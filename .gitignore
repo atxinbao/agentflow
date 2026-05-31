@@ -1,0 +1,11 @@
+.DS_Store
+.agentflow/runs/
+.agentflow/tmp/
+.agentflow/index.sqlite
+.agentflow/index.sqlite-*
+target/
+node_modules/
+apps/desktop/dist/
+.env
+.env.*
+!.env.example

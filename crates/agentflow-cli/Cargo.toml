@@ -1,0 +1,14 @@
+[package]
+name = "agentflow-cli"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "agentflow"
+path = "src/main.rs"
+
+[dependencies]
+agentflow-core = { path = "../agentflow-core" }
+anyhow.workspace = true
+clap.workspace = true
