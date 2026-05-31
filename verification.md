@@ -1,0 +1,2674 @@
+# Verification
+
+创建日期：2026-05-21
+执行者：Codex
+
+本文档是 AgentFlow 的 append-only 历史验证记录。2026-06-01 之后的新需求验证应追加到本文档末尾，并以 `docs/requirements/` 中的新需求为准；旧 `docs/validation/` 内容已归档，不再作为默认开发入口。
+
+## 2026-05-21 - AEP project document pass
+
+执行者：Codex
+
+范围：
+
+- 按 AEP 编号流程重新梳理 AgentFlow 项目文档。
+- 新增 Project Definition 初始化合同。
+- 新增 Construction Plan / Local Draft。
+- 新增 latest verification summary。
+
+计划验证：
+
+- `git diff --check`
+- `rg` 一致性检查
+
+结果：
+
+- `git diff --check`：pass。
+- `rg -n "Project Definition|CONSTRUCTION_PLAN|Construction Plan|latest-verification|verification.md|0\\. New Project Initialization|1\\. Human Project Planning|2\\. Construction Plan|3\\. Linear execution contract|施工材料|未授权执行|不授权" ...`：pass。
+
+结论：
+
+- AEP Flow 0、Human Planning、Construction Plan、local issue contract、Root Docs Refresh 的项目文档落点已建立。
+- 当前只完成文档梳理，未授权代码实现。
+
+## 2026-05-22 - Startup flow archive pass
+
+执行者：Codex
+
+范围：
+
+- 将根目录文档收敛为入口层。
+- 将产品、设计、架构、规划、规格、参考文档归档到 `docs/`。
+- 新增 `docs/startup/0.1-project-initialization-questions.md`，保存项目初始化 15 问。
+- 新增 `docs/startup/0.2-reference-reading-blueprint.md`，保存参考项目阅读和蓝图初始化。
+- 新增 `docs/startup/0.3-project-map-and-archive.md`，保存项目地图和归档规则。
+- 更新 `README.md`、`AGENTS.md`、`docs/startup/project-definition.md`、`docs/planning/construction-plan.md` 和验证摘要。
+
+验证：
+
+- `git diff --check`：pass。
+- 旧根目录大写文档路径 `rg` 检查：pass，未发现残留。
+- `find . -maxdepth 1 -type f`：pass，根目录仅保留 `.gitignore`、`AGENTS.md`、`GOAL.md`、`README.md`、`ROADMAP.md`、`verification.md`。
+- 0.1 / 0.2 / 0.3 启动流程锚点 `rg` 检查：pass。
+
+结论：
+
+- 根目录文件过多的问题已通过归档层解决。
+- 0.1 / 0.2 / 0.3 项目启动流程已补齐。
+- 当前仍未授权代码实现。
+
+## 2026-05-22 - Linear reference blueprint pass
+
+执行者：Codex
+
+范围：
+
+- 阅读 Linear 官方入口、docs、conceptual model、project updates 和 developers GraphQL 文档。
+- 按 0.2 参考阅读流程更新 AgentFlow 产品蓝图、设计蓝图和架构蓝图。
+- 明确采用 Linear 的对象模型、动态 Views、Project Updates、Agent 可观察性和 future API 边界意识。
+- 明确不采用 Linear 的 SaaS workspace/team 层级、cycles、initiatives、enterprise roadmap、远程 GraphQL API、webhook 平台和云同步。
+- 同步更新 README、ROADMAP、MVP Spec、Construction Plan、Product Requirements、Design Spec、Architecture、ADR 和 latest verification summary。
+
+参考来源：
+
+- `https://linear.app/homepage`
+- `https://linear.app/docs/start-guide`
+- `https://linear.app/docs/conceptual-model`
+- `https://linear.app/docs/initiative-and-project-updates`
+- `https://linear.app/developers/graphql`
+
+验证：
+
+- `git diff --check`：pass。
+- `rg -n "Linear homepage|Linear 参考项目提炼|SavedView|ProjectUpdate|Local View Engine|Project Update Summary|远程 GraphQL API|Stage 1 到 Stage 11|views/|updates/" ...`：pass。
+- stale MVP range `rg`：pass，未发现旧范围残留。
+- `rg -n "[ \t]+$" README.md GOAL.md ROADMAP.md AGENTS.md docs verification.md`：pass，未发现尾随空白。
+- `find . -maxdepth 1 -type f -print`：pass，根目录仍只保留 `.gitignore`、`AGENTS.md`、`GOAL.md`、`README.md`、`ROADMAP.md`、`verification.md`。
+
+结论：
+
+- 0.2 参考蓝图已经从 AEP-only 扩展为 AEP + Linear 双参考，但 AgentFlow 定位仍是本地 AI 执行工作台。
+- MVP 范围调整为 Flow 0 + Stage 1 到 Stage 11，新增 Saved Views 和 Project Update Summary，仍不授权代码实现。
+
+## 2026-05-22 - Full documentation compression pass
+
+执行者：Codex
+
+范围：
+
+- 重新压缩根目录入口文档和 `docs/` 下所有项目文档。
+- 保留 Flow 0、AEP/Linear 参考边界、MVP Stage、核心对象、CLI 规格、验证入口和未授权边界。
+- 将重复叙述压缩为事实表、边界表和最小规则。
+- 保持 `verification.md` append-only，不重写历史记录。
+
+压缩结果：
+
+- Markdown 总行数从 2607 行降到 1272 行。
+- `docs/specs/mvp-spec.md` 从 441 行降到 180 行。
+- `docs/architecture/architecture-decisions.md` 从 251 行降到 52 行。
+- `docs/design/design-spec.md` 从 206 行降到 63 行。
+
+验证：
+
+- `git diff --check`：pass。
+- `rg` Linear / SavedView / ProjectUpdate / Flow 0 / not authorized anchors：pass。
+- stale MVP range `rg`：pass。
+- trailing whitespace `rg`：pass。
+- root file check：pass。
+
+结论：
+
+- 当前文档已完成第二轮压缩。
+- 项目仍处于文档蓝图阶段，未授权代码实现。
+
+## 2026-05-22 - Goal execution spine hardening pass
+
+执行者：Codex
+
+范围：
+
+- 将 `/goal -> 可验证工程完成` 固化为 `Goal Execution Spine`。
+- 把底层链条写入 README、ROADMAP、Architecture、MVP Spec、Construction Plan、Project Definition、Product Requirements、ADR 和 latest summary。
+- 第一候选施工包从 `AgentFlow Core + CLI Bootstrap v0` 收紧为 `Goal Compiler + Core/CLI Bootstrap v0`。
+- `.agentflow/` 事实源新增 `goal.{md,json}`，并将 `agentflow init --from-goal GOAL.md` 定为第一入口。
+- 在新增底层链条后继续压缩文档，总 Markdown 行数从 1272 行降到 1228 行。
+
+验证：
+
+- `git diff --check`：pass。
+- Goal spine anchor `rg`：pass。
+- stale bootstrap wording `rg`：pass。
+- trailing whitespace `rg`：pass。
+- docs line count：pass。
+
+结论：
+
+- 当前基础已从“Core/CLI 泛化启动”收紧为“GoalCompiler 优先启动”。
+- 项目仍处于文档蓝图阶段，未授权代码实现。
+
+## 2026-05-22 - Goal Compiler + Core/CLI Bootstrap v0
+
+执行者：Codex
+
+范围：
+
+- 建立 Rust workspace。
+- 新增 `crates/agentflow-core`。
+- 新增 `crates/agentflow-cli`，二进制命令名为 `agentflow`。
+- 实现 `agentflow init --from-goal GOAL.md`。
+- 实现 `agentflow goal check`。
+- 实现离线模板版 `agentflow plan "..."`。
+- 生成 `.agentflow/goal.{md,json}`、settings、index、初始化 evidence 和 `ISSUE-0001` issue contract。
+
+验证：
+
+- `brew install rust`：pass。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，3 tests。
+- `cargo run -p agentflow-cli -- init --from-goal GOAL.md`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass。
+- `cargo run -p agentflow-cli -- plan "实现 Goal Compiler + Core/CLI Bootstrap v0"`：pass。
+- JSON parse for `.agentflow/goal.json`、settings、index、`ISSUE-0001.json`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Goal Compiler、Local Project Store、Issue Contract Builder 已具备可运行雏形。
+- Context Collector / Planner 仍是模板级能力。
+- Codex Runtime Adapter、Validation Runner、Evidence Chain、Review / ProjectUpdate Generator 尚未产品化实现。
+
+## 2026-05-22 - Context Collector + Planner v0
+
+执行者：Codex
+
+范围：
+
+- 新增 `ProjectContext` 和 `ContextFile`。
+- 实现 repo 文件扫描，跳过 `.git`、`target`、`node_modules`、`.agentflow/runs`、`.agentflow/tmp`、`.env*` 和 `.DS_Store`。
+- 实现 `agentflow context`，输出 `.agentflow/context.json` 和 `.agentflow/context.md`。
+- `agentflow plan` 在存在 `.agentflow/context.json` 时使用上下文文件填充 issue contract。
+- 补充 context collection 和 context-aware planning 单元测试。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，5 tests。
+- `cargo run -p agentflow-cli -- context`：pass，44 files。
+
+结论：
+
+- Context Collector 已具备可运行雏形。
+- Planner 已能读取上下文，但仍是 deterministic template，不调用模型。
+- 下一步应进入 `Codex Runtime Adapter + Validation / Evidence v0`。
+
+## 2026-05-22 - Codex Runtime Adapter + Validation / Evidence v0
+
+执行者：Codex
+
+范围：
+
+- 新增 `AgentRun`、`RunOutputs`、`CommandRecord`。
+- 实现 `agentflow run ISSUE-0003 --dry-run`，生成 `.agentflow/runs/RUN-0001/` 下的 `run.json`、`transcript.md`、`commands.jsonl`、`diff-summary.md`。
+- 实现 `agentflow verify ISSUE-0003`，执行 issue contract 中的本地 validation commands，并将 stdout / stderr / exit code 写入 `commands.jsonl` 和 `run.json`。
+- 实现 `agentflow review ISSUE-0003`，生成 `.agentflow/evidence/ISSUE-0003-evidence.md`、`.agentflow/reviews/ISSUE-0003-review.md`、`.agentflow/updates/PROJECT-UPDATE-0001.md`，并在验证通过后把 issue 标记为 completed。
+- 补充 Runtime Adapter、Validation Runner、Evidence Chain、Review / ProjectUpdate Generator 的核心单元测试。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，8 tests。
+- `cargo run -p agentflow-cli -- plan "实现 Codex Runtime Adapter + Validation / Evidence v0"`：pass，生成 `ISSUE-0003`。
+- `cargo run -p agentflow-cli -- run ISSUE-0003 --dry-run`：pass，生成 `RUN-0001`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0003`：pass，2 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0003`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- context`：pass，49 files。
+- JSON parse for `.agentflow/index.json`、`.agentflow/issues/ISSUE-0003.json`、`.agentflow/runs/RUN-0001/run.json`、`.agentflow/context.json`：pass。
+- `find . -name .DS_Store -print`：pass，已清理 macOS 自动生成文件。
+
+结论：
+
+- CLI MVP 已从 `/goal -> init -> context -> plan -> issue` 推进到 `run -> verify -> evidence -> review -> update`。
+- Runtime Adapter v0 仍是 dry-run only，不调用外部模型、不上传代码、不自动改文件。
+- 下一候选应进入 `SQLite Index + Saved Views v0`。
+
+## 2026-05-22 - SQLite Index + Saved Views v0
+
+执行者：Codex
+
+范围：
+
+- 新增 `rusqlite` bundled SQLite 依赖。
+- 新增 `SavedView`、`SavedViewFilter`、`IndexedIssue`、`IndexedRun`、`IndexedUpdate`。
+- 实现 `agentflow index rebuild`，从 `.agentflow/issues`、`.agentflow/runs`、`.agentflow/updates`、`.agentflow/views` 重建 `.agentflow/index.sqlite`。
+- 实现 `agentflow view save`，保存 filter-only SavedView JSON，不保存查询结果。
+- 实现 `agentflow view show`，从 SQLite 索引读取 SavedView 查询结果。
+- 将 `.agentflow/index.sqlite` 和 WAL/SHM 文件加入 ignore，并从 context 扫描中排除，保持 JSON / Markdown 为事实源。
+- 生成 `ISSUE-0004`、`RUN-0002`、`ISSUE-0004` evidence / review 和 `PROJECT-UPDATE-0002`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，10 tests。
+- `cargo run -p agentflow-cli -- context`：pass，55 files。
+- `cargo run -p agentflow-cli -- plan "实现 SQLite Index + Saved Views v0"`：pass，生成 `ISSUE-0004`。
+- `cargo run -p agentflow-cli -- index rebuild`：pass，4 issues / 2 runs / 2 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- view save completed --issue-status completed --run-status completed --validation-status passed`：pass。
+- `cargo run -p agentflow-cli -- view show completed`：pass，4 issues / 2 runs。
+- `cargo run -p agentflow-cli -- run ISSUE-0004 --dry-run`：pass，生成 `RUN-0002`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0004`：pass，2 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0004`：pass，生成 evidence / review / update。
+
+结论：
+
+- SQLite Index + Saved Views v0 已具备可运行雏形。
+- `.agentflow/index.sqlite` 是可重建查询索引，不是事实源。
+- SavedView 只保存 filter，不保存结果、不授权执行。
+- 下一候选应进入 `Project Update Summary + Review Assistant v0`。
+
+## 2026-05-22 - Project Update Summary + Review Assistant v0
+
+执行者：Codex
+
+范围：
+
+- 新增 `ProjectSummaryResult`、`ReviewAssistantSummary`、`ReviewAssistantCheck`。
+- 实现 `agentflow update summary`，生成 `.agentflow/updates/PROJECT-SUMMARY.md`，汇总 issue / run / update / saved view 当前状态。
+- 实现 `agentflow review-assistant ISSUE-0005`，生成 `.agentflow/reviews/ISSUE-0005-assistant.md`，检查 issue contract、scope、validation、run、evidence、review、project update 和 SQLite index。
+- 生成 `ISSUE-0005`、`RUN-0003`、`ISSUE-0005` evidence / review / review assistant 和 `PROJECT-UPDATE-0003`。
+- `completed` SavedView 已能读取 5 个 completed issue 和 3 个 passed run。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，12 tests。
+- `cargo run -p agentflow-cli -- context`：pass，62 files。
+- `cargo run -p agentflow-cli -- plan "实现 Project Update Summary + Review Assistant v0"`：pass，生成 `ISSUE-0005`。
+- `cargo run -p agentflow-cli -- run ISSUE-0005 --dry-run`：pass，生成 `RUN-0003`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0005`：pass，2 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0005`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0005`：pass，9 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，5 issues / 3 runs / 3 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- view show completed`：pass，5 issues / 3 runs。
+
+结论：
+
+- Project Update Summary + Review Assistant v0 已具备可运行雏形。
+- Review Assistant 只做本地审查清单，不执行远程 PR 操作，不变更团队 workspace。
+- 下一候选应进入 `Desktop Workbench MVP v0`。
+
+## 2026-05-22 - Desktop Workbench MVP v0 Boundary
+
+执行者：Codex
+
+范围：
+
+- 新增 `docs/specs/desktop-workbench-mvp-boundary.md`。
+- 明确 Desktop Workbench MVP v0 是只读桌面工作台，不是新的执行引擎。
+- 定义输入事实源：goal、index、context、Project Summary、SavedView、issue、run、evidence、review、review assistant、可重建 SQLite index。
+- 定义 MVP 内功能：Project Overview、Issue List、Issue Detail、Run / Validation、Evidence / Review、Saved Views、Refresh。
+- 明确不做：创建/编辑 issue、执行 run/verify/review、调用模型、写入 `.agentflow/` 事实源、创建 PR / 远程 issue、账号/云同步、完整 PM 看板。
+- 同步 README、ROADMAP、MVP Spec、Design Spec、Product Requirements、Architecture、Construction Plan 和 `.agentflow/roadmap.md`。
+- 生成 `ISSUE-0006`、`RUN-0004`、`ISSUE-0006` evidence / review / review assistant 和 `PROJECT-UPDATE-0004`。
+
+验证：
+
+- `cargo run -p agentflow-cli -- context`：pass，69 files。
+- `cargo run -p agentflow-cli -- plan "定义 Desktop Workbench MVP v0 边界"`：pass，生成 `ISSUE-0006`。
+- `cargo run -p agentflow-cli -- run ISSUE-0006 --dry-run`：pass，生成 `RUN-0004`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0006`：pass，2 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0006`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0006`：pass，9 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，6 issues / 4 runs / 4 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- view show completed`：pass，6 issues / 4 runs。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，12 tests。
+- `git diff --check`：pass。
+- JSON parse for `.agentflow/index.json`、`.agentflow/issues/ISSUE-0006.json`、`.agentflow/runs/RUN-0004/run.json`、`.agentflow/context.json`、`.agentflow/views/completed.json`：pass。
+- `find . -name .DS_Store -print`：pass。
+- Desktop boundary anchor `rg`：pass。
+
+结论：
+
+- Desktop Workbench MVP v0 边界已确立。
+- 下一候选可以进入 `Desktop Workbench MVP v0 只读壳实现`。
+- 实现阶段仍必须保持只读：不触发执行、不写入 `.agentflow/` 事实源、不调用模型、不接远程 PR / issue 平台。
+
+## 2026-05-22 - AEP Goal Initialization Protocol v0
+
+执行者：Codex
+
+范围：
+
+- 将 Codex `/goal` 固化为 AEP 第一阶段新项目初始化入口。
+- 补齐 `ProjectDefinition`、`AgentScopeState`、AEP bootstrap artifacts、goal readiness check。
+- 扩展 `IssueContract`，加入 stop condition、fastest feedback loop、vertical slice、tracer bullet、diagnose、Graphify status、docs claim trace、boundary confirmation、PR handoff requirements。
+- 扩展 Review Assistant，把 AEP issue protocol、boundary、docs claim trace、Graphify context 和 scope state 纳入本地 review gate。
+
+变更：
+
+- 新增 `agentflow goal bootstrap`，可在既有 `.agentflow/` 中补齐 AEP 第一阶段初始化包，不重置 issue / run / update 历史。
+- `agentflow init --from-goal` 新项目初始化时直接生成 `.agentflow/project-definition.json`、`.agentflow/scope-state.json` 和 `.agentflow/bootstrap/*`。
+- `agentflow goal check` 改为检查 ProjectGoal、ProjectDefinition、ScopeState、environment、architecture、roadmap、初始化 evidence 和 bootstrap 产物。
+- `agentflow run` 会通过 scope state 维护 WIP=1 active issue；review 通过后释放 active issue。
+- 新增 `docs/specs/aep-goal-initialization-protocol.md` 和 `checks/agentflow-readiness.sh`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，13 tests。
+- `cargo run -p agentflow-cli -- goal bootstrap`：pass，补齐当前 `.agentflow/` AEP 初始化包。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- run ISSUE-0007 --dry-run`：pass，RUN-0005。
+- `cargo run -p agentflow-cli -- verify ISSUE-0007`：pass，2 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0007`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0007`：pass，14 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，7 issues / 5 runs / 5 updates / 1 saved view。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- AEP 第一阶段已经产品化为 `/goal` 初始化协议。
+- 当前 8 个底层能力不再只是可跑通链路，而是带有 AEP 启动合同、scope state、机械 readiness 和 review gate。
+- 下一候选恢复为 `Desktop Workbench MVP v0 只读壳实现`，仍需 Human 明确授权。
+
+## 2026-05-22 - Goal Loop Orchestrator v0
+
+执行者：Codex
+
+范围：
+
+- 新增 `GoalLoopState`、`GoalLoopIssueRef`、`GoalLoopCounts`、`GoalLoopSources`。
+- 新增 `agentflow goal next`，读取 goal、project definition、scope state、index、roadmap、issues、runs、evidence、reviews 和 project summary。
+- `goal next` 写出 `.agentflow/goal-loop.json` 和 `.agentflow/updates/GOAL-LOOP-SUMMARY.md`。
+- 决策结果限制为 `plan`、`run`、`verify`、`review`、`update`、`wait-human`。
+- active issue 存在时优先完成当前 issue，保持 WIP=1，不推荐新 plan。
+- Review Assistant 新增 Goal Loop readiness 检查。
+
+变更：
+
+- `agentflow goal next` 在 `ISSUE-0008` planned 状态下返回 `run ISSUE-0008 --dry-run`。
+- `agentflow goal next` 在 `ISSUE-0008` active 状态下返回 `verify ISSUE-0008`。
+- `agentflow goal next` 在 `ISSUE-0008` 完成后返回 `plan "Desktop Workbench MVP v0 只读壳实现"`。
+- `checks/agentflow-readiness.sh` 增加 Goal Loop Orchestrator 锚点和 `agentflow goal next`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，15 tests。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next`：pass，写出 goal-loop / summary。
+- `cargo run -p agentflow-cli -- run ISSUE-0008 --dry-run`：pass，RUN-0006。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify。
+- `cargo run -p agentflow-cli -- verify ISSUE-0008`：pass，2 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0008`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0008`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，8 issues / 6 runs / 6 updates / 1 saved view。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- `/goal` 初始化后的项目推进大脑已具备本地 v0。
+- 当前系统已经能回答“下一步应该做什么”，但仍不自动执行、不创建远程 issue、不调用模型、不绕过 IssueContract。
+- 下一候选仍是 `Desktop Workbench MVP v0 只读壳实现`。
+
+## 2026-05-22 - Desktop Workbench MVP v0 Read-only Shell
+
+执行者：Codex
+
+范围：
+
+- 新增 `DesktopWorkbenchSnapshot`、`WorkbenchCounts`、`WorkbenchTextArtifact`、`WorkbenchBoundary`。
+- 新增 `agentflow-core::read_desktop_workbench_snapshot`，从 `.agentflow/` 只读读取 Project Summary、Goal Loop Summary、issues、runs、saved views、evidence 和 reviews。
+- 新增 Tauri 2 桌面壳 `apps/desktop/src-tauri`，通过 `load_workbench_snapshot` 暴露只读快照。
+- 新增 React + TypeScript UI：Overview、Issues、Issue Detail、Evidence、Review、Saved Views。
+- UI 明确展示 next action 和 recommended command，并标注只读，不创建 issue、不执行 run / verify / review、不调用模型、不写 `.agentflow/`。
+- 更新 README、ROADMAP、MVP Spec、Desktop Workbench Boundary、latest verification summary 和 readiness anchors。
+- 修复 Review Assistant docs claim trace 校验，使其同时支持 `.agentflow/` 路径和 repo-relative 路径。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，17 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next`：pass，next action plan，recommended command `agentflow plan "Local Pro Experiments v0 边界定义"`。
+- `cargo run -p agentflow-cli -- run ISSUE-0009 --dry-run`：pass，RUN-0007。
+- `cargo run -p agentflow-cli -- verify ISSUE-0009`：pass，7 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0009`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0009`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，9 issues / 7 runs / 7 updates / 1 saved view。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+- `npm --prefix apps/desktop run tauri -- dev`：pass，Tauri dev process 启动并运行，无 runtime error，已手动停止。
+
+结论：
+
+- Desktop Workbench MVP v0 只读壳已完成本地可启动版本。
+- `.agentflow/` 仍是事实源；桌面 UI 只读快照，不拥有执行和写入能力。
+- 下一候选为 `Local Pro Experiments v0 边界定义`，未授权前不进入。
+
+## 2026-05-22 - Local Pro Experiments v0 Boundary
+
+执行者：Codex
+
+范围：
+
+- 新增 `docs/specs/local-pro-experiments-boundary.md`。
+- 明确 Local Pro Experiments 包含本地 analytics / metrics、DuckDB 后置分析、local project intelligence、本地搜索 / saved query、多项目 workspace 和 Desktop Workbench 后续交互能力。
+- 明确当前阶段禁止云同步、账号 / 支付、团队协作、远程 PR / Linear issue、Desktop UI 执行 run / verify / review、自动模型调用和绕过 IssueContract 写 `.agentflow/`。
+- 为每个候选实验定义只读性、`.agentflow/` 写入、IssueContract、人类确认、验证命令和 evidence 授权门。
+- 更新 README、ROADMAP、MVP Spec、Construction Plan、latest verification summary 和 readiness anchors。
+- 将下一候选推进为 `Local Metrics Snapshot v0 只读实现`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，17 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0010。
+- `cargo run -p agentflow-cli -- run ISSUE-0010 --dry-run`：pass，RUN-0008。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0010。
+- `cargo run -p agentflow-cli -- verify ISSUE-0010`：pass，7 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0010`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0010`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，10 issues / 8 runs / 8 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Local Metrics Snapshot v0 只读实现`。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Local Pro Experiments v0 已完成边界定义，没有实现具体高级功能。
+- Desktop Workbench 仍保持只读，不新增执行按钮、不写 `.agentflow/`。
+- 下一候选为 `Local Metrics Snapshot v0 只读实现`，未授权前不进入。
+
+## 2026-05-22 - Local Metrics Snapshot v0 Read-only Implementation
+
+执行者：Codex
+
+范围：
+
+- 新增 `LocalMetricsSnapshot`、`LocalIssueMetrics`、`LocalRunMetrics`、`LocalArtifactMetrics`、latest run / artifact 引用对象。
+- 新增 `read_local_metrics_snapshot`，复用 `read_desktop_workbench_snapshot` 派生只读 metrics，不写 `.agentflow/`，不创建 DuckDB 或 analytics cache。
+- 新增 CLI 命令 `agentflow metrics`。
+- Desktop Workbench 新增 Metrics 只读视图，并通过 `load_metrics_snapshot` Tauri command 读取本地 metrics。
+- 更新 README、ROADMAP、MVP Spec、Local Pro Boundary、latest verification summary、readiness script。
+- 将下一候选推进为 `Local Search v0 边界定义`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，19 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0011。
+- `cargo run -p agentflow-cli -- run ISSUE-0011 --dry-run`：pass，RUN-0009。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0011。
+- `cargo run -p agentflow-cli -- verify ISSUE-0011`：pass，8 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0011`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0011`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，11 issues / 9 runs / 9 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- metrics`：pass，11 issues / 9 runs / read-only true。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Local Search v0 边界定义`。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Local Metrics Snapshot v0 已完成只读实现。
+- 指标全部来自 `.agentflow/` 和现有 snapshot，没有新增 DuckDB，没有写 `.agentflow/analytics`。
+- Desktop Metrics 视图只读展示，不执行命令。
+- 下一候选为 `Local Search v0 边界定义`，未授权前不进入。
+
+## 2026-05-22 - Local Search v0 Boundary Definition
+
+执行者：Codex
+
+范围：
+
+- 收紧 `ISSUE-0012` contract，明确本阶段只定义 Local Search / saved query 边界。
+- 新增 `docs/specs/local-search-boundary.md`，定义候选能力、禁止项、可搜索路径、排除路径、结果字段、literal query、saved query 后置规则、索引边界和 Desktop 只读边界。
+- 更新 README、ROADMAP、MVP Spec、Local Pro Boundary、construction plan、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Local Search Reader v0 只读实现`。
+- 未实现搜索引擎，未引入 Tantivy / SQLite FTS / DuckDB FTS，未新增 Desktop 搜索 UI，未写 `.agentflow/search` 或 `.agentflow/queries`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，19 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0012。
+- `cargo run -p agentflow-cli -- run ISSUE-0012 --dry-run`：pass，RUN-0010。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0012。
+- `cargo run -p agentflow-cli -- verify ISSUE-0012`：pass，8 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0012`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0012`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，12 issues / 10 runs / 10 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Local Search Reader v0 只读实现`。
+- `cargo run -p agentflow-cli -- metrics`：pass，12 issues / 10 runs / read-only true。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Local Search v0 已完成边界定义。
+- 可搜索路径和排除路径已经明确，saved query 明确后置。
+- Desktop Workbench 未新增搜索 UI。
+- 下一候选为 `Local Search Reader v0 只读实现`，未授权前不进入。
+
+## 2026-05-22 - Desktop Workbench 中文界面优化 v0
+
+执行者：Codex
+
+范围：
+
+- 创建并收紧 `ISSUE-0013` contract，限定为 Desktop Workbench 中文界面优化。
+- 将导航、加载态、顶部状态、Overview、Metrics、Issues、Issue Detail、Evidence、Review、Saved Views、Boundary Panel、空状态和 tooltip 改为中文。
+- 保留 issue id、run id、命令、路径和事实源原始值的可追溯性。
+- 同步浏览器 mock/fallback 的中文项目摘要、目标循环摘要和指标示例。
+- 更新 HTML `lang`、页面标题、Tauri 窗口标题和中文字体栈。
+- 未新增执行按钮、issue 写入入口、搜索 UI、搜索索引或模型调用。
+
+验证：
+
+- `npm --prefix apps/desktop run build`：pass。
+- Tauri dev：pass，Vite HMR 更新，Tauri 因配置变更自动 rebuild 并重新运行。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0013。
+- `cargo run -p agentflow-cli -- run ISSUE-0013 --dry-run`：pass，RUN-0011。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0013。
+- `cargo run -p agentflow-cli -- verify ISSUE-0013`：pass，8 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0013`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0013`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，13 issues / 11 runs / 11 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Local Search Reader v0 只读实现`。
+- `cargo run -p agentflow-cli -- metrics`：pass，13 issues / 11 runs / read-only true。
+
+结论：
+
+- Desktop Workbench 已完成中文界面优化。
+- 浏览器预览和 Tauri 桌面入口的文案风格已统一为中文；真实数据仍以 Tauri 桌面入口为准。
+- Desktop Workbench 继续保持只读边界。
+
+## 2026-05-22 - Local Search Reader v0 Read-only Implementation
+
+执行者：Codex
+
+范围：
+
+- 新增 `LocalSearchQuery`、`LocalSearchResult`、`LocalSearchSnapshot`。
+- 新增 `read_local_search_snapshot`，只读扫描 `docs/specs/local-search-boundary.md` 授权的 `.agentflow/` JSON / JSONL / Markdown 路径。
+- 新增 CLI 命令 `agentflow search "<query>"`。
+- 搜索结果包含 `sourceType`、`entityKind`、`entityId`、`path`、`title`、`field`、`line`、`snippet`、`score`。
+- 新增测试覆盖 traceable result、排除 `.agentflow/search` / `.agentflow/queries` / `index.sqlite`、不创建 query/search 目录。
+- 更新 README、ROADMAP、MVP Spec、Local Search Boundary、Local Pro Boundary、construction plan、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Saved Query v0 边界定义`。
+- 未新增 Desktop 搜索 UI，未创建搜索索引，未写 `.agentflow/search` 或 `.agentflow/queries`，未调用模型。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，21 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0014。
+- `cargo run -p agentflow-cli -- run ISSUE-0014 --dry-run`：pass，RUN-0012。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0014。
+- `cargo run -p agentflow-cli -- verify ISSUE-0014`：pass，9 commands。
+- `cargo run -p agentflow-cli -- search "Local Search"`：pass，返回 `.agentflow/` 内可追溯结果，包含 path / line / snippet / entityKind / entityId。
+- `cargo run -p agentflow-cli -- review ISSUE-0014`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0014`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，14 issues / 12 runs / 12 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Saved Query v0 边界定义`。
+- `cargo run -p agentflow-cli -- metrics`：pass，14 issues / 12 runs / read-only true。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Local Search Reader v0 已完成只读实现。
+- `agentflow search "Local Search"` 可以返回带 path、line、snippet、entityKind、entityId 的可追溯结果。
+- 搜索只读，不生成索引、不写 query 文件、不修改事实源。
+- Desktop Workbench 未新增搜索 UI。
+- 下一候选为 `Saved Query v0 边界定义`，未授权前不进入。
+
+## 2026-05-22 - Saved Query v0 Boundary Definition
+
+执行者：Codex
+
+范围：
+
+- 创建并收紧 `ISSUE-0015` contract，限定为 Saved Query v0 边界定义。
+- 新建 `docs/specs/saved-query-boundary.md`。
+- 明确 Saved Query 与现有 SavedView 分离：SavedView 继续保存 issue/run filter，Saved Query 后续首选 `.agentflow/queries/*.json`。
+- 定义 saved query schema 候选、路径规则、用户确认门、验证方式和 evidence 要求。
+- 更新 README、ROADMAP、Construction Plan、MVP Spec、Local Pro Boundary、Local Search Boundary、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Desktop Search Read-only View v0 边界定义`。
+- 未创建 `.agentflow/queries`，未写 saved query 文件，未保存搜索结果，未新增 CLI / Desktop 搜索 UI，未调用模型。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，21 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0015。
+- `cargo run -p agentflow-cli -- run ISSUE-0015 --dry-run`：pass，RUN-0013。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0015。
+- `cargo run -p agentflow-cli -- verify ISSUE-0015`：pass，10 commands。
+- `cargo run -p agentflow-cli -- search "Saved Query"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -d .agentflow/queries`：pass。
+- `cargo run -p agentflow-cli -- review ISSUE-0015`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0015`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，15 issues / 13 runs / 13 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Desktop Search Read-only View v0 边界定义`。
+- `cargo run -p agentflow-cli -- metrics`：pass，15 issues / 13 runs / read-only true。
+
+结论：
+
+- Saved Query v0 已完成边界定义。
+- 后续 saved query 写入必须另建 IssueContract，并需要用户确认 `.agentflow/queries/*.json` 路径和内容。
+- 当前阶段没有创建 query 目录、没有保存结果、没有新增 Desktop 搜索 UI。
+- 下一候选为 `Desktop Search Read-only View v0 边界定义`，未授权前不进入。
+
+## 2026-05-22 - Desktop Search Read-only View v0 Boundary Definition
+
+执行者：Codex
+
+范围：
+
+- 创建并收紧 `ISSUE-0016` contract，限定为 Desktop Search Read-only View v0 边界定义。
+- 新建 `docs/specs/desktop-search-readonly-boundary.md`。
+- 定义 Desktop 搜索入口只允许调用 Local Search Reader 的只读能力。
+- 定义后续 UI 契约：query 输入框、result list、source trace、empty / loading / error 状态、read-only badge 和 recommended command 只展示。
+- 更新 README、ROADMAP、Construction Plan、MVP Spec、Local Pro Boundary、Local Search Boundary、Saved Query Boundary、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Desktop Search Read-only View v0 实现`。
+- 未新增 Desktop 搜索 UI 实现，未写 `.agentflow/search` 或 `.agentflow/queries`，未保存搜索结果，未执行 run / verify / review，未创建 issue，未调用模型，未上传远程。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，21 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0016。
+- `cargo run -p agentflow-cli -- run ISSUE-0016 --dry-run`：pass，RUN-0014。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0016。
+- `cargo run -p agentflow-cli -- verify ISSUE-0016`：pass，10 commands。
+- `cargo run -p agentflow-cli -- search "Desktop Search"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -d .agentflow/queries`：pass。
+- `test ! -d .agentflow/search`：pass。
+- `cargo run -p agentflow-cli -- review ISSUE-0016`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0016`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，16 issues / 14 runs / 14 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Desktop Search Read-only View v0 实现`。
+- `cargo run -p agentflow-cli -- metrics`：pass，16 issues / 14 runs / read-only true。
+
+结论：
+
+- Desktop Search Read-only View v0 已完成边界定义。
+- 后续 Desktop 搜索 UI 实现必须只调用 Local Search Reader，只读展示结果和 source trace。
+- 当前阶段没有新增 Desktop 搜索 UI、没有写 search/query 目录、没有保存搜索结果、没有执行命令。
+- 下一候选为 `Desktop Search Read-only View v0 实现`，未授权前不进入。
+
+## 2026-05-22 - Desktop Search Read-only View v0 Implementation
+
+执行者：Codex
+
+范围：
+
+- 创建并收紧 `ISSUE-0017` contract，限定为 Desktop Search Read-only View v0 实现。
+- 新增 Tauri command `load_search_snapshot`，直接调用 `agentflow_core::read_local_search_snapshot`。
+- Desktop Workbench 新增 Search 导航和只读 Search 视图。
+- Search 视图展示 query 输入框、result list、source trace、empty / loading / error 状态、read-only badge 和 recommended command 文本。
+- 搜索结果展示 path、line、snippet、entityKind、entityId、score。
+- 浏览器预览增加只读 mock search snapshot；真实数据仍以 Tauri 桌面窗口为准。
+- 更新 README、ROADMAP、Construction Plan、MVP Spec、Local Pro Boundary、Local Search Boundary、Saved Query Boundary、Desktop Search Boundary、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Saved Query Writer v0 边界定义`。
+- 未写 `.agentflow/search` 或 `.agentflow/queries`，未保存搜索结果，未创建 issue，未执行 run / verify / review，未调用模型，未上传远程，未新增 saved query writer。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，21 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0017。
+- `cargo run -p agentflow-cli -- run ISSUE-0017 --dry-run`：pass，RUN-0015。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0017。
+- `cargo run -p agentflow-cli -- verify ISSUE-0017`：pass，11 commands。
+- `cargo run -p agentflow-cli -- search "Desktop Search"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -d .agentflow/queries`：pass。
+- `test ! -d .agentflow/search`：pass。
+- `cargo run -p agentflow-cli -- review ISSUE-0017`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0017`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，17 issues / 15 runs / 15 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Saved Query Writer v0 边界定义`。
+- `cargo run -p agentflow-cli -- metrics`：pass，17 issues / 15 runs / read-only true。
+
+结论：
+
+- Desktop Search Read-only View v0 已完成只读实现。
+- 搜索结果来自 Local Search Reader，并通过 Tauri command 读取本地 `.agentflow/` 事实源。
+- UI 不写 `.agentflow/`，recommended command 只展示不执行。
+- 下一候选为 `Saved Query Writer v0 边界定义`，未授权前不进入。
+
+## 2026-05-22 - Saved Query Writer v0 Boundary
+
+执行者：Codex
+
+范围：
+
+- 重启 Desktop Workbench Tauri dev client。
+- 创建并收紧 `ISSUE-0018` contract，限定为 Saved Query Writer v0 边界定义。
+- 新建 `docs/specs/saved-query-writer-boundary.md`。
+- 定义 `.agentflow/queries/{query-id}.json` 写入路径、`SavedQueryDefinition` schema、用户确认门、验证矩阵和 evidence 要求。
+- 更新 README、ROADMAP、Construction Plan、MVP Spec、Local Pro Boundary、Local Search Boundary、Saved Query Boundary、Desktop Search Boundary、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Saved Query Writer v0 实现`。
+- 未创建 `.agentflow/queries`，未写 saved query JSON 文件，未保存搜索结果，未创建 `.agentflow/search`、索引或 cache，未实现 writer。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，21 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0018。
+- `cargo run -p agentflow-cli -- run ISSUE-0018 --dry-run`：pass，RUN-0016。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0018。
+- `cargo run -p agentflow-cli -- verify ISSUE-0018`：pass，11 commands。
+- `cargo run -p agentflow-cli -- search "Saved Query Writer"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -d .agentflow/queries`：pass。
+- `test ! -d .agentflow/search`：pass。
+- `cargo run -p agentflow-cli -- review ISSUE-0018`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0018`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，18 issues / 16 runs / 16 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Saved Query Writer v0 实现`。
+- `cargo run -p agentflow-cli -- metrics`：pass，18 issues / 16 runs / read-only true。
+
+结论：
+
+- Saved Query Writer v0 已完成边界定义。
+- 后续 Writer 实现必须在用户确认点下创建 `.agentflow/queries/*.json` query definition。
+- 当前阶段没有创建 query 目录、没有写 query 文件、没有保存搜索结果、没有放宽 Desktop 只读边界。
+- 下一候选为 `Saved Query Writer v0 实现`，未授权前不进入。
+
+## 2026-05-22 - Local Workspace / Team / Project Model v0 Boundary
+
+执行者：Codex
+
+范围：
+
+- 基于 Linear 的 workspace / team / project / issue 关系，锁定 AgentFlow 本地最小关系版本。
+- 创建并收紧 `ISSUE-0019` contract，限定为 Local Workspace / Team / Project Model v0 边界定义。
+- 新建 `docs/specs/local-workspace-project-model-boundary.md`。
+- 明确本地关系为 `LocalWorkspace -> LocalTeams -> IssueContracts`、`LocalWorkspace -> LocalProjects -> Milestones -> IssueContracts`、`GoalLoop -> 从 active project 里选择下一条 issue`。
+- 定义 `LocalWorkspace`、`LocalTeam`、`LocalProject`、`Milestone`、`GoalLoopSelection` 的职责和后续 schema 候选。
+- 更新 README、ROADMAP、Construction Plan、MVP Spec、Local Pro Boundary、Architecture Decisions、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Local Project Model v0 只读实现`。
+- 未创建 `.agentflow/workspace.json`、`.agentflow/teams` 或 `.agentflow/projects`，未迁移既有 issue，未实现 project-aware GoalLoop。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，21 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0019。
+- `cargo run -p agentflow-cli -- run ISSUE-0019 --dry-run`：pass，RUN-0017。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0019。
+- `cargo run -p agentflow-cli -- verify ISSUE-0019`：pass，13 commands。
+- `cargo run -p agentflow-cli -- search "Local Workspace"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `cargo run -p agentflow-cli -- search "Local Project"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -f .agentflow/workspace.json`：pass。
+- `test ! -d .agentflow/teams`：pass。
+- `test ! -d .agentflow/projects`：pass。
+- `cargo run -p agentflow-cli -- review ISSUE-0019`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0019`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，19 issues / 17 runs / 17 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Local Project Model v0 只读实现`。
+- `cargo run -p agentflow-cli -- metrics`：pass，19 issues / 17 runs / read-only true。
+- `git diff --check`：pass。
+
+结论：
+
+- Local Workspace / Team / Project Model v0 已完成边界定义。
+- 当前最小本地组织模型已经锁定，但仍停留在文档和 readiness 层。
+- 后续 `Local Project Model v0 只读实现` 才允许新增只读 reader 和派生对象。
+- Project-aware GoalLoop 仍是后续阶段，不在本阶段实现。
+
+## 2026-05-22 - Local Project Model v0 Read-only Implementation
+
+执行者：Codex
+
+范围：
+
+- 创建并收紧 `ISSUE-0020` contract，限定为 Local Project Model v0 只读实现。
+- 新增 `LocalProjectModelSnapshot`、`LocalWorkspace`、`LocalTeam`、`LocalProject`、`LocalMilestone`、`LocalProjectIssueRef`、`GoalLoopSelection` 数据对象。
+- 新增 core reader `read_local_project_model_snapshot`，只从现有 `.agentflow/` 事实源派生默认 workspace、core team、active project、current milestone 和 issue refs。
+- 新增 CLI 命令 `agentflow projects`，只展示本地项目模型和 GoalLoop selection，不执行命令。
+- 更新 README、ROADMAP、Construction Plan、MVP Spec、Local Pro Boundary、Local Workspace / Project Boundary、Architecture Decisions、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Local Project Seed v0 边界定义`。
+- 未创建 `.agentflow/workspace.json`、`.agentflow/teams` 或 `.agentflow/projects`，未迁移 issue，未实现 Project-aware GoalLoop，未新增 Desktop Project View。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，23 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0020。
+- `cargo run -p agentflow-cli -- run ISSUE-0020 --dry-run`：pass，RUN-0018。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0020。
+- `cargo run -p agentflow-cli -- verify ISSUE-0020`：pass，13 commands。
+- `cargo run -p agentflow-cli -- projects`：pass，输出 LocalProjectModelSnapshot 只读摘要。
+- `cargo run -p agentflow-cli -- metrics`：pass，20 issues / 18 runs / read-only true。
+- `cargo run -p agentflow-cli -- search "Local Project Model"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -f .agentflow/workspace.json`：pass。
+- `test ! -d .agentflow/teams`：pass。
+- `test ! -d .agentflow/projects`：pass。
+- `cargo run -p agentflow-cli -- review ISSUE-0020`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0020`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- update summary`：pass，20 issues / 18 runs / 18 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Local Project Seed v0 边界定义`。
+- `git diff --check`：pass。
+
+结论：
+
+- Local Project Model v0 已完成只读实现。
+- `agentflow projects` 现在可以展示本地 workspace/team/project/milestone/read-only issue refs。
+- 当前仍没有落盘 workspace/team/project seed，Project-aware GoalLoop 也仍未实现。
+- 下一候选为 `Local Project Seed v0 边界定义`，未授权前不进入写入阶段。
+
+## 2026-05-22 - Desktop Project View v0 Read-only Implementation
+
+执行者：Codex
+
+范围：
+
+- 创建并收紧 `ISSUE-0021` contract，限定为 Desktop Project View v0 只读实现。
+- 新增 Tauri command `load_project_model_snapshot`，直接复用 Rust core `read_local_project_model_snapshot`。
+- Desktop Workbench 新增 Project 视图，展示 LocalWorkspace、LocalTeams、active LocalProject、milestones、issue refs、GoalLoopSelection、source trace 和 recommended command 文本。
+- 浏览器预览增加只读 `LocalProjectModelSnapshot` mock；真实层级数据仍以 Tauri 桌面窗口为准。
+- 更新 README、ROADMAP、Construction Plan、MVP Spec、Local Pro Boundary、Local Workspace / Project Boundary、Architecture Decisions、readiness script 和 latest verification summary。
+- 保持下一候选为 `Local Project Seed v0 边界定义`。
+- 未创建 `.agentflow/workspace.json`、`.agentflow/teams` 或 `.agentflow/projects`，未实现 Project-aware GoalLoop，未增加 Desktop 执行按钮。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，23 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0021。
+- `cargo run -p agentflow-cli -- run ISSUE-0021 --dry-run`：pass，RUN-0019。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0021。
+- `cargo run -p agentflow-cli -- verify ISSUE-0021`：pass，13 commands。
+- `cargo run -p agentflow-cli -- projects`：pass，输出 active issue 与只读 LocalProjectModelSnapshot。
+- `cargo run -p agentflow-cli -- metrics`：pass，RUN-0019 validation 已进入只读 metrics。
+- `cargo run -p agentflow-cli -- search "Desktop Project View"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Desktop Project View 和 `load_project_model_snapshot` anchors。
+- `test ! -f .agentflow/workspace.json`：pass。
+- `test ! -d .agentflow/teams`：pass。
+- `test ! -d .agentflow/projects`：pass。
+- `cargo run -p agentflow-cli -- review ISSUE-0021`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，21 issues / 19 runs / 19 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0021`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Local Project Seed v0 边界定义`。
+- `git diff --check`：pass。
+
+观察：
+
+- 将 `update summary`、`review-assistant` 和 `goal next` 临时并行执行时，SQLite index 出现一次建表 / readonly 写入冲突；按 CLI 正常顺序重跑后 `review-assistant` 和 `goal next` 均通过。
+
+结论：
+
+- Desktop Project View v0 已完成只读实现，本地 workspace/team/project/milestone 关系现在可在桌面工作台查看。
+- Project 视图只展示 read model 和 recommended command，不会创建 project seed，也不会绕过 IssueContract。
+- 下一候选仍为 `Local Project Seed v0 边界定义`。
+
+## 2026-05-23 - Desktop Workspace Overview v0 Read-only Entry
+
+执行者：Codex
+
+范围：
+
+- 依据 Workspace / Team / Project 层级反馈创建并收紧 `ISSUE-0022`。
+- Desktop Overview 复用现有 `LocalProjectModelSnapshot`，把 Workspace 入口放到总览顶部。
+- Workspace 入口展示 workspace 下的 Projects 和 Teams。
+- Team 摘要展示 Issues 计数和关联 Projects，保留 Team WIP 只读提示。
+- 更新 README、MVP Spec、Local Workspace / Project Boundary、readiness script 和 latest verification summary。
+- 保持下一候选为 `Local Project Seed v0 边界定义`。
+- 未创建 `.agentflow/workspace.json`、`.agentflow/teams` 或 `.agentflow/projects`，未新增 Desktop 写入或执行入口。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，23 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0022。
+- `cargo run -p agentflow-cli -- run ISSUE-0022 --dry-run`：pass，RUN-0020。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0022。
+- `cargo run -p agentflow-cli -- verify ISSUE-0022`：pass，13 commands。
+- `cargo run -p agentflow-cli -- projects`：pass，输出 workspace / team / project 只读摘要。
+- `cargo run -p agentflow-cli -- metrics`：pass，22 issues / 20 runs / read-only true。
+- `cargo run -p agentflow-cli -- search "Workspace Overview"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Workspace Overview 文档、UI 和 search anchors。
+- `test ! -f .agentflow/workspace.json`：pass。
+- `test ! -d .agentflow/teams`：pass。
+- `test ! -d .agentflow/projects`：pass。
+- `cargo run -p agentflow-cli -- review ISSUE-0022`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，22 issues / 20 runs / 20 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0022`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Local Project Seed v0 边界定义`。
+- Browser preview：pass，总览顶部显示 Workspace Projects / Teams，Team 下显示 Issues / Projects。
+- `git diff --check`：pass。
+
+结论：
+
+- 总览页现在承担 Workspace 入口职责，Workspace / Team / Project 的层级关系不用先进入 Project 视图才能看到。
+- 当前 UI 仍只读复用 `LocalProjectModelSnapshot`，不会提前落盘 Workspace / Team / Project seed。
+- 下一候选仍为 `Local Project Seed v0 边界定义`。
+
+## 2026-05-23 - Local Project Seed v0 Boundary
+
+执行者：Codex
+
+范围：
+
+- 创建并收紧 `ISSUE-0023` contract，限定为 Local Project Seed v0 边界定义。
+- 新建 `docs/specs/local-project-seed-boundary.md`。
+- 定义 `.agentflow/workspace.json`、`.agentflow/teams/*.json`、`.agentflow/projects/*.json` 的 seed 写入合同。
+- 定义 seed source、schema 候选、路径规则、用户确认门、覆盖 / 回滚规则、后续实现边界和 evidence 要求。
+- 更新 README、ROADMAP、MVP Spec、Local Pro Boundary、Local Workspace / Project Boundary、Construction Plan、Architecture Decisions、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Local Project Seed v0 实现`。
+- 未创建 `.agentflow/workspace.json`、`.agentflow/teams` 或 `.agentflow/projects`，未实现 seed writer，未迁移 issue，未实现 Project-aware GoalLoop。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，23 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` before run：pass，next action run ISSUE-0023。
+- `cargo run -p agentflow-cli -- run ISSUE-0023 --dry-run`：pass，RUN-0021。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0023。
+- `cargo run -p agentflow-cli -- verify ISSUE-0023`：pass，13 commands。
+- `cargo run -p agentflow-cli -- projects`：pass，输出 workspace / team / project 只读摘要。
+- `cargo run -p agentflow-cli -- metrics`：pass，23 issues / 21 runs / read-only true。
+- `cargo run -p agentflow-cli -- search "Local Project Seed"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Local Project Seed Boundary 和 search anchors。
+- `test ! -f .agentflow/workspace.json`：pass。
+- `test ! -d .agentflow/teams`：pass。
+- `test ! -d .agentflow/projects`：pass。
+- `cargo run -p agentflow-cli -- review ISSUE-0023`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，23 issues / 21 runs / 21 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0023`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Local Project Seed v0 实现`。
+- `git diff --check`：pass。
+
+观察：
+
+- 一次并行读取中 `metrics` 先于 `goal next` 完成时读到了旧 active issue；按顺序重跑后 active issue 为 none，下一命令为 `agentflow plan "Local Project Seed v0 实现"`。
+
+结论：
+
+- Local Project Seed v0 已完成边界定义。
+- 后续 seed writer 的路径、schema、source 和用户确认门已明确。
+- 当前仍未创建 workspace/team/project seed 文件。
+- 下一候选为 `Local Project Seed v0 实现`。
+
+## 2026-05-23 - Local Project Seed v0 Implementation
+
+执行者：Codex
+
+范围：
+
+- 创建并收紧 `ISSUE-0024` contract，限定为 Local Project Seed v0 实现。
+- 新增 `LocalProjectSeedPreview`、`LocalProjectSeedFile`、`LocalProjectSeedWriteSummary`。
+- 新增 `read_local_project_seed_preview` 和 `write_local_project_seed`。
+- 新增 CLI 命令 `agentflow project-seed`。
+- 默认 `agentflow project-seed` 只输出 preview，不写 `.agentflow/`。
+- 显式 `agentflow project-seed --write --yes` 才创建 `.agentflow/workspace.json`、`.agentflow/teams/core.json`、`.agentflow/projects/agentflow-local-execution.json`。
+- writer 默认拒绝覆盖已有 seed 文件。
+- seed writer 不迁移 issue，不写 `teamId` / `projectId` 到 issue contract，不实现 Project-aware GoalLoop，不新增 Desktop 写入 UI。
+- 更新 README、ROADMAP、MVP Spec、Local Project Seed Boundary、Local Workspace Boundary、Local Pro Boundary、Construction Plan、Architecture Decisions、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Issue Project Link v0 边界定义`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test local_project_seed`：pass，4 focused seed tests。
+- `cargo test`：pass，27 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0024。
+- `cargo run -p agentflow-cli -- projects`：pass，输出 LocalProjectModelSnapshot 只读摘要。
+- `cargo run -p agentflow-cli -- project-seed`：pass，输出 3 个待创建 seed 文件和 9 个确认门，read-only preview true。
+- `test ! -f .agentflow/workspace.json`：pass。
+- `test ! -d .agentflow/teams`：pass。
+- `test ! -d .agentflow/projects`：pass。
+- `cargo run -p agentflow-cli -- metrics`：pass。
+- `cargo run -p agentflow-cli -- search "Local Project Seed"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 `agentflow project-seed`、LocalProjectSeedPreview、writer 和 Issue Project Link anchors。
+- `cargo run -p agentflow-cli -- verify ISSUE-0024`：pass，14 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0024`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，24 issues / 22 runs / 22 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0024`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Issue Project Link v0 边界定义`。
+- `bash checks/agentflow-readiness.sh` after review：pass。
+- no live seed files after review：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Local Project Seed v0 已实现默认只读 preview 和显式确认 writer。
+- 当前 live repo 仍未创建 workspace/team/project seed 文件。
+- 显式写入路径由 tempdir 单元测试覆盖，避免在当前 repo 未授权落盘 seed。
+- 下一候选为 `Issue Project Link v0 边界定义`。
+
+## 2026-05-25 - Issue Project Link v0 Boundary
+
+执行者：Codex
+
+范围：
+
+- 创建并收紧 `ISSUE-0025` contract，限定为 Issue Project Link v0 边界定义。
+- 新建 `docs/specs/issue-project-link-boundary.md`。
+- 定义候选 `IssueContract.projectLink` 对象，字段为 `teamId`、`projectId`、`milestoneId`、`linkSource`。
+- 定义 link source、写入路径、用户确认门、后续实现顺序、验证矩阵和 evidence 要求。
+- 明确当前阶段不迁移现有 issue，不写 `projectLink` 或 team/project/milestone/linkSource 真实字段。
+- 明确当前阶段不改写 GoalLoop，不新增 Desktop 写入口，不绕过 IssueContract。
+- 更新 README、ROADMAP、MVP Spec、Local Workspace Boundary、Local Project Seed Boundary、Local Pro Boundary、Construction Plan、Architecture Decisions、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Issue Project Link Writer v0 实现`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，27 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0025。
+- `cargo run -p agentflow-cli -- projects`：pass，LocalProjectModelSnapshot 仍只读。
+- `cargo run -p agentflow-cli -- project-seed`：pass，仍为 read-only preview。
+- `cargo run -p agentflow-cli -- search "Issue Project Link"`：pass，返回 `.agentflow/` 内可追溯结果。
+- no issue project link migration proof：pass，`.agentflow/issues/*.json` 没有真实 `projectLink`、`teamId`、`projectId`、`milestoneId`、`linkSource` 属性。
+- `test ! -f .agentflow/workspace.json`：pass。
+- `test ! -d .agentflow/teams`：pass。
+- `test ! -d .agentflow/projects`：pass。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Issue Project Link Boundary / Writer anchors 和 no-migration proof。
+- `cargo run -p agentflow-cli -- verify ISSUE-0025`：pass，14 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0025`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，25 issues / 23 runs / 23 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0025`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Issue Project Link Writer v0 实现`。
+- `bash checks/agentflow-readiness.sh` after review：pass。
+- no issue project link migration after review：pass。
+- no seed files after review：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Issue Project Link v0 已完成边界定义。
+- 候选字段、写入路径、用户确认门和 no-migration proof 已明确。
+- 当前没有迁移任何现有 issue，也没有写 project/team/milestone/linkSource 真实字段。
+- 下一候选为 `Issue Project Link Writer v0 实现`。
+
+## 2026-05-25 - Issue Project Link Writer v0
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0026` contract 下实现 `IssueProjectLink` 和 `IssueProjectLinkPreview`。
+- 新增 `agentflow issue-link ISSUE-XXXX` CLI preview，默认只读，不写 `.agentflow/`。
+- 新增显式 writer：只有 `agentflow issue-link ISSUE-XXXX --write --yes` 才写指定 issue。
+- writer 只更新 `.agentflow/issues/{issue-id}.json` 和 `.agentflow/issues/{issue-id}.md`。
+- Markdown 渲染新增 `## Project Link` 可读摘要，但仅在 issue 已有 `projectLink` 时输出。
+- writer 拒绝覆盖已有 `projectLink`，不批量迁移历史 issue，不改写 GoalLoop，不新增 Desktop 写入口。
+- 更新 README、ROADMAP、MVP Spec、Issue Project Link Boundary、Local Workspace Boundary、Local Pro Boundary、Construction Plan、Architecture Decisions、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Project-aware GoalLoop v0 边界定义`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test issue_project_link`：pass，4 focused tests。
+- `cargo test`：pass，31 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0026。
+- `cargo run -p agentflow-cli -- issue-link ISSUE-0025`：pass，read-only preview，action write，recommended `--write --yes`。
+- no live issue projectLink proof：pass，`.agentflow/issues/*.json` 没有真实 top-level `projectLink`。
+- `cargo run -p agentflow-cli -- search "Issue Project Link"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 `agentflow issue-link ISSUE-0025`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0026`：pass，9 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0026`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，26 issues / 24 runs / 24 updates / 1 saved view。首次与 `goal next` 并发执行时触发 SQLite lock/table exists，顺序重跑通过。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0026`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Project-aware GoalLoop v0 边界定义`。首次并发执行时触发 readonly database，顺序重跑通过。
+- `git diff --check`：pass。
+
+结论：
+
+- Issue Project Link Writer v0 已实现默认 preview 和显式确认 writer。
+- 当前 live repo 没有执行 `--write --yes`，所以没有迁移任何历史 issue。
+- 显式写入行为由 tempdir 单元测试覆盖，避免在当前 repo 未授权写入现有 issue link。
+- 下一候选为 `Project-aware GoalLoop v0 边界定义`。
+
+## 2026-05-25 - Project-aware GoalLoop v0 Boundary
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0027` contract 下新增 `docs/specs/project-aware-goalloop-boundary.md`。
+- 明确最小关系：`LocalWorkspace.activeProjectId`、`LocalProject.activeMilestoneId`、`Milestone.issueIds` / `nextIssueIntent`、`IssueContract.projectLink`、`GoalLoopSelection`。
+- 定义后续 Project-aware GoalLoop 决策优先级：goal readiness、active issue、incomplete issue、active project / active milestone candidate、roadmap fallback、wait-human。
+- 定义缺失 workspace seed、project seed、issue projectLink、active project next issue 时的 fallback。
+- 明确当前阶段不改写 `goal_loop_decision`，不自动执行 plan / run / verify / review，不迁移历史 issue，不批量写 projectLink，不新增 Desktop 执行入口。
+- 更新 README、ROADMAP、MVP Spec、Local Workspace Boundary、Issue Project Link Boundary、Local Pro Boundary、Construction Plan、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Project-aware GoalLoop v0 实现`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，31 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0027，证明 WIP=1 / active issue 优先级仍有效。
+- `cargo run -p agentflow-cli -- projects`：pass，LocalProjectModelSnapshot 只读，recommended command 指向 `agentflow verify ISSUE-0027`。
+- `cargo run -p agentflow-cli -- issue-link ISSUE-0025`：pass，仍为 read-only preview。
+- `cargo run -p agentflow-cli -- search "Project-aware GoalLoop"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Project-aware GoalLoop boundary anchors。
+- no live issue projectLink proof：pass，`.agentflow/issues/*.json` 没有真实 top-level `projectLink`。
+- no `goal_loop_decision` implementation change proof：pass，本阶段只新增/更新边界文档和 readiness anchors，没有实现 Project-aware GoalLoop 决策代码。
+- `cargo run -p agentflow-cli -- verify ISSUE-0027`：pass，10 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0027`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，27 issues / 25 runs / 25 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0027`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Project-aware GoalLoop v0 实现`。
+- `git diff --check`：pass。
+
+结论：
+
+- Project-aware GoalLoop v0 已完成边界定义。
+- WIP=1、active issue、incomplete issue 优先级已被明确锁定。
+- 当前没有迁移历史 issue，没有批量写 projectLink，也没有自动执行任何 recommended command。
+- 下一候选为 `Project-aware GoalLoop v0 实现`。
+
+## 2026-05-25 - Project-aware GoalLoop v0 Implementation
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0028` contract 下实现 Project-aware GoalLoop v0。
+- 更新 `goal_loop_decision`：readiness 未通过仍 `wait-human`；active issue 仍优先；incomplete issue 仍优先；只有无 active / incomplete issue 时才读取 active project / active milestone candidate。
+- 新增只读 project candidate helper：读取默认 active project 或 workspace seed 指定的 active project，再读取 project seed 中 active milestone / project-level `nextIssueIntent`。
+- 缺失 workspace seed、project seed、projectLink 或 `nextIssueIntent` 时回退 root roadmap candidate。
+- 不写 workspace / project seed，不写 issue projectLink，不迁移历史 issue，不执行 recommended command。
+- 增加 focused tests 覆盖 active issue 优先、incomplete issue 优先、project candidate、roadmap fallback 和只推荐不执行。
+- 更新 README、ROADMAP、MVP Spec、Project-aware GoalLoop Boundary、Local Workspace Boundary、Local Pro Boundary、Architecture Decisions、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Desktop GoalLoop Trace v0 只读展示`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test project_aware_goal_loop`：pass，4 focused tests。
+- `cargo test`：pass，35 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0028，证明 WIP=1 / active issue 优先级仍有效。
+- `cargo run -p agentflow-cli -- projects`：pass，LocalProjectModelSnapshot 只读，recommended command 指向 `agentflow verify ISSUE-0028`。
+- `cargo run -p agentflow-cli -- search "Project-aware GoalLoop"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Project-aware GoalLoop implementation anchors 和 Desktop GoalLoop Trace next-candidate anchors。
+- no live issue projectLink proof：pass，`.agentflow/issues/*.json` 没有真实 top-level `projectLink`。
+- no live workspace/project seed proof：pass，当前 live repo 没有 `.agentflow/workspace.json`、`.agentflow/teams/` 或 `.agentflow/projects/`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0028`：pass，9 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0028`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，28 issues / 26 runs / 26 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0028`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Desktop GoalLoop Trace v0 只读展示`。
+- final `bash checks/agentflow-readiness.sh`：pass。
+- final no live issue projectLink proof：pass。
+- final no live workspace/project seed proof：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Project-aware GoalLoop v0 已实现本地只推荐决策。
+- active issue / incomplete issue 仍优先于 project candidate。
+- project candidate 缺失时回退 roadmap candidate。
+- 当前没有迁移历史 issue，没有写 projectLink，也没有自动执行任何 recommended command。
+- 下一候选为 `Desktop GoalLoop Trace v0 只读展示`。
+
+## 2026-05-25 - Desktop GoalLoop Trace v0 Read-only View
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0029` contract 下实现 Desktop GoalLoop Trace v0 只读展示。
+- Desktop Workbench 新增“决策”视图，复用现有 `DesktopWorkbenchSnapshot.goalLoop`、`.agentflow/goal-loop.json` 和 `.agentflow/updates/GOAL-LOOP-SUMMARY.md`。
+- UI 展示 goal readiness、active issue、incomplete issue、project candidate、roadmap fallback、next action、recommended issue intent 和 recommended command。
+- UI 明确展示 GoalLoop 决策优先级：readiness、active issue / WIP=1、incomplete issue、active project / active milestone candidate、roadmap fallback、wait-human。
+- recommended command 只展示文本，不新增桌面执行按钮，不创建 issue，不执行 plan / run / verify / review，不调用模型，不写 `.agentflow/`。
+- 更新 README、ROADMAP、MVP Spec、Project-aware GoalLoop Boundary、Desktop Workbench Boundary、Local Pro Boundary、Local Workspace Boundary、Construction Plan、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Desktop Issue Lifecycle Trace v0 只读展示`。
+
+验证：
+
+- `cargo run -p agentflow-cli -- plan "Desktop GoalLoop Trace v0 只读展示"`：pass，ISSUE-0029。
+- `cargo run -p agentflow-cli -- run ISSUE-0029 --dry-run`：pass，RUN-0027。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，35 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- browser smoke：pass，能看到“决策”入口、“目标循环决策追踪”、“决策优先级”、“推荐命令”和“这里没有执行按钮”。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0029，证明 WIP=1 / active issue 优先级仍有效。
+- `cargo run -p agentflow-cli -- projects`：pass，LocalProjectModelSnapshot 只读，recommended command 指向 `agentflow verify ISSUE-0029`。
+- `cargo run -p agentflow-cli -- search "Desktop GoalLoop Trace"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Desktop GoalLoop Trace UI anchors。
+- no live issue projectLink proof：pass，`.agentflow/issues/*.json` 没有真实 top-level `projectLink` / `teamId` / `projectId` / `milestoneId` / `linkSource`。
+- no live workspace/project seed proof：pass，当前 live repo 没有 `.agentflow/workspace.json`、`.agentflow/teams/` 或 `.agentflow/projects/`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0029`：pass，9 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0029`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，29 issues / 27 runs / 27 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0029`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Desktop Issue Lifecycle Trace v0 只读展示`。
+- final `bash checks/agentflow-readiness.sh`：pass。
+- final no live issue projectLink proof：pass。
+- final no live workspace/project seed proof：pass。
+- final `cargo run -p agentflow-cli -- goal next`：pass，next action plan `Desktop Issue Lifecycle Trace v0 只读展示`。
+- `git diff --check`：pass。
+
+结论：
+
+- Desktop GoalLoop Trace v0 已实现只读展示。
+- UI 可以解释当前 next action 为什么被推荐。
+- recommended command 只展示，不执行。
+- 当前没有写 `.agentflow/` 事实源，没有迁移 issue，没有写 projectLink，也没有破坏 Project-aware GoalLoop 的 WIP=1 / fallback 优先级。
+- 下一候选为 `Desktop Issue Lifecycle Trace v0 只读展示`。
+
+## 2026-05-25 - Desktop Issue Lifecycle Trace v0 Read-only View
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0030` contract 下实现 Desktop Issue Lifecycle Trace v0 只读展示。
+- 扩展 `DesktopWorkbenchSnapshot`，只读读取 `.agentflow/updates/PROJECT-UPDATE-*.md`，并向 Desktop 暴露 `projectUpdates` 计数和内容。
+- Desktop Workbench 新增“生命周期”视图，复用 issues、runs、evidence、reviews、project updates 展示单个 issue 的本地链路。
+- UI 展示 IssueContract 基本信息、scope、non-goals、latest run、validation command 状态、evidence / review / project update 链接和 lifecycle step 状态。
+- 生命周期步骤固定为 contract、run、validation、evidence、review、project update、completed。
+- evidence / review / update 只作为链接或文本展示，没有 run / verify / review 执行按钮，不创建或编辑 issue，不写 `.agentflow/`，不写 projectLink，不迁移历史 issue，不调用模型，不上传远程。
+- 更新 README、ROADMAP、MVP Spec、Desktop Workbench Boundary、Local Pro Boundary、Construction Plan、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Desktop Project Update Timeline v0 只读展示`。
+
+验证：
+
+- `cargo run -p agentflow-cli -- plan "Desktop Issue Lifecycle Trace v0 只读展示"`：pass，ISSUE-0030。
+- `cargo run -p agentflow-cli -- run ISSUE-0030 --dry-run`：pass，RUN-0028。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，35 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- browser smoke：pass，能看到“生命周期”入口、“Issue 生命周期追踪”、“当前生命周期步骤”、Contract、Validation、Evidence、Project Update 和“没有执行按钮”。
+- no execution controls：pass，生命周期视图没有 run / verify 执行按钮。
+- no live issue projectLink proof：pass，30 个 `.agentflow/issues/*.json` 没有真实 top-level `projectLink` / `teamId` / `projectId` / `milestoneId` / `linkSource`。
+- no live workspace/project seed proof：pass，当前 live repo 没有 `.agentflow/workspace.json`、`.agentflow/teams/` 或 `.agentflow/projects/`。
+- no search/query write directory proof：pass，当前 live repo 没有 `.agentflow/search/` 或 `.agentflow/queries/`。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0030，证明 WIP=1 / active issue 优先级仍有效。
+- `cargo run -p agentflow-cli -- projects`：pass，LocalProjectModelSnapshot 只读，recommended command 指向 `agentflow verify ISSUE-0030`。
+- `cargo run -p agentflow-cli -- search "Issue Lifecycle Trace"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Desktop Issue Lifecycle Trace UI anchors。
+- `cargo run -p agentflow-cli -- verify ISSUE-0030`：pass，9 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0030`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，30 issues / 28 runs / 28 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0030`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Desktop Project Update Timeline v0 只读展示`。
+- `git diff --check`：pass。
+
+结论：
+
+- Desktop Issue Lifecycle Trace v0 已实现只读展示。
+- UI 可以解释一个 issue 当前卡在哪个生命周期步骤。
+- evidence / review / update 只作为链接或文本展示。
+- 当前没有桌面执行按钮，没有写 `.agentflow/` 事实源，没有迁移 issue，也没有写 projectLink。
+- 下一候选为 `Desktop Project Update Timeline v0 只读展示`。
+
+## 2026-05-25 - Desktop Project Update Timeline v0 Read-only View
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0031` contract 下实现 Desktop Project Update Timeline v0 只读展示。
+- Desktop Workbench 新增“更新时间线”视图，复用 `DesktopWorkbenchSnapshot` 的 projectUpdates、issues、runs、evidence 和 reviews。
+- UI 按最新优先展示 project update 列表、update id、path、title、snippet、关联 issue、关联 run、validation 状态、关联 evidence 和关联 review。
+- UI 明确展示项目推进链路：issue contract -> run -> validation -> evidence -> review -> project update。
+- project update 只作为链接或文本展示；没有 run / verify / review 执行按钮，不创建或编辑 issue，不保存 timeline filter，不写 `.agentflow/`，不写 projectLink，不迁移历史 issue，不调用模型，不上传远程。
+- 更新 README、ROADMAP、MVP Spec、Desktop Workbench Boundary、Local Pro Boundary、Construction Plan、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Desktop Run Validation Trace v0 只读展示`。
+
+验证：
+
+- `cargo run -p agentflow-cli -- plan "Desktop Project Update Timeline v0 只读展示"`：pass，ISSUE-0031。
+- `cargo run -p agentflow-cli -- run ISSUE-0031 --dry-run`：pass，RUN-0029。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，35 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- browser smoke：pass，能看到“更新时间线”入口、“项目更新时间线”、项目推进链路、Issue Contract、Run、Validation、Evidence、Review 和“没有执行按钮”。
+- no execution controls：pass，更新时间线视图没有 run / verify / review 执行按钮。
+- no live issue projectLink proof：pass，31 个 `.agentflow/issues/*.json` 没有真实 top-level `projectLink` / `teamId` / `projectId` / `milestoneId` / `linkSource`。
+- no live workspace/project seed proof：pass，当前 live repo 没有 `.agentflow/workspace.json`、`.agentflow/teams/` 或 `.agentflow/projects/`。
+- no search/query write directory proof：pass，当前 live repo 没有 `.agentflow/search/` 或 `.agentflow/queries/`。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0031，证明 WIP=1 / active issue 优先级仍有效。
+- `cargo run -p agentflow-cli -- projects`：pass，LocalProjectModelSnapshot 只读，recommended command 指向 `agentflow verify ISSUE-0031`。
+- `cargo run -p agentflow-cli -- search "Project Update Timeline"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Desktop Project Update Timeline UI anchors。
+- `cargo run -p agentflow-cli -- verify ISSUE-0031`：pass，9 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0031`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，31 issues / 29 runs / 29 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0031`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Desktop Run Validation Trace v0 只读展示`。
+- `git diff --check`：pass。
+
+结论：
+
+- Desktop Project Update Timeline v0 已实现只读展示。
+- UI 可以解释项目更新来自哪个 issue / run / evidence / review。
+- project update 只作为链接或文本展示。
+- 当前没有桌面执行按钮，没有写 `.agentflow/` 事实源，没有保存 timeline filter，没有迁移 issue，也没有写 projectLink。
+- 下一候选为 `Desktop Run Validation Trace v0 只读展示`。
+
+## 2026-05-25 - Desktop MVP Navigation Scope Reduction v0
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0032` contract 下收敛 Desktop Workbench MVP 主导航。
+- 主导航只保留总览、团队、项目、任务。
+- 新增“团队”只读视图，展示 LocalWorkspace / LocalTeams、团队关联项目和团队任务。
+- 项目视图继续展示 LocalProject / Milestone / GoalLoopSelection。
+- 任务视图继续展示 IssueContract、latest run、validation commands 和证据链接。
+- 保留 GoalLoop Trace、Issue Lifecycle Trace、Project Update Timeline、Search、Metrics 等底层只读能力，但不作为 MVP 主导航入口展示。
+- 不新增 trace 视图，不删除本地事实源或 reader，不执行 run / verify / review，不写 `.agentflow/`，不写 projectLink，不创建 workspace/team/project seed。
+- 更新 README、ROADMAP、MVP Spec、Desktop Workbench Boundary、Local Pro Boundary、Construction Plan、readiness script 和 latest verification summary。
+- 将下一候选推进为 `Desktop MVP Task Detail v0 收敛`。
+
+验证：
+
+- `cargo run -p agentflow-cli -- plan "Desktop MVP Navigation Scope Reduction v0"`：pass，ISSUE-0032。
+- `cargo run -p agentflow-cli -- run ISSUE-0032 --dry-run`：pass，RUN-0030。
+- `npm --prefix apps/desktop run build`：pass。
+- browser smoke：pass，主导航只剩“总览 / 团队 / 项目 / 任务”，决策、生命周期、更新时间线、指标、搜索、证据、审查、视图入口均未出现在主导航。
+- browser smoke：pass，“团队”页能看到团队入口、项目和任务关系。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，35 tests。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0032。
+- `cargo run -p agentflow-cli -- projects`：pass，LocalProjectModelSnapshot 只读，recommended command 指向 `agentflow verify ISSUE-0032`。
+- `cargo run -p agentflow-cli -- search "Desktop MVP Navigation Scope Reduction"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Desktop MVP Navigation anchors。
+- no live issue projectLink proof：pass，32 个 `.agentflow/issues/*.json` 没有真实 top-level `projectLink` / `teamId` / `projectId` / `milestoneId` / `linkSource`。
+- no live workspace/project seed proof：pass，当前 live repo 没有 `.agentflow/workspace.json`、`.agentflow/teams/` 或 `.agentflow/projects/`。
+- no search/query write directory proof：pass，当前 live repo 没有 `.agentflow/search/` 或 `.agentflow/queries/`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0032`：pass，8 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0032`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，32 issues / 30 runs / 30 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0032`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Desktop MVP Task Detail v0 收敛`。
+- `git diff --check`：pass。
+
+结论：
+
+- Desktop Workbench MVP 已从 trace 扩张状态收敛回最小产品骨架。
+- 当前主导航只围绕总览、团队、项目、任务构建。
+- 决策、生命周期、更新时间线等能力降级为内部只读 trace/debug 能力，不再作为 MVP 主入口。
+- 下一候选为 `Desktop MVP Task Detail v0 收敛`。
+
+## 2026-05-25 - Desktop Team Hierarchy v0 收敛
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0033` contract 下收敛 Desktop 团队入口。
+- 团队页改为 workspace -> teams -> projects / tasks 的只读层级展示。
+- 一个 workspace 可以包含多个团队；每个团队下面展示关联项目和任务。
+- 总览页同步把 Projects / Teams 文案收敛为中文“项目 / 团队”。
+- 保持主导航只包含总览、团队、项目、任务。
+- 不新增 Desktop 新建/编辑/删除 team / project / task。
+- 不写 `.agentflow/workspace.json`、`.agentflow/teams/`、`.agentflow/projects/` 或 issue projectLink。
+
+验证：
+
+- `cargo run -p agentflow-cli -- plan "Desktop Team Hierarchy v0 收敛"`：pass，ISSUE-0033。
+- `cargo run -p agentflow-cli -- run ISSUE-0033 --dry-run`：pass，RUN-0031。
+- `npm --prefix apps/desktop run build`：pass。
+- browser smoke：pass，“团队”页能看到 Your teams、团队入口、项目、任务和多团队说明；主导航未恢复决策、生命周期、更新时间线。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，35 tests。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0033。
+- `cargo run -p agentflow-cli -- projects`：pass，LocalProjectModelSnapshot 只读。
+- `cargo run -p agentflow-cli -- search "Team Hierarchy"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Desktop Team Hierarchy anchors。
+- no live workspace/team/project seed proof：pass，当前 live repo 没有 `.agentflow/workspace.json`、`.agentflow/teams/` 或 `.agentflow/projects/`。
+- no issue projectLink proof：pass，33 个 `.agentflow/issues/*.json` 没有真实 top-level `projectLink` / `teamId` / `projectId` / `milestoneId` / `linkSource`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0033`：pass，9 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0033`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，33 issues / 31 runs / 31 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0033`：pass，15 checks / ready。第一次与 `update summary` 并发时触发 SQLite readonly error，串行重跑通过。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Desktop MVP Task Detail v0 收敛`。
+
+结论：
+
+- Desktop MVP 的团队入口已对齐“多个团队，每个团队下有项目和任务”的产品结构。
+- 当前实现仍是只读展示，不提供创建按钮，不写 `.agentflow/` 组织模型 seed。
+- 下一候选为 `Desktop MVP Task Detail v0 收敛`。
+
+## 2026-05-25 - Desktop Team Parent Child Columns v0
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0034` contract 下收敛 Desktop 团队页栏目。
+- 将团队页改为三栏父子关系：团队是父栏目，项目和任务是选中团队下面的子栏目。
+- 团队栏目负责选择父级 team；项目栏目只展示该 team 关联 projects；任务栏目只展示该 team 关联 issue refs。
+- 保持 Desktop 主导航只包含总览、团队、项目、任务。
+- 不新增 Desktop 新建/编辑/删除 team / project / task。
+- 不写 `.agentflow/workspace.json`、`.agentflow/teams/`、`.agentflow/projects/` 或 issue projectLink。
+
+验证：
+
+- `cargo run -p agentflow-cli -- plan "Desktop Team Parent Child Columns v0"`：pass，ISSUE-0034。
+- `cargo run -p agentflow-cli -- run ISSUE-0034 --dry-run`：pass，RUN-0032。
+- `npm --prefix apps/desktop run build`：pass。
+- browser smoke：pass，团队页显示 3 个栏目，包含父级栏目、子级栏目、团队、项目、任务；主导航未恢复决策、生命周期、更新时间线。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，35 tests。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0034。
+- `cargo run -p agentflow-cli -- projects`：pass，LocalProjectModelSnapshot 只读。
+- `cargo run -p agentflow-cli -- search "Parent Child Columns"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Desktop Team Parent Child Columns anchors。
+- no live workspace/team/project seed proof：pass，当前 live repo 没有 `.agentflow/workspace.json`、`.agentflow/teams/` 或 `.agentflow/projects/`。
+- no issue projectLink proof：pass，34 个 `.agentflow/issues/*.json` 没有真实 top-level `projectLink` / `teamId` / `projectId` / `milestoneId` / `linkSource`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0034`：pass，9 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0034`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，34 issues / 32 runs / 32 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0034`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Desktop MVP Task Detail v0 收敛`。
+
+结论：
+
+- 团队页已在栏目结构上表达父子关系。
+- 团队是父级；项目和任务是团队下面的子级。
+- 当前仍是只读 UI，不提供创建按钮，不写 `.agentflow/` 组织模型 seed。
+- 下一候选为 `Desktop MVP Task Detail v0 收敛`。
+
+## 2026-05-26 - Desktop Workspace Sidebar Tree v0
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0035` contract 下收敛 Desktop 左侧栏目。
+- 左侧栏目改为本地工作区树：
+  - Workspace
+    - project
+    - issues
+  - Team
+    - project
+    - issues
+- Workspace 节点进入总览；workspace project / issues 子项进入项目 / 任务。
+- Team 节点进入团队页；team project / issues 子项进入项目 / 任务。
+- 所有入口只切换视图，不执行命令，不写 `.agentflow/`。
+- 不新增 Desktop 新建/编辑/删除 workspace / team / project / issue。
+
+验证：
+
+- `cargo run -p agentflow-cli -- plan "Desktop Workspace Sidebar Tree v0"`：pass，ISSUE-0035。
+- `cargo run -p agentflow-cli -- run ISSUE-0035 --dry-run`：pass，RUN-0033。
+- `npm --prefix apps/desktop run build`：pass。
+- browser smoke：pass，左侧栏目显示 Workspace / Teams 父节点和 project / issues 子项；未恢复决策、生命周期、更新时间线。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，35 tests。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0035。
+- `cargo run -p agentflow-cli -- projects`：pass，LocalProjectModelSnapshot 只读。
+- `cargo run -p agentflow-cli -- search "Workspace Sidebar Tree"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Desktop Workspace Sidebar Tree anchors。
+- no live workspace/team/project seed proof：pass，当前 live repo 没有 `.agentflow/workspace.json`、`.agentflow/teams/` 或 `.agentflow/projects/`。
+- no issue projectLink proof：pass，35 个 `.agentflow/issues/*.json` 没有真实 top-level `projectLink` / `teamId` / `projectId` / `milestoneId` / `linkSource`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0035`：pass，9 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0035`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，35 issues / 33 runs / 33 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0035`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Desktop MVP Task Detail v0 收敛`。
+
+结论：
+
+- Desktop 左侧栏目已按用户指定的 workspace/team 父子结构呈现。
+- Workspace 和 Team 都是父节点；project 和 issues 是各自下面的子项。
+- 当前仍是只读导航，不提供创建按钮，不写 `.agentflow/` 组织模型 seed。
+- 下一候选为 `Desktop MVP Task Detail v0 收敛`。
+
+## 2026-05-26 - Desktop Teams Add Button v0
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0036` contract 下给 Desktop 左侧工作区树的 TEAMS 标题增加 `+` 入口。
+- `+` 点击后切换到团队页并显示“新增团队 / 初始化创建入口”面板。
+- 当前入口只展示创建入口和后续写入边界，不真正保存 team。
+- 不写 `.agentflow/workspace.json`、`.agentflow/teams/`、`.agentflow/projects/` 或 issue projectLink。
+
+验证：
+
+- `cargo run -p agentflow-cli -- plan "Desktop Teams Add Button v0"`：pass，ISSUE-0036。
+- `cargo run -p agentflow-cli -- run ISSUE-0036 --dry-run`：pass，RUN-0034。
+- `npm --prefix apps/desktop run build`：pass。
+- browser smoke：pass，TEAMS 有且只有一个 `+` 按钮；点击后显示“新增团队 / 初始化创建入口”。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，35 tests。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next` active issue：pass，next action verify ISSUE-0036。
+- `cargo run -p agentflow-cli -- search "Teams Add Button"`：pass，返回 `.agentflow/` 内可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass，包含 Desktop Teams Add Button anchors。
+- no live workspace/team/project seed proof：pass，当前 live repo 没有 `.agentflow/workspace.json`、`.agentflow/teams/` 或 `.agentflow/projects/`。
+- no issue projectLink proof：pass，36 个 `.agentflow/issues/*.json` 没有真实 top-level `projectLink` / `teamId` / `projectId` / `milestoneId` / `linkSource`。
+- `cargo run -p agentflow-cli -- verify ISSUE-0036`：pass，8 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0036`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- update summary`：pass，36 issues / 34 runs / 34 updates / 1 saved view。
+- `cargo run -p agentflow-cli -- review-assistant ISSUE-0036`：pass，15 checks / ready。
+- `cargo run -p agentflow-cli -- goal next` after review：pass，next action plan `Desktop MVP Task Detail v0 收敛`。
+
+结论：
+
+- TEAMS 右侧已新增 `+` 入口。
+- 点击 `+` 可以进入新增团队面板。
+- 当前仍不保存 team，不写 `.agentflow/teams/`；真正创建能力后置到 Team Writer。
+- 下一候选为 `Desktop MVP Task Detail v0 收敛`。
+
+## 2026-05-26 - MVP Productization Project / Milestone-aware Issue Planning v0
+
+执行者：Codex
+
+范围：
+
+- 参考 Linear 的 workspace / team / project / milestone / issue 最小关系，把 AgentFlow 当前工作收敛为本地 MVP project。
+- 创建并使用 `.agentflow/workspace.json`、`.agentflow/teams/core.json`、`.agentflow/projects/agentflow-local-execution.json` 作为本地 project seed。
+- 将 project 拆成 `mvp-project-foundation`、`mvp-issue-planning`、`mvp-execution-loop`、`mvp-desktop-polish`、`mvp-release-readiness`。
+- 完成 `ISSUE-0037 Project Seed Fact Source v0 实现` 和 `ISSUE-0038 Milestone-aware Issue Planning v0 实现`。
+- `agentflow plan` 现在会在 seed 存在时自动写入 issue `projectLink`，并同步更新 active team / project / milestone 的 `issueIds`。
+- 基于 active milestone `mvp-execution-loop` 创建 `ISSUE-0039 MVP Execution Loop v0 收敛`。
+
+验证：
+
+- `cargo run -p agentflow-cli -- project-seed --write --yes`：pass，创建 workspace/team/project seed。
+- `cargo run -p agentflow-cli -- plan "Project Seed Fact Source v0 实现"`：pass，ISSUE-0037。
+- `cargo run -p agentflow-cli -- issue-link ISSUE-0037 --write --yes`：pass，关联 `mvp-project-foundation`。
+- `cargo test -p agentflow-core local_project_model_snapshot_prefers_seed_files_when_present -- --nocapture`：pass。
+- `cargo run -p agentflow-cli -- run ISSUE-0037 --dry-run`：pass，RUN-0035。
+- `cargo run -p agentflow-cli -- verify ISSUE-0037`：pass。
+- `cargo run -p agentflow-cli -- review ISSUE-0037`：pass，生成 evidence / review / update。
+- `cargo test -p agentflow-core plan_issue_links_active_project_milestone_when_seed_exists -- --nocapture`：pass。
+- `cargo test -p agentflow-core issue_project_link_write_updates_only_target_issue -- --nocapture`：pass。
+- `cargo run -p agentflow-cli -- run ISSUE-0038 --dry-run`：pass，RUN-0036。
+- `cargo run -p agentflow-cli -- verify ISSUE-0038`：pass，5 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0038`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- projects`：pass，active milestone 进入 `mvp-execution-loop`。
+- `cargo run -p agentflow-cli -- plan "MVP Execution Loop v0 收敛"`：pass，ISSUE-0039 自动关联 `mvp-execution-loop`。
+- `cargo run -p agentflow-cli -- goal next`：pass，next action run ISSUE-0039。
+- `cargo run -p agentflow-cli -- update summary`：pass，39 issues / 38 completed / 36 runs / 36 updates。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，37 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass。
+- `cargo run -p agentflow-cli -- projects`：pass，active milestone `mvp-execution-loop`，issue `ISSUE-0039`。
+- `bash checks/agentflow-readiness.sh`：pass，seed-backed MVP checks。
+- `git diff --check`：pass。
+
+结论：
+
+- AgentFlow 现在具备 MVP 产品化的最小项目骨架：workspace -> team -> project -> milestones -> issue contracts。
+- 后续 issue 可以从 active milestone 自动生成并归属，不再需要手工补 `issue-link` 和 seed `issueIds`。
+- 当前下一步是执行 `ISSUE-0039`：`agentflow run ISSUE-0039 --dry-run`。
+
+## 2026-05-26 - MVP Execution Loop v0
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0039` contract 下把 MVP 执行链路固定为 `Project -> Milestone -> Issue -> ExecutionRun -> VerificationEvidence -> ReviewEvidence -> ProjectUpdate`。
+- `LocalProjectIssueRef` 增加 latest run、run status、validation status、execution state、evidence path、review path 和 project update path。
+- `agentflow projects` 在每个 milestone 下展示 issue execution trace。
+- Desktop Project 视图在 milestone 下只读展示 issue 的执行状态、运行、验证、证据和项目更新。
+- Milestone 仍然只做阶段归属和证据收口，不参与复杂调度；调度继续由 IssueContract、WIP=1 和 `goal next` 决定。
+
+验证：
+
+- `cargo run -p agentflow-cli -- run ISSUE-0039 --dry-run`：pass，RUN-0037。
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-core local_project_model_snapshot_reads_current_facts_without_writing -- --nocapture`：pass。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- projects`：pass，milestone 下展示 issue execution trace。
+- `cargo run -p agentflow-cli -- verify ISSUE-0039`：pass，6 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0039`：pass，生成 evidence / review / update。
+- `cargo run -p agentflow-cli -- goal next`：pass，推荐 `Desktop MVP Productization v0 收敛`。
+- `cargo run -p agentflow-cli -- plan "Desktop MVP Productization v0 收敛"`：pass，ISSUE-0040 自动关联 `mvp-desktop-polish`。
+- `cargo run -p agentflow-cli -- update summary`：pass，40 issues / 39 completed / 37 runs / 37 updates。
+- `cargo test`：pass，37 tests。
+- `cargo run -p agentflow-cli -- goal check`：pass。
+- `cargo run -p agentflow-cli -- goal next` after ISSUE-0040：pass，next action run ISSUE-0040。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- MVP 的执行链路已从扁平 issue queue 收敛为阶段化链路。
+- 当前 active milestone 已推进到 `mvp-desktop-polish`。
+- 当前下一步是执行 `ISSUE-0040`：`agentflow run ISSUE-0040 --dry-run`。
+
+## 2026-05-26 - MVP Minimal Workflow v0 / Desktop MVP Productization v0
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0040` contract 下把 MVP 最小产品链路锁定为 `Project -> Milestone -> Issue -> ExecutionRun -> VerificationEvidence -> ReviewEvidence -> ProjectUpdate -> Milestone Evidence Summary`。
+- `goal_loop_decision` 增加 active milestone queue preflight：有 active milestone issue 队列时，只推进当前 milestone 下唯一 eligible issue；同一 milestone 多个未完成 issue 时返回 `wait-human`。
+- `review_issue` 在 linked milestone 全部 issue completed 后自动写 `.agentflow/evidence/MILESTONE-<milestone-id>-evidence-summary.md`，并把 project seed 推进到下一个 planned milestone。
+- Desktop Project 视图将选择区文案收敛为“队列预检”，项目层级文案收敛为“项目 / 里程碑”和“任务合同”。
+- `ISSUE-0040` 已完成，`mvp-desktop-polish` 已完成，当前 active milestone 已推进到 `mvp-release-readiness`。
+
+验证：
+
+- `cargo test goal_next_uses_active_milestone_queue_before_outside_backlog`：pass，active milestone queue preflight 优先于外部未完成 backlog。
+- `cargo test review_completes_milestone_and_writes_summary_when_seed_linked`：pass，milestone 完成后写 summary 并激活下一 milestone。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，39 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- verify ISSUE-0040`：pass，RUN-0038 / 6 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0040`：pass，生成 evidence / review / project update。
+- `test -f .agentflow/evidence/MILESTONE-mvp-desktop-polish-evidence-summary.md`：pass。
+- `cargo run -p agentflow-cli -- update summary`：pass，40 issues / 40 completed / 38 runs / 38 updates。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next`：pass，推荐 `agentflow plan "MVP Release Readiness v0 验收"`。
+- `cargo run -p agentflow-cli -- projects`：pass，active milestone `mvp-release-readiness`，`mvp-desktop-polish` completed。
+- `cargo run -p agentflow-cli -- metrics`：pass，latest evidence 指向 milestone summary。
+- `cargo run -p agentflow-cli -- search "mvp-desktop-polish"`：pass，返回 milestone summary、ISSUE-0040 和 RUN-0038 结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- AgentFlow MVP 的主链路已从“扁平 issue queue”收敛为 `Project -> Milestone -> Issue -> Evidence`。
+- `goal next` 当前不会越过 active milestone 直接处理全局 backlog。
+- 当前下一步是进入发布验收：`agentflow plan "MVP Release Readiness v0 验收"`。
+
+## 2026-05-26 - AgentFlow AI Delivery Workflow Contract v1
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0041` contract 下新增 `docs/specs/agentflow-ai-delivery-workflow-contract-v1.md`，并将 PRD 正式合同落到 `docs/contracts/agentflow-ai-delivery-workflow-contract-v1.md`。
+- 将 AgentFlow MVP 主干定义为 `Workspace / Team -> Project -> Milestone -> Issue -> Lease -> Execution Run -> PR / Checks -> Evidence -> Milestone Review -> Project Audit / Docs Refresh`。
+- 明确五个能力面：Workflow State Machine、Eligibility Engine、Lease / Lock、Execution Evidence、Milestone / Project Closure。
+- 固定 PRD / ARC / AIE 顺序：`@003 / PRD` 先输出合同，`@005 / ARC` 审查状态机、eligible、lease、evidence 和数据模型，`@000 / AIE` 再落仓执行。
+- 当前阶段只定义产品 / 架构合同，不实现 UI、不实现 lease writer、不接入远程 PR provider、不改写 `goal_loop_decision`。
+
+验证：
+
+- `cargo run -p agentflow-cli -- plan "AgentFlow AI Delivery Workflow Contract v1 边界定义"`：pass，ISSUE-0041 自动关联 `mvp-release-readiness`。
+- `cargo run -p agentflow-cli -- run ISSUE-0041 --dry-run`：pass，RUN-0039。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，39 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass。
+- `cargo run -p agentflow-cli -- goal next`：pass，review 后推荐 `agentflow plan "Workflow State Machine v0 边界定义"`。
+- `cargo run -p agentflow-cli -- projects`：pass。
+- `cargo run -p agentflow-cli -- search "AI Delivery Workflow Contract"`：pass。
+- `test -f docs/contracts/agentflow-ai-delivery-workflow-contract-v1.md`：pass。
+- `cargo run -p agentflow-cli -- verify ISSUE-0041`：pass，RUN-0039 / 8 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0041`：pass，生成 evidence / review / project update。
+- `test -f .agentflow/evidence/MILESTONE-mvp-release-readiness-evidence-summary.md`：pass。
+- `cargo run -p agentflow-cli -- update summary`：pass，41 issues / 41 completed / 39 runs / 39 updates。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- `AgentFlow AI Delivery Workflow Contract v1` 已完成并通过 review，`mvp-release-readiness` milestone 已生成 evidence summary。
+- AgentFlow 当前 MVP 主干已从 Linear-like issue runner 收敛为受控 AI coding agent 交付系统。
+- 当前下一步是 `agentflow plan "Workflow State Machine v0 边界定义"`。
+
+## 2026-05-26 - AgentFlow AI Delivery Workflow Contract v1 可执行化
+
+执行者：Codex
+
+范围：
+
+- 将 `docs/contracts/agentflow-ai-delivery-workflow-contract-v1.md` 从 PRD 草案升级为可直接供 ARC / AIE 使用的 canonical 合同。
+- 补齐 Core Entity Model 的必填字段、状态枚举、状态迁移守卫、禁止迁移、Eligibility failure reason vocabulary、Lease race conditions、Command Boundary、Local File Mapping、Event Log Contract、Minimal Data Model、First Executable Vertical Slice 和 Verification Matrix。
+- 保持当前阶段为文档合同工作：不实现 UI、不实现状态机代码、不实现 lease writer、不接入远程 PR provider、不改写 `goal_loop_decision`。
+
+验证：
+
+- `test -f docs/contracts/agentflow-ai-delivery-workflow-contract-v1.md`：pass。
+- `rg -n "Command Boundary|Local File Mapping|Event Log Contract|Verification Matrix" docs/contracts/agentflow-ai-delivery-workflow-contract-v1.md`：pass。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，39 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass。
+- `cargo run -p agentflow-cli -- goal next`：pass，仍推荐 `agentflow plan "Workflow State Machine v0 边界定义"`。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- `AgentFlow AI Delivery Workflow Contract v1` 现在是可执行版本，可以作为 `Workflow State Machine v0 边界定义` 的直接输入。
+- 下一步仍然是 `agentflow plan "Workflow State Machine v0 边界定义"`。
+
+## 2026-05-26 - Workflow State Machine v0 可用切片
+
+执行者：Codex
+
+范围：
+
+- 在 `ISSUE-0042` contract 下实现 Workflow State Machine v0。
+- 新增 `agentflow state check`，读取 `.agentflow/projects/*.json`、`.agentflow/issues/*.json`、evidence / review 本地事实源。
+- 新增 `WorkflowStateSnapshot`、`WorkflowStateCounts`、`WorkflowStateCheck`、`WorkflowTransitionGuard`、`WorkflowStateCheckSummary` 和 `write_workflow_state_check`。
+- 写出 `.agentflow/state/workflow-state.json` 和 `.agentflow/updates/WORKFLOW-STATE-SUMMARY.md`。
+- 增加 `docs/specs/workflow-state-machine-v0.md`，并更新 README、ROADMAP、MVP Spec、construction plan、latest verification summary 和 readiness script。
+- 将 project seed 推进到 `workflow-core-eligibility-engine` active milestone，下一候选为 `Eligibility Engine v0 边界定义`。
+- 当前阶段不新增 UI、不实现 lease writer、不调用模型、不创建远程 issue / PR、不改写 `goal_loop_decision`。
+
+验证：
+
+- `cargo run -p agentflow-cli -- plan "Workflow State Machine v0 边界定义"`：pass，ISSUE-0042 自动关联 `workflow-core-state-machine`。
+- `cargo test workflow_state`：pass，2 个 workflow state focused tests。
+- `cargo run -p agentflow-cli -- state check`：pass，ready true，1 project / 8 milestones / 42 issues / 0 errors / 36 warnings。
+- `cargo run -p agentflow-cli -- run ISSUE-0042 --dry-run`：pass，RUN-0040。
+- `cargo run -p agentflow-cli -- verify ISSUE-0042`：pass，RUN-0040 / 2 commands。
+- `cargo run -p agentflow-cli -- review ISSUE-0042`：pass，生成 evidence / review / project update。
+- `test -f .agentflow/evidence/MILESTONE-workflow-core-state-machine-evidence-summary.md`：pass。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，41 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- update summary`：pass，42 issues / 42 completed / 40 runs / 40 updates。
+- `cargo run -p agentflow-cli -- goal check`：pass。
+- `cargo run -p agentflow-cli -- goal next`：pass，推荐 `agentflow plan "Eligibility Engine v0 边界定义"`。
+- `cargo run -p agentflow-cli -- projects`：pass，active milestone `workflow-core-eligibility-engine`。
+- `cargo run -p agentflow-cli -- metrics`：pass，latest evidence 指向 `MILESTONE-workflow-core-state-machine-evidence-summary.md`。
+- `cargo run -p agentflow-cli -- search "Workflow State"`：pass。
+- `cargo run -p agentflow-cli -- search "Eligibility Engine"`：pass。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Workflow State Machine v0 已从合同变成可运行的本地状态检查能力。
+- AgentFlow 当前已经具备 Project / Milestone / Issue 状态不变量检查、transition guard 输出和 readiness 硬门槛。
+- 历史 `ISSUE-0001` 到 `ISSUE-0036` 缺少 projectLink 会以 warning 呈现，不阻断当前 active milestone；后续如需清理，应单独走 issue 迁移合同。
+- 下一步进入 `agentflow plan "Eligibility Engine v0 边界定义"`。
+
+## 2026-05-26 - Workflow Control Core v0 完整可用闭环
+
+执行者：Codex
+
+范围：
+
+- 按 goal 级别直接推进，不新增单个 issue 作为本轮授权载体。
+- 在 `Workflow State Machine v0` 基础上实现 Workflow Control Core v0。
+- 新增 Eligibility Engine v0：`WorkflowEligibilitySnapshot`、`WorkflowEligibilityCandidate`、`WorkflowEligibilitySummary`、`agentflow eligibility`。
+- 新增 Lease / Lock v0：`WorkflowLeaseRecord`、`WorkflowLeaseSnapshot`、`agentflow lease`、`.agentflow/leases/LEASE-*.json`。
+- 改造 `agentflow run`：run 前必须通过 eligibility，并自动 acquire local lease；`AgentRun` 记录 `projectId`、`milestoneId`、`leaseId`。
+- 改造 `agentflow review`：evidence / review / project update 完成后 release lease，并继续在 milestone 完成时生成 evidence summary。
+- 更新 `goal next`：active milestone queue 推荐 run 前先看 eligibility；无 eligible issue 时推荐 `agentflow eligibility` 或 active milestone 的下一条 plan。
+- 更新 README、ROADMAP、MVP Spec、Workflow State Machine Spec、AI Delivery Workflow Contract、construction plan、latest verification summary 和 readiness script。
+- 当前不新增 Desktop UI，不接入远程 PR / GitHub / Linear，不调用模型，不做 SaaS、账号、支付、云同步。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，44 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- state check`：pass，ready true，1 project / 9 milestones / 42 issues / 0 errors / 36 warnings。
+- `cargo run -p agentflow-cli -- eligibility`：pass，当前 active milestone 没有 open issue，推荐 `agentflow plan "Project Audit / Docs Refresh v0 边界定义"`。
+- `cargo run -p agentflow-cli -- lease`：pass，0 active leases / 0 stale leases。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next`：pass，推荐 `agentflow plan "Project Audit / Docs Refresh v0 边界定义"`。
+- `cargo run -p agentflow-cli -- projects`：pass，active milestone `workflow-core-closure-gates`。
+- `cargo run -p agentflow-cli -- metrics`：pass，42 issues / 40 runs，下一步仍为 `Project Audit / Docs Refresh v0 边界定义`。
+- `cargo run -p agentflow-cli -- search "Workflow Control Core"`：pass，返回可追溯 roadmap 结果。
+- `cargo run -p agentflow-cli -- search "Project Audit"`：pass，返回 next-stage、goal loop 和 eligibility summary 结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+- `cargo test` focused coverage includes：
+  - `eligibility_finds_unique_active_milestone_issue`
+  - `eligibility_reports_failure_reasons_when_issue_is_not_ready`
+  - `run_acquires_lease_and_review_releases_it`
+
+结论：
+
+- AgentFlow 现在具备本地 workflow control core：state -> eligibility -> lease -> run -> verify -> review -> evidence -> milestone summary -> next milestone。
+- Eligible 是计算结果，不能通过手动 issue 状态绕过。
+- run 前必须通过 eligibility + lease。
+- review 后释放 lease，避免同一 project code-changing WIP 泄漏。
+- 当前 active milestone 已切到 `workflow-core-closure-gates`，下一步是 `agentflow plan "Project Audit / Docs Refresh v0 边界定义"`。
+
+## 2026-05-26 - Project Audit / Docs Refresh v0 边界定义
+
+执行者：Codex
+
+范围：
+
+- 新增 `docs/specs/project-audit-docs-refresh-boundary.md`。
+- 明确 Project closure 不能从 `active` 直接进入 `done`，必须经过 `audit -> docs-refresh -> final-review -> done`。
+- 定义 Code Audit 检查范围：duplicate code、temporary code、unused code、TODO / FIXME、security / auth / permission risk、performance risk、architecture drift、test gaps、unexpected public API changes。
+- 定义 Root Docs Refresh 检查范围：README、ROADMAP、MVP Spec、architecture docs、contracts、validation docs、runbook / known limitations。
+- 定义 Final Evidence Summary 必须包含 project goal、completed milestones、completed issues、runs / validations、evidence / reviews、known gaps、deferred work 和 final recommendation。
+- 明确 Human Final Approval 是 Project Done 前最后 gate，Agent 不能替用户批准。
+- 更新 README、ROADMAP、MVP Spec、Workflow Control Core Spec、AI Delivery Workflow Contract、construction plan、latest verification summary 和 readiness script。
+- 将 active milestone `workflow-core-closure-gates` 的下一候选推进为 `Project Closure State v0 实现`。
+- 当前阶段只定义边界，不实现自动审计器，不修改 Desktop UI，不创建 `.agentflow/audits/`，不接入远程 PR / GitHub / Linear，不调用模型。
+
+验证：
+
+- `test -f docs/specs/project-audit-docs-refresh-boundary.md`：pass。
+- `rg "Project Audit / Docs Refresh v0" docs/specs/project-audit-docs-refresh-boundary.md README.md ROADMAP.md docs/specs/mvp-spec.md docs/specs/workflow-control-core-v0.md docs/contracts/agentflow-ai-delivery-workflow-contract-v1.md`：pass。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，44 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- state check`：pass，ready true，1 project / 9 milestones / 42 issues / 0 errors / 36 warnings。
+- `cargo run -p agentflow-cli -- eligibility`：pass，推荐 `agentflow plan "Project Closure State v0 实现"`。
+- `cargo run -p agentflow-cli -- lease`：pass，0 active leases / 0 stale leases。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next`：pass，推荐 `agentflow plan "Project Closure State v0 实现"`。
+- `cargo run -p agentflow-cli -- projects`：pass，active milestone `workflow-core-closure-gates`。
+- `cargo run -p agentflow-cli -- metrics`：pass，下一步为 `Project Closure State v0 实现`。
+- `cargo run -p agentflow-cli -- search "Project Audit"`：pass，返回 `.agentflow/` 可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -d .agentflow/audits`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Project closure 边界已清楚：Code Audit、Root Docs Refresh、Final Evidence Summary 和 Human Final Approval 都是 Project Done 前的 gate。
+- Project 不能绕过 audit / docs refresh 直接 done。
+- 本阶段没有实现自动审计器，没有新增 Desktop UI，也没有创建 `.agentflow/audits/`。
+- 当前下一步是 `agentflow plan "Project Closure State v0 实现"`。
+
+## 2026-05-26 - Project Closure State v0 实现
+
+执行者：Codex
+
+范围：
+
+- 新增 `ProjectClosureStateSnapshot`、`ProjectClosureCounts`、`ProjectClosureGate` 和 `ProjectClosureStateSummary`。
+- 新增 `agentflow project closure` CLI。
+- `agentflow project closure` 读取 `.agentflow/projects/{project-id}.json`、milestones、issues、runs、evidence、reviews、updates。
+- 输出 `.agentflow/state/project-closure.json` 和 `.agentflow/updates/PROJECT-CLOSURE-SUMMARY.md`。
+- 判断 Project closure state：`active`、`audit-ready`、`audit`、`docs-refresh`、`final-review`、`done-blocked`、`done`。
+- 明确 Project done 前必须满足：all milestones completed、milestone evidence summaries exist、code audit exists、docs refresh exists、final evidence summary exists、human final approval exists。
+- 更新 `goal next`：当无 active issue 且进入 closure state 时，推荐 `agentflow project closure`，不自动执行 audit / docs refresh / final approval。
+- 更新 README、ROADMAP、MVP Spec、Project Audit / Docs Refresh Boundary、Workflow Control Core Spec、AI Delivery Workflow Contract、construction plan、latest verification summary 和 readiness script。
+- 当前阶段不实现自动审计器、不执行 docs refresh、不自动标记 Project done、不创建 `.agentflow/audits/`、不调用模型、不接入远程 PR / GitHub / Linear、不修改 Desktop UI。
+
+验证：
+
+- `cargo test project_closure -- --nocapture`：pass，2 focused tests。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，46 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- state check`：pass，ready true，1 project / 9 milestones / 42 issues / 0 errors / 36 warnings。
+- `cargo run -p agentflow-cli -- eligibility`：pass，推荐 `agentflow plan "Project Code Audit Snapshot v0 只读实现"`。
+- `cargo run -p agentflow-cli -- lease`：pass，0 active leases / 0 stale leases。
+- `cargo run -p agentflow-cli -- project closure`：pass，closure state `audit-ready`，`can_mark_done=false`，写出 project closure state 和 summary。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next`：pass，next action `project-closure`，推荐 `agentflow project closure`。
+- `cargo run -p agentflow-cli -- projects`：pass，recommended command `agentflow project closure`。
+- `cargo run -p agentflow-cli -- metrics`：pass，next action `project-closure`。
+- `cargo run -p agentflow-cli -- search "Project Closure"`：pass，返回 `.agentflow/` 可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -d .agentflow/audits`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Project closure state 已能明确说明当前 Project 为什么不能 done。
+- 当前 Project 进入 `audit-ready`，但 `can_mark_done=false`。
+- `goal next` 推荐 `agentflow project closure`，不会自动执行 audit、docs refresh 或 final approval。
+- 本阶段没有创建 `.agentflow/audits/`，没有实现自动审计器，没有修改 Desktop UI。
+- 下一候选实现切片是 `Project Code Audit Snapshot v0 只读实现`。
+
+## 2026-05-26 - Project Code Audit Snapshot v0 只读实现
+
+执行者：Codex
+
+范围：
+
+- 新增 `ProjectCodeAuditSnapshot`、`ProjectCodeAuditCounts`、`ProjectCodeAuditCheck`、`ProjectCodeAuditFinding` 和 `ProjectCodeAuditSummary`。
+- 新增 `agentflow project code-audit` CLI。
+- `agentflow project code-audit` 读取 `.agentflow/state/project-closure.json`、project / milestone / issue / run / evidence / review / update 事实源和源码树。
+- 输出 `.agentflow/state/project-code-audit.json` 和 `.agentflow/updates/PROJECT-CODE-AUDIT-SUMMARY.md`。
+- 只读汇总 duplicate code、temporary code、unused / dead code、TODO / FIXME、security / auth / permission risk、performance risk、architecture drift、test gap 和 unexpected public API change 候选项。
+- `agentflow project closure` 在 snapshot 存在时把 code audit gate 显示为 `snapshot-ready`，但仍不视为 final Code Audit passed。
+- `goal next` 在 closure state 为 `audit-ready` 且 snapshot 缺失时推荐 `agentflow project code-audit`；snapshot 存在后继续推荐本地 closure state 检查，不自动执行修复或 docs refresh。
+- 更新 README、ROADMAP、MVP Spec、Project Audit / Docs Refresh Boundary、construction plan、MVP productization plan、latest verification summary 和 readiness script。
+- 当前阶段不创建 `.agentflow/audits/`，不自动修复 audit findings，不修改代码或文档，不调用模型，不创建远程 PR / GitHub issue / Linear issue，不修改 Desktop UI，不标记 Project done。
+
+验证：
+
+- `cargo test project_code_audit -- --nocapture`：pass，2 focused tests。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，47 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- state check`：pass，ready true，1 project / 9 milestones / 42 issues / 0 errors / 36 warnings。
+- `cargo run -p agentflow-cli -- eligibility`：pass，推荐 `agentflow plan "Root Docs Refresh Snapshot v0 只读实现"`。
+- `cargo run -p agentflow-cli -- lease`：pass，0 active leases / 0 stale leases。
+- `cargo run -p agentflow-cli -- project closure`：pass，closure state `audit`，code audit gate `snapshot-ready`，`can_mark_done=false`。
+- `cargo run -p agentflow-cli -- project code-audit`：pass，生成 `.agentflow/state/project-code-audit.json` 和 `.agentflow/updates/PROJECT-CODE-AUDIT-SUMMARY.md`。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next`：pass，next action `project-closure`，推荐 `agentflow project closure`。
+- `cargo run -p agentflow-cli -- projects`：pass，active milestone `workflow-core-closure-gates`。
+- `cargo run -p agentflow-cli -- metrics`：pass，next action `project-closure`。
+- `cargo run -p agentflow-cli -- search "Project Code Audit"`：pass，返回 snapshot 和 closure summary 可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -d .agentflow/audits`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Project Code Audit Snapshot v0 已能生成本地只读 audit input package。
+- Snapshot 能说明当前 Project 的审计输入、风险候选和 closure blockers。
+- `agentflow project closure` 已能区分 `snapshot-ready` 和 final Code Audit passed，Project 仍不能 done。
+- 本阶段没有创建 `.agentflow/audits/`，没有修改 Desktop UI，没有自动修复或执行 docs refresh。
+- 下一候选实现切片是 `Root Docs Refresh Snapshot v0 只读实现`。
+
+## 2026-05-26 Root Docs Refresh Snapshot v0
+
+执行者：Codex
+
+目标：
+
+- 实现 `agentflow project docs-refresh`，生成 Root Docs Refresh Snapshot v0 只读文档刷新输入包。
+- 读取 closure state、code audit snapshot、README、ROADMAP、MVP Spec、architecture docs、contracts、validation docs 和 `verification.md`。
+- 输出 `.agentflow/state/project-docs-refresh.json` 和 `.agentflow/updates/PROJECT-DOCS-REFRESH-SUMMARY.md`。
+- 不创建 `.agentflow/audits/`，不修改文档内容作为 refresh 动作，不调用模型，不标记 Project done。
+- 处理完成后，把下一候选切到产品功能：`Product Feature Creation Flow v0`。
+
+结果：
+
+- 新增 `ProjectDocsRefreshSnapshot`、`ProjectDocsRefreshCheckedDoc`、`ProjectDocsRefreshRequiredUpdate` 和 `ProjectDocsRefreshSummary`。
+- 新增 CLI：`agentflow project docs-refresh`。
+- `agentflow project closure` 现在能把 docs refresh gate 显示为 `snapshot-ready`，但仍不视为 final Root Docs Refresh passed。
+- `goal next` 在 code audit / docs refresh snapshots 都存在后，回到 active project candidate，推荐 `agentflow plan "Product Feature Creation Flow v0"`。
+- 更新 README、ROADMAP、MVP Spec、Project Audit / Docs Refresh Boundary、Workflow Control Core Spec、Architecture Decisions、construction plan、MVP productization plan、latest verification summary 和 readiness script。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，50 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- state check`：pass，ready true，1 project / 9 milestones / 42 issues / 0 errors / 36 warnings。
+- `cargo run -p agentflow-cli -- eligibility`：pass，推荐 `agentflow plan "Product Feature Creation Flow v0"`。
+- `cargo run -p agentflow-cli -- lease`：pass，0 active leases / 0 stale leases。
+- `cargo run -p agentflow-cli -- project code-audit`：pass，生成 `.agentflow/state/project-code-audit.json` 和 `.agentflow/updates/PROJECT-CODE-AUDIT-SUMMARY.md`。
+- `cargo run -p agentflow-cli -- project docs-refresh`：pass，生成 `.agentflow/state/project-docs-refresh.json` 和 `.agentflow/updates/PROJECT-DOCS-REFRESH-SUMMARY.md`；checked docs 14，update-needed 0，missing 0。
+- `cargo run -p agentflow-cli -- project closure`：pass，closure state `audit`，code audit / docs refresh gates 均为 `snapshot-ready`，`can_mark_done=false`。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next`：pass，next action `plan`，推荐 `agentflow plan "Product Feature Creation Flow v0"`。
+- `cargo run -p agentflow-cli -- projects`：pass，active milestone `workflow-core-closure-gates`，recommended command `agentflow plan "Product Feature Creation Flow v0"`。
+- `cargo run -p agentflow-cli -- metrics`：pass，next action `plan`，recommended command `agentflow plan "Product Feature Creation Flow v0"`。
+- `cargo run -p agentflow-cli -- search "Root Docs Refresh"`：pass，返回 docs refresh 和 closure summary 可追溯结果。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -d .agentflow/audits`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Root Docs Refresh Snapshot v0 已完成本地只读 docs refresh input package。
+- 当前 Project 仍不能 done，因为 final Code Audit、final Root Docs Refresh、Final Evidence Summary、Human Final Approval 和部分历史 milestone summaries 尚未完成。
+- 下一阶段已切到产品功能入口：`Product Feature Creation Flow v0`。
+
+## 2026-05-26 Product Feature Creation Flow v0
+
+执行者：Codex
+
+目标：
+
+- 实现 `agentflow feature create "<feature goal>"`，把产品功能目标落成本地 Project -> Milestones -> IssueContracts。
+- 默认 preview，不写事实源；只有 `--write --yes` 才写 `.agentflow/`。
+- 写入后新 Project 成为 active project，并接入 `goal next / eligibility / lease / run` 受控执行链路。
+- 不调用模型、不创建远程 PR / GitHub issue / Linear issue、不从 Desktop 执行创建、不标记 Project done。
+
+结果：
+
+- 新增 `ProductFeatureDraft`、`ProductFeatureProject`、`ProductFeatureMilestoneDraft`、`ProductFeatureIssueDraft`、`ProductFeatureCreationSnapshot`。
+- 新增 CLI：`agentflow feature create`。
+- 写入产物包括 `.agentflow/projects/{feature-project-id}.json`、`.agentflow/issues/ISSUE-XXXX.{json,md}`、`.agentflow/teams/{team-id}.json`、`.agentflow/workspace.json`、`.agentflow/index.json`、`.agentflow/updates/FEATURE-CREATION-SUMMARY.md`。
+- IssueContract 已补齐 `riskLevel` 和 `rollbackPlan` 字段，eligibility 会检查这些执行必备字段。
+- 新增规格文档：`docs/specs/product-feature-creation-flow-v0.md`。
+
+验证：
+
+- `cargo test`：pass，53 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- feature create "示例产品功能"`：pass，preview only。
+- `cargo run -p agentflow-cli -- feature create "示例产品功能" --write --yes`：pass，创建新 Project / Milestones / IssueContracts 并更新 active project。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next`：pass，推荐新 active project 下第一条 issue。
+- `cargo run -p agentflow-cli -- eligibility`：pass，第一条 feature issue 有明确 ready / eligible 状态。
+- `cargo run -p agentflow-cli -- projects`：pass，workspace active project 为 `feature-0043`。
+- `cargo run -p agentflow-cli -- metrics`：pass，46 issues / 42 completed / 4 planned。
+- `cargo run -p agentflow-cli -- search "Product Feature Creation"`：pass，返回 `FEATURE-CREATION-SUMMARY`。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -d .agentflow/audits`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- AgentFlow 已具备第一个可用产品功能入口。
+- 新功能创建仍然服从 IssueContract、WIP=1、Eligibility、Lease、Evidence gate。
+- Desktop 仍保持只读，不参与创建或执行。
+
+## 2026-05-26 Product Feature Execution Flow v0
+
+执行者：Codex
+
+目标：
+
+- 实现 `agentflow feature status` 和 `agentflow feature next`。
+- 读取当前 active Product Feature Project，展示 project、active milestone、milestone 列表、当前 issue、eligibility、latest run / validation / evidence / review 和推荐命令。
+- 只推荐下一步，不执行 run / verify / review，不调用模型，不创建远程对象，不标记 Project done。
+
+结果：
+
+- 新增 `ProductFeatureExecutionSnapshot`、`ProductFeatureExecutionMilestone`、`ProductFeatureExecutionIssue`。
+- 新增 CLI：`agentflow feature status`、`agentflow feature next`。
+- `feature next` 复用现有 `issue_next_step` 语义：无 run 推荐 run，已有 run 未验证推荐 verify，验证通过未 review 推荐 review，review 完成后由既有 milestone summary writer 激活下一个 milestone。
+- 新增规格文档：`docs/specs/product-feature-execution-flow-v0.md`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，55 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- feature status`：pass，当前 active feature project 为 `feature-0043`，current issue 为 `ISSUE-0043`。
+- `cargo run -p agentflow-cli -- feature next`：pass，推荐 `agentflow run ISSUE-0043 --dry-run`。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next`：pass，推荐 `agentflow run ISSUE-0043 --dry-run`。
+- `cargo run -p agentflow-cli -- eligibility`：pass，`ISSUE-0043` eligible。
+- `cargo run -p agentflow-cli -- projects`：pass，active project `feature-0043`。
+- `cargo run -p agentflow-cli -- metrics`：pass，next action `run`。
+- `cargo run -p agentflow-cli -- search "Product Feature Execution"`：pass。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -d .agentflow/audits`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- 创建后的 Product Feature Project 已有可读执行入口。
+- 当前下一步稳定指向 `ISSUE-0043` 的 run。
+- 该层只读，不绕过 Workflow Control Core。
+
+## 2026-05-26 Product Feature Controlled Run v0
+
+执行者：Codex
+
+目标：
+
+- 强化 `agentflow run ISSUE-XXXX --dry-run`，使当前 active feature project 的唯一 eligible issue 进入受控 dry-run。
+- run 前必须通过 active project、active milestone、eligibility、lease 和 WIP=1 gate。
+- dry-run 必须输出 run plan、expected files、blocked files / areas、validation commands、evidence requirements 和 rollback plan。
+- `feature status` 能显示 latest run plan，`feature next` 能在 dry-run 后推荐 verify。
+
+结果：
+
+- 新增 `ControlledRunPlan`，并写入 `AgentRun.runPlan`。
+- `agentflow run` 在 v0 只接受 `--dry-run`，不带 dry-run 会失败。
+- `run.json` 记录 project / milestone / issue / lease 关系和 run plan。
+- `transcript.md` 与 `diff-summary.md` 展示受控执行计划和 no source edits 边界。
+- `ProductFeatureExecutionIssue` 增加 dry-run recorded、latest run plan、expected files、blocked files、validation commands 和 evidence requirements。
+- 新增规格文档：`docs/specs/product-feature-controlled-run-v0.md`。
+
+验证：
+
+- `cargo test -p agentflow-core product_feature_execution_next_moves_from_run_to_verify_to_review_to_next_milestone -- --nocapture`：pass。
+- `cargo test -p agentflow-core controlled_run_records_plan_and_updates_feature_status -- --nocapture`：pass。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，56 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- feature status`：pass，显示 `dry-run recorded: true` 和 latest run plan。
+- `cargo run -p agentflow-cli -- feature next`：pass，推荐 `agentflow verify ISSUE-0043`。
+- `cargo run -p agentflow-cli -- run ISSUE-0043 --dry-run`：pass，复用 / 输出 `RUN-0041`，包含 project / milestone / lease / runPlan。
+- `cargo run -p agentflow-cli -- eligibility`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass。
+- `cargo run -p agentflow-cli -- goal next`：pass，active issue 推荐 verify。
+- `cargo run -p agentflow-cli -- projects`：pass。
+- `cargo run -p agentflow-cli -- metrics`：pass，latest run `RUN-0041 -> ISSUE-0043 [dry-run / not-run]`。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `test ! -d .agentflow/audits`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Product Feature 已从创建和只读 next，推进到本地受控 dry-run。
+- 当前仍不执行真实代码修改，不调用模型，不创建远程对象，不从 Desktop 执行 run。
+
+## 2026-05-26 Goal + Criteria Driven MVP
+
+执行者：Codex
+
+目标：
+
+- 将 AgentFlow 当前项目完成方式调整为 Goal + Criteria 驱动。
+- 当前 MVP 主目标只保留两项：用户本地创建和管理 Team / Project / Milestone / Issue；用户和 Agent 共同把产品功能目标拆成 Project -> Milestones -> Issues 并保存为本地事实源。
+- Agent 自动执行流程不再作为当前 MVP 主产品目标。
+
+结果：
+
+- 更新 `GOAL.md`、`.agentflow/goal.md`、`.agentflow/goal.json`。
+- 新增 `docs/specs/goal-criteria-driven-mvp.md`，固定 24 条 Criteria。
+- Project 状态锁定为 `draft / active / paused / completed / canceled`。
+- Issue 状态锁定为 `backlog / todo / in_progress / in_review / done / canceled`。
+- Milestone 不维护独立状态，只作为 Project 下的阶段分组。
+- 更新 README、ROADMAP、MVP Spec、Construction Plan 和 latest verification summary。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，57 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass。
+- `cargo run -p agentflow-cli -- goal next`：pass，仍报告上一轮 dry-run 留下的 active issue。
+- `cargo run -p agentflow-cli -- projects`：pass。
+- `cargo run -p agentflow-cli -- feature status`：pass。
+- `cargo run -p agentflow-cli -- feature next`：pass，当前提示 stale lease requires human recovery。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- 当前项目完成标准已从执行自动化闭环，切换为 Team / Project / Milestone / Issue 本地产品建模和协作创建。
+- 下一实现切片应为 `Project / Issue Status Model v0`。
+
+## 2026-05-26 Project / Issue Status Model v0
+
+执行者：Codex
+
+目标：
+
+- 将 Project / Issue canonical status 落到 core、CLI、Desktop 和本地事实源读取。
+- Project canonical status 固定为 `draft / active / paused / completed / canceled`。
+- Issue canonical status 固定为 `backlog / todo / in_progress / in_review / done / canceled`。
+- Milestone 不维护独立产品状态，只展示从 Issues 派生的完成度。
+
+结果：
+
+- 新增 `ProjectStatus` / `IssueStatus` canonical 定义和 legacy status 映射。
+- `LocalProjectModelSnapshot` 输出 `LocalProject.canonicalStatus`、`LocalProjectIssueRef.canonicalStatus` 和 `LocalMilestone.progress`。
+- `agentflow projects` 和 `agentflow feature status` 展示 canonical status。
+- Desktop Project / Task 视图展示 canonical Project / Issue status，Milestone 展示 derived progress。
+- Product Feature Creation 和 `agentflow plan` 新建 Issue 默认写 `todo`；review 完成 Issue 后写 `done`。
+- SavedView issue status filter 支持 legacy / canonical 兼容匹配。
+- 新增规格文档：`docs/specs/project-issue-status-model-v0.md`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，56 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- goal check`：pass。
+- `cargo run -p agentflow-cli -- projects`：pass。
+- `cargo run -p agentflow-cli -- feature status`：pass。
+- `cargo run -p agentflow-cli -- feature create "状态模型验证功能"`：pass，preview only。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- Project / Issue canonical status 已成为本地 read model 和 UI 展示口径。
+- 旧 `.agentflow/` 状态仍可兼容读取；Milestone 状态不再作为 MVP 产品状态展示。
+- 下一实现切片应为 `Team / Project / Milestone / Issue Writers v0`。
+
+## 2026-05-27 Team / Project / Milestone / Issue Writers v0
+
+执行者：Codex
+
+目标：
+
+- 实现当前 MVP 的本地创建闭环：Team / Project / Milestone / Issue。
+- 所有 create 命令默认 preview，不写 `.agentflow/`。
+- 只有显式 `--write --yes` 后才允许写入本地事实源。
+
+结果：
+
+- 新增规格文档：`docs/specs/team-project-milestone-issue-writers-v0.md`。
+- 新增 `TeamDraft`、`ProjectDraft`、`MilestoneDraft`、`IssueDraft`、`CreationPreview`、`CreationWriteSummary`。
+- 新增 CLI：
+  - `agentflow team create "<team name>"`
+  - `agentflow project create "<project title>"`
+  - `agentflow milestone create "<milestone title>"`
+  - `agentflow issue create "<issue title>"`
+- Team writer 写 `.agentflow/teams/{team-id}.json` 并更新 workspace teamIds。
+- Project writer 写 `.agentflow/projects/{project-id}.json` 并更新 workspace projectIds / team projectIds，不隐式覆盖 activeProjectId。
+- Milestone writer 只追加 project `milestones[]`，不写产品状态。
+- Issue writer 写 `ISSUE-XXXX.{json,md}`，并同步 project / milestone / team / index 引用。
+- Project 默认 status = `draft`；Issue 默认 status = `todo`。
+- Desktop 继续只读展示，不新增写入口。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，59 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- team create "Demo Team"`：pass，preview only。
+- `cargo run -p agentflow-cli -- project create "Demo Project"`：pass，preview only。
+- `cargo run -p agentflow-cli -- milestone create "Demo Milestone"`：pass，preview only。
+- `cargo run -p agentflow-cli -- issue create "Demo Issue"`：pass，preview only，Issue id preview 为 `ISSUE-0047`。
+- `cargo run -p agentflow-cli -- projects`：pass。
+- `cargo run -p agentflow-cli -- feature status`：pass。
+- `bash checks/agentflow-readiness.sh`：pass，包含 writer preview commands 和 temp write unit tests。
+
+结论：
+
+- AgentFlow 当前已经具备第一个 MVP 产品创建闭环：用户可用 CLI preview / confirmed write 创建 Team、Project、Milestone、Issue。
+- 执行链路仍未自动推进；run / verify / review 继续作为后续执行层能力，不进入当前创建闭环。
+
+## 2026-05-28 Project / Milestone / Issue / View Model v1
+
+执行者：Codex
+
+目标：
+
+- 将 AgentFlow MVP 产品主干收敛为 `Workspace / Team -> Project -> Milestone -> Issue -> View`，并落地只读 schema adapter。
+- 固定 Project / Milestone / Issue / View 的职责、模板、状态目标、Queue Preflight、adapter 输出格式和 Desktop 页面边界。
+- 明确 View 只是 saved filter，不承载业务状态。
+
+结果：
+
+- 新增规格文档：`docs/specs/project-milestone-issue-view-model-v1.md`。
+- 新增 core schema / adapter：`ProjectMilestoneIssueViewModelSnapshot`、`V1WorkspaceRef`、`V1TeamRef`、`V1Project`、`V1Milestone`、`V1Issue`、`V1View`、`V1ViewFilter`、`V1ViewSort`。
+- 新增只读 reader：`read_project_milestone_issue_view_model_snapshot`。
+- 更新 Desktop TypeScript 类型，保持前端类型可对齐 v1 schema。
+- 更新 README、ROADMAP、MVP Spec、Goal + Criteria Driven MVP、Project / Issue Status Model、Team / Project / Milestone / Issue Writers、Desktop Workbench Boundary、latest verification summary。
+- 固定不变量：Project 不执行，Milestone 不执行，Issue 执行，View 只展示，Queue Preflight 决定谁能执行，Evidence 决定是否 Done。
+- v1 状态模型先作为产品目标和后续迁移方向，不破坏当前 canonical status 和既有 `.agentflow/` 事实源。
+- Adapter 保留 `rawStatus`，同时输出 v1 派生 `status`；Milestone status 只派生，不写回事实源；View 只从 SavedView 派生 filter / sort / layout。
+
+验证：
+
+- `cargo test -p agentflow-core project_milestone_issue_view_model_v1 -- --nocapture`：pass，2 tests。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，61 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- projects`：pass。
+- `git diff --check`：pass。
+
+结论：
+
+- 当前 MVP 主干已从“功能堆叠”收敛为清晰的产品模型合同。
+- 下一步应做 v1 writer preview 对齐或 Desktop 页面职责收敛，仍不进入自动 run / verify / review。
+
+## 2026-05-29 Project / Milestone / Issue / View Model v1 Writer Preview Alignment
+
+执行者：Codex
+
+目标：
+
+- 把开发文档任务推进至 100%：让 v1 产品模型合同落入 Team / Project / Milestone / Issue 创建预览。
+- 保持 preview-first；不改变 `.agentflow/` 写入 schema，不执行 run / verify / review。
+
+结果：
+
+- `CreationPreview` 新增 `v1Contract`。
+- `agentflow team create` preview 输出 Team relation。
+- `agentflow project create` preview 输出 Project charter。
+- `agentflow milestone create` preview 输出 Milestone gate。
+- `agentflow issue create` preview 输出 Issue execution contract。
+- CLI preview 增加 v1 model / relation / 关键合同摘要。
+- 更新 README、ROADMAP、MVP Spec、Team / Project / Milestone / Issue Writers、Project / Milestone / Issue / View Model v1、latest verification summary。
+
+验证：
+
+- `cargo test -p agentflow-core team_project_milestone_issue_writers_preview_without_writes -- --nocapture`：pass，1 test。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，61 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- project create "开发文档任务"`：pass，preview only，输出 v1 Project charter。
+- `cargo run -p agentflow-cli -- team create "开发文档团队"`：pass，preview only，输出 v1 Team relation。
+- `cargo run -p agentflow-cli -- milestone create "开发文档阶段"`：pass，preview only，输出 v1 Milestone gate。
+- `cargo run -p agentflow-cli -- issue create "开发文档任务"`：pass，preview only，输出 v1 Issue execution contract。
+- `cargo run -p agentflow-cli -- goal check`：pass，ready true。
+- `cargo run -p agentflow-cli -- goal next`：pass，保持 WIP=1，推荐 `agentflow verify ISSUE-0043`。
+- `cargo run -p agentflow-cli -- projects`：pass。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+- touched-file trailing whitespace scan：pass。
+
+边界：
+
+- 不调用模型。
+- 不创建远程 PR / GitHub issue / Linear issue。
+- 不改变 `.agentflow/` 既有落盘格式。
+- 不自动推进执行链路。
+
+## 2026-05-29 Desktop Project / Milestone / Issue 页面职责收敛 v0
+
+执行者：Codex
+
+目标：
+
+- 将 `Project / Milestone / Issue / View Model v1` 呈现到 Desktop Workbench。
+- 每个详情页只展示自己负责的内容，避免 Project、Milestone、Issue、View 信息继续堆在同一页。
+- Desktop 继续保持只读，不创建本地对象、不执行命令、不写 `.agentflow/`。
+
+结果：
+
+- `apps/desktop/src-tauri/src/main.rs` 新增只读 Tauri command：`load_project_milestone_issue_view_model_snapshot`。
+- `apps/desktop/src/App.tsx` 的 load flow 同步读取 v1 snapshot。
+- Project 页面只展示 Project charter、milestones、issue progress、queue status、closure gate。
+- Milestone 区块只展示 milestone goal、entry criteria、issues、exit criteria、derived progress。
+- Issue 页面只展示 issue contract 的 goal、scope、non-goals、validation、evidence、boundary、status。
+- View 页面只展示 saved filter / sort / layout，不承载业务状态。
+- Project / Issue 列表排序按本阶段规则收敛。
+- 更新 README、ROADMAP、MVP Spec、Desktop Workbench Boundary、Project / Milestone / Issue / View Model v1、latest verification summary。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，61 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo run -p agentflow-cli -- projects`：pass，当前 active project 为 `feature-0043`，推荐命令保持 `agentflow verify ISSUE-0043`。
+- `bash checks/agentflow-readiness.sh`：pass。
+- `git diff --check`：pass。
+- Browser verification at `http://127.0.0.1:1420/`：pass。
+  - Project 页面包含 `项目职责视图`、`Project Charter`、`Queue Status`、`Closure Gate`、`Milestone 阶段门`。
+  - Issue 页面包含 `Issue Contract`、`Contract`、`Execution Boundary`、`Validation`、`Evidence`、`只读边界`，且不展示 Project closure / audit。
+  - View 页面包含 `高级视图` 和 saved filter 内容，不承载业务状态。
+  - console warn/error：0。
+  - screenshots：`/tmp/agentflow-desktop-project-page.png`、`/tmp/agentflow-desktop-issue-page.png`。
+
+边界：
+
+- 不写 `.agentflow/`。
+- 不创建 Team / Project / Milestone / Issue。
+- 不执行 run / verify / review。
+- 不调用模型。
+- 不创建远程 PR / GitHub issue / Linear issue。
+
+## 2026-05-31 Project Files feature module 收口
+
+执行者：Codex
+
+目标：
+
+- 将 Project 本地文件阅读器继续收口成独立 feature module。
+- 减少 `App.tsx` 对 Project 文件阅读器内部实现的直接依赖。
+- 保持浏览器/Vite 预览可用 mock，真实 Tauri 客户端不使用 mock fallback。
+
+结果：
+
+- 新增 `apps/desktop/src/features/project-files/index.ts` 作为模块入口。
+- `App.tsx` 改为从 `features/project-files` 入口导入 Project 文件页、hook、类型和根路径工具。
+- 删除 `App.tsx` 中已废弃的 Project Goal / Milestone / Architecture / Environment / Agent tab 模板组件，Project 页面继续只承载本地文件阅读器。
+- `design.md` 更新 Project module boundary，明确 `App.tsx` 只通过模块入口使用 Project 文件模块。
+
+验证：
+
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo test`：pass，61 tests。
+- `git diff --check`：pass。
+- 静态搜索确认 `App.tsx` 不再直接导入 `features/project-files/*` 内部实现文件。
+- 静态搜索确认 `App.tsx` 不再保留旧 Project template 组件。
+- Browser verification at `http://127.0.0.1:1420/`：pass，Project 文件阅读器、右侧文件列表和 README 默认阅读状态正常渲染。
+
+边界：
+
+- 不写 `.agentflow/`。
+- 不执行 run / verify / review。
+- 不创建远程 PR / GitHub issue / Linear issue。
+- 不调用模型。
+
+## 2026-05-31 Project Files Tauri read-layer contract 补测
+
+执行者：Codex
+
+目标：
+
+- 继续收口 Project 文件阅读器模块。
+- 用 Tauri 侧单元测试固定真实客户端读取契约，而不是只依赖浏览器 mock。
+- 验证真实 Tauri 客户端读取失败时由错误 / 空态承接，浏览器/Vite 预览才允许 mock fallback。
+
+结果：
+
+- `apps/desktop/src-tauri/src/project_files.rs` 承载 Project 文件读取 command、路径校验、metadata / preview 生成和本地文件夹选择 command。
+- `apps/desktop/src-tauri/src/main.rs` 只保留 Tauri command 注册，不再承载 Project 文件读取实现。
+- `apps/desktop/src-tauri/src/project_files.rs` 新增 6 个 Project file read-layer 单元测试：
+  - 文本文件读取与 metadata。
+  - 目录概览 children。
+  - 未知二进制文件十六进制 fallback。
+  - PNG / PDF / XLSX / DOCX 小文件 data URL 预览路径。
+  - 大文本 512KB 截断标记。
+  - 相对路径逃逸拒绝。
+- `useProjectFiles.ts` 继续作为 Project 文件模块的加载 / 选择 / 刷新边界。
+- `App.tsx` 继续只通过 `features/project-files/index.ts` 使用 Project 文件模块。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，core 61 tests + desktop Project file 6 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
+- Browser smoke at `http://127.0.0.1:1420/`：pass。
+  - `.project-file-page` 存在。
+  - `.project-file-reader` 存在。
+  - `.project-file-browser` 存在。
+  - 文件列表渲染 18 行。
+  - 默认阅读器 header 包含 `README.md`。
+  - 只读说明文案存在。
+
+边界：
+
+- 不写 `.agentflow/`。
+- 不执行 run / verify / review。
+- 不创建远程 PR / GitHub issue / Linear issue。
+- 不调用模型。
+
+## 2026-06-01 项目文档重置与旧需求归档
+
+执行者：Codex
+
+目标：
+
+- 清理 AgentFlow 当前项目文档入口。
+- 将 2026-05 期间围绕 workflow control、feature flow、closure、desktop redesign 等旧需求形成的文档从默认开发入口移除。
+- 为后续全新需求建立独立入口，避免旧需求继续影响后续开发判断。
+
+结果：
+
+- 旧文档目录已归档到 `docs/archive/2026-05-agentflow-legacy/`。
+- 新增 `docs/requirements/README.md`，作为后续需求文档目录说明。
+- 新增 `docs/requirements/next-requirements.md`，作为下一轮全新需求的空白入口。
+- 重写 `README.md`、`GOAL.md`、`ROADMAP.md`、`AGENTS.md`、`docs/README.md`，明确当前开发只从 `docs/requirements/` 读取新需求。
+- 旧文档只作为历史参考，不再作为默认开发依据。
+
+验证：
+
+- 静态搜索确认当前主动文档不再引用旧 `docs/specs`、`docs/contracts`、`docs/planning`、`docs/product`、`docs/validation` 等路径作为开发入口。
+- `test -d docs/archive/2026-05-agentflow-legacy/specs`：pass。
+- `test -f docs/requirements/next-requirements.md`：pass。
+- `test ! -e docs/.DS_Store`：pass。
+- `npm --prefix apps/desktop run build`：pass，存在 Vite chunk size warning。
+- `cargo test`：pass，core 61 tests + desktop Project file 6 tests。
+- `git diff --check`：pass。
+
+边界：
+
+- 不删除旧文档内容，只归档。
+- 不修改 `.agentflow/` 运行态事实源。
+- 不新增执行命令能力。
+- 不调用模型。
+- 不创建远程 PR / GitHub issue / Linear issue。
+
+## 2026-06-01 Project Workspace Manager V0.2
+
+执行者：Codex
+
+目标：
+
+- 将“添加项目 / 准备本地工作区”作为清理旧需求后的第一个新功能需求写入 `docs/requirements/`。
+- 让 Desktop 可以把一个本地文件夹接入为 Project，并在真实桌面环境准备 `.agentflow/` 本地运行目录。
+- 保持浏览器预览不写真实仓库。
+
+结果：
+
+- 新增 `docs/requirements/001-add-local-project.md`，定义 Project Workspace Manager V0.2。
+- 更新 `docs/requirements/README.md`、`docs/requirements/next-requirements.md`、`GOAL.md`、`ROADMAP.md`，把当前第一功能指向 Project Workspace Manager。
+- 新增 Tauri command `prepare_local_project_workspace`：
+  - 创建或复用 `.agentflow/`。
+  - 创建或复用 `workspace.yaml`、`config.yaml`。
+  - 补齐 `define/`、`execute/`、`output/` 三阶段目录。
+  - Git 项目写入 `.git/info/exclude`，排除 `.agentflow/`。
+  - 不覆盖用户已有 `workspace.yaml` / `config.yaml`。
+- Desktop 添加项目流程接入 workspace 准备：
+  - Tauri 桌面环境选择文件夹后准备 `.agentflow/`。
+  - 浏览器预览环境继续只通过路径输入模拟，不写文件。
+  - 同一路径重复添加时不新增重复 Project，只切换到已有 Project。
+  - 本地添加 Project 支持从侧栏列表移除；只移除客户端列表，不删除源码或 `.agentflow/`。
+  - 无 `.agentflow/` 派生 Project 时，本地 Project 仍能进入文件阅读器。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，core 61 tests + desktop 9 tests。
+- `npm --prefix apps/desktop run build`：pass，存在 Vite chunk size warning。
+- `git diff --check`：pass。
+- `test -e .agentflow; echo $?`：pass，返回 `1`，浏览器预览核对后真实仓库仍未重新创建 `.agentflow/`。
+- Browser smoke at `http://127.0.0.1:1420/`：pass。
+  - 添加项目面板可打开。
+  - 浏览器预览可输入 `/Users/mac/Documents/AgentFlow` 模拟添加。
+  - 重复添加同一路径不会新增重复项目。
+  - 添加 / 切换后右侧显示项目文件阅读器。
+  - 本地 Project 显示“从列表移除”入口。
+
+边界：
+
+- 只在真实 Tauri 添加项目时写 `.agentflow/` 和 `.git/info/exclude`。
+- 浏览器预览不写 `.agentflow/`。
+- 不创建 Goal / Milestone / Issue。
+- 不检测技术栈。
+- 不执行 run / verify / review。
+- 不调用模型。
+- 不创建远程 PR / GitHub issue / Linear issue。
+
+## 2026-06-01 Desktop Mock Data Cleanup
+
+执行者：Codex
+
+说明：
+
+- 该记录描述的是清理旧隐式 mock fallback 的阶段性结果。
+- 当前规则见后续 `Browser Preview Mock Data Restore`：浏览器预览允许显式 mock；真实 Tauri 客户端不允许 mock fallback。
+
+目标：
+
+- 清理 Desktop 客户端的浏览器预览 mock 数据。
+- 保持真实 Tauri 客户端只读取实际本地 Project 数据。
+- 浏览器预览无法读取本地文件时显示空态 / 错误态，不再注入示例 Project、示例文件树或示例搜索结果。
+
+结果：
+
+- 删除 Desktop 旧 mock 数据源：
+  - `apps/desktop/src/mockSnapshot.ts`
+  - `apps/desktop/src/features/project-files/projectFileMock.ts`
+- Desktop 初始化失败时不再回退到 mock snapshot，而是生成空的 Workbench / Metrics / Project Model / Project View Model snapshot。
+- Project 文件阅读器失败时不再回退到 mock 文件树或 mock 文件内容。
+- 浏览器预览只允许保留用户显式添加的本地 Project 入口；不能读取真实文件时显示提示：
+  - `当前为浏览器预览，无法读取本地文件。请在桌面客户端打开项目。`
+- 清理旧浏览器 localStorage 中的 legacy mock project：
+  - `AgentFlow-Preview-Project`
+- 更新 `design.md` 和 `docs/requirements/001-add-local-project.md`，明确浏览器 / Vite preview 不注入示例项目或示例文件树。
+
+验证：
+
+- `cargo test`：pass，core 61 tests + desktop 9 tests。
+- `npm --prefix apps/desktop run build`：pass，存在 Vite chunk size warning。
+- `git diff --check`：pass。
+- Browser smoke at `http://127.0.0.1:1420/`：
+  - sidebar 不再显示 `产品功能创建流`。
+  - sidebar 不再显示 `AgentFlow-Preview-Project`。
+  - 页面不再显示 `浏览器预览 · 示例数据`。
+  - 右侧文件阅读器不再显示 mock 文件树。
+  - 浏览器预览添加 `/Users/mac/Documents/AgentFlow` 后只保存项目入口，不注入示例文件内容。
+
+边界：
+
+- 不写 `.agentflow/`。
+- 不创建 Goal / Milestone / Issue。
+- 不执行 run / verify / review。
+- 不调用模型。
+- 不创建远程 PR / GitHub issue / Linear issue。
+
+## 2026-06-01 Browser Preview Mock Data Restore
+
+执行者：Codex
+
+目标：
+
+- 恢复浏览器预览所需的 mock 数据，保证 `http://127.0.0.1:1420/` 可以做 UI 测试。
+- 保持真实 Tauri 桌面客户端只读取真实本地项目文件，不使用 mock fallback。
+
+结果：
+
+- 新增 `apps/desktop/src/browserPreviewData.ts`：
+  - 提供浏览器预览专用 Workbench / Metrics / Project Model / Project View Model。
+  - 提供浏览器预览专用文件树和文件内容。
+  - 提供浏览器预览专用搜索结果。
+- `loadSnapshot` 只有在 browser / Vite preview 中失败时才进入 `source = preview`。
+- `useProjectFiles` 只有在 browser / Vite preview 中失败时才显示 mock 文件树和 mock 文件内容。
+- 真实 Tauri 客户端调用失败仍显示真实错误 / 空态，不走 mock。
+
+验证：
+
+- `npm --prefix apps/desktop run build`：pass，存在 Vite chunk size warning。
+- `cargo test`：pass，core 61 tests + desktop 9 tests。
+- `git diff --check`：pass。
+- `test ! -e .agentflow`：pass。
+- Browser smoke at `http://127.0.0.1:1420/`：pass。
+  - 浏览器预览显示 `AgentFlow` mock Project。
+  - 文件列表显示 `.git`、`.DS_Store`、`Cargo.toml`、`README.md`、`apps`、`crates`、`docs`、`target`。
+  - 阅读器显示 `README.md` mock 内容。
+  - 不显示 raw `invoke` 错误。
+  - 浏览器控制台无 app error / warning。
+
+边界：
+
+- 浏览器 mock 不写 `.agentflow/`。
+- 浏览器 mock 不执行 run / verify / review。
+- 浏览器 mock 不调用模型。
+- 浏览器 mock 不创建远程 PR / GitHub issue / Linear issue。
+- 真实 Tauri 客户端不允许使用 browser preview mock。
