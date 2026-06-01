@@ -65,6 +65,8 @@ pub fn prepare_project_graph(
         updated_at: None,
         last_error: None,
         watcher_status: None,
+        watcher_backend: None,
+        watcher_detail: None,
         preflight_status: Some(preflight_status_label(&GraphStatus::Missing)),
         protection_status: None,
         degraded_reasons: Vec::new(),
@@ -173,6 +175,8 @@ pub fn index_project_graph(project_root: impl AsRef<Path>) -> Result<GraphStatus
                 updated_at: Some(finished_at),
                 last_error: Some(message),
                 watcher_status: watcher::watcher_status(&paths.root),
+                watcher_backend: watcher::watcher_backend(&paths.root),
+                watcher_detail: watcher::watcher_detail(&paths.root),
                 preflight_status: Some(preflight_status_label(&GraphStatus::Failed)),
                 protection_status: check_graph_git_protection(&paths.root)
                     .ok()
@@ -196,6 +200,8 @@ pub fn load_project_graph_status(project_root: impl AsRef<Path>) -> Result<Graph
             updated_at: None,
             last_error: None,
             watcher_status: watcher::watcher_status(&paths.root),
+            watcher_backend: watcher::watcher_backend(&paths.root),
+            watcher_detail: watcher::watcher_detail(&paths.root),
             preflight_status: Some(preflight_status_label(&GraphStatus::Missing)),
             protection_status: check_graph_git_protection(&paths.root)
                 .ok()
@@ -229,6 +235,8 @@ pub fn load_project_graph_status(project_root: impl AsRef<Path>) -> Result<Graph
         updated_at: Some(meta.updated_at),
         last_error: meta.last_error,
         watcher_status: watcher::watcher_status(&paths.root),
+        watcher_backend: watcher::watcher_backend(&paths.root),
+        watcher_detail: watcher::watcher_detail(&paths.root),
         preflight_status: Some(preflight_status_label(&status)),
         protection_status: protection_status.map(|snapshot| snapshot.status),
         degraded_reasons,
@@ -433,10 +441,26 @@ fn enrich_status_with_runtime(
     mut status: GraphStatusSnapshot,
 ) -> GraphStatusSnapshot {
     status.watcher_status = watcher::watcher_status(&paths.root);
+    status.watcher_backend = watcher::watcher_backend(&paths.root);
+    status.watcher_detail = watcher::watcher_detail(&paths.root);
     status.protection_status = check_graph_git_protection(&paths.root)
         .ok()
         .map(|snapshot| snapshot.status);
     status.preflight_status = Some(preflight_status_label(&status.status));
+    if status.watcher_status.as_deref() == Some("fallback") {
+        let reason = status
+            .watcher_detail
+            .as_ref()
+            .and_then(|detail| detail.last_error.clone())
+            .unwrap_or_else(|| "Graph watcher 使用降级 fallback。".to_string());
+        if !status.degraded_reasons.contains(&reason) {
+            status.degraded_reasons.push(reason);
+        }
+        if status.status == GraphStatus::Ready {
+            status.status = GraphStatus::Degraded;
+            status.preflight_status = Some(preflight_status_label(&status.status));
+        }
+    }
     status
 }
 
@@ -485,16 +509,12 @@ fn detect_entry_points(files: &[crate::model::GraphFileRecord]) -> Vec<String> {
         .filter(|file| {
             matches!(
                 file.path.as_str(),
-                "src/main.rs"
-                    | "main.go"
-                    | "lib/main.dart"
-                    | "Package.swift"
-                    | "AndroidManifest.xml"
-                    | "Info.plist"
+                "src/main.rs" | "main.go" | "lib/main.dart" | "Package.swift" | "Info.plist"
             ) || file.name == "main.py"
                 || file.name == "main.ts"
                 || file.name == "main.tsx"
                 || file.name == "App.swift"
+                || file.name == "AndroidManifest.xml"
         })
         .map(|file| file.path.clone())
         .collect()
@@ -614,6 +634,7 @@ pub(crate) fn unix_timestamp_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_recommendation::recommend_graph_tests;
     use std::fs;
     use tempfile::tempdir;
 
@@ -641,5 +662,101 @@ mod tests {
             .is_file());
         assert_eq!(status.file_count, 2);
         assert!(status.symbol_count >= 2);
+    }
+
+    #[test]
+    fn mobile_fixture_matrix_reports_platforms_configs_components_and_tests() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("android/app/src/main/java/com/demo")).unwrap();
+        fs::create_dir_all(dir.path().join("android/app/src/androidTest/java/com/demo")).unwrap();
+        fs::create_dir_all(dir.path().join("ios/App")).unwrap();
+        fs::create_dir_all(dir.path().join("ios/AppTests")).unwrap();
+        fs::create_dir_all(dir.path().join("lib")).unwrap();
+        fs::create_dir_all(dir.path().join("test")).unwrap();
+        fs::write(
+            dir.path().join("build.gradle"),
+            "plugins { id 'com.android.application' }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("android/app/src/main/AndroidManifest.xml"),
+            "<manifest><application><activity android:name=\".MainActivity\"/></application></manifest>\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path()
+                .join("android/app/src/main/java/com/demo/MainActivity.kt"),
+            "package com.demo\nclass MainActivity {}\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path()
+                .join("android/app/src/androidTest/java/com/demo/MainActivityTest.kt"),
+            "package com.demo\nclass MainActivityTest {}\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("ios/App/Info.plist"),
+            "<plist><dict><key>CFBundleIdentifier</key><string>demo</string></dict></plist>\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("ios/App/App.swift"),
+            "import SwiftUI\nstruct RootView: View { var body: some View { Text(\"ok\") } }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("ios/AppTests/AppTests.swift"),
+            "import XCTest\nfinal class AppTests: XCTestCase {}\n",
+        )
+        .unwrap();
+        fs::write(dir.path().join("pubspec.yaml"), "name: demo\nflutter:\n").unwrap();
+        fs::write(
+            dir.path().join("lib/main.dart"),
+            "import 'package:flutter/widgets.dart';\nclass Home extends StatelessWidget {}\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("test/widget_test.dart"),
+            "void main() { testWidgets('home', (tester) async {}); }\n",
+        )
+        .unwrap();
+
+        index_project_graph(dir.path()).unwrap();
+        let manifest = load_project_graph_manifest(dir.path()).unwrap();
+        let hints = recommend_graph_tests(dir.path(), &[], &[], &[]).unwrap();
+
+        for platform in ["android", "ios", "flutter"] {
+            assert!(
+                manifest.platforms.iter().any(|item| item == platform),
+                "missing platform {platform}"
+            );
+        }
+        assert!(manifest
+            .entry_points
+            .iter()
+            .any(|path| path.ends_with("AndroidManifest.xml")));
+        assert!(manifest
+            .mobile_configs
+            .iter()
+            .any(|path| path.ends_with("Info.plist")));
+        assert!(manifest
+            .mobile_components
+            .iter()
+            .any(|path| path.ends_with("MainActivity.kt")));
+        assert!(manifest
+            .mobile_tests
+            .iter()
+            .any(|path| path.ends_with("MainActivityTest.kt")));
+        for command in [
+            "./gradlew connectedAndroidTest",
+            "xcodebuild test",
+            "flutter test",
+        ] {
+            assert!(
+                hints.iter().any(|hint| hint.command_hint == command),
+                "missing test hint {command}"
+            );
+        }
     }
 }

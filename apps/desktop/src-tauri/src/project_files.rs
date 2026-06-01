@@ -2,7 +2,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde::Serialize;
 use std::{
     fs,
-    io::Read,
+    io::{BufRead, BufReader, Read},
     path::{Component, Path, PathBuf},
     time::UNIX_EPOCH,
 };
@@ -10,6 +10,7 @@ use std::{
 const PROJECT_FILE_PREVIEW_LIMIT_BYTES: u64 = 512 * 1024;
 const PROJECT_BINARY_PREVIEW_LIMIT_BYTES: usize = 4096;
 const DIRECTORY_CHILD_LIMIT: usize = 80;
+const PROJECT_FILE_TEXT_RANGE_LIMIT_LINES: usize = 2_000;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,6 +63,17 @@ pub(crate) struct ProjectFileContent {
     unsupported_reason: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectFileTextRange {
+    relative_path: String,
+    start_line: usize,
+    end_line: usize,
+    total_lines: usize,
+    content: String,
+    truncated: bool,
+}
+
 #[tauri::command]
 pub(crate) fn load_project_files_snapshot(
     project_root: Option<String>,
@@ -86,6 +98,18 @@ pub(crate) fn load_project_file_content(
     let root = resolve_agentflow_project_root(project_root)?;
     let target = sanitize_project_relative_path(&root, &relative_path)?;
     read_project_file_content(&root, &target)
+}
+
+#[tauri::command]
+pub(crate) fn load_project_file_text_range(
+    relative_path: String,
+    start_line: usize,
+    line_count: usize,
+    project_root: Option<String>,
+) -> Result<ProjectFileTextRange, String> {
+    let root = resolve_agentflow_project_root(project_root)?;
+    let target = sanitize_project_relative_path(&root, &relative_path)?;
+    read_project_file_text_range(&root, &target, start_line, line_count)
 }
 
 #[tauri::command]
@@ -396,6 +420,54 @@ fn read_project_file_content(root: &Path, path: &Path) -> Result<ProjectFileCont
     })
 }
 
+fn read_project_file_text_range(
+    root: &Path,
+    path: &Path,
+    start_line: usize,
+    line_count: usize,
+) -> Result<ProjectFileTextRange, String> {
+    let metadata =
+        fs::metadata(path).map_err(|error| format!("metadata {}: {error}", path.display()))?;
+    if metadata.is_dir() {
+        return Err("selected project path is a directory, not a text file".to_string());
+    }
+
+    let requested_start = start_line.max(1);
+    let requested_count = line_count.max(1).min(PROJECT_FILE_TEXT_RANGE_LIMIT_LINES);
+    let requested_end = requested_start.saturating_add(requested_count - 1);
+    let file = fs::File::open(path).map_err(|error| format!("open {}: {error}", path.display()))?;
+    let mut reader = BufReader::new(file);
+    let mut line = String::new();
+    let mut content = String::new();
+    let mut total_lines = 0;
+    let mut end_line = 0;
+
+    loop {
+        line.clear();
+        let bytes_read = reader
+            .read_line(&mut line)
+            .map_err(|error| format!("read text range {}: {error}", path.display()))?;
+        if bytes_read == 0 {
+            break;
+        }
+
+        total_lines += 1;
+        if total_lines >= requested_start && total_lines <= requested_end {
+            content.push_str(&line);
+            end_line = total_lines;
+        }
+    }
+
+    Ok(ProjectFileTextRange {
+        relative_path: relative_project_path(root, path),
+        start_line: requested_start,
+        end_line,
+        total_lines,
+        content,
+        truncated: end_line < total_lines,
+    })
+}
+
 fn preferred_project_file_selection(entries: &[ProjectFileEntry]) -> Option<String> {
     [
         "README.md",
@@ -678,6 +750,35 @@ mod tests {
             .unsupported_reason
             .expect("large text reason")
             .contains("512KB"));
+
+        cleanup_project_root(&root);
+    }
+
+    #[test]
+    fn project_file_text_range_reads_requested_lines_without_loading_whole_file() {
+        let root = temp_project_root("text-range");
+        let text_file = root.join("large.log");
+        fs::write(
+            &text_file,
+            (1..=20)
+                .map(|line| format!("line-{line}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .expect("write ranged text file");
+
+        let range =
+            read_project_file_text_range(&root, &text_file, 6, 4).expect("read text line range");
+
+        assert_eq!(range.relative_path, "large.log");
+        assert_eq!(range.start_line, 6);
+        assert_eq!(range.end_line, 9);
+        assert_eq!(range.total_lines, 20);
+        assert!(range.truncated);
+        assert!(range.content.contains("line-6"));
+        assert!(range.content.contains("line-9"));
+        assert!(!range.content.contains("line-5"));
+        assert!(!range.content.contains("line-10"));
 
         cleanup_project_root(&root);
     }

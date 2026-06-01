@@ -3,9 +3,10 @@ import { useCallback, useState } from "react";
 import {
   BROWSER_PREVIEW_PROJECT_ROOT,
   createBrowserPreviewProjectFileContent,
+  createBrowserPreviewProjectFileTextRange,
   createBrowserPreviewProjectFilesSnapshot,
 } from "../../browserPreviewData";
-import type { ProjectFileContent, ProjectFilesSnapshot } from "../../types";
+import type { ProjectFileContent, ProjectFileTextRange, ProjectFilesSnapshot } from "../../types";
 import type { ProjectFilesState } from "./projectFileTypes";
 import { findProjectFileEntry } from "./projectFileUtils";
 
@@ -126,6 +127,31 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
     [projectFilesState.selectedPath, selectedProjectRoot],
   );
 
+  const loadProjectFileTextRange = useCallback(
+    async (relativePath: string, startLine: number, lineCount: number) => {
+      const projectRoot = projectFilesState.snapshot?.projectRoot ?? selectedProjectRoot;
+      try {
+        return await invoke<ProjectFileTextRange>("load_project_file_text_range", {
+          projectRoot,
+          relativePath,
+          startLine,
+          lineCount,
+        });
+      } catch (error) {
+        if (isBrowserPreviewRuntime()) {
+          return createBrowserPreviewProjectFileTextRange(
+            relativePath,
+            startLine,
+            lineCount,
+            projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT,
+          );
+        }
+        throw new Error(readableProjectFilesError(error));
+      }
+    },
+    [projectFilesState.snapshot?.projectRoot, selectedProjectRoot],
+  );
+
   const reportProjectFilesError = useCallback((message: string) => {
     setProjectFilesState((current) => ({
       ...current,
@@ -143,6 +169,7 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
     projectFilesState,
     loadProjectFiles,
     selectProjectFile,
+    loadProjectFileTextRange,
     reportProjectFilesError,
     clearProjectFilesError,
   };

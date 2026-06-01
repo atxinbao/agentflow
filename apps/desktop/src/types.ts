@@ -341,6 +341,23 @@ export type ProjectFileContent = {
   unsupportedReason?: string | null;
 };
 
+export type ProjectFileTextRange = {
+  relativePath: string;
+  startLine: number;
+  endLine: number;
+  totalLines: number;
+  content: string;
+  truncated: boolean;
+};
+
+export type ProjectRecommendedFile = {
+  path: string;
+  name: string;
+  source: "context-pack-file" | "context-pack-test" | "manifest-important";
+  reason: string;
+  status: "available" | "missing" | "unloaded";
+};
+
 export type GraphStatus = "missing" | "indexing" | "ready" | "stale" | "failed" | "degraded";
 
 export type GraphStatusSnapshot = {
@@ -353,9 +370,20 @@ export type GraphStatusSnapshot = {
   updatedAt?: number | null;
   lastError?: string | null;
   watcherStatus?: string | null;
+  watcherBackend?: string | null;
+  watcherDetail?: GraphWatcherDetail | null;
   preflightStatus?: string | null;
   protectionStatus?: string | null;
   degradedReasons?: string[];
+};
+
+export type GraphWatcherDetail = {
+  platform: string;
+  recursive: boolean;
+  ignoredPathCount: number;
+  lastEventAt?: number | null;
+  lastEventKind?: string | null;
+  lastError?: string | null;
 };
 
 export type GraphManifestSnapshot = {

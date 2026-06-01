@@ -286,6 +286,9 @@ fn is_test_file(path: &str, name: &str) -> bool {
         || lower_name.contains("_test.")
         || lower_name.contains(".test.")
         || lower_name.contains(".spec.")
+        || lower_name.ends_with("test.kt")
+        || lower_name.ends_with("test.swift")
+        || lower_name.ends_with("_test.dart")
         || lower_name.ends_with("test.rs")
         || lower_name.ends_with("tests.rs")
 }
@@ -516,6 +519,7 @@ fn source_stem(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{manager::index_project_graph, search::search_project_graph};
     use std::fs;
     use tempfile::tempdir;
 
@@ -633,5 +637,232 @@ mod tests {
             .symbols
             .iter()
             .any(|symbol| symbol.kind == "component"));
+    }
+
+    #[test]
+    fn l1_fixture_matrix_extracts_symbols_imports_relations_and_chunks() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("src")).unwrap();
+        let fixtures = [
+            (
+                "src/app.ts",
+                "import React from 'react';\nclass TsParent { child() { return React; } }\n",
+                "typescript",
+            ),
+            (
+                "src/app.js",
+                "import fs from 'fs';\nclass JsParent { child() { return fs; } }\n",
+                "javascript",
+            ),
+            (
+                "src/app.py",
+                "import os\nclass PyParent:\n    def child(self):\n        return os.getcwd()\n",
+                "python",
+            ),
+            (
+                "src/App.java",
+                "package demo;\nimport java.util.List;\nclass JavaParent { void child() {} }\n",
+                "java",
+            ),
+            (
+                "src/App.kt",
+                "package demo\nimport kotlin.String\nclass KotlinParent { fun child(): String = \"ok\" }\n",
+                "kotlin",
+            ),
+            (
+                "src/App.swift",
+                "import Foundation\nclass SwiftParent { func child() {} }\n",
+                "swift",
+            ),
+            (
+                "src/app.go",
+                "package demo\nimport \"fmt\"\ntype GoParent struct {}\nfunc (g GoParent) Child() { fmt.Println(\"ok\") }\n",
+                "go",
+            ),
+            (
+                "src/lib.rs",
+                "use std::fmt;\npub struct RustParent {}\nimpl RustParent { pub fn child(&self) {} }\n",
+                "rust",
+            ),
+            (
+                "src/app.c",
+                "#include <stdio.h>\nstruct CParent { int id; };\nvoid c_child() {}\n",
+                "c",
+            ),
+            (
+                "src/app.cpp",
+                "#include <vector>\nclass CppParent { void child() {} };\n",
+                "cpp",
+            ),
+            (
+                "src/App.cs",
+                "using System;\nclass CsParent { void Child() {} }\n",
+                "csharp",
+            ),
+            (
+                "src/app.dart",
+                "import 'dart:io';\nclass DartParent { void child() {} }\n",
+                "dart",
+            ),
+        ];
+        for (path, content, _) in fixtures {
+            fs::write(dir.path().join(path), content).unwrap();
+        }
+
+        let index = scan_project(dir.path()).unwrap();
+
+        for (_, _, language) in fixtures {
+            assert!(
+                index.files.iter().any(|file| file.language == language),
+                "missing language file {language}"
+            );
+            assert!(
+                index
+                    .symbols
+                    .iter()
+                    .any(|symbol| symbol.language == language
+                        && symbol.start_line >= 1
+                        && symbol.end_line >= symbol.start_line),
+                "missing positioned symbol for {language}"
+            );
+            assert!(
+                index.chunks.iter().any(|chunk| {
+                    index
+                        .files
+                        .iter()
+                        .any(|file| file.id == chunk.file_id && file.language == language)
+                }),
+                "missing chunk for {language}"
+            );
+        }
+        for relation_kind in ["contains", "imports", "parent_of"] {
+            assert!(
+                index
+                    .relations
+                    .iter()
+                    .any(|relation| relation.relation_kind == relation_kind),
+                "missing relation {relation_kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn l2_l3_fixture_matrix_classifies_configs_docs_and_searchable_chunks() {
+        let dir = tempdir().unwrap();
+        let fixtures = [
+            (
+                "index.php",
+                "<?php use App\\Repo; class PhpRepo {}\n",
+                "php",
+            ),
+            ("app.rb", "require 'json'\nclass RubyRepo\nend\n", "ruby"),
+            ("schema.sql", "CREATE TABLE users (id INTEGER);\n", "sql"),
+            (
+                "run.sh",
+                "source ./env\nfunction run_app() { echo ok; }\n",
+                "shell",
+            ),
+            (
+                "script.ps1",
+                "function Invoke-App { Write-Output \"ok\" }\n",
+                "powershell",
+            ),
+            (
+                "index.html",
+                "<html><body><main>hello</main></body></html>\n",
+                "html",
+            ),
+            ("style.css", ".app { color: red; }\n", "css"),
+            ("README.md", "# Overview\nGraph docs\n", "markdown"),
+            (
+                "package.json",
+                "{\"scripts\":{\"test\":\"vitest\"}}\n",
+                "json",
+            ),
+            ("config.yaml", "service:\n  name: graph\n", "yaml"),
+            (
+                "Cargo.toml",
+                "[package]\nname = \"graph-fixture\"\n",
+                "toml",
+            ),
+            (
+                "AndroidManifest.xml",
+                "<manifest><application /></manifest>\n",
+                "xml",
+            ),
+            (
+                "Info.plist",
+                "<plist><dict><key>CFBundleIdentifier</key><string>x</string></dict></plist>\n",
+                "plist",
+            ),
+            (
+                "build.gradle",
+                "plugins { id 'com.android.application' }\n",
+                "gradle",
+            ),
+            ("Dockerfile", "FROM rust:latest\n", "dockerfile"),
+            ("pyproject.toml", "[project]\nname = \"demo\"\n", "toml"),
+            ("go.mod", "module example.com/demo\n", "go"),
+            ("pubspec.yaml", "name: demo\nflutter:\n", "yaml"),
+            (
+                "Package.swift",
+                "import PackageDescription\nlet package = Package(name: \"Demo\")\n",
+                "swift",
+            ),
+            ("Podfile", "platform :ios, '17.0'\n", "ruby"),
+        ];
+        for (path, content, _) in fixtures {
+            fs::write(dir.path().join(path), content).unwrap();
+        }
+
+        let index = scan_project(dir.path()).unwrap();
+        assert_eq!(index.files.len(), fixtures.len());
+        for (_, _, language) in fixtures {
+            assert!(
+                index.files.iter().any(|file| file.language == language),
+                "missing language {language}"
+            );
+        }
+        assert!(index.files.iter().any(|file| file.kind == "doc"));
+        assert!(index.files.iter().any(|file| file.kind == "config"));
+        assert!(index
+            .chunks
+            .iter()
+            .any(|chunk| chunk.text.contains("Overview")));
+
+        let status = index_project_graph(dir.path()).unwrap();
+        assert!(
+            status.status == crate::model::GraphStatus::Ready
+                || status.status == crate::model::GraphStatus::Degraded
+        );
+        let heading = search_project_graph(dir.path(), "Overview", Some(20)).unwrap();
+        assert!(heading.results.iter().any(|item| item.path == "README.md"));
+        let plist = search_project_graph(dir.path(), "CFBundleIdentifier", Some(20)).unwrap();
+        assert!(
+            plist.results.iter().any(|item| item.path == "Info.plist"),
+            "missing searchable plist config key"
+        );
+    }
+
+    #[test]
+    fn structured_fallback_parser_covers_non_l1_languages() {
+        let dir = tempdir().unwrap();
+        fs::write(
+            dir.path().join("app.php"),
+            "<?php use App\\Repo; class Controller {}\n",
+        )
+        .unwrap();
+        fs::write(dir.path().join("README.md"), "# Fallback Heading\n").unwrap();
+
+        let index = scan_project(dir.path()).unwrap();
+
+        assert!(index
+            .relations
+            .iter()
+            .any(|relation| relation.source.contains("structured-fallback")));
+        assert!(index
+            .symbols
+            .iter()
+            .any(|symbol| symbol.kind == "markdown_heading"));
     }
 }

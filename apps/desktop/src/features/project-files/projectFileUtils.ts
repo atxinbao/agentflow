@@ -50,7 +50,10 @@ export function buildProjectFileBrowserRows(
         kind: child.kind,
         createdAt: null,
         modifiedAt: null,
+        sizeBytes: null,
         extension: getProjectFileExtensionFromName(child.name),
+        childCount: null,
+        isSymlink: false,
         children: [],
         depth: row.depth + 1,
       });
@@ -64,7 +67,10 @@ export function buildProjectFileBrowserRows(
       kind: entry.kind,
       createdAt: entry.createdAt,
       modifiedAt: entry.modifiedAt,
+      sizeBytes: entry.sizeBytes,
       extension: entry.extension,
+      childCount: entry.childCount,
+      isSymlink: false,
       children: entry.children,
       depth: 0,
     });
@@ -85,6 +91,9 @@ function getProjectFileBrowserChildren(
 }
 
 export function formatProjectFileRowMeta(row: ProjectFileBrowserRow) {
+  if (row.missing) {
+    return "已不存在";
+  }
   if (row.modifiedAt) {
     return formatProjectFileTimestamp(row.modifiedAt);
   }

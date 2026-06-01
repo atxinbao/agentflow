@@ -10,6 +10,7 @@ import type {
   ProjectFileChild,
   ProjectFileContent,
   ProjectFileEntry,
+  ProjectFileTextRange,
   ProjectFilesSnapshot,
   ProjectMilestoneIssueViewModelSnapshot,
   WorkbenchBoundary,
@@ -403,6 +404,15 @@ export function createBrowserPreviewGraphStatus(projectRoot = BROWSER_PREVIEW_PR
     updatedAt: previewTimestamp,
     lastError: null,
     watcherStatus: "mock",
+    watcherBackend: "mock",
+    watcherDetail: {
+      platform: "browser-preview",
+      recursive: true,
+      ignoredPathCount: 0,
+      lastEventAt: null,
+      lastEventKind: null,
+      lastError: null,
+    },
     preflightStatus: "ready",
     protectionStatus: "ready",
     degradedReasons: [],
@@ -522,6 +532,30 @@ export function createBrowserPreviewProjectFileContent(relativePath: string, pro
     truncated: false,
     directoryChildren: entry.kind === "directory" ? entry.children : [],
     unsupportedReason: null,
+  };
+}
+
+export function createBrowserPreviewProjectFileTextRange(
+  relativePath: string,
+  startLine: number,
+  lineCount: number,
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+): ProjectFileTextRange {
+  const content = createBrowserPreviewProjectFileContent(relativePath, projectRoot);
+  const lines = (content.content ?? "").split("\n");
+  const normalizedStartLine = Math.max(1, Math.floor(startLine || 1));
+  const normalizedLineCount = Math.max(1, Math.floor(lineCount || 240));
+  const startIndex = normalizedStartLine - 1;
+  const selectedLines = lines.slice(startIndex, startIndex + normalizedLineCount);
+  const endLine = selectedLines.length > 0 ? normalizedStartLine + selectedLines.length - 1 : 0;
+
+  return {
+    relativePath: content.relativePath,
+    startLine: normalizedStartLine,
+    endLine,
+    totalLines: lines.length,
+    content: selectedLines.join("\n"),
+    truncated: endLine < lines.length,
   };
 }
 

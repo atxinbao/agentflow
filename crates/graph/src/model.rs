@@ -23,9 +23,22 @@ pub struct GraphStatusSnapshot {
     pub updated_at: Option<u64>,
     pub last_error: Option<String>,
     pub watcher_status: Option<String>,
+    pub watcher_backend: Option<String>,
+    pub watcher_detail: Option<GraphWatcherDetail>,
     pub preflight_status: Option<String>,
     pub protection_status: Option<String>,
     pub degraded_reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphWatcherDetail {
+    pub platform: String,
+    pub recursive: bool,
+    pub ignored_path_count: usize,
+    pub last_event_at: Option<u64>,
+    pub last_event_kind: Option<String>,
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -234,7 +247,12 @@ pub struct GraphWatcherSnapshot {
     pub version: String,
     pub project_root: String,
     pub status: String,
+    pub backend: String,
+    pub recursive: bool,
     pub debounce_ms: u64,
+    pub ignored_path_count: usize,
+    pub last_event_at: Option<u64>,
+    pub last_event_kind: Option<String>,
     pub last_error: Option<String>,
 }
 

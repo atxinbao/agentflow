@@ -40,6 +40,7 @@ import {
   projectRootsEqual,
   useProjectGraph,
   useProjectFiles,
+  type ProjectGraphState,
   type ProjectFilesState,
 } from "./features/project-files";
 import { AgentStatusBar, buildAgentStatusItems } from "./features/status-channel";
@@ -51,6 +52,7 @@ import type {
   LocalMetricsSnapshot,
   MilestoneDerivedProgress,
   LocalProjectModelSnapshot,
+  ProjectFileTextRange,
   LocalSearchSnapshot,
   ProjectMilestoneIssueViewModelSnapshot,
   V1Issue,
@@ -324,6 +326,7 @@ function App() {
   });
   const {
     clearProjectFilesError,
+    loadProjectFileTextRange,
     loadProjectFiles,
     projectFilesState,
     reportProjectFilesError,
@@ -744,6 +747,8 @@ function App() {
             onSelectMilestone={setSelectedMilestoneId}
             onSelectProject={setSelectedProjectId}
             onSelectProjectFile={(relativePath) => void selectProjectFile(relativePath)}
+            onLoadProjectFileTextRange={loadProjectFileTextRange}
+            projectGraphState={projectGraphState}
             projectFilesState={projectFilesState}
             projectViewModel={projectViewModel}
             selectedMilestoneId={selectedMilestoneId}
@@ -1026,20 +1031,24 @@ function WorkspaceTreeNav({
 }
 
 function ProjectView({
+  onLoadProjectFileTextRange,
   onSelectIssue,
   onSelectMilestone,
   onSelectProject,
   onSelectProjectFile,
+  projectGraphState,
   projectFilesState,
   projectViewModel,
   selectedMilestoneId,
   selectedProjectId,
   selectedProjectRoot,
 }: {
+  onLoadProjectFileTextRange: (relativePath: string, startLine: number, lineCount: number) => Promise<ProjectFileTextRange>;
   onSelectIssue: (issueId: string) => void;
   onSelectMilestone: (milestoneId: string | null) => void;
   onSelectProject: (projectId: string) => void;
   onSelectProjectFile: (relativePath: string) => void;
+  projectGraphState: ProjectGraphState;
   projectFilesState: ProjectFilesState;
   projectViewModel: ProjectMilestoneIssueViewModelSnapshot | null;
   selectedMilestoneId: string | null;
@@ -1080,7 +1089,12 @@ function ProjectView({
   return (
     <section className="project-layout project-local-files-layout">
       {activeProject || canReadSelectedLocalProject ? (
-        <ProjectLocalFilesPage fileState={projectFilesState} onSelectFile={onSelectProjectFile} />
+        <ProjectLocalFilesPage
+          fileState={projectFilesState}
+          graphState={projectGraphState}
+          onLoadTextRange={onLoadProjectFileTextRange}
+          onSelectFile={onSelectProjectFile}
+        />
       ) : (
         <section className="empty-project-state">
           <h2>添加项目</h2>

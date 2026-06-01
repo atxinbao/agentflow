@@ -214,6 +214,8 @@ pub(crate) fn counts(
         updated_at: None,
         last_error: None,
         watcher_status: None,
+        watcher_backend: None,
+        watcher_detail: None,
         preflight_status: None,
         protection_status: None,
         degraded_reasons: Vec::new(),

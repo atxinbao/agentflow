@@ -1,4 +1,11 @@
-import type { ProjectFileChild, ProjectFileContent, ProjectFileEntry, ProjectFilesSnapshot } from "../../types";
+import type {
+  ProjectFileChild,
+  ProjectFileContent,
+  ProjectFileEntry,
+  ProjectFileTextRange,
+  ProjectFilesSnapshot,
+  ProjectRecommendedFile,
+} from "../../types";
 
 export type ProjectFilesState = {
   snapshot: ProjectFilesSnapshot | null;
@@ -14,9 +21,14 @@ export type ProjectFileBrowserRow = {
   kind: "file" | "directory";
   createdAt?: number | null;
   modifiedAt?: number | null;
+  sizeBytes?: number | null;
   extension?: string | null;
+  childCount?: number | null;
+  isSymlink?: boolean;
+  missing?: boolean;
+  recommendation?: ProjectRecommendedFile;
   children: ProjectFileChild[];
   depth: number;
 };
 
-export type { ProjectFileChild, ProjectFileContent, ProjectFileEntry };
+export type { ProjectFileChild, ProjectFileContent, ProjectFileEntry, ProjectFileTextRange, ProjectRecommendedFile };
