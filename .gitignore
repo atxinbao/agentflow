@@ -1,6 +1,7 @@
 .DS_Store
 .agentflow/runs/
 .agentflow/tmp/
+.agentflow/output/graph/
 .agentflow/index.sqlite
 .agentflow/index.sqlite-*
 target/

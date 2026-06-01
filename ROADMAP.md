@@ -16,9 +16,10 @@ docs/requirements/
 ## 当前路线
 
 1. 完成 [001 - 添加本地项目](docs/requirements/001-add-local-project.md)。
-2. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
-3. 基于新需求重新生成开发切片。
-4. 每个切片必须明确：
+2. 开发 [002 - Graph V1](docs/requirements/002-graph-v1.md)。
+3. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
+4. 基于新需求重新生成开发切片。
+5. 每个切片必须明确：
    - 用户可见变化
    - 代码修改范围
    - 不允许做的事
@@ -41,5 +42,5 @@ docs/requirements/
 当前执行：
 
 ```text
-docs/requirements/001-add-local-project.md
+docs/requirements/002-graph-v1.md
 ```

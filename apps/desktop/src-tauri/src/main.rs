@@ -1,3 +1,4 @@
+mod graph;
 mod project_files;
 mod project_workspace;
 
@@ -41,6 +42,12 @@ fn main() {
             load_project_model_snapshot,
             load_project_milestone_issue_view_model_snapshot,
             load_search_snapshot,
+            graph::prepare_project_graph,
+            graph::load_project_graph_status,
+            graph::load_project_graph_manifest,
+            graph::search_project_graph,
+            graph::build_graph_context_pack,
+            graph::load_graph_context_pack,
             project_files::load_project_files_snapshot,
             project_files::load_project_file_content,
             project_files::choose_existing_project_folder,

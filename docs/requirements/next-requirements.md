@@ -5,9 +5,10 @@
 
 ## 状态
 
-第一个新功能需求已落到：
+已确认的新功能需求：
 
 - [001-add-local-project.md](001-add-local-project.md)
+- [002-graph-v1.md](002-graph-v1.md)
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 
