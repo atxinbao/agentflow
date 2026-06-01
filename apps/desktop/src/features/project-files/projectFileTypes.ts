@@ -1,4 +1,12 @@
-import type { ProjectFileChild, ProjectFileContent, ProjectFileEntry, ProjectFilesSnapshot } from "../../types";
+import type {
+  ProjectDirectoryPage,
+  ProjectFileChild,
+  ProjectFileContent,
+  ProjectFileEntry,
+  ProjectFileSearchSnapshot,
+  ProjectFileViewMode,
+  ProjectFilesSnapshot,
+} from "../../types";
 
 export type ProjectFilesState = {
   snapshot: ProjectFilesSnapshot | null;
@@ -6,6 +14,14 @@ export type ProjectFilesState = {
   selectedPath: string | null;
   error: string | null;
   source: "tauri" | "preview" | "unavailable" | "loading";
+  viewMode: ProjectFileViewMode;
+  loading: boolean;
+  loadingPath: string | null;
+  directoryPages: Record<string, ProjectDirectoryPage>;
+  searchQuery: string;
+  searchSnapshot: ProjectFileSearchSnapshot | null;
+  searchLoading: boolean;
+  recentPaths: string[];
 };
 
 export type ProjectFileBrowserRow = {
@@ -15,8 +31,15 @@ export type ProjectFileBrowserRow = {
   createdAt?: number | null;
   modifiedAt?: number | null;
   extension?: string | null;
+  sizeBytes?: number | null;
+  childCount?: number | null;
+  isSymlink?: boolean;
   children: ProjectFileChild[];
   depth: number;
+  hasMoreChildren?: boolean;
+  nextCursor?: string | null;
+  totalChildren?: number | null;
+  missing?: boolean;
 };
 
-export type { ProjectFileChild, ProjectFileContent, ProjectFileEntry };
+export type { ProjectDirectoryPage, ProjectFileChild, ProjectFileContent, ProjectFileEntry, ProjectFileSearchSnapshot, ProjectFileViewMode };

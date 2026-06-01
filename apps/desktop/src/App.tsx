@@ -40,6 +40,7 @@ import {
   projectRootsEqual,
   useProjectGraph,
   useProjectFiles,
+  type ProjectFileViewMode,
   type ProjectFilesState,
 } from "./features/project-files";
 import { AgentStatusBar, buildAgentStatusItems } from "./features/status-channel";
@@ -324,16 +325,26 @@ function App() {
   });
   const {
     clearProjectFilesError,
+    loadProjectDirectoryPage,
     loadProjectFiles,
     projectFilesState,
     reportProjectFilesError,
+    searchProjectFiles,
     selectProjectFile,
+    setProjectFileViewMode,
   } = useProjectFiles(selectedProjectRoot);
   const graphProjectRoot =
     selectedProjectRoot ??
     projectFilesState.snapshot?.projectRoot ??
     (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
   const { projectGraphState } = useProjectGraph(graphProjectRoot);
+  const recommendedProjectFilePaths = useMemo(() => {
+    const paths = new Set<string>();
+    projectGraphState.latestContextPack?.recommendedFiles.forEach((file) => paths.add(file.path));
+    projectGraphState.latestContextPack?.recommendedTests.forEach((file) => paths.add(file.path));
+    projectGraphState.manifest?.importantFiles.forEach((path) => paths.add(path));
+    return [...paths];
+  }, [projectGraphState.latestContextPack, projectGraphState.manifest?.importantFiles]);
   const agentStatusItems = useMemo(
     () => buildAgentStatusItems({ projectFilesState, projectGraphState }),
     [projectFilesState, projectGraphState],
@@ -744,7 +755,11 @@ function App() {
             onSelectMilestone={setSelectedMilestoneId}
             onSelectProject={setSelectedProjectId}
             onSelectProjectFile={(relativePath) => void selectProjectFile(relativePath)}
+            onLoadProjectDirectoryPage={loadProjectDirectoryPage}
+            onSearchProjectFiles={searchProjectFiles}
+            onSetProjectFileViewMode={setProjectFileViewMode}
             projectFilesState={projectFilesState}
+            recommendedFilePaths={recommendedProjectFilePaths}
             projectViewModel={projectViewModel}
             selectedMilestoneId={selectedMilestoneId}
             selectedProjectId={selectedProjectId}
@@ -1026,21 +1041,29 @@ function WorkspaceTreeNav({
 }
 
 function ProjectView({
+  onLoadProjectDirectoryPage,
   onSelectIssue,
   onSelectMilestone,
   onSelectProject,
   onSelectProjectFile,
+  onSearchProjectFiles,
+  onSetProjectFileViewMode,
   projectFilesState,
+  recommendedFilePaths,
   projectViewModel,
   selectedMilestoneId,
   selectedProjectId,
   selectedProjectRoot,
 }: {
+  onLoadProjectDirectoryPage: (directoryPath: string, cursor?: string | null) => Promise<unknown>;
   onSelectIssue: (issueId: string) => void;
   onSelectMilestone: (milestoneId: string | null) => void;
   onSelectProject: (projectId: string) => void;
   onSelectProjectFile: (relativePath: string) => void;
+  onSearchProjectFiles: (query: string) => Promise<unknown>;
+  onSetProjectFileViewMode: (viewMode: ProjectFileViewMode) => void;
   projectFilesState: ProjectFilesState;
+  recommendedFilePaths: string[];
   projectViewModel: ProjectMilestoneIssueViewModelSnapshot | null;
   selectedMilestoneId: string | null;
   selectedProjectId: string | null;
@@ -1080,7 +1103,14 @@ function ProjectView({
   return (
     <section className="project-layout project-local-files-layout">
       {activeProject || canReadSelectedLocalProject ? (
-        <ProjectLocalFilesPage fileState={projectFilesState} onSelectFile={onSelectProjectFile} />
+        <ProjectLocalFilesPage
+          fileState={projectFilesState}
+          onChangeViewMode={onSetProjectFileViewMode}
+          onLoadDirectoryPage={onLoadProjectDirectoryPage}
+          onSearchFiles={onSearchProjectFiles}
+          onSelectFile={onSelectProjectFile}
+          recommendedFilePaths={recommendedFilePaths}
+        />
       ) : (
         <section className="empty-project-state">
           <h2>添加项目</h2>

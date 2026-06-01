@@ -53,6 +53,9 @@ fn main() {
             graph::check_graph_git_protection,
             project_files::load_project_files_snapshot,
             project_files::load_project_file_content,
+            project_files::load_project_directory_page,
+            project_files::search_project_files,
+            project_files::load_project_file_text_range,
             project_files::choose_existing_project_folder,
             project_workspace::prepare_local_project_workspace
         ])

@@ -16,11 +16,24 @@ export function ProjectFileReader({
   content,
   entry,
   error,
+  loading,
+  loadingPath,
 }: {
   content: ProjectFileContent | null;
   entry: ProjectFileEntry | null;
   error?: string | null;
+  loading?: boolean;
+  loadingPath?: string | null;
 }) {
+  if (loading && !content) {
+    return (
+      <section className="project-file-empty">
+        <h3>正在读取文件</h3>
+        <p>{loadingPath ?? "正在加载选中文件内容。"}</p>
+      </section>
+    );
+  }
+
   if (error && !content) {
     return (
       <section className="project-file-empty">
@@ -107,14 +120,19 @@ export function ProjectFileReader({
 
 function projectFileDisplayType(content: ProjectFileContent | null, title: string, language: string) {
   const extension = (content?.extension ?? getProjectFileExtensionFromName(title)).toLowerCase();
+  const normalizedTitle = title.toLowerCase();
   const mimeType = content?.mimeType ?? "";
+  if (normalizedTitle === "androidmanifest.xml") return "Android manifest 配置";
+  if (normalizedTitle === "info.plist" || extension === "plist") return "plist 配置";
+  if (normalizedTitle === "pubspec.yaml" || normalizedTitle === "pubspec.yml") return "Flutter 配置";
+  if (normalizedTitle.endsWith(".gradle") || extension === "gradle") return "Gradle 配置";
   if (language === "markdown" || ["md", "mdx", "markdown"].includes(extension)) return "Markdown 文档";
-  if (mimeType.startsWith("image/")) return "Image";
-  if (mimeType.startsWith("audio/") || mimeType.startsWith("video/")) return "Media";
+  if (mimeType.startsWith("image/")) return "图片";
+  if (mimeType.startsWith("audio/") || mimeType.startsWith("video/")) return "媒体";
   if (mimeType === "application/pdf" || extension === "pdf") return "PDF";
   if (extension === "docx") return "DOCX";
-  if (["csv", "tsv", "xlsx"].includes(extension)) return "Table";
+  if (["csv", "tsv", "xlsx"].includes(extension)) return "表格";
   if (language === "json" || extension === "json") return "JSON";
-  if (content?.binaryPreview) return "Binary";
-  return "Code";
+  if (content?.binaryPreview) return "二进制";
+  return "代码";
 }
