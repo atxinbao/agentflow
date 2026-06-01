@@ -2,55 +2,26 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useRef, useState } from "react";
 import {
   BROWSER_PREVIEW_PROJECT_ROOT,
-  createBrowserPreviewProjectDirectoryPage,
   createBrowserPreviewProjectFileContent,
-  createBrowserPreviewProjectFileSearchSnapshot,
-  createBrowserPreviewProjectFileTextRange,
   createBrowserPreviewProjectFilesSnapshot,
-} from "../../browserPreviewData";
+} from "../../../browserPreviewData";
 import type {
-  ProjectDirectoryPage,
   ProjectFileContent,
-  ProjectFileSearchSnapshot,
-  ProjectFileTextRange,
   ProjectFileViewMode,
   ProjectFilesSnapshot,
-} from "../../types";
-import type { ProjectFilesState } from "./projectFileTypes";
-import { findProjectFileEntry, normalizeProjectRelativePath } from "./projectFileUtils";
-
-const PROJECT_FILE_READER_STATE_KEY = "agentflow.projectFileReaderState.v1";
-const RECENT_FILE_LIMIT = 20;
-const DEFAULT_PROJECT_FILE_VIEW_MODE: ProjectFileViewMode = "all";
-
-type PersistedProjectFileReaderProjectState = {
-  projectRoot?: string;
-  selectedPath?: string | null;
-  viewMode?: ProjectFileViewMode;
-  expandedPaths?: string[];
-  recentPaths?: string[];
-  lastOpenedAt?: string;
-};
-
-type PersistedProjectFileReaderStore = {
-  version?: number;
-  projects?: Record<string, PersistedProjectFileReaderProjectState>;
-};
-
-export function isBrowserPreviewRuntime() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  return !("__TAURI_INTERNALS__" in window);
-}
-
-function readableProjectFilesError(error: unknown) {
-  if (isBrowserPreviewRuntime()) {
-    return "当前为浏览器预览，正在显示 Mock 项目文件；真实内容请在桌面客户端查看。";
-  }
-  return error instanceof Error ? error.message : String(error);
-}
+} from "../../../types";
+import type { ProjectFilesState } from "../model/projectFileTypes";
+import { findProjectFileEntry, normalizeProjectRelativePath } from "../model/projectFileUtils";
+import {
+  DEFAULT_PROJECT_FILE_VIEW_MODE,
+  RECENT_FILE_LIMIT,
+  persistProjectFileReaderState,
+  readPersistedProjectFileReaderState,
+} from "./projectFileReaderState";
+import { isBrowserPreviewRuntime, readableProjectFilesError } from "./projectFileRuntime";
+import { useProjectDirectoryPageLoader } from "./useProjectDirectoryPages";
+import { useProjectFileSearch } from "./useProjectFileSearch";
+import { useProjectFileTextRange } from "./useProjectFileTextRange";
 
 export function useProjectFiles(selectedProjectRoot: string | null) {
   const [projectFilesState, setProjectFilesState] = useState<ProjectFilesState>(() => {
@@ -96,6 +67,16 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
     };
   });
   const requestCounter = useRef(0);
+
+  const currentProjectRoot = useCallback(
+    () => projectFilesState.snapshot?.projectRoot ?? selectedProjectRoot,
+    [projectFilesState.snapshot?.projectRoot, selectedProjectRoot],
+  );
+
+  const currentViewMode = useCallback(
+    () => projectFilesState.viewMode,
+    [projectFilesState.viewMode],
+  );
 
   const rememberProjectFile = useCallback((relativePath: string) => {
     setProjectFilesState((current) => {
@@ -297,128 +278,24 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
     [loadProjectFiles, projectFilesState.recentPaths, projectFilesState.selectedPath, projectFilesState.snapshot?.projectRoot, selectedProjectRoot],
   );
 
-  const loadProjectDirectoryPage = useCallback(
-    async (directoryPath: string, cursor?: string | null) => {
-      const projectRoot = projectFilesState.snapshot?.projectRoot ?? selectedProjectRoot;
-      const viewMode = projectFilesState.viewMode;
-      if (isBrowserPreviewRuntime()) {
-        const page = createBrowserPreviewProjectDirectoryPage(directoryPath, projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT, viewMode, cursor);
-        setProjectFilesState((current) => ({
-          ...current,
-          directoryPages: {
-            ...current.directoryPages,
-            [directoryPath]: mergeDirectoryPages(current.directoryPages[directoryPath], page),
-          },
-          error: null,
-          source: "preview",
-        }));
-        return page;
-      }
-      try {
-        const page = await invoke<ProjectDirectoryPage>("load_project_directory_page", {
-          projectRoot,
-          directoryPath,
-          cursor,
-          viewMode,
-        });
-        setProjectFilesState((current) => ({
-          ...current,
-          directoryPages: {
-            ...current.directoryPages,
-            [directoryPath]: mergeDirectoryPages(current.directoryPages[directoryPath], page),
-          },
-          error: null,
-          source: current.source === "loading" ? "tauri" : current.source,
-        }));
-        return page;
-      } catch (error) {
-        setProjectFilesState((current) => ({
-          ...current,
-          error: readableProjectFilesError(error),
-        }));
-        return null;
-      }
-    },
-    [projectFilesState.snapshot?.projectRoot, projectFilesState.viewMode, selectedProjectRoot],
-  );
+  const loadProjectDirectoryPage = useProjectDirectoryPageLoader({
+    getProjectRoot: currentProjectRoot,
+    getViewMode: currentViewMode,
+    selectedProjectRoot,
+    setProjectFilesState,
+  });
 
-  const searchProjectFiles = useCallback(
-    async (query: string) => {
-      const normalizedQuery = query.trim();
-      const projectRoot = projectFilesState.snapshot?.projectRoot ?? selectedProjectRoot;
-      setProjectFilesState((current) => ({
-        ...current,
-        searchQuery: query,
-        searchLoading: Boolean(normalizedQuery),
-        searchSnapshot: normalizedQuery ? current.searchSnapshot : null,
-      }));
-      if (!normalizedQuery) {
-        return null;
-      }
-      if (isBrowserPreviewRuntime()) {
-        const searchSnapshot = createBrowserPreviewProjectFileSearchSnapshot(
-          normalizedQuery,
-          projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT,
-          projectFilesState.viewMode,
-        );
-        setProjectFilesState((current) => ({
-          ...current,
-          searchSnapshot,
-          searchLoading: false,
-          error: null,
-          source: "preview",
-        }));
-        return searchSnapshot;
-      }
-      try {
-        const searchSnapshot = await invoke<ProjectFileSearchSnapshot>("search_project_files", {
-          projectRoot,
-          query: normalizedQuery,
-          viewMode: projectFilesState.viewMode,
-        });
-        setProjectFilesState((current) => ({
-          ...current,
-          searchSnapshot,
-          searchLoading: false,
-          error: null,
-        }));
-        return searchSnapshot;
-      } catch (error) {
-        setProjectFilesState((current) => ({
-          ...current,
-          searchLoading: false,
-          error: readableProjectFilesError(error),
-        }));
-        return null;
-      }
-    },
-    [projectFilesState.snapshot?.projectRoot, projectFilesState.viewMode, selectedProjectRoot],
-  );
+  const searchProjectFiles = useProjectFileSearch({
+    getProjectRoot: currentProjectRoot,
+    getViewMode: currentViewMode,
+    selectedProjectRoot,
+    setProjectFilesState,
+  });
 
-  const loadProjectFileTextRange = useCallback(
-    async (relativePath: string, startLine: number, lineCount: number): Promise<ProjectFileTextRange> => {
-      const projectRoot = projectFilesState.snapshot?.projectRoot ?? selectedProjectRoot;
-      if (isBrowserPreviewRuntime()) {
-        return createBrowserPreviewProjectFileTextRange(
-          relativePath,
-          startLine,
-          lineCount,
-          projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT,
-        );
-      }
-      try {
-        return await invoke<ProjectFileTextRange>("load_project_file_text_range", {
-          projectRoot,
-          relativePath,
-          startLine,
-          lineCount,
-        });
-      } catch (error) {
-        throw new Error(readableProjectFilesError(error));
-      }
-    },
-    [projectFilesState.snapshot?.projectRoot, selectedProjectRoot],
-  );
+  const loadProjectFileTextRange = useProjectFileTextRange({
+    getProjectRoot: currentProjectRoot,
+    selectedProjectRoot,
+  });
 
   const reportProjectFilesError = useCallback((message: string) => {
     setProjectFilesState((current) => ({
@@ -445,86 +322,5 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
     searchProjectFiles,
     selectProjectFile,
     setProjectFileViewMode,
-  };
-}
-
-function mergeDirectoryPages(previous: ProjectDirectoryPage | undefined, next: ProjectDirectoryPage): ProjectDirectoryPage {
-  if (!previous) {
-    return next;
-  }
-  const seen = new Set(previous.entries.map((entry) => entry.relativePath));
-  const entries = [...previous.entries];
-  next.entries.forEach((entry) => {
-    if (!seen.has(entry.relativePath)) {
-      seen.add(entry.relativePath);
-      entries.push(entry);
-    }
-  });
-  return {
-    ...next,
-    entries,
-  };
-}
-
-function readPersistedProjectFileReaderState(projectRoot: string | null): PersistedProjectFileReaderProjectState {
-  if (typeof window === "undefined") {
-    return {};
-  }
-  try {
-    const raw = window.localStorage.getItem(PROJECT_FILE_READER_STATE_KEY);
-    if (!raw) {
-      return {};
-    }
-    const parsed = JSON.parse(raw) as PersistedProjectFileReaderStore & PersistedProjectFileReaderProjectState;
-    const projectState = projectRoot ? parsed.projects?.[projectRoot] : null;
-    if (projectState) {
-      return normalizePersistedProjectFileReaderState(projectState);
-    }
-
-    return normalizePersistedProjectFileReaderState(parsed);
-  } catch {
-    return {};
-  }
-}
-
-function persistProjectFileReaderState(projectRoot: string, state: PersistedProjectFileReaderProjectState) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    const raw = window.localStorage.getItem(PROJECT_FILE_READER_STATE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as PersistedProjectFileReaderStore) : {};
-    const projects = parsed.projects ?? {};
-    const previous = projects[projectRoot] ?? {};
-    projects[projectRoot] = {
-      ...previous,
-      ...state,
-      projectRoot,
-      lastOpenedAt: new Date().toISOString(),
-    };
-    window.localStorage.setItem(
-      PROJECT_FILE_READER_STATE_KEY,
-      JSON.stringify({
-        version: 1,
-        projects,
-      }),
-    );
-  } catch {
-    // 本地 UI 状态持久化失败不影响只读文件浏览。
-  }
-}
-
-function isProjectFileViewMode(value: unknown): value is ProjectFileViewMode {
-  return value === "source" || value === "all" || value === "recent";
-}
-
-function normalizePersistedProjectFileReaderState(state: PersistedProjectFileReaderProjectState): PersistedProjectFileReaderProjectState {
-  return {
-    projectRoot: state.projectRoot,
-    selectedPath: state.selectedPath ?? null,
-    viewMode: isProjectFileViewMode(state.viewMode) ? state.viewMode : DEFAULT_PROJECT_FILE_VIEW_MODE,
-    recentPaths: Array.isArray(state.recentPaths) ? state.recentPaths.slice(0, RECENT_FILE_LIMIT) : [],
-    expandedPaths: Array.isArray(state.expandedPaths) ? state.expandedPaths : [],
-    lastOpenedAt: state.lastOpenedAt,
   };
 }

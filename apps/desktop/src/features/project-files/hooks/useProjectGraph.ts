@@ -5,14 +5,14 @@ import {
   createBrowserPreviewGraphManifest,
   createBrowserPreviewGraphSearch,
   createBrowserPreviewGraphStatus,
-} from "../../browserPreviewData";
+} from "../../../browserPreviewData";
 import type {
   GraphContextPack,
   GraphManifestSnapshot,
   GraphSearchSnapshot,
   GraphStatusSnapshot,
-} from "../../types";
-import { isBrowserPreviewRuntime } from "./useProjectFiles";
+} from "../../../types";
+import { isBrowserPreviewRuntime } from "./projectFileRuntime";
 
 export type ProjectGraphState = {
   status: GraphStatusSnapshot | null;

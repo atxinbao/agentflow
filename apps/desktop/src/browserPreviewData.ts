@@ -19,7 +19,10 @@ import type {
   WorkbenchBoundary,
   WorkbenchSnapshot,
 } from "./types";
-import { getProjectFileExtensionFromName, normalizeProjectRelativePath } from "./features/project-files/projectFileUtils";
+import {
+  getProjectFileExtensionFromName,
+  normalizeProjectRelativePath,
+} from "./features/project-files/model/projectFileUtils";
 
 export const BROWSER_PREVIEW_PROJECT_ROOT = "/Users/mac/Documents/AgentFlow";
 
@@ -39,7 +42,7 @@ const previewIssueContract: IssueContract = {
   nonGoals: ["不执行命令。", "不写入本地工作区。", "不调用模型。", "不创建远程对象。"],
   context: {
     repo: BROWSER_PREVIEW_PROJECT_ROOT,
-    files: ["apps/desktop/src/App.tsx", "apps/desktop/src/features/project-files/useProjectFiles.ts"],
+    files: ["apps/desktop/src/App.tsx", "apps/desktop/src/features/project-files/hooks/useProjectFiles.ts"],
   },
   executionPlan: ["在浏览器预览中加载 mock 文件树。", "点击文件后在阅读器展示 mock 内容。", "真实 Tauri 客户端仍通过本地命令读取文件。"],
   validation: {
@@ -357,7 +360,7 @@ export function createBrowserPreviewSearchSnapshot(query: string, projectRoot = 
     initialized: true,
     projectRoot,
     query: { query },
-    searchedPaths: ["README.md", "apps/desktop/src/App.tsx", "apps/desktop/src/features/project-files/useProjectFiles.ts"],
+    searchedPaths: ["README.md", "apps/desktop/src/App.tsx", "apps/desktop/src/features/project-files/hooks/useProjectFiles.ts"],
     excludedPaths: [],
     results: [
       {
@@ -493,7 +496,7 @@ export function createBrowserPreviewGraphContextPack(projectRoot = BROWSER_PREVI
     recommendedTests: [],
     impactHints: [
       {
-        path: "apps/desktop/src/features/project-files/useProjectFiles.ts",
+        path: "apps/desktop/src/features/project-files/hooks/useProjectFiles.ts",
         reason: "同一 Project 文件读取链路",
         confidence: "medium",
       },
@@ -736,7 +739,7 @@ function browserPreviewDirectoryChildSpecs(path: string): Array<{ relativePath: 
     ],
     "apps/desktop/src/features": [{ relativePath: "apps/desktop/src/features/project-files", kind: "directory" }],
     "apps/desktop/src/features/project-files": [
-      { relativePath: "apps/desktop/src/features/project-files/useProjectFiles.ts", kind: "file" },
+      { relativePath: "apps/desktop/src/features/project-files/hooks/useProjectFiles.ts", kind: "file" },
       { relativePath: "apps/desktop/src/features/project-files/ProjectLocalFilesPage.tsx", kind: "file" },
     ],
     crates: [{ relativePath: "crates/agentflow-core", kind: "directory" }],
@@ -848,7 +851,7 @@ function browserPreviewFileContentByPath(relativePath: string, projectRoot: stri
       mimeType: "text/plain",
       content: 'import { ProjectLocalFilesPage } from "./features/project-files";\n\nexport function AppPreviewNote() {\n  return "Browser preview uses explicit mock data only outside Tauri.";\n}\n',
     },
-    "apps/desktop/src/features/project-files/useProjectFiles.ts": {
+    "apps/desktop/src/features/project-files/hooks/useProjectFiles.ts": {
       language: "typescript",
       mimeType: "text/plain",
       content: 'export function isBrowserPreviewRuntime() {\n  return typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window);\n}\n',

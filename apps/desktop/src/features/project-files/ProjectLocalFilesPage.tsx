@@ -1,22 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
-import { ProjectFileBrowser } from "./ProjectFileBrowser";
-import { ProjectFileReader } from "./ProjectFileReader";
+import { ProjectFileBrowser } from "./browser/ProjectFileBrowser";
+import { ProjectFileReader } from "./reader/ProjectFileReader";
 import "./ProjectFiles.css";
 import type {
   ProjectFileBrowserRow,
   ProjectFileTextRange,
   ProjectFileViewMode,
   ProjectFilesState,
-} from "./projectFileTypes";
+} from "./model/projectFileTypes";
+import { buildProjectFileBrowserRows } from "./browser/projectFileBrowserRows";
 import {
-  buildProjectFileBrowserRows,
   findProjectFileEntry,
   getProjectFileExtensionFromName,
   normalizeProjectRelativePath,
   projectFileChildToEntry,
-} from "./projectFileUtils";
-
-const PROJECT_FILE_READER_STATE_KEY = "agentflow.projectFileReaderState.v1";
+} from "./model/projectFileUtils";
+import {
+  persistExpandedProjectFilePaths,
+  readExpandedProjectFilePaths,
+} from "./hooks/projectFileReaderState";
 
 export function ProjectLocalFilesPage({
   fileState,
@@ -33,7 +35,7 @@ export function ProjectLocalFilesPage({
   onSearchFiles: (query: string) => Promise<unknown>;
   onSelectFile: (relativePath: string) => void;
 }) {
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => readExpandedPaths());
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => readExpandedProjectFilePaths());
   const [searchDraft, setSearchDraft] = useState(fileState.searchQuery);
   const filesSnapshot = fileState.snapshot;
   const selectedPath = filesSnapshot
@@ -95,14 +97,14 @@ export function ProjectLocalFilesPage({
     if (!filesSnapshot?.projectRoot) {
       return;
     }
-    setExpandedPaths(readExpandedPaths(filesSnapshot.projectRoot));
+    setExpandedPaths(readExpandedProjectFilePaths(filesSnapshot.projectRoot));
   }, [filesSnapshot?.projectRoot]);
 
   useEffect(() => {
     if (!filesSnapshot?.projectRoot) {
       return;
     }
-    persistExpandedPaths(filesSnapshot.projectRoot, expandedPaths);
+    persistExpandedProjectFilePaths(filesSnapshot.projectRoot, expandedPaths);
   }, [expandedPaths, filesSnapshot?.projectRoot]);
 
   useEffect(() => {
@@ -178,41 +180,3 @@ function contentToChild(content: NonNullable<ProjectFilesState["content"]>) {
     isSymlink: false,
   };
 }
-
-function readExpandedPaths(projectRoot?: string | null) {
-  if (typeof window === "undefined") {
-    return new Set<string>();
-  }
-  try {
-    const raw = window.localStorage.getItem(PROJECT_FILE_READER_STATE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as PersistedProjectFileReaderStore & { expandedPaths?: string[] }) : {};
-    const expandedPaths = projectRoot ? parsed.projects?.[projectRoot]?.expandedPaths : parsed.expandedPaths;
-    return new Set((expandedPaths ?? []).map(normalizeProjectRelativePath));
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function persistExpandedPaths(projectRoot: string, paths: ReadonlySet<string>) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    const raw = window.localStorage.getItem(PROJECT_FILE_READER_STATE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as PersistedProjectFileReaderStore) : {};
-    const projects = parsed.projects ?? {};
-    projects[projectRoot] = {
-      ...(projects[projectRoot] ?? {}),
-      projectRoot,
-      expandedPaths: [...paths],
-      lastOpenedAt: new Date().toISOString(),
-    };
-    window.localStorage.setItem(PROJECT_FILE_READER_STATE_KEY, JSON.stringify({ version: 1, projects }));
-  } catch {
-    // 本地持久化失败不影响只读文件浏览。
-  }
-}
-
-type PersistedProjectFileReaderStore = {
-  projects?: Record<string, { expandedPaths?: string[]; projectRoot?: string; lastOpenedAt?: string }>;
-};
