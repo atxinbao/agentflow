@@ -15,8 +15,9 @@ AgentFlow 的旧目标文档已停止作为后续开发依据。
 
 - [001 - 添加本地项目](docs/requirements/001-add-local-project.md)
 - [002 - Graph V1](docs/requirements/002-graph-v1.md)
+- [002.1 - Graph V1 Completion](docs/requirements/002-1-graph-v1-completion.md)
 
-当前目标是在 Project Workspace Manager 之后，实现 Graph V1：为本地 Project 自动生成代码现场地图，给后续 Agent 使用。
+当前目标是在 Project Workspace Manager 和 Graph V1 主链路之后，实现 Graph V1 Completion：补齐 watcher、preflight、parser registry、impact/test recommendation、mobile semantics、protection 和状态通道，使 Graph 成为稳定可依赖的 Agent 工作现场服务。
 
 ## 当前约束
 

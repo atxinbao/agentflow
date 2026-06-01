@@ -352,6 +352,10 @@ export type GraphStatusSnapshot = {
   relationCount: number;
   updatedAt?: number | null;
   lastError?: string | null;
+  watcherStatus?: string | null;
+  preflightStatus?: string | null;
+  protectionStatus?: string | null;
+  degradedReasons?: string[];
 };
 
 export type GraphManifestSnapshot = {
@@ -364,6 +368,11 @@ export type GraphManifestSnapshot = {
   testFiles: number;
   docFiles: number;
   configFiles: number;
+  platforms?: string[];
+  entryPoints?: string[];
+  mobileComponents?: string[];
+  mobileConfigs?: string[];
+  mobileTests?: string[];
 };
 
 export type GraphSearchSnapshot = {
@@ -422,6 +431,7 @@ export type GraphTestHint = {
   commandHint: string;
   reason: string;
   confidence: string;
+  scope?: string;
 };
 
 export type V1WorkspaceRef = {

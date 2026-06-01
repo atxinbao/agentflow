@@ -9,6 +9,7 @@
 
 - [001-add-local-project.md](001-add-local-project.md)
 - [002-graph-v1.md](002-graph-v1.md)
+- [002-1-graph-v1-completion.md](002-1-graph-v1-completion.md)
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 

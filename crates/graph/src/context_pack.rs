@@ -6,6 +6,7 @@ use crate::{
         GraphSearchResult, GraphTestHint,
     },
     search::search_project_graph,
+    test_recommendation::recommend_graph_tests,
 };
 use anyhow::{Context, Result};
 use rusqlite::params;
@@ -165,34 +166,11 @@ fn test_hints(
     project_root: &Path,
     recommended_tests: &[GraphContextFile],
 ) -> Result<Vec<GraphTestHint>> {
-    let manifest = crate::manager::load_project_graph_manifest(project_root)?;
-    let mut hints = Vec::new();
-    if manifest.languages.iter().any(|language| language == "rust") {
-        hints.push(GraphTestHint {
-            command_hint: "cargo test".to_string(),
-            reason: "Rust project files found".to_string(),
-            confidence: "medium".to_string(),
-        });
-    }
-    if manifest
-        .languages
+    let affected_tests = recommended_tests
         .iter()
-        .any(|language| language == "typescript" || language == "javascript")
-    {
-        hints.push(GraphTestHint {
-            command_hint: "npm test".to_string(),
-            reason: "JavaScript or TypeScript files found".to_string(),
-            confidence: "low".to_string(),
-        });
-    }
-    for test in recommended_tests.iter().take(3) {
-        hints.push(GraphTestHint {
-            command_hint: format!("focused test for {}", test.path),
-            reason: "recommended test file matches target".to_string(),
-            confidence: "low".to_string(),
-        });
-    }
-    Ok(hints)
+        .map(|test| test.path.clone())
+        .collect::<Vec<_>>();
+    recommend_graph_tests(project_root, &[], &[], &affected_tests)
 }
 
 fn persist_context_pack(project_root: impl AsRef<Path>, pack: &GraphContextPack) -> Result<()> {

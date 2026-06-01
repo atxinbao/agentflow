@@ -213,7 +213,63 @@ pub(crate) fn counts(
         relation_count: relation_count.max(0) as usize,
         updated_at: None,
         last_error: None,
+        watcher_status: None,
+        preflight_status: None,
+        protection_status: None,
+        degraded_reasons: Vec::new(),
     })
+}
+
+pub(crate) fn fetch_symbols(connection: &Connection) -> Result<Vec<GraphSymbolRecord>> {
+    let mut statement = connection.prepare(
+        r#"
+        SELECT id, file_id, language, name, kind, signature, start_line, end_line,
+               parent_symbol_id, visibility, path
+        FROM symbols
+        ORDER BY path ASC, start_line ASC
+        "#,
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(GraphSymbolRecord {
+            id: row.get(0)?,
+            file_id: row.get(1)?,
+            language: row.get(2)?,
+            name: row.get(3)?,
+            kind: row.get(4)?,
+            signature: row.get(5)?,
+            start_line: row.get::<_, i64>(6)?.max(1) as usize,
+            end_line: row.get::<_, i64>(7)?.max(1) as usize,
+            parent_symbol_id: row.get(8)?,
+            visibility: row.get(9)?,
+            path: row.get(10)?,
+        })
+    })?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
+}
+
+pub(crate) fn fetch_relations(connection: &Connection) -> Result<Vec<GraphRelationRecord>> {
+    let mut statement = connection.prepare(
+        r#"
+        SELECT id, from_type, from_id, to_type, to_id, relation_kind, confidence, source
+        FROM relations
+        ORDER BY relation_kind ASC, id ASC
+        "#,
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(GraphRelationRecord {
+            id: row.get(0)?,
+            from_type: row.get(1)?,
+            from_id: row.get(2)?,
+            to_type: row.get(3)?,
+            to_id: row.get(4)?,
+            relation_kind: row.get(5)?,
+            confidence: row.get(6)?,
+            source: row.get(7)?,
+        })
+    })?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
 }
 
 pub(crate) fn fetch_files(connection: &Connection) -> Result<Vec<GraphFileRecord>> {
