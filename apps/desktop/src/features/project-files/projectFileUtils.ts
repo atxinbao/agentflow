@@ -167,6 +167,9 @@ function getProjectFileBrowserChildren(
 }
 
 export function formatProjectFileRowMeta(row: ProjectFileBrowserRow) {
+  if (row.missing) {
+    return "已不存在";
+  }
   if (row.modifiedAt) {
     return formatProjectFileTimestamp(row.modifiedAt);
   }

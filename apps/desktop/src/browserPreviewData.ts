@@ -12,6 +12,7 @@ import type {
   ProjectFileContent,
   ProjectFileEntry,
   ProjectFileSearchSnapshot,
+  ProjectFileTextRange,
   ProjectFileViewMode,
   ProjectFilesSnapshot,
   ProjectMilestoneIssueViewModelSnapshot,
@@ -409,6 +410,7 @@ export function createBrowserPreviewGraphStatus(projectRoot = BROWSER_PREVIEW_PR
     updatedAt: previewTimestamp,
     lastError: null,
     watcherStatus: "mock",
+    watcherBackend: "browser-preview",
     preflightStatus: "ready",
     protectionStatus: "ready",
     degradedReasons: [],
@@ -528,6 +530,30 @@ export function createBrowserPreviewProjectFileContent(relativePath: string, pro
     truncated: false,
     directoryChildren: entry.kind === "directory" ? entry.children : [],
     unsupportedReason: null,
+  };
+}
+
+export function createBrowserPreviewProjectFileTextRange(
+  relativePath: string,
+  startLine: number,
+  lineCount: number,
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+): ProjectFileTextRange {
+  const content = createBrowserPreviewProjectFileContent(relativePath, projectRoot);
+  const lines = (content.content ?? "").split("\n");
+  const safeStartLine = Math.max(1, Math.floor(startLine || 1));
+  const safeLineCount = Math.max(1, Math.floor(lineCount || 240));
+  const startIndex = Math.min(safeStartLine - 1, lines.length);
+  const endIndex = Math.min(startIndex + safeLineCount, lines.length);
+  return {
+    version: "project-file-text-range.v1",
+    projectRoot,
+    relativePath: content.relativePath,
+    startLine: safeStartLine,
+    endLine: endIndex,
+    totalLines: lines.length,
+    content: lines.slice(startIndex, endIndex).join("\n"),
+    truncated: endIndex < lines.length,
   };
 }
 

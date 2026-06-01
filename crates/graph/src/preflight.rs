@@ -137,4 +137,70 @@ mod tests {
             .join(".agentflow/output/graph/context-packs/issue-lease.json")
             .is_file());
     }
+
+    #[test]
+    fn preflight_reports_degraded_when_protection_warns() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".git/info")).unwrap();
+        fs::write(dir.path().join(".git/info/exclude"), "*.log\n").unwrap();
+        fs::create_dir_all(dir.path().join("src")).unwrap();
+        fs::write(dir.path().join("src/lib.rs"), "pub struct Lease {}\n").unwrap();
+
+        let snapshot = preflight_graph_for_target(
+            dir.path(),
+            "issue",
+            Some("issue-degraded"),
+            "Lease",
+            "准备降级状态上下文",
+            &[],
+        )
+        .unwrap();
+
+        assert!(snapshot.ready);
+        assert_eq!(snapshot.graph_status, GraphStatus::Degraded);
+        assert_eq!(snapshot.status, "ready");
+        assert!(snapshot.reason.contains("降级"));
+    }
+
+    #[test]
+    fn preflight_reports_failed_graph_as_not_ready() {
+        let dir = tempdir().unwrap();
+        let graph_dir = dir.path().join(".agentflow/output/graph");
+        fs::create_dir_all(&graph_dir).unwrap();
+        fs::write(graph_dir.join("graph.db"), "").unwrap();
+        fs::write(
+            graph_dir.join("meta.json"),
+            r#"{
+  "version": "graph.v1",
+  "status": "failed",
+  "projectRoot": "",
+  "graphDb": ".agentflow/output/graph/graph.db",
+  "updatedAt": 1,
+  "gitHead": null,
+  "fileCount": 0,
+  "symbolCount": 0,
+  "relationCount": 0,
+  "lastIndexRunId": null,
+  "languages": [],
+  "lastError": "fixture failure",
+  "degradedReasons": []
+}"#,
+        )
+        .unwrap();
+
+        let snapshot = preflight_graph_for_target(
+            dir.path(),
+            "issue",
+            Some("issue-failed"),
+            "Failed",
+            "验证失败态",
+            &[],
+        )
+        .unwrap();
+
+        assert!(!snapshot.ready);
+        assert_eq!(snapshot.status, "degraded");
+        assert_eq!(snapshot.graph_status, GraphStatus::Failed);
+        assert_eq!(snapshot.reason, "fixture failure");
+    }
 }

@@ -20,7 +20,7 @@ export function ProjectFileBrowser({
   onChangeViewMode,
   onSearchChange,
   onSelectRow,
-  recommendedFilePaths,
+  recommendedFileWarning,
   recommendedRows,
   rows,
   searchLoading,
@@ -33,7 +33,7 @@ export function ProjectFileBrowser({
   onChangeViewMode: (viewMode: ProjectFileViewMode) => void;
   onSearchChange: (query: string) => void;
   onSelectRow: (row: ProjectFileBrowserRow) => void;
-  recommendedFilePaths: string[];
+  recommendedFileWarning?: string | null;
   recommendedRows: ProjectFileBrowserRow[];
   rows: ProjectFileBrowserRow[];
   searchLoading: boolean;
@@ -41,6 +41,8 @@ export function ProjectFileBrowser({
   selectedPath: string | null;
   viewMode: ProjectFileViewMode;
 }) {
+  const recommendedPathSet = new Set(recommendedRows.map((row) => row.relativePath));
+
   return (
     <aside className="project-file-browser" aria-label="项目文件列表">
       <header className="project-file-browser-toolbar">
@@ -74,9 +76,12 @@ export function ProjectFileBrowser({
               <span>推荐文件</span>
               <small>来自代码地图</small>
             </div>
+            {recommendedFileWarning ? <p className="project-file-recommended-warning">{recommendedFileWarning}</p> : null}
             <div className="project-file-recommended-list">
               {recommendedRows.map((row) => {
                 const isMissing = Boolean(row.missing);
+                const statusLabel = recommendedStatusLabel(row.recommendation?.status);
+                const sourceLabel = recommendedSourceLabel(row.recommendation?.source);
                 const FileKindIcon = getProjectFileIconForNode(row.name, row.extension, row.kind, isHiddenProjectFilePath(row.relativePath));
                 return (
                   <button
@@ -88,7 +93,8 @@ export function ProjectFileBrowser({
                   >
                     <FileKindIcon size={14} />
                     <span>{row.name}</span>
-                    {isMissing ? <small>已不存在</small> : null}
+                    <small>{isMissing ? "已不存在" : statusLabel}</small>
+                    {sourceLabel ? <small>{sourceLabel}</small> : null}
                   </button>
                 );
               })}
@@ -107,7 +113,7 @@ export function ProjectFileBrowser({
           ) : (
             rows.map((row) => {
               const isDirectory = row.kind === "directory";
-              const isRecommended = recommendedFilePaths.includes(row.relativePath);
+              const isRecommended = recommendedPathSet.has(row.relativePath);
               const isHidden = isHiddenProjectFilePath(row.relativePath);
               const fileTone = getProjectFileToneForNode(row.name, row.extension, row.kind, isHidden);
               const FileKindIcon = getProjectFileIconForNode(row.name, row.extension, row.kind, isHidden);
@@ -122,6 +128,7 @@ export function ProjectFileBrowser({
                 isExpanded ? "expanded" : "",
                 selectedPath === row.relativePath ? "active" : "",
                 isLoadMore ? "load-more" : "",
+                row.missing ? "missing" : "",
               ]
                 .filter(Boolean)
                 .join(" ");
@@ -168,4 +175,30 @@ export function ProjectFileBrowser({
       </section>
     </aside>
   );
+}
+
+function recommendedStatusLabel(status?: NonNullable<ProjectFileBrowserRow["recommendation"]>["status"]) {
+  switch (status) {
+    case "available":
+      return "可打开";
+    case "missing":
+      return "缺失";
+    case "unloaded":
+      return "未加载";
+    default:
+      return "推荐";
+  }
+}
+
+function recommendedSourceLabel(source?: NonNullable<ProjectFileBrowserRow["recommendation"]>["source"]) {
+  switch (source) {
+    case "context-pack-file":
+      return "上下文";
+    case "context-pack-test":
+      return "测试";
+    case "manifest-important":
+      return "清单";
+    default:
+      return null;
+  }
 }

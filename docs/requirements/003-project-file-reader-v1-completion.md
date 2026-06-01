@@ -1,6 +1,6 @@
 # 003 - Project File Reader V1 Completion
 
-创建日期：2026-06-01  
+创建日期：2026-06-01
 执行者：Codex
 
 ## 用户目标
@@ -15,9 +15,9 @@
 
 大白话：
 
-> Project Workspace Manager 负责把项目接进来。  
-> Graph 负责整理代码现场。  
-> Project File Reader 负责让用户和 AgentFlow 清楚看到项目里的真实文件和内容。  
+> Project Workspace Manager 负责把项目接进来。
+> Graph 负责整理代码现场。
+> Project File Reader 负责让用户和 AgentFlow 清楚看到项目里的真实文件和内容。
 > 这一版不做 IDE，不编辑文件，不执行命令，只把“读项目文件”这件事做稳。
 
 ---
@@ -441,7 +441,7 @@ Source View
 
 原因：
 
-> 用户打开项目主要是看正常代码和文档。  
+> 用户打开项目主要是看正常代码和文档。
 > `.git`、`target`、`.agentflow`、`node_modules` 这类文件不是不能看，但不应该默认淹没正常项目文件。
 
 ## 注意

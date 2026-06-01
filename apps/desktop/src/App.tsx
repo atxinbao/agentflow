@@ -40,6 +40,7 @@ import {
   projectRootsEqual,
   useProjectGraph,
   useProjectFiles,
+  type ProjectGraphState,
   type ProjectFileViewMode,
   type ProjectFilesState,
 } from "./features/project-files";
@@ -53,6 +54,7 @@ import type {
   MilestoneDerivedProgress,
   LocalProjectModelSnapshot,
   LocalSearchSnapshot,
+  ProjectFileTextRange,
   ProjectMilestoneIssueViewModelSnapshot,
   V1Issue,
   V1Milestone,
@@ -326,6 +328,7 @@ function App() {
   const {
     clearProjectFilesError,
     loadProjectDirectoryPage,
+    loadProjectFileTextRange,
     loadProjectFiles,
     projectFilesState,
     reportProjectFilesError,
@@ -338,13 +341,6 @@ function App() {
     projectFilesState.snapshot?.projectRoot ??
     (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
   const { projectGraphState } = useProjectGraph(graphProjectRoot);
-  const recommendedProjectFilePaths = useMemo(() => {
-    const paths = new Set<string>();
-    projectGraphState.latestContextPack?.recommendedFiles.forEach((file) => paths.add(file.path));
-    projectGraphState.latestContextPack?.recommendedTests.forEach((file) => paths.add(file.path));
-    projectGraphState.manifest?.importantFiles.forEach((path) => paths.add(path));
-    return [...paths];
-  }, [projectGraphState.latestContextPack, projectGraphState.manifest?.importantFiles]);
   const agentStatusItems = useMemo(
     () => buildAgentStatusItems({ projectFilesState, projectGraphState }),
     [projectFilesState, projectGraphState],
@@ -756,10 +752,11 @@ function App() {
             onSelectProject={setSelectedProjectId}
             onSelectProjectFile={(relativePath) => void selectProjectFile(relativePath)}
             onLoadProjectDirectoryPage={loadProjectDirectoryPage}
+            onLoadProjectFileTextRange={loadProjectFileTextRange}
             onSearchProjectFiles={searchProjectFiles}
             onSetProjectFileViewMode={setProjectFileViewMode}
+            projectGraphState={projectGraphState}
             projectFilesState={projectFilesState}
-            recommendedFilePaths={recommendedProjectFilePaths}
             projectViewModel={projectViewModel}
             selectedMilestoneId={selectedMilestoneId}
             selectedProjectId={selectedProjectId}
@@ -1042,28 +1039,30 @@ function WorkspaceTreeNav({
 
 function ProjectView({
   onLoadProjectDirectoryPage,
+  onLoadProjectFileTextRange,
   onSelectIssue,
   onSelectMilestone,
   onSelectProject,
   onSelectProjectFile,
   onSearchProjectFiles,
   onSetProjectFileViewMode,
+  projectGraphState,
   projectFilesState,
-  recommendedFilePaths,
   projectViewModel,
   selectedMilestoneId,
   selectedProjectId,
   selectedProjectRoot,
 }: {
   onLoadProjectDirectoryPage: (directoryPath: string, cursor?: string | null) => Promise<unknown>;
+  onLoadProjectFileTextRange: (relativePath: string, startLine: number, lineCount: number) => Promise<ProjectFileTextRange>;
   onSelectIssue: (issueId: string) => void;
   onSelectMilestone: (milestoneId: string | null) => void;
   onSelectProject: (projectId: string) => void;
   onSelectProjectFile: (relativePath: string) => void;
   onSearchProjectFiles: (query: string) => Promise<unknown>;
   onSetProjectFileViewMode: (viewMode: ProjectFileViewMode) => void;
+  projectGraphState: ProjectGraphState;
   projectFilesState: ProjectFilesState;
-  recommendedFilePaths: string[];
   projectViewModel: ProjectMilestoneIssueViewModelSnapshot | null;
   selectedMilestoneId: string | null;
   selectedProjectId: string | null;
@@ -1105,11 +1104,12 @@ function ProjectView({
       {activeProject || canReadSelectedLocalProject ? (
         <ProjectLocalFilesPage
           fileState={projectFilesState}
+          graphState={projectGraphState}
           onChangeViewMode={onSetProjectFileViewMode}
           onLoadDirectoryPage={onLoadProjectDirectoryPage}
+          onLoadTextRange={onLoadProjectFileTextRange}
           onSearchFiles={onSearchProjectFiles}
           onSelectFile={onSelectProjectFile}
-          recommendedFilePaths={recommendedFilePaths}
         />
       ) : (
         <section className="empty-project-state">

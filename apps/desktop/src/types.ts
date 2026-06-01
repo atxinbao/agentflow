@@ -391,6 +391,14 @@ export type ProjectFileTextRange = {
   truncated: boolean;
 };
 
+export type ProjectRecommendedFile = {
+  path: string;
+  name: string;
+  source: "context-pack-file" | "context-pack-test" | "manifest-important";
+  reason: string;
+  status: "available" | "missing" | "unloaded";
+};
+
 export type GraphStatus = "missing" | "indexing" | "ready" | "stale" | "failed" | "degraded";
 
 export type GraphStatusSnapshot = {
@@ -403,6 +411,7 @@ export type GraphStatusSnapshot = {
   updatedAt?: number | null;
   lastError?: string | null;
   watcherStatus?: string | null;
+  watcherBackend?: string | null;
   preflightStatus?: string | null;
   protectionStatus?: string | null;
   degradedReasons?: string[];

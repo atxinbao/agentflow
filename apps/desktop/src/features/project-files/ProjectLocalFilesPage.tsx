@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { ProjectFileBrowser } from "./ProjectFileBrowser";
 import { ProjectFileReader } from "./ProjectFileReader";
 import "./ProjectFiles.css";
-import type { ProjectFileBrowserRow, ProjectFileViewMode, ProjectFilesState } from "./projectFileTypes";
+import type { ProjectGraphState } from "./useProjectGraph";
+import type {
+  ProjectFileBrowserRow,
+  ProjectFileEntry,
+  ProjectFileTextRange,
+  ProjectFileViewMode,
+  ProjectFilesState,
+  ProjectRecommendedFile,
+} from "./projectFileTypes";
 import {
   buildProjectFileBrowserRows,
   findProjectFileEntry,
@@ -17,19 +25,22 @@ export function ProjectLocalFilesPage({
   fileState,
   onChangeViewMode,
   onLoadDirectoryPage,
+  onLoadTextRange,
   onSearchFiles,
   onSelectFile,
-  recommendedFilePaths,
+  graphState,
 }: {
   fileState: ProjectFilesState;
+  graphState: ProjectGraphState;
   onChangeViewMode: (viewMode: ProjectFileViewMode) => void;
   onLoadDirectoryPage: (directoryPath: string, cursor?: string | null) => Promise<unknown>;
+  onLoadTextRange?: (relativePath: string, startLine: number, lineCount: number) => Promise<ProjectFileTextRange>;
   onSearchFiles: (query: string) => Promise<unknown>;
   onSelectFile: (relativePath: string) => void;
-  recommendedFilePaths: string[];
 }) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => readExpandedPaths());
   const [searchDraft, setSearchDraft] = useState(fileState.searchQuery);
+  const [recommendedFileWarning, setRecommendedFileWarning] = useState<string | null>(null);
   const filesSnapshot = fileState.snapshot;
   const selectedPath = filesSnapshot
     ? fileState.selectedPath ?? filesSnapshot.selectedPath ?? filesSnapshot.entries.at(0)?.relativePath ?? null
@@ -87,45 +98,8 @@ export function ProjectLocalFilesPage({
   }, [content, expandedPaths, fileState.directoryPages, fileState.recentPaths, fileState.searchSnapshot, fileState.viewMode, filesSnapshot]);
 
   const recommendedRows = useMemo(() => {
-    if (!filesSnapshot || recommendedFilePaths.length === 0) {
-      return [];
-    }
-
-    return recommendedFilePaths.slice(0, 6).map((recommendedPath): ProjectFileBrowserRow => {
-      const normalizedPath = normalizeProjectRelativePath(recommendedPath);
-      const entry = findProjectFileEntry(filesSnapshot.entries, normalizedPath);
-      if (entry) {
-        return {
-          name: entry.name,
-          relativePath: entry.relativePath,
-          kind: entry.kind,
-          createdAt: entry.createdAt,
-          modifiedAt: entry.modifiedAt,
-          sizeBytes: entry.sizeBytes,
-          childCount: entry.childCount,
-          isSymlink: entry.isSymlink ?? false,
-          extension: entry.extension,
-          children: entry.children,
-          depth: 0,
-        };
-      }
-
-      const name = normalizedPath.split("/").pop() ?? normalizedPath;
-      return {
-        name,
-        relativePath: normalizedPath,
-        kind: "file",
-        createdAt: null,
-        modifiedAt: null,
-        sizeBytes: null,
-        childCount: null,
-        isSymlink: false,
-        extension: getProjectFileExtensionFromName(name),
-        children: [],
-        depth: 0,
-      };
-    });
-  }, [filesSnapshot, recommendedFilePaths]);
+    return buildRecommendedFileRows(graphState, filesSnapshot?.entries ?? []);
+  }, [filesSnapshot?.entries, graphState]);
 
   useEffect(() => {
     if (!filesSnapshot?.projectRoot) {
@@ -149,6 +123,12 @@ export function ProjectLocalFilesPage({
   }, [onSearchFiles, searchDraft]);
 
   async function handleProjectFileRowSelect(row: ProjectFileBrowserRow) {
+    if (row.missing) {
+      setRecommendedFileWarning(`${row.relativePath} 已不在当前项目文件树中。`);
+      return;
+    }
+    setRecommendedFileWarning(null);
+
     if (row.hasMoreChildren) {
       const directoryPath = row.relativePath.replace(/::__load_more__$/, "");
       await onLoadDirectoryPage(directoryPath, row.nextCursor);
@@ -181,6 +161,7 @@ export function ProjectLocalFilesPage({
           error={fileState.error}
           loading={fileState.loading}
           loadingPath={fileState.loadingPath}
+          onLoadTextRange={onLoadTextRange}
         />
       </article>
 
@@ -194,12 +175,92 @@ export function ProjectLocalFilesPage({
         searchLoading={fileState.searchLoading}
         searchQuery={searchDraft}
         selectedPath={selectedPath}
-        recommendedFilePaths={recommendedFilePaths}
+        recommendedFileWarning={recommendedFileWarning}
         recommendedRows={recommendedRows}
         viewMode={fileState.viewMode}
       />
     </section>
   );
+}
+
+function buildRecommendedFileRows(graphState: ProjectGraphState, entries: ProjectFileEntry[]): ProjectFileBrowserRow[] {
+  const recommendedFiles = new Map<string, ProjectRecommendedFile>();
+
+  graphState.latestContextPack?.recommendedFiles.forEach((file) => {
+    const path = normalizeProjectRelativePath(file.path);
+    recommendedFiles.set(path, {
+      path,
+      name: path.split("/").pop() ?? path,
+      source: "context-pack-file",
+      reason: file.reason,
+      status: "unloaded",
+    });
+  });
+
+  graphState.latestContextPack?.recommendedTests.forEach((file) => {
+    const path = normalizeProjectRelativePath(file.path);
+    if (!recommendedFiles.has(path)) {
+      recommendedFiles.set(path, {
+        path,
+        name: path.split("/").pop() ?? path,
+        source: "context-pack-test",
+        reason: file.reason,
+        status: "unloaded",
+      });
+    }
+  });
+
+  graphState.manifest?.importantFiles.forEach((filePath) => {
+    const path = normalizeProjectRelativePath(filePath);
+    if (!recommendedFiles.has(path)) {
+      recommendedFiles.set(path, {
+        path,
+        name: path.split("/").pop() ?? path,
+        source: "manifest-important",
+        reason: "代码地图清单标记为重要文件。",
+        status: "unloaded",
+      });
+    }
+  });
+
+  return [...recommendedFiles.values()].slice(0, 8).map((file) => recommendedFileToRow(file, entries));
+}
+
+function recommendedFileToRow(file: ProjectRecommendedFile, entries: ProjectFileEntry[]): ProjectFileBrowserRow {
+  const entry = findProjectFileEntry(entries, file.path);
+  if (entry) {
+    return {
+      name: entry.name,
+      relativePath: entry.relativePath,
+      kind: entry.kind,
+      createdAt: entry.createdAt,
+      modifiedAt: entry.modifiedAt,
+      sizeBytes: entry.sizeBytes,
+      childCount: entry.childCount,
+      isSymlink: entry.isSymlink ?? false,
+      extension: entry.extension,
+      children: entry.children,
+      depth: 0,
+      recommendation: { ...file, status: "available" },
+    };
+  }
+
+  const name = file.name || file.path.split("/").pop() || file.path;
+  return {
+    name,
+    relativePath: file.path,
+    kind: "file",
+    createdAt: null,
+    modifiedAt: null,
+    sizeBytes: null,
+    childCount: null,
+    isSymlink: false,
+    extension: getProjectFileExtensionFromName(name),
+    children: [],
+    depth: 0,
+    missing: true,
+    recommendation: { ...file, status: "missing" },
+  };
 }
 
 function contentToChild(content: NonNullable<ProjectFilesState["content"]>) {

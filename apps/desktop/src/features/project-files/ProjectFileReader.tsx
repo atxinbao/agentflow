@@ -1,5 +1,5 @@
 import { File as FileIcon, Folder } from "lucide-react";
-import type { ProjectFileContent, ProjectFileEntry } from "../../types";
+import type { ProjectFileContent, ProjectFileEntry, ProjectFileTextRange } from "../../types";
 import { ProjectFileBodyRenderer } from "./FileRendererRegistry";
 import {
   formatProjectFileSize,
@@ -18,12 +18,14 @@ export function ProjectFileReader({
   error,
   loading,
   loadingPath,
+  onLoadTextRange,
 }: {
   content: ProjectFileContent | null;
   entry: ProjectFileEntry | null;
   error?: string | null;
   loading?: boolean;
   loadingPath?: string | null;
+  onLoadTextRange?: (relativePath: string, startLine: number, lineCount: number) => Promise<ProjectFileTextRange>;
 }) {
   if (loading && !content) {
     return (
@@ -113,7 +115,7 @@ export function ProjectFileReader({
           </div>
         </dl>
       </header>
-      {content ? <ProjectFileBodyRenderer content={content} entry={entry} /> : null}
+      {content ? <ProjectFileBodyRenderer content={content} entry={entry} onLoadTextRange={onLoadTextRange} /> : null}
     </section>
   );
 }

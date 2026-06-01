@@ -3,7 +3,9 @@ import type {
   ProjectFileChild,
   ProjectFileContent,
   ProjectFileEntry,
+  ProjectFileTextRange,
   ProjectFileSearchSnapshot,
+  ProjectRecommendedFile,
   ProjectFileViewMode,
   ProjectFilesSnapshot,
 } from "../../types";
@@ -40,6 +42,16 @@ export type ProjectFileBrowserRow = {
   nextCursor?: string | null;
   totalChildren?: number | null;
   missing?: boolean;
+  recommendation?: ProjectRecommendedFile;
 };
 
-export type { ProjectDirectoryPage, ProjectFileChild, ProjectFileContent, ProjectFileEntry, ProjectFileSearchSnapshot, ProjectFileViewMode };
+export type {
+  ProjectDirectoryPage,
+  ProjectFileChild,
+  ProjectFileContent,
+  ProjectFileEntry,
+  ProjectFileSearchSnapshot,
+  ProjectFileTextRange,
+  ProjectRecommendedFile,
+  ProjectFileViewMode,
+};
