@@ -1,7 +1,9 @@
 use crate::{
     db,
     model::{GraphIndex, GraphManifestSnapshot, GraphStatus, GraphStatusSnapshot},
+    protection::check_graph_git_protection,
     scanner::scan_project,
+    watcher,
 };
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -33,6 +35,8 @@ struct GraphMeta {
     last_index_run_id: Option<String>,
     languages: Vec<String>,
     last_error: Option<String>,
+    #[serde(default)]
+    degraded_reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -60,18 +64,26 @@ pub fn prepare_project_graph(
         relation_count: 0,
         updated_at: None,
         last_error: None,
+        watcher_status: None,
+        preflight_status: Some(preflight_status_label(&GraphStatus::Missing)),
+        protection_status: None,
+        degraded_reasons: Vec::new(),
     });
 
     if existing.status == GraphStatus::Ready && !is_stale(&paths)? {
+        if mode == GraphPrepareMode::Background {
+            let _ = watcher::ensure_graph_watcher(&paths.root);
+        }
         return Ok(existing);
     }
 
-    write_meta(&paths, GraphStatus::Indexing, None, None)?;
+    write_meta(&paths, GraphStatus::Indexing, None, None, Vec::new())?;
     if mode == GraphPrepareMode::Background {
         let root = paths.root.clone();
         std::thread::spawn(move || {
             let _ = index_project_graph(root);
         });
+        let _ = watcher::ensure_graph_watcher(&paths.root);
         return load_project_graph_status(&paths.root);
     }
 
@@ -97,26 +109,40 @@ pub fn index_project_graph(project_root: impl AsRef<Path>) -> Result<GraphStatus
             db::replace_index(&mut connection, &index)?;
             write_exports(&paths, &index)?;
             let finished_at = unix_timestamp_seconds();
+            let protection = check_graph_git_protection(&paths.root).ok();
+            let degraded_reasons = protection
+                .as_ref()
+                .filter(|snapshot| snapshot.status == "warning")
+                .map(|snapshot| vec![snapshot.reason.clone()])
+                .unwrap_or_default();
+            let graph_status = if degraded_reasons.is_empty() {
+                GraphStatus::Ready
+            } else {
+                GraphStatus::Degraded
+            };
             db::finish_index_run(
                 &connection,
                 &run_id,
                 finished_at,
-                "ready",
+                match graph_status {
+                    GraphStatus::Ready => "ready",
+                    GraphStatus::Degraded => "degraded",
+                    _ => "ready",
+                },
                 Some(&index),
                 None,
             )?;
             write_meta(
                 &paths,
-                GraphStatus::Ready,
+                graph_status.clone(),
                 Some((&run_id, &index, git_head.as_deref())),
                 None,
+                degraded_reasons,
             )?;
-            let mut status = db::counts(
-                &connection,
-                &paths.root.display().to_string(),
-                GraphStatus::Ready,
-            )?;
+            let mut status =
+                db::counts(&connection, &paths.root.display().to_string(), graph_status)?;
             status.updated_at = Some(finished_at);
+            status = enrich_status_with_runtime(&paths, status);
             Ok(status)
         }
         Err(error) => {
@@ -130,7 +156,13 @@ pub fn index_project_graph(project_root: impl AsRef<Path>) -> Result<GraphStatus
                 None,
                 Some(&message),
             )?;
-            write_meta(&paths, GraphStatus::Failed, None, Some(&message))?;
+            write_meta(
+                &paths,
+                GraphStatus::Failed,
+                None,
+                Some(&message),
+                Vec::new(),
+            )?;
             Ok(GraphStatusSnapshot {
                 version: "graph-status.v1".to_string(),
                 project_root: paths.root.display().to_string(),
@@ -140,6 +172,12 @@ pub fn index_project_graph(project_root: impl AsRef<Path>) -> Result<GraphStatus
                 relation_count: 0,
                 updated_at: Some(finished_at),
                 last_error: Some(message),
+                watcher_status: watcher::watcher_status(&paths.root),
+                preflight_status: Some(preflight_status_label(&GraphStatus::Failed)),
+                protection_status: check_graph_git_protection(&paths.root)
+                    .ok()
+                    .map(|snapshot| snapshot.status),
+                degraded_reasons: Vec::new(),
             })
         }
     }
@@ -157,23 +195,43 @@ pub fn load_project_graph_status(project_root: impl AsRef<Path>) -> Result<Graph
             relation_count: 0,
             updated_at: None,
             last_error: None,
+            watcher_status: watcher::watcher_status(&paths.root),
+            preflight_status: Some(preflight_status_label(&GraphStatus::Missing)),
+            protection_status: check_graph_git_protection(&paths.root)
+                .ok()
+                .map(|snapshot| snapshot.status),
+            degraded_reasons: Vec::new(),
         });
     }
     let meta: GraphMeta = serde_json::from_str(&fs::read_to_string(&paths.meta)?)?;
-    let status = if meta.status == GraphStatus::Ready && is_stale(&paths)? {
+    let mut status = if meta.status == GraphStatus::Ready && is_stale(&paths)? {
         GraphStatus::Stale
     } else {
         meta.status
     };
+    let mut degraded_reasons = meta.degraded_reasons;
+    let protection_status = check_graph_git_protection(&paths.root).ok();
+    if matches!(status, GraphStatus::Ready) {
+        if let Some(protection) = &protection_status {
+            if protection.status == "warning" {
+                status = GraphStatus::Degraded;
+                degraded_reasons.push(protection.reason.clone());
+            }
+        }
+    }
     Ok(GraphStatusSnapshot {
         version: "graph-status.v1".to_string(),
         project_root: paths.root.display().to_string(),
-        status,
+        status: status.clone(),
         file_count: meta.file_count,
         symbol_count: meta.symbol_count,
         relation_count: meta.relation_count,
         updated_at: Some(meta.updated_at),
         last_error: meta.last_error,
+        watcher_status: watcher::watcher_status(&paths.root),
+        preflight_status: Some(preflight_status_label(&status)),
+        protection_status: protection_status.map(|snapshot| snapshot.status),
+        degraded_reasons,
     })
 }
 
@@ -196,6 +254,11 @@ pub fn load_project_graph_manifest(
         test_files: 0,
         doc_files: 0,
         config_files: 0,
+        platforms: Vec::new(),
+        entry_points: Vec::new(),
+        mobile_components: Vec::new(),
+        mobile_configs: Vec::new(),
+        mobile_tests: Vec::new(),
     })
 }
 
@@ -238,6 +301,7 @@ fn write_meta(
     status: GraphStatus,
     success: Option<(&str, &GraphIndex, Option<&str>)>,
     last_error: Option<&str>,
+    degraded_reasons: Vec<String>,
 ) -> Result<()> {
     let (last_index_run_id, file_count, symbol_count, relation_count, languages, git_head) =
         if let Some((run_id, index, git_head)) = success {
@@ -274,6 +338,7 @@ fn write_meta(
         last_index_run_id,
         languages,
         last_error: last_error.map(str::to_string),
+        degraded_reasons,
     };
     fs::write(&paths.meta, serde_json::to_string_pretty(&meta)?)
         .with_context(|| format!("write {}", paths.meta.display()))?;
@@ -351,7 +416,135 @@ fn manifest_from_files(
         test_files: files.iter().filter(|file| file.is_test).count(),
         doc_files: files.iter().filter(|file| file.is_doc).count(),
         config_files: files.iter().filter(|file| file.is_config).count(),
+        platforms: detect_platforms(files),
+        entry_points: detect_entry_points(files),
+        mobile_components: detect_mobile_components(files),
+        mobile_configs: detect_mobile_configs(files),
+        mobile_tests: files
+            .iter()
+            .filter(|file| file.is_test && is_mobile_path(&file.path))
+            .map(|file| file.path.clone())
+            .collect(),
     }
+}
+
+fn enrich_status_with_runtime(
+    paths: &GraphPaths,
+    mut status: GraphStatusSnapshot,
+) -> GraphStatusSnapshot {
+    status.watcher_status = watcher::watcher_status(&paths.root);
+    status.protection_status = check_graph_git_protection(&paths.root)
+        .ok()
+        .map(|snapshot| snapshot.status);
+    status.preflight_status = Some(preflight_status_label(&status.status));
+    status
+}
+
+fn preflight_status_label(status: &GraphStatus) -> String {
+    match status {
+        GraphStatus::Ready | GraphStatus::Degraded => "ready",
+        GraphStatus::Indexing => "pending",
+        GraphStatus::Missing | GraphStatus::Stale => "needs_prepare",
+        GraphStatus::Failed => "blocked",
+    }
+    .to_string()
+}
+
+fn detect_platforms(files: &[crate::model::GraphFileRecord]) -> Vec<String> {
+    let mut platforms = BTreeSet::new();
+    if files.iter().any(|file| {
+        file.name == "AndroidManifest.xml"
+            || file.path.starts_with("android/")
+            || file.name == "build.gradle"
+            || file.name == "build.gradle.kts"
+    }) {
+        platforms.insert("android".to_string());
+    }
+    if files.iter().any(|file| {
+        file.name == "Info.plist"
+            || file.name == "Package.swift"
+            || file.name == "Podfile"
+            || file.path.contains(".xcodeproj/")
+            || file.path.contains(".xcworkspace/")
+            || file.path.starts_with("ios/")
+    }) {
+        platforms.insert("ios".to_string());
+    }
+    if files
+        .iter()
+        .any(|file| file.name == "pubspec.yaml" || file.path == "lib/main.dart")
+    {
+        platforms.insert("flutter".to_string());
+    }
+    platforms.into_iter().collect()
+}
+
+fn detect_entry_points(files: &[crate::model::GraphFileRecord]) -> Vec<String> {
+    files
+        .iter()
+        .filter(|file| {
+            matches!(
+                file.path.as_str(),
+                "src/main.rs"
+                    | "main.go"
+                    | "lib/main.dart"
+                    | "Package.swift"
+                    | "AndroidManifest.xml"
+                    | "Info.plist"
+            ) || file.name == "main.py"
+                || file.name == "main.ts"
+                || file.name == "main.tsx"
+                || file.name == "App.swift"
+        })
+        .map(|file| file.path.clone())
+        .collect()
+}
+
+fn detect_mobile_components(files: &[crate::model::GraphFileRecord]) -> Vec<String> {
+    files
+        .iter()
+        .filter(|file| {
+            is_mobile_path(&file.path)
+                && matches!(
+                    file.language.as_str(),
+                    "kotlin" | "java" | "swift" | "objc" | "dart" | "xml" | "plist"
+                )
+        })
+        .map(|file| file.path.clone())
+        .take(80)
+        .collect()
+}
+
+fn detect_mobile_configs(files: &[crate::model::GraphFileRecord]) -> Vec<String> {
+    files
+        .iter()
+        .filter(|file| {
+            matches!(
+                file.name.as_str(),
+                "AndroidManifest.xml"
+                    | "Info.plist"
+                    | "Package.swift"
+                    | "Podfile"
+                    | "pubspec.yaml"
+                    | "build.gradle"
+                    | "build.gradle.kts"
+                    | "settings.gradle"
+                    | "settings.gradle.kts"
+            ) || file.path.contains(".xcodeproj/")
+                || file.path.contains(".xcworkspace/")
+        })
+        .map(|file| file.path.clone())
+        .collect()
+}
+
+fn is_mobile_path(path: &str) -> bool {
+    path.starts_with("android/")
+        || path.starts_with("ios/")
+        || path.starts_with("lib/")
+        || path.contains("AndroidManifest.xml")
+        || path.contains("Info.plist")
+        || path.contains(".xcodeproj")
+        || path.contains(".xcworkspace")
 }
 
 fn is_stale(paths: &GraphPaths) -> Result<bool> {

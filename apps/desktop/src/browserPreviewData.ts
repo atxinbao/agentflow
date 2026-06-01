@@ -402,6 +402,10 @@ export function createBrowserPreviewGraphStatus(projectRoot = BROWSER_PREVIEW_PR
     relationCount: 12,
     updatedAt: previewTimestamp,
     lastError: null,
+    watcherStatus: "mock",
+    preflightStatus: "ready",
+    protectionStatus: "ready",
+    degradedReasons: [],
   };
 }
 
@@ -416,6 +420,11 @@ export function createBrowserPreviewGraphManifest(projectRoot = BROWSER_PREVIEW_
     testFiles: 0,
     docFiles: 3,
     configFiles: 2,
+    platforms: [],
+    entryPoints: ["README.md", "Cargo.toml"],
+    mobileComponents: [],
+    mobileConfigs: [],
+    mobileTests: [],
   };
 }
 
@@ -486,6 +495,7 @@ export function createBrowserPreviewGraphContextPack(projectRoot = BROWSER_PREVI
         commandHint: "npm --prefix apps/desktop run build",
         reason: "验证桌面前端类型和构建",
         confidence: "medium",
+        scope: "package",
       },
     ],
     confidence: "medium",

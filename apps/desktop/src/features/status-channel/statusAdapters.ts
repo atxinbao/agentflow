@@ -96,6 +96,9 @@ function buildWorksiteStatus(projectGraphState: ProjectGraphState): AgentStatusC
       { label: "符号", value: projectGraphState.status?.symbolCount ?? 0 },
       { label: "关系", value: projectGraphState.status?.relationCount ?? 0 },
       { label: "语言", value: languageText, title: languageText },
+      { label: "Watcher", value: projectGraphState.status?.watcherStatus ?? "未启动" },
+      { label: "Preflight", value: projectGraphState.status?.preflightStatus ?? "未执行" },
+      { label: "Protection", value: projectGraphState.status?.protectionStatus ?? "未检查" },
     ],
   };
 }

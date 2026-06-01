@@ -22,6 +22,10 @@ pub struct GraphStatusSnapshot {
     pub relation_count: usize,
     pub updated_at: Option<u64>,
     pub last_error: Option<String>,
+    pub watcher_status: Option<String>,
+    pub preflight_status: Option<String>,
+    pub protection_status: Option<String>,
+    pub degraded_reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +40,11 @@ pub struct GraphManifestSnapshot {
     pub test_files: usize,
     pub doc_files: usize,
     pub config_files: usize,
+    pub platforms: Vec<String>,
+    pub entry_points: Vec<String>,
+    pub mobile_components: Vec<String>,
+    pub mobile_configs: Vec<String>,
+    pub mobile_tests: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -172,6 +181,61 @@ pub struct GraphTestHint {
     pub command_hint: String,
     pub reason: String,
     pub confidence: String,
+    pub scope: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphPreflightSnapshot {
+    pub version: String,
+    pub project_root: String,
+    pub target_type: String,
+    pub target_id: Option<String>,
+    pub status: String,
+    pub ready: bool,
+    pub reason: String,
+    pub graph_status: GraphStatus,
+    pub context_pack_path: Option<String>,
+    pub recommended_files: Vec<GraphContextFile>,
+    pub recommended_symbols: Vec<GraphContextSymbol>,
+    pub recommended_tests: Vec<GraphContextFile>,
+    pub impact_hints: Vec<GraphContextHint>,
+    pub test_hints: Vec<GraphTestHint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphImpactSnapshot {
+    pub version: String,
+    pub project_root: String,
+    pub possibly_affected_files: Vec<GraphContextHint>,
+    pub possibly_affected_symbols: Vec<GraphContextSymbol>,
+    pub possibly_affected_tests: Vec<GraphContextFile>,
+    pub reasons: Vec<String>,
+    pub confidence: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphProtectionSnapshot {
+    pub version: String,
+    pub project_root: String,
+    pub status: String,
+    pub graph_output_root: String,
+    pub git_exclude_path: Option<String>,
+    pub protected_by_info_exclude: bool,
+    pub writes_only_graph_output: bool,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphWatcherSnapshot {
+    pub version: String,
+    pub project_root: String,
+    pub status: String,
+    pub debounce_ms: u64,
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Clone)]

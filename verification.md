@@ -2727,3 +2727,64 @@
 - Graph V1 不创建远程 PR / GitHub issue / Linear issue。
 - Graph V1 不写 `.codex/` 或 `graphify-out/`。
 - Graph V1 输出仅写入 `.agentflow/output/graph/`。
+
+## 2026-06-01 Graph V1 Completion
+
+执行者：Codex
+
+目标：
+
+- 按 `docs/requirements/002-1-graph-v1-completion.md` 补齐 Graph V1 Completion。
+- 将 Graph 从基础代码地图补到可作为 Agent 工作现场底座的稳定索引能力。
+- 保持只读边界：不执行命令、不调用模型、不改源码、不创建远程对象。
+
+结果：
+
+- 已复制并登记补充需求文档：
+  - `docs/requirements/002-1-graph-v1-completion.md`
+  - `docs/requirements/README.md`
+  - `docs/requirements/next-requirements.md`
+- Graph Watcher：
+  - 新增本地 watcher 和 debounce。
+  - 文件变化后自动刷新 `.agentflow/output/graph/**`。
+  - 忽略 `.git/`、`.agentflow/`、`node_modules/`、`target/` 等运行态 / 构建目录。
+- Graph Preflight：
+  - 新增 `GraphPreflightSnapshot`。
+  - 新增 `graph_preflight` Tauri command。
+  - missing / stale / failed / ready / degraded 状态均可返回明确结果。
+  - ready / degraded 时可生成 Context Pack。
+- Tree-sitter Registry：
+  - 新增真实 Tree-sitter grammar 依赖和 parser registry。
+  - L1 语言优先使用 Tree-sitter 解析：TypeScript / JavaScript / Python / Java / Kotlin / Swift / Go / Rust / C / C++ / C# / Dart。
+  - Tree-sitter 不可用或未产出符号时降级到结构化 fallback。
+- 符号索引：
+  - 补齐 parent_symbol_id、start_line、end_line、visibility。
+  - 补齐 Rust / TS / JS / Python / Java / Kotlin / Swift / Go / C / C++ / C# / Dart 核心符号。
+  - 补齐移动端 Android / iOS / Flutter 入口、配置、组件和测试线索。
+- 关系和影响分析：
+  - 增加 parent_of、extends、implements、same_module、mentions、uses 等基础关系。
+  - 新增 `analyze_graph_impact` API / Tauri command，返回 affected files / symbols / tests。
+  - 新增测试推荐模块，覆盖 Rust / Node / Python / Go / Java / Android / iOS / Flutter / C# / PHP / Ruby。
+- Git / PR 保护：
+  - 新增 `check_graph_git_protection` API / Tauri command。
+  - 检查 `.agentflow/` 或 `.agentflow/output/graph/` 是否被 Git 排除。
+  - Graph status 会携带 watcher / preflight / protection 状态。
+- Desktop / Browser preview：
+  - 更新 Graph status 类型和浏览器 mock。
+  - 状态通道可读取 watcher / preflight / protection 指标。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-graph`：pass，15 tests。
+- `cargo test`：pass，core 61 tests + desktop 9 tests + graph 15 tests。
+- `npm --prefix apps/desktop run build`：pass，存在 Vite chunk size warning。
+- `git diff --check`：pass。
+
+边界：
+
+- Graph V1 Completion 不执行项目命令。
+- Graph V1 Completion 不调用模型。
+- Graph V1 Completion 不修改项目源码。
+- Graph V1 Completion 不创建远程 PR / GitHub issue / Linear issue。
+- Graph V1 Completion 输出仅写入 `.agentflow/output/graph/**`。

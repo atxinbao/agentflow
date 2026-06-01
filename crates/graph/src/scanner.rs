@@ -43,6 +43,8 @@ pub(crate) fn scan_project(root: &Path) -> Result<GraphIndex> {
     relations.extend(build_test_relations(&files));
     relations.extend(build_config_relations(&files));
     relations.extend(build_same_directory_relations(&files));
+    relations.extend(build_same_module_relations(&files));
+    relations.extend(build_mention_relations(&files, &symbols, &file_text_by_id));
 
     Ok(GraphIndex {
         files,
@@ -411,6 +413,102 @@ fn build_same_directory_relations(files: &[GraphFileRecord]) -> Vec<GraphRelatio
     relations
 }
 
+fn build_same_module_relations(files: &[GraphFileRecord]) -> Vec<GraphRelationRecord> {
+    let mut relations = Vec::new();
+    let mut by_module: BTreeMap<String, Vec<&GraphFileRecord>> = BTreeMap::new();
+    for file in files
+        .iter()
+        .filter(|file| file.is_source || file.is_test || file.is_config)
+    {
+        let module = module_key(&file.path);
+        by_module.entry(module).or_default().push(file);
+    }
+    let mut seen = BTreeSet::new();
+    for group in by_module.values() {
+        for file in group.iter().take(12) {
+            for other in group.iter().take(12) {
+                if file.id == other.id {
+                    continue;
+                }
+                let id = format!("relation:{}:same_module:{}", file.path, other.path);
+                if seen.insert(id.clone()) {
+                    relations.push(GraphRelationRecord {
+                        id,
+                        from_type: "file".to_string(),
+                        from_id: file.id.clone(),
+                        to_type: "file".to_string(),
+                        to_id: other.id.clone(),
+                        relation_kind: "same_module".to_string(),
+                        confidence: "low".to_string(),
+                        source: "module-path-heuristic".to_string(),
+                    });
+                }
+            }
+        }
+    }
+    relations
+}
+
+fn build_mention_relations(
+    files: &[GraphFileRecord],
+    symbols: &[crate::model::GraphSymbolRecord],
+    file_text_by_id: &BTreeMap<String, String>,
+) -> Vec<GraphRelationRecord> {
+    let mut relations = Vec::new();
+    let mut seen = BTreeSet::new();
+    let files_by_id = files
+        .iter()
+        .map(|file| (file.id.clone(), file))
+        .collect::<BTreeMap<_, _>>();
+
+    for (file_id, text) in file_text_by_id {
+        let Some(file) = files_by_id.get(file_id) else {
+            continue;
+        };
+        let lower_text = text.to_ascii_lowercase();
+        for symbol in symbols
+            .iter()
+            .filter(|symbol| symbol.name.len() > 2)
+            .take(500)
+        {
+            if symbol.file_id == *file_id {
+                continue;
+            }
+            let name = symbol.name.to_ascii_lowercase();
+            if !lower_text.contains(&name) {
+                continue;
+            }
+            for relation_kind in ["mentions", "uses"] {
+                if relation_kind == "uses" && !file.is_source {
+                    continue;
+                }
+                let id = format!("relation:{}:{}:{}", file.path, relation_kind, symbol.id);
+                if seen.insert(id.clone()) {
+                    relations.push(GraphRelationRecord {
+                        id,
+                        from_type: "file".to_string(),
+                        from_id: file.id.clone(),
+                        to_type: "symbol".to_string(),
+                        to_id: symbol.id.clone(),
+                        relation_kind: relation_kind.to_string(),
+                        confidence: "low".to_string(),
+                        source: "symbol-mention".to_string(),
+                    });
+                }
+            }
+        }
+    }
+    relations
+}
+
+fn module_key(path: &str) -> String {
+    let parts = path.split('/').collect::<Vec<_>>();
+    if parts.len() >= 3 && matches!(parts[0], "src" | "tests" | "app" | "lib") {
+        return parts[1].to_string();
+    }
+    parts.first().copied().unwrap_or("").to_string()
+}
+
 fn source_stem(name: &str) -> String {
     name.split('.').next().unwrap_or(name).to_ascii_lowercase()
 }
@@ -457,5 +555,83 @@ mod tests {
             .relations
             .iter()
             .any(|relation| relation.relation_kind == "configures"));
+    }
+
+    #[test]
+    fn scan_project_extracts_l1_symbols_relations_and_mobile_semantics() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("src")).unwrap();
+        fs::create_dir_all(dir.path().join("android/app/src/main")).unwrap();
+        fs::create_dir_all(dir.path().join("ios/App")).unwrap();
+        fs::create_dir_all(dir.path().join("lib")).unwrap();
+        fs::write(
+            dir.path().join("src/app.tsx"),
+            "import React from 'react';\nexport interface Props {}\nexport class Screen extends Base implements Runnable {\n  render() { return null; }\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("src/main.py"),
+            "import os\nclass Worker:\n    def run(self):\n        pass\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("src/lib.go"),
+            "package demo\nimport \"fmt\"\ntype Repo struct {}\nfunc (r Repo) Save() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("android/app/src/main/AndroidManifest.xml"),
+            "<manifest>\n<uses-permission android:name=\"android.permission.INTERNET\"/>\n<activity android:name=\".MainActivity\"/>\n</manifest>\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("ios/App/App.swift"),
+            "import SwiftUI\nstruct AppView: View { var body: some View { Text(\"x\") } }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("lib/main.dart"),
+            "import 'package:flutter/widgets.dart';\nclass Home extends StatelessWidget {}\n",
+        )
+        .unwrap();
+        fs::write(dir.path().join("pubspec.yaml"), "name: demo\n").unwrap();
+
+        let index = scan_project(dir.path()).unwrap();
+
+        for expected in [
+            "Props", "Screen", "Worker", "run", "Repo", "Save", "AppView", "Home",
+        ] {
+            assert!(
+                index.symbols.iter().any(|symbol| symbol.name == expected),
+                "missing symbol {expected}"
+            );
+        }
+        for relation_kind in [
+            "contains",
+            "imports",
+            "parent_of",
+            "extends",
+            "implements",
+            "same_module",
+        ] {
+            assert!(
+                index
+                    .relations
+                    .iter()
+                    .any(|relation| relation.relation_kind == relation_kind),
+                "missing relation {relation_kind}"
+            );
+        }
+        assert!(
+            index
+                .symbols
+                .iter()
+                .any(|symbol| symbol.name.contains("INTERNET")
+                    || symbol.name.contains("MainActivity"))
+        );
+        assert!(index
+            .symbols
+            .iter()
+            .any(|symbol| symbol.kind == "component"));
     }
 }
