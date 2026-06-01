@@ -38,7 +38,9 @@ import {
   normalizeProjectRootKey,
   projectNameFromPath,
   projectRootsEqual,
+  useProjectGraph,
   useProjectFiles,
+  type ProjectGraphState,
   type ProjectFilesState,
 } from "./features/project-files";
 import type {
@@ -327,6 +329,11 @@ function App() {
     reportProjectFilesError,
     selectProjectFile,
   } = useProjectFiles(selectedProjectRoot);
+  const graphProjectRoot =
+    selectedProjectRoot ??
+    projectFilesState.snapshot?.projectRoot ??
+    (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
+  const { projectGraphState } = useProjectGraph(graphProjectRoot);
 
   async function loadSnapshot() {
     setLoadState((current) => ({ ...current, error: null }));
@@ -733,6 +740,7 @@ function App() {
             onSelectMilestone={setSelectedMilestoneId}
             onSelectProject={setSelectedProjectId}
             onSelectProjectFile={(relativePath) => void selectProjectFile(relativePath)}
+            projectGraphState={projectGraphState}
             projectFilesState={projectFilesState}
             projectViewModel={projectViewModel}
             selectedMilestoneId={selectedMilestoneId}
@@ -1018,6 +1026,7 @@ function ProjectView({
   onSelectMilestone,
   onSelectProject,
   onSelectProjectFile,
+  projectGraphState,
   projectFilesState,
   projectViewModel,
   selectedMilestoneId,
@@ -1028,6 +1037,7 @@ function ProjectView({
   onSelectMilestone: (milestoneId: string | null) => void;
   onSelectProject: (projectId: string) => void;
   onSelectProjectFile: (relativePath: string) => void;
+  projectGraphState: ProjectGraphState;
   projectFilesState: ProjectFilesState;
   projectViewModel: ProjectMilestoneIssueViewModelSnapshot | null;
   selectedMilestoneId: string | null;
@@ -1070,6 +1080,7 @@ function ProjectView({
       {activeProject || canReadSelectedLocalProject ? (
         <ProjectLocalFilesPage
           fileState={projectFilesState}
+          graphState={projectGraphState}
           onSelectFile={onSelectProjectFile}
         />
       ) : (

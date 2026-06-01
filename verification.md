@@ -2672,3 +2672,58 @@
 - 浏览器 mock 不调用模型。
 - 浏览器 mock 不创建远程 PR / GitHub issue / Linear issue。
 - 真实 Tauri 客户端不允许使用 browser preview mock。
+
+## 2026-06-01 Graph V1 Implementation
+
+执行者：Codex
+
+目标：
+
+- 按 `docs/requirements/002-graph-v1.md` 实现 AgentFlow 本地代码现场地图服务。
+- 在添加 / 打开本地 Project 后，系统可以准备 `.agentflow/output/graph/`，生成文件、符号、关系、搜索与 Context Pack 所需的本地索引。
+- 保持 Desktop 只读边界，不新增执行命令、远程对象或模型调用能力。
+
+结果：
+
+- 新增 `crates/graph`：
+  - `GraphStatusSnapshot` / `GraphManifestSnapshot` / `GraphSearchSnapshot` / `GraphContextPack` 等数据对象。
+  - SQLite `graph.db` schema：`files`、`symbols`、`relations`、`chunks`、`context_packs`、`index_runs`。
+  - 本地扫描器：跳过 `.git/`、`.agentflow/`、`node_modules/`、`target/`、`dist/`、`build/` 等运行态 / 构建目录。
+  - 轻量符号抽取：源码结构、Markdown 标题、配置键。
+  - 基础关系：contains、imports、test_of、configures、same_directory。
+  - Search 与 Context Pack 写入：`.agentflow/output/graph/context-packs/`。
+- 新增 Tauri commands：
+  - `prepare_project_graph`
+  - `load_project_graph_status`
+  - `load_project_graph_manifest`
+  - `search_project_graph`
+  - `build_graph_context_pack`
+  - `load_graph_context_pack`
+- `prepare_local_project_workspace` 已创建：
+  - `.agentflow/output/graph`
+  - `.agentflow/output/graph/context-packs`
+  - `.agentflow/output/graph/exports`
+- Desktop Project 文件页新增轻量“代码地图”状态摘要，展示 Graph 状态、文件数、符号数、关系数和语言列表。
+- 浏览器预览新增显式 Graph mock，不写真实 `.agentflow/output/graph`。
+- `.gitignore` 增加 `.agentflow/output/graph/`，避免 Graph 输出进入 Git。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-graph`：pass，5 tests。
+- `cargo test`：pass，core 61 tests + desktop 9 tests + graph 5 tests。
+- `npm --prefix apps/desktop run build`：pass，存在 Vite chunk size warning。
+- `git diff --check`：pass。
+- Browser smoke at `http://127.0.0.1:1420/`：pass。
+  - Project 页面显示 `代码地图`。
+  - 浏览器预览显示 mock Graph 状态 `已就绪`。
+  - 文件数、符号数、关系数、语言列表可见。
+  - 浏览器控制台无 app error / warning。
+
+边界：
+
+- Graph V1 不执行项目命令。
+- Graph V1 不调用模型。
+- Graph V1 不创建远程 PR / GitHub issue / Linear issue。
+- Graph V1 不写 `.codex/` 或 `graphify-out/`。
+- Graph V1 输出仅写入 `.agentflow/output/graph/`。

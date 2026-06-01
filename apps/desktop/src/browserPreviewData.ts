@@ -1,4 +1,8 @@
 import type {
+  GraphContextPack,
+  GraphManifestSnapshot,
+  GraphSearchSnapshot,
+  GraphStatusSnapshot,
   IssueContract,
   LocalMetricsSnapshot,
   LocalProjectModelSnapshot,
@@ -385,6 +389,106 @@ export function createBrowserPreviewProjectFilesSnapshot(projectRoot = BROWSER_P
     projectRoot,
     selectedPath: "README.md",
     entries: browserPreviewTopLevelEntries(),
+  };
+}
+
+export function createBrowserPreviewGraphStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): GraphStatusSnapshot {
+  return {
+    version: "graph-status.browser-preview",
+    projectRoot,
+    status: "ready",
+    fileCount: 9,
+    symbolCount: 18,
+    relationCount: 12,
+    updatedAt: previewTimestamp,
+    lastError: null,
+  };
+}
+
+export function createBrowserPreviewGraphManifest(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): GraphManifestSnapshot {
+  return {
+    version: "graph-manifest.browser-preview",
+    projectRoot,
+    languages: ["markdown", "typescript", "rust", "toml", "json"],
+    topLevelDirs: [".agentflow", ".git", "apps", "crates", "docs", "target"],
+    importantFiles: ["README.md", "Cargo.toml", "design.md", "apps/desktop/package.json"],
+    sourceFiles: 4,
+    testFiles: 0,
+    docFiles: 3,
+    configFiles: 2,
+  };
+}
+
+export function createBrowserPreviewGraphSearch(query: string): GraphSearchSnapshot {
+  const normalizedQuery = query.trim() || "project";
+  return {
+    version: "graph-search.browser-preview",
+    query: normalizedQuery,
+    results: [
+      {
+        kind: "file",
+        path: "apps/desktop/src/features/project-files/ProjectLocalFilesPage.tsx",
+        title: "ProjectLocalFilesPage.tsx",
+        language: "typescript",
+        symbolKind: "source",
+        line: null,
+        snippet: "Project 页面本地文件阅读器入口。",
+        score: 0.88,
+      },
+      {
+        kind: "symbol",
+        path: "crates/graph/src/manager.rs",
+        title: "prepare_project_graph",
+        language: "rust",
+        symbolKind: "function",
+        line: 28,
+        snippet: "准备本地 Graph V1 索引目录和状态。",
+        score: 0.82,
+      },
+    ],
+  };
+}
+
+export function createBrowserPreviewGraphContextPack(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): GraphContextPack {
+  return {
+    version: "graph-context-pack.browser-preview",
+    targetType: "preview",
+    targetId: "browser-preview",
+    query: "Project 文件阅读器 Graph V1 浏览器预览",
+    createdAt: previewTimestamp,
+    graphRevision: "browser-preview",
+    recommendedFiles: [
+      {
+        path: "apps/desktop/src/features/project-files/ProjectLocalFilesPage.tsx",
+        reason: "Project 文件阅读器入口",
+        score: 0.88,
+      },
+    ],
+    recommendedSymbols: [
+      {
+        name: "ProjectLocalFilesPage",
+        kind: "function",
+        path: "apps/desktop/src/features/project-files/ProjectLocalFilesPage.tsx",
+        line: 9,
+        score: 0.82,
+      },
+    ],
+    recommendedTests: [],
+    impactHints: [
+      {
+        path: "apps/desktop/src/features/project-files/useProjectFiles.ts",
+        reason: "同一 Project 文件读取链路",
+        confidence: "medium",
+      },
+    ],
+    testHints: [
+      {
+        commandHint: "npm --prefix apps/desktop run build",
+        reason: "验证桌面前端类型和构建",
+        confidence: "medium",
+      },
+    ],
+    confidence: "medium",
   };
 }
 

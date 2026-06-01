@@ -11,11 +11,12 @@ AgentFlow 的旧目标文档已停止作为后续开发依据。
 
 ## 当前总目标
 
-第一个新功能需求已经定义为：
+当前新功能需求已经定义为：
 
 - [001 - 添加本地项目](docs/requirements/001-add-local-project.md)
+- [002 - Graph V1](docs/requirements/002-graph-v1.md)
 
-当前目标是让用户可以在 Desktop 中添加本地 Project 文件夹，并直接进入本地文件阅读器浏览项目内容。
+当前目标是在 Project Workspace Manager 之后，实现 Graph V1：为本地 Project 自动生成代码现场地图，给后续 Agent 使用。
 
 ## 当前约束
 
