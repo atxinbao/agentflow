@@ -7,7 +7,7 @@ import type {
   ProjectFileSearchSnapshot,
   ProjectFileViewMode,
   ProjectFilesSnapshot,
-} from "../../types";
+} from "../../../types";
 
 export type ProjectFilesState = {
   snapshot: ProjectFilesSnapshot | null;

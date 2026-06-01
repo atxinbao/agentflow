@@ -1,5 +1,10 @@
 export { ProjectLocalFilesPage } from "./ProjectLocalFilesPage";
-export { useProjectGraph, type ProjectGraphState } from "./useProjectGraph";
-export { isBrowserPreviewRuntime, useProjectFiles } from "./useProjectFiles";
-export type { ProjectFileViewMode, ProjectFilesState } from "./projectFileTypes";
-export { normalizeProjectRootKey, projectNameFromPath, projectRootsEqual } from "./projectFileUtils";
+export { isBrowserPreviewRuntime } from "./hooks/projectFileRuntime";
+export { useProjectGraph, type ProjectGraphState } from "./hooks/useProjectGraph";
+export { useProjectFiles } from "./hooks/useProjectFiles";
+export type { ProjectFileViewMode, ProjectFilesState } from "./model/projectFileTypes";
+export {
+  normalizeProjectRootKey,
+  projectNameFromPath,
+  projectRootsEqual,
+} from "./model/projectFileUtils";

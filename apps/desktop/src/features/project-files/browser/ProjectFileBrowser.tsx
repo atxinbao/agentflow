@@ -1,12 +1,12 @@
 import { ChevronRight, Loader2, Search } from "lucide-react";
 import type { CSSProperties } from "react";
-import type { ProjectFileBrowserRow, ProjectFileViewMode } from "./projectFileTypes";
+import type { ProjectFileBrowserRow, ProjectFileViewMode } from "../model/projectFileTypes";
 import {
   formatProjectFileRowMeta,
   getProjectFileIconForNode,
   getProjectFileToneForNode,
   isHiddenProjectFilePath,
-} from "./projectFileUtils";
+} from "../model/projectFileUtils";
 
 const viewModeOptions: Array<{ value: ProjectFileViewMode; label: string }> = [
   { value: "all", label: "全部" },

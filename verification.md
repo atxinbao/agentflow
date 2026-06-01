@@ -2788,3 +2788,175 @@
 - Graph V1 Completion 不修改项目源码。
 - Graph V1 Completion 不创建远程 PR / GitHub issue / Linear issue。
 - Graph V1 Completion 输出仅写入 `.agentflow/output/graph/**`。
+
+## 2026-06-02 Legacy Cleanup and New Module Split - Slice 1 / Tauri Split
+
+执行者：Codex
+
+目标：
+
+- 按 `docs/requirements/004-legacy-cleanup-and-new-module-split.md` 建立新的主干清理需求入口。
+- 先完成 legacy inventory 和 Tauri 后端模块边界拆分。
+- 不新增产品功能，不改变 Desktop 只读边界，不改变 Tauri command 对外名称。
+
+结果：
+
+- 已复制并登记需求文档：
+  - `docs/requirements/004-legacy-cleanup-and-new-module-split.md`
+  - `docs/requirements/README.md`
+  - `docs/requirements/next-requirements.md`
+- 已新增架构边界文档：
+  - `docs/architecture/legacy-code-map.md`
+  - `docs/architecture/current-module-boundaries.md`
+- Tauri command 层已拆出：
+  - `apps/desktop/src-tauri/src/commands/mod.rs`
+  - `apps/desktop/src-tauri/src/commands/legacy_core.rs`
+  - `apps/desktop/src-tauri/src/commands/graph.rs`
+  - `apps/desktop/src-tauri/src/commands/project_files.rs`
+  - `apps/desktop/src-tauri/src/commands/project_workspace.rs`
+- Project File Reader 后端已移动到模块目录：
+  - `apps/desktop/src-tauri/src/project_files/mod.rs`
+  - `apps/desktop/src-tauri/src/project_files/commands.rs`
+- Project Workspace 后端已移动到模块目录：
+  - `apps/desktop/src-tauri/src/project_workspace/mod.rs`
+  - `apps/desktop/src-tauri/src/project_workspace/commands.rs`
+- `agentflow-core` 已完成第一层 legacy quarantine：
+  - `crates/agentflow-core/src/lib.rs` 变为薄入口。
+  - 旧实现整体移动到 `crates/agentflow-core/src/legacy/mod.rs`。
+  - 新增 `crates/agentflow-core/src/active/mod.rs`，只导出当前 Desktop read-only transitional read-model。
+  - 新增 `crates/agentflow-core/src/shared/mod.rs`，保留为无业务立场的共享工具入口。
+- `agentflow-cli` 已完成第一层 legacy isolation：
+  - `crates/agentflow-cli/src/main.rs` 变为薄入口。
+  - 旧命令实现整体移动到 `crates/agentflow-cli/src/legacy.rs`。
+  - CLI 旧命令名称保持不变。
+
+行为变化：
+
+- 无预期行为变化。
+- Tauri command 名称保持不变。
+- Desktop 仍保持只读边界。
+
+当前仍未完成：
+
+- `agentflow-cli` 还未继续拆分 `args.rs` 和 `print.rs`。
+- `agentflow-core` legacy 还未继续拆成 goal_protocol / product_feature / workflow_control 等细粒度文件。
+- Project Files 后端进一步拆分为 model / path_guard / directory / content / search / range / mime。
+- Project Workspace 后端进一步拆分为 model / prepare / dedupe / git / ignore / remove。
+- Graph watcher native / fallback / filter / state / debounce 文件级拆分。
+- Project File Reader 前端 browser / reader / hooks / model 拆分。
+- Frontend `types/` 拆分。
+
+已验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-core`：pass，61 tests。
+- `cargo test -p agentflow-cli`：pass，0 tests。
+- `cargo test -p agentflow-graph`：pass，26 tests。
+- `cargo test -p agentflow-desktop`：pass，16 tests。
+- `cargo test`：pass，core 61 tests + desktop 16 tests + graph 26 tests。
+- `npm --prefix apps/desktop run build`：pass，存在 Vite chunk size warning。
+- `git diff --check`：pass。
+
+## 2026-06-02 Legacy Cleanup and New Module Split - Completed Split
+
+执行者：Codex
+
+目标：
+
+- 完成 `docs/requirements/004-legacy-cleanup-and-new-module-split.md` 授权的 legacy 隔离和新模块拆分。
+- 保持旧命令名、Tauri command 名称、Desktop 只读边界和现有用户行为不变。
+- 不新增 Goal Tree、AgentRun、执行命令、模型调用或远程对象能力。
+
+结果：
+
+- `agentflow-core`：
+  - `crates/agentflow-core/src/lib.rs` 已变为薄入口。
+  - 旧 2026-05 workflow / product-feature 实现进入 `crates/agentflow-core/src/legacy/archive_2026_05.rs`。
+  - `crates/agentflow-core/src/legacy/` 已按 goal protocol、product feature、Team/Project/Milestone/Issue、workflow control、run/verify/review、eligibility/lease、closure、audit/docs refresh、evidence、saved view、SQLite index 建立 legacy compatibility 出口。
+  - 当前 Desktop 仍需的 read-only transitional read-model 通过 `crates/agentflow-core/src/active/` 的 `desktop_snapshot.rs`、`local_metrics.rs`、`local_project_model.rs`、`local_search.rs`、`boundary.rs` 导出。
+  - `crates/agentflow-core/src/shared/` 已建立 `fs_paths.rs`、`json_io.rs`、`markdown.rs`、`ids.rs`、`time.rs` 无业务立场边界。
+- `agentflow-cli`：
+  - `crates/agentflow-cli/src/main.rs` 已变为薄入口。
+  - 旧命令实现隔离到 `crates/agentflow-cli/src/legacy.rs`。
+  - clap 参数定义拆到 `crates/agentflow-cli/src/args.rs`。
+  - 输出 helper 拆到 `crates/agentflow-cli/src/print.rs`。
+- Tauri Desktop：
+  - command wrapper 拆到 `apps/desktop/src-tauri/src/commands/`。
+  - legacy core read-model command 独立到 `commands/legacy_core.rs`。
+  - graph / project files / project workspace command wrapper 分离。
+- Project Files backend：
+  - 拆为 `commands.rs`、`model.rs`、`path_guard.rs`、`directory.rs`、`content.rs`、`search.rs`、`range.rs`、`mime.rs`。
+  - 保持路径逃逸、symlink、directory page、search、text range、binary fallback 行为不变。
+- Project Workspace backend：
+  - 拆为 `commands.rs`、`model.rs`、`prepare.rs`、`git.rs`、`ignore.rs`、`dedupe.rs`、`remove.rs`。
+  - `dedupe.rs` 和 `remove.rs` 仅作为后续需求边界，不新增功能。
+- Graph Watcher：
+  - 拆为 `watcher/mod.rs`、`native.rs`、`fallback.rs`、`filter.rs`、`state.rs`、`debounce.rs`、`tests.rs`。
+  - watcher 对外 API 和 native/fallback 行为保持不变。
+- Project File Reader frontend：
+  - 拆为 `browser/`、`reader/`、`reader/renderers/`、`hooks/`、`model/`。
+  - `LargeTextReader`、file browser rows、localStorage reader state 已独立。
+  - `useProjectFiles.ts` 保留为对外协调器。
+  - `useProjectDirectoryPages.ts`、`useProjectFileSearch.ts`、`useProjectFileTextRange.ts`、`projectFileRuntime.ts` 已分别承接目录分页、搜索、文本分段读取和浏览器预览运行态边界。
+- Frontend types：
+  - 新增 `apps/desktop/src/types/` 领域类型目录。
+  - `apps/desktop/src/types.ts` 保留 barrel export，现有 import 不破坏。
+- 文档：
+  - `docs/architecture/legacy-code-map.md` 记录旧代码兼容面。
+  - `docs/architecture/current-module-boundaries.md` 记录当前模块边界。
+
+行为变化：
+
+- 无预期行为变化。
+- CLI 旧命令仍保持可编译。
+- 所有 Tauri command 名称保持不变。
+- Desktop 仍保持只读边界。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-core`：pass，61 tests。
+- `cargo test -p agentflow-cli`：pass，0 tests。
+- `cargo test -p agentflow-graph`：pass，26 tests。
+- `cargo test`：pass，core 61 tests + desktop 16 tests + graph 26 tests。
+- `npm --prefix apps/desktop run build`：pass，存在 Vite chunk size warning。
+- `git diff --check`：pass。
+
+边界：
+
+- 未新增产品功能。
+- 未定义新的 Goal / Milestone / Issue / AgentRun 流程。
+- 未调用模型。
+- 未执行项目命令。
+- 未修改用户项目源码。
+- 未写入 `.agentflow/` 运行态数据。
+
+## 2026-06-02 Legacy Cleanup and New Module Split - Final Boundary Audit
+
+执行者：Codex
+
+补齐项：
+
+- `agentflow-core` legacy 不再由 `legacy/mod.rs` 承载巨型实现。
+  - 旧实现归档到 `crates/agentflow-core/src/legacy/archive_2026_05.rs`。
+  - `legacy/mod.rs` 只负责声明 legacy compatibility 子模块和临时兼容导出。
+  - 每个 legacy 子模块均保留 legacy compatibility 注释，并按旧领域暴露兼容符号。
+- `agentflow-core` active/shared 目录补齐文件级边界。
+  - active 仅包装当前 Desktop read-only transitional read-model。
+  - shared 仅保留无业务立场工具边界，不承载旧 workflow 概念。
+- Project File Reader frontend hook 继续拆分。
+  - `useProjectFiles.ts` 保留对外协调器。
+  - `useProjectDirectoryPages.ts` 承接目录分页。
+  - `useProjectFileSearch.ts` 承接搜索。
+  - `useProjectFileTextRange.ts` 承接文本分段读取。
+  - `projectFileRuntime.ts` 承接浏览器预览运行态判断和错误文案。
+
+最终验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-core`：pass，61 tests。
+- `cargo test -p agentflow-cli`：pass，0 tests。
+- `cargo test -p agentflow-graph`：pass，26 tests。
+- `cargo test`：pass，core 61 tests + desktop 16 tests + graph 26 tests。
+- `npm --prefix apps/desktop run build`：pass，存在既有 Vite chunk size warning。
+- `git diff --check`：pass。

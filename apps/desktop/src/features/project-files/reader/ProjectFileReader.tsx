@@ -1,5 +1,5 @@
 import { File as FileIcon, Folder } from "lucide-react";
-import type { ProjectFileContent, ProjectFileEntry, ProjectFileTextRange } from "../../types";
+import type { ProjectFileContent, ProjectFileEntry, ProjectFileTextRange } from "../../../types";
 import { ProjectFileBodyRenderer } from "./FileRendererRegistry";
 import {
   formatProjectFileSize,
@@ -10,7 +10,7 @@ import {
   getProjectFileTone,
   getProjectFileToneForNode,
   isHiddenProjectFileEntry,
-} from "./projectFileUtils";
+} from "../model/projectFileUtils";
 
 export function ProjectFileReader({
   content,
