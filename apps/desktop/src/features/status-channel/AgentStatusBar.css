@@ -1,7 +1,7 @@
 .shell-status-bar {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
   min-width: 0;
   padding: 0 16px;
   overflow: hidden;
@@ -15,21 +15,20 @@
 .agent-status-item {
   display: flex;
   align-items: center;
-  gap: 12px;
   min-width: 0;
   max-width: 100%;
 }
 
 .agent-status-item + .agent-status-item {
-  padding-left: 18px;
+  padding-left: 16px;
   border-left: 1px solid #2b2f38;
 }
 
 .agent-status-primary {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -38,6 +37,11 @@
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.agent-status-separator {
+  color: #626d7d;
+  font-weight: 600;
 }
 
 .agent-status-primary span:last-child {
@@ -72,47 +76,4 @@
 .agent-status-indicator[data-status="failed"] {
   background: #ff7b86;
   box-shadow: 0 0 0 2px rgba(255, 123, 134, 0.18);
-}
-
-.agent-status-metrics {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-}
-
-.agent-status-metrics div {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  min-width: 0;
-}
-
-.agent-status-metrics dt {
-  color: #7f8b9c;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.agent-status-metrics dd {
-  min-width: 0;
-  max-width: 300px;
-  margin: 0;
-  overflow: hidden;
-  color: #dce6f3;
-  font-size: 12px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-status-error {
-  min-width: 0;
-  overflow: hidden;
-  color: #f6c177;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

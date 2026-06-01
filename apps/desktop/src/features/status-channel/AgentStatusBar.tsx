@@ -2,39 +2,64 @@ import "./AgentStatusBar.css";
 import type { AgentStatusChannelItem } from "./statusTypes";
 
 export function AgentStatusBar({ items }: { items: AgentStatusChannelItem[] }) {
-  const visibleItems = items.length
-    ? items
-    : [
-        {
-          id: "agent-status-empty",
-          label: "Agent 状态通道",
-          status: "idle" as const,
-          statusLabel: "等待数据",
-        },
-      ];
+  const visibleItem = selectVisibleStatusItem(items);
 
   return (
     <footer className="shell-status-bar" aria-label="Agent 状态通道">
-      {visibleItems.map((item) => (
-        <section className="agent-status-item" key={item.id} title={item.source}>
-          <div className="agent-status-primary">
-            <span className="agent-status-indicator" data-status={item.status} />
-            <strong>{item.label}</strong>
-            <span>{item.statusLabel}</span>
-          </div>
-          {item.metrics?.length ? (
-            <dl className="agent-status-metrics">
-              {item.metrics.map((metric) => (
-                <div key={`${item.id}-${metric.label}`}>
-                  <dt>{metric.label}</dt>
-                  <dd title={metric.title ?? String(metric.value)}>{metric.value}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
-          {item.error ? <span className="agent-status-error">{item.error}</span> : null}
-        </section>
-      ))}
+      <section className="agent-status-item" title={buildStatusTitle(visibleItem)}>
+        <div className="agent-status-primary">
+          <span className="agent-status-indicator" data-status={visibleItem.status} />
+          <strong>{visibleItem.label}</strong>
+          <span className="agent-status-separator" aria-hidden="true">
+            {" · "}
+          </span>
+          <span>{visibleItem.statusLabel}</span>
+        </div>
+      </section>
     </footer>
   );
+}
+
+function selectVisibleStatusItem(items: AgentStatusChannelItem[]) {
+  if (!items.length) {
+    return {
+      id: "agent-status-empty",
+      label: "状态通道",
+      status: "idle" as const,
+      statusLabel: "等待数据",
+    };
+  }
+
+  return [...items].sort((left, right) => {
+    const toneDiff = statusToneWeight(right.status) - statusToneWeight(left.status);
+    if (toneDiff !== 0) {
+      return toneDiff;
+    }
+    return (right.priority ?? 0) - (left.priority ?? 0);
+  })[0];
+}
+
+function statusToneWeight(status: AgentStatusChannelItem["status"]) {
+  const weights: Record<AgentStatusChannelItem["status"], number> = {
+    failed: 50,
+    warning: 40,
+    working: 30,
+    ready: 20,
+    idle: 10,
+  };
+  return weights[status];
+}
+
+function buildStatusTitle(item: AgentStatusChannelItem) {
+  const detailLines = [
+    item.source ? `来源：${item.source}` : null,
+    `状态：${item.statusLabel}`,
+    ...(item.metrics ?? []).map((metric) => {
+      const value = metric.title ?? String(metric.value);
+      return `${metric.label}：${value}`;
+    }),
+    item.error ? `错误：${item.error}` : null,
+  ].filter(Boolean);
+
+  return detailLines.join("\n");
 }

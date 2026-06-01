@@ -19,10 +19,11 @@ function buildWorkspaceStatus(projectFilesState: ProjectFilesState): AgentStatus
   if (projectFilesState.error) {
     return {
       id: "agent-workspace",
-      label: "Agent 工作空间",
+      label: "工作空间",
       status: "failed",
       statusLabel: "异常",
       source,
+      priority: 10,
       metrics: [{ label: "资源", value: entryCount }],
       error: projectFilesState.error,
     };
@@ -31,20 +32,22 @@ function buildWorkspaceStatus(projectFilesState: ProjectFilesState): AgentStatus
   if (projectFilesState.source === "loading") {
     return {
       id: "agent-workspace",
-      label: "Agent 工作空间",
+      label: "工作空间",
       status: "working",
       statusLabel: "准备中",
       source,
+      priority: 10,
     };
   }
 
   if (projectFilesState.snapshot) {
     return {
       id: "agent-workspace",
-      label: "Agent 工作空间",
+      label: "工作空间",
       status: "ready",
       statusLabel: "已就绪",
       source,
+      priority: 10,
       metrics: [
         { label: "资源", value: entryCount },
         { label: "选中", value: selectedPath, title: selectedPath },
@@ -54,10 +57,11 @@ function buildWorkspaceStatus(projectFilesState: ProjectFilesState): AgentStatus
 
   return {
     id: "agent-workspace",
-    label: "Agent 工作空间",
+    label: "工作空间",
     status: "idle",
     statusLabel: "未就绪",
     source,
+    priority: 10,
   };
 }
 
@@ -71,20 +75,22 @@ function buildWorksiteStatus(projectGraphState: ProjectGraphState): AgentStatusC
   if (projectGraphState.error) {
     return {
       id: "agent-worksite",
-      label: "Agent 工作现场",
+      label: "工作现场",
       status: "failed",
       statusLabel: "异常",
       source,
+      priority: 20,
       error: projectGraphState.error,
     };
   }
 
   return {
     id: "agent-worksite",
-    label: "Agent 工作现场",
+    label: "工作现场",
     status: graphStatusTone(graphStatus, projectGraphState.source),
     statusLabel: graphStatusLabel(graphStatus, projectGraphState.source),
     source,
+    priority: 20,
     metrics: [
       { label: "文件", value: projectGraphState.status?.fileCount ?? 0 },
       { label: "符号", value: projectGraphState.status?.symbolCount ?? 0 },

@@ -55,23 +55,33 @@ Desktop 客户端默认只读：不执行命令，不写入工作区，不创建
 
 当前接入项：
 
-- `Agent 工作空间`：由 `Project Workspace Manager V0.2` 提供，表示本地项目文件和工作区资源是否已准备。
-- `Agent 工作现场`：由 `002 - Graph V1` 提供，表示代码地图 / 工作现场索引是否已准备。
+- `工作空间`：由 `Project Workspace Manager V0.2` 提供，表示本地项目文件和工作区资源是否已准备。
+- `工作现场`：由 `002 - Graph V1` 提供，表示代码地图 / 工作现场索引是否已准备。
+
+状态栏可见内容一次只显示一个“通道事件 + 状态”，不并列展示多个通道，也不直接平铺模块指标。
+
+```text
+● 工作空间 · 已就绪
+● 工作现场 · 已就绪
+```
+
+上面的两行是不同状态事件的展示格式示例；真实状态栏同一时刻只显示其中一个。选择规则为：异常优先，其次警告、处理中、已就绪、空闲；同一状态级别下按通道优先级选择当前最相关的 Agent 作业状态。
+
+资源数、选中文件、文件数、符号数、关系数、语言列表、错误详情等进入状态项详情提示，不作为底部栏常驻文本。
 
 - Height: `34px`
 - Background: `#17181c`
 - Border top: `1px solid #343842`
 - Padding: `0 16px`
 - Typography: `12px / 16px`
-- Item label examples: `Agent 工作空间`, `Agent 工作现场`
+- Item label examples: `工作空间`, `工作现场`
 - Status label examples: `已就绪`, `准备中`, `未就绪`, `异常`
-- Metrics: 每个状态 item 自带，例：资源、选中文件、文件、符号、关系、语言
+- Metrics: 每个状态 item 可保留详情数据，例：资源、选中文件、文件、符号、关系、语言；默认不在状态栏平铺展示。
 - Ready indicator: `#60d394`
 - Working indicator: `#82aaff`
 - Warning indicator: `#f6c177`
 - Failed indicator: `#ff7b86`
-- Error text: `#f6c177`
-- Long metric/error text uses single-line truncation.
+- Error detail: 进入状态项详情提示。
 
 ## Color Tokens
 

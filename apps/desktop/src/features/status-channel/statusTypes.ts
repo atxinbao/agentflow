@@ -12,6 +12,7 @@ export type AgentStatusChannelItem = {
   status: AgentStatusTone;
   statusLabel: string;
   source?: string;
+  priority?: number;
   metrics?: AgentStatusMetric[];
   error?: string | null;
 };
