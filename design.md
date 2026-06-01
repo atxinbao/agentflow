@@ -49,22 +49,29 @@ Desktop 客户端默认只读：不执行命令，不写入工作区，不创建
 └─────────────────────────────────────┴───────────────────────────────────────┘
 ```
 
-### Statusbar
+### Agent Status Channel
 
-底部状态栏是 app shell 的一部分，用于承载系统级派生状态。当前 Project 文件阅读器把 `代码地图` 状态放在这里，而不是放在 Project 内容顶部。
+底部状态栏是 app shell 的一部分，用于承载 Agent 作业相关的系统级状态。后续涉及 Agent 作业、准备、索引、执行现场、验证现场等状态，都应接入同一个 `features/status-channel` 模块，而不是在页面内容里单独实现状态卡。
+
+当前接入项：
+
+- `Agent 工作空间`：由 `Project Workspace Manager V0.2` 提供，表示本地项目文件和工作区资源是否已准备。
+- `Agent 工作现场`：由 `002 - Graph V1` 提供，表示代码地图 / 工作现场索引是否已准备。
 
 - Height: `34px`
 - Background: `#17181c`
 - Border top: `1px solid #343842`
 - Padding: `0 16px`
 - Typography: `12px / 16px`
-- Primary label: `代码地图`
-- Metrics: 文件、符号、关系、语言、数据源
+- Item label examples: `Agent 工作空间`, `Agent 工作现场`
+- Status label examples: `已就绪`, `准备中`, `未就绪`, `异常`
+- Metrics: 每个状态 item 自带，例：资源、选中文件、文件、符号、关系、语言
 - Ready indicator: `#60d394`
-- Indexing indicator: `#82aaff`
+- Working indicator: `#82aaff`
+- Warning indicator: `#f6c177`
 - Failed indicator: `#ff7b86`
 - Error text: `#f6c177`
-- Long language/error text uses single-line truncation.
+- Long metric/error text uses single-line truncation.
 
 ## Color Tokens
 
@@ -234,7 +241,7 @@ apps/desktop/src-tauri/src/project_files.rs
 - Panels radius: `8px`
 - Panels border: `#343842`
 - Panels background: `#202126`
-- Code map status belongs to the global Statusbar, not the Project content column.
+- Agent 作业状态统一进入底部 Agent Status Channel，不放在 Project content column。
 
 ## File Reader
 

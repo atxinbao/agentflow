@@ -40,9 +40,9 @@ import {
   projectRootsEqual,
   useProjectGraph,
   useProjectFiles,
-  type ProjectGraphState,
   type ProjectFilesState,
 } from "./features/project-files";
+import { AgentStatusBar, buildAgentStatusItems } from "./features/status-channel";
 import type {
   AgentRun,
   GoalLoopSelection,
@@ -334,6 +334,10 @@ function App() {
     projectFilesState.snapshot?.projectRoot ??
     (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
   const { projectGraphState } = useProjectGraph(graphProjectRoot);
+  const agentStatusItems = useMemo(
+    () => buildAgentStatusItems({ projectFilesState, projectGraphState }),
+    [projectFilesState, projectGraphState],
+  );
 
   async function loadSnapshot() {
     setLoadState((current) => ({ ...current, error: null }));
@@ -787,74 +791,10 @@ function App() {
         {activeView === "views" ? (
           <SavedViewsView onSelectView={setSelectedViewId} selectedViewId={selectedViewId} views={projectViewModel?.views ?? []} />
         ) : null}
-        <ShellStatusBar graphState={projectGraphState} source={loadState.source} />
+        <AgentStatusBar items={agentStatusItems} />
       </section>
     </main>
   );
-}
-
-function ShellStatusBar({
-  graphState,
-  source,
-}: {
-  graphState: ProjectGraphState;
-  source: LoadState["source"];
-}) {
-  const status = graphState.status;
-  const manifest = graphState.manifest;
-  const statusText = graphStatusLabel(status?.status ?? "missing");
-  const languageText = manifest?.languages.length ? manifest.languages.slice(0, 5).join(" / ") : "未记录";
-  const sourceText =
-    graphState.source === "preview" || source === "preview"
-      ? "浏览器 Mock"
-      : graphState.source === "tauri" || source === "tauri"
-        ? "桌面真实"
-        : "等待数据";
-
-  return (
-    <footer className="shell-status-bar" aria-label="系统状态栏">
-      <div className="shell-status-primary">
-        <span className="shell-status-indicator" data-status={status?.status ?? "missing"} />
-        <strong>代码地图</strong>
-        <span>{statusText}</span>
-      </div>
-      <dl className="shell-status-metrics">
-        <div>
-          <dt>文件</dt>
-          <dd>{status?.fileCount ?? 0}</dd>
-        </div>
-        <div>
-          <dt>符号</dt>
-          <dd>{status?.symbolCount ?? 0}</dd>
-        </div>
-        <div>
-          <dt>关系</dt>
-          <dd>{status?.relationCount ?? 0}</dd>
-        </div>
-        <div className="shell-status-language">
-          <dt>语言</dt>
-          <dd title={languageText}>{languageText}</dd>
-        </div>
-        <div>
-          <dt>数据源</dt>
-          <dd>{sourceText}</dd>
-        </div>
-      </dl>
-      {graphState.error ? <span className="shell-status-error">{graphState.error}</span> : null}
-    </footer>
-  );
-}
-
-function graphStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    missing: "未建立",
-    indexing: "建立中",
-    ready: "已就绪",
-    stale: "需更新",
-    failed: "失败",
-    degraded: "降级",
-  };
-  return labels[status] ?? status;
 }
 
 function WorkspaceTreeNav({

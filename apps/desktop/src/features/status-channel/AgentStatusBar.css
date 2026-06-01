@@ -1,0 +1,118 @@
+.shell-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+  padding: 0 16px;
+  overflow: hidden;
+  border-top: 1px solid var(--af-border);
+  background: #17181c;
+  color: #aeb8c8;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.agent-status-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.agent-status-item + .agent-status-item {
+  padding-left: 18px;
+  border-left: 1px solid #2b2f38;
+}
+
+.agent-status-primary {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-status-primary strong {
+  color: #e8eef8;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.agent-status-primary span:last-child {
+  color: #dce6f3;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.agent-status-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #727b8b;
+  box-shadow: 0 0 0 2px rgba(114, 123, 139, 0.16);
+}
+
+.agent-status-indicator[data-status="ready"] {
+  background: #60d394;
+  box-shadow: 0 0 0 2px rgba(96, 211, 148, 0.16);
+}
+
+.agent-status-indicator[data-status="working"] {
+  background: #82aaff;
+  box-shadow: 0 0 0 2px rgba(130, 170, 255, 0.18);
+}
+
+.agent-status-indicator[data-status="warning"] {
+  background: #f6c177;
+  box-shadow: 0 0 0 2px rgba(246, 193, 119, 0.18);
+}
+
+.agent-status-indicator[data-status="failed"] {
+  background: #ff7b86;
+  box-shadow: 0 0 0 2px rgba(255, 123, 134, 0.18);
+}
+
+.agent-status-metrics {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+.agent-status-metrics div {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.agent-status-metrics dt {
+  color: #7f8b9c;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.agent-status-metrics dd {
+  min-width: 0;
+  max-width: 300px;
+  margin: 0;
+  overflow: hidden;
+  color: #dce6f3;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-status-error {
+  min-width: 0;
+  overflow: hidden;
+  color: #f6c177;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
