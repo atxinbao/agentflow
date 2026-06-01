@@ -1,13 +1,67 @@
 import { File as FileIcon, FileBadge, FileCode, FileJson, FileText, Folder, FolderDot, type LucideIcon } from "lucide-react";
-import type { ProjectFileChild, ProjectFileContent, ProjectFileEntry } from "../../types";
+import type { ProjectDirectoryPage, ProjectFileChild, ProjectFileContent, ProjectFileEntry } from "../../types";
 import type { ProjectFileBrowserRow } from "./projectFileTypes";
 
 export function isProjectCodeLanguage(language: string, name: string) {
   return (
-    ["json", "toml", "yaml", "rust", "typescript", "javascript", "css", "html", "shell", "config"].includes(language) ||
-    [".json", ".toml", ".yaml", ".yml", ".rs", ".ts", ".tsx", ".js", ".jsx", ".css", ".html", ".sh", ".gitignore"].some(
-      (suffix) => name.endsWith(suffix),
-    )
+    [
+      "json",
+      "toml",
+      "yaml",
+      "rust",
+      "typescript",
+      "javascript",
+      "css",
+      "html",
+      "shell",
+      "config",
+      "python",
+      "go",
+      "java",
+      "kotlin",
+      "swift",
+      "dart",
+      "c",
+      "cpp",
+      "csharp",
+      "php",
+      "ruby",
+      "sql",
+      "powershell",
+      "objective-c",
+      "xml",
+      "dockerfile",
+      "makefile",
+    ].includes(language) ||
+    [
+      ".json",
+      ".toml",
+      ".yaml",
+      ".yml",
+      ".rs",
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".css",
+      ".html",
+      ".py",
+      ".go",
+      ".java",
+      ".kt",
+      ".swift",
+      ".dart",
+      ".c",
+      ".cpp",
+      ".cs",
+      ".php",
+      ".rb",
+      ".sql",
+      ".ps1",
+      ".xml",
+      ".sh",
+      ".gitignore",
+    ].some((suffix) => name.endsWith(suffix))
   );
 }
 
@@ -30,7 +84,7 @@ export function findProjectFileEntry(entries: ProjectFileEntry[], relativePath: 
 export function buildProjectFileBrowserRows(
   entries: ProjectFileEntry[],
   expandedPaths: ReadonlySet<string>,
-  directoryChildrenByPath: Readonly<Record<string, ProjectFileChild[]>>,
+  directoryPagesByPath: Readonly<Record<string, ProjectDirectoryPage>>,
   activeContent: ProjectFileContent | null,
 ) {
   const rows: ProjectFileBrowserRow[] = [];
@@ -41,23 +95,42 @@ export function buildProjectFileBrowserRows(
       return;
     }
 
-    const children = getProjectFileBrowserChildren(row, directoryChildrenByPath, activeContent);
+    const directoryPage = directoryPagesByPath[row.relativePath];
+    const children = getProjectFileBrowserChildren(row, directoryPagesByPath, activeContent);
     children.forEach((child) => {
       const childPath = normalizeProjectRelativePath(child.relativePath);
       appendRow({
         name: child.name,
         relativePath: childPath,
         kind: child.kind,
-        createdAt: null,
-        modifiedAt: null,
-        sizeBytes: null,
-        extension: getProjectFileExtensionFromName(child.name),
-        childCount: null,
-        isSymlink: false,
+        createdAt: child.createdAt ?? null,
+        modifiedAt: child.modifiedAt ?? null,
+        sizeBytes: child.sizeBytes ?? null,
+        childCount: child.childCount ?? null,
+        isSymlink: child.isSymlink ?? false,
+        extension: child.extension ?? getProjectFileExtensionFromName(child.name),
         children: [],
         depth: row.depth + 1,
       });
     });
+    if (directoryPage?.nextCursor) {
+      rows.push({
+        name: "加载更多",
+        relativePath: `${row.relativePath}::__load_more__`,
+        kind: "file",
+        createdAt: null,
+        modifiedAt: null,
+        sizeBytes: null,
+        childCount: null,
+        isSymlink: false,
+        extension: null,
+        children: [],
+        depth: row.depth + 1,
+        hasMoreChildren: true,
+        nextCursor: directoryPage.nextCursor,
+        totalChildren: directoryPage.totalChildren,
+      });
+    }
   }
 
   entries.forEach((entry) => {
@@ -67,10 +140,10 @@ export function buildProjectFileBrowserRows(
       kind: entry.kind,
       createdAt: entry.createdAt,
       modifiedAt: entry.modifiedAt,
-      sizeBytes: entry.sizeBytes,
       extension: entry.extension,
+      sizeBytes: entry.sizeBytes,
       childCount: entry.childCount,
-      isSymlink: false,
+      isSymlink: entry.isSymlink ?? false,
       children: entry.children,
       depth: 0,
     });
@@ -81,13 +154,16 @@ export function buildProjectFileBrowserRows(
 
 function getProjectFileBrowserChildren(
   row: ProjectFileBrowserRow,
-  directoryChildrenByPath: Readonly<Record<string, ProjectFileChild[]>>,
+  directoryPagesByPath: Readonly<Record<string, ProjectDirectoryPage>>,
   activeContent: ProjectFileContent | null,
 ) {
+  if (directoryPagesByPath[row.relativePath]) {
+    return directoryPagesByPath[row.relativePath].entries;
+  }
   if (activeContent?.kind === "directory" && activeContent.relativePath === row.relativePath) {
     return activeContent.directoryChildren;
   }
-  return directoryChildrenByPath[row.relativePath] ?? row.children;
+  return row.children;
 }
 
 export function formatProjectFileRowMeta(row: ProjectFileBrowserRow) {
@@ -227,6 +303,7 @@ export function projectFileChildToEntry(child: ProjectFileChild): ProjectFileEnt
     sizeBytes: enrichedChild.sizeBytes ?? null,
     extension: enrichedChild.extension ?? (child.kind === "file" ? getProjectFileExtensionFromName(child.name) : null),
     childCount: enrichedChild.childCount ?? (child.kind === "directory" ? 0 : null),
+    isSymlink: enrichedChild.isSymlink ?? false,
     children: enrichedChild.children ?? [],
   };
 }

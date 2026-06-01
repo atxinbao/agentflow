@@ -7,10 +7,13 @@ import type {
   LocalMetricsSnapshot,
   LocalProjectModelSnapshot,
   LocalSearchSnapshot,
+  ProjectDirectoryPage,
   ProjectFileChild,
   ProjectFileContent,
   ProjectFileEntry,
+  ProjectFileSearchSnapshot,
   ProjectFileTextRange,
+  ProjectFileViewMode,
   ProjectFilesSnapshot,
   ProjectMilestoneIssueViewModelSnapshot,
   WorkbenchBoundary,
@@ -384,12 +387,15 @@ export function createBrowserPreviewSearchSnapshot(query: string, projectRoot = 
   };
 }
 
-export function createBrowserPreviewProjectFilesSnapshot(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): ProjectFilesSnapshot {
+export function createBrowserPreviewProjectFilesSnapshot(
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+  viewMode: ProjectFileViewMode | string = "source",
+): ProjectFilesSnapshot {
   return {
     version: "project-files.browser-preview",
     projectRoot,
     selectedPath: "README.md",
-    entries: browserPreviewTopLevelEntries(),
+    entries: filterBrowserPreviewEntries(browserPreviewTopLevelEntries(), viewMode),
   };
 }
 
@@ -404,15 +410,7 @@ export function createBrowserPreviewGraphStatus(projectRoot = BROWSER_PREVIEW_PR
     updatedAt: previewTimestamp,
     lastError: null,
     watcherStatus: "mock",
-    watcherBackend: "mock",
-    watcherDetail: {
-      platform: "browser-preview",
-      recursive: true,
-      ignoredPathCount: 0,
-      lastEventAt: null,
-      lastEventKind: null,
-      lastError: null,
-    },
+    watcherBackend: "browser-preview",
     preflightStatus: "ready",
     protectionStatus: "ready",
     degradedReasons: [],
@@ -543,19 +541,75 @@ export function createBrowserPreviewProjectFileTextRange(
 ): ProjectFileTextRange {
   const content = createBrowserPreviewProjectFileContent(relativePath, projectRoot);
   const lines = (content.content ?? "").split("\n");
-  const normalizedStartLine = Math.max(1, Math.floor(startLine || 1));
-  const normalizedLineCount = Math.max(1, Math.floor(lineCount || 240));
-  const startIndex = normalizedStartLine - 1;
-  const selectedLines = lines.slice(startIndex, startIndex + normalizedLineCount);
-  const endLine = selectedLines.length > 0 ? normalizedStartLine + selectedLines.length - 1 : 0;
-
+  const safeStartLine = Math.max(1, Math.floor(startLine || 1));
+  const safeLineCount = Math.max(1, Math.floor(lineCount || 240));
+  const startIndex = Math.min(safeStartLine - 1, lines.length);
+  const endIndex = Math.min(startIndex + safeLineCount, lines.length);
   return {
+    version: "project-file-text-range.v1",
+    projectRoot,
     relativePath: content.relativePath,
-    startLine: normalizedStartLine,
-    endLine,
+    startLine: safeStartLine,
+    endLine: endIndex,
     totalLines: lines.length,
-    content: selectedLines.join("\n"),
-    truncated: endLine < lines.length,
+    content: lines.slice(startIndex, endIndex).join("\n"),
+    truncated: endIndex < lines.length,
+  };
+}
+
+export function createBrowserPreviewProjectDirectoryPage(
+  directoryPath: string,
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+  viewMode: ProjectFileViewMode | string = "source",
+  cursor?: string | null,
+): ProjectDirectoryPage {
+  const normalizedPath = normalizeProjectRelativePath(directoryPath);
+  const offset = cursor ? Number.parseInt(cursor, 10) || 0 : 0;
+  const limit = 80;
+  const allEntries = filterBrowserPreviewChildren(browserPreviewDirectoryChildren(normalizedPath), viewMode);
+  const entries = allEntries.slice(offset, offset + limit);
+  const nextOffset = offset + entries.length;
+  return {
+    version: "project-directory-page.browser-preview",
+    projectRoot,
+    directoryPath: normalizedPath,
+    entries,
+    nextCursor: nextOffset < allEntries.length ? String(nextOffset) : null,
+    totalChildren: allEntries.length,
+    limit,
+    viewMode,
+  };
+}
+
+export function createBrowserPreviewProjectFileSearchSnapshot(
+  query: string,
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+  viewMode: ProjectFileViewMode | string = "source",
+): ProjectFileSearchSnapshot {
+  const normalizedQuery = query.trim().toLowerCase();
+  const results = flattenBrowserPreviewEntries(filterBrowserPreviewEntries(browserPreviewTopLevelEntries(), viewMode))
+    .filter((entry) => {
+      const path = entry.relativePath.toLowerCase();
+      const name = entry.name.toLowerCase();
+      return name.includes(normalizedQuery) || path.includes(normalizedQuery);
+    })
+    .slice(0, 80)
+    .map((entry) => ({
+      name: entry.name,
+      relativePath: entry.relativePath,
+      kind: entry.kind,
+      extension: entry.extension,
+      modifiedAt: entry.modifiedAt,
+      sizeBytes: entry.sizeBytes,
+      score: entry.name.toLowerCase().startsWith(normalizedQuery) ? 100 : 60,
+      matchReason: entry.name.toLowerCase().includes(normalizedQuery) ? "name" : "path",
+    }));
+  return {
+    version: "project-file-search.browser-preview",
+    projectRoot,
+    query,
+    viewMode,
+    results,
   };
 }
 
@@ -629,6 +683,7 @@ function browserPreviewDirectoryEntry(relativePath: string, children: ProjectFil
     sizeBytes: null,
     extension: null,
     childCount: children.length,
+    isSymlink: false,
     children,
   };
 }
@@ -644,6 +699,7 @@ function browserPreviewFileEntry(relativePath: string, kind: "file", sizeBytes?:
     sizeBytes: sizeBytes ?? 512,
     extension: getProjectFileExtensionFromName(name),
     childCount: null,
+    isSymlink: false,
     children: [],
   };
 }
@@ -654,6 +710,12 @@ function browserPreviewDirectoryChild(relativePath: string): ProjectFileChild {
     name,
     relativePath,
     kind: "directory",
+    createdAt: previewTimestamp,
+    modifiedAt: previewTimestamp,
+    sizeBytes: null,
+    extension: null,
+    childCount: browserPreviewDirectoryChildren(relativePath).length,
+    isSymlink: false,
   };
 }
 
@@ -663,7 +725,48 @@ function browserPreviewFileChild(relativePath: string): ProjectFileChild {
     name,
     relativePath,
     kind: "file",
+    createdAt: previewTimestamp,
+    modifiedAt: previewTimestamp,
+    sizeBytes: browserPreviewFileContentByPath(relativePath, BROWSER_PREVIEW_PROJECT_ROOT).content.length,
+    extension: getProjectFileExtensionFromName(name),
+    childCount: null,
+    isSymlink: false,
   };
+}
+
+function filterBrowserPreviewEntries(entries: ProjectFileEntry[], viewMode: ProjectFileViewMode | string) {
+  if (viewMode === "all") {
+    return entries;
+  }
+  return entries.filter((entry) => !browserPreviewSourceExcluded(entry.relativePath));
+}
+
+function filterBrowserPreviewChildren(children: ProjectFileChild[], viewMode: ProjectFileViewMode | string) {
+  if (viewMode === "all") {
+    return children;
+  }
+  return children.filter((entry) => !browserPreviewSourceExcluded(entry.relativePath));
+}
+
+function browserPreviewSourceExcluded(relativePath: string) {
+  return relativePath
+    .split("/")
+    .some((part) => [".git", ".agentflow", ".codex", "target", "node_modules", "dist", "build", "graphify-out"].includes(part));
+}
+
+function flattenBrowserPreviewEntries(entries: ProjectFileEntry[]): ProjectFileEntry[] {
+  const result: ProjectFileEntry[] = [];
+  function visit(entry: ProjectFileEntry) {
+    result.push(entry);
+    entry.children.forEach((child) => {
+      const childEntry = findBrowserPreviewEntry(child.relativePath);
+      if (childEntry) {
+        visit(childEntry);
+      }
+    });
+  }
+  entries.forEach(visit);
+  return result;
 }
 
 function browserPreviewFileContentByPath(relativePath: string, projectRoot: string) {

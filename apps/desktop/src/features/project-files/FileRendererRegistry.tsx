@@ -536,12 +536,46 @@ function shikiLanguage(language: string, name: string) {
   const extension = fileExtension(name).toLowerCase();
   if (language === "config" || name === ".gitignore") return "ignore";
   if (language === "shell") return "bash";
-  if (["toml", "json", "yaml", "rust", "typescript", "javascript", "css", "html", "markdown"].includes(language)) {
+  if (
+    [
+      "toml",
+      "json",
+      "yaml",
+      "rust",
+      "typescript",
+      "javascript",
+      "css",
+      "html",
+      "markdown",
+      "python",
+      "go",
+      "java",
+      "kotlin",
+      "swift",
+      "dart",
+      "c",
+      "cpp",
+      "csharp",
+      "php",
+      "ruby",
+      "sql",
+      "powershell",
+      "xml",
+    ].includes(language)
+  ) {
     return language;
   }
+  if (language === "objective-c") return "objective-c";
+  if (language === "dockerfile" || name.toLowerCase() === "dockerfile") return "dockerfile";
+  if (language === "makefile" || name.toLowerCase() === "makefile") return "makefile";
   if (extension === "tsx") return "tsx";
   if (extension === "ts") return "typescript";
   if (extension === "rs") return "rust";
+  if (extension === "py") return "python";
+  if (extension === "go") return "go";
+  if (extension === "kt") return "kotlin";
+  if (extension === "cs") return "csharp";
+  if (extension === "ps1") return "powershell";
   if (extension === "sh") return "bash";
   return "text";
 }

@@ -1,10 +1,13 @@
 import type {
+  ProjectDirectoryPage,
   ProjectFileChild,
   ProjectFileContent,
   ProjectFileEntry,
   ProjectFileTextRange,
-  ProjectFilesSnapshot,
+  ProjectFileSearchSnapshot,
   ProjectRecommendedFile,
+  ProjectFileViewMode,
+  ProjectFilesSnapshot,
 } from "../../types";
 
 export type ProjectFilesState = {
@@ -13,6 +16,14 @@ export type ProjectFilesState = {
   selectedPath: string | null;
   error: string | null;
   source: "tauri" | "preview" | "unavailable" | "loading";
+  viewMode: ProjectFileViewMode;
+  loading: boolean;
+  loadingPath: string | null;
+  directoryPages: Record<string, ProjectDirectoryPage>;
+  searchQuery: string;
+  searchSnapshot: ProjectFileSearchSnapshot | null;
+  searchLoading: boolean;
+  recentPaths: string[];
 };
 
 export type ProjectFileBrowserRow = {
@@ -21,14 +32,26 @@ export type ProjectFileBrowserRow = {
   kind: "file" | "directory";
   createdAt?: number | null;
   modifiedAt?: number | null;
-  sizeBytes?: number | null;
   extension?: string | null;
+  sizeBytes?: number | null;
   childCount?: number | null;
   isSymlink?: boolean;
-  missing?: boolean;
-  recommendation?: ProjectRecommendedFile;
   children: ProjectFileChild[];
   depth: number;
+  hasMoreChildren?: boolean;
+  nextCursor?: string | null;
+  totalChildren?: number | null;
+  missing?: boolean;
+  recommendation?: ProjectRecommendedFile;
 };
 
-export type { ProjectFileChild, ProjectFileContent, ProjectFileEntry, ProjectFileTextRange, ProjectRecommendedFile };
+export type {
+  ProjectDirectoryPage,
+  ProjectFileChild,
+  ProjectFileContent,
+  ProjectFileEntry,
+  ProjectFileSearchSnapshot,
+  ProjectFileTextRange,
+  ProjectRecommendedFile,
+  ProjectFileViewMode,
+};

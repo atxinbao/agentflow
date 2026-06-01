@@ -11,6 +11,7 @@
 - [002-graph-v1.md](002-graph-v1.md)
 - [002-1-graph-v1-completion.md](002-1-graph-v1-completion.md)
 - [002-2-graph-v1-os-native-watcher-closeout.md](002-2-graph-v1-os-native-watcher-closeout.md)
+- [003-project-file-reader-v1-completion.md](003-project-file-reader-v1-completion.md)
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 

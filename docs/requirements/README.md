@@ -27,6 +27,7 @@
 - [002-graph-v1.md](002-graph-v1.md)
 - [002-1-graph-v1-completion.md](002-1-graph-v1-completion.md)
 - [002-2-graph-v1-os-native-watcher-closeout.md](002-2-graph-v1-os-native-watcher-closeout.md)
+- [003-project-file-reader-v1-completion.md](003-project-file-reader-v1-completion.md)
 - [next-requirements.md](next-requirements.md)
 
 ## 不继承内容
