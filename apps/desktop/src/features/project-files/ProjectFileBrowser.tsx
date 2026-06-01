@@ -9,8 +9,8 @@ import {
 } from "./projectFileUtils";
 
 const viewModeOptions: Array<{ value: ProjectFileViewMode; label: string }> = [
-  { value: "source", label: "源码" },
   { value: "all", label: "全部" },
+  { value: "source", label: "源码" },
   { value: "recent", label: "最近" },
 ];
 
@@ -20,8 +20,6 @@ export function ProjectFileBrowser({
   onChangeViewMode,
   onSearchChange,
   onSelectRow,
-  recommendedFileWarning,
-  recommendedRows,
   rows,
   searchLoading,
   searchQuery,
@@ -33,16 +31,12 @@ export function ProjectFileBrowser({
   onChangeViewMode: (viewMode: ProjectFileViewMode) => void;
   onSearchChange: (query: string) => void;
   onSelectRow: (row: ProjectFileBrowserRow) => void;
-  recommendedFileWarning?: string | null;
-  recommendedRows: ProjectFileBrowserRow[];
   rows: ProjectFileBrowserRow[];
   searchLoading: boolean;
   searchQuery: string;
   selectedPath: string | null;
   viewMode: ProjectFileViewMode;
 }) {
-  const recommendedPathSet = new Set(recommendedRows.map((row) => row.relativePath));
-
   return (
     <aside className="project-file-browser" aria-label="项目文件列表">
       <header className="project-file-browser-toolbar">
@@ -70,37 +64,6 @@ export function ProjectFileBrowser({
         </div>
       </header>
       <div className="project-file-table" role="table" aria-label="本地文件列表">
-        {recommendedRows.length > 0 ? (
-          <section className="project-file-recommended" aria-label="推荐文件">
-            <div className="project-file-recommended-heading">
-              <span>推荐文件</span>
-              <small>来自代码地图</small>
-            </div>
-            {recommendedFileWarning ? <p className="project-file-recommended-warning">{recommendedFileWarning}</p> : null}
-            <div className="project-file-recommended-list">
-              {recommendedRows.map((row) => {
-                const isMissing = Boolean(row.missing);
-                const statusLabel = recommendedStatusLabel(row.recommendation?.status);
-                const sourceLabel = recommendedSourceLabel(row.recommendation?.source);
-                const FileKindIcon = getProjectFileIconForNode(row.name, row.extension, row.kind, isHiddenProjectFilePath(row.relativePath));
-                return (
-                  <button
-                    className={`project-file-recommended-chip${isMissing ? " missing" : ""}`}
-                    key={row.relativePath}
-                    onClick={() => onSelectRow(row)}
-                    title={isMissing ? "推荐文件已不存在" : row.relativePath}
-                    type="button"
-                  >
-                    <FileKindIcon size={14} />
-                    <span>{row.name}</span>
-                    <small>{isMissing ? "已不存在" : statusLabel}</small>
-                    {sourceLabel ? <small>{sourceLabel}</small> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
         <div className="project-file-table-head" role="row">
           <span role="columnheader">名称</span>
           <span role="columnheader">修改日期</span>
@@ -113,7 +76,6 @@ export function ProjectFileBrowser({
           ) : (
             rows.map((row) => {
               const isDirectory = row.kind === "directory";
-              const isRecommended = recommendedPathSet.has(row.relativePath);
               const isHidden = isHiddenProjectFilePath(row.relativePath);
               const fileTone = getProjectFileToneForNode(row.name, row.extension, row.kind, isHidden);
               const FileKindIcon = getProjectFileIconForNode(row.name, row.extension, row.kind, isHidden);
@@ -155,7 +117,6 @@ export function ProjectFileBrowser({
                     </span>
                     <span className="project-file-label">
                       {row.name}
-                      {isRecommended ? <small>推荐</small> : null}
                       {row.isSymlink ? <small>链接</small> : null}
                     </span>
                   </span>
@@ -168,37 +129,6 @@ export function ProjectFileBrowser({
           )}
         </div>
       </div>
-      <section className="project-readonly-note">
-        <h3>只读展示</h3>
-        <p>点击右侧任意文件或文件夹后，主体区域加载对应内容或目录概览。</p>
-        <p>不执行命令，不写入工作区。</p>
-      </section>
     </aside>
   );
-}
-
-function recommendedStatusLabel(status?: NonNullable<ProjectFileBrowserRow["recommendation"]>["status"]) {
-  switch (status) {
-    case "available":
-      return "可打开";
-    case "missing":
-      return "缺失";
-    case "unloaded":
-      return "未加载";
-    default:
-      return "推荐";
-  }
-}
-
-function recommendedSourceLabel(source?: NonNullable<ProjectFileBrowserRow["recommendation"]>["source"]) {
-  switch (source) {
-    case "context-pack-file":
-      return "上下文";
-    case "context-pack-test":
-      return "测试";
-    case "manifest-important":
-      return "清单";
-    default:
-      return null;
-  }
 }

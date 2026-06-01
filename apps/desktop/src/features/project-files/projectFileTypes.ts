@@ -5,7 +5,6 @@ import type {
   ProjectFileEntry,
   ProjectFileTextRange,
   ProjectFileSearchSnapshot,
-  ProjectRecommendedFile,
   ProjectFileViewMode,
   ProjectFilesSnapshot,
 } from "../../types";
@@ -42,7 +41,6 @@ export type ProjectFileBrowserRow = {
   nextCursor?: string | null;
   totalChildren?: number | null;
   missing?: boolean;
-  recommendation?: ProjectRecommendedFile;
 };
 
 export type {
@@ -52,6 +50,5 @@ export type {
   ProjectFileEntry,
   ProjectFileSearchSnapshot,
   ProjectFileTextRange,
-  ProjectRecommendedFile,
   ProjectFileViewMode,
 };

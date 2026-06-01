@@ -391,14 +391,6 @@ export type ProjectFileTextRange = {
   truncated: boolean;
 };
 
-export type ProjectRecommendedFile = {
-  path: string;
-  name: string;
-  source: "context-pack-file" | "context-pack-test" | "manifest-important";
-  reason: string;
-  status: "available" | "missing" | "unloaded";
-};
-
 export type GraphStatus = "missing" | "indexing" | "ready" | "stale" | "failed" | "degraded";
 
 export type GraphStatusSnapshot = {

@@ -21,7 +21,7 @@ import { findProjectFileEntry, normalizeProjectRelativePath } from "./projectFil
 
 const PROJECT_FILE_READER_STATE_KEY = "agentflow.projectFileReaderState.v1";
 const RECENT_FILE_LIMIT = 20;
-const DEFAULT_PROJECT_FILE_VIEW_MODE: ProjectFileViewMode = "source";
+const DEFAULT_PROJECT_FILE_VIEW_MODE: ProjectFileViewMode = "all";
 
 type PersistedProjectFileReaderProjectState = {
   projectRoot?: string;
@@ -55,13 +55,37 @@ function readableProjectFilesError(error: unknown) {
 export function useProjectFiles(selectedProjectRoot: string | null) {
   const [projectFilesState, setProjectFilesState] = useState<ProjectFilesState>(() => {
     const persisted = readPersistedProjectFileReaderState(selectedProjectRoot);
+    const initialViewMode = persisted.viewMode ?? DEFAULT_PROJECT_FILE_VIEW_MODE;
+    if (isBrowserPreviewRuntime()) {
+      const projectRoot = selectedProjectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT;
+      const filesSnapshot = createBrowserPreviewProjectFilesSnapshot(projectRoot, initialViewMode);
+      const selectedPath =
+        persisted.selectedPath && findProjectFileEntry(filesSnapshot.entries, persisted.selectedPath)
+          ? persisted.selectedPath
+          : filesSnapshot.selectedPath ?? filesSnapshot.entries.at(0)?.relativePath ?? "README.md";
+      return {
+        snapshot: filesSnapshot,
+        content: createBrowserPreviewProjectFileContent(selectedPath, filesSnapshot.projectRoot),
+        selectedPath,
+        error: null,
+        source: "preview",
+        viewMode: initialViewMode,
+        loading: false,
+        loadingPath: null,
+        directoryPages: {},
+        searchQuery: "",
+        searchSnapshot: null,
+        searchLoading: false,
+        recentPaths: persisted.recentPaths ?? [],
+      };
+    }
     return {
       snapshot: null,
       content: null,
       selectedPath: persisted.selectedPath ?? null,
       error: null,
       source: "loading",
-      viewMode: persisted.viewMode ?? DEFAULT_PROJECT_FILE_VIEW_MODE,
+      viewMode: initialViewMode,
       loading: false,
       loadingPath: null,
       directoryPages: {},
@@ -97,6 +121,21 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
       const projectRoot = projectFilesState.snapshot?.projectRoot ?? selectedProjectRoot;
       const requestId = requestCounter.current + 1;
       requestCounter.current = requestId;
+      if (isBrowserPreviewRuntime()) {
+        const previewProjectRoot = projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT;
+        const content = createBrowserPreviewProjectFileContent(relativePath, previewProjectRoot);
+        setProjectFilesState((current) => ({
+          ...current,
+          content,
+          selectedPath: content.relativePath,
+          error: null,
+          source: "preview",
+          loading: false,
+          loadingPath: null,
+        }));
+        rememberProjectFile(content.relativePath);
+        return;
+      }
       setProjectFilesState((current) => ({
         ...current,
         selectedPath: relativePath,
@@ -121,21 +160,6 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
         rememberProjectFile(relativePath);
       } catch (error) {
         if (requestCounter.current !== requestId) {
-          return;
-        }
-        if (isBrowserPreviewRuntime()) {
-          const previewProjectRoot = projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT;
-          const content = createBrowserPreviewProjectFileContent(relativePath, previewProjectRoot);
-          setProjectFilesState((current) => ({
-            ...current,
-            content,
-            selectedPath: content.relativePath,
-            error: null,
-            source: "preview",
-            loading: false,
-            loadingPath: null,
-          }));
-          rememberProjectFile(content.relativePath);
           return;
         }
         const errorMessage = readableProjectFilesError(error);
@@ -164,6 +188,33 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
       const selectedPathPreference = selectedPathHint ?? persistedState.selectedPath ?? projectFilesState.selectedPath;
       const requestId = requestCounter.current + 1;
       requestCounter.current = requestId;
+      if (isBrowserPreviewRuntime()) {
+        const filesSnapshot = createBrowserPreviewProjectFilesSnapshot(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT, viewMode);
+        const selectedPath =
+          selectedPathPreference && findProjectFileEntry(filesSnapshot.entries, selectedPathPreference)
+            ? selectedPathPreference
+            : filesSnapshot.selectedPath ?? filesSnapshot.entries.at(0)?.relativePath ?? "README.md";
+        setProjectFilesState((current) => ({
+          ...current,
+          snapshot: filesSnapshot,
+          content: createBrowserPreviewProjectFileContent(selectedPath, filesSnapshot.projectRoot),
+          selectedPath,
+          error: null,
+          source: "preview",
+          viewMode,
+          loading: false,
+          loadingPath: null,
+          directoryPages: {},
+          searchSnapshot: null,
+          recentPaths: persistedState.recentPaths ?? current.recentPaths,
+        }));
+        persistProjectFileReaderState(filesSnapshot.projectRoot, {
+          selectedPath,
+          viewMode,
+          recentPaths: persistedState.recentPaths ?? projectFilesState.recentPaths,
+        });
+        return;
+      }
       setProjectFilesState((current) => ({
         ...current,
         error: null,
@@ -214,33 +265,6 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
         if (requestCounter.current !== requestId) {
           return;
         }
-        if (isBrowserPreviewRuntime()) {
-          const filesSnapshot = createBrowserPreviewProjectFilesSnapshot(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT, viewMode);
-          const selectedPath =
-            selectedPathPreference && findProjectFileEntry(filesSnapshot.entries, selectedPathPreference)
-              ? selectedPathPreference
-              : filesSnapshot.selectedPath ?? filesSnapshot.entries.at(0)?.relativePath ?? "README.md";
-          setProjectFilesState((current) => ({
-            ...current,
-            snapshot: filesSnapshot,
-            content: createBrowserPreviewProjectFileContent(selectedPath, filesSnapshot.projectRoot),
-            selectedPath,
-            error: null,
-            source: "preview",
-            viewMode,
-            loading: false,
-            loadingPath: null,
-            directoryPages: {},
-            searchSnapshot: null,
-            recentPaths: persistedState.recentPaths ?? current.recentPaths,
-          }));
-          persistProjectFileReaderState(filesSnapshot.projectRoot, {
-            selectedPath,
-            viewMode,
-            recentPaths: persistedState.recentPaths ?? projectFilesState.recentPaths,
-          });
-          return;
-        }
         const errorMessage = readableProjectFilesError(error);
         setProjectFilesState((current) => ({
           ...current,
@@ -277,6 +301,19 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
     async (directoryPath: string, cursor?: string | null) => {
       const projectRoot = projectFilesState.snapshot?.projectRoot ?? selectedProjectRoot;
       const viewMode = projectFilesState.viewMode;
+      if (isBrowserPreviewRuntime()) {
+        const page = createBrowserPreviewProjectDirectoryPage(directoryPath, projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT, viewMode, cursor);
+        setProjectFilesState((current) => ({
+          ...current,
+          directoryPages: {
+            ...current.directoryPages,
+            [directoryPath]: mergeDirectoryPages(current.directoryPages[directoryPath], page),
+          },
+          error: null,
+          source: "preview",
+        }));
+        return page;
+      }
       try {
         const page = await invoke<ProjectDirectoryPage>("load_project_directory_page", {
           projectRoot,
@@ -295,19 +332,6 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
         }));
         return page;
       } catch (error) {
-        if (isBrowserPreviewRuntime()) {
-          const page = createBrowserPreviewProjectDirectoryPage(directoryPath, projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT, viewMode, cursor);
-          setProjectFilesState((current) => ({
-            ...current,
-            directoryPages: {
-              ...current.directoryPages,
-              [directoryPath]: mergeDirectoryPages(current.directoryPages[directoryPath], page),
-            },
-            error: null,
-            source: "preview",
-          }));
-          return page;
-        }
         setProjectFilesState((current) => ({
           ...current,
           error: readableProjectFilesError(error),
@@ -331,6 +355,21 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
       if (!normalizedQuery) {
         return null;
       }
+      if (isBrowserPreviewRuntime()) {
+        const searchSnapshot = createBrowserPreviewProjectFileSearchSnapshot(
+          normalizedQuery,
+          projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT,
+          projectFilesState.viewMode,
+        );
+        setProjectFilesState((current) => ({
+          ...current,
+          searchSnapshot,
+          searchLoading: false,
+          error: null,
+          source: "preview",
+        }));
+        return searchSnapshot;
+      }
       try {
         const searchSnapshot = await invoke<ProjectFileSearchSnapshot>("search_project_files", {
           projectRoot,
@@ -345,21 +384,6 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
         }));
         return searchSnapshot;
       } catch (error) {
-        if (isBrowserPreviewRuntime()) {
-          const searchSnapshot = createBrowserPreviewProjectFileSearchSnapshot(
-            normalizedQuery,
-            projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT,
-            projectFilesState.viewMode,
-          );
-          setProjectFilesState((current) => ({
-            ...current,
-            searchSnapshot,
-            searchLoading: false,
-            error: null,
-            source: "preview",
-          }));
-          return searchSnapshot;
-        }
         setProjectFilesState((current) => ({
           ...current,
           searchLoading: false,
@@ -374,6 +398,14 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
   const loadProjectFileTextRange = useCallback(
     async (relativePath: string, startLine: number, lineCount: number): Promise<ProjectFileTextRange> => {
       const projectRoot = projectFilesState.snapshot?.projectRoot ?? selectedProjectRoot;
+      if (isBrowserPreviewRuntime()) {
+        return createBrowserPreviewProjectFileTextRange(
+          relativePath,
+          startLine,
+          lineCount,
+          projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT,
+        );
+      }
       try {
         return await invoke<ProjectFileTextRange>("load_project_file_text_range", {
           projectRoot,
@@ -382,14 +414,6 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
           lineCount,
         });
       } catch (error) {
-        if (isBrowserPreviewRuntime()) {
-          return createBrowserPreviewProjectFileTextRange(
-            relativePath,
-            startLine,
-            lineCount,
-            projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT,
-          );
-        }
         throw new Error(readableProjectFilesError(error));
       }
     },

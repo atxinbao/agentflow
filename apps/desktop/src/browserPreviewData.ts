@@ -629,25 +629,9 @@ function browserPreviewTopLevelEntries(): ProjectFileEntry[] {
 }
 
 function browserPreviewDirectoryChildren(path: string): ProjectFileChild[] {
-  const childrenByPath: Record<string, ProjectFileChild[]> = {
-    ".git": [browserPreviewFileChild(".git/HEAD"), browserPreviewFileChild(".git/config")],
-    apps: [browserPreviewDirectoryChild("apps/desktop")],
-    "apps/desktop": [browserPreviewFileChild("apps/desktop/package.json"), browserPreviewDirectoryChild("apps/desktop/src")],
-    "apps/desktop/src": [browserPreviewFileChild("apps/desktop/src/App.tsx"), browserPreviewDirectoryChild("apps/desktop/src/features")],
-    "apps/desktop/src/features": [browserPreviewDirectoryChild("apps/desktop/src/features/project-files")],
-    "apps/desktop/src/features/project-files": [
-      browserPreviewFileChild("apps/desktop/src/features/project-files/useProjectFiles.ts"),
-      browserPreviewFileChild("apps/desktop/src/features/project-files/ProjectLocalFilesPage.tsx"),
-    ],
-    crates: [browserPreviewDirectoryChild("crates/agentflow-core")],
-    "crates/agentflow-core": [browserPreviewDirectoryChild("crates/agentflow-core/src")],
-    "crates/agentflow-core/src": [browserPreviewFileChild("crates/agentflow-core/src/lib.rs")],
-    docs: [browserPreviewDirectoryChild("docs/requirements")],
-    "docs/requirements": [browserPreviewFileChild("docs/requirements/001-add-local-project.md")],
-    target: [browserPreviewDirectoryChild("target/debug")],
-    "target/debug": [],
-  };
-  return childrenByPath[path] ?? [];
+  return browserPreviewDirectoryChildSpecs(path).map((child) =>
+    child.kind === "directory" ? browserPreviewDirectoryChild(child.relativePath) : browserPreviewFileChild(child.relativePath),
+  );
 }
 
 function findBrowserPreviewEntry(relativePath: string): ProjectFileEntry | null {
@@ -658,7 +642,7 @@ function findBrowserPreviewEntry(relativePath: string): ProjectFileEntry | null 
     return directTopLevel;
   }
   const name = normalizedPath.split("/").at(-1) ?? normalizedPath;
-  const isDirectory = browserPreviewDirectoryChildren(normalizedPath).length > 0 || ["apps/desktop", "apps/desktop/src", "crates/agentflow-core", "docs/requirements", "target/debug"].includes(normalizedPath);
+  const isDirectory = browserPreviewDirectoryPathSet.has(normalizedPath);
   return {
     name,
     relativePath: normalizedPath,
@@ -667,7 +651,7 @@ function findBrowserPreviewEntry(relativePath: string): ProjectFileEntry | null 
     modifiedAt: previewTimestamp,
     sizeBytes: isDirectory ? null : browserPreviewFileContentByPath(normalizedPath, BROWSER_PREVIEW_PROJECT_ROOT).content.length,
     extension: isDirectory ? null : getProjectFileExtensionFromName(name),
-    childCount: isDirectory ? browserPreviewDirectoryChildren(normalizedPath).length : null,
+    childCount: isDirectory ? browserPreviewDirectoryChildSpecs(normalizedPath).length : null,
     children: isDirectory ? browserPreviewDirectoryChildren(normalizedPath) : [],
   };
 }
@@ -714,9 +698,56 @@ function browserPreviewDirectoryChild(relativePath: string): ProjectFileChild {
     modifiedAt: previewTimestamp,
     sizeBytes: null,
     extension: null,
-    childCount: browserPreviewDirectoryChildren(relativePath).length,
+    childCount: browserPreviewDirectoryChildSpecs(relativePath).length,
     isSymlink: false,
   };
+}
+
+const browserPreviewDirectoryPathSet = new Set([
+  ".git",
+  "apps",
+  "apps/desktop",
+  "apps/desktop/src",
+  "apps/desktop/src/features",
+  "apps/desktop/src/features/project-files",
+  "crates",
+  "crates/agentflow-core",
+  "crates/agentflow-core/src",
+  "docs",
+  "docs/requirements",
+  "target",
+  "target/debug",
+]);
+
+function browserPreviewDirectoryChildSpecs(path: string): Array<{ relativePath: string; kind: "directory" | "file" }> {
+  const childrenByPath: Record<string, Array<{ relativePath: string; kind: "directory" | "file" }>> = {
+    ".git": [
+      { relativePath: ".git/HEAD", kind: "file" },
+      { relativePath: ".git/config", kind: "file" },
+    ],
+    apps: [{ relativePath: "apps/desktop", kind: "directory" }],
+    "apps/desktop": [
+      { relativePath: "apps/desktop/package.json", kind: "file" },
+      { relativePath: "apps/desktop/src", kind: "directory" },
+    ],
+    "apps/desktop/src": [
+      { relativePath: "apps/desktop/src/App.tsx", kind: "file" },
+      { relativePath: "apps/desktop/src/features", kind: "directory" },
+    ],
+    "apps/desktop/src/features": [{ relativePath: "apps/desktop/src/features/project-files", kind: "directory" }],
+    "apps/desktop/src/features/project-files": [
+      { relativePath: "apps/desktop/src/features/project-files/useProjectFiles.ts", kind: "file" },
+      { relativePath: "apps/desktop/src/features/project-files/ProjectLocalFilesPage.tsx", kind: "file" },
+    ],
+    crates: [{ relativePath: "crates/agentflow-core", kind: "directory" }],
+    "crates/agentflow-core": [{ relativePath: "crates/agentflow-core/src", kind: "directory" }],
+    "crates/agentflow-core/src": [{ relativePath: "crates/agentflow-core/src/lib.rs", kind: "file" }],
+    docs: [{ relativePath: "docs/requirements", kind: "directory" }],
+    "docs/requirements": [{ relativePath: "docs/requirements/001-add-local-project.md", kind: "file" }],
+    target: [{ relativePath: "target/debug", kind: "directory" }],
+    "target/debug": [],
+  };
+  return childrenByPath[path] ?? [];
 }
 
 function browserPreviewFileChild(relativePath: string): ProjectFileChild {

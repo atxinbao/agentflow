@@ -346,8 +346,39 @@ function App() {
     [projectFilesState, projectGraphState],
   );
 
+  function applyBrowserPreviewSnapshot(projectRoot: string) {
+    const previewSnapshot = createBrowserPreviewWorkbenchSnapshot(projectRoot);
+    const previewMetrics = createBrowserPreviewMetricsSnapshot(projectRoot);
+    const previewProjectModel = createBrowserPreviewProjectModelSnapshot(projectRoot);
+    const previewProjectViewModel = createBrowserPreviewProjectViewModelSnapshot(projectRoot);
+    setLoadState({
+      snapshot: previewSnapshot,
+      metrics: previewMetrics,
+      projectModel: previewProjectModel,
+      projectViewModel: previewProjectViewModel,
+      error: null,
+      source: "preview",
+    });
+    const defaultProjectId = previewProjectViewModel.workspace?.activeProjectId ?? previewProjectViewModel.projects.at(0)?.id ?? null;
+    setSelectedTeamId((current) => current ?? previewProjectViewModel.teams.at(0)?.id ?? null);
+    setSelectedProjectId((current) => current ?? defaultProjectId);
+    setSelectedProjectRoot((current) => current ?? projectRoot);
+    if (defaultProjectId) {
+      setExpandedProjectIds((current) => (current.size > 0 ? current : new Set([defaultProjectId])));
+    }
+    setSelectedViewId((current) => current ?? previewProjectViewModel.views.at(0)?.id ?? null);
+    setSelectedIssueId((current) => current ?? sortedV1Issues(previewProjectViewModel.issues).at(0)?.id ?? null);
+    setSelectedArtifactPath((current) => current ?? null);
+  }
+
   async function loadSnapshot() {
     setLoadState((current) => ({ ...current, error: null }));
+    const previewProjectRoot =
+      selectedProjectRoot ?? projectFilesState.snapshot?.projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT;
+    if (isBrowserPreviewRuntime()) {
+      applyBrowserPreviewSnapshot(previewProjectRoot);
+      return;
+    }
     try {
       const [snapshot, metrics, projectModel, projectViewModel] = await Promise.all([
         invoke<WorkbenchSnapshot>("load_workbench_snapshot"),
@@ -374,28 +405,7 @@ function App() {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const projectRoot = selectedProjectRoot ?? projectFilesState.snapshot?.projectRoot ?? (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : "");
       if (isBrowserPreviewRuntime()) {
-        const previewSnapshot = createBrowserPreviewWorkbenchSnapshot(projectRoot);
-        const previewMetrics = createBrowserPreviewMetricsSnapshot(projectRoot);
-        const previewProjectModel = createBrowserPreviewProjectModelSnapshot(projectRoot);
-        const previewProjectViewModel = createBrowserPreviewProjectViewModelSnapshot(projectRoot);
-        setLoadState({
-          snapshot: previewSnapshot,
-          metrics: previewMetrics,
-          projectModel: previewProjectModel,
-          projectViewModel: previewProjectViewModel,
-          error: null,
-          source: "preview",
-        });
-        const defaultProjectId = previewProjectViewModel.workspace?.activeProjectId ?? previewProjectViewModel.projects.at(0)?.id ?? null;
-        setSelectedTeamId((current) => current ?? previewProjectViewModel.teams.at(0)?.id ?? null);
-        setSelectedProjectId((current) => current ?? defaultProjectId);
-        setSelectedProjectRoot((current) => current ?? projectRoot);
-        if (defaultProjectId) {
-          setExpandedProjectIds((current) => (current.size > 0 ? current : new Set([defaultProjectId])));
-        }
-        setSelectedViewId((current) => current ?? previewProjectViewModel.views.at(0)?.id ?? null);
-        setSelectedIssueId((current) => current ?? sortedV1Issues(previewProjectViewModel.issues).at(0)?.id ?? null);
-        setSelectedArtifactPath((current) => current ?? null);
+        applyBrowserPreviewSnapshot(projectRoot);
         return;
       }
       setLoadState({
@@ -1104,7 +1114,6 @@ function ProjectView({
       {activeProject || canReadSelectedLocalProject ? (
         <ProjectLocalFilesPage
           fileState={projectFilesState}
-          graphState={projectGraphState}
           onChangeViewMode={onSetProjectFileViewMode}
           onLoadDirectoryPage={onLoadProjectDirectoryPage}
           onLoadTextRange={onLoadProjectFileTextRange}
