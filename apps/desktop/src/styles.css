@@ -5605,7 +5605,7 @@ button.milestone-timeline-card:hover,
 
 .workspace {
   display: grid;
-  grid-template-rows: 72px minmax(0, 1fr);
+  grid-template-rows: 72px minmax(0, 1fr) 34px;
   height: 100vh;
   min-height: 0;
   padding: 0;
@@ -5613,7 +5613,7 @@ button.milestone-timeline-card:hover,
   background: var(--af-workspace-bg);
 }
 
-.workspace > :not(.topbar) {
+.workspace > :not(.topbar):not(.shell-status-bar) {
   min-height: 0;
   padding: 20px 24px 24px;
   overflow: auto;
@@ -5687,13 +5687,13 @@ button.milestone-timeline-card:hover,
 }
 
 .sidebar::-webkit-scrollbar,
-.workspace > :not(.topbar)::-webkit-scrollbar {
+.workspace > :not(.topbar):not(.shell-status-bar)::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 .sidebar::-webkit-scrollbar-thumb,
-.workspace > :not(.topbar)::-webkit-scrollbar-thumb {
+.workspace > :not(.topbar):not(.shell-status-bar)::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
   background: #3b3d46;
@@ -5797,7 +5797,7 @@ button.milestone-timeline-card:hover,
     height: 100vh;
   }
 
-  .workspace > :not(.topbar) {
+  .workspace > :not(.topbar):not(.shell-status-bar) {
     padding: 16px;
   }
 

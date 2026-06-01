@@ -1,6 +1,6 @@
 # AgentFlow App Design System
 
-Updated: 2026-05-31
+Updated: 2026-06-01
 Executor: Codex
 
 ## Design Baseline
@@ -36,15 +36,52 @@ Desktop 客户端默认只读：不执行命令，不写入工作区，不创建
 - Workspace：右侧工作区，填满剩余空间。
 - Topbar：工作区顶部固定高度 `72px`。
 - Content：Topbar 下方内容区，独立滚动。
-- 页面切换只替换 Content，不重写 Sidebar 和 Topbar。
+- Statusbar：工作区底部固定高度 `34px`，系统级状态栏，不属于单个页面内容。
+- 页面切换只替换 Content，不重写 Sidebar、Topbar 和 Statusbar。
 
 ```text
 ┌──────────── Sidebar 292 ────────────┬────────────── Workspace ──────────────┐
 │ Brand / Projects / Footer           │ Topbar 72                             │
 │                                     ├───────────────────────────────────────┤
 │                                     │ Page Content                          │
+│                                     ├───────────────────────────────────────┤
+│                                     │ Statusbar 34                          │
 └─────────────────────────────────────┴───────────────────────────────────────┘
 ```
+
+### Agent Status Channel
+
+底部状态栏是 app shell 的一部分，用于承载 Agent 作业相关的系统级状态。后续涉及 Agent 作业、准备、索引、执行现场、验证现场等状态，都应接入同一个 `features/status-channel` 模块，而不是在页面内容里单独实现状态卡。
+
+当前接入项：
+
+- `工作空间`：由 `Project Workspace Manager V0.2` 提供，表示本地项目文件和工作区资源是否已准备。
+- `工作现场`：由 `002 - Graph V1` 提供，表示代码地图 / 工作现场索引是否已准备。
+
+状态栏可见内容一次只显示一个“通道事件 + 状态”，不并列展示多个通道，也不直接平铺模块指标。
+
+```text
+● 工作空间 · 已就绪
+● 工作现场 · 已就绪
+```
+
+上面的两行是不同状态事件的展示格式示例；真实状态栏同一时刻只显示其中一个。选择规则为：异常优先，其次警告、处理中、已就绪、空闲；同一状态级别下按通道优先级选择当前最相关的 Agent 作业状态。
+
+资源数、选中文件、文件数、符号数、关系数、语言列表、错误详情等进入状态项详情提示，不作为底部栏常驻文本。
+
+- Height: `34px`
+- Background: `#17181c`
+- Border top: `1px solid #343842`
+- Padding: `0 16px`
+- Typography: `12px / 16px`
+- Item label examples: `工作空间`, `工作现场`
+- Status label examples: `已就绪`, `准备中`, `未就绪`, `异常`
+- Metrics: 每个状态 item 可保留详情数据，例：资源、选中文件、文件、符号、关系、语言；默认不在状态栏平铺展示。
+- Ready indicator: `#60d394`
+- Working indicator: `#82aaff`
+- Warning indicator: `#f6c177`
+- Failed indicator: `#ff7b86`
+- Error detail: 进入状态项详情提示。
 
 ## Color Tokens
 
@@ -214,6 +251,7 @@ apps/desktop/src-tauri/src/project_files.rs
 - Panels radius: `8px`
 - Panels border: `#343842`
 - Panels background: `#202126`
+- Agent 作业状态统一进入底部 Agent Status Channel，不放在 Project content column。
 
 ## File Reader
 

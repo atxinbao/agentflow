@@ -40,9 +40,9 @@ import {
   projectRootsEqual,
   useProjectGraph,
   useProjectFiles,
-  type ProjectGraphState,
   type ProjectFilesState,
 } from "./features/project-files";
+import { AgentStatusBar, buildAgentStatusItems } from "./features/status-channel";
 import type {
   AgentRun,
   GoalLoopSelection,
@@ -334,6 +334,10 @@ function App() {
     projectFilesState.snapshot?.projectRoot ??
     (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
   const { projectGraphState } = useProjectGraph(graphProjectRoot);
+  const agentStatusItems = useMemo(
+    () => buildAgentStatusItems({ projectFilesState, projectGraphState }),
+    [projectFilesState, projectGraphState],
+  );
 
   async function loadSnapshot() {
     setLoadState((current) => ({ ...current, error: null }));
@@ -740,7 +744,6 @@ function App() {
             onSelectMilestone={setSelectedMilestoneId}
             onSelectProject={setSelectedProjectId}
             onSelectProjectFile={(relativePath) => void selectProjectFile(relativePath)}
-            projectGraphState={projectGraphState}
             projectFilesState={projectFilesState}
             projectViewModel={projectViewModel}
             selectedMilestoneId={selectedMilestoneId}
@@ -788,6 +791,7 @@ function App() {
         {activeView === "views" ? (
           <SavedViewsView onSelectView={setSelectedViewId} selectedViewId={selectedViewId} views={projectViewModel?.views ?? []} />
         ) : null}
+        <AgentStatusBar items={agentStatusItems} />
       </section>
     </main>
   );
@@ -1026,7 +1030,6 @@ function ProjectView({
   onSelectMilestone,
   onSelectProject,
   onSelectProjectFile,
-  projectGraphState,
   projectFilesState,
   projectViewModel,
   selectedMilestoneId,
@@ -1037,7 +1040,6 @@ function ProjectView({
   onSelectMilestone: (milestoneId: string | null) => void;
   onSelectProject: (projectId: string) => void;
   onSelectProjectFile: (relativePath: string) => void;
-  projectGraphState: ProjectGraphState;
   projectFilesState: ProjectFilesState;
   projectViewModel: ProjectMilestoneIssueViewModelSnapshot | null;
   selectedMilestoneId: string | null;
@@ -1078,11 +1080,7 @@ function ProjectView({
   return (
     <section className="project-layout project-local-files-layout">
       {activeProject || canReadSelectedLocalProject ? (
-        <ProjectLocalFilesPage
-          fileState={projectFilesState}
-          graphState={projectGraphState}
-          onSelectFile={onSelectProjectFile}
-        />
+        <ProjectLocalFilesPage fileState={projectFilesState} onSelectFile={onSelectProjectFile} />
       ) : (
         <section className="empty-project-state">
           <h2>添加项目</h2>
