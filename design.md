@@ -1,6 +1,6 @@
 # AgentFlow App Design System
 
-Updated: 2026-05-31
+Updated: 2026-06-01
 Executor: Codex
 
 ## Design Baseline
@@ -36,15 +36,35 @@ Desktop 客户端默认只读：不执行命令，不写入工作区，不创建
 - Workspace：右侧工作区，填满剩余空间。
 - Topbar：工作区顶部固定高度 `72px`。
 - Content：Topbar 下方内容区，独立滚动。
-- 页面切换只替换 Content，不重写 Sidebar 和 Topbar。
+- Statusbar：工作区底部固定高度 `34px`，系统级状态栏，不属于单个页面内容。
+- 页面切换只替换 Content，不重写 Sidebar、Topbar 和 Statusbar。
 
 ```text
 ┌──────────── Sidebar 292 ────────────┬────────────── Workspace ──────────────┐
 │ Brand / Projects / Footer           │ Topbar 72                             │
 │                                     ├───────────────────────────────────────┤
 │                                     │ Page Content                          │
+│                                     ├───────────────────────────────────────┤
+│                                     │ Statusbar 34                          │
 └─────────────────────────────────────┴───────────────────────────────────────┘
 ```
+
+### Statusbar
+
+底部状态栏是 app shell 的一部分，用于承载系统级派生状态。当前 Project 文件阅读器把 `代码地图` 状态放在这里，而不是放在 Project 内容顶部。
+
+- Height: `34px`
+- Background: `#17181c`
+- Border top: `1px solid #343842`
+- Padding: `0 16px`
+- Typography: `12px / 16px`
+- Primary label: `代码地图`
+- Metrics: 文件、符号、关系、语言、数据源
+- Ready indicator: `#60d394`
+- Indexing indicator: `#82aaff`
+- Failed indicator: `#ff7b86`
+- Error text: `#f6c177`
+- Long language/error text uses single-line truncation.
 
 ## Color Tokens
 
@@ -214,6 +234,7 @@ apps/desktop/src-tauri/src/project_files.rs
 - Panels radius: `8px`
 - Panels border: `#343842`
 - Panels background: `#202126`
+- Code map status belongs to the global Statusbar, not the Project content column.
 
 ## File Reader
 
