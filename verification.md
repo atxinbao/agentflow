@@ -3150,3 +3150,48 @@ No files were written and no command was executed.
 - 未改变 Desktop UI。
 - 未改变 Tauri command 名称。
 - 未写入 `.agentflow/` 运行态数据。
+
+## 2026-06-03 Goal Tree V1 Agent-Only Boundary Fix
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/007-1-goal-tree-agent-only-boundary-fix.md`。
+- 保留 Goal Tree V1 模型和 `.agentflow/define/**` 本地事实源。
+- 将 Desktop Goal Tree 人类界面改为只读。
+- 从 Desktop Tauri command surface 移除 Goal Tree 写命令和 Graph Context 准备命令。
+- 将 `agentflow-goal-tree` 写 API 标注为 agent-only / system-only / internal tests。
+
+结果：
+
+- 需求文档已复制到 `docs/requirements/007-1-goal-tree-agent-only-boundary-fix.md`。
+- Goal Tree 页面只保留刷新、选择、查看 Contract / Agent Draft / System State / Context / 完整性提示。
+- Goal / Milestone / Issue 创建、编辑、保存、归档、排序入口已从 Desktop UI 移除。
+- `GoalTreeContextPanel` 不再提供“准备 Graph Context”按钮，只显示已有 `graphContextPackPath`、Agent Draft 推荐文件和完整性提示。
+- Desktop Tauri handler 只注册：
+  - `load_goal_tree_snapshot`
+  - `validate_goal_tree`
+- `agentflow-goal-tree` crate 写 API 保留给未来 Agent planning flow、system migration 和 internal tests，不暴露给 Desktop human UI。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-goal-tree`：pass，3 tests。
+- `cargo test -p agentflow-desktop`：pass，16 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo test`：pass，CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + graph 26 tests。
+- `git diff --check`：pass。
+- Browser Preview Goal Tree 只读核对：pass。
+  - 页面显示 `只读` 和 `Agent-only`。
+  - 不显示 `创建 Goal` / `创建 Milestone` / `创建 Issue`。
+  - 不显示 `保存合同` / `归档` / `准备 Graph Context`。
+
+边界：
+
+- 未启动 Agent。
+- 未执行项目命令。
+- 未调用模型。
+- 未写用户源码。
+- 人类 Desktop UI 不写 `.agentflow/define/**`。
+- 人类 Desktop UI 不写 `.agentflow/output/graph/context-packs/**`。

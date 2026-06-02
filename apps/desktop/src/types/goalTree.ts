@@ -23,6 +23,7 @@ export type GoalRecord = {
   id: string;
   projectRoot: string;
   status: GoalStatus | string;
+  /** Human confirmed contract; not Desktop human UI editable state. */
   human: GoalHumanContract;
   agentDraft: GoalAgentDraft;
   system: GoalSystemState;
@@ -34,6 +35,7 @@ export type MilestoneRecord = {
   goalId: string;
   projectRoot: string;
   status: MilestoneStatus | string;
+  /** Human confirmed contract; not Desktop human UI editable state. */
   human: MilestoneHumanContract;
   agentDraft: MilestoneAgentDraft;
   system: MilestoneSystemState;
@@ -46,6 +48,7 @@ export type IssueRecord = {
   milestoneId: string;
   projectRoot: string;
   status: IssueStatus | string;
+  /** Human confirmed contract; not Desktop human UI editable state. */
   human: IssueHumanContract;
   agentDraft: IssueAgentDraft;
   system: IssueSystemState;

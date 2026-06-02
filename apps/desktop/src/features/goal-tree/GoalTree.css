@@ -130,7 +130,9 @@
 }
 
 .goal-tree-health,
-.goal-tree-status-pill {
+.goal-tree-status-pill,
+.goal-tree-readonly-pill,
+.goal-tree-agent-pill {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -140,6 +142,16 @@
   color: #526071;
   font-size: 12px;
   font-weight: 700;
+}
+
+.goal-tree-readonly-pill {
+  background: #e1f8eb;
+  color: #137442;
+}
+
+.goal-tree-agent-pill {
+  background: #e8eef5;
+  color: #253144;
 }
 
 .goal-tree-health.valid {
@@ -211,9 +223,98 @@
   max-width: 900px;
 }
 
+.goal-tree-contract-viewer,
+.goal-tree-contract-stack {
+  display: grid;
+  gap: 14px;
+  max-width: 900px;
+}
+
 .goal-tree-editor-header {
   padding-bottom: 14px;
   border-bottom: 1px solid #d8e0ea;
+}
+
+.goal-tree-editor-header p {
+  max-width: 620px;
+  margin: 6px 0 0;
+  color: #697487;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.goal-tree-readonly-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.goal-tree-readonly-section h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.goal-tree-readonly-block {
+  display: grid;
+  gap: 6px;
+}
+
+.goal-tree-readonly-block > span,
+.goal-tree-system-state dt {
+  color: #526071;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.goal-tree-readonly-block p,
+.goal-tree-readonly-block ul {
+  margin: 0;
+  color: #18202d;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.goal-tree-readonly-block ul {
+  display: grid;
+  gap: 5px;
+  padding-left: 18px;
+}
+
+.goal-tree-code-list li {
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: #111827;
+  color: #dbeafe;
+  font-family: "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.goal-tree-system-state {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+}
+
+.goal-tree-system-state div {
+  display: grid;
+  gap: 3px;
+}
+
+.goal-tree-system-state dd {
+  min-width: 0;
+  margin: 0;
+  color: #18202d;
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .goal-tree-field {

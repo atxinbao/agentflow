@@ -140,7 +140,11 @@ pub(crate) fn unix_timestamp_seconds() -> u64 {
 
 pub(crate) fn bump_record_revision(created_at: u64, revision: u64) -> (u64, u64, String) {
     let updated_at = unix_timestamp_seconds().max(created_at);
-    (updated_at, revision.saturating_add(1), "human".to_string())
+    (
+        updated_at,
+        revision.saturating_add(1),
+        "agent-system".to_string(),
+    )
 }
 
 fn load_records<T>(directory: &Path) -> Result<Vec<T>>

@@ -3,6 +3,22 @@
 创建日期：2026-06-02  
 执行者：Codex
 
+## 007.1 边界修正
+
+2026-06-03 已新增：
+
+```text
+docs/requirements/007-1-goal-tree-agent-only-boundary-fix.md
+```
+
+该修正不推翻 Goal Tree V1 模型和 `.agentflow/define/**` 本地事实源，但明确：
+
+```text
+Goal Tree 是 Agent 使用的目标工作地图。
+Desktop 人类界面只能只读查看，不创建、不编辑、不归档、不排序、不准备 Graph Context。
+写入能力保留为未来 Agent-only / system-only 通道。
+```
+
 ## 用户目标
 
 AgentFlow 已经完成了当前阶段的三个基础底座：

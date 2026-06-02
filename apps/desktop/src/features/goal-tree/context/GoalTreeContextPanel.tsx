@@ -1,26 +1,19 @@
-import { FileSearch, RefreshCw } from "lucide-react";
-import type { GoalTreeIssueContextSnapshot, GoalTreeSnapshot, IssueRecord } from "../../../types";
+import { FileSearch } from "lucide-react";
+import type { GoalTreeSnapshot, IssueRecord } from "../../../types";
 
 export function GoalTreeContextPanel({
-  context,
-  contextLoading,
   issue,
   onOpenFile,
-  onPrepareContext,
   snapshot,
 }: {
-  context: GoalTreeIssueContextSnapshot | null;
-  contextLoading: boolean;
   issue: IssueRecord | null;
   onOpenFile: (relativePath: string) => void;
-  onPrepareContext: (issueId: string) => void;
   snapshot: GoalTreeSnapshot;
 }) {
   const warnings = snapshot.validation.warnings.filter((warning) => !issue || warning.objectId === issue.id);
-  const recommendedFiles =
-    context?.recommendedFiles.length || context?.recommendedTests.length
-      ? [...(context?.recommendedFiles ?? []), ...(context?.recommendedTests ?? [])]
-      : issue?.agentDraft.suggestedFiles.map((path) => ({ path, reason: "agent draft", score: 0 })) ?? [];
+  const recommendedFiles = issue?.agentDraft.suggestedFiles.map((path) => ({ path, reason: "Agent Draft", score: 0 })) ?? [];
+  const recommendedTests = issue?.agentDraft.suggestedTests.map((path) => ({ path, reason: "Agent Draft", score: 0 })) ?? [];
+  const readonlyRecommendations = [...recommendedFiles, ...recommendedTests];
 
   return (
     <aside className="goal-tree-context-panel" aria-label="Goal Tree Context">
@@ -30,26 +23,23 @@ export function GoalTreeContextPanel({
       </header>
 
       {issue ? (
-        <button
-          className="goal-tree-secondary-action"
-          disabled={contextLoading}
-          onClick={() => onPrepareContext(issue.id)}
-          type="button"
-        >
-          <RefreshCw size={15} className={contextLoading ? "spin" : undefined} />
-          准备 Graph Context
-        </button>
+        <section>
+          <h3>Context Pack</h3>
+          <p className="goal-tree-muted">
+            {issue.system.graphContextPackPath ?? "暂无 Agent 准备的 Graph Context。后续 Agent planning flow 会准备上下文。"}
+          </p>
+        </section>
       ) : (
         <p className="goal-tree-muted">选择 Issue 后可查看推荐文件。</p>
       )}
 
       <section>
         <h3>推荐文件</h3>
-        {recommendedFiles.length === 0 ? (
-          <p className="goal-tree-muted">暂无推荐文件。Graph 缺失时仍可编辑目标树。</p>
+        {readonlyRecommendations.length === 0 ? (
+          <p className="goal-tree-muted">暂无推荐文件。Graph 尚未 ready 时，Context 推荐可能不可用。</p>
         ) : (
           <div className="goal-tree-file-list">
-            {recommendedFiles.map((file) => (
+            {readonlyRecommendations.map((file) => (
               <button key={`${file.path}-${file.reason}`} onClick={() => onOpenFile(file.path)} type="button">
                 <FileSearch size={15} />
                 <span>{file.path}</span>
