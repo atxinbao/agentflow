@@ -140,7 +140,7 @@ Active read-model wrappers:
 
 Legacy compatibility areas:
 
-- `legacy/archive_2026_05.rs` keeps the archived implementation for compatibility.
+- `legacy/archive_2026_05.rs` keeps the archived implementation for compatibility and is private to `legacy`.
 - `legacy/goal_protocol.rs`
 - `legacy/product_feature.rs`
 - `legacy/team_project_milestone_issue.rs`
@@ -149,9 +149,16 @@ Legacy compatibility areas:
 - `legacy/eligibility_lease.rs`
 - `legacy/project_closure.rs`
 - `legacy/project_audit_docs_refresh.rs`
-- `legacy/evidence.rs`
 - `legacy/saved_view.rs`
 - `legacy/sqlite_index.rs`
+
+005 boundary tightening:
+
+- `agentflow-core` no longer exposes `pub use legacy::*` at the crate root.
+- `legacy/mod.rs` no longer exposes `pub use archive_2026_05::*`.
+- `legacy/evidence.rs` was removed because it had no active/CLI/Desktop import.
+- CLI legacy dispatch imports named compatibility modules explicitly.
+- Desktop legacy Tauri commands import only `agentflow_core::active` read models.
 
 Shared neutral boundaries:
 

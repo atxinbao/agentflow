@@ -3,8 +3,12 @@
 //! Output formatting is isolated from command dispatch so legacy command code
 //! stays focused on compatibility behavior.
 
+use agentflow_core::legacy::product_feature::ProductFeatureExecutionSnapshot;
+use agentflow_core::legacy::run_verify_review::ControlledRunPlan;
+use agentflow_core::legacy::team_project_milestone_issue::CreationWriteSummary;
+
 pub(crate) fn print_feature_execution_snapshot(
-    snapshot: &agentflow_core::ProductFeatureExecutionSnapshot,
+    snapshot: &ProductFeatureExecutionSnapshot,
     verbose: bool,
 ) {
     println!("feature project: {}", snapshot.project_id);
@@ -115,7 +119,7 @@ pub(crate) fn print_feature_execution_snapshot(
     println!("read only: {}", snapshot.boundary.read_only);
 }
 
-pub(crate) fn print_controlled_run_plan(plan: &agentflow_core::ControlledRunPlan) {
+pub(crate) fn print_controlled_run_plan(plan: &ControlledRunPlan) {
     println!("run plan goal: {}", plan.goal);
     print_list_line("run plan steps", &plan.planned_steps, " | ");
     print_list_line("expected files", &plan.expected_files, ", ");
@@ -128,7 +132,7 @@ pub(crate) fn print_controlled_run_plan(plan: &agentflow_core::ControlledRunPlan
     println!("model call: none");
 }
 
-pub(crate) fn print_creation_summary(summary: &agentflow_core::CreationWriteSummary) {
+pub(crate) fn print_creation_summary(summary: &CreationWriteSummary) {
     println!("creation mode: {}", summary.preview.mode);
     println!("kind: {}", summary.preview.kind);
     println!("id: {}", summary.preview.entity_id);

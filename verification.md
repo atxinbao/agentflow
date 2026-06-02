@@ -2960,3 +2960,71 @@
 - `cargo test`：pass，core 61 tests + desktop 16 tests + graph 26 tests。
 - `npm --prefix apps/desktop run build`：pass，存在既有 Vite chunk size warning。
 - `git diff --check`：pass。
+
+## 2026-06-02 Legacy and Degraded Code Removal
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/005-legacy-and-degraded-code-removal.md`。
+- 对 `crates/agentflow-core/src/legacy/archive_2026_05.rs` 和 legacy compatibility 出口做引用审计。
+- 删除确认无 active / CLI / Desktop 引用的 legacy 公开出口。
+- 收窄 legacy 暴露面，避免旧 2026-05 workflow 继续作为 crate root 产品 API。
+
+结果：
+
+- 新增 `docs/architecture/legacy-removal-audit.md`。
+  - 记录 archive public symbol inventory。
+  - 按 active-read-model / cli-legacy / test-only / unused / uncertain 分类。
+  - 记录 degraded / fallback keep-delete 决策。
+- `agentflow-core`：
+  - 删除 crate root `pub use legacy::*`。
+  - `legacy/archive_2026_05.rs` 改为 private module。
+  - 删除 `legacy/mod.rs` 中的 `pub use archive_2026_05::*`。
+  - 删除无 active / CLI / Desktop import 的 `legacy/evidence.rs` public compatibility module。
+  - 保留 archive 内部 evidence/index DTO，因为旧索引逻辑和 archive tests 仍内部使用。
+- `agentflow-cli`：
+  - `legacy.rs` 改为显式 import `agentflow_core::active` 和命名 legacy compatibility modules。
+  - `print.rs` 改为显式 import legacy print DTO。
+- Desktop Tauri：
+  - `commands/legacy_core.rs` 改为只从 `agentflow_core::active` 导入 transitional read-model。
+  - Tauri command 名称未改变。
+- 文档：
+  - 更新 `docs/requirements/README.md`。
+  - 更新 `docs/requirements/next-requirements.md`。
+  - 更新 `docs/architecture/legacy-code-map.md`。
+  - 更新 `docs/architecture/current-module-boundaries.md`。
+
+保留：
+
+- Desktop 必需 active read model。
+- CLI legacy compatibility。
+- Graph watcher native/fingerprint fallback。
+- Project File Reader fallback 和 browser-preview mock data。
+
+行为变化：
+
+- 无预期用户行为变化。
+- 旧 root-level legacy API 不再作为 public compatibility surface。
+- 新需求必须继续通过 explicit `active` / named `legacy` module 访问仍授权的兼容面。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-core`：pass，61 tests。
+- `cargo test -p agentflow-cli`：pass，0 tests。
+- `cargo test -p agentflow-graph`：pass，26 tests。
+- `cargo test`：pass，core 61 tests + desktop 16 tests + graph 26 tests。
+- `npm --prefix apps/desktop run build`：pass，存在既有 Vite chunk size warning。
+- `git diff --check`：pass。
+
+边界：
+
+- 未新增 Goal Tree。
+- 未定义新的 Goal / Milestone / Issue / AgentRun。
+- 未调用模型。
+- 未执行项目命令。
+- 未修改用户项目源码。
+- 未改变 Desktop 只读边界。
+- 未改变 Tauri command 对外名称。
