@@ -9,6 +9,8 @@ pub struct IssueRecord {
     pub milestone_id: String,
     pub project_root: String,
     pub status: String,
+    /// Human confirmed contract. The field name is kept for schema v1
+    /// compatibility; it does not mean Desktop human UI can edit it.
     pub human: IssueHumanContract,
     pub agent_draft: IssueAgentDraft,
     pub system: IssueSystemState,

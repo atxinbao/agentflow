@@ -8,6 +8,8 @@ pub struct MilestoneRecord {
     pub goal_id: String,
     pub project_root: String,
     pub status: String,
+    /// Human confirmed contract. The field name is kept for schema v1
+    /// compatibility; it does not mean Desktop human UI can edit it.
     pub human: MilestoneHumanContract,
     pub agent_draft: MilestoneAgentDraft,
     pub system: MilestoneSystemState,

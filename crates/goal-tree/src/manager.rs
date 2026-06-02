@@ -1,3 +1,9 @@
+//! Goal Tree manager APIs.
+//!
+//! Read APIs may be used by the Desktop human UI. Write APIs in this module
+//! mutate `.agentflow/define/**` and are agent-only / system-only / internal
+//! test helpers. They must not be exposed through the human Desktop UI.
+
 use crate::{
     ids::next_id,
     integrity::validate_loaded_goal_tree,
@@ -38,6 +44,9 @@ pub fn load_goal_tree_snapshot(project_root: impl AsRef<Path>) -> Result<GoalTre
     })
 }
 
+/// Agent-only / system-only write API.
+///
+/// Mutates `.agentflow/define/**`; Desktop human UI must not call this function.
 pub fn create_goal(project_root: impl AsRef<Path>, input: CreateGoalInput) -> Result<GoalRecord> {
     let paths = paths_for(project_root)?;
     ensure_goal_tree_dirs(&paths)?;
@@ -64,8 +73,8 @@ pub fn create_goal(project_root: impl AsRef<Path>, input: CreateGoalInput) -> Re
         system: GoalSystemState {
             created_at: now,
             updated_at: now,
-            created_by: "human".to_string(),
-            updated_by: "human".to_string(),
+            created_by: "agent-system".to_string(),
+            updated_by: "agent-system".to_string(),
             path: relative_record_path(&record_path, &paths.root),
             revision: 1,
         },
@@ -85,6 +94,9 @@ pub fn create_goal(project_root: impl AsRef<Path>, input: CreateGoalInput) -> Re
     Ok(goal)
 }
 
+/// Agent-only / system-only write API.
+///
+/// Mutates `.agentflow/define/**`; Desktop human UI must not call this function.
 pub fn update_goal(
     project_root: impl AsRef<Path>,
     goal_id: &str,
@@ -132,6 +144,9 @@ pub fn update_goal(
     Ok(goal)
 }
 
+/// Agent-only / system-only write API.
+///
+/// Mutates `.agentflow/define/**`; Desktop human UI must not call this function.
 pub fn archive_goal(project_root: impl AsRef<Path>, goal_id: &str) -> Result<GoalRecord> {
     let goal = update_goal(
         project_root.as_ref(),
@@ -151,6 +166,9 @@ pub fn archive_goal(project_root: impl AsRef<Path>, goal_id: &str) -> Result<Goa
     Ok(goal)
 }
 
+/// Agent-only / system-only write API.
+///
+/// Mutates `.agentflow/define/**`; Desktop human UI must not call this function.
 pub fn create_milestone(
     project_root: impl AsRef<Path>,
     goal_id: &str,
@@ -182,8 +200,8 @@ pub fn create_milestone(
         system: MilestoneSystemState {
             created_at: now,
             updated_at: now,
-            created_by: "human".to_string(),
-            updated_by: "human".to_string(),
+            created_by: "agent-system".to_string(),
+            updated_by: "agent-system".to_string(),
             path: relative_record_path(&record_path, &paths.root),
             revision: 1,
         },
@@ -211,6 +229,9 @@ pub fn create_milestone(
     Ok(milestone)
 }
 
+/// Agent-only / system-only write API.
+///
+/// Mutates `.agentflow/define/**`; Desktop human UI must not call this function.
 pub fn update_milestone(
     project_root: impl AsRef<Path>,
     milestone_id: &str,
@@ -258,6 +279,9 @@ pub fn update_milestone(
     Ok(milestone)
 }
 
+/// Agent-only / system-only write API.
+///
+/// Mutates `.agentflow/define/**`; Desktop human UI must not call this function.
 pub fn archive_milestone(
     project_root: impl AsRef<Path>,
     milestone_id: &str,
@@ -272,6 +296,9 @@ pub fn archive_milestone(
     )
 }
 
+/// Agent-only / system-only write API.
+///
+/// Mutates `.agentflow/define/**`; Desktop human UI must not call this function.
 pub fn create_issue(
     project_root: impl AsRef<Path>,
     milestone_id: &str,
@@ -306,8 +333,8 @@ pub fn create_issue(
         system: IssueSystemState {
             created_at: now,
             updated_at: now,
-            created_by: "human".to_string(),
-            updated_by: "human".to_string(),
+            created_by: "agent-system".to_string(),
+            updated_by: "agent-system".to_string(),
             path: relative_record_path(&record_path, &paths.root),
             revision: 1,
             graph_context_pack_path: None,
@@ -336,6 +363,9 @@ pub fn create_issue(
     Ok(issue)
 }
 
+/// Agent-only / system-only write API.
+///
+/// Mutates `.agentflow/define/**`; Desktop human UI must not call this function.
 pub fn update_issue(
     project_root: impl AsRef<Path>,
     issue_id: &str,
@@ -386,6 +416,9 @@ pub fn update_issue(
     Ok(issue)
 }
 
+/// Agent-only / system-only write API.
+///
+/// Mutates `.agentflow/define/**`; Desktop human UI must not call this function.
 pub fn archive_issue(project_root: impl AsRef<Path>, issue_id: &str) -> Result<IssueRecord> {
     update_issue(
         project_root,
@@ -397,6 +430,9 @@ pub fn archive_issue(project_root: impl AsRef<Path>, issue_id: &str) -> Result<I
     )
 }
 
+/// Agent-only / system-only write API.
+///
+/// Mutates `.agentflow/define/**`; Desktop human UI must not call this function.
 pub fn reorder_goal_tree(
     project_root: impl AsRef<Path>,
     input: ReorderGoalTreeInput,
@@ -425,6 +461,10 @@ pub fn reorder_goal_tree(
     load_goal_tree_snapshot(paths.root)
 }
 
+/// Agent-only / system-only write API.
+///
+/// Records an existing Agent-prepared Graph Context Pack path. Desktop human UI
+/// must not call this function or generate context packs.
 pub fn record_issue_graph_context_path(
     project_root: impl AsRef<Path>,
     issue_id: &str,

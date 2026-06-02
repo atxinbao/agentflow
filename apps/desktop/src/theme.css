@@ -113,6 +113,7 @@ body {
 .goal-tree-context-panel h2,
 .goal-tree-create-form h2,
 .goal-tree-editor-header h2,
+.goal-tree-readonly-section h3,
 .project-file-reader-header h2,
 .project-file-content-header h3,
 .project-directory-overview h3 {
@@ -243,6 +244,7 @@ body {
 .goal-tree-field textarea,
 .goal-tree-field select,
 .goal-tree-file-list button,
+.goal-tree-readonly-section,
 .goal-tree-toolbar button,
 .goal-tree-form-actions button,
 .goal-tree-editor-actions button,
@@ -371,6 +373,8 @@ body {
 
 .goal-tree-field > span,
 .goal-tree-context-panel h3,
+.goal-tree-readonly-block > span,
+.goal-tree-system-state dt,
 .project-file-content dd,
 .project-markdown-reader,
 .project-directory-overview,
@@ -493,12 +497,14 @@ body {
 
 .goal-tree-health,
 .goal-tree-status-pill,
+.goal-tree-agent-pill,
 .status-badge {
   background: var(--af-theme-hover-bg);
   color: var(--af-theme-text-secondary);
 }
 
 .goal-tree-health.valid,
+.goal-tree-readonly-pill,
 .status-badge.completed,
 .status-badge.done,
 .status-badge.passed {
@@ -624,6 +630,7 @@ body {
 .goal-tree-detail,
 .goal-tree-empty-state,
 .goal-tree-create-form,
+.goal-tree-readonly-section,
 .goal-tree-field input,
 .goal-tree-field textarea,
 .goal-tree-field select,
@@ -666,6 +673,7 @@ body {
 .goal-tree-form-actions button,
 .goal-tree-editor-actions button,
 .goal-tree-empty-state button,
+.goal-tree-code-list li,
 .project-goal-panel.muted,
 .project-goal-panel code,
 .issue-contract-panel code,
@@ -842,7 +850,9 @@ button.saved-view.active {
 .goal-tree-kicker,
 .goal-tree-row small,
 .goal-tree-field > span,
-.goal-tree-context-panel h3 {
+.goal-tree-context-panel h3,
+.goal-tree-readonly-block > span,
+.goal-tree-system-state dt {
   color: var(--af-theme-text-muted);
 }
 
@@ -870,7 +880,10 @@ button.saved-view.active {
 .goal-tree-row,
 .goal-tree-muted,
 .goal-tree-empty,
-.goal-tree-error {
+.goal-tree-error,
+.goal-tree-readonly-block p,
+.goal-tree-readonly-block ul,
+.goal-tree-system-state dd {
   color: var(--af-theme-text-secondary);
 }
 
