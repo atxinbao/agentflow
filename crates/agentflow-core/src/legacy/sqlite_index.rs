@@ -5,6 +5,5 @@
 //! New AgentFlow requirements must not depend on this module unless a new
 //! requirement explicitly re-authorizes it.
 
-pub use super::archive_2026_05::{
-    rebuild_index, IndexSummary, IndexedIssue, IssueIndexEntry, ProjectIndex,
-};
+//! 006 retired the public compatibility re-export for the old SQLite index
+//! writer. Graph and file-reader requirements now own current read surfaces.

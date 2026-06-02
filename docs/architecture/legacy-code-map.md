@@ -9,7 +9,25 @@ This document records the compatibility surface that still belongs to the archiv
 
 ## Legacy Command Surface
 
-The following CLI commands are treated as legacy compatibility unless a new requirement re-authorizes them:
+The following CLI commands are legacy. As of 006, only the temporary read-only
+commands remain executable:
+
+```text
+metrics
+projects
+search
+```
+
+All other old CLI commands parse only to show the retirement message:
+
+```text
+This command belongs to the archived 2026-05 AgentFlow workflow.
+It is disabled in the new requirements track.
+The new Goal Tree / AgentRun workflow has not been defined yet.
+No files were written and no command was executed.
+```
+
+Retired commands:
 
 - `goal`
 - `feature`
@@ -34,7 +52,9 @@ The following CLI commands are treated as legacy compatibility unless a new requ
 - `review-assistant`
 - `state`
 
-The command names are currently preserved for compatibility. New product flows must not be added to this legacy command surface.
+The command names are currently preserved for explicit migration feedback. New
+product flows must not be added to this legacy command surface. Detailed
+classification lives in `docs/architecture/legacy-cli-retirement-plan.md`.
 
 ## Legacy Core Areas
 
@@ -57,22 +77,28 @@ Current quarantine layout:
 
 - `crates/agentflow-core/src/lib.rs` no longer re-exports `legacy::*`.
 - `crates/agentflow-core/src/legacy/archive_2026_05.rs` contains the archived implementation and is private to the `legacy` module.
-- `legacy/goal_protocol.rs` exposes archived goal protocol compatibility symbols.
-- `legacy/product_feature.rs` exposes archived product feature compatibility symbols.
-- `legacy/team_project_milestone_issue.rs` exposes archived Team / Project / Milestone / Issue compatibility symbols.
-- `legacy/workflow_control.rs` exposes archived read-model and workflow state compatibility symbols.
-- `legacy/run_verify_review.rs` exposes archived plan / run / verify / review compatibility symbols.
-- `legacy/eligibility_lease.rs` exposes archived eligibility and lease compatibility symbols.
-- `legacy/project_closure.rs` exposes archived closure state compatibility symbols.
-- `legacy/project_audit_docs_refresh.rs` exposes archived audit and docs refresh compatibility symbols.
-- `legacy/saved_view.rs` exposes archived saved-view compatibility symbols.
-- `legacy/sqlite_index.rs` exposes archived SQLite index compatibility symbols.
+- `legacy/goal_protocol.rs` exposes only DTOs still nested in active read models.
+- `legacy/product_feature.rs` no longer exposes archived product feature entrypoints.
+- `legacy/team_project_milestone_issue.rs` exposes active read-model symbols only.
+- `legacy/workflow_control.rs` exposes active read-model symbols only.
+- `legacy/run_verify_review.rs` exposes DTOs needed by active snapshot shapes only.
+- `legacy/eligibility_lease.rs` no longer exposes archived eligibility / lease entrypoints.
+- `legacy/project_closure.rs` no longer exposes archived closure entrypoints.
+- `legacy/project_audit_docs_refresh.rs` no longer exposes archived audit / docs refresh entrypoints.
+- `legacy/saved_view.rs` exposes saved-view DTOs needed by active snapshot shapes only.
+- `legacy/sqlite_index.rs` no longer exposes archived SQLite index entrypoints.
 
 Removed in 005:
 
 - the crate-root `pub use legacy::*` compatibility export;
 - the `legacy/mod.rs` `pub use archive_2026_05::*` compatibility export;
 - the public `legacy/evidence.rs` compatibility module, because no active read model, CLI legacy command, Desktop command, or non-archive source imported it.
+
+Retired in 006:
+
+- CLI write/automation dispatch for all old commands except `metrics`, `projects`, and `search`;
+- public compatibility re-exports for old legacy writer entrypoints;
+- old CLI output helpers that formatted retired writer summaries.
 
 Detailed reachability and removal classification lives in `docs/architecture/legacy-removal-audit.md`.
 
@@ -116,7 +142,7 @@ Do not delete legacy code or data handling only because it is old. It can be rem
 005 deletion result:
 
 - deleted unused public compatibility exposure, not active behavior;
-- retained CLI legacy commands temporarily;
+- retired CLI legacy write/automation commands and kept only temporary read-only commands;
 - retained active Desktop read models;
 - retained Graph watcher fallback;
 - retained Project File Reader fallback and browser-preview mock data.

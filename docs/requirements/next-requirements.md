@@ -14,6 +14,7 @@
 - [003-project-file-reader-v1-completion.md](003-project-file-reader-v1-completion.md)
 - [004-legacy-cleanup-and-new-module-split.md](004-legacy-cleanup-and-new-module-split.md)
 - [005-legacy-and-degraded-code-removal.md](005-legacy-and-degraded-code-removal.md)
+- [006-legacy-cli-retirement-and-archive-pruning.md](006-legacy-cli-retirement-and-archive-pruning.md)
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 

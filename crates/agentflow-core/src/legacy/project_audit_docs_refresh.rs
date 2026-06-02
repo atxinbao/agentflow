@@ -5,9 +5,6 @@
 //! New AgentFlow requirements must not depend on this module unless a new
 //! requirement explicitly re-authorizes it.
 
-pub use super::archive_2026_05::{
-    write_project_code_audit_snapshot, write_project_docs_refresh_snapshot, ProjectCodeAuditCheck,
-    ProjectCodeAuditCounts, ProjectCodeAuditFinding, ProjectCodeAuditSnapshot,
-    ProjectCodeAuditSummary, ProjectDocsRefreshCheckedDoc, ProjectDocsRefreshCounts,
-    ProjectDocsRefreshRequiredUpdate, ProjectDocsRefreshSnapshot, ProjectDocsRefreshSummary,
-};
+//! 006 retired the public compatibility re-exports for old project audit and
+//! docs refresh writers. Project closure/audit is not inherited by the new
+//! requirements track.

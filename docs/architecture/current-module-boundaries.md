@@ -157,7 +157,7 @@ Legacy compatibility areas:
 - `agentflow-core` no longer exposes `pub use legacy::*` at the crate root.
 - `legacy/mod.rs` no longer exposes `pub use archive_2026_05::*`.
 - `legacy/evidence.rs` was removed because it had no active/CLI/Desktop import.
-- CLI legacy dispatch imports named compatibility modules explicitly.
+- CLI legacy dispatch no longer imports old writer compatibility modules.
 - Desktop legacy Tauri commands import only `agentflow_core::active` read models.
 
 Shared neutral boundaries:
@@ -172,18 +172,29 @@ Shared neutral boundaries:
 
 Scope:
 
-- preserve old command names temporarily;
-- isolate old command implementations into `legacy.rs`;
-- keep argument definitions separate from command dispatch.
+- preserve old command names only as migration-visible parse targets;
+- disable archived 2026-05 write/automation commands with a clear retirement message;
+- keep only temporary read-only inspection commands: `metrics`, `projects`, `search`;
+- keep argument definitions separate from command retirement policy and dispatch.
 
 Non-goals:
 
-- no renaming to `agentflow legacy ...` in this slice;
-- no new product command surface;
-- no command behavior change.
+- no Goal Tree command surface in 006;
+- no AgentRun command surface in 006;
+- no old workflow writes through CLI;
+- no `.agentflow/` runtime writes through retired commands.
 
 Implemented modules:
 
 - `crates/agentflow-cli/src/args.rs`
+- `crates/agentflow-cli/src/retirement.rs`
 - `crates/agentflow-cli/src/legacy.rs`
+- `crates/agentflow-cli/src/active.rs`
 - `crates/agentflow-cli/src/print.rs`
+
+006 boundary tightening:
+
+- `legacy.rs` imports only `agentflow_core::active` read-only snapshots.
+- Retired old writer commands print a message and return success without writing files.
+- Named legacy core modules no longer publicly re-export old writer entrypoints unless active read models need DTOs.
+- `docs/architecture/legacy-cli-retirement-plan.md` records per-command disposition.

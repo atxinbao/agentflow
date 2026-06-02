@@ -5,7 +5,8 @@
 
 ## Purpose
 
-This audit implements `005 - Legacy and Degraded Code Removal`.
+This audit implements `005 - Legacy and Degraded Code Removal` and records the
+follow-up 006 CLI retirement delta.
 
 The goal is not to delete every archived implementation from
 `crates/agentflow-core/src/legacy/archive_2026_05.rs`. The goal is to remove
@@ -49,7 +50,7 @@ legacy submodule explicitly re-exports them.
 | Category | Meaning | Action |
 | --- | --- | --- |
 | `active-read-model` | Current Desktop read-only snapshots still need this path through `active/`. | Keep through `agentflow_core::active`. |
-| `cli-legacy` | Old CLI command still compiles against this compatibility path. | Keep through a named `agentflow_core::legacy::<area>` module. |
+| `cli-retired` | Old CLI command still parses but must not execute archived writes. | Route through `agentflow-cli/src/retirement.rs`. |
 | `test-only` | Used by archived unit tests or internal helpers but not by active/CLI import paths. | Keep in private archive unless a later test-retirement requirement removes it. |
 | `unused` | No active/CLI/Desktop/test compatibility import. | Delete or hide public compatibility export. |
 | `uncertain` | Public DTO appears in nested return fields or serde shapes and should not be removed without deeper replacement. | Keep private or explicitly re-export only where needed. |
@@ -73,39 +74,53 @@ legacy product authorization:
 | `LocalSearchSnapshot` | struct | `legacy::workflow_control` | Tauri + CLI search | active-read-model | keep |
 | `WorkbenchBoundary` | struct | `legacy::workflow_control` | active boundary wrapper | active-read-model | keep |
 
-## CLI Legacy Compatibility Symbols
+## 006 CLI Retirement Delta
 
-CLI legacy dispatch now imports explicit named modules instead of relying on
-crate-root legacy exports.
+CLI legacy dispatch now imports only `agentflow_core::active` read models.
+`agentflow-cli/src/retirement.rs` classifies commands and disables old write
+flows before they can reach archived functions.
 
-| Module | Key symbols | Used by | Category | Action |
-| --- | --- | --- | --- | --- |
-| `legacy::goal_protocol` | `init_from_goal`, `bootstrap_goal_protocol`, `check_goal_readiness`, `write_goal_next` | `agentflow init`, `agentflow goal ...` | cli-legacy | keep temporarily |
-| `legacy::product_feature` | `create_product_feature`, `read_product_feature_execution_status`, `read_product_feature_execution_next`, `ProductFeatureDraft` | `agentflow feature ...` | cli-legacy | keep temporarily |
-| `legacy::team_project_milestone_issue` | `create_team`, `create_project`, `create_milestone`, `create_issue`, `read_local_project_seed_preview`, `write_local_project_seed`, `read_issue_project_link_preview`, `write_issue_project_link`, draft/write DTOs | old create/project-seed/issue-link commands | cli-legacy and active-read-model | keep temporarily |
-| `legacy::run_verify_review` | `plan_issue`, `write_context`, `run_issue`, `verify_issue`, `review_issue`, `write_project_summary`, `write_review_assistant`, `ControlledRunPlan` | old plan/context/run/verify/review/update/review-assistant commands | cli-legacy | keep temporarily |
-| `legacy::sqlite_index` | `rebuild_index` | `agentflow index rebuild` | cli-legacy | keep temporarily |
-| `legacy::saved_view` | `save_view`, `show_view`, `SavedViewFilter` | `agentflow view ...` | cli-legacy | keep temporarily |
-| `legacy::eligibility_lease` | `write_workflow_eligibility`, `write_workflow_lease_snapshot` | `agentflow eligibility`, `agentflow lease` | cli-legacy | keep temporarily |
-| `legacy::workflow_control` | `write_workflow_state_check` | `agentflow state check` | cli-legacy | keep temporarily |
-| `legacy::project_closure` | `write_project_closure_state` | `agentflow project closure` | cli-legacy | keep temporarily |
-| `legacy::project_audit_docs_refresh` | `write_project_code_audit_snapshot`, `write_project_docs_refresh_snapshot` | old audit/docs-refresh commands | cli-legacy | keep temporarily |
+| Command group | Category | Action |
+| --- | --- | --- |
+| `metrics`, `projects`, `search` | active-read-model | keep temporary read-only execution |
+| all other old CLI commands | cli-retired | parse, print retirement message, perform no work |
+
+Full command classification lives in
+`docs/architecture/legacy-cli-retirement-plan.md`.
+
+## Legacy Compatibility Symbols After 006
+
+The named legacy modules now expose only active read-model functions/DTOs or
+DTOs required by those read-model return shapes.
+
+| Module | Exposed surface after 006 | Category | Action |
+| --- | --- | --- | --- |
+| `legacy::goal_protocol` | `GoalLoop*`, `ProjectDefinition*`, `ProjectGoal` DTOs | active-read-model nested DTO | keep temporarily |
+| `legacy::product_feature` | no public entrypoint | retired writer surface | no re-export |
+| `legacy::team_project_milestone_issue` | local project snapshot readers and DTOs | active-read-model | keep |
+| `legacy::workflow_control` | desktop / metrics / search readers and DTOs | active-read-model | keep |
+| `legacy::run_verify_review` | `AgentRun`, `CommandRecord`, `HumanGate`, `RunOutputs`, `ValidationSpec` DTOs | active-read-model nested DTO | keep temporarily |
+| `legacy::eligibility_lease` | no public entrypoint | retired writer surface | no re-export |
+| `legacy::project_closure` | no public entrypoint | retired writer surface | no re-export |
+| `legacy::project_audit_docs_refresh` | no public entrypoint | retired writer surface | no re-export |
+| `legacy::saved_view` | `SavedView`, `SavedViewFilter`, `ViewFilterV1Preview` DTOs | active-read-model nested DTO | keep temporarily |
+| `legacy::sqlite_index` | no public entrypoint | retired writer surface | no re-export |
 
 ## Legacy Re-export Audit
 
 | Compatibility module | Status | Classification | Action |
 | --- | --- | --- | --- |
 | `legacy::archive_2026_05` | no longer public | unused public exposure | removed public module visibility |
-| `legacy::goal_protocol` | explicit re-export list | cli-legacy | keep temporarily |
-| `legacy::product_feature` | explicit re-export list | cli-legacy | keep temporarily |
-| `legacy::team_project_milestone_issue` | explicit re-export list | cli-legacy and active-read-model | keep temporarily |
-| `legacy::workflow_control` | explicit re-export list | active-read-model and cli-legacy | keep temporarily |
-| `legacy::run_verify_review` | explicit re-export list | cli-legacy | keep temporarily |
-| `legacy::eligibility_lease` | explicit re-export list | cli-legacy | keep temporarily |
-| `legacy::project_closure` | explicit re-export list | cli-legacy | keep temporarily |
-| `legacy::project_audit_docs_refresh` | explicit re-export list | cli-legacy | keep temporarily |
-| `legacy::saved_view` | explicit re-export list | cli-legacy | keep temporarily |
-| `legacy::sqlite_index` | explicit re-export list | cli-legacy | keep temporarily |
+| `legacy::goal_protocol` | DTO-only re-export list | active-read-model nested DTO | keep temporarily |
+| `legacy::product_feature` | no re-exported entrypoints | retired writer surface | no public export |
+| `legacy::team_project_milestone_issue` | read-model re-export list | active-read-model | keep temporarily |
+| `legacy::workflow_control` | read-model re-export list | active-read-model | keep temporarily |
+| `legacy::run_verify_review` | DTO-only re-export list | active-read-model nested DTO | keep temporarily |
+| `legacy::eligibility_lease` | no re-exported entrypoints | retired writer surface | no public export |
+| `legacy::project_closure` | no re-exported entrypoints | retired writer surface | no public export |
+| `legacy::project_audit_docs_refresh` | no re-exported entrypoints | retired writer surface | no public export |
+| `legacy::saved_view` | DTO-only re-export list | active-read-model nested DTO | keep temporarily |
+| `legacy::sqlite_index` | no re-exported entrypoints | retired writer surface | no public export |
 | `legacy::evidence` | no active/CLI/Desktop import | unused | deleted |
 
 ## Deleted Legacy Surface
@@ -120,8 +135,13 @@ The following legacy public exposure was removed in this slice:
 | `legacy/evidence.rs` module | Re-exported `AepIssueProtocol`, `IndexedRun`, `IndexedUpdate`. | No active/CLI/Desktop import outside the private archive. |
 
 No archived implementation function was deleted because the remaining candidates
-are either used by CLI compatibility, active read models, archived tests, or
-nested DTO/serde shapes that need a replacement requirement before removal.
+are either used by active read models, archived tests, or nested DTO/serde
+shapes that need a replacement requirement before removal.
+
+006 removed CLI reachability to those functions. The private archive now has an
+explicit `dead_code` allowance because retired functions remain only as private,
+test-covered historical implementation until a later requirement prunes tests
+and replacement read DTOs.
 
 ## Test-only and Private Archive Symbols
 
@@ -131,9 +151,9 @@ or internally needed by archived functions:
 | Group | Examples | Category | Action |
 | --- | --- | --- | --- |
 | Evidence/index DTOs | `AepIssueProtocol`, `IndexedRun`, `IndexedUpdate` | test-only / internal archive | keep private, no public compatibility module |
-| Run data shapes | `AgentRun`, `RunOutputs`, `CommandRecord`, `ValidationSummary`, `ReviewSummary` | cli-legacy / test-only | keep through `run_verify_review` where needed |
-| Closure/audit DTOs | `ProjectClosureStateSnapshot`, `ProjectCodeAuditSnapshot`, `ProjectDocsRefreshSnapshot` | cli-legacy / test-only | keep temporarily |
-| Status normalization | `ProjectStatus`, `IssueStatus`, `canonical_*` functions | active-read-model / cli-legacy | keep temporarily |
+| Run data shapes | `AgentRun`, `RunOutputs`, `CommandRecord`, `ValidationSummary`, `ReviewSummary` | active-read-model nested DTO / test-only | keep through DTO-only re-export where needed |
+| Closure/audit DTOs | `ProjectClosureStateSnapshot`, `ProjectCodeAuditSnapshot`, `ProjectDocsRefreshSnapshot` | test-only / private archive | keep private |
+| Status normalization | `ProjectStatus`, `IssueStatus`, `canonical_*` functions | active-read-model | keep temporarily |
 | Local project read DTOs | `LocalWorkspace`, `LocalProject`, `LocalMilestone`, `LocalProjectIssueRef`, `V1*` DTOs | active-read-model | keep temporarily |
 
 ## Degraded / Fallback Code Classification
@@ -147,20 +167,23 @@ or internally needed by archived functions:
 | Desktop active transitional read model | `crates/agentflow-core/src/active/**` | required read-only compatibility | keep |
 | Legacy root exports | `pub use legacy::*`, `pub use archive_2026_05::*` | obsolete exposure | delete |
 | Legacy evidence compatibility module | `legacy/evidence.rs` | unused public compatibility export | delete |
-| Legacy GoalLoop / eligibility / lease / closure writers | archive + named legacy modules | cli-legacy | keep temporarily; not authorized for new product flows |
+| Legacy GoalLoop / eligibility / lease / closure writers | private archive only | cli-retired / test-only | no public re-export; not authorized for new product flows |
 
 ## CLI Boundary Result
 
-`crates/agentflow-cli/src/legacy.rs` now imports exactly the compatibility areas it
-uses:
+`crates/agentflow-cli/src/legacy.rs` now imports only active read models:
 
 ```rust
-use agentflow_core::active::{...};
-use agentflow_core::legacy::goal_protocol::{...};
-use agentflow_core::legacy::team_project_milestone_issue::{...};
+use agentflow_core::active::{read_local_metrics_snapshot, read_local_project_model_snapshot, read_local_search_snapshot};
 ```
 
-It no longer calls `agentflow_core::<symbol>` through crate-root legacy exports.
+Retired commands are classified and gated by:
+
+```rust
+crates/agentflow-cli/src/retirement.rs
+```
+
+It no longer calls old writer symbols through named legacy compatibility modules.
 
 ## Desktop Boundary Result
 
@@ -175,21 +198,20 @@ Tauri command names are unchanged. Desktop remains read-only.
 
 ## Residual Risk
 
-- The archived implementation remains large because CLI compatibility and
-  archived unit tests still exercise it.
-- A later requirement may retire specific CLI legacy commands, then delete the
-  corresponding named legacy module and implementation group.
+- The archived implementation remains large because archived unit tests still
+  exercise it.
+- A later requirement may retire old archive tests, then delete the
+  corresponding private implementation group.
 - DTOs with public fields should not be deleted one by one until the caller
   surface is replaced, because serde and Rust return types may rely on nested
   shapes.
 
 ## Verification Snapshot
 
-Initial verification after export narrowing:
+Verification after 006 CLI retirement:
 
 ```text
-cargo test -p agentflow-core: pass, 61 tests
-cargo test -p agentflow-cli: pass, 0 tests
+cargo test -p agentflow-cli: pass, 2 tests
 ```
 
 Full verification is recorded in `verification.md`.

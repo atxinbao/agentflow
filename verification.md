@@ -3028,3 +3028,73 @@
 - 未修改用户项目源码。
 - 未改变 Desktop 只读边界。
 - 未改变 Tauri command 对外名称。
+
+## 2026-06-02 Legacy CLI Retirement and Archive Pruning
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/006-legacy-cli-retirement-and-archive-pruning.md`。
+- 将旧 2026-05 CLI writer / automation command surface 退役。
+- 只临时保留 `metrics`、`projects`、`search` 三个只读 CLI 命令。
+- 收窄 named legacy module re-export，移除旧 writer entrypoint 的公开兼容出口。
+
+结果：
+
+- 需求文档已复制到 `docs/requirements/006-legacy-cli-retirement-and-archive-pruning.md`。
+- 新增 `docs/architecture/legacy-cli-retirement-plan.md`，记录每个旧 CLI 命令的分类。
+- `agentflow-cli`：
+  - 新增 `src/retirement.rs`，统一分类旧命令并输出退役消息。
+  - 新增 `src/active.rs`，作为未来 active CLI 边界占位。
+  - `src/legacy.rs` 只执行 `metrics`、`projects`、`search`。
+  - 其他旧命令解析后只输出禁用说明，不执行旧流程。
+- `agentflow-core`：
+  - old writer re-export 已从 named legacy modules 移除。
+  - active Desktop read model 需要的 read functions / DTOs 保留。
+  - private `archive_2026_05.rs` 暂时保留，因为 archived tests 和 nested DTO shapes 仍依赖。
+- 文档：
+  - 更新 `docs/requirements/README.md`。
+  - 更新 `docs/requirements/next-requirements.md`。
+  - 更新 `docs/architecture/legacy-removal-audit.md`。
+  - 更新 `docs/architecture/legacy-code-map.md`。
+  - 更新 `docs/architecture/current-module-boundaries.md`。
+
+CLI 退役 smoke：
+
+```text
+cargo run -p agentflow-cli -- run ISSUE-0001 --dry-run
+
+legacy command: run
+disposition: disable-with-message
+reason: new AgentRun has not been defined yet
+This command belongs to the archived 2026-05 AgentFlow workflow.
+It is disabled in the new requirements track.
+The new Goal Tree / AgentRun workflow has not been defined yet.
+No files were written and no command was executed.
+```
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-core`：pass，61 tests。
+- `cargo test -p agentflow-cli`：pass，2 tests。
+- `cargo test -p agentflow-graph`：pass，26 tests。
+- `cargo test`：pass，CLI 2 tests + core 61 tests + desktop 16 tests + graph 26 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `npm --prefix apps/desktop audit`：pass，found 0 vulnerabilities。
+- `cargo run -p agentflow-cli -- run ISSUE-0001 --dry-run`：pass，输出退役禁用消息，未执行旧 run。
+- `cargo run -p agentflow-cli -- metrics`：pass，只读命令仍可执行。
+- `git diff --check`：pass。
+
+边界：
+
+- 未新增 Goal Tree。
+- 未定义新的 Goal / Milestone / Issue / AgentRun。
+- 未调用模型。
+- 未执行用户项目命令。
+- 未修改用户项目源码。
+- 未改变 Project Workspace / Graph / Project File Reader 行为。
+- 未改变 Desktop UI。
+- 未改变 Tauri command 名称。
+- 未写入 `.agentflow/` 运行态数据。
