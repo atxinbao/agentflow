@@ -32,6 +32,7 @@ import {
   createBrowserPreviewSearchSnapshot,
   createBrowserPreviewWorkbenchSnapshot,
 } from "./browserPreviewData";
+import { GoalTreePage, useGoalTree } from "./features/goal-tree";
 import {
   ProjectLocalFilesPage,
   isBrowserPreviewRuntime,
@@ -73,6 +74,7 @@ type ViewKey =
   | "lifecycle"
   | "timeline"
   | "projects"
+  | "goal-tree"
   | "issues"
   | "metrics"
   | "search"
@@ -341,6 +343,11 @@ function App() {
     projectFilesState.snapshot?.projectRoot ??
     (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
   const { projectGraphState } = useProjectGraph(graphProjectRoot);
+  const goalTreeProjectRoot =
+    selectedProjectRoot ??
+    projectFilesState.snapshot?.projectRoot ??
+    (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
+  const goalTreeController = useGoalTree(goalTreeProjectRoot);
   const agentStatusItems = useMemo(
     () => buildAgentStatusItems({ projectFilesState, projectGraphState }),
     [projectFilesState, projectGraphState],
@@ -676,6 +683,12 @@ function App() {
             void loadProjectFiles(projectRoot ?? null);
           }}
           onSelectProject={selectSidebarProject}
+          onSelectGoalTree={(projectId, projectRoot) => {
+            setActiveView("goal-tree");
+            setSelectedProjectId(projectId);
+            setSelectedMilestoneId(null);
+            setSelectedProjectRoot(projectRoot ?? null);
+          }}
           onRemoveProject={removeLocalProject}
           onSelectViews={(projectId, projectRoot) => {
             setActiveView("views");
@@ -773,6 +786,16 @@ function App() {
             selectedProjectRoot={selectedProjectRoot}
           />
         ) : null}
+        {activeView === "goal-tree" ? (
+          <GoalTreePage
+            controller={goalTreeController}
+            onOpenProjectFile={(relativePath) => {
+              setActiveView("projects");
+              void selectProjectFile(relativePath);
+            }}
+            projectRoot={goalTreeProjectRoot}
+          />
+        ) : null}
         {activeView === "issues" ? (
           <IssuesView
             onSelectIssue={setSelectedIssueId}
@@ -829,6 +852,7 @@ function WorkspaceTreeNav({
   onSelectIssue,
   onSelectMilestone,
   onSelectProject,
+  onSelectGoalTree,
   onRemoveProject,
   onSelectViews,
   onSubmitProjectAdd,
@@ -851,6 +875,7 @@ function WorkspaceTreeNav({
   onSelectIssue: (issueId: string, projectId?: string | null, milestoneId?: string | null, projectRoot?: string | null) => void;
   onSelectMilestone: (projectId: string, milestoneId: string, projectRoot?: string | null) => void;
   onSelectProject: (projectId: string, projectRoot?: string | null) => void;
+  onSelectGoalTree: (projectId: string, projectRoot?: string | null) => void;
   onRemoveProject: (projectId: string, projectRoot: string) => void;
   onSelectViews: (projectId: string, projectRoot?: string | null) => void;
   onSubmitProjectAdd: (event: FormEvent<HTMLFormElement>) => void;
@@ -941,6 +966,7 @@ function WorkspaceTreeNav({
                 const firstIssue = firstIssueForProject(modelProject);
                 const projectSelected = effectiveProjectId === project.id;
                 const projectExpanded = expandedProjectIds.has(project.id);
+                const goalTreeActive = projectSelected && activeView === "goal-tree";
                 const milestoneActive =
                   projectSelected &&
                   activeView === "projects" &&
@@ -997,6 +1023,14 @@ function WorkspaceTreeNav({
                     {projectExpanded ? (
                       <div className="tree-children tree-children-animated expanded">
                         <div className="tree-children-inner">
+                          <button
+                            className={goalTreeActive ? "tree-child tree-goal-tree-node active" : "tree-child tree-goal-tree-node"}
+                            onClick={() => onSelectGoalTree(project.id, project.root)}
+                            type="button"
+                          >
+                            <ListChecks size={15} />
+                            <span>目标树</span>
+                          </button>
                           <button
                             className={milestoneActive ? "tree-child tree-milestone-node active" : "tree-child tree-milestone-node"}
                             onClick={() => {

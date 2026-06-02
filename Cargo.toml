@@ -3,6 +3,7 @@ members = [
     "crates/agentflow-core",
     "crates/agentflow-cli",
     "crates/graph",
+    "crates/goal-tree",
     "apps/desktop/src-tauri",
 ]
 resolver = "2"

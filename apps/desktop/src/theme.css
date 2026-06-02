@@ -1,0 +1,942 @@
+:root {
+  --af-theme-app-bg: #f5f7fb;
+  --af-theme-sidebar-bg: #ffffff;
+  --af-theme-workspace-bg: #f4f7fb;
+  --af-theme-topbar-bg: #ffffff;
+  --af-theme-panel-bg: #ffffff;
+  --af-theme-panel-inner-bg: #f8fafc;
+  --af-theme-code-bg: #f3f6fb;
+  --af-theme-hover-bg: #eef4fb;
+  --af-theme-selected-bg: #e8f1ff;
+  --af-theme-selected-text: #0f2f5f;
+  --af-theme-button-bg: #ffffff;
+  --af-theme-border: #d8e0ea;
+  --af-theme-border-soft: #e4eaf1;
+  --af-theme-text-primary: #18202d;
+  --af-theme-text-secondary: #526071;
+  --af-theme-text-muted: #697487;
+  --af-theme-text-subtle: #8a96a8;
+  --af-theme-text-inverse: #ffffff;
+  --af-theme-accent: #3b82f6;
+  --af-theme-accent-soft: #dbeafe;
+  --af-theme-success-bg: #dcf6e8;
+  --af-theme-success-text: #137442;
+  --af-theme-warning-bg: #fff5d6;
+  --af-theme-warning-text: #8a5a00;
+  --af-theme-danger-bg: #fde7e4;
+  --af-theme-danger-text: #a33a32;
+  --af-theme-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  color: var(--af-theme-text-primary);
+  background: var(--af-theme-app-bg);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --af-theme-app-bg: #18181b;
+    --af-theme-sidebar-bg: #1f1f22;
+    --af-theme-workspace-bg: #1b1b1f;
+    --af-theme-topbar-bg: #1f1f22;
+    --af-theme-panel-bg: #202126;
+    --af-theme-panel-inner-bg: #1b1c20;
+    --af-theme-code-bg: #17181c;
+    --af-theme-hover-bg: #292a2f;
+    --af-theme-selected-bg: #2f4b7a;
+    --af-theme-selected-text: #a9c3ff;
+    --af-theme-button-bg: #24252a;
+    --af-theme-border: #343842;
+    --af-theme-border-soft: #2b2f38;
+    --af-theme-text-primary: #f4f7fb;
+    --af-theme-text-secondary: #c6cfda;
+    --af-theme-text-muted: #9aa4b2;
+    --af-theme-text-subtle: #7f8896;
+    --af-theme-text-inverse: #0f141d;
+    --af-theme-accent: #8db3ff;
+    --af-theme-accent-soft: #26354a;
+    --af-theme-success-bg: #113423;
+    --af-theme-success-text: #a8f0c8;
+    --af-theme-warning-bg: #33250d;
+    --af-theme-warning-text: #f7d88a;
+    --af-theme-danger-bg: #451915;
+    --af-theme-danger-text: #ffb8b1;
+    --af-theme-shadow: 0 18px 45px rgba(0, 0, 0, 0.2);
+    color: var(--af-theme-text-primary);
+    background: var(--af-theme-app-bg);
+    color-scheme: dark;
+  }
+}
+
+body {
+  background: var(--af-theme-app-bg);
+  color: var(--af-theme-text-primary);
+}
+
+.shell {
+  --af-sidebar-bg: var(--af-theme-sidebar-bg);
+  --af-workspace-bg: var(--af-theme-workspace-bg);
+  --af-topbar-bg: var(--af-theme-topbar-bg);
+  --af-panel-bg: var(--af-theme-panel-bg);
+  --af-panel-inner-bg: var(--af-theme-panel-inner-bg);
+  --af-code-bg: var(--af-theme-code-bg);
+  --af-hover-bg: var(--af-theme-hover-bg);
+  --af-border: var(--af-theme-border);
+  --af-border-soft: var(--af-theme-border-soft);
+  --af-button-bg: var(--af-theme-button-bg);
+}
+
+.sidebar,
+.workspace,
+.topbar,
+.loading-shell {
+  color: var(--af-theme-text-primary);
+}
+
+.sidebar {
+  border-right-color: var(--af-theme-border);
+  background: var(--af-theme-sidebar-bg);
+}
+
+.workspace {
+  background: var(--af-theme-workspace-bg);
+}
+
+.topbar {
+  border-bottom-color: var(--af-theme-border);
+  background: var(--af-theme-topbar-bg);
+}
+
+.topbar h1,
+.tree-section-header,
+.section-heading h2,
+.goal-tree-toolbar h1,
+.goal-tree-browser h2,
+.goal-tree-context-panel h2,
+.goal-tree-create-form h2,
+.goal-tree-editor-header h2,
+.project-file-reader-header h2,
+.project-file-content-header h3,
+.project-directory-overview h3 {
+  color: var(--af-theme-text-primary);
+}
+
+.topbar-path,
+.brand span,
+.tree-child,
+.tree-parent,
+.tree-add-button,
+.goal-tree-toolbar p,
+.goal-tree-muted,
+.goal-tree-empty,
+.project-file-reader-header p,
+.project-file-reader-header span,
+.project-file-content-header span,
+.project-file-content-header p,
+.project-file-content dt,
+.project-directory-overview header span,
+.project-directory-overview header p {
+  color: var(--af-theme-text-muted);
+}
+
+.tree-add-button:hover,
+.tree-child:hover,
+.tree-parent:hover,
+.tree-parent.active,
+.nav-item:hover,
+.nav-item.active {
+  background: var(--af-theme-hover-bg);
+  color: var(--af-theme-text-primary);
+}
+
+.tree-project-node.active {
+  background: var(--af-theme-selected-bg);
+  color: var(--af-theme-selected-text);
+}
+
+.tree-nested-section.expanded,
+.sidebar-project-add-panel,
+.icon-command,
+.sidebar-project-add-actions button {
+  border-color: var(--af-theme-border);
+  background: var(--af-theme-button-bg);
+  color: var(--af-theme-text-secondary);
+}
+
+.sidebar-project-add-panel input {
+  border-color: var(--af-theme-border);
+  background: var(--af-theme-panel-inner-bg);
+  color: var(--af-theme-text-primary);
+}
+
+.sidebar-project-add-panel strong,
+.sidebar-project-add-actions button:hover,
+.sidebar-footer-links button:hover {
+  color: var(--af-theme-text-primary);
+}
+
+.sidebar-project-add-panel p,
+.sidebar-project-add-feedback,
+.sidebar-footer-links button {
+  color: var(--af-theme-text-muted);
+}
+
+.sidebar-footer-links {
+  border-top-color: var(--af-theme-border);
+}
+
+.sidebar-footer-links button:hover {
+  background: var(--af-theme-hover-bg);
+}
+
+.project-file-reader,
+.project-file-browser,
+.goal-tree-toolbar,
+.goal-tree-browser,
+.goal-tree-context-panel,
+.goal-tree-detail,
+.goal-tree-empty-state,
+.project-panel,
+.project-issues,
+.runtime-panel,
+.hero-runtime-panel,
+.issue-list,
+.detail-pane,
+.artifact-reader,
+.saved-view-workbench,
+.saved-view-detail,
+.views-panel,
+.team-hierarchy-shell,
+.team-parent-card,
+.team-detail-card,
+.search-header,
+.search-form,
+.search-results,
+.trace-header,
+.trace-card,
+.timeline-header,
+.timeline-board,
+.lifecycle-header,
+.lifecycle-detail,
+.lifecycle-artifact-list,
+.metrics-header,
+.metric-group,
+.latest-metric {
+  border-color: var(--af-theme-border);
+  background: var(--af-theme-panel-bg);
+  color: var(--af-theme-text-primary);
+}
+
+.goal-tree-page,
+.goal-tree-page.empty,
+.project-layout,
+.issue-page,
+.saved-view-layout,
+.search-layout,
+.trace-layout,
+.timeline-layout,
+.lifecycle-layout,
+.metrics-layout {
+  color: var(--af-theme-text-primary);
+}
+
+.project-file-title-icon,
+.goal-tree-field input,
+.goal-tree-field textarea,
+.goal-tree-field select,
+.goal-tree-file-list button,
+.goal-tree-toolbar button,
+.goal-tree-form-actions button,
+.goal-tree-editor-actions button,
+.goal-tree-secondary-action,
+.goal-tree-empty-state button {
+  border-color: var(--af-theme-border-soft);
+  background: var(--af-theme-panel-inner-bg);
+  color: var(--af-theme-text-primary);
+}
+
+.goal-tree-toolbar button:hover,
+.goal-tree-form-actions button:hover,
+.goal-tree-editor-actions button:hover,
+.goal-tree-secondary-action:hover,
+.goal-tree-empty-state button:hover,
+.goal-tree-file-list button:hover,
+.project-file-row:hover {
+  background: var(--af-theme-hover-bg);
+}
+
+.task-progress-card,
+.task-progress-stat,
+.task-search,
+.task-toolbar select,
+.task-detail-meta-row span,
+.task-meta-item,
+.task-note-grid span,
+.list-block,
+.run-summary,
+.link-list,
+.template-details,
+.template-web-document,
+.template-web-table-wrap,
+.milestone-timeline-card,
+.milestone-timeline-meta,
+.milestone-stage-facts,
+.milestone-card-facts,
+.milestone-issue-row,
+.team-row,
+.milestone-row,
+.milestone-execution-row,
+.project-facts div,
+.search-result,
+.trace-step,
+.timeline-card,
+.timeline-ref-list,
+.lifecycle-issue-row,
+.lifecycle-step,
+.lifecycle-artifact-list pre,
+.saved-view,
+.saved-view-rule-grid div,
+.issue-contract-panel,
+.issue-contract-hero {
+  border-color: var(--af-theme-border-soft);
+  background: var(--af-theme-panel-inner-bg);
+  color: var(--af-theme-text-primary);
+}
+
+.milestone-timeline-card:hover,
+.milestone-timeline-card.active,
+.milestone-issue-row:hover,
+.milestone-issue-row.active,
+.saved-view:hover,
+.saved-view.active,
+.issue-row:hover,
+.issue-row.active,
+.artifact-row:hover,
+.artifact-row.active,
+.lifecycle-issue-row:hover,
+.lifecycle-issue-row.active {
+  border-color: var(--af-theme-accent);
+  background: var(--af-theme-selected-bg);
+  color: var(--af-theme-selected-text);
+}
+
+.template-tabbar,
+.section-heading,
+.task-list-header,
+.task-detail-titlebar,
+.task-detail-heading,
+.linear-issue-header,
+.task-detail-section,
+.issue-contract-header,
+.saved-view-hero,
+.saved-view-detail header,
+.template-web-table th,
+.template-web-table td,
+.hero-runtime-panel .section-heading,
+.hero-runtime-panel dl div,
+.runtime-panel dl div,
+.workspace-entry-column + .workspace-entry-column {
+  border-color: var(--af-theme-border-soft);
+}
+
+.linear-issue-detail,
+.linear-contract-detail,
+.issue-contract-page {
+  background: var(--af-theme-panel-bg);
+  color: var(--af-theme-text-primary);
+}
+
+.goal-tree-row {
+  color: var(--af-theme-text-secondary);
+}
+
+.goal-tree-row small,
+.goal-tree-file-list button small {
+  color: var(--af-theme-text-subtle);
+}
+
+.goal-tree-row:hover,
+.goal-tree-row.active,
+.project-file-row.active {
+  background: var(--af-theme-selected-bg);
+  color: var(--af-theme-selected-text);
+}
+
+.goal-tree-editor-header,
+.project-file-reader-header,
+.project-markdown-reader,
+.project-file-content-header,
+.project-file-browser-toolbar,
+.project-file-table-header {
+  border-color: var(--af-theme-border-soft);
+}
+
+.goal-tree-field > span,
+.goal-tree-context-panel h3,
+.project-file-content dd,
+.project-markdown-reader,
+.project-directory-overview,
+.template-web-lead,
+.template-web-section p,
+.template-web-section li,
+.template-web-facts dd,
+.task-detail-section p,
+.linear-issue-section p,
+.task-guide-list,
+.task-list-group ul,
+.task-value-list,
+.task-muted,
+.list-block ul,
+.milestone-timeline-card > p,
+.milestone-card-main p,
+.saved-view-note {
+  color: var(--af-theme-text-secondary);
+}
+
+.project-markdown-reader h1,
+.project-markdown-reader h2,
+.project-markdown-reader h3,
+.project-markdown-reader h4,
+.template-web-document h1,
+.template-web-section h2,
+.linear-issue-header h1,
+.linear-issue-section h3,
+.task-detail-titlebar h2,
+.task-detail-heading h2,
+.task-detail-section h3,
+.task-list-group h4,
+.task-meta-item strong,
+.runtime-panel dd,
+.project-facts dd,
+.team-row dd,
+.milestone-row strong,
+.milestone-issue-row strong,
+.milestone-execution-row strong,
+.saved-view-detail h2,
+.saved-view dd,
+.saved-view strong,
+.issue-contract-header h1,
+.issue-contract-panel h3,
+.issue-contract-hero p,
+.task-progress-heading strong,
+.task-progress-stat strong {
+  color: var(--af-theme-text-primary);
+}
+
+.template-tab,
+.template-web-facts dt,
+.template-web-table th,
+.linear-issue-breadcrumb,
+.task-detail-status,
+.task-detail-meta-row span,
+.task-meta-item span,
+.runtime-panel dt,
+.project-facts dt,
+.team-row dt,
+.milestone-title-row span,
+.milestone-card-facts dt,
+.milestone-stage-facts dt,
+.saved-view span,
+.saved-view small,
+.saved-view-detail p,
+.saved-view-rule-grid dt,
+.issue-contract-header p,
+.issue-contract-properties span,
+.task-progress-heading span,
+.task-progress-stat span {
+  color: var(--af-theme-text-muted);
+}
+
+.template-tab.active {
+  border-bottom-color: var(--af-theme-accent);
+  color: var(--af-theme-text-primary);
+}
+
+.template-web-checklist li span {
+  border-color: var(--af-theme-border-soft);
+  background: var(--af-theme-panel-bg);
+}
+
+.project-code-reader,
+.project-file-plain-reader,
+.project-file-json-reader,
+.project-file-config-reader,
+.project-file-binary-reader,
+.project-file-large-reader,
+.task-value-list code,
+.task-list-group code,
+.task-file-list code,
+.template-web-section code,
+.command-box code,
+.list-block code {
+  background: var(--af-theme-code-bg);
+  color: var(--af-theme-text-primary);
+}
+
+.task-progress-track {
+  background: var(--af-theme-border-soft);
+}
+
+.task-progress-segment.done {
+  background: var(--af-theme-success-text);
+}
+
+.task-progress-segment.active {
+  background: var(--af-theme-accent);
+}
+
+.task-progress-segment.pending {
+  background: var(--af-theme-warning-text);
+}
+
+.task-progress-segment.canceled {
+  background: var(--af-theme-text-subtle);
+}
+
+.goal-tree-health,
+.goal-tree-status-pill,
+.status-badge {
+  background: var(--af-theme-hover-bg);
+  color: var(--af-theme-text-secondary);
+}
+
+.goal-tree-health.valid,
+.status-badge.completed,
+.status-badge.done,
+.status-badge.passed {
+  background: var(--af-theme-success-bg);
+  color: var(--af-theme-success-text);
+}
+
+.goal-tree-health.invalid,
+.goal-tree-warning-list li,
+.goal-tree-error,
+.notice,
+.status-badge.planned,
+.status-badge.todo,
+.status-badge.not-recorded {
+  background: var(--af-theme-warning-bg);
+  color: var(--af-theme-warning-text);
+}
+
+.status-badge.failed,
+.status-badge.canceled {
+  background: var(--af-theme-danger-bg);
+  color: var(--af-theme-danger-text);
+}
+
+.shell-status-bar {
+  border-top-color: var(--af-theme-border);
+  background: var(--af-theme-panel-inner-bg);
+  color: var(--af-theme-text-muted);
+}
+
+.agent-status-item + .agent-status-item {
+  border-left-color: var(--af-theme-border-soft);
+}
+
+.agent-status-primary strong,
+.agent-status-primary span:last-child {
+  color: var(--af-theme-text-primary);
+}
+
+.agent-status-separator {
+  color: var(--af-theme-text-subtle);
+}
+
+/* Final theme convergence for pages that still carry fixed v3 dark surfaces. */
+.project-local-files-layout,
+.project-file-page,
+.project-contract-surface,
+.project-goal-screen,
+.milestone-plan-screen,
+.issue-page,
+.issue-layout,
+.template-detail-layout,
+.saved-view-layout,
+.saved-view-workbench,
+.goal-tree-page,
+.search-layout,
+.trace-layout,
+.timeline-layout,
+.lifecycle-layout,
+.metrics-layout {
+  background: transparent;
+  color: var(--af-theme-text-primary);
+}
+
+.project-file-reader,
+.project-file-browser,
+.project-file-content,
+.project-directory-overview,
+.project-file-empty,
+.project-panel,
+.project-issues,
+.project-goal-panel,
+.project-fact-pill,
+.goal-statement-card,
+.runtime-hero,
+.runtime-panel,
+.hero-runtime-panel,
+.task-progress-card,
+.task-progress-stat,
+.milestone-plan-screen .milestone-timeline-card,
+.milestone-timeline-card,
+.milestone-timeline-rail span,
+.milestone-timeline-meta,
+.milestone-stage-facts,
+.milestone-card-facts,
+.milestone-step-label,
+.milestone-title-row span,
+.milestone-row,
+.milestone-issue-row,
+.milestone-execution-row,
+.detail-pane,
+.task-detail-pane,
+.linear-issue-detail,
+.linear-contract-detail,
+.issue-contract-page,
+.issue-contract-header,
+.issue-contract-hero,
+.issue-contract-panel,
+.issue-contract-properties span,
+.issue-contract-checklist li > span,
+.template-web-document,
+.template-web-table-wrap,
+.template-web-checklist li span,
+.list-block,
+.run-summary,
+.link-list,
+.template-details,
+.task-search,
+.task-toolbar select,
+.task-detail-meta-row span,
+.task-meta-item,
+.task-note-grid span,
+.saved-view-hero,
+.saved-view-workbench,
+.saved-view-list,
+.saved-view-detail,
+.saved-view,
+.saved-view-hero strong,
+.saved-view-rule-grid div,
+.goal-tree-toolbar,
+.goal-tree-browser,
+.goal-tree-context-panel,
+.goal-tree-detail,
+.goal-tree-empty-state,
+.goal-tree-create-form,
+.goal-tree-field input,
+.goal-tree-field textarea,
+.goal-tree-field select,
+.goal-tree-file-list button,
+.search-header,
+.search-form,
+.search-results,
+.search-result,
+.trace-header,
+.trace-card,
+.trace-step,
+.timeline-header,
+.timeline-board,
+.timeline-card,
+.timeline-ref-list,
+.lifecycle-header,
+.lifecycle-detail,
+.lifecycle-issue-row,
+.lifecycle-step,
+.lifecycle-artifact-list,
+.metrics-header,
+.metric-group,
+.latest-metric {
+  border-color: var(--af-theme-border);
+  background: var(--af-theme-panel-bg);
+  color: var(--af-theme-text-primary);
+}
+
+.project-file-title-icon,
+.project-markdown-reader,
+.project-code-reader,
+.project-file-plain-reader,
+.project-file-json-reader,
+.project-file-config-reader,
+.project-file-binary-reader,
+.project-file-large-reader,
+.goal-tree-row,
+.goal-tree-secondary-action,
+.goal-tree-toolbar button,
+.goal-tree-form-actions button,
+.goal-tree-editor-actions button,
+.goal-tree-empty-state button,
+.project-goal-panel.muted,
+.project-goal-panel code,
+.issue-contract-panel code,
+.task-value-list code,
+.task-list-group code,
+.task-file-list code,
+.template-web-section code,
+.command-box code,
+.list-block code,
+.lifecycle-artifact-list pre {
+  background: var(--af-theme-panel-inner-bg);
+  color: var(--af-theme-text-primary);
+}
+
+.project-code-reader,
+.project-file-plain-reader,
+.project-file-json-reader,
+.project-file-config-reader,
+.project-file-binary-reader,
+.project-file-large-reader,
+.project-goal-panel code,
+.issue-contract-panel code,
+.task-value-list code,
+.task-list-group code,
+.task-file-list code,
+.template-web-section code,
+.command-box code,
+.list-block code,
+.lifecycle-artifact-list pre {
+  background: var(--af-theme-code-bg);
+}
+
+.project-file-row:hover,
+.goal-tree-row:hover,
+.goal-tree-toolbar button:hover,
+.goal-tree-form-actions button:hover,
+.goal-tree-editor-actions button:hover,
+.goal-tree-secondary-action:hover,
+.goal-tree-empty-state button:hover,
+button.milestone-timeline-card:hover,
+.milestone-timeline-card.active,
+.milestone-issue-row:hover,
+.milestone-issue-row.active,
+.issue-row:hover,
+.issue-row.active,
+.artifact-row:hover,
+.artifact-row.active,
+.lifecycle-issue-row:hover,
+.lifecycle-issue-row.active,
+button.saved-view:hover,
+button.saved-view.active {
+  border-color: var(--af-theme-accent);
+  background: var(--af-theme-selected-bg);
+  color: var(--af-theme-selected-text);
+}
+
+.project-file-row.active,
+.goal-tree-row.active {
+  background: var(--af-theme-selected-bg);
+  color: var(--af-theme-selected-text);
+}
+
+.project-file-reader-header,
+.project-file-content-header,
+.project-markdown-reader,
+.project-file-browser-toolbar,
+.project-file-table-header,
+.goal-tree-editor-header,
+.template-tabbar,
+.section-heading,
+.task-list-header,
+.task-detail-titlebar,
+.task-detail-heading,
+.linear-issue-header,
+.task-detail-section,
+.issue-contract-header,
+.saved-view-hero,
+.saved-view-detail header,
+.saved-view dl div,
+.template-web-table th,
+.template-web-table td,
+.runtime-panel dl div,
+.hero-runtime-panel .section-heading,
+.hero-runtime-panel dl div,
+.milestone-timeline-meta div,
+.milestone-stage-facts div,
+.milestone-card-facts div,
+.workspace-entry-column + .workspace-entry-column {
+  border-color: var(--af-theme-border-soft);
+}
+
+.project-file-reader-header h2,
+.project-file-content-header h3,
+.project-directory-overview h3,
+.project-markdown-reader h1,
+.project-markdown-reader h2,
+.project-markdown-reader h3,
+.project-markdown-reader h4,
+.workbench-screen-header h1,
+.goal-statement-card h2,
+.project-goal-panel h2,
+.project-fact-pill strong,
+.milestone-card-main h3,
+.milestone-title-row h3,
+.milestone-card-progress strong,
+.milestone-card-facts dd,
+.milestone-timeline-card-heading h3,
+.milestone-timeline-meta dd,
+.milestone-stage-facts dd,
+.linear-issue-header h1,
+.linear-issue-section h3,
+.task-detail-titlebar h2,
+.task-detail-heading h2,
+.task-detail-section h3,
+.task-list-group h4,
+.task-meta-item strong,
+.runtime-panel dd,
+.project-facts dd,
+.team-row dd,
+.milestone-row strong,
+.milestone-issue-row strong,
+.milestone-execution-row strong,
+.issue-contract-header h1,
+.issue-contract-hero p,
+.issue-contract-panel h3,
+.saved-view-hero h2,
+.saved-view-hero strong,
+.saved-view-detail header h2,
+.saved-view-rule-grid dd,
+.saved-view dd,
+.saved-view strong,
+.task-progress-heading strong,
+.task-progress-stat strong {
+  color: var(--af-theme-text-primary);
+}
+
+.project-file-reader-header p,
+.project-file-reader-header span,
+.project-file-title-group > div > span,
+.project-file-content-header span,
+.project-file-content-header p,
+.project-file-content dt,
+.project-directory-overview header span,
+.project-directory-overview header p,
+.workbench-screen-header p,
+.workbench-screen-header span,
+.goal-statement-card span,
+.project-goal-panel h2,
+.project-fact-pill span,
+.milestone-step-label,
+.milestone-title-row span,
+.milestone-card-facts dt,
+.milestone-timeline-card-heading span:not(.status-badge),
+.milestone-timeline-meta dt,
+.milestone-stage-facts dt,
+.linear-issue-breadcrumb,
+.task-detail-status,
+.task-detail-meta-row span,
+.task-meta-item span,
+.runtime-panel dt,
+.project-facts dt,
+.team-row dt,
+.issue-contract-header p,
+.issue-contract-hero span,
+.issue-contract-properties span,
+.saved-view-hero p,
+.saved-view-hero span,
+.saved-view-detail header p,
+.saved-view-rule-grid dt,
+.saved-view span,
+.saved-view small,
+.task-progress-heading span,
+.task-progress-stat span,
+.goal-tree-kicker,
+.goal-tree-row small,
+.goal-tree-field > span,
+.goal-tree-context-panel h3 {
+  color: var(--af-theme-text-muted);
+}
+
+.project-file-content dd,
+.project-markdown-reader,
+.project-markdown-reader p,
+.project-plain-reader p,
+.project-markdown-reader ul,
+.template-web-lead,
+.template-web-section p,
+.template-web-section li,
+.template-web-facts dd,
+.linear-issue-section p,
+.task-detail-section p,
+.task-guide-list,
+.task-list-group ul,
+.task-value-list,
+.milestone-timeline-card > p,
+.milestone-card-main p,
+.issue-contract-panel ul,
+.issue-contract-panel li,
+.project-goal-panel ul,
+.project-goal-panel li,
+.saved-view-note,
+.goal-tree-row,
+.goal-tree-muted,
+.goal-tree-empty,
+.goal-tree-error {
+  color: var(--af-theme-text-secondary);
+}
+
+.goal-statement-card {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--af-theme-accent) 11%, transparent),
+      transparent
+    ),
+    var(--af-theme-panel-bg);
+}
+
+.milestone-progress-track,
+.task-progress-track,
+.milestone-timeline-item:not(:last-child)::before {
+  background: var(--af-theme-border-soft);
+}
+
+.milestone-progress-track span,
+.task-progress-segment.active {
+  background: var(--af-theme-accent);
+}
+
+.task-progress-segment.done {
+  background: var(--af-theme-success-text);
+}
+
+.task-progress-segment.pending {
+  background: var(--af-theme-warning-text);
+}
+
+.task-progress-segment.canceled {
+  background: var(--af-theme-text-subtle);
+}
+
+.status-badge.in-progress {
+  background: var(--af-theme-accent-soft);
+  color: var(--af-theme-accent);
+}
+
+.status-badge.in-review {
+  background: color-mix(in srgb, var(--af-theme-accent-soft) 70%, var(--af-theme-danger-bg));
+  color: var(--af-theme-accent);
+}
+
+.agent-status-indicator[data-status="ready"] {
+  background: var(--af-theme-success-text);
+}
+
+.agent-status-indicator[data-status="working"] {
+  background: var(--af-theme-accent);
+}
+
+.agent-status-indicator[data-status="warning"] {
+  background: var(--af-theme-warning-text);
+}
+
+.agent-status-indicator[data-status="failed"] {
+  background: var(--af-theme-danger-text);
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.workspace > :not(.topbar):not(.shell-status-bar)::-webkit-scrollbar-thumb,
+.project-file-reader ::-webkit-scrollbar-thumb,
+.project-file-browser ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--af-theme-text-subtle) 52%, transparent);
+  background-clip: padding-box;
+}

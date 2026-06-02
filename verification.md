@@ -2931,6 +2931,58 @@
 - 未修改用户项目源码。
 - 未写入 `.agentflow/` 运行态数据。
 
+## 2026-06-02 Goal Tree V1
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/007-goal-tree-v1.md`。
+- 新增本地 Goal Tree V1，用新的 Goal / Milestone / Issue 模型管理本地 Project Workspace 下的目标树。
+- 为未来 AgentRun 提供稳定输入，但本阶段不启动 Agent、不执行命令、不调用模型。
+
+结果：
+
+- 需求文档已复制到 `docs/requirements/007-goal-tree-v1.md`。
+- 新增 `crates/goal-tree`，Cargo package 为 `agentflow-goal-tree`。
+- 新增 Goal / Milestone / Issue / GoalTreeIndex 模型，不复用旧 `IssueContract` / `GoalLoop` / `AgentRun`。
+- 新增 `.agentflow/define/**` JSON storage：
+  - `.agentflow/define/goal-tree.json`
+  - `.agentflow/define/goals/*.json`
+  - `.agentflow/define/milestones/*.json`
+  - `.agentflow/define/issues/*.json`
+- 新增 load/create/update/archive/reorder/validate API。
+- 新增 integrity validation：
+  - 缺失引用
+  - ready Issue 必填字段
+  - archived dependency
+  - completed 状态冲突
+  - Issue dependency cycle
+  - validation/evidence/context pack warning
+- 新增 Tauri Goal Tree commands。
+- 新增 Desktop `Goal Tree` 页面：
+  - 左侧 Goal / Milestone / Issue 树
+  - 中间 Human editable contract 编辑器
+  - 右侧 Graph context / 完整性提示 / 推荐文件入口
+- 新增 browser preview Goal Tree mock，浏览器预览不写真实 `.agentflow/`。
+
+边界：
+
+- 不接 OpenSpec 工具链。
+- 不依赖 `agentflow_core::legacy`。
+- 不启动 Agent。
+- 不执行项目命令。
+- 不调用模型。
+- 不写用户源码。
+- 不写旧 `.agentflow/issues`、`runs`、`evidence`、`reviews`、`updates`、`views`。
+- Graph Context Pack 失败时只返回 warning，不阻塞 Goal Tree 编辑。
+
+验证：
+
+- `cargo test -p agentflow-goal-tree`：pass，3 tests。
+- `cargo test`：pass，CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + graph 26 tests。
+- `npm --prefix apps/desktop run build`：pass。
+
 ## 2026-06-02 Legacy Cleanup and New Module Split - Final Boundary Audit
 
 执行者：Codex

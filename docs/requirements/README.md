@@ -31,6 +31,7 @@
 - [004-legacy-cleanup-and-new-module-split.md](004-legacy-cleanup-and-new-module-split.md)
 - [005-legacy-and-degraded-code-removal.md](005-legacy-and-degraded-code-removal.md)
 - [006-legacy-cli-retirement-and-archive-pruning.md](006-legacy-cli-retirement-and-archive-pruning.md)
+- [007-goal-tree-v1.md](007-goal-tree-v1.md)
 - [next-requirements.md](next-requirements.md)
 
 ## 不继承内容

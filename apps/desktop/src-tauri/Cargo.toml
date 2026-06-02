@@ -10,6 +10,7 @@ tauri-build = { version = "=2.4.0", features = [] }
 [dependencies]
 agentflow-core = { path = "../../../crates/agentflow-core" }
 agentflow-graph = { path = "../../../crates/graph" }
+agentflow-goal-tree = { path = "../../../crates/goal-tree" }
 base64 = "0.22"
 rfd = "0.15"
 serde.workspace = true

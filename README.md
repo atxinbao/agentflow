@@ -34,8 +34,10 @@ docs/requirements/
 
 - AgentFlow 是本地优先的桌面工作台。
 - Desktop 当前只读取和展示本地项目内容。
+- Goal Tree V1 允许用户在本地项目下写入 `.agentflow/define/**` 目标树事实源。
 - 不执行命令。
-- 不写 `.agentflow/`。
+- 不写用户业务源码。
+- 不写旧 `.agentflow/issues`、`runs`、`evidence`、`reviews`、`updates`、`views` 路径。
 - 不调用模型。
 - 不创建远程 PR、GitHub issue 或 Linear issue。
 - 后续能力必须由新的需求文档重新定义。
@@ -58,6 +60,7 @@ npm run tauri -- dev
 
 ```bash
 npm --prefix apps/desktop run build
+cargo test -p agentflow-goal-tree
 cargo test
 git diff --check
 ```

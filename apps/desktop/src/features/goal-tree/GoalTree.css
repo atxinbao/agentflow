@@ -1,0 +1,351 @@
+.goal-tree-page {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+  padding: 18px;
+  color: #18202d;
+}
+
+.goal-tree-page.empty {
+  align-content: center;
+  justify-items: center;
+  min-height: calc(100vh - 72px);
+  color: #526071;
+}
+
+.goal-tree-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.goal-tree-toolbar h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 30px;
+}
+
+.goal-tree-toolbar p {
+  margin: 2px 0 0;
+  color: #697487;
+  font-size: 12px;
+}
+
+.goal-tree-toolbar-actions,
+.goal-tree-form-actions,
+.goal-tree-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.goal-tree-toolbar button,
+.goal-tree-form-actions button,
+.goal-tree-editor-actions button,
+.goal-tree-secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #cbd6e2;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #253144;
+  cursor: pointer;
+}
+
+.goal-tree-toolbar button:hover,
+.goal-tree-form-actions button:hover,
+.goal-tree-editor-actions button:hover,
+.goal-tree-secondary-action:hover {
+  background: #edf3fa;
+}
+
+.goal-tree-toolbar button:disabled,
+.goal-tree-form-actions button:disabled,
+.goal-tree-secondary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.goal-tree-kicker {
+  color: #697487;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.goal-tree-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 280px;
+  gap: 14px;
+  min-height: 0;
+}
+
+.goal-tree-browser,
+.goal-tree-context-panel,
+.goal-tree-detail {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.goal-tree-browser,
+.goal-tree-context-panel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 14px;
+}
+
+.goal-tree-browser header,
+.goal-tree-context-panel header,
+.goal-tree-create-form header,
+.goal-tree-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.goal-tree-browser h2,
+.goal-tree-context-panel h2,
+.goal-tree-create-form h2,
+.goal-tree-editor-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  line-height: 26px;
+}
+
+.goal-tree-health,
+.goal-tree-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #e8eef5;
+  color: #526071;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.goal-tree-health.valid {
+  background: #e1f8eb;
+  color: #137442;
+}
+
+.goal-tree-health.invalid {
+  background: #fff2cc;
+  color: #8a5a00;
+}
+
+.goal-tree-outline,
+.goal-tree-node-group,
+.goal-tree-children {
+  display: grid;
+  gap: 4px;
+}
+
+.goal-tree-children {
+  padding-left: 12px;
+}
+
+.goal-tree-children.nested {
+  padding-left: 18px;
+}
+
+.goal-tree-row {
+  display: grid;
+  grid-template-columns: 14px 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  width: 100%;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #526071;
+  text-align: left;
+  cursor: pointer;
+}
+
+.goal-tree-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-tree-row small {
+  color: #8a96a8;
+  font-size: 11px;
+}
+
+.goal-tree-row:hover,
+.goal-tree-row.active {
+  background: #e8eef5;
+  color: #111827;
+}
+
+.goal-tree-detail {
+  padding: 18px;
+}
+
+.goal-tree-editor,
+.goal-tree-create-form {
+  display: grid;
+  gap: 14px;
+  max-width: 900px;
+}
+
+.goal-tree-editor-header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #d8e0ea;
+}
+
+.goal-tree-field {
+  display: grid;
+  gap: 7px;
+}
+
+.goal-tree-field > span {
+  color: #253144;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.goal-tree-field input,
+.goal-tree-field textarea,
+.goal-tree-field select {
+  width: 100%;
+  border: 1px solid #cbd6e2;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #18202d;
+  font: inherit;
+  line-height: 22px;
+}
+
+.goal-tree-field input,
+.goal-tree-field select {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.goal-tree-field textarea {
+  resize: vertical;
+  padding: 10px;
+}
+
+.goal-tree-context-panel section {
+  display: grid;
+  gap: 8px;
+}
+
+.goal-tree-context-panel h3 {
+  margin: 0;
+  color: #253144;
+  font-size: 13px;
+}
+
+.goal-tree-file-list,
+.goal-tree-warning-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.goal-tree-file-list button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #d8e0ea;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #253144;
+  text-align: left;
+  cursor: pointer;
+}
+
+.goal-tree-file-list button span,
+.goal-tree-file-list button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-tree-file-list button small {
+  grid-column: 2;
+  color: #697487;
+  font-size: 11px;
+}
+
+.goal-tree-warning-list {
+  list-style: none;
+}
+
+.goal-tree-warning-list li {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border-radius: 7px;
+  background: #fff8e5;
+  color: #5f4500;
+  font-size: 12px;
+}
+
+.goal-tree-muted,
+.goal-tree-empty,
+.goal-tree-error {
+  margin: 0;
+  color: #697487;
+  font-size: 13px;
+}
+
+.goal-tree-error {
+  padding: 10px 12px;
+  border: 1px solid #f4b860;
+  border-radius: 8px;
+  background: #fff8e5;
+  color: #6d4e00;
+}
+
+.goal-tree-empty-state {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.goal-tree-empty-state h2,
+.goal-tree-empty-state p {
+  margin: 0;
+}
+
+.goal-tree-empty-state button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #cbd6e2;
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: pointer;
+}
