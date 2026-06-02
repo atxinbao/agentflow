@@ -5,10 +5,6 @@
 //! New AgentFlow requirements must not depend on this module unless a new
 //! requirement explicitly re-authorizes it.
 
-pub use super::archive_2026_05::{
-    create_product_feature, read_product_feature_execution_next,
-    read_product_feature_execution_status, ProductFeatureCreationSnapshot,
-    ProductFeatureCreationSummary, ProductFeatureDraft, ProductFeatureExecutionIssue,
-    ProductFeatureExecutionMilestone, ProductFeatureExecutionSnapshot, ProductFeatureIssueDraft,
-    ProductFeatureMilestoneDraft, ProductFeatureProject,
-};
+//! 006 retired the public compatibility re-exports for old Product Feature
+//! writers/readers. New requirements must define a fresh Goal Tree / AgentRun
+//! flow before any feature-generation CLI surface is reintroduced.

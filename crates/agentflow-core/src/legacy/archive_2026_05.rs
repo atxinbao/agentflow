@@ -5,6 +5,8 @@
 //! New AgentFlow requirements must not depend on this module unless a new
 //! requirement explicitly re-authorizes it.
 
+#![allow(dead_code)]
+
 use anyhow::{anyhow, bail, Context, Result};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};

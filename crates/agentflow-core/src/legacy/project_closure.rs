@@ -5,7 +5,5 @@
 //! New AgentFlow requirements must not depend on this module unless a new
 //! requirement explicitly re-authorizes it.
 
-pub use super::archive_2026_05::{
-    write_project_closure_state, ProjectClosureCounts, ProjectClosureGate,
-    ProjectClosureStateSnapshot, ProjectClosureStateSummary,
-};
+//! 006 retired the public compatibility re-exports for old project closure
+//! writers. Project completion will be redefined by future requirements.

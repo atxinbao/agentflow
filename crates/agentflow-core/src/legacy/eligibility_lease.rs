@@ -5,8 +5,7 @@
 //! New AgentFlow requirements must not depend on this module unless a new
 //! requirement explicitly re-authorizes it.
 
-pub use super::archive_2026_05::{
-    write_workflow_eligibility, write_workflow_lease_snapshot, WorkflowEligibilityCandidate,
-    WorkflowEligibilityCheckSummary, WorkflowEligibilitySnapshot, WorkflowEligibilitySummary,
-    WorkflowLeaseRecord, WorkflowLeaseSnapshot, WorkflowLeaseSummary,
-};
+//! 006 retired the public compatibility re-exports for old eligibility and
+//! lease writers. The archived implementation remains private to
+//! `archive_2026_05` until its internal tests and active read dependencies are
+//! replaced.
