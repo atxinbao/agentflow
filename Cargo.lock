@@ -33,12 +33,23 @@ name = "agentflow-desktop"
 version = "0.0.1"
 dependencies = [
  "agentflow-core",
+ "agentflow-goal-tree",
  "agentflow-graph",
  "base64 0.22.1",
  "rfd",
  "serde",
  "tauri",
  "tauri-build",
+ "tempfile",
+]
+
+[[package]]
+name = "agentflow-goal-tree"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 

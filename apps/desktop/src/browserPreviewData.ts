@@ -3,6 +3,7 @@ import type {
   GraphManifestSnapshot,
   GraphSearchSnapshot,
   GraphStatusSnapshot,
+  GoalTreeSnapshot,
   IssueContract,
   LocalMetricsSnapshot,
   LocalProjectModelSnapshot,
@@ -32,6 +33,9 @@ const previewBoundary: WorkbenchBoundary = {
 };
 
 const previewTimestamp = 1780291200;
+const previewGoalId = "goal-001";
+const previewMilestoneId = "ms-001";
+const previewIssueId = "iss-001";
 
 const previewIssueContract: IssueContract = {
   id: "ISSUE-PREVIEW-001",
@@ -351,6 +355,142 @@ export function createBrowserPreviewProjectViewModelSnapshot(projectRoot = BROWS
     invariants: ["浏览器预览可使用 mock 数据。", "真实 Tauri 客户端不能使用 mock fallback。"],
     sources: ["apps/desktop/src/browserPreviewData.ts"],
     boundary: previewBoundary,
+  };
+}
+
+export function createBrowserPreviewGoalTreeSnapshot(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): GoalTreeSnapshot {
+  return {
+    version: "goal-tree-snapshot.browser-preview",
+    projectRoot,
+    index: {
+      version: "goal-tree.v1",
+      projectRoot,
+      activeGoalId: previewGoalId,
+      goalOrder: [previewGoalId],
+      milestoneOrderByGoal: {
+        [previewGoalId]: [previewMilestoneId],
+      },
+      issueOrderByMilestone: {
+        [previewMilestoneId]: [previewIssueId],
+      },
+      updatedAt: previewTimestamp,
+    },
+    goals: [
+      {
+        version: "goal.v1",
+        id: previewGoalId,
+        projectRoot,
+        status: "active",
+        human: {
+          title: "Goal Tree V1",
+          objective: "在本地 Project Workspace 下管理 Goal / Milestone / Issue 目标树。",
+          scope: ["创建目标树事实源。", "支持本地创建、编辑、排序和归档。", "为未来 AgentRun 提供稳定输入。"],
+          nonGoals: ["不启动 Agent。", "不执行项目命令。", "不调用模型。", "不创建远程对象。"],
+          successCriteria: ["目标树可读取。", "Goal / Milestone / Issue 层级清晰。", "完整性 warning 可见。"],
+          milestoneOrder: [previewMilestoneId],
+          validationGate: ["cargo test -p agentflow-goal-tree", "npm --prefix apps/desktop run build"],
+          closureGate: ["不写旧 .agentflow 路径。", "不依赖 legacy workflow。"],
+        },
+        agentDraft: {
+          suggestedMilestones: ["模型和存储", "Desktop Goal Tree UI"],
+          suggestedRisks: ["Graph 缺失时推荐上下文不完整。"],
+          suggestedQuestions: ["是否需要自动生成初始 Issue？"],
+          suggestedIssueBreakdown: ["创建 Goal Tree storage", "接入 Tauri command", "新增 Desktop 页面"],
+        },
+        system: {
+          createdAt: previewTimestamp,
+          updatedAt: previewTimestamp,
+          createdBy: "human",
+          updatedBy: "human",
+          path: `.agentflow/define/goals/${previewGoalId}.json`,
+          revision: 1,
+        },
+      },
+    ],
+    milestones: [
+      {
+        version: "milestone.v1",
+        id: previewMilestoneId,
+        goalId: previewGoalId,
+        projectRoot,
+        status: "active",
+        human: {
+          title: "本地目标树基础",
+          stageGoal: "完成 Goal / Milestone / Issue 的本地存储和桌面展示。",
+          entryCriteria: ["项目已接入 AgentFlow。", "Project File Reader 可读取本地文件。"],
+          scope: ["新增 goal-tree crate。", "新增 Tauri commands。", "新增 Desktop Goal Tree 页面。"],
+          nonGoals: ["不实现 AgentRun。", "不实现 Lease。"],
+          issueOrder: [previewIssueId],
+          exitCriteria: ["CRUD 可用。", "完整性校验可读。", "浏览器预览不崩。"],
+          nextGate: ["进入 AgentRun 之前补齐执行边界。"],
+        },
+        agentDraft: {
+          suggestedIssues: ["Goal Tree storage", "Goal Tree UI"],
+          suggestedRisks: ["旧 workflow 类型误入新主线。"],
+          suggestedQuestions: [],
+        },
+        system: {
+          createdAt: previewTimestamp,
+          updatedAt: previewTimestamp,
+          createdBy: "human",
+          updatedBy: "human",
+          path: `.agentflow/define/milestones/${previewMilestoneId}.json`,
+          revision: 1,
+        },
+      },
+    ],
+    issues: [
+      {
+        version: "issue.v1",
+        id: previewIssueId,
+        goalId: previewGoalId,
+        milestoneId: previewMilestoneId,
+        projectRoot,
+        status: "ready",
+        human: {
+          title: "创建 Goal Tree 本地事实源",
+          goal: "实现 Goal / Milestone / Issue 的 JSON 存储、snapshot 和完整性校验。",
+          scope: ["只写 .agentflow/define/**。", "提供 load/create/update/archive/reorder/validate API。"],
+          nonGoals: ["不复用旧 IssueContract。", "不写 .agentflow/runs 或 evidence。"],
+          dependencies: [],
+          acceptanceCriteria: ["可以创建 Goal。", "可以创建 Milestone。", "可以创建 Issue。", "validate 能输出 warning。"],
+          validationCommands: ["cargo test -p agentflow-goal-tree"],
+          evidenceRequirements: ["测试输出。", "写入路径说明。"],
+          boundary: ["不启动 Agent。", "不执行用户项目命令。", "不调用模型。"],
+        },
+        agentDraft: {
+          suggestedFiles: ["crates/goal-tree/src/lib.rs", "crates/goal-tree/src/manager.rs"],
+          suggestedSymbols: [],
+          suggestedTests: ["creates_goal_tree_records_under_define_paths"],
+          suggestedImplementationPlan: ["定义模型", "实现 atomic write", "实现 validation"],
+          suggestedRisks: ["旧路径误写。"],
+          questions: [],
+        },
+        system: {
+          createdAt: previewTimestamp,
+          updatedAt: previewTimestamp,
+          createdBy: "human",
+          updatedBy: "human",
+          path: `.agentflow/define/issues/${previewIssueId}.json`,
+          revision: 1,
+          graphContextPackPath: ".agentflow/output/graph/context-packs/iss-001.json",
+        },
+      },
+    ],
+    validation: {
+      version: "goal-tree-validation.v1",
+      projectRoot,
+      valid: true,
+      errors: [],
+      warnings: [
+        {
+          code: "browser_preview_mock",
+          message: "浏览器预览使用 mock Goal Tree，不写真实 .agentflow/。",
+          objectType: "goal-tree",
+          objectId: null,
+        },
+      ],
+    },
   };
 }
 
