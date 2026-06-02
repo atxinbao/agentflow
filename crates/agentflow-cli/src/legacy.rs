@@ -10,6 +10,35 @@ use crate::args::{
 use crate::print::{
     print_controlled_run_plan, print_creation_summary, print_feature_execution_snapshot,
 };
+use agentflow_core::active::{
+    read_local_metrics_snapshot, read_local_project_model_snapshot, read_local_search_snapshot,
+};
+use agentflow_core::legacy::eligibility_lease::{
+    write_workflow_eligibility, write_workflow_lease_snapshot,
+};
+use agentflow_core::legacy::goal_protocol::{
+    bootstrap_goal_protocol, check_goal_readiness, init_from_goal, write_goal_next,
+};
+use agentflow_core::legacy::product_feature::{
+    create_product_feature, read_product_feature_execution_next,
+    read_product_feature_execution_status, ProductFeatureDraft,
+};
+use agentflow_core::legacy::project_audit_docs_refresh::{
+    write_project_code_audit_snapshot, write_project_docs_refresh_snapshot,
+};
+use agentflow_core::legacy::project_closure::write_project_closure_state;
+use agentflow_core::legacy::run_verify_review::{
+    plan_issue, review_issue, run_issue, verify_issue, write_context, write_project_summary,
+    write_review_assistant,
+};
+use agentflow_core::legacy::saved_view::{save_view, show_view, SavedViewFilter};
+use agentflow_core::legacy::sqlite_index::rebuild_index;
+use agentflow_core::legacy::team_project_milestone_issue::{
+    create_issue, create_milestone, create_project, create_team, read_issue_project_link_preview,
+    read_local_project_seed_preview, write_issue_project_link, write_local_project_seed,
+    IssueDraft, MilestoneDraft, ProjectDraft, TeamDraft,
+};
+use agentflow_core::legacy::workflow_control::write_workflow_state_check;
 use anyhow::{bail, Result};
 use clap::Parser;
 
@@ -19,7 +48,7 @@ pub(crate) fn run() -> Result<()> {
 
     match cli.command {
         Command::Init { from_goal, force } => {
-            let summary = agentflow_core::init_from_goal(&cwd, &from_goal, force)?;
+            let summary = init_from_goal(&cwd, &from_goal, force)?;
             println!("initialized {}", summary.project_dir.display());
             println!("wrote {}", summary.goal_json.display());
             println!("wrote {}", summary.index_json.display());
@@ -27,7 +56,7 @@ pub(crate) fn run() -> Result<()> {
         Command::Goal {
             command: GoalCommand::Bootstrap { force },
         } => {
-            let summary = agentflow_core::bootstrap_goal_protocol(&cwd, force)?;
+            let summary = bootstrap_goal_protocol(&cwd, force)?;
             println!("bootstrapped goal protocol");
             println!("wrote {}", summary.project_definition_json.display());
             println!("wrote {}", summary.scope_state_json.display());
@@ -37,7 +66,7 @@ pub(crate) fn run() -> Result<()> {
         Command::Goal {
             command: GoalCommand::Check,
         } => {
-            let summary = agentflow_core::check_goal_readiness(&cwd)?;
+            let summary = check_goal_readiness(&cwd)?;
             println!("goal ok: {}", summary.objective);
             println!("first candidate: {}", summary.first_candidate);
             println!("ready: {}", summary.ready);
@@ -51,7 +80,7 @@ pub(crate) fn run() -> Result<()> {
         Command::Goal {
             command: GoalCommand::Next,
         } => {
-            let summary = agentflow_core::write_goal_next(&cwd)?;
+            let summary = write_goal_next(&cwd)?;
             println!("goal ready: {}", summary.goal_ready);
             println!(
                 "active issue: {}",
@@ -81,7 +110,7 @@ pub(crate) fn run() -> Result<()> {
             if feature_goal.trim().is_empty() {
                 bail!("feature goal is required");
             }
-            let draft = agentflow_core::ProductFeatureDraft {
+            let draft = ProductFeatureDraft {
                 project_title: project_title.unwrap_or_else(|| feature_goal.clone()),
                 feature_goal,
                 team_id,
@@ -90,7 +119,7 @@ pub(crate) fn run() -> Result<()> {
                 risk_level,
                 scope_boundaries,
             };
-            let summary = agentflow_core::create_product_feature(&cwd, draft, write, yes)?;
+            let summary = create_product_feature(&cwd, draft, write, yes)?;
             println!("feature mode: {}", summary.snapshot.mode);
             println!("project: {}", summary.snapshot.project.id);
             println!("team: {}", summary.snapshot.project.team_id);
@@ -120,13 +149,13 @@ pub(crate) fn run() -> Result<()> {
         Command::Feature {
             command: FeatureCommand::Status,
         } => {
-            let snapshot = agentflow_core::read_product_feature_execution_status(&cwd)?;
+            let snapshot = read_product_feature_execution_status(&cwd)?;
             print_feature_execution_snapshot(&snapshot, true);
         }
         Command::Feature {
             command: FeatureCommand::Next,
         } => {
-            let snapshot = agentflow_core::read_product_feature_execution_next(&cwd)?;
+            let snapshot = read_product_feature_execution_next(&cwd)?;
             print_feature_execution_snapshot(&snapshot, false);
         }
         Command::Team {
@@ -139,12 +168,7 @@ pub(crate) fn run() -> Result<()> {
                 },
         } => {
             let name = required_joined_arg(name, "team name")?;
-            let summary = agentflow_core::create_team(
-                &cwd,
-                agentflow_core::TeamDraft { name, team_id },
-                write,
-                yes,
-            )?;
+            let summary = create_team(&cwd, TeamDraft { name, team_id }, write, yes)?;
             print_creation_summary(&summary);
         }
         Command::Project {
@@ -160,9 +184,9 @@ pub(crate) fn run() -> Result<()> {
                 },
         } => {
             let title = required_joined_arg(title, "project title")?;
-            let summary = agentflow_core::create_project(
+            let summary = create_project(
                 &cwd,
-                agentflow_core::ProjectDraft {
+                ProjectDraft {
                     title,
                     project_id,
                     team_id,
@@ -187,9 +211,9 @@ pub(crate) fn run() -> Result<()> {
                 },
         } => {
             let title = required_joined_arg(title, "milestone title")?;
-            let summary = agentflow_core::create_milestone(
+            let summary = create_milestone(
                 &cwd,
-                agentflow_core::MilestoneDraft {
+                MilestoneDraft {
                     title,
                     milestone_id,
                     project_id,
@@ -219,9 +243,9 @@ pub(crate) fn run() -> Result<()> {
                 },
         } => {
             let title = required_joined_arg(title, "issue title")?;
-            let summary = agentflow_core::create_issue(
+            let summary = create_issue(
                 &cwd,
-                agentflow_core::IssueDraft {
+                IssueDraft {
                     title,
                     project_id,
                     milestone_id,
@@ -239,7 +263,7 @@ pub(crate) fn run() -> Result<()> {
             print_creation_summary(&summary);
         }
         Command::Context => {
-            let summary = agentflow_core::write_context(&cwd)?;
+            let summary = write_context(&cwd)?;
             println!("context files: {}", summary.file_count);
             println!("wrote {}", summary.context_json.display());
             println!("wrote {}", summary.context_markdown.display());
@@ -249,7 +273,7 @@ pub(crate) fn run() -> Result<()> {
             if intent.trim().is_empty() {
                 bail!("intent is required");
             }
-            let summary = agentflow_core::plan_issue(&cwd, &intent)?;
+            let summary = plan_issue(&cwd, &intent)?;
             println!("planned {}", summary.issue_id);
             println!("wrote {}", summary.issue_markdown.display());
             println!("wrote {}", summary.issue_json.display());
@@ -267,7 +291,7 @@ pub(crate) fn run() -> Result<()> {
             if !dry_run {
                 bail!("agentflow run only supports --dry-run in Product Feature Controlled Run v0");
             }
-            let summary = agentflow_core::run_issue(&cwd, &issue_id)?;
+            let summary = run_issue(&cwd, &issue_id)?;
             println!("started {} for {}", summary.run_id, issue_id);
             println!("mode: dry-run");
             println!(
@@ -294,13 +318,13 @@ pub(crate) fn run() -> Result<()> {
             println!("wrote {}", summary.run_json.display());
         }
         Command::Verify { issue_id } => {
-            let summary = agentflow_core::verify_issue(&cwd, &issue_id)?;
+            let summary = verify_issue(&cwd, &issue_id)?;
             println!("verified {} with {}", issue_id, summary.run_id);
             println!("passed: {}", summary.passed);
             println!("commands: {}", summary.commands.len());
         }
         Command::Review { issue_id } => {
-            let summary = agentflow_core::review_issue(&cwd, &issue_id)?;
+            let summary = review_issue(&cwd, &issue_id)?;
             println!("reviewed {} with {}", issue_id, summary.run_id);
             println!("passed: {}", summary.passed);
             println!("wrote {}", summary.evidence_path.display());
@@ -310,7 +334,7 @@ pub(crate) fn run() -> Result<()> {
         Command::Index {
             command: IndexCommand::Rebuild,
         } => {
-            let summary = agentflow_core::rebuild_index(&cwd)?;
+            let summary = rebuild_index(&cwd)?;
             println!("rebuilt {}", summary.sqlite_path.display());
             println!("issues: {}", summary.issue_count);
             println!("runs: {}", summary.run_count);
@@ -325,19 +349,19 @@ pub(crate) fn run() -> Result<()> {
                 validation_status,
                 issue_id,
             } => {
-                let filter = agentflow_core::SavedViewFilter {
+                let filter = SavedViewFilter {
                     issue_status,
                     run_status,
                     validation_status,
                     issue_id,
                 };
-                let summary = agentflow_core::save_view(&cwd, &name, filter)?;
+                let summary = save_view(&cwd, &name, filter)?;
                 println!("saved view {}", summary.view_id);
                 println!("wrote {}", summary.view_path.display());
                 println!("indexed {}", summary.sqlite_path.display());
             }
             ViewCommand::Show { name } => {
-                let result = agentflow_core::show_view(&cwd, &name)?;
+                let result = show_view(&cwd, &name)?;
                 println!("view {} ({})", result.view.id, result.view.name);
                 println!("issues: {}", result.issues.len());
                 for issue in &result.issues {
@@ -355,7 +379,7 @@ pub(crate) fn run() -> Result<()> {
         Command::Update {
             command: UpdateCommand::Summary,
         } => {
-            let summary = agentflow_core::write_project_summary(&cwd)?;
+            let summary = write_project_summary(&cwd)?;
             println!("wrote {}", summary.summary_path.display());
             println!(
                 "issues: {} completed: {}",
@@ -366,7 +390,7 @@ pub(crate) fn run() -> Result<()> {
             println!("saved views: {}", summary.saved_view_count);
         }
         Command::Metrics => {
-            let metrics = agentflow_core::read_local_metrics_snapshot(&cwd)?;
+            let metrics = read_local_metrics_snapshot(&cwd)?;
             println!("metrics root: {}", metrics.project_root);
             println!("initialized: {}", metrics.initialized);
             println!(
@@ -418,7 +442,7 @@ pub(crate) fn run() -> Result<()> {
             println!("read only: {}", metrics.boundary.read_only);
         }
         Command::Eligibility { issue_id } => {
-            let summary = agentflow_core::write_workflow_eligibility(&cwd, issue_id.as_deref())?;
+            let summary = write_workflow_eligibility(&cwd, issue_id.as_deref())?;
             println!(
                 "eligibility ready issues: {}",
                 summary.snapshot.summary.ready_issue_count
@@ -457,7 +481,7 @@ pub(crate) fn run() -> Result<()> {
             println!("wrote {}", summary.summary_path.display());
         }
         Command::Lease => {
-            let summary = agentflow_core::write_workflow_lease_snapshot(&cwd)?;
+            let summary = write_workflow_lease_snapshot(&cwd)?;
             println!("active leases: {}", summary.snapshot.active_leases.len());
             println!("stale leases: {}", summary.snapshot.stale_leases.len());
             println!(
@@ -470,7 +494,7 @@ pub(crate) fn run() -> Result<()> {
         Command::Project {
             command: ProjectCommand::Closure,
         } => {
-            let summary = agentflow_core::write_project_closure_state(&cwd)?;
+            let summary = write_project_closure_state(&cwd)?;
             println!("project closure state: {}", summary.snapshot.closure_state);
             println!("can mark done: {}", summary.snapshot.can_mark_done);
             println!(
@@ -518,7 +542,7 @@ pub(crate) fn run() -> Result<()> {
         Command::Project {
             command: ProjectCommand::CodeAudit,
         } => {
-            let summary = agentflow_core::write_project_code_audit_snapshot(&cwd)?;
+            let summary = write_project_code_audit_snapshot(&cwd)?;
             println!("project code audit state: {}", summary.snapshot.audit_state);
             println!("closure state: {}", summary.snapshot.closure_state);
             println!(
@@ -548,7 +572,7 @@ pub(crate) fn run() -> Result<()> {
         Command::Project {
             command: ProjectCommand::DocsRefresh,
         } => {
-            let summary = agentflow_core::write_project_docs_refresh_snapshot(&cwd)?;
+            let summary = write_project_docs_refresh_snapshot(&cwd)?;
             println!(
                 "project docs refresh state: {}",
                 summary.snapshot.docs_refresh_state
@@ -584,7 +608,7 @@ pub(crate) fn run() -> Result<()> {
             println!("wrote {}", summary.summary_path.display());
         }
         Command::Projects => {
-            let snapshot = agentflow_core::read_local_project_model_snapshot(&cwd)?;
+            let snapshot = read_local_project_model_snapshot(&cwd)?;
             println!("projects root: {}", snapshot.project_root);
             println!("initialized: {}", snapshot.initialized);
             if let Some(workspace) = &snapshot.workspace {
@@ -673,7 +697,7 @@ pub(crate) fn run() -> Result<()> {
         }
         Command::ProjectSeed { write, yes } => {
             if write {
-                let summary = agentflow_core::write_local_project_seed(&cwd, yes)?;
+                let summary = write_local_project_seed(&cwd, yes)?;
                 println!("project seed root: {}", summary.preview.project_root);
                 println!("initialized: {}", summary.preview.initialized);
                 println!("written files: {}", summary.written_paths.len());
@@ -682,7 +706,7 @@ pub(crate) fn run() -> Result<()> {
                 }
                 println!("confirmation: --write --yes");
             } else {
-                let preview = agentflow_core::read_local_project_seed_preview(&cwd)?;
+                let preview = read_local_project_seed_preview(&cwd)?;
                 println!("project seed root: {}", preview.project_root);
                 println!("initialized: {}", preview.initialized);
                 println!("writes required: {}", preview.writes_required);
@@ -704,7 +728,7 @@ pub(crate) fn run() -> Result<()> {
             yes,
         } => {
             if write {
-                let summary = agentflow_core::write_issue_project_link(&cwd, &issue_id, yes)?;
+                let summary = write_issue_project_link(&cwd, &issue_id, yes)?;
                 println!("issue link root: {}", summary.preview.project_root);
                 println!("issue: {}", summary.preview.issue_id);
                 println!("title: {}", summary.preview.issue_title);
@@ -722,7 +746,7 @@ pub(crate) fn run() -> Result<()> {
                 }
                 println!("confirmation: --write --yes");
             } else {
-                let preview = agentflow_core::read_issue_project_link_preview(&cwd, &issue_id)?;
+                let preview = read_issue_project_link_preview(&cwd, &issue_id)?;
                 println!("issue link root: {}", preview.project_root);
                 println!("initialized: {}", preview.initialized);
                 println!("issue: {}", preview.issue_id);
@@ -754,7 +778,7 @@ pub(crate) fn run() -> Result<()> {
             if query.trim().is_empty() {
                 bail!("query is required");
             }
-            let snapshot = agentflow_core::read_local_search_snapshot(&cwd, &query)?;
+            let snapshot = read_local_search_snapshot(&cwd, &query)?;
             println!("search root: {}", snapshot.project_root);
             println!("initialized: {}", snapshot.initialized);
             println!("query: {}", snapshot.query.query);
@@ -775,7 +799,7 @@ pub(crate) fn run() -> Result<()> {
             }
         }
         Command::ReviewAssistant { issue_id } => {
-            let summary = agentflow_core::write_review_assistant(&cwd, &issue_id)?;
+            let summary = write_review_assistant(&cwd, &issue_id)?;
             println!("review assistant {}", summary.issue_id);
             println!("ready: {}", summary.ready);
             println!("checks: {}", summary.checks.len());
@@ -784,7 +808,7 @@ pub(crate) fn run() -> Result<()> {
         Command::State {
             command: StateCommand::Check,
         } => {
-            let summary = agentflow_core::write_workflow_state_check(&cwd)?;
+            let summary = write_workflow_state_check(&cwd)?;
             println!("workflow state ready: {}", summary.snapshot.ready);
             println!(
                 "counts: projects {} milestones {} issues {} errors {} warnings {}",

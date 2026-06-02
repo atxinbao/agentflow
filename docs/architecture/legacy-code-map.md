@@ -5,7 +5,7 @@
 
 ## Purpose
 
-This document records the compatibility surface that still belongs to the archived 2026-05 AgentFlow workflow. It supports `004 - Legacy Cleanup and New Module Split` by making old code visible before it is quarantined or removed.
+This document records the compatibility surface that still belongs to the archived 2026-05 AgentFlow workflow. It supports `004 - Legacy Cleanup and New Module Split` and `005 - Legacy and Degraded Code Removal` by making old code visible before it is quarantined, narrowed, or removed.
 
 ## Legacy Command Surface
 
@@ -51,11 +51,12 @@ The current `agentflow-core` compatibility layer includes archived concepts from
 - Project Closure, Code Audit, and Docs Refresh
 - Issue project link compatibility
 
-These areas must move behind `legacy/` or transitional `active/` read-model wrappers during the 004 cleanup.
+These areas must stay behind `legacy/` or transitional `active/` read-model wrappers. They are not authorized as the new AgentFlow product core.
 
 Current quarantine layout:
 
-- `crates/agentflow-core/src/legacy/archive_2026_05.rs` contains the archived implementation.
+- `crates/agentflow-core/src/lib.rs` no longer re-exports `legacy::*`.
+- `crates/agentflow-core/src/legacy/archive_2026_05.rs` contains the archived implementation and is private to the `legacy` module.
 - `legacy/goal_protocol.rs` exposes archived goal protocol compatibility symbols.
 - `legacy/product_feature.rs` exposes archived product feature compatibility symbols.
 - `legacy/team_project_milestone_issue.rs` exposes archived Team / Project / Milestone / Issue compatibility symbols.
@@ -64,9 +65,16 @@ Current quarantine layout:
 - `legacy/eligibility_lease.rs` exposes archived eligibility and lease compatibility symbols.
 - `legacy/project_closure.rs` exposes archived closure state compatibility symbols.
 - `legacy/project_audit_docs_refresh.rs` exposes archived audit and docs refresh compatibility symbols.
-- `legacy/evidence.rs` exposes archived evidence-adjacent compatibility symbols.
 - `legacy/saved_view.rs` exposes archived saved-view compatibility symbols.
 - `legacy/sqlite_index.rs` exposes archived SQLite index compatibility symbols.
+
+Removed in 005:
+
+- the crate-root `pub use legacy::*` compatibility export;
+- the `legacy/mod.rs` `pub use archive_2026_05::*` compatibility export;
+- the public `legacy/evidence.rs` compatibility module, because no active read model, CLI legacy command, Desktop command, or non-archive source imported it.
+
+Detailed reachability and removal classification lives in `docs/architecture/legacy-removal-audit.md`.
 
 ## Desktop Transitional Read Models
 
@@ -104,3 +112,11 @@ Do not delete legacy code or data handling only because it is old. It can be rem
 - no current command, desktop screen, test, or compatibility reader imports it;
 - the replacement requirement is explicit;
 - `cargo test`, desktop build, and relevant smoke checks pass.
+
+005 deletion result:
+
+- deleted unused public compatibility exposure, not active behavior;
+- retained CLI legacy commands temporarily;
+- retained active Desktop read models;
+- retained Graph watcher fallback;
+- retained Project File Reader fallback and browser-preview mock data.

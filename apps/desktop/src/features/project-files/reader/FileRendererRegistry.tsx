@@ -1,6 +1,9 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { codeToHtml } from "shiki";
+import type { HighlighterCore, LanguageInput } from "@shikijs/types";
+import githubDarkDefault from "@shikijs/themes/github-dark-default";
+import { createHighlighterCore } from "shiki/core";
+import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectFileContent, ProjectFileEntry, ProjectFileTextRange } from "../../../types";
 import { isProjectCodeLanguage } from "../model/projectFileUtils";
@@ -20,6 +23,89 @@ type FileRendererKind =
   | "binary"
   | "unsupported";
 
+const PROJECT_READER_THEME = "github-dark-default";
+const SHIKI_LANGUAGE_LOADERS = [
+  () => import("@shikijs/langs/bash"),
+  () => import("@shikijs/langs/c"),
+  () => import("@shikijs/langs/cpp"),
+  () => import("@shikijs/langs/csharp"),
+  () => import("@shikijs/langs/css"),
+  () => import("@shikijs/langs/dart"),
+  () => import("@shikijs/langs/diff"),
+  () => import("@shikijs/langs/docker"),
+  () => import("@shikijs/langs/dockerfile"),
+  () => import("@shikijs/langs/go"),
+  () => import("@shikijs/langs/html"),
+  () => import("@shikijs/langs/java"),
+  () => import("@shikijs/langs/javascript"),
+  () => import("@shikijs/langs/json"),
+  () => import("@shikijs/langs/jsx"),
+  () => import("@shikijs/langs/kotlin"),
+  () => import("@shikijs/langs/make"),
+  () => import("@shikijs/langs/markdown"),
+  () => import("@shikijs/langs/objective-c"),
+  () => import("@shikijs/langs/php"),
+  () => import("@shikijs/langs/powershell"),
+  () => import("@shikijs/langs/python"),
+  () => import("@shikijs/langs/ruby"),
+  () => import("@shikijs/langs/rust"),
+  () => import("@shikijs/langs/shellscript"),
+  () => import("@shikijs/langs/sql"),
+  () => import("@shikijs/langs/swift"),
+  () => import("@shikijs/langs/toml"),
+  () => import("@shikijs/langs/tsx"),
+  () => import("@shikijs/langs/typescript"),
+  () => import("@shikijs/langs/xml"),
+  () => import("@shikijs/langs/yaml"),
+] satisfies LanguageInput[];
+
+const SHIKI_SUPPORTED_LANGUAGES = new Set([
+  "bash",
+  "c",
+  "cpp",
+  "csharp",
+  "css",
+  "dart",
+  "diff",
+  "docker",
+  "dockerfile",
+  "go",
+  "html",
+  "java",
+  "javascript",
+  "json",
+  "jsx",
+  "kotlin",
+  "make",
+  "markdown",
+  "objective-c",
+  "php",
+  "powershell",
+  "python",
+  "ruby",
+  "rust",
+  "shellscript",
+  "sql",
+  "swift",
+  "text",
+  "toml",
+  "tsx",
+  "typescript",
+  "xml",
+  "yaml",
+]);
+
+let projectFileHighlighterPromise: Promise<HighlighterCore> | null = null;
+
+function getProjectFileHighlighter(): Promise<HighlighterCore> {
+  projectFileHighlighterPromise ??= createHighlighterCore({
+    themes: [githubDarkDefault],
+    langs: SHIKI_LANGUAGE_LOADERS,
+    engine: createJavaScriptRegexEngine(),
+  }) as Promise<HighlighterCore>;
+  return projectFileHighlighterPromise;
+}
+
 export function resolveProjectFileRenderer(content: ProjectFileContent, entry: ProjectFileEntry | null): FileRendererKind {
   const name = content.name || entry?.name || "";
   const extension = (content.extension ?? entry?.extension ?? fileExtension(name)).toLowerCase();
@@ -28,7 +114,7 @@ export function resolveProjectFileRenderer(content: ProjectFileContent, entry: P
   const sizeBytes = content.sizeBytes ?? entry?.sizeBytes ?? 0;
 
   if (content.binaryPreview) {
-    if (["csv", "tsv", "xlsx"].includes(extension) && content.dataUrl) return "table";
+    if (["csv", "tsv"].includes(extension) && content.dataUrl) return "table";
     if (extension === "docx" && content.dataUrl) return "docx";
     if (mimeType.startsWith("image/") && content.dataUrl) return "image";
     if ((mimeType.startsWith("audio/") || mimeType.startsWith("video/")) && content.dataUrl) return "media";
@@ -41,7 +127,8 @@ export function resolveProjectFileRenderer(content: ProjectFileContent, entry: P
   if (["mp3", "wav", "ogg", "mp4", "webm"].includes(extension) || mimeType.startsWith("audio/") || mimeType.startsWith("video/")) {
     return "media";
   }
-  if (["csv", "tsv", "xlsx"].includes(extension)) return "table";
+  if (["csv", "tsv"].includes(extension)) return "table";
+  if (extension === "xlsx") return "unsupported";
   if (extension === "docx") return "docx";
   if (language === "markdown" || ["md", "mdx", "markdown"].includes(extension)) return "markdown";
   if (language === "json" || ["json", "jsonc"].includes(extension)) return "json";
@@ -91,7 +178,7 @@ export function ProjectFileBodyRenderer({
     case "plain-text":
       return <PlainTextReader content={textContent} />;
     default:
-      return <UnsupportedFallbackReader title={content.name} reason={content.unsupportedReason ?? "当前格式暂无专用阅读器。"} />;
+      return <UnsupportedFallbackReader title={content.name} reason={content.unsupportedReason ?? unsupportedReaderReason(content, entry)} />;
   }
 }
 
@@ -111,9 +198,10 @@ function CodeReader({ content, language, name }: { content: string; language: st
     let canceled = false;
     async function highlightCode() {
       try {
-        const html = await codeToHtml(content || " ", {
+        const highlighter = await getProjectFileHighlighter();
+        const html = highlighter.codeToHtml(content || " ", {
           lang: normalizedLanguage,
-          theme: "github-dark-default",
+          theme: PROJECT_READER_THEME,
         });
         if (!canceled) {
           setHighlightedHtml(html);
@@ -163,64 +251,12 @@ function PlainTextReader({ content }: { content: string }) {
   );
 }
 
-function TableReader({ content, dataUrl, name }: { content: string; dataUrl?: string | null; name: string }) {
-  const extension = fileExtension(name).toLowerCase();
-  if (extension === "xlsx") {
-    return <XlsxReader dataUrl={dataUrl} name={name} />;
-  }
-
+function TableReader({ content, name }: { content: string; dataUrl?: string | null; name: string }) {
   const rows = parseDelimitedTable(content, name.endsWith(".tsv") ? "\t" : ",");
   if (rows.length === 0) {
     return <UnsupportedFallbackReader title={name} reason="表格文件暂无可展示文本内容。" />;
   }
   return <TableGrid rows={rows} />;
-}
-
-function XlsxReader({ dataUrl, name }: { dataUrl?: string | null; name: string }) {
-  const [rows, setRows] = useState<string[][] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let canceled = false;
-    async function renderWorkbook() {
-      try {
-        const data = dataUrlToUint8Array(dataUrl ?? "");
-        if (!data) {
-          throw new Error("缺少 XLSX 二进制预览数据。");
-        }
-        const xlsx = await import("xlsx");
-        const workbook = xlsx.read(data, { type: "array", sheetRows: 80 });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = sheetName ? workbook.Sheets[sheetName] : null;
-        if (!sheet) {
-          throw new Error("XLSX 文件没有可展示的工作表。");
-        }
-        const parsedRows = xlsx.utils.sheet_to_json<Array<string | number | boolean | null>>(sheet, {
-          blankrows: false,
-          header: 1,
-          raw: false,
-        });
-        if (!canceled) {
-          setRows(parsedRows.map((row) => row.map((cell) => (cell === null || cell === undefined ? "" : String(cell)))));
-          setError(null);
-        }
-      } catch (error) {
-        if (!canceled) {
-          setRows(null);
-          setError(error instanceof Error ? error.message : String(error));
-        }
-      }
-    }
-    void renderWorkbook();
-    return () => {
-      canceled = true;
-    };
-  }, [dataUrl]);
-
-  if (rows) {
-    return <TableGrid note="XLSX 已用 SheetJS 读取首个工作表前 80 行。" rows={rows} />;
-  }
-  return <UnsupportedFallbackReader title={name} reason={error ?? "正在读取 XLSX 表格预览。"} />;
 }
 
 function TableGrid({ rows, note }: { rows: string[][]; note?: string }) {
@@ -393,44 +429,28 @@ function UnsupportedFallbackReader({ title, reason }: { title: string; reason: s
   );
 }
 
+function unsupportedReaderReason(content: ProjectFileContent, entry: ProjectFileEntry | null) {
+  const extension = (content.extension ?? entry?.extension ?? fileExtension(content.name || entry?.name || "")).toLowerCase();
+  if (extension === "xlsx") {
+    return "XLSX 二进制表格预览当前已禁用；文件仍以只读 metadata / fallback 状态展示，不解析工作簿内容。";
+  }
+  return "当前格式暂无专用阅读器。";
+}
+
 function shikiLanguage(language: string, name: string) {
   const extension = fileExtension(name).toLowerCase();
-  if (language === "config" || name === ".gitignore") return "ignore";
+  if (language === "config" || name === ".gitignore") return "text";
   if (language === "shell") return "bash";
-  if (
-    [
-      "toml",
-      "json",
-      "yaml",
-      "rust",
-      "typescript",
-      "javascript",
-      "css",
-      "html",
-      "markdown",
-      "python",
-      "go",
-      "java",
-      "kotlin",
-      "swift",
-      "dart",
-      "c",
-      "cpp",
-      "csharp",
-      "php",
-      "ruby",
-      "sql",
-      "powershell",
-      "xml",
-    ].includes(language)
-  ) {
+  if (SHIKI_SUPPORTED_LANGUAGES.has(language)) {
     return language;
   }
   if (language === "objective-c") return "objective-c";
   if (language === "dockerfile" || name.toLowerCase() === "dockerfile") return "dockerfile";
-  if (language === "makefile" || name.toLowerCase() === "makefile") return "makefile";
+  if (language === "makefile" || name.toLowerCase() === "makefile") return "make";
   if (extension === "tsx") return "tsx";
+  if (extension === "jsx") return "jsx";
   if (extension === "ts") return "typescript";
+  if (extension === "js") return "javascript";
   if (extension === "rs") return "rust";
   if (extension === "py") return "python";
   if (extension === "go") return "go";
@@ -438,6 +458,7 @@ function shikiLanguage(language: string, name: string) {
   if (extension === "cs") return "csharp";
   if (extension === "ps1") return "powershell";
   if (extension === "sh") return "bash";
+  if (extension === "diff" || extension === "patch") return "diff";
   return "text";
 }
 

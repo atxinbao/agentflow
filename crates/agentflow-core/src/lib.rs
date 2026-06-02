@@ -6,7 +6,3 @@
 pub mod active;
 pub mod legacy;
 pub mod shared;
-
-// Temporary compatibility export for legacy CLI and Desktop.
-// Do not use from new requirements.
-pub use legacy::*;
