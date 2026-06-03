@@ -39,6 +39,8 @@ pub(crate) fn validate_agent_working_manual_with_context(
     if let Some(message) = external_symlink_error(&root, &agent_md_path)? {
         errors.push(message);
         blocked = true;
+    } else if let Some(message) = internal_symlink_warning(&root, &agent_md_path)? {
+        warnings.push(message);
     }
 
     let tracked_by_git = is_git_tracked(&root, "AGENT.MD");
@@ -112,6 +114,25 @@ pub(crate) fn validate_agent_working_manual_with_context(
         }
     }
 
+    let bootstrap_state_path = root.join(BOOTSTRAP_RELATIVE_PATH);
+    let validation_state_path = root.join(VALIDATION_RELATIVE_PATH);
+    let bootstrap_state_exists = bootstrap_state_path.exists();
+    let validation_state_exists = validation_state_path.exists();
+    if repaired_at.is_none() {
+        if !bootstrap_state_exists {
+            errors.push(format!(
+                "Agent Manual bootstrap state is missing: {}",
+                BOOTSTRAP_RELATIVE_PATH
+            ));
+        }
+        if !validation_state_exists {
+            errors.push(format!(
+                "Agent Manual validation state is missing: {}",
+                VALIDATION_RELATIVE_PATH
+            ));
+        }
+    }
+
     let skills = skill_templates()
         .into_iter()
         .map(|skill| {
@@ -146,7 +167,12 @@ pub(crate) fn validate_agent_working_manual_with_context(
     let state = if blocked {
         AgentEnvironmentState::Blocked
     } else if !errors.is_empty() {
-        if !agent_md_exists || !manual_exists || !lock_exists {
+        if !agent_md_exists
+            || !manual_exists
+            || !lock_exists
+            || !bootstrap_state_exists
+            || !validation_state_exists
+        {
             AgentEnvironmentState::Missing
         } else {
             AgentEnvironmentState::Failed
@@ -265,6 +291,32 @@ pub(crate) fn external_symlink_error(root: &Path, path: &Path) -> Result<Option<
 
     Ok(Some(format!(
         "AGENT.MD is a symlink outside project root: {}",
+        canonical_target.display()
+    )))
+}
+
+pub(crate) fn internal_symlink_warning(root: &Path, path: &Path) -> Result<Option<String>> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(_) => return Ok(None),
+    };
+    if !metadata.file_type().is_symlink() {
+        return Ok(None);
+    }
+
+    let target = fs::read_link(path)?;
+    let resolved = if target.is_absolute() {
+        target
+    } else {
+        path.parent().unwrap_or(root).join(target)
+    };
+    let canonical_target = resolved.canonicalize().unwrap_or(resolved);
+    if !canonical_target.starts_with(root) {
+        return Ok(None);
+    }
+
+    Ok(Some(format!(
+        "AGENT.MD is a symlink inside project root: {}",
         canonical_target.display()
     )))
 }

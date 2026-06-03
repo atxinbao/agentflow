@@ -93,6 +93,55 @@ mod tests {
     }
 
     #[test]
+    fn validate_detects_missing_state_files() {
+        let dir = tempdir().unwrap();
+        prepare_agent_working_manual(dir.path()).unwrap();
+        fs::remove_file(
+            dir.path()
+                .join(".agentflow/define/agent/state/bootstrap.json"),
+        )
+        .unwrap();
+        fs::remove_file(
+            dir.path()
+                .join(".agentflow/define/agent/state/validation.json"),
+        )
+        .unwrap();
+
+        let invalid = validate_agent_working_manual(dir.path()).unwrap();
+
+        assert!(!invalid.ready);
+        assert_eq!(invalid.status, AgentEnvironmentState::Missing);
+        assert!(invalid
+            .errors
+            .iter()
+            .any(|error| error.contains("bootstrap state is missing")));
+        assert!(invalid
+            .errors
+            .iter()
+            .any(|error| error.contains("validation state is missing")));
+    }
+
+    #[test]
+    fn load_status_revalidates_when_bootstrap_state_is_missing() {
+        let dir = tempdir().unwrap();
+        prepare_agent_working_manual(dir.path()).unwrap();
+        fs::remove_file(
+            dir.path()
+                .join(".agentflow/define/agent/state/bootstrap.json"),
+        )
+        .unwrap();
+
+        let invalid = load_agent_environment_status(dir.path()).unwrap();
+
+        assert!(!invalid.ready);
+        assert_eq!(invalid.status, AgentEnvironmentState::Missing);
+        assert!(invalid
+            .errors
+            .iter()
+            .any(|error| error.contains("bootstrap state is missing")));
+    }
+
+    #[test]
     fn tracked_agent_md_is_warning_not_blocker() {
         let dir = tempdir().unwrap();
         std::process::Command::new("git")
@@ -115,6 +164,30 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("tracked by Git")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn internal_agent_md_symlink_warns_without_blocking() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let target = dir.path().join("managed-agent-entry.md");
+        fs::write(&target, "# internal symlink target\n").unwrap();
+        symlink(&target, dir.path().join("AGENT.MD")).unwrap();
+
+        let status = prepare_agent_working_manual(dir.path()).unwrap();
+
+        assert!(status.ready);
+        assert_ne!(status.status, AgentEnvironmentState::Blocked);
+        assert!(fs::symlink_metadata(dir.path().join("AGENT.MD"))
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert!(status
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("symlink inside project root")));
     }
 
     #[cfg(unix)]

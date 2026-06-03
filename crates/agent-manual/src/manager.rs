@@ -1,7 +1,7 @@
 use crate::{
     model::{AgentEnvironmentState, AgentEnvironmentStatus},
     repair::repair_agent_working_manual,
-    templates::VALIDATION_RELATIVE_PATH,
+    templates::{BOOTSTRAP_RELATIVE_PATH, VALIDATION_RELATIVE_PATH},
     validate::{canonical_project_root, validate_agent_working_manual},
 };
 use anyhow::{anyhow, Result};
@@ -26,8 +26,9 @@ pub fn load_agent_environment_status(
     project_root: impl AsRef<Path>,
 ) -> Result<AgentEnvironmentStatus> {
     let root = canonical_project_root(project_root.as_ref())?;
+    let bootstrap_path = root.join(BOOTSTRAP_RELATIVE_PATH);
     let validation_path = root.join(VALIDATION_RELATIVE_PATH);
-    if validation_path.exists() {
+    if bootstrap_path.exists() && validation_path.exists() {
         let raw = fs::read_to_string(&validation_path)?;
         if let Ok(status) = serde_json::from_str::<AgentEnvironmentStatus>(&raw) {
             return Ok(status);
