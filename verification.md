@@ -3302,3 +3302,53 @@ No files were written and no command was executed.
 - `cargo test`：pass，agent-manual 8 tests + CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + graph 26 tests。
 - `npm --prefix apps/desktop run build`：pass。
 - `git diff --check`：pass。
+
+## 2026-06-03 Requirement Intake Filter Skill V1
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/008-2-requirement-intake-filter-skill-v1.md`。
+- 在 Agent Working Manual 中新增 AgentFlow 原生 `requirement-intake-filter` skill。
+- 将 Agent 工作流调整为：
+  - Conversation
+  - Request triage
+  - Requirement intake filter
+  - OpenSpec Draft Preview
+  - Human confirmation
+  - Approved OpenSpec
+  - Goal Tree materialization
+  - Future AgentRun
+
+结果：
+
+- `skill_templates()` 从 5 个 skill 扩展为 6 个。
+- 新增 `.agentflow/define/agent/skills/requirement-intake-filter/SKILL.md` 模板。
+- `AGENT.MD` 模板增加 OpenSpec Draft 前必须运行 requirement-intake-filter 的硬规则。
+- `Agentflow.md` 模板增加 Requirement Intake Result 准入规则。
+- `skills-lock.json` expected template 自动包含第 6 个 skill 和 hash。
+- `validate_agent_working_manual` 可检测第 6 个 skill 缺失或 hash mismatch。
+- `repair_agent_working_manual` 可恢复第 6 个 skill。
+- Browser Preview Agent Manual mock 更新为 `Skills 6/6`。
+- 新增 agent-manual 单元测试覆盖 requirement-intake-filter 缺失后的 validate / repair。
+
+边界：
+
+- 未复制 Lyra 原文。
+- 未使用 Lyra 名称。
+- 未生成 OpenSpec 文件。
+- 未写 Goal Tree。
+- 未启动 AgentRun。
+- 未执行用户项目命令。
+- 未调用模型。
+- 未写用户源码。
+- 未写旧 `.agentflow/issues`、`runs`、`evidence`、`reviews`、`updates`、`views`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-agent-manual`：pass，9 tests。
+- `cargo test`：pass，agent-manual 9 tests + CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + graph 26 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
