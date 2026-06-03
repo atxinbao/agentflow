@@ -30,6 +30,7 @@ Every Agent MUST read and follow:
 
 - Do not write source code unless AgentFlow rules explicitly allow it.
 - Do not execute project commands unless AgentFlow rules explicitly allow it.
+- Before producing an OpenSpec Draft, every Agent MUST run the requirement-intake-filter skill.
 - Do not create or edit Goal Tree directly.
 - Do not bypass OpenSpec.
 - Do not create PRs, issues, or remote objects unless explicitly authorized.
@@ -38,7 +39,9 @@ Every Agent MUST read and follow:
 ## Current Flow
 
 Conversation with human
-→ OpenSpec Draft
+→ Request triage
+→ Requirement intake filter
+→ OpenSpec Draft Preview
 → Human confirmation
 → Approved OpenSpec
 → Goal Tree materialization
@@ -85,6 +88,7 @@ You are an Agent working inside an AgentFlow-managed local project.
 - Read Goal Tree snapshot.
 - Read existing OpenSpec drafts / approvals when they exist.
 - Ask human clarification questions.
+- Produce Requirement Intake Results before OpenSpec Draft previews.
 - Produce OpenSpec Draft previews in conversation.
 
 ## Forbidden Actions
@@ -102,7 +106,8 @@ You are an Agent working inside an AgentFlow-managed local project.
 
 Conversation
 → Request triage
-→ OpenSpec Draft
+→ Requirement intake filter
+→ OpenSpec Draft Preview
 → Human confirmation
 → Approved OpenSpec
 → Goal Tree materialization
@@ -111,6 +116,10 @@ Conversation
 ## OpenSpec First Rule
 
 Feature, refactor, cleanup, and unclear change requests must go through OpenSpec Draft Preview before any Goal Tree materialization.
+
+Before OpenSpec Authoring, the Agent must produce a Requirement Intake Result.
+
+Only `ready-for-openspec` may proceed to OpenSpec Draft Preview.
 
 ## Goal Tree Rule
 
@@ -122,7 +131,7 @@ AgentRun is not authorized in this stage. Agents must stop before source writes,
 
 ## Validation Rule
 
-Before any output or future write, the Agent must verify that AGENT.MD, Agentflow.md, skills-lock.json, boundary-check, and validation skills were read.
+Before any output or future write, the Agent must verify that AGENT.MD, Agentflow.md, skills-lock.json, requirement-intake-filter, boundary-check, and validation skills were read.
 
 ## Boundary
 
@@ -131,12 +140,17 @@ If the requested action is outside the current authorized stage, stop and ask fo
     )
 }
 
-pub fn skill_templates() -> [AgentSkillTemplate; 5] {
+pub fn skill_templates() -> [AgentSkillTemplate; 6] {
     [
         AgentSkillTemplate {
             name: "request-triage",
             relative_path: ".agentflow/define/agent/skills/request-triage/SKILL.md",
             content: REQUEST_TRIAGE_SKILL,
+        },
+        AgentSkillTemplate {
+            name: "requirement-intake-filter",
+            relative_path: ".agentflow/define/agent/skills/requirement-intake-filter/SKILL.md",
+            content: REQUIREMENT_INTAKE_FILTER_SKILL,
         },
         AgentSkillTemplate {
             name: "openspec-authoring",
@@ -193,13 +207,162 @@ Classify the human request before any AgentFlow fact source is written.
 - research: output findings only unless the human confirms entry into OpenSpec.
 "#;
 
+const REQUIREMENT_INTAKE_FILTER_SKILL: &str = r#"# requirement-intake-filter
+
+Version: v1
+
+## Purpose
+
+Act as AgentFlow's requirement gate before OpenSpec Authoring.
+
+This skill turns human conversation into a structured Requirement Intake Result and decides whether the request may enter OpenSpec Draft Preview.
+
+## Required Reading
+
+- `<project-root>/AGENT.MD`
+- `.agentflow/define/agent/Agentflow.md`
+- `.agentflow/define/agent/skills-lock.json`
+- `request-triage`
+- `boundary-check`
+- `validation`
+
+## Input Sources
+
+Prefer project context before asking questions:
+
+- Human conversation
+- Current Project Workspace state
+- Graph status
+- Project File Reader metadata
+- Existing Goal Tree snapshot
+- Existing OpenSpec drafts or approvals
+- Agentflow.md
+- skills-lock.json
+- request-triage result
+
+## Output Contract
+
+Return a Requirement Intake Result. Do not output OpenSpec.
+
+```json
+{
+  "version": "requirement-intake-filter.v1",
+  "status": "needs-clarification",
+  "requestType": "feature",
+  "summary": "One-sentence requirement summary.",
+  "knowns": [],
+  "unknowns": [],
+  "clarifyingQuestions": [],
+  "scopeCandidates": [],
+  "nonGoalCandidates": [],
+  "acceptanceCriteriaCandidates": [],
+  "boundaryRisks": [],
+  "recommendedNextStep": "ask-clarifying-questions"
+}
+```
+
+## Status Definitions
+
+- `ready-for-openspec`: The goal, initial scope, non-goals, acceptance direction, and boundaries are clear enough for OpenSpec Draft Preview.
+- `needs-clarification`: The request is likely valid, but key context is missing.
+- `answer-only`: The input is a question or explanation request, not a requirement.
+- `blocked-by-boundary`: The user asked to bypass current AgentFlow boundaries.
+- `defer`: The request depends on a future capability that is not available in the current stage.
+
+## Filtering Steps
+
+1. Restate the user request in one sentence.
+2. Classify request type.
+3. Extract known facts.
+4. Identify missing facts.
+5. Identify scope candidates.
+6. Identify non-goal candidates.
+7. Draft acceptance criteria candidates.
+8. Check AgentFlow boundaries.
+9. Decide intake status.
+10. Return Requirement Intake Result.
+
+## Clarification Rules
+
+- Ask at most 3 questions.
+- Questions must be specific.
+- Questions must serve OpenSpec readiness.
+- Do not ask for information already available in project context.
+- Do not over-clarify when the request is good enough for a draft preview.
+
+## Boundary Checks
+
+Check whether the request asks the Agent to:
+
+- Write user source code.
+- Execute commands.
+- Write OpenSpec fact sources.
+- Write Goal Tree.
+- Skip approved OpenSpec.
+- Start AgentRun.
+- Create remote PRs, issues, or external objects.
+- Touch legacy paths.
+- Bypass AGENT.MD, Agentflow.md, or skills-lock.json.
+
+If out of bounds, return `blocked-by-boundary` and explain the allowed replacement flow.
+
+## Examples
+
+### Ready for OpenSpec
+
+Input: "Add a local project picker that only reads files and shows them in Desktop."
+
+Result:
+
+- status: `ready-for-openspec`
+- recommendedNextStep: `generate-openspec-draft-preview`
+
+### Needs Clarification
+
+Input: "Make the project page better."
+
+Result:
+
+- status: `needs-clarification`
+- clarifyingQuestions: ask which page, what user outcome, and what must not change.
+
+### Answer Only
+
+Input: "What is OpenSpec?"
+
+Result:
+
+- status: `answer-only`
+- recommendedNextStep: `answer-in-conversation`
+
+### Blocked by Boundary
+
+Input: "Skip OpenSpec and write the Goal Tree now."
+
+Result:
+
+- status: `blocked-by-boundary`
+- recommendedNextStep: `explain-boundary-and-stop`
+
+## Non-goals
+
+- Do not copy external prompt-optimizer text.
+- Do not optimize prompts.
+- Do not output OpenSpec.
+- Do not write `.agentflow/define/openspec/**`.
+- Do not write Goal Tree.
+- Do not start AgentRun.
+- Do not execute commands.
+- Do not write user source code.
+"#;
+
 const OPENSPEC_AUTHORING_SKILL: &str = r#"# openspec-authoring
 
 Version: v1
 
 ## Purpose
 
-Generate an OpenSpec Draft Preview from conversation.
+Generate an OpenSpec Draft Preview only after requirement-intake-filter returns `ready-for-openspec`.
 
 ## Draft Preview Contents
 
@@ -219,6 +382,7 @@ Generate an OpenSpec Draft Preview from conversation.
 
 ## Hard Rules
 
+- Do not run before Requirement Intake Result status is `ready-for-openspec`.
 - Without human confirmation, do not write `.agentflow/define/openspec/**`.
 - OpenSpec is the requirement source.
 - Goal Tree is a derived artifact.

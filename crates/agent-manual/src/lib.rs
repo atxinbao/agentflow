@@ -44,6 +44,20 @@ mod tests {
             .is_file());
         assert!(dir
             .path()
+            .join(".agentflow/define/agent/skills/requirement-intake-filter/SKILL.md")
+            .is_file());
+        assert_eq!(status.skills_lock.skill_count, 6);
+        assert_eq!(status.skills.len(), 6);
+        assert!(fs::read_to_string(dir.path().join("AGENT.MD"))
+            .unwrap()
+            .contains("requirement-intake-filter"));
+        assert!(
+            fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md"))
+                .unwrap()
+                .contains("Requirement intake filter")
+        );
+        assert!(dir
+            .path()
             .join(".agentflow/define/agent/state/bootstrap.json")
             .is_file());
         assert!(dir
@@ -90,6 +104,30 @@ mod tests {
         assert!(fs::read_to_string(skill_path)
             .unwrap()
             .contains("Self-check"));
+    }
+
+    #[test]
+    fn validate_detects_missing_requirement_intake_filter_skill() {
+        let dir = tempdir().unwrap();
+        prepare_agent_working_manual(dir.path()).unwrap();
+        let skill_path = dir
+            .path()
+            .join(".agentflow/define/agent/skills/requirement-intake-filter/SKILL.md");
+        fs::remove_file(&skill_path).unwrap();
+
+        let invalid = validate_agent_working_manual(dir.path()).unwrap();
+
+        assert!(!invalid.ready);
+        assert!(invalid
+            .errors
+            .iter()
+            .any(|error| error.contains("Skill requirement-intake-filter is missing")));
+
+        let repaired = repair_agent_working_manual(dir.path()).unwrap();
+
+        assert!(repaired.ready);
+        assert!(skill_path.is_file());
+        assert_eq!(repaired.skills_lock.skill_count, 6);
     }
 
     #[test]

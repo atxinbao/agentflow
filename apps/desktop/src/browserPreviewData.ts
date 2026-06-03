@@ -588,10 +588,11 @@ export function createBrowserPreviewAgentEnvironmentStatus(
       exists: true,
       valid: true,
       path: ".agentflow/define/agent/skills-lock.json",
-      skillCount: 5,
+      skillCount: 6,
     },
     skills: [
       "request-triage",
+      "requirement-intake-filter",
       "openspec-authoring",
       "goal-tree-materialization",
       "boundary-check",
