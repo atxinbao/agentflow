@@ -3266,3 +3266,39 @@ No files were written and no command was executed.
   - 临时打开 `http://127.0.0.1:1421/`。
   - 页面非空。
   - 状态栏显示 `工作手册 · 已就绪`。
+
+## 2026-06-03 Agent Working Manual Health Polish
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/008-1-agent-working-manual-health-polish.md`。
+- 补齐 Agent Working Manual 健康闭环：
+  - `validate_agent_working_manual` 检查 `.agentflow/define/agent/state/bootstrap.json`。
+  - `validate_agent_working_manual` 检查 `.agentflow/define/agent/state/validation.json`。
+  - `AGENT.MD` 是项目内 symlink 时记录 warning，但不阻断 ready。
+
+结果：
+
+- 缺失 `bootstrap.json` 或 `validation.json` 时，Agent Manual status 进入 `Missing`，`ready=false`。
+- `load_agent_environment_status` 只有在 bootstrap / validation 两个 state 文件都存在时才复用 validation cache。
+- 项目内 `AGENT.MD` symlink 进入 warnings，项目外 symlink 仍然 blocked。
+- 新增 agent-manual 单元测试覆盖 state 文件缺失、缓存重验和项目内 symlink warning。
+
+边界：
+
+- 未新增 OpenSpec / Goal Tree / AgentRun 代码。
+- 未改 Desktop 页面结构。
+- 未新增执行命令能力。
+- 未调用模型。
+- 未写用户项目源码。
+- 未改 `.agentflow/` runtime 目录结构。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-agent-manual`：pass，8 tests。
+- `cargo test`：pass，agent-manual 8 tests + CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + graph 26 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
