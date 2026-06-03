@@ -124,13 +124,11 @@ function projectFileDisplayType(content: ProjectFileContent | null, title: strin
   const extension = (content?.extension ?? getProjectFileExtensionFromName(title)).toLowerCase();
   const normalizedTitle = title.toLowerCase();
   const mimeType = content?.mimeType ?? "";
-  if (normalizedTitle.includes("prompt") || normalizedTitle.includes("提示词")) return "提示词文档";
   if (normalizedTitle === "androidmanifest.xml") return "Android manifest 配置";
   if (normalizedTitle === "info.plist" || extension === "plist") return "plist 配置";
   if (normalizedTitle === "pubspec.yaml" || normalizedTitle === "pubspec.yml") return "Flutter 配置";
   if (normalizedTitle.endsWith(".gradle") || extension === "gradle") return "Gradle 配置";
   if (language === "markdown" || ["md", "mdx", "markdown"].includes(extension)) return "Markdown 文档";
-  if (language === "text" || ["txt", "text", "rst", "adoc"].includes(extension)) return "文本";
   if (mimeType.startsWith("image/")) return "图片";
   if (mimeType.startsWith("audio/") || mimeType.startsWith("video/")) return "媒体";
   if (mimeType === "application/pdf" || extension === "pdf") return "PDF";

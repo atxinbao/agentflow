@@ -34,7 +34,6 @@
 - [007-goal-tree-v1.md](007-goal-tree-v1.md)
 - [007-1-goal-tree-agent-only-boundary-fix.md](007-1-goal-tree-agent-only-boundary-fix.md)
 - [008-agent-working-manual-bootstrap-v1.md](008-agent-working-manual-bootstrap-v1.md)
-- [009-figma-prompt-reader-polish.md](009-figma-prompt-reader-polish.md)
 - [next-requirements.md](next-requirements.md)
 
 ## 不继承内容

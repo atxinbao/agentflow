@@ -813,7 +813,6 @@ function browserPreviewTopLevelEntries(): ProjectFileEntry[] {
     browserPreviewFileEntry("Cargo.toml", "file", 640),
     browserPreviewFileEntry("README.md", "file", 1280),
     browserPreviewFileEntry("design.md", "file", 2200),
-    browserPreviewFileEntry("institutional-quant-figma-prompt.txt", "file", 4200),
     browserPreviewDirectoryEntry("apps", [browserPreviewDirectoryChild("apps/desktop")]),
     browserPreviewDirectoryEntry("crates", [browserPreviewDirectoryChild("crates/agentflow-core")]),
     browserPreviewDirectoryEntry("docs", [browserPreviewDirectoryChild("docs/requirements")]),
@@ -936,10 +935,7 @@ function browserPreviewDirectoryChildSpecs(path: string): Array<{ relativePath: 
     "crates/agentflow-core": [{ relativePath: "crates/agentflow-core/src", kind: "directory" }],
     "crates/agentflow-core/src": [{ relativePath: "crates/agentflow-core/src/lib.rs", kind: "file" }],
     docs: [{ relativePath: "docs/requirements", kind: "directory" }],
-    "docs/requirements": [
-      { relativePath: "docs/requirements/001-add-local-project.md", kind: "file" },
-      { relativePath: "docs/requirements/009-figma-prompt-reader-polish.md", kind: "file" },
-    ],
+    "docs/requirements": [{ relativePath: "docs/requirements/001-add-local-project.md", kind: "file" }],
     target: [{ relativePath: "target/debug", kind: "directory" }],
     "target/debug": [],
   };
@@ -1008,12 +1004,6 @@ function browserPreviewFileContentByPath(relativePath: string, projectRoot: stri
       mimeType: "text/markdown",
       content: "# AgentFlow Project Page Design\n\nProject 页面是本地项目文件阅读器。\n\n- 左侧：固定项目导航。\n- 顶部：当前项目名称和路径。\n- 主体：文件内容阅读器。\n- 右侧：Finder 风格文件列表。\n",
     },
-    "institutional-quant-figma-prompt.txt": {
-      language: "text",
-      mimeType: "text/plain",
-      content:
-        "机构级量化交易系统 Figma AI 提示词\n\n产品定位：面向专业机构的量化交易平台，而不是普通散户交易 App。\n\n目标用户：量化研究员、交易员、投资经理、风控经理、执行团队、数据工程师、系统管理员、CIO / COO。\n\n视觉方向：深色主题、高信息密度、投行 / 对冲基金内部交易系统风格，适合长时间盯盘。\n\n输出要求：Design System、左侧导航、顶部全局状态栏、核心业务页面、关键弹窗、Drawer、Prototype Flow。\n\n负面约束：不要营销页，不要零售券商 App 风，不要 crypto 赌场感，不要 lorem ipsum。\n",
-    },
     "Cargo.toml": {
       language: "toml",
       mimeType: "text/plain",
@@ -1069,12 +1059,6 @@ function browserPreviewFileContentByPath(relativePath: string, projectRoot: stri
       language: "markdown",
       mimeType: "text/markdown",
       content: "# Add Local Project\n\n浏览器预览可以使用 mock 数据验证 UI；真实 Tauri 客户端必须读取真实本地项目。\n",
-    },
-    "docs/requirements/009-figma-prompt-reader-polish.md": {
-      language: "markdown",
-      mimeType: "text/markdown",
-      content:
-        "# Figma Prompt Reader Polish\n\n## 用户目标\n\n把机构级量化交易系统 Figma AI 提示词沉淀为项目需求，并让 Project File Reader 正确展示提示词类文本。\n\n## 两个小问题\n\n1. 设计提示词需求没有进入 `docs/requirements/`。\n2. `.txt` 或提示词类文本容易被误标为代码。\n\n## 验收标准\n\n- [ ] 需求文档已进入 requirements 索引。\n- [ ] 普通文本 / 提示词文本在阅读器中显示为文本或提示词文档。\n",
     },
   };
 
