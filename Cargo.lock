@@ -9,6 +9,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "agentflow-agent-manual"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-cli"
 version = "0.0.1"
 dependencies = [
@@ -32,6 +43,7 @@ dependencies = [
 name = "agentflow-desktop"
 version = "0.0.1"
 dependencies = [
+ "agentflow-agent-manual",
  "agentflow-core",
  "agentflow-goal-tree",
  "agentflow-graph",

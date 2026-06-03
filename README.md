@@ -1,6 +1,6 @@
 # AgentFlow
 
-更新日期：2026-06-01
+更新日期：2026-06-03
 执行者：Codex
 
 ## 当前文档状态
@@ -34,7 +34,9 @@ docs/requirements/
 
 - AgentFlow 是本地优先的桌面工作台。
 - Desktop 当前只读取和展示本地项目内容。
-- Goal Tree V1 允许用户在本地项目下写入 `.agentflow/define/**` 目标树事实源。
+- Project Workspace Manager 会准备 `.agentflow/` 三段式本地工作区。
+- Agent Manual Bootstrap 会接管根目录 `AGENT.MD`，写入 `.agentflow/define/agent/**` 工作手册、skills 和 lock。
+- Goal Tree V1 是 Agent-only 事实源；Desktop 人类界面只读查看。
 - 不执行命令。
 - 不写用户业务源码。
 - 不写旧 `.agentflow/issues`、`runs`、`evidence`、`reviews`、`updates`、`views` 路径。
@@ -60,6 +62,7 @@ npm run tauri -- dev
 
 ```bash
 npm --prefix apps/desktop run build
+cargo test -p agentflow-agent-manual
 cargo test -p agentflow-goal-tree
 cargo test
 git diff --check

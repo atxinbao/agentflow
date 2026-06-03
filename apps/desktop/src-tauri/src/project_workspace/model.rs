@@ -15,4 +15,5 @@ pub(crate) struct ProjectWorkspaceSummary {
     pub(crate) reused_paths: Vec<String>,
     pub(crate) git_exclude_path: Option<String>,
     pub(crate) protected_git_exclude: bool,
+    pub(crate) agent_manual_status: agentflow_agent_manual::model::AgentEnvironmentStatus,
 }

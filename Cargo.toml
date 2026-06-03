@@ -2,6 +2,7 @@
 members = [
     "crates/agentflow-core",
     "crates/agentflow-cli",
+    "crates/agent-manual",
     "crates/graph",
     "crates/goal-tree",
     "apps/desktop/src-tauri",
@@ -19,4 +20,5 @@ clap = { version = "4", features = ["derive"] }
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 tempfile = "3"

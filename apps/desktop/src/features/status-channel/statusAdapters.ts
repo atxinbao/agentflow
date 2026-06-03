@@ -1,14 +1,106 @@
 import type { ProjectFilesState, ProjectGraphState } from "../project-files";
+import type { AgentManualState } from "../agent-manual";
 import type { AgentStatusChannelItem, AgentStatusTone } from "./statusTypes";
 
 export function buildAgentStatusItems({
+  agentManualState,
   projectFilesState,
   projectGraphState,
 }: {
+  agentManualState: AgentManualState;
   projectFilesState: ProjectFilesState;
   projectGraphState: ProjectGraphState;
 }): AgentStatusChannelItem[] {
-  return [buildWorkspaceStatus(projectFilesState), buildWorksiteStatus(projectGraphState)];
+  return [
+    buildWorkspaceStatus(projectFilesState),
+    buildWorksiteStatus(projectGraphState),
+    buildAgentManualStatus(agentManualState),
+  ];
+}
+
+function buildAgentManualStatus(agentManualState: AgentManualState): AgentStatusChannelItem {
+  const source = "008 - Agent Working Manual Bootstrap V1";
+  const status = agentManualState.status;
+
+  if (agentManualState.error) {
+    return {
+      id: "agent-manual",
+      label: "工作手册",
+      status: "failed",
+      statusLabel: "异常",
+      source,
+      priority: 30,
+      error: agentManualState.error,
+    };
+  }
+
+  if (agentManualState.source === "loading") {
+    return {
+      id: "agent-manual",
+      label: "工作手册",
+      status: "working",
+      statusLabel: "检查中",
+      source,
+      priority: 30,
+    };
+  }
+
+  if (!status) {
+    return {
+      id: "agent-manual",
+      label: "工作手册",
+      status: "idle",
+      statusLabel: "未检查",
+      source,
+      priority: 30,
+    };
+  }
+
+  return {
+    id: "agent-manual",
+    label: "工作手册",
+    status: agentManualTone(status.status),
+    statusLabel: agentManualLabel(status.status),
+    source,
+    priority: 30,
+    metrics: [
+      { label: "AGENT.MD", value: status.agentMd.managed ? "Managed" : "未接管" },
+      { label: "Skills", value: `${status.skills.filter((skill) => skill.exists && skill.hashMatches).length}/${status.skillsLock.skillCount}` },
+      { label: "Warnings", value: status.warnings.length },
+      { label: "Errors", value: status.errors.length },
+    ],
+    error: status.errors.at(0) ?? null,
+  };
+}
+
+function agentManualTone(status: NonNullable<AgentManualState["status"]>["status"]): AgentStatusTone {
+  if (status === "ready" || status === "repaired") {
+    return "ready";
+  }
+  if (status === "checking" || status === "repairing") {
+    return "working";
+  }
+  if (status === "degraded" || status === "missing") {
+    return "warning";
+  }
+  if (status === "failed" || status === "blocked") {
+    return "failed";
+  }
+  return "idle";
+}
+
+function agentManualLabel(status: NonNullable<AgentManualState["status"]>["status"]) {
+  const labels: Record<NonNullable<AgentManualState["status"]>["status"], string> = {
+    missing: "缺失",
+    checking: "检查中",
+    repairing: "修复中",
+    ready: "已就绪",
+    repaired: "已修复",
+    degraded: "降级",
+    failed: "失败",
+    blocked: "已阻断",
+  };
+  return labels[status] ?? status;
 }
 
 function buildWorkspaceStatus(projectFilesState: ProjectFilesState): AgentStatusChannelItem {

@@ -19,6 +19,7 @@ import type {
   ProjectMilestoneIssueViewModelSnapshot,
   WorkbenchBoundary,
   WorkbenchSnapshot,
+  AgentEnvironmentStatus,
 } from "./types";
 import {
   getProjectFileExtensionFromName,
@@ -557,6 +558,54 @@ export function createBrowserPreviewGraphStatus(projectRoot = BROWSER_PREVIEW_PR
     preflightStatus: "ready",
     protectionStatus: "ready",
     degradedReasons: [],
+  };
+}
+
+export function createBrowserPreviewAgentEnvironmentStatus(
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+): AgentEnvironmentStatus {
+  return {
+    version: "agent-environment-status.browser-preview",
+    projectRoot,
+    status: "ready",
+    ready: true,
+    checkedAt: previewTimestamp,
+    repairedAt: null,
+    agentMd: {
+      exists: true,
+      managed: true,
+      version: "agent-entry.v1",
+      hash: "browser-preview-agent-md",
+      backedUp: false,
+      trackedByGit: false,
+    },
+    manual: {
+      exists: true,
+      path: ".agentflow/define/agent/Agentflow.md",
+      hash: "browser-preview-agentflow-manual",
+    },
+    skillsLock: {
+      exists: true,
+      valid: true,
+      path: ".agentflow/define/agent/skills-lock.json",
+      skillCount: 5,
+    },
+    skills: [
+      "request-triage",
+      "openspec-authoring",
+      "goal-tree-materialization",
+      "boundary-check",
+      "validation",
+    ].map((name) => ({
+      name,
+      path: `.agentflow/define/agent/skills/${name}/SKILL.md`,
+      exists: true,
+      hashMatches: true,
+      version: "v1",
+    })),
+    repairs: [],
+    warnings: ["浏览器预览只展示 mock Agent Manual 状态，不写 AGENT.MD。"],
+    errors: [],
   };
 }
 
