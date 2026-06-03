@@ -76,6 +76,8 @@ pub(crate) fn prepare_local_project_workspace_at(
     )?;
 
     let (git_exclude_path, protected_git_exclude) = protect_agentflow_from_git(&root)?;
+    let agent_manual_status = agentflow_agent_manual::prepare_agent_working_manual(&root)
+        .map_err(|error| format!("prepare agent working manual: {error}"))?;
 
     Ok(ProjectWorkspaceSummary {
         version: "project-workspace.v0".to_string(),
@@ -90,6 +92,7 @@ pub(crate) fn prepare_local_project_workspace_at(
         reused_paths,
         git_exclude_path: git_exclude_path.map(|path| path.display().to_string()),
         protected_git_exclude,
+        agent_manual_status,
     })
 }
 
@@ -184,6 +187,16 @@ mod tests {
         assert!(dir.path().join(".agentflow/output/logs").is_dir());
         assert!(dir.path().join(".agentflow/output/cache").is_dir());
         assert!(dir.path().join(".agentflow/output/tmp").is_dir());
+        assert!(dir.path().join("AGENT.MD").is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/define/agent/Agentflow.md")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/define/agent/skills-lock.json")
+            .is_file());
+        assert!(summary.agent_manual_status.ready);
         assert!(fs::read_to_string(dir.path().join(".git/info/exclude"))
             .unwrap()
             .contains(".agentflow/"));
@@ -207,6 +220,7 @@ mod tests {
             fs::read_to_string(dir.path().join(".agentflow/config.yaml")).unwrap(),
             "custom: true\n"
         );
+        assert!(summary.agent_manual_status.ready);
     }
 
     #[test]

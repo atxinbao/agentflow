@@ -33,6 +33,7 @@ import {
   createBrowserPreviewWorkbenchSnapshot,
 } from "./browserPreviewData";
 import { GoalTreePage, useGoalTree } from "./features/goal-tree";
+import { useAgentManual } from "./features/agent-manual";
 import {
   ProjectLocalFilesPage,
   isBrowserPreviewRuntime,
@@ -56,6 +57,7 @@ import type {
   LocalProjectModelSnapshot,
   LocalSearchSnapshot,
   ProjectFileTextRange,
+  AgentEnvironmentStatus,
   ProjectMilestoneIssueViewModelSnapshot,
   V1Issue,
   V1Milestone,
@@ -127,6 +129,7 @@ type ProjectWorkspaceSummary = {
   reusedPaths: string[];
   gitExcludePath?: string | null;
   protectedGitExclude: boolean;
+  agentManualStatus: AgentEnvironmentStatus;
 };
 
 type SidebarProjectItem = {
@@ -348,9 +351,14 @@ function App() {
     projectFilesState.snapshot?.projectRoot ??
     (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
   const goalTreeController = useGoalTree(goalTreeProjectRoot);
+  const agentManualProjectRoot =
+    selectedProjectRoot ??
+    projectFilesState.snapshot?.projectRoot ??
+    (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
+  const { agentManualState, loadAgentManual } = useAgentManual(agentManualProjectRoot);
   const agentStatusItems = useMemo(
-    () => buildAgentStatusItems({ projectFilesState, projectGraphState }),
-    [projectFilesState, projectGraphState],
+    () => buildAgentStatusItems({ agentManualState, projectFilesState, projectGraphState }),
+    [agentManualState, projectFilesState, projectGraphState],
   );
 
   function applyBrowserPreviewSnapshot(projectRoot: string) {
@@ -497,6 +505,7 @@ function App() {
       setProjectAddOpen(false);
       setProjectAddFeedback(workspaceSummary ? projectWorkspaceFeedback(workspaceSummary, "项目已存在，已准备并切换。") : "项目已存在，已切换。");
       await loadProjectFiles(projectRoot);
+      await loadAgentManual(projectRoot);
       return;
     }
 
@@ -510,6 +519,7 @@ function App() {
       setProjectAddOpen(false);
       setProjectAddFeedback(workspaceSummary ? projectWorkspaceFeedback(workspaceSummary, "项目已存在，已准备并切换。") : "项目已存在，已切换。");
       await loadProjectFiles(existingLocalProject.root);
+      await loadAgentManual(existingLocalProject.root);
       return;
     }
 
@@ -523,6 +533,7 @@ function App() {
     setProjectAddOpen(false);
     setProjectAddFeedback(workspaceSummary ? projectWorkspaceFeedback(workspaceSummary, `已添加：${localProject.name}`) : `已添加：${localProject.name}`);
     await loadProjectFiles(projectRoot);
+    await loadAgentManual(projectRoot);
   }
 
   function removeLocalProject(projectId: string, projectRoot: string) {
@@ -549,6 +560,7 @@ function App() {
     setSelectedIssueId(null);
     setActiveView("projects");
     void loadProjectFiles(fallbackProjectRoot ?? null);
+    void loadAgentManual(fallbackProjectRoot ?? null);
   }
 
   async function chooseProjectFolder() {
@@ -729,10 +741,12 @@ function App() {
               onClick={() => {
                 if (activeView === "projects") {
                   void loadProjectFiles(projectFilesRoot);
+                  void loadAgentManual(projectFilesRoot);
                   return;
                 }
                 void loadSnapshot();
                 void loadProjectFiles(projectFilesRoot);
+                void loadAgentManual(projectFilesRoot);
               }}
               title={activeView === "projects" ? "重新读取项目文件" : "重新读取本地快照"}
               type="button"

@@ -3195,3 +3195,74 @@ No files were written and no command was executed.
 - 未写用户源码。
 - 人类 Desktop UI 不写 `.agentflow/define/**`。
 - 人类 Desktop UI 不写 `.agentflow/output/graph/context-packs/**`。
+
+## 2026-06-03 Agent Working Manual Bootstrap V1
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/008-agent-working-manual-bootstrap-v1.md`。
+- 新增 Agent 工作手册 bootstrap 能力，接管根目录 `AGENT.MD`。
+- 写入 `.agentflow/define/agent/Agentflow.md`、5 个内置 skills、`skills-lock.json`。
+- 在 Project Workspace prepare、App 打开 / 项目切换的 Desktop 状态通道中接入 Agent Manual 状态。
+
+结果：
+
+- 新增 `crates/agent-manual`，Cargo package 为 `agentflow-agent-manual`。
+- 新增模型：
+  - `AgentEnvironmentStatus`
+  - `AgentMdStatus`
+  - `ManualStatus`
+  - `SkillsLockStatus`
+  - `SkillStatus`
+  - `SkillsLock`
+- 新增 API：
+  - `prepare_agent_working_manual`
+  - `validate_agent_working_manual`
+  - `repair_agent_working_manual`
+  - `load_agent_environment_status`
+  - `assert_agent_environment_ready`
+- `prepare_local_project_workspace` 已接入 Agent Manual bootstrap。
+- Desktop Tauri 新增 Agent Manual commands：
+  - `prepare_agent_working_manual`
+  - `load_agent_environment_status`
+  - `repair_agent_working_manual`
+  - `validate_agent_working_manual`
+- Desktop 增加 browser preview mock Agent Manual 状态。
+- Agent 状态通道增加 `工作手册` 通道，仍保持一次只显示一个通道事件 + 状态。
+
+自动修复行为：
+
+- 缺失 `AGENT.MD` 时创建。
+- 已有 `AGENT.MD` 时备份到 `.agentflow/output/backup/agent-md/` 后重写。
+- 缺失 / mismatch 的 `Agentflow.md`、`SKILL.md`、`skills-lock.json` 会自动修复。
+- `AGENT.MD` 被 Git 跟踪时记录 warning，不阻断 ready。
+- `AGENT.MD` 是指向项目外的 symlink 时进入 `blocked`。
+
+边界：
+
+- 本轮唯一允许写入项目根目录的是 `AGENT.MD`。
+- 允许写 `.agentflow/define/agent/**`。
+- 允许写 `.agentflow/output/backup/agent-md/**`。
+- 允许写 `.agentflow/output/logs/**`。
+- 未写 OpenSpec changes。
+- 未写 Goal Tree。
+- 未启动 AgentRun。
+- 未执行用户项目命令。
+- 未调用模型。
+- 未创建远程 PR / Issue。
+- 未写旧 `.agentflow/issues`、`runs`、`evidence`、`reviews`、`updates`、`views`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-agent-manual`：pass，5 tests。
+- `cargo test -p agentflow-desktop`：pass，16 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo test`：pass，agent-manual 5 tests + CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + graph 26 tests。
+- `git diff --check`：pass。
+- Browser Preview 最新前端包核对：pass。
+  - 临时打开 `http://127.0.0.1:1421/`。
+  - 页面非空。
+  - 状态栏显示 `工作手册 · 已就绪`。
