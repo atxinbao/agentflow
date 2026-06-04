@@ -24,6 +24,7 @@ import type {
   ExecuteStatusSnapshot,
   OutputStatusSnapshot,
   OutputIndex,
+  OutputIndexEntry,
   AuditIndex,
   HumanAuditReport,
   StateStatusSnapshot,
@@ -44,6 +45,9 @@ const previewTimestamp = 1780291200;
 const previewGoalId = "goal-001";
 const previewMilestoneId = "ms-001";
 const previewIssueId = "iss-001";
+const previewAuditId = "audit-browser-preview-001";
+const previewDeliveryRunId = "run-browser-preview-001";
+const previewSpecId = "spec-browser-preview";
 
 const previewIssueContract: IssueContract = {
   id: "ISSUE-PREVIEW-001",
@@ -739,9 +743,9 @@ export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_P
     manifestExists: true,
     indexExists: true,
     summary: {
-      evidence: 0,
-      releaseDeliveries: 0,
-      audits: 0,
+      evidence: 1,
+      releaseDeliveries: 1,
+      audits: 1,
       logs: 0,
       backups: 0,
       incompleteEvidence: 0,
@@ -754,12 +758,35 @@ export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_P
 }
 
 export function createBrowserPreviewOutputIndex(): OutputIndex {
+  const releaseDelivery = browserPreviewOutputEntry(
+    previewDeliveryRunId,
+    previewIssueId,
+    previewSpecId,
+    ".agentflow/output/release/run-browser-preview-001/delivery.json",
+    "delivered",
+  );
   return {
     version: "output-index.browser-preview",
     updatedAt: previewTimestamp,
-    evidence: [],
-    releaseDeliveries: [],
-    audits: [],
+    evidence: [
+      browserPreviewOutputEntry(
+        previewDeliveryRunId,
+        previewIssueId,
+        previewSpecId,
+        ".agentflow/output/evidence/run-browser-preview-001.json",
+        "complete",
+      ),
+    ],
+    releaseDeliveries: [releaseDelivery],
+    audits: [
+      browserPreviewOutputEntry(
+        previewDeliveryRunId,
+        previewIssueId,
+        previewSpecId,
+        ".agentflow/output/audit/audit-browser-preview-001/audit-report.md",
+        "passed-with-warnings",
+      ),
+    ],
   };
 }
 
@@ -767,12 +794,116 @@ export function createBrowserPreviewAuditIndex(): AuditIndex {
   return {
     version: "audit-index.browser-preview",
     updatedAt: previewTimestamp,
-    audits: [],
+    audits: [
+      {
+        auditId: previewAuditId,
+        status: "passed-with-warnings",
+        requestedBy: "human",
+        requestedAt: previewTimestamp,
+        reportPath: ".agentflow/output/audit/audit-browser-preview-001/audit-report.md",
+        auditPath: ".agentflow/output/audit/audit-browser-preview-001/audit.json",
+      },
+    ],
   };
 }
 
 export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null {
-  return null;
+  return {
+    request: {
+      reason: "浏览器预览核对人工审计入口。",
+      scope: {
+        description: "Human requested audit for Build Agent delivery.",
+        refs: [
+          {
+            kind: "spec",
+            id: previewSpecId,
+            path: `.agentflow/input/specs/approved/${previewSpecId}/`,
+          },
+          {
+            kind: "issue",
+            id: previewIssueId,
+            path: `.agentflow/input/issues/${previewIssueId}.json`,
+          },
+          {
+            kind: "execute-run",
+            id: previewDeliveryRunId,
+            path: `.agentflow/execute/runs/${previewDeliveryRunId}/`,
+          },
+          {
+            kind: "evidence",
+            id: previewDeliveryRunId,
+            path: `.agentflow/output/evidence/${previewDeliveryRunId}.json`,
+          },
+          {
+            kind: "release-delivery",
+            id: previewDeliveryRunId,
+            path: `.agentflow/output/release/${previewDeliveryRunId}/delivery.json`,
+          },
+        ],
+      },
+    },
+    audit: {
+      auditId: previewAuditId,
+      status: "passed-with-warnings",
+      requestedBy: "human",
+      requestedAt: previewTimestamp,
+      summary: {
+        findings: 1,
+        warnings: 1,
+      },
+      checks: {
+        specAlignment: "passed",
+        boundaryCompliance: "passed",
+        evidenceCompleteness: "warning",
+      },
+      paths: {
+        report: ".agentflow/output/audit/audit-browser-preview-001/audit-report.md",
+      },
+    },
+    reportMarkdown:
+      "# Human Audit Browser Preview\n\n" +
+      "状态：通过，有警告。\n\n" +
+      "- 已核对 release delivery、execute run、evidence 和 issue scope refs。\n" +
+      "- 浏览器预览只展示 mock 审计报告，不写 `.agentflow/output/audit`。\n",
+    findings: [
+      {
+        id: "finding-browser-preview-001",
+        severity: "warning",
+        summary: "Browser Preview 使用 mock audit package。",
+      },
+    ],
+    checklistMarkdown:
+      "- [x] Scope refs 自动生成\n" +
+      "- [x] Request Human Audit 在浏览器预览中禁用\n" +
+      "- [x] audit-report.md 可只读展示\n",
+    evidenceMap: {
+      evidence: [".agentflow/output/evidence/run-browser-preview-001.json"],
+      releaseDelivery: [".agentflow/output/release/run-browser-preview-001/delivery.json"],
+    },
+    traceability: {
+      sourceSpecId: previewSpecId,
+      issueId: previewIssueId,
+      runId: previewDeliveryRunId,
+      auditId: previewAuditId,
+    },
+  };
+}
+
+function browserPreviewOutputEntry(
+  runId: string,
+  issueId: string,
+  sourceSpecId: string,
+  path: string,
+  status: string,
+): OutputIndexEntry {
+  return {
+    runId,
+    issueId,
+    sourceSpecId,
+    path,
+    status,
+    updatedAt: previewTimestamp,
+  };
 }
 
 export function createBrowserPreviewStateStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): StateStatusSnapshot {
@@ -781,7 +912,7 @@ export function createBrowserPreviewStateStatus(projectRoot = BROWSER_PREVIEW_PR
     projectRoot,
     status: "ready",
     currentStage: "workspace-ready",
-    auditStatus: "not-requested",
+    auditStatus: "passed-with-warnings",
     activeIssueId: null,
     activeRunId: null,
     health: {

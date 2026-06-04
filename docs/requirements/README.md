@@ -45,6 +45,7 @@
 - [012-human-triggered-audit-report-v1.md](012-human-triggered-audit-report-v1.md)
 - [012-1-desktop-human-audit-entry-polish.md](012-1-desktop-human-audit-entry-polish.md)
 - [013-workflow-state-gate-orchestration-v1.md](013-workflow-state-gate-orchestration-v1.md)
+- [013-1-browser-preview-verification-polish.md](013-1-browser-preview-verification-polish.md)
 - [next-requirements.md](next-requirements.md)
 
 ## 不继承内容

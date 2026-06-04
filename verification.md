@@ -4168,3 +4168,57 @@ No files were written and no command was executed.
 - `npm --prefix apps/desktop run build`：pass。
 - `git diff --check`：pass。
 - Browser Preview 核对：尝试刷新 `http://127.0.0.1:1421/` 时被浏览器侧拦截，未完成可视核对；本轮以前端 build 和 mock 禁写逻辑验证为准。
+
+## 2026-06-05 Browser Preview Verification Polish
+
+执行者：Codex
+
+目标：
+
+- 将 `Browser Preview Verification Polish` 补充为 `docs/requirements/013-1-browser-preview-verification-polish.md`。
+- 修复 PR #27 遗留的 Browser Preview 可视核对缺口。
+- 让 `http://127.0.0.1:1421/` 能展示 Desktop 人工审计入口的可核对 mock 状态。
+
+结果：
+
+- Browser Preview output status 从空状态补齐为：
+  - `evidence = 1`
+  - `releaseDeliveries = 1`
+  - `audits = 1`
+  - `incompleteEvidence = 0`
+  - `incompleteDeliveries = 0`
+- Browser Preview output index 新增 1 条 evidence、1 条 release delivery、1 条 audit report entry。
+- Browser Preview audit index 新增 `audit-browser-preview-001`。
+- Browser Preview human audit report 新增只读 mock 报告：
+  - `# Human Audit Browser Preview`
+  - findings / checklist / evidence map / traceability 均可展示。
+- Browser Preview workflow state 的 `auditStatus` 更新为 `passed-with-warnings`。
+- README / GOAL / ROADMAP / requirements index 已补充 013.1。
+
+边界：
+
+- 未修改 `request_human_audit` Tauri 命令。
+- 未修改 Rust output / audit / state 模型。
+- 未修改 `.agentflow/output/audit` 真实写入逻辑。
+- 未自动触发 audit。
+- 未写 input / execute / evidence / release delivery 真实 facts。
+- Browser Preview 仍只展示 mock 数据，不写 `.agentflow/output/audit`。
+
+验证：
+
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-desktop`：pass，17 tests。
+- `cargo test`：pass，agent-manual 23 tests + CLI 2 tests + core 61 tests + desktop 17 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 18 tests + panel 27 tests + state 9 tests。
+- `git diff --check`：pass。
+- Browser Preview 核对：pass。
+  - URL：`http://127.0.0.1:1421/`。
+  - 页面标题：`AgentFlow 本地工作台`。
+  - DOM snapshot 显示 `region "人工审计"`。
+  - 统计显示 `证据 1`、`交付 1`、`审计 1`、`未完成 0`。
+  - `交付材料` combobox 选中 `run-browser-preview-001 · iss-001 · delivered`。
+  - `请求人工审计` button 在 Browser Preview 中保持 disabled。
+  - `最新审计报告` 显示 `audit-browser-preview-001`、`通过，有警告` 和 `# Human Audit Browser Preview`。
+  - preview-only 提示显示 `浏览器预览不写 .agentflow/output/audit；请在 Tauri Desktop 中触发人工审计。`
+  - Browser logs 仅包含 Vite debug 和 React DevTools info，无应用 error / warning。
+  - in-app Browser screenshot 命令尝试过，但当前后端 `Page.captureScreenshot` 超时且 `playwright_element_screenshot` 不支持；本轮以 DOM snapshot 和 console logs 作为 Browser Preview 核对证据。
