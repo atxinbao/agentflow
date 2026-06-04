@@ -1,14 +1,16 @@
 use crate::{
     git::is_git_tracked,
     hash::file_sha256_hex,
+    layout::{detect_shadow_files, shadow_warnings, validate_workspace_layout},
     lock::{expected_skills_lock, read_skills_lock},
     model::{
         AgentEnvironmentState, AgentEnvironmentStatus, AgentMdStatus, ManualStatus, SkillStatus,
         SkillsLockStatus, AGENT_ENTRY_VERSION, STATUS_VERSION,
     },
     templates::{
-        skill_templates, AGENT_MANUAL_RELATIVE_PATH, BOOTSTRAP_RELATIVE_PATH,
-        SKILLS_LOCK_RELATIVE_PATH, VALIDATION_RELATIVE_PATH,
+        skill_templates, AGENT_ENTRY_RELATIVE_PATH, AGENT_MANUAL_RELATIVE_PATH,
+        BOOTSTRAP_RELATIVE_PATH, LEGACY_AGENT_ENTRY_RELATIVE_PATH, SKILLS_LOCK_RELATIVE_PATH,
+        VALIDATION_RELATIVE_PATH,
     },
 };
 use anyhow::{anyhow, Result};
@@ -35,7 +37,10 @@ pub(crate) fn validate_agent_working_manual_with_context(
     let mut errors = Vec::new();
     let mut blocked = false;
 
-    let agent_md_path = root.join("AGENT.MD");
+    let shadow_guard = detect_shadow_files(&root);
+    warnings.extend(shadow_warnings(&shadow_guard));
+
+    let agent_md_path = root.join(AGENT_ENTRY_RELATIVE_PATH);
     if let Some(message) = external_symlink_error(&root, &agent_md_path)? {
         errors.push(message);
         blocked = true;
@@ -43,10 +48,10 @@ pub(crate) fn validate_agent_working_manual_with_context(
         warnings.push(message);
     }
 
-    let tracked_by_git = is_git_tracked(&root, "AGENT.MD");
+    let tracked_by_git = is_git_tracked(&root, AGENT_ENTRY_RELATIVE_PATH);
     if tracked_by_git {
         warnings.push(
-            "AGENT.MD is tracked by Git. AgentFlow rewrote it as the managed Agent entry. Review your Git diff before committing."
+            "AGENTS.md is tracked by Git. AgentFlow rewrote it as the managed Agent entry. Review your Git diff before committing."
                 .to_string(),
         );
     }
@@ -55,19 +60,33 @@ pub(crate) fn validate_agent_working_manual_with_context(
     let agent_md_content = fs::read_to_string(&agent_md_path).ok();
     let managed = agent_md_content
         .as_deref()
-        .map(|content| content.contains("<!-- AGENTFLOW:MANAGED version=agent-entry.v1 -->"))
+        .map(|content| content.contains("<!-- AGENTFLOW:MANAGED version=agent-entry.v2 -->"))
         .unwrap_or(false);
     let agent_md_version = managed.then(|| AGENT_ENTRY_VERSION.to_string());
     if !agent_md_exists {
-        errors.push("AGENT.MD is missing.".to_string());
+        errors.push("AGENTS.md is missing.".to_string());
     } else if !managed {
-        errors.push("AGENT.MD is not managed by AgentFlow.".to_string());
+        errors.push("AGENTS.md is not managed by AgentFlow.".to_string());
     }
 
     let expected_lock = expected_skills_lock(checked_at);
     let agent_hash = file_sha256_hex(&agent_md_path);
     if agent_md_exists && agent_hash.as_deref() != Some(expected_lock.entry.hash.as_str()) {
-        errors.push("AGENT.MD hash does not match AgentFlow managed template.".to_string());
+        errors.push("AGENTS.md hash does not match AgentFlow managed template.".to_string());
+    }
+
+    let (workspace_manifest, layout) = validate_workspace_layout(&root)?;
+    if !workspace_manifest.exists {
+        errors.push(".agentflow/workspace-manifest.json is missing.".to_string());
+    } else if !workspace_manifest.valid {
+        errors.push(".agentflow/workspace-manifest.json is invalid.".to_string());
+    }
+    if !layout.ready {
+        for path in &layout.missing_paths {
+            errors.push(format!(
+                "AgentFlow workspace layout path is missing: {path}"
+            ));
+        }
     }
 
     let manual_path = root.join(AGENT_MANUAL_RELATIVE_PATH);
@@ -172,6 +191,8 @@ pub(crate) fn validate_agent_working_manual_with_context(
             || !lock_exists
             || !bootstrap_state_exists
             || !validation_state_exists
+            || !workspace_manifest.exists
+            || !layout.ready
         {
             AgentEnvironmentState::Missing
         } else {
@@ -205,7 +226,7 @@ pub(crate) fn validate_agent_working_manual_with_context(
             hash: agent_hash,
             backed_up: repairs
                 .iter()
-                .any(|repair| repair.contains("Backed up existing AGENT.MD")),
+                .any(|repair| repair.contains("Backed up existing AGENTS.md")),
             tracked_by_git,
         },
         manual: ManualStatus {
@@ -229,6 +250,16 @@ pub(crate) fn validate_agent_working_manual_with_context(
         repairs,
         warnings,
         errors,
+        workspace_manifest,
+        layout,
+        legacy_agent_entry: crate::model::LegacyAgentEntryStatus {
+            exists: root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH).exists(),
+            path: LEGACY_AGENT_ENTRY_RELATIVE_PATH.to_string(),
+            managed: fs::read_to_string(root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH))
+                .map(|content| content.contains("AGENTFLOW:MANAGED"))
+                .unwrap_or(false),
+        },
+        shadow_guard,
     };
 
     Ok(status)
@@ -290,7 +321,10 @@ pub(crate) fn external_symlink_error(root: &Path, path: &Path) -> Result<Option<
     }
 
     Ok(Some(format!(
-        "AGENT.MD is a symlink outside project root: {}",
+        "{} is a symlink outside project root: {}",
+        path.file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("Agent entry"),
         canonical_target.display()
     )))
 }
@@ -316,7 +350,10 @@ pub(crate) fn internal_symlink_warning(root: &Path, path: &Path) -> Result<Optio
     }
 
     Ok(Some(format!(
-        "AGENT.MD is a symlink inside project root: {}",
+        "{} is a symlink inside project root: {}",
+        path.file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("Agent entry"),
         canonical_target.display()
     )))
 }

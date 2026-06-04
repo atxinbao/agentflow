@@ -1,6 +1,6 @@
 # Goal
 
-更新日期：2026-06-03
+更新日期：2026-06-04
 执行者：Codex
 
 ## 当前状态
@@ -24,8 +24,11 @@ AgentFlow 的旧目标文档已停止作为后续开发依据。
 - [007 - Goal Tree V1](docs/requirements/007-goal-tree-v1.md)
 - [007.1 - Goal Tree Agent-only Boundary Fix](docs/requirements/007-1-goal-tree-agent-only-boundary-fix.md)
 - [008 - Agent Working Manual Bootstrap V1](docs/requirements/008-agent-working-manual-bootstrap-v1.md)
+- [008.1 - Agent Working Manual Health Polish](docs/requirements/008-1-agent-working-manual-health-polish.md)
+- [008.2 - Requirement Intake Filter Skill V1](docs/requirements/008-2-requirement-intake-filter-skill-v1.md)
+- [008.3 - AgentFlow Workflow Directory Blueprint V1](docs/requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md)
 
-当前目标是在 Project Workspace、Graph、Project File Reader、Goal Tree 只读边界之后，实现 Agent Working Manual Bootstrap：接管 `AGENT.MD`，写入 AgentFlow 工作手册、内置 skills、`skills-lock.json`，并在项目打开 / 添加 / 切换时准备、校验和修复 Agent 工作环境。
+当前目标是在 Project Workspace、Graph、Project File Reader、Goal Tree 只读边界和 Agent Working Manual / Requirement Intake 之后，实现 008.3 Workflow Directory Blueprint：将 `AGENTS.md` 设为 canonical Agent entry，保留 `AGENT.MD` legacy compatibility，建立 `.agentflow/workspace-manifest.json`，并准备 `define/spec/tdd/release/audit`、`spec/`、`goal-tree/`、`graph/`、`execute/`、`output/`、`state/` 的本地 Agent 工作流控制面骨架。
 
 ## 当前约束
 

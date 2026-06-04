@@ -50,4 +50,26 @@ export type AgentEnvironmentStatus = {
   repairs: string[];
   warnings: string[];
   errors: string[];
+  workspaceManifest: {
+    exists: boolean;
+    path: string;
+    valid: boolean;
+    layoutVersion?: string | null;
+  };
+  layout: {
+    version: string;
+    ready: boolean;
+    createdPaths: string[];
+    reusedPaths: string[];
+    missingPaths: string[];
+  };
+  legacyAgentEntry: {
+    exists: boolean;
+    path: string;
+    managed: boolean;
+  };
+  shadowGuard: {
+    checked: string[];
+    detected: string[];
+  };
 };

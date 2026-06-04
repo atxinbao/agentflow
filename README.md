@@ -1,6 +1,6 @@
 # AgentFlow
 
-更新日期：2026-06-03
+更新日期：2026-06-04
 执行者：Codex
 
 ## 当前文档状态
@@ -35,8 +35,10 @@ docs/requirements/
 - AgentFlow 是本地优先的桌面工作台。
 - Desktop 当前只读取和展示本地项目内容。
 - Project Workspace Manager 会准备 `.agentflow/` 三段式本地工作区。
-- Agent Manual Bootstrap 会接管根目录 `AGENT.MD`，写入 `.agentflow/define/agent/**` 工作手册、skills 和 lock。
-- Goal Tree V1 是 Agent-only 事实源；Desktop 人类界面只读查看。
+- Agent Manual Bootstrap 会接管根目录 `AGENTS.md` 作为 canonical Agent entry，保留 `AGENT.MD` 为 legacy compatibility，并写入 `.agentflow/define/agent/**` 工作手册、skills 和 lock。
+- Workflow Directory Blueprint V1 会准备 `.agentflow/workspace-manifest.json`，并把 `define/` 收敛为 `agent/spec/tdd/release/audit` 工作手册区。
+- Goal Tree V1 是 Agent-only 事实源；008.3 起 canonical path 为 `.agentflow/goal-tree/`，旧 `.agentflow/define/**` Goal Tree 路径仅保留兼容。
+- Graph canonical path 为 `.agentflow/graph/`；当前 `.agentflow/output/graph/` 仍作为兼容输出路径保留。
 - 不执行命令。
 - 不写用户业务源码。
 - 不写旧 `.agentflow/issues`、`runs`、`evidence`、`reviews`、`updates`、`views` 路径。

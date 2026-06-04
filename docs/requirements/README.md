@@ -1,6 +1,7 @@
 # Requirements
 
 创建日期：2026-06-01
+更新日期：2026-06-04
 执行者：Codex
 
 ## 目的
@@ -36,6 +37,7 @@
 - [008-agent-working-manual-bootstrap-v1.md](008-agent-working-manual-bootstrap-v1.md)
 - [008-1-agent-working-manual-health-polish.md](008-1-agent-working-manual-health-polish.md)
 - [008-2-requirement-intake-filter-skill-v1.md](008-2-requirement-intake-filter-skill-v1.md)
+- [008-3-agentflow-workflow-directory-blueprint-v1-final.md](008-3-agentflow-workflow-directory-blueprint-v1-final.md)
 - [next-requirements.md](next-requirements.md)
 
 ## 不继承内容

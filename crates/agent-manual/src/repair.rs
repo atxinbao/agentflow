@@ -1,8 +1,15 @@
 use crate::{
+    layout::{
+        detect_shadow_files, prepare_workspace_layout, shadow_warnings, validate_workspace_layout,
+    },
     lock::expected_skills_lock,
-    model::{AgentEnvironmentState, AgentEnvironmentStatus, STATUS_VERSION},
+    model::{
+        AgentEnvironmentState, AgentEnvironmentStatus, LegacyAgentEntryStatus,
+        RootAgentEntryShadowGuardStatus, STATUS_VERSION,
+    },
     templates::{
-        agent_md_template, agentflow_manual_template, skill_templates, AGENT_MANUAL_RELATIVE_PATH,
+        agent_entry_template, agentflow_manual_template, skill_templates,
+        AGENT_ENTRY_RELATIVE_PATH, AGENT_MANUAL_RELATIVE_PATH, LEGACY_AGENT_ENTRY_RELATIVE_PATH,
         SKILLS_LOCK_RELATIVE_PATH,
     },
     validate::{
@@ -20,21 +27,17 @@ pub fn repair_agent_working_manual(
     let repaired_at = unix_timestamp_seconds();
     let mut repairs = Vec::new();
 
-    if let Some(error) = external_symlink_error(&root, &root.join("AGENT.MD"))? {
+    if let Some(error) = external_symlink_error(&root, &root.join(AGENT_ENTRY_RELATIVE_PATH))? {
         let status = blocked_status(&root, error, repaired_at);
         write_state_files(&root, &status, &status).ok();
         return Ok(status);
     }
 
-    ensure_directory(&root.join(".agentflow/define/agent/state"), &mut repairs)?;
-    ensure_directory(&root.join(".agentflow/define/agent/skills"), &mut repairs)?;
-    ensure_directory(
-        &root.join(".agentflow/output/backup/agent-md"),
-        &mut repairs,
-    )?;
-    ensure_directory(&root.join(".agentflow/output/logs"), &mut repairs)?;
+    let shadow_guard = detect_shadow_files(&root);
+    let warnings = shadow_warnings(&shadow_guard);
+    prepare_workspace_layout(&root, &warnings, &mut repairs)?;
 
-    write_agent_md(&root, &mut repairs, repaired_at)?;
+    write_agent_entry(&root, &mut repairs, repaired_at)?;
     write_file_if_changed(
         &root.join(AGENT_MANUAL_RELATIVE_PATH),
         &agentflow_manual_template(),
@@ -64,18 +67,9 @@ pub fn repair_agent_working_manual(
     Ok(status)
 }
 
-fn ensure_directory(path: &Path, repairs: &mut Vec<String>) -> Result<()> {
-    if path.exists() {
-        return Ok(());
-    }
-    fs::create_dir_all(path)?;
-    repairs.push(format!("Created directory {}", path.display()));
-    Ok(())
-}
-
-fn write_agent_md(root: &Path, repairs: &mut Vec<String>, timestamp: u64) -> Result<()> {
-    let path = root.join("AGENT.MD");
-    let desired = agent_md_template();
+fn write_agent_entry(root: &Path, repairs: &mut Vec<String>, timestamp: u64) -> Result<()> {
+    let path = root.join(AGENT_ENTRY_RELATIVE_PATH);
+    let desired = agent_entry_template();
     let current = fs::read_to_string(&path).ok();
     if current.as_deref() == Some(desired.as_str()) {
         return Ok(());
@@ -84,10 +78,10 @@ fn write_agent_md(root: &Path, repairs: &mut Vec<String>, timestamp: u64) -> Res
     if let Some(content) = current {
         let backup_path = root
             .join(".agentflow/output/backup/agent-md")
-            .join(format!("AGENT.MD.{timestamp}.bak.md"));
+            .join(format!("AGENTS.md.{timestamp}.bak.md"));
         fs::write(&backup_path, content)?;
         repairs.push(format!(
-            "Backed up existing AGENT.MD to {}",
+            "Backed up existing AGENTS.md to {}",
             backup_path
                 .strip_prefix(root)
                 .unwrap_or(&backup_path)
@@ -96,7 +90,7 @@ fn write_agent_md(root: &Path, repairs: &mut Vec<String>, timestamp: u64) -> Res
     }
 
     fs::write(&path, desired)?;
-    repairs.push("Rewrote AGENT.MD as AgentFlow managed entry.".to_string());
+    repairs.push("Rewrote AGENTS.md as AgentFlow managed entry.".to_string());
     Ok(())
 }
 
@@ -118,6 +112,23 @@ fn write_file_if_changed(
 }
 
 fn blocked_status(root: &Path, error: String, checked_at: u64) -> AgentEnvironmentStatus {
+    let (workspace_manifest, layout) = validate_workspace_layout(root).unwrap_or_else(|_| {
+        (
+            crate::model::WorkspaceManifestStatus {
+                exists: false,
+                path: ".agentflow/workspace-manifest.json".to_string(),
+                valid: false,
+                layout_version: None,
+            },
+            crate::model::WorkspaceLayoutStatus {
+                version: crate::model::WORKSPACE_LAYOUT_VERSION.to_string(),
+                ready: false,
+                created_paths: Vec::new(),
+                reused_paths: Vec::new(),
+                missing_paths: Vec::new(),
+            },
+        )
+    });
     AgentEnvironmentStatus {
         version: STATUS_VERSION.to_string(),
         project_root: root.display().to_string(),
@@ -126,7 +137,7 @@ fn blocked_status(root: &Path, error: String, checked_at: u64) -> AgentEnvironme
         checked_at,
         repaired_at: Some(checked_at),
         agent_md: crate::model::AgentMdStatus {
-            exists: root.join("AGENT.MD").exists(),
+            exists: root.join(AGENT_ENTRY_RELATIVE_PATH).exists(),
             managed: false,
             version: None,
             hash: None,
@@ -148,5 +159,18 @@ fn blocked_status(root: &Path, error: String, checked_at: u64) -> AgentEnvironme
         repairs: Vec::new(),
         warnings: Vec::new(),
         errors: vec![error],
+        workspace_manifest,
+        layout,
+        legacy_agent_entry: LegacyAgentEntryStatus {
+            exists: root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH).exists(),
+            path: LEGACY_AGENT_ENTRY_RELATIVE_PATH.to_string(),
+            managed: fs::read_to_string(root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH))
+                .map(|content| content.contains("AGENTFLOW:MANAGED"))
+                .unwrap_or(false),
+        },
+        shadow_guard: RootAgentEntryShadowGuardStatus {
+            checked: Vec::new(),
+            detected: Vec::new(),
+        },
     }
 }

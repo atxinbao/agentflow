@@ -3352,3 +3352,42 @@ No files were written and no command was executed.
 - `cargo test`：pass，agent-manual 9 tests + CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + graph 26 tests。
 - `npm --prefix apps/desktop run build`：pass。
 - `git diff --check`：pass。
+
+## 2026-06-04 Workflow Directory Blueprint V1
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md`。
+- 将 AgentFlow managed root entry 从 `AGENT.MD` 切换为 canonical `AGENTS.md`。
+- 保留 `AGENT.MD` 作为 legacy compatibility，不强制创建、不删除、不接管。
+- 建立 `.agentflow/workspace-manifest.json` 和 008.3 workflow directory skeleton。
+- 新增 Root Agent Entry Shadow Guard，只 warning 不重写 shadow files。
+
+结果：
+
+- 新增 008.3 需求文档并登记到 `docs/requirements/README.md` 与 `next-requirements.md`。
+- `agent-manual` 新增 layout prepare / validation / manifest / shadow guard 状态。
+- `repair_agent_working_manual` 写入 `AGENTS.md`、`Agentflow.md`、skills、`skills-lock.json`、五本工作手册和 workspace manifest。
+- `.agentflow/define/` 收敛为 `agent/spec/tdd/release/audit` 工作手册区。
+- `.agentflow/spec/`、`.agentflow/goal-tree/`、`.agentflow/graph/`、`.agentflow/execute/`、`.agentflow/output/`、`.agentflow/state/` 在 prepare / repair 中建立骨架。
+- Desktop 状态栏 mock 和类型更新为 008.3 layout 状态。
+- Project Workspace prepare 通过 agent-manual 接入 workflow layout prepare / repair，不再主动创建旧 `define/goals`、`define/milestones`、`define/issues`。
+
+边界：
+
+- 未迁移旧 Goal Tree 数据。
+- 未迁移旧 Graph 数据。
+- 未写 SPEC change、Approved SPEC、Goal、Milestone、Issue、AgentRun、Evidence、Audit report 或 Release record。
+- 未接管 `.rules`、`.cursorrules`、`.windsurfrules`、`.clinerules`、`AGENT.md`、`CLAUDE.md`、`GEMINI.md`。
+- 未创建 PR、远程 issue 或调用模型。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-agent-manual`：pass，11 tests。
+- `cargo test -p agentflow-desktop`：pass，16 tests。
+- `cargo test`：pass，agent-manual 11 tests + CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + graph 26 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。

@@ -1,6 +1,6 @@
 # Docs Index
 
-更新日期：2026-06-01
+更新日期：2026-06-04
 执行者：Codex
 
 ## 当前文档入口
@@ -16,8 +16,8 @@
 2. [../GOAL.md](../GOAL.md)
 3. [../ROADMAP.md](../ROADMAP.md)
 4. [requirements/README.md](requirements/README.md)
-5. [requirements/002-graph-v1.md](requirements/002-graph-v1.md)
-6. [requirements/next-requirements.md](requirements/next-requirements.md)
+5. [requirements/next-requirements.md](requirements/next-requirements.md)
+6. [requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md](requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md)
 
 ## 规则
 

@@ -2,6 +2,7 @@ pub mod model;
 
 mod git;
 mod hash;
+mod layout;
 mod lock;
 mod manager;
 mod repair;
@@ -29,11 +30,34 @@ mod tests {
 
         assert!(status.ready);
         assert_eq!(status.status, AgentEnvironmentState::Repaired);
-        assert!(dir.path().join("AGENT.MD").is_file());
+        assert!(dir.path().join("AGENTS.md").is_file());
+        assert!(!dir.path().join("AGENT.MD").exists());
+        assert!(dir
+            .path()
+            .join(".agentflow/workspace-manifest.json")
+            .is_file());
+        assert!(status.workspace_manifest.valid);
+        assert!(status.layout.ready);
         assert!(dir
             .path()
             .join(".agentflow/define/agent/Agentflow.md")
             .is_file());
+        assert!(dir.path().join(".agentflow/define/spec/SPEC.md").is_file());
+        assert!(dir.path().join(".agentflow/define/tdd/TDD.md").is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/define/release/RELEASE.md")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/define/audit/AUDIT.md")
+            .is_file());
+        assert!(dir.path().join(".agentflow/spec/changes").is_dir());
+        assert!(dir.path().join(".agentflow/goal-tree/goals").is_dir());
+        assert!(dir.path().join(".agentflow/graph/context-packs").is_dir());
+        assert!(dir.path().join(".agentflow/execute/commands").is_dir());
+        assert!(dir.path().join(".agentflow/output/audit").is_dir());
+        assert!(dir.path().join(".agentflow/state/health").is_dir());
         assert!(dir
             .path()
             .join(".agentflow/define/agent/skills-lock.json")
@@ -48,7 +72,7 @@ mod tests {
             .is_file());
         assert_eq!(status.skills_lock.skill_count, 6);
         assert_eq!(status.skills.len(), 6);
-        assert!(fs::read_to_string(dir.path().join("AGENT.MD"))
+        assert!(fs::read_to_string(dir.path().join("AGENTS.md"))
             .unwrap()
             .contains("requirement-intake-filter"));
         assert!(
@@ -67,20 +91,37 @@ mod tests {
     }
 
     #[test]
-    fn prepare_backs_up_existing_agent_md_before_rewrite() {
+    fn prepare_backs_up_existing_agents_md_before_rewrite() {
         let dir = tempdir().unwrap();
-        fs::write(dir.path().join("AGENT.MD"), "# Existing\n").unwrap();
+        fs::write(dir.path().join("AGENTS.md"), "# Existing\n").unwrap();
 
         let status = prepare_agent_working_manual(dir.path()).unwrap();
 
         assert!(status.agent_md.backed_up);
-        assert!(fs::read_to_string(dir.path().join("AGENT.MD"))
+        assert!(fs::read_to_string(dir.path().join("AGENTS.md"))
             .unwrap()
             .contains("AGENTFLOW:MANAGED"));
         let backups = fs::read_dir(dir.path().join(".agentflow/output/backup/agent-md"))
             .unwrap()
             .count();
         assert_eq!(backups, 1);
+    }
+
+    #[test]
+    fn existing_legacy_agent_md_is_compatibility_only() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("AGENT.MD"), "# Legacy\n").unwrap();
+
+        let status = prepare_agent_working_manual(dir.path()).unwrap();
+
+        assert!(status.ready);
+        assert!(dir.path().join("AGENTS.md").is_file());
+        assert_eq!(
+            fs::read_to_string(dir.path().join("AGENT.MD")).unwrap(),
+            "# Legacy\n"
+        );
+        assert!(status.legacy_agent_entry.exists);
+        assert_eq!(status.legacy_agent_entry.path, "AGENT.MD");
     }
 
     #[test]
@@ -180,16 +221,16 @@ mod tests {
     }
 
     #[test]
-    fn tracked_agent_md_is_warning_not_blocker() {
+    fn tracked_agents_md_is_warning_not_blocker() {
         let dir = tempdir().unwrap();
         std::process::Command::new("git")
             .arg("init")
             .current_dir(dir.path())
             .output()
             .unwrap();
-        fs::write(dir.path().join("AGENT.MD"), "# Existing\n").unwrap();
+        fs::write(dir.path().join("AGENTS.md"), "# Existing\n").unwrap();
         std::process::Command::new("git")
-            .args(["add", "AGENT.MD"])
+            .args(["add", "AGENTS.md"])
             .current_dir(dir.path())
             .output()
             .unwrap();
@@ -204,21 +245,40 @@ mod tests {
             .any(|warning| warning.contains("tracked by Git")));
     }
 
+    #[test]
+    fn shadow_files_are_warning_not_blocker() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("CLAUDE.md"), "# Other tool rules\n").unwrap();
+
+        let status = prepare_agent_working_manual(dir.path()).unwrap();
+
+        assert!(status.ready);
+        assert!(status
+            .shadow_guard
+            .detected
+            .iter()
+            .any(|path| path == "CLAUDE.md"));
+        assert!(status
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Agent entry shadow detected: CLAUDE.md")));
+    }
+
     #[cfg(unix)]
     #[test]
-    fn internal_agent_md_symlink_warns_without_blocking() {
+    fn internal_agents_md_symlink_warns_without_blocking() {
         use std::os::unix::fs::symlink;
 
         let dir = tempdir().unwrap();
         let target = dir.path().join("managed-agent-entry.md");
         fs::write(&target, "# internal symlink target\n").unwrap();
-        symlink(&target, dir.path().join("AGENT.MD")).unwrap();
+        symlink(&target, dir.path().join("AGENTS.md")).unwrap();
 
         let status = prepare_agent_working_manual(dir.path()).unwrap();
 
         assert!(status.ready);
         assert_ne!(status.status, AgentEnvironmentState::Blocked);
-        assert!(fs::symlink_metadata(dir.path().join("AGENT.MD"))
+        assert!(fs::symlink_metadata(dir.path().join("AGENTS.md"))
             .unwrap()
             .file_type()
             .is_symlink());
@@ -230,14 +290,14 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn external_agent_md_symlink_blocks_repair() {
+    fn external_agents_md_symlink_blocks_repair() {
         use std::os::unix::fs::symlink;
 
         let dir = tempdir().unwrap();
         let outside = tempdir().unwrap();
-        let outside_agent = outside.path().join("AGENT.MD");
+        let outside_agent = outside.path().join("AGENTS.md");
         fs::write(&outside_agent, "# outside\n").unwrap();
-        symlink(&outside_agent, dir.path().join("AGENT.MD")).unwrap();
+        symlink(&outside_agent, dir.path().join("AGENTS.md")).unwrap();
 
         let status = prepare_agent_working_manual(dir.path()).unwrap();
 
