@@ -1,5 +1,5 @@
 use super::*;
-use crate::manager::{index_project_graph, load_project_graph_status};
+use crate::manager::{index_project_panel, load_project_panel_status};
 use notify::{
     event::{CreateKind, DataChange, ModifyKind, RemoveKind, RenameMode},
     EventKind,
@@ -11,11 +11,11 @@ use tempfile::tempdir;
 fn fingerprint_ignores_agentflow_and_target_runtime_files() {
     let dir = tempdir().unwrap();
     fs::write(dir.path().join("src.rs"), "fn a() {}\n").unwrap();
-    fs::create_dir_all(dir.path().join(".agentflow/output/graph")).unwrap();
+    fs::create_dir_all(dir.path().join(".agentflow/panel")).unwrap();
     fs::create_dir_all(dir.path().join("target")).unwrap();
 
     let before = fallback::project_fingerprint(dir.path()).unwrap();
-    fs::write(dir.path().join(".agentflow/output/graph/meta.json"), "{}").unwrap();
+    fs::write(dir.path().join(".agentflow/panel/manifest.json"), "{}").unwrap();
     fs::write(dir.path().join("target/generated.rs"), "ignored").unwrap();
     let after = fallback::project_fingerprint(dir.path()).unwrap();
 
@@ -23,10 +23,10 @@ fn fingerprint_ignores_agentflow_and_target_runtime_files() {
 }
 
 #[test]
-fn graph_event_filter_ignores_runtime_and_build_paths() {
+fn panel_event_filter_ignores_runtime_and_build_paths() {
     let dir = tempdir().unwrap();
     for ignored in [
-        ".agentflow/output/graph/meta.json",
+        ".agentflow/panel/manifest.json",
         ".git/index",
         "target/debug/app",
         "node_modules/pkg/index.js",
@@ -34,11 +34,11 @@ fn graph_event_filter_ignores_runtime_and_build_paths() {
         ".DS_Store",
     ] {
         assert!(
-            filter::should_ignore_graph_event(dir.path(), &dir.path().join(ignored)),
+            filter::should_ignore_panel_event(dir.path(), &dir.path().join(ignored)),
             "expected ignored path {ignored}"
         );
     }
-    assert!(!filter::should_ignore_graph_event(
+    assert!(!filter::should_ignore_panel_event(
         dir.path(),
         &dir.path().join("src/lib.rs")
     ));
@@ -54,7 +54,7 @@ fn native_event_kinds_cover_create_modify_remove_and_rename() {
     ] {
         assert!(
             filter::is_supported_event_kind(&kind),
-            "event kind should refresh graph: {kind:?}"
+            "event kind should refresh panel: {kind:?}"
         );
     }
 }
@@ -64,7 +64,7 @@ fn native_watcher_snapshot_reports_backend_and_recursive_mode() {
     let dir = tempdir().unwrap();
     fs::write(dir.path().join("a.rs"), "pub struct A {}\n").unwrap();
 
-    let snapshot = ensure_graph_watcher(dir.path()).unwrap();
+    let snapshot = ensure_panel_watcher(dir.path()).unwrap();
 
     assert_eq!(snapshot.status, "starting");
     assert!(snapshot.recursive);
@@ -72,11 +72,11 @@ fn native_watcher_snapshot_reports_backend_and_recursive_mode() {
 }
 
 #[test]
-fn watcher_native_event_refreshes_graph() {
+fn watcher_native_event_refreshes_panel() {
     let dir = tempdir().unwrap();
     fs::write(dir.path().join("a.rs"), "pub struct A {}\n").unwrap();
-    index_project_graph(dir.path()).unwrap();
-    ensure_graph_watcher(dir.path()).unwrap();
+    index_project_panel(dir.path()).unwrap();
+    ensure_panel_watcher(dir.path()).unwrap();
     for _ in 0..30 {
         if watcher_status(dir.path()).as_deref() == Some("native") {
             break;
@@ -86,15 +86,15 @@ fn watcher_native_event_refreshes_graph() {
 
     fs::write(dir.path().join("b.rs"), "pub struct B {}\n").unwrap();
 
-    let mut status = load_project_graph_status(dir.path()).unwrap();
+    let mut status = load_project_panel_status(dir.path()).unwrap();
     for _ in 0..60 {
         if status.file_count == 2 && watcher_status(dir.path()).as_deref() == Some("native") {
             break;
         }
         thread::sleep(Duration::from_millis(150));
-        status = load_project_graph_status(dir.path()).unwrap();
+        status = load_project_panel_status(dir.path()).unwrap();
     }
-    assert_eq!(status.status, crate::model::GraphStatus::Ready);
+    assert_eq!(status.status, crate::model::PanelStatus::Ready);
     assert_eq!(status.file_count, 2);
     assert_eq!(status.watcher_status.as_deref(), Some("native"));
     assert!(matches!(
@@ -113,7 +113,7 @@ fn fallback_snapshot_is_marked_degraded() {
     let root_key = dir.path().canonicalize().unwrap().display().to_string();
 
     state::record_fallback(&root_key, "forced fallback".to_string());
-    let snapshot = ensure_graph_watcher(dir.path()).unwrap();
+    let snapshot = ensure_panel_watcher(dir.path()).unwrap();
 
     assert_eq!(snapshot.status, "fallback");
     assert_eq!(snapshot.backend, "fingerprint");
@@ -121,15 +121,15 @@ fn fallback_snapshot_is_marked_degraded() {
 }
 
 #[test]
-fn fallback_watcher_marks_graph_status_degraded() {
+fn fallback_watcher_marks_panel_status_degraded() {
     let dir = tempdir().unwrap();
     fs::write(dir.path().join("a.rs"), "pub struct A {}\n").unwrap();
     let root_key = dir.path().canonicalize().unwrap().display().to_string();
     state::record_fallback(&root_key, "forced fallback".to_string());
 
-    let status = index_project_graph(dir.path()).unwrap();
+    let status = index_project_panel(dir.path()).unwrap();
 
-    assert_eq!(status.status, crate::model::GraphStatus::Degraded);
+    assert_eq!(status.status, crate::model::PanelStatus::Degraded);
     assert_eq!(status.watcher_status.as_deref(), Some("fallback"));
     assert_eq!(status.watcher_backend.as_deref(), Some("fingerprint"));
     assert!(status

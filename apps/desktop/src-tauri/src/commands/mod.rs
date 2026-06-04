@@ -6,7 +6,7 @@
 
 pub(crate) mod agent_manual;
 pub(crate) mod goal_tree;
-pub(crate) mod graph;
 pub(crate) mod legacy_core;
+pub(crate) mod panel;
 pub(crate) mod project_files;
 pub(crate) mod project_workspace;

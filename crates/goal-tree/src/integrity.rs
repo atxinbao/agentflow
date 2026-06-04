@@ -180,9 +180,9 @@ pub(crate) fn validate_loaded_goal_tree(
                 Some(&issue_record.id),
             ));
         }
-        if issue_record.system.graph_context_pack_path.is_none() {
+        if issue_record.system.panel_context_pack_path.is_none() {
             warnings.push(issue(
-                "missing_graph_context_pack",
+                "missing_panel_context_pack",
                 "代码地图尚未准备好，Issue 上下文推荐可能不完整。",
                 "issue",
                 Some(&issue_record.id),
@@ -282,15 +282,15 @@ pub(crate) fn validate_loaded_goal_tree(
 }
 
 fn first_dependency_cycle(issues: &[IssueRecord]) -> Option<Vec<String>> {
-    let graph = issues
+    let panel = issues
         .iter()
         .map(|item| (item.id.clone(), item.human.dependencies.clone()))
         .collect::<BTreeMap<_, _>>();
     let mut visiting = BTreeSet::new();
     let mut visited = BTreeSet::new();
     let mut stack = Vec::<String>::new();
-    for issue_id in graph.keys() {
-        if let Some(cycle) = visit(issue_id, &graph, &mut visiting, &mut visited, &mut stack) {
+    for issue_id in panel.keys() {
+        if let Some(cycle) = visit(issue_id, &panel, &mut visiting, &mut visited, &mut stack) {
             return Some(cycle);
         }
     }
@@ -299,7 +299,7 @@ fn first_dependency_cycle(issues: &[IssueRecord]) -> Option<Vec<String>> {
 
 fn visit(
     issue_id: &str,
-    graph: &BTreeMap<String, Vec<String>>,
+    panel: &BTreeMap<String, Vec<String>>,
     visiting: &mut BTreeSet<String>,
     visited: &mut BTreeSet<String>,
     stack: &mut Vec<String>,
@@ -315,9 +315,9 @@ fn visit(
     }
     visiting.insert(issue_id.to_string());
     stack.push(issue_id.to_string());
-    for dependency in graph.get(issue_id).into_iter().flatten() {
-        if graph.contains_key(dependency) {
-            if let Some(cycle) = visit(dependency, graph, visiting, visited, stack) {
+    for dependency in panel.get(issue_id).into_iter().flatten() {
+        if panel.contains_key(dependency) {
+            if let Some(cycle) = visit(dependency, panel, visiting, visited, stack) {
                 return Some(cycle);
             }
         }

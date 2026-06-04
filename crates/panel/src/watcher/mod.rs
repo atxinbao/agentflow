@@ -1,5 +1,5 @@
 use crate::{
-    model::{GraphWatcherDetail, GraphWatcherSnapshot},
+    model::{PanelWatcherDetail, PanelWatcherSnapshot},
     watcher::state::WatcherState,
 };
 use anyhow::{Context, Result};
@@ -14,7 +14,7 @@ mod state;
 #[cfg(test)]
 mod tests;
 
-pub fn ensure_graph_watcher(project_root: impl AsRef<Path>) -> Result<GraphWatcherSnapshot> {
+pub fn ensure_panel_watcher(project_root: impl AsRef<Path>) -> Result<PanelWatcherSnapshot> {
     let root = project_root
         .as_ref()
         .canonicalize()
@@ -37,8 +37,8 @@ pub(crate) fn watcher_backend(project_root: impl AsRef<Path>) -> Option<String> 
     state::watcher_state(project_root).map(|state| state.backend)
 }
 
-pub(crate) fn watcher_detail(project_root: impl AsRef<Path>) -> Option<GraphWatcherDetail> {
-    state::watcher_state(project_root).map(|state| GraphWatcherDetail {
+pub(crate) fn watcher_detail(project_root: impl AsRef<Path>) -> Option<PanelWatcherDetail> {
+    state::watcher_state(project_root).map(|state| PanelWatcherDetail {
         platform: state::platform_name().to_string(),
         recursive: state.recursive,
         ignored_path_count: state.ignored_path_count,

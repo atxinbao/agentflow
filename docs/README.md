@@ -17,7 +17,7 @@
 3. [../ROADMAP.md](../ROADMAP.md)
 4. [requirements/README.md](requirements/README.md)
 5. [requirements/next-requirements.md](requirements/next-requirements.md)
-6. [requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md](requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md)
+6. [requirements/008-4-1-project-panel-finalization-and-graph-removal-v1.md](requirements/008-4-1-project-panel-finalization-and-graph-removal-v1.md)
 
 ## 规则
 

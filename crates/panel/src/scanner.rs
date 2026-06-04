@@ -1,5 +1,5 @@
 use crate::{
-    model::{GraphFileRecord, GraphIndex, GraphRelationRecord},
+    model::{PanelFileRecord, PanelIndex, PanelRelationRecord},
     parser::{extract_file_details, stable_hash},
 };
 use anyhow::{Context, Result};
@@ -12,7 +12,7 @@ use std::{
 
 const READ_LIMIT_BYTES: u64 = 1024 * 1024;
 
-pub(crate) fn scan_project(root: &Path) -> Result<GraphIndex> {
+pub(crate) fn scan_project(root: &Path) -> Result<PanelIndex> {
     let canonical_root = root
         .canonicalize()
         .with_context(|| format!("canonicalize {}", root.display()))?;
@@ -46,7 +46,7 @@ pub(crate) fn scan_project(root: &Path) -> Result<GraphIndex> {
     relations.extend(build_same_module_relations(&files));
     relations.extend(build_mention_relations(&files, &symbols, &file_text_by_id));
 
-    Ok(GraphIndex {
+    Ok(PanelIndex {
         files,
         symbols,
         relations,
@@ -105,7 +105,7 @@ fn is_ignored_relative(path: &Path) -> bool {
     })
 }
 
-fn build_file_record(root: &Path, path: &Path) -> Result<GraphFileRecord> {
+fn build_file_record(root: &Path, path: &Path) -> Result<PanelFileRecord> {
     let metadata = fs::metadata(path).with_context(|| format!("metadata {}", path.display()))?;
     let relative_path = path
         .strip_prefix(root)
@@ -147,7 +147,7 @@ fn build_file_record(root: &Path, path: &Path) -> Result<GraphFileRecord> {
         .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_secs());
 
-    Ok(GraphFileRecord {
+    Ok(PanelFileRecord {
         id: format!("file:{relative_path}"),
         path: relative_path,
         name,
@@ -332,8 +332,8 @@ fn file_kind(
     .to_string()
 }
 
-fn build_test_relations(files: &[GraphFileRecord]) -> Vec<GraphRelationRecord> {
-    let sources: BTreeMap<String, &GraphFileRecord> = files
+fn build_test_relations(files: &[PanelFileRecord]) -> Vec<PanelRelationRecord> {
+    let sources: BTreeMap<String, &PanelFileRecord> = files
         .iter()
         .filter(|file| file.is_source && !file.is_test)
         .map(|file| (source_stem(&file.name), file))
@@ -348,7 +348,7 @@ fn build_test_relations(files: &[GraphFileRecord]) -> Vec<GraphRelationRecord> {
                 .replace(".test", "")
                 .replace(".spec", "");
             let source = sources.get(&stem)?;
-            Some(GraphRelationRecord {
+            Some(PanelRelationRecord {
                 id: format!("relation:{}:test_of:{}", test.path, source.path),
                 from_type: "file".to_string(),
                 from_id: test.id.clone(),
@@ -362,11 +362,11 @@ fn build_test_relations(files: &[GraphFileRecord]) -> Vec<GraphRelationRecord> {
         .collect()
 }
 
-fn build_config_relations(files: &[GraphFileRecord]) -> Vec<GraphRelationRecord> {
+fn build_config_relations(files: &[PanelFileRecord]) -> Vec<PanelRelationRecord> {
     files
         .iter()
         .filter(|file| file.is_config)
-        .map(|file| GraphRelationRecord {
+        .map(|file| PanelRelationRecord {
             id: format!("relation:{}:configures:project", file.path),
             from_type: "file".to_string(),
             from_id: file.id.clone(),
@@ -379,9 +379,9 @@ fn build_config_relations(files: &[GraphFileRecord]) -> Vec<GraphRelationRecord>
         .collect()
 }
 
-fn build_same_directory_relations(files: &[GraphFileRecord]) -> Vec<GraphRelationRecord> {
+fn build_same_directory_relations(files: &[PanelFileRecord]) -> Vec<PanelRelationRecord> {
     let mut relations = Vec::new();
-    let mut by_dir: BTreeMap<String, Vec<&GraphFileRecord>> = BTreeMap::new();
+    let mut by_dir: BTreeMap<String, Vec<&PanelFileRecord>> = BTreeMap::new();
     for file in files {
         let directory = file
             .path
@@ -399,7 +399,7 @@ fn build_same_directory_relations(files: &[GraphFileRecord]) -> Vec<GraphRelatio
                 }
                 let id = format!("relation:{}:same_directory:{}", file.path, other.path);
                 if seen.insert(id.clone()) {
-                    relations.push(GraphRelationRecord {
+                    relations.push(PanelRelationRecord {
                         id,
                         from_type: "file".to_string(),
                         from_id: file.id.clone(),
@@ -416,9 +416,9 @@ fn build_same_directory_relations(files: &[GraphFileRecord]) -> Vec<GraphRelatio
     relations
 }
 
-fn build_same_module_relations(files: &[GraphFileRecord]) -> Vec<GraphRelationRecord> {
+fn build_same_module_relations(files: &[PanelFileRecord]) -> Vec<PanelRelationRecord> {
     let mut relations = Vec::new();
-    let mut by_module: BTreeMap<String, Vec<&GraphFileRecord>> = BTreeMap::new();
+    let mut by_module: BTreeMap<String, Vec<&PanelFileRecord>> = BTreeMap::new();
     for file in files
         .iter()
         .filter(|file| file.is_source || file.is_test || file.is_config)
@@ -435,7 +435,7 @@ fn build_same_module_relations(files: &[GraphFileRecord]) -> Vec<GraphRelationRe
                 }
                 let id = format!("relation:{}:same_module:{}", file.path, other.path);
                 if seen.insert(id.clone()) {
-                    relations.push(GraphRelationRecord {
+                    relations.push(PanelRelationRecord {
                         id,
                         from_type: "file".to_string(),
                         from_id: file.id.clone(),
@@ -453,10 +453,10 @@ fn build_same_module_relations(files: &[GraphFileRecord]) -> Vec<GraphRelationRe
 }
 
 fn build_mention_relations(
-    files: &[GraphFileRecord],
-    symbols: &[crate::model::GraphSymbolRecord],
+    files: &[PanelFileRecord],
+    symbols: &[crate::model::PanelSymbolRecord],
     file_text_by_id: &BTreeMap<String, String>,
-) -> Vec<GraphRelationRecord> {
+) -> Vec<PanelRelationRecord> {
     let mut relations = Vec::new();
     let mut seen = BTreeSet::new();
     let files_by_id = files
@@ -487,7 +487,7 @@ fn build_mention_relations(
                 }
                 let id = format!("relation:{}:{}:{}", file.path, relation_kind, symbol.id);
                 if seen.insert(id.clone()) {
-                    relations.push(GraphRelationRecord {
+                    relations.push(PanelRelationRecord {
                         id,
                         from_type: "file".to_string(),
                         from_id: file.id.clone(),
@@ -519,14 +519,14 @@ fn source_stem(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{manager::index_project_graph, search::search_project_graph};
+    use crate::{manager::index_project_panel, search::search_project_panel};
     use std::fs;
     use tempfile::tempdir;
 
     #[test]
     fn scan_project_skips_runtime_and_detects_core_files() {
         let dir = tempdir().unwrap();
-        fs::create_dir_all(dir.path().join(".agentflow/output/graph")).unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow/panel")).unwrap();
         fs::create_dir_all(dir.path().join("src")).unwrap();
         fs::create_dir_all(dir.path().join("tests")).unwrap();
         fs::write(
@@ -544,7 +544,7 @@ mod tests {
             "[package]\nname = \"demo\"\n",
         )
         .unwrap();
-        fs::write(dir.path().join(".agentflow/output/graph/meta.json"), "{}").unwrap();
+        fs::write(dir.path().join(".agentflow/panel/manifest.json"), "{}").unwrap();
 
         let index = scan_project(dir.path()).unwrap();
 
@@ -773,16 +773,16 @@ mod tests {
                 "html",
             ),
             ("style.css", ".app { color: red; }\n", "css"),
-            ("README.md", "# Overview\nGraph docs\n", "markdown"),
+            ("README.md", "# Overview\nPanel docs\n", "markdown"),
             (
                 "package.json",
                 "{\"scripts\":{\"test\":\"vitest\"}}\n",
                 "json",
             ),
-            ("config.yaml", "service:\n  name: graph\n", "yaml"),
+            ("config.yaml", "service:\n  name: panel\n", "yaml"),
             (
                 "Cargo.toml",
-                "[package]\nname = \"graph-fixture\"\n",
+                "[package]\nname = \"panel-fixture\"\n",
                 "toml",
             ),
             (
@@ -830,14 +830,14 @@ mod tests {
             .iter()
             .any(|chunk| chunk.text.contains("Overview")));
 
-        let status = index_project_graph(dir.path()).unwrap();
+        let status = index_project_panel(dir.path()).unwrap();
         assert!(
-            status.status == crate::model::GraphStatus::Ready
-                || status.status == crate::model::GraphStatus::Degraded
+            status.status == crate::model::PanelStatus::Ready
+                || status.status == crate::model::PanelStatus::Degraded
         );
-        let heading = search_project_graph(dir.path(), "Overview", Some(20)).unwrap();
+        let heading = search_project_panel(dir.path(), "Overview", Some(20)).unwrap();
         assert!(heading.results.iter().any(|item| item.path == "README.md"));
-        let plist = search_project_graph(dir.path(), "CFBundleIdentifier", Some(20)).unwrap();
+        let plist = search_project_panel(dir.path(), "CFBundleIdentifier", Some(20)).unwrap();
         assert!(
             plist.results.iter().any(|item| item.path == "Info.plist"),
             "missing searchable plist config key"

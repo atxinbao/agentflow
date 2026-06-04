@@ -26,7 +26,7 @@ export function GoalTreeContextPanel({
         <section>
           <h3>Context Pack</h3>
           <p className="goal-tree-muted">
-            {issue.system.graphContextPackPath ?? "暂无 Agent 准备的 Panel Context。后续 Agent planning flow 会准备上下文。"}
+            {issue.system.panelContextPackPath ?? "暂无 Agent 准备的 Panel Context。后续 Agent planning flow 会准备上下文。"}
           </p>
         </section>
       ) : (

@@ -1,17 +1,17 @@
 use crate::{
-    model::{GraphChunkRecord, GraphFileRecord, GraphRelationRecord, GraphSymbolRecord},
+    model::{PanelChunkRecord, PanelFileRecord, PanelRelationRecord, PanelSymbolRecord},
     parser_registry::{
         parse_with_tree_sitter, parser_engine_for_language, ParserEngine, TreeSitterParseOutput,
     },
 };
 
 pub(crate) fn extract_file_details(
-    file: &GraphFileRecord,
+    file: &PanelFileRecord,
     content: &str,
 ) -> (
-    Vec<GraphSymbolRecord>,
-    Vec<GraphRelationRecord>,
-    Vec<GraphChunkRecord>,
+    Vec<PanelSymbolRecord>,
+    Vec<PanelRelationRecord>,
+    Vec<PanelChunkRecord>,
 ) {
     if parser_engine_for_language(&file.language) == ParserEngine::TreeSitterPreferred {
         if let Ok(Some(parsed)) = parse_with_tree_sitter(&file.language, content) {
@@ -49,7 +49,7 @@ pub(crate) fn extract_file_details(
         }
 
         if let Some(import_name) = extract_import(&file.language, line) {
-            relations.push(GraphRelationRecord {
+            relations.push(PanelRelationRecord {
                 id: format!("relation:{}:import:{}", file.path, line_number),
                 from_type: "file".to_string(),
                 from_id: file.id.clone(),
@@ -68,7 +68,7 @@ pub(crate) fn extract_file_details(
             }
             let end_line = find_symbol_end(&lines, index, &file.language);
             let id = format!("symbol:{}:{}", file.path, symbols.len() + 1);
-            symbols.push(GraphSymbolRecord {
+            symbols.push(PanelSymbolRecord {
                 id: id.clone(),
                 file_id: file.id.clone(),
                 language: file.language.clone(),
@@ -81,7 +81,7 @@ pub(crate) fn extract_file_details(
                 visibility: extract_visibility(line),
                 path: file.path.clone(),
             });
-            relations.push(GraphRelationRecord {
+            relations.push(PanelRelationRecord {
                 id: format!("relation:{}:contains:{}", file.path, symbols.len()),
                 from_type: "file".to_string(),
                 from_id: file.id.clone(),
@@ -92,7 +92,7 @@ pub(crate) fn extract_file_details(
                 source: parser_source.to_string(),
             });
             if let Some(parent_id) = parent_symbol_id {
-                relations.push(GraphRelationRecord {
+                relations.push(PanelRelationRecord {
                     id: format!("relation:{}:parent_of:{}", parent_id, id),
                     from_type: "symbol".to_string(),
                     from_id: parent_id,
@@ -104,7 +104,7 @@ pub(crate) fn extract_file_details(
                 });
             }
             for extends in extracted.extends {
-                relations.push(GraphRelationRecord {
+                relations.push(PanelRelationRecord {
                     id: format!("relation:{}:extends:{}:{}", file.path, id, extends),
                     from_type: "symbol".to_string(),
                     from_id: id.clone(),
@@ -116,7 +116,7 @@ pub(crate) fn extract_file_details(
                 });
             }
             for implements in extracted.implements {
-                relations.push(GraphRelationRecord {
+                relations.push(PanelRelationRecord {
                     id: format!("relation:{}:implements:{}:{}", file.path, id, implements),
                     from_type: "symbol".to_string(),
                     from_id: id.clone(),
@@ -140,13 +140,13 @@ pub(crate) fn extract_file_details(
 }
 
 fn build_from_tree_sitter(
-    file: &GraphFileRecord,
+    file: &PanelFileRecord,
     content: &str,
     parsed: TreeSitterParseOutput,
 ) -> (
-    Vec<GraphSymbolRecord>,
-    Vec<GraphRelationRecord>,
-    Vec<GraphChunkRecord>,
+    Vec<PanelSymbolRecord>,
+    Vec<PanelRelationRecord>,
+    Vec<PanelChunkRecord>,
 ) {
     let parser_source = if parsed.has_error {
         "tree-sitter-degraded"
@@ -158,7 +158,7 @@ fn build_from_tree_sitter(
     let mut symbol_ids = Vec::new();
 
     for import in parsed.imports {
-        relations.push(GraphRelationRecord {
+        relations.push(PanelRelationRecord {
             id: format!("relation:{}:import:{}", file.path, import.line),
             from_type: "file".to_string(),
             from_id: file.id.clone(),
@@ -187,7 +187,7 @@ fn build_from_tree_sitter(
         }
         let id = format!("symbol:{}:{}", file.path, index + 1);
         symbol_ids.push(id.clone());
-        symbols.push(GraphSymbolRecord {
+        symbols.push(PanelSymbolRecord {
             id: id.clone(),
             file_id: file.id.clone(),
             language: file.language.clone(),
@@ -203,7 +203,7 @@ fn build_from_tree_sitter(
                 .or_else(|| candidate.signature.as_deref().and_then(extract_visibility)),
             path: file.path.clone(),
         });
-        relations.push(GraphRelationRecord {
+        relations.push(PanelRelationRecord {
             id: format!("relation:{}:contains:{}", file.path, index + 1),
             from_type: "file".to_string(),
             from_id: file.id.clone(),
@@ -214,7 +214,7 @@ fn build_from_tree_sitter(
             source: parser_source.to_string(),
         });
         if let Some(parent_id) = parent_symbol_id {
-            relations.push(GraphRelationRecord {
+            relations.push(PanelRelationRecord {
                 id: format!("relation:{}:parent_of:{}", parent_id, id),
                 from_type: "symbol".to_string(),
                 from_id: parent_id,
@@ -231,7 +231,7 @@ fn build_from_tree_sitter(
             .map(extract_extends)
             .unwrap_or_default()
         {
-            relations.push(GraphRelationRecord {
+            relations.push(PanelRelationRecord {
                 id: format!("relation:{}:extends:{}:{}", file.path, id, extends),
                 from_type: "symbol".to_string(),
                 from_id: id.clone(),
@@ -248,7 +248,7 @@ fn build_from_tree_sitter(
             .map(extract_implements)
             .unwrap_or_default()
         {
-            relations.push(GraphRelationRecord {
+            relations.push(PanelRelationRecord {
                 id: format!("relation:{}:implements:{}:{}", file.path, id, implements),
                 from_type: "symbol".to_string(),
                 from_id: id.clone(),
@@ -290,7 +290,7 @@ struct ExtractedSymbol {
 }
 
 fn extract_symbol(
-    file: &GraphFileRecord,
+    file: &PanelFileRecord,
     line: &str,
     pending_test: bool,
     pending_component: bool,
@@ -492,7 +492,7 @@ fn extract_config_key(trimmed: &str) -> Option<ExtractedSymbol> {
     Some(extracted("config_key", key, trimmed))
 }
 
-fn extract_mobile_symbol(file: &GraphFileRecord, trimmed: &str) -> Option<ExtractedSymbol> {
+fn extract_mobile_symbol(file: &PanelFileRecord, trimmed: &str) -> Option<ExtractedSymbol> {
     if file.name == "AndroidManifest.xml" {
         for (tag, kind) in [
             ("<activity", "component"),
@@ -624,10 +624,10 @@ fn extract_import(language: &str, line: &str) -> Option<String> {
 }
 
 fn build_chunks(
-    file: &GraphFileRecord,
+    file: &PanelFileRecord,
     content: &str,
-    symbols: &[GraphSymbolRecord],
-) -> Vec<GraphChunkRecord> {
+    symbols: &[PanelSymbolRecord],
+) -> Vec<PanelChunkRecord> {
     let lines: Vec<&str> = content.lines().collect();
     if lines.is_empty() {
         return Vec::new();
@@ -735,16 +735,16 @@ fn extract_implements(signature: &str) -> Vec<String> {
 }
 
 fn chunk_from_lines(
-    file: &GraphFileRecord,
+    file: &PanelFileRecord,
     symbol_id: Option<&str>,
     lines: &[&str],
     start_line: usize,
     end_line: usize,
-) -> GraphChunkRecord {
+) -> PanelChunkRecord {
     let start_index = start_line.saturating_sub(1);
     let end_index = end_line.min(lines.len());
     let text = lines[start_index..end_index].join("\n");
-    GraphChunkRecord {
+    PanelChunkRecord {
         id: format!(
             "chunk:{}:{}:{}:{}",
             file.path,

@@ -82,7 +82,7 @@ export type IssueContract = {
     verticalSlice: string;
     tracerBulletPlan: string[];
     diagnosePlan: string[];
-    graphifyContextStatus: string;
+    panelContextStatus: string;
     docsClaimTrace: string[];
     boundaryConfirmation: string[];
     prHandoffRequirements: string[];

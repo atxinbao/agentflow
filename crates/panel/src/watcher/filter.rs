@@ -23,7 +23,7 @@ pub(crate) fn relevant_event_kind(root: &Path, event: &Event) -> Option<String> 
     if event
         .paths
         .iter()
-        .all(|path| should_ignore_graph_event(root, path))
+        .all(|path| should_ignore_panel_event(root, path))
     {
         return None;
     }
@@ -52,7 +52,7 @@ fn event_kind_label(kind: &EventKind) -> &'static str {
     }
 }
 
-pub(crate) fn should_ignore_graph_event(root: &Path, path: &Path) -> bool {
+pub(crate) fn should_ignore_panel_event(root: &Path, path: &Path) -> bool {
     let relative = if path.is_absolute() {
         path.strip_prefix(root).unwrap_or(path)
     } else {

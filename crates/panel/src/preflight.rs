@@ -1,32 +1,32 @@
 use crate::{
-    context_pack::build_context_pack,
-    impact::analyze_graph_impact,
-    manager::{load_project_graph_status, prepare_project_graph, GraphPrepareMode},
-    model::{GraphPreflightSnapshot, GraphStatus},
+    context_pack::build_panel_context_pack,
+    impact::analyze_panel_impact,
+    manager::{load_project_panel_status, prepare_project_panel, PanelPrepareMode},
+    model::{PanelPreflightSnapshot, PanelStatus},
 };
 use anyhow::Result;
 use std::{path::Path, thread, time::Duration};
 
-pub fn preflight_graph_for_target(
+pub fn panel_preflight(
     project_root: impl AsRef<Path>,
     target_type: &str,
     target_id: Option<&str>,
     title: &str,
     objective: &str,
     acceptance_criteria: &[String],
-) -> Result<GraphPreflightSnapshot> {
+) -> Result<PanelPreflightSnapshot> {
     let project_root = project_root.as_ref();
-    let initial = load_project_graph_status(project_root)?;
+    let initial = load_project_panel_status(project_root)?;
     let status = match initial.status {
-        GraphStatus::Missing | GraphStatus::Stale => {
-            prepare_project_graph(project_root, GraphPrepareMode::Blocking)?
+        PanelStatus::Missing | PanelStatus::Stale => {
+            prepare_project_panel(project_root, PanelPrepareMode::Blocking)?
         }
-        GraphStatus::Indexing => wait_for_indexing(project_root)?,
-        GraphStatus::Ready | GraphStatus::Degraded | GraphStatus::Failed => initial,
+        PanelStatus::Indexing => wait_for_indexing(project_root)?,
+        PanelStatus::Ready | PanelStatus::Degraded | PanelStatus::Failed => initial,
     };
 
-    if status.status == GraphStatus::Failed {
-        return Ok(GraphPreflightSnapshot {
+    if status.status == PanelStatus::Failed {
+        return Ok(PanelPreflightSnapshot {
             version: "panel-preflight.v1".to_string(),
             project_root: project_root.display().to_string(),
             target_type: target_type.to_string(),
@@ -36,7 +36,7 @@ pub fn preflight_graph_for_target(
             reason: status
                 .last_error
                 .unwrap_or_else(|| "Panel 构建失败，阻止自动 AgentRun。".to_string()),
-            graph_status: GraphStatus::Failed,
+            panel_status: PanelStatus::Failed,
             context_pack_path: None,
             recommended_files: Vec::new(),
             recommended_symbols: Vec::new(),
@@ -46,7 +46,7 @@ pub fn preflight_graph_for_target(
         });
     }
 
-    let pack = build_context_pack(
+    let pack = build_panel_context_pack(
         project_root,
         target_type,
         target_id,
@@ -54,7 +54,7 @@ pub fn preflight_graph_for_target(
         objective,
         acceptance_criteria,
     )?;
-    let impact = analyze_graph_impact(
+    let impact = analyze_panel_impact(
         project_root,
         &[],
         &pack
@@ -76,19 +76,19 @@ pub fn preflight_graph_for_target(
         )
     });
 
-    Ok(GraphPreflightSnapshot {
+    Ok(PanelPreflightSnapshot {
         version: "panel-preflight.v1".to_string(),
         project_root: project_root.display().to_string(),
         target_type: target_type.to_string(),
         target_id: target_id.map(str::to_string),
         status: "ready".to_string(),
-        ready: status.status == GraphStatus::Ready || status.status == GraphStatus::Degraded,
-        reason: if status.status == GraphStatus::Degraded {
+        ready: status.status == PanelStatus::Ready || status.status == PanelStatus::Degraded,
+        reason: if status.status == PanelStatus::Degraded {
             "Panel 可用但存在降级原因，AgentRun 需要记录原因。".to_string()
         } else {
             "Panel 已就绪，Context Pack 已生成。".to_string()
         },
-        graph_status: status.status,
+        panel_status: status.status,
         context_pack_path,
         recommended_files: pack.recommended_files,
         recommended_symbols: pack.recommended_symbols,
@@ -98,15 +98,15 @@ pub fn preflight_graph_for_target(
     })
 }
 
-fn wait_for_indexing(project_root: &Path) -> Result<crate::model::GraphStatusSnapshot> {
+fn wait_for_indexing(project_root: &Path) -> Result<crate::model::PanelStatusSnapshot> {
     for _ in 0..20 {
         thread::sleep(Duration::from_millis(250));
-        let status = load_project_graph_status(project_root)?;
-        if status.status != GraphStatus::Indexing {
+        let status = load_project_panel_status(project_root)?;
+        if status.status != PanelStatus::Indexing {
             return Ok(status);
         }
     }
-    Ok(load_project_graph_status(project_root)?)
+    Ok(load_project_panel_status(project_root)?)
 }
 
 #[cfg(test)]
@@ -116,12 +116,12 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn preflight_builds_missing_graph_and_context_pack() {
+    fn preflight_builds_missing_panel_and_context_pack() {
         let dir = tempdir().unwrap();
         fs::create_dir_all(dir.path().join("src")).unwrap();
         fs::write(dir.path().join("src/lease.rs"), "pub struct Lease {}\n").unwrap();
 
-        let snapshot = preflight_graph_for_target(
+        let snapshot = panel_preflight(
             dir.path(),
             "issue",
             Some("issue-lease"),
@@ -146,7 +146,7 @@ mod tests {
         fs::create_dir_all(dir.path().join("src")).unwrap();
         fs::write(dir.path().join("src/lib.rs"), "pub struct Lease {}\n").unwrap();
 
-        let snapshot = preflight_graph_for_target(
+        let snapshot = panel_preflight(
             dir.path(),
             "issue",
             Some("issue-degraded"),
@@ -157,39 +157,63 @@ mod tests {
         .unwrap();
 
         assert!(snapshot.ready);
-        assert_eq!(snapshot.graph_status, GraphStatus::Degraded);
+        assert_eq!(snapshot.panel_status, PanelStatus::Degraded);
         assert_eq!(snapshot.status, "ready");
         assert!(snapshot.reason.contains("降级"));
     }
 
     #[test]
-    fn preflight_reports_failed_graph_as_not_ready() {
+    fn preflight_reports_failed_panel_as_not_ready() {
         let dir = tempdir().unwrap();
-        let graph_dir = dir.path().join(".agentflow/panel");
-        fs::create_dir_all(&graph_dir).unwrap();
-        fs::create_dir_all(graph_dir.join("index")).unwrap();
-        fs::write(graph_dir.join("index/panel.db"), "").unwrap();
+        let panel_dir = dir.path().join(".agentflow/panel");
+        fs::create_dir_all(&panel_dir).unwrap();
+        fs::create_dir_all(panel_dir.join("index")).unwrap();
+        fs::write(panel_dir.join("index/panel.db"), "").unwrap();
         fs::write(
-            graph_dir.join("manifest.json"),
+            panel_dir.join("manifest.json"),
             r#"{
   "version": "panel-manifest.v1",
   "status": "failed",
   "projectRoot": "",
-  "graphDb": ".agentflow/panel/index/panel.db",
-  "updatedAt": 1,
-  "gitHead": null,
-  "fileCount": 0,
-  "symbolCount": 0,
-  "relationCount": 0,
-  "lastIndexRunId": null,
-  "languages": [],
-  "lastError": "fixture failure",
-  "degradedReasons": []
+  "backend": "panel",
+  "lastIndexedAt": 1,
+  "activeSnapshotId": null,
+  "paths": {
+    "database": ".agentflow/panel/index/panel.db",
+    "fileTree": ".agentflow/panel/file-tree.json",
+    "languages": ".agentflow/panel/languages.json",
+    "symbols": ".agentflow/panel/symbols.json",
+    "relations": ".agentflow/panel/relations.json",
+    "diagnostics": ".agentflow/panel/diagnostics.json",
+    "git": ".agentflow/panel/git.json",
+    "tests": ".agentflow/panel/tests.json"
+  },
+  "summary": {
+    "files": 0,
+    "languages": 0,
+    "symbols": 0,
+    "relations": 0,
+    "diagnostics": 0,
+    "tests": 0
+  },
+  "worktree": {
+    "root": "",
+    "gitBranch": null,
+    "headSha": null,
+    "dirty": false
+  },
+  "watcher": {
+    "status": "not_started",
+    "backend": "none"
+  },
+  "degradedReasons": [],
+  "warnings": [],
+  "errors": ["fixture failure"]
 }"#,
         )
         .unwrap();
 
-        let snapshot = preflight_graph_for_target(
+        let snapshot = panel_preflight(
             dir.path(),
             "issue",
             Some("issue-failed"),
@@ -201,7 +225,7 @@ mod tests {
 
         assert!(!snapshot.ready);
         assert_eq!(snapshot.status, "degraded");
-        assert_eq!(snapshot.graph_status, GraphStatus::Failed);
+        assert_eq!(snapshot.panel_status, PanelStatus::Failed);
         assert_eq!(snapshot.reason, "fixture failure");
     }
 }

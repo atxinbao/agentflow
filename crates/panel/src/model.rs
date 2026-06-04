@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum GraphStatus {
+pub enum PanelStatus {
     Missing,
     Indexing,
     Ready,
@@ -13,10 +13,10 @@ pub enum GraphStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphStatusSnapshot {
+pub struct PanelStatusSnapshot {
     pub version: String,
     pub project_root: String,
-    pub status: GraphStatus,
+    pub status: PanelStatus,
     pub file_count: usize,
     pub symbol_count: usize,
     pub relation_count: usize,
@@ -24,7 +24,7 @@ pub struct GraphStatusSnapshot {
     pub last_error: Option<String>,
     pub watcher_status: Option<String>,
     pub watcher_backend: Option<String>,
-    pub watcher_detail: Option<GraphWatcherDetail>,
+    pub watcher_detail: Option<PanelWatcherDetail>,
     pub preflight_status: Option<String>,
     pub protection_status: Option<String>,
     pub degraded_reasons: Vec<String>,
@@ -32,7 +32,7 @@ pub struct GraphStatusSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphWatcherDetail {
+pub struct PanelWatcherDetail {
     pub platform: String,
     pub recursive: bool,
     pub ignored_path_count: usize,
@@ -43,7 +43,7 @@ pub struct GraphWatcherDetail {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphManifestSnapshot {
+pub struct PanelManifestSnapshot {
     pub version: String,
     pub project_root: String,
     pub languages: Vec<String>,
@@ -62,7 +62,7 @@ pub struct GraphManifestSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphFileRecord {
+pub struct PanelFileRecord {
     pub id: String,
     pub path: String,
     pub name: String,
@@ -83,7 +83,7 @@ pub struct GraphFileRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphSymbolRecord {
+pub struct PanelSymbolRecord {
     pub id: String,
     pub file_id: String,
     pub language: String,
@@ -99,7 +99,7 @@ pub struct GraphSymbolRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphRelationRecord {
+pub struct PanelRelationRecord {
     pub id: String,
     pub from_type: String,
     pub from_id: String,
@@ -112,7 +112,7 @@ pub struct GraphRelationRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphChunkRecord {
+pub struct PanelChunkRecord {
     pub id: String,
     pub file_id: String,
     pub symbol_id: Option<String>,
@@ -126,15 +126,15 @@ pub struct GraphChunkRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphSearchSnapshot {
+pub struct PanelSearchSnapshot {
     pub version: String,
     pub query: String,
-    pub results: Vec<GraphSearchResult>,
+    pub results: Vec<PanelSearchResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphSearchResult {
+pub struct PanelSearchResult {
     pub kind: String,
     pub path: String,
     pub title: String,
@@ -147,24 +147,24 @@ pub struct GraphSearchResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphContextPack {
+pub struct PanelContextPack {
     pub version: String,
     pub target_type: String,
     pub target_id: Option<String>,
     pub query: String,
     pub created_at: u64,
-    pub graph_revision: Option<String>,
-    pub recommended_files: Vec<GraphContextFile>,
-    pub recommended_symbols: Vec<GraphContextSymbol>,
-    pub recommended_tests: Vec<GraphContextFile>,
-    pub impact_hints: Vec<GraphContextHint>,
-    pub test_hints: Vec<GraphTestHint>,
+    pub panel_revision: Option<String>,
+    pub recommended_files: Vec<PanelContextFile>,
+    pub recommended_symbols: Vec<PanelContextSymbol>,
+    pub recommended_tests: Vec<PanelContextFile>,
+    pub impact_hints: Vec<PanelContextHint>,
+    pub test_hints: Vec<PanelTestHint>,
     pub confidence: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphContextFile {
+pub struct PanelContextFile {
     pub path: String,
     pub reason: String,
     pub score: f64,
@@ -172,7 +172,7 @@ pub struct GraphContextFile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphContextSymbol {
+pub struct PanelContextSymbol {
     pub name: String,
     pub kind: String,
     pub path: String,
@@ -182,7 +182,7 @@ pub struct GraphContextSymbol {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphContextHint {
+pub struct PanelContextHint {
     pub path: String,
     pub reason: String,
     pub confidence: String,
@@ -190,7 +190,7 @@ pub struct GraphContextHint {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphTestHint {
+pub struct PanelTestHint {
     pub command_hint: String,
     pub reason: String,
     pub confidence: String,
@@ -199,7 +199,7 @@ pub struct GraphTestHint {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphPreflightSnapshot {
+pub struct PanelPreflightSnapshot {
     pub version: String,
     pub project_root: String,
     pub target_type: String,
@@ -207,43 +207,43 @@ pub struct GraphPreflightSnapshot {
     pub status: String,
     pub ready: bool,
     pub reason: String,
-    pub graph_status: GraphStatus,
+    pub panel_status: PanelStatus,
     pub context_pack_path: Option<String>,
-    pub recommended_files: Vec<GraphContextFile>,
-    pub recommended_symbols: Vec<GraphContextSymbol>,
-    pub recommended_tests: Vec<GraphContextFile>,
-    pub impact_hints: Vec<GraphContextHint>,
-    pub test_hints: Vec<GraphTestHint>,
+    pub recommended_files: Vec<PanelContextFile>,
+    pub recommended_symbols: Vec<PanelContextSymbol>,
+    pub recommended_tests: Vec<PanelContextFile>,
+    pub impact_hints: Vec<PanelContextHint>,
+    pub test_hints: Vec<PanelTestHint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphImpactSnapshot {
+pub struct PanelImpactSnapshot {
     pub version: String,
     pub project_root: String,
-    pub possibly_affected_files: Vec<GraphContextHint>,
-    pub possibly_affected_symbols: Vec<GraphContextSymbol>,
-    pub possibly_affected_tests: Vec<GraphContextFile>,
+    pub possibly_affected_files: Vec<PanelContextHint>,
+    pub possibly_affected_symbols: Vec<PanelContextSymbol>,
+    pub possibly_affected_tests: Vec<PanelContextFile>,
     pub reasons: Vec<String>,
     pub confidence: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphProtectionSnapshot {
+pub struct PanelProtectionSnapshot {
     pub version: String,
     pub project_root: String,
     pub status: String,
-    pub graph_output_root: String,
+    pub panel_output_root: String,
     pub git_exclude_path: Option<String>,
     pub protected_by_info_exclude: bool,
-    pub writes_only_graph_output: bool,
+    pub writes_only_panel_output: bool,
     pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GraphWatcherSnapshot {
+pub struct PanelWatcherSnapshot {
     pub version: String,
     pub project_root: String,
     pub status: String,
@@ -257,30 +257,9 @@ pub struct GraphWatcherSnapshot {
 }
 
 #[derive(Debug, Clone)]
-pub struct GraphIndex {
-    pub files: Vec<GraphFileRecord>,
-    pub symbols: Vec<GraphSymbolRecord>,
-    pub relations: Vec<GraphRelationRecord>,
-    pub chunks: Vec<GraphChunkRecord>,
+pub struct PanelIndex {
+    pub files: Vec<PanelFileRecord>,
+    pub symbols: Vec<PanelSymbolRecord>,
+    pub relations: Vec<PanelRelationRecord>,
+    pub chunks: Vec<PanelChunkRecord>,
 }
-
-pub type PanelStatus = GraphStatus;
-pub type PanelStatusSnapshot = GraphStatusSnapshot;
-pub type PanelWatcherDetail = GraphWatcherDetail;
-pub type PanelManifestSnapshot = GraphManifestSnapshot;
-pub type PanelFileRecord = GraphFileRecord;
-pub type PanelSymbolRecord = GraphSymbolRecord;
-pub type PanelRelationRecord = GraphRelationRecord;
-pub type PanelChunkRecord = GraphChunkRecord;
-pub type PanelSearchSnapshot = GraphSearchSnapshot;
-pub type PanelSearchResult = GraphSearchResult;
-pub type PanelContextPack = GraphContextPack;
-pub type PanelContextFile = GraphContextFile;
-pub type PanelContextSymbol = GraphContextSymbol;
-pub type PanelContextHint = GraphContextHint;
-pub type PanelTestHint = GraphTestHint;
-pub type PanelPreflightSnapshot = GraphPreflightSnapshot;
-pub type PanelImpactSnapshot = GraphImpactSnapshot;
-pub type PanelProtectionSnapshot = GraphProtectionSnapshot;
-pub type PanelWatcherSnapshot = GraphWatcherSnapshot;
-pub type PanelIndex = GraphIndex;

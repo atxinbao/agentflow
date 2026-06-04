@@ -1,8 +1,8 @@
 use crate::{
     db,
-    manager::graph_db_path,
-    model::{GraphContextFile, GraphContextHint, GraphContextSymbol, GraphImpactSnapshot},
-    search::search_project_graph,
+    manager::panel_db_path,
+    model::{PanelContextFile, PanelContextHint, PanelContextSymbol, PanelImpactSnapshot},
+    search::search_project_panel,
 };
 use anyhow::Result;
 use std::{
@@ -10,15 +10,15 @@ use std::{
     path::Path,
 };
 
-pub fn analyze_graph_impact(
+pub fn analyze_panel_impact(
     project_root: impl AsRef<Path>,
     changed_files: &[String],
     target_files: &[String],
     target_symbols: &[String],
     query: Option<&str>,
-) -> Result<GraphImpactSnapshot> {
+) -> Result<PanelImpactSnapshot> {
     let project_root = project_root.as_ref();
-    let connection = db::open_graph_db(&graph_db_path(project_root)?)?;
+    let connection = db::open_panel_db(&panel_db_path(project_root)?)?;
     let files = db::fetch_files(&connection)?;
     let symbols = db::fetch_symbols(&connection)?;
     let relations = db::fetch_relations(&connection)?;
@@ -56,7 +56,7 @@ pub fn analyze_graph_impact(
         }
     }
     if let Some(query) = query.filter(|query| !query.trim().is_empty()) {
-        let search = search_project_graph(project_root, query, Some(20))?;
+        let search = search_project_panel(project_root, query, Some(20))?;
         for result in search.results {
             if let Some(file) = files_by_path.get(&result.path) {
                 seed_file_ids.insert(file.id.clone());
@@ -123,7 +123,7 @@ pub fn analyze_graph_impact(
     let possibly_affected_files = affected_file_ids
         .into_iter()
         .filter_map(|id| files_by_id.get(&id))
-        .map(|file| GraphContextHint {
+        .map(|file| PanelContextHint {
             path: file.path.clone(),
             reason: "由文件、符号或关系启发式推导。".to_string(),
             confidence: if file.is_test { "medium" } else { "low" }.to_string(),
@@ -134,7 +134,7 @@ pub fn analyze_graph_impact(
     let possibly_affected_symbols = affected_symbol_ids
         .into_iter()
         .filter_map(|id| symbols_by_id.get(&id))
-        .map(|symbol| GraphContextSymbol {
+        .map(|symbol| PanelContextSymbol {
             name: symbol.name.clone(),
             kind: symbol.kind.clone(),
             path: symbol.path.clone(),
@@ -146,7 +146,7 @@ pub fn analyze_graph_impact(
 
     let possibly_affected_tests = test_paths
         .into_iter()
-        .map(|path| GraphContextFile {
+        .map(|path| PanelContextFile {
             path,
             reason: "测试文件与受影响文件存在 test_of 或路径关系。".to_string(),
             score: 0.78,
@@ -156,7 +156,7 @@ pub fn analyze_graph_impact(
 
     reasons.sort();
     reasons.dedup();
-    Ok(GraphImpactSnapshot {
+    Ok(PanelImpactSnapshot {
         version: "panel-impact.v1".to_string(),
         project_root: project_root.display().to_string(),
         possibly_affected_files,
@@ -170,7 +170,7 @@ pub fn analyze_graph_impact(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manager::index_project_graph;
+    use crate::manager::index_project_panel;
     use std::fs;
     use tempfile::tempdir;
 
@@ -185,9 +185,9 @@ mod tests {
             "fn lease_test() {}\n",
         )
         .unwrap();
-        index_project_graph(dir.path()).unwrap();
+        index_project_panel(dir.path()).unwrap();
 
-        let impact = analyze_graph_impact(
+        let impact = analyze_panel_impact(
             dir.path(),
             &["src/lease.rs".to_string()],
             &[],

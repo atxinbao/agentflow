@@ -308,14 +308,6 @@ pub(crate) fn expected_workspace_manifest(root: &Path, warnings: &[String]) -> W
         ]),
         compat: BTreeMap::from([
             (
-                "legacyGraphOutput".to_string(),
-                ".agentflow/output/graph".to_string(),
-            ),
-            (
-                "legacyGraphCanonical".to_string(),
-                ".agentflow/graph".to_string(),
-            ),
-            (
                 "legacyGoalTreeDefine".to_string(),
                 ".agentflow/define".to_string(),
             ),

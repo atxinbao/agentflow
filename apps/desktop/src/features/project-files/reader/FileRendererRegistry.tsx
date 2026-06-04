@@ -240,13 +240,13 @@ function JsonReader({ content }: { content: string }) {
 }
 
 function PlainTextReader({ content }: { content: string }) {
-  const paragraphs = content
+  const parapanels = content
     .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
+    .map((parapanel) => parapanel.trim())
     .filter(Boolean);
   return (
     <div className="project-plain-reader">
-      {paragraphs.length === 0 ? <p>文件为空。</p> : paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+      {parapanels.length === 0 ? <p>文件为空。</p> : parapanels.map((parapanel) => <p key={parapanel}>{parapanel}</p>)}
     </div>
   );
 }

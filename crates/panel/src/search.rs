@@ -1,23 +1,23 @@
 use crate::{
     db,
-    manager::graph_db_path,
-    model::{GraphSearchResult, GraphSearchSnapshot},
+    manager::panel_db_path,
+    model::{PanelSearchResult, PanelSearchSnapshot},
 };
 use anyhow::Result;
 use rusqlite::params;
 use std::path::Path;
 
-pub fn search_project_graph(
+pub fn search_project_panel(
     project_root: impl AsRef<Path>,
     query: &str,
     limit: Option<usize>,
-) -> Result<GraphSearchSnapshot> {
-    let db_path = graph_db_path(project_root)?;
-    let connection = db::open_graph_db(&db_path)?;
+) -> Result<PanelSearchSnapshot> {
+    let db_path = panel_db_path(project_root)?;
+    let connection = db::open_panel_db(&db_path)?;
     let query = query.trim();
     let limit = limit.unwrap_or(20).clamp(1, 100);
     if query.is_empty() {
-        return Ok(GraphSearchSnapshot {
+        return Ok(PanelSearchSnapshot {
             version: "panel-search.v1".to_string(),
             query: query.to_string(),
             results: Vec::new(),
@@ -38,7 +38,7 @@ pub fn search_project_graph(
     });
     results.truncate(limit);
 
-    Ok(GraphSearchSnapshot {
+    Ok(PanelSearchSnapshot {
         version: "panel-search.v1".to_string(),
         query: query.to_string(),
         results,
@@ -49,7 +49,7 @@ fn search_files(
     connection: &rusqlite::Connection,
     like: &str,
     limit: usize,
-) -> Result<Vec<GraphSearchResult>> {
+) -> Result<Vec<PanelSearchResult>> {
     let mut statement = connection.prepare(
         r#"
         SELECT path, name, language, kind
@@ -64,7 +64,7 @@ fn search_files(
         let name: String = row.get(1)?;
         let language: String = row.get(2)?;
         let kind: String = row.get(3)?;
-        Ok(GraphSearchResult {
+        Ok(PanelSearchResult {
             kind: "file".to_string(),
             path: path.clone(),
             title: name,
@@ -87,7 +87,7 @@ fn search_symbols(
     connection: &rusqlite::Connection,
     like: &str,
     limit: usize,
-) -> Result<Vec<GraphSearchResult>> {
+) -> Result<Vec<PanelSearchResult>> {
     let mut statement = connection.prepare(
         r#"
         SELECT path, name, language, kind, start_line, signature
@@ -104,7 +104,7 @@ fn search_symbols(
         let kind: String = row.get(3)?;
         let start_line: i64 = row.get(4)?;
         let signature: Option<String> = row.get(5)?;
-        Ok(GraphSearchResult {
+        Ok(PanelSearchResult {
             kind: "symbol".to_string(),
             path,
             title: name,
@@ -123,7 +123,7 @@ fn search_chunks(
     connection: &rusqlite::Connection,
     like: &str,
     limit: usize,
-) -> Result<Vec<GraphSearchResult>> {
+) -> Result<Vec<PanelSearchResult>> {
     let mut statement = connection.prepare(
         r#"
         SELECT path, start_line, text
@@ -137,7 +137,7 @@ fn search_chunks(
         let path: String = row.get(0)?;
         let start_line: i64 = row.get(1)?;
         let text: String = row.get(2)?;
-        Ok(GraphSearchResult {
+        Ok(PanelSearchResult {
             kind: "chunk".to_string(),
             path: path.clone(),
             title: format!("{}:{}", path, start_line.max(1)),
@@ -164,7 +164,7 @@ fn snippet(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manager::index_project_graph;
+    use crate::manager::index_project_panel;
     use std::fs;
     use tempfile::tempdir;
 
@@ -177,9 +177,9 @@ mod tests {
             "pub struct Lease {}\nimpl Lease { pub fn acquire_lease() {} }\n",
         )
         .unwrap();
-        index_project_graph(dir.path()).unwrap();
+        index_project_panel(dir.path()).unwrap();
 
-        let result = search_project_graph(dir.path(), "lease", Some(10)).unwrap();
+        let result = search_project_panel(dir.path(), "lease", Some(10)).unwrap();
 
         assert!(result.results.iter().any(|item| item.kind == "file"));
         assert!(result.results.iter().any(|item| item.kind == "symbol"));

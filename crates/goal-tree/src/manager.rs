@@ -337,7 +337,7 @@ pub fn create_issue(
             updated_by: "agent-system".to_string(),
             path: relative_record_path(&record_path, &paths.root),
             revision: 1,
-            graph_context_pack_path: None,
+            panel_context_pack_path: None,
         },
     };
     save_issue(&paths, &issue)?;
@@ -463,16 +463,16 @@ pub fn reorder_goal_tree(
 
 /// Agent-only / system-only write API.
 ///
-/// Records an existing Agent-prepared Graph Context Pack path. Desktop human UI
+/// Records an existing Agent-prepared Panel Context Pack path. Desktop human UI
 /// must not call this function or generate context packs.
-pub fn record_issue_graph_context_path(
+pub fn record_issue_panel_context_path(
     project_root: impl AsRef<Path>,
     issue_id: &str,
     context_pack_path: Option<String>,
 ) -> Result<IssueRecord> {
     let paths = paths_for(project_root)?;
     let mut issue = read_issue(&paths, issue_id)?;
-    issue.system.graph_context_pack_path = context_pack_path;
+    issue.system.panel_context_pack_path = context_pack_path;
     let (updated_at, revision, updated_by) =
         bump_record_revision(issue.system.created_at, issue.system.revision);
     issue.system.updated_at = updated_at;
@@ -586,7 +586,7 @@ mod tests {
     }
 
     #[test]
-    fn load_snapshot_includes_validation_warnings_without_graph_context() {
+    fn load_snapshot_includes_validation_warnings_without_panel_context() {
         let dir = tempdir().unwrap();
         let goal = create_goal(
             dir.path(),

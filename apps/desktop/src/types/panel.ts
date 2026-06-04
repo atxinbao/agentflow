@@ -1,9 +1,9 @@
-export type GraphStatus = "missing" | "indexing" | "ready" | "stale" | "failed" | "degraded";
+export type PanelStatus = "missing" | "indexing" | "ready" | "stale" | "failed" | "degraded";
 
-export type GraphStatusSnapshot = {
+export type PanelStatusSnapshot = {
   version: string;
   projectRoot: string;
-  status: GraphStatus;
+  status: PanelStatus;
   fileCount: number;
   symbolCount: number;
   relationCount: number;
@@ -16,7 +16,7 @@ export type GraphStatusSnapshot = {
   degradedReasons?: string[];
 };
 
-export type GraphManifestSnapshot = {
+export type PanelManifestSnapshot = {
   version: string;
   projectRoot: string;
   languages: string[];
@@ -33,13 +33,13 @@ export type GraphManifestSnapshot = {
   mobileTests?: string[];
 };
 
-export type GraphSearchSnapshot = {
+export type PanelSearchSnapshot = {
   version: string;
   query: string;
-  results: GraphSearchResult[];
+  results: PanelSearchResult[];
 };
 
-export type GraphSearchResult = {
+export type PanelSearchResult = {
   kind: string;
   path: string;
   title: string;
@@ -50,28 +50,28 @@ export type GraphSearchResult = {
   score: number;
 };
 
-export type GraphContextPack = {
+export type PanelContextPack = {
   version: string;
   targetType: string;
   targetId?: string | null;
   query: string;
   createdAt: number;
-  graphRevision?: string | null;
-  recommendedFiles: GraphContextFile[];
-  recommendedSymbols: GraphContextSymbol[];
-  recommendedTests: GraphContextFile[];
-  impactHints: GraphContextHint[];
-  testHints: GraphTestHint[];
+  panelRevision?: string | null;
+  recommendedFiles: PanelContextFile[];
+  recommendedSymbols: PanelContextSymbol[];
+  recommendedTests: PanelContextFile[];
+  impactHints: PanelContextHint[];
+  testHints: PanelTestHint[];
   confidence: string;
 };
 
-export type GraphContextFile = {
+export type PanelContextFile = {
   path: string;
   reason: string;
   score: number;
 };
 
-export type GraphContextSymbol = {
+export type PanelContextSymbol = {
   name: string;
   kind: string;
   path: string;
@@ -79,26 +79,15 @@ export type GraphContextSymbol = {
   score: number;
 };
 
-export type GraphContextHint = {
+export type PanelContextHint = {
   path: string;
   reason: string;
   confidence: string;
 };
 
-export type GraphTestHint = {
+export type PanelTestHint = {
   commandHint: string;
   reason: string;
   confidence: string;
   scope?: string;
 };
-
-export type PanelStatus = GraphStatus;
-export type PanelStatusSnapshot = GraphStatusSnapshot;
-export type PanelManifestSnapshot = GraphManifestSnapshot;
-export type PanelSearchSnapshot = GraphSearchSnapshot;
-export type PanelSearchResult = GraphSearchResult;
-export type PanelContextPack = GraphContextPack;
-export type PanelContextFile = GraphContextFile;
-export type PanelContextSymbol = GraphContextSymbol;
-export type PanelContextHint = GraphContextHint;
-export type PanelTestHint = GraphTestHint;
