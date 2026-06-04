@@ -12,6 +12,7 @@ agentflow-core = { path = "../../../crates/agentflow-core" }
 agentflow-agent-manual = { path = "../../../crates/agent-manual" }
 agentflow-panel = { path = "../../../crates/panel" }
 agentflow-goal-tree = { path = "../../../crates/goal-tree" }
+agentflow-input = { path = "../../../crates/input" }
 base64 = "0.22"
 rfd = "0.15"
 serde.workspace = true

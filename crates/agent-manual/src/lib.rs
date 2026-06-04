@@ -61,8 +61,13 @@ mod tests {
             .path()
             .join(".agentflow/define/audit/AUDIT.md")
             .is_file());
-        assert!(dir.path().join(".agentflow/spec/changes").is_dir());
-        assert!(dir.path().join(".agentflow/goal-tree/goals").is_dir());
+        assert!(dir.path().join(".agentflow/input/intake").is_dir());
+        assert!(dir.path().join(".agentflow/input/specs/drafts").is_dir());
+        assert!(dir.path().join(".agentflow/input/specs/approved").is_dir());
+        assert!(dir.path().join(".agentflow/input/projects").is_dir());
+        assert!(dir.path().join(".agentflow/input/issues").is_dir());
+        assert!(!dir.path().join(".agentflow/spec").exists());
+        assert!(!dir.path().join(".agentflow/goal-tree").exists());
         assert!(dir.path().join(".agentflow/panel/context-packs").is_dir());
         assert!(dir.path().join(".agentflow/execute/commands").is_dir());
         assert!(dir.path().join(".agentflow/output/audit").is_dir());
@@ -97,19 +102,22 @@ mod tests {
             .path()
             .join(".agentflow/define/agent/state/validation.json")
             .is_file());
+        let spec_manual =
+            fs::read_to_string(dir.path().join(".agentflow/define/spec/SPEC.md")).unwrap();
+        assert!(spec_manual.contains("`.agentflow/input/specs/`"));
+        assert!(!spec_manual.contains("`.agentflow/spec/`"));
     }
 
     #[test]
-    fn spec_agent_status_is_limited_to_intake_and_draft_preview() {
+    fn spec_agent_status_allows_input_facts_after_confirmation() {
         let manual = crate::templates::agentflow_manual_template();
 
-        assert!(
-            manual.contains("Status: enabled for requirement intake and SPEC Draft Preview only.")
-        );
+        assert!(manual.contains("Status: enabled for Input Model V1."));
         assert!(manual.contains(
-            "Approved SPEC writes and Goal Tree materialization are not enabled by this manual"
+            "After confirmation, it may write Approved SPEC and generate direct issues or project issues under `.agentflow/input/**`"
         ));
-        assert!(manual.contains("write Approved SPEC, or write Goal Tree"));
+        assert!(manual.contains("Do not write legacy `.agentflow/spec/**`."));
+        assert!(manual.contains("Do not write legacy `.agentflow/goal-tree/**`."));
         assert!(!manual.contains("Status: enabled.\n\nCombines requirement intake"));
     }
 

@@ -45,6 +45,7 @@ pub(crate) fn prepare_local_project_workspace_at(
             protected_git_exclude: false,
             ownership: ownership.clone(),
             agent_manual_status,
+            input_status: None,
         });
     }
 
@@ -66,8 +67,12 @@ pub(crate) fn prepare_local_project_workspace_at(
             protected_git_exclude: false,
             ownership: agent_manual_status.ownership.clone(),
             agent_manual_status,
+            input_status: None,
         });
     }
+
+    let input_snapshot = agentflow_input::prepare_input_workspace(&root)
+        .map_err(|error| format!("prepare input workspace: {error}"))?;
 
     ensure_directory(
         &agentflow_path,
@@ -111,6 +116,7 @@ pub(crate) fn prepare_local_project_workspace_at(
         protected_git_exclude,
         ownership,
         agent_manual_status,
+        input_status: Some(input_snapshot.status),
     })
 }
 
@@ -163,7 +169,7 @@ fn workspace_yaml(name: &str, root: &Path) -> String {
 }
 
 fn config_yaml() -> String {
-    "version: config.v1\nmode: local\nagentflowDir: .agentflow\nworkflow:\n  define: define\n  spec: spec\n  goalTree: goal-tree\n  panel: panel\n  execute: execute\n  output: output\n  state: state\n".to_string()
+    "version: config.v1\nmode: local\nagentflowDir: .agentflow\nworkflow:\n  define: define\n  panel: panel\n  input: input\n  execute: execute\n  output: output\n  state: state\nlegacy:\n  spec: spec\n  goalTree: goal-tree\n".to_string()
 }
 
 fn yaml_quote(value: &str) -> String {
@@ -209,8 +215,19 @@ mod tests {
             .path()
             .join(".agentflow/define/audit/AUDIT.md")
             .is_file());
-        assert!(dir.path().join(".agentflow/spec/changes").is_dir());
-        assert!(dir.path().join(".agentflow/goal-tree/goals").is_dir());
+        assert!(dir.path().join(".agentflow/input/intake").is_dir());
+        assert!(dir.path().join(".agentflow/input/specs/drafts").is_dir());
+        assert!(dir.path().join(".agentflow/input/specs/approved").is_dir());
+        assert!(dir.path().join(".agentflow/input/manifest.json").is_file());
+        assert!(dir.path().join(".agentflow/input/index.json").is_file());
+        assert!(dir.path().join(".agentflow/input/projects").is_dir());
+        assert!(dir.path().join(".agentflow/input/issues").is_dir());
+        assert!(summary
+            .input_status
+            .as_ref()
+            .is_some_and(|status| status.ready));
+        assert!(!dir.path().join(".agentflow/spec").exists());
+        assert!(!dir.path().join(".agentflow/goal-tree").exists());
         assert!(dir.path().join(".agentflow/panel/context-packs").is_dir());
         assert!(dir.path().join(".agentflow/execute/leases").is_dir());
         assert!(dir.path().join(".agentflow/execute/runs").is_dir());

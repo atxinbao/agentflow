@@ -1,0 +1,14 @@
+[package]
+name = "agentflow-input"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+agentflow-agent-manual = { path = "../agent-manual" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

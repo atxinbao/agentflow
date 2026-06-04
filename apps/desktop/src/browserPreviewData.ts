@@ -20,6 +20,7 @@ import type {
   WorkbenchBoundary,
   WorkbenchSnapshot,
   AgentEnvironmentStatus,
+  InputStatusSnapshot,
 } from "./types";
 import {
   getProjectFileExtensionFromName,
@@ -593,8 +594,8 @@ export function createBrowserPreviewAgentEnvironmentStatus(
     skills: [
       "request-triage",
       "requirement-intake-filter",
-      "openspec-authoring",
-      "goal-tree-materialization",
+      "spec-gate-authoring",
+      "input-issue-generation",
       "boundary-check",
       "validation",
     ].map((name) => ({
@@ -647,8 +648,9 @@ export function createBrowserPreviewAgentEnvironmentStatus(
         ".agentflow/define/tdd/TDD.md",
         ".agentflow/define/release/RELEASE.md",
         ".agentflow/define/audit/AUDIT.md",
-        ".agentflow/spec",
-        ".agentflow/goal-tree",
+        ".agentflow/input",
+        ".agentflow/input/manifest.json",
+        ".agentflow/input/index.json",
         ".agentflow/panel",
         ".agentflow/execute",
         ".agentflow/output",
@@ -674,6 +676,29 @@ export function createBrowserPreviewAgentEnvironmentStatus(
       ],
       detected: [],
     },
+  };
+}
+
+export function createBrowserPreviewInputStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): InputStatusSnapshot {
+  return {
+    version: "input-status.browser-preview",
+    projectRoot,
+    status: "ready",
+    ready: true,
+    manifestExists: true,
+    indexExists: true,
+    summary: {
+      intake: 1,
+      draftSpecs: 1,
+      approvedSpecs: 0,
+      projects: 0,
+      issues: 0,
+      blockedIssues: 0,
+      highRiskIssues: 0,
+    },
+    missingPaths: [],
+    warnings: ["浏览器预览只展示 mock input 状态，不写 .agentflow/input。"],
+    errors: [],
   };
 }
 

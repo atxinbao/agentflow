@@ -111,3 +111,28 @@ export type WorkspaceOwnershipStatus = {
   errors: string[];
   recommendedAction: WorkspaceOwnershipAction;
 };
+
+export type InputWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";
+
+export type InputSummary = {
+  intake: number;
+  draftSpecs: number;
+  approvedSpecs: number;
+  projects: number;
+  issues: number;
+  blockedIssues: number;
+  highRiskIssues: number;
+};
+
+export type InputStatusSnapshot = {
+  version: string;
+  projectRoot: string;
+  status: InputWorkspaceStatus;
+  ready: boolean;
+  manifestExists: boolean;
+  indexExists: boolean;
+  summary: InputSummary;
+  missingPaths: string[];
+  warnings: string[];
+  errors: string[];
+};

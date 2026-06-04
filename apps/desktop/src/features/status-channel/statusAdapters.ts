@@ -1,13 +1,16 @@
 import type { ProjectFilesState, ProjectPanelState } from "../project-files";
 import type { AgentManualState } from "../agent-manual";
+import type { InputStatusState } from "../input";
 import type { AgentStatusChannelItem, AgentStatusTone } from "./statusTypes";
 
 export function buildAgentStatusItems({
   agentManualState,
+  inputStatusState,
   projectFilesState,
   projectPanelState,
 }: {
   agentManualState: AgentManualState;
+  inputStatusState: InputStatusState;
   projectFilesState: ProjectFilesState;
   projectPanelState: ProjectPanelState;
 }): AgentStatusChannelItem[] {
@@ -15,8 +18,90 @@ export function buildAgentStatusItems({
     buildWorkspaceStatus(projectFilesState),
     buildWorkspaceOwnershipStatus(agentManualState),
     buildWorksiteStatus(projectPanelState),
+    buildInputStatus(inputStatusState),
     buildAgentManualStatus(agentManualState),
   ];
+}
+
+function buildInputStatus(inputStatusState: InputStatusState): AgentStatusChannelItem {
+  const source = "009 - Input Model V1";
+  const status = inputStatusState.status;
+
+  if (inputStatusState.error) {
+    return {
+      id: "agent-input",
+      label: "需求输入",
+      status: "failed",
+      statusLabel: "异常",
+      source,
+      priority: 25,
+      error: inputStatusState.error,
+    };
+  }
+
+  if (inputStatusState.source === "loading") {
+    return {
+      id: "agent-input",
+      label: "需求输入",
+      status: "working",
+      statusLabel: "检查中",
+      source,
+      priority: 25,
+    };
+  }
+
+  if (!status) {
+    return {
+      id: "agent-input",
+      label: "需求输入",
+      status: "idle",
+      statusLabel: "未检查",
+      source,
+      priority: 25,
+    };
+  }
+
+  return {
+    id: "agent-input",
+    label: "需求输入",
+    status: inputTone(status.status),
+    statusLabel: inputStatusLabel(status.status),
+    source,
+    priority: 25,
+    metrics: [
+      { label: "Intake", value: status.summary.intake },
+      { label: "Draft SPEC", value: status.summary.draftSpecs },
+      { label: "Approved SPEC", value: status.summary.approvedSpecs },
+      { label: "Projects", value: status.summary.projects },
+      { label: "Issues", value: status.summary.issues },
+      { label: "High Risk", value: status.summary.highRiskIssues },
+    ],
+    error: status.errors.at(0) ?? null,
+  };
+}
+
+function inputTone(status: NonNullable<InputStatusState["status"]>["status"]): AgentStatusTone {
+  if (status === "ready" || status === "degraded") {
+    return status === "ready" ? "ready" : "warning";
+  }
+  if (status === "missing") {
+    return "warning";
+  }
+  if (status === "failed" || status === "blocked") {
+    return "failed";
+  }
+  return "idle";
+}
+
+function inputStatusLabel(status: NonNullable<InputStatusState["status"]>["status"]) {
+  const labels: Record<NonNullable<InputStatusState["status"]>["status"], string> = {
+    missing: "缺失",
+    ready: "已就绪",
+    degraded: "降级",
+    failed: "失败",
+    blocked: "已阻断",
+  };
+  return labels[status] ?? status;
 }
 
 function buildWorkspaceOwnershipStatus(agentManualState: AgentManualState): AgentStatusChannelItem {

@@ -34,6 +34,7 @@ import {
 } from "./browserPreviewData";
 import { GoalTreePage, useGoalTree } from "./features/goal-tree";
 import { useAgentManual } from "./features/agent-manual";
+import { useInputStatus } from "./features/input";
 import {
   ProjectLocalFilesPage,
   isBrowserPreviewRuntime,
@@ -358,9 +359,10 @@ function App() {
     projectFilesState.snapshot?.projectRoot ??
     (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
   const { agentManualState, loadAgentManual } = useAgentManual(agentManualProjectRoot);
+  const inputStatusState = useInputStatus(agentManualProjectRoot);
   const agentStatusItems = useMemo(
-    () => buildAgentStatusItems({ agentManualState, projectFilesState, projectPanelState }),
-    [agentManualState, projectFilesState, projectPanelState],
+    () => buildAgentStatusItems({ agentManualState, inputStatusState, projectFilesState, projectPanelState }),
+    [agentManualState, inputStatusState, projectFilesState, projectPanelState],
   );
 
   function applyBrowserPreviewSnapshot(projectRoot: string) {

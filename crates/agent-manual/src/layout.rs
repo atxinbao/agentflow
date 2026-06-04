@@ -37,15 +37,16 @@ const LAYOUT_DIRECTORIES: &[&str] = &[
     ".agentflow/define/audit",
     ".agentflow/define/audit/skills",
     ".agentflow/define/audit/templates",
-    ".agentflow/spec",
-    ".agentflow/spec/changes",
-    ".agentflow/spec/approvals",
-    ".agentflow/spec/drafts",
-    ".agentflow/goal-tree",
-    ".agentflow/goal-tree/goals",
-    ".agentflow/goal-tree/milestones",
-    ".agentflow/goal-tree/issues",
-    ".agentflow/goal-tree/materialization",
+    ".agentflow/input",
+    ".agentflow/input/intake",
+    ".agentflow/input/specs",
+    ".agentflow/input/specs/drafts",
+    ".agentflow/input/specs/approved",
+    ".agentflow/input/specs/archive",
+    ".agentflow/input/projects",
+    ".agentflow/input/issues",
+    ".agentflow/input/relations",
+    ".agentflow/input/views",
     ".agentflow/panel",
     ".agentflow/panel/context-packs",
     ".agentflow/panel/search",
@@ -70,12 +71,11 @@ const LAYOUT_DIRECTORIES: &[&str] = &[
     ".agentflow/state/indexes",
 ];
 
-const LAYOUT_FILES: [(&str, &str); 5] = [
+const LAYOUT_FILES: [(&str, &str); 4] = [
     (".agentflow/define/spec/SPEC.md", SPEC_MANUAL),
     (".agentflow/define/tdd/TDD.md", TDD_MANUAL),
     (".agentflow/define/release/RELEASE.md", RELEASE_MANUAL),
     (".agentflow/define/audit/AUDIT.md", AUDIT_MANUAL),
-    (".agentflow/spec/index.json", SPEC_INDEX),
 ];
 
 pub(crate) fn prepare_workspace_layout(
@@ -233,12 +233,11 @@ pub(crate) fn expected_workspace_manifest(root: &Path, warnings: &[String]) -> W
             "workspace".to_string(),
             "agent-manual".to_string(),
             "panel".to_string(),
+            "input".to_string(),
             "project-file-reader".to_string(),
             "requirement-intake".to_string(),
         ],
         planned_layers: vec![
-            "spec".to_string(),
-            "goal-tree".to_string(),
             "tdd".to_string(),
             "execution".to_string(),
             "release".to_string(),
@@ -264,8 +263,39 @@ pub(crate) fn expected_workspace_manifest(root: &Path, warnings: &[String]) -> W
                 "defineAudit".to_string(),
                 ".agentflow/define/audit".to_string(),
             ),
-            ("spec".to_string(), ".agentflow/spec".to_string()),
-            ("goalTree".to_string(), ".agentflow/goal-tree".to_string()),
+            ("input".to_string(), ".agentflow/input".to_string()),
+            (
+                "inputManifest".to_string(),
+                ".agentflow/input/manifest.json".to_string(),
+            ),
+            (
+                "inputIndex".to_string(),
+                ".agentflow/input/index.json".to_string(),
+            ),
+            (
+                "inputIntake".to_string(),
+                ".agentflow/input/intake".to_string(),
+            ),
+            (
+                "inputSpecs".to_string(),
+                ".agentflow/input/specs".to_string(),
+            ),
+            (
+                "inputProjects".to_string(),
+                ".agentflow/input/projects".to_string(),
+            ),
+            (
+                "inputIssues".to_string(),
+                ".agentflow/input/issues".to_string(),
+            ),
+            (
+                "inputRelations".to_string(),
+                ".agentflow/input/relations".to_string(),
+            ),
+            (
+                "inputViews".to_string(),
+                ".agentflow/input/views".to_string(),
+            ),
             ("panel".to_string(), ".agentflow/panel".to_string()),
             (
                 "panelManifest".to_string(),
@@ -323,6 +353,11 @@ pub(crate) fn expected_workspace_manifest(root: &Path, warnings: &[String]) -> W
             (
                 "legacyGoalTreeDefine".to_string(),
                 ".agentflow/define".to_string(),
+            ),
+            ("legacySpec".to_string(), ".agentflow/spec".to_string()),
+            (
+                "legacyGoalTree".to_string(),
+                ".agentflow/goal-tree".to_string(),
             ),
             ("legacyAgentEntry".to_string(), "AGENT.MD".to_string()),
             (
@@ -407,10 +442,10 @@ SPEC is the requirement and acceptance manual for AgentFlow.
 ## Rules
 
 - Requirement Intake Result is the prerequisite for SPEC work.
-- Only `ready-for-openspec` may proceed to SPEC Draft Preview.
+- Only `ready-for-spec` may proceed to SPEC Draft Preview.
 - Before human confirmation, Agents may discuss a draft preview but must not write SPEC fact sources.
-- Approved SPEC is required before Goal Tree materialization.
-- Real SPEC artifacts live under `.agentflow/spec/`, not under `define/`.
+- Approved SPEC is required before input issue generation.
+- Real SPEC artifacts live under `.agentflow/input/specs/`, not under `define/`.
 
 ## V1 Boundary
 
@@ -471,5 +506,3 @@ Audit is the code review and risk review working manual for future Audit Agent e
 
 V1 creates this manual only. It does not generate audit reports.
 "#;
-
-const SPEC_INDEX: &str = "{\n  \"version\": \"agentflow-spec-index.v1\",\n  \"changes\": [],\n  \"approvals\": [],\n  \"drafts\": []\n}\n";

@@ -17,4 +17,5 @@ pub(crate) struct ProjectWorkspaceSummary {
     pub(crate) protected_git_exclude: bool,
     pub(crate) ownership: agentflow_agent_manual::model::WorkspaceOwnershipStatus,
     pub(crate) agent_manual_status: agentflow_agent_manual::model::AgentEnvironmentStatus,
+    pub(crate) input_status: Option<agentflow_input::model::InputStatusSnapshot>,
 }
