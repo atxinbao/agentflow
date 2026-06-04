@@ -24,6 +24,79 @@
 结果：
 
 - `git diff --check`：pass。
+
+## 2026-06-05 Execute Patch / Checkpoint V1
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/010-execute-patch-checkpoint-v1.md`。
+- 新增受控执行层 `execute/`。
+- execute 只能从 `.agentflow/input/issues/<issue-id>.json` 启动。
+- 每次 run 记录 preflight、lease、plan、checkpoint、patch / command、validation、result 和 evidence。
+
+结果：
+
+- 新增 `crates/execute`，Cargo package 为 `agentflow-execute`。
+- 新增 Execute canonical layout：
+  - `.agentflow/execute/manifest.json`
+  - `.agentflow/execute/index.json`
+  - `.agentflow/execute/runs/`
+  - `.agentflow/execute/leases/`
+  - `.agentflow/execute/queue/`
+  - `.agentflow/output/evidence/`
+- 新增 Execute public API：
+  - `prepare_execute_workspace`
+  - `validate_execute_workspace`
+  - `load_execute_status`
+  - `load_execute_manifest`
+  - `load_execute_index`
+  - `load_execute_snapshot`
+  - `create_execute_run`
+  - `execute_run_preflight`
+  - `confirm_high_risk_execute_run`
+  - `acquire_execute_lease`
+  - `release_execute_lease`
+  - `write_execute_plan`
+  - `create_execute_checkpoint`
+  - `apply_execute_patch`
+  - `run_execute_command`
+  - `validate_execute_run`
+  - `complete_execute_run`
+  - `cancel_execute_run`
+- Preflight 已检查 ownership、define、panel、input、issue、Approved SPEC、risk、lease、working tree 和 validation hints。
+- High risk issue 必须写入 run-scoped human confirmation 后才可通过 preflight。
+- Low / medium risk issue 不需要 human confirmation。
+- Lease 防止同一个 issue 同时拥有多个 active run。
+- Patch 必须在 checkpoint 后执行，并且只能修改 run plan 的 `allowedWritePaths`。
+- Command record 结构化记录 program、args、cwd、exitCode、stdout、stderr。
+- Dangerous command 已阻断，包括 shell freeform、git push / commit / checkout / reset / clean、rm -rf、deploy、release、curl。
+- Result 和 evidence 已绑定，completed / failed run 均会释放 lease。
+- Desktop Tauri 新增 execute commands；Desktop human UI 只读展示 execute 状态。
+- Desktop 状态通道新增“执行流水线”事件。
+- Browser Preview mock 已同步 execute status。
+- README / GOAL / ROADMAP / docs index / requirements index 已更新到 010。
+
+边界：
+
+- 未修改 `.agentflow/input/**` facts。
+- 未修改 Approved SPEC。
+- 未创建 PR。
+- 未 merge。
+- 未 release。
+- 未 deploy。
+- 未调用模型。
+- 未把 Desktop human UI 改成执行入口。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-execute`：pass，12 tests。
+- `cargo test -p agentflow-desktop`：pass，17 tests。
+- `cargo test`：pass，agent-manual 21 tests + CLI 2 tests + core 61 tests + desktop 17 tests + execute 12 tests + goal-tree 3 tests + input 8 tests + panel 27 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
 - `rg -n "Project Definition|CONSTRUCTION_PLAN|Construction Plan|latest-verification|verification.md|0\\. New Project Initialization|1\\. Human Project Planning|2\\. Construction Plan|3\\. Linear execution contract|施工材料|未授权执行|不授权" ...`：pass。
 
 结论：

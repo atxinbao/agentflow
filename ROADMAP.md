@@ -1,6 +1,6 @@
 # Roadmap
 
-更新日期：2026-06-04
+更新日期：2026-06-05
 执行者：Codex
 
 ## 当前状态
@@ -26,10 +26,11 @@ docs/requirements/
 9. 完成 [008.4 - Project Panel V1](docs/requirements/008-4-project-panel-v1.md)。
 10. 完成 [008.4.1 - Project Panel Finalization and Graph Removal V1](docs/requirements/008-4-1-project-panel-finalization-and-graph-removal-v1.md)。
 11. 完成 [008.4.2 - AgentFlow Workspace Ownership Guard V1](docs/requirements/008-4-2-agentflow-workspace-ownership-guard-v1.md)。
-12. 当前执行 [009 - Input Model V1](docs/requirements/009-input-model-v1.md)。
-13. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
-14. 基于新需求重新生成开发切片。
-15. 每个切片必须明确：
+12. 完成 [009 - Input Model V1](docs/requirements/009-input-model-v1.md)。
+13. 当前执行 [010 - Execute Patch / Checkpoint V1](docs/requirements/010-execute-patch-checkpoint-v1.md)。
+14. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
+15. 基于新需求重新生成开发切片。
+16. 每个切片必须明确：
    - 用户可见变化
    - 代码修改范围
    - 不允许做的事
@@ -52,5 +53,5 @@ docs/requirements/
 当前执行：
 
 ```text
-docs/requirements/009-input-model-v1.md
+docs/requirements/010-execute-patch-checkpoint-v1.md
 ```

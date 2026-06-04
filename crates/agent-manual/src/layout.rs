@@ -56,6 +56,7 @@ const LAYOUT_DIRECTORIES: &[&str] = &[
     ".agentflow/execute/runs",
     ".agentflow/execute/leases",
     ".agentflow/execute/commands",
+    ".agentflow/execute/queue",
     ".agentflow/output",
     ".agentflow/output/evidence",
     ".agentflow/output/audit",

@@ -1,6 +1,6 @@
 # Goal
 
-更新日期：2026-06-04
+更新日期：2026-06-05
 执行者：Codex
 
 ## 当前状态
@@ -28,8 +28,9 @@ AgentFlow 的旧目标文档已停止作为后续开发依据。
 - [008.4.1 - Project Panel Finalization and Graph Removal V1](docs/requirements/008-4-1-project-panel-finalization-and-graph-removal-v1.md)
 - [008.4.2 - AgentFlow Workspace Ownership Guard V1](docs/requirements/008-4-2-agentflow-workspace-ownership-guard-v1.md)
 - [009 - Input Model V1](docs/requirements/009-input-model-v1.md)
+- [010 - Execute Patch / Checkpoint V1](docs/requirements/010-execute-patch-checkpoint-v1.md)
 
-当前目标是在 Workspace Ownership Guard 之后，实现 009 Input Model V1：把需求输入、SPEC Gate 和施工清单统一收敛到 `.agentflow/input/`，新写入不再进入旧 `.agentflow/spec/` 或 `.agentflow/goal-tree/`。
+当前目标是在 Input Model V1 之后，实现 010 Execute Patch / Checkpoint V1：以 `.agentflow/input/issues/<issue-id>.json` 为唯一执行入口，创建受控 run，完成 preflight、lease、plan、checkpoint、patch / command record、validation、result 和 evidence。
 
 ## 当前约束
 

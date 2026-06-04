@@ -5,6 +5,7 @@
 //! that boundary.
 
 pub(crate) mod agent_manual;
+pub(crate) mod execute;
 pub(crate) mod goal_tree;
 pub(crate) mod input;
 pub(crate) mod legacy_core;

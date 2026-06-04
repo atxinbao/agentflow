@@ -1,15 +1,18 @@
 import type { ProjectFilesState, ProjectPanelState } from "../project-files";
 import type { AgentManualState } from "../agent-manual";
+import type { ExecuteStatusState } from "../execute";
 import type { InputStatusState } from "../input";
 import type { AgentStatusChannelItem, AgentStatusTone } from "./statusTypes";
 
 export function buildAgentStatusItems({
   agentManualState,
+  executeStatusState,
   inputStatusState,
   projectFilesState,
   projectPanelState,
 }: {
   agentManualState: AgentManualState;
+  executeStatusState: ExecuteStatusState;
   inputStatusState: InputStatusState;
   projectFilesState: ProjectFilesState;
   projectPanelState: ProjectPanelState;
@@ -19,8 +22,65 @@ export function buildAgentStatusItems({
     buildWorkspaceOwnershipStatus(agentManualState),
     buildWorksiteStatus(projectPanelState),
     buildInputStatus(inputStatusState),
+    buildExecuteStatus(executeStatusState),
     buildAgentManualStatus(agentManualState),
   ];
+}
+
+function buildExecuteStatus(executeStatusState: ExecuteStatusState): AgentStatusChannelItem {
+  const source = "010 - Execute Patch / Checkpoint V1";
+  const status = executeStatusState.status;
+
+  if (executeStatusState.error) {
+    return {
+      id: "agent-execute",
+      label: "执行流水线",
+      status: "failed",
+      statusLabel: "异常",
+      source,
+      priority: 28,
+      error: executeStatusState.error,
+    };
+  }
+
+  if (executeStatusState.source === "loading") {
+    return {
+      id: "agent-execute",
+      label: "执行流水线",
+      status: "working",
+      statusLabel: "检查中",
+      source,
+      priority: 28,
+    };
+  }
+
+  if (!status) {
+    return {
+      id: "agent-execute",
+      label: "执行流水线",
+      status: "idle",
+      statusLabel: "未检查",
+      source,
+      priority: 28,
+    };
+  }
+
+  return {
+    id: "agent-execute",
+    label: "执行流水线",
+    status: inputTone(status.status),
+    statusLabel: inputStatusLabel(status.status),
+    source,
+    priority: 28,
+    metrics: [
+      { label: "Runs", value: status.summary.runs },
+      { label: "Active", value: status.summary.activeRuns },
+      { label: "Blocked", value: status.summary.blockedRuns },
+      { label: "Completed", value: status.summary.completedRuns },
+      { label: "Leases", value: status.summary.activeLeases },
+    ],
+    error: status.errors.at(0) ?? null,
+  };
 }
 
 function buildInputStatus(inputStatusState: InputStatusState): AgentStatusChannelItem {

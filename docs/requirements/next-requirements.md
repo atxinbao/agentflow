@@ -1,7 +1,7 @@
 # Next Requirements
 
 创建日期：2026-06-01
-更新日期：2026-06-04
+更新日期：2026-06-05
 执行者：Codex
 
 ## 状态
@@ -23,6 +23,7 @@
 - [008-4-1-project-panel-finalization-and-graph-removal-v1.md](008-4-1-project-panel-finalization-and-graph-removal-v1.md)
 - [008-4-2-agentflow-workspace-ownership-guard-v1.md](008-4-2-agentflow-workspace-ownership-guard-v1.md)
 - [009-input-model-v1.md](009-input-model-v1.md)
+- [010-execute-patch-checkpoint-v1.md](010-execute-patch-checkpoint-v1.md)
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 

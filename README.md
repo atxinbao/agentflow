@@ -1,6 +1,6 @@
 # AgentFlow
 
-更新日期：2026-06-04
+更新日期：2026-06-05
 执行者：Codex
 
 ## 当前文档状态
@@ -38,9 +38,11 @@ docs/requirements/
 - Agent Manual Bootstrap 会接管根目录 `AGENTS.md` 作为 canonical Agent entry，保留 `AGENT.MD` 为 legacy compatibility，并写入 `.agentflow/define/agent/**` 工作手册、skills 和 lock。
 - Workflow Directory Blueprint V1 会准备 `.agentflow/workspace-manifest.json`，并把 `define/` 收敛为 `agent/spec/tdd/release/audit` 工作手册区。
 - Input Model V1 是新的需求事实源；canonical path 为 `.agentflow/input/`，旧 `.agentflow/spec/` 和 `.agentflow/goal-tree/` 仅作为 legacy marker，不再作为新写入路径。
+- Execute Patch / Checkpoint V1 是受控执行层；canonical path 为 `.agentflow/execute/`，只能从 `.agentflow/input/issues/<issue-id>.json` 启动，结果证据写入 `.agentflow/output/evidence/`。
 - Project Panel canonical path 为 `.agentflow/panel/`；不再保留旧代码地图兼容路径。
-- 不执行命令。
-- 不写用户业务源码。
+- Desktop human UI 不执行命令。
+- Execute API 允许 Agent-only 受控 patch / command，但必须通过 preflight、lease、plan、checkpoint 和 allowedWritePaths / allowedCommands。
+- 未经 execute 流水线授权不写用户业务源码。
 - 不写旧 `.agentflow/issues`、`runs`、`evidence`、`reviews`、`updates`、`views` 路径。
 - 不调用模型。
 - 不创建远程 PR、GitHub issue 或 Linear issue。
@@ -67,6 +69,7 @@ npm --prefix apps/desktop run build
 cargo test -p agentflow-agent-manual
 cargo test -p agentflow-goal-tree
 cargo test -p agentflow-input
+cargo test -p agentflow-execute
 cargo test -p agentflow-panel
 cargo test
 git diff --check
