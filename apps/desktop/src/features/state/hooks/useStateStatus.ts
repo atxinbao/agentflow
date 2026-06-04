@@ -2,35 +2,35 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import {
   BROWSER_PREVIEW_PROJECT_ROOT,
-  createBrowserPreviewOutputStatus,
+  createBrowserPreviewStateStatus,
 } from "../../../browserPreviewData";
-import type { OutputStatusSnapshot } from "../../../types";
+import type { StateStatusSnapshot } from "../../../types";
 import { isBrowserPreviewRuntime } from "../../project-files";
 
-export type OutputStatusState = {
-  status: OutputStatusSnapshot | null;
+export type StateStatusState = {
+  status: StateStatusSnapshot | null;
   error: string | null;
   source: "idle" | "loading" | "tauri" | "preview" | "unavailable";
 };
 
-const initialOutputStatusState: OutputStatusState = {
+const initialStateStatusState: StateStatusState = {
   status: null,
   error: null,
   source: "idle",
 };
 
-export function useOutputStatus(projectRoot: string | null, refreshToken = 0) {
-  const [outputStatusState, setOutputStatusState] = useState<OutputStatusState>(initialOutputStatusState);
+export function useStateStatus(projectRoot: string | null) {
+  const [stateStatusState, setStateStatusState] = useState<StateStatusState>(initialStateStatusState);
 
   useEffect(() => {
     if (!projectRoot) {
-      setOutputStatusState(initialOutputStatusState);
+      setStateStatusState(initialStateStatusState);
       return;
     }
 
     if (isBrowserPreviewRuntime()) {
-      setOutputStatusState({
-        status: createBrowserPreviewOutputStatus(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT),
+      setStateStatusState({
+        status: createBrowserPreviewStateStatus(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT),
         error: null,
         source: "preview",
       });
@@ -38,16 +38,16 @@ export function useOutputStatus(projectRoot: string | null, refreshToken = 0) {
     }
 
     let cancelled = false;
-    setOutputStatusState((current) => ({ ...current, error: null, source: "loading" }));
-    void invoke<OutputStatusSnapshot>("load_output_status", { projectRoot })
+    setStateStatusState((current) => ({ ...current, error: null, source: "loading" }));
+    void invoke<StateStatusSnapshot>("load_state_status", { projectRoot })
       .then((status) => {
         if (!cancelled) {
-          setOutputStatusState({ status, error: null, source: "tauri" });
+          setStateStatusState({ status, error: null, source: "tauri" });
         }
       })
       .catch((error) => {
         if (!cancelled) {
-          setOutputStatusState({
+          setStateStatusState({
             status: null,
             error: error instanceof Error ? error.message : String(error),
             source: "unavailable",
@@ -58,7 +58,7 @@ export function useOutputStatus(projectRoot: string | null, refreshToken = 0) {
     return () => {
       cancelled = true;
     };
-  }, [projectRoot, refreshToken]);
+  }, [projectRoot]);
 
-  return outputStatusState;
+  return stateStatusState;
 }

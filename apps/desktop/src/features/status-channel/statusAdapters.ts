@@ -3,6 +3,7 @@ import type { AgentManualState } from "../agent-manual";
 import type { ExecuteStatusState } from "../execute";
 import type { InputStatusState } from "../input";
 import type { OutputStatusState } from "../output";
+import type { StateStatusState } from "../state";
 import type { AgentStatusChannelItem, AgentStatusTone } from "./statusTypes";
 
 export function buildAgentStatusItems({
@@ -12,6 +13,7 @@ export function buildAgentStatusItems({
   outputStatusState,
   projectFilesState,
   projectPanelState,
+  stateStatusState,
 }: {
   agentManualState: AgentManualState;
   executeStatusState: ExecuteStatusState;
@@ -19,6 +21,7 @@ export function buildAgentStatusItems({
   outputStatusState: OutputStatusState;
   projectFilesState: ProjectFilesState;
   projectPanelState: ProjectPanelState;
+  stateStatusState: StateStatusState;
 }): AgentStatusChannelItem[] {
   return [
     buildWorkspaceStatus(projectFilesState),
@@ -27,8 +30,65 @@ export function buildAgentStatusItems({
     buildInputStatus(inputStatusState),
     buildExecuteStatus(executeStatusState),
     buildOutputStatus(outputStatusState),
+    buildWorkflowStateStatus(stateStatusState),
     buildAgentManualStatus(agentManualState),
   ];
+}
+
+function buildWorkflowStateStatus(stateStatusState: StateStatusState): AgentStatusChannelItem {
+  const source = "013 - Workflow State / Gate Orchestration V1";
+  const status = stateStatusState.status;
+
+  if (stateStatusState.error) {
+    return {
+      id: "workflow-state",
+      label: "工作流状态",
+      status: "failed",
+      statusLabel: "异常",
+      source,
+      priority: 31,
+      error: stateStatusState.error,
+    };
+  }
+
+  if (stateStatusState.source === "loading") {
+    return {
+      id: "workflow-state",
+      label: "工作流状态",
+      status: "working",
+      statusLabel: "检查中",
+      source,
+      priority: 31,
+    };
+  }
+
+  if (!status) {
+    return {
+      id: "workflow-state",
+      label: "工作流状态",
+      status: "idle",
+      statusLabel: "未检查",
+      source,
+      priority: 31,
+    };
+  }
+
+  return {
+    id: "workflow-state",
+    label: "工作流状态",
+    status: workflowStateTone(status.status, status.currentStage),
+    statusLabel: workflowStateLabel(status.status, status.currentStage),
+    source,
+    priority: 31,
+    metrics: [
+      { label: "阶段", value: workflowStageLabel(status.currentStage) },
+      { label: "下一步", value: status.nextActions.length },
+      { label: "阻断", value: status.blockers.length },
+      { label: "审计", value: workflowAuditLabel(status.auditStatus) },
+      { label: "运行", value: status.activeRunId ?? "无" },
+    ],
+    error: status.blockers.at(0)?.reason ?? null,
+  };
 }
 
 function buildOutputStatus(outputStatusState: OutputStatusState): AgentStatusChannelItem {
@@ -222,6 +282,73 @@ function inputStatusLabel(status: NonNullable<InputStatusState["status"]>["statu
     degraded: "降级",
     failed: "失败",
     blocked: "已阻断",
+  };
+  return labels[status] ?? status;
+}
+
+function workflowStateTone(
+  status: NonNullable<StateStatusState["status"]>["status"],
+  stage: NonNullable<StateStatusState["status"]>["currentStage"],
+): AgentStatusTone {
+  if (status === "failed" || status === "blocked" || stage === "failed" || stage === "workspace-blocked") {
+    return "failed";
+  }
+  if (stage === "execute-running" || stage === "audit-running") {
+    return "working";
+  }
+  if (status === "degraded" || status === "missing" || stage === "workspace-missing" || stage === "execute-blocked") {
+    return "warning";
+  }
+  if (status === "ready") {
+    return "ready";
+  }
+  return "idle";
+}
+
+function workflowStateLabel(
+  status: NonNullable<StateStatusState["status"]>["status"],
+  stage: NonNullable<StateStatusState["status"]>["currentStage"],
+) {
+  if (status === "blocked") {
+    return "已阻断";
+  }
+  if (status === "failed") {
+    return "异常";
+  }
+  return workflowStageLabel(stage);
+}
+
+function workflowStageLabel(stage: NonNullable<StateStatusState["status"]>["currentStage"]) {
+  const labels: Record<NonNullable<StateStatusState["status"]>["currentStage"], string> = {
+    "workspace-missing": "工作区缺失",
+    "workspace-blocked": "工作区阻断",
+    "workspace-ready": "工作区已就绪",
+    "panel-ready": "面板已就绪",
+    "input-ready": "输入已就绪",
+    "issue-ready": "任务已就绪",
+    "execute-ready": "执行已就绪",
+    "execute-running": "执行中",
+    "execute-blocked": "执行阻断",
+    "execute-completed": "执行完成",
+    "evidence-ready": "证据已就绪",
+    "delivery-ready": "交付已就绪",
+    "audit-requested": "审计已请求",
+    "audit-running": "审计中",
+    "audit-completed": "审计完成",
+    failed: "失败",
+  };
+  return labels[stage] ?? stage;
+}
+
+function workflowAuditLabel(status: NonNullable<StateStatusState["status"]>["auditStatus"]) {
+  const labels: Record<NonNullable<StateStatusState["status"]>["auditStatus"], string> = {
+    "not-requested": "未请求",
+    requested: "已请求",
+    running: "运行中",
+    passed: "通过",
+    "passed-with-warnings": "带警告通过",
+    failed: "失败",
+    cancelled: "已取消",
   };
   return labels[status] ?? status;
 }

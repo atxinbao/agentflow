@@ -46,6 +46,7 @@ pub(crate) fn prepare_local_project_workspace_at(
             ownership: ownership.clone(),
             agent_manual_status,
             input_status: None,
+            state_status: None,
         });
     }
 
@@ -68,6 +69,7 @@ pub(crate) fn prepare_local_project_workspace_at(
             ownership: agent_manual_status.ownership.clone(),
             agent_manual_status,
             input_status: None,
+            state_status: None,
         });
     }
 
@@ -100,6 +102,8 @@ pub(crate) fn prepare_local_project_workspace_at(
 
     let (git_exclude_path, protected_git_exclude) = protect_agentflow_from_git(&root)?;
     let ownership = agent_manual_status.ownership.clone();
+    let state_status = agentflow_state::prepare_state_workspace(&root)
+        .map_err(|error| format!("prepare workflow state: {error}"))?;
 
     Ok(ProjectWorkspaceSummary {
         version: "project-workspace.v0".to_string(),
@@ -117,6 +121,7 @@ pub(crate) fn prepare_local_project_workspace_at(
         ownership,
         agent_manual_status,
         input_status: Some(input_snapshot.status),
+        state_status: Some(state_status),
     })
 }
 
@@ -238,6 +243,20 @@ mod tests {
         assert!(dir.path().join(".agentflow/output/cache").is_dir());
         assert!(dir.path().join(".agentflow/output/tmp").is_dir());
         assert!(dir.path().join(".agentflow/state/health").is_dir());
+        assert!(dir.path().join(".agentflow/state/manifest.json").is_file());
+        assert!(dir.path().join(".agentflow/state/index.json").is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/state/gates/workflow.json")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/state/events/timeline.jsonl")
+            .is_file());
+        assert!(summary
+            .state_status
+            .as_ref()
+            .is_some_and(|status| !status.next_actions.is_empty()));
         assert!(dir.path().join("AGENTS.md").is_file());
         assert!(dir
             .path()

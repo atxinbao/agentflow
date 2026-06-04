@@ -184,3 +184,120 @@ export type OutputStatusSnapshot = {
   warnings: string[];
   errors: string[];
 };
+
+export type OutputIndexEntry = {
+  runId: string;
+  issueId: string;
+  sourceSpecId: string;
+  path: string;
+  status: string;
+  updatedAt: number;
+};
+
+export type OutputIndex = {
+  version: string;
+  updatedAt: number;
+  evidence: OutputIndexEntry[];
+  releaseDeliveries: OutputIndexEntry[];
+  audits: OutputIndexEntry[];
+};
+
+export type AuditStatus = "passed" | "passed-with-warnings" | "failed" | "cancelled";
+
+export type AuditIndexEntry = {
+  auditId: string;
+  status: AuditStatus;
+  requestedBy: string;
+  requestedAt: number;
+  reportPath: string;
+  auditPath: string;
+};
+
+export type AuditIndex = {
+  version: string;
+  updatedAt: number;
+  audits: AuditIndexEntry[];
+};
+
+export type AuditScopeRef = {
+  kind: string;
+  id: string;
+  path: string;
+};
+
+export type AuditScope = {
+  description: string;
+  refs: AuditScopeRef[];
+};
+
+export type HumanAuditRequestDraft = {
+  reason: string;
+  scope: AuditScope;
+};
+
+export type HumanAuditReport = {
+  request: unknown;
+  audit: {
+    auditId: string;
+    status: AuditStatus;
+    requestedBy: string;
+    requestedAt: number;
+    summary?: unknown;
+    checks?: unknown;
+    paths?: Record<string, string>;
+  };
+  reportMarkdown: string;
+  findings: unknown;
+  checklistMarkdown: string;
+  evidenceMap: unknown;
+  traceability: unknown;
+};
+
+export type StateWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";
+
+export type WorkflowStage =
+  | "workspace-missing"
+  | "workspace-blocked"
+  | "workspace-ready"
+  | "panel-ready"
+  | "input-ready"
+  | "issue-ready"
+  | "execute-ready"
+  | "execute-running"
+  | "execute-blocked"
+  | "execute-completed"
+  | "evidence-ready"
+  | "delivery-ready"
+  | "audit-requested"
+  | "audit-running"
+  | "audit-completed"
+  | "failed";
+
+export type WorkflowAuditStatus =
+  | "not-requested"
+  | "requested"
+  | "running"
+  | "passed"
+  | "passed-with-warnings"
+  | "failed"
+  | "cancelled";
+
+export type WorkflowBlockedAction = {
+  action: string;
+  reason: string;
+  sourcePath?: string | null;
+};
+
+export type StateStatusSnapshot = {
+  version: string;
+  projectRoot: string;
+  status: StateWorkspaceStatus;
+  currentStage: WorkflowStage;
+  auditStatus: WorkflowAuditStatus;
+  activeIssueId?: string | null;
+  activeRunId?: string | null;
+  health: Record<string, string>;
+  nextActions: string[];
+  blockers: WorkflowBlockedAction[];
+  updatedAt: number;
+};

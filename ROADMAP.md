@@ -30,10 +30,11 @@ docs/requirements/
 13. 完成 [010 - Execute Patch / Checkpoint V1](docs/requirements/010-execute-patch-checkpoint-v1.md)。
 14. 完成 [010.2 - Agent Role Consolidation V2](docs/requirements/010-2-agent-role-consolidation-v2.md)。
 15. 完成 [011 - Output Evidence / Delivery / Audit V1](docs/requirements/011-output-evidence-delivery-audit-v1.md)。
-16. 当前执行 [012 - Human-triggered Audit Report V1](docs/requirements/012-human-triggered-audit-report-v1.md)。
-17. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
-18. 基于新需求重新生成开发切片。
-19. 每个切片必须明确：
+16. 完成 [012 - Human-triggered Audit Report V1](docs/requirements/012-human-triggered-audit-report-v1.md)。
+17. 当前执行 [012.1 - Desktop Human Audit Entry Polish](docs/requirements/012-1-desktop-human-audit-entry-polish.md) 和 [013 - Workflow State / Gate Orchestration V1](docs/requirements/013-workflow-state-gate-orchestration-v1.md)。
+18. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
+19. 基于新需求重新生成开发切片。
+20. 每个切片必须明确：
    - 用户可见变化
    - 代码修改范围
    - 不允许做的事
@@ -56,5 +57,6 @@ docs/requirements/
 当前执行：
 
 ```text
-docs/requirements/012-human-triggered-audit-report-v1.md
+docs/requirements/013-workflow-state-gate-orchestration-v1.md
+docs/requirements/012-1-desktop-human-audit-entry-polish.md
 ```

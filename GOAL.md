@@ -32,8 +32,10 @@ AgentFlow 的旧目标文档已停止作为后续开发依据。
 - [010.2 - Agent Role Consolidation V2](docs/requirements/010-2-agent-role-consolidation-v2.md)
 - [011 - Output Evidence / Delivery / Audit V1](docs/requirements/011-output-evidence-delivery-audit-v1.md)
 - [012 - Human-triggered Audit Report V1](docs/requirements/012-human-triggered-audit-report-v1.md)
+- [012.1 - Desktop Human Audit Entry Polish](docs/requirements/012-1-desktop-human-audit-entry-polish.md)
+- [013 - Workflow State / Gate Orchestration V1](docs/requirements/013-workflow-state-gate-orchestration-v1.md)
 
-当前目标是在 011 Output Evidence / Delivery / Audit V1 之后，实现 012 Human-triggered Audit Report V1：Audit 不再是每次 execute / output 的默认步骤，而是人类主动触发后生成 `.agentflow/output/audit/<audit-id>/` 完整审计报告包。
+当前目标是在 012 Human-triggered Audit Report V1 之后，补齐 012.1 Desktop Human Audit Entry Polish，并实现 013 Workflow State / Gate Orchestration V1：Desktop 提供人类可见的人工审计入口；`.agentflow/state/` 作为派生状态总控层集中呈现 workflow stage、允许动作、阻断原因、locks、sessions 和 indexes。
 
 ## 当前约束
 

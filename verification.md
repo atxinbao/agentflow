@@ -4018,3 +4018,153 @@ No files were written and no command was executed.
 - `cargo test`：pass，agent-manual 23 tests + CLI 2 tests + core 61 tests + desktop 17 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 10 tests + panel 27 tests。
 - `npm --prefix apps/desktop run build`：pass。
 - `git diff --check`：pass。
+
+## 2026-06-05 Workflow State / Gate Orchestration V1
+
+执行者：Codex
+
+目标：
+
+- 将 `/Users/mac/Downloads/013-workflow-state-gate-orchestration-v1.md` 复制到 `docs/requirements/`。
+- 新增 `state/` 总控状态层，聚合 define / panel / input / execute / output / audit 的健康状态。
+- 输出 workflow gates、next actions、blockers、sessions、locks、events 和 indexes。
+- 接入 Project Workspace prepare、Desktop Tauri commands 和 Desktop 状态通道。
+
+结果：
+
+- 新增 `crates/state`，Cargo package 为 `agentflow-state`。
+- 新增 `.agentflow/state/**` 派生状态布局：
+  - `manifest.json`
+  - `index.json`
+  - `status.json`
+  - `health/workflow.json`
+  - `gates/workflow.json`
+  - `gates/next-actions.json`
+  - `gates/blockers.json`
+  - `locks/active.json`
+  - `locks/stale.json`
+  - `locks/cleanup-candidates.json`
+  - `events/timeline.jsonl`
+  - `indexes/workspaces.json`
+  - `indexes/issues.json`
+  - `indexes/runs.json`
+  - `indexes/outputs.json`
+- 新增 State public API：
+  - `prepare_state_workspace`
+  - `refresh_state`
+  - `load_state_status`
+  - `load_state_manifest`
+  - `load_state_index`
+  - `load_workflow_gates`
+  - `load_next_actions`
+  - `load_blockers`
+  - `load_state_timeline`
+  - `append_state_event`
+  - `load_state_session`
+  - `update_state_session`
+  - `load_state_locks`
+- 新增 workflow stage / audit status / workspace status 模型。
+- 新增 health 聚合，覆盖 workspace / define / panel / input / execute / output / audit。
+- 新增 gate 推导：
+  - workspace missing / blocked / ready
+  - panel ready
+  - input ready
+  - issue ready
+  - execute ready / running / blocked / completed
+  - evidence ready
+  - delivery ready
+  - audit requested / running / completed
+- 新增 blockers 与 next actions 推导，高风险 issue 会生成 human confirmation blocker。
+- 新增 locks 聚合：
+  - Active lease + non-terminal run => active
+  - Active lease + missing / terminal run => stale
+  - Released lease => ignored
+  - unreadable / corrupted lease => cleanup candidate
+- 新增 sessions 和 timeline event 写入 / 读取能力。
+- 新增状态 indexes：
+  - workspace status
+  - issue status
+  - run status
+  - output status
+- Project Workspace prepare 已接入 State prepare。
+- Desktop Tauri 新增 State commands。
+- Desktop 状态通道新增“工作流状态”事件，展示阶段、下一步、阻断、审计和运行状态。
+- Browser Preview 新增 workflow state mock 数据。
+- README / GOAL / ROADMAP / requirements index 已更新到 013。
+
+边界：
+
+- State 只写 `.agentflow/state/**`。
+- 未修改 input facts。
+- 未修改 execute run facts 主流程。
+- 未修改 output evidence / delivery / audit facts 主流程。
+- 未写用户源码。
+- 未创建远程 PR。
+- 未 merge。
+- 未 deploy。
+- 未调用模型。
+- 未新增 Desktop 执行动作。
+
+验证：
+
+- `cargo test -p agentflow-state`：pass，9 tests。
+- `cargo fmt --check`：pass。
+- `cargo test`：pass，agent-manual 23 tests + CLI 2 tests + core 61 tests + desktop 17 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 18 tests + panel 27 tests + state 9 tests。
+- `npm --prefix apps/desktop run build`：pass。
+
+## 2026-06-05 Desktop Human Audit Entry Polish
+
+执行者：Codex
+
+目标：
+
+- 将 `Desktop Human Audit Entry Polish` 补充为 `docs/requirements/012-1-desktop-human-audit-entry-polish.md`。
+- 在 Desktop 中新增人类可见的“人工审计”入口。
+- 支持选择 release delivery、填写必填 reason，并由 Desktop 自动生成 audit scope refs。
+- 成功触发后加载 `audit-report.md`，并可展开查看 findings / checklist / evidence-map / traceability。
+- Browser Preview 不执行真实 audit 写入。
+
+结果：
+
+- 新增 `OutputAuditPanel`：
+  - 读取 `load_output_index`。
+  - 读取 `load_audit_index`。
+  - 读取 `load_audit_report`。
+  - 真实 Tauri 客户端中调用 `request_human_audit`。
+  - 浏览器预览中禁用请求按钮并显示 preview-only 提示。
+- 新增前端 audit / output index 类型：
+  - `OutputIndex`
+  - `OutputIndexEntry`
+  - `AuditIndex`
+  - `AuditIndexEntry`
+  - `HumanAuditRequestDraft`
+  - `HumanAuditReport`
+- Project 页面新增“交付输出 / 人工审计”可见入口。
+- reason 为空时请求按钮禁用。
+- 无 release delivery 时显示“暂无可审计交付材料”并禁用按钮。
+- 请求成功后刷新 Output status，并默认展示最新 audit report。
+- Browser Preview mock 新增 output index / audit index / audit report 数据函数，且不调用 `request_human_audit`。
+- README / GOAL / ROADMAP / requirements index 已补充 012.1。
+
+边界：
+
+- 未改 audit 核心模型。
+- 未自动触发 audit。
+- 未在 execute / output 完成后自动审计。
+- 未写 input facts。
+- 未写 execute facts。
+- 未写 evidence。
+- 未写 release delivery。
+- 未写用户源码。
+- 未执行命令。
+- 未创建远程 PR / merge / deploy。
+- 未调用模型。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-desktop`：pass，17 tests。
+- `cargo test`：pass，agent-manual 23 tests + CLI 2 tests + core 61 tests + desktop 17 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 18 tests + panel 27 tests + state 9 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
+- Browser Preview 核对：尝试刷新 `http://127.0.0.1:1421/` 时被浏览器侧拦截，未完成可视核对；本轮以前端 build 和 mock 禁写逻辑验证为准。

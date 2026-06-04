@@ -1,0 +1,17 @@
+[package]
+name = "agentflow-state"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+agentflow-agent-manual = { path = "../agent-manual" }
+agentflow-execute = { path = "../execute" }
+agentflow-input = { path = "../input" }
+agentflow-output = { path = "../output" }
+agentflow-panel = { path = "../panel" }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
