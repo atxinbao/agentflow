@@ -33,7 +33,7 @@ pub fn build_context_pack(
     let test_hints = test_hints(project_root.as_ref(), &recommended_tests)?;
 
     let pack = GraphContextPack {
-        version: "graph-context-pack.v1".to_string(),
+        version: "panel-context-pack.v1".to_string(),
         target_type: target_type.to_string(),
         target_id: target_id.map(str::to_string),
         query,
@@ -205,7 +205,7 @@ fn persist_context_pack(project_root: impl AsRef<Path>, pack: &GraphContextPack)
             serde_json::to_string(&pack.recommended_symbols)?,
             serde_json::to_string(&pack.recommended_tests)?,
             serde_json::to_string(&pack.impact_hints)?,
-            "generated from graph search",
+            "generated from panel search",
             pack.confidence
         ],
     )?;
@@ -246,10 +246,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(pack.version, "graph-context-pack.v1");
+        assert_eq!(pack.version, "panel-context-pack.v1");
         assert!(dir
             .path()
-            .join(".agentflow/output/graph/context-packs/issue-lease.json")
+            .join(".agentflow/panel/context-packs/issue-lease.json")
             .is_file());
     }
 }

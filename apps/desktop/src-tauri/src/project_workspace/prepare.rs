@@ -119,7 +119,7 @@ fn workspace_yaml(name: &str, root: &Path) -> String {
 }
 
 fn config_yaml() -> String {
-    "version: config.v1\nmode: local\nagentflowDir: .agentflow\nworkflow:\n  define: define\n  spec: spec\n  goalTree: goal-tree\n  graph: graph\n  execute: execute\n  output: output\n  state: state\n".to_string()
+    "version: config.v1\nmode: local\nagentflowDir: .agentflow\nworkflow:\n  define: define\n  spec: spec\n  goalTree: goal-tree\n  panel: panel\n  execute: execute\n  output: output\n  state: state\n".to_string()
 }
 
 fn yaml_quote(value: &str) -> String {
@@ -167,7 +167,7 @@ mod tests {
             .is_file());
         assert!(dir.path().join(".agentflow/spec/changes").is_dir());
         assert!(dir.path().join(".agentflow/goal-tree/goals").is_dir());
-        assert!(dir.path().join(".agentflow/graph/context-packs").is_dir());
+        assert!(dir.path().join(".agentflow/panel/context-packs").is_dir());
         assert!(dir.path().join(".agentflow/execute/leases").is_dir());
         assert!(dir.path().join(".agentflow/execute/runs").is_dir());
         assert!(dir.path().join(".agentflow/execute/commands").is_dir());

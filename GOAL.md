@@ -27,8 +27,9 @@ AgentFlow 的旧目标文档已停止作为后续开发依据。
 - [008.1 - Agent Working Manual Health Polish](docs/requirements/008-1-agent-working-manual-health-polish.md)
 - [008.2 - Requirement Intake Filter Skill V1](docs/requirements/008-2-requirement-intake-filter-skill-v1.md)
 - [008.3 - AgentFlow Workflow Directory Blueprint V1](docs/requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md)
+- [008.4 - Project Panel V1](docs/requirements/008-4-project-panel-v1.md)
 
-当前目标是在 Project Workspace、Graph、Project File Reader、Goal Tree 只读边界和 Agent Working Manual / Requirement Intake 之后，实现 008.3 Workflow Directory Blueprint：将 `AGENTS.md` 设为 canonical Agent entry，保留 `AGENT.MD` legacy compatibility，建立 `.agentflow/workspace-manifest.json`，并准备 `define/spec/tdd/release/audit`、`spec/`、`goal-tree/`、`graph/`、`execute/`、`output/`、`state/` 的本地 Agent 工作流控制面骨架。
+当前目标是在 Project Workspace、Graph V1、Project File Reader、Goal Tree 只读边界和 Agent Working Manual / Requirement Intake 之后，实现 008.4 Project Panel V1：将 Graph 产品概念升级为 Panel，新的 canonical path 为 `.agentflow/panel/`，旧 `.agentflow/output/graph/` 与 `.agentflow/graph/` 仅作为 legacy compatibility。
 
 ## 当前约束
 

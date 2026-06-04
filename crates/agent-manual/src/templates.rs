@@ -84,14 +84,14 @@ You are an Agent working inside an AgentFlow-managed local project.
 - Goal Tree is agent-only and human read-only.
 - SPEC is the requirement source.
 - Goal Tree is derived from approved SPEC.
-- Graph canonical path is `.agentflow/graph/`.
-- Current Graph output compatibility path is `.agentflow/output/graph/`.
+- Panel canonical path is `.agentflow/panel/`.
+- Legacy Graph compatibility paths are `.agentflow/output/graph/` and `.agentflow/graph/`.
 - AgentRun is not authorized yet.
 
 ## Allowed Actions
 
 - Read project files.
-- Read Graph status.
+- Read Panel status.
 - Read Project File Reader metadata.
 - Read Goal Tree snapshot.
 - Read existing SPEC drafts / approvals when they exist.
@@ -272,7 +272,7 @@ Prefer project context before asking questions:
 
 - Human conversation
 - Current Project Workspace state
-- Graph status
+- Panel status
 - Project File Reader metadata
 - Existing Goal Tree snapshot
 - Existing OpenSpec drafts or approvals

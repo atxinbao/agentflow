@@ -205,7 +205,7 @@ pub(crate) fn counts(
     let relation_count: i64 =
         connection.query_row("SELECT COUNT(*) FROM relations", [], |row| row.get(0))?;
     Ok(GraphStatusSnapshot {
-        version: "graph-status.v1".to_string(),
+        version: "panel-status.v1".to_string(),
         project_root: project_root.to_string(),
         status,
         file_count: file_count.max(0) as usize,

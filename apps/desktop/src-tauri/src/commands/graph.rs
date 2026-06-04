@@ -1,4 +1,115 @@
 #[tauri::command]
+pub(crate) fn prepare_project_panel(
+    project_root: String,
+) -> Result<agentflow_graph::PanelStatusSnapshot, String> {
+    agentflow_graph::prepare_project_panel(
+        project_root,
+        agentflow_graph::PanelPrepareMode::Background,
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn load_project_panel_status(
+    project_root: String,
+) -> Result<agentflow_graph::PanelStatusSnapshot, String> {
+    agentflow_graph::load_project_panel_status(project_root).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn load_project_panel_manifest(
+    project_root: String,
+) -> Result<agentflow_graph::PanelManifestSnapshot, String> {
+    agentflow_graph::load_project_panel_manifest(project_root).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn search_project_panel(
+    project_root: String,
+    query: String,
+    limit: Option<usize>,
+) -> Result<agentflow_graph::PanelSearchSnapshot, String> {
+    agentflow_graph::search_project_panel(project_root, &query, limit)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn build_panel_context_pack(
+    project_root: String,
+    target_type: String,
+    target_id: Option<String>,
+    title: String,
+    objective: String,
+    acceptance_criteria: Option<Vec<String>>,
+) -> Result<agentflow_graph::PanelContextPack, String> {
+    let acceptance_criteria = acceptance_criteria.unwrap_or_default();
+    agentflow_graph::build_panel_context_pack(
+        project_root,
+        &target_type,
+        target_id.as_deref(),
+        &title,
+        &objective,
+        &acceptance_criteria,
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn load_panel_context_pack(
+    project_root: String,
+    target_id: String,
+) -> Result<Option<agentflow_graph::PanelContextPack>, String> {
+    agentflow_graph::load_panel_context_pack(project_root, &target_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn panel_preflight(
+    project_root: String,
+    target_type: String,
+    target_id: Option<String>,
+    title: String,
+    objective: String,
+    acceptance_criteria: Option<Vec<String>>,
+) -> Result<agentflow_graph::PanelPreflightSnapshot, String> {
+    let acceptance_criteria = acceptance_criteria.unwrap_or_default();
+    agentflow_graph::panel_preflight(
+        project_root,
+        &target_type,
+        target_id.as_deref(),
+        &title,
+        &objective,
+        &acceptance_criteria,
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn analyze_panel_impact(
+    project_root: String,
+    changed_files: Option<Vec<String>>,
+    target_files: Option<Vec<String>>,
+    target_symbols: Option<Vec<String>>,
+    query: Option<String>,
+) -> Result<agentflow_graph::PanelImpactSnapshot, String> {
+    agentflow_graph::analyze_panel_impact(
+        project_root,
+        &changed_files.unwrap_or_default(),
+        &target_files.unwrap_or_default(),
+        &target_symbols.unwrap_or_default(),
+        query.as_deref(),
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn check_panel_git_protection(
+    project_root: String,
+) -> Result<agentflow_graph::PanelProtectionSnapshot, String> {
+    agentflow_graph::check_panel_git_protection(project_root).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub(crate) fn prepare_project_graph(
     project_root: String,
 ) -> Result<agentflow_graph::GraphStatusSnapshot, String> {

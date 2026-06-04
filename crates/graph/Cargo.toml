@@ -1,5 +1,5 @@
 [package]
-name = "agentflow-graph"
+name = "agentflow-panel"
 edition.workspace = true
 license.workspace = true
 version.workspace = true

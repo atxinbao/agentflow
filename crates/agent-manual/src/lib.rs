@@ -54,7 +54,7 @@ mod tests {
             .is_file());
         assert!(dir.path().join(".agentflow/spec/changes").is_dir());
         assert!(dir.path().join(".agentflow/goal-tree/goals").is_dir());
-        assert!(dir.path().join(".agentflow/graph/context-packs").is_dir());
+        assert!(dir.path().join(".agentflow/panel/context-packs").is_dir());
         assert!(dir.path().join(".agentflow/execute/commands").is_dir());
         assert!(dir.path().join(".agentflow/output/audit").is_dir());
         assert!(dir.path().join(".agentflow/state/health").is_dir());

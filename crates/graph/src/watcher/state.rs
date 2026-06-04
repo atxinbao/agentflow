@@ -25,7 +25,7 @@ static WATCHERS: OnceLock<Mutex<HashMap<String, WatcherState>>> = OnceLock::new(
 
 pub(crate) fn ensure_starting_state(root: &Path, root_key: &str) -> (GraphWatcherSnapshot, bool) {
     let registry = WATCHERS.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut watchers = registry.lock().expect("graph watcher registry poisoned");
+    let mut watchers = registry.lock().expect("panel watcher registry poisoned");
     if let Some(state) = watchers.get(root_key) {
         return (snapshot(root, state), false);
     }
@@ -129,7 +129,7 @@ fn starting_state() -> WatcherState {
 
 fn snapshot(root: &Path, state: &WatcherState) -> GraphWatcherSnapshot {
     GraphWatcherSnapshot {
-        version: "graph-watcher.v2".to_string(),
+        version: "panel-watcher.v1".to_string(),
         project_root: root.display().to_string(),
         status: state.status.clone(),
         backend: state.backend.clone(),

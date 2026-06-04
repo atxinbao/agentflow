@@ -38,6 +38,7 @@
 - [008-1-agent-working-manual-health-polish.md](008-1-agent-working-manual-health-polish.md)
 - [008-2-requirement-intake-filter-skill-v1.md](008-2-requirement-intake-filter-skill-v1.md)
 - [008-3-agentflow-workflow-directory-blueprint-v1-final.md](008-3-agentflow-workflow-directory-blueprint-v1-final.md)
+- [008-4-project-panel-v1.md](008-4-project-panel-v1.md)
 - [next-requirements.md](next-requirements.md)
 
 ## 不继承内容

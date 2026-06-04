@@ -18,7 +18,7 @@ pub fn search_project_graph(
     let limit = limit.unwrap_or(20).clamp(1, 100);
     if query.is_empty() {
         return Ok(GraphSearchSnapshot {
-            version: "graph-search.v1".to_string(),
+            version: "panel-search.v1".to_string(),
             query: query.to_string(),
             results: Vec::new(),
         });
@@ -39,7 +39,7 @@ pub fn search_project_graph(
     results.truncate(limit);
 
     Ok(GraphSearchSnapshot {
-        version: "graph-search.v1".to_string(),
+        version: "panel-search.v1".to_string(),
         query: query.to_string(),
         results,
     })

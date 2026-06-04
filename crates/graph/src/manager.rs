@@ -8,11 +8,17 @@ use crate::{
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+const PANEL_DIR: &str = ".agentflow/panel";
+const PANEL_DB_RELATIVE_PATH: &str = ".agentflow/panel/index/panel.db";
+const PANEL_MANIFEST_RELATIVE_PATH: &str = ".agentflow/panel/manifest.json";
+const LEGACY_GRAPH_OUTPUT_DIR: &str = ".agentflow/output/graph";
+const LEGACY_GRAPH_CANONICAL_DIR: &str = ".agentflow/graph";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GraphPrepareMode {
@@ -46,7 +52,21 @@ struct GraphPaths {
     graph_db: PathBuf,
     meta: PathBuf,
     context_packs: PathBuf,
-    exports: PathBuf,
+    search: PathBuf,
+    snapshots: PathBuf,
+    index: PathBuf,
+    file_tree: PathBuf,
+    languages: PathBuf,
+    symbols: PathBuf,
+    relations: PathBuf,
+    diagnostics: PathBuf,
+    git: PathBuf,
+    tests: PathBuf,
+    file_index: PathBuf,
+    symbol_index: PathBuf,
+    content_index: PathBuf,
+    legacy_output_dir: PathBuf,
+    legacy_canonical_dir: PathBuf,
 }
 
 pub fn prepare_project_graph(
@@ -56,7 +76,7 @@ pub fn prepare_project_graph(
     let paths = prepare_paths(project_root.as_ref())?;
     let project_root_string = paths.root.display().to_string();
     let existing = load_project_graph_status(&paths.root).unwrap_or_else(|_| GraphStatusSnapshot {
-        version: "graph-status.v1".to_string(),
+        version: "panel-status.v1".to_string(),
         project_root: project_root_string.clone(),
         status: GraphStatus::Missing,
         file_count: 0,
@@ -96,7 +116,7 @@ pub fn index_project_graph(project_root: impl AsRef<Path>) -> Result<GraphStatus
     let paths = prepare_paths(project_root.as_ref())?;
     let mut connection = db::open_graph_db(&paths.graph_db)?;
     let started_at = unix_timestamp_seconds();
-    let run_id = format!("graph-run-{started_at}");
+    let run_id = format!("panel-run-{started_at}");
     let git_head = git_head(&paths.root);
     db::insert_index_run_start(
         &connection,
@@ -166,7 +186,7 @@ pub fn index_project_graph(project_root: impl AsRef<Path>) -> Result<GraphStatus
                 Vec::new(),
             )?;
             Ok(GraphStatusSnapshot {
-                version: "graph-status.v1".to_string(),
+                version: "panel-status.v1".to_string(),
                 project_root: paths.root.display().to_string(),
                 status: GraphStatus::Failed,
                 file_count: 0,
@@ -191,7 +211,7 @@ pub fn load_project_graph_status(project_root: impl AsRef<Path>) -> Result<Graph
     let paths = graph_paths(project_root.as_ref())?;
     if !paths.meta.is_file() || !paths.graph_db.is_file() {
         return Ok(GraphStatusSnapshot {
-            version: "graph-status.v1".to_string(),
+            version: "panel-status.v1".to_string(),
             project_root: paths.root.display().to_string(),
             status: GraphStatus::Missing,
             file_count: 0,
@@ -226,7 +246,7 @@ pub fn load_project_graph_status(project_root: impl AsRef<Path>) -> Result<Graph
         }
     }
     Ok(GraphStatusSnapshot {
-        version: "graph-status.v1".to_string(),
+        version: "panel-status.v1".to_string(),
         project_root: paths.root.display().to_string(),
         status: status.clone(),
         file_count: meta.file_count,
@@ -253,7 +273,7 @@ pub fn load_project_graph_manifest(
         return Ok(manifest_from_files(&paths.root, &files));
     }
     Ok(GraphManifestSnapshot {
-        version: "graph-manifest.v1".to_string(),
+        version: "panel-manifest.v1".to_string(),
         project_root: paths.root.display().to_string(),
         languages: Vec::new(),
         top_level_dirs: Vec::new(),
@@ -284,8 +304,13 @@ fn prepare_paths(project_root: &Path) -> Result<GraphPaths> {
         .with_context(|| format!("create {}", paths.graph_dir.display()))?;
     fs::create_dir_all(&paths.context_packs)
         .with_context(|| format!("create {}", paths.context_packs.display()))?;
-    fs::create_dir_all(&paths.exports)
-        .with_context(|| format!("create {}", paths.exports.display()))?;
+    fs::create_dir_all(&paths.search)
+        .with_context(|| format!("create {}", paths.search.display()))?;
+    fs::create_dir_all(&paths.snapshots)
+        .with_context(|| format!("create {}", paths.snapshots.display()))?;
+    fs::create_dir_all(&paths.index)
+        .with_context(|| format!("create {}", paths.index.display()))?;
+    migrate_legacy_panel_artifacts(&paths)?;
     Ok(paths)
 }
 
@@ -293,15 +318,108 @@ fn graph_paths(project_root: &Path) -> Result<GraphPaths> {
     let root = project_root
         .canonicalize()
         .with_context(|| format!("canonicalize {}", project_root.display()))?;
-    let graph_dir = root.join(".agentflow/output/graph");
+    let graph_dir = root.join(PANEL_DIR);
+    let search = graph_dir.join("search");
+    let snapshots = graph_dir.join("snapshots");
+    let index = graph_dir.join("index");
     Ok(GraphPaths {
-        root,
-        graph_db: graph_dir.join("graph.db"),
-        meta: graph_dir.join("meta.json"),
+        graph_db: root.join(PANEL_DB_RELATIVE_PATH),
+        meta: root.join(PANEL_MANIFEST_RELATIVE_PATH),
         context_packs: graph_dir.join("context-packs"),
-        exports: graph_dir.join("exports"),
+        file_tree: graph_dir.join("file-tree.json"),
+        languages: graph_dir.join("languages.json"),
+        symbols: graph_dir.join("symbols.json"),
+        relations: graph_dir.join("relations.json"),
+        diagnostics: graph_dir.join("diagnostics.json"),
+        git: graph_dir.join("git.json"),
+        tests: graph_dir.join("tests.json"),
+        file_index: search.join("file-index.json"),
+        symbol_index: search.join("symbol-index.json"),
+        content_index: search.join("content-index.json"),
+        legacy_output_dir: root.join(LEGACY_GRAPH_OUTPUT_DIR),
+        legacy_canonical_dir: root.join(LEGACY_GRAPH_CANONICAL_DIR),
+        root,
+        search,
+        snapshots,
+        index,
         graph_dir,
     })
+}
+
+fn migrate_legacy_panel_artifacts(paths: &GraphPaths) -> Result<()> {
+    migrate_legacy_graph_dir(paths, &paths.legacy_output_dir, "meta.json", "graph.db")?;
+    migrate_legacy_graph_dir(
+        paths,
+        &paths.legacy_canonical_dir,
+        "manifest.json",
+        "index/graph.db",
+    )?;
+    Ok(())
+}
+
+fn migrate_legacy_graph_dir(
+    paths: &GraphPaths,
+    legacy_dir: &Path,
+    legacy_manifest_name: &str,
+    legacy_db_name: &str,
+) -> Result<()> {
+    if !legacy_dir.is_dir() {
+        return Ok(());
+    }
+
+    let legacy_manifest = legacy_dir.join(legacy_manifest_name);
+    if legacy_manifest.is_file() && !paths.meta.is_file() {
+        fs::copy(&legacy_manifest, &paths.meta).with_context(|| {
+            format!(
+                "copy legacy manifest {} to {}",
+                legacy_manifest.display(),
+                paths.meta.display()
+            )
+        })?;
+    }
+
+    let legacy_db = legacy_dir.join(legacy_db_name);
+    if legacy_db.is_file() && !paths.graph_db.is_file() {
+        if let Some(parent) = paths.graph_db.parent() {
+            fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+        }
+        fs::copy(&legacy_db, &paths.graph_db).with_context(|| {
+            format!(
+                "copy legacy db {} to {}",
+                legacy_db.display(),
+                paths.graph_db.display()
+            )
+        })?;
+    }
+
+    let legacy_context_packs = legacy_dir.join("context-packs");
+    if legacy_context_packs.is_dir() {
+        copy_legacy_files_if_missing(&legacy_context_packs, &paths.context_packs)?;
+    }
+
+    Ok(())
+}
+
+fn copy_legacy_files_if_missing(source: &Path, destination: &Path) -> Result<()> {
+    fs::create_dir_all(destination).with_context(|| format!("create {}", destination.display()))?;
+    for entry in fs::read_dir(source).with_context(|| format!("read {}", source.display()))? {
+        let entry = entry?;
+        let source_path = entry.path();
+        if !source_path.is_file() {
+            continue;
+        }
+        let destination_path = destination.join(entry.file_name());
+        if !destination_path.exists() {
+            fs::copy(&source_path, &destination_path).with_context(|| {
+                format!(
+                    "copy legacy file {} to {}",
+                    source_path.display(),
+                    destination_path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
 }
 
 fn write_meta(
@@ -334,10 +452,10 @@ fn write_meta(
         };
 
     let meta = GraphMeta {
-        version: "graph.v1".to_string(),
+        version: "panel-manifest.v1".to_string(),
         status,
         project_root: paths.root.display().to_string(),
-        graph_db: ".agentflow/output/graph/graph.db".to_string(),
+        graph_db: PANEL_DB_RELATIVE_PATH.to_string(),
         updated_at: unix_timestamp_seconds(),
         git_head,
         file_count,
@@ -354,25 +472,102 @@ fn write_meta(
 }
 
 fn write_exports(paths: &GraphPaths, index: &GraphIndex) -> Result<()> {
-    let manifest = manifest_from_files(&paths.root, &index.files);
-    fs::write(
-        paths.exports.join("manifest.json"),
-        serde_json::to_string_pretty(&manifest)?,
+    let language_counts = index
+        .files
+        .iter()
+        .fold(BTreeMap::new(), |mut counts, file| {
+            if file.language != "unknown" {
+                *counts.entry(file.language.clone()).or_insert(0usize) += 1;
+            }
+            counts
+        });
+    let test_files = index
+        .files
+        .iter()
+        .filter(|file| file.is_test)
+        .collect::<Vec<_>>();
+    let snapshot_id = format!("panel-snapshot-{}", unix_timestamp_seconds());
+
+    write_json(&paths.file_tree, &index.files)?;
+    write_json(&paths.languages, &language_counts)?;
+    write_json(&paths.symbols, &index.symbols)?;
+    write_json(&paths.relations, &index.relations)?;
+    write_json(&paths.diagnostics, &Vec::<serde_json::Value>::new())?;
+    write_json(
+        &paths.git,
+        &serde_json::json!({
+            "version": "panel-git.v1",
+            "head": git_head(&paths.root),
+            "projectRoot": paths.root.display().to_string(),
+        }),
     )?;
-    write_jsonl(&paths.exports.join("files.jsonl"), &index.files)?;
-    write_jsonl(&paths.exports.join("symbols.jsonl"), &index.symbols)?;
-    write_jsonl(&paths.exports.join("relations.jsonl"), &index.relations)?;
-    write_jsonl(&paths.exports.join("chunks.jsonl"), &index.chunks)?;
+    write_json(
+        &paths.tests,
+        &test_files
+            .iter()
+            .map(|file| {
+                serde_json::json!({
+                    "path": file.path,
+                    "language": file.language,
+                    "kind": file.kind,
+                })
+            })
+            .collect::<Vec<_>>(),
+    )?;
+    write_json(
+        &paths.file_index,
+        &index
+            .files
+            .iter()
+            .map(|file| {
+                serde_json::json!({
+                    "id": file.id,
+                    "path": file.path,
+                    "name": file.name,
+                    "language": file.language,
+                    "kind": file.kind,
+                })
+            })
+            .collect::<Vec<_>>(),
+    )?;
+    write_json(&paths.symbol_index, &index.symbols)?;
+    write_json(
+        &paths.content_index,
+        &index
+            .chunks
+            .iter()
+            .map(|chunk| {
+                serde_json::json!({
+                    "id": chunk.id,
+                    "fileId": chunk.file_id,
+                    "path": chunk.path,
+                    "startLine": chunk.start_line,
+                    "endLine": chunk.end_line,
+                    "text": chunk.text,
+                    "contentHash": chunk.content_hash,
+                })
+            })
+            .collect::<Vec<_>>(),
+    )?;
+    write_json(
+        &paths.snapshots.join(format!("{snapshot_id}.json")),
+        &serde_json::json!({
+            "version": "panel-snapshot.v1",
+            "snapshotId": snapshot_id,
+            "createdAt": unix_timestamp_seconds(),
+            "projectRoot": paths.root.display().to_string(),
+            "fileCount": index.files.len(),
+            "symbolCount": index.symbols.len(),
+            "relationCount": index.relations.len(),
+            "languages": language_counts.keys().cloned().collect::<Vec<_>>(),
+        }),
+    )?;
     Ok(())
 }
 
-fn write_jsonl<T: serde::Serialize>(path: &Path, records: &[T]) -> Result<()> {
-    let mut content = String::new();
-    for record in records {
-        content.push_str(&serde_json::to_string(record)?);
-        content.push('\n');
-    }
-    fs::write(path, content).with_context(|| format!("write {}", path.display()))?;
+fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
+    fs::write(path, format!("{}\n", serde_json::to_string_pretty(value)?))
+        .with_context(|| format!("write {}", path.display()))?;
     Ok(())
 }
 
@@ -415,7 +610,7 @@ fn manifest_from_files(
         .collect();
 
     GraphManifestSnapshot {
-        version: "graph-manifest.v1".to_string(),
+        version: "panel-manifest.v1".to_string(),
         project_root: root.display().to_string(),
         languages,
         top_level_dirs,
@@ -639,7 +834,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn index_project_graph_writes_db_meta_and_exports() {
+    fn index_project_graph_writes_panel_artifacts() {
         let dir = tempdir().unwrap();
         fs::create_dir_all(dir.path().join("src")).unwrap();
         fs::write(dir.path().join("src/lib.rs"), "pub struct Lease {}\n").unwrap();
@@ -648,18 +843,31 @@ mod tests {
         let status = index_project_graph(dir.path()).unwrap();
 
         assert_eq!(status.status, GraphStatus::Ready);
+        assert!(dir.path().join(".agentflow/panel/index/panel.db").is_file());
+        assert!(dir.path().join(".agentflow/panel/manifest.json").is_file());
+        assert!(dir.path().join(".agentflow/panel/file-tree.json").is_file());
+        assert!(dir.path().join(".agentflow/panel/languages.json").is_file());
+        assert!(dir.path().join(".agentflow/panel/symbols.json").is_file());
+        assert!(dir.path().join(".agentflow/panel/relations.json").is_file());
         assert!(dir
             .path()
-            .join(".agentflow/output/graph/graph.db")
+            .join(".agentflow/panel/diagnostics.json")
+            .is_file());
+        assert!(dir.path().join(".agentflow/panel/git.json").is_file());
+        assert!(dir.path().join(".agentflow/panel/tests.json").is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/panel/search/file-index.json")
             .is_file());
         assert!(dir
             .path()
-            .join(".agentflow/output/graph/meta.json")
+            .join(".agentflow/panel/search/symbol-index.json")
             .is_file());
         assert!(dir
             .path()
-            .join(".agentflow/output/graph/exports/files.jsonl")
+            .join(".agentflow/panel/search/content-index.json")
             .is_file());
+        assert!(dir.path().join(".agentflow/panel/snapshots").is_dir());
         assert_eq!(status.file_count, 2);
         assert!(status.symbol_count >= 2);
     }
