@@ -28,10 +28,11 @@ docs/requirements/
 11. 完成 [008.4.2 - AgentFlow Workspace Ownership Guard V1](docs/requirements/008-4-2-agentflow-workspace-ownership-guard-v1.md)。
 12. 完成 [009 - Input Model V1](docs/requirements/009-input-model-v1.md)。
 13. 完成 [010 - Execute Patch / Checkpoint V1](docs/requirements/010-execute-patch-checkpoint-v1.md)。
-14. 当前执行 [010.2 - Agent Role Consolidation V2](docs/requirements/010-2-agent-role-consolidation-v2.md)。
-15. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
-16. 基于新需求重新生成开发切片。
-17. 每个切片必须明确：
+14. 完成 [010.2 - Agent Role Consolidation V2](docs/requirements/010-2-agent-role-consolidation-v2.md)。
+15. 当前执行 [011 - Output Evidence / Delivery / Audit V1](docs/requirements/011-output-evidence-delivery-audit-v1.md)。
+16. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
+17. 基于新需求重新生成开发切片。
+18. 每个切片必须明确：
    - 用户可见变化
    - 代码修改范围
    - 不允许做的事
@@ -54,5 +55,5 @@ docs/requirements/
 当前执行：
 
 ```text
-docs/requirements/010-2-agent-role-consolidation-v2.md
+docs/requirements/011-output-evidence-delivery-audit-v1.md
 ```

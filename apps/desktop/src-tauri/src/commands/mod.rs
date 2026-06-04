@@ -9,6 +9,7 @@ pub(crate) mod execute;
 pub(crate) mod goal_tree;
 pub(crate) mod input;
 pub(crate) mod legacy_core;
+pub(crate) mod output;
 pub(crate) mod panel;
 pub(crate) mod project_files;
 pub(crate) mod project_workspace;

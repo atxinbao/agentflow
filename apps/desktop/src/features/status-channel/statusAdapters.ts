@@ -2,18 +2,21 @@ import type { ProjectFilesState, ProjectPanelState } from "../project-files";
 import type { AgentManualState } from "../agent-manual";
 import type { ExecuteStatusState } from "../execute";
 import type { InputStatusState } from "../input";
+import type { OutputStatusState } from "../output";
 import type { AgentStatusChannelItem, AgentStatusTone } from "./statusTypes";
 
 export function buildAgentStatusItems({
   agentManualState,
   executeStatusState,
   inputStatusState,
+  outputStatusState,
   projectFilesState,
   projectPanelState,
 }: {
   agentManualState: AgentManualState;
   executeStatusState: ExecuteStatusState;
   inputStatusState: InputStatusState;
+  outputStatusState: OutputStatusState;
   projectFilesState: ProjectFilesState;
   projectPanelState: ProjectPanelState;
 }): AgentStatusChannelItem[] {
@@ -23,8 +26,67 @@ export function buildAgentStatusItems({
     buildWorksiteStatus(projectPanelState),
     buildInputStatus(inputStatusState),
     buildExecuteStatus(executeStatusState),
+    buildOutputStatus(outputStatusState),
     buildAgentManualStatus(agentManualState),
   ];
+}
+
+function buildOutputStatus(outputStatusState: OutputStatusState): AgentStatusChannelItem {
+  const source = "011 - Output Evidence / Delivery / Audit V1";
+  const status = outputStatusState.status;
+
+  if (outputStatusState.error) {
+    return {
+      id: "agent-output",
+      label: "交付输出",
+      status: "failed",
+      statusLabel: "异常",
+      source,
+      priority: 29,
+      error: outputStatusState.error,
+    };
+  }
+
+  if (outputStatusState.source === "loading") {
+    return {
+      id: "agent-output",
+      label: "交付输出",
+      status: "working",
+      statusLabel: "检查中",
+      source,
+      priority: 29,
+    };
+  }
+
+  if (!status) {
+    return {
+      id: "agent-output",
+      label: "交付输出",
+      status: "idle",
+      statusLabel: "未检查",
+      source,
+      priority: 29,
+    };
+  }
+
+  return {
+    id: "agent-output",
+    label: "交付输出",
+    status: inputTone(status.status),
+    statusLabel: inputStatusLabel(status.status),
+    source,
+    priority: 29,
+    metrics: [
+      { label: "Evidence", value: status.summary.evidence },
+      { label: "Delivery", value: status.summary.releaseDeliveries },
+      { label: "Audit", value: status.summary.audits },
+      {
+        label: "Incomplete",
+        value: status.summary.incompleteEvidence + status.summary.incompleteDeliveries,
+      },
+    ],
+    error: status.errors.at(0) ?? null,
+  };
 }
 
 function buildExecuteStatus(executeStatusState: ExecuteStatusState): AgentStatusChannelItem {
