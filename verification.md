@@ -3615,3 +3615,86 @@ No files were written and no command was executed.
 - `cargo test`：pass，agent-manual 21 tests + CLI 2 tests + core 61 tests + desktop 17 tests + goal-tree 3 tests + panel 27 tests。
 - `npm --prefix apps/desktop run build`：pass。
 - `git diff --check`：pass。
+
+## 2026-06-04 Input Model V1
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/009-input-model-v1.md`。
+- 将需求输入、SPEC Gate 和施工清单统一收敛到 `.agentflow/input/`。
+- 旧 `.agentflow/spec/` 与 `.agentflow/goal-tree/` 仅作为 legacy marker，不再作为新写入路径。
+
+结果：
+
+- 新增 `crates/input`，Cargo package 为 `agentflow-input`。
+- 新增 Input canonical layout：
+  - `.agentflow/input/manifest.json`
+  - `.agentflow/input/index.json`
+  - `.agentflow/input/intake/`
+  - `.agentflow/input/specs/drafts/`
+  - `.agentflow/input/specs/approved/`
+  - `.agentflow/input/specs/archive/`
+  - `.agentflow/input/projects/`
+  - `.agentflow/input/issues/`
+  - `.agentflow/input/relations/issue-relations.json`
+  - `.agentflow/input/relations/dependency-graph.json`
+  - `.agentflow/input/views/active.json`
+  - `.agentflow/input/views/blocked.json`
+  - `.agentflow/input/views/by-spec.json`
+  - `.agentflow/input/views/by-project.json`
+- 新增 Input public API：
+  - `prepare_input_workspace`
+  - `validate_input_workspace`
+  - `load_input_status`
+  - `load_input_manifest`
+  - `load_input_index`
+  - `load_input_snapshot`
+  - `repair_input_workspace`
+  - `validate_input_snapshot`
+- Input validation 已覆盖：
+  - manifest / index / required paths 缺失。
+  - Spec Gate draft / approved descriptor 文件完整性。
+  - Approved SPEC 必须有 `approval.json`。
+  - Issue 必须带 `sourceSpecId`。
+  - direct issue 必须 `projectId = null`。
+  - project issue 必须引用存在的 project。
+  - project issueIds 和 issue relations 必须引用存在的 issue。
+  - Issue model 不暴露 automation / humanGates / PR automation 等复杂自动化字段。
+  - `riskLevel = high` 才需要人类确认。
+- Agent Manual workspace layout 已接入 `.agentflow/input/**`，prepare 不再创建新的 `.agentflow/spec/` 或 `.agentflow/goal-tree/`。
+- Agentflow.md 模板已更新为 Input Model V1 能力边界：
+  - Spec Gate 使用 product.md + tech.md + approval.json。
+  - Approved SPEC 后生成 direct issue 或 project issues。
+  - 新写入只进入 `.agentflow/input/**`。
+- Desktop Tauri 新增 Input commands：
+  - `prepare_input_workspace`
+  - `load_input_status`
+  - `load_input_manifest`
+  - `load_input_index`
+  - `load_input_snapshot`
+  - `validate_input`
+- Project Workspace prepare 已接入 Input prepare，并将 input status 返回给 Desktop。
+- Desktop 状态通道新增“需求输入”事件，展示 Intake、Draft SPEC、Approved SPEC、Projects、Issues 和 High Risk 汇总。
+- Browser Preview mock 已同步 Input status 和新 skill 名称。
+- README / GOAL / ROADMAP / docs index / requirements index 已更新到 009。
+
+边界：
+
+- 未迁移旧 `.agentflow/spec/` 或 `.agentflow/goal-tree/` 数据。
+- 未强制删除旧 legacy 目录。
+- 未启用 AgentRun。
+- 未执行用户项目命令。
+- 未写用户源码。
+- 未调用模型。
+- 未创建 PR、远程 issue 或 Linear issue。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-input`：pass，8 tests。
+- `cargo test -p agentflow-desktop`：pass，17 tests。
+- `cargo test`：pass，agent-manual 21 tests + CLI 2 tests + core 61 tests + desktop 17 tests + goal-tree 3 tests + input 8 tests + panel 27 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。

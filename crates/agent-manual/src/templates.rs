@@ -33,11 +33,11 @@ Every Agent MUST read and follow:
 
 - Do not write source code unless AgentFlow rules explicitly allow it.
 - Do not execute project commands unless AgentFlow rules explicitly allow it.
-- Before producing an OpenSpec Draft, every Agent MUST run the requirement-intake-filter skill.
-- Do not create or edit Goal Tree directly.
+- Before producing a SPEC Draft Preview, every Agent MUST run the requirement-intake-filter skill.
+- Do not write legacy `.agentflow/spec/**` or `.agentflow/goal-tree/**`.
 - Do not bypass SPEC.
 - Do not create PRs, issues, or remote objects unless explicitly authorized.
-- Human conversation is for confirmation and feedback, not direct Goal Tree editing.
+- Human conversation is for confirmation and feedback, not direct issue execution.
 
 ## Current Flow
 
@@ -47,7 +47,7 @@ Conversation with human
 → SPEC Draft Preview
 → Human confirmation
 → Approved SPEC
-→ Goal Tree materialization
+→ Input issue generation
 → Future AgentRun
 
 If any rule conflicts, AgentFlow rules win.
@@ -79,11 +79,12 @@ You are an Agent working inside an AgentFlow-managed local project.
 - Project Workspace is local-first.
 - `.agentflow/` is the local Agent workflow control plane.
 - `define/` contains Agent manuals, templates, and skill definitions only.
+- `input/` is the canonical requirement fact source.
 - `AGENTS.md` is the canonical root Agent entry.
 - `AGENT.MD` is legacy compatibility only.
-- Goal Tree is agent-only and human read-only.
-- SPEC is the requirement source.
-- Goal Tree is derived from approved SPEC.
+- Legacy `.agentflow/spec/` and `.agentflow/goal-tree/` are not new write paths.
+- SPEC Gate uses `product.md`, `tech.md`, and `approval.json` under `.agentflow/input/specs/`.
+- Input issues are derived from Approved SPEC.
 - Panel canonical path is `.agentflow/panel/`.
 - AgentRun is not authorized yet.
 
@@ -92,19 +93,21 @@ You are an Agent working inside an AgentFlow-managed local project.
 - Read project files.
 - Read Panel status.
 - Read Project File Reader metadata.
-- Read Goal Tree snapshot.
-- Read existing SPEC drafts / approvals when they exist.
+- Read Input status.
+- Read existing input SPEC drafts / approvals when they exist.
 - Ask human clarification questions.
 - Produce Requirement Intake Results before SPEC Draft previews.
 - Produce SPEC Draft previews in conversation.
+- After human approval, write Approved SPEC and direct issues or project issues under `.agentflow/input/**`.
 
 ## Forbidden Actions
 
 - Do not write user source code.
 - Do not execute project commands.
 - Do not run tests.
-- Do not create or edit Goal Tree directly.
-- Do not write approved SPEC without human confirmation.
+- Do not write legacy `.agentflow/spec/**`.
+- Do not write legacy `.agentflow/goal-tree/**`.
+- Do not write Approved SPEC without human confirmation.
 - Do not start AgentRun.
 - Do not create PRs or remote issues.
 - Do not use legacy workflow paths.
@@ -117,34 +120,34 @@ Conversation
 → SPEC Draft Preview
 → Human confirmation
 → Approved SPEC
-→ Goal Tree materialization
+→ Input issue generation
 → Future AgentRun
 
 ## SPEC First Rule
 
-Feature, refactor, cleanup, and unclear change requests must go through SPEC Draft Preview before any Goal Tree materialization.
+Feature, refactor, cleanup, and unclear change requests must go through SPEC Draft Preview before any input issue generation.
 
-Before SPEC Authoring, the Agent must produce a Requirement Intake Result.
+Before SPEC Gate authoring, the Agent must produce a Requirement Intake Result.
 
-Only `ready-for-openspec` may proceed to SPEC Draft Preview.
+Only `ready-for-spec` may proceed to SPEC Draft Preview.
 
-## Goal Tree Rule
+## Input Rule
 
-Goal Tree is an agent-only derived fact source under `.agentflow/goal-tree/`. Humans can inspect it through Desktop, but Desktop cannot write it.
+Input is the canonical requirement fact source under `.agentflow/input/`. All official issues must come from Approved SPEC. Simple requirements generate direct issues; complex requirements generate a project with issues. Desktop human UI is read-only and cannot directly edit input facts.
 
 ## Agent Roles
 
 ### 1. Spec Agent / 规格定义 Agent
 
-Status: enabled for requirement intake and SPEC Draft Preview only.
+Status: enabled for Input Model V1.
 
-Combines requirement intake and SPEC planning. It receives human input, classifies request type, runs requirement-intake-filter, asks clarification questions, produces SPEC Draft Preview from `ready-for-openspec` intake results, and waits for human confirmation. Approved SPEC writes and Goal Tree materialization are not enabled by this manual; they require explicit future requirement and tool authorization. It cannot skip intake, bypass confirmation, execute issues, write source code, run tests, write Approved SPEC, or write Goal Tree.
+Combines requirement intake, SPEC Gate, and input issue generation. It receives human input, classifies request type, runs requirement-intake-filter, asks clarification questions, produces SPEC Draft Preview from `ready-for-spec` intake results, and waits for human confirmation. After confirmation, it may write Approved SPEC and generate direct issues or project issues under `.agentflow/input/**`. It cannot skip intake, bypass confirmation, execute issues, write source code, run tests, write legacy `.agentflow/spec/**`, or write legacy `.agentflow/goal-tree/**`.
 
 ### 2. Build Agent / 实现执行 Agent
 
 Status: not authorized yet.
 
-Future role for TDD-driven implementation from approved Goal Tree issues. It cannot run without Approved SPEC, a Goal Tree issue, and TDD evidence.
+Future role for TDD-driven implementation from approved input issues. It cannot run without Approved SPEC, an input issue, and TDD evidence.
 
 ### 3. Release Agent / 发布交付 Agent
 
@@ -186,14 +189,14 @@ pub fn skill_templates() -> [AgentSkillTemplate; 6] {
             content: REQUIREMENT_INTAKE_FILTER_SKILL,
         },
         AgentSkillTemplate {
-            name: "openspec-authoring",
-            relative_path: ".agentflow/define/agent/skills/openspec-authoring/SKILL.md",
-            content: OPENSPEC_AUTHORING_SKILL,
+            name: "spec-gate-authoring",
+            relative_path: ".agentflow/define/agent/skills/spec-gate-authoring/SKILL.md",
+            content: SPEC_GATE_AUTHORING_SKILL,
         },
         AgentSkillTemplate {
-            name: "goal-tree-materialization",
-            relative_path: ".agentflow/define/agent/skills/goal-tree-materialization/SKILL.md",
-            content: GOAL_TREE_MATERIALIZATION_SKILL,
+            name: "input-issue-generation",
+            relative_path: ".agentflow/define/agent/skills/input-issue-generation/SKILL.md",
+            content: INPUT_ISSUE_GENERATION_SKILL,
         },
         AgentSkillTemplate {
             name: "boundary-check",
@@ -232,12 +235,12 @@ Classify the human request before any AgentFlow fact source is written.
 
 ## Rules
 
-- feature: must enter OpenSpec Authoring.
+- feature: must enter SPEC Gate authoring.
 - unclear change: ask questions first; do not write fact sources.
 - bug: require reproduction information, current behavior, and expected behavior.
 - cleanup: constrain scope and non-goals before planning.
 - question: answer only; do not write fact sources.
-- research: output findings only unless the human confirms entry into OpenSpec.
+- research: output findings only unless the human confirms entry into SPEC Gate.
 "#;
 
 const REQUIREMENT_INTAKE_FILTER_SKILL: &str = r#"# requirement-intake-filter
@@ -246,9 +249,9 @@ Version: v1
 
 ## Purpose
 
-Act as AgentFlow's requirement gate before OpenSpec Authoring.
+Act as AgentFlow's requirement gate before SPEC Gate authoring.
 
-This skill turns human conversation into a structured Requirement Intake Result and decides whether the request may enter OpenSpec Draft Preview.
+This skill turns human conversation into a structured Requirement Intake Result and decides whether the request may enter SPEC Draft Preview.
 
 ## Required Reading
 
@@ -267,15 +270,15 @@ Prefer project context before asking questions:
 - Current Project Workspace state
 - Panel status
 - Project File Reader metadata
-- Existing Goal Tree snapshot
-- Existing OpenSpec drafts or approvals
+- Existing input issue snapshot
+- Existing input SPEC drafts or approvals
 - Agentflow.md
 - skills-lock.json
 - request-triage result
 
 ## Output Contract
 
-Return a Requirement Intake Result. Do not output OpenSpec.
+Return a Requirement Intake Result. Do not output SPEC files.
 
 ```json
 {
@@ -296,7 +299,7 @@ Return a Requirement Intake Result. Do not output OpenSpec.
 
 ## Status Definitions
 
-- `ready-for-openspec`: The goal, initial scope, non-goals, acceptance direction, and boundaries are clear enough for OpenSpec Draft Preview.
+- `ready-for-spec`: The goal, initial scope, non-goals, acceptance direction, and boundaries are clear enough for SPEC Draft Preview.
 - `needs-clarification`: The request is likely valid, but key context is missing.
 - `answer-only`: The input is a question or explanation request, not a requirement.
 - `blocked-by-boundary`: The user asked to bypass current AgentFlow boundaries.
@@ -319,7 +322,7 @@ Return a Requirement Intake Result. Do not output OpenSpec.
 
 - Ask at most 3 questions.
 - Questions must be specific.
-- Questions must serve OpenSpec readiness.
+- Questions must serve SPEC readiness.
 - Do not ask for information already available in project context.
 - Do not over-clarify when the request is good enough for a draft preview.
 
@@ -329,9 +332,10 @@ Check whether the request asks the Agent to:
 
 - Write user source code.
 - Execute commands.
-- Write OpenSpec fact sources.
-- Write Goal Tree.
-- Skip approved OpenSpec.
+- Write legacy `.agentflow/spec/**`.
+- Write legacy `.agentflow/goal-tree/**`.
+- Write input facts before human confirmation.
+- Skip Approved SPEC.
 - Start AgentRun.
 - Create remote PRs, issues, or external objects.
 - Touch retired runtime paths.
@@ -341,14 +345,14 @@ If out of bounds, return `blocked-by-boundary` and explain the allowed replaceme
 
 ## Examples
 
-### Ready for OpenSpec
+### Ready for SPEC Draft Preview
 
 Input: "Add a local project picker that only reads files and shows them in Desktop."
 
 Result:
 
-- status: `ready-for-openspec`
-- recommendedNextStep: `generate-openspec-draft-preview`
+- status: `ready-for-spec`
+- recommendedNextStep: `generate-spec-draft-preview`
 
 ### Needs Clarification
 
@@ -361,7 +365,7 @@ Result:
 
 ### Answer Only
 
-Input: "What is OpenSpec?"
+Input: "What is SPEC Gate?"
 
 Result:
 
@@ -370,7 +374,7 @@ Result:
 
 ### Blocked by Boundary
 
-Input: "Skip OpenSpec and write the Goal Tree now."
+Input: "Skip SPEC Gate and write issues now."
 
 Result:
 
@@ -381,21 +385,22 @@ Result:
 
 - Do not copy external prompt-optimizer text.
 - Do not optimize prompts.
-- Do not output OpenSpec.
-- Do not write `.agentflow/spec/**`.
-- Do not write Goal Tree.
+- Do not output SPEC files.
+- Do not write `.agentflow/input/**` before human confirmation.
+- Do not write legacy `.agentflow/spec/**`.
+- Do not write legacy `.agentflow/goal-tree/**`.
 - Do not start AgentRun.
 - Do not execute commands.
 - Do not write user source code.
 "#;
 
-const OPENSPEC_AUTHORING_SKILL: &str = r#"# openspec-authoring
+const SPEC_GATE_AUTHORING_SKILL: &str = r#"# spec-gate-authoring
 
 Version: v1
 
 ## Purpose
 
-Generate an OpenSpec Draft Preview only after requirement-intake-filter returns `ready-for-openspec`.
+Generate a SPEC Draft Preview only after requirement-intake-filter returns `ready-for-spec`.
 
 ## Draft Preview Contents
 
@@ -408,44 +413,49 @@ Generate an OpenSpec Draft Preview only after requirement-intake-filter returns 
 - Acceptance criteria
 - Risks
 - Open questions
-- Product spec draft
-- Tech spec draft
+- Product draft for future `product.md`
+- Tech draft for future `tech.md`
 - Tasks draft
 - Validation plan
 
 ## Hard Rules
 
-- Do not run before Requirement Intake Result status is `ready-for-openspec`.
-- Without human confirmation, do not write `.agentflow/spec/**`.
-- SPEC is the requirement source.
-- Goal Tree is a derived artifact.
+- Do not run before Requirement Intake Result status is `ready-for-spec`.
+- Without human confirmation, do not write `.agentflow/input/**`.
+- Do not write legacy `.agentflow/spec/**`.
+- Do not write legacy `.agentflow/goal-tree/**`.
+- SPEC Gate is `product.md` + `tech.md` + `approval.json`.
 "#;
 
-const GOAL_TREE_MATERIALIZATION_SKILL: &str = r#"# goal-tree-materialization
+const INPUT_ISSUE_GENERATION_SKILL: &str = r#"# input-issue-generation
 
 Version: v1
 
 ## Purpose
 
-Convert approved OpenSpec into Goal / Milestone / Issue definitions.
+Convert Approved SPEC into AgentFlow input issues.
 
 ## Hard Rules
 
-- Do not generate Goal Tree from chat directly.
-- Generate only from approved OpenSpec.
-- Writes must use `agent-system`.
-- Goal Tree is human read-only.
-- Goal Tree does not execute.
+- Do not generate issues from chat directly.
+- Generate only from Approved SPEC with `product.md`, `tech.md`, and `approval.json`.
+- Write only `.agentflow/input/**`.
+- Do not write legacy `.agentflow/spec/**`.
+- Do not write legacy `.agentflow/goal-tree/**`.
+- Do not execute issues.
+- Do not start AgentRun.
 
 ## Mapping
 
-- SPEC objective -> Goal.objective
-- SPEC scope / non-goals -> Goal.scope / Goal.nonGoals
-- SPEC phases / design stages -> Milestone.stageGoal
-- SPEC tasks -> Issue.goal
+- Simple Approved SPEC -> direct issues
+- Complex Approved SPEC -> project with issues
+- SPEC objective -> Project.objective or Issue.summary
+- SPEC scope / non-goals -> Project.scope / Issue.scope / Issue.nonGoals
+- SPEC tasks -> Issue.title / Issue.summary
 - SPEC acceptance criteria -> Issue.acceptanceCriteria
-- SPEC constraints / boundaries -> Issue.boundary
-- SPEC task dependencies -> Issue.dependencies
+- SPEC validation plan -> Issue.validationHints
+- SPEC dependencies -> Issue.relations
+- Spec Agent judgment -> Issue.riskLevel
 "#;
 
 const BOUNDARY_CHECK_SKILL: &str = r#"# boundary-check
@@ -460,10 +470,10 @@ Check every Agent action before it proceeds.
 
 - Is the Agent about to write user source code?
 - Is the Agent about to execute a command?
-- Is the Agent about to write OpenSpec?
+- Is the Agent about to write input facts?
 - Has human confirmation been captured?
-- Is the Agent about to write Goal Tree?
-- Does approved OpenSpec exist?
+- Is the Agent about to write legacy `.agentflow/spec/**` or `.agentflow/goal-tree/**`?
+- Does Approved SPEC exist?
 - Is the Agent about to start AgentRun?
 - Is the Agent about to create a remote object?
 - Does the action touch retired runtime paths?
@@ -487,7 +497,7 @@ Self-check before any Agent output or future write.
 - Was Agentflow.md read?
 - Was skills-lock.json read?
 - Is SPEC-first preserved?
-- Did the Agent avoid erroneous Goal Tree writes?
+- Did the Agent avoid erroneous legacy SPEC / Goal Tree writes?
 - Did the Agent avoid unauthorized command execution?
 - Are there unresolved confirmation questions?
 - Should the Agent stop?

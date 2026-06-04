@@ -5,6 +5,7 @@ members = [
     "crates/agent-manual",
     "crates/panel",
     "crates/goal-tree",
+    "crates/input",
     "apps/desktop/src-tauri",
 ]
 resolver = "2"
