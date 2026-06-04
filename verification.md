@@ -3391,3 +3391,61 @@ No files were written and no command was executed.
 - `cargo test`：pass，agent-manual 11 tests + CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + graph 26 tests。
 - `npm --prefix apps/desktop run build`：pass。
 - `git diff --check`：pass。
+
+## 2026-06-04 Project Panel V1
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/008-4-project-panel-v1.md`。
+- 将 Graph 产品概念升级为 Project Panel。
+- 将新的 canonical path 切换为 `.agentflow/panel/`。
+- 保留 `.agentflow/output/graph/` 与 `.agentflow/graph/` 作为 legacy compatibility。
+
+结果：
+
+- 新增 008.4 需求文档并登记到 `docs/requirements/README.md` 与 `next-requirements.md`。
+- `crates/graph` 的 package 名改为 `agentflow-panel`，desktop 依赖保留 `agentflow-graph` alias 以兼容既有 Rust import。
+- 新增 Panel public API：`prepare_project_panel`、`load_project_panel_status`、`load_project_panel_manifest`、`search_project_panel`、`build_panel_context_pack`、`load_panel_context_pack`、`panel_preflight`、`analyze_panel_impact`、`check_panel_git_protection`、`ensure_panel_watcher`。
+- Tauri 新增 Panel 命名 commands，旧 Graph commands 保留为 compatibility alias。
+- Panel 新写入 `.agentflow/panel/**`：
+  - `manifest.json`
+  - `file-tree.json`
+  - `languages.json`
+  - `symbols.json`
+  - `relations.json`
+  - `diagnostics.json`
+  - `git.json`
+  - `tests.json`
+  - `search/file-index.json`
+  - `search/symbol-index.json`
+  - `search/content-index.json`
+  - `context-packs/`
+  - `snapshots/`
+  - `index/panel.db`
+- `workspace-manifest.json` active layer 改为 `panel`，并新增 Panel paths：`panelManifest`、`panelFileTree`、`panelLanguages`、`panelSymbols`、`panelRelations`、`panelDiagnostics`、`panelGit`、`panelTests`、`panelSearch`、`panelContextPacks`、`panelSnapshots`、`panelIndex`。
+- `workspace-manifest.json` compat 保留 `legacyGraphOutput = .agentflow/output/graph` 和 `legacyGraphCanonical = .agentflow/graph`。
+- Desktop 优先调用 Panel commands，状态通道来源改为 `008.4 - Project Panel V1`。
+- Browser Preview 和 Goal Tree context 可见文案从 Graph 收敛为 Panel / 项目现场。
+- README / GOAL / ROADMAP 更新当前目标与 Panel canonical path。
+
+边界：
+
+- 未创建 `.agentflow/panel/output/`。
+- 未创建 `.agentflow/inspect/`。
+- 未删除旧 `.agentflow/output/graph/` 或 `.agentflow/graph/`。
+- 未写 SPEC、Goal Tree、AgentRun、Evidence、Audit report 或 Release record。
+- 未写用户源码。
+- 未执行用户项目命令。
+- 未调用模型。
+- 未创建 PR、远程 issue 或 Linear issue。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-panel`：pass，26 tests。
+- `cargo test -p agentflow-desktop`：pass，16 tests。
+- `cargo test`：pass，agent-manual 11 tests + CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + panel 26 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。

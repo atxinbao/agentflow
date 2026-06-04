@@ -91,3 +91,14 @@ export type GraphTestHint = {
   confidence: string;
   scope?: string;
 };
+
+export type PanelStatus = GraphStatus;
+export type PanelStatusSnapshot = GraphStatusSnapshot;
+export type PanelManifestSnapshot = GraphManifestSnapshot;
+export type PanelSearchSnapshot = GraphSearchSnapshot;
+export type PanelSearchResult = GraphSearchResult;
+export type PanelContextPack = GraphContextPack;
+export type PanelContextFile = GraphContextFile;
+export type PanelContextSymbol = GraphContextSymbol;
+export type PanelContextHint = GraphContextHint;
+export type PanelTestHint = GraphTestHint;

@@ -26,7 +26,7 @@ export function GoalTreeContextPanel({
         <section>
           <h3>Context Pack</h3>
           <p className="goal-tree-muted">
-            {issue.system.graphContextPackPath ?? "暂无 Agent 准备的 Graph Context。后续 Agent planning flow 会准备上下文。"}
+            {issue.system.graphContextPackPath ?? "暂无 Agent 准备的 Panel Context。后续 Agent planning flow 会准备上下文。"}
           </p>
         </section>
       ) : (
@@ -36,7 +36,7 @@ export function GoalTreeContextPanel({
       <section>
         <h3>推荐文件</h3>
         {readonlyRecommendations.length === 0 ? (
-          <p className="goal-tree-muted">暂无推荐文件。Graph 尚未 ready 时，Context 推荐可能不可用。</p>
+          <p className="goal-tree-muted">暂无推荐文件。Panel 尚未 ready 时，Context 推荐可能不可用。</p>
         ) : (
           <div className="goal-tree-file-list">
             {readonlyRecommendations.map((file) => (

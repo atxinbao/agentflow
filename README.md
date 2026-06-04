@@ -38,7 +38,7 @@ docs/requirements/
 - Agent Manual Bootstrap 会接管根目录 `AGENTS.md` 作为 canonical Agent entry，保留 `AGENT.MD` 为 legacy compatibility，并写入 `.agentflow/define/agent/**` 工作手册、skills 和 lock。
 - Workflow Directory Blueprint V1 会准备 `.agentflow/workspace-manifest.json`，并把 `define/` 收敛为 `agent/spec/tdd/release/audit` 工作手册区。
 - Goal Tree V1 是 Agent-only 事实源；008.3 起 canonical path 为 `.agentflow/goal-tree/`，旧 `.agentflow/define/**` Goal Tree 路径仅保留兼容。
-- Graph canonical path 为 `.agentflow/graph/`；当前 `.agentflow/output/graph/` 仍作为兼容输出路径保留。
+- Project Panel canonical path 为 `.agentflow/panel/`；旧 `.agentflow/output/graph/` 与 `.agentflow/graph/` 仅作为 legacy compatibility 保留。
 - 不执行命令。
 - 不写用户业务源码。
 - 不写旧 `.agentflow/issues`、`runs`、`evidence`、`reviews`、`updates`、`views` 路径。
@@ -66,6 +66,7 @@ npm run tauri -- dev
 npm --prefix apps/desktop run build
 cargo test -p agentflow-agent-manual
 cargo test -p agentflow-goal-tree
+cargo test -p agentflow-panel
 cargo test
 git diff --check
 ```

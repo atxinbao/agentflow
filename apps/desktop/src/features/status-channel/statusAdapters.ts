@@ -159,7 +159,7 @@ function buildWorkspaceStatus(projectFilesState: ProjectFilesState): AgentStatus
 }
 
 function buildWorksiteStatus(projectGraphState: ProjectGraphState): AgentStatusChannelItem {
-  const source = "002 - Graph V1";
+  const source = "008.4 - Project Panel V1";
   const graphStatus = projectGraphState.status?.status ?? "missing";
   const languageText = projectGraphState.manifest?.languages.length
     ? projectGraphState.manifest.languages.slice(0, 5).join(" / ")

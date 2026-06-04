@@ -263,3 +263,24 @@ pub struct GraphIndex {
     pub relations: Vec<GraphRelationRecord>,
     pub chunks: Vec<GraphChunkRecord>,
 }
+
+pub type PanelStatus = GraphStatus;
+pub type PanelStatusSnapshot = GraphStatusSnapshot;
+pub type PanelWatcherDetail = GraphWatcherDetail;
+pub type PanelManifestSnapshot = GraphManifestSnapshot;
+pub type PanelFileRecord = GraphFileRecord;
+pub type PanelSymbolRecord = GraphSymbolRecord;
+pub type PanelRelationRecord = GraphRelationRecord;
+pub type PanelChunkRecord = GraphChunkRecord;
+pub type PanelSearchSnapshot = GraphSearchSnapshot;
+pub type PanelSearchResult = GraphSearchResult;
+pub type PanelContextPack = GraphContextPack;
+pub type PanelContextFile = GraphContextFile;
+pub type PanelContextSymbol = GraphContextSymbol;
+pub type PanelContextHint = GraphContextHint;
+pub type PanelTestHint = GraphTestHint;
+pub type PanelPreflightSnapshot = GraphPreflightSnapshot;
+pub type PanelImpactSnapshot = GraphImpactSnapshot;
+pub type PanelProtectionSnapshot = GraphProtectionSnapshot;
+pub type PanelWatcherSnapshot = GraphWatcherSnapshot;
+pub type PanelIndex = GraphIndex;

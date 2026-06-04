@@ -157,7 +157,7 @@ pub fn analyze_graph_impact(
     reasons.sort();
     reasons.dedup();
     Ok(GraphImpactSnapshot {
-        version: "graph-impact.v1".to_string(),
+        version: "panel-impact.v1".to_string(),
         project_root: project_root.display().to_string(),
         possibly_affected_files,
         possibly_affected_symbols,

@@ -25,10 +25,11 @@ docs/requirements/
 8. 完成 [006 - Legacy CLI Retirement and Archive Pruning](docs/requirements/006-legacy-cli-retirement-and-archive-pruning.md)。
 9. 完成 [007 - Goal Tree V1](docs/requirements/007-goal-tree-v1.md) 和 [007.1 - Goal Tree Agent-only Boundary Fix](docs/requirements/007-1-goal-tree-agent-only-boundary-fix.md)。
 10. 完成 [008 - Agent Working Manual Bootstrap V1](docs/requirements/008-agent-working-manual-bootstrap-v1.md)、[008.1 - Agent Working Manual Health Polish](docs/requirements/008-1-agent-working-manual-health-polish.md) 和 [008.2 - Requirement Intake Filter Skill V1](docs/requirements/008-2-requirement-intake-filter-skill-v1.md)。
-11. 当前执行 [008.3 - AgentFlow Workflow Directory Blueprint V1](docs/requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md)。
-12. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
-13. 基于新需求重新生成开发切片。
-14. 每个切片必须明确：
+11. 完成 [008.3 - AgentFlow Workflow Directory Blueprint V1](docs/requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md)。
+12. 当前执行 [008.4 - Project Panel V1](docs/requirements/008-4-project-panel-v1.md)。
+13. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
+14. 基于新需求重新生成开发切片。
+15. 每个切片必须明确：
    - 用户可见变化
    - 代码修改范围
    - 不允许做的事
@@ -51,5 +52,5 @@ docs/requirements/
 当前执行：
 
 ```text
-docs/requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md
+docs/requirements/008-4-project-panel-v1.md
 ```

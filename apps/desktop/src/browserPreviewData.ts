@@ -390,11 +390,11 @@ export function createBrowserPreviewGoalTreeSnapshot(projectRoot = BROWSER_PREVI
           successCriteria: ["目标树可读取。", "Desktop 不显示写入入口。", "完整性 warning 可见。"],
           milestoneOrder: [previewMilestoneId],
           validationGate: ["cargo test -p agentflow-goal-tree", "npm --prefix apps/desktop run build"],
-          closureGate: ["人类 UI 不写 .agentflow/define/**。", "人类 UI 不写 Graph Context Pack。"],
+          closureGate: ["人类 UI 不写 .agentflow/define/**。", "人类 UI 不写 Panel Context Pack。"],
         },
         agentDraft: {
           suggestedMilestones: ["Desktop 只读收敛", "Tauri command 收窄"],
-          suggestedRisks: ["Graph 缺失时推荐上下文不完整。"],
+          suggestedRisks: ["Panel 缺失时推荐上下文不完整。"],
           suggestedQuestions: ["未来 Agent planning flow 如何授权写入？"],
           suggestedIssueBreakdown: ["移除 Desktop 写入入口", "收窄 Tauri command", "标注 agent-only API"],
         },
@@ -474,7 +474,7 @@ export function createBrowserPreviewGoalTreeSnapshot(projectRoot = BROWSER_PREVI
           updatedBy: "agent-system",
           path: `.agentflow/define/issues/${previewIssueId}.json`,
           revision: 1,
-          graphContextPackPath: ".agentflow/output/graph/context-packs/iss-001.json",
+          graphContextPackPath: ".agentflow/panel/context-packs/iss-001.json",
         },
       },
     ],
@@ -545,7 +545,7 @@ export function createBrowserPreviewProjectFilesSnapshot(
 
 export function createBrowserPreviewGraphStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): GraphStatusSnapshot {
   return {
-    version: "graph-status.browser-preview",
+    version: "panel-status.browser-preview",
     projectRoot,
     status: "ready",
     fileCount: 9,
@@ -624,7 +624,7 @@ export function createBrowserPreviewAgentEnvironmentStatus(
         ".agentflow/define/audit/AUDIT.md",
         ".agentflow/spec",
         ".agentflow/goal-tree",
-        ".agentflow/graph",
+        ".agentflow/panel",
         ".agentflow/execute",
         ".agentflow/output",
         ".agentflow/state",
@@ -654,7 +654,7 @@ export function createBrowserPreviewAgentEnvironmentStatus(
 
 export function createBrowserPreviewGraphManifest(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): GraphManifestSnapshot {
   return {
-    version: "graph-manifest.browser-preview",
+    version: "panel-manifest.browser-preview",
     projectRoot,
     languages: ["markdown", "typescript", "rust", "toml", "json"],
     topLevelDirs: [".agentflow", ".git", "apps", "crates", "docs", "target"],
@@ -674,7 +674,7 @@ export function createBrowserPreviewGraphManifest(projectRoot = BROWSER_PREVIEW_
 export function createBrowserPreviewGraphSearch(query: string): GraphSearchSnapshot {
   const normalizedQuery = query.trim() || "project";
   return {
-    version: "graph-search.browser-preview",
+    version: "panel-search.browser-preview",
     query: normalizedQuery,
     results: [
       {
@@ -690,11 +690,11 @@ export function createBrowserPreviewGraphSearch(query: string): GraphSearchSnaps
       {
         kind: "symbol",
         path: "crates/graph/src/manager.rs",
-        title: "prepare_project_graph",
+        title: "prepare_project_panel",
         language: "rust",
         symbolKind: "function",
         line: 28,
-        snippet: "准备本地 Graph V1 索引目录和状态。",
+        snippet: "准备本地 Project Panel 索引目录和状态。",
         score: 0.82,
       },
     ],
@@ -703,10 +703,10 @@ export function createBrowserPreviewGraphSearch(query: string): GraphSearchSnaps
 
 export function createBrowserPreviewGraphContextPack(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): GraphContextPack {
   return {
-    version: "graph-context-pack.browser-preview",
+    version: "panel-context-pack.browser-preview",
     targetType: "preview",
     targetId: "browser-preview",
-    query: "Project 文件阅读器 Graph V1 浏览器预览",
+    query: "Project 文件阅读器 Panel V1 浏览器预览",
     createdAt: previewTimestamp,
     graphRevision: "browser-preview",
     recommendedFiles: [

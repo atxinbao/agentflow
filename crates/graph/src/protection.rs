@@ -12,12 +12,12 @@ pub fn check_graph_git_protection(
         .as_ref()
         .canonicalize()
         .with_context(|| format!("canonicalize {}", project_root.as_ref().display()))?;
-    let graph_output_root = root.join(".agentflow/output/graph");
+    let graph_output_root = root.join(".agentflow/panel");
     let git_dir = resolve_git_dir(&root);
 
     let Some(git_dir) = git_dir else {
         return Ok(GraphProtectionSnapshot {
-            version: "graph-protection.v1".to_string(),
+            version: "panel-protection.v1".to_string(),
             project_root: root.display().to_string(),
             status: "ready".to_string(),
             graph_output_root: graph_output_root.display().to_string(),
@@ -33,6 +33,8 @@ pub fn check_graph_git_protection(
     let protected_by_info_exclude = exclude_content.lines().map(str::trim).any(|line| {
         line == ".agentflow/"
             || line == ".agentflow"
+            || line == ".agentflow/panel/"
+            || line == ".agentflow/panel"
             || line == ".agentflow/output/graph/"
             || line == ".agentflow/output/graph"
     });
@@ -44,11 +46,11 @@ pub fn check_graph_git_protection(
     let reason = if protected_by_info_exclude {
         ".git/info/exclude 已保护 .agentflow/ 本地运行目录。"
     } else {
-        ".git/info/exclude 缺少 .agentflow/ 保护，Graph 产物可能被误加入 Git。"
+        ".git/info/exclude 缺少 .agentflow/ 保护，Panel 产物可能被误加入 Git。"
     };
 
     Ok(GraphProtectionSnapshot {
-        version: "graph-protection.v1".to_string(),
+        version: "panel-protection.v1".to_string(),
         project_root: root.display().to_string(),
         status: status.to_string(),
         graph_output_root: graph_output_root.display().to_string(),

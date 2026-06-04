@@ -27,7 +27,7 @@ pub fn preflight_graph_for_target(
 
     if status.status == GraphStatus::Failed {
         return Ok(GraphPreflightSnapshot {
-            version: "graph-preflight.v1".to_string(),
+            version: "panel-preflight.v1".to_string(),
             project_root: project_root.display().to_string(),
             target_type: target_type.to_string(),
             target_id: target_id.map(str::to_string),
@@ -35,7 +35,7 @@ pub fn preflight_graph_for_target(
             ready: false,
             reason: status
                 .last_error
-                .unwrap_or_else(|| "Graph 构建失败，阻止自动 AgentRun。".to_string()),
+                .unwrap_or_else(|| "Panel 构建失败，阻止自动 AgentRun。".to_string()),
             graph_status: GraphStatus::Failed,
             context_pack_path: None,
             recommended_files: Vec::new(),
@@ -71,22 +71,22 @@ pub fn preflight_graph_for_target(
     )?;
     let context_pack_path = target_id.map(|id| {
         format!(
-            ".agentflow/output/graph/context-packs/{}.json",
+            ".agentflow/panel/context-packs/{}.json",
             id.replace('/', "-")
         )
     });
 
     Ok(GraphPreflightSnapshot {
-        version: "graph-preflight.v1".to_string(),
+        version: "panel-preflight.v1".to_string(),
         project_root: project_root.display().to_string(),
         target_type: target_type.to_string(),
         target_id: target_id.map(str::to_string),
         status: "ready".to_string(),
         ready: status.status == GraphStatus::Ready || status.status == GraphStatus::Degraded,
         reason: if status.status == GraphStatus::Degraded {
-            "Graph 可用但存在降级原因，AgentRun 需要记录原因。".to_string()
+            "Panel 可用但存在降级原因，AgentRun 需要记录原因。".to_string()
         } else {
-            "Graph 已就绪，Context Pack 已生成。".to_string()
+            "Panel 已就绪，Context Pack 已生成。".to_string()
         },
         graph_status: status.status,
         context_pack_path,
@@ -134,7 +134,7 @@ mod tests {
         assert!(snapshot.ready);
         assert!(dir
             .path()
-            .join(".agentflow/output/graph/context-packs/issue-lease.json")
+            .join(".agentflow/panel/context-packs/issue-lease.json")
             .is_file());
     }
 
@@ -165,16 +165,17 @@ mod tests {
     #[test]
     fn preflight_reports_failed_graph_as_not_ready() {
         let dir = tempdir().unwrap();
-        let graph_dir = dir.path().join(".agentflow/output/graph");
+        let graph_dir = dir.path().join(".agentflow/panel");
         fs::create_dir_all(&graph_dir).unwrap();
-        fs::write(graph_dir.join("graph.db"), "").unwrap();
+        fs::create_dir_all(graph_dir.join("index")).unwrap();
+        fs::write(graph_dir.join("index/panel.db"), "").unwrap();
         fs::write(
-            graph_dir.join("meta.json"),
+            graph_dir.join("manifest.json"),
             r#"{
-  "version": "graph.v1",
+  "version": "panel-manifest.v1",
   "status": "failed",
   "projectRoot": "",
-  "graphDb": ".agentflow/output/graph/graph.db",
+  "graphDb": ".agentflow/panel/index/panel.db",
   "updatedAt": 1,
   "gitHead": null,
   "fileCount": 0,

@@ -20,7 +20,7 @@ pub(crate) const SHADOW_CANDIDATES: [&str; 8] = [
     "GEMINI.md",
 ];
 
-const LAYOUT_DIRECTORIES: [&str; 49] = [
+const LAYOUT_DIRECTORIES: &[&str] = &[
     ".agentflow/define/agent",
     ".agentflow/define/agent/skills",
     ".agentflow/define/agent/state",
@@ -45,11 +45,11 @@ const LAYOUT_DIRECTORIES: [&str; 49] = [
     ".agentflow/goal-tree/milestones",
     ".agentflow/goal-tree/issues",
     ".agentflow/goal-tree/materialization",
-    ".agentflow/graph",
-    ".agentflow/graph/context-packs",
-    ".agentflow/graph/search",
-    ".agentflow/graph/files",
-    ".agentflow/graph/index",
+    ".agentflow/panel",
+    ".agentflow/panel/context-packs",
+    ".agentflow/panel/search",
+    ".agentflow/panel/snapshots",
+    ".agentflow/panel/index",
     ".agentflow/execute",
     ".agentflow/execute/runs",
     ".agentflow/execute/leases",
@@ -62,9 +62,6 @@ const LAYOUT_DIRECTORIES: [&str; 49] = [
     ".agentflow/output/logs",
     ".agentflow/output/cache",
     ".agentflow/output/tmp",
-    ".agentflow/output/graph",
-    ".agentflow/output/graph/context-packs",
-    ".agentflow/output/graph/exports",
     ".agentflow/state",
     ".agentflow/state/health",
     ".agentflow/state/locks",
@@ -88,7 +85,7 @@ pub(crate) fn prepare_workspace_layout(
     let mut created_paths = Vec::new();
     let mut reused_paths = Vec::new();
 
-    for relative_path in LAYOUT_DIRECTORIES {
+    for relative_path in LAYOUT_DIRECTORIES.iter().copied() {
         ensure_directory(
             &root.join(relative_path),
             root,
@@ -139,7 +136,8 @@ pub(crate) fn validate_workspace_layout(
     root: &Path,
 ) -> Result<(WorkspaceManifestStatus, WorkspaceLayoutStatus)> {
     let missing_paths = LAYOUT_DIRECTORIES
-        .into_iter()
+        .iter()
+        .copied()
         .chain(LAYOUT_FILES.into_iter().map(|(path, _)| path))
         .filter(|relative_path| !root.join(relative_path).exists())
         .map(str::to_string)
@@ -221,7 +219,7 @@ pub(crate) fn expected_workspace_manifest(root: &Path, warnings: &[String]) -> W
         active_layers: vec![
             "workspace".to_string(),
             "agent-manual".to_string(),
-            "graph".to_string(),
+            "panel".to_string(),
             "project-file-reader".to_string(),
             "requirement-intake".to_string(),
         ],
@@ -255,7 +253,55 @@ pub(crate) fn expected_workspace_manifest(root: &Path, warnings: &[String]) -> W
             ),
             ("spec".to_string(), ".agentflow/spec".to_string()),
             ("goalTree".to_string(), ".agentflow/goal-tree".to_string()),
-            ("graph".to_string(), ".agentflow/graph".to_string()),
+            ("panel".to_string(), ".agentflow/panel".to_string()),
+            (
+                "panelManifest".to_string(),
+                ".agentflow/panel/manifest.json".to_string(),
+            ),
+            (
+                "panelFileTree".to_string(),
+                ".agentflow/panel/file-tree.json".to_string(),
+            ),
+            (
+                "panelLanguages".to_string(),
+                ".agentflow/panel/languages.json".to_string(),
+            ),
+            (
+                "panelSymbols".to_string(),
+                ".agentflow/panel/symbols.json".to_string(),
+            ),
+            (
+                "panelRelations".to_string(),
+                ".agentflow/panel/relations.json".to_string(),
+            ),
+            (
+                "panelDiagnostics".to_string(),
+                ".agentflow/panel/diagnostics.json".to_string(),
+            ),
+            (
+                "panelGit".to_string(),
+                ".agentflow/panel/git.json".to_string(),
+            ),
+            (
+                "panelTests".to_string(),
+                ".agentflow/panel/tests.json".to_string(),
+            ),
+            (
+                "panelSearch".to_string(),
+                ".agentflow/panel/search".to_string(),
+            ),
+            (
+                "panelContextPacks".to_string(),
+                ".agentflow/panel/context-packs".to_string(),
+            ),
+            (
+                "panelSnapshots".to_string(),
+                ".agentflow/panel/snapshots".to_string(),
+            ),
+            (
+                "panelIndex".to_string(),
+                ".agentflow/panel/index".to_string(),
+            ),
             ("execute".to_string(), ".agentflow/execute".to_string()),
             ("output".to_string(), ".agentflow/output".to_string()),
             ("state".to_string(), ".agentflow/state".to_string()),
@@ -264,6 +310,10 @@ pub(crate) fn expected_workspace_manifest(root: &Path, warnings: &[String]) -> W
             (
                 "legacyGraphOutput".to_string(),
                 ".agentflow/output/graph".to_string(),
+            ),
+            (
+                "legacyGraphCanonical".to_string(),
+                ".agentflow/graph".to_string(),
             ),
             (
                 "legacyGoalTreeDefine".to_string(),

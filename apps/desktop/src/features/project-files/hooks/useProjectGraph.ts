@@ -34,7 +34,7 @@ const initialProjectGraphState: ProjectGraphState = {
 
 function readableProjectGraphError(error: unknown) {
   if (isBrowserPreviewRuntime()) {
-    return "当前为浏览器预览，正在显示 Mock 代码地图；真实索引请在桌面客户端查看。";
+    return "当前为浏览器预览，正在显示 Mock 项目现场；真实 Panel 请在桌面客户端查看。";
   }
   return error instanceof Error ? error.message : String(error);
 }
@@ -51,8 +51,8 @@ export function useProjectGraph(projectRoot: string | null) {
       setProjectGraphState((current) => ({ ...current, error: null, source: "loading" }));
       try {
         const [status, manifest] = await Promise.all([
-          invoke<GraphStatusSnapshot>("load_project_graph_status", { projectRoot: root }),
-          invoke<GraphManifestSnapshot>("load_project_graph_manifest", { projectRoot: root }),
+          invoke<GraphStatusSnapshot>("load_project_panel_status", { projectRoot: root }),
+          invoke<GraphManifestSnapshot>("load_project_panel_manifest", { projectRoot: root }),
         ]);
         setProjectGraphState((current) => ({
           ...current,
@@ -92,8 +92,8 @@ export function useProjectGraph(projectRoot: string | null) {
       }
       setProjectGraphState((current) => ({ ...current, error: null, source: "loading" }));
       try {
-        const status = await invoke<GraphStatusSnapshot>("prepare_project_graph", { projectRoot: root });
-        const manifest = await invoke<GraphManifestSnapshot>("load_project_graph_manifest", { projectRoot: root });
+        const status = await invoke<GraphStatusSnapshot>("prepare_project_panel", { projectRoot: root });
+        const manifest = await invoke<GraphManifestSnapshot>("load_project_panel_manifest", { projectRoot: root });
         setProjectGraphState((current) => ({
           ...current,
           status,
@@ -135,7 +135,7 @@ export function useProjectGraph(projectRoot: string | null) {
         return null;
       }
       try {
-        const result = await invoke<GraphSearchSnapshot>("search_project_graph", {
+        const result = await invoke<GraphSearchSnapshot>("search_project_panel", {
           projectRoot: root,
           query,
           limit,
@@ -168,7 +168,7 @@ export function useProjectGraph(projectRoot: string | null) {
         return null;
       }
       try {
-        const pack = await invoke<GraphContextPack>("build_graph_context_pack", {
+        const pack = await invoke<GraphContextPack>("build_panel_context_pack", {
           projectRoot: root,
           targetType,
           targetId,
