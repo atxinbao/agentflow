@@ -31,8 +31,9 @@ AgentFlow 的旧目标文档已停止作为后续开发依据。
 - [010 - Execute Patch / Checkpoint V1](docs/requirements/010-execute-patch-checkpoint-v1.md)
 - [010.2 - Agent Role Consolidation V2](docs/requirements/010-2-agent-role-consolidation-v2.md)
 - [011 - Output Evidence / Delivery / Audit V1](docs/requirements/011-output-evidence-delivery-audit-v1.md)
+- [012 - Human-triggered Audit Report V1](docs/requirements/012-human-triggered-audit-report-v1.md)
 
-当前目标是在 Execute Patch / Checkpoint V1 和 Agent Role Consolidation V2 之后，实现 011 Output Evidence / Delivery / Audit V1：将 `.agentflow/output/` 收口为交付与证据层，包含 Build Agent 的 evidence、Build Agent 的 release delivery、本轮只创建 skeleton 的 Audit Agent audit output。
+当前目标是在 011 Output Evidence / Delivery / Audit V1 之后，实现 012 Human-triggered Audit Report V1：Audit 不再是每次 execute / output 的默认步骤，而是人类主动触发后生成 `.agentflow/output/audit/<audit-id>/` 完整审计报告包。
 
 ## 当前约束
 

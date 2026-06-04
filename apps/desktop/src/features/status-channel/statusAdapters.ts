@@ -32,7 +32,7 @@ export function buildAgentStatusItems({
 }
 
 function buildOutputStatus(outputStatusState: OutputStatusState): AgentStatusChannelItem {
-  const source = "011 - Output Evidence / Delivery / Audit V1";
+  const source = "012 - Human-triggered Audit Report V1";
   const status = outputStatusState.status;
 
   if (outputStatusState.error) {
@@ -77,11 +77,11 @@ function buildOutputStatus(outputStatusState: OutputStatusState): AgentStatusCha
     source,
     priority: 29,
     metrics: [
-      { label: "Evidence", value: status.summary.evidence },
-      { label: "Delivery", value: status.summary.releaseDeliveries },
-      { label: "Audit", value: status.summary.audits },
+      { label: "证据", value: status.summary.evidence },
+      { label: "交付", value: status.summary.releaseDeliveries },
+      { label: "审计", value: status.summary.audits },
       {
-        label: "Incomplete",
+        label: "未完成",
         value: status.summary.incompleteEvidence + status.summary.incompleteDeliveries,
       },
     ],

@@ -40,7 +40,8 @@ docs/requirements/
 - Input Model V1 是新的需求事实源；canonical path 为 `.agentflow/input/`，旧 `.agentflow/spec/` 和 `.agentflow/goal-tree/` 仅作为 legacy marker，不再作为新写入路径。
 - Execute Patch / Checkpoint V1 是受控执行层；canonical path 为 `.agentflow/execute/`，只能从 `.agentflow/input/issues/<issue-id>.json` 启动，结果证据写入 `.agentflow/output/evidence/`。
 - Agent Role Consolidation V2 将顶层 Agent 角色收敛为 Spec / Build / Audit；Release Agent 不再独立存在，release delivery 能力归入 Build Agent，交付材料写入 `.agentflow/output/release/`。
-- Output Evidence / Delivery / Audit V1 将 `.agentflow/output/` 收口为交付与证据层：`output/evidence` 是 Build Agent 执行证明，`output/release` 是 Build Agent 本地交付材料，`output/audit` 是 Audit Agent 未来审计 skeleton。
+- Output Evidence / Delivery / Audit V1 将 `.agentflow/output/` 收口为交付与证据层：`output/evidence` 是 Build Agent 执行证明，`output/release` 是 Build Agent 本地交付材料。
+- Human-triggered Audit Report V1 将 `output/audit` 明确为人类主动触发的完整审计报告包；它不会随 execute / output 自动生成，只在 `request_human_audit` 后写入 `.agentflow/output/audit/<audit-id>/`。
 - Project Panel canonical path 为 `.agentflow/panel/`；不再保留旧代码地图兼容路径。
 - Desktop human UI 不执行命令。
 - Execute API 允许 Agent-only 受控 patch / command，但必须通过 preflight、lease、plan、checkpoint 和 allowedWritePaths / allowedCommands。

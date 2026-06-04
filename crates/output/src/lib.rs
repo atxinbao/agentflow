@@ -4,7 +4,10 @@ pub mod model;
 pub mod storage;
 pub mod validate;
 
-pub use audit::{create_audit_skeleton, load_audit_output};
+pub use audit::{
+    load_audit_index, load_audit_manifest, load_audit_report, load_audit_status,
+    prepare_audit_workspace, request_human_audit,
+};
 pub use manager::{
     load_output_index, load_output_manifest, load_output_snapshot, load_output_status,
     prepare_output_workspace, validate_output,
@@ -24,12 +27,16 @@ mod tests {
     use tempfile::tempdir;
 
     fn valid_evidence(run_id: &str) -> OutputEvidence {
+        valid_evidence_with_risk(run_id, "medium")
+    }
+
+    fn valid_evidence_with_risk(run_id: &str, risk_level: &str) -> OutputEvidence {
         OutputEvidence {
             version: OUTPUT_EVIDENCE_VERSION.to_string(),
             run_id: run_id.to_string(),
             issue_id: "iss-001".to_string(),
             source_spec_id: "spec-001".to_string(),
-            risk_level: "medium".to_string(),
+            risk_level: risk_level.to_string(),
             completed_at: 1,
             summary: "Evidence fixture".to_string(),
             input: OutputEvidenceInput {
@@ -87,7 +94,19 @@ mod tests {
         ensure_directory(&run_dir.join("review")).unwrap();
         fs::write(run_dir.join("run.json"), "{}\n").unwrap();
         fs::write(run_dir.join("preflight.json"), "{}\n").unwrap();
-        fs::write(run_dir.join("plan.json"), "{}\n").unwrap();
+        fs::write(
+            run_dir.join("plan.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": "execute-plan.v1",
+                "runId": run_id,
+                "issueId": "iss-001",
+                "steps": [],
+                "allowedWritePaths": ["src"],
+                "allowedCommands": ["cargo test"]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
         fs::write(
             run_dir.join("result.json"),
             serde_json::to_string_pretty(&json!({
@@ -98,7 +117,23 @@ mod tests {
         .unwrap();
         fs::write(run_dir.join("checkpoints/chk-001.json"), "{}\n").unwrap();
         fs::write(run_dir.join("patches/worktree.diff"), "diff\n").unwrap();
-        fs::write(run_dir.join("patches/changed-files.json"), "{}\n").unwrap();
+        fs::write(
+            run_dir.join("patches/changed-files.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": "execute-changed-files.v1",
+                "runId": run_id,
+                "files": [
+                    {
+                        "path": "src/lib.rs",
+                        "changeType": "modified",
+                        "insertions": 1,
+                        "deletions": 0
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
         fs::write(run_dir.join("review/diff-summary.json"), "{}\n").unwrap();
         fs::write(run_dir.join("commands/cmd-001.json"), "{}\n").unwrap();
         fs::write(run_dir.join("commands/cmd-001.stdout.txt"), "ok\n").unwrap();
@@ -116,7 +151,22 @@ mod tests {
         .unwrap();
     }
 
+    fn write_evidence_with_risk(root: &std::path::Path, run_id: &str, risk_level: &str) {
+        write_execute_artifacts(root, run_id);
+        write_json(
+            &root
+                .join(".agentflow/output/evidence")
+                .join(format!("{run_id}.json")),
+            &valid_evidence_with_risk(run_id, risk_level),
+        )
+        .unwrap();
+    }
+
     fn write_release_delivery(root: &std::path::Path, run_id: &str) {
+        write_release_delivery_with_risk(root, run_id, "medium");
+    }
+
+    fn write_release_delivery_with_risk(root: &std::path::Path, run_id: &str, risk_level: &str) {
         let dir = root.join(".agentflow/output/release").join(run_id);
         ensure_directory(&dir).unwrap();
         let relative_dir = format!(".agentflow/output/release/{run_id}");
@@ -125,7 +175,7 @@ mod tests {
             run_id: run_id.to_string(),
             issue_id: "iss-001".to_string(),
             source_spec_id: "spec-001".to_string(),
-            risk_level: "medium".to_string(),
+            risk_level: risk_level.to_string(),
             status: "drafted".to_string(),
             created_by: "Build Agent".to_string(),
             created_at: 1,
@@ -165,6 +215,42 @@ mod tests {
             "release-note.md",
         ] {
             fs::write(dir.join(file), "# fixture\n").unwrap();
+        }
+    }
+
+    fn audit_request(run_id: &str) -> HumanAuditRequestDraft {
+        HumanAuditRequestDraft {
+            reason: "Human requested audit before accepting delivery.".to_string(),
+            scope: AuditScope {
+                description: "Review Build Agent delivery evidence chain.".to_string(),
+                refs: vec![
+                    AuditScopeRef {
+                        kind: "spec".to_string(),
+                        id: "spec-001".to_string(),
+                        path: ".agentflow/input/specs/approved/spec-001/".to_string(),
+                    },
+                    AuditScopeRef {
+                        kind: "issue".to_string(),
+                        id: "iss-001".to_string(),
+                        path: ".agentflow/input/issues/iss-001.json".to_string(),
+                    },
+                    AuditScopeRef {
+                        kind: "execute-run".to_string(),
+                        id: run_id.to_string(),
+                        path: format!(".agentflow/execute/runs/{run_id}/"),
+                    },
+                    AuditScopeRef {
+                        kind: "evidence".to_string(),
+                        id: run_id.to_string(),
+                        path: format!(".agentflow/output/evidence/{run_id}.json"),
+                    },
+                    AuditScopeRef {
+                        kind: "release-delivery".to_string(),
+                        id: run_id.to_string(),
+                        path: format!(".agentflow/output/release/{run_id}/delivery.json"),
+                    },
+                ],
+            },
         }
     }
 
@@ -274,32 +360,214 @@ mod tests {
     }
 
     #[test]
-    fn output_audit_skeleton_can_be_created_for_run() {
+    fn prepare_audit_space_only_creates_manifest_and_index() {
         let dir = tempdir().unwrap();
         prepare_output_workspace(dir.path()).unwrap();
-        let audit = create_audit_skeleton(dir.path(), "run-001".to_string()).unwrap();
 
-        assert_eq!(audit.status, "pending");
-        assert_eq!(audit.created_by, "Audit Agent");
         assert!(dir
             .path()
-            .join(".agentflow/output/audit/run-001/audit.json")
+            .join(".agentflow/output/audit/manifest.json")
             .is_file());
         assert!(dir
             .path()
-            .join(".agentflow/output/audit/run-001/audit-report.md")
+            .join(".agentflow/output/audit/index.json")
             .is_file());
+        assert!(!dir
+            .path()
+            .join(".agentflow/output/audit/audit-001")
+            .exists());
     }
 
     #[test]
-    fn audit_skeleton_does_not_execute_audit() {
+    fn request_human_audit_writes_complete_report_package() {
         let dir = tempdir().unwrap();
         prepare_output_workspace(dir.path()).unwrap();
-        let audit = create_audit_skeleton(dir.path(), "run-001".to_string()).unwrap();
+        write_evidence(dir.path(), "run-001");
+        write_release_delivery(dir.path(), "run-001");
 
-        assert_eq!(audit.status, "pending");
-        assert!(audit.findings.is_empty());
-        assert!(audit.checks.spec_aligned.is_none());
+        let report = request_human_audit(dir.path(), audit_request("run-001")).unwrap();
+
+        assert_eq!(report.audit.audit_id, "audit-001");
+        assert_eq!(report.audit.status, AuditStatus::Passed);
+        for file in [
+            "audit-request.json",
+            "audit.json",
+            "audit-report.md",
+            "findings.json",
+            "checklist.md",
+            "evidence-map.json",
+            "traceability.json",
+        ] {
+            assert!(
+                dir.path()
+                    .join(".agentflow/output/audit/audit-001")
+                    .join(file)
+                    .is_file(),
+                "{file}"
+            );
+        }
+        let index = load_audit_index(dir.path()).unwrap();
+        assert_eq!(index.audits.len(), 1);
+    }
+
+    #[test]
+    fn audit_checks_fail_when_checkpoint_is_missing() {
+        let dir = tempdir().unwrap();
+        prepare_output_workspace(dir.path()).unwrap();
+        write_evidence(dir.path(), "run-001");
+        write_release_delivery(dir.path(), "run-001");
+        fs::remove_file(
+            dir.path()
+                .join(".agentflow/execute/runs/run-001/checkpoints/chk-001.json"),
+        )
+        .unwrap();
+
+        let report = request_human_audit(dir.path(), audit_request("run-001")).unwrap();
+
+        assert_eq!(report.audit.status, AuditStatus::Failed);
+        assert_eq!(
+            report.audit.checks.checkpoint_exists,
+            AuditCheckStatus::Failed
+        );
+    }
+
+    #[test]
+    fn audit_checks_fail_when_changed_files_are_missing() {
+        let dir = tempdir().unwrap();
+        prepare_output_workspace(dir.path()).unwrap();
+        write_evidence(dir.path(), "run-001");
+        write_release_delivery(dir.path(), "run-001");
+        fs::remove_file(
+            dir.path()
+                .join(".agentflow/execute/runs/run-001/patches/changed-files.json"),
+        )
+        .unwrap();
+
+        let report = request_human_audit(dir.path(), audit_request("run-001")).unwrap();
+
+        assert_eq!(
+            report.audit.checks.changed_files_recorded,
+            AuditCheckStatus::Failed
+        );
+    }
+
+    #[test]
+    fn audit_checks_fail_when_changed_file_is_outside_allowed_write_paths() {
+        let dir = tempdir().unwrap();
+        prepare_output_workspace(dir.path()).unwrap();
+        write_evidence(dir.path(), "run-001");
+        write_release_delivery(dir.path(), "run-001");
+        fs::write(
+            dir.path()
+                .join(".agentflow/execute/runs/run-001/patches/changed-files.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": "execute-changed-files.v1",
+                "runId": "run-001",
+                "files": [
+                    {
+                        "path": "README.md",
+                        "changeType": "modified",
+                        "insertions": 1,
+                        "deletions": 0
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let report = request_human_audit(dir.path(), audit_request("run-001")).unwrap();
+
+        assert_eq!(
+            report.audit.checks.allowed_write_paths_only,
+            AuditCheckStatus::Failed
+        );
+    }
+
+    #[test]
+    fn audit_checks_fail_when_command_record_is_incomplete() {
+        let dir = tempdir().unwrap();
+        prepare_output_workspace(dir.path()).unwrap();
+        write_evidence(dir.path(), "run-001");
+        write_release_delivery(dir.path(), "run-001");
+        fs::remove_file(
+            dir.path()
+                .join(".agentflow/execute/runs/run-001/commands/cmd-001.stdout.txt"),
+        )
+        .unwrap();
+
+        let report = request_human_audit(dir.path(), audit_request("run-001")).unwrap();
+
+        assert_eq!(
+            report.audit.checks.commands_recorded,
+            AuditCheckStatus::Failed
+        );
+    }
+
+    #[test]
+    fn high_risk_issue_without_confirmation_fails_audit() {
+        let dir = tempdir().unwrap();
+        prepare_output_workspace(dir.path()).unwrap();
+        write_evidence_with_risk(dir.path(), "run-001", "high");
+        write_release_delivery_with_risk(dir.path(), "run-001", "high");
+
+        let report = request_human_audit(dir.path(), audit_request("run-001")).unwrap();
+
+        assert_eq!(
+            report.audit.checks.high_risk_confirmed_if_needed,
+            AuditCheckStatus::Failed
+        );
+    }
+
+    #[test]
+    fn missing_evidence_fails_audit() {
+        let dir = tempdir().unwrap();
+        prepare_output_workspace(dir.path()).unwrap();
+        write_execute_artifacts(dir.path(), "run-001");
+        write_release_delivery(dir.path(), "run-001");
+
+        let report = request_human_audit(dir.path(), audit_request("run-001")).unwrap();
+
+        assert_eq!(
+            report.audit.checks.evidence_complete,
+            AuditCheckStatus::Failed
+        );
+    }
+
+    #[test]
+    fn missing_release_delivery_fails_audit() {
+        let dir = tempdir().unwrap();
+        prepare_output_workspace(dir.path()).unwrap();
+        write_evidence(dir.path(), "run-001");
+
+        let report = request_human_audit(dir.path(), audit_request("run-001")).unwrap();
+
+        assert_eq!(
+            report.audit.checks.release_delivery_complete,
+            AuditCheckStatus::Failed
+        );
+    }
+
+    #[test]
+    fn audit_does_not_modify_input_execute_evidence_or_release() {
+        let dir = tempdir().unwrap();
+        prepare_output_workspace(dir.path()).unwrap();
+        write_evidence(dir.path(), "run-001");
+        write_release_delivery(dir.path(), "run-001");
+        let evidence_path = dir.path().join(".agentflow/output/evidence/run-001.json");
+        let delivery_path = dir
+            .path()
+            .join(".agentflow/output/release/run-001/delivery.json");
+        let plan_path = dir.path().join(".agentflow/execute/runs/run-001/plan.json");
+        let evidence_before = fs::read_to_string(&evidence_path).unwrap();
+        let delivery_before = fs::read_to_string(&delivery_path).unwrap();
+        let plan_before = fs::read_to_string(&plan_path).unwrap();
+
+        request_human_audit(dir.path(), audit_request("run-001")).unwrap();
+
+        assert_eq!(fs::read_to_string(evidence_path).unwrap(), evidence_before);
+        assert_eq!(fs::read_to_string(delivery_path).unwrap(), delivery_before);
+        assert_eq!(fs::read_to_string(plan_path).unwrap(), plan_before);
     }
 
     #[test]
