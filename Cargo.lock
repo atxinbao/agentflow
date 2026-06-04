@@ -69,6 +69,7 @@ dependencies = [
 name = "agentflow-panel"
 version = "0.0.1"
 dependencies = [
+ "agentflow-agent-manual",
  "anyhow",
  "notify",
  "rusqlite",

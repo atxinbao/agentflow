@@ -1,6 +1,8 @@
 use crate::{
     db,
-    manager::{context_pack_dir, panel_db_path, unix_timestamp_seconds},
+    manager::{
+        context_pack_dir, ensure_agentflow_owned_for_panel, panel_db_path, unix_timestamp_seconds,
+    },
     model::{
         PanelContextFile, PanelContextHint, PanelContextPack, PanelContextSymbol,
         PanelSearchResult, PanelTestHint,
@@ -20,6 +22,8 @@ pub fn build_panel_context_pack(
     objective: &str,
     acceptance_criteria: &[String],
 ) -> Result<PanelContextPack> {
+    ensure_agentflow_owned_for_panel(project_root.as_ref())?;
+
     let query = [title, objective, &acceptance_criteria.join(" ")]
         .into_iter()
         .filter(|value| !value.trim().is_empty())

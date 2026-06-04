@@ -7,6 +7,7 @@ use crate::{
         AgentEnvironmentState, AgentEnvironmentStatus, LegacyAgentEntryStatus,
         RootAgentEntryShadowGuardStatus, STATUS_VERSION,
     },
+    ownership::check_agentflow_workspace_ownership_at,
     templates::{
         agent_entry_template, agentflow_manual_template, skill_templates,
         AGENT_ENTRY_RELATIVE_PATH, AGENT_MANUAL_RELATIVE_PATH, LEGACY_AGENT_ENTRY_RELATIVE_PATH,
@@ -26,6 +27,10 @@ pub fn repair_agent_working_manual(
     let root = canonical_project_root(project_root.as_ref())?;
     let repaired_at = unix_timestamp_seconds();
     let mut repairs = Vec::new();
+    let ownership = check_agentflow_workspace_ownership_at(&root);
+    if ownership.agent_blocked {
+        return Ok(ownership_blocked_status(&root, ownership, repaired_at));
+    }
 
     if let Some(error) = external_symlink_error(&root, &root.join(AGENT_ENTRY_RELATIVE_PATH))? {
         let status = blocked_status(&root, error, repaired_at);
@@ -160,7 +165,71 @@ fn blocked_status(root: &Path, error: String, checked_at: u64) -> AgentEnvironme
         warnings: Vec::new(),
         errors: vec![error],
         workspace_manifest,
+        ownership: check_agentflow_workspace_ownership_at(root),
         layout,
+        legacy_agent_entry: LegacyAgentEntryStatus {
+            exists: root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH).exists(),
+            path: LEGACY_AGENT_ENTRY_RELATIVE_PATH.to_string(),
+            managed: fs::read_to_string(root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH))
+                .map(|content| content.contains("AGENTFLOW:MANAGED"))
+                .unwrap_or(false),
+        },
+        shadow_guard: RootAgentEntryShadowGuardStatus {
+            checked: Vec::new(),
+            detected: Vec::new(),
+        },
+    }
+}
+
+fn ownership_blocked_status(
+    root: &Path,
+    ownership: crate::model::WorkspaceOwnershipStatus,
+    checked_at: u64,
+) -> AgentEnvironmentStatus {
+    AgentEnvironmentStatus {
+        version: STATUS_VERSION.to_string(),
+        project_root: root.display().to_string(),
+        status: AgentEnvironmentState::Blocked,
+        ready: false,
+        checked_at,
+        repaired_at: Some(checked_at),
+        agent_md: crate::model::AgentMdStatus {
+            exists: root.join(AGENT_ENTRY_RELATIVE_PATH).exists(),
+            managed: false,
+            version: None,
+            hash: None,
+            backed_up: false,
+            tracked_by_git: false,
+        },
+        manual: crate::model::ManualStatus {
+            exists: root.join(AGENT_MANUAL_RELATIVE_PATH).exists(),
+            path: AGENT_MANUAL_RELATIVE_PATH.to_string(),
+            hash: None,
+        },
+        skills_lock: crate::model::SkillsLockStatus {
+            exists: root.join(SKILLS_LOCK_RELATIVE_PATH).exists(),
+            valid: false,
+            path: SKILLS_LOCK_RELATIVE_PATH.to_string(),
+            skill_count: 0,
+        },
+        skills: Vec::new(),
+        repairs: Vec::new(),
+        warnings: ownership.warnings.clone(),
+        errors: ownership.errors.clone(),
+        workspace_manifest: crate::model::WorkspaceManifestStatus {
+            exists: root.join(".agentflow/workspace-manifest.json").exists(),
+            path: ".agentflow/workspace-manifest.json".to_string(),
+            valid: false,
+            layout_version: ownership.marker.layout_version.clone(),
+        },
+        ownership,
+        layout: crate::model::WorkspaceLayoutStatus {
+            version: crate::model::WORKSPACE_LAYOUT_VERSION.to_string(),
+            ready: false,
+            created_paths: Vec::new(),
+            reused_paths: Vec::new(),
+            missing_paths: Vec::new(),
+        },
         legacy_agent_entry: LegacyAgentEntryStatus {
             exists: root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH).exists(),
             path: LEGACY_AGENT_ENTRY_RELATIVE_PATH.to_string(),

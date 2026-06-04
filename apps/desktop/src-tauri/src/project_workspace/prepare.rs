@@ -24,6 +24,50 @@ pub(crate) fn prepare_local_project_workspace_at(
     let created_agentflow = !agentflow_path.exists();
     let mut created_paths = Vec::new();
     let mut reused_paths = Vec::new();
+    let ownership = agentflow_agent_manual::check_agentflow_workspace_ownership(&root)
+        .map_err(|error| format!("check workspace ownership: {error}"))?;
+
+    if !ownership.ready_for_prepare {
+        let agent_manual_status = agentflow_agent_manual::validate_agent_working_manual(&root)
+            .map_err(|error| format!("validate agent working manual: {error}"))?;
+        return Ok(ProjectWorkspaceSummary {
+            version: "project-workspace.v0".to_string(),
+            id: format!("local:{}", root.display()),
+            name,
+            root: root.display().to_string(),
+            agentflow_path: agentflow_path.display().to_string(),
+            workspace_path: agentflow_path.join("workspace.yaml").display().to_string(),
+            config_path: agentflow_path.join("config.yaml").display().to_string(),
+            created_agentflow: false,
+            created_paths,
+            reused_paths,
+            git_exclude_path: None,
+            protected_git_exclude: false,
+            ownership: ownership.clone(),
+            agent_manual_status,
+        });
+    }
+
+    let agent_manual_status = agentflow_agent_manual::prepare_agent_working_manual(&root)
+        .map_err(|error| format!("prepare agent working manual: {error}"))?;
+    if !agent_manual_status.ready {
+        return Ok(ProjectWorkspaceSummary {
+            version: "project-workspace.v0".to_string(),
+            id: format!("local:{}", root.display()),
+            name,
+            root: root.display().to_string(),
+            agentflow_path: agentflow_path.display().to_string(),
+            workspace_path: agentflow_path.join("workspace.yaml").display().to_string(),
+            config_path: agentflow_path.join("config.yaml").display().to_string(),
+            created_agentflow: false,
+            created_paths,
+            reused_paths,
+            git_exclude_path: None,
+            protected_git_exclude: false,
+            ownership: agent_manual_status.ownership.clone(),
+            agent_manual_status,
+        });
+    }
 
     ensure_directory(
         &agentflow_path,
@@ -50,8 +94,7 @@ pub(crate) fn prepare_local_project_workspace_at(
     )?;
 
     let (git_exclude_path, protected_git_exclude) = protect_agentflow_from_git(&root)?;
-    let agent_manual_status = agentflow_agent_manual::prepare_agent_working_manual(&root)
-        .map_err(|error| format!("prepare agent working manual: {error}"))?;
+    let ownership = agent_manual_status.ownership.clone();
 
     Ok(ProjectWorkspaceSummary {
         version: "project-workspace.v0".to_string(),
@@ -66,6 +109,7 @@ pub(crate) fn prepare_local_project_workspace_at(
         reused_paths,
         git_exclude_path: git_exclude_path.map(|path| path.display().to_string()),
         protected_git_exclude,
+        ownership,
         agent_manual_status,
     })
 }
@@ -197,7 +241,7 @@ mod tests {
     #[test]
     fn prepare_workspace_reuses_existing_files_without_overwriting() {
         let dir = tempdir().unwrap();
-        fs::create_dir_all(dir.path().join(".agentflow")).unwrap();
+        prepare_local_project_workspace_at(&dir.path().display().to_string()).unwrap();
         fs::write(dir.path().join(".agentflow/config.yaml"), "custom: true\n").unwrap();
 
         let summary =
@@ -213,6 +257,31 @@ mod tests {
             "custom: true\n"
         );
         assert!(summary.agent_manual_status.ready);
+    }
+
+    #[test]
+    fn prepare_workspace_blocks_foreign_agentflow_without_writing() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow")).unwrap();
+        fs::write(dir.path().join(".agentflow/config.yaml"), "foreign: true\n").unwrap();
+
+        let summary =
+            prepare_local_project_workspace_at(&dir.path().display().to_string()).unwrap();
+
+        assert!(!summary.agent_manual_status.ready);
+        assert_eq!(
+            summary.ownership.status,
+            agentflow_agent_manual::model::WorkspaceOwnershipState::Foreign
+        );
+        assert!(!dir.path().join("AGENTS.md").exists());
+        assert!(!dir
+            .path()
+            .join(".agentflow/workspace-manifest.json")
+            .exists());
+        assert_eq!(
+            fs::read_to_string(dir.path().join(".agentflow/config.yaml")).unwrap(),
+            "foreign: true\n"
+        );
     }
 
     #[test]

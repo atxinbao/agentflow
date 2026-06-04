@@ -136,9 +136,9 @@ Goal Tree is an agent-only derived fact source under `.agentflow/goal-tree/`. Hu
 
 ### 1. Spec Agent / 规格定义 Agent
 
-Status: enabled.
+Status: enabled for requirement intake and SPEC Draft Preview only.
 
-Combines requirement intake and SPEC planning. It receives human input, classifies request type, runs requirement-intake-filter, asks clarification questions, produces SPEC Draft Preview from `ready-for-openspec` intake results, waits for human confirmation, and later materializes Goal Tree from Approved SPEC. It cannot skip intake, bypass confirmation, execute issues, write source code, or run tests.
+Combines requirement intake and SPEC planning. It receives human input, classifies request type, runs requirement-intake-filter, asks clarification questions, produces SPEC Draft Preview from `ready-for-openspec` intake results, and waits for human confirmation. Approved SPEC writes and Goal Tree materialization are not enabled by this manual; they require explicit future requirement and tool authorization. It cannot skip intake, bypass confirmation, execute issues, write source code, run tests, write Approved SPEC, or write Goal Tree.
 
 ### 2. Build Agent / 实现执行 Agent
 

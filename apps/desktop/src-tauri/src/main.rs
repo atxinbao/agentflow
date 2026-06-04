@@ -25,6 +25,8 @@ fn main() {
             commands::agent_manual::load_agent_environment_status,
             commands::agent_manual::repair_agent_working_manual,
             commands::agent_manual::validate_agent_working_manual,
+            commands::agent_manual::load_agentflow_workspace_ownership,
+            commands::agent_manual::take_over_agentflow_workspace,
             commands::project_files::load_project_files_snapshot,
             commands::project_files::load_project_file_content,
             commands::project_files::load_project_directory_page,

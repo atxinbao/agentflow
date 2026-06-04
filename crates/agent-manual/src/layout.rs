@@ -1,7 +1,8 @@
 use crate::{
     model::{
         RootAgentEntryShadowGuardStatus, WorkspaceLayoutStatus, WorkspaceManifest,
-        WorkspaceManifestRootEntries, WorkspaceManifestStatus, WORKSPACE_LAYOUT_VERSION,
+        WorkspaceManifestOwnership, WorkspaceManifestRootEntries, WorkspaceManifestStatus,
+        WorkspaceOwnershipState, WORKSPACE_LAYOUT_VERSION, WORKSPACE_MANAGED_BY,
         WORKSPACE_MANIFEST_VERSION,
     },
     templates::WORKSPACE_MANIFEST_RELATIVE_PATH,
@@ -150,7 +151,9 @@ pub(crate) fn validate_workspace_layout(
         .as_ref()
         .map(|value| {
             value.version == WORKSPACE_MANIFEST_VERSION
+                && value.managed_by == WORKSPACE_MANAGED_BY
                 && value.layout_version == WORKSPACE_LAYOUT_VERSION
+                && value.ownership.status == WorkspaceOwnershipState::ManagedCurrent
                 && value.root_entries.canonical_agent_entry == "AGENTS.md"
         })
         .unwrap_or(false);
@@ -207,10 +210,20 @@ pub(crate) fn shadow_warnings(shadow_guard: &RootAgentEntryShadowGuardStatus) ->
 }
 
 pub(crate) fn expected_workspace_manifest(root: &Path, warnings: &[String]) -> WorkspaceManifest {
+    let now = unix_timestamp_seconds();
     WorkspaceManifest {
         version: WORKSPACE_MANIFEST_VERSION.to_string(),
+        managed_by: WORKSPACE_MANAGED_BY.to_string(),
         layout_version: WORKSPACE_LAYOUT_VERSION.to_string(),
         project_root: root.display().to_string(),
+        ownership: WorkspaceManifestOwnership {
+            status: WorkspaceOwnershipState::ManagedCurrent,
+            created_by: WORKSPACE_MANAGED_BY.to_string(),
+            created_at: now,
+            last_validated_at: now,
+            migrated_from: None,
+            migration_record: None,
+        },
         root_entries: WorkspaceManifestRootEntries {
             canonical_agent_entry: "AGENTS.md".to_string(),
             legacy_agent_entry: "AGENT.MD".to_string(),
@@ -326,6 +339,13 @@ pub(crate) fn expected_workspace_manifest(root: &Path, warnings: &[String]) -> W
 fn read_workspace_manifest(path: &Path) -> Result<WorkspaceManifest> {
     let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     serde_json::from_str(&raw).with_context(|| format!("parse {}", path.display()))
+}
+
+fn unix_timestamp_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
 }
 
 fn ensure_directory(

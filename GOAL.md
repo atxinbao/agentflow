@@ -26,8 +26,9 @@ AgentFlow 的旧目标文档已停止作为后续开发依据。
 - [008.3 - AgentFlow Workflow Directory Blueprint V1](docs/requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md)
 - [008.4 - Project Panel V1](docs/requirements/008-4-project-panel-v1.md)
 - [008.4.1 - Project Panel Finalization and Graph Removal V1](docs/requirements/008-4-1-project-panel-finalization-and-graph-removal-v1.md)
+- [008.4.2 - AgentFlow Workspace Ownership Guard V1](docs/requirements/008-4-2-agentflow-workspace-ownership-guard-v1.md)
 
-当前目标是在 Project Workspace、Project File Reader、Goal Tree 只读边界和 Agent Working Manual / Requirement Intake 之后，实现 008.4.1 Project Panel Finalization：Project Panel 的 canonical path 为 `.agentflow/panel/`，并清理旧代码地图兼容层。
+当前目标是在 Project Panel Finalization 之后，实现 008.4.2 Workspace Ownership Guard：任何 Project Workspace / Agent Manual / Panel 写入 `.agentflow/` 前必须先确认 `.agentflow/` 归属权，foreign 或 blocked 目录不能被自动接管。
 
 ## 当前约束
 

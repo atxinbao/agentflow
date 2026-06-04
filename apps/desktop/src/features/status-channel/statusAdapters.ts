@@ -13,9 +13,65 @@ export function buildAgentStatusItems({
 }): AgentStatusChannelItem[] {
   return [
     buildWorkspaceStatus(projectFilesState),
+    buildWorkspaceOwnershipStatus(agentManualState),
     buildWorksiteStatus(projectPanelState),
     buildAgentManualStatus(agentManualState),
   ];
+}
+
+function buildWorkspaceOwnershipStatus(agentManualState: AgentManualState): AgentStatusChannelItem {
+  const source = "008.4.2 - Workspace Ownership Guard V1";
+  const ownership = agentManualState.status?.ownership;
+
+  if (agentManualState.error) {
+    return {
+      id: "workspace-ownership",
+      label: "工作区归属",
+      status: "failed",
+      statusLabel: "异常",
+      source,
+      priority: 15,
+      error: agentManualState.error,
+    };
+  }
+
+  if (agentManualState.source === "loading") {
+    return {
+      id: "workspace-ownership",
+      label: "工作区归属",
+      status: "working",
+      statusLabel: "检查中",
+      source,
+      priority: 15,
+    };
+  }
+
+  if (!ownership) {
+    return {
+      id: "workspace-ownership",
+      label: "工作区归属",
+      status: "idle",
+      statusLabel: "未检查",
+      source,
+      priority: 15,
+    };
+  }
+
+  return {
+    id: "workspace-ownership",
+    label: "工作区归属",
+    status: ownershipTone(ownership.status),
+    statusLabel: ownershipLabel(ownership.status),
+    source,
+    priority: 15,
+    metrics: [
+      { label: "动作", value: ownershipActionLabel(ownership.recommendedAction) },
+      { label: "标记", value: ownership.detectedFiles.length },
+      { label: "Warnings", value: ownership.warnings.length },
+      { label: "Errors", value: ownership.errors.length },
+    ],
+    error: ownership.errors.at(0) ?? null,
+  };
 }
 
 function buildAgentManualStatus(agentManualState: AgentManualState): AgentStatusChannelItem {
@@ -102,6 +158,42 @@ function agentManualLabel(status: NonNullable<AgentManualState["status"]>["statu
     blocked: "已阻断",
   };
   return labels[status] ?? status;
+}
+
+function ownershipTone(status: NonNullable<AgentManualState["status"]>["ownership"]["status"]): AgentStatusTone {
+  if (status === "managed-current" || status === "managed-legacy") {
+    return "ready";
+  }
+  if (status === "none" || status === "corrupted") {
+    return "warning";
+  }
+  if (status === "foreign" || status === "blocked") {
+    return "failed";
+  }
+  return "idle";
+}
+
+function ownershipLabel(status: NonNullable<AgentManualState["status"]>["ownership"]["status"]) {
+  const labels: Record<NonNullable<AgentManualState["status"]>["ownership"]["status"], string> = {
+    none: "未创建",
+    "managed-current": "已接管",
+    "managed-legacy": "旧版接管",
+    foreign: "外部目录",
+    corrupted: "待修复",
+    blocked: "已阻断",
+  };
+  return labels[status] ?? status;
+}
+
+function ownershipActionLabel(action: NonNullable<AgentManualState["status"]>["ownership"]["recommendedAction"]) {
+  const labels: Record<NonNullable<AgentManualState["status"]>["ownership"]["recommendedAction"], string> = {
+    create: "创建",
+    "validate-repair": "检查/修复",
+    "migrate-repair": "迁移/修复",
+    "ask-user-to-take-over": "等待接管确认",
+    stop: "停止",
+  };
+  return labels[action] ?? action;
 }
 
 function buildWorkspaceStatus(projectFilesState: ProjectFilesState): AgentStatusChannelItem {
