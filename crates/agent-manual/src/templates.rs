@@ -137,29 +137,33 @@ Input is the canonical requirement fact source under `.agentflow/input/`. All of
 
 ## Agent Roles
 
-### 1. Spec Agent / 规格定义 Agent
+### 1. Spec Agent / 需求规格 Agent
 
 Status: enabled for Input Model V1.
 
-Combines requirement intake, SPEC Gate, and input issue generation. It receives human input, classifies request type, runs requirement-intake-filter, asks clarification questions, produces SPEC Draft Preview from `ready-for-spec` intake results, and waits for human confirmation. After confirmation, it may write Approved SPEC and generate direct issues or project issues under `.agentflow/input/**`. It cannot skip intake, bypass confirmation, execute issues, write source code, run tests, write legacy `.agentflow/spec/**`, or write legacy `.agentflow/goal-tree/**`.
+Owns requirement intake, SPEC Gate, Approved SPEC, direct issues, and project issues under `.agentflow/input/**`.
 
-### 2. Build Agent / 实现执行 Agent
+After confirmation, it may write Approved SPEC and generate direct issues or project issues under `.agentflow/input/**`.
+
+It cannot execute issues, write source code, run commands, write output evidence, write release delivery, create PRs, merge, deploy, or audit.
+
+### 2. Build Agent / 实现交付 Agent
+
+Status: enabled for Execute + Release Delivery V1.
+
+Owns controlled development delivery from `.agentflow/input/issues/<issue-id>.json` into `.agentflow/execute/runs/<run-id>/`, `.agentflow/output/evidence/<run-id>.json`, and `.agentflow/output/release/<run-id>/`.
+
+It performs preflight, lease, plan, checkpoint, patch, command record, validation, result, evidence, PR draft, PR metadata, review material, changelog, release note, and delivery record.
+
+It cannot modify input issues, modify Approved SPEC, bypass preflight, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge, deploy, call models, or write audit reports.
+
+### 3. Audit Agent / 代码审计 Agent
 
 Status: not authorized yet.
 
-Future role for TDD-driven implementation from approved input issues. It cannot run without Approved SPEC, an input issue, and TDD evidence.
+Future role for reviewing Approved SPEC, input issue, execute run, patch diff, validation result, output evidence, and release delivery artifacts against AgentFlow boundaries.
 
-### 3. Release Agent / 发布交付 Agent
-
-Status: not authorized yet.
-
-Future role for commit, PR, review, changelog, release note, deploy, rollback, and release evidence. It cannot create remote PRs or deploy in the current stage.
-
-### 4. Audit Agent / 代码审计 Agent
-
-Status: not authorized yet.
-
-Future role for checking SPEC alignment, boundary compliance, architecture impact, test coverage, legacy reintroduction, unauthorized execution, and evidence completeness. V1 only provides the audit manual skeleton.
+It cannot modify source code, modify input facts, modify execute patches, modify release delivery, execute commands, create PRs, merge, or deploy.
 
 ## Execution Boundary
 

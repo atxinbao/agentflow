@@ -1,11 +1,12 @@
 use crate::{
     manager::load_issue_for_run,
     model::{
-        ExecuteCheckStatus, ExecuteHumanConfirmation, ExecutePreflight, ExecutePreflightCheck,
-        ExecuteRunStatus, EXECUTE_PREFLIGHT_VERSION,
+        ExecuteCheckStatus, ExecuteHumanConfirmation, ExecuteLease, ExecuteLeaseStatus,
+        ExecutePreflight, ExecutePreflightCheck, ExecuteRunStatus, EXECUTE_PREFLIGHT_VERSION,
     },
     storage::{
-        canonical_project_root, read_run, rebuild_index, run_dir, update_run_status, write_json,
+        canonical_project_root, read_json, read_run, rebuild_index, run_dir, update_run_status,
+        write_json,
     },
 };
 use agentflow_input::issue::InputRiskLevel;
@@ -176,21 +177,11 @@ pub fn execute_run_preflight(
                 confirmed: Some(confirmed),
             });
 
-            let active_lease = root
-                .join(".agentflow/execute/leases")
-                .join(format!("{}.json", issue.issue_id));
+            let lease_check = issue_lease_state(&root, &issue.issue_id);
             checks.push(ExecutePreflightCheck {
                 name: "lease".to_string(),
-                status: if active_lease.is_file() {
-                    ExecuteCheckStatus::Blocked
-                } else {
-                    ExecuteCheckStatus::Passed
-                },
-                message: Some(if active_lease.is_file() {
-                    "Active lease already exists for this issue.".to_string()
-                } else {
-                    "No active lease exists for this issue.".to_string()
-                }),
+                status: lease_check.status,
+                message: Some(lease_check.message),
                 risk_level: None,
                 human_confirmation_required: None,
                 confirmed: None,
@@ -261,7 +252,12 @@ pub fn execute_run_preflight(
             ExecuteRunStatus::Blocked
         },
     )?;
-    rebuild_index(&root)?;
+    if let Err(error) = rebuild_index(&root) {
+        if has_unreadable_lease_block(&preflight) {
+            return Ok(preflight);
+        }
+        return Err(error);
+    }
     Ok(preflight)
 }
 
@@ -291,4 +287,52 @@ fn push_check(
         human_confirmation_required: None,
         confirmed: None,
     });
+}
+
+struct LeasePreflightCheck {
+    status: ExecuteCheckStatus,
+    message: String,
+}
+
+fn issue_lease_state(root: &Path, issue_id: &str) -> LeasePreflightCheck {
+    let lease_path = root
+        .join(".agentflow/execute/leases")
+        .join(format!("{issue_id}.json"));
+
+    if !lease_path.is_file() {
+        return LeasePreflightCheck {
+            status: ExecuteCheckStatus::Passed,
+            message: "No active lease exists for this issue.".to_string(),
+        };
+    }
+
+    match read_json::<ExecuteLease>(&lease_path) {
+        Ok(lease) if matches!(lease.status, ExecuteLeaseStatus::Active) => LeasePreflightCheck {
+            status: ExecuteCheckStatus::Blocked,
+            message: "Active lease already exists for this issue.".to_string(),
+        },
+        Ok(lease) if matches!(lease.status, ExecuteLeaseStatus::Released) => LeasePreflightCheck {
+            status: ExecuteCheckStatus::Passed,
+            message: "Existing lease is released and does not block execute.".to_string(),
+        },
+        Ok(_) => LeasePreflightCheck {
+            status: ExecuteCheckStatus::Blocked,
+            message: "Lease state is unsupported and blocks execute.".to_string(),
+        },
+        Err(error) => LeasePreflightCheck {
+            status: ExecuteCheckStatus::Blocked,
+            message: format!("Lease state unreadable: {error}"),
+        },
+    }
+}
+
+fn has_unreadable_lease_block(preflight: &ExecutePreflight) -> bool {
+    preflight.checks.iter().any(|check| {
+        check.name == "lease"
+            && matches!(check.status, ExecuteCheckStatus::Blocked)
+            && check
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("Lease state unreadable"))
+    })
 }

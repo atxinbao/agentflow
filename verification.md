@@ -97,6 +97,106 @@
 - `cargo test`：pass，agent-manual 21 tests + CLI 2 tests + core 61 tests + desktop 17 tests + execute 12 tests + goal-tree 3 tests + input 8 tests + panel 27 tests。
 - `npm --prefix apps/desktop run build`：pass。
 - `git diff --check`：pass。
+
+## 2026-06-05 Execute Lease Preflight Polish
+
+执行者：Codex
+
+目标：
+
+- 修复 Released lease 误阻断同 issue 后续 execute run preflight。
+- 保持 Active lease 对并发 run 的阻断。
+- 将 corrupted / unreadable lease 作为 blocked preflight 返回。
+- 修复 ExecutePatchOutcome 的 patch artifact 返回路径。
+
+结果：
+
+- `execute_run_preflight` 不再仅根据 `.agentflow/execute/leases/<issue-id>.json` 是否存在判断阻断。
+- lease 文件不存在时，lease check passed。
+- `lease.status = Active` 时，lease check blocked。
+- `lease.status = Released` 时，lease check passed。
+- lease 文件损坏或不可解析时，lease check blocked，并返回 `Lease state unreadable`。
+- `ExecutePatchOutcome.proposedPatchPath` 返回 `.agentflow/execute/runs/<run-id>/patches/proposed.patch`。
+- `ExecutePatchOutcome.appliedPatchPath` 返回 `.agentflow/execute/runs/<run-id>/patches/applied.patch`。
+- `ExecutePatchOutcome.worktreeDiffPath` 返回 `.agentflow/execute/runs/<run-id>/patches/worktree.diff`。
+- 新增 `released_lease_does_not_block_second_run_preflight` 测试。
+- 新增 `corrupted_lease_blocks_preflight` 测试。
+
+边界：
+
+- 未改变 run / preflight / lease / checkpoint / patch / command / result / evidence 主流程。
+- 未写 input issue。
+- 未写 Approved SPEC。
+- 未创建 PR、merge、release 或 deploy。
+- 未调用模型。
+- 未修改 Desktop UI 交互。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-execute`：pass，14 tests。
+- `cargo test`：pass，agent-manual 21 tests + CLI 2 tests + core 61 tests + desktop 17 tests + execute 14 tests + goal-tree 3 tests + input 8 tests + panel 27 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
+
+## 2026-06-05 Agent Role Consolidation V2
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/010-2-agent-role-consolidation-v2.md`。
+- 将 V1 顶层 Agent 角色收敛为 Spec / Build / Audit。
+- 删除独立 Release Agent 顶层角色，但保留 release delivery 能力并归入 Build Agent。
+- 新增 Build Agent release delivery 输出模型和 API。
+
+结果：
+
+- `Agentflow.md` 模板的 Agent Roles 只保留：
+  - Spec Agent / 需求规格 Agent
+  - Build Agent / 实现交付 Agent
+  - Audit Agent / 代码审计 Agent
+- Build Agent 明确负责：
+  - `.agentflow/execute/runs/<run-id>/`
+  - `.agentflow/output/evidence/<run-id>.json`
+  - `.agentflow/output/release/<run-id>/`
+- RELEASE.md 模板改为 Build Agent 的 release delivery manual。
+- `.agentflow/output/release/` 纳入 Agent Manual layout 和 Execute paths。
+- `ExecuteResultNext` 从 `readyForRelease` 改为 `readyForDelivery` + `needsAudit`。
+- 新增 `OutputReleaseDelivery` / `OutputReleaseDeliveryArtifacts`。
+- 新增 `prepare_release_delivery` / `load_release_delivery`。
+- `prepare_release_delivery` 写入：
+  - `.agentflow/output/release/<run-id>/delivery.json`
+  - `.agentflow/output/release/<run-id>/pr-draft.md`
+  - `.agentflow/output/release/<run-id>/pr-metadata.json`
+  - `.agentflow/output/release/<run-id>/review-checklist.md`
+  - `.agentflow/output/release/<run-id>/changelog.md`
+  - `.agentflow/output/release/<run-id>/release-note.md`
+- Browser Preview mock layout 增加 `.agentflow/output/release`。
+- README / GOAL / ROADMAP / requirements index 已更新到 010.2。
+
+边界：
+
+- 未恢复独立 Release Agent。
+- 未改 input 模型。
+- 未改 panel 模型。
+- 未改 riskLevel 规则。
+- 未绕过 execute preflight、checkpoint、lease 或 evidence。
+- 未 merge。
+- 未 deploy。
+- 未直接发布生产。
+- 未调用模型。
+- 未启动 Audit Agent。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-agent-manual`：pass，23 tests。
+- `cargo test -p agentflow-execute`：pass，17 tests。
+- `cargo test -p agentflow-desktop`：pass，17 tests。
+- `cargo test`：pass，agent-manual 23 tests + CLI 2 tests + core 61 tests + desktop 17 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + panel 27 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
 - `rg -n "Project Definition|CONSTRUCTION_PLAN|Construction Plan|latest-verification|verification.md|0\\. New Project Initialization|1\\. Human Project Planning|2\\. Construction Plan|3\\. Linear execution contract|施工材料|未授权执行|不授权" ...`：pass。
 
 结论：

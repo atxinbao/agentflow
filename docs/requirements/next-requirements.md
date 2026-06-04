@@ -24,6 +24,7 @@
 - [008-4-2-agentflow-workspace-ownership-guard-v1.md](008-4-2-agentflow-workspace-ownership-guard-v1.md)
 - [009-input-model-v1.md](009-input-model-v1.md)
 - [010-execute-patch-checkpoint-v1.md](010-execute-patch-checkpoint-v1.md)
+- [010-2-agent-role-consolidation-v2.md](010-2-agent-role-consolidation-v2.md)
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 

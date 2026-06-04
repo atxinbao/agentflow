@@ -48,7 +48,7 @@ pub(crate) fn build_execute_result(
             evidence_path,
         },
         next: ExecuteResultNext {
-            ready_for_release: false,
+            ready_for_delivery: passed,
             needs_audit: true,
         },
     };

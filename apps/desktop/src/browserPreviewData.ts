@@ -655,6 +655,7 @@ export function createBrowserPreviewAgentEnvironmentStatus(
         ".agentflow/panel",
         ".agentflow/execute",
         ".agentflow/output",
+        ".agentflow/output/release",
         ".agentflow/state",
       ],
       missingPaths: [],

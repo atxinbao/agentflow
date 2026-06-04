@@ -29,8 +29,9 @@ AgentFlow 的旧目标文档已停止作为后续开发依据。
 - [008.4.2 - AgentFlow Workspace Ownership Guard V1](docs/requirements/008-4-2-agentflow-workspace-ownership-guard-v1.md)
 - [009 - Input Model V1](docs/requirements/009-input-model-v1.md)
 - [010 - Execute Patch / Checkpoint V1](docs/requirements/010-execute-patch-checkpoint-v1.md)
+- [010.2 - Agent Role Consolidation V2](docs/requirements/010-2-agent-role-consolidation-v2.md)
 
-当前目标是在 Input Model V1 之后，实现 010 Execute Patch / Checkpoint V1：以 `.agentflow/input/issues/<issue-id>.json` 为唯一执行入口，创建受控 run，完成 preflight、lease、plan、checkpoint、patch / command record、validation、result 和 evidence。
+当前目标是在 Execute Patch / Checkpoint V1 之后，实现 010.2 Agent Role Consolidation V2：顶层 Agent 角色收敛为 Spec / Build / Audit，Release Agent 不再独立存在，release delivery 能力并入 Build Agent，并把交付材料写入 `.agentflow/output/release/`。
 
 ## 当前约束
 

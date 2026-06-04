@@ -13,6 +13,7 @@ pub const EXECUTE_CHECKPOINT_VERSION: &str = "execute-checkpoint.v1";
 pub const EXECUTE_COMMAND_VERSION: &str = "execute-command.v1";
 pub const EXECUTE_RESULT_VERSION: &str = "execute-result.v1";
 pub const OUTPUT_EVIDENCE_VERSION: &str = "output-evidence.v1";
+pub const OUTPUT_RELEASE_DELIVERY_VERSION: &str = "output-release-delivery.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -377,7 +378,7 @@ pub struct ExecuteValidationResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecuteResultNext {
-    pub ready_for_release: bool,
+    pub ready_for_delivery: bool,
     pub needs_audit: bool,
 }
 
@@ -433,6 +434,31 @@ pub struct OutputEvidence {
     pub artifacts: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputReleaseDeliveryArtifacts {
+    pub pr_draft: String,
+    pub pr_metadata: String,
+    pub review_checklist: String,
+    pub changelog: String,
+    pub release_note: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputReleaseDelivery {
+    pub version: String,
+    pub run_id: String,
+    pub issue_id: String,
+    pub source_spec_id: String,
+    pub risk_level: String,
+    pub evidence_path: String,
+    pub status: String,
+    pub artifacts: OutputReleaseDeliveryArtifacts,
+    pub created_by: String,
+    pub created_at: u64,
+}
+
 pub fn execute_paths() -> BTreeMap<String, String> {
     BTreeMap::from([
         ("root".to_string(), ".agentflow/execute".to_string()),
@@ -445,6 +471,10 @@ pub fn execute_paths() -> BTreeMap<String, String> {
         (
             "evidence".to_string(),
             ".agentflow/output/evidence".to_string(),
+        ),
+        (
+            "release".to_string(),
+            ".agentflow/output/release".to_string(),
         ),
     ])
 }

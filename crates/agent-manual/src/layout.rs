@@ -59,6 +59,7 @@ const LAYOUT_DIRECTORIES: &[&str] = &[
     ".agentflow/execute/queue",
     ".agentflow/output",
     ".agentflow/output/evidence",
+    ".agentflow/output/release",
     ".agentflow/output/audit",
     ".agentflow/output/backup",
     ".agentflow/output/backup/agent-md",
@@ -476,19 +477,61 @@ const RELEASE_MANUAL: &str = r#"# RELEASE.md
 
 Version: release-manual.v1
 
-Release is the delivery working manual for future Release Agent execution.
+Release delivery is owned by Build Agent in V1.
 
-## Rules
+There is no standalone Release Agent in V1.
 
-- Release Agent is currently not authorized yet.
-- Future release work may cover commit, PR, review, changelog, release note, deploy, rollback, and release evidence.
-- Current stage cannot create PRs.
-- Current stage cannot deploy.
-- Release must wait for Build and Validation evidence.
+## Purpose
+
+RELEASE.md tells Build Agent how to prepare development delivery artifacts after execute result and evidence are available.
+
+## Build Agent Release Delivery
+
+After a successful execute run, Build Agent may prepare:
+
+- PR draft
+- PR metadata
+- Review checklist
+- Changelog entry
+- Release note
+- Delivery record
+
+These artifacts are written under:
+
+`.agentflow/output/release/<run-id>/`
 
 ## V1 Boundary
 
-V1 creates this manual only. It does not perform release work.
+Build Agent may prepare release delivery artifacts.
+
+Build Agent must not:
+
+- merge
+- deploy
+- release to production
+- run dangerous commands
+- bypass high-risk confirmation
+- modify Approved SPEC
+- modify input issue facts
+- write audit reports
+
+## Required Inputs
+
+- input issue
+- Approved SPEC
+- execute result
+- output evidence
+- changed-files summary
+- validation result
+
+## Required Outputs
+
+- delivery.json
+- pr-draft.md
+- pr-metadata.json
+- review-checklist.md
+- changelog.md
+- release-note.md
 "#;
 
 const AUDIT_MANUAL: &str = r#"# AUDIT.md

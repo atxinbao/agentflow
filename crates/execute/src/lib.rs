@@ -1,5 +1,6 @@
 pub mod checkpoint;
 pub mod command;
+pub mod delivery;
 pub mod evidence;
 pub mod lease;
 pub mod manager;
@@ -13,6 +14,7 @@ pub mod validation;
 
 pub use checkpoint::create_execute_checkpoint;
 pub use command::run_execute_command;
+pub use delivery::{load_release_delivery, prepare_release_delivery};
 pub use evidence::write_execute_evidence;
 pub use lease::{acquire_execute_lease, release_execute_lease};
 pub use manager::{
@@ -117,6 +119,27 @@ mod tests {
         run
     }
 
+    fn completed_low_risk_run(root: &Path, issue_id: &str) -> ExecuteRun {
+        let run = ready_low_risk_run(root, issue_id);
+        let patch = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,3 @@\n pub fn value() -> u8 {\n-    1\n+    2\n }\n";
+        apply_execute_patch(root, run.run_id.clone(), patch.to_string()).unwrap();
+        run_execute_command(
+            root,
+            run.run_id.clone(),
+            ExecuteCommandRequest {
+                label: "printf ok".to_string(),
+                program: "printf".to_string(),
+                args: vec!["ok".to_string()],
+                source: Some("runPlan.allowedCommands".to_string()),
+            },
+        )
+        .unwrap();
+        let result = validate_execute_run(root, run.run_id.clone()).unwrap();
+        assert_eq!(result.status, ExecuteRunStatus::Completed);
+        assert!(result.next.ready_for_delivery);
+        run
+    }
+
     #[test]
     fn missing_input_issue_cannot_create_run() {
         let dir = tempdir().unwrap();
@@ -209,6 +232,54 @@ mod tests {
     }
 
     #[test]
+    fn released_lease_does_not_block_second_run_preflight() {
+        let dir = tempdir().unwrap();
+        let first = ready_low_risk_run(dir.path(), "iss-001");
+        release_execute_lease(dir.path(), first.run_id).unwrap();
+        let lease: ExecuteLease = storage::read_json(
+            &dir.path()
+                .join(".agentflow/execute/leases")
+                .join("iss-001.json"),
+        )
+        .unwrap();
+        assert_eq!(lease.status, ExecuteLeaseStatus::Released);
+
+        let second = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        let preflight = execute_run_preflight(dir.path(), second.run_id).unwrap();
+
+        assert!(preflight.checks.iter().any(|check| {
+            check.name == "lease" && matches!(check.status, ExecuteCheckStatus::Passed)
+        }));
+        assert_eq!(preflight.status, "ready");
+    }
+
+    #[test]
+    fn corrupted_lease_blocks_preflight() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path(), "spec-001");
+        write_issue(dir.path(), "iss-001", "spec-001", InputRiskLevel::Low);
+        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        fs::write(
+            dir.path()
+                .join(".agentflow/execute/leases")
+                .join("iss-001.json"),
+            "{not valid json",
+        )
+        .unwrap();
+        let preflight = execute_run_preflight(dir.path(), run.run_id).unwrap();
+
+        assert!(preflight.checks.iter().any(|check| {
+            check.name == "lease" && matches!(check.status, ExecuteCheckStatus::Blocked)
+        }));
+        assert!(preflight
+            .blocked_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Lease state unreadable"));
+    }
+
+    #[test]
     fn completed_run_releases_lease_and_writes_result_evidence() {
         let dir = tempdir().unwrap();
         let run = ready_low_risk_run(dir.path(), "iss-001");
@@ -225,6 +296,8 @@ mod tests {
         .unwrap();
         let result = validate_execute_run(dir.path(), run.run_id.clone()).unwrap();
         assert_eq!(result.status, ExecuteRunStatus::Completed);
+        assert!(result.next.ready_for_delivery);
+        assert!(result.next.needs_audit);
         assert!(dir
             .path()
             .join(".agentflow/execute/runs")
@@ -243,6 +316,69 @@ mod tests {
         )
         .unwrap();
         assert_eq!(lease.status, ExecuteLeaseStatus::Released);
+    }
+
+    #[test]
+    fn release_delivery_requires_completed_run() {
+        let dir = tempdir().unwrap();
+        let run = ready_low_risk_run(dir.path(), "iss-001");
+
+        let error = prepare_release_delivery(dir.path(), run.run_id).unwrap_err();
+
+        assert!(error.to_string().contains("completed execute run"));
+    }
+
+    #[test]
+    fn release_delivery_requires_evidence() {
+        let dir = tempdir().unwrap();
+        let run = completed_low_risk_run(dir.path(), "iss-001");
+        fs::remove_file(
+            dir.path()
+                .join(".agentflow/output/evidence")
+                .join(format!("{}.json", run.run_id)),
+        )
+        .unwrap();
+
+        let error = prepare_release_delivery(dir.path(), run.run_id).unwrap_err();
+
+        assert!(error.to_string().contains(".agentflow/output/evidence"));
+    }
+
+    #[test]
+    fn release_delivery_writes_build_agent_artifacts() {
+        let dir = tempdir().unwrap();
+        let run = completed_low_risk_run(dir.path(), "iss-001");
+
+        let delivery = prepare_release_delivery(dir.path(), run.run_id.clone()).unwrap();
+        let loaded = load_release_delivery(dir.path(), run.run_id.clone()).unwrap();
+
+        assert_eq!(delivery.version, OUTPUT_RELEASE_DELIVERY_VERSION);
+        assert_eq!(delivery.created_by, "Build Agent");
+        assert_eq!(delivery.status, "drafted");
+        assert_eq!(
+            delivery.evidence_path,
+            format!(".agentflow/output/evidence/{}.json", run.run_id)
+        );
+        assert_eq!(loaded.run_id, run.run_id);
+        for artifact in [
+            "delivery.json",
+            "pr-draft.md",
+            "pr-metadata.json",
+            "review-checklist.md",
+            "changelog.md",
+            "release-note.md",
+        ] {
+            assert!(dir
+                .path()
+                .join(".agentflow/output/release")
+                .join(&loaded.run_id)
+                .join(artifact)
+                .is_file());
+        }
+        assert_eq!(
+            delivery.artifacts.pr_draft,
+            format!(".agentflow/output/release/{}/pr-draft.md", loaded.run_id)
+        );
     }
 
     #[test]
@@ -299,6 +435,27 @@ mod tests {
         let outcome =
             apply_execute_patch(dir.path(), run.run_id.clone(), patch.to_string()).unwrap();
         assert_eq!(outcome.changed_files.files[0].path, "src/lib.rs");
+        assert_eq!(
+            outcome.proposed_patch_path,
+            format!(
+                ".agentflow/execute/runs/{}/patches/proposed.patch",
+                run.run_id
+            )
+        );
+        assert_eq!(
+            outcome.applied_patch_path,
+            format!(
+                ".agentflow/execute/runs/{}/patches/applied.patch",
+                run.run_id
+            )
+        );
+        assert_eq!(
+            outcome.worktree_diff_path,
+            format!(
+                ".agentflow/execute/runs/{}/patches/worktree.diff",
+                run.run_id
+            )
+        );
         assert!(fs::read_to_string(dir.path().join("src/lib.rs"))
             .unwrap()
             .contains("2"));
