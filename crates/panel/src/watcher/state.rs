@@ -1,6 +1,6 @@
 use crate::{
-    manager::{index_project_graph, unix_timestamp_seconds},
-    model::GraphWatcherSnapshot,
+    manager::{index_project_panel, unix_timestamp_seconds},
+    model::PanelWatcherSnapshot,
     watcher::{debounce::DEBOUNCE_MS, filter::IGNORED_ENTRIES, native::native_backend_name},
 };
 use std::{
@@ -23,7 +23,7 @@ pub(crate) struct WatcherState {
 
 static WATCHERS: OnceLock<Mutex<HashMap<String, WatcherState>>> = OnceLock::new();
 
-pub(crate) fn ensure_starting_state(root: &Path, root_key: &str) -> (GraphWatcherSnapshot, bool) {
+pub(crate) fn ensure_starting_state(root: &Path, root_key: &str) -> (PanelWatcherSnapshot, bool) {
     let registry = WATCHERS.get_or_init(|| Mutex::new(HashMap::new()));
     let mut watchers = registry.lock().expect("panel watcher registry poisoned");
     if let Some(state) = watchers.get(root_key) {
@@ -48,9 +48,9 @@ pub(crate) fn watcher_state(project_root: impl AsRef<Path>) -> Option<WatcherSta
         .and_then(|registry| registry.lock().ok()?.get(&root_key).cloned())
 }
 
-pub(crate) fn refresh_graph(root_key: &str, root: &Path, backend: &str, event_kind: &str) {
+pub(crate) fn refresh_panel(root_key: &str, root: &Path, backend: &str, event_kind: &str) {
     record_event(root_key, "indexing", event_kind, None);
-    match index_project_graph(root) {
+    match index_project_panel(root) {
         Ok(_) => {
             update_state(root_key, |state| {
                 state.status = if backend == "fingerprint" {
@@ -127,8 +127,8 @@ fn starting_state() -> WatcherState {
     }
 }
 
-fn snapshot(root: &Path, state: &WatcherState) -> GraphWatcherSnapshot {
-    GraphWatcherSnapshot {
+fn snapshot(root: &Path, state: &WatcherState) -> PanelWatcherSnapshot {
+    PanelWatcherSnapshot {
         version: "panel-watcher.v1".to_string(),
         project_root: root.display().to_string(),
         status: state.status.clone(),

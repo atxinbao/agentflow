@@ -25,9 +25,6 @@
 ## 当前入口
 
 - [001-add-local-project.md](001-add-local-project.md)
-- [002-graph-v1.md](002-graph-v1.md)
-- [002-1-graph-v1-completion.md](002-1-graph-v1-completion.md)
-- [002-2-graph-v1-os-native-watcher-closeout.md](002-2-graph-v1-os-native-watcher-closeout.md)
 - [003-project-file-reader-v1-completion.md](003-project-file-reader-v1-completion.md)
 - [004-legacy-cleanup-and-new-module-split.md](004-legacy-cleanup-and-new-module-split.md)
 - [005-legacy-and-degraded-code-removal.md](005-legacy-and-degraded-code-removal.md)
@@ -39,6 +36,7 @@
 - [008-2-requirement-intake-filter-skill-v1.md](008-2-requirement-intake-filter-skill-v1.md)
 - [008-3-agentflow-workflow-directory-blueprint-v1-final.md](008-3-agentflow-workflow-directory-blueprint-v1-final.md)
 - [008-4-project-panel-v1.md](008-4-project-panel-v1.md)
+- [008-4-1-project-panel-finalization-and-graph-removal-v1.md](008-4-1-project-panel-finalization-and-graph-removal-v1.md)
 - [next-requirements.md](next-requirements.md)
 
 ## 不继承内容

@@ -6,4 +6,4 @@
 //! requirement explicitly re-authorizes it.
 
 //! 006 retired the public compatibility re-export for the old SQLite index
-//! writer. Graph and file-reader requirements now own current read surfaces.
+//! writer. Panel and file-reader requirements now own current read surfaces.

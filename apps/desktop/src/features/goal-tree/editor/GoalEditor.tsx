@@ -94,7 +94,7 @@ export function IssueContractViewer({ issue }: { issue: IssueRecord }) {
         values={[
           ["所属 Goal", issue.goalId],
           ["所属 Milestone", issue.milestoneId],
-          ["Panel Context", issue.system.graphContextPackPath ?? "未准备"],
+          ["Panel Context", issue.system.panelContextPackPath ?? "未准备"],
           ["创建者", issue.system.createdBy],
           ["更新者", issue.system.updatedBy],
           ["记录路径", issue.system.path],

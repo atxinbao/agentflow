@@ -1,8 +1,8 @@
 import type {
-  GraphContextPack,
-  GraphManifestSnapshot,
-  GraphSearchSnapshot,
-  GraphStatusSnapshot,
+  PanelContextPack,
+  PanelManifestSnapshot,
+  PanelSearchSnapshot,
+  PanelStatusSnapshot,
   GoalTreeSnapshot,
   IssueContract,
   LocalMetricsSnapshot,
@@ -333,7 +333,7 @@ export function createBrowserPreviewProjectViewModelSnapshot(projectRoot = BROWS
         validationCommands: previewIssueContract.validation.commands,
         evidenceRequired: previewIssueContract.evidenceRequirements,
         allowedFiles: previewIssueContract.context.files,
-        forbiddenFiles: [".agentflow/*", ".codex/*", "graphify-out/*"],
+        forbiddenFiles: [".agentflow/*", ".codex/*", "agent-artifacts/*"],
         boundary: previewIssueContract.nonGoals,
         riskLevel: "low",
       },
@@ -474,7 +474,7 @@ export function createBrowserPreviewGoalTreeSnapshot(projectRoot = BROWSER_PREVI
           updatedBy: "agent-system",
           path: `.agentflow/define/issues/${previewIssueId}.json`,
           revision: 1,
-          graphContextPackPath: ".agentflow/panel/context-packs/iss-001.json",
+          panelContextPackPath: ".agentflow/panel/context-packs/iss-001.json",
         },
       },
     ],
@@ -543,7 +543,7 @@ export function createBrowserPreviewProjectFilesSnapshot(
   };
 }
 
-export function createBrowserPreviewGraphStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): GraphStatusSnapshot {
+export function createBrowserPreviewPanelStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): PanelStatusSnapshot {
   return {
     version: "panel-status.browser-preview",
     projectRoot,
@@ -652,7 +652,7 @@ export function createBrowserPreviewAgentEnvironmentStatus(
   };
 }
 
-export function createBrowserPreviewGraphManifest(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): GraphManifestSnapshot {
+export function createBrowserPreviewPanelManifest(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): PanelManifestSnapshot {
   return {
     version: "panel-manifest.browser-preview",
     projectRoot,
@@ -671,7 +671,7 @@ export function createBrowserPreviewGraphManifest(projectRoot = BROWSER_PREVIEW_
   };
 }
 
-export function createBrowserPreviewGraphSearch(query: string): GraphSearchSnapshot {
+export function createBrowserPreviewPanelSearch(query: string): PanelSearchSnapshot {
   const normalizedQuery = query.trim() || "project";
   return {
     version: "panel-search.browser-preview",
@@ -689,7 +689,7 @@ export function createBrowserPreviewGraphSearch(query: string): GraphSearchSnaps
       },
       {
         kind: "symbol",
-        path: "crates/graph/src/manager.rs",
+        path: "crates/panel/src/manager.rs",
         title: "prepare_project_panel",
         language: "rust",
         symbolKind: "function",
@@ -701,14 +701,14 @@ export function createBrowserPreviewGraphSearch(query: string): GraphSearchSnaps
   };
 }
 
-export function createBrowserPreviewGraphContextPack(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): GraphContextPack {
+export function createBrowserPreviewPanelContextPack(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): PanelContextPack {
   return {
     version: "panel-context-pack.browser-preview",
     targetType: "preview",
     targetId: "browser-preview",
     query: "Project 文件阅读器 Panel V1 浏览器预览",
     createdAt: previewTimestamp,
-    graphRevision: "browser-preview",
+    panelRevision: "browser-preview",
     recommendedFiles: [
       {
         path: "apps/desktop/src/features/project-files/ProjectLocalFilesPage.tsx",
@@ -1017,7 +1017,7 @@ function filterBrowserPreviewChildren(children: ProjectFileChild[], viewMode: Pr
 function browserPreviewSourceExcluded(relativePath: string) {
   return relativePath
     .split("/")
-    .some((part) => [".git", ".agentflow", ".codex", "target", "node_modules", "dist", "build", "graphify-out"].includes(part));
+    .some((part) => [".git", ".agentflow", ".codex", "target", "node_modules", "dist", "build", "agent-artifacts"].includes(part));
 }
 
 function flattenBrowserPreviewEntries(entries: ProjectFileEntry[]): ProjectFileEntry[] {
@@ -1040,7 +1040,7 @@ function browserPreviewFileContentByPath(relativePath: string, projectRoot: stri
     "README.md": {
       language: "markdown",
       mimeType: "text/markdown",
-      content: `# AgentFlow\n\n浏览器预览模式使用这份 mock 项目数据来验证 Desktop UI。\n\n## 边界\n\n- 真实桌面客户端读取 ${projectRoot} 下的本地文件。\n- 浏览器预览不具备 Tauri 本地命令能力，因此只展示 mock 文件树。\n- 浏览器预览不会写入 .agentflow/、.codex/ 或 graphify-out/。\n`,
+      content: `# AgentFlow\n\n浏览器预览模式使用这份 mock 项目数据来验证 Desktop UI。\n\n## 边界\n\n- 真实桌面客户端读取 ${projectRoot} 下的本地文件。\n- 浏览器预览不具备 Tauri 本地命令能力，因此只展示 mock 文件树。\n- 浏览器预览不会写入 .agentflow/、.codex/ 或 agent-artifacts/。\n`,
     },
     "design.md": {
       language: "markdown",

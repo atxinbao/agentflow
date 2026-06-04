@@ -21,7 +21,7 @@ const SOURCE_VIEW_EXCLUDED_DIRS: &[&str] = &[
     "build",
     ".next",
     ".turbo",
-    "graphify-out",
+    "agent-artifacts",
 ];
 
 pub(crate) fn normalize_project_file_view_mode(view_mode: Option<&str>) -> String {

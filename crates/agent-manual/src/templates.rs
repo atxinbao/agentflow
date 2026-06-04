@@ -85,7 +85,6 @@ You are an Agent working inside an AgentFlow-managed local project.
 - SPEC is the requirement source.
 - Goal Tree is derived from approved SPEC.
 - Panel canonical path is `.agentflow/panel/`.
-- Legacy Graph compatibility paths are `.agentflow/output/graph/` and `.agentflow/graph/`.
 - AgentRun is not authorized yet.
 
 ## Allowed Actions
@@ -135,31 +134,25 @@ Goal Tree is an agent-only derived fact source under `.agentflow/goal-tree/`. Hu
 
 ## Agent Roles
 
-### 1. Intake Agent / 需求接待 Agent
+### 1. Spec Agent / 规格定义 Agent
 
 Status: enabled.
 
-Receives human input, classifies request type, runs requirement-intake-filter, asks clarification questions, and decides whether a request is ready for SPEC. It cannot write SPEC files, Goal Tree, source code, or execute commands.
+Combines requirement intake and SPEC planning. It receives human input, classifies request type, runs requirement-intake-filter, asks clarification questions, produces SPEC Draft Preview from `ready-for-openspec` intake results, waits for human confirmation, and later materializes Goal Tree from Approved SPEC. It cannot skip intake, bypass confirmation, execute issues, write source code, or run tests.
 
-### 2. Spec Planning Agent / 规格计划 Agent
-
-Status: planned.
-
-Produces SPEC Draft Preview from `ready-for-openspec` intake results, waits for human confirmation, and later materializes Goal Tree from Approved SPEC. It cannot bypass intake, skip confirmation, execute issues, write source code, or run tests.
-
-### 3. Build Agent / 实现执行 Agent
+### 2. Build Agent / 实现执行 Agent
 
 Status: not authorized yet.
 
 Future role for TDD-driven implementation from approved Goal Tree issues. It cannot run without Approved SPEC, a Goal Tree issue, and TDD evidence.
 
-### 4. Release Agent / 发布交付 Agent
+### 3. Release Agent / 发布交付 Agent
 
 Status: not authorized yet.
 
 Future role for commit, PR, review, changelog, release note, deploy, rollback, and release evidence. It cannot create remote PRs or deploy in the current stage.
 
-### 5. Audit Agent / 代码审计 Agent
+### 4. Audit Agent / 代码审计 Agent
 
 Status: not authorized yet.
 
@@ -341,7 +334,7 @@ Check whether the request asks the Agent to:
 - Skip approved OpenSpec.
 - Start AgentRun.
 - Create remote PRs, issues, or external objects.
-- Touch legacy paths.
+- Touch retired runtime paths.
 - Bypass AGENTS.md, Agentflow.md, or skills-lock.json.
 
 If out of bounds, return `blocked-by-boundary` and explain the allowed replacement flow.
@@ -473,7 +466,7 @@ Check every Agent action before it proceeds.
 - Does approved OpenSpec exist?
 - Is the Agent about to start AgentRun?
 - Is the Agent about to create a remote object?
-- Does the action touch legacy paths?
+- Does the action touch retired runtime paths?
 
 ## If Out Of Bounds
 

@@ -64,7 +64,7 @@ pub(crate) fn run_native_watcher(root: PathBuf) -> Result<()> {
         }
 
         if saw_relevant_event {
-            state::refresh_graph(&root_key, &root, "native", &last_kind);
+            state::refresh_panel(&root_key, &root, "native", &last_kind);
         }
     }
 }

@@ -1,12 +1,12 @@
 use crate::model::{
-    GraphChunkRecord, GraphFileRecord, GraphIndex, GraphRelationRecord, GraphStatus,
-    GraphStatusSnapshot, GraphSymbolRecord,
+    PanelChunkRecord, PanelFileRecord, PanelIndex, PanelRelationRecord, PanelStatus,
+    PanelStatusSnapshot, PanelSymbolRecord,
 };
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection};
 use std::path::Path;
 
-pub(crate) fn open_graph_db(path: &Path) -> Result<Connection> {
+pub(crate) fn open_panel_db(path: &Path) -> Result<Connection> {
     let connection = Connection::open(path).with_context(|| format!("open {}", path.display()))?;
     migrate(&connection)?;
     Ok(connection)
@@ -79,7 +79,7 @@ pub(crate) fn migrate(connection: &Connection) -> Result<()> {
             target_id TEXT,
             query TEXT NOT NULL,
             created_at INTEGER NOT NULL,
-            graph_revision TEXT,
+            panel_revision TEXT,
             recommended_files_json TEXT NOT NULL,
             recommended_symbols_json TEXT NOT NULL,
             recommended_tests_json TEXT NOT NULL,
@@ -113,7 +113,7 @@ pub(crate) fn migrate(connection: &Connection) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn replace_index(connection: &mut Connection, index: &GraphIndex) -> Result<()> {
+pub(crate) fn replace_index(connection: &mut Connection, index: &PanelIndex) -> Result<()> {
     let transaction = connection.transaction()?;
     transaction.execute("DELETE FROM relations", [])?;
     transaction.execute("DELETE FROM chunks", [])?;
@@ -156,7 +156,7 @@ pub(crate) fn finish_index_run(
     id: &str,
     finished_at: u64,
     status: &str,
-    index: Option<&GraphIndex>,
+    index: Option<&PanelIndex>,
     error: Option<&str>,
 ) -> Result<()> {
     let (files, symbols, relations) = index
@@ -196,15 +196,15 @@ pub(crate) fn finish_index_run(
 pub(crate) fn counts(
     connection: &Connection,
     project_root: &str,
-    status: GraphStatus,
-) -> Result<GraphStatusSnapshot> {
+    status: PanelStatus,
+) -> Result<PanelStatusSnapshot> {
     let file_count: i64 =
         connection.query_row("SELECT COUNT(*) FROM files", [], |row| row.get(0))?;
     let symbol_count: i64 =
         connection.query_row("SELECT COUNT(*) FROM symbols", [], |row| row.get(0))?;
     let relation_count: i64 =
         connection.query_row("SELECT COUNT(*) FROM relations", [], |row| row.get(0))?;
-    Ok(GraphStatusSnapshot {
+    Ok(PanelStatusSnapshot {
         version: "panel-status.v1".to_string(),
         project_root: project_root.to_string(),
         status,
@@ -222,7 +222,7 @@ pub(crate) fn counts(
     })
 }
 
-pub(crate) fn fetch_symbols(connection: &Connection) -> Result<Vec<GraphSymbolRecord>> {
+pub(crate) fn fetch_symbols(connection: &Connection) -> Result<Vec<PanelSymbolRecord>> {
     let mut statement = connection.prepare(
         r#"
         SELECT id, file_id, language, name, kind, signature, start_line, end_line,
@@ -232,7 +232,7 @@ pub(crate) fn fetch_symbols(connection: &Connection) -> Result<Vec<GraphSymbolRe
         "#,
     )?;
     let rows = statement.query_map([], |row| {
-        Ok(GraphSymbolRecord {
+        Ok(PanelSymbolRecord {
             id: row.get(0)?,
             file_id: row.get(1)?,
             language: row.get(2)?,
@@ -250,7 +250,7 @@ pub(crate) fn fetch_symbols(connection: &Connection) -> Result<Vec<GraphSymbolRe
         .map_err(Into::into)
 }
 
-pub(crate) fn fetch_relations(connection: &Connection) -> Result<Vec<GraphRelationRecord>> {
+pub(crate) fn fetch_relations(connection: &Connection) -> Result<Vec<PanelRelationRecord>> {
     let mut statement = connection.prepare(
         r#"
         SELECT id, from_type, from_id, to_type, to_id, relation_kind, confidence, source
@@ -259,7 +259,7 @@ pub(crate) fn fetch_relations(connection: &Connection) -> Result<Vec<GraphRelati
         "#,
     )?;
     let rows = statement.query_map([], |row| {
-        Ok(GraphRelationRecord {
+        Ok(PanelRelationRecord {
             id: row.get(0)?,
             from_type: row.get(1)?,
             from_id: row.get(2)?,
@@ -274,7 +274,7 @@ pub(crate) fn fetch_relations(connection: &Connection) -> Result<Vec<GraphRelati
         .map_err(Into::into)
 }
 
-pub(crate) fn fetch_files(connection: &Connection) -> Result<Vec<GraphFileRecord>> {
+pub(crate) fn fetch_files(connection: &Connection) -> Result<Vec<PanelFileRecord>> {
     let mut statement = connection.prepare(
         r#"
         SELECT id, path, name, extension, language, kind, size_bytes, line_count, modified_at,
@@ -284,7 +284,7 @@ pub(crate) fn fetch_files(connection: &Connection) -> Result<Vec<GraphFileRecord
         "#,
     )?;
     let rows = statement.query_map([], |row| {
-        Ok(GraphFileRecord {
+        Ok(PanelFileRecord {
             id: row.get(0)?,
             path: row.get(1)?,
             name: row.get(2)?,
@@ -309,7 +309,7 @@ pub(crate) fn fetch_files(connection: &Connection) -> Result<Vec<GraphFileRecord
         .map_err(Into::into)
 }
 
-fn insert_file(connection: &Connection, file: &GraphFileRecord) -> Result<()> {
+fn insert_file(connection: &Connection, file: &PanelFileRecord) -> Result<()> {
     connection.execute(
         r#"
         INSERT INTO files (
@@ -339,7 +339,7 @@ fn insert_file(connection: &Connection, file: &GraphFileRecord) -> Result<()> {
     Ok(())
 }
 
-fn insert_symbol(connection: &Connection, symbol: &GraphSymbolRecord) -> Result<()> {
+fn insert_symbol(connection: &Connection, symbol: &PanelSymbolRecord) -> Result<()> {
     connection.execute(
         r#"
         INSERT INTO symbols (
@@ -364,7 +364,7 @@ fn insert_symbol(connection: &Connection, symbol: &GraphSymbolRecord) -> Result<
     Ok(())
 }
 
-fn insert_relation(connection: &Connection, relation: &GraphRelationRecord) -> Result<()> {
+fn insert_relation(connection: &Connection, relation: &PanelRelationRecord) -> Result<()> {
     connection.execute(
         r#"
         INSERT INTO relations (
@@ -385,7 +385,7 @@ fn insert_relation(connection: &Connection, relation: &GraphRelationRecord) -> R
     Ok(())
 }
 
-fn insert_chunk(connection: &Connection, chunk: &GraphChunkRecord) -> Result<()> {
+fn insert_chunk(connection: &Connection, chunk: &PanelChunkRecord) -> Result<()> {
     connection.execute(
         r#"
         INSERT INTO chunks (
@@ -415,8 +415,8 @@ mod tests {
     #[test]
     fn migrate_is_idempotent() {
         let dir = tempdir().unwrap();
-        let db_path = dir.path().join("graph.db");
-        let connection = open_graph_db(&db_path).unwrap();
+        let db_path = dir.path().join("panel.db");
+        let connection = open_panel_db(&db_path).unwrap();
         migrate(&connection).unwrap();
         migrate(&connection).unwrap();
     }

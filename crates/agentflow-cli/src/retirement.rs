@@ -69,7 +69,7 @@ pub(crate) fn legacy_command_status(command: &Command) -> LegacyCommandStatus {
         Command::Context => LegacyCommandStatus {
             command_name: "context",
             disposition: LegacyCommandDisposition::Delete,
-            reason: "old context writer is superseded by Graph read models",
+            reason: "old context writer is superseded by Panel read models",
         },
         Command::Goal { .. } => LegacyCommandStatus::disabled(
             "goal",

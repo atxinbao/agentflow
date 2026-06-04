@@ -126,7 +126,7 @@ export type GoalSystemState = {
 export type MilestoneSystemState = GoalSystemState;
 
 export type IssueSystemState = GoalSystemState & {
-  graphContextPackPath?: string | null;
+  panelContextPackPath?: string | null;
 };
 
 export type GoalTreeValidationSnapshot = {

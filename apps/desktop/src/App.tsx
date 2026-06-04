@@ -40,9 +40,9 @@ import {
   normalizeProjectRootKey,
   projectNameFromPath,
   projectRootsEqual,
-  useProjectGraph,
+  useProjectPanel,
   useProjectFiles,
-  type ProjectGraphState,
+  type ProjectPanelState,
   type ProjectFileViewMode,
   type ProjectFilesState,
 } from "./features/project-files";
@@ -341,11 +341,11 @@ function App() {
     selectProjectFile,
     setProjectFileViewMode,
   } = useProjectFiles(selectedProjectRoot);
-  const graphProjectRoot =
+  const panelProjectRoot =
     selectedProjectRoot ??
     projectFilesState.snapshot?.projectRoot ??
     (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
-  const { projectGraphState } = useProjectGraph(graphProjectRoot);
+  const { projectPanelState } = useProjectPanel(panelProjectRoot);
   const goalTreeProjectRoot =
     selectedProjectRoot ??
     projectFilesState.snapshot?.projectRoot ??
@@ -357,8 +357,8 @@ function App() {
     (isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null);
   const { agentManualState, loadAgentManual } = useAgentManual(agentManualProjectRoot);
   const agentStatusItems = useMemo(
-    () => buildAgentStatusItems({ agentManualState, projectFilesState, projectGraphState }),
-    [agentManualState, projectFilesState, projectGraphState],
+    () => buildAgentStatusItems({ agentManualState, projectFilesState, projectPanelState }),
+    [agentManualState, projectFilesState, projectPanelState],
   );
 
   function applyBrowserPreviewSnapshot(projectRoot: string) {
@@ -792,7 +792,7 @@ function App() {
             onLoadProjectFileTextRange={loadProjectFileTextRange}
             onSearchProjectFiles={searchProjectFiles}
             onSetProjectFileViewMode={setProjectFileViewMode}
-            projectGraphState={projectGraphState}
+            projectPanelState={projectPanelState}
             projectFilesState={projectFilesState}
             projectViewModel={projectViewModel}
             selectedMilestoneId={selectedMilestoneId}
@@ -1104,7 +1104,7 @@ function ProjectView({
   onSelectProjectFile,
   onSearchProjectFiles,
   onSetProjectFileViewMode,
-  projectGraphState,
+  projectPanelState,
   projectFilesState,
   projectViewModel,
   selectedMilestoneId,
@@ -1119,7 +1119,7 @@ function ProjectView({
   onSelectProjectFile: (relativePath: string) => void;
   onSearchProjectFiles: (query: string) => Promise<unknown>;
   onSetProjectFileViewMode: (viewMode: ProjectFileViewMode) => void;
-  projectGraphState: ProjectGraphState;
+  projectPanelState: ProjectPanelState;
   projectFilesState: ProjectFilesState;
   projectViewModel: ProjectMilestoneIssueViewModelSnapshot | null;
   selectedMilestoneId: string | null;

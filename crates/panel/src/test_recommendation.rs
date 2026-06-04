@@ -1,15 +1,15 @@
-use crate::{manager::load_project_graph_manifest, model::GraphTestHint};
+use crate::{manager::load_project_panel_manifest, model::PanelTestHint};
 use anyhow::Result;
 use std::{fs, path::Path};
 
-pub fn recommend_graph_tests(
+pub fn recommend_panel_tests(
     project_root: impl AsRef<Path>,
     changed_files: &[String],
     context_files: &[String],
     affected_tests: &[String],
-) -> Result<Vec<GraphTestHint>> {
+) -> Result<Vec<PanelTestHint>> {
     let root = project_root.as_ref();
-    let manifest = load_project_graph_manifest(root)?;
+    let manifest = load_project_panel_manifest(root)?;
     let mut hints = Vec::new();
 
     if root.join("Cargo.toml").is_file()
@@ -170,8 +170,8 @@ pub fn recommend_graph_tests(
     dedup_hints(hints)
 }
 
-fn hint(command_hint: &str, reason: &str, confidence: &str, scope: &str) -> GraphTestHint {
-    GraphTestHint {
+fn hint(command_hint: &str, reason: &str, confidence: &str, scope: &str) -> PanelTestHint {
+    PanelTestHint {
         command_hint: command_hint.to_string(),
         reason: reason.to_string(),
         confidence: confidence.to_string(),
@@ -233,7 +233,7 @@ fn has_extension(root: &Path, extension: &str) -> bool {
     })
 }
 
-fn dedup_hints(hints: Vec<GraphTestHint>) -> Result<Vec<GraphTestHint>> {
+fn dedup_hints(hints: Vec<PanelTestHint>) -> Result<Vec<PanelTestHint>> {
     let mut seen = std::collections::BTreeSet::new();
     Ok(hints
         .into_iter()
@@ -244,7 +244,7 @@ fn dedup_hints(hints: Vec<GraphTestHint>) -> Result<Vec<GraphTestHint>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manager::index_project_graph;
+    use crate::manager::index_project_panel;
     use tempfile::tempdir;
 
     #[test]
@@ -260,9 +260,9 @@ mod tests {
             "{\"scripts\":{\"test\":\"vitest run\"}}",
         )
         .unwrap();
-        index_project_graph(dir.path()).unwrap();
+        index_project_panel(dir.path()).unwrap();
 
-        let hints = recommend_graph_tests(dir.path(), &[], &[], &[]).unwrap();
+        let hints = recommend_panel_tests(dir.path(), &[], &[], &[]).unwrap();
 
         assert!(hints.iter().any(|hint| hint.command_hint == "cargo test"));
         assert!(hints.iter().any(|hint| hint.command_hint == "npm test"));

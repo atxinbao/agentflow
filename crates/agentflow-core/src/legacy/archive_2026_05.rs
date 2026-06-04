@@ -254,7 +254,7 @@ pub struct AepIssueProtocol {
     pub vertical_slice: String,
     pub tracer_bullet_plan: Vec<String>,
     pub diagnose_plan: Vec<String>,
-    pub graphify_context_status: String,
+    pub context_status: String,
     pub docs_claim_trace: Vec<String>,
     pub boundary_confirmation: Vec<String>,
     pub pr_handoff_requirements: Vec<String>,
@@ -1619,7 +1619,7 @@ pub struct ProjectDocsRefreshSummary {
 
 pub fn compile_goal_from_markdown(markdown: &str) -> ProjectGoal {
     let objective = section_body(markdown, "Objective")
-        .and_then(first_paragraph)
+        .and_then(first_text_block)
         .unwrap_or_else(|| "Build the local AgentFlow execution spine.".to_string());
     let success_criteria = section_body(markdown, "Success")
         .map(bullets)
@@ -3391,9 +3391,9 @@ pub fn write_review_assistant(repo: &Path, issue_id: &str) -> Result<ReviewAssis
         format!("{} traced docs.", issue.aep.docs_claim_trace.len()),
     ));
     checks.push(assistant_check(
-        "Graphify context status",
-        !issue.aep.graphify_context_status.is_empty(),
-        issue.aep.graphify_context_status.clone(),
+        "Context status",
+        !issue.aep.context_status.is_empty(),
+        issue.aep.context_status.clone(),
     ));
     checks.push(assistant_check(
         "Scope state",
@@ -6699,7 +6699,7 @@ fn aep_issue_protocol(settings: &Settings) -> AepIssueProtocol {
             "Record failing command, exit code, stdout, and stderr.".to_string(),
             "Narrow the next attempt to the failing contract boundary.".to_string(),
         ],
-        graphify_context_status: "not-integrated-v0-local-context-only".to_string(),
+        context_status: "not-integrated-v0-local-context-only".to_string(),
         docs_claim_trace: vec![
             ".agentflow/goal.json".to_string(),
             ".agentflow/project-definition.json".to_string(),
@@ -11508,7 +11508,7 @@ fn section_body<'a>(markdown: &'a str, heading: &str) -> Option<&'a str> {
     Some(after_newline[..end].trim())
 }
 
-fn first_paragraph(body: &str) -> Option<String> {
+fn first_text_block(body: &str) -> Option<String> {
     body.lines()
         .map(str::trim)
         .filter(|line| !line.is_empty() && !line.starts_with('>'))
@@ -11651,7 +11651,7 @@ fn dry_run_diff_summary(issue: &IssueContract, run: &AgentRun) -> String {
 
 fn evidence_markdown(issue: &IssueContract, run: &AgentRun, passed: bool) -> String {
     format!(
-        "# {} Evidence\n\n- Issue: `{}`\n- Run: `{}`\n- Project: `{}`\n- Milestone: `{}`\n- Lease: `{}`\n- Result: `{}`\n\n## Artifacts\n\n- Transcript: `.agentflow/runs/{}/transcript.md`\n- Commands: `.agentflow/runs/{}/commands.jsonl`\n- Diff summary: `.agentflow/runs/{}/diff-summary.md`\n\n## Validation\n\n{}\n\n## AEP Evidence Chain\n\n- Stop condition: {}\n- Graphify context status: {}\n\n### Docs Claim Trace\n\n{}\n\n### Boundary Confirmation\n\n{}\n\n## Known Limitations\n\n- Runtime Adapter v0 is dry-run only.\n- External model execution and apply gates remain future work.\n",
+        "# {} Evidence\n\n- Issue: `{}`\n- Run: `{}`\n- Project: `{}`\n- Milestone: `{}`\n- Lease: `{}`\n- Result: `{}`\n\n## Artifacts\n\n- Transcript: `.agentflow/runs/{}/transcript.md`\n- Commands: `.agentflow/runs/{}/commands.jsonl`\n- Diff summary: `.agentflow/runs/{}/diff-summary.md`\n\n## Validation\n\n{}\n\n## AEP Evidence Chain\n\n- Stop condition: {}\n- Context status: {}\n\n### Docs Claim Trace\n\n{}\n\n### Boundary Confirmation\n\n{}\n\n## Known Limitations\n\n- Runtime Adapter v0 is dry-run only.\n- External model execution and apply gates remain future work.\n",
         issue.id,
         issue.id,
         run.id,
@@ -11664,7 +11664,7 @@ fn evidence_markdown(issue: &IssueContract, run: &AgentRun, passed: bool) -> Str
         run.id,
         validation_table(&run.validation_commands),
         issue.aep.stop_condition,
-        issue.aep.graphify_context_status,
+        issue.aep.context_status,
         markdown_list(&issue.aep.docs_claim_trace),
         markdown_list(&issue.aep.boundary_confirmation)
     )
@@ -11953,7 +11953,7 @@ fn issue_title(intent: &str) -> String {
 fn issue_markdown_body(contract: &IssueContract) -> String {
     let project_link = issue_project_link_markdown(&contract.project_link);
     format!(
-        "# {}: {}\n\n## Intent\n\n{}\n\n## Risk Level\n\n{}\n\n## Scope\n\n{}\n\n## Non-Goals\n\n{}\n\n## Context\n\n- Repo: {}\n- Files:\n{}\n\n## Execution Plan\n\n{}\n\n## Validation\n\n{}\n\n## Evidence Requirements\n\n{}\n\n## Rollback Plan\n\n{}\n\n{}## AEP Protocol\n\n- Phase: {}\n- Stop condition: {}\n- Vertical slice: {}\n- Graphify context status: {}\n\n### Fastest Feedback Loop\n\n{}\n\n### Tracer Bullet Plan\n\n{}\n\n### Diagnose Plan\n\n{}\n\n### Docs Claim Trace\n\n{}\n\n### Boundary Confirmation\n\n{}\n\n### PR Handoff Requirements\n\n{}\n\n## Human Gate\n\n- Requires confirmation before file edits: {}\n- Requires confirmation before external network: {}\n\n## Status\n\n{}\n",
+        "# {}: {}\n\n## Intent\n\n{}\n\n## Risk Level\n\n{}\n\n## Scope\n\n{}\n\n## Non-Goals\n\n{}\n\n## Context\n\n- Repo: {}\n- Files:\n{}\n\n## Execution Plan\n\n{}\n\n## Validation\n\n{}\n\n## Evidence Requirements\n\n{}\n\n## Rollback Plan\n\n{}\n\n{}## AEP Protocol\n\n- Phase: {}\n- Stop condition: {}\n- Vertical slice: {}\n- Context status: {}\n\n### Fastest Feedback Loop\n\n{}\n\n### Tracer Bullet Plan\n\n{}\n\n### Diagnose Plan\n\n{}\n\n### Docs Claim Trace\n\n{}\n\n### Boundary Confirmation\n\n{}\n\n### PR Handoff Requirements\n\n{}\n\n## Human Gate\n\n- Requires confirmation before file edits: {}\n- Requires confirmation before external network: {}\n\n## Status\n\n{}\n",
         contract.id,
         contract.title,
         contract.intent,
@@ -11970,7 +11970,7 @@ fn issue_markdown_body(contract: &IssueContract) -> String {
         contract.aep.phase,
         contract.aep.stop_condition,
         contract.aep.vertical_slice,
-        contract.aep.graphify_context_status,
+        contract.aep.context_status,
         markdown_list(&contract.aep.fastest_feedback_loop),
         numbered_list(&contract.aep.tracer_bullet_plan),
         numbered_list(&contract.aep.diagnose_plan),

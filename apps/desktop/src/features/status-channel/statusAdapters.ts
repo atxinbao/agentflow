@@ -1,19 +1,19 @@
-import type { ProjectFilesState, ProjectGraphState } from "../project-files";
+import type { ProjectFilesState, ProjectPanelState } from "../project-files";
 import type { AgentManualState } from "../agent-manual";
 import type { AgentStatusChannelItem, AgentStatusTone } from "./statusTypes";
 
 export function buildAgentStatusItems({
   agentManualState,
   projectFilesState,
-  projectGraphState,
+  projectPanelState,
 }: {
   agentManualState: AgentManualState;
   projectFilesState: ProjectFilesState;
-  projectGraphState: ProjectGraphState;
+  projectPanelState: ProjectPanelState;
 }): AgentStatusChannelItem[] {
   return [
     buildWorkspaceStatus(projectFilesState),
-    buildWorksiteStatus(projectGraphState),
+    buildWorksiteStatus(projectPanelState),
     buildAgentManualStatus(agentManualState),
   ];
 }
@@ -158,14 +158,14 @@ function buildWorkspaceStatus(projectFilesState: ProjectFilesState): AgentStatus
   };
 }
 
-function buildWorksiteStatus(projectGraphState: ProjectGraphState): AgentStatusChannelItem {
+function buildWorksiteStatus(projectPanelState: ProjectPanelState): AgentStatusChannelItem {
   const source = "008.4 - Project Panel V1";
-  const graphStatus = projectGraphState.status?.status ?? "missing";
-  const languageText = projectGraphState.manifest?.languages.length
-    ? projectGraphState.manifest.languages.slice(0, 5).join(" / ")
+  const panelStatus = projectPanelState.status?.status ?? "missing";
+  const languageText = projectPanelState.manifest?.languages.length
+    ? projectPanelState.manifest.languages.slice(0, 5).join(" / ")
     : "未记录";
 
-  if (projectGraphState.error) {
+  if (projectPanelState.error) {
     return {
       id: "agent-worksite",
       label: "工作现场",
@@ -173,31 +173,31 @@ function buildWorksiteStatus(projectGraphState: ProjectGraphState): AgentStatusC
       statusLabel: "异常",
       source,
       priority: 20,
-      error: projectGraphState.error,
+      error: projectPanelState.error,
     };
   }
 
   return {
     id: "agent-worksite",
     label: "工作现场",
-    status: graphStatusTone(graphStatus, projectGraphState.source),
-    statusLabel: graphStatusLabel(graphStatus, projectGraphState.source),
+    status: panelStatusTone(panelStatus, projectPanelState.source),
+    statusLabel: panelStatusLabel(panelStatus, projectPanelState.source),
     source,
     priority: 20,
     metrics: [
-      { label: "文件", value: projectGraphState.status?.fileCount ?? 0 },
-      { label: "符号", value: projectGraphState.status?.symbolCount ?? 0 },
-      { label: "关系", value: projectGraphState.status?.relationCount ?? 0 },
+      { label: "文件", value: projectPanelState.status?.fileCount ?? 0 },
+      { label: "符号", value: projectPanelState.status?.symbolCount ?? 0 },
+      { label: "关系", value: projectPanelState.status?.relationCount ?? 0 },
       { label: "语言", value: languageText, title: languageText },
-      { label: "Watcher", value: projectGraphState.status?.watcherStatus ?? "未启动" },
-      { label: "Backend", value: projectGraphState.status?.watcherBackend ?? "未记录" },
-      { label: "Preflight", value: projectGraphState.status?.preflightStatus ?? "未执行" },
-      { label: "Protection", value: projectGraphState.status?.protectionStatus ?? "未检查" },
+      { label: "Watcher", value: projectPanelState.status?.watcherStatus ?? "未启动" },
+      { label: "Backend", value: projectPanelState.status?.watcherBackend ?? "未记录" },
+      { label: "Preflight", value: projectPanelState.status?.preflightStatus ?? "未执行" },
+      { label: "Protection", value: projectPanelState.status?.protectionStatus ?? "未检查" },
     ],
   };
 }
 
-function graphStatusTone(status: string, source: ProjectGraphState["source"]): AgentStatusTone {
+function panelStatusTone(status: string, source: ProjectPanelState["source"]): AgentStatusTone {
   if (source === "loading" || status === "indexing") {
     return "working";
   }
@@ -213,7 +213,7 @@ function graphStatusTone(status: string, source: ProjectGraphState["source"]): A
   return "idle";
 }
 
-function graphStatusLabel(status: string, source: ProjectGraphState["source"]) {
+function panelStatusLabel(status: string, source: ProjectPanelState["source"]) {
   if (source === "loading") {
     return "建立中";
   }

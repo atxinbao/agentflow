@@ -3,7 +3,7 @@ members = [
     "crates/agentflow-core",
     "crates/agentflow-cli",
     "crates/agent-manual",
-    "crates/graph",
+    "crates/panel",
     "crates/goal-tree",
     "apps/desktop/src-tauri",
 ]

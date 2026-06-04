@@ -1,6 +1,6 @@
 use crate::watcher::{
     debounce::{DEBOUNCE_MS, WATCH_INTERVAL_MS},
-    filter::{should_ignore_graph_event, should_skip_entry},
+    filter::{should_ignore_panel_event, should_skip_entry},
     state,
 };
 use anyhow::{Context, Result};
@@ -58,7 +58,7 @@ pub(crate) fn run_fingerprint_watcher(root: PathBuf) {
             continue;
         }
 
-        state::refresh_graph(&root_key, &root, "fingerprint", "fingerprint_change");
+        state::refresh_panel(&root_key, &root, "fingerprint", "fingerprint_change");
         last_fingerprint = debounced_fingerprint;
     }
 }
@@ -97,7 +97,7 @@ fn collect_file_fingerprints(root: &Path, directory: &Path, files: &mut Vec<Stri
             collect_file_fingerprints(root, &path, files)?;
         } else if metadata.is_file() {
             let relative = path.strip_prefix(root).unwrap_or(&path);
-            if should_ignore_graph_event(root, relative) {
+            if should_ignore_panel_event(root, relative) {
                 continue;
             }
             let modified = metadata

@@ -2483,6 +2483,73 @@
 - `cargo test`：pass，core 61 tests + desktop Project file 6 tests。
 - `npm --prefix apps/desktop run build`：pass。
 - `git diff --check`：pass。
+
+## 2026-06-04 Project Panel Finalization
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/008-4-1-project-panel-finalization-and-graph-removal-v1.md`。
+- 将 Project Panel 收敛为唯一项目现场模块。
+- 移除旧代码地图兼容 API、命令、类型、路径和可见文案。
+- 将 Agent 顶层角色收敛为 Spec / Build / Release / Audit。
+- 补齐 Panel manifest / git / diagnostics / tests / snapshot / context pack 数据。
+
+结果：
+
+- `crates/graph` 迁移为 `crates/panel`，package 保持 `agentflow-panel`。
+- Desktop Rust dependency 改为 `agentflow-panel`，不再使用旧 dependency alias。
+- Tauri command surface 改为 `commands/panel.rs`：
+  - `prepare_project_panel`
+  - `load_project_panel_status`
+  - `load_project_panel_manifest`
+  - `search_project_panel`
+  - `build_panel_context_pack`
+  - `load_panel_context_pack`
+  - `panel_preflight`
+  - `analyze_panel_impact`
+  - `check_panel_git_protection`
+- Frontend 类型和 hook 改为 `types/panel.ts` 与 `useProjectPanel.ts`。
+- Panel 新 manifest 使用 `panel-manifest.v1`，包含 status、backend、lastIndexedAt、activeSnapshotId、paths、summary、worktree、watcher、degradedReasons、warnings、errors。
+- Panel 输出补齐：
+  - `manifest.json`
+  - `git.json`
+  - `diagnostics.json`
+  - `tests.json`
+  - `snapshots/<id>.json`
+  - `file-tree.json`
+  - `languages.json`
+  - `context-packs/<target>.json`
+- Context Pack version 改为 `panel-context-pack.v1`。
+- Goal Tree context pack 输出改到 `.agentflow/panel/context-packs/`。
+- Agent 工作手册角色收敛为：
+  - `Spec Agent / 规格定义 Agent`
+  - `Build Agent / 实现执行 Agent`
+  - `Release Agent / 发布交付 Agent`
+  - `Audit Agent / 代码审计 Agent`
+- README / GOAL / ROADMAP / docs index 更新到 008.4.1 当前路线。
+
+边界：
+
+- 未实现 OpenSpec Authoring。
+- 未写 SPEC change、Approved SPEC、Goal Tree fact、AgentRun、Evidence、Audit report 或 Release record。
+- 未运行用户项目 build / test 命令。
+- 未写用户源码。
+- 未创建远程 PR / issue。
+- 未调用模型。
+- 未保留旧兼容 commands / aliases / path writers。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-panel`：pass，26 tests。
+- `cargo test -p agentflow-desktop`：pass，16 tests。
+- `cargo test`：pass，agent-manual 11 tests + CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + panel 26 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
+- active surface cleanup 检查：pass；active crates / apps / README / GOAL / ROADMAP / docs index 仅剩当前需求文件名中的历史目标词。
+- 需求中的宽泛 cleanup `rg` 仍会命中历史 requirements / verification 旧记录和当前 008.4.1 需求正文；这些是历史审计记录，不是 active API / UI / runtime 兼容层。
 - Browser smoke at `http://127.0.0.1:1420/`：pass。
   - `.project-file-page` 存在。
   - `.project-file-reader` 存在。

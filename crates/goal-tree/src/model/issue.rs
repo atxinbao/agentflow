@@ -50,7 +50,7 @@ pub struct IssueSystemState {
     pub updated_by: String,
     pub path: String,
     pub revision: u64,
-    pub graph_context_pack_path: Option<String>,
+    pub panel_context_pack_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

@@ -40,7 +40,7 @@ pub(crate) fn paths_for(project_root: impl AsRef<Path>) -> Result<GoalTreePaths>
         milestones: define.join("milestones"),
         issues: define.join("issues"),
         exports: define.join("exports"),
-        output_context_packs: root.join(".agentflow/output/graph/context-packs"),
+        output_context_packs: root.join(".agentflow/panel/context-packs"),
         index: root.join(GOAL_TREE_JSON),
         define,
         root,
