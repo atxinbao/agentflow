@@ -71,6 +71,7 @@ mod tests {
         assert!(dir.path().join(".agentflow/panel/context-packs").is_dir());
         assert!(dir.path().join(".agentflow/execute/commands").is_dir());
         assert!(dir.path().join(".agentflow/output/audit").is_dir());
+        assert!(dir.path().join(".agentflow/output/release").is_dir());
         assert!(dir.path().join(".agentflow/state/health").is_dir());
         assert!(dir
             .path()
@@ -119,6 +120,37 @@ mod tests {
         assert!(manual.contains("Do not write legacy `.agentflow/spec/**`."));
         assert!(manual.contains("Do not write legacy `.agentflow/goal-tree/**`."));
         assert!(!manual.contains("Status: enabled.\n\nCombines requirement intake"));
+    }
+
+    #[test]
+    fn agent_roles_consolidate_release_into_build_agent() {
+        let manual = crate::templates::agentflow_manual_template();
+
+        assert!(manual.contains("### 1. Spec Agent / 需求规格 Agent"));
+        assert!(manual.contains("### 2. Build Agent / 实现交付 Agent"));
+        assert!(manual.contains("### 3. Audit Agent / 代码审计 Agent"));
+        assert!(!manual.contains("### 3. Release Agent"));
+        assert!(!manual.contains("### 4. Audit Agent"));
+        assert!(manual.contains("Status: enabled for Execute + Release Delivery V1."));
+        assert!(manual.contains(".agentflow/output/release/<run-id>/"));
+        assert!(manual.contains(
+            "PR draft, PR metadata, review material, changelog, release note, and delivery record"
+        ));
+    }
+
+    #[test]
+    fn release_manual_is_build_agent_delivery_manual() {
+        let dir = tempdir().unwrap();
+        prepare_agent_working_manual(dir.path()).unwrap();
+        let release_manual =
+            fs::read_to_string(dir.path().join(".agentflow/define/release/RELEASE.md")).unwrap();
+
+        assert!(release_manual.contains("Release delivery is owned by Build Agent in V1."));
+        assert!(release_manual.contains("There is no standalone Release Agent in V1."));
+        assert!(release_manual.contains(".agentflow/output/release/<run-id>/"));
+        assert!(release_manual.contains("delivery.json"));
+        assert!(!release_manual.contains("future Release Agent execution"));
+        assert!(!release_manual.contains("Release Agent is currently not authorized yet"));
     }
 
     #[test]

@@ -39,6 +39,7 @@ docs/requirements/
 - Workflow Directory Blueprint V1 会准备 `.agentflow/workspace-manifest.json`，并把 `define/` 收敛为 `agent/spec/tdd/release/audit` 工作手册区。
 - Input Model V1 是新的需求事实源；canonical path 为 `.agentflow/input/`，旧 `.agentflow/spec/` 和 `.agentflow/goal-tree/` 仅作为 legacy marker，不再作为新写入路径。
 - Execute Patch / Checkpoint V1 是受控执行层；canonical path 为 `.agentflow/execute/`，只能从 `.agentflow/input/issues/<issue-id>.json` 启动，结果证据写入 `.agentflow/output/evidence/`。
+- Agent Role Consolidation V2 将顶层 Agent 角色收敛为 Spec / Build / Audit；Release Agent 不再独立存在，release delivery 能力归入 Build Agent，交付材料写入 `.agentflow/output/release/`。
 - Project Panel canonical path 为 `.agentflow/panel/`；不再保留旧代码地图兼容路径。
 - Desktop human UI 不执行命令。
 - Execute API 允许 Agent-only 受控 patch / command，但必须通过 preflight、lease、plan、checkpoint 和 allowedWritePaths / allowedCommands。

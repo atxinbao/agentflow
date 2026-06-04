@@ -21,6 +21,7 @@ pub const EXECUTE_DIRECTORIES: &[&str] = &[
     ".agentflow/execute/queue",
     ".agentflow/output",
     ".agentflow/output/evidence",
+    ".agentflow/output/release",
 ];
 
 pub const EXECUTE_REQUIRED_FILES: &[&str] = &[

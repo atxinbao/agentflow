@@ -83,11 +83,11 @@ pub fn apply_execute_patch(
     update_run_status(&root, &run_id, ExecuteRunStatus::Running)?;
     rebuild_index(&root)?;
     Ok(ExecutePatchOutcome {
+        proposed_patch_path: format!(".agentflow/execute/runs/{run_id}/patches/proposed.patch"),
+        applied_patch_path: format!(".agentflow/execute/runs/{run_id}/patches/applied.patch"),
+        worktree_diff_path: format!(".agentflow/execute/runs/{run_id}/patches/worktree.diff"),
         run_id,
         changed_files: changed,
-        proposed_patch_path: ".agentflow/execute/runs".to_string(),
-        applied_patch_path: "patches/applied.patch".to_string(),
-        worktree_diff_path: "patches/worktree.diff".to_string(),
     })
 }
 

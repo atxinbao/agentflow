@@ -1042,7 +1042,7 @@ Result 是：
     "evidencePath": ".agentflow/output/evidence/run-001.json"
   },
   "next": {
-    "readyForRelease": false,
+    "readyForDelivery": true,
     "needsAudit": true
   }
 }
