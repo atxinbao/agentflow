@@ -574,8 +574,8 @@ export function createBrowserPreviewAgentEnvironmentStatus(
     agentMd: {
       exists: true,
       managed: true,
-      version: "agent-entry.v1",
-      hash: "browser-preview-agent-md",
+      version: "agent-entry.v2",
+      hash: "browser-preview-agents-md",
       backedUp: false,
       trackedByGit: false,
     },
@@ -605,8 +605,50 @@ export function createBrowserPreviewAgentEnvironmentStatus(
       version: "v1",
     })),
     repairs: [],
-    warnings: ["浏览器预览只展示 mock Agent Manual 状态，不写 AGENT.MD。"],
+    warnings: ["浏览器预览只展示 mock Agent Manual 状态，不写 AGENTS.md。"],
     errors: [],
+    workspaceManifest: {
+      exists: true,
+      path: ".agentflow/workspace-manifest.json",
+      valid: true,
+      layoutVersion: "agentflow-layout.v1",
+    },
+    layout: {
+      version: "agentflow-layout.v1",
+      ready: true,
+      createdPaths: [],
+      reusedPaths: [
+        ".agentflow/define/spec/SPEC.md",
+        ".agentflow/define/tdd/TDD.md",
+        ".agentflow/define/release/RELEASE.md",
+        ".agentflow/define/audit/AUDIT.md",
+        ".agentflow/spec",
+        ".agentflow/goal-tree",
+        ".agentflow/graph",
+        ".agentflow/execute",
+        ".agentflow/output",
+        ".agentflow/state",
+      ],
+      missingPaths: [],
+    },
+    legacyAgentEntry: {
+      exists: false,
+      path: "AGENT.MD",
+      managed: false,
+    },
+    shadowGuard: {
+      checked: [
+        ".rules",
+        ".cursorrules",
+        ".windsurfrules",
+        ".clinerules",
+        ".github/copilot-instructions.md",
+        "AGENT.md",
+        "CLAUDE.md",
+        "GEMINI.md",
+      ],
+      detected: [],
+    },
   };
 }
 

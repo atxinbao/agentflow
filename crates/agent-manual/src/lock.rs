@@ -5,8 +5,8 @@ use crate::{
         LOCK_VERSION,
     },
     templates::{
-        agent_md_template, agentflow_manual_template, skill_templates, skill_version,
-        AGENT_MANUAL_RELATIVE_PATH,
+        agent_entry_template, agentflow_manual_template, skill_templates, skill_version,
+        AGENT_ENTRY_RELATIVE_PATH, AGENT_MANUAL_RELATIVE_PATH,
     },
 };
 use anyhow::{Context, Result};
@@ -32,10 +32,10 @@ pub fn expected_skills_lock(updated_at: u64) -> SkillsLock {
         managed_by: "AgentFlow".to_string(),
         updated_at,
         entry: SkillsLockEntry {
-            path: "AGENT.MD".to_string(),
+            path: AGENT_ENTRY_RELATIVE_PATH.to_string(),
             version: AGENT_ENTRY_VERSION.to_string(),
             managed: true,
-            hash: sha256_hex(&agent_md_template()),
+            hash: sha256_hex(&agent_entry_template()),
         },
         manual: SkillsLockItem {
             version: AGENT_MANUAL_VERSION.to_string(),

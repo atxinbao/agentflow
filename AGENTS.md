@@ -1,6 +1,6 @@
 # AGENTS.md
 
-更新日期：2026-06-01
+更新日期：2026-06-04
 执行者：Codex
 
 ## 当前文档原则
@@ -23,6 +23,7 @@ docs/archive/2026-05-agentflow-legacy/
 4. `docs/README.md`
 5. `docs/requirements/README.md`
 6. `docs/requirements/next-requirements.md`
+7. `docs/requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md`
 
 按需参考：
 
@@ -48,6 +49,12 @@ docs/archive/2026-05-agentflow-legacy/
 | `docs/archive/*` | 历史归档，不授权实现 |
 | `design.md` | 当前界面设计记录，除非新需求覆盖 |
 | `verification.md` | 历史验证记录 |
+
+## 当前实现焦点
+
+- 当前需求为 `docs/requirements/008-3-agentflow-workflow-directory-blueprint-v1-final.md`。
+- 本项目根 `AGENTS.md` 仍作为仓库操作手册维护，不直接替换成运行时 managed entry 模板。
+- 运行时 managed entry 模板由 `crates/agent-manual` 生成到目标项目的 `AGENTS.md`。
 
 ## 实施规则
 

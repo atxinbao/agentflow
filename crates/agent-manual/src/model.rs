@@ -3,9 +3,11 @@ use std::collections::BTreeMap;
 
 pub const STATUS_VERSION: &str = "agent-environment-status.v1";
 pub const LOCK_VERSION: &str = "agentflow-skills-lock.v1";
-pub const AGENT_ENTRY_VERSION: &str = "agent-entry.v1";
+pub const AGENT_ENTRY_VERSION: &str = "agent-entry.v2";
 pub const AGENT_MANUAL_VERSION: &str = "agentflow-manual.v1";
 pub const SKILL_VERSION: &str = "v1";
+pub const WORKSPACE_MANIFEST_VERSION: &str = "agentflow-workspace-manifest.v1";
+pub const WORKSPACE_LAYOUT_VERSION: &str = "agentflow-layout.v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -36,6 +38,10 @@ pub struct AgentEnvironmentStatus {
     pub repairs: Vec<String>,
     pub warnings: Vec<String>,
     pub errors: Vec<String>,
+    pub workspace_manifest: WorkspaceManifestStatus,
+    pub layout: WorkspaceLayoutStatus,
+    pub legacy_agent_entry: LegacyAgentEntryStatus,
+    pub shadow_guard: RootAgentEntryShadowGuardStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +53,14 @@ pub struct AgentMdStatus {
     pub hash: Option<String>,
     pub backed_up: bool,
     pub tracked_by_git: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyAgentEntryStatus {
+    pub exists: bool,
+    pub path: String,
+    pub managed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +92,32 @@ pub struct SkillStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkspaceManifestStatus {
+    pub exists: bool,
+    pub path: String,
+    pub valid: bool,
+    pub layout_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceLayoutStatus {
+    pub version: String,
+    pub ready: bool,
+    pub created_paths: Vec<String>,
+    pub reused_paths: Vec<String>,
+    pub missing_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RootAgentEntryShadowGuardStatus {
+    pub checked: Vec<String>,
+    pub detected: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SkillsLock {
     pub version: String,
     pub managed_by: String,
@@ -94,6 +134,28 @@ pub struct SkillsLockEntry {
     pub version: String,
     pub managed: bool,
     pub hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceManifest {
+    pub version: String,
+    pub layout_version: String,
+    pub project_root: String,
+    pub root_entries: WorkspaceManifestRootEntries,
+    pub active_layers: Vec<String>,
+    pub planned_layers: Vec<String>,
+    pub paths: BTreeMap<String, String>,
+    pub compat: BTreeMap<String, String>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceManifestRootEntries {
+    pub canonical_agent_entry: String,
+    pub legacy_agent_entry: String,
+    pub shadow_checked: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

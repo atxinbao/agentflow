@@ -19,7 +19,7 @@ export function buildAgentStatusItems({
 }
 
 function buildAgentManualStatus(agentManualState: AgentManualState): AgentStatusChannelItem {
-  const source = "008 - Agent Working Manual Bootstrap V1";
+  const source = "008.3 - Workflow Directory Blueprint V1";
   const status = agentManualState.status;
 
   if (agentManualState.error) {
@@ -64,7 +64,8 @@ function buildAgentManualStatus(agentManualState: AgentManualState): AgentStatus
     source,
     priority: 30,
     metrics: [
-      { label: "AGENT.MD", value: status.agentMd.managed ? "Managed" : "未接管" },
+      { label: "AGENTS.md", value: status.agentMd.managed ? "Managed" : "未接管" },
+      { label: "Layout", value: status.layout.ready ? "Ready" : "缺失" },
       { label: "Skills", value: `${status.skills.filter((skill) => skill.exists && skill.hashMatches).length}/${status.skillsLock.skillCount}` },
       { label: "Warnings", value: status.warnings.length },
       { label: "Errors", value: status.errors.length },
