@@ -204,6 +204,60 @@
 - AEP Flow 0、Human Planning、Construction Plan、local issue contract、Root Docs Refresh 的项目文档落点已建立。
 - 当前只完成文档梳理，未授权代码实现。
 
+## 2026-06-05 Human-triggered Audit Report V1
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/012-human-triggered-audit-report-v1.md`。
+- 将 Audit 明确为人类主动触发的完整审计报告，而不是每次 execute / output 后的自动流程。
+- 统一写入 `.agentflow/output/audit/<audit-id>/`，不按 run / project / batch 拆三套目录模型。
+
+结果：
+
+- 新增 `docs/requirements/012-human-triggered-audit-report-v1.md` 并更新 requirements index。
+- `prepare_output_workspace` 只创建 output/audit root、`manifest.json` 和 `index.json`，不会创建 `<audit-id>` 报告目录。
+- 新增 `request_human_audit`，人类触发后写入：
+  - `.agentflow/output/audit/<audit-id>/audit-request.json`
+  - `.agentflow/output/audit/<audit-id>/audit.json`
+  - `.agentflow/output/audit/<audit-id>/audit-report.md`
+  - `.agentflow/output/audit/<audit-id>/findings.json`
+  - `.agentflow/output/audit/<audit-id>/checklist.md`
+  - `.agentflow/output/audit/<audit-id>/evidence-map.json`
+  - `.agentflow/output/audit/<audit-id>/traceability.json`
+- 新增 `load_audit_report`、`load_audit_index`、`load_audit_status`。
+- Audit V1 固定检查 7 项：
+  - checkpoint exists
+  - changed files recorded
+  - allowedWritePaths only
+  - command records complete
+  - high risk confirmation if needed
+  - evidence complete
+  - release delivery complete
+- Desktop Tauri 新增 human audit trigger 和 audit read commands。
+
+边界：
+
+- Audit 不自动随 execute / output 生成。
+- Audit 不修改 input facts。
+- Audit 不修改 execute facts。
+- Audit 不修改 output evidence。
+- Audit 不修改 output release delivery。
+- Audit 不写用户源码。
+- Audit 不执行命令。
+- Audit 不创建 PR、merge 或 deploy。
+- Audit 不调用模型。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-output`：pass，18 tests。
+- `cargo test -p agentflow-desktop`：pass，17 tests。
+- `cargo test`：pass，agent-manual 23 tests + CLI 2 tests + core 61 tests + desktop 17 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 18 tests + panel 27 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
+
 ## 2026-05-22 - Startup flow archive pass
 
 执行者：Codex

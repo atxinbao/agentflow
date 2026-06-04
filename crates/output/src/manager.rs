@@ -1,6 +1,7 @@
 use crate::{
+    audit::{ensure_audit_workspace, rebuild_audit_manifest_and_index},
     model::{
-        OutputAudit, OutputEvidence, OutputIndex, OutputIndexEntry, OutputManifest,
+        HumanAudit, OutputEvidence, OutputIndex, OutputIndexEntry, OutputManifest,
         OutputReleaseDelivery, OutputSnapshot, OutputStatusSnapshot, OutputSummary,
         OutputWorkspaceStatus, OUTPUT_DIRECTORIES, OUTPUT_REQUIRED_FILES, OUTPUT_SNAPSHOT_VERSION,
         OUTPUT_STATUS_VERSION,
@@ -20,6 +21,8 @@ pub fn prepare_output_workspace(project_root: impl AsRef<Path>) -> Result<Output
     for relative_path in OUTPUT_DIRECTORIES {
         ensure_directory(&root.join(relative_path))?;
     }
+    ensure_audit_workspace(&root)?;
+    rebuild_audit_manifest_and_index(&root)?;
 
     let index = rebuild_output_index(&root)?;
     let summary = output_summary(&root, &index)?;
@@ -100,16 +103,18 @@ pub(crate) fn rebuild_output_index(root: &Path) -> Result<OutputIndex> {
         if !audit_path.is_file() {
             continue;
         }
-        let Ok(record) = read_json::<OutputAudit>(&audit_path) else {
+        let Ok(record) = read_json::<HumanAudit>(&audit_path) else {
             continue;
         };
+        let issue_id = audit_scope_id(root, &record.audit_id, "issue").unwrap_or_default();
+        let source_spec_id = audit_scope_id(root, &record.audit_id, "spec").unwrap_or_default();
         audits.push(OutputIndexEntry {
-            run_id: record.run_id.clone(),
-            issue_id: record.issue_id.clone(),
-            source_spec_id: record.source_spec_id.clone(),
-            path: format!(".agentflow/output/audit/{}/audit.json", record.run_id),
-            status: record.status.clone(),
-            updated_at: record.created_at,
+            run_id: record.audit_id.clone(),
+            issue_id,
+            source_spec_id,
+            path: format!(".agentflow/output/audit/{}/audit.json", record.audit_id),
+            status: record.status.as_str().to_string(),
+            updated_at: record.requested_at,
         });
     }
 
@@ -164,6 +169,13 @@ fn build_output_snapshot(root: &Path) -> Result<OutputSnapshot> {
         if !path.is_dir() {
             continue;
         }
+        let name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
+        if name == "manifest.json" || name == "index.json" {
+            continue;
+        }
         let has_audit_json = path.join("audit.json").is_file();
         let has_audit_report = path.join("audit-report.md").is_file();
         if !has_audit_json && !has_audit_report {
@@ -209,6 +221,20 @@ fn build_output_snapshot(root: &Path) -> Result<OutputSnapshot> {
         manifest,
         index,
     })
+}
+
+fn audit_scope_id(root: &Path, audit_id: &str, kind: &str) -> Option<String> {
+    let request_path = root
+        .join(".agentflow/output/audit")
+        .join(audit_id)
+        .join("audit-request.json");
+    let request: crate::model::AuditRequest = read_json(&request_path).ok()?;
+    request
+        .scope
+        .refs
+        .into_iter()
+        .find(|reference| reference.kind == kind)
+        .map(|reference| reference.id)
 }
 
 fn output_summary(root: &Path, index: &OutputIndex) -> Result<OutputSummary> {

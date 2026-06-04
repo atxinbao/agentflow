@@ -42,6 +42,7 @@
 - [010-execute-patch-checkpoint-v1.md](010-execute-patch-checkpoint-v1.md)
 - [010-2-agent-role-consolidation-v2.md](010-2-agent-role-consolidation-v2.md)
 - [011-output-evidence-delivery-audit-v1.md](011-output-evidence-delivery-audit-v1.md)
+- [012-human-triggered-audit-report-v1.md](012-human-triggered-audit-report-v1.md)
 - [next-requirements.md](next-requirements.md)
 
 ## 不继承内容

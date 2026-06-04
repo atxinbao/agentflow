@@ -9,6 +9,12 @@ pub const OUTPUT_EVIDENCE_VERSION: &str = "output-evidence.v1";
 pub const OUTPUT_RELEASE_DELIVERY_VERSION: &str = "output-release-delivery.v1";
 pub const OUTPUT_PR_METADATA_VERSION: &str = "output-pr-metadata.v1";
 pub const OUTPUT_AUDIT_VERSION: &str = "output-audit.v1";
+pub const AUDIT_MANIFEST_VERSION: &str = "audit-manifest.v1";
+pub const AUDIT_INDEX_VERSION: &str = "audit-index.v1";
+pub const AUDIT_REQUEST_VERSION: &str = "audit-request.v1";
+pub const AUDIT_FINDINGS_VERSION: &str = "audit-findings.v1";
+pub const AUDIT_EVIDENCE_MAP_VERSION: &str = "audit-evidence-map.v1";
+pub const AUDIT_TRACEABILITY_VERSION: &str = "audit-traceability.v1";
 
 pub const OUTPUT_DIRECTORIES: &[&str] = &[
     ".agentflow/output",
@@ -24,6 +30,8 @@ pub const OUTPUT_DIRECTORIES: &[&str] = &[
 pub const OUTPUT_REQUIRED_FILES: &[&str] = &[
     ".agentflow/output/manifest.json",
     ".agentflow/output/index.json",
+    ".agentflow/output/audit/manifest.json",
+    ".agentflow/output/audit/index.json",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -253,34 +261,262 @@ pub struct OutputPrMetadata {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OutputAuditChecks {
-    pub spec_aligned: Option<bool>,
-    pub issue_acceptance_covered: Option<bool>,
-    pub allowed_paths_only: Option<bool>,
-    pub evidence_complete: Option<bool>,
-    pub release_delivery_complete: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OutputAudit {
-    pub version: String,
-    pub run_id: String,
-    pub issue_id: String,
-    pub source_spec_id: String,
-    pub status: String,
-    pub created_by: String,
-    pub created_at: u64,
-    pub checks: OutputAuditChecks,
-    pub findings: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct OutputValidationReport {
     pub valid: bool,
     pub warnings: Vec<String>,
     pub errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AuditStatus {
+    Passed,
+    PassedWithWarnings,
+    Failed,
+    Cancelled,
+}
+
+impl AuditStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Passed => "passed",
+            Self::PassedWithWarnings => "passed-with-warnings",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AuditCheckStatus {
+    Passed,
+    Warning,
+    Failed,
+}
+
+impl AuditCheckStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Passed => "passed",
+            Self::Warning => "warning",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AuditFindingSeverity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl AuditFindingSeverity {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Critical => "critical",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditPaths {
+    pub audit_root: String,
+    pub index: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditManifestSummary {
+    pub audits: usize,
+    pub passed: usize,
+    pub passed_with_warnings: usize,
+    pub failed: usize,
+    pub cancelled: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditManifest {
+    pub version: String,
+    pub project_root: String,
+    pub status: String,
+    pub paths: AuditPaths,
+    pub summary: AuditManifestSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditIndexEntry {
+    pub audit_id: String,
+    pub status: AuditStatus,
+    pub requested_by: String,
+    pub requested_at: u64,
+    pub report_path: String,
+    pub audit_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditIndex {
+    pub version: String,
+    pub updated_at: u64,
+    pub audits: Vec<AuditIndexEntry>,
+}
+
+impl Default for AuditIndex {
+    fn default() -> Self {
+        Self {
+            version: AUDIT_INDEX_VERSION.to_string(),
+            updated_at: 0,
+            audits: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditScopeRef {
+    pub kind: String,
+    pub id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditScope {
+    pub description: String,
+    pub refs: Vec<AuditScopeRef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HumanAuditRequestDraft {
+    pub reason: String,
+    pub scope: AuditScope,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditRequest {
+    pub version: String,
+    pub audit_id: String,
+    pub requested_by: String,
+    pub requested_at: u64,
+    pub reason: String,
+    pub scope: AuditScope,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditSummary {
+    pub checks: usize,
+    pub passed: usize,
+    pub warnings: usize,
+    pub failed: usize,
+    pub findings: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditChecks {
+    pub checkpoint_exists: AuditCheckStatus,
+    pub changed_files_recorded: AuditCheckStatus,
+    pub allowed_write_paths_only: AuditCheckStatus,
+    pub commands_recorded: AuditCheckStatus,
+    pub high_risk_confirmed_if_needed: AuditCheckStatus,
+    pub evidence_complete: AuditCheckStatus,
+    pub release_delivery_complete: AuditCheckStatus,
+}
+
+impl AuditChecks {
+    pub fn values(&self) -> [&AuditCheckStatus; 7] {
+        [
+            &self.checkpoint_exists,
+            &self.changed_files_recorded,
+            &self.allowed_write_paths_only,
+            &self.commands_recorded,
+            &self.high_risk_confirmed_if_needed,
+            &self.evidence_complete,
+            &self.release_delivery_complete,
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HumanAudit {
+    pub version: String,
+    pub audit_id: String,
+    pub requested_by: String,
+    pub requested_at: u64,
+    pub status: AuditStatus,
+    pub summary: AuditSummary,
+    pub checks: AuditChecks,
+    pub paths: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditFinding {
+    pub finding_id: String,
+    pub severity: AuditFindingSeverity,
+    pub category: String,
+    pub title: String,
+    pub detail: String,
+    pub evidence_path: String,
+    pub recommendation: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditFindings {
+    pub version: String,
+    pub audit_id: String,
+    pub findings: Vec<AuditFinding>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditEvidenceMap {
+    pub version: String,
+    pub audit_id: String,
+    pub inputs: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditTraceabilityItem {
+    pub layer: String,
+    pub id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditTraceability {
+    pub version: String,
+    pub audit_id: String,
+    pub chain: Vec<AuditTraceabilityItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HumanAuditReport {
+    pub request: AuditRequest,
+    pub audit: HumanAudit,
+    pub report_markdown: String,
+    pub findings: AuditFindings,
+    pub checklist_markdown: String,
+    pub evidence_map: AuditEvidenceMap,
+    pub traceability: AuditTraceability,
 }
 
 pub fn output_paths() -> BTreeMap<String, String> {

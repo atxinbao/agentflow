@@ -744,7 +744,7 @@ export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_P
       incompleteDeliveries: 0,
     },
     missingPaths: [],
-    warnings: ["浏览器预览只展示 mock output 状态，不写 .agentflow/output。"],
+    warnings: ["浏览器预览只展示 mock output 状态；human audit 触发只在真实客户端 Tauri 命令中写 output/audit。"],
     errors: [],
   };
 }
