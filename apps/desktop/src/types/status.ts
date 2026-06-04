@@ -136,3 +136,26 @@ export type InputStatusSnapshot = {
   warnings: string[];
   errors: string[];
 };
+
+export type ExecuteWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";
+
+export type ExecuteSummary = {
+  runs: number;
+  activeRuns: number;
+  blockedRuns: number;
+  completedRuns: number;
+  activeLeases: number;
+};
+
+export type ExecuteStatusSnapshot = {
+  version: string;
+  projectRoot: string;
+  status: ExecuteWorkspaceStatus;
+  ready: boolean;
+  manifestExists: boolean;
+  indexExists: boolean;
+  summary: ExecuteSummary;
+  missingPaths: string[];
+  warnings: string[];
+  errors: string[];
+};

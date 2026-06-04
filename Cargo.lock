@@ -45,6 +45,7 @@ version = "0.0.1"
 dependencies = [
  "agentflow-agent-manual",
  "agentflow-core",
+ "agentflow-execute",
  "agentflow-goal-tree",
  "agentflow-input",
  "agentflow-panel",
@@ -53,6 +54,20 @@ dependencies = [
  "serde",
  "tauri",
  "tauri-build",
+ "tempfile",
+]
+
+[[package]]
+name = "agentflow-execute"
+version = "0.1.0"
+dependencies = [
+ "agentflow-agent-manual",
+ "agentflow-input",
+ "agentflow-panel",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "sha2",
  "tempfile",
 ]
 

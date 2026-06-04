@@ -1,6 +1,6 @@
 # Docs Index
 
-更新日期：2026-06-04
+更新日期：2026-06-05
 执行者：Codex
 
 ## 当前文档入口
@@ -18,6 +18,7 @@
 4. [requirements/README.md](requirements/README.md)
 5. [requirements/next-requirements.md](requirements/next-requirements.md)
 6. [requirements/009-input-model-v1.md](requirements/009-input-model-v1.md)
+7. [requirements/010-execute-patch-checkpoint-v1.md](requirements/010-execute-patch-checkpoint-v1.md)
 
 ## 规则
 

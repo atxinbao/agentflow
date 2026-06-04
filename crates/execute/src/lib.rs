@@ -1,0 +1,372 @@
+pub mod checkpoint;
+pub mod command;
+pub mod evidence;
+pub mod lease;
+pub mod manager;
+pub mod model;
+pub mod patch;
+pub mod plan;
+pub mod preflight;
+pub mod result;
+pub mod storage;
+pub mod validation;
+
+pub use checkpoint::create_execute_checkpoint;
+pub use command::run_execute_command;
+pub use evidence::write_execute_evidence;
+pub use lease::{acquire_execute_lease, release_execute_lease};
+pub use manager::{
+    cancel_execute_run, create_execute_run, load_execute_index, load_execute_manifest,
+    load_execute_result, load_execute_run, load_execute_snapshot, load_execute_status,
+    prepare_execute_workspace, validate_execute_workspace,
+};
+pub use model::*;
+pub use patch::apply_execute_patch;
+pub use plan::write_execute_plan;
+pub use preflight::{confirm_high_risk_execute_run, execute_run_preflight};
+pub use validation::{complete_execute_run, validate_execute_run};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agentflow_input::{
+        issue::{InputIssue, InputIssueModel, InputIssueStatus, InputRiskLevel},
+        spec_gate::{InputIssueGenerationMode, InputSpecApproval},
+    };
+    use std::{fs, path::Path};
+    use tempfile::tempdir;
+
+    fn prepare_root(root: &Path) {
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("README.md"), "# fixture\n").unwrap();
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub fn value() -> u8 {\n    1\n}\n",
+        )
+        .unwrap();
+        agentflow_input::prepare_input_workspace(root).unwrap();
+        agentflow_panel::prepare_project_panel(root, agentflow_panel::PanelPrepareMode::Blocking)
+            .unwrap();
+    }
+
+    fn write_approved_spec(root: &Path, spec_id: &str) {
+        let spec_dir = root.join(".agentflow/input/specs/approved").join(spec_id);
+        fs::create_dir_all(&spec_dir).unwrap();
+        fs::write(spec_dir.join("product.md"), "# Product\n").unwrap();
+        fs::write(spec_dir.join("tech.md"), "# Tech\n").unwrap();
+        fs::write(spec_dir.join("spec.json"), "{}\n").unwrap();
+        fs::write(
+            spec_dir.join("approval.json"),
+            serde_json::to_string_pretty(&InputSpecApproval {
+                spec_id: spec_id.to_string(),
+                issue_generation_mode: InputIssueGenerationMode::Direct,
+                ..InputSpecApproval::default()
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn write_issue(
+        root: &Path,
+        issue_id: &str,
+        spec_id: &str,
+        risk_level: InputRiskLevel,
+    ) -> InputIssue {
+        let issue = InputIssue {
+            issue_id: issue_id.to_string(),
+            issue_model: InputIssueModel::Direct,
+            source_spec_id: spec_id.to_string(),
+            project_id: None,
+            title: format!("Execute {issue_id}"),
+            summary: "Execute fixture issue".to_string(),
+            status: InputIssueStatus::ReadyForExecute,
+            risk_level,
+            scope: vec!["src/lib.rs".to_string()],
+            validation_hints: vec!["printf ok".to_string()],
+            ..InputIssue::default()
+        };
+        fs::write(
+            root.join(".agentflow/input/issues")
+                .join(format!("{issue_id}.json")),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+        issue
+    }
+
+    fn ready_low_risk_run(root: &Path, issue_id: &str) -> ExecuteRun {
+        prepare_root(root);
+        write_approved_spec(root, "spec-001");
+        write_issue(root, issue_id, "spec-001", InputRiskLevel::Low);
+        let run = create_execute_run(root, issue_id.to_string()).unwrap();
+        let preflight = execute_run_preflight(root, run.run_id.clone()).unwrap();
+        assert_eq!(preflight.status, "ready");
+        acquire_execute_lease(root, run.run_id.clone()).unwrap();
+        write_execute_plan(
+            root,
+            run.run_id.clone(),
+            ExecutePlanDraft {
+                steps: Vec::new(),
+                allowed_write_paths: vec!["src/lib.rs".to_string()],
+                allowed_commands: vec!["printf ok".to_string()],
+            },
+        )
+        .unwrap();
+        create_execute_checkpoint(root, run.run_id.clone()).unwrap();
+        run
+    }
+
+    #[test]
+    fn missing_input_issue_cannot_create_run() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        let error = create_execute_run(dir.path(), "missing".to_string()).unwrap_err();
+        assert!(error.to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn issue_without_source_spec_id_blocks_preflight() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_issue(dir.path(), "iss-001", "", InputRiskLevel::Low);
+        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        let preflight = execute_run_preflight(dir.path(), run.run_id).unwrap();
+        assert_eq!(preflight.status, "blocked");
+        assert!(preflight
+            .checks
+            .iter()
+            .any(|check| check.name == "source-spec-id"
+                && matches!(check.status, ExecuteCheckStatus::Blocked)));
+    }
+
+    #[test]
+    fn missing_approved_spec_blocks_preflight() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_issue(dir.path(), "iss-001", "missing-spec", InputRiskLevel::Low);
+        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        let preflight = execute_run_preflight(dir.path(), run.run_id).unwrap();
+        assert_eq!(preflight.status, "blocked");
+        assert!(preflight
+            .checks
+            .iter()
+            .any(|check| check.name == "approved-spec"
+                && matches!(check.status, ExecuteCheckStatus::Blocked)));
+    }
+
+    #[test]
+    fn low_and_medium_risk_do_not_require_confirmation() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path(), "spec-001");
+        write_issue(dir.path(), "iss-low", "spec-001", InputRiskLevel::Low);
+        write_issue(dir.path(), "iss-medium", "spec-001", InputRiskLevel::Medium);
+        let low = create_execute_run(dir.path(), "iss-low".to_string()).unwrap();
+        let medium = create_execute_run(dir.path(), "iss-medium".to_string()).unwrap();
+        assert_eq!(
+            execute_run_preflight(dir.path(), low.run_id)
+                .unwrap()
+                .status,
+            "ready"
+        );
+        assert_eq!(
+            execute_run_preflight(dir.path(), medium.run_id)
+                .unwrap()
+                .status,
+            "ready"
+        );
+    }
+
+    #[test]
+    fn high_risk_requires_and_accepts_confirmation() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path(), "spec-001");
+        write_issue(dir.path(), "iss-high", "spec-001", InputRiskLevel::High);
+        let run = create_execute_run(dir.path(), "iss-high".to_string()).unwrap();
+        let blocked = execute_run_preflight(dir.path(), run.run_id.clone()).unwrap();
+        assert_eq!(blocked.status, "blocked");
+        confirm_high_risk_execute_run(
+            dir.path(),
+            run.run_id.clone(),
+            "I approve executing this high risk issue.".to_string(),
+        )
+        .unwrap();
+        let ready = execute_run_preflight(dir.path(), run.run_id).unwrap();
+        assert_eq!(ready.status, "ready");
+    }
+
+    #[test]
+    fn same_issue_cannot_have_two_active_leases() {
+        let dir = tempdir().unwrap();
+        let first = ready_low_risk_run(dir.path(), "iss-001");
+        let second = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        execute_run_preflight(dir.path(), second.run_id.clone()).ok();
+        let error = acquire_execute_lease(dir.path(), second.run_id).unwrap_err();
+        assert!(error.to_string().contains("active lease"));
+        release_execute_lease(dir.path(), first.run_id).unwrap();
+    }
+
+    #[test]
+    fn completed_run_releases_lease_and_writes_result_evidence() {
+        let dir = tempdir().unwrap();
+        let run = ready_low_risk_run(dir.path(), "iss-001");
+        run_execute_command(
+            dir.path(),
+            run.run_id.clone(),
+            ExecuteCommandRequest {
+                label: "printf ok".to_string(),
+                program: "printf".to_string(),
+                args: vec!["ok".to_string()],
+                source: Some("runPlan.allowedCommands".to_string()),
+            },
+        )
+        .unwrap();
+        let result = validate_execute_run(dir.path(), run.run_id.clone()).unwrap();
+        assert_eq!(result.status, ExecuteRunStatus::Completed);
+        assert!(dir
+            .path()
+            .join(".agentflow/execute/runs")
+            .join(&run.run_id)
+            .join("result.json")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/output/evidence")
+            .join(format!("{}.json", run.run_id))
+            .is_file());
+        let lease: ExecuteLease = storage::read_json(
+            &dir.path()
+                .join(".agentflow/execute/leases")
+                .join("iss-001.json"),
+        )
+        .unwrap();
+        assert_eq!(lease.status, ExecuteLeaseStatus::Released);
+    }
+
+    #[test]
+    fn failed_and_cancelled_runs_release_lease() {
+        let failed_dir = tempdir().unwrap();
+        let failed_run = ready_low_risk_run(failed_dir.path(), "iss-001");
+        let failed_result =
+            validate_execute_run(failed_dir.path(), failed_run.run_id.clone()).unwrap();
+        assert_eq!(failed_result.status, ExecuteRunStatus::Failed);
+        let failed_lease: ExecuteLease = storage::read_json(
+            &failed_dir
+                .path()
+                .join(".agentflow/execute/leases/iss-001.json"),
+        )
+        .unwrap();
+        assert_eq!(failed_lease.status, ExecuteLeaseStatus::Released);
+
+        let cancelled_dir = tempdir().unwrap();
+        let cancelled_run = ready_low_risk_run(cancelled_dir.path(), "iss-001");
+        cancel_execute_run(cancelled_dir.path(), cancelled_run.run_id.clone()).unwrap();
+        let cancelled_lease: ExecuteLease = storage::read_json(
+            &cancelled_dir
+                .path()
+                .join(".agentflow/execute/leases/iss-001.json"),
+        )
+        .unwrap();
+        assert_eq!(cancelled_lease.status, ExecuteLeaseStatus::Released);
+    }
+
+    #[test]
+    fn patch_requires_checkpoint_and_stays_within_allowed_paths() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path(), "spec-001");
+        write_issue(dir.path(), "iss-001", "spec-001", InputRiskLevel::Low);
+        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        execute_run_preflight(dir.path(), run.run_id.clone()).unwrap();
+        acquire_execute_lease(dir.path(), run.run_id.clone()).unwrap();
+        write_execute_plan(
+            dir.path(),
+            run.run_id.clone(),
+            ExecutePlanDraft {
+                steps: Vec::new(),
+                allowed_write_paths: vec!["src/lib.rs".to_string()],
+                allowed_commands: vec!["printf ok".to_string()],
+            },
+        )
+        .unwrap();
+        let patch = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,3 @@\n pub fn value() -> u8 {\n-    1\n+    2\n }\n";
+        let missing_checkpoint =
+            apply_execute_patch(dir.path(), run.run_id.clone(), patch.to_string()).unwrap_err();
+        assert!(missing_checkpoint.to_string().contains("checkpoint"));
+        create_execute_checkpoint(dir.path(), run.run_id.clone()).unwrap();
+        let outcome =
+            apply_execute_patch(dir.path(), run.run_id.clone(), patch.to_string()).unwrap();
+        assert_eq!(outcome.changed_files.files[0].path, "src/lib.rs");
+        assert!(fs::read_to_string(dir.path().join("src/lib.rs"))
+            .unwrap()
+            .contains("2"));
+    }
+
+    #[test]
+    fn patch_blocks_unauthorized_path() {
+        let dir = tempdir().unwrap();
+        let run = ready_low_risk_run(dir.path(), "iss-001");
+        let patch = "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-# fixture\n+# changed\n";
+        let error = apply_execute_patch(dir.path(), run.run_id, patch.to_string()).unwrap_err();
+        assert!(error.to_string().contains("unauthorized path"));
+    }
+
+    #[test]
+    fn command_records_stdout_stderr_exit_code_and_blocks_dangerous_commands() {
+        let dir = tempdir().unwrap();
+        let run = ready_low_risk_run(dir.path(), "iss-001");
+        let record = run_execute_command(
+            dir.path(),
+            run.run_id.clone(),
+            ExecuteCommandRequest {
+                label: "printf ok".to_string(),
+                program: "printf".to_string(),
+                args: vec!["ok".to_string()],
+                source: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(record.exit_code, Some(0));
+        assert!(dir.path().join(&record.stdout_path).is_file());
+        let blocked = run_execute_command(
+            dir.path(),
+            run.run_id,
+            ExecuteCommandRequest {
+                label: "git push".to_string(),
+                program: "git".to_string(),
+                args: vec!["push".to_string()],
+                source: None,
+            },
+        )
+        .unwrap_err();
+        assert!(blocked.to_string().contains("dangerous command"));
+    }
+
+    #[test]
+    fn execute_does_not_write_input_issue_or_approved_spec() {
+        let dir = tempdir().unwrap();
+        let run = ready_low_risk_run(dir.path(), "iss-001");
+        let issue_path = dir.path().join(".agentflow/input/issues/iss-001.json");
+        let spec_path = dir
+            .path()
+            .join(".agentflow/input/specs/approved/spec-001/approval.json");
+        let issue_before = fs::read_to_string(&issue_path).unwrap();
+        let spec_before = fs::read_to_string(&spec_path).unwrap();
+        run_execute_command(
+            dir.path(),
+            run.run_id.clone(),
+            ExecuteCommandRequest {
+                label: "printf ok".to_string(),
+                program: "printf".to_string(),
+                args: vec!["ok".to_string()],
+                source: None,
+            },
+        )
+        .unwrap();
+        validate_execute_run(dir.path(), run.run_id).unwrap();
+        assert_eq!(issue_before, fs::read_to_string(&issue_path).unwrap());
+        assert_eq!(spec_before, fs::read_to_string(&spec_path).unwrap());
+    }
+}
