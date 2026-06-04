@@ -42,6 +42,8 @@ docs/requirements/
 - Agent Role Consolidation V2 将顶层 Agent 角色收敛为 Spec / Build / Audit；Release Agent 不再独立存在，release delivery 能力归入 Build Agent，交付材料写入 `.agentflow/output/release/`。
 - Output Evidence / Delivery / Audit V1 将 `.agentflow/output/` 收口为交付与证据层：`output/evidence` 是 Build Agent 执行证明，`output/release` 是 Build Agent 本地交付材料。
 - Human-triggered Audit Report V1 将 `output/audit` 明确为人类主动触发的完整审计报告包；它不会随 execute / output 自动生成，只在 `request_human_audit` 后写入 `.agentflow/output/audit/<audit-id>/`。
+- Desktop Human Audit Entry Polish 在 Desktop 里提供人工审计入口：人类选择 release delivery 并填写 reason 后才会请求 audit；浏览器预览不会写 `.agentflow/output/audit`。
+- Workflow State / Gate Orchestration V1 新增 `.agentflow/state/` 派生状态总控层，聚合 define / panel / input / execute / output / audit 健康状态，输出 gates、next actions、blockers、sessions、locks、events 和 indexes；它只写 `.agentflow/state/**`。
 - Project Panel canonical path 为 `.agentflow/panel/`；不再保留旧代码地图兼容路径。
 - Desktop human UI 不执行命令。
 - Execute API 允许 Agent-only 受控 patch / command，但必须通过 preflight、lease、plan、checkpoint 和 allowedWritePaths / allowedCommands。
@@ -74,6 +76,7 @@ cargo test -p agentflow-goal-tree
 cargo test -p agentflow-input
 cargo test -p agentflow-output
 cargo test -p agentflow-execute
+cargo test -p agentflow-state
 cargo test -p agentflow-panel
 cargo test
 git diff --check

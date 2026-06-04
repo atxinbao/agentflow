@@ -5,6 +5,11 @@
   overflow: hidden !important;
 }
 
+.project-local-files-layout.project-local-files-with-audit {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .project-file-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 336px;

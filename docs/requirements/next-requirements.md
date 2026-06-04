@@ -27,6 +27,8 @@
 - [010-2-agent-role-consolidation-v2.md](010-2-agent-role-consolidation-v2.md)
 - [011-output-evidence-delivery-audit-v1.md](011-output-evidence-delivery-audit-v1.md)
 - [012-human-triggered-audit-report-v1.md](012-human-triggered-audit-report-v1.md)
+- [012-1-desktop-human-audit-entry-polish.md](012-1-desktop-human-audit-entry-polish.md)
+- [013-workflow-state-gate-orchestration-v1.md](013-workflow-state-gate-orchestration-v1.md)
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 

@@ -50,6 +50,7 @@ dependencies = [
  "agentflow-input",
  "agentflow-output",
  "agentflow-panel",
+ "agentflow-state",
  "base64 0.22.1",
  "rfd",
  "serde",
@@ -128,6 +129,21 @@ dependencies = [
  "tree-sitter-rust",
  "tree-sitter-swift",
  "tree-sitter-typescript",
+]
+
+[[package]]
+name = "agentflow-state"
+version = "0.1.0"
+dependencies = [
+ "agentflow-agent-manual",
+ "agentflow-execute",
+ "agentflow-input",
+ "agentflow-output",
+ "agentflow-panel",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

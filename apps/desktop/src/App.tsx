@@ -36,7 +36,8 @@ import { GoalTreePage, useGoalTree } from "./features/goal-tree";
 import { useAgentManual } from "./features/agent-manual";
 import { useExecuteStatus } from "./features/execute";
 import { useInputStatus } from "./features/input";
-import { useOutputStatus } from "./features/output";
+import { OutputAuditPanel, useOutputStatus, type OutputStatusState } from "./features/output";
+import { useStateStatus } from "./features/state";
 import {
   ProjectLocalFilesPage,
   isBrowserPreviewRuntime,
@@ -61,6 +62,7 @@ import type {
   LocalSearchSnapshot,
   ProjectFileTextRange,
   AgentEnvironmentStatus,
+  StateStatusSnapshot,
   ProjectMilestoneIssueViewModelSnapshot,
   V1Issue,
   V1Milestone,
@@ -135,6 +137,7 @@ type ProjectWorkspaceSummary = {
   protectedGitExclude: boolean;
   ownership: WorkspaceOwnershipStatus;
   agentManualStatus: AgentEnvironmentStatus;
+  stateStatus?: StateStatusSnapshot | null;
 };
 
 type SidebarProjectItem = {
@@ -363,7 +366,9 @@ function App() {
   const { agentManualState, loadAgentManual } = useAgentManual(agentManualProjectRoot);
   const inputStatusState = useInputStatus(agentManualProjectRoot);
   const executeStatusState = useExecuteStatus(agentManualProjectRoot);
-  const outputStatusState = useOutputStatus(agentManualProjectRoot);
+  const [outputStatusRefreshToken, setOutputStatusRefreshToken] = useState(0);
+  const outputStatusState = useOutputStatus(agentManualProjectRoot, outputStatusRefreshToken);
+  const stateStatusState = useStateStatus(agentManualProjectRoot);
   const agentStatusItems = useMemo(
     () =>
       buildAgentStatusItems({
@@ -373,6 +378,7 @@ function App() {
         outputStatusState,
         projectFilesState,
         projectPanelState,
+        stateStatusState,
       }),
     [
       agentManualState,
@@ -381,6 +387,7 @@ function App() {
       outputStatusState,
       projectFilesState,
       projectPanelState,
+      stateStatusState,
     ],
   );
 
@@ -815,6 +822,8 @@ function App() {
             onLoadProjectFileTextRange={loadProjectFileTextRange}
             onSearchProjectFiles={searchProjectFiles}
             onSetProjectFileViewMode={setProjectFileViewMode}
+            onAuditRequested={() => setOutputStatusRefreshToken((current) => current + 1)}
+            outputStatusState={outputStatusState}
             projectPanelState={projectPanelState}
             projectFilesState={projectFilesState}
             projectViewModel={projectViewModel}
@@ -1127,6 +1136,8 @@ function ProjectView({
   onSelectProjectFile,
   onSearchProjectFiles,
   onSetProjectFileViewMode,
+  onAuditRequested,
+  outputStatusState,
   projectPanelState,
   projectFilesState,
   projectViewModel,
@@ -1142,6 +1153,8 @@ function ProjectView({
   onSelectProjectFile: (relativePath: string) => void;
   onSearchProjectFiles: (query: string) => Promise<unknown>;
   onSetProjectFileViewMode: (viewMode: ProjectFileViewMode) => void;
+  onAuditRequested: () => void;
+  outputStatusState: OutputStatusState;
   projectPanelState: ProjectPanelState;
   projectFilesState: ProjectFilesState;
   projectViewModel: ProjectMilestoneIssueViewModelSnapshot | null;
@@ -1181,16 +1194,23 @@ function ProjectView({
   }
 
   return (
-    <section className="project-layout project-local-files-layout">
+    <section className="project-layout project-local-files-layout project-local-files-with-audit">
       {activeProject || canReadSelectedLocalProject ? (
-        <ProjectLocalFilesPage
-          fileState={projectFilesState}
-          onChangeViewMode={onSetProjectFileViewMode}
-          onLoadDirectoryPage={onLoadProjectDirectoryPage}
-          onLoadTextRange={onLoadProjectFileTextRange}
-          onSearchFiles={onSearchProjectFiles}
-          onSelectFile={onSelectProjectFile}
-        />
+        <>
+          <OutputAuditPanel
+            onAuditRequested={onAuditRequested}
+            outputStatusState={outputStatusState}
+            projectRoot={selectedLocalProjectRoot}
+          />
+          <ProjectLocalFilesPage
+            fileState={projectFilesState}
+            onChangeViewMode={onSetProjectFileViewMode}
+            onLoadDirectoryPage={onLoadProjectDirectoryPage}
+            onLoadTextRange={onLoadProjectFileTextRange}
+            onSearchFiles={onSearchProjectFiles}
+            onSelectFile={onSelectProjectFile}
+          />
+        </>
       ) : (
         <section className="empty-project-state">
           <h2>添加项目</h2>

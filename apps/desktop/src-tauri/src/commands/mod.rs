@@ -13,3 +13,4 @@ pub(crate) mod output;
 pub(crate) mod panel;
 pub(crate) mod project_files;
 pub(crate) mod project_workspace;
+pub(crate) mod state;

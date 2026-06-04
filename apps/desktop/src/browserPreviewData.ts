@@ -23,6 +23,10 @@ import type {
   InputStatusSnapshot,
   ExecuteStatusSnapshot,
   OutputStatusSnapshot,
+  OutputIndex,
+  AuditIndex,
+  HumanAuditReport,
+  StateStatusSnapshot,
 } from "./types";
 import {
   getProjectFileExtensionFromName,
@@ -746,6 +750,52 @@ export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_P
     missingPaths: [],
     warnings: ["浏览器预览只展示 mock output 状态；human audit 触发只在真实客户端 Tauri 命令中写 output/audit。"],
     errors: [],
+  };
+}
+
+export function createBrowserPreviewOutputIndex(): OutputIndex {
+  return {
+    version: "output-index.browser-preview",
+    updatedAt: previewTimestamp,
+    evidence: [],
+    releaseDeliveries: [],
+    audits: [],
+  };
+}
+
+export function createBrowserPreviewAuditIndex(): AuditIndex {
+  return {
+    version: "audit-index.browser-preview",
+    updatedAt: previewTimestamp,
+    audits: [],
+  };
+}
+
+export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null {
+  return null;
+}
+
+export function createBrowserPreviewStateStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): StateStatusSnapshot {
+  return {
+    version: "state-status.browser-preview",
+    projectRoot,
+    status: "ready",
+    currentStage: "workspace-ready",
+    auditStatus: "not-requested",
+    activeIssueId: null,
+    activeRunId: null,
+    health: {
+      workspace: "ready",
+      define: "ready",
+      panel: "ready",
+      input: "ready",
+      execute: "ready",
+      output: "ready",
+      audit: "idle",
+    },
+    nextActions: ["start-new-input"],
+    blockers: [],
+    updatedAt: 1780600000,
   };
 }
 
