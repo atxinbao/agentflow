@@ -1,5 +1,6 @@
 use crate::{
     model::{AgentEnvironmentState, AgentEnvironmentStatus},
+    ownership::check_agentflow_workspace_ownership_at,
     repair::repair_agent_working_manual,
     templates::{BOOTSTRAP_RELATIVE_PATH, VALIDATION_RELATIVE_PATH},
     validate::{canonical_project_root, validate_agent_working_manual},
@@ -26,6 +27,11 @@ pub fn load_agent_environment_status(
     project_root: impl AsRef<Path>,
 ) -> Result<AgentEnvironmentStatus> {
     let root = canonical_project_root(project_root.as_ref())?;
+    let ownership = check_agentflow_workspace_ownership_at(&root);
+    if ownership.agent_blocked {
+        return validate_agent_working_manual(&root);
+    }
+
     let bootstrap_path = root.join(BOOTSTRAP_RELATIVE_PATH);
     let validation_path = root.join(VALIDATION_RELATIVE_PATH);
     if bootstrap_path.exists() && validation_path.exists() {

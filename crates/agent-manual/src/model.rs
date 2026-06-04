@@ -8,6 +8,8 @@ pub const AGENT_MANUAL_VERSION: &str = "agentflow-manual.v1";
 pub const SKILL_VERSION: &str = "v1";
 pub const WORKSPACE_MANIFEST_VERSION: &str = "agentflow-workspace-manifest.v1";
 pub const WORKSPACE_LAYOUT_VERSION: &str = "agentflow-layout.v1";
+pub const WORKSPACE_OWNERSHIP_VERSION: &str = "agentflow-workspace-ownership.v1";
+pub const WORKSPACE_MANAGED_BY: &str = "AgentFlow";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -39,6 +41,7 @@ pub struct AgentEnvironmentStatus {
     pub warnings: Vec<String>,
     pub errors: Vec<String>,
     pub workspace_manifest: WorkspaceManifestStatus,
+    pub ownership: WorkspaceOwnershipStatus,
     pub layout: WorkspaceLayoutStatus,
     pub legacy_agent_entry: LegacyAgentEntryStatus,
     pub shadow_guard: RootAgentEntryShadowGuardStatus,
@@ -99,6 +102,55 @@ pub struct WorkspaceManifestStatus {
     pub layout_version: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkspaceOwnershipState {
+    None,
+    ManagedCurrent,
+    ManagedLegacy,
+    Foreign,
+    Corrupted,
+    Blocked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkspaceOwnershipAction {
+    Create,
+    ValidateRepair,
+    MigrateRepair,
+    AskUserToTakeOver,
+    Stop,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceOwnershipMarker {
+    pub manifest_exists: bool,
+    pub manifest_managed_by_agentflow: bool,
+    pub manifest_version: Option<String>,
+    pub layout_version: Option<String>,
+    pub agent_manual_exists: bool,
+    pub skills_lock_exists: bool,
+    pub managed_entry_exists: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceOwnershipStatus {
+    pub version: String,
+    pub project_root: String,
+    pub status: WorkspaceOwnershipState,
+    pub ready_for_prepare: bool,
+    pub agent_blocked: bool,
+    pub agentflow_path: String,
+    pub marker: WorkspaceOwnershipMarker,
+    pub detected_files: Vec<String>,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+    pub recommended_action: WorkspaceOwnershipAction,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceLayoutStatus {
@@ -140,14 +192,27 @@ pub struct SkillsLockEntry {
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceManifest {
     pub version: String,
+    pub managed_by: String,
     pub layout_version: String,
     pub project_root: String,
+    pub ownership: WorkspaceManifestOwnership,
     pub root_entries: WorkspaceManifestRootEntries,
     pub active_layers: Vec<String>,
     pub planned_layers: Vec<String>,
     pub paths: BTreeMap<String, String>,
     pub compat: BTreeMap<String, String>,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceManifestOwnership {
+    pub status: WorkspaceOwnershipState,
+    pub created_by: String,
+    pub created_at: u64,
+    pub last_validated_at: u64,
+    pub migrated_from: Option<String>,
+    pub migration_record: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

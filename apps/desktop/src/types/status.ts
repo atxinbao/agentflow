@@ -56,6 +56,7 @@ export type AgentEnvironmentStatus = {
     valid: boolean;
     layoutVersion?: string | null;
   };
+  ownership: WorkspaceOwnershipStatus;
   layout: {
     version: string;
     ready: boolean;
@@ -72,4 +73,41 @@ export type AgentEnvironmentStatus = {
     checked: string[];
     detected: string[];
   };
+};
+
+export type WorkspaceOwnershipState =
+  | "none"
+  | "managed-current"
+  | "managed-legacy"
+  | "foreign"
+  | "corrupted"
+  | "blocked";
+
+export type WorkspaceOwnershipAction =
+  | "create"
+  | "validate-repair"
+  | "migrate-repair"
+  | "ask-user-to-take-over"
+  | "stop";
+
+export type WorkspaceOwnershipStatus = {
+  version: string;
+  projectRoot: string;
+  status: WorkspaceOwnershipState;
+  readyForPrepare: boolean;
+  agentBlocked: boolean;
+  agentflowPath: string;
+  marker: {
+    manifestExists: boolean;
+    manifestManagedByAgentflow: boolean;
+    manifestVersion?: string | null;
+    layoutVersion?: string | null;
+    agentManualExists: boolean;
+    skillsLockExists: boolean;
+    managedEntryExists: boolean;
+  };
+  detectedFiles: string[];
+  warnings: string[];
+  errors: string[];
+  recommendedAction: WorkspaceOwnershipAction;
 };

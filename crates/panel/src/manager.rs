@@ -5,7 +5,7 @@ use crate::{
     scanner::scan_project,
     watcher,
 };
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -135,7 +135,10 @@ pub fn prepare_project_panel(
     project_root: impl AsRef<Path>,
     mode: PanelPrepareMode,
 ) -> Result<PanelStatusSnapshot> {
-    let paths = prepare_paths(project_root.as_ref())?;
+    let project_root = project_root.as_ref();
+    ensure_agentflow_owned_for_panel(project_root)?;
+
+    let paths = prepare_paths(project_root)?;
     let project_root_string = paths.root.display().to_string();
     let existing = load_project_panel_status(&paths.root).unwrap_or_else(|_| PanelStatusSnapshot {
         version: "panel-status.v1".to_string(),
@@ -182,6 +185,7 @@ pub fn prepare_project_panel(
 }
 
 pub fn index_project_panel(project_root: impl AsRef<Path>) -> Result<PanelStatusSnapshot> {
+    ensure_agentflow_owned_for_panel(project_root.as_ref())?;
     let paths = prepare_paths(project_root.as_ref())?;
     let mut connection = db::open_panel_db(&paths.panel_db)?;
     let started_at = unix_timestamp_seconds();
@@ -276,6 +280,28 @@ pub fn index_project_panel(project_root: impl AsRef<Path>) -> Result<PanelStatus
             })
         }
     }
+}
+
+pub(crate) fn ensure_agentflow_owned_for_panel(project_root: &Path) -> Result<()> {
+    let ownership = agentflow_agent_manual::check_agentflow_workspace_ownership(project_root)?;
+    if !ownership.ready_for_prepare {
+        return Err(anyhow!(
+            "AgentFlow workspace ownership blocks panel prepare: {:?}: {}",
+            ownership.status,
+            ownership.errors.join("; ")
+        ));
+    }
+
+    let agent_status = agentflow_agent_manual::prepare_agent_working_manual(project_root)?;
+    if !agent_status.ready {
+        return Err(anyhow!(
+            "Agent working manual is not ready for panel prepare: {:?}: {}",
+            agent_status.status,
+            agent_status.errors.join("; ")
+        ));
+    }
+
+    Ok(())
 }
 
 pub fn load_project_panel_status(project_root: impl AsRef<Path>) -> Result<PanelStatusSnapshot> {
@@ -1423,8 +1449,27 @@ mod tests {
             .join(".agentflow/panel/search/content-index.json")
             .is_file());
         assert!(dir.path().join(".agentflow/panel/snapshots").is_dir());
-        assert_eq!(status.file_count, 2);
+        assert_eq!(status.file_count, 3);
         assert!(status.symbol_count >= 2);
+    }
+
+    #[test]
+    fn index_project_panel_blocks_foreign_agentflow_without_panel_writes() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow")).unwrap();
+        fs::write(dir.path().join(".agentflow/custom.txt"), "foreign\n").unwrap();
+        fs::write(dir.path().join("README.md"), "# Demo\n").unwrap();
+
+        let error = index_project_panel(dir.path()).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("workspace ownership blocks panel prepare"));
+        assert!(!dir.path().join(".agentflow/panel").exists());
+        assert_eq!(
+            fs::read_to_string(dir.path().join(".agentflow/custom.txt")).unwrap(),
+            "foreign\n"
+        );
     }
 
     #[test]

@@ -67,6 +67,7 @@ import type {
   WorkbenchSnapshot,
   WorkbenchTextArtifact,
   WorkbenchBoundary,
+  WorkspaceOwnershipStatus,
 } from "./types";
 
 type ViewKey =
@@ -129,6 +130,7 @@ type ProjectWorkspaceSummary = {
   reusedPaths: string[];
   gitExcludePath?: string | null;
   protectedGitExclude: boolean;
+  ownership: WorkspaceOwnershipStatus;
   agentManualStatus: AgentEnvironmentStatus;
 };
 

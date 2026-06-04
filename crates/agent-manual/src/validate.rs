@@ -7,6 +7,7 @@ use crate::{
         AgentEnvironmentState, AgentEnvironmentStatus, AgentMdStatus, ManualStatus, SkillStatus,
         SkillsLockStatus, AGENT_ENTRY_VERSION, STATUS_VERSION,
     },
+    ownership::check_agentflow_workspace_ownership_at,
     templates::{
         skill_templates, AGENT_ENTRY_RELATIVE_PATH, AGENT_MANUAL_RELATIVE_PATH,
         BOOTSTRAP_RELATIVE_PATH, LEGACY_AGENT_ENTRY_RELATIVE_PATH, SKILLS_LOCK_RELATIVE_PATH,
@@ -36,6 +37,13 @@ pub(crate) fn validate_agent_working_manual_with_context(
     let mut warnings = Vec::new();
     let mut errors = Vec::new();
     let mut blocked = false;
+
+    let ownership = check_agentflow_workspace_ownership_at(&root);
+    warnings.extend(ownership.warnings.clone());
+    if ownership.agent_blocked {
+        blocked = true;
+        errors.extend(ownership.errors.clone());
+    }
 
     let shadow_guard = detect_shadow_files(&root);
     warnings.extend(shadow_warnings(&shadow_guard));
@@ -251,6 +259,7 @@ pub(crate) fn validate_agent_working_manual_with_context(
         warnings,
         errors,
         workspace_manifest,
+        ownership,
         layout,
         legacy_agent_entry: crate::model::LegacyAgentEntryStatus {
             exists: root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH).exists(),

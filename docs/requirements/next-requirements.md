@@ -21,6 +21,7 @@
 - [008-3-agentflow-workflow-directory-blueprint-v1-final.md](008-3-agentflow-workflow-directory-blueprint-v1-final.md)
 - [008-4-project-panel-v1.md](008-4-project-panel-v1.md)
 - [008-4-1-project-panel-finalization-and-graph-removal-v1.md](008-4-1-project-panel-finalization-and-graph-removal-v1.md)
+- [008-4-2-agentflow-workspace-ownership-guard-v1.md](008-4-2-agentflow-workspace-ownership-guard-v1.md)
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 

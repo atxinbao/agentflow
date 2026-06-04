@@ -5,6 +5,7 @@ mod hash;
 mod layout;
 mod lock;
 mod manager;
+mod ownership;
 mod repair;
 mod templates;
 mod validate;
@@ -12,13 +13,17 @@ mod validate;
 pub use manager::{
     assert_agent_environment_ready, load_agent_environment_status, prepare_agent_working_manual,
 };
+pub use ownership::{
+    assert_agentflow_workspace_owned_or_creatable, check_agentflow_workspace_ownership,
+    take_over_agentflow_workspace,
+};
 pub use repair::repair_agent_working_manual;
 pub use validate::validate_agent_working_manual;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::AgentEnvironmentState;
+    use crate::model::{AgentEnvironmentState, WorkspaceOwnershipState};
     use std::fs;
     use tempfile::tempdir;
 
@@ -37,6 +42,10 @@ mod tests {
             .join(".agentflow/workspace-manifest.json")
             .is_file());
         assert!(status.workspace_manifest.valid);
+        assert_eq!(
+            status.ownership.status,
+            WorkspaceOwnershipState::ManagedCurrent
+        );
         assert!(status.layout.ready);
         assert!(dir
             .path()
@@ -88,6 +97,20 @@ mod tests {
             .path()
             .join(".agentflow/define/agent/state/validation.json")
             .is_file());
+    }
+
+    #[test]
+    fn spec_agent_status_is_limited_to_intake_and_draft_preview() {
+        let manual = crate::templates::agentflow_manual_template();
+
+        assert!(
+            manual.contains("Status: enabled for requirement intake and SPEC Draft Preview only.")
+        );
+        assert!(manual.contains(
+            "Approved SPEC writes and Goal Tree materialization are not enabled by this manual"
+        ));
+        assert!(manual.contains("write Approved SPEC, or write Goal Tree"));
+        assert!(!manual.contains("Status: enabled.\n\nCombines requirement intake"));
     }
 
     #[test]
@@ -198,6 +221,193 @@ mod tests {
             .errors
             .iter()
             .any(|error| error.contains("validation state is missing")));
+    }
+
+    #[test]
+    fn ownership_none_is_creatable() {
+        let dir = tempdir().unwrap();
+
+        let ownership = check_agentflow_workspace_ownership(dir.path()).unwrap();
+
+        assert_eq!(ownership.status, WorkspaceOwnershipState::None);
+        assert!(ownership.ready_for_prepare);
+        assert!(!ownership.agent_blocked);
+    }
+
+    #[test]
+    fn ownership_foreign_blocks_prepare_without_writing() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow")).unwrap();
+        fs::write(dir.path().join(".agentflow/custom.txt"), "foreign\n").unwrap();
+
+        let status = prepare_agent_working_manual(dir.path()).unwrap();
+
+        assert_eq!(status.status, AgentEnvironmentState::Blocked);
+        assert_eq!(status.ownership.status, WorkspaceOwnershipState::Foreign);
+        assert!(!dir.path().join("AGENTS.md").exists());
+        assert!(!dir
+            .path()
+            .join(".agentflow/workspace-manifest.json")
+            .exists());
+        assert_eq!(
+            fs::read_to_string(dir.path().join(".agentflow/custom.txt")).unwrap(),
+            "foreign\n"
+        );
+    }
+
+    #[test]
+    fn ownership_legacy_markers_are_repaired_to_current() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow/define/agent")).unwrap();
+        fs::write(
+            dir.path().join(".agentflow/define/agent/Agentflow.md"),
+            "# Legacy AgentFlow manual\n",
+        )
+        .unwrap();
+
+        let before = check_agentflow_workspace_ownership(dir.path()).unwrap();
+        assert_eq!(before.status, WorkspaceOwnershipState::ManagedLegacy);
+
+        let status = prepare_agent_working_manual(dir.path()).unwrap();
+
+        assert!(status.ready);
+        assert_eq!(
+            status.ownership.status,
+            WorkspaceOwnershipState::ManagedCurrent
+        );
+    }
+
+    #[test]
+    fn ownership_legacy_project_workspace_files_are_repaired_to_current() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow")).unwrap();
+        fs::write(
+            dir.path().join(".agentflow/workspace.yaml"),
+            "version: workspace.v0\ncreatedBy: \"AgentFlow Desktop\"\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join(".agentflow/config.yaml"),
+            "version: config.v1\nagentflowDir: .agentflow\n",
+        )
+        .unwrap();
+
+        let before = check_agentflow_workspace_ownership(dir.path()).unwrap();
+        assert_eq!(before.status, WorkspaceOwnershipState::ManagedLegacy);
+
+        let status = prepare_agent_working_manual(dir.path()).unwrap();
+
+        assert!(status.ready);
+        assert_eq!(
+            status.ownership.status,
+            WorkspaceOwnershipState::ManagedCurrent
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join(".agentflow/workspace.yaml")).unwrap(),
+            "version: workspace.v0\ncreatedBy: \"AgentFlow Desktop\"\n"
+        );
+    }
+
+    #[test]
+    fn ownership_corrupted_agentflow_manifest_can_be_repaired_when_marker_exists() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow")).unwrap();
+        fs::write(
+            dir.path().join(".agentflow/workspace-manifest.json"),
+            "{ AgentFlow",
+        )
+        .unwrap();
+
+        let before = check_agentflow_workspace_ownership(dir.path()).unwrap();
+        assert_eq!(before.status, WorkspaceOwnershipState::Corrupted);
+
+        let status = prepare_agent_working_manual(dir.path()).unwrap();
+
+        assert!(status.ready);
+        assert_eq!(
+            status.ownership.status,
+            WorkspaceOwnershipState::ManagedCurrent
+        );
+    }
+
+    #[test]
+    fn ownership_corrupted_foreign_manifest_blocks_prepare() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow")).unwrap();
+        fs::write(
+            dir.path().join(".agentflow/workspace-manifest.json"),
+            "{ nope",
+        )
+        .unwrap();
+
+        let status = prepare_agent_working_manual(dir.path()).unwrap();
+
+        assert_eq!(status.status, AgentEnvironmentState::Blocked);
+        assert_eq!(status.ownership.status, WorkspaceOwnershipState::Blocked);
+        assert!(!dir.path().join("AGENTS.md").exists());
+    }
+
+    #[test]
+    fn takeover_renames_foreign_agentflow_and_creates_managed_workspace() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow")).unwrap();
+        fs::write(dir.path().join(".agentflow/custom.txt"), "foreign\n").unwrap();
+
+        let ownership = take_over_agentflow_workspace(dir.path()).unwrap();
+
+        assert!(matches!(
+            ownership.status,
+            WorkspaceOwnershipState::ManagedCurrent | WorkspaceOwnershipState::ManagedLegacy
+        ));
+        assert!(dir
+            .path()
+            .join(".agentflow/workspace-manifest.json")
+            .is_file());
+        assert!(fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".agentflow.unmanaged.")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn internal_agentflow_symlink_warns_without_blocking() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let target = dir.path().join("agentflow-real");
+        fs::create_dir_all(&target).unwrap();
+        symlink(&target, dir.path().join(".agentflow")).unwrap();
+
+        let ownership = check_agentflow_workspace_ownership(dir.path()).unwrap();
+
+        assert_ne!(ownership.status, WorkspaceOwnershipState::Blocked);
+        assert!(ownership
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("symlink inside project root")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn external_agentflow_symlink_blocks_prepare() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        symlink(outside.path(), dir.path().join(".agentflow")).unwrap();
+
+        let ownership = check_agentflow_workspace_ownership(dir.path()).unwrap();
+
+        assert_eq!(ownership.status, WorkspaceOwnershipState::Blocked);
+        assert!(ownership.agent_blocked);
+        assert!(ownership
+            .errors
+            .iter()
+            .any(|error| error.contains("symlink outside project root")));
     }
 
     #[test]

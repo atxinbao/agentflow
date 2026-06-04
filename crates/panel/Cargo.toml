@@ -5,6 +5,7 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
+agentflow-agent-manual = { path = "../agent-manual" }
 anyhow.workspace = true
 notify = "8"
 rusqlite.workspace = true

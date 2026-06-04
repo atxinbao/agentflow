@@ -3516,3 +3516,102 @@ No files were written and no command was executed.
 - `cargo test`：pass，agent-manual 11 tests + CLI 2 tests + core 61 tests + desktop 16 tests + goal-tree 3 tests + panel 26 tests。
 - `npm --prefix apps/desktop run build`：pass。
 - `git diff --check`：pass。
+
+## 2026-06-04 AgentFlow Workspace Ownership Guard V1
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/008-4-2-agentflow-workspace-ownership-guard-v1.md`。
+- 在 Project Workspace prepare / Agent Manual prepare / Panel prepare 写入 `.agentflow/` 前检查归属权。
+- foreign / blocked `.agentflow/` 不自动写入、不自动修复、不自动接管。
+
+结果：
+
+- 新增 AgentFlow workspace ownership 模型：
+  - `none`
+  - `managed-current`
+  - `managed-legacy`
+  - `foreign`
+  - `corrupted`
+  - `blocked`
+- `.agentflow/workspace-manifest.json` 新增：
+  - `managedBy = "AgentFlow"`
+  - `ownership.status`
+  - `ownership.createdBy`
+  - `ownership.createdAt`
+  - `ownership.lastValidatedAt`
+  - `ownership.migratedFrom`
+  - `ownership.migrationRecord`
+- 新增 Rust API：
+  - `check_agentflow_workspace_ownership`
+  - `assert_agentflow_workspace_owned_or_creatable`
+  - `take_over_agentflow_workspace`
+- 新增 Tauri commands：
+  - `load_agentflow_workspace_ownership`
+  - `take_over_agentflow_workspace`
+- Project Workspace prepare 改为：
+  - 先检查 `.agentflow/` ownership。
+  - 再准备 Agent Manual / workspace manifest。
+  - 只有 ready 后才写 `workspace.yaml`、`config.yaml` 和 `.git/info/exclude`。
+- Agent Manual validate / load / repair 改为：
+  - validate 输出 ownership 状态。
+  - cached validation 遇到 foreign / blocked 会重新 validate。
+  - repair 遇到 foreign / blocked 直接返回 blocked，不写 `.agentflow/**` 或 `AGENTS.md`。
+- Panel prepare / index / context pack build 改为：
+  - 先检查 workspace ownership。
+  - ready 后准备 Agent Manual。
+  - foreign / blocked 时不写 `.agentflow/panel/**`。
+- Desktop 类型和 Browser Preview mock 已接入 `ownership` 字段。
+- 状态通道新增“工作区归属”事件，展示已接管 / 旧版接管 / 外部目录 / 已阻断等状态。
+- 测试覆盖：
+  - no `.agentflow` 可创建。
+  - current managed manifest。
+  - legacy marker migration / repair。
+  - foreign `.agentflow` blocked 且不写入。
+  - corrupted AgentFlow manifest 可修复。
+  - corrupted foreign manifest blocked。
+  - internal `.agentflow` symlink warning。
+  - external `.agentflow` symlink blocked。
+  - explicit takeover 备份 foreign `.agentflow` 并创建新 managed workspace。
+  - Project Workspace foreign blocked。
+  - Panel foreign blocked。
+
+边界：
+
+- 未在 UI 自动触发 takeover。
+- 未自动接管 foreign `.agentflow/`。
+- 未写用户源码。
+- 未执行用户项目命令。
+- 未调用模型。
+- 未创建 PR、远程 issue 或 Linear issue。
+
+验证：
+
+- `cargo fmt`：pass。
+- `cargo test`：pass，agent-manual 21 tests + CLI 2 tests + core 61 tests + desktop 17 tests + goal-tree 3 tests + panel 27 tests。
+- `npm --prefix apps/desktop run build`：pass。
+
+## 2026-06-04 Spec Agent Status Wording Polish
+
+执行者：Codex
+
+目标：
+
+- 修正 Agentflow.md 模板中的 Spec Agent 状态文案。
+- 避免 Agent 误解当前已经完整开放 Approved SPEC 写入和 Goal Tree materialization。
+
+结果：
+
+- `Spec Agent / 规格定义 Agent` 状态改为仅启用 requirement intake 与 SPEC Draft Preview。
+- 模板明确写入：Approved SPEC writes 与 Goal Tree materialization 尚未由当前 manual 启用，必须等待后续需求和工具授权。
+- 增加回归测试，防止文案退回为模糊的 `Status: enabled.`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-agent-manual`：pass，21 tests。
+- `cargo test`：pass，agent-manual 21 tests + CLI 2 tests + core 61 tests + desktop 17 tests + goal-tree 3 tests + panel 27 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
