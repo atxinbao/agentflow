@@ -44,6 +44,7 @@ docs/requirements/
 - Human-triggered Audit Report V1 将 `output/audit` 明确为人类主动触发的完整审计报告包；它不会随 execute / output 自动生成，只在 `request_human_audit` 后写入 `.agentflow/output/audit/<audit-id>/`。
 - Desktop Human Audit Entry Polish 在 Desktop 里提供人工审计入口：人类选择 release delivery 并填写 reason 后才会请求 audit；浏览器预览不会写 `.agentflow/output/audit`。
 - Workflow State / Gate Orchestration V1 新增 `.agentflow/state/` 派生状态总控层，聚合 define / panel / input / execute / output / audit 健康状态，输出 gates、next actions、blockers、sessions、locks、events 和 indexes；它只写 `.agentflow/state/**`。
+- Browser Preview Verification Polish 为 Desktop 浏览器预览补齐只读 release delivery 和 audit report mock，使人工审计入口可以完成可视核对；它不写 `.agentflow/output/audit`。
 - Project Panel canonical path 为 `.agentflow/panel/`；不再保留旧代码地图兼容路径。
 - Desktop human UI 不执行命令。
 - Execute API 允许 Agent-only 受控 patch / command，但必须通过 preflight、lease、plan、checkpoint 和 allowedWritePaths / allowedCommands。
