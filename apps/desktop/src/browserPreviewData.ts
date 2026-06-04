@@ -22,6 +22,7 @@ import type {
   AgentEnvironmentStatus,
   InputStatusSnapshot,
   ExecuteStatusSnapshot,
+  OutputStatusSnapshot,
 } from "./types";
 import {
   getProjectFileExtensionFromName,
@@ -721,6 +722,29 @@ export function createBrowserPreviewExecuteStatus(projectRoot = BROWSER_PREVIEW_
     },
     missingPaths: [],
     warnings: ["浏览器预览只展示 mock execute 状态，不执行命令、不应用 patch。"],
+    errors: [],
+  };
+}
+
+export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): OutputStatusSnapshot {
+  return {
+    version: "output-status.browser-preview",
+    projectRoot,
+    status: "ready",
+    ready: true,
+    manifestExists: true,
+    indexExists: true,
+    summary: {
+      evidence: 0,
+      releaseDeliveries: 0,
+      audits: 0,
+      logs: 0,
+      backups: 0,
+      incompleteEvidence: 0,
+      incompleteDeliveries: 0,
+    },
+    missingPaths: [],
+    warnings: ["浏览器预览只展示 mock output 状态，不写 .agentflow/output。"],
     errors: [],
   };
 }

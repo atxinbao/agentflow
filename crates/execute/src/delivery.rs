@@ -1,15 +1,16 @@
 use crate::{
-    model::{
-        ExecuteResult, ExecuteRunStatus, OutputEvidence, OutputReleaseDelivery,
-        OutputReleaseDeliveryArtifacts, OUTPUT_RELEASE_DELIVERY_VERSION,
-    },
+    model::{ExecuteResult, ExecuteRunStatus},
     storage::{
         canonical_project_root, ensure_directory, read_json, read_run, run_dir,
         unix_timestamp_seconds, write_json,
     },
 };
+use agentflow_output::{
+    OutputEvidence, OutputPrMetadata, OutputReleaseDelivery, OutputReleaseDeliveryArtifacts,
+    OUTPUT_PR_METADATA_VERSION, OUTPUT_RELEASE_DELIVERY_VERSION,
+};
 use anyhow::{Context, Result};
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{fs, path::Path};
 
 pub fn prepare_release_delivery(
     project_root: impl AsRef<Path>,
@@ -40,6 +41,10 @@ pub fn prepare_release_delivery(
     let release_relative_dir = format!(".agentflow/output/release/{run_id}");
     let release_dir = root.join(&release_relative_dir);
     ensure_directory(&release_dir)?;
+    let execute_result_relative_path = format!(".agentflow/execute/runs/{run_id}/result.json");
+    let diff_summary_relative_path =
+        format!(".agentflow/execute/runs/{run_id}/review/diff-summary.json");
+    let diff_summary_path = root.join(&diff_summary_relative_path);
 
     let artifacts = OutputReleaseDeliveryArtifacts {
         pr_draft: format!("{release_relative_dir}/pr-draft.md"),
@@ -56,14 +61,17 @@ pub fn prepare_release_delivery(
     .with_context(|| format!("write {}/pr-draft.md", release_dir.display()))?;
     write_json(
         &release_dir.join("pr-metadata.json"),
-        &BTreeMap::from([
-            ("runId".to_string(), run_id.clone()),
-            ("issueId".to_string(), run.issue_id.clone()),
-            ("sourceSpecId".to_string(), run.source_spec_id.clone()),
-            ("riskLevel".to_string(), run.risk_level.clone()),
-            ("status".to_string(), "drafted".to_string()),
-            ("evidencePath".to_string(), evidence_relative_path.clone()),
-        ]),
+        &OutputPrMetadata {
+            version: OUTPUT_PR_METADATA_VERSION.to_string(),
+            run_id: run_id.clone(),
+            issue_id: run.issue_id.clone(),
+            source_spec_id: run.source_spec_id.clone(),
+            title: format!("Implement {}", run.issue_id),
+            branch_name: None,
+            remote_pr_url: None,
+            status: "draft-only".to_string(),
+            created_remote_pr: false,
+        },
     )?;
     fs::write(
         release_dir.join("review-checklist.md"),
@@ -87,13 +95,18 @@ pub fn prepare_release_delivery(
         issue_id: run.issue_id,
         source_spec_id: run.source_spec_id,
         risk_level: run.risk_level,
-        evidence_path: evidence_relative_path,
         status: "drafted".to_string(),
-        artifacts,
         created_by: "Build Agent".to_string(),
         created_at: unix_timestamp_seconds(),
+        evidence_path: evidence_relative_path,
+        execute_result_path: execute_result_relative_path,
+        diff_summary_path: diff_summary_path
+            .is_file()
+            .then_some(diff_summary_relative_path),
+        artifacts,
     };
     write_json(&release_dir.join("delivery.json"), &delivery)?;
+    agentflow_output::prepare_output_workspace(&root)?;
     Ok(delivery)
 }
 
@@ -101,13 +114,7 @@ pub fn load_release_delivery(
     project_root: impl AsRef<Path>,
     run_id: String,
 ) -> Result<OutputReleaseDelivery> {
-    let root = canonical_project_root(project_root)?;
-    read_json(
-        &root
-            .join(".agentflow/output/release")
-            .join(run_id)
-            .join("delivery.json"),
-    )
+    agentflow_output::load_release_delivery(project_root, run_id)
 }
 
 fn pr_draft_content(run_id: &str, issue_id: &str, result: &ExecuteResult) -> String {

@@ -27,6 +27,7 @@ pub fn prepare_execute_workspace(project_root: impl AsRef<Path>) -> Result<Execu
     for relative_path in EXECUTE_DIRECTORIES {
         ensure_directory(&root.join(relative_path))?;
     }
+    agentflow_output::prepare_output_workspace(&root)?;
 
     write_json_if_missing(
         &root.join(".agentflow/execute/queue/pending.json"),

@@ -12,8 +12,6 @@ pub const EXECUTE_LEASE_VERSION: &str = "execute-lease.v1";
 pub const EXECUTE_CHECKPOINT_VERSION: &str = "execute-checkpoint.v1";
 pub const EXECUTE_COMMAND_VERSION: &str = "execute-command.v1";
 pub const EXECUTE_RESULT_VERSION: &str = "execute-result.v1";
-pub const OUTPUT_EVIDENCE_VERSION: &str = "output-evidence.v1";
-pub const OUTPUT_RELEASE_DELIVERY_VERSION: &str = "output-release-delivery.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -416,47 +414,6 @@ pub struct ExecuteReviewState {
     pub status: String,
     pub hunk_review_enabled: bool,
     pub notes: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OutputEvidence {
-    pub version: String,
-    pub run_id: String,
-    pub issue_id: String,
-    pub source_spec_id: String,
-    pub risk_level: String,
-    pub completed_at: u64,
-    pub summary: String,
-    pub changed_files: Vec<String>,
-    pub commands: Vec<String>,
-    pub validation_passed: bool,
-    pub artifacts: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OutputReleaseDeliveryArtifacts {
-    pub pr_draft: String,
-    pub pr_metadata: String,
-    pub review_checklist: String,
-    pub changelog: String,
-    pub release_note: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OutputReleaseDelivery {
-    pub version: String,
-    pub run_id: String,
-    pub issue_id: String,
-    pub source_spec_id: String,
-    pub risk_level: String,
-    pub evidence_path: String,
-    pub status: String,
-    pub artifacts: OutputReleaseDeliveryArtifacts,
-    pub created_by: String,
-    pub created_at: u64,
 }
 
 pub fn execute_paths() -> BTreeMap<String, String> {

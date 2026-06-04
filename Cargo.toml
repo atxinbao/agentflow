@@ -6,6 +6,7 @@ members = [
     "crates/panel",
     "crates/goal-tree",
     "crates/input",
+    "crates/output",
     "crates/execute",
     "apps/desktop/src-tauri",
 ]

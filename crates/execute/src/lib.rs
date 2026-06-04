@@ -12,9 +12,13 @@ pub mod result;
 pub mod storage;
 pub mod validation;
 
+pub use agentflow_output::{
+    load_output_evidence, load_release_delivery, OutputEvidence, OutputReleaseDelivery,
+    OutputReleaseDeliveryArtifacts, OUTPUT_EVIDENCE_VERSION, OUTPUT_RELEASE_DELIVERY_VERSION,
+};
 pub use checkpoint::create_execute_checkpoint;
 pub use command::run_execute_command;
-pub use delivery::{load_release_delivery, prepare_release_delivery};
+pub use delivery::prepare_release_delivery;
 pub use evidence::write_execute_evidence;
 pub use lease::{acquire_execute_lease, release_execute_lease};
 pub use manager::{

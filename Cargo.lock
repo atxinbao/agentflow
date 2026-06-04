@@ -48,6 +48,7 @@ dependencies = [
  "agentflow-execute",
  "agentflow-goal-tree",
  "agentflow-input",
+ "agentflow-output",
  "agentflow-panel",
  "base64 0.22.1",
  "rfd",
@@ -63,6 +64,7 @@ version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
  "agentflow-input",
+ "agentflow-output",
  "agentflow-panel",
  "anyhow",
  "serde",
@@ -86,6 +88,16 @@ name = "agentflow-input"
 version = "0.0.1"
 dependencies = [
  "agentflow-agent-manual",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "agentflow-output"
+version = "0.1.0"
+dependencies = [
  "anyhow",
  "serde",
  "serde_json",

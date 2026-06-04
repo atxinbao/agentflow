@@ -3871,3 +3871,96 @@ No files were written and no command was executed.
 - `cargo test`：pass，agent-manual 21 tests + CLI 2 tests + core 61 tests + desktop 17 tests + goal-tree 3 tests + input 8 tests + panel 27 tests。
 - `npm --prefix apps/desktop run build`：pass。
 - `git diff --check`：pass。
+
+## 2026-06-05 Output Evidence / Delivery / Audit V1
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/011-output-evidence-delivery-audit-v1.md`。
+- 将 `.agentflow/output/` 正式收口为 AgentFlow 的交付与证据层。
+- 明确 `output/evidence/` 属于 Build Agent 执行证明。
+- 明确 `output/release/` 属于 Build Agent 本地交付材料。
+- 明确 `output/audit/` 属于 Audit Agent 未来审计输出，本轮只创建 skeleton，不启用真实 Audit Agent。
+
+结果：
+
+- 新增 `crates/output`，Cargo package 为 `agentflow-output`。
+- 新增 Output canonical layout：
+  - `.agentflow/output/manifest.json`
+  - `.agentflow/output/index.json`
+  - `.agentflow/output/evidence/`
+  - `.agentflow/output/release/`
+  - `.agentflow/output/audit/`
+  - `.agentflow/output/logs/`
+  - `.agentflow/output/backup/`
+  - `.agentflow/output/cache/`
+  - `.agentflow/output/tmp/`
+- 新增 Output public API：
+  - `prepare_output_workspace`
+  - `validate_output`
+  - `load_output_status`
+  - `load_output_manifest`
+  - `load_output_index`
+  - `load_output_snapshot`
+  - `load_output_evidence`
+  - `load_release_delivery`
+  - `create_audit_skeleton`
+  - `load_audit_output`
+- 新增 Output 模型：
+  - `OutputManifest`
+  - `OutputIndex`
+  - `OutputStatusSnapshot`
+  - `OutputSnapshot`
+  - `OutputEvidence`
+  - `OutputReleaseDelivery`
+  - `OutputPrMetadata`
+  - `OutputAudit`
+- Evidence schema 已扩展为引用型证据包：
+  - 引用 input issue / approved spec。
+  - 引用 panel snapshot / context pack。
+  - 引用 execute run / preflight / plan / result / checkpoint / diff / changed-files / diff-summary。
+  - 引用 command record / stdout path / stderr path，不复制大 stdout / stderr 内容。
+  - 记录 validation summary 和 manual proof 占位。
+- Release delivery schema 已扩展：
+  - `delivery.json` 引用 evidence、execute result 和 diff summary。
+  - `pr-metadata.json` 明确 `createdRemotePr = false`。
+  - `createdBy = Build Agent`。
+  - 继续生成 `pr-draft.md`、`review-checklist.md`、`changelog.md`、`release-note.md`。
+- Audit skeleton 已实现：
+  - 写入 `output/audit/<run-id>/audit.json`。
+  - 写入 `audit-report.md`、`findings.json`、`checklist.md`。
+  - `status = pending`，不运行真实 audit。
+- Execute prepare 已接入 Output prepare。
+- Execute evidence / release 写入已改用 `agentflow-output` schema。
+- Desktop Tauri 新增只读 Output commands：
+  - `load_output_status`
+  - `load_output_manifest`
+  - `load_output_index`
+  - `load_output_snapshot`
+  - `validate_output`
+- Desktop 状态通道新增“交付输出”事件，展示 Evidence、Delivery、Audit 和 Incomplete。
+- Browser Preview mock 已同步 Output status。
+- README / GOAL / ROADMAP / requirements index 已更新到 011。
+
+边界：
+
+- 未修改 input facts。
+- 未修改 execute run facts 主流程。
+- 未写用户源码。
+- 未创建远程 PR。
+- 未 merge。
+- 未 deploy。
+- 未调用模型。
+- 未启用真实 Audit Agent。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-output`：pass，10 tests。
+- `cargo test -p agentflow-execute`：pass，17 tests。
+- `cargo test -p agentflow-desktop`：pass，17 tests。
+- `cargo test`：pass，agent-manual 23 tests + CLI 2 tests + core 61 tests + desktop 17 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 10 tests + panel 27 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
