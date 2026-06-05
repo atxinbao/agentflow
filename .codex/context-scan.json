@@ -1,0 +1,34 @@
+{
+  "date": "2026-06-05",
+  "executor": "Codex",
+  "task": "013.2 - Browser Preview Smoke Script",
+  "tooling_notes": {
+    "sequential_thinking": "当前会话未提供可调用 sequential-thinking 工具，使用 update_plan 和代码证据替代。",
+    "shrimp_task_manager": "当前会话未提供可调用 shrimp-task-manager 工具，使用 update_plan 跟踪任务。",
+    "code_index": "当前会话未提供可调用 code-index 工具，使用 rg / sed / git diff 收集上下文。"
+  },
+  "locations": {
+    "requirement": "docs/requirements/013-2-browser-preview-smoke-script.md",
+    "smoke_script": "apps/desktop/scripts/browser-preview-smoke.mjs",
+    "package_script": "apps/desktop/package.json",
+    "browser_preview_data": "apps/desktop/src/browserPreviewData.ts",
+    "audit_panel": "apps/desktop/src/features/output/OutputAuditPanel.tsx",
+    "verification": "verification.md"
+  },
+  "current_behavior": {
+    "browser_preview_data": "Browser Preview 已提供 output status、output index、audit index、audit report、workflow state mock。",
+    "audit_panel": "Browser Preview runtime 分支读取 mock 数据并设置 source=preview；request human audit 在 previewOnly guard 内返回。",
+    "gap": "PR #28 的可视证据主要依赖 DOM snapshot，不便后续稳定复跑。"
+  },
+  "similar_patterns": [
+    "docs/requirements/013-1-browser-preview-verification-polish.md 记录 Browser Preview 可视核对边界。",
+    "docs/requirements/014-agentflow-end-to-end-workflow-acceptance-v1.md 将 preview:smoke 纳入端到端验收。",
+    "verification.md 按日期记录每轮目标、结果、边界和验证命令。"
+  ],
+  "sufficiency_check": {
+    "interface_contract": true,
+    "technical_choice_understood": true,
+    "major_risks_identified": true,
+    "verification_known": true
+  }
+}

@@ -1,0 +1,18 @@
+[package]
+name = "agentflow-workflow-acceptance"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+agentflow-agent-manual = { path = "../agent-manual" }
+agentflow-panel = { path = "../panel" }
+agentflow-input = { path = "../input" }
+agentflow-execute = { path = "../execute" }
+agentflow-output = { path = "../output" }
+agentflow-state = { path = "../state" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
