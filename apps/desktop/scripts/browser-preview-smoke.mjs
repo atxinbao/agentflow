@@ -29,6 +29,11 @@ try {
     "utf8",
   );
   const appEntry = readFileSync(path.join(desktopRoot, "src/App.tsx"), "utf8");
+  const appShellCss = readFileSync(path.join(desktopRoot, "src/AppShell.css"), "utf8");
+  const projectLocalFilesPage = readFileSync(
+    path.join(desktopRoot, "src/features/project-files/ProjectLocalFilesPage.tsx"),
+    "utf8",
+  );
   const designSystemPreview = readFileSync(
     path.join(desktopRoot, "src/features/design-system/DesignSystemPreview.tsx"),
     "utf8",
@@ -80,6 +85,33 @@ try {
   assert.ok(requestAuditInvokeIndex > previewOnlyGuardIndex);
   assert.ok(outputPanel.includes("浏览器预览不写 .agentflow/output/audit"));
   assert.ok(appEntry.includes("<DesignSystemPreview />"));
+  assert.ok(appEntry.includes('data-agentflow-ux="v16"'));
+  assert.ok(appEntry.includes('data-agentflow-screen="login"'));
+  assert.ok(appEntry.includes('data-agentflow-screen="first-run"'));
+  assert.ok(appEntry.includes('data-agentflow-page="workbench"'));
+  assert.ok(appEntry.includes('data-agentflow-page="tasks"'));
+  assert.ok(appEntry.includes('data-agentflow-page="files"'));
+  assert.ok(appEntry.includes('data-agentflow-page="delivery"'));
+  assert.ok(appEntry.includes('data-agentflow-page="audit"'));
+  assert.ok(appEntry.includes('data-agentflow-page="advanced"'));
+  assert.ok(appEntry.includes("进入工作台"));
+  assert.ok(appEntry.includes("工作台"));
+  assert.ok(appEntry.includes("任务"));
+  assert.ok(appEntry.includes("文件"));
+  assert.ok(appEntry.includes("交付"));
+  assert.ok(appEntry.includes("审计"));
+  assert.ok(appEntry.includes("高级"));
+  assert.ok(appEntry.includes("复制任务包"));
+  assert.ok(appEntry.includes("请求人工审计"));
+  assert.ok(appEntry.includes("Delivery Summary"));
+  assert.ok(appEntry.includes("Evidence Map"));
+  assert.ok(appEntry.includes("Traceability"));
+  assert.ok(appEntry.includes("AdvancedStateViewer"));
+  assert.ok(appShellCss.includes(".v16-status-bar"));
+  assert.ok(appShellCss.includes(".v16-task-board"));
+  assert.ok(appShellCss.includes(".v16-files-page"));
+  assert.ok(appShellCss.includes("@media (prefers-color-scheme: dark)"));
+  assert.ok(projectLocalFilesPage.indexOf("<ProjectFileBrowser") < projectLocalFilesPage.indexOf("<article className=\"project-file-reader\""));
   assert.ok(designSystemPreview.includes('data-agentflow-design-system="v1"'));
   for (const [marker, relativePath] of designSystemFiles) {
     const componentSource = readFileSync(path.join(desktopRoot, relativePath), "utf8");
@@ -90,7 +122,7 @@ try {
   }
   assert.equal(existsSync(path.join(smokeRoot, ".agentflow/output/audit")), false);
 
-  console.log("Browser Preview smoke passed: workflow state, human audit, and design system preview are read-only.");
+  console.log("Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.");
 } finally {
   await server.close();
 }
