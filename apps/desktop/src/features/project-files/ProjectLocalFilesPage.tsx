@@ -140,17 +140,6 @@ export function ProjectLocalFilesPage({
 
   return (
     <section className="project-file-page" aria-label="项目本地文件阅读器">
-      <article className="project-file-reader" aria-label="文件内容阅读器">
-        <ProjectFileReader
-          content={content}
-          entry={selectedEntry ?? (content?.kind === "directory" ? projectFileChildToEntry(contentToChild(content)) : null)}
-          error={fileState.error}
-          loading={fileState.loading}
-          loadingPath={fileState.loadingPath}
-          onLoadTextRange={onLoadTextRange}
-        />
-      </article>
-
       <ProjectFileBrowser
         expandedPaths={expandedPaths}
         loading={fileState.loading}
@@ -163,6 +152,17 @@ export function ProjectLocalFilesPage({
         selectedPath={selectedPath}
         viewMode={fileState.viewMode}
       />
+
+      <article className="project-file-reader" aria-label="文件内容阅读器">
+        <ProjectFileReader
+          content={content}
+          entry={selectedEntry ?? (content?.kind === "directory" ? projectFileChildToEntry(contentToChild(content)) : null)}
+          error={fileState.error}
+          loading={fileState.loading}
+          loadingPath={fileState.loadingPath}
+          onLoadTextRange={onLoadTextRange}
+        />
+      </article>
     </section>
   );
 }

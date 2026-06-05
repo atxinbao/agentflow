@@ -3818,6 +3818,116 @@ No files were written and no command was executed.
 
 - `cargo fmt --check`：pass。
 - `git diff --check`：pass。
+
+## 2026-06-06 AgentFlow Unified UX Spec V16
+
+执行者：Codex
+
+目标：
+
+- 执行 `docs/requirements/017-agentflow-unified-ux-spec-v16-pr33-merged.md`。
+- 将 `docs/requirements/015-human-agent-guided-experience-v1.md` 标记为 historical design reference。
+- 将 017 标记为 current frontend implementation baseline。
+- 实现 V16 前端基础结构：登录浮窗、首次引导、项目工作台、任务、文件、交付、审计、高级和底部状态栏。
+
+结果：
+
+- 新增需求文档：
+  - `docs/requirements/017-agentflow-unified-ux-spec-v16-pr33-merged.md`
+- 更新需求索引：
+  - `docs/requirements/README.md`
+  - `docs/requirements/next-requirements.md`
+- `apps/desktop/src/App.tsx` 收敛为 V16 页面编排入口。
+- 新增 `apps/desktop/src/AppShell.css`，隔离 V16 AppShell / TitleBar / ProjectTree / Toolbar / StatusBar / 页面骨架样式。
+- 登录模块为独立浮窗，只展示 AgentFlow、ChatGPT、Claude、DeepSeek。
+- 首次引导为 5 步浮窗：
+  - 选择项目
+  - 环境准备
+  - 认识 Agent
+  - 确认意图
+  - 完成引导
+- 完成引导页只保留 `进入工作台`。
+- 项目工作区左侧主导航固定为：
+  - 工作台
+  - 任务
+  - 文件
+  - 交付
+  - 审计
+  - 高级
+- 工作台包含 Next Step Card、今日待处理、项目现场摘要和 Companion Mode 摘要。
+- 任务页包含看板 / 列表切换；看板和列表默认不显示固定 Inspector；列表右侧显示任务详情。
+- 文件页调整为左侧文件树、右侧只读 Reader，并在 Reader 元数据里显示 `read-only`。
+- 交付页展示 Delivery Summary、Evidence、Validation、Changed files、Missing evidence 和 Out-of-scope check。
+- 审计页展示 Findings、Evidence Map、Traceability、Scope check、Validation check 和 Risk summary。
+- 高级页展示 State、Panel、Input、Execute、Output、Audit、Settings 和 JSON Reader。
+- 所有项目页固定底部状态栏。
+- Browser Preview smoke 增加 017 页面标记、V16 CSS、文件页顺序和 Light / Dark token 检查。
+
+Figma 核对：
+
+- 尝试读取 Figma AgentFlow v3：
+  - fileKey：`d1yy8aPLVr4M45FPxt1Wsw`
+  - nodeId：`129:2`
+- Figma MCP 返回：`You currently have nothing selected. You need to select a layer first before using this tool.`
+- 已重试 `129-2`，结果相同。
+- 本轮实现以 017 文档中的 V16 页面结构、组件清单、按钮语义和验收标准为准。
+
+Browser Preview 核对：
+
+- URL：`http://127.0.0.1:1420/`。
+- 登录页 DOM：
+  - 显示 `连接大模型入口`。
+  - 只显示 `ChatGPT` / `Claude` / `DeepSeek`。
+  - 未显示项目导航。
+- 首次引导 DOM：
+  - Step 1 标题为 `选择项目`，未出现重复标题。
+  - 完成页仅有 `进入工作台` 一个按钮。
+- 工作台 DOM：
+  - `data-agentflow-page="workbench"`。
+  - Toolbar 文本为 `工作台`。
+  - 底部 `.v16-status-bar` 存在。
+- 任务页 DOM：
+  - `data-agentflow-page="tasks"`。
+  - 看板列为 `待确认 / 可交给 Codex / 等待写回 / 待审计 / 已完成`。
+  - 看板无 `.v16-inspector-panel`。
+  - 列表表头为 `Issue / 状态 / Agent / 风险 / 更新时间 / 动作`。
+  - 列表右侧详情显示 `浏览器预览文件阅读器`。
+- 文件页 DOM：
+  - `data-agentflow-page="files"`。
+  - `.project-file-browser` 是 `.project-file-page` 第一个子节点。
+  - 文件树视觉位置在 Reader 左侧。
+  - 无固定 Inspector。
+  - 页面包含 `read-only`。
+- 交付页 DOM：
+  - `data-agentflow-page="delivery"`。
+  - 包含 `Delivery Summary`、`Evidence`、`Validation`、`Changed files`、`Missing evidence`、`Out-of-scope check`。
+- 审计页 DOM：
+  - `data-agentflow-page="audit"`。
+  - 包含 `Findings`、`Evidence Map`、`Traceability`、`Scope check`、`Validation check`、`Risk summary`。
+  - Browser Preview 中 `请求人工审计` 仍为 disabled。
+- 高级页 DOM：
+  - `data-agentflow-page="advanced"`。
+  - 包含 `State / Panel / Input / Execute / Output / Audit / Settings`。
+  - `.v16-json-reader` 存在。
+  - `data-agentflow-design-system="v1"` 存在。
+
+边界：
+
+- 未改 Rust 后端。
+- 未新增 Tauri command。
+- 未新增模型调用能力。
+- 未自动执行 Codex。
+- 未做 Git commit / push / stage。
+- 未删除 PR#33 / 015 文档。
+- 未在普通页面暴露 raw JSON；raw JSON 仅在高级页展示。
+
+验证：
+
+- `npm --prefix apps/desktop run build`：pass。
+- `npm --prefix apps/desktop run preview:smoke`：pass。
+  - 输出：`Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.`
+- `cargo test -p agentflow-desktop`：pass，18 tests。
+- `git diff --check`：pass。
 - `cargo test`：pass，agent-manual 21 tests + CLI 2 tests + core 61 tests + desktop 17 tests + goal-tree 3 tests + panel 27 tests。
 - `npm --prefix apps/desktop run build`：pass。
 

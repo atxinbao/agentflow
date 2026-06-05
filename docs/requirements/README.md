@@ -1,7 +1,7 @@
 # Requirements
 
 创建日期：2026-06-01
-更新日期：2026-06-05
+更新日期：2026-06-06
 执行者：Codex
 
 ## 目的
@@ -51,7 +51,13 @@
 - [014-1-014-2-agent-locale-and-voice-style-policy-v1.md](014-1-014-2-agent-locale-and-voice-style-policy-v1.md)
 - [015-human-agent-guided-experience-v1.md](015-human-agent-guided-experience-v1.md)
 - [016-desktop-design-system-v1.md](016-desktop-design-system-v1.md)
+- [017-agentflow-unified-ux-spec-v16-pr33-merged.md](017-agentflow-unified-ux-spec-v16-pr33-merged.md)
 - [next-requirements.md](next-requirements.md)
+
+## 当前前端设计基线
+
+- [015-human-agent-guided-experience-v1.md](015-human-agent-guided-experience-v1.md) = historical design reference
+- [017-agentflow-unified-ux-spec-v16-pr33-merged.md](017-agentflow-unified-ux-spec-v16-pr33-merged.md) = current frontend implementation baseline
 
 ## 不继承内容
 
