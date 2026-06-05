@@ -1,4 +1,5 @@
 .DS_Store
+.codex/
 .agentflow/runs/
 .agentflow/tmp/
 .agentflow/output/graph/
