@@ -1,5 +1,5 @@
 use crate::{
-    issue::{InputIssue, InputIssueModel},
+    issue::{DisplayStatus, InputIssue, InputIssueModel},
     manager::{load_input_facts, load_summary, missing_input_paths, status},
     model::{InputManifest, InputSnapshot, InputWorkspaceStatus, INPUT_SNAPSHOT_VERSION},
     project::InputProject,
@@ -42,7 +42,7 @@ pub(crate) fn build_input_snapshot(root: &Path) -> Result<InputSnapshot> {
     }
 
     let facts = load_input_facts(root);
-    let (manifest, index, intake, specs, projects, issues, relations) = match facts {
+    let (manifest, index, intake, specs, projects, mut issues, relations) = match facts {
         Ok(value) => value,
         Err(error) => {
             errors.push(error.to_string());
@@ -69,6 +69,7 @@ pub(crate) fn build_input_snapshot(root: &Path) -> Result<InputSnapshot> {
     validate_manifest(&manifest, &mut errors);
     validate_spec_gate(root, &specs, &mut errors);
     validate_issue_graph(&projects, &issues, &relations, &mut errors);
+    normalize_display_statuses(&mut issues);
 
     let ready = errors.is_empty() && missing_paths.is_empty();
     let status = status(
@@ -95,6 +96,12 @@ pub(crate) fn build_input_snapshot(root: &Path) -> Result<InputSnapshot> {
         issues,
         relations,
     })
+}
+
+fn normalize_display_statuses(issues: &mut [InputIssue]) {
+    for issue in issues {
+        issue.display_status = DisplayStatus::from_input_status(&issue.status);
+    }
 }
 
 fn validate_manifest(manifest: &InputManifest, errors: &mut Vec<String>) {

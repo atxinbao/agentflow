@@ -39,7 +39,7 @@ import {
 import { DesignSystemPreview } from "./features/design-system";
 import { useAgentManual } from "./features/agent-manual";
 import { useExecuteStatus } from "./features/execute";
-import { useInputStatus } from "./features/input";
+import { useInputSnapshot, useInputStatus } from "./features/input";
 import { OutputAuditPanel, useOutputStatus, type OutputStatusState } from "./features/output";
 import {
   ProjectLocalFilesPage,
@@ -51,13 +51,16 @@ import {
   type ProjectPanelState,
   type ProjectFilesState,
 } from "./features/project-files";
-import { useStateStatus, type StateStatusState } from "./features/state";
+import { useIssueStatusIndex, useStateStatus, type StateStatusState } from "./features/state";
 import { AgentStatusBar, buildAgentStatusItems } from "./features/status-channel";
 import type {
   AgentStatusChannelItem,
   AuditIndex,
   AuditIndexEntry,
   HumanAuditReport,
+  InputIssue,
+  IssueDisplayStatus,
+  IssueStatusIndex,
   IssueContract,
   OutputIndex,
   OutputIndexEntry,
@@ -133,9 +136,11 @@ function App() {
   const { agentManualState, loadAgentManual } = useAgentManual(projectRoot);
   const { projectPanelState, prepareProjectPanel } = useProjectPanel(projectRoot);
   const inputStatusState = useInputStatus(projectRoot);
+  const inputSnapshotState = useInputSnapshot(projectRoot);
   const executeStatusState = useExecuteStatus(projectRoot);
   const outputStatusState = useOutputStatus(projectRoot, outputRefreshToken);
   const stateStatusState = useStateStatus(projectRoot);
+  const issueStatusIndexState = useIssueStatusIndex(projectRoot, outputRefreshToken);
   const workspaceData = useWorkspaceData(projectRoot);
   const outputBundle = useOutputBundle(projectRoot, outputRefreshToken);
 
@@ -171,8 +176,14 @@ function App() {
   );
 
   const tasks = useMemo(
-    () => buildTaskItems(workspaceData.projectViewModel, workspaceData.workbench),
-    [workspaceData.projectViewModel, workspaceData.workbench],
+    () =>
+      buildTaskItems(
+        inputSnapshotState.snapshot?.issues ?? [],
+        issueStatusIndexState.index,
+        workspaceData.projectViewModel,
+        workspaceData.workbench,
+      ),
+    [inputSnapshotState.snapshot, issueStatusIndexState.index, workspaceData.projectViewModel, workspaceData.workbench],
   );
   const filteredTasks = useMemo(() => {
     const query = taskSearch.trim().toLowerCase();
@@ -180,7 +191,9 @@ function App() {
       return tasks;
     }
     return tasks.filter((task) => {
-      const searchable = [task.id, task.title, task.status, task.riskLevel, task.goal].join(" ").toLowerCase();
+      const searchable = [task.id, task.title, task.displayStatus, task.status, task.riskLevel, task.goal]
+        .join(" ")
+        .toLowerCase();
       return searchable.includes(query);
     });
   }, [taskSearch, tasks]);
@@ -954,19 +967,10 @@ function TasksPage({
 }
 
 function TaskBoard({ onSelectTask, tasks }: { onSelectTask: (taskId: string) => void; tasks: V1Issue[] }) {
-  const columns = [
-    { id: "confirm", label: "待确认", matcher: (task: V1Issue) => task.status.includes("draft") || task.status === "todo" },
-    { id: "codex", label: "可交给 Codex", matcher: (task: V1Issue) => task.status === "todo" || task.status === "ready" },
-    { id: "writeback", label: "等待写回", matcher: (task: V1Issue) => task.status.includes("running") },
-    { id: "audit", label: "待审计", matcher: (task: V1Issue) => task.status.includes("review") },
-    { id: "done", label: "已完成", matcher: (task: V1Issue) => task.status.includes("done") || task.status.includes("complete") },
-  ];
-
   return (
     <div className="v16-task-board" aria-label="任务看板">
-      {columns.map((column) => {
-        const columnTasks = tasks.filter(column.matcher);
-        const visibleTasks = columnTasks.length ? columnTasks : column.id === "confirm" ? tasks.slice(0, 1) : [];
+      {displayStatusColumns.map((column) => {
+        const visibleTasks = tasks.filter((task) => task.displayStatus === column.id);
         return (
           <section key={column.id}>
             <header>
@@ -976,7 +980,8 @@ function TaskBoard({ onSelectTask, tasks }: { onSelectTask: (taskId: string) => 
             <div>
               {visibleTasks.map((task) => (
                 <button className="v16-task-card" key={`${column.id}-${task.id}`} onClick={() => onSelectTask(task.id)} type="button">
-                  <span>{task.id}</span>
+                  <span className="v16-task-id">{task.id}</span>
+                  <StatusChip status={statusChipForDisplayStatus(task.displayStatus)}>{displayStatusLabel(task.displayStatus)}</StatusChip>
                   <strong>{task.title}</strong>
                   <small>{task.riskLevel || "normal"} · {task.validationCommands.length || 0} 条验证命令</small>
                 </button>
@@ -1011,7 +1016,7 @@ function TaskList({
               </button>
             ),
           },
-          { key: "status", label: "状态", render: (task) => task.status },
+          { key: "status", label: "状态", render: (task) => displayStatusLabel(task.displayStatus) },
           { key: "agent", label: "Agent", render: () => "Build Agent" },
           { key: "risk", label: "风险", render: (task) => task.riskLevel || "normal" },
           { key: "updated", label: "更新时间", render: () => "本地快照" },
@@ -1038,11 +1043,12 @@ function TaskDetail({ task }: { task: V1Issue | null }) {
       <header>
         <p className="v16-kicker">{task.id}</p>
         <h2>{task.title}</h2>
-        <StatusChip status="ready">{task.status}</StatusChip>
+        <StatusChip status={statusChipForDisplayStatus(task.displayStatus)}>{displayStatusLabel(task.displayStatus)}</StatusChip>
       </header>
       <DescriptionList
         items={[
           ["Agent", "Build Agent"],
+          ["内部状态", task.status],
           ["风险", task.riskLevel || "normal"],
           ["来源 SPEC", task.projectId ?? "approved SPEC"],
         ]}
@@ -1495,14 +1501,58 @@ function JsonSummary({ title, value }: { title: string; value: unknown }) {
   );
 }
 
+const displayStatusColumns: Array<{ id: IssueDisplayStatus; label: string }> = [
+  { id: "backlog", label: "Backlog" },
+  { id: "ready", label: "Ready" },
+  { id: "in-progress", label: "In Progress" },
+  { id: "review", label: "Review" },
+  { id: "done", label: "Done" },
+  { id: "cancel", label: "Cancel" },
+];
+
+const displayStatusOrder = new Map(displayStatusColumns.map((column, index) => [column.id, index]));
+
 function buildTaskItems(
+  inputIssues: InputIssue[],
+  issueStatusIndex: IssueStatusIndex | null,
   projectViewModel: ProjectMilestoneIssueViewModelSnapshot | null,
   workbench: WorkbenchSnapshot | null,
 ): V1Issue[] {
-  if (projectViewModel?.issues.length) {
-    return projectViewModel.issues;
+  if (inputIssues.length) {
+    return sortTasksByDisplayStatus(inputIssues.map((issue) => inputIssueToV1Issue(issue, issueStatusIndex)));
   }
-  return (workbench?.issues ?? []).map(issueContractToV1Issue);
+  if (projectViewModel?.issues.length) {
+    return sortTasksByDisplayStatus(
+      projectViewModel.issues.map((issue) => withDisplayStatus(issue, issueStatusIndex)),
+    );
+  }
+  return sortTasksByDisplayStatus((workbench?.issues ?? []).map(issueContractToV1Issue));
+}
+
+function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusIndex | null): V1Issue {
+  const indexed = issueStatusIndex?.issues.find((item) => item.issueId === issue.issueId);
+  const displayStatus = indexed?.displayStatus ?? issue.displayStatus;
+  return {
+    acceptanceCriteria: issue.acceptanceCriteria,
+    allowedFiles: issue.scope,
+    boundary: issue.nonGoals,
+    codexInstructions: issue.validationHints,
+    dependencies: issue.relations?.blockedBy ?? [],
+    displayStatus,
+    evidenceRequired: issue.acceptanceCriteria,
+    forbiddenFiles: [".agentflow/*", ".codex/*", "agent-artifacts/*"],
+    goal: issue.summary || issue.title,
+    id: issue.issueId,
+    milestoneId: null,
+    nonGoals: issue.nonGoals,
+    projectId: issue.projectId ?? null,
+    rawStatus: issue.status,
+    riskLevel: issue.riskLevel || indexed?.riskLevel || "normal",
+    scope: issue.scope,
+    status: issue.status,
+    title: issue.title,
+    validationCommands: issue.validationHints,
+  };
 }
 
 function issueContractToV1Issue(issue: IssueContract): V1Issue {
@@ -1512,6 +1562,7 @@ function issueContractToV1Issue(issue: IssueContract): V1Issue {
     boundary: issue.nonGoals,
     codexInstructions: issue.executionPlan,
     dependencies: [],
+    displayStatus: displayStatusFromLegacyStatus(issue.status),
     evidenceRequired: issue.evidenceRequirements,
     forbiddenFiles: [".agentflow/*", ".codex/*", "agent-artifacts/*"],
     goal: issue.intent,
@@ -1526,6 +1577,58 @@ function issueContractToV1Issue(issue: IssueContract): V1Issue {
     title: issue.title,
     validationCommands: issue.validation.commands,
   };
+}
+
+function withDisplayStatus(issue: V1Issue, issueStatusIndex: IssueStatusIndex | null): V1Issue {
+  const indexed = issueStatusIndex?.issues.find((item) => item.issueId === issue.id);
+  return {
+    ...issue,
+    displayStatus: indexed?.displayStatus ?? issue.displayStatus ?? displayStatusFromLegacyStatus(issue.status),
+  };
+}
+
+function sortTasksByDisplayStatus(tasks: V1Issue[]) {
+  return [...tasks].sort((left, right) => {
+    const leftOrder = displayStatusOrder.get(left.displayStatus ?? "backlog") ?? 0;
+    const rightOrder = displayStatusOrder.get(right.displayStatus ?? "backlog") ?? 0;
+    return leftOrder - rightOrder || left.id.localeCompare(right.id);
+  });
+}
+
+function displayStatusFromLegacyStatus(status: string): IssueDisplayStatus {
+  const normalized = status.toLowerCase();
+  if (normalized.includes("cancel")) {
+    return "cancel";
+  }
+  if (normalized.includes("done") || normalized.includes("complete")) {
+    return "done";
+  }
+  if (normalized.includes("review") || normalized.includes("delivered")) {
+    return "review";
+  }
+  if (normalized.includes("running") || normalized.includes("progress")) {
+    return "in-progress";
+  }
+  if (normalized === "ready" || normalized === "todo" || normalized === "ready-for-execute") {
+    return "ready";
+  }
+  return "backlog";
+}
+
+function displayStatusLabel(status: IssueDisplayStatus = "backlog") {
+  return displayStatusColumns.find((column) => column.id === status)?.label ?? "Backlog";
+}
+
+function statusChipForDisplayStatus(status: IssueDisplayStatus = "backlog"): StatusChipStatus {
+  const chips: Record<IssueDisplayStatus, StatusChipStatus> = {
+    backlog: "idle",
+    cancel: "blocked",
+    done: "ready",
+    "in-progress": "working",
+    ready: "ready",
+    review: "warning",
+  };
+  return chips[status];
 }
 
 function buildNextStep(

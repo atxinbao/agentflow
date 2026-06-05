@@ -19,6 +19,8 @@ const server = await createServer({
 try {
   const preview = await server.ssrLoadModule("/src/browserPreviewData.ts");
   const outputStatus = preview.createBrowserPreviewOutputStatus(smokeRoot);
+  const inputSnapshot = preview.createBrowserPreviewInputSnapshot(smokeRoot);
+  const issueStatusIndex = preview.createBrowserPreviewIssueStatusIndex(smokeRoot);
   const outputIndex = preview.createBrowserPreviewOutputIndex();
   const auditIndex = preview.createBrowserPreviewAuditIndex();
   const auditReport = preview.createBrowserPreviewHumanAuditReport();
@@ -30,6 +32,10 @@ try {
   );
   const appEntry = readFileSync(path.join(desktopRoot, "src/App.tsx"), "utf8");
   const appShellCss = readFileSync(path.join(desktopRoot, "src/AppShell.css"), "utf8");
+  const stateStatusHook = readFileSync(
+    path.join(desktopRoot, "src/features/state/hooks/useStateStatus.ts"),
+    "utf8",
+  );
   const projectLocalFilesPage = readFileSync(
     path.join(desktopRoot, "src/features/project-files/ProjectLocalFilesPage.tsx"),
     "utf8",
@@ -60,6 +66,15 @@ try {
   assert.equal(outputStatus.summary.audits, 1);
   assert.equal(outputStatus.summary.incompleteEvidence, 0);
   assert.equal(outputStatus.summary.incompleteDeliveries, 0);
+  assert.equal(inputSnapshot.issues.length, 6);
+  assert.deepEqual(
+    inputSnapshot.issues.map((issue) => issue.displayStatus),
+    ["backlog", "ready", "in-progress", "review", "done", "cancel"],
+  );
+  assert.deepEqual(
+    issueStatusIndex.issues.map((issue) => issue.displayStatus),
+    ["backlog", "ready", "in-progress", "review", "done", "cancel"],
+  );
   assert.equal(outputIndex.releaseDeliveries.length, 1);
   assert.equal(outputIndex.releaseDeliveries[0].runId, "run-browser-preview-001");
   assert.equal(auditIndex.audits.length, 1);
@@ -103,6 +118,8 @@ try {
   assert.ok(appEntry.includes("高级"));
   assert.ok(appEntry.includes("复制任务包"));
   assert.ok(appEntry.includes("请求人工审计"));
+  assert.ok(appEntry.includes("displayStatusColumns"));
+  assert.ok(stateStatusHook.includes("load_issue_status_index"));
   assert.ok(appEntry.includes("Delivery Summary"));
   assert.ok(appEntry.includes("Evidence Map"));
   assert.ok(appEntry.includes("Traceability"));

@@ -133,6 +133,8 @@ export type WorkspaceOwnershipStatus = {
 
 export type InputWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";
 
+export type IssueDisplayStatus = "backlog" | "ready" | "in-progress" | "review" | "done" | "cancel";
+
 export type InputSummary = {
   intake: number;
   draftSpecs: number;
@@ -154,6 +156,58 @@ export type InputStatusSnapshot = {
   missingPaths: string[];
   warnings: string[];
   errors: string[];
+};
+
+export type InputIssueStatus = "planned" | "blocked" | "ready-for-execute" | "done" | "canceled";
+
+export type InputIssue = {
+  version: string;
+  issueId: string;
+  issueModel: "direct" | "project";
+  sourceSpecId: string;
+  projectId?: string | null;
+  title: string;
+  summary: string;
+  kind: string;
+  priority: string;
+  status: InputIssueStatus;
+  displayStatus: IssueDisplayStatus;
+  riskLevel: string;
+  scope: string[];
+  nonGoals: string[];
+  acceptanceCriteria: string[];
+  validationHints: string[];
+  relations?: {
+    blockedBy?: string[];
+    blocks?: string[];
+    related?: string[];
+    duplicateOf?: string | null;
+  };
+  panel?: {
+    snapshotId?: string | null;
+    contextPackId?: string | null;
+  };
+  system?: {
+    createdBy?: string;
+    createdAt?: number;
+    updatedAt?: number;
+    path?: string;
+    revision?: number;
+  };
+};
+
+export type InputSnapshot = {
+  version: string;
+  projectRoot: string;
+  ready: boolean;
+  status: InputStatusSnapshot;
+  manifest: unknown;
+  index: unknown;
+  intake: unknown[];
+  specs: unknown[];
+  projects: unknown[];
+  issues: InputIssue[];
+  relations: unknown;
 };
 
 export type ExecuteWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";
@@ -319,4 +373,21 @@ export type StateStatusSnapshot = {
   nextActions: string[];
   blockers: WorkflowBlockedAction[];
   updatedAt: number;
+};
+
+export type IssueStatusIndexEntry = {
+  issueId: string;
+  displayStatus: IssueDisplayStatus;
+  riskLevel: string;
+  latestRunId?: string | null;
+  executeStatus?: string | null;
+  evidenceStatus: string;
+  deliveryStatus: string;
+  auditStatus: WorkflowAuditStatus;
+};
+
+export type IssueStatusIndex = {
+  version: string;
+  updatedAt: number;
+  issues: IssueStatusIndexEntry[];
 };

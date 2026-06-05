@@ -53,6 +53,7 @@
 - [016-desktop-design-system-v1.md](016-desktop-design-system-v1.md)
 - [017-agentflow-unified-ux-spec-v16-pr33-merged.md](017-agentflow-unified-ux-spec-v16-pr33-merged.md)
 - [018-agentflow-code-cleanup-rust-workspace.md](018-agentflow-code-cleanup-rust-workspace.md)
+- [019-agentflow-issue-status-enhancement.md](019-agentflow-issue-status-enhancement.md)
 - [next-requirements.md](next-requirements.md)
 
 ## 当前前端设计基线

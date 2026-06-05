@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -61,6 +61,45 @@ impl Default for InputIssueStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum DisplayStatus {
+    Backlog,
+    Ready,
+    InProgress,
+    Review,
+    Done,
+    Cancel,
+}
+
+impl DisplayStatus {
+    pub fn from_input_status(status: &InputIssueStatus) -> Self {
+        match status {
+            InputIssueStatus::Planned | InputIssueStatus::Blocked => Self::Backlog,
+            InputIssueStatus::ReadyForExecute => Self::Ready,
+            InputIssueStatus::Done => Self::Done,
+            InputIssueStatus::Canceled => Self::Cancel,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Backlog => "backlog",
+            Self::Ready => "ready",
+            Self::InProgress => "in-progress",
+            Self::Review => "review",
+            Self::Done => "done",
+            Self::Cancel => "cancel",
+        }
+    }
+}
+
+impl Default for DisplayStatus {
+    fn default() -> Self {
+        Self::Backlog
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum InputRiskLevel {
     Low,
     Medium,
@@ -105,7 +144,7 @@ pub struct InputSystemRecord {
     pub revision: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InputIssue {
     pub version: String,
@@ -118,6 +157,8 @@ pub struct InputIssue {
     pub kind: InputIssueKind,
     pub priority: InputPriority,
     pub status: InputIssueStatus,
+    #[serde(default)]
+    pub display_status: DisplayStatus,
     pub risk_level: InputRiskLevel,
     pub scope: Vec<String>,
     pub non_goals: Vec<String>,
@@ -126,6 +167,38 @@ pub struct InputIssue {
     pub relations: InputIssueRelations,
     pub panel: InputPanelLink,
     pub system: InputSystemRecord,
+}
+
+impl Serialize for InputIssue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("InputIssue", 19)?;
+        state.serialize_field("version", &self.version)?;
+        state.serialize_field("issueId", &self.issue_id)?;
+        state.serialize_field("issueModel", &self.issue_model)?;
+        state.serialize_field("sourceSpecId", &self.source_spec_id)?;
+        state.serialize_field("projectId", &self.project_id)?;
+        state.serialize_field("title", &self.title)?;
+        state.serialize_field("summary", &self.summary)?;
+        state.serialize_field("kind", &self.kind)?;
+        state.serialize_field("priority", &self.priority)?;
+        state.serialize_field("status", &self.status)?;
+        state.serialize_field(
+            "displayStatus",
+            &DisplayStatus::from_input_status(&self.status),
+        )?;
+        state.serialize_field("riskLevel", &self.risk_level)?;
+        state.serialize_field("scope", &self.scope)?;
+        state.serialize_field("nonGoals", &self.non_goals)?;
+        state.serialize_field("acceptanceCriteria", &self.acceptance_criteria)?;
+        state.serialize_field("validationHints", &self.validation_hints)?;
+        state.serialize_field("relations", &self.relations)?;
+        state.serialize_field("panel", &self.panel)?;
+        state.serialize_field("system", &self.system)?;
+        state.end()
+    }
 }
 
 impl Default for InputIssue {
@@ -141,6 +214,7 @@ impl Default for InputIssue {
             kind: InputIssueKind::default(),
             priority: InputPriority::default(),
             status: InputIssueStatus::default(),
+            display_status: DisplayStatus::default(),
             risk_level: InputRiskLevel::default(),
             scope: Vec::new(),
             non_goals: Vec::new(),

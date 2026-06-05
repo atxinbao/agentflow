@@ -13,8 +13,8 @@ pub use events::{append_state_event, load_state_timeline};
 pub use gates::{load_blockers, load_next_actions, load_workflow_gates};
 pub use locks::load_state_locks;
 pub use manager::{
-    load_state_index, load_state_manifest, load_state_status, prepare_state_workspace,
-    refresh_state,
+    load_issue_status_index, load_state_index, load_state_manifest, load_state_status,
+    prepare_state_workspace, refresh_state,
 };
 pub use model::*;
 pub use sessions::{load_state_session, update_state_session};
@@ -46,7 +46,7 @@ mod tests {
         ExecutePlanDraft, ExecuteRun,
     };
     use agentflow_input::{
-        issue::{InputIssue, InputIssueModel, InputIssueStatus, InputRiskLevel},
+        issue::{DisplayStatus, InputIssue, InputIssueModel, InputIssueStatus, InputRiskLevel},
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
     use agentflow_output::{
@@ -478,6 +478,7 @@ mod tests {
             .find(|item| item.issue_id == "iss-001")
             .unwrap();
         assert_eq!(issue.latest_run_id.as_deref(), Some(run.run_id.as_str()));
+        assert_eq!(issue.display_status, DisplayStatus::Review);
         assert_eq!(issue.delivery_status, "drafted");
         assert_eq!(issue.audit_status, WorkflowAuditStatus::Failed);
     }

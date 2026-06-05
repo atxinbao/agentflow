@@ -25,7 +25,10 @@ pub use validate::validate_input_snapshot;
 mod tests {
     use super::*;
     use crate::{
-        issue::{InputIssue, InputIssueModel, InputPriority, InputRiskLevel},
+        issue::{
+            DisplayStatus, InputIssue, InputIssueModel, InputIssueStatus, InputPriority,
+            InputRiskLevel,
+        },
         project::{InputProject, InputProjectStatus},
         relations::{InputIssueRelation, InputIssueRelationKind, InputIssueRelationsFile},
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
@@ -258,5 +261,73 @@ mod tests {
         assert!(issue.get("blockedAgentActions").is_none());
         assert!(issue.get("riskReasons").is_none());
         assert!(issue.get("riskFactors").is_none());
+    }
+
+    #[test]
+    fn display_status_serializes_as_kebab_case() {
+        assert_eq!(
+            serde_json::to_value(DisplayStatus::Backlog).unwrap(),
+            "backlog"
+        );
+        assert_eq!(serde_json::to_value(DisplayStatus::Ready).unwrap(), "ready");
+        assert_eq!(
+            serde_json::to_value(DisplayStatus::InProgress).unwrap(),
+            "in-progress"
+        );
+        assert_eq!(
+            serde_json::to_value(DisplayStatus::Review).unwrap(),
+            "review"
+        );
+        assert_eq!(serde_json::to_value(DisplayStatus::Done).unwrap(), "done");
+        assert_eq!(
+            serde_json::to_value(DisplayStatus::Cancel).unwrap(),
+            "cancel"
+        );
+    }
+
+    #[test]
+    fn issue_serialization_derives_display_status_from_workflow_status() {
+        let issue = serde_json::to_value(InputIssue {
+            issue_id: "iss-001".to_string(),
+            source_spec_id: "spec-001".to_string(),
+            title: "Ready issue".to_string(),
+            status: InputIssueStatus::ReadyForExecute,
+            display_status: DisplayStatus::Backlog,
+            ..InputIssue::default()
+        })
+        .unwrap();
+
+        assert_eq!(issue["status"], "ready-for-execute");
+        assert_eq!(issue["displayStatus"], "ready");
+    }
+
+    #[test]
+    fn input_index_records_issue_display_status() {
+        let dir = tempdir().unwrap();
+        prepare_input_workspace(dir.path()).unwrap();
+        let issue = InputIssue {
+            issue_id: "iss-001".to_string(),
+            source_spec_id: "spec-001".to_string(),
+            title: "Ready issue".to_string(),
+            status: InputIssueStatus::ReadyForExecute,
+            risk_level: InputRiskLevel::Low,
+            ..InputIssue::default()
+        };
+        fs::write(
+            dir.path().join(".agentflow/input/issues/iss-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+
+        prepare_input_workspace(dir.path()).unwrap();
+        let index = load_input_index(dir.path()).unwrap();
+        let issue_entry = index
+            .issues
+            .iter()
+            .find(|entry| entry.id == "iss-001")
+            .unwrap();
+
+        assert_eq!(issue_entry.status, "readyforexecute");
+        assert_eq!(issue_entry.display_status, Some(DisplayStatus::Ready));
     }
 }
