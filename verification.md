@@ -3816,7 +3816,8 @@ No files were written and no command was executed.
 
 验证：
 
-- `cargo fmt`：pass。
+- `cargo fmt --check`：pass。
+- `git diff --check`：pass。
 - `cargo test`：pass，agent-manual 21 tests + CLI 2 tests + core 61 tests + desktop 17 tests + goal-tree 3 tests + panel 27 tests。
 - `npm --prefix apps/desktop run build`：pass。
 
@@ -4354,3 +4355,78 @@ No files were written and no command was executed.
 - `cargo test -p agentflow-state`：pass，9 tests。
 - `npm --prefix apps/desktop run build`：pass。
 - `cargo test`：pass，agent-manual 23 tests + CLI 2 tests + core 61 tests + desktop 18 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 18 tests + panel 27 tests + state 9 tests + workflow-acceptance 6 tests。
+
+## 2026-06-05 Agent Locale and Voice Style Policy V1
+
+执行者：Codex
+
+目标：
+
+- 将 `014.1 + 014.2 - Agent Locale and Voice Style Policy V1` 复制到 `docs/requirements/014-1-014-2-agent-locale-and-voice-style-policy-v1.md`。
+- 固定 AgentFlow managed manuals 为英文。
+- 记录 Agent 用户面输出使用的 `agentLocale`。
+- 新增 `plain-work-style` 默认表达规则。
+- 让 Agent 新写代码注释和 doc comment 跟随 `agentLocale` 与 plain-work-style。
+
+结果：
+
+- 新增 Agent locale state：
+  - `.agentflow/define/agent/state/locale.json`
+  - `manualLanguage = en`
+  - `agentLocale` 使用 BCP 47-like normalization，例如 `zh_CN -> zh-CN`。
+  - 无法检测 OS / App locale 时 fallback 到 `en-US`，原因记录在 `locale.json.warnings`。
+- 新增 Agent style state：
+  - `.agentflow/define/agent/state/style.json`
+  - `styleId = plain-work-style`
+  - `appliesToAgentLocale = true`
+  - `appliesToCodeComments = true`
+- `workspace-manifest.json` 增加 locale / style 信息。
+- `skills-lock.json` 增加：
+  - `manualLanguage`
+  - `agentLocale`
+  - `stylePolicy`
+- 新增 `plain-work-style` skill template：
+  - `.agentflow/define/agent/skills/plain-work-style/SKILL.md`
+  - 正文保持英文。
+  - 作为默认 voice policy，不是后处理工具。
+- `AGENTS.md` template 增加 Locale Policy / Voice Style Policy，正文保持英文。
+- `Agentflow.md` template 增加 Locale Policy / Voice Style Policy，正文保持英文。
+- `TDD.md` 增加 Code Comment Language and Style 规则。
+- validate / repair 覆盖：
+  - locale.json 缺失 / 格式 / manualLanguage / agentLocale。
+  - style.json 缺失 / styleId / manualLanguage / appliesToCodeComments。
+  - plain-work-style skill 缺失和 hash mismatch。
+  - skills-lock locale / style metadata。
+- Desktop prepare / Agent Manual prepare 接收 `appLocale`：
+  - 前端来源为 `Intl.DateTimeFormat().resolvedOptions().locale`，fallback 为 `navigator.language`。
+  - Rust 侧 normalize 为 BCP 47-like string。
+- Browser Preview Agent Manual mock 增加：
+  - `agentLocale`
+  - `manualLanguage = en`
+  - `styleId = plain-work-style`
+  - `plain-work-style` skill，skills count 变为 7。
+- Status Channel 增加：
+  - Agent locale
+  - Manual language
+  - Voice style
+
+边界：
+
+- 未翻译 AGENTS.md / Agentflow.md / SKILL.md / SPEC.md / TDD.md / RELEASE.md / AUDIT.md。
+- 未调用模型。
+- 未接外部 writing-style-skill / brand voice 工具。
+- 未批量翻译已有代码注释。
+- 未写用户源码。
+- 未写 SPEC facts。
+- 未写 Goal Tree facts。
+- 未启动 AgentRun。
+- locale 变化只更新 locale / manifest / skills-lock metadata，不改变 skill 正文 hash。
+
+验证：
+
+- `cargo test -p agentflow-agent-manual`：pass，31 tests。
+- `cargo test -p agentflow-desktop`：pass，18 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `npm --prefix apps/desktop run preview:smoke`：pass。
+- `cargo test`：pass，agent-manual 31 tests + CLI 2 tests + core 61 tests + desktop 18 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 18 tests + panel 27 tests + state 9 tests + workflow-acceptance 6 tests。
+- `cargo fmt`：pass。

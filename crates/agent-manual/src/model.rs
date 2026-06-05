@@ -10,6 +10,10 @@ pub const WORKSPACE_MANIFEST_VERSION: &str = "agentflow-workspace-manifest.v1";
 pub const WORKSPACE_LAYOUT_VERSION: &str = "agentflow-layout.v1";
 pub const WORKSPACE_OWNERSHIP_VERSION: &str = "agentflow-workspace-ownership.v1";
 pub const WORKSPACE_MANAGED_BY: &str = "AgentFlow";
+pub const LOCALE_VERSION: &str = "agent-locale.v1";
+pub const STYLE_VERSION: &str = "agent-style.v1";
+pub const MANUAL_LANGUAGE: &str = "en";
+pub const PLAIN_WORK_STYLE_ID: &str = "plain-work-style";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -43,6 +47,8 @@ pub struct AgentEnvironmentStatus {
     pub workspace_manifest: WorkspaceManifestStatus,
     pub ownership: WorkspaceOwnershipStatus,
     pub layout: WorkspaceLayoutStatus,
+    pub locale: AgentLocaleState,
+    pub style: AgentStyleState,
     pub legacy_agent_entry: LegacyAgentEntryStatus,
     pub shadow_guard: RootAgentEntryShadowGuardStatus,
 }
@@ -170,13 +176,53 @@ pub struct RootAgentEntryShadowGuardStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AgentLocaleState {
+    pub version: String,
+    pub agent_locale: String,
+    pub raw_os_locale: Option<String>,
+    pub manual_language: String,
+    pub source: String,
+    pub checked_at: u64,
+    pub fallback: bool,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentStyleState {
+    pub version: String,
+    pub style_id: String,
+    pub manual_language: String,
+    pub applies_to_agent_locale: bool,
+    pub applies_to_code_comments: bool,
+    pub checked_at: u64,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SkillsLock {
     pub version: String,
     pub managed_by: String,
     pub updated_at: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manual_language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_locale: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style_policy: Option<SkillsLockStylePolicy>,
     pub entry: SkillsLockEntry,
     pub manual: SkillsLockItem,
     pub skills: BTreeMap<String, SkillsLockItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsLockStylePolicy {
+    pub style_id: String,
+    pub version: String,
+    pub path: String,
+    pub applies_to_code_comments: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -197,11 +243,34 @@ pub struct WorkspaceManifest {
     pub project_root: String,
     pub ownership: WorkspaceManifestOwnership,
     pub root_entries: WorkspaceManifestRootEntries,
+    pub locale: WorkspaceManifestLocale,
+    pub style: WorkspaceManifestStyle,
     pub active_layers: Vec<String>,
     pub planned_layers: Vec<String>,
     pub paths: BTreeMap<String, String>,
     pub compat: BTreeMap<String, String>,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceManifestLocale {
+    pub agent_locale: String,
+    pub manual_language: String,
+    pub raw_os_locale: Option<String>,
+    pub source: String,
+    pub checked_at: u64,
+    pub fallback: bool,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceManifestStyle {
+    pub style_id: String,
+    pub manual_language: String,
+    pub applies_to_agent_locale: bool,
+    pub applies_to_code_comments: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

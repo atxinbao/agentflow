@@ -2,12 +2,14 @@ use crate::{
     layout::{
         detect_shadow_files, prepare_workspace_layout, shadow_warnings, validate_workspace_layout,
     },
+    locale::expected_locale_state,
     lock::expected_skills_lock,
     model::{
         AgentEnvironmentState, AgentEnvironmentStatus, LegacyAgentEntryStatus,
         RootAgentEntryShadowGuardStatus, STATUS_VERSION,
     },
     ownership::check_agentflow_workspace_ownership_at,
+    style::expected_style_state,
     templates::{
         agent_entry_template, agentflow_manual_template, skill_templates,
         AGENT_ENTRY_RELATIVE_PATH, AGENT_MANUAL_RELATIVE_PATH, LEGACY_AGENT_ENTRY_RELATIVE_PATH,
@@ -23,6 +25,13 @@ use std::{fs, path::Path};
 
 pub fn repair_agent_working_manual(
     project_root: impl AsRef<Path>,
+) -> Result<AgentEnvironmentStatus> {
+    repair_agent_working_manual_with_locale(project_root, None)
+}
+
+pub fn repair_agent_working_manual_with_locale(
+    project_root: impl AsRef<Path>,
+    app_locale: Option<String>,
 ) -> Result<AgentEnvironmentStatus> {
     let root = canonical_project_root(project_root.as_ref())?;
     let repaired_at = unix_timestamp_seconds();
@@ -40,7 +49,9 @@ pub fn repair_agent_working_manual(
 
     let shadow_guard = detect_shadow_files(&root);
     let warnings = shadow_warnings(&shadow_guard);
-    prepare_workspace_layout(&root, &warnings, &mut repairs)?;
+    let locale = expected_locale_state(&root, app_locale.as_deref(), repaired_at);
+    let style = expected_style_state(repaired_at);
+    prepare_workspace_layout(&root, &warnings, &mut repairs, &locale, &style)?;
 
     write_agent_entry(&root, &mut repairs, repaired_at)?;
     write_file_if_changed(
@@ -59,15 +70,21 @@ pub fn repair_agent_working_manual(
         )?;
     }
 
-    let lock = expected_skills_lock(repaired_at);
+    let lock = expected_skills_lock(repaired_at, &locale);
     write_file_if_changed(
         &root.join(SKILLS_LOCK_RELATIVE_PATH),
         &(serde_json::to_string_pretty(&lock)? + "\n"),
         "Rewrote skills-lock.json",
         &mut repairs,
     )?;
+    crate::validate::write_policy_state_files(&root, &locale, &style)?;
 
-    let status = validate_agent_working_manual_with_context(&root, repairs, Some(repaired_at))?;
+    let status = validate_agent_working_manual_with_context(
+        &root,
+        repairs,
+        Some(repaired_at),
+        app_locale.as_deref(),
+    )?;
     write_state_files(&root, &status, &status)?;
     Ok(status)
 }
@@ -167,6 +184,8 @@ fn blocked_status(root: &Path, error: String, checked_at: u64) -> AgentEnvironme
         workspace_manifest,
         ownership: check_agentflow_workspace_ownership_at(root),
         layout,
+        locale: crate::locale::expected_locale_state(root, None, checked_at),
+        style: crate::style::expected_style_state(checked_at),
         legacy_agent_entry: LegacyAgentEntryStatus {
             exists: root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH).exists(),
             path: LEGACY_AGENT_ENTRY_RELATIVE_PATH.to_string(),
@@ -230,6 +249,8 @@ fn ownership_blocked_status(
             reused_paths: Vec::new(),
             missing_paths: Vec::new(),
         },
+        locale: crate::locale::expected_locale_state(root, None, checked_at),
+        style: crate::style::expected_style_state(checked_at),
         legacy_agent_entry: LegacyAgentEntryStatus {
             exists: root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH).exists(),
             path: LEGACY_AGENT_ENTRY_RELATIVE_PATH.to_string(),

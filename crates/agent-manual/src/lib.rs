@@ -3,21 +3,24 @@ pub mod model;
 mod git;
 mod hash;
 mod layout;
+mod locale;
 mod lock;
 mod manager;
 mod ownership;
 mod repair;
+mod style;
 mod templates;
 mod validate;
 
 pub use manager::{
     assert_agent_environment_ready, load_agent_environment_status, prepare_agent_working_manual,
+    prepare_agent_working_manual_with_locale,
 };
 pub use ownership::{
     assert_agentflow_workspace_owned_or_creatable, check_agentflow_workspace_ownership,
     take_over_agentflow_workspace,
 };
-pub use repair::repair_agent_working_manual;
+pub use repair::{repair_agent_working_manual, repair_agent_working_manual_with_locale};
 pub use validate::validate_agent_working_manual;
 
 #[cfg(test)]
@@ -85,8 +88,24 @@ mod tests {
             .path()
             .join(".agentflow/define/agent/skills/requirement-intake-filter/SKILL.md")
             .is_file());
-        assert_eq!(status.skills_lock.skill_count, 6);
-        assert_eq!(status.skills.len(), 6);
+        assert!(dir
+            .path()
+            .join(".agentflow/define/agent/skills/plain-work-style/SKILL.md")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/define/agent/state/locale.json")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/define/agent/state/style.json")
+            .is_file());
+        assert_eq!(status.skills_lock.skill_count, 7);
+        assert_eq!(status.skills.len(), 7);
+        assert!(!status.locale.agent_locale.is_empty());
+        assert_eq!(status.locale.manual_language, "en");
+        assert_eq!(status.style.style_id, "plain-work-style");
+        assert!(status.style.applies_to_code_comments);
         assert!(fs::read_to_string(dir.path().join("AGENTS.md"))
             .unwrap()
             .contains("requirement-intake-filter"));
@@ -110,6 +129,77 @@ mod tests {
     }
 
     #[test]
+    fn prepare_records_agent_locale_and_manual_language() {
+        let dir = tempdir().unwrap();
+
+        let status =
+            prepare_agent_working_manual_with_locale(dir.path(), Some("zh_CN".to_string()))
+                .unwrap();
+
+        assert!(status.ready);
+        assert_eq!(status.locale.agent_locale, "zh-CN");
+        assert_eq!(status.locale.raw_os_locale.as_deref(), Some("zh_CN"));
+        assert_eq!(status.locale.manual_language, "en");
+        assert_eq!(status.locale.source, "app");
+        assert_eq!(status.style.style_id, "plain-work-style");
+
+        let locale_json =
+            fs::read_to_string(dir.path().join(".agentflow/define/agent/state/locale.json"))
+                .unwrap();
+        assert!(locale_json.contains("\"agentLocale\": \"zh-CN\""));
+        assert!(locale_json.contains("\"manualLanguage\": \"en\""));
+    }
+
+    #[test]
+    fn skills_lock_records_agent_locale_and_style_policy() {
+        let dir = tempdir().unwrap();
+
+        prepare_agent_working_manual_with_locale(dir.path(), Some("ja_JP".to_string())).unwrap();
+
+        let lock = fs::read_to_string(dir.path().join(".agentflow/define/agent/skills-lock.json"))
+            .unwrap();
+        assert!(lock.contains("\"manualLanguage\": \"en\""));
+        assert!(lock.contains("\"agentLocale\": \"ja-JP\""));
+        assert!(lock.contains("\"styleId\": \"plain-work-style\""));
+        assert!(lock.contains("\"appliesToCodeComments\": true"));
+    }
+
+    #[test]
+    fn locale_metadata_changes_do_not_rewrite_manual_templates() {
+        let dir = tempdir().unwrap();
+        prepare_agent_working_manual_with_locale(dir.path(), Some("en_US".to_string())).unwrap();
+        let agent_entry_before = fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
+        let skill_before = fs::read_to_string(
+            dir.path()
+                .join(".agentflow/define/agent/skills/plain-work-style/SKILL.md"),
+        )
+        .unwrap();
+
+        let status =
+            prepare_agent_working_manual_with_locale(dir.path(), Some("zh_CN".to_string()))
+                .unwrap();
+
+        assert!(status.ready);
+        assert_eq!(status.locale.agent_locale, "zh-CN");
+        assert_eq!(
+            fs::read_to_string(dir.path().join("AGENTS.md")).unwrap(),
+            agent_entry_before
+        );
+        assert_eq!(
+            fs::read_to_string(
+                dir.path()
+                    .join(".agentflow/define/agent/skills/plain-work-style/SKILL.md")
+            )
+            .unwrap(),
+            skill_before
+        );
+        assert!(!status
+            .errors
+            .iter()
+            .any(|error| error.contains("plain-work-style hash mismatch")));
+    }
+
+    #[test]
     fn spec_agent_status_allows_input_facts_after_confirmation() {
         let manual = crate::templates::agentflow_manual_template();
 
@@ -126,9 +216,9 @@ mod tests {
     fn agent_roles_consolidate_release_into_build_agent() {
         let manual = crate::templates::agentflow_manual_template();
 
-        assert!(manual.contains("### 1. Spec Agent / 需求规格 Agent"));
-        assert!(manual.contains("### 2. Build Agent / 实现交付 Agent"));
-        assert!(manual.contains("### 3. Audit Agent / 代码审计 Agent"));
+        assert!(manual.contains("### 1. Spec Agent"));
+        assert!(manual.contains("### 2. Build Agent"));
+        assert!(manual.contains("### 3. Audit Agent"));
         assert!(!manual.contains("### 3. Release Agent"));
         assert!(!manual.contains("### 4. Audit Agent"));
         assert!(manual.contains("Status: enabled for Execute + Release Delivery V1."));
@@ -231,7 +321,100 @@ mod tests {
 
         assert!(repaired.ready);
         assert!(skill_path.is_file());
-        assert_eq!(repaired.skills_lock.skill_count, 6);
+        assert_eq!(repaired.skills_lock.skill_count, 7);
+    }
+
+    #[test]
+    fn validate_detects_missing_locale_state_and_repair_restores_it() {
+        let dir = tempdir().unwrap();
+        prepare_agent_working_manual_with_locale(dir.path(), Some("zh_CN".to_string())).unwrap();
+        let locale_path = dir.path().join(".agentflow/define/agent/state/locale.json");
+        fs::remove_file(&locale_path).unwrap();
+
+        let invalid = crate::validate::validate_agent_working_manual_with_context(
+            dir.path(),
+            Vec::new(),
+            None,
+            Some("zh_CN"),
+        )
+        .unwrap();
+
+        assert!(!invalid.ready);
+        assert!(invalid
+            .errors
+            .iter()
+            .any(|error| error.contains("locale state is missing")));
+
+        let repaired =
+            repair_agent_working_manual_with_locale(dir.path(), Some("zh_CN".to_string())).unwrap();
+
+        assert!(repaired.ready);
+        assert!(locale_path.is_file());
+        assert_eq!(repaired.locale.agent_locale, "zh-CN");
+    }
+
+    #[test]
+    fn validate_detects_missing_style_state_and_repair_restores_it() {
+        let dir = tempdir().unwrap();
+        prepare_agent_working_manual(dir.path()).unwrap();
+        let style_path = dir.path().join(".agentflow/define/agent/state/style.json");
+        fs::remove_file(&style_path).unwrap();
+
+        let invalid = validate_agent_working_manual(dir.path()).unwrap();
+
+        assert!(!invalid.ready);
+        assert!(invalid
+            .errors
+            .iter()
+            .any(|error| error.contains("style state is missing")));
+
+        let repaired = repair_agent_working_manual(dir.path()).unwrap();
+
+        assert!(repaired.ready);
+        assert!(style_path.is_file());
+        assert_eq!(repaired.style.style_id, "plain-work-style");
+    }
+
+    #[test]
+    fn validate_detects_missing_plain_work_style_skill_and_repair_restores_it() {
+        let dir = tempdir().unwrap();
+        prepare_agent_working_manual(dir.path()).unwrap();
+        let skill_path = dir
+            .path()
+            .join(".agentflow/define/agent/skills/plain-work-style/SKILL.md");
+        fs::remove_file(&skill_path).unwrap();
+
+        let invalid = validate_agent_working_manual(dir.path()).unwrap();
+
+        assert!(!invalid.ready);
+        assert!(invalid
+            .errors
+            .iter()
+            .any(|error| error.contains("Skill plain-work-style is missing")));
+
+        let repaired = repair_agent_working_manual(dir.path()).unwrap();
+
+        assert!(repaired.ready);
+        assert!(skill_path.is_file());
+        assert!(fs::read_to_string(skill_path)
+            .unwrap()
+            .contains("Default Output Structure"));
+    }
+
+    #[test]
+    fn code_comment_policy_is_present_in_agentflow_and_tdd_manuals() {
+        let dir = tempdir().unwrap();
+        prepare_agent_working_manual(dir.path()).unwrap();
+
+        let agentflow =
+            fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md")).unwrap();
+        let tdd = fs::read_to_string(dir.path().join(".agentflow/define/tdd/TDD.md")).unwrap();
+
+        assert!(agentflow.contains("newly authored code comments"));
+        assert!(agentflow.contains("Do not mass-translate existing code comments."));
+        assert!(tdd.contains("Code Comment Language and Style"));
+        assert!(tdd.contains("agentLocale"));
+        assert!(tdd.contains("plain-work-style"));
     }
 
     #[test]

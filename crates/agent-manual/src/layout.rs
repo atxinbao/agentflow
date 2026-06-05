@@ -1,7 +1,8 @@
 use crate::{
     model::{
-        RootAgentEntryShadowGuardStatus, WorkspaceLayoutStatus, WorkspaceManifest,
-        WorkspaceManifestOwnership, WorkspaceManifestRootEntries, WorkspaceManifestStatus,
+        AgentLocaleState, AgentStyleState, RootAgentEntryShadowGuardStatus, WorkspaceLayoutStatus,
+        WorkspaceManifest, WorkspaceManifestLocale, WorkspaceManifestOwnership,
+        WorkspaceManifestRootEntries, WorkspaceManifestStatus, WorkspaceManifestStyle,
         WorkspaceOwnershipState, WORKSPACE_LAYOUT_VERSION, WORKSPACE_MANAGED_BY,
         WORKSPACE_MANIFEST_VERSION,
     },
@@ -84,6 +85,8 @@ pub(crate) fn prepare_workspace_layout(
     root: &Path,
     warnings: &[String],
     repairs: &mut Vec<String>,
+    locale: &AgentLocaleState,
+    style: &AgentStyleState,
 ) -> Result<WorkspaceLayoutStatus> {
     let mut created_paths = Vec::new();
     let mut reused_paths = Vec::new();
@@ -108,7 +111,7 @@ pub(crate) fn prepare_workspace_layout(
         )?;
     }
 
-    let manifest = expected_workspace_manifest(root, warnings);
+    let manifest = expected_workspace_manifest(root, warnings, locale, style);
     let manifest_path = root.join(WORKSPACE_MANIFEST_RELATIVE_PATH);
     let manifest_content = serde_json::to_string_pretty(&manifest)? + "\n";
     write_file_if_changed(
@@ -157,6 +160,11 @@ pub(crate) fn validate_workspace_layout(
                 && value.layout_version == WORKSPACE_LAYOUT_VERSION
                 && value.ownership.status == WorkspaceOwnershipState::ManagedCurrent
                 && value.root_entries.canonical_agent_entry == "AGENTS.md"
+                && value.locale.manual_language == crate::model::MANUAL_LANGUAGE
+                && !value.locale.agent_locale.is_empty()
+                && value.style.style_id == crate::model::PLAIN_WORK_STYLE_ID
+                && value.style.manual_language == crate::model::MANUAL_LANGUAGE
+                && value.style.applies_to_code_comments
         })
         .unwrap_or(false);
     let layout_version = manifest.as_ref().map(|value| value.layout_version.clone());
@@ -211,7 +219,12 @@ pub(crate) fn shadow_warnings(shadow_guard: &RootAgentEntryShadowGuardStatus) ->
         .collect()
 }
 
-pub(crate) fn expected_workspace_manifest(root: &Path, warnings: &[String]) -> WorkspaceManifest {
+pub(crate) fn expected_workspace_manifest(
+    root: &Path,
+    warnings: &[String],
+    locale: &AgentLocaleState,
+    style: &AgentStyleState,
+) -> WorkspaceManifest {
     let now = unix_timestamp_seconds();
     WorkspaceManifest {
         version: WORKSPACE_MANIFEST_VERSION.to_string(),
@@ -230,6 +243,21 @@ pub(crate) fn expected_workspace_manifest(root: &Path, warnings: &[String]) -> W
             canonical_agent_entry: "AGENTS.md".to_string(),
             legacy_agent_entry: "AGENT.MD".to_string(),
             shadow_checked: SHADOW_CANDIDATES.into_iter().map(str::to_string).collect(),
+        },
+        locale: WorkspaceManifestLocale {
+            agent_locale: locale.agent_locale.clone(),
+            manual_language: locale.manual_language.clone(),
+            raw_os_locale: locale.raw_os_locale.clone(),
+            source: locale.source.clone(),
+            checked_at: locale.checked_at,
+            fallback: locale.fallback,
+            warnings: locale.warnings.clone(),
+        },
+        style: WorkspaceManifestStyle {
+            style_id: style.style_id.clone(),
+            manual_language: style.manual_language.clone(),
+            applies_to_agent_locale: style.applies_to_agent_locale,
+            applies_to_code_comments: style.applies_to_code_comments,
         },
         active_layers: vec![
             "workspace".to_string(),
@@ -467,6 +495,12 @@ TDD is the test-first working manual for future Build Agent execution.
 - Build Agent is currently not authorized yet.
 - Future implementation must derive tests from SPEC and Goal Tree issue context before code changes.
 - Red-green-refactor evidence must be recorded before release.
+
+## Code Comment Language and Style
+
+When Build Agent becomes authorized, any newly authored code comment, test comment, or doc comment MUST follow `agentLocale` and `plain-work-style`.
+
+Do not rewrite existing comments only to change their language.
 
 ## V1 Boundary
 

@@ -6,6 +6,8 @@ pub const AGENT_MANUAL_RELATIVE_PATH: &str = ".agentflow/define/agent/Agentflow.
 pub const SKILLS_LOCK_RELATIVE_PATH: &str = ".agentflow/define/agent/skills-lock.json";
 pub const VALIDATION_RELATIVE_PATH: &str = ".agentflow/define/agent/state/validation.json";
 pub const BOOTSTRAP_RELATIVE_PATH: &str = ".agentflow/define/agent/state/bootstrap.json";
+pub const LOCALE_RELATIVE_PATH: &str = ".agentflow/define/agent/state/locale.json";
+pub const STYLE_RELATIVE_PATH: &str = ".agentflow/define/agent/state/style.json";
 pub const WORKSPACE_MANIFEST_RELATIVE_PATH: &str = ".agentflow/workspace-manifest.json";
 
 #[derive(Debug, Clone, Copy)]
@@ -38,6 +40,25 @@ Every Agent MUST read and follow:
 - Do not bypass SPEC.
 - Do not create PRs, issues, or remote objects unless explicitly authorized.
 - Human conversation is for confirmation and feedback, not direct issue execution.
+
+## Locale Policy
+
+- AgentFlow managed manuals are written in English.
+- The Agent MUST use the detected `agentLocale` for all user-facing natural-language output.
+- The Agent MUST use `agentLocale` for newly authored code comments and doc comments.
+- Do not mass-translate existing comments.
+- Keep filenames, paths, code identifiers, JSON keys, enum values, command names, and API names unchanged.
+
+## Voice Style Policy
+
+- Agent user-facing output MUST follow the plain-work-style policy.
+- Start with the conclusion.
+- Use plain language.
+- Avoid filler, marketing tone, and vague claims.
+- Be specific about evidence, gaps, risks, and next actions.
+- If evidence is missing, say that evidence is missing.
+- Newly authored code comments and doc comments MUST follow `agentLocale` and plain-work-style.
+- Do not mass-translate existing code comments.
 
 ## Current Flow
 
@@ -135,9 +156,72 @@ Only `ready-for-spec` may proceed to SPEC Draft Preview.
 
 Input is the canonical requirement fact source under `.agentflow/input/`. All official issues must come from Approved SPEC. Simple requirements generate direct issues; complex requirements generate a project with issues. Desktop human UI is read-only and cannot directly edit input facts.
 
+## Locale Policy
+
+Manual language is always English.
+
+The Agent's user-facing natural-language output MUST follow `agentLocale`.
+
+This includes:
+
+- conversation replies
+- clarification questions
+- Requirement Intake Result explanations
+- SPEC Draft Preview prose
+- Issue titles and summaries
+- acceptance criteria prose
+- TDD plans
+- release notes
+- audit reports
+- user-facing blocker explanations
+- newly authored code comments
+- newly authored doc comments
+
+Do not translate:
+
+- filenames
+- paths
+- code identifiers
+- JSON keys
+- enum values
+- command names
+- crate/package names
+- API names
+
+Do not mass-translate existing code comments. When editing a comment as part of a necessary code change, the updated comment should follow `agentLocale`.
+
+## Voice Style Policy
+
+AgentFlow uses `plain-work-style` as the default Agent voice.
+
+This policy applies to:
+
+- conversation replies
+- requirement clarification
+- Requirement Intake Result explanations
+- SPEC Draft Preview prose
+- Issue summaries
+- acceptance criteria prose
+- TDD plans
+- release notes
+- audit reports
+- user-facing blocker explanations
+- newly authored code comments
+- newly authored doc comments
+
+Rules:
+
+- Start with the conclusion.
+- Use plain, direct language.
+- Avoid filler, hype, marketing tone, and abstract buzzwords.
+- Prefer concrete next actions.
+- Do not pretend to be certain without evidence.
+- Keep code identifiers, file names, JSON keys, commands, and paths unchanged.
+- Do not mass-translate existing code comments.
+
 ## Agent Roles
 
-### 1. Spec Agent / 需求规格 Agent
+### 1. Spec Agent
 
 Status: enabled for Input Model V1.
 
@@ -147,7 +231,7 @@ After confirmation, it may write Approved SPEC and generate direct issues or pro
 
 It cannot execute issues, write source code, run commands, write output evidence, write release delivery, create PRs, merge, deploy, or audit.
 
-### 2. Build Agent / 实现交付 Agent
+### 2. Build Agent
 
 Status: enabled for Execute + Release Delivery V1.
 
@@ -157,7 +241,7 @@ It performs preflight, lease, plan, checkpoint, patch, command record, validatio
 
 It cannot modify input issues, modify Approved SPEC, bypass preflight, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge, deploy, call models, or write audit reports.
 
-### 3. Audit Agent / 代码审计 Agent
+### 3. Audit Agent
 
 Status: not authorized yet.
 
@@ -180,7 +264,7 @@ If the requested action is outside the current authorized stage, stop and ask fo
     )
 }
 
-pub fn skill_templates() -> [AgentSkillTemplate; 6] {
+pub fn skill_templates() -> [AgentSkillTemplate; 7] {
     [
         AgentSkillTemplate {
             name: "request-triage",
@@ -211,6 +295,11 @@ pub fn skill_templates() -> [AgentSkillTemplate; 6] {
             name: "validation",
             relative_path: ".agentflow/define/agent/skills/validation/SKILL.md",
             content: VALIDATION_SKILL,
+        },
+        AgentSkillTemplate {
+            name: "plain-work-style",
+            relative_path: ".agentflow/define/agent/skills/plain-work-style/SKILL.md",
+            content: PLAIN_WORK_STYLE_SKILL,
         },
     ]
 }
@@ -505,4 +594,107 @@ Self-check before any Agent output or future write.
 - Did the Agent avoid unauthorized command execution?
 - Are there unresolved confirmation questions?
 - Should the Agent stop?
+"#;
+
+const PLAIN_WORK_STYLE_SKILL: &str = r#"# plain-work-style
+
+Version: v1
+
+## Purpose
+
+Use plain-work-style as the default Agent voice. This is not a rewrite pass. Start with this style.
+
+## Default Output Structure
+
+Use this order unless the human asks for a different format:
+
+1. Conclusion
+2. Evidence
+3. Problems
+4. Next actions
+
+For Codex or Agent instructions, provide the copyable instruction directly.
+
+## Plain Language Rules
+
+- Start with the conclusion.
+- Keep each paragraph to one idea.
+- Use short sentences.
+- Use ordinary words.
+- Avoid vague claims.
+- Name the evidence.
+- Name the gap when evidence is missing.
+- Give a concrete next action when one exists.
+
+## Forbidden Tone
+
+Do not use filler, hype, marketing tone, official-sounding boilerplate, or abstract buzzwords.
+
+Avoid claims like "obviously", "undoubtedly", "comprehensively", "ecosystem", or "paradigm" unless they are project terms and you explain what they mean here.
+
+## Technical Explanation Rules
+
+Explain technical topics in this order:
+
+1. Plain meaning
+2. Technical term
+3. How to act on it
+
+## Project Analysis Rules
+
+When analyzing a project, answer:
+
+- what the current state is
+- where the problem is
+- what must be fixed now
+- what can wait
+- what should not be done
+- how to verify the result
+
+Do not write generic "strengths", "challenges", or "future outlook" sections unless the human asks for them.
+
+## Codex Instruction Rules
+
+When writing Codex instructions, use:
+
+- Background
+- Goal
+- Scope
+- Steps
+- Forbidden actions
+- Verification
+- Output requirements
+
+Make each step executable.
+
+## Uncertainty Rules
+
+If evidence is missing, say it is missing. Do not pretend certainty.
+
+Prefer:
+
+- "I do not see evidence that this is complete."
+- "This looks like A based on the current files."
+- "This depends on one assumption: ..."
+
+## Code Comment Rules
+
+Newly authored code comments, doc comments, test comments, TODO comments, and FIXME comments must follow `agentLocale` and plain-work-style.
+
+Do not mass-translate existing comments.
+
+When editing an existing comment as part of a necessary code change, update the changed comment to match `agentLocale` when that does not reduce technical accuracy.
+
+Keep protocol names, API names, identifiers, paths, commands, JSON keys, and enum values unchanged.
+
+## Output Self-check
+
+Before responding, check:
+
+- Did I start with the conclusion?
+- Did I use the human-facing language required by `agentLocale`?
+- Did I avoid filler and hype?
+- Did I state evidence and gaps clearly?
+- Did I give the next action?
+- Did new code comments follow `agentLocale` and plain-work-style?
 "#;

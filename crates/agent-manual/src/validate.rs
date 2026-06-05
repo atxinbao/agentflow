@@ -2,16 +2,19 @@ use crate::{
     git::is_git_tracked,
     hash::file_sha256_hex,
     layout::{detect_shadow_files, shadow_warnings, validate_workspace_layout},
+    locale::{expected_locale_state, read_locale_state},
     lock::{expected_skills_lock, read_skills_lock},
     model::{
-        AgentEnvironmentState, AgentEnvironmentStatus, AgentMdStatus, ManualStatus, SkillStatus,
-        SkillsLockStatus, AGENT_ENTRY_VERSION, STATUS_VERSION,
+        AgentEnvironmentState, AgentEnvironmentStatus, AgentMdStatus, AgentStyleState,
+        ManualStatus, SkillStatus, SkillsLockStatus, AGENT_ENTRY_VERSION, LOCALE_VERSION,
+        MANUAL_LANGUAGE, PLAIN_WORK_STYLE_ID, STATUS_VERSION, STYLE_VERSION,
     },
     ownership::check_agentflow_workspace_ownership_at,
+    style::expected_style_state,
     templates::{
         skill_templates, AGENT_ENTRY_RELATIVE_PATH, AGENT_MANUAL_RELATIVE_PATH,
-        BOOTSTRAP_RELATIVE_PATH, LEGACY_AGENT_ENTRY_RELATIVE_PATH, SKILLS_LOCK_RELATIVE_PATH,
-        VALIDATION_RELATIVE_PATH,
+        BOOTSTRAP_RELATIVE_PATH, LEGACY_AGENT_ENTRY_RELATIVE_PATH, LOCALE_RELATIVE_PATH,
+        SKILLS_LOCK_RELATIVE_PATH, STYLE_RELATIVE_PATH, VALIDATION_RELATIVE_PATH,
     },
 };
 use anyhow::{anyhow, Result};
@@ -24,13 +27,14 @@ use std::{
 pub fn validate_agent_working_manual(
     project_root: impl AsRef<Path>,
 ) -> Result<AgentEnvironmentStatus> {
-    validate_agent_working_manual_with_context(project_root.as_ref(), Vec::new(), None)
+    validate_agent_working_manual_with_context(project_root.as_ref(), Vec::new(), None, None)
 }
 
 pub(crate) fn validate_agent_working_manual_with_context(
     project_root: &Path,
     repairs: Vec<String>,
     repaired_at: Option<u64>,
+    app_locale: Option<&str>,
 ) -> Result<AgentEnvironmentStatus> {
     let root = canonical_project_root(project_root)?;
     let checked_at = unix_timestamp_seconds();
@@ -77,7 +81,60 @@ pub(crate) fn validate_agent_working_manual_with_context(
         errors.push("AGENTS.md is not managed by AgentFlow.".to_string());
     }
 
-    let expected_lock = expected_skills_lock(checked_at);
+    let expected_locale = expected_locale_state(&root, app_locale, checked_at);
+    let expected_style = expected_style_state(checked_at);
+
+    let locale_path = root.join(LOCALE_RELATIVE_PATH);
+    let locale_state = read_locale_state(&root);
+    if !locale_path.exists() {
+        errors.push(format!(
+            "Agent locale state is missing: {LOCALE_RELATIVE_PATH}"
+        ));
+    }
+    if let Some(locale) = &locale_state {
+        if locale.version != LOCALE_VERSION {
+            errors.push("locale.json version mismatch.".to_string());
+        }
+        if locale.manual_language != MANUAL_LANGUAGE {
+            errors.push("locale.json manualLanguage must be en.".to_string());
+        }
+        if locale.agent_locale.trim().is_empty() {
+            errors.push("locale.json agentLocale is missing.".to_string());
+        }
+        if locale.agent_locale != expected_locale.agent_locale {
+            errors.push("locale.json agentLocale does not match detected locale.".to_string());
+        }
+    } else if locale_path.exists() {
+        errors.push("locale.json format is invalid.".to_string());
+    }
+
+    let style_path = root.join(STYLE_RELATIVE_PATH);
+    let style_state = read_style_state(&style_path);
+    if !style_path.exists() {
+        errors.push(format!(
+            "Agent style state is missing: {STYLE_RELATIVE_PATH}"
+        ));
+    }
+    if let Some(style) = &style_state {
+        if style.version != STYLE_VERSION {
+            errors.push("style.json version mismatch.".to_string());
+        }
+        if style.style_id != PLAIN_WORK_STYLE_ID {
+            errors.push("style.json styleId must be plain-work-style.".to_string());
+        }
+        if style.manual_language != MANUAL_LANGUAGE {
+            errors.push("style.json manualLanguage must be en.".to_string());
+        }
+        if !style.applies_to_code_comments {
+            errors.push("style.json appliesToCodeComments must be true.".to_string());
+        }
+    } else if style_path.exists() {
+        errors.push("style.json format is invalid.".to_string());
+    }
+
+    let locale_status = locale_state.unwrap_or_else(|| expected_locale.clone());
+    let style_status = style_state.unwrap_or_else(|| expected_style.clone());
+    let expected_lock = expected_skills_lock(checked_at, &expected_locale);
     let agent_hash = file_sha256_hex(&agent_md_path);
     if agent_md_exists && agent_hash.as_deref() != Some(expected_lock.entry.hash.as_str()) {
         errors.push("AGENTS.md hash does not match AgentFlow managed template.".to_string());
@@ -122,6 +179,30 @@ pub(crate) fn validate_agent_working_manual_with_context(
         if lock.version != expected_lock.version || lock.managed_by != expected_lock.managed_by {
             errors.push("skills-lock.json header mismatch.".to_string());
             lock_valid = false;
+        }
+        if lock.manual_language.as_deref() != Some(MANUAL_LANGUAGE) {
+            errors.push(
+                "skills-lock.json manualLanguage metadata is missing or invalid.".to_string(),
+            );
+            lock_valid = false;
+        }
+        if lock.agent_locale.as_deref() != Some(expected_locale.agent_locale.as_str()) {
+            errors.push("skills-lock.json agentLocale metadata mismatch.".to_string());
+            lock_valid = false;
+        }
+        match &lock.style_policy {
+            Some(style_policy)
+                if style_policy.style_id == PLAIN_WORK_STYLE_ID
+                    && style_policy.version == "v1"
+                    && style_policy.path
+                        == ".agentflow/define/agent/skills/plain-work-style/SKILL.md"
+                    && style_policy.applies_to_code_comments => {}
+            _ => {
+                errors.push(
+                    "skills-lock.json stylePolicy metadata is missing or invalid.".to_string(),
+                );
+                lock_valid = false;
+            }
         }
         if lock.entry.hash != expected_lock.entry.hash
             || lock.entry.version != expected_lock.entry.version
@@ -201,6 +282,8 @@ pub(crate) fn validate_agent_working_manual_with_context(
             || !validation_state_exists
             || !workspace_manifest.exists
             || !layout.ready
+            || !locale_path.exists()
+            || !style_path.exists()
         {
             AgentEnvironmentState::Missing
         } else {
@@ -261,6 +344,8 @@ pub(crate) fn validate_agent_working_manual_with_context(
         workspace_manifest,
         ownership,
         layout,
+        locale: locale_status,
+        style: style_status,
         legacy_agent_entry: crate::model::LegacyAgentEntryStatus {
             exists: root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH).exists(),
             path: LEGACY_AGENT_ENTRY_RELATIVE_PATH.to_string(),
@@ -284,12 +369,35 @@ pub(crate) fn write_state_files(
     Ok(())
 }
 
+pub(crate) fn write_policy_state_files(
+    root: &Path,
+    locale: &crate::model::AgentLocaleState,
+    style: &AgentStyleState,
+) -> Result<()> {
+    write_policy_json(root.join(LOCALE_RELATIVE_PATH), locale)?;
+    write_policy_json(root.join(STYLE_RELATIVE_PATH), style)?;
+    Ok(())
+}
+
 fn write_json(path: PathBuf, value: &AgentEnvironmentStatus) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
     fs::write(path, serde_json::to_string_pretty(value)? + "\n")?;
     Ok(())
+}
+
+fn write_policy_json<T: serde::Serialize>(path: PathBuf, value: &T) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, serde_json::to_string_pretty(value)? + "\n")?;
+    Ok(())
+}
+
+fn read_style_state(path: &Path) -> Option<AgentStyleState> {
+    let raw = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&raw).ok()
 }
 
 pub(crate) fn canonical_project_root(project_root: &Path) -> Result<PathBuf> {
