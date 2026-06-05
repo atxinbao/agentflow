@@ -4,7 +4,6 @@ members = [
     "crates/agentflow-cli",
     "crates/agent-manual",
     "crates/panel",
-    "crates/goal-tree",
     "crates/input",
     "crates/output",
     "crates/execute",
