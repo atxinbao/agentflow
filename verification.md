@@ -4430,3 +4430,92 @@ No files were written and no command was executed.
 - `npm --prefix apps/desktop run preview:smoke`：pass。
 - `cargo test`：pass，agent-manual 31 tests + CLI 2 tests + core 61 tests + desktop 18 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 18 tests + panel 27 tests + state 9 tests + workflow-acceptance 6 tests。
 - `cargo fmt`：pass。
+
+## 2026-06-05 Desktop Design System V1
+
+执行者：Codex
+
+目标：
+
+- 将 `016 - Desktop Design System V1` 复制到 `docs/requirements/016-desktop-design-system-v1.md`。
+- 为 AgentFlow Desktop 新增前端设计系统底座。
+- 只做 design tokens、基础组件、状态组件、代码块、Advanced Details 基础壳和 Browser Preview 验证。
+
+结果：
+
+- 新增设计系统 CSS：
+  - `apps/desktop/src/design/tokens.css`
+  - `apps/desktop/src/design/typography.css`
+  - `apps/desktop/src/design/layout.css`
+  - `apps/desktop/src/design/components.css`
+  - `apps/desktop/src/design/states.css`
+  - `apps/desktop/src/design/motion.css`
+  - `apps/desktop/src/design/index.css`
+- App 入口引入 `design/index.css`。
+- 新增基础组件：
+  - `Button`
+  - `SurfaceCard`
+  - `StatusChip`
+  - `MetricCard`
+  - `EmptyState`
+  - `BlockedState`
+  - `LoadingState`
+  - `WarningState`
+  - `CopyableCodeBlock`
+  - `AdvancedDetailsDrawer`
+- 组件包含 `data-agentflow-component` marker。
+- 新增 `DesignSystemPreview`：
+  - 展示颜色、按钮、StatusChip、SurfaceCard、MetricCard、EmptyState、BlockedState、LoadingState、WarningState、CopyableCodeBlock、AdvancedDetailsDrawer。
+  - 根节点包含 `data-agentflow-design-system="v1"`。
+  - Browser Preview runtime 下在项目页面展示。
+- `preview:smoke` 增加设计系统检查：
+  - `data-agentflow-design-system="v1"`
+  - `button`
+  - `surface-card`
+  - `status-chip`
+  - `metric-card`
+  - `empty-state`
+  - `blocked-state`
+  - `loading-state`
+  - `warning-state`
+  - `copyable-code-block`
+  - `advanced-details-drawer`
+- requirements index 已补充 016。
+
+边界：
+
+- 未实现完整 Project Home。
+- 未实现 Next Step Card 业务逻辑。
+- 未实现 Spec Agent Flow。
+- 未实现 SPEC Draft。
+- 未实现 Codex Handoff 真实业务。
+- 未改 Rust 后端。
+- 未新增 Tauri command。
+- 未调用模型。
+- 未写 `.agentflow`。
+- 未自动执行 Codex。
+- 未引入 MUI / Ant Design / Chakra / Mantine 等重型组件库。
+- 未改变 OutputAuditPanel 业务逻辑。
+
+Browser Preview 核对：
+
+- URL：`http://127.0.0.1:1420/`。
+- 页面标题：`AgentFlow 本地工作台`。
+- `data-agentflow-design-system="v1"` count：1。
+- `data-agentflow-component="button"` count：9。
+- DOM snapshot 包含 `AgentFlow 基础组件`。
+- `AdvancedDetailsDrawer` 可点击展开，展开后 DOM 包含 `workflow gates`。
+- Browser console `error` / `warn`：空。
+- Browser 截图通道两次超时：
+  - `Page.captureScreenshot` timeout。
+  - 已完成 DOM / console / interaction 证据，未将截图作为通过条件。
+
+验证：
+
+- `npm --prefix apps/desktop run build`：pass。
+- `npm --prefix apps/desktop run preview:smoke`：pass。
+  - 输出：`Browser Preview smoke passed: workflow state, human audit, and design system preview are read-only.`
+- `cargo test -p agentflow-desktop`：pass，18 tests。
+- `cargo test`：pass，agent-manual 31 tests + CLI 2 tests + core 61 tests + desktop 18 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 18 tests + panel 27 tests + state 9 tests + workflow-acceptance 6 tests。
+- `cargo fmt --check`：pass。
+- `git diff --check`：pass。
