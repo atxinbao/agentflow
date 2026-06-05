@@ -19,8 +19,6 @@ fn main() {
             commands::panel::panel_preflight,
             commands::panel::analyze_panel_impact,
             commands::panel::check_panel_git_protection,
-            commands::goal_tree::load_goal_tree_snapshot,
-            commands::goal_tree::validate_goal_tree,
             commands::input::prepare_input_workspace,
             commands::input::load_input_status,
             commands::input::load_input_manifest,

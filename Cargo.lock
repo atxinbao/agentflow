@@ -46,7 +46,6 @@ dependencies = [
  "agentflow-agent-manual",
  "agentflow-core",
  "agentflow-execute",
- "agentflow-goal-tree",
  "agentflow-input",
  "agentflow-output",
  "agentflow-panel",
@@ -72,16 +71,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "tempfile",
-]
-
-[[package]]
-name = "agentflow-goal-tree"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "serde",
- "serde_json",
  "tempfile",
 ]
 

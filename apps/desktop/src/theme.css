@@ -108,12 +108,6 @@ body {
 .topbar h1,
 .tree-section-header,
 .section-heading h2,
-.goal-tree-toolbar h1,
-.goal-tree-browser h2,
-.goal-tree-context-panel h2,
-.goal-tree-create-form h2,
-.goal-tree-editor-header h2,
-.goal-tree-readonly-section h3,
 .project-file-reader-header h2,
 .project-file-content-header h3,
 .project-directory-overview h3 {
@@ -125,9 +119,6 @@ body {
 .tree-child,
 .tree-parent,
 .tree-add-button,
-.goal-tree-toolbar p,
-.goal-tree-muted,
-.goal-tree-empty,
 .project-file-reader-header p,
 .project-file-reader-header span,
 .project-file-content-header span,
@@ -190,11 +181,6 @@ body {
 
 .project-file-reader,
 .project-file-browser,
-.goal-tree-toolbar,
-.goal-tree-browser,
-.goal-tree-context-panel,
-.goal-tree-detail,
-.goal-tree-empty-state,
 .project-panel,
 .project-issues,
 .runtime-panel,
@@ -226,8 +212,6 @@ body {
   color: var(--af-theme-text-primary);
 }
 
-.goal-tree-page,
-.goal-tree-page.empty,
 .project-layout,
 .issue-page,
 .saved-view-layout,
@@ -239,28 +223,12 @@ body {
   color: var(--af-theme-text-primary);
 }
 
-.project-file-title-icon,
-.goal-tree-field input,
-.goal-tree-field textarea,
-.goal-tree-field select,
-.goal-tree-file-list button,
-.goal-tree-readonly-section,
-.goal-tree-toolbar button,
-.goal-tree-form-actions button,
-.goal-tree-editor-actions button,
-.goal-tree-secondary-action,
-.goal-tree-empty-state button {
+.project-file-title-icon {
   border-color: var(--af-theme-border-soft);
   background: var(--af-theme-panel-inner-bg);
   color: var(--af-theme-text-primary);
 }
 
-.goal-tree-toolbar button:hover,
-.goal-tree-form-actions button:hover,
-.goal-tree-editor-actions button:hover,
-.goal-tree-secondary-action:hover,
-.goal-tree-empty-state button:hover,
-.goal-tree-file-list button:hover,
 .project-file-row:hover {
   background: var(--af-theme-hover-bg);
 }
@@ -346,23 +314,11 @@ body {
   color: var(--af-theme-text-primary);
 }
 
-.goal-tree-row {
-  color: var(--af-theme-text-secondary);
-}
-
-.goal-tree-row small,
-.goal-tree-file-list button small {
-  color: var(--af-theme-text-subtle);
-}
-
-.goal-tree-row:hover,
-.goal-tree-row.active,
 .project-file-row.active {
   background: var(--af-theme-selected-bg);
   color: var(--af-theme-selected-text);
 }
 
-.goal-tree-editor-header,
 .project-file-reader-header,
 .project-markdown-reader,
 .project-file-content-header,
@@ -371,10 +327,6 @@ body {
   border-color: var(--af-theme-border-soft);
 }
 
-.goal-tree-field > span,
-.goal-tree-context-panel h3,
-.goal-tree-readonly-block > span,
-.goal-tree-system-state dt,
 .project-file-content dd,
 .project-markdown-reader,
 .project-directory-overview,
@@ -495,16 +447,11 @@ body {
   background: var(--af-theme-text-subtle);
 }
 
-.goal-tree-health,
-.goal-tree-status-pill,
-.goal-tree-agent-pill,
 .status-badge {
   background: var(--af-theme-hover-bg);
   color: var(--af-theme-text-secondary);
 }
 
-.goal-tree-health.valid,
-.goal-tree-readonly-pill,
 .status-badge.completed,
 .status-badge.done,
 .status-badge.passed {
@@ -512,9 +459,6 @@ body {
   color: var(--af-theme-success-text);
 }
 
-.goal-tree-health.invalid,
-.goal-tree-warning-list li,
-.goal-tree-error,
 .notice,
 .status-badge.planned,
 .status-badge.todo,
@@ -559,7 +503,6 @@ body {
 .template-detail-layout,
 .saved-view-layout,
 .saved-view-workbench,
-.goal-tree-page,
 .search-layout,
 .trace-layout,
 .timeline-layout,
@@ -624,17 +567,6 @@ body {
 .saved-view,
 .saved-view-hero strong,
 .saved-view-rule-grid div,
-.goal-tree-toolbar,
-.goal-tree-browser,
-.goal-tree-context-panel,
-.goal-tree-detail,
-.goal-tree-empty-state,
-.goal-tree-create-form,
-.goal-tree-readonly-section,
-.goal-tree-field input,
-.goal-tree-field textarea,
-.goal-tree-field select,
-.goal-tree-file-list button,
 .search-header,
 .search-form,
 .search-results,
@@ -667,13 +599,6 @@ body {
 .project-file-config-reader,
 .project-file-binary-reader,
 .project-file-large-reader,
-.goal-tree-row,
-.goal-tree-secondary-action,
-.goal-tree-toolbar button,
-.goal-tree-form-actions button,
-.goal-tree-editor-actions button,
-.goal-tree-empty-state button,
-.goal-tree-code-list li,
 .project-goal-panel.muted,
 .project-goal-panel code,
 .issue-contract-panel code,
@@ -707,12 +632,6 @@ body {
 }
 
 .project-file-row:hover,
-.goal-tree-row:hover,
-.goal-tree-toolbar button:hover,
-.goal-tree-form-actions button:hover,
-.goal-tree-editor-actions button:hover,
-.goal-tree-secondary-action:hover,
-.goal-tree-empty-state button:hover,
 button.milestone-timeline-card:hover,
 .milestone-timeline-card.active,
 .milestone-issue-row:hover,
@@ -730,8 +649,7 @@ button.saved-view.active {
   color: var(--af-theme-selected-text);
 }
 
-.project-file-row.active,
-.goal-tree-row.active {
+.project-file-row.active {
   background: var(--af-theme-selected-bg);
   color: var(--af-theme-selected-text);
 }
@@ -741,7 +659,6 @@ button.saved-view.active {
 .project-markdown-reader,
 .project-file-browser-toolbar,
 .project-file-table-header,
-.goal-tree-editor-header,
 .template-tabbar,
 .section-heading,
 .task-list-header,
@@ -846,13 +763,7 @@ button.saved-view.active {
 .saved-view span,
 .saved-view small,
 .task-progress-heading span,
-.task-progress-stat span,
-.goal-tree-kicker,
-.goal-tree-row small,
-.goal-tree-field > span,
-.goal-tree-context-panel h3,
-.goal-tree-readonly-block > span,
-.goal-tree-system-state dt {
+.task-progress-stat span {
   color: var(--af-theme-text-muted);
 }
 
@@ -876,14 +787,7 @@ button.saved-view.active {
 .issue-contract-panel li,
 .project-goal-panel ul,
 .project-goal-panel li,
-.saved-view-note,
-.goal-tree-row,
-.goal-tree-muted,
-.goal-tree-empty,
-.goal-tree-error,
-.goal-tree-readonly-block p,
-.goal-tree-readonly-block ul,
-.goal-tree-system-state dd {
+.saved-view-note {
   color: var(--af-theme-text-secondary);
 }
 

@@ -5,24 +5,19 @@
 
 use crate::args::Command;
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LegacyCommandDisposition {
     KeepTemporary,
-    HideFromHelp,
     DisableWithMessage,
     Delete,
-    DeferUntilGoalTree,
 }
 
 impl LegacyCommandDisposition {
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::KeepTemporary => "keep-temporary",
-            Self::HideFromHelp => "hide-from-help",
             Self::DisableWithMessage => "disable-with-message",
             Self::Delete => "delete",
-            Self::DeferUntilGoalTree => "defer-until-goal-tree",
         }
     }
 }
@@ -63,8 +58,8 @@ pub(crate) fn legacy_command_status(command: &Command) -> LegacyCommandStatus {
         },
         Command::Init { .. } => LegacyCommandStatus {
             command_name: "init",
-            disposition: LegacyCommandDisposition::DeferUntilGoalTree,
-            reason: "old goal bootstrap is not the new Project Workspace flow",
+            disposition: LegacyCommandDisposition::Delete,
+            reason: "old goal bootstrap was removed with the legacy goal-tree crate",
         },
         Command::Context => LegacyCommandStatus {
             command_name: "context",
@@ -154,7 +149,9 @@ pub(crate) fn print_legacy_retirement_message(status: &LegacyCommandStatus) {
     println!("reason: {}", status.reason);
     println!("This command belongs to the archived 2026-05 AgentFlow workflow.");
     println!("It is disabled in the new requirements track.");
-    println!("The new Goal Tree / AgentRun workflow has not been defined yet.");
+    println!(
+        "Use the current Project Workspace, Input, Execute, Output, and State workflow instead."
+    );
     println!("No files were written and no command was executed.");
 }
 

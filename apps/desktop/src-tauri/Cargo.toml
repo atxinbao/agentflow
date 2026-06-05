@@ -11,7 +11,6 @@ tauri-build = { version = "=2.4.0", features = [] }
 agentflow-core = { path = "../../../crates/agentflow-core" }
 agentflow-agent-manual = { path = "../../../crates/agent-manual" }
 agentflow-panel = { path = "../../../crates/panel" }
-agentflow-goal-tree = { path = "../../../crates/goal-tree" }
 agentflow-input = { path = "../../../crates/input" }
 agentflow-execute = { path = "../../../crates/execute" }
 agentflow-output = { path = "../../../crates/output" }

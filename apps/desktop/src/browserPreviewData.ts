@@ -3,7 +3,6 @@ import type {
   PanelManifestSnapshot,
   PanelSearchSnapshot,
   PanelStatusSnapshot,
-  GoalTreeSnapshot,
   IssueContract,
   LocalMetricsSnapshot,
   LocalProjectModelSnapshot,
@@ -42,8 +41,6 @@ const previewBoundary: WorkbenchBoundary = {
 };
 
 const previewTimestamp = 1780291200;
-const previewGoalId = "goal-001";
-const previewMilestoneId = "ms-001";
 const previewIssueId = "iss-001";
 const previewAuditId = "audit-browser-preview-001";
 const previewDeliveryRunId = "run-browser-preview-001";
@@ -367,142 +364,6 @@ export function createBrowserPreviewProjectViewModelSnapshot(projectRoot = BROWS
     invariants: ["浏览器预览可使用 mock 数据。", "真实 Tauri 客户端不能使用 mock fallback。"],
     sources: ["apps/desktop/src/browserPreviewData.ts"],
     boundary: previewBoundary,
-  };
-}
-
-export function createBrowserPreviewGoalTreeSnapshot(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): GoalTreeSnapshot {
-  return {
-    version: "goal-tree-snapshot.browser-preview",
-    projectRoot,
-    index: {
-      version: "goal-tree.v1",
-      projectRoot,
-      activeGoalId: previewGoalId,
-      goalOrder: [previewGoalId],
-      milestoneOrderByGoal: {
-        [previewGoalId]: [previewMilestoneId],
-      },
-      issueOrderByMilestone: {
-        [previewMilestoneId]: [previewIssueId],
-      },
-      updatedAt: previewTimestamp,
-    },
-    goals: [
-      {
-        version: "goal.v1",
-        id: previewGoalId,
-        projectRoot,
-        status: "active",
-        human: {
-          title: "Goal Tree Agent-only 边界",
-          objective: "把 Goal Tree 定义为 Agent 使用的目标工作地图，Desktop 人类界面只读查看。",
-          scope: ["保留 .agentflow/define/** 事实源。", "Desktop 只读取目标树、完整性提示和 Agent Draft。", "写入能力收敛到未来 Agent / System 通道。"],
-          nonGoals: ["不启动 Agent。", "不执行项目命令。", "不调用模型。", "不创建远程对象。"],
-          successCriteria: ["目标树可读取。", "Desktop 不显示写入入口。", "完整性 warning 可见。"],
-          milestoneOrder: [previewMilestoneId],
-          validationGate: ["cargo test -p agentflow-goal-tree", "npm --prefix apps/desktop run build"],
-          closureGate: ["人类 UI 不写 .agentflow/define/**。", "人类 UI 不写 Panel Context Pack。"],
-        },
-        agentDraft: {
-          suggestedMilestones: ["Desktop 只读收敛", "Tauri command 收窄"],
-          suggestedRisks: ["Panel 缺失时推荐上下文不完整。"],
-          suggestedQuestions: ["未来 Agent planning flow 如何授权写入？"],
-          suggestedIssueBreakdown: ["移除 Desktop 写入入口", "收窄 Tauri command", "标注 agent-only API"],
-        },
-        system: {
-          createdAt: previewTimestamp,
-          updatedAt: previewTimestamp,
-          createdBy: "agent-system",
-          updatedBy: "agent-system",
-          path: `.agentflow/define/goals/${previewGoalId}.json`,
-          revision: 1,
-        },
-      },
-    ],
-    milestones: [
-      {
-        version: "milestone.v1",
-        id: previewMilestoneId,
-        goalId: previewGoalId,
-        projectRoot,
-        status: "active",
-        human: {
-          title: "只读界面边界",
-          stageGoal: "把 Desktop Goal Tree 页面收敛为只读查看界面。",
-          entryCriteria: ["项目已接入 AgentFlow。", "Project File Reader 可读取本地文件。"],
-          scope: ["显示 Confirmed Contract。", "显示 Agent Draft。", "显示 System State。", "显示完整性提示。"],
-          nonGoals: ["不实现 AgentRun。", "不实现 Lease。"],
-          issueOrder: [previewIssueId],
-          exitCriteria: ["页面无写入按钮。", "完整性校验可读。", "浏览器预览只读。"],
-          nextGate: ["未来 Agent planning flow 定义授权写入通道。"],
-        },
-        agentDraft: {
-          suggestedIssues: ["Desktop 只读 UI", "Tauri read-only registry"],
-          suggestedRisks: ["旧 workflow 类型误入新主线。"],
-          suggestedQuestions: [],
-        },
-        system: {
-          createdAt: previewTimestamp,
-          updatedAt: previewTimestamp,
-          createdBy: "agent-system",
-          updatedBy: "agent-system",
-          path: `.agentflow/define/milestones/${previewMilestoneId}.json`,
-          revision: 1,
-        },
-      },
-    ],
-    issues: [
-      {
-        version: "issue.v1",
-        id: previewIssueId,
-        goalId: previewGoalId,
-        milestoneId: previewMilestoneId,
-        projectRoot,
-        status: "ready",
-        human: {
-          title: "移除人类写入入口",
-          goal: "让 Desktop 只能查看 Goal / Milestone / Issue 目标约束和系统状态。",
-          scope: ["移除 Goal Tree 页面写入按钮。", "Tauri handler 只保留读取和验证命令。"],
-          nonGoals: ["不复用旧 IssueContract。", "不写 .agentflow/runs 或 evidence。"],
-          dependencies: [],
-          acceptanceCriteria: ["页面不显示写入按钮。", "validate 能输出 warning。", "Browser Preview 不触发写入。"],
-          validationCommands: ["cargo test -p agentflow-goal-tree"],
-          evidenceRequirements: ["测试输出。", "只读边界说明。"],
-          boundary: ["不启动 Agent。", "不执行用户项目命令。", "不调用模型。"],
-        },
-        agentDraft: {
-          suggestedFiles: ["crates/goal-tree/src/lib.rs", "crates/goal-tree/src/manager.rs"],
-          suggestedSymbols: [],
-          suggestedTests: ["creates_goal_tree_records_under_define_paths"],
-          suggestedImplementationPlan: ["定义模型", "实现 atomic write", "实现 validation"],
-          suggestedRisks: ["旧路径误写。"],
-          questions: [],
-        },
-        system: {
-          createdAt: previewTimestamp,
-          updatedAt: previewTimestamp,
-          createdBy: "agent-system",
-          updatedBy: "agent-system",
-          path: `.agentflow/define/issues/${previewIssueId}.json`,
-          revision: 1,
-          panelContextPackPath: ".agentflow/panel/context-packs/iss-001.json",
-        },
-      },
-    ],
-    validation: {
-      version: "goal-tree-validation.v1",
-      projectRoot,
-      valid: true,
-      errors: [],
-      warnings: [
-        {
-          code: "browser_preview_mock",
-          message: "浏览器预览使用 mock Goal Tree，不写真实 .agentflow/。",
-          objectType: "goal-tree",
-          objectId: null,
-        },
-      ],
-    },
   };
 }
 

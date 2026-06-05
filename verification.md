@@ -3819,6 +3819,69 @@ No files were written and no command was executed.
 - `cargo fmt --check`：pass。
 - `git diff --check`：pass。
 
+## 018 - Rust Workspace Code Cleanup
+
+日期：2026-06-06
+执行者：Codex
+
+需求来源：
+
+- `/Users/mac/Downloads/agentflow_code_cleanup_requirements.md`
+
+需求归档：
+
+- `docs/requirements/018-agentflow-code-cleanup-rust-workspace.md`
+- `docs/requirements/README.md`
+- `docs/requirements/next-requirements.md`
+
+实现结果：
+
+- 删除 `crates/goal-tree` workspace member。
+- 删除 `apps/desktop/src-tauri` 中的 `goal_tree` command 模块、Tauri command 注册和 `agentflow-goal-tree` 依赖。
+- 删除桌面前端里只依赖旧 `load_goal_tree_snapshot` command 的 dead code：
+  - `apps/desktop/src/features/goal-tree/**`
+  - `apps/desktop/src/types/goalTree.ts`
+  - `browserPreviewData` 里的 Goal Tree mock snapshot。
+- 删除 `apps/desktop/src/theme.css` 中旧 Goal Tree 选择器。
+- 删除 `agentflow-core` 里没有当前代码引用的 legacy wrapper module：
+  - `eligibility_lease`
+  - `goal_protocol`
+  - `product_feature`
+  - `project_audit_docs_refresh`
+  - `project_closure`
+  - `run_verify_review`
+  - `saved_view`
+  - `sqlite_index`
+- 保留 `agentflow-core` 的当前 read-model 兼容边界：
+  - `legacy::workflow_control`
+  - `legacy::team_project_milestone_issue`
+  - `legacy::archive_2026_05`
+- CLI retirement policy 删除 `HideFromHelp` / `DeferUntilGoalTree`，`init` 明确标记为已删除旧 bootstrap。
+- `Cargo.lock` 已移除 `agentflow-goal-tree` package。
+
+边界说明：
+
+- 当前 workspace 没有 `crates/graph`，因此本轮没有 graph crate 可清理。
+- `legacyGoalTree` manifest / manual 字段仍保留。它们是当前防回归 guard，用来声明不要写旧 `.agentflow/goal-tree/**` 路径，不是旧 Goal Tree crate 或 command。
+- 没有删除 `archive_2026_05` 内部实现；当前 desktop read-model 仍依赖其中的兼容 DTO 和快照读取逻辑。
+- 没有新增后端能力。
+- 没有改动当前 V16 主页面业务流程。
+
+验证：
+
+- `cargo check --workspace`：pass。
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-core`：pass，61 tests。
+- `cargo test -p agentflow-cli`：pass，2 tests。
+- `cargo test -p agentflow-desktop`：pass，18 tests。
+- `cargo test`：pass，agent-manual 31 tests + CLI 2 tests + core 61 tests + desktop 18 tests + execute 17 tests + input 8 tests + output 18 tests + panel 27 tests + state 9 tests + workflow-acceptance 6 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `git diff --check`：pass。
+
+残留扫描：
+
+- `rg "agentflow-goal-tree|name = \"agentflow-goal-tree\"|load_goal_tree_snapshot|validate_goal_tree|GoalTree|previewGoalId|previewMilestoneId" Cargo.toml Cargo.lock apps/desktop/src-tauri crates apps/desktop/src`：只剩 `legacyGoalTree` guard 字段。
+
 ## 2026-06-06 AgentFlow Unified UX Spec V16
 
 执行者：Codex
