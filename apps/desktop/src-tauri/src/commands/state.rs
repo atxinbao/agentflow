@@ -39,6 +39,13 @@ pub(crate) fn load_state_index(
 }
 
 #[tauri::command]
+pub(crate) fn load_issue_status_index(
+    project_root: String,
+) -> Result<agentflow_state::IssueStatusIndex, String> {
+    agentflow_state::load_issue_status_index(project_root).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub(crate) fn load_workflow_gates(
     project_root: String,
 ) -> Result<agentflow_state::WorkflowGateSnapshot, String> {

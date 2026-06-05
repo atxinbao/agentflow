@@ -672,7 +672,7 @@
   text-align: left;
 }
 
-.v16-task-card span,
+.v16-task-card .v16-task-id,
 .v16-task-card small {
   color: var(--v16-subtle);
   font-size: 12px;

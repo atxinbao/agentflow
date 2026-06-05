@@ -19,7 +19,10 @@ import type {
   WorkbenchBoundary,
   WorkbenchSnapshot,
   AgentEnvironmentStatus,
+  InputIssue,
+  InputSnapshot,
   InputStatusSnapshot,
+  IssueStatusIndex,
   ExecuteStatusSnapshot,
   OutputStatusSnapshot,
   OutputIndex,
@@ -67,6 +70,59 @@ const previewIssueContract: IssueContract = {
     beforeFileEdits: true,
   },
 };
+
+const previewInputIssues: InputIssue[] = [
+  browserPreviewInputIssue("iss-backlog", "整理需求入口", "planned", "backlog", "需求已创建，等待整理成 SPEC。"),
+  browserPreviewInputIssue("iss-ready", "生成 Codex 任务包", "ready-for-execute", "ready", "SPEC 已确认，可以交给 Agent。"),
+  browserPreviewInputIssue("iss-progress", "执行受控改动", "ready-for-execute", "in-progress", "Agent 已接手任务。"),
+  browserPreviewInputIssue("iss-review", "审计交付材料", "ready-for-execute", "review", "Codex 已交付，等待人工审计。"),
+  browserPreviewInputIssue("iss-done", "确认交付完成", "done", "done", "审计已通过。"),
+  browserPreviewInputIssue("iss-cancel", "取消过期需求", "canceled", "cancel", "任务已取消。"),
+];
+
+function browserPreviewInputIssue(
+  issueId: string,
+  title: string,
+  status: InputIssue["status"],
+  displayStatus: InputIssue["displayStatus"],
+  summary: string,
+): InputIssue {
+  return {
+    version: "input-issue.browser-preview",
+    issueId,
+    issueModel: "direct",
+    sourceSpecId: previewSpecId,
+    projectId: null,
+    title,
+    summary,
+    kind: "feature",
+    priority: "normal",
+    status,
+    displayStatus,
+    riskLevel: "low",
+    scope: previewIssueContract.scope,
+    nonGoals: previewIssueContract.nonGoals,
+    acceptanceCriteria: previewIssueContract.evidenceRequirements,
+    validationHints: previewIssueContract.validation.commands,
+    relations: {
+      blockedBy: [],
+      blocks: [],
+      related: [],
+      duplicateOf: null,
+    },
+    panel: {
+      snapshotId: null,
+      contextPackId: null,
+    },
+    system: {
+      createdBy: "browser-preview",
+      createdAt: previewTimestamp,
+      updatedAt: previewTimestamp,
+      path: `.agentflow/input/issues/${issueId}.json`,
+      revision: 1,
+    },
+  };
+}
 
 export function createBrowserPreviewWorkbenchSnapshot(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): WorkbenchSnapshot {
   return {
@@ -583,15 +639,66 @@ export function createBrowserPreviewInputStatus(projectRoot = BROWSER_PREVIEW_PR
     summary: {
       intake: 1,
       draftSpecs: 1,
-      approvedSpecs: 0,
+      approvedSpecs: 1,
       projects: 0,
-      issues: 0,
+      issues: previewInputIssues.length,
       blockedIssues: 0,
       highRiskIssues: 0,
     },
     missingPaths: [],
     warnings: ["浏览器预览只展示 mock input 状态，不写 .agentflow/input。"],
     errors: [],
+  };
+}
+
+export function createBrowserPreviewInputSnapshot(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): InputSnapshot {
+  return {
+    version: "input-snapshot.browser-preview",
+    projectRoot,
+    ready: true,
+    status: createBrowserPreviewInputStatus(projectRoot),
+    manifest: {
+      version: "input-manifest.browser-preview",
+      projectRoot,
+      status: "ready",
+    },
+    index: {
+      version: "input-index.browser-preview",
+      issues: previewInputIssues.map((issue) => ({
+        id: issue.issueId,
+        title: issue.title,
+        path: issue.system?.path ?? `.agentflow/input/issues/${issue.issueId}.json`,
+        status: issue.status,
+        displayStatus: issue.displayStatus,
+      })),
+    },
+    intake: [],
+    specs: [],
+    projects: [],
+    issues: previewInputIssues,
+    relations: {},
+  };
+}
+
+export function createBrowserPreviewIssueStatusIndex(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): IssueStatusIndex {
+  return {
+    version: "state-issue-status-index.browser-preview",
+    updatedAt: previewTimestamp,
+    issues: previewInputIssues.map((issue) => ({
+      issueId: issue.issueId,
+      displayStatus: issue.displayStatus,
+      riskLevel: issue.riskLevel,
+      latestRunId: issue.displayStatus === "in-progress" || issue.displayStatus === "review" || issue.displayStatus === "done" ? previewDeliveryRunId : null,
+      executeStatus:
+        issue.displayStatus === "in-progress"
+          ? "running"
+          : issue.displayStatus === "review" || issue.displayStatus === "done"
+            ? "completed"
+            : null,
+      evidenceStatus: issue.displayStatus === "review" || issue.displayStatus === "done" ? "complete" : "missing",
+      deliveryStatus: issue.displayStatus === "review" || issue.displayStatus === "done" ? "drafted" : "missing",
+      auditStatus: issue.displayStatus === "done" ? "passed" : issue.displayStatus === "review" ? "failed" : "not-requested",
+    })),
   };
 }
 

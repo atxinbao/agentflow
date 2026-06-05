@@ -7,6 +7,8 @@ use crate::{
     },
     storage::{unix_timestamp_seconds, write_json},
 };
+use agentflow_execute::{ExecuteRunIndexEntry, ExecuteRunStatus};
+use agentflow_input::issue::{DisplayStatus, InputIssue, InputIssueStatus};
 use anyhow::Result;
 use std::path::Path;
 
@@ -50,6 +52,12 @@ pub(crate) fn write_indexes(
                     let latest_run_id = latest_run.map(|run| run.run_id.clone());
                     IssueStatusIndexEntry {
                         issue_id: issue.issue_id.clone(),
+                        display_status: display_status(
+                            issue,
+                            latest_run,
+                            output.as_ref(),
+                            latest_run_id.as_deref(),
+                        ),
                         risk_level: format!("{:?}", issue.risk_level).to_lowercase(),
                         latest_run_id: latest_run_id.clone(),
                         execute_status: latest_run
@@ -119,6 +127,78 @@ pub(crate) fn write_indexes(
             audit_status,
         },
     )
+}
+
+fn display_status(
+    issue: &InputIssue,
+    latest_run: Option<&ExecuteRunIndexEntry>,
+    output: Option<&agentflow_output::OutputSnapshot>,
+    latest_run_id: Option<&str>,
+) -> DisplayStatus {
+    if matches!(issue.status, InputIssueStatus::Canceled) {
+        return DisplayStatus::Cancel;
+    }
+
+    if let Some(status) = audit_display_status(output, &issue.issue_id) {
+        return status;
+    }
+
+    if let Some(run) = latest_run {
+        return match run.status {
+            ExecuteRunStatus::Cancelled => DisplayStatus::Cancel,
+            ExecuteRunStatus::Completed => DisplayStatus::Review,
+            ExecuteRunStatus::Failed => DisplayStatus::Review,
+            ExecuteRunStatus::Queued
+            | ExecuteRunStatus::Preflight
+            | ExecuteRunStatus::Blocked
+            | ExecuteRunStatus::Planned
+            | ExecuteRunStatus::Checkpointed
+            | ExecuteRunStatus::Patching
+            | ExecuteRunStatus::Running
+            | ExecuteRunStatus::Validating => DisplayStatus::InProgress,
+        };
+    }
+
+    if output_has_issue_delivery(output, &issue.issue_id, latest_run_id) {
+        return DisplayStatus::Review;
+    }
+
+    DisplayStatus::from_input_status(&issue.status)
+}
+
+fn audit_display_status(
+    output: Option<&agentflow_output::OutputSnapshot>,
+    issue_id: &str,
+) -> Option<DisplayStatus> {
+    output.and_then(|snapshot| {
+        snapshot
+            .index
+            .audits
+            .iter()
+            .rev()
+            .find(|entry| entry.issue_id == issue_id)
+            .map(|entry| match entry.status.as_str() {
+                "passed" | "passed-with-warnings" => DisplayStatus::Done,
+                "cancelled" => DisplayStatus::Cancel,
+                _ => DisplayStatus::Review,
+            })
+    })
+}
+
+fn output_has_issue_delivery(
+    output: Option<&agentflow_output::OutputSnapshot>,
+    issue_id: &str,
+    latest_run_id: Option<&str>,
+) -> bool {
+    let Some(snapshot) = output else {
+        return false;
+    };
+
+    snapshot.index.release_deliveries.iter().any(|entry| {
+        entry.issue_id == issue_id || latest_run_id.is_some_and(|run_id| entry.run_id == run_id)
+    }) || snapshot.index.evidence.iter().any(|entry| {
+        entry.issue_id == issue_id || latest_run_id.is_some_and(|run_id| entry.run_id == run_id)
+    })
 }
 
 fn evidence_status(

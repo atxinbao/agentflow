@@ -4692,3 +4692,66 @@ Browser Preview 核对：
 - `cargo test`：pass，agent-manual 31 tests + CLI 2 tests + core 61 tests + desktop 18 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 18 tests + panel 27 tests + state 9 tests + workflow-acceptance 6 tests。
 - `cargo fmt --check`：pass。
 - `git diff --check`：pass。
+
+## 019 - AgentFlow Issue Status Enhancement
+
+日期：2026-06-06
+执行者：Codex
+
+需求来源：
+
+- `/Users/mac/Downloads/agentflow_issue_status_enhancement.md`
+
+需求归档：
+
+- `docs/requirements/019-agentflow-issue-status-enhancement.md`
+- `docs/requirements/README.md`
+- `docs/requirements/next-requirements.md`
+
+实现结果：
+
+- 新增 `DisplayStatus` 枚举：
+  - `backlog`
+  - `ready`
+  - `in-progress`
+  - `review`
+  - `done`
+  - `cancel`
+- `InputIssue` 新增 `displayStatus` 字段，旧 JSON 缺字段时可读入。
+- `InputIssue` 保存时根据 `InputIssueStatus` 派生 `displayStatus`，避免写出不一致状态。
+- `InputIndexEntry` 为 issue 增加 `displayStatus`，spec / project entry 保持不写该字段。
+- `State issue-status index` 新增跨层派生 `displayStatus`：
+  - input issue status
+  - latest execute run status
+  - output evidence / release delivery
+  - audit status
+- 新增 Tauri command：
+  - `load_issue_status_index`
+- Desktop 前端新增：
+  - `useInputSnapshot`
+  - `useIssueStatusIndex`
+  - Input issue -> V1 task 转换
+  - 6 列任务看板：Backlog / Ready / In Progress / Review / Done / Cancel
+  - 列表模式按 `displayStatus` 排序并显示人类可读状态
+  - 任务卡显示状态标签
+- Browser Preview mock 覆盖 6 个展示状态。
+- Browser Preview smoke 增加 display status 断言。
+
+边界：
+
+- `InputIssueStatus` 保留，仍用于 workflow 内部计算。
+- 没有改变 execute / output 的执行语义。
+- 没有让前端直接写 input issue。
+- 没有改动 `.agentflow/input/issues/*.json`，当前仓库没有可迁移的本地 issue JSON。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-input`：pass，11 tests。
+- `cargo test -p agentflow-state`：pass，9 tests。
+- `cargo test -p agentflow-desktop`：pass，18 tests。
+- `cargo test`：pass，agent-manual 31 tests + CLI 2 tests + core 61 tests + desktop 18 tests + execute 17 tests + input 11 tests + output 18 tests + panel 27 tests + state 9 tests + workflow-acceptance 6 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `npm --prefix apps/desktop run preview:smoke`：pass。
+  - 输出：`Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.`
+- `git diff --check`：pass。

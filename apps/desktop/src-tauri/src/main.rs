@@ -58,6 +58,7 @@ fn main() {
             commands::state::load_state_status,
             commands::state::load_state_manifest,
             commands::state::load_state_index,
+            commands::state::load_issue_status_index,
             commands::state::load_workflow_gates,
             commands::state::load_next_actions,
             commands::state::load_blockers,

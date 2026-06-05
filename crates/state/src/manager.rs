@@ -4,9 +4,9 @@ use crate::{
     indexes::write_indexes,
     locks::{build_lock_snapshot, write_lock_snapshot},
     model::{
-        StateEventIndex, StateIndex, StateIndexEntry, StateManifest, StateManifestSummary,
-        StateStatusSnapshot, StateWorkspaceStatus, WorkflowHealthSnapshot, STATE_INDEX_VERSION,
-        STATE_MANIFEST_VERSION, STATE_STATUS_VERSION,
+        IssueStatusIndex, StateEventIndex, StateIndex, StateIndexEntry, StateManifest,
+        StateManifestSummary, StateStatusSnapshot, StateWorkspaceStatus, WorkflowHealthSnapshot,
+        STATE_INDEX_VERSION, STATE_MANIFEST_VERSION, STATE_STATUS_VERSION,
     },
     sessions::load_sessions,
     storage::{
@@ -78,6 +78,12 @@ pub fn load_state_manifest(project_root: impl AsRef<Path>) -> Result<StateManife
 pub fn load_state_index(project_root: impl AsRef<Path>) -> Result<StateIndex> {
     let root = canonical_project_root(project_root)?;
     crate::storage::read_json(&root.join(".agentflow/state/index.json"))
+}
+
+pub fn load_issue_status_index(project_root: impl AsRef<Path>) -> Result<IssueStatusIndex> {
+    let root = canonical_project_root(project_root)?;
+    refresh_state(&root)?;
+    crate::storage::read_json(&root.join(".agentflow/state/indexes/issue-status.json"))
 }
 
 fn build_manifest(

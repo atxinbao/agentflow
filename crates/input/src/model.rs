@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::{
-    issue::InputIssue,
+    issue::{DisplayStatus, InputIssue},
     project::InputProject,
     relations::InputIssueRelationsFile,
     spec_gate::{InputIntakeResult, InputSpecDescriptor},
@@ -67,6 +67,8 @@ pub struct InputIndexEntry {
     pub title: String,
     pub path: String,
     pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_status: Option<DisplayStatus>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

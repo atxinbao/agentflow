@@ -1,4 +1,5 @@
 import type { WorkbenchBoundary } from "./workbench";
+import type { IssueDisplayStatus } from "./status";
 
 export type LocalProjectModelSnapshot = {
   version: string;
@@ -168,6 +169,7 @@ export type V1Issue = {
   projectId?: string | null;
   milestoneId?: string | null;
   title: string;
+  displayStatus?: IssueDisplayStatus;
   status: string;
   rawStatus: string;
   goal: string;

@@ -1,1 +1,6 @@
-export { useStateStatus, type StateStatusState } from "./hooks/useStateStatus";
+export {
+  useIssueStatusIndex,
+  useStateStatus,
+  type IssueStatusIndexState,
+  type StateStatusState,
+} from "./hooks/useStateStatus";
