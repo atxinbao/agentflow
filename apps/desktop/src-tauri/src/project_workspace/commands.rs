@@ -2,6 +2,7 @@ use super::{model::ProjectWorkspaceSummary, prepare::prepare_local_project_works
 
 pub(crate) fn prepare_local_project_workspace(
     project_root: String,
+    app_locale: Option<String>,
 ) -> Result<ProjectWorkspaceSummary, String> {
-    prepare_local_project_workspace_at(&project_root)
+    prepare_local_project_workspace_at(&project_root, app_locale)
 }

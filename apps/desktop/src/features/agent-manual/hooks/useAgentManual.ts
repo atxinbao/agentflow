@@ -4,6 +4,7 @@ import {
   BROWSER_PREVIEW_PROJECT_ROOT,
   createBrowserPreviewAgentEnvironmentStatus,
 } from "../../../browserPreviewData";
+import { detectAppLocale } from "../../../appLocale";
 import type { AgentEnvironmentStatus } from "../../../types";
 import { isBrowserPreviewRuntime } from "../../project-files";
 
@@ -42,6 +43,7 @@ export function useAgentManual(projectRoot: string | null) {
       try {
         const status = await invoke<AgentEnvironmentStatus>("prepare_agent_working_manual", {
           projectRoot: root,
+          appLocale: detectAppLocale(),
         });
         setAgentManualState({ status, error: null, source: "tauri" });
       } catch (error) {

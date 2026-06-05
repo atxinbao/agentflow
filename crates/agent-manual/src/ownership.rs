@@ -1,10 +1,12 @@
 use crate::{
     layout::prepare_workspace_layout,
+    locale::expected_locale_state,
     model::{
         WorkspaceOwnershipAction, WorkspaceOwnershipMarker, WorkspaceOwnershipState,
         WorkspaceOwnershipStatus, WORKSPACE_LAYOUT_VERSION, WORKSPACE_MANAGED_BY,
         WORKSPACE_MANIFEST_VERSION, WORKSPACE_OWNERSHIP_VERSION,
     },
+    style::expected_style_state,
     templates::{
         AGENT_MANUAL_RELATIVE_PATH, LEGACY_AGENT_ENTRY_RELATIVE_PATH, SKILLS_LOCK_RELATIVE_PATH,
         WORKSPACE_MANIFEST_RELATIVE_PATH,
@@ -72,7 +74,10 @@ pub fn take_over_agentflow_workspace(
         backup_path.display()
     )];
     let warning = format!("Took over foreign .agentflow after explicit user confirmation.");
-    prepare_workspace_layout(&root, &[warning], &mut repairs)?;
+    let checked_at = unix_timestamp_seconds();
+    let locale = expected_locale_state(&root, None, checked_at);
+    let style = expected_style_state(checked_at);
+    prepare_workspace_layout(&root, &[warning], &mut repairs, &locale, &style)?;
 
     Ok(check_agentflow_workspace_ownership_at(&root))
 }

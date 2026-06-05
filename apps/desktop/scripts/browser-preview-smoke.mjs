@@ -22,6 +22,7 @@ try {
   const outputIndex = preview.createBrowserPreviewOutputIndex();
   const auditIndex = preview.createBrowserPreviewAuditIndex();
   const auditReport = preview.createBrowserPreviewHumanAuditReport();
+  const agentEnvironment = preview.createBrowserPreviewAgentEnvironmentStatus(smokeRoot);
   const stateStatus = preview.createBrowserPreviewStateStatus(smokeRoot);
   const outputPanel = readFileSync(
     path.join(desktopRoot, "src/features/output/OutputAuditPanel.tsx"),
@@ -42,6 +43,15 @@ try {
   assert.equal(auditIndex.audits.length, 1);
   assert.equal(auditIndex.audits[0].auditId, "audit-browser-preview-001");
   assert.ok(auditReport.reportMarkdown.includes("Human Audit Browser Preview"));
+  assert.equal(agentEnvironment.locale.manualLanguage, "en");
+  assert.equal(agentEnvironment.locale.source, "browser-preview");
+  assert.equal(agentEnvironment.style.styleId, "plain-work-style");
+  assert.equal(agentEnvironment.style.appliesToCodeComments, true);
+  assert.equal(agentEnvironment.skillsLock.skillCount, 7);
+  assert.equal(
+    agentEnvironment.skills.some((skill) => skill.name === "plain-work-style" && skill.hashMatches),
+    true,
+  );
   assert.equal(stateStatus.currentStage, "workspace-ready");
   assert.equal(stateStatus.auditStatus, "passed-with-warnings");
   assert.ok(previewBranchIndex >= 0);

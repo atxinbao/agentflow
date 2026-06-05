@@ -34,10 +34,11 @@ docs/requirements/
 17. 完成 [012.1 - Desktop Human Audit Entry Polish](docs/requirements/012-1-desktop-human-audit-entry-polish.md) 和 [013 - Workflow State / Gate Orchestration V1](docs/requirements/013-workflow-state-gate-orchestration-v1.md)。
 18. 完成 [013.1 - Browser Preview Verification Polish](docs/requirements/013-1-browser-preview-verification-polish.md)。
 19. 完成 [013.2 - Browser Preview Smoke Script](docs/requirements/013-2-browser-preview-smoke-script.md)。
-20. 当前执行 [014 - AgentFlow End-to-End Workflow Acceptance V1](docs/requirements/014-agentflow-end-to-end-workflow-acceptance-v1.md)。
-21. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
-22. 基于新需求重新生成开发切片。
-23. 每个切片必须明确：
+20. 完成 [014 - AgentFlow End-to-End Workflow Acceptance V1](docs/requirements/014-agentflow-end-to-end-workflow-acceptance-v1.md)。
+21. 当前执行 [014.1 + 014.2 - Agent Locale and Voice Style Policy V1](docs/requirements/014-1-014-2-agent-locale-and-voice-style-policy-v1.md)。
+22. 从后续新需求中提取产品目标、页面范围、数据边界和验收标准。
+23. 基于新需求重新生成开发切片。
+24. 每个切片必须明确：
    - 用户可见变化
    - 代码修改范围
    - 不允许做的事
@@ -65,4 +66,5 @@ docs/requirements/012-1-desktop-human-audit-entry-polish.md
 docs/requirements/013-1-browser-preview-verification-polish.md
 docs/requirements/013-2-browser-preview-smoke-script.md
 docs/requirements/014-agentflow-end-to-end-workflow-acceptance-v1.md
+docs/requirements/014-1-014-2-agent-locale-and-voice-style-policy-v1.md
 ```

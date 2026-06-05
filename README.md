@@ -47,6 +47,7 @@ docs/requirements/
 - Browser Preview Verification Polish 为 Desktop 浏览器预览补齐只读 release delivery 和 audit report mock，使人工审计入口可以完成可视核对；它不写 `.agentflow/output/audit`。
 - Browser Preview Smoke Script 新增 `npm --prefix apps/desktop run preview:smoke`，用可复跑本地断言验证 Browser Preview mock、人工审计禁用边界和 `.agentflow/output/audit` 禁写。
 - AgentFlow End-to-End Workflow Acceptance V1 新增系统级验收：用临时 fixture 项目证明 define / panel / input / execute / output / state / human audit 闭环可达，并验证用户源码 hash 不变。
+- Agent Locale and Voice Style Policy V1 固定 AgentFlow managed manuals 为英文，记录 `agentLocale`，新增 `plain-work-style` 默认表达规则，并要求 Agent 新写代码注释跟随 `agentLocale`。
 - Project Panel canonical path 为 `.agentflow/panel/`；不再保留旧代码地图兼容路径。
 - Desktop human UI 不执行命令。
 - Execute API 允许 Agent-only 受控 patch / command，但必须通过 preflight、lease、plan、checkpoint 和 allowedWritePaths / allowedCommands。

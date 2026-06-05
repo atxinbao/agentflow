@@ -32,6 +32,7 @@ import {
   createBrowserPreviewSearchSnapshot,
   createBrowserPreviewWorkbenchSnapshot,
 } from "./browserPreviewData";
+import { detectAppLocale } from "./appLocale";
 import { GoalTreePage, useGoalTree } from "./features/goal-tree";
 import { useAgentManual } from "./features/agent-manual";
 import { useExecuteStatus } from "./features/execute";
@@ -510,7 +511,10 @@ function App() {
     let workspaceSummary: ProjectWorkspaceSummary | null = null;
     if (!isBrowserPreviewRuntime()) {
       try {
-        workspaceSummary = await invoke<ProjectWorkspaceSummary>("prepare_local_project_workspace", { projectRoot });
+        workspaceSummary = await invoke<ProjectWorkspaceSummary>("prepare_local_project_workspace", {
+          projectRoot,
+          appLocale: detectAppLocale(),
+        });
         projectRoot = normalizeProjectRootKey(workspaceSummary.root);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

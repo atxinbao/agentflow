@@ -64,6 +64,25 @@ export type AgentEnvironmentStatus = {
     reusedPaths: string[];
     missingPaths: string[];
   };
+  locale: {
+    version: string;
+    agentLocale: string;
+    rawOsLocale?: string | null;
+    manualLanguage: string;
+    source: string;
+    checkedAt: number;
+    fallback: boolean;
+    warnings: string[];
+  };
+  style: {
+    version: string;
+    styleId: string;
+    manualLanguage: string;
+    appliesToAgentLocale: boolean;
+    appliesToCodeComments: boolean;
+    checkedAt: number;
+    warnings: string[];
+  };
   legacyAgentEntry: {
     exists: boolean;
     path: string;

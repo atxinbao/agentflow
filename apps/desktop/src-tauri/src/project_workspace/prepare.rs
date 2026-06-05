@@ -13,6 +13,7 @@ const AGENTFLOW_DIR: &str = ".agentflow";
 
 pub(crate) fn prepare_local_project_workspace_at(
     project_root: &str,
+    app_locale: Option<String>,
 ) -> Result<ProjectWorkspaceSummary, String> {
     let root = canonical_project_root(project_root)?;
     let name = root
@@ -50,8 +51,9 @@ pub(crate) fn prepare_local_project_workspace_at(
         });
     }
 
-    let agent_manual_status = agentflow_agent_manual::prepare_agent_working_manual(&root)
-        .map_err(|error| format!("prepare agent working manual: {error}"))?;
+    let agent_manual_status =
+        agentflow_agent_manual::prepare_agent_working_manual_with_locale(&root, app_locale.clone())
+            .map_err(|error| format!("prepare agent working manual: {error}"))?;
     if !agent_manual_status.ready {
         return Ok(ProjectWorkspaceSummary {
             version: "project-workspace.v0".to_string(),
@@ -200,7 +202,7 @@ mod tests {
         fs::write(dir.path().join(".git/info/exclude"), "*.log\n").unwrap();
 
         let summary =
-            prepare_local_project_workspace_at(&dir.path().display().to_string()).unwrap();
+            prepare_local_project_workspace_at(&dir.path().display().to_string(), None).unwrap();
 
         assert!(summary.created_agentflow);
         assert!(summary.protected_git_exclude);
@@ -277,11 +279,11 @@ mod tests {
     #[test]
     fn prepare_workspace_reuses_existing_files_without_overwriting() {
         let dir = tempdir().unwrap();
-        prepare_local_project_workspace_at(&dir.path().display().to_string()).unwrap();
+        prepare_local_project_workspace_at(&dir.path().display().to_string(), None).unwrap();
         fs::write(dir.path().join(".agentflow/config.yaml"), "custom: true\n").unwrap();
 
         let summary =
-            prepare_local_project_workspace_at(&dir.path().display().to_string()).unwrap();
+            prepare_local_project_workspace_at(&dir.path().display().to_string(), None).unwrap();
 
         assert!(!summary.created_agentflow);
         assert!(summary
@@ -302,7 +304,7 @@ mod tests {
         fs::write(dir.path().join(".agentflow/config.yaml"), "foreign: true\n").unwrap();
 
         let summary =
-            prepare_local_project_workspace_at(&dir.path().display().to_string()).unwrap();
+            prepare_local_project_workspace_at(&dir.path().display().to_string(), None).unwrap();
 
         assert!(!summary.agent_manual_status.ready);
         assert_eq!(
@@ -325,7 +327,7 @@ mod tests {
         let dir = tempdir().unwrap();
 
         let summary =
-            prepare_local_project_workspace_at(&dir.path().display().to_string()).unwrap();
+            prepare_local_project_workspace_at(&dir.path().display().to_string(), None).unwrap();
 
         assert!(summary.created_agentflow);
         assert!(!summary.protected_git_exclude);

@@ -37,8 +37,9 @@ AgentFlow 的旧目标文档已停止作为后续开发依据。
 - [013.1 - Browser Preview Verification Polish](docs/requirements/013-1-browser-preview-verification-polish.md)
 - [013.2 - Browser Preview Smoke Script](docs/requirements/013-2-browser-preview-smoke-script.md)
 - [014 - AgentFlow End-to-End Workflow Acceptance V1](docs/requirements/014-agentflow-end-to-end-workflow-acceptance-v1.md)
+- [014.1 + 014.2 - Agent Locale and Voice Style Policy V1](docs/requirements/014-1-014-2-agent-locale-and-voice-style-policy-v1.md)
 
-当前目标是在 012 Human-triggered Audit Report V1 之后，完成 012.1 Desktop Human Audit Entry Polish、013 Workflow State / Gate Orchestration V1、013.1 Browser Preview Verification Polish、013.2 Browser Preview Smoke Script 和 014 AgentFlow End-to-End Workflow Acceptance V1：Desktop 提供人类可见的人工审计入口；`.agentflow/state/` 作为派生状态总控层集中呈现 workflow stage、允许动作、阻断原因、locks、sessions 和 indexes；Browser Preview 能只读展示 release delivery 和 audit report，并通过可复跑 smoke 命令证明只读边界；014 用临时 fixture 项目证明 define / panel / input / execute / output / state / human audit 闭环可达且用户源码不被修改。
+当前目标是在 012 Human-triggered Audit Report V1 之后，完成 012.1 Desktop Human Audit Entry Polish、013 Workflow State / Gate Orchestration V1、013.1 Browser Preview Verification Polish、013.2 Browser Preview Smoke Script、014 AgentFlow End-to-End Workflow Acceptance V1 和 014.1 + 014.2 Agent Locale and Voice Style Policy V1：Desktop 提供人类可见的人工审计入口；`.agentflow/state/` 作为派生状态总控层集中呈现 workflow stage、允许动作、阻断原因、locks、sessions 和 indexes；Browser Preview 能只读展示 release delivery 和 audit report，并通过可复跑 smoke 命令证明只读边界；014 用临时 fixture 项目证明 define / panel / input / execute / output / state / human audit 闭环可达且用户源码不被修改；014.1 + 014.2 固定 managed manuals 为英文，记录 agentLocale，并把默认表达风格收敛为 plain-work-style。
 
 ## 当前约束
 

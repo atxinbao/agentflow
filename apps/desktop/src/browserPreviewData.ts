@@ -575,6 +575,7 @@ export function createBrowserPreviewPanelStatus(projectRoot = BROWSER_PREVIEW_PR
 export function createBrowserPreviewAgentEnvironmentStatus(
   projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
 ): AgentEnvironmentStatus {
+  const agentLocale = globalThis.navigator?.language || "zh-CN";
   return {
     version: "agent-environment-status.browser-preview",
     projectRoot,
@@ -599,7 +600,7 @@ export function createBrowserPreviewAgentEnvironmentStatus(
       exists: true,
       valid: true,
       path: ".agentflow/define/agent/skills-lock.json",
-      skillCount: 6,
+      skillCount: 7,
     },
     skills: [
       "request-triage",
@@ -608,6 +609,7 @@ export function createBrowserPreviewAgentEnvironmentStatus(
       "input-issue-generation",
       "boundary-check",
       "validation",
+      "plain-work-style",
     ].map((name) => ({
       name,
       path: `.agentflow/define/agent/skills/${name}/SKILL.md`,
@@ -616,7 +618,7 @@ export function createBrowserPreviewAgentEnvironmentStatus(
       version: "v1",
     })),
     repairs: [],
-    warnings: ["浏览器预览只展示 mock Agent Manual 状态，不写 AGENTS.md。"],
+    warnings: ["Browser Preview shows mock Agent Manual state and does not write AGENTS.md."],
     errors: [],
     workspaceManifest: {
       exists: true,
@@ -668,6 +670,25 @@ export function createBrowserPreviewAgentEnvironmentStatus(
         ".agentflow/state",
       ],
       missingPaths: [],
+    },
+    locale: {
+      version: "agent-locale.v1",
+      agentLocale,
+      rawOsLocale: agentLocale,
+      manualLanguage: "en",
+      source: "browser-preview",
+      checkedAt: previewTimestamp,
+      fallback: false,
+      warnings: [],
+    },
+    style: {
+      version: "agent-style.v1",
+      styleId: "plain-work-style",
+      manualLanguage: "en",
+      appliesToAgentLocale: true,
+      appliesToCodeComments: true,
+      checkedAt: previewTimestamp,
+      warnings: [],
     },
     legacyAgentEntry: {
       exists: false,
