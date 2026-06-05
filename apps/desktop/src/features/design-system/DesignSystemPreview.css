@@ -1,0 +1,15 @@
+.af-design-system-preview code {
+  font-family: var(--af-font-mono);
+  font-size: 11px;
+}
+
+.af-design-system-preview h2,
+.af-design-system-preview h3,
+.af-design-system-preview p {
+  max-width: 860px;
+}
+
+.af-design-system-preview .af-state,
+.af-design-system-preview .af-surface-card {
+  min-height: 100%;
+}

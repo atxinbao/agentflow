@@ -34,6 +34,7 @@
 - [014-agentflow-end-to-end-workflow-acceptance-v1.md](014-agentflow-end-to-end-workflow-acceptance-v1.md)
 - [014-1-014-2-agent-locale-and-voice-style-policy-v1.md](014-1-014-2-agent-locale-and-voice-style-policy-v1.md)
 - [015-human-agent-guided-experience-v1.md](015-human-agent-guided-experience-v1.md)
+- [016-desktop-design-system-v1.md](016-desktop-design-system-v1.md)
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 

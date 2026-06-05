@@ -1,0 +1,36 @@
+.af-ui {
+  color: var(--af-text);
+  font-family: var(--af-font-sans);
+  font-size: var(--af-text-md);
+  line-height: var(--af-leading-normal);
+}
+
+.af-kicker {
+  margin: 0;
+  color: var(--af-text-subtle);
+  font-size: var(--af-text-xs);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.af-title {
+  margin: 0;
+  color: var(--af-text);
+  font-size: var(--af-text-xl);
+  font-weight: 800;
+  line-height: var(--af-leading-tight);
+}
+
+.af-description {
+  margin: 0;
+  color: var(--af-text-muted);
+  font-size: var(--af-text-sm);
+  line-height: var(--af-leading-relaxed);
+}
+
+.af-code-text {
+  font-family: var(--af-font-mono);
+  font-size: var(--af-text-xs);
+  line-height: 1.7;
+}

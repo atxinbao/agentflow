@@ -33,6 +33,7 @@ import {
   createBrowserPreviewWorkbenchSnapshot,
 } from "./browserPreviewData";
 import { detectAppLocale } from "./appLocale";
+import { DesignSystemPreview } from "./features/design-system";
 import { GoalTreePage, useGoalTree } from "./features/goal-tree";
 import { useAgentManual } from "./features/agent-manual";
 import { useExecuteStatus } from "./features/execute";
@@ -1201,6 +1202,7 @@ function ProjectView({
     <section className="project-layout project-local-files-layout project-local-files-with-audit">
       {activeProject || canReadSelectedLocalProject ? (
         <>
+          {isBrowserPreviewRuntime() ? <DesignSystemPreview /> : null}
           <OutputAuditPanel
             onAuditRequested={onAuditRequested}
             outputStatusState={outputStatusState}

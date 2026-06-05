@@ -28,6 +28,23 @@ try {
     path.join(desktopRoot, "src/features/output/OutputAuditPanel.tsx"),
     "utf8",
   );
+  const appEntry = readFileSync(path.join(desktopRoot, "src/App.tsx"), "utf8");
+  const designSystemPreview = readFileSync(
+    path.join(desktopRoot, "src/features/design-system/DesignSystemPreview.tsx"),
+    "utf8",
+  );
+  const designSystemFiles = [
+    ["button", "src/components/Button.tsx"],
+    ["surface-card", "src/components/SurfaceCard.tsx"],
+    ["status-chip", "src/components/StatusChip.tsx"],
+    ["metric-card", "src/components/MetricCard.tsx"],
+    ["empty-state", "src/components/EmptyState.tsx"],
+    ["blocked-state", "src/components/BlockedState.tsx"],
+    ["loading-state", "src/components/LoadingState.tsx"],
+    ["warning-state", "src/components/WarningState.tsx"],
+    ["copyable-code-block", "src/components/CopyableCodeBlock.tsx"],
+    ["advanced-details-drawer", "src/components/AdvancedDetailsDrawer.tsx"],
+  ];
   const previewBranchIndex = outputPanel.indexOf("if (isBrowserPreviewRuntime()) {");
   const previewOnlyGuardIndex = outputPanel.indexOf("if (previewOnly) {");
   const requestAuditInvokeIndex = outputPanel.indexOf('invoke<HumanAuditReport>("request_human_audit"');
@@ -62,9 +79,18 @@ try {
   assert.ok(previewOnlyGuardIndex >= 0);
   assert.ok(requestAuditInvokeIndex > previewOnlyGuardIndex);
   assert.ok(outputPanel.includes("浏览器预览不写 .agentflow/output/audit"));
+  assert.ok(appEntry.includes("<DesignSystemPreview />"));
+  assert.ok(designSystemPreview.includes('data-agentflow-design-system="v1"'));
+  for (const [marker, relativePath] of designSystemFiles) {
+    const componentSource = readFileSync(path.join(desktopRoot, relativePath), "utf8");
+    assert.ok(
+      componentSource.includes(`data-agentflow-component="${marker}"`),
+      `Missing design system marker: ${marker}`,
+    );
+  }
   assert.equal(existsSync(path.join(smokeRoot, ".agentflow/output/audit")), false);
 
-  console.log("Browser Preview smoke passed: workflow state and human audit preview are read-only.");
+  console.log("Browser Preview smoke passed: workflow state, human audit, and design system preview are read-only.");
 } finally {
   await server.close();
 }
