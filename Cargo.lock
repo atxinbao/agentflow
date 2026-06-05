@@ -51,6 +51,7 @@ dependencies = [
  "agentflow-output",
  "agentflow-panel",
  "agentflow-state",
+ "agentflow-workflow-acceptance",
  "base64 0.22.1",
  "rfd",
  "serde",
@@ -143,6 +144,23 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "agentflow-workflow-acceptance"
+version = "0.0.1"
+dependencies = [
+ "agentflow-agent-manual",
+ "agentflow-execute",
+ "agentflow-input",
+ "agentflow-output",
+ "agentflow-panel",
+ "agentflow-state",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "sha2",
  "tempfile",
 ]
 

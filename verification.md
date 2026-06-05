@@ -4222,3 +4222,135 @@ No files were written and no command was executed.
   - preview-only 提示显示 `浏览器预览不写 .agentflow/output/audit；请在 Tauri Desktop 中触发人工审计。`
   - Browser logs 仅包含 Vite debug 和 React DevTools info，无应用 error / warning。
   - in-app Browser screenshot 命令尝试过，但当前后端 `Page.captureScreenshot` 超时且 `playwright_element_screenshot` 不支持；本轮以 DOM snapshot 和 console logs 作为 Browser Preview 核对证据。
+
+## 2026-06-05 Browser Preview Smoke Script
+
+执行者：Codex
+
+目标：
+
+- 将 `Browser Preview Smoke Script` 补充为 `docs/requirements/013-2-browser-preview-smoke-script.md`。
+- 为 PR #28 遗留的 Browser Preview 人工核对证据补上可重复执行的本地 smoke 命令。
+- 用自动断言覆盖 Browser Preview output / audit / state mock、人工审计禁用边界和 `.agentflow/output/audit` 禁写边界。
+
+结果：
+
+- `apps/desktop/package.json` 提供 `preview:smoke`：
+  - `npm --prefix apps/desktop run preview:smoke`
+- `apps/desktop/scripts/browser-preview-smoke.mjs` 通过 Vite SSR 加载 Browser Preview mock factory。
+- smoke 断言 output status：
+  - `ready = true`
+  - `evidence = 1`
+  - `releaseDeliveries = 1`
+  - `audits = 1`
+  - `incompleteEvidence = 0`
+  - `incompleteDeliveries = 0`
+- smoke 断言 output / audit indexes：
+  - release delivery run id 为 `run-browser-preview-001`
+  - audit id 为 `audit-browser-preview-001`
+- smoke 断言 human audit report 包含 `Human Audit Browser Preview`。
+- smoke 断言 workflow state：
+  - `currentStage = workspace-ready`
+  - `auditStatus = passed-with-warnings`
+- smoke 断言 `OutputAuditPanel.tsx`：
+  - Browser Preview runtime 分支存在。
+  - preview 分支注入 `createBrowserPreviewHumanAuditReport()`。
+  - preview 分支设置 `source = "preview"`。
+  - request disabled 条件包含 `previewOnly`。
+  - preview-only guard 位于真实 `request_human_audit` invoke 之前。
+  - preview-only 提示包含 `浏览器预览不写 .agentflow/output/audit`。
+- smoke 断言临时项目中没有 `.agentflow/output/audit`。
+
+边界：
+
+- 未新增真实浏览器 DOM 自动化。
+- 未新增 CI。
+- 未修改 Tauri `request_human_audit` 命令。
+- 未修改 Rust output / audit / state 核心模型。
+- 未在 Browser Preview 写 `.agentflow/output/audit`。
+
+验证：
+
+- `npm --prefix apps/desktop run preview:smoke`：pass。
+  - 输出：`Browser Preview smoke passed: workflow state and human audit preview are read-only.`
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-workflow-acceptance`：pass，6 tests。
+- `git diff --check`：pass。
+
+## 2026-06-05 AgentFlow End-to-End Workflow Acceptance V1
+
+执行者：Codex
+
+目标：
+
+- 将 `014 - AgentFlow End-to-End Workflow Acceptance V1` 复制到 `docs/requirements/014-agentflow-end-to-end-workflow-acceptance-v1.md`。
+- 新增系统级端到端验收，证明 define / panel / input / execute / output / state / human audit 闭环可达。
+- 使用临时 fixture 项目验证写入边界，确认 AgentFlow 流程后用户源码 hash 不变。
+
+结果：
+
+- 新增 `agentflow-workflow-acceptance` crate：
+  - `full_workflow_reaches_delivery_ready`
+  - `human_audit_request_updates_state`
+  - `write_boundary_keeps_user_source_unchanged`
+  - `high_risk_issue_creates_blocker`
+  - `stale_lease_is_reported`
+  - `browser_preview_smoke_contract_is_registered`
+- fixture 项目只在初始化阶段创建：
+  - `README.md`
+  - `Cargo.toml`
+  - `src/lib.rs`
+- 验收链路覆盖：
+  - Agent working manual / define prepare。
+  - Panel prepare。
+  - Input prepare、approved SPEC fixture、issue fixture。
+  - Execute run、preflight、lease、plan、checkpoint、`printf ok` command、validation。
+  - 空 changed-files summary，用于证明本轮执行无源码改动。
+  - Output evidence 和 local release delivery draft。
+  - State refresh 推导 `delivery-ready`，且 `nextActions` 包含 `request-human-audit` 和 `start-new-input`。
+  - 人类显式 `request_human_audit` 生成完整 audit package。
+  - `load_audit_report` 可读取 report / findings / checklist / evidence map / traceability。
+  - Audit 后 state refresh 推导 `audit-completed`，`auditStatus != not-requested`。
+  - 高风险 issue preflight blocker。
+  - stale lease 分类。
+- Desktop command wrapper 测试新增覆盖：
+  - `load_state_status`
+  - `load_workflow_gates`
+  - `load_next_actions`
+  - `load_blockers`
+  - `load_output_status`
+  - `load_output_index`
+  - `request_human_audit`
+  - `load_audit_index`
+  - `load_audit_report`
+- Browser Preview smoke 复用 013.2：
+  - `npm --prefix apps/desktop run preview:smoke`
+  - 验证 workflow state / output / audit preview mock 可读。
+  - 验证 Browser Preview smoke 不写 `.agentflow/output/audit`。
+- README / GOAL / ROADMAP / requirements index 已补充 014。
+
+边界：
+
+- 未新增 OpenSpec Authoring。
+- 未新增 SPEC 编辑器。
+- 未新增 Goal Tree materializer。
+- 未新增 Agent 自动执行。
+- 未调用模型。
+- 未创建远程 PR。
+- 未 merge。
+- 未 deploy。
+- 未执行用户项目测试命令。
+- 未修改真实用户源码。
+- 未自动触发 audit。
+- 未改 state / audit / execute / output 核心模型。
+- 测试写入只发生在临时 fixture 项目内。
+
+验证：
+
+- `npm --prefix apps/desktop run preview:smoke`：pass。
+- `cargo test -p agentflow-workflow-acceptance`：pass，6 tests。
+- `cargo test -p agentflow-desktop`：pass，18 tests。
+- `cargo test -p agentflow-state`：pass，9 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `cargo test`：pass，agent-manual 23 tests + CLI 2 tests + core 61 tests + desktop 18 tests + execute 17 tests + goal-tree 3 tests + input 8 tests + output 18 tests + panel 27 tests + state 9 tests + workflow-acceptance 6 tests。
