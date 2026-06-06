@@ -46,7 +46,10 @@ mod tests {
         ExecutePlanDraft, ExecuteRun,
     };
     use agentflow_input::{
-        issue::{DisplayStatus, InputIssue, InputIssueModel, InputIssueStatus, InputRiskLevel},
+        issue::{
+            AgentClaim, AgentRole, DisplayStatus, InputIssue, InputIssueModel, InputIssueStatus,
+            InputRiskLevel, IssueCategory, AGENT_CLAIM_VERSION,
+        },
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
     use agentflow_output::{
@@ -462,6 +465,42 @@ mod tests {
             .path()
             .join(".agentflow/state/sessions/session-001.json")
             .is_file());
+    }
+
+    #[test]
+    fn role_mismatch_writes_blocker_and_timeline_event() {
+        let dir = tempdir().unwrap();
+        prepare_layers(dir.path());
+        write_spec(dir.path());
+        write_issue(dir.path(), InputRiskLevel::Low);
+        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        fs::write(
+            dir.path().join(format!(
+                ".agentflow/execute/runs/{}/agent-claim.json",
+                run.run_id
+            )),
+            serde_json::to_string_pretty(&AgentClaim {
+                version: AGENT_CLAIM_VERSION.to_string(),
+                issue_id: "iss-001".to_string(),
+                issue_category: IssueCategory::Spec,
+                claimed_agent_role: AgentRole::AuditAgent,
+                handoff_id: "handoff-iss-001".to_string(),
+                created_by: "audit-agent".to_string(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let status = refresh_state(dir.path()).unwrap();
+
+        assert!(status
+            .blockers
+            .iter()
+            .any(|blocker| blocker.action == "agent-role-mismatch"));
+        assert!(load_state_timeline(dir.path())
+            .unwrap()
+            .iter()
+            .any(|event| event.event == "agent.role_mismatch"));
     }
 
     #[test]

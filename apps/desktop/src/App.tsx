@@ -84,7 +84,6 @@ import {
   displayStatusLabelZh,
   pickTaskId,
   taskActionLabel,
-  taskActionsForStatus,
   type AppInteractionState,
   type ButtonInteractionState,
   type TaskInteractionAction,
@@ -559,11 +558,11 @@ function App() {
       try {
         await navigator.clipboard.writeText(buildCodexHandoff(task));
         setTaskCopyState("success");
-        setTaskActionFeedback("任务包已复制到剪贴板。请手动交给 Codex。");
+        setTaskActionFeedback("任务包已复制到剪贴板。请手动交给对应 Agent。");
         window.setTimeout(() => setTaskCopyState("enabled"), 1400);
       } catch {
         setTaskCopyState("error");
-        setTaskActionFeedback("复制失败。请手动复制 Codex Handoff Package。");
+        setTaskActionFeedback("复制失败。请手动复制 Agent Handoff Package。");
       }
       return;
     }
@@ -1729,6 +1728,7 @@ function TaskList({
                     <span className="v16-task-queue-title-line">
                       <span>{task.title}</span>
                     </span>
+                    <small>{issueCategoryLabelZh(task.issueCategory)} · {agentRoleLabelZh(task.requiredAgentRole)}</small>
                   </span>
                   <span className="v16-task-queue-state">
                     <StatusBadge
@@ -1837,15 +1837,22 @@ function TaskDetail({
               {displayRiskTextZh(task.riskLevel)}
             </strong>
           </span>
+          <span className="v16-detail-meta-item">
+            <span className="v16-detail-meta-label">角色</span>
+            <strong>{agentRoleLabelZh(task.requiredAgentRole)}</strong>
+          </span>
         </div>
       </header>
       <div className="v16-detail-document">
         <DescriptionList
           items={[
-            ["智能体", "执行助手"],
+            ["任务类型", issueCategoryLabelZh(task.issueCategory)],
+            ["执行角色", agentRoleLabelZh(task.requiredAgentRole)],
             ["状态", displayStatusLabelZh(task.displayStatus)],
             ["交给 Codex", handedOff ? "已做本地标记" : "未标记"],
             ["关联规格", "已确认规格"],
+            ...(task.auditTrigger ? [["触发来源", auditTriggerLabel(task.auditTrigger)] as [string, string]] : []),
+            ...(task.sourceReleaseId ? [["关联交付", task.sourceReleaseId] as [string, string]] : []),
           ]}
         />
         <SectionList title="目标" items={[task.goal || task.title]} />
@@ -1856,8 +1863,8 @@ function TaskDetail({
         <SectionList title="验证命令" items={task.validationCommands} />
         <SectionList title="相关文件" items={task.allowedFiles} />
         <details className="v16-task-package">
-          <summary>Codex 任务包</summary>
-          <CopyableCodeBlock content={buildCodexHandoff(task)} maxHeight={210} title="Codex 任务包" />
+          <summary>Agent 任务包</summary>
+          <CopyableCodeBlock content={buildCodexHandoff(task)} maxHeight={210} title="Agent 任务包" />
         </details>
       </div>
       {actionFeedback ? <p className="v16-feedback">{actionFeedback}</p> : null}
@@ -2562,11 +2569,15 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
     forbiddenFiles: [".agentflow/*", ".codex/*", "agent-artifacts/*"],
     goal: issue.summary || issue.title,
     id: issue.issueId,
+    auditTrigger: issue.audit?.trigger ?? null,
+    issueCategory: issue.issueCategory ?? "spec",
     milestoneId: null,
     nonGoals: issue.nonGoals,
     projectId: issue.projectId ?? null,
     rawStatus: issue.status,
+    requiredAgentRole: issue.requiredAgentRole ?? "build-agent",
     riskLevel: issue.riskLevel || indexed?.riskLevel || "normal",
+    sourceReleaseId: issue.audit?.sourceReleaseId ?? null,
     scope: issue.scope,
     status: issue.status,
     title: issue.title,
@@ -2586,11 +2597,15 @@ function issueContractToV1Issue(issue: IssueContract): V1Issue {
     forbiddenFiles: [".agentflow/*", ".codex/*", "agent-artifacts/*"],
     goal: issue.intent,
     id: issue.id,
+    auditTrigger: null,
+    issueCategory: "spec",
     milestoneId: null,
     nonGoals: issue.nonGoals,
     projectId: null,
     rawStatus: issue.status,
+    requiredAgentRole: "build-agent",
     riskLevel: "normal",
+    sourceReleaseId: null,
     scope: issue.scope,
     status: issue.status,
     title: issue.title,
@@ -2701,6 +2716,29 @@ function displayRiskLabelZh(risk?: string | null) {
     return "高";
   }
   return "普通";
+}
+
+function issueCategoryLabelZh(category?: string | null) {
+  if (category === "audit") {
+    return "审计任务";
+  }
+  return "需求任务";
+}
+
+function agentRoleLabelZh(role?: string | null) {
+  const labels: Record<string, string> = {
+    "audit-agent": "审计助手",
+    "build-agent": "执行助手",
+    "spec-agent": "需求助手",
+  };
+  return labels[role ?? ""] ?? "执行助手";
+}
+
+function agentInstructionForTask(task: V1Issue) {
+  if (task.requiredAgentRole === "audit-agent") {
+    return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR。";
+  }
+  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。不要写 audit report、findings、evidence-map 或 traceability。";
 }
 
 function displayRiskTextZh(risk?: string | null) {
@@ -2929,8 +2967,25 @@ function buildCodexHandoff(task: V1Issue) {
   return [
     `# ${task.title}`,
     "",
+    "```json",
+    JSON.stringify(
+      {
+        agentInstruction: agentInstructionForTask(task),
+        handoffVersion: "agent-handoff.v1",
+        issueCategory: task.issueCategory ?? "spec",
+        issueId: task.id,
+        requiredAgentRole: task.requiredAgentRole ?? "build-agent",
+      },
+      null,
+      2,
+    ),
+    "```",
+    "",
     `任务：${task.id}`,
+    `任务类型：${issueCategoryLabelZh(task.issueCategory)}`,
+    `执行角色：${agentRoleLabelZh(task.requiredAgentRole)}`,
     `风险：${displayRiskLabelZh(task.riskLevel)}`,
+    `指令：${agentInstructionForTask(task)}`,
     "",
     "## 范围",
     ...task.scope.map((item) => `- ${item}`),

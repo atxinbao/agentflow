@@ -1,5 +1,6 @@
 use crate::{
     lease::has_active_lease_for_run,
+    manager::assert_build_agent_run,
     model::{
         ExecuteChangedFile, ExecuteChangedFiles, ExecutePatchOutcome, ExecutePlan,
         ExecutePreflight, ExecuteRunStatus,
@@ -26,6 +27,8 @@ pub fn apply_execute_patch(
     if !has_active_lease_for_run(&root, &run_id)? {
         anyhow::bail!("run {} must acquire an active lease before patch", run_id);
     }
+    let run = crate::storage::read_run(&root, &run_id)?;
+    assert_build_agent_run(&root, &run)?;
     let plan: ExecutePlan = read_json(&run_path.join("plan.json"))?;
     let checkpoint_exists = run_path
         .join("checkpoints")

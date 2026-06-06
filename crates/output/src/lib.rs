@@ -21,7 +21,7 @@ pub use validate::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{ensure_directory, write_json};
+    use crate::storage::{ensure_directory, read_json, write_json};
     use serde_json::json;
     use std::fs;
     use tempfile::tempdir;
@@ -429,6 +429,13 @@ mod tests {
             .path()
             .join(".agentflow/output/audit/audit-001/audit-request.json")
             .is_file());
+        let audit_issue_path = dir
+            .path()
+            .join(".agentflow/input/issues/audit-run-001.json");
+        assert!(audit_issue_path.is_file());
+        let audit_issue: agentflow_input::issue::InputIssue = read_json(&audit_issue_path).unwrap();
+        assert_eq!(audit_issue.issue_category.as_str(), "audit");
+        assert_eq!(audit_issue.required_agent_role.as_str(), "audit-agent");
         assert!(!dir
             .path()
             .join(".agentflow/output/audit/audit-001/audit.json")

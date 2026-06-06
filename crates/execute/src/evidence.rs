@@ -1,4 +1,5 @@
 use crate::{
+    manager::assert_build_agent_run,
     model::ExecuteResult,
     storage::{canonical_project_root, load_command_records, read_run, run_dir, write_json},
 };
@@ -17,6 +18,7 @@ pub fn write_execute_evidence(
 ) -> Result<OutputEvidence> {
     let root = canonical_project_root(project_root)?;
     let run = read_run(&root, &run_id)?;
+    assert_build_agent_run(&root, &run)?;
     let run_directory = run_dir(&root, &run_id);
     let command_records = load_command_records(&root, &run_id)?;
     let checkpoint = latest_json_artifact(&run_directory.join("checkpoints")).map(|path| {

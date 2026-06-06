@@ -1,5 +1,5 @@
 use crate::{
-    issue::{DisplayStatus, InputIssue, InputIssueModel},
+    issue::{required_role_for_issue_category, DisplayStatus, InputIssue, InputIssueModel},
     manager::{load_input_facts, load_summary, missing_input_paths, status},
     model::{InputManifest, InputSnapshot, InputWorkspaceStatus, INPUT_SNAPSHOT_VERSION},
     project::InputProject,
@@ -181,6 +181,16 @@ fn validate_issue_graph(
     for issue in issues {
         if issue.source_spec_id.trim().is_empty() {
             errors.push(format!("issue {} is missing sourceSpecId", issue.issue_id));
+        }
+        let expected_role = required_role_for_issue_category(&issue.issue_category);
+        if issue.required_agent_role != expected_role {
+            errors.push(format!(
+                "issue {} category {} requires role {}, found {}",
+                issue.issue_id,
+                issue.issue_category.as_str(),
+                expected_role.as_str(),
+                issue.required_agent_role.as_str()
+            ));
         }
         match issue.issue_model {
             InputIssueModel::Direct => {

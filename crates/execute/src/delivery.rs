@@ -1,4 +1,5 @@
 use crate::{
+    manager::assert_build_agent_run,
     model::{ExecuteResult, ExecuteRunStatus},
     storage::{
         canonical_project_root, ensure_directory, read_json, read_run, run_dir,
@@ -18,6 +19,7 @@ pub fn prepare_release_delivery(
 ) -> Result<OutputReleaseDelivery> {
     let root = canonical_project_root(project_root)?;
     let run = read_run(&root, &run_id)?;
+    assert_build_agent_run(&root, &run)?;
     if !matches!(run.status, ExecuteRunStatus::Completed) {
         anyhow::bail!("release delivery requires a completed execute run");
     }

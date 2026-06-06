@@ -36,7 +36,9 @@ pub use validation::{complete_execute_run, validate_execute_run};
 mod tests {
     use super::*;
     use agentflow_input::{
-        issue::{InputIssue, InputIssueModel, InputIssueStatus, InputRiskLevel},
+        issue::{
+            AgentRole, InputIssue, InputIssueModel, InputIssueStatus, InputRiskLevel, IssueCategory,
+        },
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
     use std::{fs, path::Path};
@@ -150,6 +152,37 @@ mod tests {
         prepare_root(dir.path());
         let error = create_execute_run(dir.path(), "missing".to_string()).unwrap_err();
         assert!(error.to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn audit_issue_cannot_create_build_agent_run() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path(), "release-v0.1.0");
+        let issue = InputIssue {
+            issue_id: "audit-release-v0.1.0".to_string(),
+            issue_model: InputIssueModel::Direct,
+            issue_category: IssueCategory::Audit,
+            required_agent_role: AgentRole::AuditAgent,
+            source_spec_id: "release-v0.1.0".to_string(),
+            project_id: None,
+            title: "Audit release".to_string(),
+            summary: "Audit release delivery".to_string(),
+            status: InputIssueStatus::ReadyForExecute,
+            risk_level: InputRiskLevel::High,
+            validation_hints: vec!["audit output".to_string()],
+            ..InputIssue::default()
+        };
+        fs::write(
+            dir.path()
+                .join(".agentflow/input/issues/audit-release-v0.1.0.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+
+        let error = create_execute_run(dir.path(), "audit-release-v0.1.0".to_string()).unwrap_err();
+
+        assert!(error.to_string().contains("Agent role mismatch"));
     }
 
     #[test]

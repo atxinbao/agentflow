@@ -1,12 +1,14 @@
 use crate::{
+    events::{append_state_event, load_state_timeline},
     gates::{build_gate_snapshot, write_gate_files},
     health::{collect_health, health_ready, health_status_map, write_health},
     indexes::write_indexes,
     locks::{build_lock_snapshot, write_lock_snapshot},
     model::{
         IssueStatusIndex, StateEventIndex, StateIndex, StateIndexEntry, StateManifest,
-        StateManifestSummary, StateStatusSnapshot, StateWorkspaceStatus, WorkflowHealthSnapshot,
-        STATE_INDEX_VERSION, STATE_MANIFEST_VERSION, STATE_STATUS_VERSION,
+        StateManifestSummary, StateStatusSnapshot, StateTimelineEventDraft, StateWorkspaceStatus,
+        WorkflowBlockedAction, WorkflowHealthSnapshot, STATE_INDEX_VERSION, STATE_MANIFEST_VERSION,
+        STATE_STATUS_VERSION,
     },
     sessions::load_sessions,
     storage::{
@@ -15,7 +17,7 @@ use crate::{
     },
 };
 use anyhow::Result;
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
 pub fn prepare_state_workspace(project_root: impl AsRef<Path>) -> Result<StateStatusSnapshot> {
     let root = canonical_project_root(project_root)?;
@@ -39,6 +41,7 @@ pub fn refresh_state(project_root: impl AsRef<Path>) -> Result<StateStatusSnapsh
     write_health(&root, &health)?;
     let gate = build_gate_snapshot(&root, &health)?;
     write_gate_files(&root, &gate)?;
+    write_role_mismatch_events(&root, &gate.blocked_actions)?;
     let locks = build_lock_snapshot(&root)?;
     write_lock_snapshot(&root, &locks)?;
     write_indexes(&root, &health, &gate)?;
@@ -84,6 +87,34 @@ pub fn load_issue_status_index(project_root: impl AsRef<Path>) -> Result<IssueSt
     let root = canonical_project_root(project_root)?;
     refresh_state(&root)?;
     crate::storage::read_json(&root.join(".agentflow/state/indexes/issue-status.json"))
+}
+
+fn write_role_mismatch_events(root: &Path, blockers: &[WorkflowBlockedAction]) -> Result<()> {
+    let existing = load_state_timeline(root).unwrap_or_default();
+    for blocker in blockers
+        .iter()
+        .filter(|blocker| blocker.action == "agent-role-mismatch")
+    {
+        let source_path = blocker.source_path.clone().unwrap_or_default();
+        let already_recorded = existing.iter().any(|event| {
+            event.event == "agent.role_mismatch"
+                && event.details.get("sourcePath") == Some(&source_path)
+        });
+        if already_recorded {
+            continue;
+        }
+        let mut details = BTreeMap::new();
+        details.insert("reason".to_string(), blocker.reason.clone());
+        details.insert("sourcePath".to_string(), source_path);
+        append_state_event(
+            root,
+            StateTimelineEventDraft {
+                event: "agent.role_mismatch".to_string(),
+                details,
+            },
+        )?;
+    }
+    Ok(())
 }
 
 fn build_manifest(

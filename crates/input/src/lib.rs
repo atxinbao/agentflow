@@ -26,8 +26,8 @@ mod tests {
     use super::*;
     use crate::{
         issue::{
-            DisplayStatus, InputIssue, InputIssueModel, InputIssueStatus, InputPriority,
-            InputRiskLevel,
+            validate_agent_issue_permission, AgentRole, DisplayStatus, InputIssue, InputIssueModel,
+            InputIssueStatus, InputPriority, InputRiskLevel, IssueCategory,
         },
         project::{InputProject, InputProjectStatus},
         relations::{InputIssueRelation, InputIssueRelationKind, InputIssueRelationsFile},
@@ -344,6 +344,54 @@ mod tests {
             DisplayStatus::from_input_status(&issue.status),
             DisplayStatus::Ready
         );
+        assert_eq!(issue.issue_category, IssueCategory::Spec);
+        assert_eq!(issue.required_agent_role, AgentRole::BuildAgent);
+        validate_agent_issue_permission(&issue, &AgentRole::BuildAgent).unwrap();
+        assert!(validate_agent_issue_permission(&issue, &AgentRole::AuditAgent).is_err());
+    }
+
+    #[test]
+    fn audit_issue_requires_audit_agent() {
+        let issue = InputIssue {
+            issue_id: "audit-release-v0.1.0".to_string(),
+            issue_category: IssueCategory::Audit,
+            required_agent_role: AgentRole::AuditAgent,
+            source_spec_id: "release-v0.1.0".to_string(),
+            title: "Audit release".to_string(),
+            ..InputIssue::default()
+        };
+
+        validate_agent_issue_permission(&issue, &AgentRole::AuditAgent).unwrap();
+        assert!(validate_agent_issue_permission(&issue, &AgentRole::BuildAgent).is_err());
+    }
+
+    #[test]
+    fn issue_category_role_mismatch_fails_validation() {
+        let dir = tempdir().unwrap();
+        prepare_input_workspace(dir.path()).unwrap();
+        let issue = InputIssue {
+            issue_id: "audit-release-v0.1.0".to_string(),
+            issue_category: IssueCategory::Audit,
+            required_agent_role: AgentRole::BuildAgent,
+            source_spec_id: "release-v0.1.0".to_string(),
+            title: "Audit release".to_string(),
+            ..InputIssue::default()
+        };
+        fs::write(
+            dir.path()
+                .join(".agentflow/input/issues/audit-release-v0.1.0.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+
+        let snapshot = validate_input_workspace(dir.path()).unwrap();
+
+        assert!(!snapshot.ready);
+        assert!(snapshot
+            .status
+            .errors
+            .iter()
+            .any(|error| error.contains("requires role audit-agent")));
     }
 
     #[test]

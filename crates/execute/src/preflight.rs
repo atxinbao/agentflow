@@ -9,7 +9,7 @@ use crate::{
         write_json,
     },
 };
-use agentflow_input::issue::InputRiskLevel;
+use agentflow_input::issue::{validate_agent_issue_permission, AgentRole, InputRiskLevel};
 use anyhow::Result;
 use std::path::Path;
 
@@ -128,6 +128,23 @@ pub fn execute_run_preflight(
                 } else {
                     "Issue sourceSpecId exists.".to_string()
                 }),
+                risk_level: None,
+                human_confirmation_required: None,
+                confirmed: None,
+            });
+            let role_check = validate_agent_issue_permission(issue, &AgentRole::BuildAgent);
+            checks.push(ExecutePreflightCheck {
+                name: "agent-role".to_string(),
+                status: if role_check.is_ok() {
+                    ExecuteCheckStatus::Passed
+                } else {
+                    ExecuteCheckStatus::Blocked
+                },
+                message: Some(
+                    role_check
+                        .map(|_| "Issue is assigned to Build Agent.".to_string())
+                        .unwrap_or_else(|error| format!("Agent 角色不匹配：{error}")),
+                ),
                 risk_level: None,
                 human_confirmation_required: None,
                 confirmed: None,

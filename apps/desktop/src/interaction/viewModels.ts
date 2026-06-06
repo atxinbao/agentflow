@@ -113,7 +113,7 @@ export function buildAppInteractionState({
 export function buildTaskInteractionState(tasks: V1Issue[], selectedTaskId: string | null): TaskInteractionState {
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
   return {
-    actions: selectedTask ? taskActionsForStatus(selectedTask.displayStatus) : [],
+    actions: selectedTask ? taskActionsForTask(selectedTask) : [],
     empty: tasks.length === 0,
     selectedTask,
     selectedTaskId: selectedTask?.id ?? null,
@@ -138,7 +138,23 @@ export function pickTaskId(tasks: V1Issue[], currentTaskId: string | null, activ
   );
 }
 
-export function taskActionsForStatus(status: IssueDisplayStatus = "backlog"): TaskInteractionAction[] {
+export function taskActionsForTask(task: V1Issue): TaskInteractionAction[] {
+  if (task.issueCategory === "audit") {
+    const actions: Record<IssueDisplayStatus, TaskInteractionAction[]> = {
+      backlog: ["view-requirement"],
+      cancel: ["readonly"],
+      done: ["view-audit"],
+      "in-progress": ["copy-handoff", "view-audit"],
+      ready: ["copy-handoff"],
+      review: ["view-audit"],
+    };
+    return actions[task.displayStatus ?? "backlog"];
+  }
+
+  return taskActionsForStatus(task.displayStatus);
+}
+
+function taskActionsForStatus(status: IssueDisplayStatus = "backlog"): TaskInteractionAction[] {
   const actions: Record<IssueDisplayStatus, TaskInteractionAction[]> = {
     backlog: ["view-requirement"],
     cancel: ["readonly"],
