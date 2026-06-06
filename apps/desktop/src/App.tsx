@@ -513,6 +513,7 @@ function App() {
             onCheckWriteback={() => selectedTask && void handleTaskAction("check-writeback", selectedTask)}
             outputStatusState={outputStatusState}
             projectPanelState={projectPanelState}
+            projectName={projectDisplayName}
             projectRoot={projectRoot}
             selectedTask={selectedTask}
             stateStatusState={stateStatusState}
@@ -1030,6 +1031,7 @@ function ProjectHomePage({
   onCheckWriteback,
   outputStatusState,
   projectPanelState,
+  projectName,
   projectRoot,
   selectedTask,
   stateStatusState,
@@ -1042,6 +1044,7 @@ function ProjectHomePage({
   onCheckWriteback: () => void;
   outputStatusState: OutputStatusState;
   projectPanelState: ProjectPanelState;
+  projectName: string;
   projectRoot: string | null;
   selectedTask: V1Issue | null;
   stateStatusState: StateStatusState;
@@ -1111,6 +1114,7 @@ function ProjectHomePage({
         onCheckWriteback={onCheckWriteback}
         onOpenFiles={onOpenFiles}
         onOpenTasks={onOpenTasks}
+        projectName={projectName}
         selectedTask={selectedTask}
       />
     </section>
@@ -1729,11 +1733,13 @@ function CompanionShell({
   onCheckWriteback,
   onOpenFiles,
   onOpenTasks,
+  projectName,
   selectedTask,
 }: {
   onCheckWriteback: () => void;
   onOpenFiles: () => void;
   onOpenTasks: () => void;
+  projectName: string;
   selectedTask: V1Issue | null;
 }) {
   const queueItems = [
@@ -1760,8 +1766,7 @@ function CompanionShell({
   return (
     <section className="v16-companion-shell" aria-label="协作模式">
       <header>
-        <h2>协作模式</h2>
-        <span>{selectedTask ? "等待 Codex 写回" : "等待任务"}</span>
+        <h2>{projectName}</h2>
       </header>
       <div className="v16-companion-queue" aria-label="今日队列">
         <p>今日队列</p>
