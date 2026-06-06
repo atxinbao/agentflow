@@ -12,11 +12,13 @@
   "app": {
     "windows": [
       {
-        "title": "AgentFlow 本地工作台",
+        "title": "AgentFlow",
         "width": 1280,
         "height": 820,
         "minWidth": 1040,
-        "minHeight": 680
+        "minHeight": 680,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

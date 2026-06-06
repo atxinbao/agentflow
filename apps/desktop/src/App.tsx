@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   CheckCircle2,
   ClipboardCheck,
@@ -14,7 +15,7 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { detectAppLocale } from "./appLocale";
 import {
   BROWSER_PREVIEW_PROJECT_ROOT,
@@ -159,6 +160,22 @@ function readStoredIssueSet() {
   } catch {
     return new Set<string>();
   }
+}
+
+function startWindowDrag(event: MouseEvent<HTMLElement>) {
+  if (isBrowserPreviewRuntime() || event.button !== 0) {
+    return;
+  }
+
+  const target = event.target;
+  if (
+    target instanceof HTMLElement &&
+    target.closest("button, a, input, textarea, select, [data-agentflow-no-drag]")
+  ) {
+    return;
+  }
+
+  void getCurrentWindow().startDragging().catch(() => undefined);
 }
 
 function App() {
@@ -489,7 +506,6 @@ function App() {
         activePage={activePage}
         inspector={activePage === "home" ? <InspectorPanel nextStep={nextStep} selectedTask={selectedTask} /> : null}
         onPageChange={setActivePage}
-        onRefresh={refreshWorkspace}
         projectName={projectDisplayName}
         projectRoot={projectRoot}
         statusBar={
@@ -718,7 +734,12 @@ function LoginModal({ onConnect }: { onConnect: (provider: Provider) => void }) 
 
   return (
     <main className={`v16-login-stage v16-login-shell ${runtimeChromeClass}`} data-agentflow-screen="login">
-      <header className="v16-login-titlebar" aria-label="登录窗口" data-tauri-drag-region>
+      <header
+        className="v16-login-titlebar"
+        aria-label="登录窗口"
+        data-tauri-drag-region
+        onMouseDown={startWindowDrag}
+      >
         <div className="v16-titlebar-left" data-tauri-drag-region>
           {isBrowserPreviewRuntime() ? <WindowDots /> : null}
           <span className="v16-titlebar-action muted">未登录</span>
@@ -903,7 +924,6 @@ function AppShell({
   children,
   inspector,
   onPageChange,
-  onRefresh,
   projectName,
   projectRoot,
   statusBar,
@@ -914,7 +934,6 @@ function AppShell({
   children: ReactNode;
   inspector: ReactNode;
   onPageChange: (page: AppPage) => void;
-  onRefresh: () => void;
   projectName: string;
   projectRoot: string | null;
   statusBar: ReactNode;
@@ -925,7 +944,7 @@ function AppShell({
 
   return (
     <AppFrame className={`v16-app ${runtimeChromeClass}`} data-agentflow-ux="v16">
-      <TitleBar onRefresh={onRefresh} projectName={projectName} statusText={titlebarStatus} />
+      <TitleBar projectName={projectName} statusText={titlebarStatus} />
       <ProjectTree activePage={activePage} onPageChange={onPageChange} projectName={projectName} />
       <section className={inspector ? "v16-workspace with-inspector" : "v16-workspace"}>
         {toolbar}
@@ -938,21 +957,16 @@ function AppShell({
 }
 
 function TitleBar({
-  onRefresh,
   projectName,
   statusText,
 }: {
-  onRefresh: () => void;
   projectName: string;
   statusText: string;
 }) {
   return (
-    <TopBar className="v16-titlebar" aria-label="应用顶部栏" data-tauri-drag-region>
+    <TopBar className="v16-titlebar" aria-label="应用顶部栏" data-tauri-drag-region onMouseDown={startWindowDrag}>
       <div className="v16-titlebar-left" data-tauri-drag-region>
         {isBrowserPreviewRuntime() ? <WindowDots /> : null}
-        <button className="v16-titlebar-action" onClick={onRefresh} type="button">
-          更新
-        </button>
       </div>
       <div className="v16-titlebar-project" data-tauri-drag-region>
         <span className="v16-titlebar-status-dot" aria-hidden="true" />
