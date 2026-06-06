@@ -481,14 +481,15 @@ function App() {
       taskSearch={taskSearch}
     />
   );
+  const titlebarStatus = titlebarStatusText(appInteractionState, stateStatusState.status?.currentStage, selectedTask);
 
   return (
     <>
       <AppShell
         activePage={activePage}
-        connectedProvider={connectedProvider}
         inspector={activePage === "home" ? <InspectorPanel nextStep={nextStep} selectedTask={selectedTask} /> : null}
         onPageChange={setActivePage}
+        onRefresh={refreshWorkspace}
         projectName={projectDisplayName}
         projectRoot={projectRoot}
         statusBar={
@@ -501,6 +502,7 @@ function App() {
             stateStatus={stateStatusState.status}
           />
         }
+        titlebarStatus={titlebarStatus}
         toolbar={toolbar}
       >
         {activePage === "home" ? (
@@ -712,12 +714,21 @@ function LoginModal({ onConnect }: { onConnect: (provider: Provider) => void }) 
     { id: "Claude" },
     { id: "DeepSeek" },
   ];
+  const runtimeChromeClass = isBrowserPreviewRuntime() ? "browser-preview-titlebar" : "native-titlebar";
 
   return (
-    <main className="v16-login-stage v16-login-shell" data-agentflow-screen="login">
-      <header className="v16-login-titlebar" aria-label="登录窗口">
-        <WindowDots />
-        <span className="v16-login-state">未登录</span>
+    <main className={`v16-login-stage v16-login-shell ${runtimeChromeClass}`} data-agentflow-screen="login">
+      <header className="v16-login-titlebar" aria-label="登录窗口" data-tauri-drag-region>
+        <div className="v16-titlebar-left" data-tauri-drag-region>
+          {isBrowserPreviewRuntime() ? <WindowDots /> : null}
+          <span className="v16-titlebar-action muted">未登录</span>
+        </div>
+        <div className="v16-titlebar-project" data-tauri-drag-region>
+          <span className="v16-titlebar-status-dot warning" aria-hidden="true" />
+          <strong>AgentFlow</strong>
+          <small>not-authenticated</small>
+        </div>
+        <span className="v16-command-key">⌘K</span>
       </header>
       <section className="v16-login-content" aria-label="连接大模型入口">
         <h1>连接大模型入口</h1>
@@ -890,27 +901,31 @@ function AgentBrief({ className, title, value }: { className?: string; title: st
 function AppShell({
   activePage,
   children,
-  connectedProvider,
   inspector,
   onPageChange,
+  onRefresh,
   projectName,
   projectRoot,
   statusBar,
+  titlebarStatus,
   toolbar,
 }: {
   activePage: AppPage;
   children: ReactNode;
-  connectedProvider: Provider;
   inspector: ReactNode;
   onPageChange: (page: AppPage) => void;
+  onRefresh: () => void;
   projectName: string;
   projectRoot: string | null;
   statusBar: ReactNode;
+  titlebarStatus: string;
   toolbar: ReactNode;
 }) {
+  const runtimeChromeClass = isBrowserPreviewRuntime() ? "browser-preview-titlebar" : "native-titlebar";
+
   return (
-    <AppFrame className="v16-app" data-agentflow-ux="v16">
-      <TitleBar projectName={projectName} projectRoot={projectRoot} />
+    <AppFrame className={`v16-app ${runtimeChromeClass}`} data-agentflow-ux="v16">
+      <TitleBar onRefresh={onRefresh} projectName={projectName} statusText={titlebarStatus} />
       <ProjectTree activePage={activePage} onPageChange={onPageChange} projectName={projectName} />
       <section className={inspector ? "v16-workspace with-inspector" : "v16-workspace"}>
         {toolbar}
@@ -922,12 +937,27 @@ function AppShell({
   );
 }
 
-function TitleBar({ projectName }: { projectName: string; projectRoot: string | null }) {
+function TitleBar({
+  onRefresh,
+  projectName,
+  statusText,
+}: {
+  onRefresh: () => void;
+  projectName: string;
+  statusText: string;
+}) {
   return (
-    <TopBar className="v16-titlebar">
-      <WindowDots />
-      <div className="v16-titlebar-project">
+    <TopBar className="v16-titlebar" aria-label="应用顶部栏" data-tauri-drag-region>
+      <div className="v16-titlebar-left" data-tauri-drag-region>
+        {isBrowserPreviewRuntime() ? <WindowDots /> : null}
+        <button className="v16-titlebar-action" onClick={onRefresh} type="button">
+          更新
+        </button>
+      </div>
+      <div className="v16-titlebar-project" data-tauri-drag-region>
+        <span className="v16-titlebar-status-dot" aria-hidden="true" />
         <strong>{projectName}</strong>
+        <small>{statusText}</small>
       </div>
       <div className="v16-titlebar-right">
         <span className="v16-command-key">⌘K</span>
@@ -1239,7 +1269,7 @@ function TaskList({
               title={`${task.id} ${task.title}`}
               type="button"
             >
-              <strong>{task.id}</strong>
+              <strong className="v16-list-item-id">{task.id}</strong>
               <span className="v16-task-queue-title">{task.title}</span>
               <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
                 {displayStatusLabelZh(task.displayStatus)}
@@ -1434,9 +1464,12 @@ function DeliveryList({
               title={delivery.runId}
               type="button"
             >
-              <strong>{delivery.runId}</strong>
-              <span>{delivery.issueId || "未记录任务"} · {artifactStatusLabel(delivery.status)}</span>
-              <small>{formatTimestamp(delivery.updatedAt)}</small>
+              <span className="v16-list-item-main">
+                <strong>{delivery.runId}</strong>
+                <span>{delivery.issueId || "未记录任务"}</span>
+              </span>
+              <small>{artifactStatusLabel(delivery.status)}</small>
+              <time>{formatTimestamp(delivery.updatedAt)}</time>
             </button>
           ))}
         </div>
@@ -1556,9 +1589,12 @@ function AuditList({
               title={audit.auditId}
               type="button"
             >
-              <strong>{audit.auditId}</strong>
-              <span>{artifactStatusLabel(audit.status)} · {audit.requestedBy}</span>
-              <small>{formatTimestamp(audit.requestedAt)}</small>
+              <span className="v16-list-item-main">
+                <strong>{audit.auditId}</strong>
+                <span>{audit.requestedBy}</span>
+              </span>
+              <small>{artifactStatusLabel(audit.status)}</small>
+              <time>{formatTimestamp(audit.requestedAt)}</time>
             </button>
           ))}
         </div>
@@ -2165,6 +2201,52 @@ function workflowStageText(stage?: string | null) {
     "workspace-ready": "项目已准备好",
   };
   return stage ? labels[stage] ?? stage : "等待状态";
+}
+
+function titlebarStatusText(
+  appInteractionState: AppInteractionState,
+  stage: string | null | undefined,
+  selectedTask: V1Issue | null,
+) {
+  if (appInteractionState.lifecycle === "not-authenticated") {
+    return "not-authenticated";
+  }
+  if (appInteractionState.lifecycle === "first-run") {
+    return "first-run";
+  }
+  if (appInteractionState.lifecycle === "project-loading") {
+    return "loading";
+  }
+  if (appInteractionState.lifecycle === "error") {
+    return "error";
+  }
+  if (appInteractionState.lifecycle === "workspace-blocked") {
+    return "blocked";
+  }
+
+  if (selectedTask?.displayStatus === "ready") {
+    return "waiting-for-codex";
+  }
+  if (selectedTask?.displayStatus === "in-progress") {
+    return "codex-running";
+  }
+  if (selectedTask?.displayStatus === "review") {
+    return "ready-for-audit";
+  }
+  if (selectedTask?.displayStatus === "done") {
+    return "delivered";
+  }
+
+  const labels: Record<string, string> = {
+    "audit-completed": "audit-completed",
+    "audit-requested": "audit-requested",
+    "delivery-ready": "ready-for-audit",
+    "execute-ready": "waiting-for-codex",
+    "input-ready": "needs-spec",
+    "workspace-ready": "workspace-ready",
+  };
+
+  return stage ? labels[stage] ?? stage : "workspace-ready";
 }
 
 function advancedCategorySummary(categoryId: string) {
