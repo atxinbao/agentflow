@@ -1292,22 +1292,24 @@ function TaskDetail({
           <RiskBadge risk={task.riskLevel || "normal"} />
         </div>
       </header>
-      <DescriptionList
-        items={[
-          ["智能体", "执行助手"],
-          ["状态", displayStatusLabelZh(task.displayStatus)],
-          ["风险", displayRiskLabelZh(task.riskLevel)],
-          ["交给 Codex", handedOff ? "已做本地标记" : "未标记"],
-          ["来源规格", task.projectId ?? "已确认规格"],
-        ]}
-      />
-      <SectionList title="范围" items={task.scope} />
-      <SectionList title="非目标" items={task.nonGoals} />
-      <SectionList title="验收标准" items={task.acceptanceCriteria} />
-      <SectionList title="相关文件" items={task.allowedFiles} />
-      <SectionList title="验证命令" items={task.validationCommands} />
-      <SectionList title="证据要求" items={task.evidenceRequired} />
-      <CopyableCodeBlock content={buildCodexHandoff(task)} maxHeight={210} title="Codex 任务包" />
+      <div className="v16-detail-document">
+        <DescriptionList
+          items={[
+            ["智能体", "执行助手"],
+            ["状态", displayStatusLabelZh(task.displayStatus)],
+            ["风险", displayRiskLabelZh(task.riskLevel)],
+            ["交给 Codex", handedOff ? "已做本地标记" : "未标记"],
+            ["来源规格", task.projectId ?? "已确认规格"],
+          ]}
+        />
+        <SectionList title="范围" items={task.scope} />
+        <SectionList title="非目标" items={task.nonGoals} />
+        <SectionList title="验收标准" items={task.acceptanceCriteria} />
+        <SectionList title="相关文件" items={task.allowedFiles} />
+        <SectionList title="验证命令" items={task.validationCommands} />
+        <SectionList title="证据要求" items={task.evidenceRequired} />
+        <CopyableCodeBlock content={buildCodexHandoff(task)} maxHeight={210} title="Codex 任务包" />
+      </div>
       {actionFeedback ? <p className="v16-feedback">{actionFeedback}</p> : null}
       <ActionBar sticky>
         {actions.map((action, index) => (
@@ -1463,18 +1465,20 @@ function DeliveryDetail({
           {delivery ? artifactStatusLabel(delivery.status) : "等待写回"}
         </StatusBadge>
       </header>
-      <div className="v16-summary-grid">
-        <MetricCard label="证据" value={outputStatusState.status?.summary.evidence ?? evidence.length} />
-        <MetricCard label="验证命令" value={selectedTask?.validationCommands.length ?? 0} />
-        <MetricCard label="变更文件" value={selectedTask?.allowedFiles.length ?? 0} />
-        <MetricCard label="缺失证据" value={outputStatusState.status?.summary.incompleteEvidence ?? 0} />
+      <div className="v16-detail-document">
+        <div className="v16-summary-grid">
+          <MetricCard label="证据" value={outputStatusState.status?.summary.evidence ?? evidence.length} />
+          <MetricCard label="验证命令" value={selectedTask?.validationCommands.length ?? 0} />
+          <MetricCard label="变更文件" value={selectedTask?.allowedFiles.length ?? 0} />
+          <MetricCard label="缺失证据" value={outputStatusState.status?.summary.incompleteEvidence ?? 0} />
+        </div>
+        <SectionList title="变更文件" items={selectedTask?.allowedFiles ?? ["等待 Codex 写回变更文件。"]} />
+        <SectionList title="验证命令" items={selectedTask?.validationCommands ?? ["等待验证命令。"]} />
+        <SectionList title="验证结果" items={[delivery ? "浏览器预览：验证记录已回填。" : "等待写回。"]} />
+        <SectionList title="证据文件" items={evidence.map((item) => item.path)} />
+        <SectionList title="交付记录" items={[delivery?.path ?? "暂无交付记录。"]} />
+        <SectionList title="越界检查" items={["普通页面只展示摘要；原始 JSON 在高级页查看。"]} />
       </div>
-      <SectionList title="变更文件" items={selectedTask?.allowedFiles ?? ["等待 Codex 写回变更文件。"]} />
-      <SectionList title="验证命令" items={selectedTask?.validationCommands ?? ["等待验证命令。"]} />
-      <SectionList title="验证结果" items={[delivery ? "浏览器预览：验证记录已回填。" : "等待写回。"]} />
-      <SectionList title="证据文件" items={evidence.map((item) => item.path)} />
-      <SectionList title="交付记录" items={[delivery?.path ?? "暂无交付记录。"]} />
-      <SectionList title="越界检查" items={["普通页面只展示摘要；原始 JSON 在高级页查看。"]} />
       <ActionBar sticky>
         <ActionButton disabled={!delivery} onClick={onOpenAudit} variant="primary">
           请求审计
@@ -1581,17 +1585,19 @@ function AuditReport({
           {artifactStatusLabel(selectedAudit?.status ?? report?.audit.status ?? "未请求")}
         </StatusBadge>
       </header>
-      <SectionList title="审计结论" items={[report?.reportMarkdown.split("\n").slice(0, 3).join(" ") || "选择交付并填写原因后可请求人工审计。"]} />
-      <SectionList
-        title="发现项"
-        items={findings.length ? findings.map((finding) => `${finding.severity ?? "info"}：${finding.summary ?? finding.id ?? "发现项"}`) : ["暂无发现项。"]}
-      />
-      <JsonSummary title="证据映射" value={report?.evidenceMap ?? { evidence: [], releaseDelivery: [] }} />
-      <JsonSummary title="追溯关系" value={report?.traceability ?? { spec: "waiting", issue: "waiting", delivery: "waiting" }} />
-      <SectionList title="范围检查" items={["对照规格、任务、交付和证据。"]} />
-      <SectionList title="验证检查" items={["检查验证命令是否记录并通过。"]} />
-      <SectionList title="处理建议" items={["建议：补充证据", "建议：返工", "建议：接受"]} />
-      <SectionList title="当前版本限制" items={["这里只读展示建议，不写接受 / 返工 / 补证据状态。"]} />
+      <div className="v16-detail-document">
+        <SectionList title="审计结论" items={[report?.reportMarkdown.split("\n").slice(0, 3).join(" ") || "选择交付并填写原因后可请求人工审计。"]} />
+        <SectionList
+          title="发现项"
+          items={findings.length ? findings.map((finding) => `${finding.severity ?? "info"}：${finding.summary ?? finding.id ?? "发现项"}`) : ["暂无发现项。"]}
+        />
+        <JsonSummary title="证据映射" value={report?.evidenceMap ?? { evidence: [], releaseDelivery: [] }} />
+        <JsonSummary title="追溯关系" value={report?.traceability ?? { spec: "waiting", issue: "waiting", delivery: "waiting" }} />
+        <SectionList title="范围检查" items={["对照规格、任务、交付和证据。"]} />
+        <SectionList title="验证检查" items={["检查验证命令是否记录并通过。"]} />
+        <SectionList title="处理建议" items={["建议：补充证据", "建议：返工", "建议：接受"]} />
+        <SectionList title="当前版本限制" items={["这里只读展示建议，不写接受 / 返工 / 补证据状态。"]} />
+      </div>
     </section>
   );
 }

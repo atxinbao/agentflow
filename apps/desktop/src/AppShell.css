@@ -1019,8 +1019,10 @@
 }
 
 .v16-detail-pane {
-  grid-template-rows: auto;
-  padding: 16px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .v16-list-pane {
@@ -1030,9 +1032,18 @@
   overflow: hidden;
 }
 
-.v16-detail-pane header {
+.v16-detail-pane > header {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  padding: 18px 18px 16px;
+  border-bottom: 1px solid var(--v16-border);
+}
+
+.v16-detail-pane > header h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
 }
 
 .v16-detail-badges {
@@ -1042,10 +1053,23 @@
   align-items: center;
 }
 
+.v16-detail-document {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+  padding: 16px 18px 18px;
+  overflow: auto;
+}
+
 .v16-section-list,
 .v16-json-summary {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--v16-border-soft);
+  background: var(--v16-surface-2);
 }
 
 .v16-section-list h3,
@@ -1055,9 +1079,16 @@
 }
 
 .v16-section-list li {
-  padding-left: 12px;
-  border-left: 2px solid var(--v16-border);
+  min-width: 0;
+  padding-left: 0;
+  border-left: 0;
   font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.v16-section-list li::marker {
+  color: var(--v16-accent);
 }
 
 .v16-action-bar {
@@ -1070,10 +1101,17 @@
 .v16-action-bar.sticky {
   position: sticky;
   bottom: 0;
-  margin: 0 -16px -16px;
-  padding: 12px 16px;
+  margin: 0;
+  padding: 12px 18px;
   border-top: 1px solid var(--v16-border);
   background: var(--v16-surface);
+}
+
+.v16-detail-pane > .v16-feedback {
+  margin: 0;
+  padding: 10px 18px;
+  border-top: 1px solid var(--v16-border-soft);
+  background: var(--v16-surface-2);
 }
 
 .v16-files-page {
