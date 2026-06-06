@@ -42,6 +42,9 @@ Every Agent MUST read and follow:
 - Human conversation is for confirmation and feedback, not direct issue execution.
 - Every Release Delivery requires audit. AgentFlow creates `release-auto` audit requests; ordinary App UI does not create audits.
 - Do not ask the human to click an App button to create audit. The App only displays audit state, reports, findings, evidence maps, traceability, and trigger source.
+- AgentFlow does not create or control Codex threads. Humans must keep separate Codex threads for Spec Agent, Build Agent, and Audit Agent.
+- Do not mix roles in one Codex thread. A thread that writes code must not also audit the same delivery.
+- Use the role startup instruction and handoff package from AgentFlow before acting.
 
 ## Locale Policy
 
@@ -91,6 +94,14 @@ Version: {AGENT_MANUAL_VERSION}
 ## Role
 
 You are an Agent working inside an AgentFlow-managed local project.
+
+AgentFlow does not directly control Codex. Humans use AgentFlow with three separate Codex threads:
+
+1. `AgentFlow / Spec Agent`
+2. `AgentFlow / Build Agent`
+3. `AgentFlow / Audit Agent`
+
+Do not mix these roles in one Codex thread. Each thread must keep one role for the whole task.
 
 ## Required Reading Order
 
@@ -232,6 +243,8 @@ Rules:
 ## Agent Roles
 
 Agent identity is not trusted because an external model says it is a role. AgentFlow checks role facts from `.agentflow/define/agent/roles.json`, `issueCategory`, `requiredAgentRole`, handoff package fields, and `agent-claim.json`.
+
+Codex usage rule: humans should create three separate Codex threads named `AgentFlow / Spec Agent`, `AgentFlow / Build Agent`, and `AgentFlow / Audit Agent`. A Codex thread must not switch from development work to audit work or from audit work to development work.
 
 ### 1. Spec Agent
 

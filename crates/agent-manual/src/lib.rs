@@ -113,10 +113,18 @@ mod tests {
         assert!(fs::read_to_string(dir.path().join("AGENTS.md"))
             .unwrap()
             .contains("requirement-intake-filter"));
+        assert!(fs::read_to_string(dir.path().join("AGENTS.md"))
+            .unwrap()
+            .contains("separate Codex threads for Spec Agent, Build Agent, and Audit Agent"));
         assert!(
             fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md"))
                 .unwrap()
                 .contains("Requirement intake filter")
+        );
+        assert!(
+            fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md"))
+                .unwrap()
+                .contains("AgentFlow / Build Agent")
         );
         assert!(
             fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md"))
@@ -238,6 +246,10 @@ mod tests {
         assert!(manual.contains("### 1. Spec Agent"));
         assert!(manual.contains("### 2. Build Agent"));
         assert!(manual.contains("### 3. Audit Agent"));
+        assert!(manual.contains("three separate Codex threads"));
+        assert!(
+            manual.contains("A Codex thread must not switch from development work to audit work")
+        );
         assert!(!manual.contains("### 3. Release Agent"));
         assert!(!manual.contains("### 4. Audit Agent"));
         assert!(manual.contains("Status: enabled for Execute + Release Delivery V1."));
