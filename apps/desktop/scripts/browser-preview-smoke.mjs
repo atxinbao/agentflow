@@ -120,9 +120,9 @@ try {
   assert.ok(appEntry.includes("请求人工审计"));
   assert.ok(appEntry.includes("displayStatusColumns"));
   assert.ok(stateStatusHook.includes("load_issue_status_index"));
-  assert.ok(appEntry.includes("Delivery Summary"));
-  assert.ok(appEntry.includes("Evidence Map"));
-  assert.ok(appEntry.includes("Traceability"));
+  assert.ok(appEntry.includes("交付摘要"));
+  assert.ok(appEntry.includes("证据映射"));
+  assert.ok(appEntry.includes("追溯关系"));
   assert.ok(appEntry.includes("AdvancedStateViewer"));
   assert.ok(appShellCss.includes(".v16-status-bar"));
   assert.ok(appShellCss.includes(".v16-task-board"));
