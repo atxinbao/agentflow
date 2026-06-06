@@ -910,7 +910,7 @@ function AppShell({
 }) {
   return (
     <AppFrame className="v16-app" data-agentflow-ux="v16">
-      <TitleBar connectedProvider={connectedProvider} projectName={projectName} projectRoot={projectRoot} />
+      <TitleBar projectName={projectName} projectRoot={projectRoot} />
       <ProjectTree activePage={activePage} onPageChange={onPageChange} projectName={projectName} />
       <section className={inspector ? "v16-workspace with-inspector" : "v16-workspace"}>
         {toolbar}
@@ -922,20 +922,12 @@ function AppShell({
   );
 }
 
-function TitleBar({
-  connectedProvider,
-  projectName,
-}: {
-  connectedProvider: Provider;
-  projectName: string;
-  projectRoot: string | null;
-}) {
+function TitleBar({ projectName }: { projectName: string; projectRoot: string | null }) {
   return (
     <TopBar className="v16-titlebar">
       <WindowDots />
       <div className="v16-titlebar-project">
         <strong>{projectName}</strong>
-        <span>{connectedProvider}</span>
       </div>
       <div className="v16-titlebar-right">
         <span className="v16-command-key">⌘K</span>
@@ -1062,9 +1054,7 @@ function ProjectHomePage({
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
       <PageHeader
-        description="先看下一步，再进入任务、交付或审计。内部 JSON 默认放在高级页。"
-        kicker="Project Home"
-        meta={<ReadOnlyBadge>本地只读</ReadOnlyBadge>}
+        description="查看下一步、当前任务和最近活动。"
         title="项目工作台"
       />
       <NextStepCard nextStep={nextStep} onOpenAudit={onOpenAudit} onOpenTasks={onOpenTasks} />
@@ -1734,13 +1724,13 @@ function CompanionShell({
   selectedTask: V1Issue | null;
 }) {
   return (
-    <Panel className="v16-companion-shell" title="Companion Mode" description="窄窗口模式只保留当前队列和当前 Issue。">
+    <Panel className="v16-companion-shell" title="协作模式" description="窄窗口模式只保留当前队列和当前任务。">
       <div className="v16-companion-grid">
-        <span>Issue Queue</span>
+        <span>任务队列</span>
         <strong>{selectedTask?.id ?? "等待任务"}</strong>
-        <span>Handoff</span>
+        <span>任务包</span>
         <strong>{selectedTask ? "可复制" : "未就绪"}</strong>
-        <span>Writeback Check</span>
+        <span>写回检查</span>
         <strong>手动检查</strong>
       </div>
       <ActionBar>

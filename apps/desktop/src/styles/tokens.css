@@ -1,8 +1,8 @@
 :root,
 .af-theme-light {
-  --af-bg: #eef2f6;
+  --af-bg: #ffffff;
   --af-surface: #ffffff;
-  --af-surface-muted: #f7f9fc;
+  --af-surface-muted: #f8fafc;
   --af-border: #d8e0ea;
   --af-border-strong: #aeb8c8;
   --af-text: #17202d;
@@ -17,7 +17,7 @@
   --af-statusbar-height: 30px;
 
   --af-surface-2: var(--af-surface-muted);
-  --af-surface-3: #edf2f8;
+  --af-surface-3: #eef4fb;
   --af-line: var(--af-border);
   --af-line-muted: #e5ebf2;
   --af-border-soft: #e5ebf2;
