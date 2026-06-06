@@ -5,8 +5,8 @@ pub mod storage;
 pub mod validate;
 
 pub use audit::{
-    load_audit_index, load_audit_manifest, load_audit_report, load_audit_status,
-    prepare_audit_workspace, request_human_audit,
+    ensure_release_auto_audits, load_audit_index, load_audit_manifest, load_audit_report,
+    load_audit_status, prepare_audit_workspace, request_human_audit,
 };
 pub use manager::{
     load_output_index, load_output_manifest, load_output_snapshot, load_output_status,
@@ -408,6 +408,46 @@ mod tests {
         }
         let index = load_audit_index(dir.path()).unwrap();
         assert_eq!(index.audits.len(), 1);
+    }
+
+    #[test]
+    fn prepare_output_workspace_creates_release_auto_audit_request() {
+        let dir = tempdir().unwrap();
+        prepare_output_workspace(dir.path()).unwrap();
+        write_evidence(dir.path(), "run-001");
+        write_release_delivery(dir.path(), "run-001");
+
+        prepare_output_workspace(dir.path()).unwrap();
+
+        let index = load_audit_index(dir.path()).unwrap();
+        assert_eq!(index.audits.len(), 1);
+        let audit = &index.audits[0];
+        assert_eq!(audit.status, AuditStatus::Requested);
+        assert_eq!(audit.trigger, AuditTrigger::ReleaseAuto);
+        assert_eq!(audit.source_run_id.as_deref(), Some("run-001"));
+        assert!(dir
+            .path()
+            .join(".agentflow/output/audit/audit-001/audit-request.json")
+            .is_file());
+        assert!(!dir
+            .path()
+            .join(".agentflow/output/audit/audit-001/audit.json")
+            .exists());
+    }
+
+    #[test]
+    fn release_auto_audit_request_is_idempotent() {
+        let dir = tempdir().unwrap();
+        prepare_output_workspace(dir.path()).unwrap();
+        write_evidence(dir.path(), "run-001");
+        write_release_delivery(dir.path(), "run-001");
+
+        prepare_output_workspace(dir.path()).unwrap();
+        prepare_output_workspace(dir.path()).unwrap();
+
+        let index = load_audit_index(dir.path()).unwrap();
+        assert_eq!(index.audits.len(), 1);
+        assert_eq!(index.audits[0].trigger, AuditTrigger::ReleaseAuto);
     }
 
     #[test]

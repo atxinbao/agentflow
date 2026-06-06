@@ -82,19 +82,13 @@ pub fn prepare_delivery_ready_fixture() -> Result<DeliveryReadyFixture> {
 
     let delivery_state = agentflow_state::refresh_state(root)?;
     anyhow::ensure!(
-        delivery_state.current_stage == WorkflowStage::DeliveryReady,
-        "expected delivery-ready, got {:?}",
+        delivery_state.current_stage == WorkflowStage::AuditRequested,
+        "expected audit-requested, got {:?}",
         delivery_state.current_stage
     );
     anyhow::ensure!(
-        delivery_state.audit_status == WorkflowAuditStatus::NotRequested,
-        "audit must not be requested before human action"
-    );
-    anyhow::ensure!(
-        delivery_state
-            .next_actions
-            .contains(&"request-human-audit".to_string()),
-        "delivery-ready next actions must include request-human-audit"
+        delivery_state.audit_status == WorkflowAuditStatus::Requested,
+        "release delivery must register release-auto audit request"
     );
 
     fixture.assert_user_files_unchanged()?;

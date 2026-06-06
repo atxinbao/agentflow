@@ -1,7 +1,7 @@
 # Next Requirements
 
 创建日期：2026-06-01
-更新日期：2026-06-06
+更新日期：2026-06-07
 执行者：Codex
 
 ## 状态
@@ -39,6 +39,11 @@
 - [018-agentflow-code-cleanup-rust-workspace.md](018-agentflow-code-cleanup-rust-workspace.md)
 - [019-agentflow-issue-status-enhancement.md](019-agentflow-issue-status-enhancement.md)
 - [021-agentflow-frontend-interaction-ux-v1.md](021-agentflow-frontend-interaction-ux-v1.md)
+- [022-agentflow-local-agents-management-v1.md](022-agentflow-local-agents-management-v1.md)
+- [023-agentflow-github-code-latest-svg-page-repair-v1.md](023-agentflow-github-code-latest-svg-page-repair-v1.md)
+- [024-agentflow-project-tree-multi-project-navigation-v1.md](024-agentflow-project-tree-multi-project-navigation-v1.md)
+- [025-agentflow-base-release-initialization-v1.md](025-agentflow-base-release-initialization-v1.md)
+- [026-agentflow-release-audit-trigger-rules-v1.md](026-agentflow-release-audit-trigger-rules-v1.md)
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 

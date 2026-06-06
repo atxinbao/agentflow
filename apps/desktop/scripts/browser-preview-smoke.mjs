@@ -86,7 +86,6 @@ try {
     ["advanced-details-drawer", "src/components/AdvancedDetailsDrawer.tsx"],
   ];
   const previewBranchIndex = outputPanel.indexOf("if (isBrowserPreviewRuntime()) {");
-  const previewOnlyGuardIndex = outputPanel.indexOf("if (previewOnly) {");
   const requestAuditInvokeIndex = outputPanel.indexOf('invoke<HumanAuditReport>("request_human_audit"');
 
   assert.equal(outputStatus.ready, true);
@@ -151,11 +150,10 @@ try {
   assert.ok(previewBranchIndex >= 0);
   assert.ok(outputPanel.includes("setReport(createBrowserPreviewHumanAuditReport())"));
   assert.ok(outputPanel.includes('setSource("preview")'));
-  assert.ok(outputPanel.includes('const previewOnly = source === "preview";'));
-  assert.ok(outputPanel.includes("previewOnly || !selectedDelivery"));
-  assert.ok(previewOnlyGuardIndex >= 0);
-  assert.ok(requestAuditInvokeIndex > previewOnlyGuardIndex);
-  assert.ok(outputPanel.includes("浏览器预览不写 .agentflow/output/audit"));
+  assert.equal(requestAuditInvokeIndex, -1);
+  assert.ok(outputPanel.includes("刷新审计状态"));
+  assert.ok(outputPanel.includes("Release 自动审计"));
+  assert.ok(outputPanel.includes("App 只展示审计状态，不创建审计。"));
   assert.ok(appEntry.includes("createBrowserPreviewProjectRegistry"));
   assert.ok(appEntry.includes("readProjectRegistry"));
   assert.ok(appEntry.includes("persistProjectRegistry"));
@@ -193,7 +191,8 @@ try {
   assert.ok(appEntry.includes("审计"));
   assert.ok(appEntry.includes("高级"));
   assert.ok(appEntry.includes("复制任务包"));
-  assert.ok(appEntry.includes("请求人工审计"));
+  assert.equal(appEntry.includes("请求人工审计"), false);
+  assert.ok(appEntry.includes("等待 Agent 审计"));
   assert.ok(appEntry.includes("displayStatusColumns"));
   assert.ok(stateStatusHook.includes("load_issue_status_index"));
   assert.ok(appEntry.includes("交付摘要"));

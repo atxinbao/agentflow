@@ -12,13 +12,14 @@ use agentflow_input::issue::{
 use agentflow_input::project::{InputProject, InputProjectStatus};
 use agentflow_output::{
     AuditCheckStatus, AuditChecks, AuditEvidenceMap, AuditFinding, AuditFindingSeverity,
-    AuditFindings, AuditRequest, AuditScope, AuditScopeRef, AuditStatus, AuditSummary,
-    AuditTraceability, AuditTraceabilityItem, HumanAudit, OutputCommandEvidence, OutputEvidence,
-    OutputEvidenceExecuteArtifacts, OutputEvidenceInput, OutputEvidencePanel, OutputManualProof,
-    OutputPrMetadata, OutputReleaseDelivery, OutputReleaseDeliveryArtifacts,
-    OutputValidationSummary, AUDIT_EVIDENCE_MAP_VERSION, AUDIT_FINDINGS_VERSION,
-    AUDIT_REQUEST_VERSION, AUDIT_TRACEABILITY_VERSION, OUTPUT_AUDIT_VERSION,
-    OUTPUT_EVIDENCE_VERSION, OUTPUT_PR_METADATA_VERSION, OUTPUT_RELEASE_DELIVERY_VERSION,
+    AuditFindings, AuditRequest, AuditRequestSource, AuditScope, AuditScopeRef, AuditStatus,
+    AuditSummary, AuditTraceability, AuditTraceabilityItem, AuditTrigger, HumanAudit,
+    OutputCommandEvidence, OutputEvidence, OutputEvidenceExecuteArtifacts, OutputEvidenceInput,
+    OutputEvidencePanel, OutputManualProof, OutputPrMetadata, OutputReleaseDelivery,
+    OutputReleaseDeliveryArtifacts, OutputValidationSummary, AUDIT_EVIDENCE_MAP_VERSION,
+    AUDIT_FINDINGS_VERSION, AUDIT_REQUEST_VERSION, AUDIT_TRACEABILITY_VERSION,
+    OUTPUT_AUDIT_VERSION, OUTPUT_EVIDENCE_VERSION, OUTPUT_PR_METADATA_VERSION,
+    OUTPUT_RELEASE_DELIVERY_VERSION,
 };
 use serde_json::{json, Value};
 use std::{
@@ -580,9 +581,17 @@ fn write_demo_audit(root: &Path) -> Result<(), String> {
     let request = AuditRequest {
         version: AUDIT_REQUEST_VERSION.to_string(),
         audit_id: audit_id.to_string(),
+        trigger: AuditTrigger::ReleaseAuto,
         requested_by: DEMO_SOURCE.to_string(),
         requested_at: now,
-        reason: "示例审计：展示人工审计报告如何呈现。".to_string(),
+        reason: "Release 已生成，AgentFlow 规则要求进行审计。".to_string(),
+        source: Some(AuditRequestSource {
+            kind: "release-delivery".to_string(),
+            delivery_id: Some(DEMO_DELIVERY_RUN_ID.to_string()),
+            run_id: Some(DEMO_DELIVERY_RUN_ID.to_string()),
+            issue_id: Some("AF-DEMO-004".to_string()),
+            spec_id: Some(DEMO_SPEC_ID.to_string()),
+        }),
         scope: AuditScope {
             description: "审计示例交付、证据和任务追溯。".to_string(),
             refs: vec![
@@ -617,8 +626,12 @@ fn write_demo_audit(root: &Path) -> Result<(), String> {
     let audit = HumanAudit {
         version: OUTPUT_AUDIT_VERSION.to_string(),
         audit_id: audit_id.to_string(),
+        trigger: AuditTrigger::ReleaseAuto,
         requested_by: DEMO_SOURCE.to_string(),
         requested_at: now,
+        source_delivery_id: Some(DEMO_DELIVERY_RUN_ID.to_string()),
+        source_run_id: Some(DEMO_DELIVERY_RUN_ID.to_string()),
+        source_issue_id: Some("AF-DEMO-004".to_string()),
         status: AuditStatus::PassedWithWarnings,
         summary: AuditSummary {
             checks: 7,
@@ -657,7 +670,7 @@ fn write_demo_audit(root: &Path) -> Result<(), String> {
             title: "示例审计只用于演示".to_string(),
             detail: "这条审计来自 AgentFlow 本地示例数据，不代表真实交付结论。".to_string(),
             evidence_path: format!(".agentflow/output/evidence/{DEMO_DELIVERY_RUN_ID}.json"),
-            recommendation: "真实交付完成后再请求人工审计。".to_string(),
+            recommendation: "真实交付完成后等待 Agent 写入审计报告。".to_string(),
         }],
     };
     let evidence_map = AuditEvidenceMap {

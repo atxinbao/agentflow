@@ -30,7 +30,6 @@ export type TaskInteractionAction =
   | "mark-handed-off"
   | "check-writeback"
   | "view-delivery"
-  | "request-audit"
   | "view-audit"
   | "readonly";
 
@@ -146,7 +145,7 @@ export function taskActionsForStatus(status: IssueDisplayStatus = "backlog"): Ta
     done: ["view-delivery", "view-audit"],
     "in-progress": ["mark-handed-off", "check-writeback"],
     ready: ["copy-handoff"],
-    review: ["view-delivery", "request-audit"],
+    review: ["view-delivery", "view-audit"],
   };
   return actions[status];
 }
@@ -157,7 +156,6 @@ export function taskActionLabel(action: TaskInteractionAction) {
     "copy-handoff": "复制任务包",
     "mark-handed-off": "我已交给 Codex",
     readonly: "只读查看",
-    "request-audit": "请求审计",
     "view-audit": "查看审计",
     "view-delivery": "查看交付",
     "view-requirement": "查看需求",

@@ -270,6 +270,8 @@ pub struct OutputValidationReport {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AuditStatus {
+    Requested,
+    Running,
     Passed,
     PassedWithWarnings,
     Failed,
@@ -279,10 +281,34 @@ pub enum AuditStatus {
 impl AuditStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Self::Requested => "requested",
+            Self::Running => "running",
             Self::Passed => "passed",
             Self::PassedWithWarnings => "passed-with-warnings",
             Self::Failed => "failed",
             Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AuditTrigger {
+    HumanViaAgent,
+    ReleaseAuto,
+}
+
+impl Default for AuditTrigger {
+    fn default() -> Self {
+        Self::HumanViaAgent
+    }
+}
+
+impl AuditTrigger {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::HumanViaAgent => "human-via-agent",
+            Self::ReleaseAuto => "release-auto",
         }
     }
 }
@@ -336,6 +362,8 @@ pub struct AuditPaths {
 #[serde(rename_all = "camelCase")]
 pub struct AuditManifestSummary {
     pub audits: usize,
+    pub requested: usize,
+    pub running: usize,
     pub passed: usize,
     pub passed_with_warnings: usize,
     pub failed: usize,
@@ -357,8 +385,18 @@ pub struct AuditManifest {
 pub struct AuditIndexEntry {
     pub audit_id: String,
     pub status: AuditStatus,
+    #[serde(default)]
+    pub trigger: AuditTrigger,
     pub requested_by: String,
     pub requested_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_delivery_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_issue_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_spec_id: Option<String>,
     pub report_path: String,
     pub audit_path: String,
 }
@@ -405,12 +443,30 @@ pub struct HumanAuditRequestDraft {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AuditRequestSource {
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuditRequest {
     pub version: String,
     pub audit_id: String,
+    #[serde(default)]
+    pub trigger: AuditTrigger,
     pub requested_by: String,
     pub requested_at: u64,
     pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<AuditRequestSource>,
     pub scope: AuditScope,
 }
 
@@ -455,8 +511,16 @@ impl AuditChecks {
 pub struct HumanAudit {
     pub version: String,
     pub audit_id: String,
+    #[serde(default)]
+    pub trigger: AuditTrigger,
     pub requested_by: String,
     pub requested_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_delivery_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_issue_id: Option<String>,
     pub status: AuditStatus,
     pub summary: AuditSummary,
     pub checks: AuditChecks,

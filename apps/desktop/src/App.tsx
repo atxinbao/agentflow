@@ -597,22 +597,13 @@ function App() {
       return;
     }
 
-    if (action === "request-audit") {
-      const delivery = findDeliveryForTask(outputBundle.outputIndex?.releaseDeliveries ?? [], task.id);
-      if (delivery) {
-        setSelectedDeliveryRunId(delivery.runId);
-      }
-      setActivePage("audit");
-      return;
-    }
-
     if (action === "view-audit") {
       const audit = outputBundle.auditIndex?.audits.at(-1) ?? null;
       if (audit) {
         setSelectedAuditId(audit.auditId);
         setActivePage("audit");
       } else {
-        setTaskActionFeedback("还没有审计报告。交付完成后可以请求审计。");
+        setTaskActionFeedback("还没有审计报告。Release 生成后，AgentFlow 规则会要求 Agent 完成审计。");
       }
       return;
     }
@@ -872,9 +863,12 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
       invoke<AuditIndex>("load_audit_index", { projectRoot }),
     ])
       .then(async ([outputIndex, auditIndex]) => {
-        const latestAudit = [...auditIndex.audits].sort((left, right) => left.requestedAt - right.requestedAt).at(-1);
-        const auditReport = latestAudit
-          ? await invoke<HumanAuditReport>("load_audit_report", { auditId: latestAudit.auditId, projectRoot })
+        const latestAuditWithReport = [...auditIndex.audits]
+          .filter((audit) => auditHasReport(audit))
+          .sort((left, right) => left.requestedAt - right.requestedAt)
+          .at(-1);
+        const auditReport = latestAuditWithReport
+          ? await invoke<HumanAuditReport>("load_audit_report", { auditId: latestAuditWithReport.auditId, projectRoot })
           : null;
 
         if (!cancelled) {
@@ -1941,6 +1935,7 @@ function DeliveryPage({
         selectedDeliveryRunId={deliveryInteractionState.selectedDeliveryRunId}
       />
       <DeliveryDetail
+        audits={outputBundle.auditIndex?.audits ?? []}
         delivery={selectedDelivery}
         evidence={evidence}
         onOpenAudit={onOpenAudit}
@@ -1993,18 +1988,22 @@ function DeliveryList({
 }
 
 function DeliveryDetail({
+  audits,
   delivery,
   evidence,
   onOpenAudit,
   outputStatusState,
   selectedTask,
 }: {
+  audits: AuditIndexEntry[];
   delivery: OutputIndexEntry | null;
   evidence: OutputIndexEntry[];
   onOpenAudit: () => void;
   outputStatusState: OutputStatusState;
   selectedTask: V1Issue | null;
 }) {
+  const deliveryAudit = delivery ? findAuditForDelivery(audits, delivery.runId) : null;
+  const auditDisplay = deliveryAuditStatus(delivery, deliveryAudit);
   return (
     <section className="v16-detail-pane" aria-label="交付详情">
       <header>
@@ -2038,6 +2037,7 @@ function DeliveryDetail({
         <SectionList title="变更文件" items={selectedTask?.allowedFiles ?? ["等待 Codex 写回变更文件。"]} />
         <SectionList title="验证命令" items={selectedTask?.validationCommands ?? ["等待验证命令。"]} />
         <SectionList title="验证结果" items={[delivery ? `状态：${artifactStatusLabel(delivery.status)}` : "等待写回。"]} />
+        <SectionList title="审计状态" items={[auditDisplay.detail]} />
         <SectionList
           id="v16-delivery-evidence"
           title="证据"
@@ -2046,8 +2046,8 @@ function DeliveryDetail({
         <SectionList title="越界检查" items={["普通页面只展示摘要；原始路径和 JSON 在高级页查看。"]} />
       </div>
       <ActionBar sticky>
-        <ActionButton disabled={!delivery} onClick={onOpenAudit} variant="primary">
-          请求审计
+        <ActionButton disabled={!auditDisplay.canOpenReport} onClick={onOpenAudit} variant="primary">
+          {auditDisplay.actionLabel}
         </ActionButton>
         <ActionButton disabled={!evidence.length} onClick={() => document.getElementById("v16-delivery-evidence")?.scrollIntoView({ block: "nearest" })} variant="secondary">
           查看证据
@@ -2109,7 +2109,7 @@ function AuditList({
             >
               <span className="v16-list-item-main">
                 <strong>{audit.auditId}</strong>
-                <span>{audit.requestedBy}</span>
+                <span>{auditTriggerLabel(audit.trigger)}</span>
               </span>
               <small>{artifactStatusLabel(audit.status)}</small>
               <time>{formatTimestamp(audit.requestedAt)}</time>
@@ -2117,7 +2117,7 @@ function AuditList({
           ))}
         </div>
       ) : (
-        <p className="v16-empty-text">还没有请求人工审计。</p>
+        <p className="v16-empty-text">还没有审计记录。</p>
       )}
     </aside>
   );
@@ -2130,31 +2130,63 @@ function AuditReport({
   report: HumanAuditReport | null;
   selectedAudit: AuditIndexEntry | null;
 }) {
+  type AuditFindingSummary = {
+    findingId?: string;
+    id?: string;
+    severity?: string;
+    summary?: string;
+    title?: string;
+  };
   const findings = Array.isArray(report?.findings)
-    ? (report.findings as Array<{ id?: string; severity?: string; summary?: string }>)
+    ? (report.findings as AuditFindingSummary[])
+    : Array.isArray((report?.findings as { findings?: unknown[] } | undefined)?.findings)
+      ? (report?.findings as { findings: AuditFindingSummary[] }).findings
     : [];
+  const trigger = report?.request.trigger ?? report?.audit.trigger ?? selectedAudit?.trigger;
+  const sourceRunId =
+    report?.request.source?.runId ?? report?.audit.sourceRunId ?? selectedAudit?.sourceRunId ?? selectedAudit?.sourceDeliveryId;
+  const sourceIssueId =
+    report?.request.source?.issueId ?? report?.audit.sourceIssueId ?? selectedAudit?.sourceIssueId;
 
   return (
     <section className="v16-detail-pane" aria-label="审计报告详情">
       <header>
         <p className="v16-kicker">审计报告</p>
-        <h2>{selectedAudit?.auditId ?? report?.audit.auditId ?? "未请求审计"}</h2>
+        <h2>{selectedAudit?.auditId ?? report?.audit.auditId ?? "未登记审计"}</h2>
         <StatusBadge status={selectedAudit || report ? "warning" : "idle"}>
-          {artifactStatusLabel(selectedAudit?.status ?? report?.audit.status ?? "未请求")}
+          {artifactStatusLabel(selectedAudit?.status ?? report?.audit.status ?? "未登记")}
         </StatusBadge>
       </header>
       <div className="v16-detail-document">
-        <SectionList title="审计结论" items={[report?.reportMarkdown.split("\n").slice(0, 3).join(" ") || "选择交付并填写原因后可请求人工审计。"]} />
+        <SectionList
+          title="触发来源"
+          items={[
+            auditTriggerLabel(trigger),
+            sourceRunId ? `关联交付：${sourceRunId}` : "关联交付：等待 Agent 写入",
+            sourceIssueId ? `关联任务：${sourceIssueId}` : "关联任务：等待 Agent 写入",
+          ]}
+        />
+        <SectionList
+          title="审计结论"
+          items={[
+            report?.reportMarkdown.split("\n").slice(0, 3).join(" ") ||
+              "Release 已生成，AgentFlow 规则要求 Agent 完成审计。App 只展示状态，不创建审计。",
+          ]}
+        />
         <SectionList
           title="发现项"
-          items={findings.length ? findings.map((finding) => `${finding.severity ?? "info"}：${finding.summary ?? finding.id ?? "发现项"}`) : ["暂无发现项。"]}
+          items={
+            findings.length
+              ? findings.map((finding) => `${finding.severity ?? "info"}：${finding.summary ?? finding.title ?? finding.id ?? finding.findingId ?? "发现项"}`)
+              : ["暂无发现项。"]
+          }
         />
         <HumanSummaryTable title="证据链" rows={summaryRowsFromValue(report?.evidenceMap, "等待交付证据。")} />
         <HumanSummaryTable title="追溯关系" rows={summaryRowsFromValue(report?.traceability, "等待审计追溯关系。")} />
         <SectionList title="范围检查" items={["对照规格、任务、交付和证据。"]} />
         <SectionList title="验证检查" items={["检查验证命令是否记录并通过。"]} />
-        <SectionList title="处理建议" items={["建议：补充证据", "建议：返工", "建议：接受"]} />
-        <SectionList title="当前版本限制" items={["这里只读展示建议，不写接受 / 返工 / 补证据状态。"]} />
+        <SectionList title="处理建议" items={["等待审计报告写入后展示。"]} />
+        <SectionList title="当前版本限制" items={["这里只读展示审计状态和报告，不写处理结果。"]} />
       </div>
     </section>
   );
@@ -2713,6 +2745,57 @@ function findDeliveryForTask(deliveries: OutputIndexEntry[], taskId: string) {
     .find((delivery) => delivery.issueId === taskId || delivery.runId.includes(taskId)) ?? null;
 }
 
+function auditHasReport(audit: AuditIndexEntry | null | undefined) {
+  return Boolean(audit && audit.status !== "requested" && audit.status !== "running");
+}
+
+function findAuditForDelivery(audits: AuditIndexEntry[], deliveryRunId: string) {
+  return [...audits]
+    .reverse()
+    .find(
+      (audit) =>
+        audit.sourceRunId === deliveryRunId ||
+        audit.sourceDeliveryId === deliveryRunId ||
+        audit.auditId.includes(deliveryRunId),
+    ) ?? null;
+}
+
+function deliveryAuditStatus(delivery: OutputIndexEntry | null, audit: AuditIndexEntry | null) {
+  if (!delivery) {
+    return {
+      actionLabel: "等待交付",
+      canOpenReport: false,
+      detail: "还没有 Release Delivery。",
+    };
+  }
+  if (!audit) {
+    return {
+      actionLabel: "审计缺失",
+      canOpenReport: false,
+      detail: "Release 已生成，但审计请求缺失。AgentFlow 规则要求 Agent 完成审计。",
+    };
+  }
+  if (audit.status === "requested") {
+    return {
+      actionLabel: "等待 Agent 审计",
+      canOpenReport: false,
+      detail: `${auditTriggerLabel(audit.trigger)}已登记，等待 Agent 写入审计报告。`,
+    };
+  }
+  if (audit.status === "running") {
+    return {
+      actionLabel: "审计中",
+      canOpenReport: false,
+      detail: `${auditTriggerLabel(audit.trigger)}正在进行。`,
+    };
+  }
+  return {
+    actionLabel: "查看审计报告",
+    canOpenReport: true,
+    detail: `审计状态：已完成。${auditTriggerLabel(audit.trigger)}，结果：${artifactStatusLabel(audit.status)}。`,
+  };
+}
+
 function buildRecentActivities(
   workspaceData: WorkspaceDataState,
   outputBundle: OutputBundleState,
@@ -2805,11 +2888,11 @@ function buildNextStep(
 
   if ((outputStatus.status?.summary.releaseDeliveries ?? 0) > 0) {
     return {
-      action: "请求人工审计",
-      description: "Codex 已经返回交付材料，可以请求人工审计。",
-      reason: "交付页已有交付、证据和验证摘要。",
+      action: "查看审计状态",
+      description: "Release 已生成，AgentFlow 规则要求 Agent 完成审计。",
+      reason: "交付页已有交付、证据和验证摘要；审计由 Agent 工作流触发。",
       status: "ready",
-      title: "可以审计交付结果",
+      title: "等待 Agent 审计交付",
     };
   }
 
@@ -2871,9 +2954,18 @@ function buildCodexHandoff(task: V1Issue) {
 
 function buildNextActionLabel(action: string) {
   const labels: Record<string, string> = {
+    "release-auto-audit-required": "等待 Agent 审计",
     "start-new-input": "告诉 Agent 你想做什么",
   };
   return labels[action] ?? action;
+}
+
+function auditTriggerLabel(trigger?: string | null) {
+  const labels: Record<string, string> = {
+    "human-via-agent": "人类通过 Agent 触发",
+    "release-auto": "Release 自动审计",
+  };
+  return labels[trigger ?? ""] ?? "审计规则";
 }
 
 function artifactStatusLabel(status?: string | null) {
@@ -2889,9 +2981,11 @@ function artifactStatusLabel(status?: string | null) {
     missing: "缺失",
     pass: "通过",
     passed: "通过",
+    "passed-with-warnings": "通过，有警告",
     pending: "待处理",
     ready: "就绪",
     requested: "已请求",
+    running: "审计中",
     review: "待审计",
     validated: "已验证",
     waiting: "等待",
@@ -3025,7 +3119,7 @@ function titlebarStatusText(
 
 function advancedCategorySummary(categoryId: string) {
   const summaries: Record<string, string> = {
-    audit: "展示审计索引和报告快照。这里不接受、返工或补证据。",
+    audit: "展示审计索引和报告快照。这里不写处理结果。",
     execute: "展示执行状态快照。这里不继续执行，不清理锁。",
     initialization: "展示基础发布初始化摘要。这里不重跑初始化，不删除示例数据。",
     input: "展示需求和 Issue 状态快照。普通页面只展示人能读懂的摘要。",

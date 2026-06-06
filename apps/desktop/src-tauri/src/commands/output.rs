@@ -1,7 +1,7 @@
 //! Output commands expose delivery/evidence/audit status to Desktop.
 //!
-//! Human-triggered audit is the only Desktop-authorized output write path here.
-//! It writes only `.agentflow/output/audit/<audit-id>/**`.
+//! Desktop普通界面只读展示审计状态和报告。human-via-agent 写入能力
+//! 保留在底层库和本地测试里，不注册为普通 Tauri 命令。
 
 #[tauri::command]
 pub(crate) fn load_output_status(
@@ -38,7 +38,6 @@ pub(crate) fn validate_output(
     agentflow_output::validate_output(project_root).map_err(|error| error.to_string())
 }
 
-#[tauri::command]
 pub(crate) fn request_human_audit(
     project_root: String,
     draft: agentflow_output::HumanAuditRequestDraft,

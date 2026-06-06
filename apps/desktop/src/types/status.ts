@@ -275,13 +275,19 @@ export type OutputIndex = {
   audits: OutputIndexEntry[];
 };
 
-export type AuditStatus = "passed" | "passed-with-warnings" | "failed" | "cancelled";
+export type AuditStatus = "requested" | "running" | "passed" | "passed-with-warnings" | "failed" | "cancelled";
+export type AuditTrigger = "human-via-agent" | "release-auto";
 
 export type AuditIndexEntry = {
   auditId: string;
   status: AuditStatus;
+  trigger?: AuditTrigger;
   requestedBy: string;
   requestedAt: number;
+  sourceDeliveryId?: string | null;
+  sourceRunId?: string | null;
+  sourceIssueId?: string | null;
+  sourceSpecId?: string | null;
   reportPath: string;
   auditPath: string;
 };
@@ -292,29 +298,27 @@ export type AuditIndex = {
   audits: AuditIndexEntry[];
 };
 
-export type AuditScopeRef = {
-  kind: string;
-  id: string;
-  path: string;
-};
-
-export type AuditScope = {
-  description: string;
-  refs: AuditScopeRef[];
-};
-
-export type HumanAuditRequestDraft = {
-  reason: string;
-  scope: AuditScope;
-};
-
 export type HumanAuditReport = {
-  request: unknown;
+  request: {
+    trigger?: AuditTrigger;
+    source?: {
+      kind?: string;
+      deliveryId?: string | null;
+      runId?: string | null;
+      issueId?: string | null;
+      specId?: string | null;
+    } | null;
+    [key: string]: unknown;
+  };
   audit: {
     auditId: string;
     status: AuditStatus;
+    trigger?: AuditTrigger;
     requestedBy: string;
     requestedAt: number;
+    sourceDeliveryId?: string | null;
+    sourceRunId?: string | null;
+    sourceIssueId?: string | null;
     summary?: unknown;
     checks?: unknown;
     paths?: Record<string, string>;

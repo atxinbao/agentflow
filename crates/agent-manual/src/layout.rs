@@ -534,6 +534,10 @@ These artifacts are written under:
 
 `.agentflow/output/release/<run-id>/`
 
+After Release Delivery exists, AgentFlow must ensure one `release-auto` audit request under:
+
+`.agentflow/output/audit/<audit-id>/audit-request.json`
+
 ## V1 Boundary
 
 Build Agent may prepare release delivery artifacts.
@@ -548,6 +552,7 @@ Build Agent must not:
 - modify Approved SPEC
 - modify input issue facts
 - write audit reports
+- create duplicate `release-auto` audit requests for the same Release Delivery
 
 ## Required Inputs
 
@@ -557,6 +562,14 @@ Build Agent must not:
 - output evidence
 - changed-files summary
 - validation result
+
+## Audit Handoff
+
+Build Agent stops after release delivery and evidence are written.
+
+Audit Agent completes the matching `release-auto` audit request.
+
+The ordinary App UI only displays audit state and report material. It must not create audits.
 
 ## Required Outputs
 
@@ -576,11 +589,23 @@ Audit is the code review and risk review working manual for future Audit Agent e
 
 ## Rules
 
-- Audit Agent is currently not authorized yet.
-- Future audit checks SPEC alignment, boundary compliance, architecture impact, security / permission / path / data-write risk, test coverage, legacy reintroduction, unauthorized execution, unauthorized writes, model calls, and evidence completeness.
+- Audit Agent is enabled for Release Audit V1.
+- Audit Agent completes existing `release-auto` and `human-via-agent` audit requests.
+- Audit checks SPEC alignment, boundary compliance, architecture impact, permission / path / data-write risk, test coverage, legacy reintroduction, unauthorized execution, unauthorized writes, model calls, and evidence completeness.
 - Audit output belongs under `.agentflow/output/audit/`.
+- The same Release Delivery must not have duplicate `release-auto` audit requests.
+- Human conversation can ask an Agent for `human-via-agent` audit. The ordinary App UI must not create audits.
+
+## Required Outputs
+
+- audit.json
+- audit-report.md
+- findings.json
+- checklist.md
+- evidence-map.json
+- traceability.json
 
 ## V1 Boundary
 
-V1 creates this manual only. It does not generate audit reports.
+Audit Agent writes only audit artifacts for the selected audit request. It must not modify source code, input facts, execute artifacts, release delivery, remote objects, or project commands.
 "#;

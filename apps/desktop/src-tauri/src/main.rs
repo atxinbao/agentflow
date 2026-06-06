@@ -49,7 +49,6 @@ fn main() {
             commands::output::load_output_index,
             commands::output::load_output_snapshot,
             commands::output::validate_output,
-            commands::output::request_human_audit,
             commands::output::load_audit_report,
             commands::output::load_audit_index,
             commands::output::load_audit_status,

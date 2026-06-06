@@ -25,11 +25,11 @@ mod tests {
         let project_root = ready.fixture.root().display().to_string();
 
         let status = state::load_state_status(project_root.clone()).unwrap();
-        assert_eq!(status.current_stage, WorkflowStage::DeliveryReady);
+        assert_eq!(status.current_stage, WorkflowStage::AuditRequested);
         let gates = state::load_workflow_gates(project_root.clone()).unwrap();
-        assert_eq!(gates.current_stage, WorkflowStage::DeliveryReady);
+        assert_eq!(gates.current_stage, WorkflowStage::AuditRequested);
         let actions = state::load_next_actions(project_root.clone()).unwrap();
-        assert!(actions
+        assert!(!actions
             .actions
             .iter()
             .any(|action| action.action == "request-human-audit" && action.allowed));
@@ -46,7 +46,7 @@ mod tests {
         )
         .unwrap();
         let audit_index = output::load_audit_index(project_root.clone()).unwrap();
-        assert_eq!(audit_index.audits.len(), 1);
+        assert_eq!(audit_index.audits.len(), 2);
         let loaded_report =
             output::load_audit_report(project_root.clone(), report.audit.audit_id.clone()).unwrap();
         assert!(!loaded_report.report_markdown.trim().is_empty());
