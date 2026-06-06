@@ -142,6 +142,7 @@ pub fn ensure_release_auto_audits(project_root: impl AsRef<Path>) -> Result<Audi
         }
         write_release_auto_audit_request(&root, &release)?;
     }
+    backfill_release_auto_audit_issues_from_requests(&root)?;
 
     rebuild_audit_manifest_and_index(&root)?;
     rebuild_output_index(&root)?;
@@ -312,7 +313,50 @@ fn next_audit_id(root: &Path) -> Result<String> {
 }
 
 fn write_release_auto_audit_issue(root: &Path, release: &OutputReleaseDelivery) -> Result<()> {
-    let issue_id = release_auto_audit_issue_id(&release.run_id);
+    write_release_auto_audit_issue_record(root, &release.run_id, &release.source_spec_id)
+}
+
+fn backfill_release_auto_audit_issues_from_requests(root: &Path) -> Result<()> {
+    for path in sorted_child_paths(&root.join(".agentflow/output/audit"))? {
+        let request_path = path.join("audit-request.json");
+        if !request_path.is_file() {
+            continue;
+        }
+        let Ok(request) = read_json::<AuditRequest>(&request_path) else {
+            continue;
+        };
+        if !matches!(request.trigger, AuditTrigger::ReleaseAuto) {
+            continue;
+        }
+        let Some(release_id) = release_id_from_audit_request(&request) else {
+            continue;
+        };
+        let source_spec_id = request
+            .source
+            .as_ref()
+            .and_then(|source| source.spec_id.clone())
+            .or_else(|| scope_id(&request.scope.refs, "spec"))
+            .unwrap_or_else(|| "unknown-spec".to_string());
+        write_release_auto_audit_issue_record(root, &release_id, &source_spec_id)?;
+    }
+    Ok(())
+}
+
+fn release_id_from_audit_request(request: &AuditRequest) -> Option<String> {
+    request
+        .source
+        .as_ref()
+        .and_then(|source| source.delivery_id.clone().or_else(|| source.run_id.clone()))
+        .or_else(|| scope_id(&request.scope.refs, "release-delivery"))
+        .or_else(|| scope_id(&request.scope.refs, "execute-run"))
+}
+
+fn write_release_auto_audit_issue_record(
+    root: &Path,
+    release_id: &str,
+    source_spec_id: &str,
+) -> Result<()> {
+    let issue_id = release_auto_audit_issue_id(release_id);
     let issue_dir = root.join(".agentflow/input/issues");
     ensure_directory(&issue_dir)?;
     let issue_path = issue_dir.join(format!("{issue_id}.json"));
@@ -327,12 +371,12 @@ fn write_release_auto_audit_issue(root: &Path, release: &OutputReleaseDelivery) 
         issue_model: InputIssueModel::Direct,
         issue_category: IssueCategory::Audit,
         required_agent_role: AgentRole::AuditAgent,
-        source_spec_id: release.source_spec_id.clone(),
+        source_spec_id: source_spec_id.to_string(),
         project_id: None,
-        title: format!("审计 Release {}", release.run_id),
+        title: format!("审计 Release {release_id}"),
         summary: format!(
             "检查 {} 是否符合已确认需求、任务、证据和交付边界。",
-            release.run_id
+            release_id
         ),
         kind: InputIssueKind::Validation,
         priority: InputPriority::High,
@@ -340,7 +384,7 @@ fn write_release_auto_audit_issue(root: &Path, release: &OutputReleaseDelivery) 
         display_status: DisplayStatus::Ready,
         risk_level: InputRiskLevel::High,
         scope: vec![
-            format!("读取 {} 的 delivery.json", release.run_id),
+            format!("读取 {release_id} 的 delivery.json"),
             "读取关联 SPEC / Issue / Evidence".to_string(),
             "检查验证命令和结果".to_string(),
             "检查是否有越界改动".to_string(),
@@ -367,8 +411,8 @@ fn write_release_auto_audit_issue(root: &Path, release: &OutputReleaseDelivery) 
         panel: InputPanelLink::default(),
         audit: Some(InputIssueAudit {
             trigger: "release-auto".to_string(),
-            source_release_id: release.run_id.clone(),
-            source_run_id: Some(release.run_id.clone()),
+            source_release_id: release_id.to_string(),
+            source_run_id: Some(release_id.to_string()),
             expected_outputs: vec![
                 "audit.json".to_string(),
                 "audit-report.md".to_string(),

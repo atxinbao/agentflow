@@ -44,14 +44,29 @@
 - [024-agentflow-project-tree-multi-project-navigation-v1.md](024-agentflow-project-tree-multi-project-navigation-v1.md)
 - [025-agentflow-base-release-initialization-v1.md](025-agentflow-base-release-initialization-v1.md)
 - [026-agentflow-release-audit-trigger-rules-v1.md](026-agentflow-release-audit-trigger-rules-v1.md)
+- [027-agentflow-agent-role-descriptor-and-issue-guard-v1.md](027-agentflow-agent-role-descriptor-and-issue-guard-v1.md)
+- [028-agentflow-codex-role-usage-guide-v1.md](028-agentflow-codex-role-usage-guide-v1.md)
+- [029-agentflow-dogfood-cutover-cleanup-and-start-v1.md](029-agentflow-dogfood-cutover-cleanup-and-start-v1.md) = dogfood cutover baseline
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 
-## 当前前端设计基线
+## Dogfood Cutover 基线
 
-- [015-human-agent-guided-experience-v1.md](015-human-agent-guided-experience-v1.md) = historical design reference
-- [017-agentflow-unified-ux-spec-v16-pr33-merged.md](017-agentflow-unified-ux-spec-v16-pr33-merged.md) = current frontend implementation baseline
-- [021-agentflow-frontend-interaction-ux-v1.md](021-agentflow-frontend-interaction-ux-v1.md) = current frontend interaction baseline
+- [024-agentflow-project-tree-multi-project-navigation-v1.md](024-agentflow-project-tree-multi-project-navigation-v1.md) = current base workspace baseline
+- [025-agentflow-base-release-initialization-v1.md](025-agentflow-base-release-initialization-v1.md) = current base release initialization baseline
+- [026-agentflow-release-audit-trigger-rules-v1.md](026-agentflow-release-audit-trigger-rules-v1.md) = current release audit trigger baseline
+- [027-agentflow-agent-role-descriptor-and-issue-guard-v1.md](027-agentflow-agent-role-descriptor-and-issue-guard-v1.md) = current role guard baseline
+- [028-agentflow-codex-role-usage-guide-v1.md](028-agentflow-codex-role-usage-guide-v1.md) = current Codex role usage baseline
+- [029-agentflow-dogfood-cutover-cleanup-and-start-v1.md](029-agentflow-dogfood-cutover-cleanup-and-start-v1.md) = dogfood cutover baseline
+
+## 历史设计参考
+
+- [015-human-agent-guided-experience-v1.md](015-human-agent-guided-experience-v1.md) = historical design reference / pre-base requirement / superseded by dogfood workflow
+- [017-agentflow-unified-ux-spec-v16-pr33-merged.md](017-agentflow-unified-ux-spec-v16-pr33-merged.md) = historical design reference / pre-base requirement / superseded by dogfood workflow
+- [018-agentflow-code-cleanup-rust-workspace.md](018-agentflow-code-cleanup-rust-workspace.md) = pre-base cleanup reference / superseded by dogfood workflow
+- [019-agentflow-issue-status-enhancement.md](019-agentflow-issue-status-enhancement.md) = pre-base status reference / superseded by dogfood workflow
+- [021-agentflow-frontend-interaction-ux-v1.md](021-agentflow-frontend-interaction-ux-v1.md) = historical design reference / pre-base requirement / superseded by dogfood workflow
+- [023-agentflow-github-code-latest-svg-page-repair-v1.md](023-agentflow-github-code-latest-svg-page-repair-v1.md) = historical design reference / pre-base requirement / superseded by dogfood workflow
 
 ## 背景
 

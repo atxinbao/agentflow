@@ -361,6 +361,43 @@ mod tests {
     }
 
     #[test]
+    fn prepare_workspace_agentflow_repo_seeds_dogfood_cutover_issue() {
+        let dir = tempdir().unwrap();
+        initialize_git_repo_with_commit(dir.path());
+        write_agentflow_project_markers(dir.path());
+
+        let summary =
+            prepare_local_project_workspace_at(&dir.path().display().to_string(), None).unwrap();
+
+        let initialization_status = summary.initialization_status.as_ref().unwrap();
+        assert_eq!(initialization_status.project_kind, "existing");
+        assert!(!initialization_status.demo_data_created);
+        assert_eq!(initialization_status.demo_issue_count, 0);
+        assert!(dir
+            .path()
+            .join(".agentflow/input/specs/approved/dogfood-cutover-v1/spec.json")
+            .is_file());
+        let dogfood_issue_path = dir
+            .path()
+            .join(".agentflow/input/issues/AF-DOGFOOD-001.json");
+        assert!(dogfood_issue_path.is_file());
+        let dogfood_issue: agentflow_input::issue::InputIssue =
+            serde_json::from_str(&fs::read_to_string(&dogfood_issue_path).unwrap()).unwrap();
+        assert_eq!(dogfood_issue.source_spec_id, "dogfood-cutover-v1");
+        assert_eq!(dogfood_issue.issue_category.as_str(), "spec");
+        assert_eq!(dogfood_issue.required_agent_role.as_str(), "build-agent");
+        assert_eq!(dogfood_issue.display_status.as_str(), "ready");
+        assert!(matches!(
+            dogfood_issue.risk_level,
+            agentflow_input::issue::InputRiskLevel::Medium
+        ));
+        assert!(!dir
+            .path()
+            .join(".agentflow/input/issues/AF-DEMO-001.json")
+            .exists());
+    }
+
+    #[test]
     fn prepare_workspace_reuses_existing_files_without_overwriting() {
         let dir = tempdir().unwrap();
         prepare_local_project_workspace_at(&dir.path().display().to_string(), None).unwrap();
@@ -426,6 +463,21 @@ mod tests {
         fs::write(root.join("README.md"), "# Test Project\n").unwrap();
         run_git(root, &["add", "README.md"]);
         run_git(root, &["commit", "-m", "Initial project state"]);
+    }
+
+    fn write_agentflow_project_markers(root: &Path) {
+        fs::create_dir_all(root.join("apps/desktop")).unwrap();
+        fs::write(
+            root.join("apps/desktop/package.json"),
+            "{\n  \"name\": \"agentflow-desktop\"\n}\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("crates/agent-manual")).unwrap();
+        fs::write(
+            root.join("crates/agent-manual/Cargo.toml"),
+            "[package]\nname = \"agentflow-agent-manual\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
     }
 
     fn run_git(root: &Path, args: &[&str]) {

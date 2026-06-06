@@ -458,6 +458,63 @@ mod tests {
     }
 
     #[test]
+    fn prepare_output_workspace_backfills_issue_for_existing_release_auto_request() {
+        let dir = tempdir().unwrap();
+        let audit_dir = dir
+            .path()
+            .join(".agentflow/output/audit/audit-release-v0.1.0");
+        ensure_directory(&audit_dir).unwrap();
+        write_json(
+            &audit_dir.join("audit-request.json"),
+            &AuditRequest {
+                version: AUDIT_REQUEST_VERSION.to_string(),
+                audit_id: "audit-release-v0.1.0".to_string(),
+                trigger: AuditTrigger::ReleaseAuto,
+                requested_by: "agentflow-release-auto".to_string(),
+                requested_at: 1,
+                reason: "Release 已生成，AgentFlow 规则要求进行审计。".to_string(),
+                source: Some(AuditRequestSource {
+                    kind: "release-delivery".to_string(),
+                    delivery_id: Some("release-v0.1.0".to_string()),
+                    run_id: Some("release-v0.1.0".to_string()),
+                    issue_id: Some("AF-DOGFOOD-001".to_string()),
+                    spec_id: Some("dogfood-cutover-v1".to_string()),
+                }),
+                scope: AuditScope {
+                    description: "审计 release delivery。".to_string(),
+                    refs: vec![
+                        AuditScopeRef {
+                            kind: "spec".to_string(),
+                            id: "dogfood-cutover-v1".to_string(),
+                            path: ".agentflow/input/specs/approved/dogfood-cutover-v1/spec.json"
+                                .to_string(),
+                        },
+                        AuditScopeRef {
+                            kind: "release-delivery".to_string(),
+                            id: "release-v0.1.0".to_string(),
+                            path: ".agentflow/output/release/release-v0.1.0/delivery.json"
+                                .to_string(),
+                        },
+                    ],
+                },
+            },
+        )
+        .unwrap();
+
+        prepare_output_workspace(dir.path()).unwrap();
+
+        let audit_issue_path = dir
+            .path()
+            .join(".agentflow/input/issues/audit-release-v0.1.0.json");
+        assert!(audit_issue_path.is_file());
+        let audit_issue: agentflow_input::issue::InputIssue = read_json(&audit_issue_path).unwrap();
+        assert_eq!(audit_issue.source_spec_id, "dogfood-cutover-v1");
+        assert_eq!(audit_issue.issue_category.as_str(), "audit");
+        assert_eq!(audit_issue.required_agent_role.as_str(), "audit-agent");
+        assert_eq!(audit_issue.display_status.as_str(), "ready");
+    }
+
+    #[test]
     fn audit_checks_fail_when_checkpoint_is_missing() {
         let dir = tempdir().unwrap();
         prepare_output_workspace(dir.path()).unwrap();

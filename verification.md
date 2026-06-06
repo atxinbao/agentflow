@@ -4756,6 +4756,59 @@ Browser Preview 核对：
   - 输出：`Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.`
 - `git diff --check`：pass。
 
+## 029 - AgentFlow Dogfood Cutover Cleanup and Start V1
+
+日期：2026-06-07
+执行者：Codex
+
+需求来源：
+
+- `/Users/mac/Desktop/029-agentflow-dogfood-cutover-cleanup-and-start-v1.md`
+
+需求归档：
+
+- `docs/requirements/029-agentflow-dogfood-cutover-cleanup-and-start-v1.md`
+- `docs/requirements/README.md`
+- `docs/requirements/next-requirements.md`
+
+实现结果：
+
+- 将 029 需求复制到 `docs/requirements/`。
+- 将 requirements 入口更新为 024-029 Dogfood Cutover 基线。
+- 将 015 / 017 / 018 / 019 / 021 / 023 标为历史参考或 pre-base superseded。
+- AgentFlow 自身仓库 prepare 时会生成 `dogfood-cutover-v1` Approved SPEC 和 `AF-DOGFOOD-001`。
+- `AF-DOGFOOD-001` 使用 `issueCategory=spec`、`requiredAgentRole=build-agent`、`displayStatus=ready`、`riskLevel=medium`。
+- prepare 会删除 legacy define 目录：
+  - `.agentflow/define/goals`
+  - `.agentflow/define/milestones`
+  - `.agentflow/define/issues`
+- release-auto 审计规则支持从已有 `audit-request.json` 回填 Audit Issue。
+- RELEASE manual 明确 Audit Issue 是 Audit Agent 的主入口，`audit-request.json` 是兼容元数据。
+- 本地 `.agentflow` 已补齐：
+  - `.agentflow/input/specs/approved/dogfood-cutover-v1/`
+  - `.agentflow/input/issues/AF-DOGFOOD-001.json`
+  - `.agentflow/input/issues/audit-release-v0.1.0.json`
+
+边界：
+
+- 没有新增业务 UI 能力。
+- 没有调用模型。
+- 没有写远程 GitHub / Linear / Figma。
+- 没有删除用户源码、Git 仓库或当前 `.agentflow/input/**` 事实。
+- Browser Preview mock 仍只通过 `apps/desktop/src/browserPreviewData.ts` 和 smoke 规则验证。
+
+验证：
+
+- `cargo fmt --all`：pass。
+- `cargo check --workspace`：pass。
+- `cargo test -p agentflow-agent-manual`：pass，32 tests。
+- `cargo test -p agentflow-desktop project_workspace`：pass，6 tests。
+- `cargo test --workspace`：pass，agent-manual 32 tests + CLI 2 tests + core 61 tests + desktop 20 tests + execute 18 tests + input 14 tests + output 21 tests + panel 27 tests + state 12 tests + workflow-acceptance 6 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `npm --prefix apps/desktop run preview:smoke`：pass。
+  - 输出：`Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.`
+- `git diff --check`：pass。
+
 ## 026 - AgentFlow Release Audit Trigger Rules V1
 
 日期：2026-06-07
