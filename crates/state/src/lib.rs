@@ -391,6 +391,35 @@ mod tests {
     }
 
     #[test]
+    fn missing_issue_target_metadata_blocks_handoff_copy() {
+        let dir = tempdir().unwrap();
+        prepare_layers(dir.path());
+        let issue = InputIssue {
+            issue_id: "iss-missing-target".to_string(),
+            issue_model: InputIssueModel::Direct,
+            source_spec_id: String::new(),
+            project_id: None,
+            title: "Missing target".to_string(),
+            summary: "Missing target metadata".to_string(),
+            status: InputIssueStatus::ReadyForExecute,
+            risk_level: InputRiskLevel::Low,
+            ..InputIssue::default()
+        };
+        fs::write(
+            dir.path()
+                .join(".agentflow/input/issues/iss-missing-target.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+
+        let status = refresh_state(dir.path()).unwrap();
+
+        assert!(status.blockers.iter().any(|blocker| {
+            blocker.action == "copy-handoff" && blocker.reason == "任务缺少执行目标，不能生成任务包"
+        }));
+    }
+
+    #[test]
     fn active_released_and_stale_locks_are_classified() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());

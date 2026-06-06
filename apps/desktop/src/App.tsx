@@ -102,6 +102,7 @@ import type {
   ProjectMilestoneIssueViewModelSnapshot,
   V1Issue,
   WorkbenchSnapshot,
+  ExpectedOutputs,
 } from "./types";
 import "./AppShell.css";
 
@@ -187,6 +188,7 @@ const interactionStorageKeys = {
   provider: "agentflow.interaction.provider.v1",
 } as const;
 const appearanceThemeClass = "af-theme-light";
+const INCOMPLETE_HANDOFF_MESSAGE = "这个任务包不完整，缺少执行目标。请先修复 Issue 元数据。";
 
 type CodexRoleGuide = {
   cannotDo: string[];
@@ -672,6 +674,13 @@ function App() {
   async function handleTaskAction(action: TaskInteractionAction, task: V1Issue) {
     setTaskActionFeedback(null);
     if (action === "copy-handoff") {
+      const validationError = taskHandoffValidationError(task);
+      if (validationError) {
+        setTaskCopyState("error");
+        setTaskActionFeedback(validationError);
+        window.setTimeout(() => setTaskCopyState("enabled"), 1800);
+        return;
+      }
       setTaskCopyState("loading");
       try {
         await navigator.clipboard.writeText(buildCodexHandoff(task));
@@ -1981,6 +1990,10 @@ function TaskDetail({
     );
   }
 
+  const handoffError = taskHandoffValidationError(task);
+  const targetDescriptionItems = taskTargetDescriptionItems(task);
+  const outputItems = taskOutputItems(task);
+
   return (
     <aside className="v16-detail-pane" aria-label="任务合约">
       <header>
@@ -2014,9 +2027,8 @@ function TaskDetail({
             ["Codex 线程", codexThreadNameForRole(task.requiredAgentRole)],
             ["状态", displayStatusLabelZh(task.displayStatus)],
             ["交给 Codex", handedOff ? "已做本地标记" : "未标记"],
-            ["关联规格", "已确认规格"],
+            ...targetDescriptionItems,
             ...(task.auditTrigger ? [["触发来源", auditTriggerLabel(task.auditTrigger)] as [string, string]] : []),
-            ...(task.sourceReleaseId ? [["关联交付", task.sourceReleaseId] as [string, string]] : []),
           ]}
         />
         <SectionList title="目标" items={[task.goal || task.title]} />
@@ -2026,9 +2038,14 @@ function TaskDetail({
         <SectionList title="证据要求" items={task.evidenceRequired} />
         <SectionList title="验证命令" items={task.validationCommands} />
         <SectionList title="相关文件" items={task.allowedFiles} />
+        <SectionList title="输出位置" items={outputItems} />
         <details className="v16-task-package">
           <summary>Agent 任务包</summary>
-          <CopyableCodeBlock content={buildCodexHandoff(task)} maxHeight={210} title="Agent 任务包" />
+          <CopyableCodeBlock
+            content={handoffError ?? buildCodexHandoff(task)}
+            maxHeight={210}
+            title="Agent 任务包"
+          />
         </details>
       </div>
       {actionFeedback ? <p className="v16-feedback">{actionFeedback}</p> : null}
@@ -2723,34 +2740,59 @@ function buildTaskItems(
 function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusIndex | null): V1Issue {
   const indexed = issueStatusIndex?.issues.find((item) => item.issueId === issue.issueId);
   const displayStatus = indexed?.displayStatus ?? issue.displayStatus;
+  const issueCategory = issue.issueCategory ?? "spec";
+  const requiredAgentRole = issue.requiredAgentRole ?? (issueCategory === "audit" ? "audit-agent" : "build-agent");
+  const auditId = issue.audit?.auditId ?? (issueCategory === "audit" ? issue.issueId : null);
+  const auditOutputDir = issue.audit?.auditOutputDir ?? (auditId ? `.agentflow/output/audit/${auditId}` : null);
+  const expectedOutputs = normalizeExpectedOutputs(
+    issue.expectedOutputs,
+    issueCategory,
+    issue.issueId,
+    auditId,
+    auditOutputDir,
+    issue.audit?.expectedOutputs,
+  );
   return {
     acceptanceCriteria: issue.acceptanceCriteria,
-    allowedFiles: issue.scope,
+    allowedFiles: issue.allowedPaths?.length ? issue.allowedPaths : issue.scope,
     boundary: issue.nonGoals,
     codexInstructions: issue.validationHints,
     dependencies: issue.relations?.blockedBy ?? [],
     displayStatus,
     evidenceRequired: issue.acceptanceCriteria,
-    forbiddenFiles: [".agentflow/*", ".codex/*", "agent-artifacts/*"],
+    expectedOutputs,
+    forbiddenActions: issue.forbiddenActions?.length ? issue.forbiddenActions : defaultForbiddenActions(issueCategory),
+    forbiddenFiles: issue.forbiddenPaths?.length ? issue.forbiddenPaths : defaultForbiddenPaths(issueCategory),
     goal: issue.summary || issue.title,
     id: issue.issueId,
     auditTrigger: issue.audit?.trigger ?? null,
-    issueCategory: issue.issueCategory ?? "spec",
+    auditId,
+    auditOutputDir,
+    contextPackPath: issue.contextPackPath ?? null,
+    handoffId: issue.handoffId ?? `handoff-${issue.issueId}`,
+    issueCategory,
+    issuePath: issue.issuePath ?? issue.system?.path ?? `.agentflow/input/issues/${issue.issueId}.json`,
     milestoneId: null,
     nonGoals: issue.nonGoals,
     projectId: issue.projectId ?? null,
     rawStatus: issue.status,
-    requiredAgentRole: issue.requiredAgentRole ?? "build-agent",
+    requiredAgentRole,
     riskLevel: issue.riskLevel || indexed?.riskLevel || "normal",
+    sourceDeliveryPath: issue.audit?.sourceDeliveryPath ?? null,
     sourceReleaseId: issue.audit?.sourceReleaseId ?? null,
+    sourceSpecId: issue.sourceSpecId ?? null,
+    sourceSpecPath:
+      issue.sourceSpecPath ??
+      (issue.sourceSpecId ? `.agentflow/input/specs/approved/${issue.sourceSpecId}/spec.json` : null),
     scope: issue.scope,
     status: issue.status,
     title: issue.title,
-    validationCommands: issue.validationHints,
+    validationCommands: issue.validationCommands?.length ? issue.validationCommands : issue.validationHints,
   };
 }
 
 function issueContractToV1Issue(issue: IssueContract): V1Issue {
+  const expectedOutputs = normalizeExpectedOutputs(undefined, "spec", issue.id, null, null);
   return {
     acceptanceCriteria: issue.evidenceRequirements,
     allowedFiles: issue.context.files,
@@ -2759,18 +2801,28 @@ function issueContractToV1Issue(issue: IssueContract): V1Issue {
     dependencies: [],
     displayStatus: displayStatusFromLegacyStatus(issue.status),
     evidenceRequired: issue.evidenceRequirements,
+    expectedOutputs,
+    forbiddenActions: defaultForbiddenActions("spec"),
     forbiddenFiles: [".agentflow/*", ".codex/*", "agent-artifacts/*"],
     goal: issue.intent,
     id: issue.id,
     auditTrigger: null,
+    auditId: null,
+    auditOutputDir: null,
+    contextPackPath: null,
+    handoffId: `handoff-${issue.id}`,
     issueCategory: "spec",
+    issuePath: `.agentflow/input/issues/${issue.id}.json`,
     milestoneId: null,
     nonGoals: issue.nonGoals,
     projectId: null,
     rawStatus: issue.status,
     requiredAgentRole: "build-agent",
     riskLevel: "normal",
+    sourceDeliveryPath: null,
     sourceReleaseId: null,
+    sourceSpecId: "legacy-workbench",
+    sourceSpecPath: ".agentflow/input/specs/approved/legacy-workbench/spec.json",
     scope: issue.scope,
     status: issue.status,
     title: issue.title,
@@ -2784,6 +2836,73 @@ function withDisplayStatus(issue: V1Issue, issueStatusIndex: IssueStatusIndex | 
     ...issue,
     displayStatus: indexed?.displayStatus ?? issue.displayStatus ?? displayStatusFromLegacyStatus(issue.status),
   };
+}
+
+function normalizeExpectedOutputs(
+  outputs: ExpectedOutputs | undefined,
+  issueCategory: string,
+  issueId: string,
+  auditId?: string | null,
+  auditOutputDir?: string | null,
+  auditOutputs?: ExpectedOutputs | string[] | null,
+): ExpectedOutputs {
+  if (issueCategory === "audit") {
+    const normalizedAuditOutputs = normalizeOutputValue(auditOutputs);
+    if (Object.keys(normalizedAuditOutputs).length) {
+      return normalizedAuditOutputs;
+    }
+    const outputDir = auditOutputDir || (auditId ? `.agentflow/output/audit/${auditId}` : "");
+    return outputDir ? auditExpectedOutputs(outputDir) : {};
+  }
+
+  const normalized = normalizeOutputValue(outputs);
+  if (Object.keys(normalized).length) {
+    return normalized;
+  }
+  return {
+    evidencePath: `.agentflow/output/evidence/${issueId}.json`,
+    executeRunDir: `.agentflow/execute/runs/${issueId}`,
+    releaseDeliveryDir: `.agentflow/output/release/${issueId}`,
+  };
+}
+
+function normalizeOutputValue(outputs?: ExpectedOutputs | string[] | null): ExpectedOutputs {
+  if (!outputs) {
+    return {};
+  }
+  if (Array.isArray(outputs)) {
+    return Object.fromEntries(
+      outputs.map((output) => {
+        const key = output.split("/").pop() || output;
+        return [key, output];
+      }),
+    );
+  }
+  return outputs;
+}
+
+function auditExpectedOutputs(auditOutputDir: string): ExpectedOutputs {
+  return {
+    "audit-report.md": `${auditOutputDir}/audit-report.md`,
+    "audit.json": `${auditOutputDir}/audit.json`,
+    "evidence-map.json": `${auditOutputDir}/evidence-map.json`,
+    "findings.json": `${auditOutputDir}/findings.json`,
+    "traceability.json": `${auditOutputDir}/traceability.json`,
+  };
+}
+
+function defaultForbiddenPaths(issueCategory?: string | null) {
+  if (issueCategory === "audit") {
+    return [".agentflow/execute/**", ".agentflow/output/release/**", ".agentflow/output/evidence/**"];
+  }
+  return [".agentflow/output/audit/**", ".agentflow/spec/**", ".agentflow/goal-tree/**"];
+}
+
+function defaultForbiddenActions(issueCategory?: string | null) {
+  if (issueCategory === "audit") {
+    return ["process-spec-issue", "write-source-code", "execute-project-commands", "generate-release-delivery"];
+  }
+  return ["process-audit-issue", "write-audit-report", "write-audit-findings"];
 }
 
 function sortTasksByDisplayStatus(tasks: V1Issue[]) {
@@ -2916,6 +3035,46 @@ function agentInstructionForTask(task: V1Issue) {
     return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR。";
   }
   return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。不要写 audit report、findings、evidence-map 或 traceability。";
+}
+
+function taskTargetDescriptionItems(task: V1Issue): Array<[string, string]> {
+  if (task.issueCategory === "audit") {
+    return [
+      ["审计目标", task.auditId || "未提供"],
+      ["关联 Release", task.sourceReleaseId || "未提供"],
+      ["交付文件", task.sourceDeliveryPath || "未提供"],
+      ["输出目录", task.auditOutputDir || "未提供"],
+    ];
+  }
+
+  return [
+    ["来源规格", task.sourceSpecId || "未提供"],
+    ["规格文件", task.sourceSpecPath || "未提供"],
+    ["Issue 文件", task.issuePath || "未提供"],
+  ];
+}
+
+function taskOutputItems(task: V1Issue) {
+  const entries = Object.entries(task.expectedOutputs ?? {});
+  if (!entries.length) {
+    return ["未提供输出位置。"];
+  }
+  return entries.map(([key, value]) => `${key}: ${value}`);
+}
+
+function taskHandoffValidationError(task: V1Issue) {
+  if (task.issueCategory === "audit") {
+    if (!task.auditId || !task.auditOutputDir || !Object.keys(task.expectedOutputs ?? {}).length) {
+      return INCOMPLETE_HANDOFF_MESSAGE;
+    }
+    return null;
+  }
+
+  const outputs = task.expectedOutputs ?? {};
+  if (!task.sourceSpecId || !outputs.executeRunDir || !outputs.evidencePath || !outputs.releaseDeliveryDir) {
+    return INCOMPLETE_HANDOFF_MESSAGE;
+  }
+  return null;
 }
 
 function taskActionDisplayLabel(action: TaskInteractionAction, task: V1Issue, copyState: ButtonInteractionState) {
@@ -3152,19 +3311,43 @@ function buildNextStep(
 
 function buildCodexHandoff(task: V1Issue) {
   const codexThreadName = codexThreadNameForRole(task.requiredAgentRole);
+  const handoffPackage =
+    task.issueCategory === "audit"
+      ? {
+          agentInstruction: agentInstructionForTask(task),
+          auditId: task.auditId,
+          auditOutputDir: task.auditOutputDir,
+          codexThreadName,
+          expectedOutputs: task.expectedOutputs,
+          handoffId: task.handoffId,
+          handoffVersion: "agent-handoff.v1",
+          issueCategory: "audit",
+          issueId: task.id,
+          issuePath: task.issuePath,
+          requiredAgentRole: task.requiredAgentRole ?? "audit-agent",
+          sourceDeliveryPath: task.sourceDeliveryPath,
+          sourceReleaseId: task.sourceReleaseId,
+        }
+      : {
+          agentInstruction: agentInstructionForTask(task),
+          codexThreadName,
+          contextPackPath: task.contextPackPath,
+          expectedOutputs: task.expectedOutputs,
+          handoffId: task.handoffId,
+          handoffVersion: "agent-handoff.v1",
+          issueCategory: "spec",
+          issueId: task.id,
+          issuePath: task.issuePath,
+          requiredAgentRole: task.requiredAgentRole ?? "build-agent",
+          sourceSpecId: task.sourceSpecId,
+          sourceSpecPath: task.sourceSpecPath,
+        };
   return [
     `# ${task.title}`,
     "",
     "```json",
     JSON.stringify(
-      {
-        agentInstruction: agentInstructionForTask(task),
-        handoffVersion: "agent-handoff.v1",
-        issueCategory: task.issueCategory ?? "spec",
-        issueId: task.id,
-        requiredAgentRole: task.requiredAgentRole ?? "build-agent",
-        codexThreadName,
-      },
+      handoffPackage,
       null,
       2,
     ),
@@ -3176,6 +3359,17 @@ function buildCodexHandoff(task: V1Issue) {
     `Codex 线程：${codexThreadName}`,
     `风险：${displayRiskLabelZh(task.riskLevel)}`,
     `指令：${agentInstructionForTask(task)}`,
+    ...(task.issueCategory === "audit"
+      ? [
+          `审计目标：${task.auditId ?? ""}`,
+          `关联 Release：${task.sourceReleaseId ?? ""}`,
+          `审计输出目录：${task.auditOutputDir ?? ""}`,
+        ]
+      : [
+          `来源 SPEC：${task.sourceSpecId ?? ""}`,
+          `SPEC 路径：${task.sourceSpecPath ?? ""}`,
+          `Issue 路径：${task.issuePath ?? ""}`,
+        ]),
     "",
     "## 角色边界",
     "- 如果你不是 requiredAgentRole，请停止执行。",
@@ -3193,6 +3387,9 @@ function buildCodexHandoff(task: V1Issue) {
     ...task.allowedFiles.map((item) => `- ${item}`),
     "",
     "## 禁止动作",
+    ...task.forbiddenActions.map((item) => `- ${item}`),
+    "",
+    "## 禁止路径",
     ...task.forbiddenFiles.map((item) => `- ${item}`),
     "",
     "## 验证命令",
@@ -3200,6 +3397,9 @@ function buildCodexHandoff(task: V1Issue) {
     "",
     "## 交付要求",
     ...task.evidenceRequired.map((item) => `- ${item}`),
+    "",
+    "## 输出位置",
+    ...taskOutputItems(task).map((item) => `- ${item}`),
   ].join("\n");
 }
 

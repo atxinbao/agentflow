@@ -17,9 +17,9 @@ use crate::{
     validate::{validate_output_evidence, validate_release_delivery},
 };
 use agentflow_input::issue::{
-    AgentRole, DisplayStatus, InputIssue, InputIssueAudit, InputIssueKind, InputIssueModel,
-    InputIssueRelations, InputIssueStatus, InputPanelLink, InputPriority, InputRiskLevel,
-    InputSystemRecord, IssueCategory,
+    audit_expected_outputs, AgentRole, DisplayStatus, InputIssue, InputIssueAudit, InputIssueKind,
+    InputIssueModel, InputIssueRelations, InputIssueStatus, InputPanelLink, InputPriority,
+    InputRiskLevel, InputSystemRecord, IssueCategory,
 };
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -136,7 +136,6 @@ pub fn ensure_release_auto_audits(project_root: impl AsRef<Path>) -> Result<Audi
 
     let releases = release_deliveries(&root)?;
     for release in releases {
-        write_release_auto_audit_issue(&root, &release)?;
         if release_auto_audit_exists(&root, &release)? {
             continue;
         }
@@ -312,10 +311,6 @@ fn next_audit_id(root: &Path) -> Result<String> {
     Ok(format!("audit-{:03}", max_id + 1))
 }
 
-fn write_release_auto_audit_issue(root: &Path, release: &OutputReleaseDelivery) -> Result<()> {
-    write_release_auto_audit_issue_record(root, &release.run_id, &release.source_spec_id)
-}
-
 fn backfill_release_auto_audit_issues_from_requests(root: &Path) -> Result<()> {
     for path in sorted_child_paths(&root.join(".agentflow/output/audit"))? {
         let request_path = path.join("audit-request.json");
@@ -337,7 +332,20 @@ fn backfill_release_auto_audit_issues_from_requests(root: &Path) -> Result<()> {
             .and_then(|source| source.spec_id.clone())
             .or_else(|| scope_id(&request.scope.refs, "spec"))
             .unwrap_or_else(|| "unknown-spec".to_string());
-        write_release_auto_audit_issue_record(root, &release_id, &source_spec_id)?;
+        let source_delivery_path = request
+            .scope
+            .refs
+            .iter()
+            .find(|reference| reference.kind == "release-delivery" && reference.id == release_id)
+            .map(|reference| reference.path.clone())
+            .unwrap_or_else(|| format!(".agentflow/output/release/{release_id}/delivery.json"));
+        write_release_auto_audit_issue_record(
+            root,
+            &release_id,
+            &source_spec_id,
+            &request.audit_id,
+            &source_delivery_path,
+        )?;
     }
     Ok(())
 }
@@ -355,12 +363,29 @@ fn write_release_auto_audit_issue_record(
     root: &Path,
     release_id: &str,
     source_spec_id: &str,
+    audit_id: &str,
+    source_delivery_path: &str,
 ) -> Result<()> {
     let issue_id = release_auto_audit_issue_id(release_id);
     let issue_dir = root.join(".agentflow/input/issues");
     ensure_directory(&issue_dir)?;
     let issue_path = issue_dir.join(format!("{issue_id}.json"));
     if issue_path.is_file() {
+        let mut issue: InputIssue = read_json(&issue_path)?;
+        let before = serde_json::to_value(&issue)?;
+        issue.issue_category = IssueCategory::Audit;
+        issue.required_agent_role = AgentRole::AuditAgent;
+        issue.display_status = DisplayStatus::Ready;
+        issue.risk_level = InputRiskLevel::High;
+        issue.audit = Some(release_auto_issue_audit(
+            release_id,
+            audit_id,
+            source_delivery_path,
+        ));
+        issue.normalize_execution_metadata();
+        if serde_json::to_value(&issue)? != before {
+            write_json(&issue_path, &issue)?;
+        }
         return Ok(());
     }
 
@@ -397,11 +422,11 @@ fn write_release_auto_audit_issue_record(
             "不自动修复问题".to_string(),
         ],
         acceptance_criteria: vec![
-            format!(".agentflow/output/audit/{issue_id}/audit.json 存在"),
-            format!(".agentflow/output/audit/{issue_id}/audit-report.md 存在"),
-            format!(".agentflow/output/audit/{issue_id}/findings.json 存在"),
-            format!(".agentflow/output/audit/{issue_id}/evidence-map.json 存在"),
-            format!(".agentflow/output/audit/{issue_id}/traceability.json 存在"),
+            format!(".agentflow/output/audit/{audit_id}/audit.json 存在"),
+            format!(".agentflow/output/audit/{audit_id}/audit-report.md 存在"),
+            format!(".agentflow/output/audit/{audit_id}/findings.json 存在"),
+            format!(".agentflow/output/audit/{audit_id}/evidence-map.json 存在"),
+            format!(".agentflow/output/audit/{audit_id}/traceability.json 存在"),
         ],
         validation_hints: vec![
             "读取 release delivery、evidence、execute result 和 diff summary。".to_string(),
@@ -409,18 +434,11 @@ fn write_release_auto_audit_issue_record(
         ],
         relations: InputIssueRelations::default(),
         panel: InputPanelLink::default(),
-        audit: Some(InputIssueAudit {
-            trigger: "release-auto".to_string(),
-            source_release_id: release_id.to_string(),
-            source_run_id: Some(release_id.to_string()),
-            expected_outputs: vec![
-                "audit.json".to_string(),
-                "audit-report.md".to_string(),
-                "findings.json".to_string(),
-                "evidence-map.json".to_string(),
-                "traceability.json".to_string(),
-            ],
-        }),
+        audit: Some(release_auto_issue_audit(
+            release_id,
+            audit_id,
+            source_delivery_path,
+        )),
         system: InputSystemRecord {
             created_by: "agentflow-release-auto".to_string(),
             created_at: now,
@@ -428,8 +446,28 @@ fn write_release_auto_audit_issue_record(
             path: format!(".agentflow/input/issues/{issue_id}.json"),
             revision: 1,
         },
+        ..InputIssue::default()
     };
+    let mut issue = issue;
+    issue.normalize_execution_metadata();
     write_json(&issue_path, &issue)
+}
+
+fn release_auto_issue_audit(
+    release_id: &str,
+    audit_id: &str,
+    source_delivery_path: &str,
+) -> InputIssueAudit {
+    let audit_output_dir = format!(".agentflow/output/audit/{audit_id}");
+    InputIssueAudit {
+        audit_id: audit_id.to_string(),
+        trigger: "release-auto".to_string(),
+        source_release_id: release_id.to_string(),
+        source_run_id: Some(release_id.to_string()),
+        source_delivery_path: source_delivery_path.to_string(),
+        audit_output_dir: audit_output_dir.clone(),
+        expected_outputs: audit_expected_outputs(&audit_output_dir),
+    }
 }
 
 fn release_auto_audit_issue_id(release_id: &str) -> String {

@@ -161,6 +161,7 @@ export type InputStatusSnapshot = {
 export type InputIssueStatus = "planned" | "blocked" | "ready-for-execute" | "done" | "canceled";
 export type IssueCategory = "spec" | "audit";
 export type AgentRole = "spec-agent" | "build-agent" | "audit-agent";
+export type ExpectedOutputs = Record<string, string>;
 
 export type InputIssue = {
   version: string;
@@ -169,6 +170,10 @@ export type InputIssue = {
   issueCategory?: IssueCategory;
   requiredAgentRole?: AgentRole;
   sourceSpecId: string;
+  sourceSpecPath?: string;
+  issuePath?: string;
+  handoffId?: string;
+  contextPackPath?: string;
   projectId?: string | null;
   title: string;
   summary: string;
@@ -177,10 +182,15 @@ export type InputIssue = {
   status: InputIssueStatus;
   displayStatus: IssueDisplayStatus;
   riskLevel: string;
+  allowedPaths?: string[];
+  forbiddenPaths?: string[];
+  forbiddenActions?: string[];
   scope: string[];
   nonGoals: string[];
   acceptanceCriteria: string[];
   validationHints: string[];
+  validationCommands?: string[];
+  expectedOutputs?: ExpectedOutputs;
   relations?: {
     blockedBy?: string[];
     blocks?: string[];
@@ -192,10 +202,13 @@ export type InputIssue = {
     contextPackId?: string | null;
   };
   audit?: {
+    auditId?: string;
     trigger?: string;
     sourceReleaseId?: string;
     sourceRunId?: string | null;
-    expectedOutputs?: string[];
+    sourceDeliveryPath?: string;
+    auditOutputDir?: string;
+    expectedOutputs?: ExpectedOutputs | string[];
   } | null;
   system?: {
     createdBy?: string;

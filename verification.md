@@ -25,6 +25,49 @@
 
 - `git diff --check`：pass。
 
+## 031 - AgentFlow Initialization Rules and Issue Metadata Hardening V1
+
+日期：2026-06-07
+执行者：Codex
+
+需求来源：
+
+- `/Users/mac/.codex/attachments/e1e5fb4c-24a7-4f37-a7b2-cdab59f9b900/pasted-text.txt`
+
+需求归档：
+
+- `docs/requirements/031-agentflow-initialization-rules-and-issue-metadata-hardening-v1.md`
+- `docs/requirements/README.md`
+- `docs/requirements/next-requirements.md`
+
+实现结果：
+
+- `InputIssue` 支持 Spec / Audit target metadata，并兼容旧 Issue 默认 `issueCategory=spec`、`requiredAgentRole=build-agent`。
+- `prepare_input_workspace` 会标准化 `.agentflow/input/issues/*.json` 的目标字段和 expected outputs。
+- input validator 校验 Spec Issue 的 `sourceSpecId` / `sourceSpecPath` / build expected outputs，以及 Audit Issue 的 `auditId` / `auditOutputDir` / audit expected outputs。
+- release-auto 现在从 `audit-request.json` 反填 Audit Issue，Audit Issue 带真实 `auditId`、`sourceDeliveryPath`、`auditOutputDir` 和审计输出映射。
+- state 在 Issue 缺少目标 metadata 时写入 `copy-handoff` blocker：`任务缺少执行目标，不能生成任务包`。
+- Desktop 任务详情显示任务类型、执行角色、来源 SPEC 或审计目标、输出位置。
+- Desktop 复制 handoff 前校验目标完整性，缺目标时提示：`这个任务包不完整，缺少执行目标。请先修复 Issue 元数据。`
+- `AGENTS.md` / `Agentflow.md` 模板和角色描述补充 input facts、Audit Issue 入口、legacy path 禁写和三角色边界。
+
+边界：
+
+- 没有提交当前本地 `.agentflow/**` 生成物。
+- 没有手工修 `audit-001` 或 `AF-RULES-LEGACY-001`。
+- 没有恢复 `.agentflow/spec/**` 或 `.agentflow/goal-tree/**`。
+- 没有创建 GitHub Release。
+- 没有调用模型。
+
+验证：
+
+- `cargo check --workspace`：pass。
+- `cargo test --workspace`：pass，agent-manual 32 tests + CLI 2 tests + core 61 tests + desktop 20 tests + execute 18 tests + input 16 tests + output 21 tests + panel 27 tests + state 13 tests + workflow-acceptance 6 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `npm --prefix apps/desktop run preview:smoke`：pass。
+  - 输出：`Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.`
+- `git diff --check`：pass。
+
 ## 2026-06-05 Execute Patch / Checkpoint V1
 
 执行者：Codex
