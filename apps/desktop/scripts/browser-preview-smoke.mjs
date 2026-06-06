@@ -18,6 +18,7 @@ const server = await createServer({
 
 try {
   const preview = await server.ssrLoadModule("/src/browserPreviewData.ts");
+  const projectRegistryModule = await server.ssrLoadModule("/src/projectRegistry.ts");
   const outputStatus = preview.createBrowserPreviewOutputStatus(smokeRoot);
   const inputSnapshot = preview.createBrowserPreviewInputSnapshot(smokeRoot);
   const issueStatusIndex = preview.createBrowserPreviewIssueStatusIndex(smokeRoot);
@@ -26,6 +27,34 @@ try {
   const auditReport = preview.createBrowserPreviewHumanAuditReport();
   const agentEnvironment = preview.createBrowserPreviewAgentEnvironmentStatus(smokeRoot);
   const stateStatus = preview.createBrowserPreviewStateStatus(smokeRoot);
+  const projectRegistry = projectRegistryModule.createBrowserPreviewProjectRegistry(smokeRoot);
+  const registryWithoutInactive = projectRegistryModule.removeProject(
+    projectRegistry,
+    "/Users/mac/Documents/mobile-app",
+  );
+  const registryAfterActiveRemoval = projectRegistryModule.removeProject(
+    registryWithoutInactive,
+    "/Users/mac/Documents/my-web-app",
+  );
+  const emptyRegistry = projectRegistryModule.removeProject(registryAfterActiveRemoval, smokeRoot);
+  const storage = new Map();
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+      removeItem: (key) => {
+        storage.delete(key);
+      },
+      setItem: (key, value) => {
+        storage.set(key, String(value));
+      },
+    },
+  };
+  projectRegistryModule.persistProjectRegistry(emptyRegistry);
+  const restoredEmptyRegistry = projectRegistryModule.readProjectRegistry({
+    legacyActivePage: "files",
+    legacyProjectRoot: "/Users/mac/Documents/legacy-project",
+    projectNameFromRoot: () => "legacy-project",
+  });
   const outputPanel = readFileSync(
     path.join(desktopRoot, "src/features/output/OutputAuditPanel.tsx"),
     "utf8",
@@ -91,6 +120,34 @@ try {
   );
   assert.equal(stateStatus.currentStage, "workspace-ready");
   assert.equal(stateStatus.auditStatus, "passed-with-warnings");
+  assert.equal(projectRegistry.projects.length, 3);
+  assert.deepEqual(
+    projectRegistry.projects.map((project) => project.name),
+    ["my-web-app", "AgentFlow", "mobile-app"],
+  );
+  assert.equal(projectRegistry.activeProjectRoot, "/Users/mac/Documents/my-web-app");
+  assert.deepEqual([...projectRegistry.expandedProjectRoots], ["/Users/mac/Documents/my-web-app"]);
+  assert.equal(projectRegistry.activePageByProject["/Users/mac/Documents/my-web-app"], "home");
+  assert.equal(projectRegistry.activePageByProject[smokeRoot], "tasks");
+  assert.equal(projectRegistry.activePageByProject["/Users/mac/Documents/mobile-app"], "files");
+  assert.equal(projectRegistry.projects[2].status, "missing");
+  assert.deepEqual(
+    registryWithoutInactive.projects.map((project) => project.name),
+    ["my-web-app", "AgentFlow"],
+  );
+  assert.equal(registryWithoutInactive.activeProjectRoot, "/Users/mac/Documents/my-web-app");
+  assert.equal(registryAfterActiveRemoval.activeProjectRoot, smokeRoot);
+  assert.equal(registryAfterActiveRemoval.expandedProjectRoots.has(smokeRoot), true);
+  assert.deepEqual(emptyRegistry.projects, []);
+  assert.equal(emptyRegistry.activeProjectRoot, null);
+  assert.deepEqual([...emptyRegistry.expandedProjectRoots], []);
+  assert.deepEqual(emptyRegistry.activePageByProject, {});
+  assert.equal(storage.get(projectRegistryModule.projectRegistryStorageKeys.projects), "[]");
+  assert.equal(storage.has(projectRegistryModule.projectRegistryStorageKeys.activeProjectRoot), false);
+  assert.equal(storage.get(projectRegistryModule.projectRegistryStorageKeys.expandedProjectRoots), "[]");
+  assert.equal(storage.get(projectRegistryModule.projectRegistryStorageKeys.activePageByProject), "{}");
+  assert.deepEqual(restoredEmptyRegistry.projects, []);
+  assert.equal(restoredEmptyRegistry.activeProjectRoot, null);
   assert.ok(previewBranchIndex >= 0);
   assert.ok(outputPanel.includes("setReport(createBrowserPreviewHumanAuditReport())"));
   assert.ok(outputPanel.includes('setSource("preview")'));
@@ -99,7 +156,19 @@ try {
   assert.ok(previewOnlyGuardIndex >= 0);
   assert.ok(requestAuditInvokeIndex > previewOnlyGuardIndex);
   assert.ok(outputPanel.includes("浏览器预览不写 .agentflow/output/audit"));
-  assert.ok(appEntry.includes("<DesignSystemPreview />"));
+  assert.ok(appEntry.includes("createBrowserPreviewProjectRegistry"));
+  assert.ok(appEntry.includes("readProjectRegistry"));
+  assert.ok(appEntry.includes("persistProjectRegistry"));
+  assert.ok(appEntry.includes("data-agentflow-project-select"));
+  assert.ok(appEntry.includes("data-agentflow-project-toggle"));
+  assert.ok(appEntry.includes("data-agentflow-project-remove"));
+  assert.ok(appEntry.includes("data-agentflow-project-remove-confirm"));
+  assert.ok(appEntry.includes("这只会把项目从 AgentFlow 侧边栏移除，不会删除你的本地文件。"));
+  assert.ok(appEntry.includes("未选择项目 · 本地模式"));
+  assert.ok(appEntry.includes("添加本地项目"));
+  assert.ok(appEntry.includes("removeItem(interactionStorageKeys.projectRoot)"));
+  assert.ok(appEntry.includes("data-agentflow-page-id"));
+  assert.ok(appEntry.includes('data-agentflow-page="project-unavailable"'));
   assert.ok(appEntry.includes('data-agentflow-ux="v16"'));
   assert.ok(appEntry.includes('data-agentflow-screen="login"'));
   assert.ok(appEntry.includes('data-agentflow-screen="first-run"'));
@@ -128,11 +197,13 @@ try {
   assert.ok(appEntry.includes("displayStatusColumns"));
   assert.ok(stateStatusHook.includes("load_issue_status_index"));
   assert.ok(appEntry.includes("交付摘要"));
-  assert.ok(appEntry.includes("证据映射"));
+  assert.ok(appEntry.includes("证据链"));
   assert.ok(appEntry.includes("追溯关系"));
   assert.ok(appEntry.includes("AdvancedStateViewer"));
   assert.ok(appShellCss.includes(".v16-status-bar"));
-  assert.ok(appShellCss.includes(".v16-task-board"));
+  assert.ok(appShellCss.includes(".v16-tasks-page"));
+  assert.ok(appShellCss.includes(".v16-task-list-layout"));
+  assert.ok(appShellCss.includes(".v16-task-queue-row"));
   assert.ok(appShellCss.includes(".v16-files-page"));
   assert.ok(appShellCss.includes("@media (prefers-color-scheme: dark)"));
   assert.ok(projectLocalFilesPage.indexOf("<ProjectFileBrowser") < projectLocalFilesPage.indexOf("<article className=\"project-file-reader\""));

@@ -14,7 +14,7 @@ export type ProjectFilesState = {
   content: ProjectFileContent | null;
   selectedPath: string | null;
   error: string | null;
-  source: "tauri" | "preview" | "unavailable" | "loading";
+  source: "idle" | "tauri" | "preview" | "unavailable" | "loading";
   viewMode: ProjectFileViewMode;
   loading: boolean;
   loadingPath: string | null;
