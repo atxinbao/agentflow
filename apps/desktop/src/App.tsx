@@ -125,7 +125,7 @@ const pages: Array<{ icon: LucideIcon; id: AppPage; label: string }> = [
   { icon: Settings, id: "advanced", label: "高级" },
 ];
 
-const onboardingSteps = ["选择项目", "环境准备", "认识 Agent", "确认意图", "完成引导"] as const;
+const onboardingSteps = ["选择项目", "环境准备", "认识智能体", "确认意图", "完成引导"] as const;
 
 const interactionStorageKeys = {
   activePage: "agentflow.interaction.activePage.v1",
@@ -707,32 +707,34 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
 }
 
 function LoginModal({ onConnect }: { onConnect: (provider: Provider) => void }) {
-  const providers: Array<{ description: string; id: Provider }> = [
-    { id: "ChatGPT", description: "适合 Codex / ChatGPT 工作流入口。" },
-    { id: "Claude", description: "适合 Claude Code 任务交接。" },
-    { id: "DeepSeek", description: "适合本地中文需求整理入口。" },
+  const providers: Array<{ id: Provider }> = [
+    { id: "ChatGPT" },
+    { id: "Claude" },
+    { id: "DeepSeek" },
   ];
 
   return (
-    <main className="v16-login-stage" data-agentflow-screen="login">
-      <WindowChrome
-        aria-label="登录 AgentFlow"
-        className="v16-floating-window v16-login-window"
-        description="选择你要配合使用的 Agent 工具。登录窗口独立于项目工作台。"
-        kicker="AgentFlow"
-        title="连接大模型入口"
-      >
-        <div className="v16-provider-list">
+    <main className="v16-login-stage v16-login-shell" data-agentflow-screen="login">
+      <header className="v16-login-titlebar" aria-label="登录窗口">
+        <WindowDots />
+        <span className="v16-login-state">未登录</span>
+      </header>
+      <section className="v16-login-content" aria-label="连接大模型入口">
+        <h1>连接大模型入口</h1>
+        <div className="v16-provider-list" role="list">
           {providers.map((provider) => (
-            <ListRow
+            <button
+              className="v16-provider-entry"
               key={provider.id}
               onClick={() => onConnect(provider.id)}
-              subtitle={provider.description}
-              title={`连接 ${provider.id}`}
-            />
+              type="button"
+            >
+              <strong>{provider.id}</strong>
+              <span>连接</span>
+            </button>
           ))}
         </div>
-      </WindowChrome>
+      </section>
     </main>
   );
 }
@@ -818,11 +820,11 @@ function FirstRunModal({
           </section>
         ) : null}
 
-        {stepTitle === "认识 Agent" ? (
+        {stepTitle === "认识智能体" ? (
           <section className="v16-first-run-body v16-agent-brief">
-            <AgentBrief title="Spec Agent" value="确认需求 / SPEC / Issue" />
-            <AgentBrief title="Build Agent" value="任务包 / 执行 / 写回" />
-            <AgentBrief title="Audit Agent" value="审计 / Evidence / Report" />
+            <AgentBrief className="spec" title="需求助手" value="确认需求 / 整理计划 / 生成任务" />
+            <AgentBrief className="build" title="执行助手" value="任务编排 · 执行改动 · 写回结果" />
+            <AgentBrief className="audit" title="审计助手" value="审计交付 / 核对证据 / 生成报告" />
           </section>
         ) : null}
 
@@ -843,7 +845,7 @@ function FirstRunModal({
             <CopyableCodeBlock
               content={`请基于当前项目帮我处理：${selectedIntent}\n先确认需求，再生成可交给 Codex 的任务包。`}
               maxHeight={118}
-              title="给 ChatGPT / Codex 的启动说明"
+              title="在聊天会话中启动输入："
             />
           </section>
         ) : null}
@@ -852,7 +854,6 @@ function FirstRunModal({
           <section className="v16-first-run-body v16-complete-step">
             <CheckCircle2 size={36} />
             <h3>一切准备就绪</h3>
-            <p>以后打开 App，会直接进入项目工作台。</p>
           </section>
         ) : null}
 
@@ -877,9 +878,9 @@ function FirstRunModal({
   );
 }
 
-function AgentBrief({ title, value }: { title: string; value: string }) {
+function AgentBrief({ className, title, value }: { className?: string; title: string; value: string }) {
   return (
-    <article>
+    <article className={className}>
       <strong>{title}</strong>
       <span>{value}</span>
     </article>
@@ -924,7 +925,6 @@ function AppShell({
 function TitleBar({
   connectedProvider,
   projectName,
-  projectRoot,
 }: {
   connectedProvider: Provider;
   projectName: string;
@@ -932,19 +932,25 @@ function TitleBar({
 }) {
   return (
     <TopBar className="v16-titlebar">
-      <div>
-        <strong>AgentFlow</strong>
-        <span>{projectName}</span>
+      <WindowDots />
+      <div className="v16-titlebar-project">
+        <strong>{projectName}</strong>
+        <span>{connectedProvider}</span>
       </div>
-      <label className="v16-command-search">
-        <Search size={15} />
-        <input aria-label="命令入口" placeholder="搜索或输入命令" />
-      </label>
       <div className="v16-titlebar-right">
-        <span>{connectedProvider} connected</span>
-        <small>{projectRoot ?? "未选择项目"}</small>
+        <span className="v16-command-key">⌘K</span>
       </div>
     </TopBar>
+  );
+}
+
+function WindowDots() {
+  return (
+    <span className="v16-window-dots" aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
   );
 }
 
@@ -1226,25 +1232,29 @@ function TaskList({
 }) {
   return (
     <div className="v16-task-list-layout" aria-label="任务列表">
-      <CompactTable
-        columns={[
-          {
-            key: "issue",
-            label: "Issue",
-            render: (task) => (
-              <button className="v16-table-link" onClick={() => onSelectTask(task.id)} type="button">
-                {task.title}
-              </button>
-            ),
-          },
-          { key: "status", label: "状态", render: (task) => displayStatusLabelZh(task.displayStatus) },
-          { key: "agent", label: "Agent", render: () => "Build Agent" },
-          { key: "risk", label: "风险", render: (task) => task.riskLevel || "normal" },
-          { key: "updated", label: "更新时间", render: () => "本地快照" },
-          { key: "action", label: "动作", render: (task) => taskActionLabel(taskActionsForRow(task).at(0) ?? "readonly") },
-        ]}
-        rows={tasks}
-      />
+      <aside className="v16-list-pane v16-task-queue-pane" aria-label="任务队列">
+        <header>
+          <h2>任务队列</h2>
+          <span>{tasks.length} 项</span>
+        </header>
+        <div className="v16-task-queue-items">
+          {tasks.map((task) => (
+            <button
+              className={task.id === selectedTask?.id ? "v16-task-queue-row active" : "v16-task-queue-row"}
+              key={task.id}
+              onClick={() => onSelectTask(task.id)}
+              type="button"
+            >
+              <strong>{task.id}</strong>
+              <span className="v16-task-queue-title">{task.title}</span>
+              <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
+                {displayStatusLabelZh(task.displayStatus)}
+              </StatusBadge>
+              <small>风险 {displayRiskLabelZh(task.riskLevel)}</small>
+            </button>
+          ))}
+        </div>
+      </aside>
       <TaskDetail
         actionFeedback={actionFeedback}
         actions={actions}
@@ -1294,9 +1304,9 @@ function TaskDetail({
       </header>
       <DescriptionList
         items={[
-          ["Agent", "Build Agent"],
+          ["智能体", "执行助手"],
           ["内部状态", task.status],
-          ["风险", task.riskLevel || "normal"],
+          ["风险", displayRiskLabelZh(task.riskLevel)],
           ["交给 Codex", handedOff ? "已做本地标记" : "未标记"],
           ["来源 SPEC", task.projectId ?? "approved SPEC"],
         ]}
@@ -1307,7 +1317,7 @@ function TaskDetail({
       <SectionList title="相关文件" items={task.allowedFiles} />
       <SectionList title="验证命令" items={task.validationCommands} />
       <SectionList title="证据要求" items={task.evidenceRequired} />
-      <CopyableCodeBlock content={buildCodexHandoff(task)} maxHeight={210} title="Codex Handoff Package" />
+      <CopyableCodeBlock content={buildCodexHandoff(task)} maxHeight={210} title="Codex 任务包" />
       {actionFeedback ? <p className="v16-feedback">{actionFeedback}</p> : null}
       <ActionBar sticky>
         {actions.map((action, index) => (
@@ -1454,22 +1464,22 @@ function DeliveryDetail({
   return (
     <section className="v16-detail-pane" aria-label="交付详情">
       <header>
-        <p className="v16-kicker">Delivery Summary</p>
+        <p className="v16-kicker">交付摘要</p>
         <h2>{delivery?.runId ?? "还没有交付材料"}</h2>
         <StatusBadge status={delivery ? "ready" : "idle"}>{delivery?.status ?? "等待写回"}</StatusBadge>
       </header>
       <div className="v16-summary-grid">
-        <MetricCard label="Evidence" value={outputStatusState.status?.summary.evidence ?? evidence.length} />
-        <MetricCard label="Validation" value={selectedTask?.validationCommands.length ?? 0} />
-        <MetricCard label="Changed files" value={selectedTask?.allowedFiles.length ?? 0} />
-        <MetricCard label="Missing evidence" value={outputStatusState.status?.summary.incompleteEvidence ?? 0} />
+        <MetricCard label="证据" value={outputStatusState.status?.summary.evidence ?? evidence.length} />
+        <MetricCard label="验证命令" value={selectedTask?.validationCommands.length ?? 0} />
+        <MetricCard label="变更文件" value={selectedTask?.allowedFiles.length ?? 0} />
+        <MetricCard label="缺失证据" value={outputStatusState.status?.summary.incompleteEvidence ?? 0} />
       </div>
-      <SectionList title="Changed files" items={selectedTask?.allowedFiles ?? ["等待 Codex 写回 changed files。"]} />
-      <SectionList title="Validation commands" items={selectedTask?.validationCommands ?? ["等待验证命令。"]} />
-      <SectionList title="Validation result" items={[delivery ? "浏览器预览：验证记录已回填。" : "等待写回。"]} />
-      <SectionList title="Evidence files" items={evidence.map((item) => item.path)} />
-      <SectionList title="Release note" items={[delivery?.path ?? "暂无 release delivery。"]} />
-      <SectionList title="Out-of-scope check" items={["普通页面只展示摘要；raw JSON 在高级页查看。"]} />
+      <SectionList title="变更文件" items={selectedTask?.allowedFiles ?? ["等待 Codex 写回变更文件。"]} />
+      <SectionList title="验证命令" items={selectedTask?.validationCommands ?? ["等待验证命令。"]} />
+      <SectionList title="验证结果" items={[delivery ? "浏览器预览：验证记录已回填。" : "等待写回。"]} />
+      <SectionList title="证据文件" items={evidence.map((item) => item.path)} />
+      <SectionList title="交付记录" items={[delivery?.path ?? "暂无交付记录。"]} />
+      <SectionList title="越界检查" items={["普通页面只展示摘要；原始 JSON 在高级页查看。"]} />
       <ActionBar sticky>
         <ActionButton disabled={!delivery} onClick={onOpenAudit} variant="primary">
           请求审计
@@ -1567,7 +1577,7 @@ function AuditReport({
   return (
     <section className="v16-detail-pane" aria-label="审计报告详情">
       <header>
-        <p className="v16-kicker">Audit Report</p>
+        <p className="v16-kicker">审计报告</p>
         <h2>{selectedAudit?.auditId ?? report?.audit.auditId ?? "未请求审计"}</h2>
         <StatusBadge status={selectedAudit || report ? "warning" : "idle"}>
           {selectedAudit?.status ?? report?.audit.status ?? "未请求"}
@@ -1575,13 +1585,13 @@ function AuditReport({
       </header>
       <SectionList title="审计结论" items={[report?.reportMarkdown.split("\n").slice(0, 3).join(" ") || "选择 delivery 并填写原因后可请求人工审计。"]} />
       <SectionList
-        title="Findings"
-        items={findings.length ? findings.map((finding) => `${finding.severity ?? "info"}：${finding.summary ?? finding.id ?? "finding"}`) : ["暂无 findings。"]}
+        title="发现项"
+        items={findings.length ? findings.map((finding) => `${finding.severity ?? "info"}：${finding.summary ?? finding.id ?? "发现项"}`) : ["暂无发现项。"]}
       />
-      <JsonSummary title="Evidence Map" value={report?.evidenceMap ?? { evidence: [], releaseDelivery: [] }} />
-      <JsonSummary title="Traceability" value={report?.traceability ?? { spec: "waiting", issue: "waiting", delivery: "waiting" }} />
-      <SectionList title="Scope check" items={["对照 SPEC / Issue / Delivery / Evidence。"]} />
-      <SectionList title="Validation check" items={["检查验证命令是否记录并通过。"]} />
+      <JsonSummary title="证据映射" value={report?.evidenceMap ?? { evidence: [], releaseDelivery: [] }} />
+      <JsonSummary title="追溯关系" value={report?.traceability ?? { spec: "waiting", issue: "waiting", delivery: "waiting" }} />
+      <SectionList title="范围检查" items={["对照 SPEC / Issue / Delivery / Evidence。"]} />
+      <SectionList title="验证检查" items={["检查验证命令是否记录并通过。"]} />
       <SectionList title="处理建议" items={["建议：补充证据", "建议：返工", "建议：接受"]} />
       <SectionList title="当前版本限制" items={["这里只读展示建议，不写接受 / 返工 / 补证据状态。"]} />
     </section>
@@ -1945,6 +1955,20 @@ function statusChipForDisplayStatus(status: IssueDisplayStatus = "backlog"): Sta
   return chips[status];
 }
 
+function displayRiskLabelZh(risk?: string | null) {
+  const normalized = (risk ?? "normal").toLowerCase();
+  if (normalized === "low") {
+    return "低";
+  }
+  if (normalized === "medium" || normalized === "med") {
+    return "中";
+  }
+  if (normalized === "high") {
+    return "高";
+  }
+  return "普通";
+}
+
 function taskActionsForRow(task: V1Issue) {
   return taskActionsForStatus(task.displayStatus);
 }
@@ -2015,25 +2039,25 @@ function buildCodexHandoff(task: V1Issue) {
   return [
     `# ${task.title}`,
     "",
-    `Issue: ${task.id}`,
-    `Risk: ${task.riskLevel || "normal"}`,
+    `任务：${task.id}`,
+    `风险：${displayRiskLabelZh(task.riskLevel)}`,
     "",
-    "## Scope",
+    "## 范围",
     ...task.scope.map((item) => `- ${item}`),
     "",
-    "## Non-goals",
+    "## 非目标",
     ...task.nonGoals.map((item) => `- ${item}`),
     "",
-    "## Allowed paths",
+    "## 允许路径",
     ...task.allowedFiles.map((item) => `- ${item}`),
     "",
-    "## Forbidden actions",
+    "## 禁止动作",
     ...task.forbiddenFiles.map((item) => `- ${item}`),
     "",
-    "## Validation commands",
+    "## 验证命令",
     ...task.validationCommands.map((item) => `- ${item}`),
     "",
-    "## Output requirements",
+    "## 交付要求",
     ...task.evidenceRequired.map((item) => `- ${item}`),
   ].join("\n");
 }
