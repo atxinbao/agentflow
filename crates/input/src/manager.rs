@@ -1,5 +1,5 @@
 use crate::{
-    issue::{DisplayStatus, InputIssue},
+    issue::InputIssue,
     model::{
         InputIndex, InputIndexEntry, InputManifest, InputSnapshot, InputStatusSnapshot,
         InputSummary, InputWorkspaceStatus, INPUT_STATUS_VERSION,
@@ -223,7 +223,7 @@ fn rebuild_index(root: &Path, snapshot: &InputSnapshot) -> Result<()> {
                 title: issue.title.clone(),
                 path: issue.system.path.clone(),
                 status: format!("{:?}", issue.status).to_lowercase(),
-                display_status: Some(DisplayStatus::from_input_status(&issue.status)),
+                display_status: Some(issue.display_status.clone()),
             })
             .collect(),
     };

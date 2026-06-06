@@ -44,8 +44,8 @@
   --af-success-soft: #dcfce7;
   --af-warning-soft: #fff4d6;
   --af-danger-soft: #fee2e2;
-  --af-shadow-card: 0 18px 42px rgba(15, 23, 42, 0.12);
-  --af-shadow-soft: 0 10px 26px rgba(15, 23, 42, 0.1);
+  --af-shadow-card: 0 14px 34px rgba(15, 23, 42, 0.1);
+  --af-shadow-soft: 0 8px 20px rgba(15, 23, 42, 0.08);
 
   --af-font-sans: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
     "Noto Sans CJK SC", sans-serif;
@@ -53,11 +53,11 @@
 
   --af-text-xs: 12px;
   --af-text-sm: 13px;
-  --af-text-md: 15px;
-  --af-text-lg: 18px;
-  --af-text-xl: 22px;
-  --af-text-2xl: 28px;
-  --af-text-3xl: 34px;
+  --af-text-md: 14px;
+  --af-text-lg: 16px;
+  --af-text-xl: 19px;
+  --af-text-2xl: 24px;
+  --af-text-3xl: 30px;
 
   --af-leading-tight: 1.2;
   --af-leading-normal: 1.5;
@@ -126,8 +126,8 @@
     --af-success-soft: #113423;
     --af-warning-soft: #33250d;
     --af-danger-soft: #451915;
-    --af-shadow-card: 0 18px 42px rgba(0, 0, 0, 0.22);
-    --af-shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.18);
+    --af-shadow-card: 0 14px 34px rgba(0, 0, 0, 0.2);
+    --af-shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.16);
 
     color-scheme: dark;
   }
@@ -172,7 +172,7 @@
   --af-success-soft: #113423;
   --af-warning-soft: #33250d;
   --af-danger-soft: #451915;
-  --af-shadow-card: 0 18px 42px rgba(0, 0, 0, 0.22);
-  --af-shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.18);
+  --af-shadow-card: 0 14px 34px rgba(0, 0, 0, 0.2);
+  --af-shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.16);
   color-scheme: dark;
 }

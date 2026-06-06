@@ -238,3 +238,121 @@ fn delivery_status(
         .map(|entry| entry.status.clone())
         .unwrap_or_else(|| "missing".to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agentflow_execute::ExecuteRunStatus;
+    use agentflow_output::{
+        OutputIndex, OutputIndexEntry, OutputManifest, OutputSnapshot, OutputStatusSnapshot,
+        OutputSummary, OutputWorkspaceStatus,
+    };
+    use std::collections::BTreeMap;
+
+    fn issue(status: InputIssueStatus) -> InputIssue {
+        InputIssue {
+            issue_id: "iss-001".to_string(),
+            status,
+            ..InputIssue::default()
+        }
+    }
+
+    fn run(status: ExecuteRunStatus) -> ExecuteRunIndexEntry {
+        ExecuteRunIndexEntry {
+            run_id: "run-001".to_string(),
+            issue_id: "iss-001".to_string(),
+            status,
+            updated_at: 1,
+            ..ExecuteRunIndexEntry::default()
+        }
+    }
+
+    fn output_with_delivery(status: &str) -> agentflow_output::OutputSnapshot {
+        OutputSnapshot {
+            version: agentflow_output::OUTPUT_SNAPSHOT_VERSION.to_string(),
+            project_root: "/tmp/agentflow-test".to_string(),
+            ready: true,
+            status: OutputStatusSnapshot {
+                version: agentflow_output::OUTPUT_STATUS_VERSION.to_string(),
+                project_root: "/tmp/agentflow-test".to_string(),
+                status: OutputWorkspaceStatus::Ready,
+                ready: true,
+                manifest_exists: true,
+                index_exists: true,
+                summary: OutputSummary::default(),
+                missing_paths: Vec::new(),
+                warnings: Vec::new(),
+                errors: Vec::new(),
+            },
+            manifest: OutputManifest {
+                version: agentflow_output::OUTPUT_MANIFEST_VERSION.to_string(),
+                project_root: "/tmp/agentflow-test".to_string(),
+                status: OutputWorkspaceStatus::Ready,
+                paths: BTreeMap::new(),
+                summary: OutputSummary::default(),
+                updated_at: 1,
+            },
+            index: OutputIndex {
+                release_deliveries: vec![OutputIndexEntry {
+                    run_id: "run-001".to_string(),
+                    issue_id: "iss-001".to_string(),
+                    status: status.to_string(),
+                    updated_at: 1,
+                    ..OutputIndexEntry::default()
+                }],
+                ..OutputIndex::default()
+            },
+        }
+    }
+
+    #[test]
+    fn display_status_mapping_covers_input_execute_output_and_audit_states() {
+        assert_eq!(
+            display_status(&issue(InputIssueStatus::Planned), None, None, None),
+            DisplayStatus::Backlog
+        );
+        assert_eq!(
+            display_status(&issue(InputIssueStatus::ReadyForExecute), None, None, None),
+            DisplayStatus::Ready
+        );
+        assert_eq!(
+            display_status(
+                &issue(InputIssueStatus::ReadyForExecute),
+                Some(&run(ExecuteRunStatus::Running)),
+                None,
+                Some("run-001"),
+            ),
+            DisplayStatus::InProgress
+        );
+        let output = output_with_delivery("drafted");
+        assert_eq!(
+            display_status(
+                &issue(InputIssueStatus::ReadyForExecute),
+                None,
+                Some(&output),
+                Some("run-001"),
+            ),
+            DisplayStatus::Review
+        );
+        assert_eq!(
+            audit_display_status(Some(&output_with_audit("passed")), "iss-001"),
+            Some(DisplayStatus::Done)
+        );
+        assert_eq!(
+            display_status(&issue(InputIssueStatus::Canceled), None, None, None),
+            DisplayStatus::Cancel
+        );
+    }
+
+    fn output_with_audit(status: &str) -> agentflow_output::OutputSnapshot {
+        let mut output = output_with_delivery("drafted");
+        output.index.audits = vec![OutputIndexEntry {
+            run_id: "run-001".to_string(),
+            issue_id: "iss-001".to_string(),
+            status: status.to_string(),
+            updated_at: 1,
+            ..OutputIndexEntry::default()
+        }];
+        output
+    }
+}

@@ -12,8 +12,8 @@
 
 .project-file-page {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-template-columns: 336px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 336px;
   gap: 18px;
   height: 100%;
   min-height: 0;
@@ -53,11 +53,45 @@
 }
 
 .project-file-reader {
+  grid-column: 1;
+  grid-row: 1;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   height: calc(100% - 20px);
-  margin: 10px 10px 10px 0;
+  margin: 10px 0 10px 10px;
   overflow: hidden;
+}
+
+.project-file-column-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  min-height: 28px;
+  color: var(--af-theme-text-primary);
+}
+
+.project-file-reader > .project-file-column-title {
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--af-border-soft);
+}
+
+.project-file-column-title strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-file-column-title span {
+  flex: 0 0 auto;
+  color: var(--af-theme-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
 }
 
 .project-file-reader-header {
@@ -87,16 +121,16 @@
 .project-directory-overview h3 {
   margin: 2px 0 0;
   color: var(--af-theme-text-primary);
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 26px;
+  font-size: 16px;
+  font-weight: 720;
+  line-height: 22px;
 }
 
 .project-file-content,
 .project-directory-overview,
 .project-file-empty {
   min-height: 0;
-  padding: 22px 24px 28px;
+  padding: 18px 20px 22px;
   overflow: auto;
 }
 
@@ -106,7 +140,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin: 0 0 18px;
+  margin: 0 0 14px;
   padding: 0;
   border-bottom: 0;
 }
@@ -123,8 +157,8 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   margin-top: 1px;
   border: 1px solid var(--af-border);
   border-radius: 8px;
@@ -168,9 +202,9 @@
 
 .project-file-content-header h3 {
   color: var(--af-theme-text-primary);
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 22px;
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 20px;
 }
 
 .project-file-title-group h3 {
@@ -218,13 +252,13 @@
 .project-markdown-reader {
   width: 100%;
   max-width: none;
-  padding: 22px 0 0;
+  padding: 18px 0 0;
   border-top: 1px solid var(--af-border-soft);
   border-radius: 0;
   background: transparent;
   color: var(--af-theme-text-primary);
-  font-size: 14px;
-  line-height: 24px;
+  font-size: 13px;
+  line-height: 22px;
 }
 
 .project-markdown-reader > :not(pre) {
@@ -235,7 +269,7 @@
 .project-markdown-reader h2,
 .project-markdown-reader h3,
 .project-markdown-reader h4 {
-  margin: 26px 0 10px;
+  margin: 22px 0 8px;
   color: var(--af-theme-text-primary);
   letter-spacing: 0;
 }
@@ -249,27 +283,27 @@
 }
 
 .project-markdown-reader h1 {
-  font-size: 26px;
-  line-height: 34px;
+  font-size: 22px;
+  line-height: 29px;
 }
 
 .project-markdown-reader h2 {
-  font-size: 20px;
-  line-height: 28px;
+  font-size: 17px;
+  line-height: 24px;
 }
 
 .project-markdown-reader h3,
 .project-markdown-reader h4 {
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .project-markdown-reader p,
 .project-plain-reader p {
-  margin: 0 0 14px;
+  margin: 0 0 12px;
   color: var(--af-theme-text-secondary);
-  font-size: 14px;
-  line-height: 24px;
+  font-size: 13px;
+  line-height: 22px;
 }
 
 .project-markdown-reader ul {
@@ -282,28 +316,28 @@
 
 .project-markdown-reader pre {
   overflow: auto;
-  margin: 14px 0;
-  padding: 14px 16px;
+  margin: 12px 0;
+  padding: 12px 14px;
   border: 1px solid var(--af-border-soft);
   border-radius: 8px;
   background: var(--af-code-bg);
   color: var(--af-theme-text-primary);
   font-family: "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
-  font-size: 13px;
-  line-height: 22px;
+  font-size: 12px;
+  line-height: 20px;
 }
 
 .project-code-reader,
 .project-binary-reader pre {
   margin: 0;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--af-border-soft);
   border-radius: 8px;
   background: var(--af-code-bg);
   color: var(--af-theme-text-primary);
   font-family: "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
-  font-size: 13px;
-  line-height: 22px;
+  font-size: 12px;
+  line-height: 20px;
   overflow: auto;
   white-space: pre-wrap;
 }
@@ -327,11 +361,11 @@
   inset: 0 auto auto 0;
   min-width: 100%;
   margin: 0;
-  padding: 14px 16px;
+  padding: 12px 14px;
   color: var(--af-theme-text-primary);
   font-family: "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
-  font-size: 13px;
-  line-height: 22px;
+  font-size: 12px;
+  line-height: 20px;
   white-space: pre;
   will-change: transform;
 }
@@ -344,7 +378,7 @@
 .project-code-reader.shiki-reader pre {
   min-height: 100%;
   margin: 0;
-  padding: 14px 16px;
+  padding: 12px 14px;
   overflow: auto;
   border-radius: 8px;
   background: var(--af-code-bg) !important;
@@ -362,7 +396,7 @@
 .project-media-reader,
 .project-pdf-reader,
 .project-docx-reader {
-  padding-top: 22px;
+  padding-top: 18px;
   border-top: 1px solid var(--af-border-soft);
 }
 
@@ -373,10 +407,10 @@
 .project-pdf-reader p,
 .project-docx-reader p {
   max-width: 820px;
-  margin: 0 0 14px;
+  margin: 0 0 12px;
   color: var(--af-theme-text-secondary);
-  font-size: 13px;
-  line-height: 22px;
+  font-size: 12px;
+  line-height: 20px;
 }
 
 .project-large-text-reader .project-large-text-status {
@@ -506,10 +540,12 @@
 }
 
 .project-file-browser {
+  grid-column: 2;
+  grid-row: 1;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   height: calc(100% - 20px);
-  margin: 10px 0 10px 10px;
+  margin: 10px 10px 10px 0;
   overflow: hidden;
 }
 
