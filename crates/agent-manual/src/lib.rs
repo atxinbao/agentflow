@@ -178,6 +178,30 @@ mod tests {
     }
 
     #[test]
+    fn prepare_removes_legacy_define_directories() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow/define/goals")).unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow/define/milestones")).unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow/define/issues")).unwrap();
+        fs::write(
+            dir.path().join(".agentflow/define/goals/old-goal.md"),
+            "legacy\n",
+        )
+        .unwrap();
+
+        let status = prepare_agent_working_manual(dir.path()).unwrap();
+
+        assert!(status.ready);
+        assert!(!dir.path().join(".agentflow/define/goals").exists());
+        assert!(!dir.path().join(".agentflow/define/milestones").exists());
+        assert!(!dir.path().join(".agentflow/define/issues").exists());
+        assert!(status
+            .repairs
+            .iter()
+            .any(|repair| repair.contains("Removed legacy define directory")));
+    }
+
+    #[test]
     fn skills_lock_records_agent_locale_and_style_policy() {
         let dir = tempdir().unwrap();
 

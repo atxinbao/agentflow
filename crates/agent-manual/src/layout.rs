@@ -74,6 +74,12 @@ const LAYOUT_DIRECTORIES: &[&str] = &[
     ".agentflow/state/indexes",
 ];
 
+const LEGACY_DEFINE_DIRECTORIES: &[&str] = &[
+    ".agentflow/define/goals",
+    ".agentflow/define/milestones",
+    ".agentflow/define/issues",
+];
+
 const LAYOUT_FILES: [(&str, &str); 5] = [
     (".agentflow/define/agent/roles.json", AGENT_ROLES_JSON),
     (".agentflow/define/spec/SPEC.md", SPEC_MANUAL),
@@ -173,6 +179,7 @@ pub(crate) fn prepare_workspace_layout(
         &mut reused_paths,
         repairs,
     )?;
+    cleanup_legacy_define_directories(root, repairs)?;
 
     repairs.extend(
         created_paths
@@ -187,6 +194,24 @@ pub(crate) fn prepare_workspace_layout(
         reused_paths,
         missing_paths: Vec::new(),
     })
+}
+
+fn cleanup_legacy_define_directories(root: &Path, repairs: &mut Vec<String>) -> Result<()> {
+    for relative_path in LEGACY_DEFINE_DIRECTORIES {
+        let path = root.join(relative_path);
+        if !path.exists() {
+            continue;
+        }
+        if !path.is_dir() {
+            repairs.push(format!(
+                "Retained legacy define path {relative_path} because it is not a directory"
+            ));
+            continue;
+        }
+        fs::remove_dir_all(&path).with_context(|| format!("remove legacy {relative_path}"))?;
+        repairs.push(format!("Removed legacy define directory {relative_path}"));
+    }
+    Ok(())
 }
 
 pub(crate) fn validate_workspace_layout(
@@ -585,15 +610,15 @@ These artifacts are written under:
 
 `.agentflow/output/release/<run-id>/`
 
-After Release Delivery exists, AgentFlow must ensure one `release-auto` audit request under:
-
-`.agentflow/output/audit/<audit-id>/audit-request.json`
-
-AgentFlow must also ensure one audit issue under:
+After Release Delivery exists, AgentFlow must ensure one audit issue under:
 
 `.agentflow/input/issues/audit-<release-id>.json`
 
-The audit issue must use `issueCategory=audit` and `requiredAgentRole=audit-agent`.
+The audit issue is the primary entry for Audit Agent work. It must use `issueCategory=audit` and `requiredAgentRole=audit-agent`.
+
+AgentFlow may also keep one `release-auto` audit request as compatibility metadata under:
+
+`.agentflow/output/audit/<audit-id>/audit-request.json`
 
 ## V1 Boundary
 

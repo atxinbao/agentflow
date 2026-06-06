@@ -39,6 +39,9 @@ const DEMO_SPEC_ID: &str = "SPEC-DEMO-001";
 const DEMO_PROJECT_ID: &str = "PROJ-DEMO-001";
 const DEMO_DELIVERY_RUN_ID: &str = "DEL-DEMO-001";
 const DEMO_AUDIT_ID: &str = "AUD-DEMO-001";
+const DOGFOOD_SOURCE: &str = "agentflow-dogfood-cutover";
+const DOGFOOD_SPEC_ID: &str = "dogfood-cutover-v1";
+const DOGFOOD_ISSUE_ID: &str = "AF-DOGFOOD-001";
 
 #[derive(Clone)]
 struct DemoIssueSeed {
@@ -74,6 +77,7 @@ pub(crate) fn initialize_base_release_project(
         } else {
             warnings.push("未读取到最近 Git 提交；保留已有 .agentflow 数据。".to_string());
         }
+        write_dogfood_cutover_input_if_agentflow(root, &mut paths)?;
 
         let summary = ProjectInitializationSummary {
             version: "base-release-initialization.v1".to_string(),
@@ -121,6 +125,7 @@ pub(crate) fn initialize_base_release_project(
             format!(".agentflow/output/audit/{DEMO_AUDIT_ID}/audit-report.md"),
         ]);
     }
+    write_dogfood_cutover_input_if_agentflow(root, &mut paths)?;
 
     let summary = ProjectInitializationSummary {
         version: "base-release-initialization.v1".to_string(),
@@ -735,6 +740,136 @@ fn write_demo_audit(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn write_dogfood_cutover_input_if_agentflow(
+    root: &Path,
+    paths: &mut Vec<String>,
+) -> Result<(), String> {
+    if !is_agentflow_self_project(root) {
+        return Ok(());
+    }
+
+    let now = unix_timestamp_seconds();
+    let spec_dir = root
+        .join(".agentflow/input/specs/approved")
+        .join(DOGFOOD_SPEC_ID);
+    ensure_directory(&spec_dir)?;
+    write_text_if_missing(
+        &spec_dir.join("product.md"),
+        "# AgentFlow Dogfood Cutover SPEC\n\nAgentFlow 自身进入 dogfood 使用阶段。后续本项目需求必须从 SPEC、Issue、Handoff、Delivery、Audit 这条链路进入，不再依赖 pre-base 文档或一次性截图说明。\n\n## 目标\n\n- 清理 Base 前遗留入口和旧目录提示。\n- 保留当前可执行事实源：input、execute、output、state。\n- 生成第一条 dogfood cutover Issue，作为 AgentFlow 自己使用 AgentFlow 的起点。\n",
+        ".agentflow/input/specs/approved/dogfood-cutover-v1/product.md",
+        paths,
+    )?;
+    write_text_if_missing(
+        &spec_dir.join("tech.md"),
+        "# 技术约束\n\n- 只写入 `.agentflow/**` 运行事实、需求文档和索引。\n- 不删除用户源码、不删除 Git 仓库、不调用模型。\n- `AGENTS.md` 由本地生成并加入忽略；如果已经被 Git 跟踪，只提示用户手动 `git rm --cached AGENTS.md`。\n- Browser Preview mock 只能保留在 `apps/desktop/src/browserPreviewData.ts`，真实客户端不能静默回退到 mock。\n",
+        ".agentflow/input/specs/approved/dogfood-cutover-v1/tech.md",
+        paths,
+    )?;
+    write_json_if_missing(
+        &spec_dir.join("spec.json"),
+        &json!({
+            "version": "input-spec.v1",
+            "specId": DOGFOOD_SPEC_ID,
+            "source": DOGFOOD_SOURCE,
+            "createdBy": DOGFOOD_SOURCE,
+            "title": "AgentFlow Dogfood Cutover",
+            "summary": "清理 pre-base 入口，启用 AgentFlow 自身 dogfood 工作流。",
+            "status": "approved",
+            "issueId": DOGFOOD_ISSUE_ID
+        }),
+        ".agentflow/input/specs/approved/dogfood-cutover-v1/spec.json",
+        paths,
+    )?;
+    write_json_if_missing(
+        &spec_dir.join("approval.json"),
+        &json!({
+            "version": "input-spec-approval.v1",
+            "specId": DOGFOOD_SPEC_ID,
+            "approved": true,
+            "approvedBy": DOGFOOD_SOURCE,
+            "approvedAt": now,
+            "source": DOGFOOD_SOURCE
+        }),
+        ".agentflow/input/specs/approved/dogfood-cutover-v1/approval.json",
+        paths,
+    )?;
+
+    let issue = InputIssue {
+        version: "input-issue.v1".to_string(),
+        issue_id: DOGFOOD_ISSUE_ID.to_string(),
+        issue_model: InputIssueModel::Direct,
+        issue_category: IssueCategory::Spec,
+        required_agent_role: AgentRole::BuildAgent,
+        source_spec_id: DOGFOOD_SPEC_ID.to_string(),
+        project_id: None,
+        title: "清理 pre-base 文档并启用 dogfood 工作流".to_string(),
+        summary: "完成 AgentFlow 自身 dogfood cutover：当前需求进入 SPEC、Issue、Handoff、Delivery、Audit 链路。"
+            .to_string(),
+        kind: InputIssueKind::Cleanup,
+        priority: InputPriority::High,
+        status: InputIssueStatus::ReadyForExecute,
+        display_status: DisplayStatus::Ready,
+        risk_level: InputRiskLevel::Medium,
+        scope: vec![
+            "更新 requirements 索引，明确 024-029 为 Base 后基线。".to_string(),
+            "删除 legacy define goals / milestones / issues 目录。".to_string(),
+            "确认 Browser Preview mock 只存在于前端 mock 数据边界。".to_string(),
+            "确认 release-auto 以 audit issue 作为审计入口。".to_string(),
+            "确认 AGENTS.md 本地生成并加入忽略，不强制删除已跟踪文件。".to_string(),
+        ],
+        non_goals: vec![
+            "不新增业务能力。".to_string(),
+            "不调用模型。".to_string(),
+            "不删除用户源码或 Git 仓库。".to_string(),
+            "不把 Browser Preview mock 写入真实客户端路径。".to_string(),
+        ],
+        acceptance_criteria: vec![
+            format!(".agentflow/input/specs/approved/{DOGFOOD_SPEC_ID}/spec.json 存在"),
+            format!(".agentflow/input/issues/{DOGFOOD_ISSUE_ID}.json 存在"),
+            "dogfood issue 使用 issueCategory=spec、requiredAgentRole=build-agent、displayStatus=ready。"
+                .to_string(),
+            "legacy define goals / milestones / issues 目录会在 prepare 时被删除。".to_string(),
+            "release-auto audit request 已有时也能补齐对应 audit issue。".to_string(),
+        ],
+        validation_hints: vec![
+            "cargo check --workspace".to_string(),
+            "cargo test --workspace".to_string(),
+            "npm --prefix apps/desktop run build".to_string(),
+            "git diff --check".to_string(),
+        ],
+        relations: InputIssueRelations::default(),
+        panel: InputPanelLink::default(),
+        audit: None,
+        system: InputSystemRecord {
+            created_by: DOGFOOD_SOURCE.to_string(),
+            created_at: now,
+            updated_at: now,
+            path: format!(".agentflow/input/issues/{DOGFOOD_ISSUE_ID}.json"),
+            revision: 1,
+        },
+    };
+    write_json_if_missing(
+        &root
+            .join(".agentflow/input/issues")
+            .join(format!("{DOGFOOD_ISSUE_ID}.json")),
+        &issue,
+        ".agentflow/input/issues/AF-DOGFOOD-001.json",
+        paths,
+    )
+}
+
+fn is_agentflow_self_project(root: &Path) -> bool {
+    let desktop_package = root.join("apps/desktop/package.json");
+    let agent_manual_crate = root.join("crates/agent-manual/Cargo.toml");
+    if !desktop_package.is_file() || !agent_manual_crate.is_file() {
+        return false;
+    }
+
+    fs::read_to_string(desktop_package)
+        .map(|content| content.contains("\"name\": \"agentflow-desktop\""))
+        .unwrap_or(false)
+}
+
 fn write_git_context(root: &Path, contexts: &[ProjectInitializationContext]) -> Result<(), String> {
     let now = unix_timestamp_seconds();
     let context_value = json!({
@@ -972,6 +1107,20 @@ fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), String>
     fs::write(path, content).map_err(|error| format!("write {}: {error}", path.display()))
 }
 
+fn write_json_if_missing<T: serde::Serialize>(
+    path: &Path,
+    value: &T,
+    relative_path: &str,
+    paths: &mut Vec<String>,
+) -> Result<(), String> {
+    if path.is_file() {
+        return Ok(());
+    }
+    write_json(path, value)?;
+    paths.push(relative_path.to_string());
+    Ok(())
+}
+
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
     let raw =
         fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))?;
@@ -983,6 +1132,20 @@ fn write_text(path: &Path, content: &str) -> Result<(), String> {
         ensure_directory(parent)?;
     }
     fs::write(path, content).map_err(|error| format!("write {}: {error}", path.display()))
+}
+
+fn write_text_if_missing(
+    path: &Path,
+    content: &str,
+    relative_path: &str,
+    paths: &mut Vec<String>,
+) -> Result<(), String> {
+    if path.is_file() {
+        return Ok(());
+    }
+    write_text(path, content)?;
+    paths.push(relative_path.to_string());
+    Ok(())
 }
 
 fn ensure_directory(path: &Path) -> Result<(), String> {
