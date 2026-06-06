@@ -856,14 +856,15 @@
 .v16-split-page,
 .v16-advanced-layout {
   display: grid;
-  grid-template-columns: minmax(390px, 0.9fr) minmax(0, 1.5fr);
+  grid-template-columns: minmax(340px, 0.74fr) minmax(0, 1.55fr);
   gap: 14px;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .v16-task-list-layout {
-  height: 100%;
-  overflow: hidden;
+  grid-template-columns: minmax(380px, 0.72fr) minmax(0, 1.58fr);
 }
 
 .v16-task-queue-pane {
@@ -878,21 +879,29 @@
   border-bottom: 1px solid var(--v16-border);
 }
 
+.v16-list-pane header {
+  min-height: 58px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--v16-border);
+}
+
 .v16-task-queue-items {
+  display: grid;
+  align-content: start;
   min-height: 0;
   overflow: auto;
 }
 
 .v16-task-queue-row {
   display: grid;
-  grid-template-columns: 86px minmax(0, 1fr) 76px;
+  grid-template-columns: 82px minmax(0, 1fr) 76px;
   grid-template-areas:
     "id title status"
     "id risk status";
-  align-items: start;
-  gap: 5px 12px;
+  align-items: center;
+  gap: 4px 12px;
   width: 100%;
-  min-height: 86px;
+  min-height: 80px;
   padding: 12px 14px;
   border: 0;
   border-bottom: 1px solid var(--v16-border-soft);
@@ -938,7 +947,7 @@
 
 .v16-task-queue-row .af-status-badge {
   grid-area: status;
-  align-self: start;
+  align-self: center;
   justify-self: end;
   width: 72px;
   min-height: 32px;
@@ -949,9 +958,9 @@
   white-space: normal;
 }
 
-.v16-task-queue-row small {
+.v16-task-risk {
   grid-area: risk;
-  align-self: end;
+  align-self: start;
   min-width: 0;
   overflow: hidden;
   color: var(--v16-muted);
@@ -1010,11 +1019,15 @@
 }
 
 .v16-detail-pane {
+  grid-template-rows: auto;
   padding: 16px;
 }
 
 .v16-list-pane {
-  padding: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .v16-detail-pane header {
@@ -1072,14 +1085,26 @@
   height: 100%;
 }
 
+.v16-list-items {
+  display: grid;
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+}
+
+.v16-list-pane > .v16-empty-text {
+  padding: 14px;
+}
+
 .v16-list-item {
   display: grid;
   gap: 4px;
   width: 100%;
   padding: 12px;
-  border: 1px solid var(--v16-border);
+  border: 0;
+  border-bottom: 1px solid var(--v16-border-soft);
   border-radius: 0;
-  background: var(--v16-surface-2);
+  background: transparent;
   color: var(--v16-text);
   font: inherit;
   text-align: left;
@@ -1089,8 +1114,22 @@ button.v16-list-item {
   cursor: pointer;
 }
 
+.v16-list-item:hover {
+  background: var(--v16-surface-2);
+}
+
 .v16-list-item.active {
-  border-color: var(--v16-accent);
+  background: var(--v16-accent-soft);
+  box-shadow: inset 3px 0 0 var(--v16-accent);
+}
+
+.v16-list-item strong,
+.v16-list-item span,
+.v16-list-item small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .v16-audit-page {

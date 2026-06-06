@@ -1232,6 +1232,7 @@ function TaskList({
               className={task.id === selectedTask?.id ? "v16-task-queue-row active" : "v16-task-queue-row"}
               key={task.id}
               onClick={() => onSelectTask(task.id)}
+              title={`${task.id} ${task.title}`}
               type="button"
             >
               <strong>{task.id}</strong>
@@ -1239,7 +1240,7 @@ function TaskList({
               <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
                 {displayStatusLabelZh(task.displayStatus)}
               </StatusBadge>
-              <small>风险 {displayRiskLabelZh(task.riskLevel)}</small>
+              <small className="v16-task-risk">风险：{displayRiskLabelZh(task.riskLevel)}</small>
             </button>
           ))}
         </div>
@@ -1418,18 +1419,21 @@ function DeliveryList({
         <span>{deliveries.length}</span>
       </header>
       {deliveries.length ? (
-        deliveries.map((delivery) => (
-          <button
-            className={delivery.runId === selectedDeliveryRunId ? "v16-list-item active" : "v16-list-item"}
-            key={delivery.runId}
-            onClick={() => onSelectDelivery(delivery.runId)}
-            type="button"
-          >
-            <strong>{delivery.runId}</strong>
-            <span>{delivery.issueId || "未记录任务"} · {artifactStatusLabel(delivery.status)}</span>
-            <small>{formatTimestamp(delivery.updatedAt)}</small>
-          </button>
-        ))
+        <div className="v16-list-items">
+          {deliveries.map((delivery) => (
+            <button
+              className={delivery.runId === selectedDeliveryRunId ? "v16-list-item active" : "v16-list-item"}
+              key={delivery.runId}
+              onClick={() => onSelectDelivery(delivery.runId)}
+              title={delivery.runId}
+              type="button"
+            >
+              <strong>{delivery.runId}</strong>
+              <span>{delivery.issueId || "未记录任务"} · {artifactStatusLabel(delivery.status)}</span>
+              <small>{formatTimestamp(delivery.updatedAt)}</small>
+            </button>
+          ))}
+        </div>
       ) : (
         <p className="v16-empty-text">暂无 Codex 写回结果。</p>
       )}
@@ -1535,18 +1539,21 @@ function AuditList({
         <span>{audits.length}</span>
       </header>
       {audits.length ? (
-        audits.map((audit) => (
-          <button
-            className={audit.auditId === selectedAuditId ? "v16-list-item active" : "v16-list-item"}
-            key={audit.auditId}
-            onClick={() => onSelectAudit(audit.auditId)}
-            type="button"
-          >
-            <strong>{audit.auditId}</strong>
-            <span>{artifactStatusLabel(audit.status)} · {audit.requestedBy}</span>
-            <small>{formatTimestamp(audit.requestedAt)}</small>
-          </button>
-        ))
+        <div className="v16-list-items">
+          {audits.map((audit) => (
+            <button
+              className={audit.auditId === selectedAuditId ? "v16-list-item active" : "v16-list-item"}
+              key={audit.auditId}
+              onClick={() => onSelectAudit(audit.auditId)}
+              title={audit.auditId}
+              type="button"
+            >
+              <strong>{audit.auditId}</strong>
+              <span>{artifactStatusLabel(audit.status)} · {audit.requestedBy}</span>
+              <small>{formatTimestamp(audit.requestedAt)}</small>
+            </button>
+          ))}
+        </div>
       ) : (
         <p className="v16-empty-text">还没有请求人工审计。</p>
       )}
