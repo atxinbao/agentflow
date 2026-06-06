@@ -429,10 +429,10 @@
 }
 
 .v16-titlebar-project {
-  display: inline-flex;
+  display: flex;
   justify-self: center;
+  justify-content: center;
   align-items: center;
-  gap: 18px;
   min-width: 0;
   max-width: min(520px, 100%);
 }
@@ -578,7 +578,7 @@
 .v16-workspace {
   grid-row: 2;
   display: grid;
-  grid-template-rows: 48px minmax(0, 1fr);
+  grid-template-rows: 44px minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
@@ -595,7 +595,7 @@
   justify-content: space-between;
   gap: 16px;
   min-width: 0;
-  padding: 0 16px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--v16-border);
   background: var(--v16-surface);
 }
@@ -659,8 +659,22 @@
 .v16-page {
   height: 100%;
   min-height: 0;
-  padding: 16px;
+  padding: 14px;
   overflow: auto;
+}
+
+.v16-page .af-page-header {
+  padding: 4px 0 14px;
+}
+
+.v16-page .af-page-title {
+  line-height: 1.05;
+}
+
+.v16-page .af-page-description {
+  max-width: 760px;
+  font-size: 15px;
+  line-height: 1.45;
 }
 
 .v16-home-page,
@@ -842,7 +856,7 @@
 .v16-split-page,
 .v16-advanced-layout {
   display: grid;
-  grid-template-columns: minmax(360px, 0.95fr) minmax(0, 1.45fr);
+  grid-template-columns: minmax(390px, 0.9fr) minmax(0, 1.5fr);
   gap: 14px;
   min-height: 0;
 }
@@ -871,14 +885,14 @@
 
 .v16-task-queue-row {
   display: grid;
-  grid-template-columns: minmax(72px, 0.42fr) minmax(0, 1fr) auto;
+  grid-template-columns: 86px minmax(0, 1fr) 76px;
   grid-template-areas:
     "id title status"
     "id risk status";
-  align-items: center;
-  gap: 4px 12px;
+  align-items: start;
+  gap: 5px 12px;
   width: 100%;
-  min-height: 74px;
+  min-height: 86px;
   padding: 12px 14px;
   border: 0;
   border-bottom: 1px solid var(--v16-border-soft);
@@ -897,7 +911,9 @@
 
 .v16-task-queue-row strong {
   grid-area: id;
+  align-self: start;
   min-width: 0;
+  padding-top: 2px;
   overflow: hidden;
   color: var(--v16-accent);
   font-size: 17px;
@@ -910,6 +926,7 @@
   grid-area: title;
   display: -webkit-box;
   min-width: 0;
+  max-height: 42px;
   overflow: hidden;
   color: var(--v16-text);
   font-size: 15px;
@@ -921,13 +938,20 @@
 
 .v16-task-queue-row .af-status-badge {
   grid-area: status;
+  align-self: start;
   justify-self: end;
-  max-width: 78px;
-  white-space: nowrap;
+  width: 72px;
+  min-height: 32px;
+  max-width: 72px;
+  justify-content: center;
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
 }
 
 .v16-task-queue-row small {
   grid-area: risk;
+  align-self: end;
   min-width: 0;
   overflow: hidden;
   color: var(--v16-muted);
@@ -941,7 +965,7 @@
   min-width: 0;
   overflow: auto;
   border: 1px solid var(--v16-border);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--v16-surface);
 }
 
@@ -981,7 +1005,7 @@
   min-height: 0;
   overflow: auto;
   border: 1px solid var(--v16-border);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--v16-surface);
 }
 
@@ -1054,7 +1078,7 @@
   width: 100%;
   padding: 12px;
   border: 1px solid var(--v16-border);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--v16-surface-2);
   color: var(--v16-text);
   font: inherit;
@@ -1080,7 +1104,7 @@ button.v16-list-item {
   margin: 0;
   overflow: auto;
   border: 1px solid var(--v16-border);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--v16-surface-2);
   color: var(--v16-text);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -1105,7 +1129,7 @@ button.v16-list-item {
   min-height: 0;
   padding: 12px;
   border: 1px solid var(--v16-border);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--v16-surface);
 }
 

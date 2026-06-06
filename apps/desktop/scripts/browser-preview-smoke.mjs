@@ -109,6 +109,13 @@ try {
   assert.ok(appEntry.includes('data-agentflow-page="delivery"'));
   assert.ok(appEntry.includes('data-agentflow-page="audit"'));
   assert.ok(appEntry.includes('data-agentflow-page="advanced"'));
+  const titleBarSource = appEntry.slice(
+    appEntry.indexOf("function TitleBar"),
+    appEntry.indexOf("function WindowDots"),
+  );
+  assert.equal(appEntry.includes("<TitleBar connectedProvider="), false);
+  assert.equal(titleBarSource.includes("connectedProvider"), false);
+  assert.equal(appEntry.includes('meta={<ReadOnlyBadge>本地只读</ReadOnlyBadge>}'), false);
   assert.ok(appEntry.includes("进入工作台"));
   assert.ok(appEntry.includes("工作台"));
   assert.ok(appEntry.includes("任务"));
