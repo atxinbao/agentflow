@@ -1,0 +1,30 @@
+{
+  "version": "input-manifest.v1",
+  "projectRoot": "/Users/mac/Documents/AgentFlow",
+  "status": "ready",
+  "paths": {
+    "approvedSpecs": ".agentflow/input/specs/approved",
+    "archivedSpecs": ".agentflow/input/specs/archive",
+    "draftSpecs": ".agentflow/input/specs/drafts",
+    "intake": ".agentflow/input/intake",
+    "issues": ".agentflow/input/issues",
+    "projects": ".agentflow/input/projects",
+    "relations": ".agentflow/input/relations",
+    "root": ".agentflow/input",
+    "specs": ".agentflow/input/specs",
+    "views": ".agentflow/input/views"
+  },
+  "legacyPaths": {
+    "legacyGoalTree": ".agentflow/goal-tree",
+    "legacySpec": ".agentflow/spec"
+  },
+  "summary": {
+    "intake": 0,
+    "draftSpecs": 0,
+    "approvedSpecs": 2,
+    "projects": 0,
+    "issues": 3,
+    "blockedIssues": 0,
+    "highRiskIssues": 1
+  }
+}

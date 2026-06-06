@@ -1,0 +1,62 @@
+{
+  "version": "input-issue.v1",
+  "issueId": "AF-RULES-LEGACY-001",
+  "issueModel": "direct",
+  "issueCategory": "spec",
+  "requiredAgentRole": "build-agent",
+  "sourceSpecId": "agentflow-remove-legacy-write-ban-v1",
+  "projectId": null,
+  "title": "移除 legacy spec / goal-tree 写入禁令并同步锁文件",
+  "summary": "删除 AgentFlow 规则中关于 legacy .agentflow/spec/** 和 .agentflow/goal-tree/** 的独立写入禁令，同时保持当前 .agentflow/input/** 事实源说明和 SPEC Gate 规则。",
+  "kind": "cleanup",
+  "priority": "medium",
+  "status": "ready-for-execute",
+  "displayStatus": "ready",
+  "riskLevel": "medium",
+  "scope": [
+    "删除 AGENTS.md 中 legacy .agentflow/spec/** / .agentflow/goal-tree/** 写入禁令。",
+    "删除 .agentflow/define/agent/Agentflow.md 中 legacy 写入禁令和 not new write paths 硬阻断表述。",
+    "删除 boundary-check 对 legacy path 写入的独立阻断检查。",
+    "删除 requirement-intake-filter、spec-gate-authoring、input-issue-generation 中 legacy path 写入硬禁止项。",
+    "删除 validation 中 erroneous legacy SPEC / Goal Tree writes 检查项。",
+    "同步更新 .agentflow/define/agent/skills-lock.json 中受影响文件 hash。"
+  ],
+  "nonGoals": [
+    "不把 .agentflow/spec/** 或 .agentflow/goal-tree/** 恢复为推荐写入路径。",
+    "不向 .agentflow/spec/** 或 .agentflow/goal-tree/** 写入新内容。",
+    "不改变 .agentflow/input/** 作为当前需求事实源的规则。",
+    "不改变 Spec Agent、Build Agent、Audit Agent 的角色边界。",
+    "不启动 AgentRun，不创建 PR，不创建远程 issue。"
+  ],
+  "acceptanceCriteria": [
+    "AGENTS.md 不再包含 legacy .agentflow/spec/** / .agentflow/goal-tree/** 写入禁令。",
+    ".agentflow/define/agent/Agentflow.md 不再包含 legacy 写入禁令或 not new write paths 硬阻断表述。",
+    "boundary-check 不再把写 legacy path 作为独立阻断项。",
+    "requirement-intake-filter、spec-gate-authoring、input-issue-generation 不再把写 legacy path 作为硬性禁止项。",
+    "validation 不再检查 erroneous legacy SPEC / Goal Tree writes。",
+    ".agentflow/define/agent/skills-lock.json 中 entry、manual 和受影响 skills 的 hash 与文件内容一致。"
+  ],
+  "validationHints": [
+    "rg -n \"legacy \\\\.agentflow/spec|\\\\.agentflow/spec|goal-tree|legacy SPEC|Goal Tree\" AGENTS.md .agentflow/define/agent",
+    "shasum -a 256 AGENTS.md .agentflow/define/agent/Agentflow.md .agentflow/define/agent/skills/*.md",
+    "find .agentflow/spec .agentflow/goal-tree -maxdepth 2 -type f 2>/dev/null"
+  ],
+  "relations": {
+    "blockedBy": [],
+    "blocks": [],
+    "related": [],
+    "duplicateOf": null
+  },
+  "panel": {
+    "snapshotId": null,
+    "contextPackId": null
+  },
+  "audit": null,
+  "system": {
+    "createdBy": "codex-spec-agent",
+    "createdAt": 1780787439,
+    "updatedAt": 1780787439,
+    "path": ".agentflow/input/issues/AF-RULES-LEGACY-001.json",
+    "revision": 1
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "version": "input-index.v1",
+  "updatedAt": 1780788349,
+  "specs": [
+    {
+      "id": "agentflow-remove-legacy-write-ban-v1",
+      "title": "移除 legacy spec / goal-tree 写入禁令",
+      "path": ".agentflow/input/specs/approved/agentflow-remove-legacy-write-ban-v1/spec.json",
+      "status": "approved"
+    },
+    {
+      "id": "dogfood-cutover-v1",
+      "title": "AgentFlow Dogfood Cutover",
+      "path": ".agentflow/input/specs/approved/dogfood-cutover-v1/spec.json",
+      "status": "approved"
+    }
+  ],
+  "projects": [],
+  "issues": [
+    {
+      "id": "AF-DOGFOOD-001",
+      "title": "清理 pre-base 文档并启用 dogfood 工作流",
+      "path": ".agentflow/input/issues/AF-DOGFOOD-001.json",
+      "status": "ready-for-execute",
+      "displayStatus": "ready"
+    },
+    {
+      "id": "AF-RULES-LEGACY-001",
+      "title": "移除 legacy spec / goal-tree 写入禁令并同步锁文件",
+      "path": ".agentflow/input/issues/AF-RULES-LEGACY-001.json",
+      "status": "ready-for-execute",
+      "displayStatus": "ready"
+    },
+    {
+      "id": "audit-release-v0.1.0",
+      "title": "审计 Release release-v0.1.0",
+      "path": ".agentflow/input/issues/audit-release-v0.1.0.json",
+      "status": "ready-for-execute",
+      "displayStatus": "ready"
+    }
+  ]
+}

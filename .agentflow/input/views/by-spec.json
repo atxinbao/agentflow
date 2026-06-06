@@ -1,0 +1,7 @@
+{
+  "version": "input-view.v1",
+  "viewId": "by-spec",
+  "title": "Issues by SPEC",
+  "filter": "group by sourceSpecId",
+  "sort": "issueId asc"
+}

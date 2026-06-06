@@ -1,0 +1,60 @@
+{
+  "version": "input-issue.v1",
+  "issueId": "AF-DOGFOOD-001",
+  "issueModel": "direct",
+  "issueCategory": "spec",
+  "requiredAgentRole": "build-agent",
+  "sourceSpecId": "dogfood-cutover-v1",
+  "projectId": null,
+  "title": "清理 pre-base 文档并启用 dogfood 工作流",
+  "summary": "完成 AgentFlow 自身 dogfood cutover：当前需求进入 SPEC、Issue、Handoff、Delivery、Audit 链路。",
+  "kind": "cleanup",
+  "priority": "high",
+  "status": "ready-for-execute",
+  "displayStatus": "ready",
+  "riskLevel": "medium",
+  "scope": [
+    "更新 requirements 索引，明确 024-029 为 Base 后基线。",
+    "删除 legacy define goals / milestones / issues 目录。",
+    "确认 Browser Preview mock 只存在于前端 mock 数据边界。",
+    "确认 release-auto 以 audit issue 作为审计入口。",
+    "确认 AGENTS.md 本地生成并加入忽略，不强制删除已跟踪文件。"
+  ],
+  "nonGoals": [
+    "不新增业务能力。",
+    "不调用模型。",
+    "不删除用户源码或 Git 仓库。",
+    "不把 Browser Preview mock 写入真实客户端路径。"
+  ],
+  "acceptanceCriteria": [
+    ".agentflow/input/specs/approved/dogfood-cutover-v1/spec.json 存在",
+    ".agentflow/input/issues/AF-DOGFOOD-001.json 存在",
+    "dogfood issue 使用 issueCategory=spec、requiredAgentRole=build-agent、displayStatus=ready。",
+    "legacy define goals / milestones / issues 目录会在 prepare 时被删除。",
+    "release-auto audit request 已有时也能补齐对应 audit issue。"
+  ],
+  "validationHints": [
+    "cargo check --workspace",
+    "cargo test --workspace",
+    "npm --prefix apps/desktop run build",
+    "git diff --check"
+  ],
+  "relations": {
+    "blockedBy": [],
+    "blocks": [],
+    "related": [],
+    "duplicateOf": null
+  },
+  "panel": {
+    "snapshotId": null,
+    "contextPackId": null
+  },
+  "audit": null,
+  "system": {
+    "createdBy": "agentflow-dogfood-cutover",
+    "createdAt": 1780785671,
+    "updatedAt": 1780785671,
+    "path": ".agentflow/input/issues/AF-DOGFOOD-001.json",
+    "revision": 1
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": "input-spec.v1",
+  "specId": "dogfood-cutover-v1",
+  "source": "agentflow-dogfood-cutover",
+  "createdBy": "agentflow-dogfood-cutover",
+  "title": "AgentFlow Dogfood Cutover",
+  "summary": "清理 pre-base 入口，启用 AgentFlow 自身 dogfood 工作流。",
+  "status": "approved",
+  "issueId": "AF-DOGFOOD-001"
+}

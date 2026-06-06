@@ -1,0 +1,69 @@
+{
+  "version": "input-issue.v1",
+  "issueId": "audit-release-v0.1.0",
+  "issueModel": "direct",
+  "issueCategory": "audit",
+  "requiredAgentRole": "audit-agent",
+  "sourceSpecId": "release-v0.1.0",
+  "projectId": null,
+  "title": "审计 Release release-v0.1.0",
+  "summary": "检查 release-v0.1.0 是否符合已确认需求、任务、证据和交付边界。",
+  "kind": "validation",
+  "priority": "high",
+  "status": "ready-for-execute",
+  "displayStatus": "ready",
+  "riskLevel": "high",
+  "scope": [
+    "读取 release-v0.1.0 的 delivery.json",
+    "读取关联 SPEC / Issue / Evidence",
+    "检查验证命令和结果",
+    "检查是否有越界改动",
+    "生成审计报告"
+  ],
+  "nonGoals": [
+    "不修改用户源码",
+    "不创建远程 PR",
+    "不发布 GitHub Release",
+    "不自动修复问题"
+  ],
+  "acceptanceCriteria": [
+    ".agentflow/output/audit/audit-release-v0.1.0/audit.json 存在",
+    ".agentflow/output/audit/audit-release-v0.1.0/audit-report.md 存在",
+    ".agentflow/output/audit/audit-release-v0.1.0/findings.json 存在",
+    ".agentflow/output/audit/audit-release-v0.1.0/evidence-map.json 存在",
+    ".agentflow/output/audit/audit-release-v0.1.0/traceability.json 存在"
+  ],
+  "validationHints": [
+    "读取 release delivery、evidence、execute result 和 diff summary。",
+    "只写 .agentflow/output/audit/**。"
+  ],
+  "relations": {
+    "blockedBy": [],
+    "blocks": [],
+    "related": [],
+    "duplicateOf": null
+  },
+  "panel": {
+    "snapshotId": null,
+    "contextPackId": null
+  },
+  "audit": {
+    "trigger": "release-auto",
+    "sourceReleaseId": "release-v0.1.0",
+    "sourceRunId": "release-v0.1.0",
+    "expectedOutputs": [
+      "audit.json",
+      "audit-report.md",
+      "findings.json",
+      "evidence-map.json",
+      "traceability.json"
+    ]
+  },
+  "system": {
+    "createdBy": "agentflow-release-auto",
+    "createdAt": 1780782794,
+    "updatedAt": 1780782794,
+    "path": ".agentflow/input/issues/audit-release-v0.1.0.json",
+    "revision": 1
+  }
+}

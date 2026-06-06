@@ -1,0 +1,10 @@
+{
+  "version": "input-spec.v1",
+  "specId": "agentflow-remove-legacy-write-ban-v1",
+  "source": "human-confirmed-chat",
+  "createdBy": "codex-spec-agent",
+  "title": "移除 legacy spec / goal-tree 写入禁令",
+  "summary": "删除 AgentFlow 规则中针对 legacy .agentflow/spec/** 和 .agentflow/goal-tree/** 的独立写入禁令，同时保留当前 .agentflow/input/** 事实源边界。",
+  "status": "approved",
+  "issueId": "AF-RULES-LEGACY-001"
+}

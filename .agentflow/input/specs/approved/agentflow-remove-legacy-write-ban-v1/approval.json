@@ -1,0 +1,8 @@
+{
+  "version": "input-spec-approval.v1",
+  "specId": "agentflow-remove-legacy-write-ban-v1",
+  "approved": true,
+  "approvedBy": "human-via-conversation",
+  "approvedAt": 1780787439,
+  "source": "confirmed-in-chat"
+}

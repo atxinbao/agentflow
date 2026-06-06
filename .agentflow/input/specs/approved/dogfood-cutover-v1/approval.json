@@ -1,0 +1,8 @@
+{
+  "version": "input-spec-approval.v1",
+  "specId": "dogfood-cutover-v1",
+  "approved": true,
+  "approvedBy": "agentflow-dogfood-cutover",
+  "approvedAt": 1780785671,
+  "source": "agentflow-dogfood-cutover"
+}
