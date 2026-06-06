@@ -12,10 +12,35 @@
 
 .project-file-page {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-columns: 336px minmax(0, 1fr);
   gap: 18px;
   height: 100%;
   min-height: 0;
+}
+
+.project-file-readonly-banner {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 34px;
+  margin: 10px 10px 0;
+  padding: 0 12px;
+  border: 1px solid var(--af-border);
+  border-radius: 8px;
+  background: var(--af-panel-bg);
+  color: var(--af-theme-text-primary);
+  font-size: 12px;
+}
+
+.project-file-readonly-banner span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--af-theme-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-file-reader,
