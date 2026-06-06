@@ -538,12 +538,46 @@
   gap: 6px;
 }
 
+.v16-shortcut-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.v16-shortcut-list button {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--v16-border);
+  border-radius: 8px;
+  background: var(--v16-surface-2);
+  color: var(--v16-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.v16-shortcut-list button:hover {
+  border-color: var(--v16-accent);
+}
+
+.v16-shortcut-list strong,
+.v16-shortcut-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .v16-next-step-content p,
 .v16-next-step-content small,
 .v16-project-summary p,
 .v16-detail-pane p,
 .v16-list-pane span,
 .v16-list-pane small,
+.v16-shortcut-list span,
 .v16-description-list dt,
 .v16-section-list li,
 .v16-empty-text,
@@ -781,10 +815,18 @@
 .v16-list-item {
   display: grid;
   gap: 4px;
+  width: 100%;
   padding: 12px;
   border: 1px solid var(--v16-border);
   border-radius: 8px;
   background: var(--v16-surface-2);
+  color: var(--v16-text);
+  font: inherit;
+  text-align: left;
+}
+
+button.v16-list-item {
+  cursor: pointer;
 }
 
 .v16-list-item.active {

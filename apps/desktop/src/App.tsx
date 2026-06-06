@@ -28,7 +28,6 @@ import {
   ActionButton,
   AppFrame,
   CopyableCodeBlock,
-  ListPanel,
   ListRow,
   MetricCard,
   PageHeader,
@@ -60,6 +59,19 @@ import {
 } from "./features/project-files";
 import { useIssueStatusIndex, useStateStatus, type StateStatusState } from "./features/state";
 import { AgentStatusBar, buildAgentStatusItems } from "./features/status-channel";
+import {
+  buildAppInteractionState,
+  buildAuditInteractionState,
+  buildDeliveryInteractionState,
+  buildTaskInteractionState,
+  displayStatusLabelZh,
+  pickTaskId,
+  taskActionLabel,
+  taskActionsForStatus,
+  type AppInteractionState,
+  type ButtonInteractionState,
+  type TaskInteractionAction,
+} from "./interaction/viewModels";
 import type {
   AgentStatusChannelItem,
   AuditIndex,
@@ -79,7 +91,6 @@ import "./AppShell.css";
 
 type Provider = "ChatGPT" | "Claude" | "DeepSeek";
 type AppPage = "home" | "tasks" | "files" | "delivery" | "audit" | "advanced";
-type TaskViewMode = "board" | "list";
 type DataSource = "idle" | "loading" | "tauri" | "preview" | "unavailable";
 
 type WorkspaceDataState = {
@@ -116,19 +127,63 @@ const pages: Array<{ icon: LucideIcon; id: AppPage; label: string }> = [
 
 const onboardingSteps = ["选择项目", "环境准备", "认识 Agent", "确认意图", "完成引导"] as const;
 
+const interactionStorageKeys = {
+  activePage: "agentflow.interaction.activePage.v1",
+  handedOffIssues: "agentflow.interaction.handedOffIssues.v1",
+  onboardingComplete: "agentflow.interaction.onboardingComplete.v1",
+  projectRoot: "agentflow.interaction.projectRoot.v1",
+  provider: "agentflow.interaction.provider.v1",
+} as const;
+
+function readStoredProvider(): Provider | null {
+  const value = window.localStorage.getItem(interactionStorageKeys.provider);
+  return value === "ChatGPT" || value === "Claude" || value === "DeepSeek" ? value : null;
+}
+
+function readStoredPage(): AppPage {
+  const value = window.localStorage.getItem(interactionStorageKeys.activePage);
+  return pages.some((page) => page.id === value) ? (value as AppPage) : "home";
+}
+
+function readStoredProjectRoot() {
+  return window.localStorage.getItem(interactionStorageKeys.projectRoot);
+}
+
+function readStoredBoolean(key: string) {
+  return window.localStorage.getItem(key) === "true";
+}
+
+function readStoredIssueSet() {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(interactionStorageKeys.handedOffIssues) ?? "[]");
+    return new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
 function App() {
-  const [connectedProvider, setConnectedProvider] = useState<Provider | null>(null);
-  const [firstRunOpen, setFirstRunOpen] = useState(false);
-  const [projectRoot, setProjectRoot] = useState<string | null>(
-    isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : null,
+  const [connectedProvider, setConnectedProvider] = useState<Provider | null>(() =>
+    isBrowserPreviewRuntime() ? "ChatGPT" : readStoredProvider(),
   );
-  const [activePage, setActivePage] = useState<AppPage>("home");
-  const [taskViewMode, setTaskViewMode] = useState<TaskViewMode>("board");
+  const [onboardingComplete, setOnboardingComplete] = useState(() =>
+    isBrowserPreviewRuntime() ? true : readStoredBoolean(interactionStorageKeys.onboardingComplete),
+  );
+  const [firstRunOpen, setFirstRunOpen] = useState(() => Boolean(readStoredProvider()) && !onboardingComplete);
+  const [projectRoot, setProjectRoot] = useState<string | null>(
+    isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : readStoredProjectRoot(),
+  );
+  const [activePage, setActivePage] = useState<AppPage>(() => (isBrowserPreviewRuntime() ? "home" : readStoredPage()));
   const [taskSearch, setTaskSearch] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedDeliveryRunId, setSelectedDeliveryRunId] = useState<string | null>(null);
+  const [selectedAuditId, setSelectedAuditId] = useState<string | null>(null);
   const [outputRefreshToken, setOutputRefreshToken] = useState(0);
   const [selectedIntent, setSelectedIntent] = useState("我要新增功能");
   const [onboardingFeedback, setOnboardingFeedback] = useState<string | null>(null);
+  const [taskActionFeedback, setTaskActionFeedback] = useState<string | null>(null);
+  const [taskCopyState, setTaskCopyState] = useState<ButtonInteractionState>("enabled");
+  const [handedOffIssues, setHandedOffIssues] = useState<Set<string>>(() => readStoredIssueSet());
 
   const {
     loadProjectDirectoryPage,
@@ -152,6 +207,30 @@ function App() {
   const outputBundle = useOutputBundle(projectRoot, outputRefreshToken);
 
   useEffect(() => {
+    if (connectedProvider) {
+      window.localStorage.setItem(interactionStorageKeys.provider, connectedProvider);
+    }
+  }, [connectedProvider]);
+
+  useEffect(() => {
+    window.localStorage.setItem(interactionStorageKeys.onboardingComplete, String(onboardingComplete));
+  }, [onboardingComplete]);
+
+  useEffect(() => {
+    if (projectRoot) {
+      window.localStorage.setItem(interactionStorageKeys.projectRoot, projectRoot);
+    }
+  }, [projectRoot]);
+
+  useEffect(() => {
+    window.localStorage.setItem(interactionStorageKeys.activePage, activePage);
+  }, [activePage]);
+
+  useEffect(() => {
+    window.localStorage.setItem(interactionStorageKeys.handedOffIssues, JSON.stringify([...handedOffIssues]));
+  }, [handedOffIssues]);
+
+  useEffect(() => {
     if (!projectRoot) {
       return;
     }
@@ -159,6 +238,21 @@ function App() {
     void loadProjectFiles(projectRoot);
     void loadAgentManual(projectRoot);
   }, [projectRoot]);
+
+  useEffect(() => {
+    if (!projectRoot) {
+      return;
+    }
+    if (activePage === "files") {
+      void loadProjectFiles(projectRoot);
+    }
+    if (activePage === "home" || activePage === "tasks") {
+      void prepareProjectPanel(projectRoot);
+    }
+    if (activePage === "delivery" || activePage === "audit") {
+      setOutputRefreshToken((current) => current + 1);
+    }
+  }, [activePage, projectRoot]);
 
   const agentStatusItems = useMemo(
     () =>
@@ -204,21 +298,50 @@ function App() {
       return searchable.includes(query);
     });
   }, [taskSearch, tasks]);
-  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? tasks.at(0) ?? null;
+  const activeIssueId = workspaceData.workbench?.goalLoop?.activeIssueId ?? null;
+  const selectedTaskCandidateId = useMemo(
+    () => pickTaskId(tasks, selectedTaskId, activeIssueId),
+    [activeIssueId, selectedTaskId, tasks],
+  );
+  const taskInteractionState = useMemo(
+    () => buildTaskInteractionState(tasks, selectedTaskCandidateId),
+    [selectedTaskCandidateId, tasks],
+  );
+  const selectedTask = taskInteractionState.selectedTask;
   const nextStep = useMemo(
     () => buildNextStep(stateStatusState, inputStatusState.status, outputStatusState, selectedTask),
     [inputStatusState.status, outputStatusState, selectedTask, stateStatusState],
   );
+  const appInteractionState: AppInteractionState = useMemo(
+    () =>
+      buildAppInteractionState({
+        activePage,
+        hasError: Boolean(workspaceData.error || outputBundle.error),
+        onboardingComplete,
+        projectLoading: projectFilesState.loading || workspaceData.source === "loading",
+        projectRoot,
+        providerConnected: Boolean(connectedProvider),
+        workspaceBlocked: Boolean(stateStatusState.status?.blockers.length),
+      }),
+    [
+      activePage,
+      connectedProvider,
+      onboardingComplete,
+      outputBundle.error,
+      projectFilesState.loading,
+      projectRoot,
+      stateStatusState.status?.blockers.length,
+      workspaceData.error,
+      workspaceData.source,
+    ],
+  );
 
   useEffect(() => {
-    if (!tasks.length) {
-      setSelectedTaskId(null);
-      return;
+    const nextTaskId = pickTaskId(tasks, selectedTaskId, activeIssueId);
+    if (nextTaskId !== selectedTaskId) {
+      setSelectedTaskId(nextTaskId);
     }
-    if (!selectedTaskId || !tasks.some((task) => task.id === selectedTaskId)) {
-      setSelectedTaskId(tasks[0].id);
-    }
-  }, [selectedTaskId, tasks]);
+  }, [activeIssueId, selectedTaskId, tasks]);
 
   async function chooseProjectFolder() {
     if (isBrowserPreviewRuntime()) {
@@ -258,12 +381,92 @@ function App() {
     setOutputRefreshToken((current) => current + 1);
   }
 
+  async function handleTaskAction(action: TaskInteractionAction, task: V1Issue) {
+    setTaskActionFeedback(null);
+    if (action === "copy-handoff") {
+      setTaskCopyState("loading");
+      try {
+        await navigator.clipboard.writeText(buildCodexHandoff(task));
+        setTaskCopyState("success");
+        setTaskActionFeedback("任务包已复制到剪贴板。请手动交给 Codex。");
+        window.setTimeout(() => setTaskCopyState("enabled"), 1400);
+      } catch {
+        setTaskCopyState("error");
+        setTaskActionFeedback("复制失败。请手动复制 Codex Handoff Package。");
+      }
+      return;
+    }
+
+    if (action === "mark-handed-off") {
+      setHandedOffIssues((current) => new Set(current).add(task.id));
+      setTaskActionFeedback("已做本地标记。AgentFlow 不会自动控制 Codex。");
+      return;
+    }
+
+    if (action === "check-writeback") {
+      refreshWorkspace();
+      const delivery = findDeliveryForTask(outputBundle.outputIndex?.releaseDeliveries ?? [], task.id);
+      if (delivery) {
+        setSelectedDeliveryRunId(delivery.runId);
+        setActivePage("delivery");
+      } else {
+        setTaskActionFeedback("还没有检测到 Codex 写回结果。");
+      }
+      return;
+    }
+
+    if (action === "view-delivery") {
+      const delivery = findDeliveryForTask(outputBundle.outputIndex?.releaseDeliveries ?? [], task.id);
+      if (delivery) {
+        setSelectedDeliveryRunId(delivery.runId);
+        setActivePage("delivery");
+      } else {
+        setTaskActionFeedback("还没有交付结果。Codex 写回后会显示在交付页。");
+      }
+      return;
+    }
+
+    if (action === "request-audit") {
+      const delivery = findDeliveryForTask(outputBundle.outputIndex?.releaseDeliveries ?? [], task.id);
+      if (delivery) {
+        setSelectedDeliveryRunId(delivery.runId);
+      }
+      setActivePage("audit");
+      return;
+    }
+
+    if (action === "view-audit") {
+      const audit = outputBundle.auditIndex?.audits.at(-1) ?? null;
+      if (audit) {
+        setSelectedAuditId(audit.auditId);
+        setActivePage("audit");
+      } else {
+        setTaskActionFeedback("还没有审计报告。交付完成后可以请求审计。");
+      }
+      return;
+    }
+
+    if (action === "view-requirement") {
+      setTaskActionFeedback("需求详情来自 approved SPEC。普通页面暂不展示 raw SPEC。");
+      return;
+    }
+
+    setTaskActionFeedback("这个任务当前只读查看。");
+  }
+
   function handleLogin(provider: Provider) {
     setConnectedProvider(provider);
-    setFirstRunOpen(true);
+    setFirstRunOpen(!onboardingComplete);
     if (isBrowserPreviewRuntime()) {
       setProjectRoot(BROWSER_PREVIEW_PROJECT_ROOT);
     }
+  }
+
+  function completeOnboarding() {
+    setOnboardingComplete(true);
+    setFirstRunOpen(false);
+    setActivePage("home");
+    refreshWorkspace();
   }
 
   if (!connectedProvider) {
@@ -276,9 +479,7 @@ function App() {
       activePage={activePage}
       onRefresh={refreshWorkspace}
       onSearchChange={setTaskSearch}
-      onTaskViewModeChange={setTaskViewMode}
       taskSearch={taskSearch}
-      taskViewMode={taskViewMode}
     />
   );
 
@@ -297,6 +498,7 @@ function App() {
             connectedProvider={connectedProvider}
             projectName={projectDisplayName}
             projectRoot={projectRoot}
+            appInteractionState={appInteractionState}
             stateStatus={stateStatusState.status}
           />
         }
@@ -306,7 +508,10 @@ function App() {
           <ProjectHomePage
             nextStep={nextStep}
             onOpenAudit={() => setActivePage("audit")}
+            onOpenDelivery={() => setActivePage("delivery")}
+            onOpenFiles={() => setActivePage("files")}
             onOpenTasks={() => setActivePage("tasks")}
+            onCheckWriteback={() => selectedTask && void handleTaskAction("check-writeback", selectedTask)}
             outputStatusState={outputStatusState}
             projectPanelState={projectPanelState}
             projectRoot={projectRoot}
@@ -316,7 +521,11 @@ function App() {
         ) : null}
         {activePage === "tasks" ? (
           <TasksPage
-            mode={taskViewMode}
+            actionFeedback={taskActionFeedback}
+            actions={taskInteractionState.actions}
+            copyState={taskCopyState}
+            handedOff={selectedTask ? handedOffIssues.has(selectedTask.id) : false}
+            onTaskAction={(action, task) => void handleTaskAction(action, task)}
             onSelectTask={setSelectedTaskId}
             selectedTask={selectedTask}
             tasks={filteredTasks}
@@ -333,14 +542,23 @@ function App() {
           />
         ) : null}
         {activePage === "delivery" ? (
-          <DeliveryPage outputBundle={outputBundle} outputStatusState={outputStatusState} selectedTask={selectedTask} />
+          <DeliveryPage
+            onOpenAudit={() => setActivePage("audit")}
+            onSelectDelivery={setSelectedDeliveryRunId}
+            outputBundle={outputBundle}
+            outputStatusState={outputStatusState}
+            selectedDeliveryRunId={selectedDeliveryRunId}
+            selectedTask={selectedTask}
+          />
         ) : null}
         {activePage === "audit" ? (
           <AuditPage
             onAuditRequested={() => setOutputRefreshToken((current) => current + 1)}
+            onSelectAudit={setSelectedAuditId}
             outputBundle={outputBundle}
             outputStatusState={outputStatusState}
             projectRoot={projectRoot}
+            selectedAuditId={selectedAuditId}
           />
         ) : null}
         {activePage === "advanced" ? (
@@ -362,7 +580,7 @@ function App() {
         <FirstRunModal
           feedback={onboardingFeedback}
           onChooseProject={() => void chooseProjectFolder()}
-          onClose={() => setFirstRunOpen(false)}
+          onClose={completeOnboarding}
           onIntentChange={setSelectedIntent}
           projectRoot={projectRoot}
           selectedIntent={selectedIntent}
@@ -510,7 +728,7 @@ function LoginModal({ onConnect }: { onConnect: (provider: Provider) => void }) 
               key={provider.id}
               onClick={() => onConnect(provider.id)}
               subtitle={provider.description}
-              title={provider.id}
+              title={`连接 ${provider.id}`}
             />
           ))}
         </div>
@@ -774,16 +992,12 @@ function Toolbar({
   activePage,
   onRefresh,
   onSearchChange,
-  onTaskViewModeChange,
   taskSearch,
-  taskViewMode,
 }: {
   activePage: AppPage;
   onRefresh: () => void;
   onSearchChange: (value: string) => void;
-  onTaskViewModeChange: (mode: TaskViewMode) => void;
   taskSearch: string;
-  taskViewMode: TaskViewMode;
 }) {
   return (
     <TopBar className="v16-toolbar">
@@ -792,25 +1006,15 @@ function Toolbar({
       </div>
       <div className="v16-toolbar-actions">
         {activePage === "tasks" ? (
-          <>
-            <SegmentedControl
-              activeValue={taskViewMode}
-              items={[
-                { label: "看板", value: "board" },
-                { label: "列表", value: "list" },
-              ]}
-              onChange={onTaskViewModeChange}
+          <label className="v16-inline-search">
+            <Search size={14} />
+            <input
+              aria-label="搜索任务"
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="搜索任务"
+              value={taskSearch}
             />
-            <label className="v16-inline-search">
-              <Search size={14} />
-              <input
-                aria-label="搜索任务"
-                onChange={(event) => onSearchChange(event.target.value)}
-                placeholder="搜索"
-                value={taskSearch}
-              />
-            </label>
-          </>
+          </label>
         ) : null}
         <button aria-label={`刷新${pageTitle(activePage)}`} className="v16-icon-button" onClick={onRefresh} type="button">
           <RefreshCw size={16} />
@@ -820,35 +1024,13 @@ function Toolbar({
   );
 }
 
-function SegmentedControl<T extends string>({
-  activeValue,
-  items,
-  onChange,
-}: {
-  activeValue: T;
-  items: Array<{ label: string; value: T }>;
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div className="v16-segmented-control">
-      {items.map((item) => (
-        <button
-          className={item.value === activeValue ? "active" : ""}
-          key={item.value}
-          onClick={() => onChange(item.value)}
-          type="button"
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function ProjectHomePage({
   nextStep,
   onOpenAudit,
+  onOpenDelivery,
+  onOpenFiles,
   onOpenTasks,
+  onCheckWriteback,
   outputStatusState,
   projectPanelState,
   projectRoot,
@@ -857,7 +1039,10 @@ function ProjectHomePage({
 }: {
   nextStep: NextStepViewModel;
   onOpenAudit: () => void;
+  onOpenDelivery: () => void;
+  onOpenFiles: () => void;
   onOpenTasks: () => void;
+  onCheckWriteback: () => void;
   outputStatusState: OutputStatusState;
   projectPanelState: ProjectPanelState;
   projectRoot: string | null;
@@ -885,6 +1070,23 @@ function ProjectHomePage({
         <MetricCard label="待审计" value={outputSummary?.releaseDeliveries ?? 0} detail="可请求审计" />
       </section>
 
+      <Panel className="v16-current-work-panel" title="当前任务和最近活动">
+        <div className="v16-shortcut-list">
+          <button onClick={onOpenTasks} type="button">
+            <strong>{selectedTask?.title ?? "还没有任务"}</strong>
+            <span>{selectedTask ? `${selectedTask.id} · ${displayStatusLabelZh(selectedTask.displayStatus)}` : "请先确认需求，生成任务。"}</span>
+          </button>
+          <button onClick={onOpenDelivery} type="button">
+            <strong>交付结果</strong>
+            <span>{outputSummary?.releaseDeliveries ?? 0} 个 delivery，{outputSummary?.evidence ?? 0} 份 evidence</span>
+          </button>
+          <button onClick={onOpenAudit} type="button">
+            <strong>审计报告</strong>
+            <span>{outputSummary?.audits ?? 0} 个 audit，交付完成后可以请求审计。</span>
+          </button>
+        </div>
+      </Panel>
+
       <Panel
         className="v16-project-summary"
         description="项目现场只展示人能判断下一步的摘要。内部 JSON 在高级页查看。"
@@ -910,7 +1112,12 @@ function ProjectHomePage({
         />
       </Panel>
 
-      <CompanionShell selectedTask={selectedTask} />
+      <CompanionShell
+        onCheckWriteback={onCheckWriteback}
+        onOpenFiles={onOpenFiles}
+        onOpenTasks={onOpenTasks}
+        selectedTask={selectedTask}
+      />
     </section>
   );
 }
@@ -964,65 +1171,56 @@ function InspectorPanel({ nextStep, selectedTask }: { nextStep: NextStepViewMode
 }
 
 function TasksPage({
-  mode,
+  actionFeedback,
+  actions,
+  copyState,
+  handedOff,
+  onTaskAction,
   onSelectTask,
   selectedTask,
   tasks,
 }: {
-  mode: TaskViewMode;
+  actionFeedback: string | null;
+  actions: TaskInteractionAction[];
+  copyState: ButtonInteractionState;
+  handedOff: boolean;
+  onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   onSelectTask: (taskId: string) => void;
   selectedTask: V1Issue | null;
   tasks: V1Issue[];
 }) {
   return (
     <section className="v16-page v16-tasks-page" data-agentflow-page="tasks">
-      {mode === "board" ? <TaskBoard onSelectTask={onSelectTask} tasks={tasks} /> : null}
-      {mode === "list" ? <TaskList onSelectTask={onSelectTask} selectedTask={selectedTask} tasks={tasks} /> : null}
+      <TaskList
+        actionFeedback={actionFeedback}
+        actions={actions}
+        copyState={copyState}
+        handedOff={handedOff}
+        onSelectTask={onSelectTask}
+        onTaskAction={onTaskAction}
+        selectedTask={selectedTask}
+        tasks={tasks}
+      />
     </section>
   );
 }
 
-function TaskBoard({ onSelectTask, tasks }: { onSelectTask: (taskId: string) => void; tasks: V1Issue[] }) {
-  return (
-    <div className="v16-task-board" aria-label="任务看板">
-      {displayStatusColumns.map((column) => {
-        const visibleTasks = tasks.filter((task) => task.displayStatus === column.id);
-        return (
-          <ListPanel count={visibleTasks.length} key={column.id} title={column.label}>
-            {visibleTasks.length ? (
-              visibleTasks.map((task) => (
-                <ListRow
-                  className="v16-task-card"
-                  key={`${column.id}-${task.id}`}
-                  meta={
-                    <>
-                      <span className="v16-task-id">{task.id}</span>
-                      <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
-                        {displayStatusLabel(task.displayStatus)}
-                      </StatusBadge>
-                    </>
-                  }
-                  onClick={() => onSelectTask(task.id)}
-                  subtitle={`${task.riskLevel || "normal"} · ${task.validationCommands.length || 0} 条验证命令`}
-                  title={task.title}
-                />
-              ))
-            ) : (
-              <p className="v16-empty-text">暂无任务。</p>
-            )}
-          </ListPanel>
-        );
-      })}
-    </div>
-  );
-}
-
 function TaskList({
+  actionFeedback,
+  actions,
+  copyState,
+  handedOff,
   onSelectTask,
+  onTaskAction,
   selectedTask,
   tasks,
 }: {
+  actionFeedback: string | null;
+  actions: TaskInteractionAction[];
+  copyState: ButtonInteractionState;
+  handedOff: boolean;
   onSelectTask: (taskId: string) => void;
+  onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   selectedTask: V1Issue | null;
   tasks: V1Issue[];
 }) {
@@ -1039,24 +1237,45 @@ function TaskList({
               </button>
             ),
           },
-          { key: "status", label: "状态", render: (task) => displayStatusLabel(task.displayStatus) },
+          { key: "status", label: "状态", render: (task) => displayStatusLabelZh(task.displayStatus) },
           { key: "agent", label: "Agent", render: () => "Build Agent" },
           { key: "risk", label: "风险", render: (task) => task.riskLevel || "normal" },
           { key: "updated", label: "更新时间", render: () => "本地快照" },
-          { key: "action", label: "动作", render: () => "复制任务包" },
+          { key: "action", label: "动作", render: (task) => taskActionLabel(taskActionsForRow(task).at(0) ?? "readonly") },
         ]}
         rows={tasks}
       />
-      <TaskDetail task={selectedTask} />
+      <TaskDetail
+        actionFeedback={actionFeedback}
+        actions={actions}
+        copyState={copyState}
+        handedOff={handedOff}
+        onTaskAction={onTaskAction}
+        task={selectedTask}
+      />
     </div>
   );
 }
 
-function TaskDetail({ task }: { task: V1Issue | null }) {
+function TaskDetail({
+  actionFeedback,
+  actions,
+  copyState,
+  handedOff,
+  onTaskAction,
+  task,
+}: {
+  actionFeedback: string | null;
+  actions: TaskInteractionAction[];
+  copyState: ButtonInteractionState;
+  handedOff: boolean;
+  onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
+  task: V1Issue | null;
+}) {
   if (!task) {
     return (
       <aside className="v16-detail-pane">
-        <p>选择一个任务查看详情。</p>
+        <p>还没有任务。请先确认需求，生成任务。</p>
       </aside>
     );
   }
@@ -1068,7 +1287,7 @@ function TaskDetail({ task }: { task: V1Issue | null }) {
         <h2>{task.title}</h2>
         <div className="v16-detail-badges">
           <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
-            {displayStatusLabel(task.displayStatus)}
+            {displayStatusLabelZh(task.displayStatus)}
           </StatusBadge>
           <RiskBadge risk={task.riskLevel || "normal"} />
         </div>
@@ -1078,6 +1297,7 @@ function TaskDetail({ task }: { task: V1Issue | null }) {
           ["Agent", "Build Agent"],
           ["内部状态", task.status],
           ["风险", task.riskLevel || "normal"],
+          ["交给 Codex", handedOff ? "已做本地标记" : "未标记"],
           ["来源 SPEC", task.projectId ?? "approved SPEC"],
         ]}
       />
@@ -1088,12 +1308,19 @@ function TaskDetail({ task }: { task: V1Issue | null }) {
       <SectionList title="验证命令" items={task.validationCommands} />
       <SectionList title="证据要求" items={task.evidenceRequired} />
       <CopyableCodeBlock content={buildCodexHandoff(task)} maxHeight={210} title="Codex Handoff Package" />
+      {actionFeedback ? <p className="v16-feedback">{actionFeedback}</p> : null}
       <ActionBar sticky>
-        <ActionButton variant="secondary">确认需求</ActionButton>
-        <ActionButton variant="primary">复制任务包</ActionButton>
-        <ActionButton variant="secondary">我已交给 Codex</ActionButton>
-        <ActionButton variant="secondary">检查写回</ActionButton>
-        <ActionButton variant="secondary">请求审计</ActionButton>
+        {actions.map((action, index) => (
+          <ActionButton
+            disabled={action === "readonly"}
+            key={action}
+            loading={action === "copy-handoff" && copyState === "loading"}
+            onClick={() => onTaskAction(action, task)}
+            variant={index === 0 && action !== "readonly" ? "primary" : "secondary"}
+          >
+            {action === "copy-handoff" && copyState === "success" ? "已复制" : taskActionLabel(action)}
+          </ActionButton>
+        ))}
       </ActionBar>
     </aside>
   );
@@ -1139,24 +1366,36 @@ function FileReader() {
 }
 
 function DeliveryPage({
+  onOpenAudit,
+  onSelectDelivery,
   outputBundle,
   outputStatusState,
+  selectedDeliveryRunId,
   selectedTask,
 }: {
+  onOpenAudit: () => void;
+  onSelectDelivery: (runId: string) => void;
   outputBundle: OutputBundleState;
   outputStatusState: OutputStatusState;
+  selectedDeliveryRunId: string | null;
   selectedTask: V1Issue | null;
 }) {
   const deliveries = outputBundle.outputIndex?.releaseDeliveries ?? [];
   const evidence = outputBundle.outputIndex?.evidence ?? [];
-  const selectedDelivery = deliveries.at(-1) ?? null;
+  const deliveryInteractionState = buildDeliveryInteractionState(deliveries, selectedDeliveryRunId);
+  const selectedDelivery = deliveryInteractionState.selectedDelivery;
 
   return (
     <section className="v16-page v16-split-page" data-agentflow-page="delivery">
-      <DeliveryList deliveries={deliveries} />
+      <DeliveryList
+        deliveries={deliveries}
+        onSelectDelivery={onSelectDelivery}
+        selectedDeliveryRunId={deliveryInteractionState.selectedDeliveryRunId}
+      />
       <DeliveryDetail
         delivery={selectedDelivery}
         evidence={evidence}
+        onOpenAudit={onOpenAudit}
         outputStatusState={outputStatusState}
         selectedTask={selectedTask}
       />
@@ -1164,7 +1403,15 @@ function DeliveryPage({
   );
 }
 
-function DeliveryList({ deliveries }: { deliveries: OutputIndexEntry[] }) {
+function DeliveryList({
+  deliveries,
+  onSelectDelivery,
+  selectedDeliveryRunId,
+}: {
+  deliveries: OutputIndexEntry[];
+  onSelectDelivery: (runId: string) => void;
+  selectedDeliveryRunId: string | null;
+}) {
   return (
     <aside className="v16-list-pane" aria-label="交付列表">
       <header>
@@ -1173,11 +1420,16 @@ function DeliveryList({ deliveries }: { deliveries: OutputIndexEntry[] }) {
       </header>
       {deliveries.length ? (
         deliveries.map((delivery) => (
-          <article className="v16-list-item active" key={delivery.runId}>
+          <button
+            className={delivery.runId === selectedDeliveryRunId ? "v16-list-item active" : "v16-list-item"}
+            key={delivery.runId}
+            onClick={() => onSelectDelivery(delivery.runId)}
+            type="button"
+          >
             <strong>{delivery.runId}</strong>
             <span>{delivery.issueId || "未记录 Issue"} · {delivery.status}</span>
             <small>{formatTimestamp(delivery.updatedAt)}</small>
-          </article>
+          </button>
         ))
       ) : (
         <p className="v16-empty-text">暂无 Codex 写回结果。</p>
@@ -1189,11 +1441,13 @@ function DeliveryList({ deliveries }: { deliveries: OutputIndexEntry[] }) {
 function DeliveryDetail({
   delivery,
   evidence,
+  onOpenAudit,
   outputStatusState,
   selectedTask,
 }: {
   delivery: OutputIndexEntry | null;
   evidence: OutputIndexEntry[];
+  onOpenAudit: () => void;
   outputStatusState: OutputStatusState;
   selectedTask: V1Issue | null;
 }) {
@@ -1217,10 +1471,10 @@ function DeliveryDetail({
       <SectionList title="Release note" items={[delivery?.path ?? "暂无 release delivery。"]} />
       <SectionList title="Out-of-scope check" items={["普通页面只展示摘要；raw JSON 在高级页查看。"]} />
       <ActionBar sticky>
+        <ActionButton disabled={!delivery} onClick={onOpenAudit} variant="primary">
+          请求审计
+        </ActionButton>
         <ActionButton variant="secondary">查看证据</ActionButton>
-        <ActionButton variant="primary">请求审计</ActionButton>
-        <ActionButton variant="secondary">补证据</ActionButton>
-        <ActionButton variant="secondary">重新检查写回</ActionButton>
       </ActionBar>
     </section>
   );
@@ -1228,21 +1482,32 @@ function DeliveryDetail({
 
 function AuditPage({
   onAuditRequested,
+  onSelectAudit,
   outputBundle,
   outputStatusState,
   projectRoot,
+  selectedAuditId,
 }: {
   onAuditRequested: () => void;
+  onSelectAudit: (auditId: string) => void;
   outputBundle: OutputBundleState;
   outputStatusState: OutputStatusState;
   projectRoot: string | null;
+  selectedAuditId: string | null;
 }) {
   const audits = outputBundle.auditIndex?.audits ?? [];
+  const auditInteractionState = buildAuditInteractionState(audits, selectedAuditId);
+  const selectedReport =
+    outputBundle.auditReport?.audit.auditId === auditInteractionState.selectedAuditId ? outputBundle.auditReport : null;
   return (
     <section className="v16-page v16-audit-page" data-agentflow-page="audit">
       <div className="v16-split-page">
-        <AuditList audits={audits} />
-        <AuditReport report={outputBundle.auditReport} />
+        <AuditList
+          audits={audits}
+          onSelectAudit={onSelectAudit}
+          selectedAuditId={auditInteractionState.selectedAuditId}
+        />
+        <AuditReport report={selectedReport} selectedAudit={auditInteractionState.selectedAudit} />
       </div>
       <OutputAuditPanel
         onAuditRequested={onAuditRequested}
@@ -1253,7 +1518,15 @@ function AuditPage({
   );
 }
 
-function AuditList({ audits }: { audits: AuditIndexEntry[] }) {
+function AuditList({
+  audits,
+  onSelectAudit,
+  selectedAuditId,
+}: {
+  audits: AuditIndexEntry[];
+  onSelectAudit: (auditId: string) => void;
+  selectedAuditId: string | null;
+}) {
   return (
     <aside className="v16-list-pane" aria-label="审计列表">
       <header>
@@ -1262,11 +1535,16 @@ function AuditList({ audits }: { audits: AuditIndexEntry[] }) {
       </header>
       {audits.length ? (
         audits.map((audit) => (
-          <article className="v16-list-item active" key={audit.auditId}>
+          <button
+            className={audit.auditId === selectedAuditId ? "v16-list-item active" : "v16-list-item"}
+            key={audit.auditId}
+            onClick={() => onSelectAudit(audit.auditId)}
+            type="button"
+          >
             <strong>{audit.auditId}</strong>
             <span>{audit.status} · {audit.requestedBy}</span>
             <small>{formatTimestamp(audit.requestedAt)}</small>
-          </article>
+          </button>
         ))
       ) : (
         <p className="v16-empty-text">还没有请求人工审计。</p>
@@ -1275,7 +1553,13 @@ function AuditList({ audits }: { audits: AuditIndexEntry[] }) {
   );
 }
 
-function AuditReport({ report }: { report: HumanAuditReport | null }) {
+function AuditReport({
+  report,
+  selectedAudit,
+}: {
+  report: HumanAuditReport | null;
+  selectedAudit: AuditIndexEntry | null;
+}) {
   const findings = Array.isArray(report?.findings)
     ? (report.findings as Array<{ id?: string; severity?: string; summary?: string }>)
     : [];
@@ -1284,8 +1568,10 @@ function AuditReport({ report }: { report: HumanAuditReport | null }) {
     <section className="v16-detail-pane" aria-label="审计报告详情">
       <header>
         <p className="v16-kicker">Audit Report</p>
-        <h2>{report?.audit.auditId ?? "未请求审计"}</h2>
-        <StatusBadge status={report ? "warning" : "idle"}>{report?.audit.status ?? "未请求"}</StatusBadge>
+        <h2>{selectedAudit?.auditId ?? report?.audit.auditId ?? "未请求审计"}</h2>
+        <StatusBadge status={selectedAudit || report ? "warning" : "idle"}>
+          {selectedAudit?.status ?? report?.audit.status ?? "未请求"}
+        </StatusBadge>
       </header>
       <SectionList title="审计结论" items={[report?.reportMarkdown.split("\n").slice(0, 3).join(" ") || "选择 delivery 并填写原因后可请求人工审计。"]} />
       <SectionList
@@ -1296,13 +1582,8 @@ function AuditReport({ report }: { report: HumanAuditReport | null }) {
       <JsonSummary title="Traceability" value={report?.traceability ?? { spec: "waiting", issue: "waiting", delivery: "waiting" }} />
       <SectionList title="Scope check" items={["对照 SPEC / Issue / Delivery / Evidence。"]} />
       <SectionList title="Validation check" items={["检查验证命令是否记录并通过。"]} />
-      <SectionList title="Risk summary" items={["V1 只做展示和请求，不做自动修复。"]} />
-      <ActionBar sticky>
-        <ActionButton variant="primary">接受</ActionButton>
-        <ActionButton variant="secondary">返工</ActionButton>
-        <ActionButton variant="secondary">补证据</ActionButton>
-        <ActionButton variant="secondary">查看证据</ActionButton>
-      </ActionBar>
+      <SectionList title="处理建议" items={["建议：补充证据", "建议：返工", "建议：接受"]} />
+      <SectionList title="当前版本限制" items={["这里只读展示建议，不写接受 / 返工 / 补证据状态。"]} />
     </section>
   );
 }
@@ -1377,7 +1658,8 @@ function AdvancedStateViewer({
       </aside>
       <section className="v16-advanced-list">
         <h2>{selectedCategory.label}</h2>
-        <p>这里展示开发者调试信息。普通页面不显示 raw JSON。</p>
+        <p>{advancedCategorySummary(selectedCategory.id)}</p>
+        <ReadOnlyBadge>只读诊断</ReadOnlyBadge>
       </section>
       <JsonReader value={selectedCategory.value} />
     </div>
@@ -1394,12 +1676,14 @@ function JsonReader({ value }: { value: unknown }) {
 
 function StatusBar({
   agentStatusItems,
+  appInteractionState,
   connectedProvider,
   projectName,
   projectRoot,
   stateStatus,
 }: {
   agentStatusItems: AgentStatusChannelItem[];
+  appInteractionState: AppInteractionState;
   connectedProvider: Provider;
   projectName: string;
   projectRoot: string | null;
@@ -1421,14 +1705,24 @@ function StatusBar({
       <section>
         <span>{workflowStageText(stateStatus?.currentStage)}</span>
         <span>{connectedProvider}</span>
-        <span>Full</span>
+        <span>{lifecycleLabel(appInteractionState.lifecycle)}</span>
         <span>⌘K</span>
       </section>
     </FoundationStatusBar>
   );
 }
 
-function CompanionShell({ selectedTask }: { selectedTask: V1Issue | null }) {
+function CompanionShell({
+  onCheckWriteback,
+  onOpenFiles,
+  onOpenTasks,
+  selectedTask,
+}: {
+  onCheckWriteback: () => void;
+  onOpenFiles: () => void;
+  onOpenTasks: () => void;
+  selectedTask: V1Issue | null;
+}) {
   return (
     <Panel className="v16-companion-shell" title="Companion Mode" description="窄窗口模式只保留当前队列和当前 Issue。">
       <div className="v16-companion-grid">
@@ -1439,6 +1733,17 @@ function CompanionShell({ selectedTask }: { selectedTask: V1Issue | null }) {
         <span>Writeback Check</span>
         <strong>手动检查</strong>
       </div>
+      <ActionBar>
+        <ActionButton disabled={!selectedTask} onClick={onCheckWriteback} variant="secondary">
+          检查写回
+        </ActionButton>
+        <ActionButton disabled={!selectedTask} onClick={onOpenTasks} variant="primary">
+          复制任务包
+        </ActionButton>
+        <ActionButton onClick={onOpenFiles} variant="secondary">
+          打开文件
+        </ActionButton>
+      </ActionBar>
     </Panel>
   );
 }
@@ -1628,10 +1933,6 @@ function displayStatusFromLegacyStatus(status: string): IssueDisplayStatus {
   return "backlog";
 }
 
-function displayStatusLabel(status: IssueDisplayStatus = "backlog") {
-  return displayStatusColumns.find((column) => column.id === status)?.label ?? "Backlog";
-}
-
 function statusChipForDisplayStatus(status: IssueDisplayStatus = "backlog"): StatusChipStatus {
   const chips: Record<IssueDisplayStatus, StatusChipStatus> = {
     backlog: "idle",
@@ -1642,6 +1943,16 @@ function statusChipForDisplayStatus(status: IssueDisplayStatus = "backlog"): Sta
     review: "warning",
   };
   return chips[status];
+}
+
+function taskActionsForRow(task: V1Issue) {
+  return taskActionsForStatus(task.displayStatus);
+}
+
+function findDeliveryForTask(deliveries: OutputIndexEntry[], taskId: string) {
+  return [...deliveries]
+    .reverse()
+    .find((delivery) => delivery.issueId === taskId || delivery.runId.includes(taskId)) ?? null;
 }
 
 function buildNextStep(
@@ -1760,6 +2071,31 @@ function workflowStageText(stage?: string | null) {
     "workspace-ready": "项目已准备好",
   };
   return stage ? labels[stage] ?? stage : "等待状态";
+}
+
+function advancedCategorySummary(categoryId: string) {
+  const summaries: Record<string, string> = {
+    audit: "展示审计索引和报告快照。这里不接受、返工或补证据。",
+    execute: "展示执行状态快照。这里不继续执行，不清理锁。",
+    input: "展示需求和 Issue 状态快照。普通页面只展示人能读懂的摘要。",
+    output: "展示 evidence、delivery、audit 的输出摘要。",
+    panel: "展示项目现场读取结果和 Context Pack 摘要。",
+    settings: "展示本地设置、文件 Reader 和工作台数据源状态。",
+    state: "展示全局派生状态、gate、blocker 和 next action。",
+  };
+  return summaries[categoryId] ?? "这里展示开发者调试信息。普通页面不显示 raw JSON。";
+}
+
+function lifecycleLabel(state: AppInteractionState["lifecycle"]) {
+  const labels: Record<AppInteractionState["lifecycle"], string> = {
+    error: "错误",
+    "first-run": "首次引导",
+    "not-authenticated": "未连接",
+    "project-loading": "项目加载中",
+    "workspace-blocked": "工作区阻断",
+    "workspace-ready": "工作区就绪",
+  };
+  return labels[state];
 }
 
 export default App;

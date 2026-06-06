@@ -54,12 +54,14 @@
 - [017-agentflow-unified-ux-spec-v16-pr33-merged.md](017-agentflow-unified-ux-spec-v16-pr33-merged.md)
 - [018-agentflow-code-cleanup-rust-workspace.md](018-agentflow-code-cleanup-rust-workspace.md)
 - [019-agentflow-issue-status-enhancement.md](019-agentflow-issue-status-enhancement.md)
+- [021-agentflow-frontend-interaction-ux-v1.md](021-agentflow-frontend-interaction-ux-v1.md)
 - [next-requirements.md](next-requirements.md)
 
 ## 当前前端设计基线
 
 - [015-human-agent-guided-experience-v1.md](015-human-agent-guided-experience-v1.md) = historical design reference
 - [017-agentflow-unified-ux-spec-v16-pr33-merged.md](017-agentflow-unified-ux-spec-v16-pr33-merged.md) = current frontend implementation baseline
+- [021-agentflow-frontend-interaction-ux-v1.md](021-agentflow-frontend-interaction-ux-v1.md) = current frontend interaction baseline
 
 ## 不继承内容
 
