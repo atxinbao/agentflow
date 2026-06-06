@@ -3,11 +3,12 @@ use crate::{
     model::{
         AuditCheckStatus, AuditChecks, AuditEvidenceMap, AuditFinding, AuditFindingSeverity,
         AuditFindings, AuditIndex, AuditIndexEntry, AuditManifest, AuditManifestSummary,
-        AuditPaths, AuditRequest, AuditScopeRef, AuditStatus, AuditSummary, AuditTraceability,
-        AuditTraceabilityItem, HumanAudit, HumanAuditReport, HumanAuditRequestDraft,
-        OutputEvidence, OutputReleaseDelivery, AUDIT_EVIDENCE_MAP_VERSION, AUDIT_FINDINGS_VERSION,
-        AUDIT_INDEX_VERSION, AUDIT_MANIFEST_VERSION, AUDIT_REQUEST_VERSION,
-        AUDIT_TRACEABILITY_VERSION, OUTPUT_AUDIT_VERSION,
+        AuditPaths, AuditRequest, AuditRequestSource, AuditScope, AuditScopeRef, AuditStatus,
+        AuditSummary, AuditTraceability, AuditTraceabilityItem, AuditTrigger, HumanAudit,
+        HumanAuditReport, HumanAuditRequestDraft, OutputEvidence, OutputReleaseDelivery,
+        AUDIT_EVIDENCE_MAP_VERSION, AUDIT_FINDINGS_VERSION, AUDIT_INDEX_VERSION,
+        AUDIT_MANIFEST_VERSION, AUDIT_REQUEST_VERSION, AUDIT_TRACEABILITY_VERSION,
+        OUTPUT_AUDIT_VERSION,
     },
     storage::{
         canonical_project_root, ensure_directory, read_json, sorted_child_paths,
@@ -53,9 +54,11 @@ pub fn request_human_audit(
     let request = AuditRequest {
         version: AUDIT_REQUEST_VERSION.to_string(),
         audit_id: audit_id.clone(),
-        requested_by: "human".to_string(),
+        trigger: AuditTrigger::HumanViaAgent,
+        requested_by: "human-via-agent".to_string(),
         requested_at,
         reason: draft.reason,
+        source: audit_request_source_from_refs(&draft.scope.refs, "release-delivery"),
         scope: draft.scope,
     };
 
@@ -67,8 +70,22 @@ pub fn request_human_audit(
     let audit = HumanAudit {
         version: OUTPUT_AUDIT_VERSION.to_string(),
         audit_id: audit_id.clone(),
+        trigger: request.trigger.clone(),
         requested_by: request.requested_by.clone(),
         requested_at,
+        source_delivery_id: request
+            .source
+            .as_ref()
+            .and_then(|source| source.delivery_id.clone()),
+        source_run_id: request
+            .source
+            .as_ref()
+            .and_then(|source| source.run_id.clone())
+            .or_else(|| Some(context.run_id.clone())),
+        source_issue_id: request
+            .source
+            .as_ref()
+            .and_then(|source| source.issue_id.clone()),
         status,
         summary,
         checks: check_result.checks,
@@ -106,6 +123,23 @@ pub fn request_human_audit(
         evidence_map,
         traceability,
     })
+}
+
+pub fn ensure_release_auto_audits(project_root: impl AsRef<Path>) -> Result<AuditIndex> {
+    let root = canonical_project_root(project_root)?;
+    ensure_audit_workspace(&root)?;
+
+    let releases = release_deliveries(&root)?;
+    for release in releases {
+        if release_auto_audit_exists(&root, &release)? {
+            continue;
+        }
+        write_release_auto_audit_request(&root, &release)?;
+    }
+
+    rebuild_audit_manifest_and_index(&root)?;
+    rebuild_output_index(&root)?;
+    load_audit_index(&root)
 }
 
 pub fn load_audit_report(
@@ -175,22 +209,44 @@ fn rebuild_audit_index(root: &Path) -> Result<AuditIndex> {
         }
         let audit_path = path.join("audit.json");
         let request_path = path.join("audit-request.json");
-        if !audit_path.is_file() || !request_path.is_file() {
+        if !request_path.is_file() {
             continue;
         }
-        let Ok(audit) = read_json::<HumanAudit>(&audit_path) else {
-            continue;
-        };
         let Ok(request) = read_json::<AuditRequest>(&request_path) else {
             continue;
         };
+        let audit = if audit_path.is_file() {
+            read_json::<HumanAudit>(&audit_path).ok()
+        } else {
+            None
+        };
+        let status = audit
+            .as_ref()
+            .map(|audit| audit.status.clone())
+            .unwrap_or(AuditStatus::Requested);
+        let trigger = audit
+            .as_ref()
+            .map(|audit| audit.trigger.clone())
+            .unwrap_or_else(|| request.trigger.clone());
+        let source = request.source.clone();
+        let audit_id = audit
+            .as_ref()
+            .map(|audit| audit.audit_id.clone())
+            .unwrap_or_else(|| request.audit_id.clone());
         audits.push(AuditIndexEntry {
-            audit_id: audit.audit_id.clone(),
-            status: audit.status.clone(),
+            audit_id: audit_id.clone(),
+            status,
+            trigger,
             requested_by: request.requested_by,
             requested_at: request.requested_at,
-            report_path: format!(".agentflow/output/audit/{}/audit-report.md", audit.audit_id),
-            audit_path: format!(".agentflow/output/audit/{}/audit.json", audit.audit_id),
+            source_delivery_id: source
+                .as_ref()
+                .and_then(|source| source.delivery_id.clone()),
+            source_run_id: source.as_ref().and_then(|source| source.run_id.clone()),
+            source_issue_id: source.as_ref().and_then(|source| source.issue_id.clone()),
+            source_spec_id: source.as_ref().and_then(|source| source.spec_id.clone()),
+            report_path: format!(".agentflow/output/audit/{audit_id}/audit-report.md"),
+            audit_path: format!(".agentflow/output/audit/{audit_id}/audit.json"),
         });
     }
     audits.sort_by(|left, right| left.audit_id.cmp(&right.audit_id));
@@ -210,6 +266,8 @@ fn audit_manifest(root: &Path, index: &AuditIndex) -> AuditManifest {
     };
     for entry in &index.audits {
         match entry.status {
+            AuditStatus::Requested => summary.requested += 1,
+            AuditStatus::Running => summary.running += 1,
             AuditStatus::Passed => summary.passed += 1,
             AuditStatus::PassedWithWarnings => summary.passed_with_warnings += 1,
             AuditStatus::Failed => summary.failed += 1,
@@ -245,6 +303,121 @@ fn next_audit_id(root: &Path) -> Result<String> {
         }
     }
     Ok(format!("audit-{:03}", max_id + 1))
+}
+
+fn release_deliveries(root: &Path) -> Result<Vec<OutputReleaseDelivery>> {
+    let mut releases = Vec::new();
+    for path in sorted_child_paths(&root.join(".agentflow/output/release"))? {
+        let delivery_path = path.join("delivery.json");
+        if !delivery_path.is_file() {
+            continue;
+        }
+        if let Ok(release) = read_json::<OutputReleaseDelivery>(&delivery_path) {
+            releases.push(release);
+        }
+    }
+    Ok(releases)
+}
+
+fn release_auto_audit_exists(root: &Path, release: &OutputReleaseDelivery) -> Result<bool> {
+    for path in sorted_child_paths(&root.join(".agentflow/output/audit"))? {
+        let request_path = path.join("audit-request.json");
+        if !request_path.is_file() {
+            continue;
+        }
+        let Ok(request) = read_json::<AuditRequest>(&request_path) else {
+            continue;
+        };
+        if !matches!(request.trigger, AuditTrigger::ReleaseAuto) {
+            continue;
+        }
+        let source_matches = request.source.as_ref().is_some_and(|source| {
+            source.run_id.as_deref() == Some(release.run_id.as_str())
+                || source.delivery_id.as_deref() == Some(release.run_id.as_str())
+        });
+        let scope_matches = scope_id(&request.scope.refs, "execute-run").as_deref()
+            == Some(release.run_id.as_str())
+            || scope_id(&request.scope.refs, "release-delivery").as_deref()
+                == Some(release.run_id.as_str());
+        if source_matches || scope_matches {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn write_release_auto_audit_request(root: &Path, release: &OutputReleaseDelivery) -> Result<()> {
+    let audit_id = next_audit_id(root)?;
+    let audit_dir = root.join(".agentflow/output/audit").join(&audit_id);
+    ensure_directory(&audit_dir)?;
+    let requested_at = unix_timestamp_seconds();
+    let request = AuditRequest {
+        version: AUDIT_REQUEST_VERSION.to_string(),
+        audit_id: audit_id.clone(),
+        trigger: AuditTrigger::ReleaseAuto,
+        requested_by: "agentflow-release-auto".to_string(),
+        requested_at,
+        reason: "Release 已生成，AgentFlow 规则要求进行审计。".to_string(),
+        source: Some(AuditRequestSource {
+            kind: "release-delivery".to_string(),
+            delivery_id: Some(release.run_id.clone()),
+            run_id: Some(release.run_id.clone()),
+            issue_id: Some(release.issue_id.clone()),
+            spec_id: Some(release.source_spec_id.clone()),
+        }),
+        scope: release_auto_scope(release),
+    };
+    write_json(&audit_dir.join("audit-request.json"), &request)
+}
+
+fn release_auto_scope(release: &OutputReleaseDelivery) -> AuditScope {
+    AuditScope {
+        description: "审计 release delivery 是否符合 SPEC、Issue、Evidence 和验证结果。"
+            .to_string(),
+        refs: vec![
+            AuditScopeRef {
+                kind: "spec".to_string(),
+                id: release.source_spec_id.clone(),
+                path: format!(
+                    ".agentflow/input/specs/approved/{}/spec.json",
+                    release.source_spec_id
+                ),
+            },
+            AuditScopeRef {
+                kind: "issue".to_string(),
+                id: release.issue_id.clone(),
+                path: format!(".agentflow/input/issues/{}.json", release.issue_id),
+            },
+            AuditScopeRef {
+                kind: "execute-run".to_string(),
+                id: release.run_id.clone(),
+                path: format!(".agentflow/execute/runs/{}", release.run_id),
+            },
+            AuditScopeRef {
+                kind: "evidence".to_string(),
+                id: release.run_id.clone(),
+                path: release.evidence_path.clone(),
+            },
+            AuditScopeRef {
+                kind: "release-delivery".to_string(),
+                id: release.run_id.clone(),
+                path: format!(".agentflow/output/release/{}/delivery.json", release.run_id),
+            },
+        ],
+    }
+}
+
+fn audit_request_source_from_refs(
+    refs: &[AuditScopeRef],
+    kind: &str,
+) -> Option<AuditRequestSource> {
+    Some(AuditRequestSource {
+        kind: kind.to_string(),
+        delivery_id: scope_id(refs, "release-delivery"),
+        run_id: scope_id(refs, "execute-run").or_else(|| scope_id(refs, "evidence")),
+        issue_id: scope_id(refs, "issue"),
+        spec_id: scope_id(refs, "spec"),
+    })
 }
 
 #[derive(Debug)]

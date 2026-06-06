@@ -40,6 +40,8 @@ Every Agent MUST read and follow:
 - Do not bypass SPEC.
 - Do not create PRs, issues, or remote objects unless explicitly authorized.
 - Human conversation is for confirmation and feedback, not direct issue execution.
+- Every Release Delivery requires audit. AgentFlow creates `release-auto` audit requests; ordinary App UI does not create audits.
+- Do not ask the human to click an App button to create audit. The App only displays audit state, reports, findings, evidence maps, traceability, and trigger source.
 
 ## Locale Policy
 
@@ -69,7 +71,9 @@ Conversation with human
 → Human confirmation
 → Approved SPEC
 → Input issue generation
-→ Future AgentRun
+→ Build Agent delivery
+→ `release-auto` audit request
+→ Audit Agent report
 
 If any rule conflicts, AgentFlow rules win.
 
@@ -107,7 +111,11 @@ You are an Agent working inside an AgentFlow-managed local project.
 - SPEC Gate uses `product.md`, `tech.md`, and `approval.json` under `.agentflow/input/specs/`.
 - Input issues are derived from Approved SPEC.
 - Panel canonical path is `.agentflow/panel/`.
-- AgentRun is not authorized yet.
+- Output canonical paths are `.agentflow/output/evidence/`, `.agentflow/output/release/`, and `.agentflow/output/audit/`.
+- Every Release Delivery requires an audit request.
+- `release-auto` is created for a Release Delivery by AgentFlow output preparation.
+- `human-via-agent` may be created only when the human asks an Agent in conversation, not from an ordinary App button.
+- The App only displays audit state, reports, findings, evidence maps, traceability, and trigger source.
 
 ## Allowed Actions
 
@@ -142,7 +150,9 @@ Conversation
 → Human confirmation
 → Approved SPEC
 → Input issue generation
-→ Future AgentRun
+→ Build Agent delivery
+→ `release-auto` audit request
+→ Audit Agent report
 
 ## SPEC First Rule
 
@@ -243,11 +253,32 @@ It cannot modify input issues, modify Approved SPEC, bypass preflight, bypass ch
 
 ### 3. Audit Agent
 
-Status: not authorized yet.
+Status: enabled for Release Audit V1.
 
-Future role for reviewing Approved SPEC, input issue, execute run, patch diff, validation result, output evidence, and release delivery artifacts against AgentFlow boundaries.
+Owns audit report completion for existing `release-auto` and `human-via-agent` audit requests under `.agentflow/output/audit/<audit-id>/`.
+
+It reviews Approved SPEC, input issue, execute run, patch diff, validation result, output evidence, and release delivery artifacts against AgentFlow boundaries.
+
+It writes only audit artifacts for the selected audit request:
+
+- audit.json
+- audit-report.md
+- findings.json
+- checklist.md
+- evidence-map.json
+- traceability.json
+
+It must not create duplicate `release-auto` audits for the same Release Delivery.
 
 It cannot modify source code, modify input facts, modify execute patches, modify release delivery, execute commands, create PRs, merge, or deploy.
+
+## Audit Trigger Rule
+
+Every Release Delivery must have exactly one `release-auto` audit request.
+
+If a Release Delivery exists but no audit request exists, the Agent must treat it as blocked and report: `Release 已生成，但审计请求缺失。`
+
+The ordinary App UI must not expose create-audit actions. It only displays audit status, trigger source, reports, findings, evidence maps, and traceability.
 
 ## Execution Boundary
 

@@ -49,7 +49,20 @@ pub(crate) fn build_gate_snapshot(
         .as_ref()
         .and_then(|snapshot| snapshot.index.release_deliveries.last())
         .map(|entry| entry.path.clone());
-    let blockers = collect_blockers(root)?;
+    let mut blockers = collect_blockers(root)?;
+    if matches!(audit_status, WorkflowAuditStatus::NotRequested) {
+        if let Some(delivery_path) = output
+            .as_ref()
+            .and_then(|snapshot| snapshot.index.release_deliveries.last())
+            .map(|entry| entry.path.clone())
+        {
+            blockers.push(WorkflowBlockedAction {
+                action: "release-auto-audit-required".to_string(),
+                reason: "Release 已生成，但审计请求缺失。".to_string(),
+                source_path: Some(delivery_path),
+            });
+        }
+    }
     let current_stage = derive_stage(
         health,
         input.as_ref(),
@@ -58,7 +71,7 @@ pub(crate) fn build_gate_snapshot(
         &audit_status,
         !blockers.is_empty(),
     );
-    let allowed_next_actions = allowed_actions(&current_stage, &audit_status);
+    let allowed_next_actions = allowed_actions(&current_stage);
     Ok(WorkflowGateSnapshot {
         version: STATE_WORKFLOW_GATES_VERSION.to_string(),
         current_stage,
@@ -246,6 +259,8 @@ fn derive_audit_status(index: Option<&agentflow_output::AuditIndex>) -> Workflow
         return WorkflowAuditStatus::NotRequested;
     };
     match latest.status {
+        agentflow_output::AuditStatus::Requested => WorkflowAuditStatus::Requested,
+        agentflow_output::AuditStatus::Running => WorkflowAuditStatus::Running,
         agentflow_output::AuditStatus::Passed => WorkflowAuditStatus::Passed,
         agentflow_output::AuditStatus::PassedWithWarnings => {
             WorkflowAuditStatus::PassedWithWarnings
@@ -255,15 +270,10 @@ fn derive_audit_status(index: Option<&agentflow_output::AuditIndex>) -> Workflow
     }
 }
 
-fn allowed_actions(stage: &WorkflowStage, audit_status: &WorkflowAuditStatus) -> Vec<String> {
+fn allowed_actions(stage: &WorkflowStage) -> Vec<String> {
     let mut actions = Vec::new();
     match stage {
-        WorkflowStage::DeliveryReady
-            if matches!(audit_status, WorkflowAuditStatus::NotRequested) =>
-        {
-            actions.push("request-human-audit".to_string());
-            actions.push("start-new-input".to_string());
-        }
+        WorkflowStage::DeliveryReady => actions.push("start-new-input".to_string()),
         WorkflowStage::EvidenceReady => actions.push("prepare-release-delivery".to_string()),
         WorkflowStage::ExecuteCompleted => actions.push("write-output-evidence".to_string()),
         WorkflowStage::IssueReady | WorkflowStage::ExecuteReady => {
@@ -347,7 +357,7 @@ fn run_is_active(status: &ExecuteRunStatus) -> bool {
 
 fn action_label(action: &str) -> String {
     match action {
-        "request-human-audit" => "Request human audit",
+        "release-auto-audit-required" => "Release audit required",
         "start-new-input" => "Start new requirement intake",
         "prepare-release-delivery" => "Prepare release delivery",
         "write-output-evidence" => "Write output evidence",
@@ -359,8 +369,8 @@ fn action_label(action: &str) -> String {
 
 fn allowed_reason(action: &str, gate: &WorkflowGateSnapshot) -> String {
     match action {
-        "request-human-audit" => {
-            "Release delivery is ready and audit has not been requested.".to_string()
+        "release-auto-audit-required" => {
+            "Release delivery exists but release-auto audit request is missing.".to_string()
         }
         "start-new-input" => "Workflow can accept the next requirement intake.".to_string(),
         "prepare-release-delivery" => {

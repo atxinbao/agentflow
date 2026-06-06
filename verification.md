@@ -4755,3 +4755,70 @@ Browser Preview 核对：
 - `npm --prefix apps/desktop run preview:smoke`：pass。
   - 输出：`Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.`
 - `git diff --check`：pass。
+
+## 026 - AgentFlow Release Audit Trigger Rules V1
+
+日期：2026-06-07
+执行者：Codex
+
+需求来源：
+
+- `/Users/mac/Desktop/026-agentflow-release-audit-trigger-rules-v1.md`
+
+需求归档：
+
+- `docs/requirements/026-agentflow-release-audit-trigger-rules-v1.md`
+- `docs/requirements/README.md`
+- `docs/requirements/next-requirements.md`
+
+实现结果：
+
+- 新增审计触发模型：
+  - `release-auto`
+  - `human-via-agent`
+- `prepare_output_workspace` 会为每个 Release Delivery 自动登记一个 `release-auto` audit request。
+- 同一个 Release Delivery 不会重复创建 `release-auto` audit request。
+- request-only audit 进入 audit index，状态为 `requested`，不会自动写 audit report。
+- Desktop 普通 Tauri command 不再注册 `request_human_audit`。
+- Desktop 交付页只展示审计状态，不再展示创建审计入口。
+- Desktop 审计页展示触发来源、关联交付、关联任务、报告、发现项、证据链和追溯关系。
+- Browser Preview mock 改为 `release-auto` 审计来源。
+- Workflow state 将 `requested` / `running` 映射到 `AuditRequested` / `AuditRunning`。
+- Release 已生成但 audit request 缺失时，state blocker 显示：`Release 已生成，但审计请求缺失。`
+- Agent manual 模板补充 Release 后必须审计、Audit Agent 填充 existing audit request、App 只读展示审计的规则。
+
+边界：
+
+- 没有自动写 audit report。
+- 没有调用模型。
+- 没有新增前端业务写入口。
+- 没有让普通 App UI 创建审计。
+- 没有删除本地项目文件、源码或 `.agentflow` 用户数据。
+- 没有新增远程 GitHub / Linear / Figma 写入。
+
+Browser Preview 核对：
+
+- URL：`http://127.0.0.1:1420/`。
+- 交付页：
+  - 没有 `请求审计` / `请求人工审计` 文案。
+  - 显示 `审计状态`。
+  - 显示 `Release 自动审计`。
+  - 主按钮为 `查看审计报告`。
+- 审计页：
+  - 没有 `请求审计` / `请求人工审计` / `新建审计` / `重新审计` / `补证据` 文案。
+  - 显示 `Release 自动审计`。
+  - 显示 `触发来源`、`证据链`、`追溯关系`。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-output`：pass，20 tests。
+- `cargo test -p agentflow-state`：pass，11 tests。
+- `cargo test -p agentflow-agent-manual`：pass，31 tests。
+- `cargo test -p agentflow-workflow-acceptance`：pass，6 tests。
+- `cargo test -p agentflow-desktop`：pass，19 tests。
+- `cargo test`：pass，agent-manual 31 tests + CLI 2 tests + core 61 tests + desktop 19 tests + execute 17 tests + input 12 tests + output 20 tests + panel 27 tests + state 11 tests + workflow-acceptance 6 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `npm --prefix apps/desktop run preview:smoke`：pass。
+  - 输出：`Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.`
+- `git diff --check`：pass。

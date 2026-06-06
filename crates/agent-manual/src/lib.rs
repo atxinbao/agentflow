@@ -114,6 +114,16 @@ mod tests {
                 .unwrap()
                 .contains("Requirement intake filter")
         );
+        assert!(
+            fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md"))
+                .unwrap()
+                .contains("release-auto")
+        );
+        assert!(
+            fs::read_to_string(dir.path().join(".agentflow/define/audit/AUDIT.md"))
+                .unwrap()
+                .contains("Audit Agent is enabled for Release Audit V1")
+        );
         assert!(dir
             .path()
             .join(".agentflow/define/agent/state/bootstrap.json")

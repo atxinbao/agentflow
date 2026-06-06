@@ -787,8 +787,13 @@ export function createBrowserPreviewAuditIndex(): AuditIndex {
       {
         auditId: previewAuditId,
         status: "passed-with-warnings",
-        requestedBy: "human",
+        trigger: "release-auto",
+        requestedBy: "agentflow-release-auto",
         requestedAt: previewTimestamp,
+        sourceDeliveryId: previewDeliveryRunId,
+        sourceRunId: previewDeliveryRunId,
+        sourceIssueId: previewIssueId,
+        sourceSpecId: previewSpecId,
         reportPath: ".agentflow/output/audit/audit-browser-preview-001/audit-report.md",
         auditPath: ".agentflow/output/audit/audit-browser-preview-001/audit.json",
       },
@@ -799,9 +804,17 @@ export function createBrowserPreviewAuditIndex(): AuditIndex {
 export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null {
   return {
     request: {
-      reason: "浏览器预览核对人工审计入口。",
+      trigger: "release-auto",
+      reason: "Release 已生成，AgentFlow 规则要求进行审计。",
+      source: {
+        kind: "release-delivery",
+        deliveryId: previewDeliveryRunId,
+        runId: previewDeliveryRunId,
+        issueId: previewIssueId,
+        specId: previewSpecId,
+      },
       scope: {
-        description: "Human requested audit for Build Agent delivery.",
+        description: "Release 自动审计 Build Agent delivery。",
         refs: [
           {
             kind: "spec",
@@ -834,8 +847,12 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
     audit: {
       auditId: previewAuditId,
       status: "passed-with-warnings",
-      requestedBy: "human",
+      trigger: "release-auto",
+      requestedBy: "agentflow-release-auto",
       requestedAt: previewTimestamp,
+      sourceDeliveryId: previewDeliveryRunId,
+      sourceRunId: previewDeliveryRunId,
+      sourceIssueId: previewIssueId,
       summary: {
         findings: 1,
         warnings: 1,

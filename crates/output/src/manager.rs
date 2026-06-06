@@ -1,10 +1,9 @@
 use crate::{
-    audit::{ensure_audit_workspace, rebuild_audit_manifest_and_index},
+    audit::{ensure_audit_workspace, ensure_release_auto_audits, rebuild_audit_manifest_and_index},
     model::{
-        HumanAudit, OutputEvidence, OutputIndex, OutputIndexEntry, OutputManifest,
-        OutputReleaseDelivery, OutputSnapshot, OutputStatusSnapshot, OutputSummary,
-        OutputWorkspaceStatus, OUTPUT_DIRECTORIES, OUTPUT_REQUIRED_FILES, OUTPUT_SNAPSHOT_VERSION,
-        OUTPUT_STATUS_VERSION,
+        OutputEvidence, OutputIndex, OutputIndexEntry, OutputManifest, OutputReleaseDelivery,
+        OutputSnapshot, OutputStatusSnapshot, OutputSummary, OutputWorkspaceStatus,
+        OUTPUT_DIRECTORIES, OUTPUT_REQUIRED_FILES, OUTPUT_SNAPSHOT_VERSION, OUTPUT_STATUS_VERSION,
     },
     storage::{
         canonical_project_root, count_directory_entries, ensure_directory, read_json,
@@ -23,6 +22,7 @@ pub fn prepare_output_workspace(project_root: impl AsRef<Path>) -> Result<Output
     }
     ensure_audit_workspace(&root)?;
     rebuild_audit_manifest_and_index(&root)?;
+    ensure_release_auto_audits(&root)?;
 
     let index = rebuild_output_index(&root)?;
     let summary = output_summary(&root, &index)?;
@@ -98,21 +98,23 @@ pub(crate) fn rebuild_output_index(root: &Path) -> Result<OutputIndex> {
     }
 
     let mut audits = Vec::new();
-    for path in sorted_child_paths(&root.join(".agentflow/output/audit"))? {
-        let audit_path = path.join("audit.json");
-        if !audit_path.is_file() {
-            continue;
-        }
-        let Ok(record) = read_json::<HumanAudit>(&audit_path) else {
-            continue;
-        };
-        let issue_id = audit_scope_id(root, &record.audit_id, "issue").unwrap_or_default();
-        let source_spec_id = audit_scope_id(root, &record.audit_id, "spec").unwrap_or_default();
+    let audit_index =
+        read_json::<crate::model::AuditIndex>(&root.join(".agentflow/output/audit/index.json"))
+            .unwrap_or_default();
+    for record in audit_index.audits {
         audits.push(OutputIndexEntry {
             run_id: record.audit_id.clone(),
-            issue_id,
-            source_spec_id,
-            path: format!(".agentflow/output/audit/{}/audit.json", record.audit_id),
+            issue_id: record
+                .source_issue_id
+                .clone()
+                .or_else(|| audit_scope_id(root, &record.audit_id, "issue"))
+                .unwrap_or_default(),
+            source_spec_id: record
+                .source_spec_id
+                .clone()
+                .or_else(|| audit_scope_id(root, &record.audit_id, "spec"))
+                .unwrap_or_default(),
+            path: record.audit_path,
             status: record.status.as_str().to_string(),
             updated_at: record.requested_at,
         });
@@ -176,11 +178,19 @@ fn build_output_snapshot(root: &Path) -> Result<OutputSnapshot> {
         if name == "manifest.json" || name == "index.json" {
             continue;
         }
+        let has_request_json = path.join("audit-request.json").is_file();
         let has_audit_json = path.join("audit.json").is_file();
         let has_audit_report = path.join("audit-report.md").is_file();
-        if !has_audit_json && !has_audit_report {
+        if has_request_json && !has_audit_json && !has_audit_report {
+            warnings.push(format!(
+                "audit request {} is waiting for Agent audit report",
+                path.display()
+            ));
+            continue;
+        }
+        if !has_request_json && !has_audit_json && !has_audit_report {
             errors.push(format!(
-                "audit output {} must contain audit.json or audit-report.md",
+                "audit output {} must contain audit-request.json, audit.json, or audit-report.md",
                 path.display()
             ));
         }
