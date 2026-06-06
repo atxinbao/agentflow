@@ -51,7 +51,7 @@
 
 .v16-login-titlebar {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(180px, 320px);
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(140px, 240px);
   align-items: center;
   border-bottom: 1px solid #24313d;
   background: #111821;
@@ -388,7 +388,7 @@
 .v16-titlebar {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(180px, 320px);
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(140px, 240px);
   align-items: center;
   min-width: 0;
   border-bottom: 1px solid var(--v16-border);
@@ -400,14 +400,14 @@
 .v16-titlebar-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  padding: 0 14px;
+  padding: 0 10px;
 }
 
 .v16-app.native-titlebar .v16-titlebar-left,
 .v16-login-stage.native-titlebar .v16-titlebar-left {
-  padding-left: 150px;
+  padding-left: 92px;
 }
 
 .v16-window-dots {
@@ -441,14 +441,9 @@
   justify-self: center;
   justify-content: center;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
-  width: min(496px, 100%);
-  min-height: 34px;
-  padding: 0 20px;
-  border: 1px solid var(--v16-border);
-  border-radius: 7px;
-  background: var(--v16-surface-2);
+  max-width: min(420px, 100%);
   -webkit-app-region: drag;
 }
 
@@ -456,6 +451,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--v16-text);
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -463,15 +459,15 @@
 .v16-titlebar-project small {
   max-width: 100%;
   color: var(--v16-subtle);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
 }
 
 .v16-titlebar-status-dot {
   flex: 0 0 auto;
-  width: 11px;
-  height: 11px;
+  width: 9px;
+  height: 9px;
   border-radius: 999px;
   background: var(--v16-warning);
 }
@@ -483,9 +479,9 @@
 .v16-titlebar-action {
   display: inline-grid;
   place-items: center;
-  min-width: 92px;
-  min-height: 34px;
-  padding: 0 18px;
+  min-width: 72px;
+  min-height: 24px;
+  padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--v16-success) 28%, var(--v16-border));
   border-radius: 7px;
   background: color-mix(in srgb, var(--v16-success) 14%, var(--v16-surface));
@@ -545,15 +541,14 @@
 }
 
 .v16-command-key {
-  display: grid;
-  place-items: center;
-  min-width: 72px;
-  height: 30px;
-  border: 1px solid var(--v16-border);
-  border-radius: 7px;
-  background: var(--v16-surface-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
   color: var(--v16-muted);
-  font-weight: 900;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.86;
   -webkit-app-region: no-drag;
 }
 
