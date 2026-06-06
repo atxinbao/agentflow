@@ -1,31 +1,38 @@
 import type { CSSProperties } from "react";
 import {
+  ActionButton,
   AdvancedDetailsDrawer,
   BlockedState,
   Button,
   CopyableCodeBlock,
   EmptyState,
+  ListPanel,
+  ListRow,
   LoadingState,
   MetricCard,
-  StatusChip,
-  SurfaceCard,
+  PageHeader,
+  Panel,
+  ReadOnlyBadge,
+  RiskBadge,
+  StatusBadge,
   WarningState,
 } from "../../components";
 import "./DesignSystemPreview.css";
 
 const colorSwatches = [
-  ["背景", "--af-bg", "#0b1020"],
-  ["表面", "--af-surface", "#11182b"],
-  ["表面 2", "--af-surface-2", "#151e33"],
-  ["主色", "--af-primary", "#7c9cff"],
-  ["成功", "--af-success", "#22c55e"],
-  ["警告", "--af-warning", "#fbbf24"],
-  ["阻断", "--af-danger", "#fb7185"],
-  ["代码", "--af-blue", "#38bdf8"],
+  ["背景", "--af-bg", "var(--af-bg)"],
+  ["表面", "--af-surface", "var(--af-surface)"],
+  ["弱表面", "--af-surface-muted", "var(--af-surface-muted)"],
+  ["边框", "--af-border", "var(--af-border)"],
+  ["强边框", "--af-border-strong", "var(--af-border-strong)"],
+  ["主色", "--af-accent", "var(--af-accent)"],
+  ["成功", "--af-success", "var(--af-success)"],
+  ["警告", "--af-warning", "var(--af-warning)"],
+  ["阻断", "--af-danger", "var(--af-danger)"],
 ] as const;
 
 const handoffExample = `请在 AgentFlow Desktop 中使用 design system 组件。
-范围：apps/desktop/src/design/** 和 apps/desktop/src/components/**。
+范围：apps/desktop/src/styles/**、apps/desktop/src/design/** 和 apps/desktop/src/components/**。
 不要改 Rust 后端，不新增 Tauri command，不写 .agentflow。`;
 
 type SwatchStyle = CSSProperties & {
@@ -36,9 +43,9 @@ export function DesignSystemPreview() {
   return (
     <section className="af-design-system-preview af-ui" data-agentflow-design-system="v1" aria-label="Design System Preview">
       <header className="af-preview-header">
-        <p className="af-kicker">Desktop Design System V1</p>
+        <p className="af-kicker">Figma SVG Style Foundation V1</p>
         <h2 className="af-title">AgentFlow 基础组件</h2>
-        <p className="af-description">先把颜色、按钮、卡片和状态统一，再做 Project Home 和三 Agent 动线。</p>
+        <p className="af-description">先统一 token、窗口外壳、面板、列表和状态，再逐页迁移业务页面。</p>
       </header>
 
       <section className="af-preview-section" aria-label="颜色">
@@ -60,36 +67,68 @@ export function DesignSystemPreview() {
           <Button variant="secondary">查看详情</Button>
           <Button variant="ghost">返回</Button>
           <Button variant="danger">返工</Button>
-          <Button loading>正在准备</Button>
+          <ActionButton loading>正在准备</ActionButton>
         </div>
         <div className="af-preview-row">
-          <StatusChip status="ready" />
-          <StatusChip status="working" />
-          <StatusChip status="warning" />
-          <StatusChip status="blocked" />
-          <StatusChip status="failed" />
-          <StatusChip status="idle" />
+          <StatusBadge status="ready">Ready</StatusBadge>
+          <StatusBadge status="working">Working</StatusBadge>
+          <StatusBadge status="warning">Warning</StatusBadge>
+          <StatusBadge status="blocked">Blocked</StatusBadge>
+          <StatusBadge status="failed">Failed</StatusBadge>
+          <StatusBadge status="idle">Idle</StatusBadge>
+          <RiskBadge risk="high" />
+          <ReadOnlyBadge />
+        </div>
+      </section>
+
+      <section className="af-preview-section" aria-label="页面基础组件">
+        <PageHeader
+          description="页面标题只说明当前工作面，不做营销说明。"
+          kicker="Project Home"
+          meta={<ReadOnlyBadge>本地只读</ReadOnlyBadge>}
+          title="项目工作台"
+        />
+        <div className="af-preview-grid">
+          <Panel
+            title="可以交给 Codex 了"
+            description="这个任务已经有 approved SPEC 和 Issue。"
+            footer={<ActionButton variant="primary">复制 Codex 指令</ActionButton>}
+          >
+            <StatusBadge status="ready">Ready</StatusBadge>
+          </Panel>
+          <ListPanel count={2} title="任务列表">
+            <ListRow
+              meta={<StatusBadge status="ready">Ready</StatusBadge>}
+              subtitle="normal · 2 条验证命令"
+              title="实现 Figma SVG Style Foundation"
+            />
+            <ListRow
+              meta={<StatusBadge status="warning">Review</StatusBadge>}
+              subtitle="high · 1 条验证命令"
+              title="核对交付证据"
+            />
+          </ListPanel>
         </div>
       </section>
 
       <section className="af-preview-section" aria-label="卡片和指标">
         <h3 className="af-title">卡片和指标</h3>
         <div className="af-preview-grid">
-          <SurfaceCard
+          <Panel
             title="项目已准备好"
             description="AgentFlow 已经准备好规则和项目现场。下一步先把需求说清楚。"
-            footer={<Button variant="primary">继续整理 SPEC</Button>}
+            footer={<ActionButton variant="primary">继续整理 SPEC</ActionButton>}
           >
-            <StatusChip status="ready">工作手册：已就绪</StatusChip>
-          </SurfaceCard>
-          <SurfaceCard title="可以交给 Codex 了" description="这个任务已经有 approved SPEC 和 Issue。" tone="success">
+            <StatusBadge status="ready">工作手册：已就绪</StatusBadge>
+          </Panel>
+          <Panel title="可以审计交付结果" description="交付材料已有 evidence / delivery 摘要。" tone="success">
             <div className="af-preview-metrics">
               <MetricCard label="证据" value={3} detail="可审计" />
               <MetricCard label="交付" value={1} detail="已回填" />
               <MetricCard label="审计" value={0} detail="未请求" />
               <MetricCard label="未完成" value={0} detail="无阻断" />
             </div>
-          </SurfaceCard>
+          </Panel>
         </div>
       </section>
 
