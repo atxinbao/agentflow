@@ -1,12 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
-  AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
   ClipboardList,
-  Code2,
   FileSearch,
-  FileText,
   FolderOpen,
   GitBranch,
   LayoutDashboard,
@@ -15,7 +12,6 @@ import {
   Search,
   Settings,
   ShieldCheck,
-  Terminal,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -29,11 +25,22 @@ import {
   createBrowserPreviewWorkbenchSnapshot,
 } from "./browserPreviewData";
 import {
-  Button,
+  ActionButton,
+  AppFrame,
   CopyableCodeBlock,
+  ListPanel,
+  ListRow,
   MetricCard,
-  StatusChip,
-  SurfaceCard,
+  PageHeader,
+  Panel,
+  ReadOnlyBadge,
+  RiskBadge,
+  Section,
+  Sidebar,
+  StatusBadge,
+  StatusBar as FoundationStatusBar,
+  TopBar,
+  WindowChrome,
   type StatusChipStatus,
 } from "./components";
 import { DesignSystemPreview } from "./features/design-system";
@@ -490,21 +497,24 @@ function LoginModal({ onConnect }: { onConnect: (provider: Provider) => void }) 
 
   return (
     <main className="v16-login-stage" data-agentflow-screen="login">
-      <section className="v16-floating-window v16-login-window" aria-label="登录 AgentFlow">
-        <header>
-          <p className="v16-kicker">AgentFlow</p>
-          <h1>连接大模型入口</h1>
-          <p>选择你要配合使用的 Agent 工具。登录窗口独立于项目工作台。</p>
-        </header>
+      <WindowChrome
+        aria-label="登录 AgentFlow"
+        className="v16-floating-window v16-login-window"
+        description="选择你要配合使用的 Agent 工具。登录窗口独立于项目工作台。"
+        kicker="AgentFlow"
+        title="连接大模型入口"
+      >
         <div className="v16-provider-list">
           {providers.map((provider) => (
-            <button key={provider.id} onClick={() => onConnect(provider.id)} type="button">
-              <strong>{provider.id}</strong>
-              <span>{provider.description}</span>
-            </button>
+            <ListRow
+              key={provider.id}
+              onClick={() => onConnect(provider.id)}
+              subtitle={provider.description}
+              title={provider.id}
+            />
           ))}
         </div>
-      </section>
+      </WindowChrome>
     </main>
   );
 }
@@ -535,7 +545,7 @@ function FirstRunModal({
 
   return (
     <div className="v16-modal-backdrop" data-agentflow-screen="first-run">
-      <section className="v16-floating-window v16-first-run-window" aria-label="首次引导">
+      <WindowChrome className="v16-floating-window v16-first-run-window" aria-label="首次引导">
         <header className="v16-first-run-header">
           <div>
             <p className="v16-kicker">首次引导</p>
@@ -555,9 +565,9 @@ function FirstRunModal({
             <p>打开一个本地项目，AgentFlow 会准备工作规则和项目现场。</p>
             <div className="v16-project-picker">
               <span>{projectRoot ? projectRoot : "还没有选择项目"}</span>
-              <Button leftIcon={<FolderOpen size={16} />} onClick={onChooseProject} variant="primary">
+              <ActionButton leftIcon={<FolderOpen size={16} />} onClick={onChooseProject} variant="primary">
                 打开本地项目
-              </Button>
+              </ActionButton>
             </div>
             {feedback ? <p className="v16-feedback">{feedback}</p> : null}
           </section>
@@ -630,21 +640,21 @@ function FirstRunModal({
 
         <footer className="v16-first-run-actions">
           {isFinalStep ? (
-            <Button onClick={onClose} size="lg" variant="primary">
+            <ActionButton onClick={onClose} size="lg" variant="primary">
               进入工作台
-            </Button>
+            </ActionButton>
           ) : (
             <>
-              <Button disabled={stepIndex === 0} onClick={() => setStepIndex((current) => Math.max(current - 1, 0))}>
+              <ActionButton disabled={stepIndex === 0} onClick={() => setStepIndex((current) => Math.max(current - 1, 0))}>
                 上一步
-              </Button>
-              <Button disabled={stepTitle === "选择项目" && !projectReady} onClick={nextStep} variant="primary">
+              </ActionButton>
+              <ActionButton disabled={stepTitle === "选择项目" && !projectReady} onClick={nextStep} variant="primary">
                 下一步
-              </Button>
+              </ActionButton>
             </>
           )}
         </footer>
-      </section>
+      </WindowChrome>
     </div>
   );
 }
@@ -680,7 +690,7 @@ function AppShell({
   toolbar: ReactNode;
 }) {
   return (
-    <main className="v16-app" data-agentflow-ux="v16">
+    <AppFrame className="v16-app" data-agentflow-ux="v16">
       <TitleBar connectedProvider={connectedProvider} projectName={projectName} projectRoot={projectRoot} />
       <ProjectTree activePage={activePage} onPageChange={onPageChange} projectName={projectName} />
       <section className={inspector ? "v16-workspace with-inspector" : "v16-workspace"}>
@@ -689,7 +699,7 @@ function AppShell({
         {inspector}
       </section>
       {statusBar}
-    </main>
+    </AppFrame>
   );
 }
 
@@ -703,7 +713,7 @@ function TitleBar({
   projectRoot: string | null;
 }) {
   return (
-    <header className="v16-titlebar">
+    <TopBar className="v16-titlebar">
       <div>
         <strong>AgentFlow</strong>
         <span>{projectName}</span>
@@ -716,7 +726,7 @@ function TitleBar({
         <span>{connectedProvider} connected</span>
         <small>{projectRoot ?? "未选择项目"}</small>
       </div>
-    </header>
+    </TopBar>
   );
 }
 
@@ -730,7 +740,7 @@ function ProjectTree({
   projectName: string;
 }) {
   return (
-    <aside className="v16-project-tree" aria-label="项目导航">
+    <Sidebar className="v16-project-tree" aria-label="项目导航">
       <header>
         <span className="v16-tree-mark" aria-hidden="true">
           AF
@@ -756,7 +766,7 @@ function ProjectTree({
           );
         })}
       </nav>
-    </aside>
+    </Sidebar>
   );
 }
 
@@ -776,7 +786,7 @@ function Toolbar({
   taskViewMode: TaskViewMode;
 }) {
   return (
-    <header className="v16-toolbar">
+    <TopBar className="v16-toolbar">
       <div>
         <h1>{pageTitle(activePage)}</h1>
       </div>
@@ -806,7 +816,7 @@ function Toolbar({
           <RefreshCw size={16} />
         </button>
       </div>
-    </header>
+    </TopBar>
   );
 }
 
@@ -860,6 +870,12 @@ function ProjectHomePage({
 
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
+      <PageHeader
+        description="先看下一步，再进入任务、交付或审计。内部 JSON 默认放在高级页。"
+        kicker="Project Home"
+        meta={<ReadOnlyBadge>本地只读</ReadOnlyBadge>}
+        title="项目工作台"
+      />
       <NextStepCard nextStep={nextStep} onOpenAudit={onOpenAudit} onOpenTasks={onOpenTasks} />
 
       <section className="v16-panel-grid" aria-label="今日待处理">
@@ -869,7 +885,7 @@ function ProjectHomePage({
         <MetricCard label="待审计" value={outputSummary?.releaseDeliveries ?? 0} detail="可请求审计" />
       </section>
 
-      <SurfaceCard
+      <Panel
         className="v16-project-summary"
         description="项目现场只展示人能判断下一步的摘要。内部 JSON 在高级页查看。"
         title="项目现场摘要"
@@ -892,7 +908,7 @@ function ProjectHomePage({
             { id: "scan", label: "最近索引时间", value: panelStatus?.updatedAt ? formatTimestamp(panelStatus.updatedAt) : "未记录" },
           ]}
         />
-      </SurfaceCard>
+      </Panel>
 
       <CompanionShell selectedTask={selectedTask} />
     </section>
@@ -910,18 +926,18 @@ function NextStepCard({
 }) {
   const primaryAction = nextStep.action === "请求人工审计" ? onOpenAudit : onOpenTasks;
   return (
-    <SurfaceCard className="v16-next-step-card" title={nextStep.title} tone={nextStep.status === "warning" ? "warning" : "neutral"}>
+    <Panel className="v16-next-step-card" title={nextStep.title} tone={nextStep.status === "warning" ? "warning" : "neutral"}>
       <div className="v16-next-step-content">
-        <StatusChip status={nextStep.status}>{nextStep.status === "ready" ? "Ready" : "Warning"}</StatusChip>
+        <StatusBadge status={nextStep.status}>{nextStep.status === "ready" ? "Ready" : "Warning"}</StatusBadge>
         <p>{nextStep.description}</p>
         <small>{nextStep.reason}</small>
       </div>
       <ActionBar>
-        <Button onClick={primaryAction} size="lg" variant="primary">
+        <ActionButton onClick={primaryAction} size="lg" variant="primary">
           {nextStep.action}
-        </Button>
+        </ActionButton>
       </ActionBar>
-    </SurfaceCard>
+    </Panel>
   );
 }
 
@@ -972,22 +988,29 @@ function TaskBoard({ onSelectTask, tasks }: { onSelectTask: (taskId: string) => 
       {displayStatusColumns.map((column) => {
         const visibleTasks = tasks.filter((task) => task.displayStatus === column.id);
         return (
-          <section key={column.id}>
-            <header>
-              <strong>{column.label}</strong>
-              <span>{visibleTasks.length}</span>
-            </header>
-            <div>
-              {visibleTasks.map((task) => (
-                <button className="v16-task-card" key={`${column.id}-${task.id}`} onClick={() => onSelectTask(task.id)} type="button">
-                  <span className="v16-task-id">{task.id}</span>
-                  <StatusChip status={statusChipForDisplayStatus(task.displayStatus)}>{displayStatusLabel(task.displayStatus)}</StatusChip>
-                  <strong>{task.title}</strong>
-                  <small>{task.riskLevel || "normal"} · {task.validationCommands.length || 0} 条验证命令</small>
-                </button>
-              ))}
-            </div>
-          </section>
+          <ListPanel count={visibleTasks.length} key={column.id} title={column.label}>
+            {visibleTasks.length ? (
+              visibleTasks.map((task) => (
+                <ListRow
+                  className="v16-task-card"
+                  key={`${column.id}-${task.id}`}
+                  meta={
+                    <>
+                      <span className="v16-task-id">{task.id}</span>
+                      <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
+                        {displayStatusLabel(task.displayStatus)}
+                      </StatusBadge>
+                    </>
+                  }
+                  onClick={() => onSelectTask(task.id)}
+                  subtitle={`${task.riskLevel || "normal"} · ${task.validationCommands.length || 0} 条验证命令`}
+                  title={task.title}
+                />
+              ))
+            ) : (
+              <p className="v16-empty-text">暂无任务。</p>
+            )}
+          </ListPanel>
         );
       })}
     </div>
@@ -1043,7 +1066,12 @@ function TaskDetail({ task }: { task: V1Issue | null }) {
       <header>
         <p className="v16-kicker">{task.id}</p>
         <h2>{task.title}</h2>
-        <StatusChip status={statusChipForDisplayStatus(task.displayStatus)}>{displayStatusLabel(task.displayStatus)}</StatusChip>
+        <div className="v16-detail-badges">
+          <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
+            {displayStatusLabel(task.displayStatus)}
+          </StatusBadge>
+          <RiskBadge risk={task.riskLevel || "normal"} />
+        </div>
       </header>
       <DescriptionList
         items={[
@@ -1061,11 +1089,11 @@ function TaskDetail({ task }: { task: V1Issue | null }) {
       <SectionList title="证据要求" items={task.evidenceRequired} />
       <CopyableCodeBlock content={buildCodexHandoff(task)} maxHeight={210} title="Codex Handoff Package" />
       <ActionBar sticky>
-        <Button variant="secondary">确认需求</Button>
-        <Button variant="primary">复制任务包</Button>
-        <Button variant="secondary">我已交给 Codex</Button>
-        <Button variant="secondary">检查写回</Button>
-        <Button variant="secondary">请求审计</Button>
+        <ActionButton variant="secondary">确认需求</ActionButton>
+        <ActionButton variant="primary">复制任务包</ActionButton>
+        <ActionButton variant="secondary">我已交给 Codex</ActionButton>
+        <ActionButton variant="secondary">检查写回</ActionButton>
+        <ActionButton variant="secondary">请求审计</ActionButton>
       </ActionBar>
     </aside>
   );
@@ -1174,7 +1202,7 @@ function DeliveryDetail({
       <header>
         <p className="v16-kicker">Delivery Summary</p>
         <h2>{delivery?.runId ?? "还没有交付材料"}</h2>
-        <StatusChip status={delivery ? "ready" : "idle"}>{delivery?.status ?? "等待写回"}</StatusChip>
+        <StatusBadge status={delivery ? "ready" : "idle"}>{delivery?.status ?? "等待写回"}</StatusBadge>
       </header>
       <div className="v16-summary-grid">
         <MetricCard label="Evidence" value={outputStatusState.status?.summary.evidence ?? evidence.length} />
@@ -1189,10 +1217,10 @@ function DeliveryDetail({
       <SectionList title="Release note" items={[delivery?.path ?? "暂无 release delivery。"]} />
       <SectionList title="Out-of-scope check" items={["普通页面只展示摘要；raw JSON 在高级页查看。"]} />
       <ActionBar sticky>
-        <Button variant="secondary">查看证据</Button>
-        <Button variant="primary">请求审计</Button>
-        <Button variant="secondary">补证据</Button>
-        <Button variant="secondary">重新检查写回</Button>
+        <ActionButton variant="secondary">查看证据</ActionButton>
+        <ActionButton variant="primary">请求审计</ActionButton>
+        <ActionButton variant="secondary">补证据</ActionButton>
+        <ActionButton variant="secondary">重新检查写回</ActionButton>
       </ActionBar>
     </section>
   );
@@ -1257,7 +1285,7 @@ function AuditReport({ report }: { report: HumanAuditReport | null }) {
       <header>
         <p className="v16-kicker">Audit Report</p>
         <h2>{report?.audit.auditId ?? "未请求审计"}</h2>
-        <StatusChip status={report ? "warning" : "idle"}>{report?.audit.status ?? "未请求"}</StatusChip>
+        <StatusBadge status={report ? "warning" : "idle"}>{report?.audit.status ?? "未请求"}</StatusBadge>
       </header>
       <SectionList title="审计结论" items={[report?.reportMarkdown.split("\n").slice(0, 3).join(" ") || "选择 delivery 并填写原因后可请求人工审计。"]} />
       <SectionList
@@ -1270,10 +1298,10 @@ function AuditReport({ report }: { report: HumanAuditReport | null }) {
       <SectionList title="Validation check" items={["检查验证命令是否记录并通过。"]} />
       <SectionList title="Risk summary" items={["V1 只做展示和请求，不做自动修复。"]} />
       <ActionBar sticky>
-        <Button variant="primary">接受</Button>
-        <Button variant="secondary">返工</Button>
-        <Button variant="secondary">补证据</Button>
-        <Button variant="secondary">查看证据</Button>
+        <ActionButton variant="primary">接受</ActionButton>
+        <ActionButton variant="secondary">返工</ActionButton>
+        <ActionButton variant="secondary">补证据</ActionButton>
+        <ActionButton variant="secondary">查看证据</ActionButton>
       </ActionBar>
     </section>
   );
@@ -1378,7 +1406,7 @@ function StatusBar({
   stateStatus: StateStatusState["status"];
 }) {
   return (
-    <footer className="v16-status-bar" aria-label="工作流状态通道">
+    <FoundationStatusBar className="v16-status-bar" aria-label="工作流状态通道">
       <section>
         <StatusDot status={projectRoot ? "ready" : "idle"} />
         <span>{projectRoot ? "ready" : "waiting"}</span>
@@ -1396,13 +1424,13 @@ function StatusBar({
         <span>Full</span>
         <span>⌘K</span>
       </section>
-    </footer>
+    </FoundationStatusBar>
   );
 }
 
 function CompanionShell({ selectedTask }: { selectedTask: V1Issue | null }) {
   return (
-    <SurfaceCard className="v16-companion-shell" title="Companion Mode" description="窄窗口模式只保留当前队列和当前 Issue。">
+    <Panel className="v16-companion-shell" title="Companion Mode" description="窄窗口模式只保留当前队列和当前 Issue。">
       <div className="v16-companion-grid">
         <span>Issue Queue</span>
         <strong>{selectedTask?.id ?? "等待任务"}</strong>
@@ -1411,7 +1439,7 @@ function CompanionShell({ selectedTask }: { selectedTask: V1Issue | null }) {
         <span>Writeback Check</span>
         <strong>手动检查</strong>
       </div>
-    </SurfaceCard>
+    </Panel>
   );
 }
 
@@ -1419,22 +1447,8 @@ function ActionBar({ children, sticky = false }: { children: ReactNode; sticky?:
   return <footer className={sticky ? "v16-action-bar sticky" : "v16-action-bar"}>{children}</footer>;
 }
 
-function StatePill({ children, status = "idle" }: { children: ReactNode; status?: StatusChipStatus }) {
-  return <StatusChip status={status}>{children}</StatusChip>;
-}
-
 function StatusDot({ status }: { status: StatusChipStatus }) {
   return <span className={`v16-status-dot ${status}`} aria-hidden="true" />;
-}
-
-function TerminalRow({ command, status }: { command: string; status: string }) {
-  return (
-    <div className="v16-terminal-row">
-      <Terminal size={14} />
-      <code>{command}</code>
-      <span>{status}</span>
-    </div>
-  );
 }
 
 function CompactTable<T extends { id: string }>({
@@ -1481,14 +1495,13 @@ function DescriptionList({ items }: { items: Array<[string, string]> }) {
 
 function SectionList({ items, title }: { items: string[]; title: string }) {
   return (
-    <section className="v16-section-list">
-      <h3>{title}</h3>
+    <Section className="v16-section-list" title={title}>
       <ul>
         {(items.length ? items : ["暂无记录。"]).map((item) => (
           <li key={item}>{item}</li>
         ))}
       </ul>
-    </section>
+    </Section>
   );
 }
 
