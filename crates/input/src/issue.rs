@@ -1,4 +1,4 @@
-use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -144,7 +144,7 @@ pub struct InputSystemRecord {
     pub revision: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InputIssue {
     pub version: String,
@@ -167,38 +167,6 @@ pub struct InputIssue {
     pub relations: InputIssueRelations,
     pub panel: InputPanelLink,
     pub system: InputSystemRecord,
-}
-
-impl Serialize for InputIssue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("InputIssue", 19)?;
-        state.serialize_field("version", &self.version)?;
-        state.serialize_field("issueId", &self.issue_id)?;
-        state.serialize_field("issueModel", &self.issue_model)?;
-        state.serialize_field("sourceSpecId", &self.source_spec_id)?;
-        state.serialize_field("projectId", &self.project_id)?;
-        state.serialize_field("title", &self.title)?;
-        state.serialize_field("summary", &self.summary)?;
-        state.serialize_field("kind", &self.kind)?;
-        state.serialize_field("priority", &self.priority)?;
-        state.serialize_field("status", &self.status)?;
-        state.serialize_field(
-            "displayStatus",
-            &DisplayStatus::from_input_status(&self.status),
-        )?;
-        state.serialize_field("riskLevel", &self.risk_level)?;
-        state.serialize_field("scope", &self.scope)?;
-        state.serialize_field("nonGoals", &self.non_goals)?;
-        state.serialize_field("acceptanceCriteria", &self.acceptance_criteria)?;
-        state.serialize_field("validationHints", &self.validation_hints)?;
-        state.serialize_field("relations", &self.relations)?;
-        state.serialize_field("panel", &self.panel)?;
-        state.serialize_field("system", &self.system)?;
-        state.end()
-    }
 }
 
 impl Default for InputIssue {

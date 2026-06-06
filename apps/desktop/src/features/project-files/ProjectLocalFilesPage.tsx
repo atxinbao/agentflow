@@ -140,11 +140,6 @@ export function ProjectLocalFilesPage({
 
   return (
     <section className="project-file-page" aria-label="项目本地文件阅读器">
-      <div className="project-file-readonly-banner" role="note">
-        <strong>只读文件页</strong>
-        <span>只能读，不能改。不提供编辑、保存、删除、重命名或 Git 操作。</span>
-      </div>
-
       <ProjectFileBrowser
         expandedPaths={expandedPaths}
         loading={fileState.loading}
@@ -159,6 +154,10 @@ export function ProjectLocalFilesPage({
       />
 
       <article className="project-file-reader" aria-label="文件内容阅读器">
+        <div className="project-file-column-title">
+          <strong>文件内容</strong>
+          <span>只读预览</span>
+        </div>
         <ProjectFileReader
           content={content}
           entry={selectedEntry ?? (content?.kind === "directory" ? projectFileChildToEntry(contentToChild(content)) : null)}

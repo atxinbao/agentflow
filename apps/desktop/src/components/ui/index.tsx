@@ -247,7 +247,12 @@ export function StatusBadge({ children, className, status = "idle", ...props }: 
   );
 }
 
-export function RiskBadge({ className, risk = "normal", ...props }: HTMLAttributes<HTMLSpanElement> & { risk?: RiskLevel }) {
+export function RiskBadge({
+  "aria-label": ariaLabel,
+  className,
+  risk = "normal",
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & { risk?: RiskLevel }) {
   const normalized = String(risk || "normal").toLowerCase();
   const level = normalized.includes("critical")
     ? "critical"
@@ -258,14 +263,23 @@ export function RiskBadge({ className, risk = "normal", ...props }: HTMLAttribut
         : normalized.includes("low")
           ? "low"
           : "normal";
+  const label =
+    level === "critical"
+      ? "严重"
+      : level === "high"
+        ? "高"
+        : level === "medium"
+          ? "中"
+          : level === "low"
+            ? "低"
+            : "普通";
   return (
     <span
+      aria-label={ariaLabel ?? `风险：${label}`}
       className={cx("af-risk-badge", `af-risk-badge-${level}`, className)}
       data-agentflow-component="risk-badge"
       {...props}
-    >
-      {risk}
-    </span>
+    />
   );
 }
 

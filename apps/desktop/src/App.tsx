@@ -29,7 +29,6 @@ import {
   ActionButton,
   AppFrame,
   CopyableCodeBlock,
-  ListRow,
   MetricCard,
   PageHeader,
   Panel,
@@ -42,11 +41,10 @@ import {
   WindowChrome,
   type StatusChipStatus,
 } from "./components";
-import { DesignSystemPreview } from "./features/design-system";
 import { useAgentManual } from "./features/agent-manual";
 import { useExecuteStatus } from "./features/execute";
 import { useInputSnapshot, useInputStatus } from "./features/input";
-import { OutputAuditPanel, useOutputStatus, type OutputStatusState } from "./features/output";
+import { useOutputStatus, type OutputStatusState } from "./features/output";
 import {
   ProjectLocalFilesPage,
   isBrowserPreviewRuntime,
@@ -58,7 +56,6 @@ import {
   type ProjectFilesState,
 } from "./features/project-files";
 import { useIssueStatusIndex, useStateStatus, type StateStatusState } from "./features/state";
-import { AgentStatusBar, buildAgentStatusItems } from "./features/status-channel";
 import {
   buildAppInteractionState,
   buildAuditInteractionState,
@@ -73,7 +70,6 @@ import {
   type TaskInteractionAction,
 } from "./interaction/viewModels";
 import type {
-  AgentStatusChannelItem,
   AuditIndex,
   AuditIndexEntry,
   HumanAuditReport,
@@ -125,7 +121,7 @@ const pages: Array<{ icon: LucideIcon; id: AppPage; label: string }> = [
   { icon: Settings, id: "advanced", label: "高级" },
 ];
 
-const onboardingSteps = ["选择项目", "环境准备", "认识智能体", "确认意图", "完成引导"] as const;
+const onboardingSteps = ["选择项目", "环境准备", "认识 Agent", "确认意图", "完成引导"] as const;
 
 const interactionStorageKeys = {
   activePage: "agentflow.interaction.activePage.v1",
@@ -270,28 +266,6 @@ function App() {
       setOutputRefreshToken((current) => current + 1);
     }
   }, [activePage, projectRoot]);
-
-  const agentStatusItems = useMemo(
-    () =>
-      buildAgentStatusItems({
-        agentManualState,
-        executeStatusState,
-        inputStatusState,
-        outputStatusState,
-        projectFilesState,
-        projectPanelState,
-        stateStatusState,
-      }),
-    [
-      agentManualState,
-      executeStatusState,
-      inputStatusState,
-      outputStatusState,
-      projectFilesState,
-      projectPanelState,
-      stateStatusState,
-    ],
-  );
 
   const tasks = useMemo(
     () =>
@@ -505,14 +479,12 @@ function App() {
     <>
       <AppShell
         activePage={activePage}
-        inspector={activePage === "home" ? <InspectorPanel nextStep={nextStep} selectedTask={selectedTask} /> : null}
+        inspector={null}
         onPageChange={setActivePage}
         projectName={projectDisplayName}
         projectRoot={projectRoot}
         statusBar={
           <StatusBar
-            agentStatusItems={agentStatusItems}
-            connectedProvider={connectedProvider}
             projectName={projectDisplayName}
             projectRoot={projectRoot}
             appInteractionState={appInteractionState}
@@ -524,18 +496,21 @@ function App() {
       >
         {activePage === "home" ? (
           <ProjectHomePage
+            connectedProvider={connectedProvider}
             nextStep={nextStep}
             onOpenAudit={() => setActivePage("audit")}
             onOpenDelivery={() => setActivePage("delivery")}
             onOpenFiles={() => setActivePage("files")}
             onOpenTasks={() => setActivePage("tasks")}
-            onCheckWriteback={() => selectedTask && void handleTaskAction("check-writeback", selectedTask)}
+            outputBundle={outputBundle}
             outputStatusState={outputStatusState}
             projectPanelState={projectPanelState}
+            projectFilesState={projectFilesState}
             projectName={projectDisplayName}
             projectRoot={projectRoot}
             selectedTask={selectedTask}
             stateStatusState={stateStatusState}
+            workspaceData={workspaceData}
           />
         ) : null}
         {activePage === "tasks" ? (
@@ -572,11 +547,8 @@ function App() {
         ) : null}
         {activePage === "audit" ? (
           <AuditPage
-            onAuditRequested={() => setOutputRefreshToken((current) => current + 1)}
             onSelectAudit={setSelectedAuditId}
             outputBundle={outputBundle}
-            outputStatusState={outputStatusState}
-            projectRoot={projectRoot}
             selectedAuditId={selectedAuditId}
           />
         ) : null}
@@ -757,6 +729,7 @@ function LoginModal({ onConnect }: { onConnect: (provider: Provider) => void }) 
       </header>
       <section className="v16-login-content" aria-label="连接大模型入口">
         <h1>连接大模型入口</h1>
+        <p>选择你将用来配合 AgentFlow 的入口。登录是独立模块，不展示项目内容；完成后进入首次引导。</p>
         <div className="v16-provider-list" role="list">
           {providers.map((provider) => (
             <button
@@ -856,11 +829,11 @@ function FirstRunModal({
           </section>
         ) : null}
 
-        {stepTitle === "认识智能体" ? (
+        {stepTitle === "认识 Agent" ? (
           <section className="v16-first-run-body v16-agent-brief">
-            <AgentBrief className="spec" title="需求助手" value="确认需求 / 整理计划 / 生成任务" />
-            <AgentBrief className="build" title="执行助手" value="任务编排 · 执行改动 · 写回结果" />
-            <AgentBrief className="audit" title="审计助手" value="审计交付 / 核对证据 / 生成报告" />
+            <AgentBrief className="spec" title="需求助手" value="确认需求 · 整理规格 · 生成任务" />
+            <AgentBrief className="build" title="执行助手" value="任务打包 · 执行改动 · 写回结果" />
+            <AgentBrief className="audit" title="审计助手" value="审计交付 · 核对证据 · 生成报告" />
           </section>
         ) : null}
 
@@ -1071,149 +1044,138 @@ function Toolbar({
 }
 
 function ProjectHomePage({
+  connectedProvider,
   nextStep,
   onOpenAudit,
   onOpenDelivery,
   onOpenFiles,
   onOpenTasks,
-  onCheckWriteback,
+  outputBundle,
   outputStatusState,
   projectPanelState,
+  projectFilesState,
   projectName,
   projectRoot,
   selectedTask,
   stateStatusState,
+  workspaceData,
 }: {
+  connectedProvider: Provider;
   nextStep: NextStepViewModel;
   onOpenAudit: () => void;
   onOpenDelivery: () => void;
   onOpenFiles: () => void;
   onOpenTasks: () => void;
-  onCheckWriteback: () => void;
+  outputBundle: OutputBundleState;
   outputStatusState: OutputStatusState;
   projectPanelState: ProjectPanelState;
+  projectFilesState: ProjectFilesState;
   projectName: string;
   projectRoot: string | null;
   selectedTask: V1Issue | null;
   stateStatusState: StateStatusState;
+  workspaceData: WorkspaceDataState;
 }) {
   const panelStatus = projectPanelState.status;
-  const manifest = projectPanelState.manifest;
   const outputSummary = outputStatusState.status?.summary;
+  const filesMode = isBrowserPreviewRuntime() ? "浏览器预览" : "客户端真实读取";
+  const recentActivities = buildRecentActivities(workspaceData, outputBundle, outputSummary);
 
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
-      <PageHeader
-        description="查看下一步、当前任务和最近活动。"
-        title="项目工作台"
-      />
-      <NextStepCard nextStep={nextStep} onOpenAudit={onOpenAudit} onOpenTasks={onOpenTasks} />
+      <section className="v16-home-columns" aria-label="工作台总览">
+        <Panel className="v16-home-column" title="项目状态">
+          <div className="v16-status-stack">
+            <HomeStatusItem
+              detail={workflowStageText(stateStatusState.status?.currentStage)}
+              label="项目"
+              status={stateStatusState.status?.currentStage ? "就绪" : "等待"}
+              title={projectName}
+            />
+            <HomeStatusItem
+              detail={`${connectedProvider} · 本地只读客户端`}
+              label="工作台 Shell"
+              status={projectRoot ? "已就绪" : "未选择项目"}
+              title="AgentFlow"
+            />
+            <HomeStatusItem
+              detail={`${filesMode} · 只读`}
+              label="项目文件"
+              status={projectFilesState.snapshot ? "已读取" : "等待读取"}
+              title={projectFilesState.snapshot?.projectRoot ? projectNameFromPath(projectFilesState.snapshot.projectRoot) : "文件阅读器"}
+            />
+          </div>
+          <ActionBar>
+            <ActionButton onClick={onOpenFiles} variant="secondary">打开文件页</ActionButton>
+          </ActionBar>
+        </Panel>
 
-      <section className="v16-panel-grid" aria-label="今日待处理">
-        <MetricCard label="待确认" value={stateStatusState.status?.blockers.length ?? 0} detail="需要人类确认" />
-        <MetricCard label="可交给 Codex" value={selectedTask ? 1 : 0} detail="任务包就绪" />
-        <MetricCard label="等待写回" value={outputSummary?.incompleteDeliveries ?? 0} detail="检查 output" />
-        <MetricCard label="待审计" value={outputSummary?.releaseDeliveries ?? 0} detail="可请求审计" />
+        <Panel className="v16-home-column v16-home-task-column" title="当前任务">
+          {selectedTask ? (
+            <button className="v16-current-task-card" onClick={onOpenTasks} type="button">
+              <span className="v16-current-task-meta">
+                <span>{selectedTask.id}</span>
+                <RiskBadge risk={selectedTask.riskLevel || "normal"} />
+              </span>
+              <strong>{selectedTask.title}</strong>
+              <dl>
+                <div>
+                  <dt>状态</dt>
+                  <dd>{displayStatusLabelZh(selectedTask.displayStatus)}</dd>
+                </div>
+              </dl>
+            </button>
+          ) : (
+            <div className="v16-home-empty">
+              <strong>还没有任务</strong>
+              <span>先确认需求，生成任务合约。</span>
+            </div>
+          )}
+          <p className="v16-home-next-step">{nextStep.description}</p>
+          <ActionBar>
+            <ActionButton disabled={!selectedTask} onClick={onOpenTasks} variant="primary">
+              进入任务页
+            </ActionButton>
+          </ActionBar>
+        </Panel>
+
+        <Panel className="v16-home-column" title="最近活动">
+          <div className="v16-activity-list">
+            {recentActivities.map((activity) => (
+              <button
+                key={activity.id}
+                onClick={activity.target === "delivery" ? onOpenDelivery : activity.target === "audit" ? onOpenAudit : onOpenTasks}
+                type="button"
+              >
+                <strong>{activity.title}</strong>
+                <span>{activity.detail}</span>
+              </button>
+            ))}
+          </div>
+        </Panel>
       </section>
-
-      <Panel className="v16-current-work-panel" title="当前任务和最近活动">
-        <div className="v16-shortcut-list">
-          <button onClick={onOpenTasks} type="button">
-            <strong>{selectedTask?.title ?? "还没有任务"}</strong>
-            <span>{selectedTask ? `${selectedTask.id} · ${displayStatusLabelZh(selectedTask.displayStatus)}` : "请先确认需求，生成任务。"}</span>
-          </button>
-          <button onClick={onOpenDelivery} type="button">
-            <strong>交付结果</strong>
-            <span>{outputSummary?.releaseDeliveries ?? 0} 个交付，{outputSummary?.evidence ?? 0} 份证据</span>
-          </button>
-          <button onClick={onOpenAudit} type="button">
-            <strong>审计报告</strong>
-            <span>{outputSummary?.audits ?? 0} 个审计，交付完成后可以请求审计。</span>
-          </button>
-        </div>
-      </Panel>
-
-      <Panel
-        className="v16-project-summary"
-        description="项目现场只展示人能判断下一步的摘要。内部 JSON 在高级页查看。"
-        title="项目现场摘要"
-      >
-        <div className="v16-summary-grid">
-          <MetricCard label="文件数" value={panelStatus?.fileCount ?? manifest?.sourceFiles ?? 0} />
-          <MetricCard label="语言数" value={manifest?.languages.length ?? 0} />
-          <MetricCard label="诊断" value={panelStatus?.degradedReasons?.length ?? 0} />
-          <MetricCard label="测试" value={manifest?.testFiles ?? 0} />
-        </div>
-        <CompactTable
-          columns={[
-            { key: "label", label: "项目现场", render: (row) => row.label },
-            { key: "value", label: "状态", render: (row) => row.value },
-          ]}
-          rows={[
-            { id: "root", label: "项目", value: projectRoot ?? "未选择项目" },
-            { id: "git", label: "Git 状态", value: "仅本地" },
-            { id: "context", label: "上下文包", value: projectPanelState.latestContextPack ? "已生成" : "等待需要时生成" },
-            { id: "scan", label: "最近索引时间", value: panelStatus?.updatedAt ? formatTimestamp(panelStatus.updatedAt) : "未记录" },
-          ]}
-        />
-      </Panel>
-
-      <CompanionShell
-        onCheckWriteback={onCheckWriteback}
-        onOpenFiles={onOpenFiles}
-        onOpenTasks={onOpenTasks}
-        projectName={projectName}
-        selectedTask={selectedTask}
-      />
     </section>
   );
 }
 
-function NextStepCard({
-  nextStep,
-  onOpenAudit,
-  onOpenTasks,
+function HomeStatusItem({
+  detail,
+  label,
+  status,
+  title,
 }: {
-  nextStep: NextStepViewModel;
-  onOpenAudit: () => void;
-  onOpenTasks: () => void;
+  detail: string;
+  label: string;
+  status: string;
+  title: string;
 }) {
-  const primaryAction = nextStep.action === "请求人工审计" ? onOpenAudit : onOpenTasks;
   return (
-    <Panel className="v16-next-step-card" title={nextStep.title} tone={nextStep.status === "warning" ? "warning" : "neutral"}>
-      <div className="v16-next-step-content">
-        <StatusBadge status={nextStep.status}>{nextStep.status === "ready" ? "就绪" : "提醒"}</StatusBadge>
-        <p>{nextStep.description}</p>
-        <small>{nextStep.reason}</small>
-      </div>
-      <ActionBar>
-        <ActionButton onClick={primaryAction} size="lg" variant="primary">
-          {nextStep.action}
-        </ActionButton>
-      </ActionBar>
-    </Panel>
-  );
-}
-
-function InspectorPanel({ nextStep, selectedTask }: { nextStep: NextStepViewModel; selectedTask: V1Issue | null }) {
-  return (
-    <aside className="v16-inspector-panel" aria-label="下一步详情">
-      <header>
-        <p className="v16-kicker">下一步详情</p>
-        <h2>{nextStep.title}</h2>
-      </header>
-      <p>{nextStep.description}</p>
-      <dl>
-        <div>
-          <dt>关联对象</dt>
-          <dd>{selectedTask?.id ?? "当前项目"}</dd>
-        </div>
-        <div>
-          <dt>阻断原因</dt>
-          <dd>{nextStep.status === "warning" ? nextStep.reason : "无阻断"}</dd>
-        </div>
-      </dl>
-    </aside>
+    <article className="v16-home-status-item">
+      <p>{label}</p>
+      <strong>{title}</strong>
+      <span>{detail}</span>
+      <StatusBadge status={status.includes("等待") || status.includes("未") ? "idle" : "ready"}>{status}</StatusBadge>
+    </article>
   );
 }
 
@@ -1272,10 +1234,10 @@ function TaskList({
   tasks: V1Issue[];
 }) {
   return (
-    <div className="v16-task-list-layout" aria-label="任务列表">
-      <aside className="v16-list-pane v16-task-queue-pane" aria-label="任务队列">
+    <div className="v16-task-list-layout" aria-label="任务流转">
+      <aside className="v16-list-pane v16-task-queue-pane" aria-label="任务流转">
         <header>
-          <h2>任务队列</h2>
+          <h2>任务流转</h2>
           <span>{tasks.length} 项</span>
         </header>
         <div className="v16-task-queue-items">
@@ -1287,12 +1249,20 @@ function TaskList({
               title={`${task.id} ${task.title}`}
               type="button"
             >
-              <strong className="v16-list-item-id">{task.id}</strong>
-              <span className="v16-task-queue-title">{task.title}</span>
-              <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
-                {displayStatusLabelZh(task.displayStatus)}
-              </StatusBadge>
-              <small className="v16-task-risk">风险：{displayRiskLabelZh(task.riskLevel)}</small>
+              <span className="v16-task-queue-main">
+                <strong className="v16-list-item-id">{task.id}</strong>
+                <span className="v16-task-queue-title-line">
+                  <span>{task.title}</span>
+                </span>
+              </span>
+              <span className="v16-task-queue-state">
+                <StatusBadge
+                  className={`v16-task-status-risk ${riskStatusDotClass(task.riskLevel)}`}
+                  status={statusChipForDisplayStatus(task.displayStatus)}
+                >
+                  {displayStatusLabelZh(task.displayStatus)}
+                </StatusBadge>
+              </span>
             </button>
           ))}
         </div>
@@ -1333,15 +1303,24 @@ function TaskDetail({
   }
 
   return (
-    <aside className="v16-detail-pane" aria-label="任务详情">
+    <aside className="v16-detail-pane" aria-label="任务合约">
       <header>
-        <p className="v16-kicker">{task.id}</p>
-        <h2>{task.title}</h2>
-        <div className="v16-detail-badges">
-          <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
-            {displayStatusLabelZh(task.displayStatus)}
-          </StatusBadge>
-          <RiskBadge risk={task.riskLevel || "normal"} />
+        <p className="v16-kicker">任务合约</p>
+        <h2>任务合约：{task.id}</h2>
+        <p>{task.title}</p>
+        <div className="v16-detail-meta-strip">
+          <span className="v16-detail-meta-item">
+            <span className="v16-detail-meta-label">状态</span>
+            <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
+              {displayStatusLabelZh(task.displayStatus)}
+            </StatusBadge>
+          </span>
+          <span className="v16-detail-meta-item">
+            <span className="v16-detail-meta-label">风险</span>
+            <strong className={`v16-risk-text ${riskTextClass(task.riskLevel)}`}>
+              {displayRiskTextZh(task.riskLevel)}
+            </strong>
+          </span>
         </div>
       </header>
       <div className="v16-detail-document">
@@ -1349,18 +1328,21 @@ function TaskDetail({
           items={[
             ["智能体", "执行助手"],
             ["状态", displayStatusLabelZh(task.displayStatus)],
-            ["风险", displayRiskLabelZh(task.riskLevel)],
             ["交给 Codex", handedOff ? "已做本地标记" : "未标记"],
-            ["来源规格", task.projectId ?? "已确认规格"],
+            ["关联规格", "已确认规格"],
           ]}
         />
+        <SectionList title="目标" items={[task.goal || task.title]} />
         <SectionList title="范围" items={task.scope} />
         <SectionList title="非目标" items={task.nonGoals} />
         <SectionList title="验收标准" items={task.acceptanceCriteria} />
-        <SectionList title="相关文件" items={task.allowedFiles} />
-        <SectionList title="验证命令" items={task.validationCommands} />
         <SectionList title="证据要求" items={task.evidenceRequired} />
-        <CopyableCodeBlock content={buildCodexHandoff(task)} maxHeight={210} title="Codex 任务包" />
+        <SectionList title="验证命令" items={task.validationCommands} />
+        <SectionList title="相关文件" items={task.allowedFiles} />
+        <details className="v16-task-package">
+          <summary>Codex 任务包</summary>
+          <CopyableCodeBlock content={buildCodexHandoff(task)} maxHeight={210} title="Codex 任务包" />
+        </details>
       </div>
       {actionFeedback ? <p className="v16-feedback">{actionFeedback}</p> : null}
       <ActionBar sticky>
@@ -1397,8 +1379,6 @@ function FilesPage({
 }) {
   return (
     <section className="v16-page v16-files-page project-local-files-layout" data-agentflow-page="files">
-      <FileBrowser />
-      <FileReader />
       <ProjectLocalFilesPage
         fileState={fileState}
         onChangeViewMode={onChangeViewMode}
@@ -1409,14 +1389,6 @@ function FilesPage({
       />
     </section>
   );
-}
-
-function FileBrowser() {
-  return null;
-}
-
-function FileReader() {
-  return null;
 }
 
 function DeliveryPage({
@@ -1470,7 +1442,7 @@ function DeliveryList({
     <aside className="v16-list-pane" aria-label="交付列表">
       <header>
         <h2>交付列表</h2>
-        <span>{deliveries.length}</span>
+        <span>{deliveries.length} 项</span>
       </header>
       {deliveries.length ? (
         <div className="v16-list-items">
@@ -1483,8 +1455,8 @@ function DeliveryList({
               type="button"
             >
               <span className="v16-list-item-main">
-                <strong>{delivery.runId}</strong>
-                <span>{delivery.issueId || "未记录任务"}</span>
+                <strong>{deliveryDisplayId(delivery.runId)}</strong>
+                <span>{delivery.issueId ? `关联任务：${delivery.issueId}` : "未记录任务"}</span>
               </span>
               <small>{artifactStatusLabel(delivery.status)}</small>
               <time>{formatTimestamp(delivery.updatedAt)}</time>
@@ -1514,8 +1486,8 @@ function DeliveryDetail({
   return (
     <section className="v16-detail-pane" aria-label="交付详情">
       <header>
-        <p className="v16-kicker">交付摘要</p>
-        <h2>{delivery?.runId ?? "还没有交付材料"}</h2>
+        <p className="v16-kicker">交付包</p>
+        <h2>{delivery ? `交付包：${deliveryDisplayId(delivery.runId)}` : "还没有交付材料"}</h2>
         <StatusBadge status={delivery ? "ready" : "idle"}>
           {delivery ? artifactStatusLabel(delivery.status) : "等待写回"}
         </StatusBadge>
@@ -1527,36 +1499,49 @@ function DeliveryDetail({
           <MetricCard label="变更文件" value={selectedTask?.allowedFiles.length ?? 0} />
           <MetricCard label="缺失证据" value={outputStatusState.status?.summary.incompleteEvidence ?? 0} />
         </div>
+        <SectionList
+          title="交付摘要"
+          items={[
+            delivery ? "任务合约页面交付记录已生成。" : "等待 Codex 写回交付记录。",
+            "模式：只读",
+          ]}
+        />
+        <SectionList
+          title="关联记录"
+          items={[
+            delivery?.issueId ? `关联任务：${delivery.issueId}` : "关联任务：未记录",
+            delivery?.sourceSpecId ? "关联规格：已确认规格" : "关联规格：未记录",
+          ]}
+        />
         <SectionList title="变更文件" items={selectedTask?.allowedFiles ?? ["等待 Codex 写回变更文件。"]} />
         <SectionList title="验证命令" items={selectedTask?.validationCommands ?? ["等待验证命令。"]} />
-        <SectionList title="验证结果" items={[delivery ? "浏览器预览：验证记录已回填。" : "等待写回。"]} />
-        <SectionList title="证据文件" items={evidence.map((item) => item.path)} />
-        <SectionList title="交付记录" items={[delivery?.path ?? "暂无交付记录。"]} />
-        <SectionList title="越界检查" items={["普通页面只展示摘要；原始 JSON 在高级页查看。"]} />
+        <SectionList title="验证结果" items={[delivery ? `状态：${artifactStatusLabel(delivery.status)}` : "等待写回。"]} />
+        <SectionList
+          id="v16-delivery-evidence"
+          title="证据"
+          items={evidence.length ? evidence.map((item) => `${deliveryDisplayId(item.runId)} · ${artifactStatusLabel(item.status)}`) : ["暂无证据。"]}
+        />
+        <SectionList title="越界检查" items={["普通页面只展示摘要；原始路径和 JSON 在高级页查看。"]} />
       </div>
       <ActionBar sticky>
         <ActionButton disabled={!delivery} onClick={onOpenAudit} variant="primary">
           请求审计
         </ActionButton>
-        <ActionButton variant="secondary">查看证据</ActionButton>
+        <ActionButton disabled={!evidence.length} onClick={() => document.getElementById("v16-delivery-evidence")?.scrollIntoView({ block: "nearest" })} variant="secondary">
+          查看证据
+        </ActionButton>
       </ActionBar>
     </section>
   );
 }
 
 function AuditPage({
-  onAuditRequested,
   onSelectAudit,
   outputBundle,
-  outputStatusState,
-  projectRoot,
   selectedAuditId,
 }: {
-  onAuditRequested: () => void;
   onSelectAudit: (auditId: string) => void;
   outputBundle: OutputBundleState;
-  outputStatusState: OutputStatusState;
-  projectRoot: string | null;
   selectedAuditId: string | null;
 }) {
   const audits = outputBundle.auditIndex?.audits ?? [];
@@ -1565,19 +1550,12 @@ function AuditPage({
     outputBundle.auditReport?.audit.auditId === auditInteractionState.selectedAuditId ? outputBundle.auditReport : null;
   return (
     <section className="v16-page v16-audit-page" data-agentflow-page="audit">
-      <div className="v16-split-page">
-        <AuditList
-          audits={audits}
-          onSelectAudit={onSelectAudit}
-          selectedAuditId={auditInteractionState.selectedAuditId}
-        />
-        <AuditReport report={selectedReport} selectedAudit={auditInteractionState.selectedAudit} />
-      </div>
-      <OutputAuditPanel
-        onAuditRequested={onAuditRequested}
-        outputStatusState={outputStatusState}
-        projectRoot={projectRoot}
+      <AuditList
+        audits={audits}
+        onSelectAudit={onSelectAudit}
+        selectedAuditId={auditInteractionState.selectedAuditId}
       />
+      <AuditReport report={selectedReport} selectedAudit={auditInteractionState.selectedAudit} />
     </section>
   );
 }
@@ -1595,7 +1573,7 @@ function AuditList({
     <aside className="v16-list-pane" aria-label="审计列表">
       <header>
         <h2>审计列表</h2>
-        <span>{audits.length}</span>
+        <span>{audits.length} 项</span>
       </header>
       {audits.length ? (
         <div className="v16-list-items">
@@ -1649,8 +1627,8 @@ function AuditReport({
           title="发现项"
           items={findings.length ? findings.map((finding) => `${finding.severity ?? "info"}：${finding.summary ?? finding.id ?? "发现项"}`) : ["暂无发现项。"]}
         />
-        <JsonSummary title="证据映射" value={report?.evidenceMap ?? { evidence: [], releaseDelivery: [] }} />
-        <JsonSummary title="追溯关系" value={report?.traceability ?? { spec: "waiting", issue: "waiting", delivery: "waiting" }} />
+        <HumanSummaryTable title="证据链" rows={summaryRowsFromValue(report?.evidenceMap, "等待交付证据。")} />
+        <HumanSummaryTable title="追溯关系" rows={summaryRowsFromValue(report?.traceability, "等待审计追溯关系。")} />
         <SectionList title="范围检查" items={["对照规格、任务、交付和证据。"]} />
         <SectionList title="验证检查" items={["检查验证命令是否记录并通过。"]} />
         <SectionList title="处理建议" items={["建议：补充证据", "建议：返工", "建议：接受"]} />
@@ -1682,13 +1660,13 @@ function AdvancedPage({
   workspaceData: WorkspaceDataState;
 }) {
   const categories = [
-    { id: "state", label: "状态", value: stateStatusState },
-    { id: "panel", label: "面板", value: projectPanelState },
-    { id: "input", label: "输入", value: inputStatusState },
-    { id: "execute", label: "执行", value: executeStatusState },
-    { id: "output", label: "输出", value: { outputBundle, outputStatusState } },
-    { id: "audit", label: "审计", value: outputBundle.auditReport },
-    { id: "settings", label: "设置", value: { agentManualState, projectFilesState, workspaceData } },
+    { id: "state", label: "状态", value: stateStatusState, files: advancedFilesForCategory("state") },
+    { id: "panel", label: "Panel", value: projectPanelState, files: advancedFilesForCategory("panel") },
+    { id: "input", label: "Input", value: inputStatusState, files: advancedFilesForCategory("input") },
+    { id: "execute", label: "Execute", value: executeStatusState, files: advancedFilesForCategory("execute") },
+    { id: "output", label: "Output", value: { outputBundle, outputStatusState }, files: advancedFilesForCategory("output") },
+    { id: "audit", label: "Audit", value: outputBundle.auditReport, files: advancedFilesForCategory("audit") },
+    { id: "settings", label: "设置", value: { agentManualState, projectFilesState, workspaceData }, files: advancedFilesForCategory("settings") },
   ];
   const [activeCategory, setActiveCategory] = useState(categories[0].id);
   const selectedCategory = categories.find((category) => category.id === activeCategory) ?? categories[0];
@@ -1700,7 +1678,6 @@ function AdvancedPage({
         onSelectCategory={setActiveCategory}
         selectedCategory={selectedCategory}
       />
-      <DesignSystemPreview />
     </section>
   );
 }
@@ -1710,9 +1687,9 @@ function AdvancedStateViewer({
   onSelectCategory,
   selectedCategory,
 }: {
-  categories: Array<{ id: string; label: string; value: unknown }>;
+  categories: Array<{ files: Array<{ description: string; name: string }>; id: string; label: string; value: unknown }>;
   onSelectCategory: (categoryId: string) => void;
-  selectedCategory: { id: string; label: string; value: unknown };
+  selectedCategory: { files: Array<{ description: string; name: string }>; id: string; label: string; value: unknown };
 }) {
   return (
     <div className="v16-advanced-layout" aria-label="高级详情">
@@ -1731,8 +1708,22 @@ function AdvancedStateViewer({
       <section className="v16-advanced-list">
         <h2>{selectedCategory.label}</h2>
         <p>{advancedCategorySummary(selectedCategory.id)}</p>
+        <div className="v16-advanced-file-list">
+          {selectedCategory.files.map((file) => (
+            <article key={file.name}>
+              <strong>{file.name}</strong>
+              <span>{file.description}</span>
+            </article>
+          ))}
+        </div>
       </section>
-      <JsonReader value={selectedCategory.value} />
+      <section className="v16-advanced-reader">
+        <header>
+          <h2>JSON Reader</h2>
+          <p>只读展示。这里不编辑 JSON，不修复状态，不清理锁，不触发审计。</p>
+        </header>
+        <JsonReader value={selectedCategory.value} />
+      </section>
     </div>
   );
 }
@@ -1746,22 +1737,18 @@ function JsonReader({ value }: { value: unknown }) {
 }
 
 function StatusBar({
-  agentStatusItems,
   appInteractionState,
-  connectedProvider,
   projectName,
   projectRoot,
   stateStatus,
 }: {
-  agentStatusItems: AgentStatusChannelItem[];
   appInteractionState: AppInteractionState;
-  connectedProvider: Provider;
   projectName: string;
   projectRoot: string | null;
   stateStatus: StateStatusState["status"];
 }) {
   return (
-    <FoundationStatusBar className="v16-status-bar" aria-label="工作流状态通道">
+    <FoundationStatusBar className="v16-status-bar" aria-label="底部状态摘要">
       <section>
         <StatusDot status={projectRoot ? "ready" : "idle"} />
         <span>{projectRoot ? "ready" : "waiting"}</span>
@@ -1770,12 +1757,8 @@ function StatusBar({
           <GitBranch size={13} /> local-only
         </span>
       </section>
-      <section className="v16-status-channel">
-        <AgentStatusBar items={agentStatusItems} />
-      </section>
       <section>
         <span>{workflowStageText(stateStatus?.currentStage)}</span>
-        <span>{connectedProvider}</span>
         <span>{lifecycleLabel(appInteractionState.lifecycle)}</span>
         <span>⌘K</span>
       </section>
@@ -1864,35 +1847,6 @@ function StatusDot({ status }: { status: StatusChipStatus }) {
   return <span className={`v16-status-dot ${status}`} aria-hidden="true" />;
 }
 
-function CompactTable<T extends { id: string }>({
-  columns,
-  rows,
-}: {
-  columns: Array<{ key: string; label: string; render: (row: T) => ReactNode }>;
-  rows: T[];
-}) {
-  return (
-    <div className="v16-compact-table" role="table">
-      <div className="v16-compact-table-row header" role="row">
-        {columns.map((column) => (
-          <span key={column.key} role="columnheader">
-            {column.label}
-          </span>
-        ))}
-      </div>
-      {rows.map((row) => (
-        <div className="v16-compact-table-row" key={row.id} role="row">
-          {columns.map((column) => (
-            <span key={column.key} role="cell">
-              {column.render(row)}
-            </span>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function DescriptionList({ items }: { items: Array<[string, string]> }) {
   return (
     <dl className="v16-description-list">
@@ -1906,9 +1860,9 @@ function DescriptionList({ items }: { items: Array<[string, string]> }) {
   );
 }
 
-function SectionList({ items, title }: { items: string[]; title: string }) {
+function SectionList({ id, items, title }: { id?: string; items: string[]; title: string }) {
   return (
-    <Section className="v16-section-list" title={title}>
+    <Section className="v16-section-list" id={id} title={title}>
       <ul>
         {(items.length ? items : ["暂无记录。"]).map((item) => (
           <li key={item}>{item}</li>
@@ -1918,13 +1872,29 @@ function SectionList({ items, title }: { items: string[]; title: string }) {
   );
 }
 
-function JsonSummary({ title, value }: { title: string; value: unknown }) {
+function HumanSummaryTable({ rows, title }: { rows: Array<[string, string]>; title: string }) {
   return (
-    <section className="v16-json-summary">
+    <section className="v16-human-summary">
       <h3>{title}</h3>
-      <pre>{JSON.stringify(value, null, 2)}</pre>
+      <dl>
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
+}
+
+function summaryRowsFromValue(value: unknown, emptyText: string): Array<[string, string]> {
+  if (!value || typeof value !== "object") {
+    return [["状态", emptyText]];
+  }
+  return Object.entries(value as Record<string, unknown>)
+    .slice(0, 6)
+    .map(([key, item]) => [humanizeKey(key), summarizeValue(item)]);
 }
 
 const displayStatusColumns: Array<{ id: IssueDisplayStatus; label: string }> = [
@@ -2067,14 +2037,100 @@ function displayRiskLabelZh(risk?: string | null) {
   return "普通";
 }
 
-function taskActionsForRow(task: V1Issue) {
-  return taskActionsForStatus(task.displayStatus);
+function displayRiskTextZh(risk?: string | null) {
+  const tone = riskToneKey(risk);
+  if (tone === "high") {
+    return "高";
+  }
+  if (tone === "medium") {
+    return "中";
+  }
+  if (tone === "low") {
+    return "低";
+  }
+  return "普通";
+}
+
+function riskToneKey(risk?: string | null) {
+  const normalized = (risk ?? "normal").toLowerCase();
+  if (normalized.includes("critical") || normalized.includes("high")) {
+    return "high";
+  }
+  if (normalized.includes("medium") || normalized === "med") {
+    return "medium";
+  }
+  if (normalized.includes("low")) {
+    return "low";
+  }
+  return "normal";
+}
+
+function riskStatusDotClass(risk?: string | null) {
+  return `v16-risk-dot-${riskToneKey(risk)}`;
+}
+
+function riskTextClass(risk?: string | null) {
+  return `v16-risk-text-${riskToneKey(risk)}`;
 }
 
 function findDeliveryForTask(deliveries: OutputIndexEntry[], taskId: string) {
   return [...deliveries]
     .reverse()
     .find((delivery) => delivery.issueId === taskId || delivery.runId.includes(taskId)) ?? null;
+}
+
+function buildRecentActivities(
+  workspaceData: WorkspaceDataState,
+  outputBundle: OutputBundleState,
+  outputSummary?: NonNullable<OutputStatusState["status"]>["summary"],
+) {
+  const projectUpdates =
+    workspaceData.workbench?.projectUpdates.slice(-2).map((update, index) => ({
+      detail: update.title || update.path,
+      id: `update-${index}-${update.path}`,
+      target: "tasks" as const,
+      title: "项目更新已记录",
+    })) ?? [];
+  const deliveryItems =
+    outputBundle.outputIndex?.releaseDeliveries.slice(-2).map((delivery) => ({
+      detail: `${delivery.issueId || "关联任务"} · ${artifactStatusLabel(delivery.status)}`,
+      id: `delivery-${delivery.runId}`,
+      target: "delivery" as const,
+      title: "交付页面同步结构",
+    })) ?? [];
+  const auditItems =
+    outputBundle.auditIndex?.audits.slice(-2).map((audit) => ({
+      detail: `${audit.auditId} · ${artifactStatusLabel(audit.status)}`,
+      id: `audit-${audit.auditId}`,
+      target: "audit" as const,
+      title: "审计页面同步结构",
+    })) ?? [];
+
+  const items = [...projectUpdates, ...deliveryItems, ...auditItems];
+  if (items.length) {
+    return items.slice(-4).reverse();
+  }
+
+  return [
+    {
+      detail: `${outputSummary?.releaseDeliveries ?? 0} 个交付，${outputSummary?.audits ?? 0} 个审计`,
+      id: "activity-output",
+      target: "delivery" as const,
+      title: "交付页面同步结构",
+    },
+    {
+      detail: "任务合约和状态按钮已按状态收口。",
+      id: "activity-task",
+      target: "tasks" as const,
+      title: "任务页面压缩完成",
+    },
+    {
+      detail: "高级页只读展示状态文件。",
+      id: "activity-advanced",
+      target: "audit" as const,
+      title: "高级页面清理",
+    },
+  ];
 }
 
 function buildNextStep(
@@ -2193,6 +2249,45 @@ function artifactStatusLabel(status?: string | null) {
   return labels[status.toLowerCase()] ?? status;
 }
 
+function deliveryDisplayId(runId: string) {
+  const suffix = runId.match(/(\d+)$/)?.[1];
+  return suffix ? `DEL-${suffix.padStart(3, "0").slice(-3)}` : `DEL-${runId.slice(-6)}`;
+}
+
+function humanizeKey(key: string) {
+  const labels: Record<string, string> = {
+    audit: "审计",
+    delivery: "交付",
+    evidence: "证据",
+    issue: "任务",
+    releaseDelivery: "交付记录",
+    run: "执行",
+    spec: "规格",
+    traceability: "追溯",
+  };
+  return labels[key] ?? key.replace(/([A-Z])/g, " $1").trim();
+}
+
+function summarizeValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.length ? `${value.length} 条记录` : "暂无记录";
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (!entries.length) {
+      return "暂无记录";
+    }
+    return entries
+      .slice(0, 3)
+      .map(([key, item]) => `${humanizeKey(key)}：${typeof item === "string" ? item : Array.isArray(item) ? `${item.length} 条` : "已记录"}`)
+      .join("；");
+  }
+  if (value === null || value === undefined || value === "") {
+    return "未记录";
+  }
+  return String(value);
+}
+
 function formatTimestamp(timestamp: number) {
   if (!timestamp) {
     return "未记录";
@@ -2206,7 +2301,15 @@ function formatTimestamp(timestamp: number) {
 }
 
 function pageTitle(page: AppPage) {
-  return pages.find((item) => item.id === page)?.label ?? "工作台";
+  const labels: Record<AppPage, string> = {
+    advanced: "高级",
+    audit: "审计",
+    delivery: "交付",
+    files: "文件",
+    home: "工作台",
+    tasks: "任务流转",
+  };
+  return labels[page] ?? "工作台";
 }
 
 function workflowStageText(stage?: string | null) {
@@ -2278,6 +2381,51 @@ function advancedCategorySummary(categoryId: string) {
     state: "展示全局派生状态、门禁、阻断和下一步动作。",
   };
   return summaries[categoryId] ?? "这里展示开发者调试信息。普通页面不显示原始 JSON。";
+}
+
+function advancedFilesForCategory(categoryId: string) {
+  const files: Record<string, Array<{ description: string; name: string }>> = {
+    audit: [
+      { name: "index.json", description: "审计报告索引" },
+      { name: "audit.json", description: "审计结论和检查结果" },
+      { name: "evidence-map.json", description: "证据链映射" },
+      { name: "traceability.json", description: "规格、任务和交付追溯" },
+    ],
+    execute: [
+      { name: "runs/index.json", description: "执行运行列表" },
+      { name: "leases/*.json", description: "本地执行锁状态" },
+      { name: "commands/*.json", description: "命令记录" },
+    ],
+    input: [
+      { name: "index.json", description: "规格、项目和任务索引" },
+      { name: "issues/*.json", description: "任务合约来源" },
+      { name: "specs/approved/*", description: "已确认规格" },
+    ],
+    output: [
+      { name: "index.json", description: "证据、交付和审计输出索引" },
+      { name: "evidence/*.json", description: "验证证据" },
+      { name: "release/*/delivery.json", description: "交付包记录" },
+    ],
+    panel: [
+      { name: "manifest.json", description: "项目现场摘要" },
+      { name: "context-packs/*.json", description: "上下文包" },
+      { name: "diagnostics.json", description: "诊断快照" },
+    ],
+    settings: [
+      { name: "locale.json", description: "Agent 语言设置" },
+      { name: "style.json", description: "输出风格策略" },
+      { name: "AGENTS.md", description: "本地 Agent 入口文件" },
+    ],
+    state: [
+      { name: "workflow.json", description: "当前阶段与下一动作" },
+      { name: "gates.json", description: "门禁检查结果" },
+      { name: "blockers.json", description: "阻塞项快照" },
+      { name: "locks.json", description: "本地锁状态" },
+      { name: "sessions.json", description: "智能体会话记录" },
+      { name: "next-actions.json", description: "下一步候选动作" },
+    ],
+  };
+  return files[categoryId] ?? files.state;
 }
 
 function lifecycleLabel(state: AppInteractionState["lifecycle"]) {

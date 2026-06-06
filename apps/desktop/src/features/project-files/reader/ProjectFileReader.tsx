@@ -113,10 +113,6 @@ export function ProjectFileReader({
             <dt>创建日期</dt>
             <dd>{createdAt}</dd>
           </div>
-          <div>
-            <dt>模式</dt>
-            <dd>read-only</dd>
-          </div>
         </dl>
       </header>
       {content ? <ProjectFileBodyRenderer content={content} entry={entry} onLoadTextRange={onLoadTextRange} /> : null}

@@ -286,19 +286,64 @@ mod tests {
     }
 
     #[test]
-    fn issue_serialization_derives_display_status_from_workflow_status() {
+    fn issue_serialization_preserves_display_status_field() {
         let issue = serde_json::to_value(InputIssue {
             issue_id: "iss-001".to_string(),
             source_spec_id: "spec-001".to_string(),
             title: "Ready issue".to_string(),
             status: InputIssueStatus::ReadyForExecute,
-            display_status: DisplayStatus::Backlog,
+            display_status: DisplayStatus::Review,
             ..InputIssue::default()
         })
         .unwrap();
 
         assert_eq!(issue["status"], "ready-for-execute");
-        assert_eq!(issue["displayStatus"], "ready");
+        assert_eq!(issue["displayStatus"], "review");
+    }
+
+    #[test]
+    fn legacy_issue_without_display_status_defaults_to_backlog() {
+        let issue: InputIssue = serde_json::from_value(serde_json::json!({
+            "version": "input-issue.v1",
+            "issueId": "iss-legacy",
+            "issueModel": "direct",
+            "sourceSpecId": "spec-001",
+            "projectId": null,
+            "title": "Legacy issue",
+            "summary": "Legacy issue without displayStatus",
+            "kind": "feature",
+            "priority": "normal",
+            "status": "ready-for-execute",
+            "riskLevel": "low",
+            "scope": [],
+            "nonGoals": [],
+            "acceptanceCriteria": [],
+            "validationHints": [],
+            "relations": {
+                "blockedBy": [],
+                "blocks": [],
+                "related": [],
+                "duplicateOf": null
+            },
+            "panel": {
+                "snapshotId": null,
+                "contextPackId": null
+            },
+            "system": {
+                "createdBy": "fixture",
+                "createdAt": 1,
+                "updatedAt": 1,
+                "path": ".agentflow/input/issues/iss-legacy.json",
+                "revision": 1
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(issue.display_status, DisplayStatus::Backlog);
+        assert_eq!(
+            DisplayStatus::from_input_status(&issue.status),
+            DisplayStatus::Ready
+        );
     }
 
     #[test]
