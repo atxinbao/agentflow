@@ -1269,18 +1269,105 @@ button.v16-list-item {
 }
 
 .v16-companion-shell {
-  max-width: 720px;
-}
-
-.v16-companion-grid {
   display: grid;
-  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1fr);
-  gap: 8px 12px;
-  padding: 12px;
+  gap: 16px;
+  border: 1px solid var(--v16-border);
+  background: var(--v16-surface);
+  padding: 18px;
 }
 
-.v16-companion-grid span {
+.v16-companion-shell header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--v16-border);
+}
+
+.v16-companion-shell h2,
+.v16-companion-selected h3 {
+  margin: 0;
+}
+
+.v16-companion-shell header span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--v16-border);
+  background: var(--v16-surface-2);
+  color: var(--v16-accent);
+  font-size: var(--af-text-sm);
+  font-weight: 900;
+}
+
+.v16-companion-queue {
+  display: grid;
+  gap: 10px;
+}
+
+.v16-companion-queue p,
+.v16-companion-selected p {
+  margin: 0;
   color: var(--v16-subtle);
+  font-size: var(--af-text-sm);
+  font-weight: 800;
+}
+
+.v16-companion-queue button {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  min-height: 54px;
+  padding: 0 16px;
+  border: 1px solid var(--v16-border);
+  background: var(--v16-surface);
+  color: var(--v16-text);
+  text-align: left;
+}
+
+.v16-companion-queue button:hover,
+.v16-companion-queue button.active {
+  border-color: var(--v16-accent);
+  background: var(--v16-accent-soft);
+}
+
+.v16-companion-queue button strong {
+  color: var(--v16-accent);
+  font-size: var(--af-text-sm);
+}
+
+.v16-companion-queue button span {
+  overflow: hidden;
+  color: var(--v16-text);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v16-companion-selected {
+  display: grid;
+  gap: 14px;
+  min-height: 190px;
+  padding: 18px;
+  border: 1px solid var(--v16-border);
+  background: var(--v16-surface);
+}
+
+.v16-companion-selected strong {
+  color: var(--v16-accent);
+}
+
+.v16-companion-selected span {
+  max-width: 54ch;
+  color: var(--v16-muted);
+  line-height: 1.7;
+}
+
+.v16-companion-shell .v16-action-bar {
+  border: 1px solid var(--v16-border);
+  padding: 14px;
 }
 
 .v16-terminal-row {
