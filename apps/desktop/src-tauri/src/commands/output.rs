@@ -38,6 +38,7 @@ pub(crate) fn validate_output(
     agentflow_output::validate_output(project_root).map_err(|error| error.to_string())
 }
 
+#[cfg(test)]
 pub(crate) fn request_human_audit(
     project_root: String,
     draft: agentflow_output::HumanAuditRequestDraft,

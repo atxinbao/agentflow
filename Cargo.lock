@@ -10,7 +10,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agentflow-agent-manual"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-cli"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "agentflow-core",
  "anyhow",
@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-core"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "rusqlite",
@@ -41,7 +41,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-desktop"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
  "agentflow-core",
@@ -77,7 +77,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-input"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
  "anyhow",
@@ -98,7 +98,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-panel"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
  "anyhow",
@@ -139,7 +139,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-workflow-acceptance"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
  "agentflow-execute",
