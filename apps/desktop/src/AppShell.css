@@ -188,6 +188,7 @@
 .v16-current-task-card,
 .v16-activity-list button,
 .v16-task-queue-row,
+.v16-context-suggestion,
 .v16-list-item,
 .v16-advanced-nav button,
 .v16-segmented-control button {
@@ -1298,7 +1299,8 @@
   overflow: auto;
 }
 
-.v16-task-queue-row {
+.v16-task-queue-row,
+.v16-context-suggestion {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -1311,9 +1313,16 @@
   border-radius: 0;
   background: transparent;
   color: var(--v16-text);
-  cursor: pointer;
   font: inherit;
   text-align: left;
+}
+
+.v16-task-queue-row {
+  cursor: pointer;
+}
+
+.v16-context-suggestion {
+  cursor: default;
 }
 
 .v16-task-queue-row:hover,
@@ -1332,6 +1341,7 @@
 }
 
 .v16-task-queue-row .v16-list-item-id,
+.v16-context-suggestion .v16-list-item-id,
 .v16-task-queue-title-line > span {
   min-width: 0;
   overflow: hidden;
@@ -1339,7 +1349,18 @@
   white-space: nowrap;
 }
 
-.v16-task-queue-row .v16-list-item-id {
+.v16-context-suggestion small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--v16-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v16-task-queue-row .v16-list-item-id,
+.v16-context-suggestion .v16-list-item-id {
   color: var(--v16-accent);
   font-size: 13px;
   font-weight: 760;

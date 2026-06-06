@@ -79,7 +79,8 @@ fn main() {
             commands::project_files::search_project_files,
             commands::project_files::load_project_file_text_range,
             commands::project_files::choose_existing_project_folder,
-            commands::project_workspace::prepare_local_project_workspace
+            commands::project_workspace::prepare_local_project_workspace,
+            commands::project_workspace::load_project_initialization_status
         ])
         .run(tauri::generate_context!())
         .expect("run AgentFlow desktop workbench");

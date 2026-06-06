@@ -124,6 +124,42 @@ type OutputBundleState = {
   source: DataSource;
 };
 
+type ProjectInitializationContext = {
+  author?: string | null;
+  changedFiles: string[];
+  committedAt?: string | null;
+  id: string;
+  sourceUrl?: string | null;
+  summary: string;
+  title: string;
+};
+
+type ProjectInitializationStatus = {
+  demoAuditCount: number;
+  demoDataCreated: boolean;
+  demoDeliveryCount: number;
+  demoIssueCount: number;
+  gitContextLoaded: boolean;
+  initialized: boolean;
+  message: string;
+  paths: string[];
+  projectKind: "new" | "existing" | string;
+  recentContext: ProjectInitializationContext[];
+  recentContextCount: number;
+  version: string;
+  warnings: string[];
+};
+
+type ProjectInitializationState = {
+  error: string | null;
+  source: DataSource;
+  status: ProjectInitializationStatus | null;
+};
+
+type ProjectWorkspaceSummary = {
+  initializationStatus?: ProjectInitializationStatus | null;
+};
+
 type NextStepViewModel = {
   action: string;
   description: string;
@@ -248,6 +284,7 @@ function App() {
   const issueStatusIndexState = useIssueStatusIndex(projectRoot, outputRefreshToken);
   const workspaceData = useWorkspaceData(projectRoot);
   const outputBundle = useOutputBundle(projectRoot, outputRefreshToken);
+  const initializationState = useProjectInitializationStatus(projectRoot, outputRefreshToken);
 
   useEffect(() => {
     if (connectedProvider) {
@@ -462,7 +499,7 @@ function App() {
           }),
         ),
       );
-      await invoke("prepare_local_project_workspace", {
+      const summary = await invoke<ProjectWorkspaceSummary>("prepare_local_project_workspace", {
         appLocale: detectAppLocale(),
         projectRoot: projectRootToAdd,
       });
@@ -478,7 +515,8 @@ function App() {
           }),
         ),
       );
-      setOnboardingFeedback("项目已准备好。");
+      setOutputRefreshToken((current) => current + 1);
+      setOnboardingFeedback(summary.initializationStatus?.message ?? "项目已准备好。");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setOnboardingFeedback(message);
@@ -672,6 +710,7 @@ function App() {
             projectName={projectDisplayName}
             projectRoot={projectRoot}
             selectedTask={selectedTask}
+            initializationState={initializationState}
             stateStatusState={stateStatusState}
             workspaceData={workspaceData}
           />
@@ -685,6 +724,7 @@ function App() {
             onTaskAction={(action, task) => void handleTaskAction(action, task)}
             onSelectTask={setSelectedTaskId}
             selectedTask={selectedTask}
+            suggestions={initializationState.status?.recentContext ?? []}
             tasks={filteredTasks}
           />
         ) : null}
@@ -724,6 +764,7 @@ function App() {
             outputStatusState={outputStatusState}
             projectFilesState={projectFilesState}
             projectPanelState={projectPanelState}
+            initializationState={initializationState}
             stateStatusState={stateStatusState}
             workspaceData={workspaceData}
           />
@@ -848,6 +889,71 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
             error: error instanceof Error ? error.message : String(error),
             outputIndex: null,
             source: "unavailable",
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectRoot, refreshToken]);
+
+  return state;
+}
+
+function useProjectInitializationStatus(
+  projectRoot: string | null,
+  refreshToken: number,
+): ProjectInitializationState {
+  const [state, setState] = useState<ProjectInitializationState>({
+    error: null,
+    source: "idle",
+    status: null,
+  });
+
+  useEffect(() => {
+    if (!projectRoot) {
+      setState({ error: null, source: "idle", status: null });
+      return;
+    }
+
+    if (isBrowserPreviewRuntime()) {
+      setState({
+        error: null,
+        source: "preview",
+        status: {
+          demoAuditCount: 1,
+          demoDataCreated: true,
+          demoDeliveryCount: 1,
+          demoIssueCount: 5,
+          gitContextLoaded: false,
+          initialized: true,
+          message: "浏览器预览使用本地 mock 数据。",
+          paths: [],
+          projectKind: "new",
+          recentContext: [],
+          recentContextCount: 0,
+          version: "base-release-initialization.browser-preview",
+          warnings: ["浏览器预览不写 .agentflow。"],
+        },
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setState((current) => ({ ...current, error: null, source: "loading" }));
+    void invoke<ProjectInitializationStatus>("load_project_initialization_status", { projectRoot })
+      .then((status) => {
+        if (!cancelled) {
+          setState({ error: null, source: "tauri", status });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setState({
+            error: error instanceof Error ? error.message : String(error),
+            source: "unavailable",
+            status: null,
           });
         }
       });
@@ -1413,6 +1519,7 @@ function ProjectHomePage({
   outputStatusState,
   projectPanelState,
   projectFilesState,
+  initializationState,
   projectName,
   projectRoot,
   selectedTask,
@@ -1429,6 +1536,7 @@ function ProjectHomePage({
   outputStatusState: OutputStatusState;
   projectPanelState: ProjectPanelState;
   projectFilesState: ProjectFilesState;
+  initializationState: ProjectInitializationState;
   projectName: string;
   projectRoot: string | null;
   selectedTask: V1Issue | null;
@@ -1438,7 +1546,7 @@ function ProjectHomePage({
   const panelStatus = projectPanelState.status;
   const outputSummary = outputStatusState.status?.summary;
   const filesMode = isBrowserPreviewRuntime() ? "浏览器预览" : "客户端真实读取";
-  const recentActivities = buildRecentActivities(workspaceData, outputBundle, outputSummary);
+  const recentActivities = buildRecentActivities(workspaceData, outputBundle, initializationState.status, outputSummary);
 
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
@@ -1450,6 +1558,12 @@ function ProjectHomePage({
               label="项目"
               status={stateStatusState.status?.currentStage ? "就绪" : "等待"}
               title={projectName}
+            />
+            <HomeStatusItem
+              detail={initializationDetail(initializationState)}
+              label="初始化"
+              status={initializationState.status?.initialized ? "已就绪" : "等待"}
+              title={initializationTitle(initializationState.status)}
             />
             <HomeStatusItem
               detail={`${connectedProvider} · 本地只读客户端`}
@@ -1546,6 +1660,7 @@ function TasksPage({
   onTaskAction,
   onSelectTask,
   selectedTask,
+  suggestions,
   tasks,
 }: {
   actionFeedback: string | null;
@@ -1555,6 +1670,7 @@ function TasksPage({
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   onSelectTask: (taskId: string) => void;
   selectedTask: V1Issue | null;
+  suggestions: ProjectInitializationContext[];
   tasks: V1Issue[];
 }) {
   return (
@@ -1567,6 +1683,7 @@ function TasksPage({
         onSelectTask={onSelectTask}
         onTaskAction={onTaskAction}
         selectedTask={selectedTask}
+        suggestions={suggestions}
         tasks={tasks}
       />
     </section>
@@ -1581,6 +1698,7 @@ function TaskList({
   onSelectTask,
   onTaskAction,
   selectedTask,
+  suggestions,
   tasks,
 }: {
   actionFeedback: string | null;
@@ -1590,40 +1708,61 @@ function TaskList({
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   selectedTask: V1Issue | null;
+  suggestions: ProjectInitializationContext[];
   tasks: V1Issue[];
 }) {
+  const showContextSuggestions = !tasks.length && suggestions.length > 0;
+
   return (
     <div className="v16-task-list-layout" aria-label="任务流转">
       <aside className="v16-list-pane v16-task-queue-pane" aria-label="任务流转">
         <header>
           <h2>任务流转</h2>
-          <span>{tasks.length} 项</span>
+          <span>{showContextSuggestions ? `${suggestions.length} 条` : `${tasks.length} 项`}</span>
         </header>
         <div className="v16-task-queue-items">
-          {tasks.map((task) => (
-            <button
-              className={task.id === selectedTask?.id ? "v16-task-queue-row active" : "v16-task-queue-row"}
-              key={task.id}
-              onClick={() => onSelectTask(task.id)}
-              title={`${task.id} ${task.title}`}
-              type="button"
-            >
-              <span className="v16-task-queue-main">
-                <strong className="v16-list-item-id">{task.id}</strong>
-                <span className="v16-task-queue-title-line">
-                  <span>{task.title}</span>
-                </span>
-              </span>
-              <span className="v16-task-queue-state">
-                <StatusBadge
-                  className={`v16-task-status-risk ${riskStatusDotClass(task.riskLevel)}`}
-                  status={statusChipForDisplayStatus(task.displayStatus)}
+          {tasks.length
+            ? tasks.map((task) => (
+                <button
+                  className={task.id === selectedTask?.id ? "v16-task-queue-row active" : "v16-task-queue-row"}
+                  key={task.id}
+                  onClick={() => onSelectTask(task.id)}
+                  title={`${task.id} ${task.title}`}
+                  type="button"
                 >
-                  {displayStatusLabelZh(task.displayStatus)}
-                </StatusBadge>
-              </span>
-            </button>
-          ))}
+                  <span className="v16-task-queue-main">
+                    <strong className="v16-list-item-id">{task.id}</strong>
+                    <span className="v16-task-queue-title-line">
+                      <span>{task.title}</span>
+                    </span>
+                  </span>
+                  <span className="v16-task-queue-state">
+                    <StatusBadge
+                      className={`v16-task-status-risk ${riskStatusDotClass(task.riskLevel)}`}
+                      status={statusChipForDisplayStatus(task.displayStatus)}
+                    >
+                      {displayStatusLabelZh(task.displayStatus)}
+                    </StatusBadge>
+                  </span>
+                </button>
+              ))
+            : null}
+          {showContextSuggestions
+            ? suggestions.map((suggestion) => (
+                <article className="v16-context-suggestion" key={suggestion.id}>
+                  <span className="v16-task-queue-main">
+                    <strong className="v16-list-item-id">{suggestion.id}</strong>
+                    <span className="v16-task-queue-title-line">
+                      <span>{suggestion.title}</span>
+                    </span>
+                    <small>{suggestion.summary}</small>
+                  </span>
+                </article>
+              ))
+            : null}
+          {!tasks.length && !suggestions.length ? (
+            <p className="v16-empty-text">还没有任务。先整理需求，生成 Issue。</p>
+          ) : null}
         </div>
       </aside>
       <TaskDetail
@@ -1632,6 +1771,7 @@ function TaskList({
         copyState={copyState}
         handedOff={handedOff}
         onTaskAction={onTaskAction}
+        suggestions={showContextSuggestions ? suggestions : []}
         task={selectedTask}
       />
     </div>
@@ -1644,6 +1784,7 @@ function TaskDetail({
   copyState,
   handedOff,
   onTaskAction,
+  suggestions,
   task,
 }: {
   actionFeedback: string | null;
@@ -1651,9 +1792,31 @@ function TaskDetail({
   copyState: ButtonInteractionState;
   handedOff: boolean;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
+  suggestions: ProjectInitializationContext[];
   task: V1Issue | null;
 }) {
   if (!task) {
+    if (suggestions.length) {
+      return (
+        <aside className="v16-detail-pane" aria-label="最近项目记录">
+          <header>
+            <p className="v16-kicker">上下文建议</p>
+            <h2>从最近记录继续</h2>
+            <p>这些只是项目上下文，还不是已确认 Issue。</p>
+          </header>
+          <div className="v16-detail-document">
+            <SectionList
+              title="可整理的方向"
+              items={suggestions.slice(0, 5).map((suggestion) => `${suggestion.title}：${suggestion.summary}`)}
+            />
+            <SectionList
+              title="下一步"
+              items={["先把其中一个方向整理成 SPEC，再生成 Issue。确认后才能交给 Codex。"]}
+            />
+          </div>
+        </aside>
+      );
+    }
     return (
       <aside className="v16-detail-pane">
         <p>还没有任务。请先确认需求，生成任务。</p>
@@ -2005,6 +2168,7 @@ function AdvancedPage({
   outputStatusState,
   projectFilesState,
   projectPanelState,
+  initializationState,
   stateStatusState,
   workspaceData,
 }: {
@@ -2015,11 +2179,13 @@ function AdvancedPage({
   outputStatusState: OutputStatusState;
   projectFilesState: ProjectFilesState;
   projectPanelState: ProjectPanelState;
+  initializationState: ProjectInitializationState;
   stateStatusState: StateStatusState;
   workspaceData: WorkspaceDataState;
 }) {
   const categories = [
     { id: "state", label: "状态", value: stateStatusState, files: advancedFilesForCategory("state") },
+    { id: "initialization", label: "初始化", value: initializationState, files: advancedFilesForCategory("initialization") },
     { id: "panel", label: "Panel", value: projectPanelState, files: advancedFilesForCategory("panel") },
     { id: "input", label: "Input", value: inputStatusState, files: advancedFilesForCategory("input") },
     { id: "execute", label: "Execute", value: executeStatusState, files: advancedFilesForCategory("execute") },
@@ -2295,6 +2461,33 @@ function summaryRowsFromValue(value: unknown, emptyText: string): Array<[string,
     .map(([key, item]) => [humanizeKey(key), summarizeValue(item)]);
 }
 
+function initializationTitle(status: ProjectInitializationStatus | null) {
+  if (!status) {
+    return "正在读取初始化状态";
+  }
+  if (status.projectKind === "existing") {
+    return status.gitContextLoaded ? "已读取最近项目记录" : "已接入现有项目";
+  }
+  if (status.demoDataCreated) {
+    return "新项目示例已准备";
+  }
+  return "新项目已准备";
+}
+
+function initializationDetail(state: ProjectInitializationState) {
+  if (state.source === "loading") {
+    return "正在读取初始化状态。";
+  }
+  if (state.error) {
+    return state.error;
+  }
+  if (!state.status) {
+    return "等待项目初始化。";
+  }
+  const warning = state.status.warnings.at(0);
+  return warning ? `${state.status.message} ${warning}` : state.status.message;
+}
+
 const displayStatusColumns: Array<{ id: IssueDisplayStatus; label: string }> = [
   { id: "backlog", label: "待确认" },
   { id: "ready", label: "可交给 Codex" },
@@ -2523,8 +2716,27 @@ function findDeliveryForTask(deliveries: OutputIndexEntry[], taskId: string) {
 function buildRecentActivities(
   workspaceData: WorkspaceDataState,
   outputBundle: OutputBundleState,
+  initializationStatus: ProjectInitializationStatus | null,
   outputSummary?: NonNullable<OutputStatusState["status"]>["summary"],
 ) {
+  const initializationItems = [
+    ...(initializationStatus?.recentContext.slice(0, 2).map((context) => ({
+      detail: context.summary,
+      id: `init-context-${context.id}`,
+      target: "tasks" as const,
+      title: "已读取最近项目记录",
+    })) ?? []),
+    ...(initializationStatus?.demoDataCreated
+      ? [
+          {
+            detail: `${initializationStatus.demoIssueCount} 个示例任务，${initializationStatus.demoDeliveryCount} 个示例交付，${initializationStatus.demoAuditCount} 个示例审计`,
+            id: "init-demo-data",
+            target: "tasks" as const,
+            title: "示例流程已准备",
+          },
+        ]
+      : []),
+  ];
   const projectUpdates =
     workspaceData.workbench?.projectUpdates.slice(-2).map((update, index) => ({
       detail: update.title || update.path,
@@ -2547,7 +2759,7 @@ function buildRecentActivities(
       title: "审计页面同步结构",
     })) ?? [];
 
-  const items = [...projectUpdates, ...deliveryItems, ...auditItems];
+  const items = [...initializationItems, ...projectUpdates, ...deliveryItems, ...auditItems];
   if (items.length) {
     return items.slice(-4).reverse();
   }
@@ -2815,6 +3027,7 @@ function advancedCategorySummary(categoryId: string) {
   const summaries: Record<string, string> = {
     audit: "展示审计索引和报告快照。这里不接受、返工或补证据。",
     execute: "展示执行状态快照。这里不继续执行，不清理锁。",
+    initialization: "展示基础发布初始化摘要。这里不重跑初始化，不删除示例数据。",
     input: "展示需求和 Issue 状态快照。普通页面只展示人能读懂的摘要。",
     output: "展示证据、交付和审计输出摘要。",
     panel: "展示项目现场读取结果和上下文包摘要。",
@@ -2836,6 +3049,11 @@ function advancedFilesForCategory(categoryId: string) {
       { name: "runs/index.json", description: "执行运行列表" },
       { name: "leases/*.json", description: "本地执行锁状态" },
       { name: "commands/*.json", description: "命令记录" },
+    ],
+    initialization: [
+      { name: "base-release-initialization.json", description: "基础发布初始化摘要" },
+      { name: "recent-project-context.json", description: "现有项目最近提交上下文" },
+      { name: "git-context.json", description: "本地 Git 上下文索引" },
     ],
     input: [
       { name: "index.json", description: "规格、项目和任务索引" },
