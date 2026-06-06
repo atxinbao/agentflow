@@ -92,6 +92,7 @@ import type {
   AuditIndex,
   AuditIndexEntry,
   HumanAuditReport,
+  AgentRole,
   InputIssue,
   IssueDisplayStatus,
   IssueStatusIndex,
@@ -186,6 +187,123 @@ const interactionStorageKeys = {
   provider: "agentflow.interaction.provider.v1",
 } as const;
 const appearanceThemeClass = "af-theme-light";
+
+type CodexRoleGuide = {
+  cannotDo: string[];
+  englishName: string;
+  role: AgentRole;
+  startupInstruction: string;
+  summary: string;
+  threadName: string;
+  title: string;
+};
+
+const codexRoleGuides: CodexRoleGuide[] = [
+  {
+    cannotDo: ["不改代码", "不执行命令", "不生成 release", "不写 audit report"],
+    englishName: "Spec Agent",
+    role: "spec-agent",
+    startupInstruction: [
+      "你现在是 AgentFlow 的 Spec Agent。",
+      "",
+      "你只做三件事：",
+      "1. 确认用户需求。",
+      "2. 整理 SPEC。",
+      "3. 生成 Issue。",
+      "",
+      "你不能做：",
+      "- 不改代码",
+      "- 不执行命令",
+      "- 不生成 release",
+      "- 不写 audit report",
+      "- 不执行 Build Agent 或 Audit Agent 的任务",
+      "",
+      "你必须遵守：",
+      "- 只写 .agentflow/input/**",
+      "- 不修改用户源码",
+      "- 不写 .agentflow/execute/**",
+      "- 不写 .agentflow/output/release/**",
+      "- 不写 .agentflow/output/audit/**",
+      "",
+      "如果用户要求你改代码、执行任务或审计，请停止并提示需要切换到正确 Agent。",
+    ].join("\n"),
+    summary: "确认需求 · 整理规格 · 生成任务",
+    threadName: "AgentFlow / Spec Agent",
+    title: "需求助手",
+  },
+  {
+    cannotDo: ["不执行 audit issue", "不写 audit report", "不写 findings.json", "不 merge / deploy"],
+    englishName: "Build Agent",
+    role: "build-agent",
+    startupInstruction: [
+      "你现在是 AgentFlow 的 Build Agent。",
+      "",
+      "你只能执行：",
+      "issueCategory = spec",
+      "requiredAgentRole = build-agent",
+      "",
+      "你要做：",
+      "1. 读取指定 Issue。",
+      "2. 按任务包执行改动。",
+      "3. 写入 execute 过程记录。",
+      "4. 写入 evidence。",
+      "5. 写入 release delivery。",
+      "",
+      "你不能做：",
+      "- 不执行 audit issue",
+      "- 不写 audit report",
+      "- 不写 findings.json",
+      "- 不写 evidence-map.json",
+      "- 不写 traceability.json",
+      "- 不越过任务边界",
+      "- 不创建远程 PR",
+      "- 不 merge",
+      "- 不 deploy",
+      "",
+      "如果任务不是 spec issue，必须停止。",
+      "如果 requiredAgentRole 不是 build-agent，必须停止。",
+    ].join("\n"),
+    summary: "任务打包 · 执行改动 · 写回结果",
+    threadName: "AgentFlow / Build Agent",
+    title: "执行助手",
+  },
+  {
+    cannotDo: ["不改代码", "不执行 spec issue", "不生成 release", "不创建 PR / merge / deploy"],
+    englishName: "Audit Agent",
+    role: "audit-agent",
+    startupInstruction: [
+      "你现在是 AgentFlow 的 Audit Agent。",
+      "",
+      "你只能执行：",
+      "issueCategory = audit",
+      "requiredAgentRole = audit-agent",
+      "",
+      "你要做：",
+      "1. 读取 Audit Issue。",
+      "2. 读取关联 SPEC / Issue / Evidence / Release。",
+      "3. 检查是否符合需求、范围和边界。",
+      "4. 写入 audit report。",
+      "5. 写入 findings.json。",
+      "6. 写入 evidence-map.json。",
+      "7. 写入 traceability.json。",
+      "",
+      "你不能做：",
+      "- 不改代码",
+      "- 不执行 spec issue",
+      "- 不生成 release",
+      "- 不创建 PR",
+      "- 不 merge",
+      "- 不 deploy",
+      "- 不修改用户源码",
+      "",
+      "如果任务不是 audit issue，必须停止。",
+      "如果 requiredAgentRole 不是 audit-agent，必须停止。",
+    ].join("\n"),
+    summary: "审计交付 · 核对证据 · 生成报告",
+    threadName: "AgentFlow / Audit Agent",
+    title: "审计助手",
+  },
+];
 
 function readStoredProvider(): Provider | null {
   const value = window.localStorage.getItem(interactionStorageKeys.provider);
@@ -558,7 +676,7 @@ function App() {
       try {
         await navigator.clipboard.writeText(buildCodexHandoff(task));
         setTaskCopyState("success");
-        setTaskActionFeedback("任务包已复制到剪贴板。请手动交给对应 Agent。");
+        setTaskActionFeedback(`已复制。请粘贴到 ${codexThreadNameForRole(task.requiredAgentRole)} 线程。`);
         window.setTimeout(() => setTaskCopyState("enabled"), 1400);
       } catch {
         setTaskCopyState("error");
@@ -1620,7 +1738,52 @@ function ProjectHomePage({
           </div>
         </Panel>
       </section>
+      <CodexRoleGuideCard defaultOpen={!selectedTask} />
     </section>
+  );
+}
+
+function CodexRoleGuideCard({ defaultOpen }: { defaultOpen: boolean }) {
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  async function copyStartupInstruction(guide: CodexRoleGuide) {
+    try {
+      await navigator.clipboard.writeText(guide.startupInstruction);
+      setCopyFeedback(`已复制。请粘贴到 ${guide.threadName} 线程。`);
+    } catch {
+      setCopyFeedback("复制失败。请手动复制启动指令。");
+    }
+  }
+
+  return (
+    <details className="v16-codex-role-guide" open={defaultOpen}>
+      <summary>
+        <span>
+          <strong>Codex 角色使用说明</strong>
+          <small>AgentFlow 不直接控制 Codex。你需要在 Codex 里按角色开线程，每个线程只做一种工作。</small>
+        </span>
+        <StatusBadge status="idle">本地说明</StatusBadge>
+      </summary>
+      <div className="v16-codex-role-guide-body">
+        <p className="v16-codex-role-warning">
+          不要让同一个 Codex 线程一会儿写代码、一会儿审计。这样容易混淆边界。
+        </p>
+        <div className="v16-codex-role-grid">
+          {codexRoleGuides.map((guide) => (
+            <article className="v16-codex-role-card" key={guide.role}>
+              <span>{guide.englishName}</span>
+              <strong>{guide.title}</strong>
+              <p>{guide.summary}</p>
+              <small>线程名：{guide.threadName}</small>
+              <ActionButton onClick={() => copyStartupInstruction(guide)} variant="secondary">
+                复制 {guide.englishName} 启动指令
+              </ActionButton>
+            </article>
+          ))}
+        </div>
+        {copyFeedback ? <p className="v16-feedback">{copyFeedback}</p> : null}
+      </div>
+    </details>
   );
 }
 
@@ -1848,6 +2011,7 @@ function TaskDetail({
           items={[
             ["任务类型", issueCategoryLabelZh(task.issueCategory)],
             ["执行角色", agentRoleLabelZh(task.requiredAgentRole)],
+            ["Codex 线程", codexThreadNameForRole(task.requiredAgentRole)],
             ["状态", displayStatusLabelZh(task.displayStatus)],
             ["交给 Codex", handedOff ? "已做本地标记" : "未标记"],
             ["关联规格", "已确认规格"],
@@ -1877,7 +2041,7 @@ function TaskDetail({
             onClick={() => onTaskAction(action, task)}
             variant={index === 0 && action !== "readonly" ? "primary" : "secondary"}
           >
-            {action === "copy-handoff" && copyState === "success" ? "已复制" : taskActionLabel(action)}
+            {taskActionDisplayLabel(action, task, copyState)}
           </ActionButton>
         ))}
       </ActionBar>
@@ -2224,6 +2388,7 @@ function AdvancedPage({
 }) {
   const categories = [
     { id: "state", label: "状态", value: stateStatusState, files: advancedFilesForCategory("state") },
+    { id: "agentRoles", label: "Agent 角色", value: agentRoleRulesDocument(), files: advancedFilesForCategory("agentRoles") },
     { id: "initialization", label: "初始化", value: initializationState, files: advancedFilesForCategory("initialization") },
     { id: "panel", label: "Panel", value: projectPanelState, files: advancedFilesForCategory("panel") },
     { id: "input", label: "Input", value: inputStatusState, files: advancedFilesForCategory("input") },
@@ -2734,11 +2899,33 @@ function agentRoleLabelZh(role?: string | null) {
   return labels[role ?? ""] ?? "执行助手";
 }
 
+function codexRoleGuideForRole(role?: string | null) {
+  return codexRoleGuides.find((guide) => guide.role === role) ?? codexRoleGuides[1];
+}
+
+function codexThreadNameForRole(role?: string | null) {
+  return codexRoleGuideForRole(role).threadName;
+}
+
+function agentRoleEnglishName(role?: string | null) {
+  return codexRoleGuideForRole(role).englishName;
+}
+
 function agentInstructionForTask(task: V1Issue) {
   if (task.requiredAgentRole === "audit-agent") {
     return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR。";
   }
   return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。不要写 audit report、findings、evidence-map 或 traceability。";
+}
+
+function taskActionDisplayLabel(action: TaskInteractionAction, task: V1Issue, copyState: ButtonInteractionState) {
+  if (action === "copy-handoff") {
+    if (copyState === "success") {
+      return "已复制";
+    }
+    return `复制 ${agentRoleEnglishName(task.requiredAgentRole)} 任务包`;
+  }
+  return taskActionLabel(action);
 }
 
 function displayRiskTextZh(risk?: string | null) {
@@ -2964,6 +3151,7 @@ function buildNextStep(
 }
 
 function buildCodexHandoff(task: V1Issue) {
+  const codexThreadName = codexThreadNameForRole(task.requiredAgentRole);
   return [
     `# ${task.title}`,
     "",
@@ -2975,6 +3163,7 @@ function buildCodexHandoff(task: V1Issue) {
         issueCategory: task.issueCategory ?? "spec",
         issueId: task.id,
         requiredAgentRole: task.requiredAgentRole ?? "build-agent",
+        codexThreadName,
       },
       null,
       2,
@@ -2984,8 +3173,15 @@ function buildCodexHandoff(task: V1Issue) {
     `任务：${task.id}`,
     `任务类型：${issueCategoryLabelZh(task.issueCategory)}`,
     `执行角色：${agentRoleLabelZh(task.requiredAgentRole)}`,
+    `Codex 线程：${codexThreadName}`,
     `风险：${displayRiskLabelZh(task.riskLevel)}`,
     `指令：${agentInstructionForTask(task)}`,
+    "",
+    "## 角色边界",
+    "- 如果你不是 requiredAgentRole，请停止执行。",
+    "- 如果 issueCategory 不属于你，请停止执行。",
+    "- 不要执行其他 Agent 的任务。",
+    "- 不要越过任务边界。",
     "",
     "## 范围",
     ...task.scope.map((item) => `- ${item}`),
@@ -3005,6 +3201,44 @@ function buildCodexHandoff(task: V1Issue) {
     "## 交付要求",
     ...task.evidenceRequired.map((item) => `- ${item}`),
   ].join("\n");
+}
+
+function agentRoleRulesDocument() {
+  return {
+    version: "codex-role-usage-guide.v1",
+    rule: "AgentFlow 不直接控制 Codex。用户需要在 Codex 里按角色开 3 个独立线程，每个线程只做一种工作。",
+    warning: "不要在一个 Codex 线程里混用多个角色。",
+    source: {
+      rolesJson: ".agentflow/define/agent/roles.json",
+      rootAgentEntry: "AGENTS.md",
+      manual: ".agentflow/define/agent/Agentflow.md",
+    },
+    roles: codexRoleGuides.map((guide) => ({
+      agentRole: guide.role,
+      label: guide.title,
+      englishName: guide.englishName,
+      codexThreadName: guide.threadName,
+      summary: guide.summary,
+      cannotDo: guide.cannotDo,
+    })),
+    matrix: [
+      {
+        agentRole: "spec-agent",
+        handlesIssueCategory: [],
+        writes: [".agentflow/input/**"],
+      },
+      {
+        agentRole: "build-agent",
+        handlesIssueCategory: ["spec"],
+        writes: [".agentflow/execute/**", ".agentflow/output/evidence/**", ".agentflow/output/release/**"],
+      },
+      {
+        agentRole: "audit-agent",
+        handlesIssueCategory: ["audit"],
+        writes: [".agentflow/output/audit/**"],
+      },
+    ],
+  };
 }
 
 function buildNextActionLabel(action: string) {
@@ -3174,6 +3408,7 @@ function titlebarStatusText(
 
 function advancedCategorySummary(categoryId: string) {
   const summaries: Record<string, string> = {
+    agentRoles: "展示 Codex 三个线程的角色边界和 roles.json 只读诊断规则。",
     audit: "展示审计索引和报告快照。这里不写处理结果。",
     execute: "展示执行状态快照。这里不继续执行，不清理锁。",
     initialization: "展示基础发布初始化摘要。这里不重跑初始化，不删除示例数据。",
@@ -3188,6 +3423,11 @@ function advancedCategorySummary(categoryId: string) {
 
 function advancedFilesForCategory(categoryId: string) {
   const files: Record<string, Array<{ description: string; name: string }>> = {
+    agentRoles: [
+      { name: ".agentflow/define/agent/roles.json", description: "三类 Agent 的可处理任务和写入边界" },
+      { name: "AGENTS.md", description: "根级 Agent 入口规则" },
+      { name: ".agentflow/define/agent/Agentflow.md", description: "AgentFlow 工作手册" },
+    ],
     audit: [
       { name: "index.json", description: "审计报告索引" },
       { name: "audit.json", description: "审计结论和检查结果" },
