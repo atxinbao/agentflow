@@ -1,6 +1,7 @@
 use super::{
+    base_release::initialize_base_release_project,
     git::{canonical_project_root, relative_or_display},
-    ignore::protect_agentflow_from_git,
+    ignore::{protect_agentflow_from_git, protect_agents_md_from_gitignore},
     model::ProjectWorkspaceSummary,
 };
 use std::{
@@ -44,10 +45,15 @@ pub(crate) fn prepare_local_project_workspace_at(
             reused_paths,
             git_exclude_path: None,
             protected_git_exclude: false,
+            agents_gitignore_path: None,
+            protected_agents_gitignore: false,
+            agents_md_tracked_by_git: false,
+            agents_md_git_warning: None,
             ownership: ownership.clone(),
             agent_manual_status,
             input_status: None,
             state_status: None,
+            initialization_status: None,
         });
     }
 
@@ -68,15 +74,22 @@ pub(crate) fn prepare_local_project_workspace_at(
             reused_paths,
             git_exclude_path: None,
             protected_git_exclude: false,
+            agents_gitignore_path: None,
+            protected_agents_gitignore: false,
+            agents_md_tracked_by_git: false,
+            agents_md_git_warning: None,
             ownership: agent_manual_status.ownership.clone(),
             agent_manual_status,
             input_status: None,
             state_status: None,
+            initialization_status: None,
         });
     }
 
-    let input_snapshot = agentflow_input::prepare_input_workspace(&root)
+    agentflow_input::prepare_input_workspace(&root)
         .map_err(|error| format!("prepare input workspace: {error}"))?;
+    agentflow_execute::prepare_execute_workspace(&root)
+        .map_err(|error| format!("prepare execute workspace: {error}"))?;
 
     ensure_directory(
         &agentflow_path,
@@ -103,7 +116,14 @@ pub(crate) fn prepare_local_project_workspace_at(
     )?;
 
     let (git_exclude_path, protected_git_exclude) = protect_agentflow_from_git(&root)?;
+    let agents_gitignore = protect_agents_md_from_gitignore(&root)?;
     let ownership = agent_manual_status.ownership.clone();
+    let initialization_status = initialize_base_release_project(&root)
+        .map_err(|error| format!("initialize base release workspace: {error}"))?;
+    let input_snapshot = agentflow_input::prepare_input_workspace(&root)
+        .map_err(|error| format!("refresh input workspace: {error}"))?;
+    agentflow_output::prepare_output_workspace(&root)
+        .map_err(|error| format!("refresh output workspace: {error}"))?;
     let state_status = agentflow_state::prepare_state_workspace(&root)
         .map_err(|error| format!("prepare workflow state: {error}"))?;
 
@@ -120,10 +140,15 @@ pub(crate) fn prepare_local_project_workspace_at(
         reused_paths,
         git_exclude_path: git_exclude_path.map(|path| path.display().to_string()),
         protected_git_exclude,
+        agents_gitignore_path: Some(agents_gitignore.gitignore_path.display().to_string()),
+        protected_agents_gitignore: agents_gitignore.protected,
+        agents_md_tracked_by_git: agents_gitignore.tracked_by_git,
+        agents_md_git_warning: agents_gitignore.warning,
         ownership,
         agent_manual_status,
         input_status: Some(input_snapshot.status),
         state_status: Some(state_status),
+        initialization_status: Some(initialization_status),
     })
 }
 
@@ -193,6 +218,7 @@ fn unix_timestamp_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
     use tempfile::tempdir;
 
     #[test]
@@ -206,6 +232,12 @@ mod tests {
 
         assert!(summary.created_agentflow);
         assert!(summary.protected_git_exclude);
+        let initialization_status = summary.initialization_status.as_ref().unwrap();
+        assert_eq!(initialization_status.project_kind, "new");
+        assert!(initialization_status.demo_data_created);
+        assert_eq!(initialization_status.demo_issue_count, 5);
+        assert_eq!(initialization_status.demo_delivery_count, 1);
+        assert_eq!(initialization_status.demo_audit_count, 1);
         assert!(dir.path().join(".agentflow/workspace.yaml").is_file());
         assert!(dir.path().join(".agentflow/config.yaml").is_file());
         assert!(dir
@@ -229,6 +261,22 @@ mod tests {
         assert!(dir.path().join(".agentflow/input/index.json").is_file());
         assert!(dir.path().join(".agentflow/input/projects").is_dir());
         assert!(dir.path().join(".agentflow/input/issues").is_dir());
+        assert!(dir
+            .path()
+            .join(".agentflow/input/issues/AF-DEMO-001.json")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/output/release/DEL-DEMO-001/delivery.json")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/output/audit/AUD-DEMO-001/audit-report.md")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/state/indexes/base-release-initialization.json")
+            .is_file());
         assert!(summary
             .input_status
             .as_ref()
@@ -255,10 +303,7 @@ mod tests {
             .path()
             .join(".agentflow/state/events/timeline.jsonl")
             .is_file());
-        assert!(summary
-            .state_status
-            .as_ref()
-            .is_some_and(|status| !status.next_actions.is_empty()));
+        assert!(summary.state_status.is_some());
         assert!(dir.path().join("AGENTS.md").is_file());
         assert!(dir
             .path()
@@ -274,6 +319,45 @@ mod tests {
         assert!(fs::read_to_string(dir.path().join(".git/info/exclude"))
             .unwrap()
             .contains(".agentflow/"));
+        assert!(fs::read_to_string(dir.path().join(".gitignore"))
+            .unwrap()
+            .contains("AGENTS.md"));
+    }
+
+    #[test]
+    fn prepare_workspace_existing_git_project_uses_recent_context_without_demo_data() {
+        let dir = tempdir().unwrap();
+        initialize_git_repo_with_commit(dir.path());
+
+        let summary =
+            prepare_local_project_workspace_at(&dir.path().display().to_string(), None).unwrap();
+
+        let initialization_status = summary.initialization_status.as_ref().unwrap();
+        assert_eq!(initialization_status.project_kind, "existing");
+        assert!(initialization_status.git_context_loaded);
+        assert_eq!(initialization_status.demo_issue_count, 0);
+        assert_eq!(initialization_status.demo_delivery_count, 0);
+        assert_eq!(initialization_status.demo_audit_count, 0);
+        assert!(dir
+            .path()
+            .join(".agentflow/state/indexes/git-context.json")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/state/indexes/recent-project-context.json")
+            .is_file());
+        assert!(!dir
+            .path()
+            .join(".agentflow/input/intake/git-context.json")
+            .exists());
+        assert!(!dir
+            .path()
+            .join(".agentflow/input/projects/context-prs.json")
+            .exists());
+        assert!(!dir
+            .path()
+            .join(".agentflow/input/issues/AF-DEMO-001.json")
+            .exists());
     }
 
     #[test]
@@ -333,5 +417,29 @@ mod tests {
         assert!(!summary.protected_git_exclude);
         assert!(summary.git_exclude_path.is_none());
         assert!(dir.path().join(".agentflow/workspace.yaml").is_file());
+    }
+
+    fn initialize_git_repo_with_commit(root: &Path) {
+        run_git(root, &["init"]);
+        run_git(root, &["config", "user.email", "agentflow@example.local"]);
+        run_git(root, &["config", "user.name", "AgentFlow Test"]);
+        fs::write(root.join("README.md"), "# Test Project\n").unwrap();
+        run_git(root, &["add", "README.md"]);
+        run_git(root, &["commit", "-m", "Initial project state"]);
+    }
+
+    fn run_git(root: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

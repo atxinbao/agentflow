@@ -10,3 +10,10 @@ pub(crate) fn prepare_local_project_workspace(
 ) -> Result<crate::project_workspace::ProjectWorkspaceSummary, String> {
     crate::project_workspace::prepare_local_project_workspace(project_root, app_locale)
 }
+
+#[tauri::command]
+pub(crate) fn load_project_initialization_status(
+    project_root: String,
+) -> Result<crate::project_workspace::ProjectInitializationSummary, String> {
+    crate::project_workspace::load_project_initialization_status(project_root)
+}
