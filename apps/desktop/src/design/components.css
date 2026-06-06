@@ -36,7 +36,7 @@
 
 .af-button-primary {
   background: var(--af-primary);
-  color: #071120;
+  color: var(--af-on-primary);
 }
 
 .af-button-secondary {
@@ -46,9 +46,9 @@
 }
 
 .af-button-danger {
-  border-color: rgba(251, 113, 133, 0.5);
-  background: rgba(251, 113, 133, 0.14);
-  color: #fecdd3;
+  border-color: color-mix(in srgb, var(--af-danger), transparent 50%);
+  background: color-mix(in srgb, var(--af-danger-soft), var(--af-surface) 60%);
+  color: var(--af-danger);
 }
 
 .af-button-ghost {
@@ -57,7 +57,7 @@
 }
 
 .af-button:hover:not(:disabled) {
-  border-color: rgba(232, 238, 248, 0.34);
+  border-color: color-mix(in srgb, var(--af-primary), transparent 58%);
 }
 
 .af-button:disabled,
@@ -92,19 +92,19 @@
 }
 
 .af-surface-card-warning {
-  border-color: rgba(251, 191, 36, 0.38);
-  background: rgba(251, 191, 36, 0.08);
+  border-color: color-mix(in srgb, var(--af-warning), transparent 62%);
+  background: color-mix(in srgb, var(--af-warning-soft), var(--af-surface) 70%);
 }
 
 .af-surface-card-blocked,
 .af-surface-card-danger {
-  border-color: rgba(251, 113, 133, 0.38);
-  background: rgba(251, 113, 133, 0.08);
+  border-color: color-mix(in srgb, var(--af-danger), transparent 62%);
+  background: color-mix(in srgb, var(--af-danger-soft), var(--af-surface) 70%);
 }
 
 .af-surface-card-success {
-  border-color: rgba(34, 197, 94, 0.38);
-  background: rgba(34, 197, 94, 0.08);
+  border-color: color-mix(in srgb, var(--af-success), transparent 62%);
+  background: color-mix(in srgb, var(--af-success-soft), var(--af-surface) 70%);
 }
 
 .af-surface-card-header {
@@ -125,7 +125,7 @@
   padding: 2px 8px;
   border: 1px solid var(--af-line);
   border-radius: 999px;
-  background: rgba(145, 160, 184, 0.08);
+  background: color-mix(in srgb, var(--af-text-muted), transparent 92%);
   color: var(--af-text-muted);
   font-size: var(--af-text-xs);
   font-weight: 800;
@@ -141,24 +141,24 @@
 }
 
 .af-status-ready {
-  border-color: rgba(34, 197, 94, 0.42);
-  color: #86efac;
+  border-color: color-mix(in srgb, var(--af-success), transparent 58%);
+  color: var(--af-success);
 }
 
 .af-status-working {
-  border-color: rgba(56, 189, 248, 0.42);
-  color: #7dd3fc;
+  border-color: color-mix(in srgb, var(--af-primary), transparent 58%);
+  color: var(--af-primary);
 }
 
 .af-status-warning {
-  border-color: rgba(251, 191, 36, 0.42);
-  color: #fde68a;
+  border-color: color-mix(in srgb, var(--af-warning), transparent 58%);
+  color: var(--af-warning);
 }
 
 .af-status-blocked,
 .af-status-failed {
-  border-color: rgba(251, 113, 133, 0.42);
-  color: #fda4af;
+  border-color: color-mix(in srgb, var(--af-danger), transparent 58%);
+  color: var(--af-danger);
 }
 
 .af-status-idle {
@@ -194,7 +194,7 @@
   min-width: 0;
   border: 1px solid var(--af-line);
   border-radius: var(--af-radius-md);
-  background: #090e1a;
+  background: var(--af-code-bg);
   color: var(--af-text);
 }
 
@@ -224,7 +224,7 @@
   margin: 0;
   padding: var(--af-space-3);
   overflow: auto;
-  color: #dbeafe;
+  color: var(--af-text);
   white-space: pre-wrap;
   word-break: break-word;
 }

@@ -53,7 +53,7 @@ pub fn repair_agent_working_manual_with_locale(
     let style = expected_style_state(repaired_at);
     prepare_workspace_layout(&root, &warnings, &mut repairs, &locale, &style)?;
 
-    write_agent_entry(&root, &mut repairs, repaired_at)?;
+    write_agent_entry(&root, &mut repairs)?;
     write_file_if_changed(
         &root.join(AGENT_MANUAL_RELATIVE_PATH),
         &agentflow_manual_template(),
@@ -89,30 +89,18 @@ pub fn repair_agent_working_manual_with_locale(
     Ok(status)
 }
 
-fn write_agent_entry(root: &Path, repairs: &mut Vec<String>, timestamp: u64) -> Result<()> {
+fn write_agent_entry(root: &Path, repairs: &mut Vec<String>) -> Result<()> {
     let path = root.join(AGENT_ENTRY_RELATIVE_PATH);
-    let desired = agent_entry_template();
-    let current = fs::read_to_string(&path).ok();
-    if current.as_deref() == Some(desired.as_str()) {
+    if path.exists() {
+        repairs.push("Kept existing local AGENTS.md unchanged.".to_string());
         return Ok(());
     }
 
-    if let Some(content) = current {
-        let backup_path = root
-            .join(".agentflow/output/backup/agent-md")
-            .join(format!("AGENTS.md.{timestamp}.bak.md"));
-        fs::write(&backup_path, content)?;
-        repairs.push(format!(
-            "Backed up existing AGENTS.md to {}",
-            backup_path
-                .strip_prefix(root)
-                .unwrap_or(&backup_path)
-                .display()
-        ));
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
     }
-
-    fs::write(&path, desired)?;
-    repairs.push("Rewrote AGENTS.md as AgentFlow managed entry.".to_string());
+    fs::write(&path, agent_entry_template())?;
+    repairs.push("Created local AGENTS.md from AgentFlow default entry.".to_string());
     Ok(())
 }
 

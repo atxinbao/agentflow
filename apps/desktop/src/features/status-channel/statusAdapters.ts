@@ -454,7 +454,10 @@ function buildAgentManualStatus(agentManualState: AgentManualState): AgentStatus
     source,
     priority: 30,
     metrics: [
-      { label: "AGENTS.md", value: status.agentMd.managed ? "Managed" : "未接管" },
+      {
+        label: "AGENTS.md",
+        value: status.agentMd.exists ? (status.agentMd.managed ? "Managed" : "Local") : "缺失",
+      },
       { label: "Layout", value: status.layout.ready ? "Ready" : "缺失" },
       { label: "Skills", value: `${status.skills.filter((skill) => skill.exists && skill.hashMatches).length}/${status.skillsLock.skillCount}` },
       { label: "Agent locale", value: status.locale.fallback ? `${status.locale.agentLocale} fallback` : status.locale.agentLocale },

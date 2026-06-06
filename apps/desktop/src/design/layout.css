@@ -6,7 +6,7 @@
   padding: var(--af-space-4);
   border: 1px solid var(--af-line);
   border-radius: var(--af-radius-md);
-  background: linear-gradient(180deg, rgba(124, 156, 255, 0.08), rgba(17, 24, 43, 0.96));
+  background: var(--af-bg);
   box-shadow: var(--af-shadow-soft);
 }
 

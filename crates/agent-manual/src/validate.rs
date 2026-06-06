@@ -63,7 +63,7 @@ pub(crate) fn validate_agent_working_manual_with_context(
     let tracked_by_git = is_git_tracked(&root, AGENT_ENTRY_RELATIVE_PATH);
     if tracked_by_git {
         warnings.push(
-            "AGENTS.md is tracked by Git. AgentFlow rewrote it as the managed Agent entry. Review your Git diff before committing."
+            "AGENTS.md is tracked by Git. Keep it local with git rm --cached AGENTS.md and leave the file ignored."
                 .to_string(),
         );
     }
@@ -78,7 +78,10 @@ pub(crate) fn validate_agent_working_manual_with_context(
     if !agent_md_exists {
         errors.push("AGENTS.md is missing.".to_string());
     } else if !managed {
-        errors.push("AGENTS.md is not managed by AgentFlow.".to_string());
+        warnings.push(
+            "AGENTS.md is local and not AgentFlow-managed; existing content is preserved."
+                .to_string(),
+        );
     }
 
     let expected_locale = expected_locale_state(&root, app_locale, checked_at);
@@ -136,8 +139,14 @@ pub(crate) fn validate_agent_working_manual_with_context(
     let style_status = style_state.unwrap_or_else(|| expected_style.clone());
     let expected_lock = expected_skills_lock(checked_at, &expected_locale);
     let agent_hash = file_sha256_hex(&agent_md_path);
-    if agent_md_exists && agent_hash.as_deref() != Some(expected_lock.entry.hash.as_str()) {
-        errors.push("AGENTS.md hash does not match AgentFlow managed template.".to_string());
+    if agent_md_exists
+        && managed
+        && agent_hash.as_deref() != Some(expected_lock.entry.hash.as_str())
+    {
+        warnings.push(
+            "AGENTS.md differs from AgentFlow default entry; existing local content is preserved."
+                .to_string(),
+        );
     }
 
     let (workspace_manifest, layout) = validate_workspace_layout(&root)?;
@@ -315,9 +324,7 @@ pub(crate) fn validate_agent_working_manual_with_context(
             managed,
             version: agent_md_version,
             hash: agent_hash,
-            backed_up: repairs
-                .iter()
-                .any(|repair| repair.contains("Backed up existing AGENTS.md")),
+            backed_up: false,
             tracked_by_git,
         },
         manual: ManualStatus {

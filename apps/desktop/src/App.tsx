@@ -134,6 +134,7 @@ const interactionStorageKeys = {
   projectRoot: "agentflow.interaction.projectRoot.v1",
   provider: "agentflow.interaction.provider.v1",
 } as const;
+const appearanceThemeClass = "af-theme-light";
 
 function readStoredProvider(): Provider | null {
   const value = window.localStorage.getItem(interactionStorageKeys.provider);
@@ -733,7 +734,10 @@ function LoginModal({ onConnect }: { onConnect: (provider: Provider) => void }) 
   const runtimeChromeClass = isBrowserPreviewRuntime() ? "browser-preview-titlebar" : "native-titlebar";
 
   return (
-    <main className={`v16-login-stage v16-login-shell ${runtimeChromeClass}`} data-agentflow-screen="login">
+    <main
+      className={`v16-login-stage v16-login-shell ${runtimeChromeClass} ${appearanceThemeClass}`}
+      data-agentflow-screen="login"
+    >
       <header
         className="v16-login-titlebar"
         aria-label="登录窗口"
@@ -943,7 +947,7 @@ function AppShell({
   const runtimeChromeClass = isBrowserPreviewRuntime() ? "browser-preview-titlebar" : "native-titlebar";
 
   return (
-    <AppFrame className={`v16-app ${runtimeChromeClass}`} data-agentflow-ux="v16">
+    <AppFrame className={`v16-app ${runtimeChromeClass} ${appearanceThemeClass}`} data-agentflow-ux="v16">
       <TitleBar projectName={projectName} statusText={titlebarStatus} />
       <ProjectTree activePage={activePage} onPageChange={onPageChange} projectName={projectName} />
       <section className={inspector ? "v16-workspace with-inspector" : "v16-workspace"}>
