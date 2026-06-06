@@ -13,6 +13,10 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
@@ -57,6 +61,22 @@ import {
 } from "./features/project-files";
 import { useIssueStatusIndex, useStateStatus, type StateStatusState } from "./features/state";
 import {
+  createBrowserPreviewProjectRegistry,
+  createProjectRef,
+  isAgentFlowProjectPage,
+  persistProjectRegistry,
+  projectRegistryStorageKeys,
+  readProjectRegistry,
+  removeProject,
+  selectProject,
+  setProjectPage,
+  toggleProjectExpanded,
+  upsertProject,
+  type AgentFlowProjectPage,
+  type AgentFlowProjectRef,
+  type AgentFlowProjectStatus,
+} from "./projectRegistry";
+import {
   buildAppInteractionState,
   buildAuditInteractionState,
   buildDeliveryInteractionState,
@@ -86,7 +106,7 @@ import type {
 import "./AppShell.css";
 
 type Provider = "ChatGPT" | "Claude" | "DeepSeek";
-type AppPage = "home" | "tasks" | "files" | "delivery" | "audit" | "advanced";
+type AppPage = AgentFlowProjectPage;
 type DataSource = "idle" | "loading" | "tauri" | "preview" | "unavailable";
 
 type WorkspaceDataState = {
@@ -139,11 +159,23 @@ function readStoredProvider(): Provider | null {
 
 function readStoredPage(): AppPage {
   const value = window.localStorage.getItem(interactionStorageKeys.activePage);
-  return pages.some((page) => page.id === value) ? (value as AppPage) : "home";
+  return isAgentFlowProjectPage(value) ? value : "home";
 }
 
 function readStoredProjectRoot() {
   return window.localStorage.getItem(interactionStorageKeys.projectRoot);
+}
+
+function readInitialProjectRegistry() {
+  if (isBrowserPreviewRuntime() && window.localStorage.getItem(projectRegistryStorageKeys.projects) === null) {
+    return createBrowserPreviewProjectRegistry(BROWSER_PREVIEW_PROJECT_ROOT);
+  }
+
+  return readProjectRegistry({
+    legacyActivePage: readStoredPage(),
+    legacyProjectRoot: readStoredProjectRoot(),
+    projectNameFromRoot: (root) => projectNameFromPath(root) || "本地项目",
+  });
 }
 
 function readStoredBoolean(key: string) {
@@ -176,17 +208,10 @@ function startWindowDrag(event: MouseEvent<HTMLElement>) {
 }
 
 function App() {
-  const [connectedProvider, setConnectedProvider] = useState<Provider | null>(() =>
-    isBrowserPreviewRuntime() ? "ChatGPT" : readStoredProvider(),
-  );
-  const [onboardingComplete, setOnboardingComplete] = useState(() =>
-    isBrowserPreviewRuntime() ? true : readStoredBoolean(interactionStorageKeys.onboardingComplete),
-  );
-  const [firstRunOpen, setFirstRunOpen] = useState(() => Boolean(readStoredProvider()) && !onboardingComplete);
-  const [projectRoot, setProjectRoot] = useState<string | null>(
-    isBrowserPreviewRuntime() ? BROWSER_PREVIEW_PROJECT_ROOT : readStoredProjectRoot(),
-  );
-  const [activePage, setActivePage] = useState<AppPage>(() => (isBrowserPreviewRuntime() ? "home" : readStoredPage()));
+  const [connectedProvider, setConnectedProvider] = useState<Provider>(() => readStoredProvider() ?? "ChatGPT");
+  const [onboardingComplete, setOnboardingComplete] = useState(true);
+  const [firstRunOpen, setFirstRunOpen] = useState(false);
+  const [projectRegistry, setProjectRegistry] = useState(readInitialProjectRegistry);
   const [taskSearch, setTaskSearch] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedDeliveryRunId, setSelectedDeliveryRunId] = useState<string | null>(null);
@@ -197,6 +222,11 @@ function App() {
   const [taskActionFeedback, setTaskActionFeedback] = useState<string | null>(null);
   const [taskCopyState, setTaskCopyState] = useState<ButtonInteractionState>("enabled");
   const [handedOffIssues, setHandedOffIssues] = useState<Set<string>>(() => readStoredIssueSet());
+  const { activePageByProject, activeProjectRoot, expandedProjectRoots, projects } = projectRegistry;
+  const activeProject = projects.find((project) => project.root === activeProjectRoot) ?? null;
+  const activeProjectRegistryStatus = activeProject?.status ?? null;
+  const projectRoot = activeProject?.root ?? null;
+  const activePage = projectRoot ? activePageByProject[projectRoot] ?? activeProject?.lastActivePage ?? "home" : "home";
 
   const {
     loadProjectDirectoryPage,
@@ -232,8 +262,14 @@ function App() {
   useEffect(() => {
     if (projectRoot) {
       window.localStorage.setItem(interactionStorageKeys.projectRoot, projectRoot);
+    } else {
+      window.localStorage.removeItem(interactionStorageKeys.projectRoot);
     }
   }, [projectRoot]);
+
+  useEffect(() => {
+    persistProjectRegistry(projectRegistry);
+  }, [projectRegistry]);
 
   useEffect(() => {
     window.localStorage.setItem(interactionStorageKeys.activePage, activePage);
@@ -242,6 +278,17 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(interactionStorageKeys.handedOffIssues, JSON.stringify([...handedOffIssues]));
   }, [handedOffIssues]);
+
+  useEffect(() => {
+    if (projectRoot) {
+      return;
+    }
+    setSelectedTaskId(null);
+    setSelectedDeliveryRunId(null);
+    setSelectedAuditId(null);
+    setTaskSearch("");
+    setTaskActionFeedback(null);
+  }, [projectRoot]);
 
   useEffect(() => {
     if (!projectRoot) {
@@ -307,15 +354,22 @@ function App() {
     () =>
       buildAppInteractionState({
         activePage,
-        hasError: Boolean(workspaceData.error || outputBundle.error),
+        hasError: Boolean(
+          workspaceData.error ||
+            outputBundle.error ||
+            activeProjectRegistryStatus === "error" ||
+            activeProjectRegistryStatus === "missing",
+        ),
         onboardingComplete,
-        projectLoading: projectFilesState.loading || workspaceData.source === "loading",
+        projectLoading:
+          activeProjectRegistryStatus === "loading" || projectFilesState.loading || workspaceData.source === "loading",
         projectRoot,
         providerConnected: Boolean(connectedProvider),
         workspaceBlocked: Boolean(stateStatusState.status?.blockers.length),
       }),
     [
       activePage,
+      activeProjectRegistryStatus,
       connectedProvider,
       onboardingComplete,
       outputBundle.error,
@@ -334,30 +388,118 @@ function App() {
     }
   }, [activeIssueId, selectedTaskId, tasks]);
 
+  function setActivePage(page: AppPage) {
+    setProjectRegistry((current) => setProjectPage(current, current.activeProjectRoot, page));
+  }
+
+  function handleSelectProject(projectRootToSelect: string) {
+    setProjectRegistry((current) => selectProject(current, projectRootToSelect));
+    setTaskSearch("");
+    setOutputRefreshToken((current) => current + 1);
+  }
+
+  function handleToggleProject(projectRootToToggle: string) {
+    setProjectRegistry((current) => toggleProjectExpanded(current, projectRootToToggle));
+  }
+
+  function handleRemoveProject(projectRootToRemove: string) {
+    const removingActiveProject = projectRootToRemove === projectRoot;
+    setProjectRegistry((current) => removeProject(current, projectRootToRemove));
+    if (removingActiveProject) {
+      setSelectedTaskId(null);
+      setSelectedDeliveryRunId(null);
+      setSelectedAuditId(null);
+      setTaskSearch("");
+      setTaskActionFeedback(null);
+      setOutputRefreshToken((current) => current + 1);
+    }
+  }
+
+  function handleProjectPageChange(projectRootToSelect: string, page: AppPage) {
+    setProjectRegistry((current) => setProjectPage(current, projectRootToSelect, page));
+    setTaskSearch("");
+    setOutputRefreshToken((current) => current + 1);
+  }
+
   async function chooseProjectFolder() {
     if (isBrowserPreviewRuntime()) {
-      setProjectRoot(BROWSER_PREVIEW_PROJECT_ROOT);
+      setProjectRegistry((current) =>
+        upsertProject(
+          current,
+          createProjectRef({
+            expanded: true,
+            lastActivePage: "home",
+            name: projectNameFromPath(BROWSER_PREVIEW_PROJECT_ROOT) || "AgentFlow",
+            root: BROWSER_PREVIEW_PROJECT_ROOT,
+            status: "ready",
+          }),
+        ),
+      );
       setOnboardingFeedback("浏览器预览使用 mock 项目现场，不会读取或写入真实本地项目。");
       return;
     }
 
+    let normalizedRoot: string | null = null;
     try {
       const selectedRoot = await invoke<string | null>("choose_existing_project_folder");
-      const normalizedRoot = selectedRoot ? normalizeProjectRootKey(selectedRoot) : null;
+      normalizedRoot = selectedRoot ? normalizeProjectRootKey(selectedRoot) : null;
       if (!normalizedRoot) {
         return;
       }
 
+      const projectRootToAdd = normalizedRoot;
+      const projectName = projectNameFromPath(projectRootToAdd) || "本地项目";
       setOnboardingFeedback("正在准备项目工作规则和现场。");
+      setProjectRegistry((current) =>
+        upsertProject(
+          current,
+          createProjectRef({
+            expanded: true,
+            lastActivePage: "home",
+            name: projectName,
+            root: projectRootToAdd,
+            status: "loading",
+          }),
+        ),
+      );
       await invoke("prepare_local_project_workspace", {
         appLocale: detectAppLocale(),
-        projectRoot: normalizedRoot,
+        projectRoot: projectRootToAdd,
       });
-      setProjectRoot(normalizedRoot);
+      setProjectRegistry((current) =>
+        upsertProject(
+          current,
+          createProjectRef({
+            expanded: true,
+            lastActivePage: "home",
+            name: projectName,
+            root: projectRootToAdd,
+            status: "ready",
+          }),
+        ),
+      );
       setOnboardingFeedback("项目已准备好。");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setOnboardingFeedback(message);
+      if (normalizedRoot) {
+        const failedProjectRoot = normalizedRoot;
+        setProjectRegistry((current) =>
+          upsertProject(
+            current,
+            {
+              ...createProjectRef({
+                expanded: true,
+                lastActivePage: "home",
+                name: projectNameFromPath(failedProjectRoot) || "本地项目",
+                root: failedProjectRoot,
+                status: "error",
+              }),
+              error: message,
+            },
+          ),
+        );
+      }
       reportProjectFilesError(message);
     }
   }
@@ -448,9 +590,6 @@ function App() {
   function handleLogin(provider: Provider) {
     setConnectedProvider(provider);
     setFirstRunOpen(!onboardingComplete);
-    if (isBrowserPreviewRuntime()) {
-      setProjectRoot(BROWSER_PREVIEW_PROJECT_ROOT);
-    }
   }
 
   function completeOnboarding() {
@@ -460,33 +599,48 @@ function App() {
     refreshWorkspace();
   }
 
-  if (!connectedProvider) {
-    return <LoginModal onConnect={handleLogin} />;
-  }
-
   const projectDisplayName = projectNameFromPath(projectRoot ?? "") || "未选择项目";
-  const toolbar = (
+  const projectAvailabilityStatus =
+    activeProjectRegistryStatus === "loading" ||
+    activeProjectRegistryStatus === "error" ||
+    activeProjectRegistryStatus === "missing"
+      ? activeProjectRegistryStatus
+      : null;
+  const navigationProjects = projectsWithLiveStatus(projects, projectRoot, projectFilesState, stateStatusState);
+  const activeNavigationProject = navigationProjects.find((project) => project.root === projectRoot) ?? null;
+  const toolbar = projectRoot ? (
     <Toolbar
       activePage={activePage}
       onRefresh={refreshWorkspace}
       onSearchChange={setTaskSearch}
       taskSearch={taskSearch}
     />
-  );
-  const titlebarStatus = titlebarStatusText(appInteractionState, stateStatusState.status?.currentStage, selectedTask);
+  ) : null;
+  const titlebarProjectName = projectRoot ? projectDisplayName : "AgentFlow";
+  const titlebarStatus = projectRoot
+    ? titlebarStatusText(appInteractionState, stateStatusState.status?.currentStage, selectedTask)
+    : "未选择项目 · 本地模式";
 
   return (
     <>
       <AppShell
         activePage={activePage}
+        activeProjectRoot={activeProjectRoot}
+        expandedProjectRoots={expandedProjectRoots}
         inspector={null}
-        onPageChange={setActivePage}
-        projectName={projectDisplayName}
+        onAddProject={chooseProjectFolder}
+        onPageChange={handleProjectPageChange}
+        onRemoveProject={handleRemoveProject}
+        onSelectProject={handleSelectProject}
+        onToggleProject={handleToggleProject}
+        projectName={titlebarProjectName}
         projectRoot={projectRoot}
+        projects={navigationProjects}
         statusBar={
           <StatusBar
             projectName={projectDisplayName}
             projectRoot={projectRoot}
+            projectStatus={activeNavigationProject?.status ?? null}
             appInteractionState={appInteractionState}
             stateStatus={stateStatusState.status}
           />
@@ -494,7 +648,16 @@ function App() {
         titlebarStatus={titlebarStatus}
         toolbar={toolbar}
       >
-        {activePage === "home" ? (
+        {!projectRoot ? <EmptyProjectPage onAddProject={chooseProjectFolder} /> : null}
+        {projectRoot && projectAvailabilityStatus ? (
+          <ProjectAvailabilityPage
+            error={activeProject?.error}
+            onAddProject={chooseProjectFolder}
+            projectName={projectDisplayName}
+            status={projectAvailabilityStatus}
+          />
+        ) : null}
+        {projectRoot && !projectAvailabilityStatus && activePage === "home" ? (
           <ProjectHomePage
             connectedProvider={connectedProvider}
             nextStep={nextStep}
@@ -513,7 +676,7 @@ function App() {
             workspaceData={workspaceData}
           />
         ) : null}
-        {activePage === "tasks" ? (
+        {projectRoot && !projectAvailabilityStatus && activePage === "tasks" ? (
           <TasksPage
             actionFeedback={taskActionFeedback}
             actions={taskInteractionState.actions}
@@ -525,7 +688,7 @@ function App() {
             tasks={filteredTasks}
           />
         ) : null}
-        {activePage === "files" ? (
+        {projectRoot && !projectAvailabilityStatus && activePage === "files" ? (
           <FilesPage
             fileState={projectFilesState}
             onChangeViewMode={setProjectFileViewMode}
@@ -535,7 +698,7 @@ function App() {
             onSelectFile={selectProjectFile}
           />
         ) : null}
-        {activePage === "delivery" ? (
+        {projectRoot && !projectAvailabilityStatus && activePage === "delivery" ? (
           <DeliveryPage
             onOpenAudit={() => setActivePage("audit")}
             onSelectDelivery={setSelectedDeliveryRunId}
@@ -545,14 +708,14 @@ function App() {
             selectedTask={selectedTask}
           />
         ) : null}
-        {activePage === "audit" ? (
+        {projectRoot && !projectAvailabilityStatus && activePage === "audit" ? (
           <AuditPage
             onSelectAudit={setSelectedAuditId}
             outputBundle={outputBundle}
             selectedAuditId={selectedAuditId}
           />
         ) : null}
-        {activePage === "advanced" ? (
+        {projectRoot && !projectAvailabilityStatus && activePage === "advanced" ? (
           <AdvancedPage
             agentManualState={agentManualState}
             executeStatusState={executeStatusState}
@@ -898,32 +1061,63 @@ function AgentBrief({ className, title, value }: { className?: string; title: st
 
 function AppShell({
   activePage,
+  activeProjectRoot,
   children,
+  expandedProjectRoots,
   inspector,
+  onAddProject,
   onPageChange,
+  onRemoveProject,
+  onSelectProject,
+  onToggleProject,
   projectName,
   projectRoot,
+  projects,
   statusBar,
   titlebarStatus,
   toolbar,
 }: {
   activePage: AppPage;
+  activeProjectRoot: string | null;
   children: ReactNode;
+  expandedProjectRoots: Set<string>;
   inspector: ReactNode;
-  onPageChange: (page: AppPage) => void;
+  onAddProject: () => void;
+  onPageChange: (projectRoot: string, page: AppPage) => void;
+  onRemoveProject: (projectRoot: string) => void;
+  onSelectProject: (projectRoot: string) => void;
+  onToggleProject: (projectRoot: string) => void;
   projectName: string;
   projectRoot: string | null;
+  projects: AgentFlowProjectRef[];
   statusBar: ReactNode;
   titlebarStatus: string;
   toolbar: ReactNode;
 }) {
   const runtimeChromeClass = isBrowserPreviewRuntime() ? "browser-preview-titlebar" : "native-titlebar";
+  const workspaceClassName = [
+    "v16-workspace",
+    inspector ? "with-inspector" : null,
+    toolbar ? null : "without-toolbar",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <AppFrame className={`v16-app ${runtimeChromeClass} ${appearanceThemeClass}`} data-agentflow-ux="v16">
       <TitleBar projectName={projectName} statusText={titlebarStatus} />
-      <ProjectTree activePage={activePage} onPageChange={onPageChange} projectName={projectName} />
-      <section className={inspector ? "v16-workspace with-inspector" : "v16-workspace"}>
+      <ProjectTree
+        activePage={activePage}
+        activeProjectRoot={activeProjectRoot}
+        expandedProjectRoots={expandedProjectRoots}
+        onAddProject={onAddProject}
+        onPageChange={onPageChange}
+        onRemoveProject={onRemoveProject}
+        onSelectProject={onSelectProject}
+        onToggleProject={onToggleProject}
+        projects={projects}
+      />
+      <section className={workspaceClassName}>
         {toolbar}
         <section className="v16-main-content">{children}</section>
         {inspector}
@@ -969,40 +1163,136 @@ function WindowDots() {
 
 function ProjectTree({
   activePage,
+  activeProjectRoot,
+  expandedProjectRoots,
+  onAddProject,
   onPageChange,
-  projectName,
+  onRemoveProject,
+  onSelectProject,
+  onToggleProject,
+  projects,
 }: {
   activePage: AppPage;
-  onPageChange: (page: AppPage) => void;
-  projectName: string;
+  activeProjectRoot: string | null;
+  expandedProjectRoots: Set<string>;
+  onAddProject: () => void;
+  onPageChange: (projectRoot: string, page: AppPage) => void;
+  onRemoveProject: (projectRoot: string) => void;
+  onSelectProject: (projectRoot: string) => void;
+  onToggleProject: (projectRoot: string) => void;
+  projects: AgentFlowProjectRef[];
 }) {
+  const [pendingRemoveProject, setPendingRemoveProject] = useState<AgentFlowProjectRef | null>(null);
+
+  function confirmRemoveProject() {
+    if (!pendingRemoveProject) {
+      return;
+    }
+    onRemoveProject(pendingRemoveProject.root);
+    setPendingRemoveProject(null);
+  }
+
   return (
     <Sidebar className="v16-project-tree" aria-label="项目导航">
-      <header>
-        <span className="v16-tree-mark" aria-hidden="true">
-          AF
-        </span>
-        <div>
-          <strong>{projectName}</strong>
-          <span>本地项目</span>
-        </div>
-      </header>
-      <nav>
-        {pages.map((page) => {
-          const Icon = page.icon;
-          return (
+      <button className="v16-add-project-button" onClick={onAddProject} type="button">
+        <Plus size={14} />
+        <span>添加项目</span>
+      </button>
+      <div className="v16-project-tree-scroll">
+        <p className="v16-project-tree-label">所有项目</p>
+        {projects.length ? (
+          <nav className="v16-project-tree-list">
+            {projects.map((project) => {
+              const expanded = expandedProjectRoots.has(project.root);
+              const active = project.root === activeProjectRoot;
+              return (
+                <div className="v16-project-group" key={project.root}>
+                  <div className={active ? "v16-project-node active" : "v16-project-node"}>
+                    <button
+                      aria-expanded={expanded}
+                      aria-label={`${expanded ? "收起" : "展开"}${project.name}`}
+                      className="v16-project-toggle"
+                      data-agentflow-project-root={project.root}
+                      data-agentflow-project-toggle
+                      onClick={() => onToggleProject(project.root)}
+                      type="button"
+                    >
+                      {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    </button>
+                    <button
+                      className="v16-project-label"
+                      data-agentflow-project-root={project.root}
+                      data-agentflow-project-select
+                      onClick={() => onSelectProject(project.root)}
+                      title={project.root}
+                      type="button"
+                    >
+                      <span
+                        aria-label={projectStatusLabel(project.status)}
+                        className={`v16-project-status-dot ${project.status}`}
+                        role="img"
+                        title={projectStatusLabel(project.status)}
+                      />
+                      <span className="v16-project-name">{project.name}</span>
+                    </button>
+                    <button
+                      aria-label={`从列表移除 ${project.name}`}
+                      className="v16-project-remove"
+                      data-agentflow-project-remove
+                      data-agentflow-project-root={project.root}
+                      onClick={() => setPendingRemoveProject(project)}
+                      title="从列表移除，不删除本地文件"
+                      type="button"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                  {expanded ? (
+                    <div className="v16-project-page-list">
+                      {pages.map((page) => {
+                        const Icon = page.icon;
+                        return (
+                          <button
+                            className={active && page.id === activePage ? "active" : ""}
+                            data-agentflow-page-id={page.id}
+                            data-agentflow-project-root={project.root}
+                            key={`${project.root}-${page.id}`}
+                            onClick={() => onPageChange(project.root, page.id)}
+                            type="button"
+                          >
+                            <Icon size={14} />
+                            <span>{page.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </nav>
+        ) : null}
+      </div>
+      {pendingRemoveProject ? (
+        <div className="v16-project-remove-dialog" role="dialog" aria-modal="false" aria-label="从列表移除项目">
+          <strong>从列表移除 {pendingRemoveProject.name}</strong>
+          <p>这只会把项目从 AgentFlow 侧边栏移除，不会删除你的本地文件。</p>
+          <div>
+            <button onClick={() => setPendingRemoveProject(null)} type="button">
+              取消
+            </button>
             <button
-              className={page.id === activePage ? "active" : ""}
-              key={page.id}
-              onClick={() => onPageChange(page.id)}
+              className="danger"
+              data-agentflow-project-remove-confirm
+              data-agentflow-project-root={pendingRemoveProject.root}
+              onClick={confirmRemoveProject}
               type="button"
             >
-              <Icon size={17} />
-              <span>{page.label}</span>
+              从列表移除
             </button>
-          );
-        })}
-      </nav>
+          </div>
+        </div>
+      ) : null}
     </Sidebar>
   );
 }
@@ -1040,6 +1330,75 @@ function Toolbar({
         </button>
       </div>
     </TopBar>
+  );
+}
+
+function EmptyProjectPage({ onAddProject }: { onAddProject: () => void }) {
+  return (
+    <section className="v16-page v16-empty-project-page" data-agentflow-page="empty-project">
+      <Panel className="v16-empty-project-card">
+        <div className="v16-empty-project-mark" aria-hidden="true">
+          <FolderOpen size={18} />
+        </div>
+        <div className="v16-empty-project-copy">
+          <p className="v16-empty-project-kicker">项目列表</p>
+          <h2>还没有项目</h2>
+          <p>添加一个本地项目后，AgentFlow 会准备任务、文件、交付和审计工作区。</p>
+          <p className="v16-empty-project-note">移除项目不会删除你的本地文件。</p>
+        </div>
+        <ActionBar>
+          <ActionButton onClick={onAddProject} variant="primary">
+            添加本地项目
+          </ActionButton>
+        </ActionBar>
+      </Panel>
+    </section>
+  );
+}
+
+function ProjectAvailabilityPage({
+  error,
+  onAddProject,
+  projectName,
+  status,
+}: {
+  error?: string | null;
+  onAddProject: () => void;
+  projectName: string;
+  status: "loading" | "error" | "missing";
+}) {
+  const content = {
+    error: {
+      body: "请检查项目路径是否还存在，或重新添加项目。",
+      title: "项目读取失败",
+    },
+    loading: {
+      body: "正在准备 AgentFlow 工作区。",
+      title: "正在读取项目",
+    },
+    missing: {
+      body: "这个项目可能被移动或删除了。",
+      title: "项目路径不存在",
+    },
+  }[status];
+
+  return (
+    <section className="v16-page v16-empty-project-page" data-agentflow-page="project-unavailable">
+      <Panel title={content.title}>
+        <p>
+          <strong>{projectName}</strong>
+        </p>
+        <p>{content.body}</p>
+        {error ? <p>{error}</p> : null}
+        {status !== "loading" ? (
+          <ActionBar>
+            <ActionButton onClick={onAddProject} variant="primary">
+              重新添加项目
+            </ActionButton>
+          </ActionBar>
+        ) : null}
+      </Panel>
+    </section>
   );
 }
 
@@ -1740,18 +2099,35 @@ function StatusBar({
   appInteractionState,
   projectName,
   projectRoot,
+  projectStatus,
   stateStatus,
 }: {
   appInteractionState: AppInteractionState;
   projectName: string;
   projectRoot: string | null;
+  projectStatus: AgentFlowProjectStatus | null;
   stateStatus: StateStatusState["status"];
 }) {
+  const projectStatusSummary = statusBarProjectSummary(projectRoot, projectStatus);
+  if (!projectRoot) {
+    return (
+      <FoundationStatusBar className="v16-status-bar" aria-label="底部状态摘要">
+        <section>
+          <strong>未选择项目</strong>
+          <span>本地模式</span>
+        </section>
+        <section>
+          <span>⌘K</span>
+        </section>
+      </FoundationStatusBar>
+    );
+  }
+
   return (
     <FoundationStatusBar className="v16-status-bar" aria-label="底部状态摘要">
       <section>
-        <StatusDot status={projectRoot ? "ready" : "idle"} />
-        <span>{projectRoot ? "ready" : "waiting"}</span>
+        <StatusDot status={projectStatusSummary.dot} />
+        <span>{projectStatusSummary.label}</span>
         <strong>{projectName}</strong>
         <span>
           <GitBranch size={13} /> local-only
@@ -1764,6 +2140,28 @@ function StatusBar({
       </section>
     </FoundationStatusBar>
   );
+}
+
+function statusBarProjectSummary(
+  projectRoot: string | null,
+  projectStatus: AgentFlowProjectStatus | null,
+): { dot: StatusChipStatus; label: string } {
+  if (!projectRoot) {
+    return { dot: "idle", label: "waiting" };
+  }
+  if (projectStatus === "loading") {
+    return { dot: "working", label: "loading" };
+  }
+  if (projectStatus === "blocked") {
+    return { dot: "blocked", label: "blocked" };
+  }
+  if (projectStatus === "error") {
+    return { dot: "failed", label: "error" };
+  }
+  if (projectStatus === "missing") {
+    return { dot: "idle", label: "missing" };
+  }
+  return { dot: "ready", label: "ready" };
 }
 
 function CompanionShell({
@@ -2021,6 +2419,49 @@ function statusChipForDisplayStatus(status: IssueDisplayStatus = "backlog"): Sta
     review: "warning",
   };
   return chips[status];
+}
+
+function projectStatusLabel(status: AgentFlowProjectStatus) {
+  const labels: Record<AgentFlowProjectStatus, string> = {
+    blocked: "有阻断",
+    error: "读取失败",
+    loading: "正在读取",
+    missing: "项目路径不存在",
+    ready: "已就绪",
+  };
+  return labels[status];
+}
+
+function projectsWithLiveStatus(
+  projects: AgentFlowProjectRef[],
+  activeProjectRoot: string | null,
+  projectFilesState: ProjectFilesState,
+  stateStatusState: StateStatusState,
+) {
+  return projects.map((project) =>
+    project.root === activeProjectRoot
+      ? {
+          ...project,
+          status: project.status === "missing" ? project.status : activeProjectStatus(projectFilesState, stateStatusState),
+        }
+      : project,
+  );
+}
+
+function activeProjectStatus(
+  projectFilesState: ProjectFilesState,
+  stateStatusState: StateStatusState,
+): AgentFlowProjectStatus {
+  if (projectFilesState.error || stateStatusState.error) {
+    return "error";
+  }
+  if (projectFilesState.source === "loading" || stateStatusState.source === "loading") {
+    return "loading";
+  }
+  if (stateStatusState.status?.blockers.length) {
+    return "blocked";
+  }
+  return "ready";
 }
 
 function displayRiskLabelZh(risk?: string | null) {

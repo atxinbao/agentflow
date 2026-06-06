@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BROWSER_PREVIEW_PROJECT_ROOT,
   createBrowserPreviewProjectFileContent,
@@ -23,13 +23,33 @@ import { useProjectDirectoryPageLoader } from "./useProjectDirectoryPages";
 import { useProjectFileSearch } from "./useProjectFileSearch";
 import { useProjectFileTextRange } from "./useProjectFileTextRange";
 
+function emptyProjectFilesState(viewMode: ProjectFileViewMode): ProjectFilesState {
+  return {
+    snapshot: null,
+    content: null,
+    selectedPath: null,
+    error: null,
+    source: "idle",
+    viewMode,
+    loading: false,
+    loadingPath: null,
+    directoryPages: {},
+    searchQuery: "",
+    searchSnapshot: null,
+    searchLoading: false,
+    recentPaths: [],
+  };
+}
+
 export function useProjectFiles(selectedProjectRoot: string | null) {
   const [projectFilesState, setProjectFilesState] = useState<ProjectFilesState>(() => {
     const persisted = readPersistedProjectFileReaderState(selectedProjectRoot);
     const initialViewMode = persisted.viewMode ?? DEFAULT_PROJECT_FILE_VIEW_MODE;
+    if (!selectedProjectRoot) {
+      return emptyProjectFilesState(initialViewMode);
+    }
     if (isBrowserPreviewRuntime()) {
-      const projectRoot = selectedProjectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT;
-      const filesSnapshot = createBrowserPreviewProjectFilesSnapshot(projectRoot, initialViewMode);
+      const filesSnapshot = createBrowserPreviewProjectFilesSnapshot(selectedProjectRoot, initialViewMode);
       const selectedPath =
         persisted.selectedPath && findProjectFileEntry(filesSnapshot.entries, persisted.selectedPath)
           ? persisted.selectedPath
@@ -67,6 +87,14 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
     };
   });
   const requestCounter = useRef(0);
+
+  useEffect(() => {
+    if (selectedProjectRoot) {
+      return;
+    }
+    requestCounter.current += 1;
+    setProjectFilesState((current) => emptyProjectFilesState(current.viewMode));
+  }, [selectedProjectRoot]);
 
   const currentProjectRoot = useCallback(
     () => projectFilesState.snapshot?.projectRoot ?? selectedProjectRoot,
@@ -169,8 +197,12 @@ export function useProjectFiles(selectedProjectRoot: string | null) {
       const selectedPathPreference = selectedPathHint ?? persistedState.selectedPath ?? projectFilesState.selectedPath;
       const requestId = requestCounter.current + 1;
       requestCounter.current = requestId;
+      if (!projectRoot) {
+        setProjectFilesState(emptyProjectFilesState(viewMode));
+        return;
+      }
       if (isBrowserPreviewRuntime()) {
-        const filesSnapshot = createBrowserPreviewProjectFilesSnapshot(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT, viewMode);
+        const filesSnapshot = createBrowserPreviewProjectFilesSnapshot(projectRoot, viewMode);
         const selectedPath =
           selectedPathPreference && findProjectFileEntry(filesSnapshot.entries, selectedPathPreference)
             ? selectedPathPreference
