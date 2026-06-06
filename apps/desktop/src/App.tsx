@@ -32,7 +32,6 @@ import {
   MetricCard,
   PageHeader,
   Panel,
-  ReadOnlyBadge,
   RiskBadge,
   Section,
   Sidebar,
@@ -447,7 +446,7 @@ function App() {
     }
 
     if (action === "view-requirement") {
-      setTaskActionFeedback("需求详情来自 approved SPEC。普通页面暂不展示 raw SPEC。");
+      setTaskActionFeedback("需求详情来自已确认规格。普通页面暂不展示原始规格。");
       return;
     }
 
@@ -1074,11 +1073,11 @@ function ProjectHomePage({
           </button>
           <button onClick={onOpenDelivery} type="button">
             <strong>交付结果</strong>
-            <span>{outputSummary?.releaseDeliveries ?? 0} 个 delivery，{outputSummary?.evidence ?? 0} 份 evidence</span>
+            <span>{outputSummary?.releaseDeliveries ?? 0} 个交付，{outputSummary?.evidence ?? 0} 份证据</span>
           </button>
           <button onClick={onOpenAudit} type="button">
             <strong>审计报告</strong>
-            <span>{outputSummary?.audits ?? 0} 个 audit，交付完成后可以请求审计。</span>
+            <span>{outputSummary?.audits ?? 0} 个审计，交付完成后可以请求审计。</span>
           </button>
         </div>
       </Panel>
@@ -1091,8 +1090,8 @@ function ProjectHomePage({
         <div className="v16-summary-grid">
           <MetricCard label="文件数" value={panelStatus?.fileCount ?? manifest?.sourceFiles ?? 0} />
           <MetricCard label="语言数" value={manifest?.languages.length ?? 0} />
-          <MetricCard label="Diagnostics" value={panelStatus?.degradedReasons?.length ?? 0} />
-          <MetricCard label="Tests" value={manifest?.testFiles ?? 0} />
+          <MetricCard label="诊断" value={panelStatus?.degradedReasons?.length ?? 0} />
+          <MetricCard label="测试" value={manifest?.testFiles ?? 0} />
         </div>
         <CompactTable
           columns={[
@@ -1101,8 +1100,8 @@ function ProjectHomePage({
           ]}
           rows={[
             { id: "root", label: "项目", value: projectRoot ?? "未选择项目" },
-            { id: "git", label: "Git 状态", value: "local-only" },
-            { id: "context", label: "Context Pack", value: projectPanelState.latestContextPack ? "已生成" : "等待需要时生成" },
+            { id: "git", label: "Git 状态", value: "仅本地" },
+            { id: "context", label: "上下文包", value: projectPanelState.latestContextPack ? "已生成" : "等待需要时生成" },
             { id: "scan", label: "最近索引时间", value: panelStatus?.updatedAt ? formatTimestamp(panelStatus.updatedAt) : "未记录" },
           ]}
         />
@@ -1131,7 +1130,7 @@ function NextStepCard({
   return (
     <Panel className="v16-next-step-card" title={nextStep.title} tone={nextStep.status === "warning" ? "warning" : "neutral"}>
       <div className="v16-next-step-content">
-        <StatusBadge status={nextStep.status}>{nextStep.status === "ready" ? "Ready" : "Warning"}</StatusBadge>
+        <StatusBadge status={nextStep.status}>{nextStep.status === "ready" ? "就绪" : "提醒"}</StatusBadge>
         <p>{nextStep.description}</p>
         <small>{nextStep.reason}</small>
       </div>
@@ -1295,10 +1294,10 @@ function TaskDetail({
       <DescriptionList
         items={[
           ["智能体", "执行助手"],
-          ["内部状态", task.status],
+          ["状态", displayStatusLabelZh(task.displayStatus)],
           ["风险", displayRiskLabelZh(task.riskLevel)],
           ["交给 Codex", handedOff ? "已做本地标记" : "未标记"],
-          ["来源 SPEC", task.projectId ?? "approved SPEC"],
+          ["来源规格", task.projectId ?? "已确认规格"],
         ]}
       />
       <SectionList title="范围" items={task.scope} />
@@ -1427,7 +1426,7 @@ function DeliveryList({
             type="button"
           >
             <strong>{delivery.runId}</strong>
-            <span>{delivery.issueId || "未记录 Issue"} · {delivery.status}</span>
+            <span>{delivery.issueId || "未记录任务"} · {artifactStatusLabel(delivery.status)}</span>
             <small>{formatTimestamp(delivery.updatedAt)}</small>
           </button>
         ))
@@ -1456,7 +1455,9 @@ function DeliveryDetail({
       <header>
         <p className="v16-kicker">交付摘要</p>
         <h2>{delivery?.runId ?? "还没有交付材料"}</h2>
-        <StatusBadge status={delivery ? "ready" : "idle"}>{delivery?.status ?? "等待写回"}</StatusBadge>
+        <StatusBadge status={delivery ? "ready" : "idle"}>
+          {delivery ? artifactStatusLabel(delivery.status) : "等待写回"}
+        </StatusBadge>
       </header>
       <div className="v16-summary-grid">
         <MetricCard label="证据" value={outputStatusState.status?.summary.evidence ?? evidence.length} />
@@ -1542,7 +1543,7 @@ function AuditList({
             type="button"
           >
             <strong>{audit.auditId}</strong>
-            <span>{audit.status} · {audit.requestedBy}</span>
+            <span>{artifactStatusLabel(audit.status)} · {audit.requestedBy}</span>
             <small>{formatTimestamp(audit.requestedAt)}</small>
           </button>
         ))
@@ -1570,17 +1571,17 @@ function AuditReport({
         <p className="v16-kicker">审计报告</p>
         <h2>{selectedAudit?.auditId ?? report?.audit.auditId ?? "未请求审计"}</h2>
         <StatusBadge status={selectedAudit || report ? "warning" : "idle"}>
-          {selectedAudit?.status ?? report?.audit.status ?? "未请求"}
+          {artifactStatusLabel(selectedAudit?.status ?? report?.audit.status ?? "未请求")}
         </StatusBadge>
       </header>
-      <SectionList title="审计结论" items={[report?.reportMarkdown.split("\n").slice(0, 3).join(" ") || "选择 delivery 并填写原因后可请求人工审计。"]} />
+      <SectionList title="审计结论" items={[report?.reportMarkdown.split("\n").slice(0, 3).join(" ") || "选择交付并填写原因后可请求人工审计。"]} />
       <SectionList
         title="发现项"
         items={findings.length ? findings.map((finding) => `${finding.severity ?? "info"}：${finding.summary ?? finding.id ?? "发现项"}`) : ["暂无发现项。"]}
       />
       <JsonSummary title="证据映射" value={report?.evidenceMap ?? { evidence: [], releaseDelivery: [] }} />
       <JsonSummary title="追溯关系" value={report?.traceability ?? { spec: "waiting", issue: "waiting", delivery: "waiting" }} />
-      <SectionList title="范围检查" items={["对照 SPEC / Issue / Delivery / Evidence。"]} />
+      <SectionList title="范围检查" items={["对照规格、任务、交付和证据。"]} />
       <SectionList title="验证检查" items={["检查验证命令是否记录并通过。"]} />
       <SectionList title="处理建议" items={["建议：补充证据", "建议：返工", "建议：接受"]} />
       <SectionList title="当前版本限制" items={["这里只读展示建议，不写接受 / 返工 / 补证据状态。"]} />
@@ -1610,13 +1611,13 @@ function AdvancedPage({
   workspaceData: WorkspaceDataState;
 }) {
   const categories = [
-    { id: "state", label: "State", value: stateStatusState },
-    { id: "panel", label: "Panel", value: projectPanelState },
-    { id: "input", label: "Input", value: inputStatusState },
-    { id: "execute", label: "Execute", value: executeStatusState },
-    { id: "output", label: "Output", value: { outputBundle, outputStatusState } },
-    { id: "audit", label: "Audit", value: outputBundle.auditReport },
-    { id: "settings", label: "Settings", value: { agentManualState, projectFilesState, workspaceData } },
+    { id: "state", label: "状态", value: stateStatusState },
+    { id: "panel", label: "面板", value: projectPanelState },
+    { id: "input", label: "输入", value: inputStatusState },
+    { id: "execute", label: "执行", value: executeStatusState },
+    { id: "output", label: "输出", value: { outputBundle, outputStatusState } },
+    { id: "audit", label: "审计", value: outputBundle.auditReport },
+    { id: "settings", label: "设置", value: { agentManualState, projectFilesState, workspaceData } },
   ];
   const [activeCategory, setActiveCategory] = useState(categories[0].id);
   const selectedCategory = categories.find((category) => category.id === activeCategory) ?? categories[0];
@@ -1659,7 +1660,6 @@ function AdvancedStateViewer({
       <section className="v16-advanced-list">
         <h2>{selectedCategory.label}</h2>
         <p>{advancedCategorySummary(selectedCategory.id)}</p>
-        <ReadOnlyBadge>只读诊断</ReadOnlyBadge>
       </section>
       <JsonReader value={selectedCategory.value} />
     </div>
@@ -1820,12 +1820,12 @@ function JsonSummary({ title, value }: { title: string; value: unknown }) {
 }
 
 const displayStatusColumns: Array<{ id: IssueDisplayStatus; label: string }> = [
-  { id: "backlog", label: "Backlog" },
-  { id: "ready", label: "Ready" },
-  { id: "in-progress", label: "In Progress" },
-  { id: "review", label: "Review" },
-  { id: "done", label: "Done" },
-  { id: "cancel", label: "Cancel" },
+  { id: "backlog", label: "待确认" },
+  { id: "ready", label: "可交给 Codex" },
+  { id: "in-progress", label: "等待写回" },
+  { id: "review", label: "待审计" },
+  { id: "done", label: "已完成" },
+  { id: "cancel", label: "已取消" },
 ];
 
 const displayStatusOrder = new Map(displayStatusColumns.map((column, index) => [column.id, index]));
@@ -1990,7 +1990,7 @@ function buildNextStep(
     return {
       action: "请求人工审计",
       description: "Codex 已经返回交付材料，可以请求人工审计。",
-      reason: "交付页已有 delivery / evidence / validation 摘要。",
+      reason: "交付页已有交付、证据和验证摘要。",
       status: "ready",
       title: "可以审计交付结果",
     };
@@ -1998,8 +1998,8 @@ function buildNextStep(
 
   if ((inputStatus?.summary.approvedSpecs ?? 0) === 0) {
     return {
-      action: "继续整理 SPEC",
-      description: "还不能交给 Codex。原因是：这个需求还没有确认成 SPEC。",
+      action: "继续整理规格",
+      description: "还不能交给 Codex。原因是：这个需求还没有确认成规格。",
       reason: "Spec Agent 需要先整理需求，再由人确认。",
       status: "warning",
       title: "先确认需求",
@@ -2009,7 +2009,7 @@ function buildNextStep(
   if (selectedTask) {
     return {
       action: "复制 Codex 指令",
-      description: "这个任务已经有 approved SPEC 和 Issue。",
+      description: "这个任务已经有已确认规格和任务合同。",
       reason: selectedTask.id,
       status: "ready",
       title: "可以交给 Codex 了",
@@ -2059,6 +2059,32 @@ function buildNextActionLabel(action: string) {
   return labels[action] ?? action;
 }
 
+function artifactStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    accepted: "已接受",
+    approved: "已确认",
+    audit: "待审计",
+    audited: "已审计",
+    blocked: "阻断",
+    completed: "已完成",
+    done: "已完成",
+    failed: "失败",
+    missing: "缺失",
+    pass: "通过",
+    passed: "通过",
+    pending: "待处理",
+    ready: "就绪",
+    requested: "已请求",
+    review: "待审计",
+    validated: "已验证",
+    waiting: "等待",
+  };
+  if (!status) {
+    return "未记录";
+  }
+  return labels[status.toLowerCase()] ?? status;
+}
+
 function formatTimestamp(timestamp: number) {
   if (!timestamp) {
     return "未记录";
@@ -2092,12 +2118,12 @@ function advancedCategorySummary(categoryId: string) {
     audit: "展示审计索引和报告快照。这里不接受、返工或补证据。",
     execute: "展示执行状态快照。这里不继续执行，不清理锁。",
     input: "展示需求和 Issue 状态快照。普通页面只展示人能读懂的摘要。",
-    output: "展示 evidence、delivery、audit 的输出摘要。",
-    panel: "展示项目现场读取结果和 Context Pack 摘要。",
-    settings: "展示本地设置、文件 Reader 和工作台数据源状态。",
-    state: "展示全局派生状态、gate、blocker 和 next action。",
+    output: "展示证据、交付和审计输出摘要。",
+    panel: "展示项目现场读取结果和上下文包摘要。",
+    settings: "展示本地设置、文件阅读器和工作台数据源状态。",
+    state: "展示全局派生状态、门禁、阻断和下一步动作。",
   };
-  return summaries[categoryId] ?? "这里展示开发者调试信息。普通页面不显示 raw JSON。";
+  return summaries[categoryId] ?? "这里展示开发者调试信息。普通页面不显示原始 JSON。";
 }
 
 function lifecycleLabel(state: AppInteractionState["lifecycle"]) {
