@@ -82,6 +82,10 @@ mod tests {
             .is_file());
         assert!(dir
             .path()
+            .join(".agentflow/define/agent/roles.json")
+            .is_file());
+        assert!(dir
+            .path()
             .join(".agentflow/define/agent/skills/request-triage/SKILL.md")
             .is_file());
         assert!(dir
@@ -124,6 +128,11 @@ mod tests {
                 .unwrap()
                 .contains("Audit Agent is enabled for Release Audit V1")
         );
+        let roles =
+            fs::read_to_string(dir.path().join(".agentflow/define/agent/roles.json")).unwrap();
+        assert!(roles.contains("\"agentRole\": \"spec-agent\""));
+        assert!(roles.contains("\"agentRole\": \"build-agent\""));
+        assert!(roles.contains("\"agentRole\": \"audit-agent\""));
         assert!(dir
             .path()
             .join(".agentflow/define/agent/state/bootstrap.json")

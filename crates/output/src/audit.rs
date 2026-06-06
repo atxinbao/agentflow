@@ -16,6 +16,11 @@ use crate::{
     },
     validate::{validate_output_evidence, validate_release_delivery},
 };
+use agentflow_input::issue::{
+    AgentRole, DisplayStatus, InputIssue, InputIssueAudit, InputIssueKind, InputIssueModel,
+    InputIssueRelations, InputIssueStatus, InputPanelLink, InputPriority, InputRiskLevel,
+    InputSystemRecord, IssueCategory,
+};
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::{
@@ -131,6 +136,7 @@ pub fn ensure_release_auto_audits(project_root: impl AsRef<Path>) -> Result<Audi
 
     let releases = release_deliveries(&root)?;
     for release in releases {
+        write_release_auto_audit_issue(&root, &release)?;
         if release_auto_audit_exists(&root, &release)? {
             continue;
         }
@@ -303,6 +309,87 @@ fn next_audit_id(root: &Path) -> Result<String> {
         }
     }
     Ok(format!("audit-{:03}", max_id + 1))
+}
+
+fn write_release_auto_audit_issue(root: &Path, release: &OutputReleaseDelivery) -> Result<()> {
+    let issue_id = release_auto_audit_issue_id(&release.run_id);
+    let issue_dir = root.join(".agentflow/input/issues");
+    ensure_directory(&issue_dir)?;
+    let issue_path = issue_dir.join(format!("{issue_id}.json"));
+    if issue_path.is_file() {
+        return Ok(());
+    }
+
+    let now = unix_timestamp_seconds();
+    let issue = InputIssue {
+        version: "input-issue.v1".to_string(),
+        issue_id: issue_id.clone(),
+        issue_model: InputIssueModel::Direct,
+        issue_category: IssueCategory::Audit,
+        required_agent_role: AgentRole::AuditAgent,
+        source_spec_id: release.source_spec_id.clone(),
+        project_id: None,
+        title: format!("审计 Release {}", release.run_id),
+        summary: format!(
+            "检查 {} 是否符合已确认需求、任务、证据和交付边界。",
+            release.run_id
+        ),
+        kind: InputIssueKind::Validation,
+        priority: InputPriority::High,
+        status: InputIssueStatus::ReadyForExecute,
+        display_status: DisplayStatus::Ready,
+        risk_level: InputRiskLevel::High,
+        scope: vec![
+            format!("读取 {} 的 delivery.json", release.run_id),
+            "读取关联 SPEC / Issue / Evidence".to_string(),
+            "检查验证命令和结果".to_string(),
+            "检查是否有越界改动".to_string(),
+            "生成审计报告".to_string(),
+        ],
+        non_goals: vec![
+            "不修改用户源码".to_string(),
+            "不创建远程 PR".to_string(),
+            "不发布 GitHub Release".to_string(),
+            "不自动修复问题".to_string(),
+        ],
+        acceptance_criteria: vec![
+            format!(".agentflow/output/audit/{issue_id}/audit.json 存在"),
+            format!(".agentflow/output/audit/{issue_id}/audit-report.md 存在"),
+            format!(".agentflow/output/audit/{issue_id}/findings.json 存在"),
+            format!(".agentflow/output/audit/{issue_id}/evidence-map.json 存在"),
+            format!(".agentflow/output/audit/{issue_id}/traceability.json 存在"),
+        ],
+        validation_hints: vec![
+            "读取 release delivery、evidence、execute result 和 diff summary。".to_string(),
+            "只写 .agentflow/output/audit/**。".to_string(),
+        ],
+        relations: InputIssueRelations::default(),
+        panel: InputPanelLink::default(),
+        audit: Some(InputIssueAudit {
+            trigger: "release-auto".to_string(),
+            source_release_id: release.run_id.clone(),
+            source_run_id: Some(release.run_id.clone()),
+            expected_outputs: vec![
+                "audit.json".to_string(),
+                "audit-report.md".to_string(),
+                "findings.json".to_string(),
+                "evidence-map.json".to_string(),
+                "traceability.json".to_string(),
+            ],
+        }),
+        system: InputSystemRecord {
+            created_by: "agentflow-release-auto".to_string(),
+            created_at: now,
+            updated_at: now,
+            path: format!(".agentflow/input/issues/{issue_id}.json"),
+            revision: 1,
+        },
+    };
+    write_json(&issue_path, &issue)
+}
+
+fn release_auto_audit_issue_id(release_id: &str) -> String {
+    format!("audit-{release_id}")
 }
 
 fn release_deliveries(root: &Path) -> Result<Vec<OutputReleaseDelivery>> {

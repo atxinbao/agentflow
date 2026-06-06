@@ -1,5 +1,6 @@
 use crate::{
     lease::has_active_lease_for_run,
+    manager::assert_build_agent_run,
     model::{ExecuteCommandRecord, ExecuteCommandRequest, ExecutePlan, ExecuteRunStatus},
     storage::{
         canonical_project_root, next_named_id, read_json, rebuild_index, run_dir, run_process,
@@ -21,6 +22,8 @@ pub fn run_execute_command(
     if !has_active_lease_for_run(&root, &run_id)? {
         anyhow::bail!("run {} must acquire an active lease before command", run_id);
     }
+    let run = crate::storage::read_run(&root, &run_id)?;
+    assert_build_agent_run(&root, &run)?;
     let plan: ExecutePlan = read_json(&run_dir(&root, &run_id).join("plan.json"))?;
     let normalized = normalize_command(&request.program, &request.args);
     if !plan

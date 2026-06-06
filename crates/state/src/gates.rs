@@ -6,7 +6,8 @@ use crate::{
     },
     storage::{read_json, sorted_child_paths, unix_timestamp_seconds, write_json},
 };
-use agentflow_execute::{ExecutePreflight, ExecuteRunStatus};
+use agentflow_execute::{ExecutePreflight, ExecuteRun, ExecuteRunStatus};
+use agentflow_input::issue::{validate_agent_claim, AgentClaim};
 use anyhow::Result;
 use std::path::Path;
 
@@ -314,6 +315,45 @@ fn build_next_actions(gate: &WorkflowGateSnapshot) -> Vec<WorkflowNextAction> {
 fn collect_blockers(root: &Path) -> Result<Vec<WorkflowBlockedAction>> {
     let mut blockers = Vec::new();
     for run_dir in sorted_child_paths(&root.join(".agentflow/execute/runs"))? {
+        let run_path = run_dir.join("run.json");
+        let claim_path = run_dir.join("agent-claim.json");
+        if run_path.is_file() {
+            if let Ok(run) = read_json::<ExecuteRun>(&run_path) {
+                let issue = read_json(&root.join(&run.input.issue_path));
+                let claim = read_json::<AgentClaim>(&claim_path);
+                match (issue, claim) {
+                    (Ok(issue), Ok(claim)) => {
+                        if let Err(error) = validate_agent_claim(&issue, &claim) {
+                            blockers.push(WorkflowBlockedAction {
+                                action: "agent-role-mismatch".to_string(),
+                                reason: format!("Agent 角色不匹配：{error}"),
+                                source_path: Some(format!(
+                                    ".agentflow/execute/runs/{}/agent-claim.json",
+                                    run.run_id
+                                )),
+                            });
+                        }
+                    }
+                    (Ok(_), Err(error)) => blockers.push(WorkflowBlockedAction {
+                        action: "agent-role-mismatch".to_string(),
+                        reason: format!("Agent 写回缺少 agent-claim.json：{error}"),
+                        source_path: Some(format!(
+                            ".agentflow/execute/runs/{}/agent-claim.json",
+                            run.run_id
+                        )),
+                    }),
+                    (Err(error), _) => blockers.push(WorkflowBlockedAction {
+                        action: "agent-role-mismatch".to_string(),
+                        reason: format!("Agent 写回无法关联 Issue：{error}"),
+                        source_path: Some(format!(
+                            ".agentflow/execute/runs/{}/run.json",
+                            run.run_id
+                        )),
+                    }),
+                }
+            }
+        }
+
         let preflight_path = run_dir.join("preflight.json");
         if !preflight_path.is_file() {
             continue;

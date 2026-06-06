@@ -74,12 +74,63 @@ const LAYOUT_DIRECTORIES: &[&str] = &[
     ".agentflow/state/indexes",
 ];
 
-const LAYOUT_FILES: [(&str, &str); 4] = [
+const LAYOUT_FILES: [(&str, &str); 5] = [
+    (".agentflow/define/agent/roles.json", AGENT_ROLES_JSON),
     (".agentflow/define/spec/SPEC.md", SPEC_MANUAL),
     (".agentflow/define/tdd/TDD.md", TDD_MANUAL),
     (".agentflow/define/release/RELEASE.md", RELEASE_MANUAL),
     (".agentflow/define/audit/AUDIT.md", AUDIT_MANUAL),
 ];
+
+const AGENT_ROLES_JSON: &str = r#"{
+  "version": "agent-roles.v1",
+  "roles": [
+    {
+      "agentRole": "spec-agent",
+      "label": "需求助手",
+      "allowedIssueCategories": [],
+      "allowedWrites": [
+        ".agentflow/input/intake/**",
+        ".agentflow/input/specs/**",
+        ".agentflow/input/issues/**"
+      ],
+      "forbiddenWrites": [
+        ".agentflow/execute/**",
+        ".agentflow/output/release/**",
+        ".agentflow/output/audit/**"
+      ]
+    },
+    {
+      "agentRole": "build-agent",
+      "label": "执行助手",
+      "allowedIssueCategories": ["spec"],
+      "allowedWrites": [
+        ".agentflow/execute/**",
+        ".agentflow/output/evidence/**",
+        ".agentflow/output/release/**",
+        ".agentflow/state/events/**"
+      ],
+      "forbiddenWrites": [
+        ".agentflow/output/audit/**"
+      ]
+    },
+    {
+      "agentRole": "audit-agent",
+      "label": "审计助手",
+      "allowedIssueCategories": ["audit"],
+      "allowedWrites": [
+        ".agentflow/output/audit/**",
+        ".agentflow/state/events/**"
+      ],
+      "forbiddenWrites": [
+        ".agentflow/execute/**",
+        ".agentflow/output/evidence/**",
+        ".agentflow/output/release/**"
+      ]
+    }
+  ]
+}
+"#;
 
 pub(crate) fn prepare_workspace_layout(
     root: &Path,
@@ -538,6 +589,12 @@ After Release Delivery exists, AgentFlow must ensure one `release-auto` audit re
 
 `.agentflow/output/audit/<audit-id>/audit-request.json`
 
+AgentFlow must also ensure one audit issue under:
+
+`.agentflow/input/issues/audit-<release-id>.json`
+
+The audit issue must use `issueCategory=audit` and `requiredAgentRole=audit-agent`.
+
 ## V1 Boundary
 
 Build Agent may prepare release delivery artifacts.
@@ -552,6 +609,7 @@ Build Agent must not:
 - modify Approved SPEC
 - modify input issue facts
 - write audit reports
+- execute audit issues
 - create duplicate `release-auto` audit requests for the same Release Delivery
 
 ## Required Inputs

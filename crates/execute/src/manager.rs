@@ -10,7 +10,10 @@ use crate::{
         write_json, write_json_if_missing, write_run, EXECUTE_DIRECTORIES, EXECUTE_REQUIRED_FILES,
     },
 };
-use agentflow_input::issue::InputIssue;
+use agentflow_input::issue::{
+    validate_agent_claim, validate_agent_issue_permission, validate_agent_write_paths, AgentClaim,
+    AgentRole, AgentRolesDocument, InputIssue,
+};
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -107,6 +110,7 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
             issue.issue_id
         );
     }
+    validate_agent_issue_permission(&issue, &AgentRole::BuildAgent)?;
 
     let run_id = next_run_id(&root)?;
     let run_path = run_dir(&root, &run_id);
@@ -135,8 +139,8 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
         project_id: issue.project_id.clone(),
         risk_level: format!("{:?}", issue.risk_level).to_lowercase(),
         status: ExecuteRunStatus::Preflight,
-        agent_role: "Build Agent".to_string(),
-        created_by: "agent".to_string(),
+        agent_role: issue.required_agent_role.as_str().to_string(),
+        created_by: AgentRole::BuildAgent.as_str().to_string(),
         created_at: now,
         updated_at: now,
         input: ExecuteRunInput {
@@ -153,6 +157,14 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
         },
     };
     write_run(&root, &run)?;
+    write_json(
+        &run_path.join("agent-claim.json"),
+        &AgentClaim::new(
+            &issue,
+            AgentRole::BuildAgent,
+            format!("handoff-{}", issue.issue_id),
+        ),
+    )?;
     rebuild_index(&root)?;
     build_execute_snapshot(&root)?;
     Ok(run)
@@ -305,4 +317,22 @@ pub(crate) fn status(
 pub(crate) fn load_issue_for_run(root: &Path, run: &ExecuteRun) -> Result<InputIssue> {
     read_json(&root.join(&run.input.issue_path))
         .with_context(|| format!("load input issue {} for run {}", run.issue_id, run.run_id))
+}
+
+pub(crate) fn assert_build_agent_run(root: &Path, run: &ExecuteRun) -> Result<InputIssue> {
+    let issue = load_issue_for_run(root, run)?;
+    let claim_path = run_dir(root, &run.run_id).join("agent-claim.json");
+    let claim: AgentClaim = read_json(&claim_path)
+        .with_context(|| format!("load agent claim for run {}", run.run_id))?;
+    validate_agent_claim(&issue, &claim)?;
+    validate_agent_write_paths(
+        &AgentRole::BuildAgent,
+        &[
+            format!(".agentflow/execute/runs/{}", run.run_id),
+            format!(".agentflow/output/evidence/{}.json", run.run_id),
+            format!(".agentflow/output/release/{}", run.run_id),
+        ],
+        &AgentRolesDocument::default(),
+    )?;
+    Ok(issue)
 }

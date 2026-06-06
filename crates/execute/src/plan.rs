@@ -1,5 +1,5 @@
 use crate::{
-    manager::load_issue_for_run,
+    manager::assert_build_agent_run,
     model::{ExecutePlan, ExecutePlanDraft, ExecuteRunStatus, EXECUTE_PLAN_VERSION},
     storage::{
         canonical_project_root, read_run, rebuild_index, run_dir, update_run_status, write_json,
@@ -15,7 +15,7 @@ pub fn write_execute_plan(
 ) -> Result<ExecutePlan> {
     let root = canonical_project_root(project_root)?;
     let run = read_run(&root, &run_id)?;
-    let issue = load_issue_for_run(&root, &run)?;
+    let issue = assert_build_agent_run(&root, &run)?;
     if draft.allowed_write_paths.is_empty() {
         anyhow::bail!("execute plan requires at least one allowedWritePaths entry");
     }

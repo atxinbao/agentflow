@@ -6,8 +6,9 @@ use agentflow_execute::{
     EXECUTE_PLAN_VERSION, EXECUTE_RESULT_VERSION, EXECUTE_RUN_VERSION,
 };
 use agentflow_input::issue::{
-    DisplayStatus, InputIssue, InputIssueKind, InputIssueModel, InputIssueRelations,
+    AgentRole, DisplayStatus, InputIssue, InputIssueKind, InputIssueModel, InputIssueRelations,
     InputIssueStatus, InputPanelLink, InputPriority, InputRiskLevel, InputSystemRecord,
+    IssueCategory,
 };
 use agentflow_input::project::{InputProject, InputProjectStatus};
 use agentflow_output::{
@@ -265,6 +266,8 @@ fn write_demo_input(root: &Path) -> Result<(), String> {
             version: "input-issue.v1".to_string(),
             issue_id: seed.issue_id.to_string(),
             issue_model: InputIssueModel::Project,
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::BuildAgent,
             source_spec_id: DEMO_SPEC_ID.to_string(),
             project_id: Some(DEMO_PROJECT_ID.to_string()),
             title: seed.title.to_string(),
@@ -289,6 +292,7 @@ fn write_demo_input(root: &Path) -> Result<(), String> {
             ],
             relations: InputIssueRelations::default(),
             panel: InputPanelLink::default(),
+            audit: None,
             system: InputSystemRecord {
                 created_by: DEMO_SOURCE.to_string(),
                 created_at: now,

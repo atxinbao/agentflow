@@ -231,6 +231,8 @@ Rules:
 
 ## Agent Roles
 
+Agent identity is not trusted because an external model says it is a role. AgentFlow checks role facts from `.agentflow/define/agent/roles.json`, `issueCategory`, `requiredAgentRole`, handoff package fields, and `agent-claim.json`.
+
 ### 1. Spec Agent
 
 Status: enabled for Input Model V1.
@@ -238,6 +240,8 @@ Status: enabled for Input Model V1.
 Owns requirement intake, SPEC Gate, Approved SPEC, direct issues, and project issues under `.agentflow/input/**`.
 
 After confirmation, it may write Approved SPEC and generate direct issues or project issues under `.agentflow/input/**`.
+
+It does not execute issues. Generated spec issues must use `issueCategory=spec` and `requiredAgentRole=build-agent`.
 
 It cannot execute issues, write source code, run commands, write output evidence, write release delivery, create PRs, merge, deploy, or audit.
 
@@ -247,15 +251,19 @@ Status: enabled for Execute + Release Delivery V1.
 
 Owns controlled development delivery from `.agentflow/input/issues/<issue-id>.json` into `.agentflow/execute/runs/<run-id>/`, `.agentflow/output/evidence/<run-id>.json`, and `.agentflow/output/release/<run-id>/`.
 
+It may execute only `issueCategory=spec` issues with `requiredAgentRole=build-agent`. Its handoff and writeback must include `agent-claim.json` with `claimedAgentRole=build-agent`.
+
 It performs preflight, lease, plan, checkpoint, patch, command record, validation, result, evidence, PR draft, PR metadata, review material, changelog, release note, and delivery record.
 
-It cannot modify input issues, modify Approved SPEC, bypass preflight, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge, deploy, call models, or write audit reports.
+It cannot process `issueCategory=audit`, modify input issues, modify Approved SPEC, bypass preflight, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge, deploy, call models, or write audit reports.
 
 ### 3. Audit Agent
 
 Status: enabled for Release Audit V1.
 
 Owns audit report completion for existing `release-auto` and `human-via-agent` audit requests under `.agentflow/output/audit/<audit-id>/`.
+
+It may execute only `issueCategory=audit` issues with `requiredAgentRole=audit-agent`. Its writeback must include `agent-claim.json` with `claimedAgentRole=audit-agent`.
 
 It reviews Approved SPEC, input issue, execute run, patch diff, validation result, output evidence, and release delivery artifacts against AgentFlow boundaries.
 

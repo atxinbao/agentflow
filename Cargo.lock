@@ -90,6 +90,7 @@ dependencies = [
 name = "agentflow-output"
 version = "0.1.0"
 dependencies = [
+ "agentflow-input",
  "anyhow",
  "serde",
  "serde_json",

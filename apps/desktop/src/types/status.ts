@@ -159,11 +159,15 @@ export type InputStatusSnapshot = {
 };
 
 export type InputIssueStatus = "planned" | "blocked" | "ready-for-execute" | "done" | "canceled";
+export type IssueCategory = "spec" | "audit";
+export type AgentRole = "spec-agent" | "build-agent" | "audit-agent";
 
 export type InputIssue = {
   version: string;
   issueId: string;
   issueModel: "direct" | "project";
+  issueCategory?: IssueCategory;
+  requiredAgentRole?: AgentRole;
   sourceSpecId: string;
   projectId?: string | null;
   title: string;
@@ -187,6 +191,12 @@ export type InputIssue = {
     snapshotId?: string | null;
     contextPackId?: string | null;
   };
+  audit?: {
+    trigger?: string;
+    sourceReleaseId?: string;
+    sourceRunId?: string | null;
+    expectedOutputs?: string[];
+  } | null;
   system?: {
     createdBy?: string;
     createdAt?: number;
