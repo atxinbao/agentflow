@@ -37,10 +37,14 @@ Every Agent MUST read and follow:
 - Do not execute project commands unless AgentFlow rules explicitly allow it.
 - Before producing a SPEC Draft Preview, every Agent MUST run the requirement-intake-filter skill.
 - Do not write legacy `.agentflow/spec/**` or `.agentflow/goal-tree/**`.
+- Do not write legacy `.agentflow/define/goals/**`, `.agentflow/define/milestones/**`, or `.agentflow/define/issues/**`.
 - Do not bypass SPEC.
+- `.agentflow/input/issues/**` is the only current task fact source.
+- `.agentflow/input/specs/drafts/**` and `.agentflow/input/specs/approved/**` are the only current SPEC fact sources.
 - Do not create PRs, issues, or remote objects unless explicitly authorized.
 - Human conversation is for confirmation and feedback, not direct issue execution.
-- Every Release Delivery requires audit. AgentFlow creates `release-auto` audit requests; ordinary App UI does not create audits.
+- Raw human requirements go to Spec Agent in conversation. Do not require humans to hand-write a raw directory.
+- Every Release Delivery requires audit. AgentFlow creates `release-auto` Audit Issues; `audit-request.json` is compatibility metadata, not the Agent execution entry.
 - Do not ask the human to click an App button to create audit. The App only displays audit state, reports, findings, evidence maps, traceability, and trigger source.
 - AgentFlow does not create or control Codex threads. Humans must keep separate Codex threads for Spec Agent, Build Agent, and Audit Agent.
 - Do not mix roles in one Codex thread. A thread that writes code must not also audit the same delivery.
@@ -116,6 +120,8 @@ Do not mix these roles in one Codex thread. Each thread must keep one role for t
 - `.agentflow/` is the local Agent workflow control plane.
 - `define/` contains Agent manuals, templates, and skill definitions only.
 - `input/` is the canonical requirement fact source.
+- `.agentflow/input/issues/**` is the only current task fact source.
+- `.agentflow/input/specs/drafts/**` and `.agentflow/input/specs/approved/**` are the only current SPEC fact sources.
 - `AGENTS.md` is the canonical root Agent entry.
 - `AGENT.MD` is legacy compatibility only.
 - Legacy `.agentflow/spec/` and `.agentflow/goal-tree/` are not new write paths.
@@ -124,6 +130,8 @@ Do not mix these roles in one Codex thread. Each thread must keep one role for t
 - Panel canonical path is `.agentflow/panel/`.
 - Output canonical paths are `.agentflow/output/evidence/`, `.agentflow/output/release/`, and `.agentflow/output/audit/`.
 - Every Release Delivery requires an audit request.
+- Every Release Delivery requires an Audit Issue under `.agentflow/input/issues/audit-<release-id>.json`.
+- `audit-request.json` is compatibility metadata only. Audit Issue is the Audit Agent execution entry.
 - `release-auto` is created for a Release Delivery by AgentFlow output preparation.
 - `human-via-agent` may be created only when the human asks an Agent in conversation, not from an ordinary App button.
 - The App only displays audit state, reports, findings, evidence maps, traceability, and trigger source.
@@ -252,11 +260,15 @@ Status: enabled for Input Model V1.
 
 Owns requirement intake, SPEC Gate, Approved SPEC, direct issues, and project issues under `.agentflow/input/**`.
 
-After confirmation, it may write Approved SPEC and generate direct issues or project issues under `.agentflow/input/**`.
+Raw human requirements are received in conversation by Spec Agent. Humans do not need to hand-write a raw directory.
 
-It does not execute issues. Generated spec issues must use `issueCategory=spec` and `requiredAgentRole=build-agent`.
+Before confirmation, it only produces Requirement Intake Result and SPEC Draft Preview in conversation.
 
-It cannot execute issues, write source code, run commands, write output evidence, write release delivery, create PRs, merge, deploy, or audit.
+After confirmation, it may write Approved SPEC files only under `.agentflow/input/specs/approved/<spec-id>/` and generate direct issues or project issues under `.agentflow/input/issues/**` / `.agentflow/input/projects/**`.
+
+It does not execute issues. Generated spec issues must use `issueCategory=spec`, `requiredAgentRole=build-agent`, `displayStatus=ready` or `displayStatus=backlog`, `sourceSpecId`, `sourceSpecPath`, `issuePath`, `handoffId`, explicit `contextPackPath`, allowed / forbidden paths, forbidden actions, validation commands, and `expectedOutputs.executeRunDir`, `expectedOutputs.evidencePath`, `expectedOutputs.releaseDeliveryDir`.
+
+It cannot execute issues, write source code, run commands, write execute facts, write output evidence, write release delivery, create PRs, merge, deploy, or audit.
 
 ### 2. Build Agent
 
@@ -264,19 +276,19 @@ Status: enabled for Execute + Release Delivery V1.
 
 Owns controlled development delivery from `.agentflow/input/issues/<issue-id>.json` into `.agentflow/execute/runs/<run-id>/`, `.agentflow/output/evidence/<run-id>.json`, and `.agentflow/output/release/<run-id>/`.
 
-It may execute only `issueCategory=spec` issues with `requiredAgentRole=build-agent`. Its handoff and writeback must include `agent-claim.json` with `claimedAgentRole=build-agent`.
+It may execute only `issueCategory=spec` issues with `requiredAgentRole=build-agent`. Its handoff must include source SPEC target metadata and build expected outputs. Its writeback must include `agent-claim.json` with `claimedAgentRole=build-agent`.
 
 It performs preflight, lease, plan, checkpoint, patch, command record, validation, result, evidence, PR draft, PR metadata, review material, changelog, release note, and delivery record.
 
-It cannot process `issueCategory=audit`, modify input issues, modify Approved SPEC, bypass preflight, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge, deploy, call models, or write audit reports.
+It cannot process `issueCategory=audit`, ask for audit target metadata, modify input issues, modify Approved SPEC, bypass preflight, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge, deploy, call models, or write audit reports.
 
 ### 3. Audit Agent
 
 Status: enabled for Release Audit V1.
 
-Owns audit report completion for existing `release-auto` and `human-via-agent` audit requests under `.agentflow/output/audit/<audit-id>/`.
+Owns audit report completion for Audit Issues under `.agentflow/input/issues/audit-<release-id>.json` and audit artifacts under `.agentflow/output/audit/<audit-id>/`.
 
-It may execute only `issueCategory=audit` issues with `requiredAgentRole=audit-agent`. Its writeback must include `agent-claim.json` with `claimedAgentRole=audit-agent`.
+It may execute only `issueCategory=audit` issues with `requiredAgentRole=audit-agent`. Its handoff must include `auditId`, `sourceReleaseId`, `sourceDeliveryPath`, `auditOutputDir`, and audit expected outputs. Its writeback must include `agent-claim.json` with `claimedAgentRole=audit-agent`.
 
 It reviews Approved SPEC, input issue, execute run, patch diff, validation result, output evidence, and release delivery artifacts against AgentFlow boundaries.
 
@@ -291,7 +303,7 @@ It writes only audit artifacts for the selected audit request:
 
 It must not create duplicate `release-auto` audits for the same Release Delivery.
 
-It cannot modify source code, modify input facts, modify execute patches, modify release delivery, execute commands, create PRs, merge, or deploy.
+It cannot process `issueCategory=spec`, modify source code, modify input facts, modify execute patches, modify release delivery, generate release, execute commands, create PRs, merge, or deploy.
 
 ## Audit Trigger Rule
 
@@ -567,6 +579,11 @@ Generate a SPEC Draft Preview only after requirement-intake-filter returns `read
 
 - Do not run before Requirement Intake Result status is `ready-for-spec`.
 - Without human confirmation, do not write `.agentflow/input/**`.
+- After human confirmation, Approved SPEC writes only:
+  - `.agentflow/input/specs/approved/<spec-id>/product.md`
+  - `.agentflow/input/specs/approved/<spec-id>/tech.md`
+  - `.agentflow/input/specs/approved/<spec-id>/spec.json`
+  - `.agentflow/input/specs/approved/<spec-id>/approval.json`
 - Do not write legacy `.agentflow/spec/**`.
 - Do not write legacy `.agentflow/goal-tree/**`.
 - SPEC Gate is `product.md` + `tech.md` + `approval.json`.
@@ -584,11 +601,13 @@ Convert Approved SPEC into AgentFlow input issues.
 
 - Do not generate issues from chat directly.
 - Generate only from Approved SPEC with `product.md`, `tech.md`, and `approval.json`.
-- Write only `.agentflow/input/**`.
+- Write issues only to `.agentflow/input/issues/<issue-id>.json`.
+- Do not write `.agentflow/define/issues/**`, `.agentflow/define/goals/**`, or `.agentflow/define/milestones/**`.
 - Do not write legacy `.agentflow/spec/**`.
 - Do not write legacy `.agentflow/goal-tree/**`.
 - Do not execute issues.
 - Do not start AgentRun.
+- Every generated Spec Issue must include `issueCategory=spec`, `requiredAgentRole=build-agent`, `sourceSpecId`, `sourceSpecPath`, `issuePath`, `handoffId`, explicit `contextPackPath`, `allowedPaths`, `forbiddenPaths`, `forbiddenActions`, `validationCommands`, and build `expectedOutputs`.
 
 ## Mapping
 

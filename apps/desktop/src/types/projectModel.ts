@@ -1,5 +1,5 @@
 import type { WorkbenchBoundary } from "./workbench";
-import type { AgentRole, IssueCategory, IssueDisplayStatus } from "./status";
+import type { AgentRole, ExpectedOutputs, IssueCategory, IssueDisplayStatus } from "./status";
 
 export type LocalProjectModelSnapshot = {
   version: string;
@@ -171,8 +171,16 @@ export type V1Issue = {
   title: string;
   issueCategory?: IssueCategory;
   requiredAgentRole?: AgentRole;
+  sourceSpecId?: string | null;
+  sourceSpecPath?: string | null;
+  issuePath?: string | null;
+  handoffId?: string | null;
+  contextPackPath?: string | null;
   auditTrigger?: string | null;
+  auditId?: string | null;
   sourceReleaseId?: string | null;
+  sourceDeliveryPath?: string | null;
+  auditOutputDir?: string | null;
   displayStatus?: IssueDisplayStatus;
   status: string;
   rawStatus: string;
@@ -183,9 +191,11 @@ export type V1Issue = {
   codexInstructions: string[];
   acceptanceCriteria: string[];
   validationCommands: string[];
+  expectedOutputs: ExpectedOutputs;
   evidenceRequired: string[];
   allowedFiles: string[];
   forbiddenFiles: string[];
+  forbiddenActions: string[];
   boundary: string[];
   riskLevel: string;
 };

@@ -67,6 +67,9 @@ mod tests {
             .is_file());
         assert!(dir.path().join(".agentflow/spec").exists() == false);
         assert!(dir.path().join(".agentflow/goal-tree").exists() == false);
+        assert!(!dir.path().join(".agentflow/define/goals").exists());
+        assert!(!dir.path().join(".agentflow/define/milestones").exists());
+        assert!(!dir.path().join(".agentflow/define/issues").exists());
     }
 
     #[test]
@@ -302,6 +305,64 @@ mod tests {
     }
 
     #[test]
+    fn prepare_normalizes_spec_issue_target_metadata() {
+        let dir = tempdir().unwrap();
+        prepare_input_workspace(dir.path()).unwrap();
+        let issue = InputIssue {
+            issue_id: "iss-001".to_string(),
+            source_spec_id: "spec-001".to_string(),
+            title: "Ready issue".to_string(),
+            status: InputIssueStatus::ReadyForExecute,
+            risk_level: InputRiskLevel::Low,
+            scope: vec!["src/lib.rs".to_string()],
+            validation_hints: vec!["cargo test".to_string()],
+            ..InputIssue::default()
+        };
+        fs::write(
+            dir.path().join(".agentflow/input/issues/iss-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+
+        prepare_input_workspace(dir.path()).unwrap();
+
+        let issue: InputIssue =
+            crate::storage::read_json(&dir.path().join(".agentflow/input/issues/iss-001.json"))
+                .unwrap();
+        assert_eq!(issue.issue_category, IssueCategory::Spec);
+        assert_eq!(issue.required_agent_role, AgentRole::BuildAgent);
+        assert_eq!(issue.issue_path, ".agentflow/input/issues/iss-001.json");
+        assert_eq!(
+            issue.source_spec_path,
+            ".agentflow/input/specs/approved/spec-001/spec.json"
+        );
+        assert_eq!(issue.handoff_id, "handoff-iss-001");
+        assert_eq!(issue.allowed_paths, vec!["src/lib.rs".to_string()]);
+        assert_eq!(issue.validation_commands, vec!["cargo test".to_string()]);
+        assert_eq!(
+            issue
+                .expected_outputs
+                .get("executeRunDir")
+                .map(String::as_str),
+            Some(".agentflow/execute/runs/iss-001")
+        );
+        assert_eq!(
+            issue
+                .expected_outputs
+                .get("evidencePath")
+                .map(String::as_str),
+            Some(".agentflow/output/evidence/iss-001.json")
+        );
+        assert_eq!(
+            issue
+                .expected_outputs
+                .get("releaseDeliveryDir")
+                .map(String::as_str),
+            Some(".agentflow/output/release/iss-001")
+        );
+    }
+
+    #[test]
     fn legacy_issue_without_display_status_defaults_to_backlog() {
         let issue: InputIssue = serde_json::from_value(serde_json::json!({
             "version": "input-issue.v1",
@@ -348,6 +409,74 @@ mod tests {
         assert_eq!(issue.required_agent_role, AgentRole::BuildAgent);
         validate_agent_issue_permission(&issue, &AgentRole::BuildAgent).unwrap();
         assert!(validate_agent_issue_permission(&issue, &AgentRole::AuditAgent).is_err());
+    }
+
+    #[test]
+    fn legacy_audit_expected_outputs_array_is_supported() {
+        let mut issue: InputIssue = serde_json::from_value(serde_json::json!({
+            "version": "input-issue.v1",
+            "issueId": "audit-release-v0.1.0",
+            "issueModel": "direct",
+            "issueCategory": "audit",
+            "requiredAgentRole": "audit-agent",
+            "sourceSpecId": "spec-001",
+            "projectId": null,
+            "title": "Audit release",
+            "summary": "Audit release",
+            "kind": "validation",
+            "priority": "high",
+            "status": "ready-for-execute",
+            "displayStatus": "ready",
+            "riskLevel": "high",
+            "scope": [],
+            "nonGoals": [],
+            "acceptanceCriteria": [],
+            "validationHints": [],
+            "relations": {
+                "blockedBy": [],
+                "blocks": [],
+                "related": [],
+                "duplicateOf": null
+            },
+            "panel": {
+                "snapshotId": null,
+                "contextPackId": null
+            },
+            "audit": {
+                "auditId": "audit-001",
+                "trigger": "release-auto",
+                "sourceReleaseId": "release-v0.1.0",
+                "sourceRunId": "release-v0.1.0",
+                "sourceDeliveryPath": ".agentflow/output/release/release-v0.1.0/delivery.json",
+                "auditOutputDir": ".agentflow/output/audit/audit-001",
+                "expectedOutputs": [
+                    "audit.json",
+                    "audit-report.md",
+                    "findings.json",
+                    "evidence-map.json",
+                    "traceability.json"
+                ]
+            },
+            "system": {
+                "createdBy": "fixture",
+                "createdAt": 1,
+                "updatedAt": 1,
+                "path": ".agentflow/input/issues/audit-release-v0.1.0.json",
+                "revision": 1
+            }
+        }))
+        .unwrap();
+
+        issue.normalize_execution_metadata();
+        let audit = issue.audit.unwrap();
+        assert_eq!(
+            audit
+                .expected_outputs
+                .get("audit-report.md")
+                .map(String::as_str),
+            Some("audit-report.md")
+        );
+        assert!(audit.expected_outputs.contains_key("traceability.json"));
     }
 
     #[test]

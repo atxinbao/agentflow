@@ -47,6 +47,7 @@
 - [027-agentflow-agent-role-descriptor-and-issue-guard-v1.md](027-agentflow-agent-role-descriptor-and-issue-guard-v1.md)
 - [028-agentflow-codex-role-usage-guide-v1.md](028-agentflow-codex-role-usage-guide-v1.md)
 - [029-agentflow-dogfood-cutover-cleanup-and-start-v1.md](029-agentflow-dogfood-cutover-cleanup-and-start-v1.md) = dogfood cutover baseline
+- [031-agentflow-initialization-rules-and-issue-metadata-hardening-v1.md](031-agentflow-initialization-rules-and-issue-metadata-hardening-v1.md) = initialization and issue metadata hardening baseline
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 
@@ -58,6 +59,7 @@
 - [027-agentflow-agent-role-descriptor-and-issue-guard-v1.md](027-agentflow-agent-role-descriptor-and-issue-guard-v1.md) = current role guard baseline
 - [028-agentflow-codex-role-usage-guide-v1.md](028-agentflow-codex-role-usage-guide-v1.md) = current Codex role usage baseline
 - [029-agentflow-dogfood-cutover-cleanup-and-start-v1.md](029-agentflow-dogfood-cutover-cleanup-and-start-v1.md) = dogfood cutover baseline
+- [031-agentflow-initialization-rules-and-issue-metadata-hardening-v1.md](031-agentflow-initialization-rules-and-issue-metadata-hardening-v1.md) = current initialization and issue metadata baseline
 
 ## 历史设计参考
 

@@ -436,6 +436,30 @@ mod tests {
         let audit_issue: agentflow_input::issue::InputIssue = read_json(&audit_issue_path).unwrap();
         assert_eq!(audit_issue.issue_category.as_str(), "audit");
         assert_eq!(audit_issue.required_agent_role.as_str(), "audit-agent");
+        let audit_metadata = audit_issue.audit.as_ref().unwrap();
+        assert_eq!(audit_metadata.audit_id, "audit-001");
+        assert_eq!(audit_metadata.source_release_id, "run-001");
+        assert_eq!(
+            audit_metadata.source_delivery_path,
+            ".agentflow/output/release/run-001/delivery.json"
+        );
+        assert_eq!(
+            audit_metadata.audit_output_dir,
+            ".agentflow/output/audit/audit-001"
+        );
+        assert!(audit_metadata.expected_outputs.contains_key("audit.json"));
+        assert!(audit_metadata
+            .expected_outputs
+            .contains_key("audit-report.md"));
+        assert!(audit_metadata
+            .expected_outputs
+            .contains_key("findings.json"));
+        assert!(audit_metadata
+            .expected_outputs
+            .contains_key("evidence-map.json"));
+        assert!(audit_metadata
+            .expected_outputs
+            .contains_key("traceability.json"));
         assert!(!dir
             .path()
             .join(".agentflow/output/audit/audit-001/audit.json")
@@ -512,6 +536,16 @@ mod tests {
         assert_eq!(audit_issue.issue_category.as_str(), "audit");
         assert_eq!(audit_issue.required_agent_role.as_str(), "audit-agent");
         assert_eq!(audit_issue.display_status.as_str(), "ready");
+        let audit_metadata = audit_issue.audit.as_ref().unwrap();
+        assert_eq!(audit_metadata.audit_id, "audit-release-v0.1.0");
+        assert_eq!(
+            audit_metadata.audit_output_dir,
+            ".agentflow/output/audit/audit-release-v0.1.0"
+        );
+        assert_eq!(
+            audit_metadata.source_delivery_path,
+            ".agentflow/output/release/release-v0.1.0/delivery.json"
+        );
     }
 
     #[test]

@@ -267,7 +267,7 @@ fn write_demo_input(root: &Path) -> Result<(), String> {
     )?;
 
     for seed in demo_issue_seeds() {
-        let issue = InputIssue {
+        let mut issue = InputIssue {
             version: "input-issue.v1".to_string(),
             issue_id: seed.issue_id.to_string(),
             issue_model: InputIssueModel::Project,
@@ -305,7 +305,9 @@ fn write_demo_input(root: &Path) -> Result<(), String> {
                 path: format!(".agentflow/input/issues/{}.json", seed.issue_id),
                 revision: 1,
             },
+            ..InputIssue::default()
         };
+        issue.normalize_execution_metadata();
         write_json_with_demo_marker(
             &root
                 .join(".agentflow/input/issues")
@@ -794,7 +796,7 @@ fn write_dogfood_cutover_input_if_agentflow(
         paths,
     )?;
 
-    let issue = InputIssue {
+    let mut issue = InputIssue {
         version: "input-issue.v1".to_string(),
         issue_id: DOGFOOD_ISSUE_ID.to_string(),
         issue_model: InputIssueModel::Direct,
@@ -847,7 +849,9 @@ fn write_dogfood_cutover_input_if_agentflow(
             path: format!(".agentflow/input/issues/{DOGFOOD_ISSUE_ID}.json"),
             revision: 1,
         },
+        ..InputIssue::default()
     };
+    issue.normalize_execution_metadata();
     write_json_if_missing(
         &root
             .join(".agentflow/input/issues")

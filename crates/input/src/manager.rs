@@ -31,6 +31,7 @@ pub fn prepare_input_workspace(project_root: impl AsRef<Path>) -> Result<InputSn
     for relative_path in INPUT_DIRECTORIES {
         ensure_directory(&root.join(relative_path))?;
     }
+    normalize_issue_metadata_files(&root)?;
 
     let summary = load_summary(&root)?;
     let manifest = InputManifest::new(root.display().to_string(), summary);
@@ -70,6 +71,34 @@ pub fn prepare_input_workspace(project_root: impl AsRef<Path>) -> Result<InputSn
     let snapshot = build_input_snapshot(&root)?;
     rebuild_index(&root, &snapshot)?;
     build_input_snapshot(&root)
+}
+
+pub(crate) fn normalize_issue_metadata_files(root: &Path) -> Result<()> {
+    let issue_dir = root.join(".agentflow/input/issues");
+    if !issue_dir.exists() {
+        return Ok(());
+    }
+
+    let mut entries = fs::read_dir(&issue_dir)
+        .with_context(|| format!("read directory {}", issue_dir.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .with_context(|| format!("collect directory {}", issue_dir.display()))?;
+    entries.sort_by_key(|entry| entry.path());
+
+    for entry in entries {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let mut issue: InputIssue = read_json(&path)?;
+        let before = serde_json::to_value(&issue)?;
+        issue.normalize_execution_metadata();
+        if serde_json::to_value(&issue)? != before {
+            write_json(&path, &issue)?;
+        }
+    }
+
+    Ok(())
 }
 
 pub fn validate_input_workspace(project_root: impl AsRef<Path>) -> Result<InputSnapshot> {

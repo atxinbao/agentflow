@@ -103,7 +103,8 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
     if !issue_path.is_file() {
         anyhow::bail!("input issue {issue_id} does not exist");
     }
-    let issue: InputIssue = read_json(&issue_path)?;
+    let mut issue: InputIssue = read_json(&issue_path)?;
+    issue.normalize_execution_metadata();
     if issue.issue_id != issue_id {
         anyhow::bail!(
             "input issue id mismatch: requested {issue_id}, found {}",
@@ -125,11 +126,7 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
         ensure_directory(&run_path.join(relative))?;
     }
 
-    let spec_path = if issue.source_spec_id.is_empty() {
-        String::new()
-    } else {
-        format!(".agentflow/input/specs/approved/{}", issue.source_spec_id)
-    };
+    let spec_path = issue.source_spec_path.clone();
     let now = unix_timestamp_seconds();
     let run = ExecuteRun {
         version: crate::model::EXECUTE_RUN_VERSION.to_string(),

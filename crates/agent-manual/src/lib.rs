@@ -256,8 +256,9 @@ mod tests {
 
         assert!(manual.contains("Status: enabled for Input Model V1."));
         assert!(manual.contains(
-            "After confirmation, it may write Approved SPEC and generate direct issues or project issues under `.agentflow/input/**`"
+            "After confirmation, it may write Approved SPEC files only under `.agentflow/input/specs/approved/<spec-id>/`"
         ));
+        assert!(manual.contains("Generated spec issues must use `issueCategory=spec`"));
         assert!(manual.contains("Do not write legacy `.agentflow/spec/**`."));
         assert!(manual.contains("Do not write legacy `.agentflow/goal-tree/**`."));
         assert!(!manual.contains("Status: enabled.\n\nCombines requirement intake"));

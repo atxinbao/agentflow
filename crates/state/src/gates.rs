@@ -64,6 +64,17 @@ pub(crate) fn build_gate_snapshot(
             });
         }
     }
+    if let Some(input) = input.as_ref() {
+        for issue in &input.issues {
+            if !issue.target_metadata_complete() {
+                blockers.push(WorkflowBlockedAction {
+                    action: "copy-handoff".to_string(),
+                    reason: "任务缺少执行目标，不能生成任务包".to_string(),
+                    source_path: Some(issue.issue_path.clone()),
+                });
+            }
+        }
+    }
     let current_stage = derive_stage(
         health,
         input.as_ref(),
@@ -398,6 +409,7 @@ fn run_is_active(status: &ExecuteRunStatus) -> bool {
 fn action_label(action: &str) -> String {
     match action {
         "release-auto-audit-required" => "Release audit required",
+        "copy-handoff" => "Copy Agent handoff package",
         "start-new-input" => "Start new requirement intake",
         "prepare-release-delivery" => "Prepare release delivery",
         "write-output-evidence" => "Write output evidence",
