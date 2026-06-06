@@ -1308,18 +1308,17 @@ button.v16-list-item {
 
 .v16-companion-shell {
   display: grid;
-  gap: 16px;
-  border: 1px solid var(--v16-border);
-  background: var(--v16-surface);
-  padding: 18px;
+  gap: 24px;
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .v16-companion-shell header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  padding-bottom: 14px;
+  min-height: 42px;
+  padding: 0 0 14px;
   border-bottom: 1px solid var(--v16-border);
 }
 
@@ -1328,21 +1327,18 @@ button.v16-list-item {
   margin: 0;
 }
 
-.v16-companion-shell header span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 14px;
-  border: 1px solid var(--v16-border);
-  background: var(--v16-surface-2);
-  color: var(--v16-accent);
-  font-size: var(--af-text-sm);
-  font-weight: 900;
+.v16-companion-shell h2 {
+  overflow: hidden;
+  color: var(--v16-text);
+  font-size: 22px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .v16-companion-queue {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .v16-companion-queue p,
@@ -1355,10 +1351,10 @@ button.v16-list-item {
 
 .v16-companion-queue button {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
+  grid-template-columns: 112px minmax(0, 1fr);
   align-items: center;
-  min-height: 54px;
-  padding: 0 16px;
+  min-height: 56px;
+  padding: 0 18px;
   border: 1px solid var(--v16-border);
   background: var(--v16-surface);
   color: var(--v16-text);
@@ -1373,7 +1369,8 @@ button.v16-list-item {
 
 .v16-companion-queue button strong {
   color: var(--v16-accent);
-  font-size: var(--af-text-sm);
+  font-size: 13px;
+  letter-spacing: 0.01em;
 }
 
 .v16-companion-queue button span {
@@ -1386,8 +1383,8 @@ button.v16-list-item {
 
 .v16-companion-selected {
   display: grid;
-  gap: 14px;
-  min-height: 190px;
+  gap: 16px;
+  min-height: 250px;
   padding: 18px;
   border: 1px solid var(--v16-border);
   background: var(--v16-surface);
@@ -1405,7 +1402,15 @@ button.v16-list-item {
 
 .v16-companion-shell .v16-action-bar {
   border: 1px solid var(--v16-border);
-  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-height: 92px;
+  padding: 26px 18px;
+}
+
+.v16-companion-shell .v16-action-bar .af-button {
+  justify-content: center;
+  min-width: 0;
 }
 
 .v16-terminal-row {
