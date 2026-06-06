@@ -244,20 +244,33 @@ mod tests {
     }
 
     #[test]
-    fn prepare_backs_up_existing_agents_md_before_rewrite() {
+    fn prepare_keeps_existing_local_agents_md_without_rewrite() {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("AGENTS.md"), "# Existing\n").unwrap();
 
         let status = prepare_agent_working_manual(dir.path()).unwrap();
 
-        assert!(status.agent_md.backed_up);
-        assert!(fs::read_to_string(dir.path().join("AGENTS.md"))
-            .unwrap()
-            .contains("AGENTFLOW:MANAGED"));
-        let backups = fs::read_dir(dir.path().join(".agentflow/output/backup/agent-md"))
-            .unwrap()
-            .count();
-        assert_eq!(backups, 1);
+        assert!(status.ready);
+        assert!(!status.agent_md.backed_up);
+        assert!(!status.agent_md.managed);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("AGENTS.md")).unwrap(),
+            "# Existing\n"
+        );
+        assert_eq!(
+            fs::read_dir(dir.path().join(".agentflow/output/backup/agent-md"))
+                .unwrap()
+                .count(),
+            0
+        );
+        assert!(status
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("not AgentFlow-managed")));
+        assert!(status
+            .repairs
+            .iter()
+            .any(|repair| repair.contains("Kept existing local AGENTS.md")));
     }
 
     #[test]
@@ -672,6 +685,10 @@ mod tests {
 
         assert!(status.ready);
         assert!(status.agent_md.tracked_by_git);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("AGENTS.md")).unwrap(),
+            "# Existing\n"
+        );
         assert!(status
             .warnings
             .iter()

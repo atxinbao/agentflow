@@ -21,18 +21,18 @@
 }
 
 .af-state-blocked {
-  border-color: rgba(251, 113, 133, 0.42);
-  background: rgba(251, 113, 133, 0.08);
+  border-color: color-mix(in srgb, var(--af-danger), transparent 58%);
+  background: color-mix(in srgb, var(--af-danger-soft), var(--af-surface) 70%);
 }
 
 .af-state-warning {
-  border-color: rgba(251, 191, 36, 0.42);
-  background: rgba(251, 191, 36, 0.08);
+  border-color: color-mix(in srgb, var(--af-warning), transparent 58%);
+  background: color-mix(in srgb, var(--af-warning-soft), var(--af-surface) 70%);
 }
 
 .af-state-loading {
-  border-color: rgba(56, 189, 248, 0.38);
-  background: rgba(56, 189, 248, 0.08);
+  border-color: color-mix(in srgb, var(--af-primary), transparent 62%);
+  background: color-mix(in srgb, var(--af-accent-soft), var(--af-surface) 70%);
 }
 
 .af-loading-steps {
@@ -67,5 +67,5 @@
 }
 
 .af-blocked-reason strong {
-  color: #fecdd3;
+  color: var(--af-danger);
 }
