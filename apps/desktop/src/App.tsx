@@ -1730,16 +1730,52 @@ function CompanionShell({
   onOpenTasks: () => void;
   selectedTask: V1Issue | null;
 }) {
+  const queueItems = [
+    {
+      id: "writeback",
+      label: "写回",
+      title: selectedTask?.title ?? "等待任务写回",
+      active: true,
+    },
+    {
+      id: "ready",
+      label: "就绪",
+      title: selectedTask ? "任务包已准备" : "等待任务包",
+      active: false,
+    },
+    {
+      id: "audit",
+      label: "审计",
+      title: selectedTask ? "等待证据核对" : "等待交付",
+      active: false,
+    },
+  ];
+
   return (
-    <Panel className="v16-companion-shell" title="协作模式" description="窄窗口模式只保留当前队列和当前任务。">
-      <div className="v16-companion-grid">
-        <span>任务队列</span>
-        <strong>{selectedTask?.id ?? "等待任务"}</strong>
-        <span>任务包</span>
-        <strong>{selectedTask ? "可复制" : "未就绪"}</strong>
-        <span>写回检查</span>
-        <strong>手动检查</strong>
+    <section className="v16-companion-shell" aria-label="协作模式">
+      <header>
+        <h2>协作模式</h2>
+        <span>{selectedTask ? "等待 Codex 写回" : "等待任务"}</span>
+      </header>
+      <div className="v16-companion-queue" aria-label="今日队列">
+        <p>今日队列</p>
+        {queueItems.map((item) => (
+          <button className={item.active ? "active" : ""} key={item.id} type="button">
+            <strong>{item.label}</strong>
+            <span>{item.title}</span>
+          </button>
+        ))}
       </div>
+      <article className="v16-companion-selected">
+        <p>当前任务</p>
+        <h3>{selectedTask?.title ?? "还没有选中任务"}</h3>
+        <strong>执行助手</strong>
+        <span>
+          {selectedTask
+            ? "等待 Codex 写回。请确认任务包已经粘贴，然后扫描 .agentflow/output。"
+            : "当前没有可交付给执行助手的任务。"}
+        </span>
+      </article>
       <ActionBar>
         <ActionButton disabled={!selectedTask} onClick={onCheckWriteback} variant="secondary">
           检查写回
@@ -1751,7 +1787,7 @@ function CompanionShell({
           打开文件
         </ActionButton>
       </ActionBar>
-    </Panel>
+    </section>
   );
 }
 
