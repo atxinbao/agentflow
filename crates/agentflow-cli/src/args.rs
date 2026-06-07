@@ -98,6 +98,10 @@ pub(crate) enum Command {
     ReviewAssistant {
         issue_id: String,
     },
+    BuildAgent {
+        #[command(subcommand)]
+        command: BuildAgentCommand,
+    },
     State {
         #[command(subcommand)]
         command: StateCommand,
@@ -197,6 +201,14 @@ pub(crate) enum IssueCommand {
         write: bool,
         #[arg(long)]
         yes: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum BuildAgentCommand {
+    Complete {
+        #[arg(long)]
+        request: PathBuf,
     },
 }
 

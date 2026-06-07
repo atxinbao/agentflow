@@ -348,6 +348,36 @@ pub struct ExecuteCommandRequest {
     pub source: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildAgentValidationCommand {
+    pub label: String,
+    pub program: String,
+    pub args: Vec<String>,
+    pub exit_code: Option<i32>,
+    pub stdout: Option<String>,
+    pub stderr: Option<String>,
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildAgentCompletionRequest {
+    pub issue_id: String,
+    #[serde(default)]
+    pub changed_files: Vec<ExecuteChangedFile>,
+    #[serde(default)]
+    pub validation_commands: Vec<BuildAgentValidationCommand>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildAgentCompletion {
+    pub run: ExecuteRun,
+    pub result: ExecuteResult,
+    pub delivery: agentflow_output::OutputReleaseDelivery,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecuteCommandRecord {

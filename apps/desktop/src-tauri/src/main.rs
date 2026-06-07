@@ -43,6 +43,7 @@ fn main() {
             commands::execute::load_execute_result,
             commands::execute::validate_execute_run,
             commands::execute::complete_execute_run,
+            commands::execute::complete_build_agent_issue,
             commands::execute::cancel_execute_run,
             commands::output::load_output_status,
             commands::output::load_output_manifest,

@@ -4,7 +4,8 @@
 //! users receive a clear migration message, but old writers are no longer
 //! executed from the CLI.
 
-use crate::args::{Cli, Command};
+use crate::active::complete_build_agent_issue_from_request;
+use crate::args::{BuildAgentCommand, Cli, Command};
 use crate::retirement::{
     legacy_command_status, print_legacy_retirement_message, should_disable_legacy_command,
 };
@@ -189,6 +190,17 @@ pub(crate) fn run() -> Result<()> {
                 println!("  score: {}", result.score);
                 println!("  snippet: {}", result.snippet);
             }
+        }
+        Command::BuildAgent {
+            command: BuildAgentCommand::Complete { request },
+        } => {
+            let completion = complete_build_agent_issue_from_request(&cwd, &request)?;
+            println!("build agent completion: done");
+            println!("issue: {}", completion.run.issue_id);
+            println!("run: {}", completion.run.run_id);
+            println!("run status: {:?}", completion.run.status);
+            println!("delivery: {}", completion.delivery.run_id);
+            println!("validation passed: {}", completion.result.validation.passed);
         }
         command => {
             let status = legacy_command_status(&command);
