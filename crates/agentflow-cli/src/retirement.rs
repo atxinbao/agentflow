@@ -129,6 +129,11 @@ pub(crate) fn legacy_command_status(command: &Command) -> LegacyCommandStatus {
             "review-assistant",
             "old review assistant writer is not authorized",
         ),
+        Command::BuildAgent { .. } => LegacyCommandStatus {
+            command_name: "build-agent",
+            disposition: LegacyCommandDisposition::KeepTemporary,
+            reason: "active Build Agent completion writeback command",
+        },
         Command::State { .. } => LegacyCommandStatus::disabled(
             "state",
             "old workflow state snapshot writer is not inherited",
@@ -173,6 +178,15 @@ mod tests {
         assert_eq!(
             legacy_command_status(&Command::Search {
                 query: vec!["AgentFlow".to_string()]
+            })
+            .disposition,
+            LegacyCommandDisposition::KeepTemporary
+        );
+        assert_eq!(
+            legacy_command_status(&Command::BuildAgent {
+                command: crate::args::BuildAgentCommand::Complete {
+                    request: std::path::PathBuf::from("request.json")
+                }
             })
             .disposition,
             LegacyCommandDisposition::KeepTemporary

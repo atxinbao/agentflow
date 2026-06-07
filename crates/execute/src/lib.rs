@@ -1,5 +1,6 @@
 pub mod checkpoint;
 pub mod command;
+pub mod completion;
 pub mod delivery;
 pub mod evidence;
 pub mod lease;
@@ -18,6 +19,7 @@ pub use agentflow_output::{
 };
 pub use checkpoint::create_execute_checkpoint;
 pub use command::run_execute_command;
+pub use completion::complete_build_agent_issue;
 pub use delivery::prepare_release_delivery;
 pub use evidence::write_execute_evidence;
 pub use lease::{acquire_execute_lease, release_execute_lease};
@@ -144,6 +146,51 @@ mod tests {
         assert_eq!(result.status, ExecuteRunStatus::Completed);
         assert!(result.next.ready_for_delivery);
         run
+    }
+
+    #[test]
+    fn build_agent_completion_creates_run_evidence_and_delivery() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path(), "spec-001");
+        write_issue(dir.path(), "iss-001", "spec-001", InputRiskLevel::Low);
+
+        let completion = complete_build_agent_issue(
+            dir.path(),
+            BuildAgentCompletionRequest {
+                issue_id: "iss-001".to_string(),
+                changed_files: vec![ExecuteChangedFile {
+                    path: "src/lib.rs".to_string(),
+                    change_type: "modified".to_string(),
+                    insertions: 1,
+                    deletions: 1,
+                }],
+                validation_commands: vec![BuildAgentValidationCommand {
+                    label: "printf ok".to_string(),
+                    program: "printf".to_string(),
+                    args: vec!["ok".to_string()],
+                    exit_code: Some(0),
+                    stdout: Some("ok".to_string()),
+                    stderr: None,
+                    source: Some("test".to_string()),
+                }],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(completion.run.issue_id, "iss-001");
+        assert_eq!(completion.run.status, ExecuteRunStatus::Completed);
+        assert_eq!(completion.result.status, ExecuteRunStatus::Completed);
+        assert!(completion.result.validation.passed);
+        assert_eq!(completion.delivery.status, "drafted");
+
+        let execute_index = load_execute_index(dir.path()).unwrap();
+        assert_eq!(execute_index.runs.len(), 1);
+        assert_eq!(execute_index.runs[0].status, ExecuteRunStatus::Completed);
+
+        let output_index = agentflow_output::load_output_index(dir.path()).unwrap();
+        assert_eq!(output_index.evidence.len(), 1);
+        assert_eq!(output_index.release_deliveries.len(), 1);
     }
 
     #[test]

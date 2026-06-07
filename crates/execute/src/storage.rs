@@ -209,12 +209,18 @@ pub fn load_runs(root: &Path) -> Result<Vec<ExecuteRun>> {
     }
     let mut entries = fs::read_dir(&runs_dir)?.collect::<Result<Vec<_>, _>>()?;
     entries.sort_by_key(|entry| entry.path());
-    entries
+    let runs = entries
         .into_iter()
         .filter(|entry| entry.path().is_dir())
-        .filter(|entry| entry.path().join("run.json").is_file())
-        .map(|entry| read_json::<ExecuteRun>(&entry.path().join("run.json")))
-        .collect()
+        .filter_map(|entry| {
+            let run_path = entry.path().join("run.json");
+            if !run_path.is_file() {
+                return None;
+            }
+            read_json::<ExecuteRun>(&run_path).ok()
+        })
+        .collect();
+    Ok(runs)
 }
 
 pub fn load_leases(root: &Path) -> Result<Vec<ExecuteLease>> {

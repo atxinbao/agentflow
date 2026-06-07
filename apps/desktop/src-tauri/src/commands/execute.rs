@@ -155,6 +155,17 @@ pub(crate) fn complete_execute_run(
 }
 
 #[tauri::command]
+pub(crate) fn complete_build_agent_issue(
+    project_root: String,
+    request: agentflow_execute::BuildAgentCompletionRequest,
+) -> Result<agentflow_execute::BuildAgentCompletion, String> {
+    let completion = agentflow_execute::complete_build_agent_issue(&project_root, request)
+        .map_err(|error| error.to_string())?;
+    agentflow_state::refresh_state(&project_root).map_err(|error| error.to_string())?;
+    Ok(completion)
+}
+
+#[tauri::command]
 pub(crate) fn cancel_execute_run(
     project_root: String,
     run_id: String,

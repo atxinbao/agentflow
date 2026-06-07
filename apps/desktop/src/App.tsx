@@ -3602,6 +3602,26 @@ function buildCodexHandoff(task: V1Issue) {
         }
       : {
           agentInstruction: agentInstructionForTask(task),
+          completionWriteback: {
+            cli: "agentflow build-agent complete --request <completion-request.json>",
+            command: "complete_build_agent_issue",
+            request: {
+              changedFiles: task.allowedFiles.slice(0, 3).map((path) => ({
+                changeType: "modified",
+                deletions: 0,
+                insertions: 0,
+                path,
+              })),
+              issueId: task.id,
+              validationCommands: task.validationCommands.slice(0, 3).map((command) => ({
+                args: command.split(" ").slice(1),
+                exitCode: 0,
+                label: command,
+                program: command.split(" ")[0] ?? command,
+                source: "build-agent",
+              })),
+            },
+          },
           contextPackPath: task.contextPackPath,
           expectedOutputs: task.expectedOutputs,
           handoffId: task.handoffId,
@@ -3641,6 +3661,7 @@ function buildCodexHandoff(task: V1Issue) {
     "- 如果 issueCategory 不属于你，请停止执行。",
     "- 不要执行其他 Agent 的任务。",
     "- 不要越过任务边界。",
+    "- 不要手写 `.agentflow/execute/**`、`.agentflow/output/evidence/**` 或 `.agentflow/output/release/**`。",
     "",
     "## 范围",
     ...task.scope.map((item) => `- ${item}`),
@@ -3665,6 +3686,18 @@ function buildCodexHandoff(task: V1Issue) {
     "",
     "## 输出位置",
     ...taskOutputItems(task).map((item) => `- ${item}`),
+    ...(task.issueCategory === "spec"
+      ? [
+          "",
+          "## 完成写回",
+          "- 完成代码任务后，调用 `agentflow build-agent complete --request <completion-request.json>`。",
+          "- 桌面端内部命令名为 `complete_build_agent_issue`。",
+          "- request.issueId 必须等于当前任务 id。",
+          "- request.changedFiles 填写实际修改文件。",
+          "- request.validationCommands 填写已执行的验证命令和 exitCode。",
+          "- AgentFlow 会自动生成规范 run、evidence、release，并把任务派生成已完成。",
+        ]
+      : []),
   ].join("\n");
 }
 

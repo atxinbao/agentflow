@@ -146,7 +146,7 @@ fn display_status(
     if let Some(run) = latest_run {
         return match run.status {
             ExecuteRunStatus::Cancelled => DisplayStatus::Cancel,
-            ExecuteRunStatus::Completed => DisplayStatus::Review,
+            ExecuteRunStatus::Completed => DisplayStatus::Done,
             ExecuteRunStatus::Failed => DisplayStatus::Review,
             ExecuteRunStatus::Queued
             | ExecuteRunStatus::Preflight
@@ -160,7 +160,7 @@ fn display_status(
     }
 
     if output_has_issue_delivery(output, &issue.issue_id, latest_run_id) {
-        return DisplayStatus::Review;
+        return DisplayStatus::Done;
     }
 
     DisplayStatus::from_input_status(&issue.status)
@@ -177,10 +177,12 @@ fn audit_display_status(
             .iter()
             .rev()
             .find(|entry| entry.issue_id == issue_id)
-            .map(|entry| match entry.status.as_str() {
-                "passed" | "passed-with-warnings" => DisplayStatus::Done,
-                "cancelled" => DisplayStatus::Cancel,
-                _ => DisplayStatus::Review,
+            .and_then(|entry| match entry.status.as_str() {
+                "passed" | "passed-with-warnings" => Some(DisplayStatus::Done),
+                "failed" => Some(DisplayStatus::Review),
+                "cancelled" => Some(DisplayStatus::Cancel),
+                "requested" | "running" => None,
+                _ => None,
             })
     })
 }
@@ -324,6 +326,15 @@ mod tests {
             ),
             DisplayStatus::InProgress
         );
+        assert_eq!(
+            display_status(
+                &issue(InputIssueStatus::ReadyForExecute),
+                Some(&run(ExecuteRunStatus::Completed)),
+                None,
+                Some("run-001"),
+            ),
+            DisplayStatus::Done
+        );
         let output = output_with_delivery("drafted");
         assert_eq!(
             display_status(
@@ -332,7 +343,11 @@ mod tests {
                 Some(&output),
                 Some("run-001"),
             ),
-            DisplayStatus::Review
+            DisplayStatus::Done
+        );
+        assert_eq!(
+            audit_display_status(Some(&output_with_audit("requested")), "iss-001"),
+            None
         );
         assert_eq!(
             audit_display_status(Some(&output_with_audit("passed")), "iss-001"),

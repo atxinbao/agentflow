@@ -24,8 +24,11 @@ name = "agentflow-cli"
 version = "0.1.0"
 dependencies = [
  "agentflow-core",
+ "agentflow-execute",
+ "agentflow-state",
  "anyhow",
  "clap",
+ "serde_json",
 ]
 
 [[package]]
