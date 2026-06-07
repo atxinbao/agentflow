@@ -1,5 +1,5 @@
 import type { WorkbenchBoundary } from "./workbench";
-import type { AgentRole, ExpectedOutputs, IssueCategory, IssueDisplayStatus } from "./status";
+import type { AgentRole, ExecutionPipeline, ExpectedOutputs, IssueCategory, IssueDisplayStatus } from "./status";
 
 export type LocalProjectModelSnapshot = {
   version: string;
@@ -194,6 +194,7 @@ export type V1Issue = {
   acceptanceCriteria: string[];
   validationCommands: string[];
   expectedOutputs: ExpectedOutputs;
+  executionPipeline?: ExecutionPipeline | null;
   evidenceRequired: string[];
   allowedFiles: string[];
   forbiddenFiles: string[];

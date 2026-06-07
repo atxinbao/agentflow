@@ -92,6 +92,7 @@ import {
 import type {
   AuditIndex,
   AuditIndexEntry,
+  ExecutionPipeline,
   HumanAuditReport,
   AgentRole,
   InputIssue,
@@ -252,7 +253,7 @@ const codexRoleGuides: CodexRoleGuide[] = [
     title: "需求助手",
   },
   {
-    cannotDo: ["不执行 audit issue", "不写 audit report", "不写 findings.json", "不 merge / deploy"],
+    cannotDo: ["不执行 audit issue", "不写 audit report", "不写 findings.json", "不绕过 GitHub 预检 / deploy"],
     englishName: "Build Agent",
     role: "build-agent",
     startupInstruction: [
@@ -263,11 +264,12 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "requiredAgentRole = build-agent",
       "",
       "你要做：",
-      "1. 读取指定 Issue。",
-      "2. 按任务包执行改动。",
-      "3. 写入 execute 过程记录。",
-      "4. 写入 evidence。",
-      "5. 写入 release delivery。",
+      "1. GitHub 自动化预检。",
+      "2. Agent 执行 issue。",
+      "3. 沙箱测试与结果验证。",
+      "4. 创建 PR。",
+      "5. 合并 PR。",
+      "6. 写回 Done。",
       "",
       "你不能做：",
       "- 不执行 audit issue",
@@ -276,10 +278,13 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "- 不写 evidence-map.json",
       "- 不写 traceability.json",
       "- 不越过任务边界",
-      "- 不创建远程 PR",
-      "- 不 merge",
+      "- 不绕过 GitHub 自动化预检",
+      "- 不绕过沙箱验证",
+      "- 不越过 mergeMode 合并 PR",
       "- 不 deploy",
       "",
+      "创建 PR 前必须完成 GitHub 自动化预检和沙箱验证。",
+      "合并 PR 只能按 mergeMode：manual-merge 或 auto-merge-if-eligible。",
       "如果任务不是 spec issue，必须停止。",
       "如果 requiredAgentRole 不是 build-agent，必须停止。",
     ].join("\n"),
@@ -2290,6 +2295,7 @@ function TaskDetail({
         <SectionList title="验收标准" items={task.acceptanceCriteria} />
         <SectionList title="证据要求" items={task.evidenceRequired} />
         <SectionList title="验证命令" items={task.validationCommands} />
+        {task.issueCategory === "spec" ? <SectionList title="执行流程" items={taskExecutionPipelineItems(task)} /> : null}
         <SectionList title="相关文件" items={task.allowedFiles} />
         <SectionList title="输出位置" items={outputItems} />
         <details className="v16-task-package">
@@ -2977,6 +2983,76 @@ const displayStatusColumns: Array<{ id: IssueDisplayStatus; label: string }> = [
 
 const displayStatusOrder = new Map(displayStatusColumns.map((column, index) => [column.id, index]));
 
+const buildAgentPipelineStageIds = [
+  "github-preflight",
+  "implement",
+  "sandbox-verify",
+  "create-pr",
+  "merge-pr",
+  "writeback-done",
+] as const;
+
+function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
+  return {
+    agentRole: "build-agent",
+    mergeModes: ["manual-merge", "auto-merge-if-eligible"],
+    stages: [
+      {
+        evidence: [
+          "gh --version",
+          "gh auth status",
+          "git status --short",
+          "git remote -v",
+          "gh repo view --json nameWithOwner,defaultBranchRef",
+        ],
+        goal: "确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用。",
+        label: "GitHub 自动化预检",
+        required: true,
+        stageId: "github-preflight",
+      },
+      {
+        evidence: ["git diff --stat", "changed-files summary"],
+        goal: "按 issue 合同在 allowedPaths 内完成代码、配置或测试改动。",
+        label: "Agent 执行 issue",
+        required: true,
+        stageId: "implement",
+      },
+      {
+        evidence: ["validation command records", "browser smoke evidence when applicable", "git diff --check"],
+        goal: "在受控本地沙箱中运行验证命令并收集 stdout、stderr、exit code、浏览器或截图证据。",
+        label: "沙箱测试与结果验证",
+        required: true,
+        stageId: "sandbox-verify",
+      },
+      {
+        evidence: ["PR URL", "PR body validation summary"],
+        goal: "推送任务分支，创建 draft PR，并把验证结果写入 PR 描述。",
+        label: "创建 PR",
+        required: true,
+        stageId: "create-pr",
+      },
+      {
+        evidence: ["merge mode", "merge commit or merged PR state"],
+        goal: "根据 GitHub 预检结果走人工合并或符合条件的自动合并。",
+        label: "合并 PR",
+        required: true,
+        stageId: "merge-pr",
+      },
+      {
+        evidence: [
+          "agentflow build-agent complete --request <completion-request.json>",
+          "issue status done",
+        ],
+        goal: "PR 合并后调用 build-agent complete 写回 run、evidence、delivery 和任务 Done 状态。",
+        label: "写回 Done",
+        required: true,
+        stageId: "writeback-done",
+      },
+    ],
+    version: "build-agent-execution-pipeline.v1",
+  };
+}
+
 function buildTaskItems(
   inputIssues: InputIssue[],
   issueStatusIndex: IssueStatusIndex | null,
@@ -3017,6 +3093,7 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
     dependencies: issue.relations?.blockedBy ?? [],
     displayStatus,
     evidenceRequired: issue.acceptanceCriteria,
+    executionPipeline: issueCategory === "spec" ? (issue.executionPipeline ?? defaultBuildAgentExecutionPipeline()) : null,
     expectedOutputs,
     forbiddenActions: issue.forbiddenActions?.length ? issue.forbiddenActions : defaultForbiddenActions(issueCategory),
     forbiddenFiles: issue.forbiddenPaths?.length ? issue.forbiddenPaths : defaultForbiddenPaths(issueCategory),
@@ -3060,6 +3137,7 @@ function issueContractToV1Issue(issue: IssueContract): V1Issue {
     dependencies: [],
     displayStatus: displayStatusFromLegacyStatus(issue.status),
     evidenceRequired: issue.evidenceRequirements,
+    executionPipeline: defaultBuildAgentExecutionPipeline(),
     expectedOutputs,
     forbiddenActions: defaultForbiddenActions("spec"),
     forbiddenFiles: [".agentflow/*", ".codex/*", "agent-artifacts/*"],
@@ -3315,7 +3393,7 @@ function agentInstructionForTask(task: V1Issue) {
   if (task.requiredAgentRole === "audit-agent") {
     return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR。";
   }
-  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。不要写 audit report、findings、evidence-map 或 traceability。";
+  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。按 GitHub 自动化预检、执行、沙箱验证、创建 PR、合并 PR、写回 Done 的流程执行。不要写 audit report、findings、evidence-map 或 traceability。";
 }
 
 function taskAuditDescriptionItems(task: V1Issue): Array<[string, string]> {
@@ -3339,6 +3417,34 @@ function taskOutputItems(task: V1Issue) {
   return entries.map(([key, value]) => `${key}: ${value}`);
 }
 
+function taskExecutionPipeline(task: V1Issue) {
+  if (task.issueCategory !== "spec") {
+    return null;
+  }
+  return task.executionPipeline ?? defaultBuildAgentExecutionPipeline();
+}
+
+function taskExecutionPipelineItems(task: V1Issue) {
+  const pipeline = taskExecutionPipeline(task);
+  if (!pipeline?.stages.length) {
+    return ["等待执行流程。"];
+  }
+  return pipeline.stages.map((stage, index) => `${index + 1}. ${stage.label}：${stage.goal}`);
+}
+
+function hasCompleteBuildAgentPipeline(task: V1Issue) {
+  const pipeline = taskExecutionPipeline(task);
+  if (!pipeline) {
+    return false;
+  }
+  if (pipeline.version !== "build-agent-execution-pipeline.v1" || pipeline.agentRole !== "build-agent") {
+    return false;
+  }
+  return buildAgentPipelineStageIds.every((stageId) =>
+    pipeline.stages.some((stage) => stage.stageId === stageId && stage.required),
+  );
+}
+
 function taskHandoffValidationError(task: V1Issue) {
   if (task.issueCategory === "audit") {
     if (!task.auditId || !task.auditOutputDir || !Object.keys(task.expectedOutputs ?? {}).length) {
@@ -3348,7 +3454,13 @@ function taskHandoffValidationError(task: V1Issue) {
   }
 
   const outputs = task.expectedOutputs ?? {};
-  if (!task.sourceSpecId || !outputs.executeRunDir || !outputs.evidencePath || !outputs.releaseDeliveryDir) {
+  if (
+    !task.sourceSpecId ||
+    !outputs.executeRunDir ||
+    !outputs.evidencePath ||
+    !outputs.releaseDeliveryDir ||
+    !hasCompleteBuildAgentPipeline(task)
+  ) {
     return INCOMPLETE_HANDOFF_MESSAGE;
   }
   return null;
@@ -3623,6 +3735,7 @@ function buildCodexHandoff(task: V1Issue) {
             },
           },
           contextPackPath: task.contextPackPath,
+          executionPipeline: taskExecutionPipeline(task),
           expectedOutputs: task.expectedOutputs,
           handoffId: task.handoffId,
           handoffVersion: "agent-handoff.v1",
@@ -3662,6 +3775,18 @@ function buildCodexHandoff(task: V1Issue) {
     "- 不要执行其他 Agent 的任务。",
     "- 不要越过任务边界。",
     "- 不要手写 `.agentflow/execute/**`、`.agentflow/output/evidence/**` 或 `.agentflow/output/release/**`。",
+    ...(task.issueCategory === "spec"
+      ? [
+          "",
+          "## Build Agent 执行流程",
+          ...taskExecutionPipelineItems(task).map((item) => `- ${item}`),
+          "",
+          "## 合并规则",
+          "- 创建 PR 前必须完成 GitHub 自动化预检和沙箱测试与结果验证。",
+          "- 合并 PR 是独立阶段，按 mergeMode 走人工合并或符合条件的自动合并。",
+          "- PR 合并后才写回 Done。",
+        ]
+      : []),
     "",
     "## 范围",
     ...task.scope.map((item) => `- ${item}`),

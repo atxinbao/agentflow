@@ -582,19 +582,19 @@ TDD is the test-first working manual for future Build Agent execution.
 
 - Quality standards come from SPEC acceptance criteria.
 - TDD does not redefine requirement quality.
-- Build Agent is currently not authorized yet.
-- Future implementation must derive tests from SPEC and Goal Tree issue context before code changes.
-- Red-green-refactor evidence must be recorded before release.
+- Build Agent is authorized only inside a complete Build Agent execution pipeline handoff.
+- Implementation must derive tests from SPEC and input issue context before code changes.
+- Sandbox verification evidence must be recorded before PR creation and Done writeback.
 
 ## Code Comment Language and Style
 
-When Build Agent becomes authorized, any newly authored code comment, test comment, or doc comment MUST follow `agentLocale` and `plain-work-style`.
+When Build Agent authors code inside the execution pipeline, any newly authored code comment, test comment, or doc comment MUST follow `agentLocale` and `plain-work-style`.
 
 Do not rewrite existing comments only to change their language.
 
 ## V1 Boundary
 
-V1 creates this manual only. It does not run tests or authorize implementation.
+V1 creates this manual and records the test discipline for the Build Agent execution pipeline.
 "#;
 
 const RELEASE_MANUAL: &str = r#"# RELEASE.md
@@ -624,15 +624,19 @@ These artifacts are written under:
 
 `.agentflow/output/release/<run-id>/`
 
-After Release Delivery exists, AgentFlow must ensure one audit issue under:
+Task completion and audit are separate flows.
+
+After Release Delivery exists, AgentFlow must not automatically create an audit request only because a task reached Done.
+
+Audit starts only when an independent audit issue exists under:
 
 `.agentflow/input/issues/audit-<release-id>.json`
 
+or when a human explicitly requests audit through an Agent conversation.
+
 The audit issue is the primary entry for Audit Agent work. It must use `issueCategory=audit` and `requiredAgentRole=audit-agent`.
 
-AgentFlow may also keep one `release-auto` audit request as compatibility metadata under:
-
-`.agentflow/output/audit/<audit-id>/audit-request.json`
+AgentFlow may keep `audit-request.json` as compatibility metadata only when an audit request already exists.
 
 ## V1 Boundary
 
@@ -649,7 +653,7 @@ Build Agent must not:
 - modify input issue facts
 - write audit reports
 - execute audit issues
-- create duplicate `release-auto` audit requests for the same Release Delivery
+- create audit requests from task Done writeback
 
 ## Required Inputs
 
@@ -662,7 +666,7 @@ Build Agent must not:
 
 ## Audit Handoff
 
-Build Agent stops after release delivery and evidence are written.
+Build Agent stops after PR merge and Done writeback are recorded.
 
 Build Agent must not create audit requests when a task is done.
 
@@ -689,10 +693,10 @@ Audit is the code review and risk review working manual for future Audit Agent e
 ## Rules
 
 - Audit Agent is enabled for Release Audit V1.
-- Audit Agent completes existing `release-auto` and `human-via-agent` audit requests.
+- Audit Agent completes existing `audit` issues and `human-via-agent` audit requests.
 - Audit checks SPEC alignment, boundary compliance, architecture impact, permission / path / data-write risk, test coverage, legacy reintroduction, unauthorized execution, unauthorized writes, model calls, and evidence completeness.
 - Audit output belongs under `.agentflow/output/audit/`.
-- The same Release Delivery must not have duplicate `release-auto` audit requests.
+- The same Release Delivery must not have duplicate audit requests.
 - Human conversation can ask an Agent for `human-via-agent` audit. The ordinary App UI must not create audits.
 
 ## Required Outputs
