@@ -20,6 +20,25 @@ const initialInputStatusState: InputStatusState = {
   source: "idle",
 };
 
+function inputErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function loadInputStatusWithRepair(projectRoot: string) {
+  try {
+    return await invoke<InputStatusSnapshot>("load_input_status", { projectRoot });
+  } catch (loadError) {
+    try {
+      const snapshot = await invoke<InputSnapshot>("prepare_input_workspace", { projectRoot });
+      return snapshot.status;
+    } catch (repairError) {
+      throw new Error(
+        `load input status failed: ${inputErrorMessage(loadError)}; repair failed: ${inputErrorMessage(repairError)}`,
+      );
+    }
+  }
+}
+
 export function useInputStatus(projectRoot: string | null) {
   const [inputStatusState, setInputStatusState] = useState<InputStatusState>(initialInputStatusState);
 
@@ -40,7 +59,7 @@ export function useInputStatus(projectRoot: string | null) {
 
     let cancelled = false;
     setInputStatusState((current) => ({ ...current, error: null, source: "loading" }));
-    void invoke<InputStatusSnapshot>("load_input_status", { projectRoot })
+    void loadInputStatusWithRepair(projectRoot)
       .then((status) => {
         if (!cancelled) {
           setInputStatusState({ status, error: null, source: "tauri" });
@@ -76,6 +95,20 @@ const initialInputSnapshotState: InputSnapshotState = {
   source: "idle",
 };
 
+async function loadInputSnapshotWithRepair(projectRoot: string) {
+  try {
+    return await invoke<InputSnapshot>("load_input_snapshot", { projectRoot });
+  } catch (loadError) {
+    try {
+      return await invoke<InputSnapshot>("prepare_input_workspace", { projectRoot });
+    } catch (repairError) {
+      throw new Error(
+        `load input snapshot failed: ${inputErrorMessage(loadError)}; repair failed: ${inputErrorMessage(repairError)}`,
+      );
+    }
+  }
+}
+
 export function useInputSnapshot(projectRoot: string | null) {
   const [inputSnapshotState, setInputSnapshotState] =
     useState<InputSnapshotState>(initialInputSnapshotState);
@@ -97,7 +130,7 @@ export function useInputSnapshot(projectRoot: string | null) {
 
     let cancelled = false;
     setInputSnapshotState((current) => ({ ...current, error: null, source: "loading" }));
-    void invoke<InputSnapshot>("load_input_snapshot", { projectRoot })
+    void loadInputSnapshotWithRepair(projectRoot)
       .then((snapshot) => {
         if (!cancelled) {
           setInputSnapshotState({ snapshot, error: null, source: "tauri" });
