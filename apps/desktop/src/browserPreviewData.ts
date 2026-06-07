@@ -109,7 +109,10 @@ const previewInputIssues: InputIssue[] = [
     issueModel: "project",
     projectId: previewProjectId,
   }),
-  browserPreviewInputIssue("iss-cancel", "取消过期需求", "canceled", "cancel", "任务已取消。"),
+  browserPreviewInputIssue("iss-cancel", "取消过期需求", "canceled", "cancel", "任务已取消。", {
+    issueModel: "project",
+    projectId: previewProjectId,
+  }),
 ];
 
 function browserPreviewInputIssue(
@@ -765,7 +768,7 @@ export function createBrowserPreviewInputSnapshot(projectRoot = BROWSER_PREVIEW_
         scope: ["展示项目摘要。", "展示 issue 所属项目和输出目标。", "验证建议任务按钮会切换到 issue 合约。"],
         nonGoals: ["不写入真实 .agentflow/input。", "不创建远程对象。"],
         successCriteria: ["项目行可选中。", "右侧可显示 Project Summary。", "查看建议任务后右侧显示 Issue Contract。"],
-        issueIds: ["iss-ready", "iss-progress", "iss-review", "iss-audit-ready", "iss-done"],
+        issueIds: ["iss-ready", "iss-progress", "iss-review", "iss-audit-ready", "iss-done", "iss-cancel"],
         status: "active",
         panel: {
           snapshotId: null,
