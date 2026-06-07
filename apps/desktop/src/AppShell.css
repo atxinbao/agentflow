@@ -490,9 +490,9 @@
   justify-self: center;
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   min-width: 0;
-  max-width: min(420px, 100%);
+  max-width: min(460px, 100%);
   -webkit-app-region: drag;
 }
 
@@ -500,7 +500,9 @@
   min-width: 0;
   overflow: hidden;
   color: var(--v16-text);
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 760;
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -509,20 +511,46 @@
   max-width: 100%;
   color: var(--v16-subtle);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 650;
   line-height: 1;
 }
 
 .v16-titlebar-status-dot {
   flex: 0 0 auto;
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
+  background: var(--v16-subtle);
+}
+
+.v16-titlebar-status-dot.ready,
+.v16-titlebar-status-dot.done {
+  background: var(--v16-success);
+}
+
+.v16-titlebar-status-dot.working,
+.v16-titlebar-status-dot.warning {
   background: var(--v16-warning);
 }
 
-.v16-titlebar-status-dot.warning {
-  background: var(--v16-warning);
+.v16-titlebar-status-dot.failed,
+.v16-titlebar-status-dot.blocked {
+  background: var(--v16-danger);
+}
+
+.v16-titlebar-status-text.ready,
+.v16-titlebar-status-text.done {
+  color: var(--v16-success);
+}
+
+.v16-titlebar-status-text.working,
+.v16-titlebar-status-text.warning {
+  color: var(--v16-warning);
+}
+
+.v16-titlebar-status-text.failed,
+.v16-titlebar-status-text.blocked {
+  color: var(--v16-danger);
 }
 
 .v16-titlebar-action {
@@ -2146,8 +2174,13 @@ button.v16-list-item {
   background: var(--v16-success);
 }
 
+.v16-status-dot.working,
 .v16-status-dot.warning {
   background: var(--v16-warning);
+}
+
+.v16-status-dot.done {
+  background: var(--v16-success);
 }
 
 .v16-status-dot.failed,

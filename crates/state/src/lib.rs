@@ -375,6 +375,32 @@ mod tests {
     }
 
     #[test]
+    fn stale_blocked_preflight_is_ignored_after_newer_completed_run_for_same_issue() {
+        let dir = tempdir().unwrap();
+        prepare_layers(dir.path());
+        write_spec(dir.path());
+        write_issue(dir.path(), InputRiskLevel::High);
+        let blocked_run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        let blocked_preflight = execute_run_preflight(dir.path(), blocked_run.run_id).unwrap();
+        assert_eq!(blocked_preflight.status, "blocked");
+
+        let completed_run = complete_run(dir.path());
+        assert_eq!(
+            completed_run.status,
+            agentflow_execute::ExecuteRunStatus::Completed
+        );
+
+        let status = refresh_state(dir.path()).unwrap();
+
+        assert!(!status.blockers.iter().any(|blocker| {
+            blocker.action == "execute-issue"
+                && blocker.source_path.as_deref()
+                    == Some(".agentflow/execute/runs/run-001/preflight.json")
+        }));
+        assert!(status.blockers.is_empty());
+    }
+
+    #[test]
     fn missing_issue_target_metadata_blocks_handoff_copy() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());

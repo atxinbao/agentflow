@@ -9,6 +9,7 @@ use crate::{
 use agentflow_execute::{ExecutePreflight, ExecuteRun, ExecuteRunStatus};
 use agentflow_input::issue::{validate_agent_claim, AgentClaim};
 use anyhow::Result;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 pub(crate) fn build_gate_snapshot(
@@ -312,11 +313,23 @@ fn build_next_actions(gate: &WorkflowGateSnapshot) -> Vec<WorkflowNextAction> {
 
 fn collect_blockers(root: &Path) -> Result<Vec<WorkflowBlockedAction>> {
     let mut blockers = Vec::new();
+    let latest_run_by_issue = latest_run_ids_by_issue(root)?;
     for run_dir in sorted_child_paths(&root.join(".agentflow/execute/runs"))? {
         let run_path = run_dir.join("run.json");
         let claim_path = run_dir.join("agent-claim.json");
-        if run_path.is_file() {
-            if let Ok(run) = read_json::<ExecuteRun>(&run_path) {
+        let run = run_path
+            .is_file()
+            .then(|| read_json::<ExecuteRun>(&run_path))
+            .transpose()
+            .ok()
+            .flatten();
+        let is_latest_issue_run = run.as_ref().is_some_and(|run| {
+            latest_run_by_issue
+                .get(&run.issue_id)
+                .is_some_and(|latest_run_id| latest_run_id == &run.run_id)
+        });
+        if is_latest_issue_run {
+            if let Some(run) = run.as_ref() {
                 let issue = read_json(&root.join(&run.input.issue_path));
                 let claim = read_json::<AgentClaim>(&claim_path);
                 match (issue, claim) {
@@ -359,6 +372,12 @@ fn collect_blockers(root: &Path) -> Result<Vec<WorkflowBlockedAction>> {
         let Ok(preflight) = read_json::<ExecutePreflight>(&preflight_path) else {
             continue;
         };
+        if !run
+            .as_ref()
+            .is_some_and(|run| run.run_id == preflight.run_id && is_latest_issue_run)
+        {
+            continue;
+        }
         for check in preflight
             .checks
             .iter()
@@ -378,6 +397,33 @@ fn collect_blockers(root: &Path) -> Result<Vec<WorkflowBlockedAction>> {
         }
     }
     Ok(blockers)
+}
+
+fn latest_run_ids_by_issue(root: &Path) -> Result<BTreeMap<String, String>> {
+    let mut latest_runs = BTreeMap::<String, ExecuteRun>::new();
+    for run_dir in sorted_child_paths(&root.join(".agentflow/execute/runs"))? {
+        let run_path = run_dir.join("run.json");
+        if !run_path.is_file() {
+            continue;
+        }
+        let Ok(run) = read_json::<ExecuteRun>(&run_path) else {
+            continue;
+        };
+        let replace = match latest_runs.get(&run.issue_id) {
+            Some(existing) => {
+                (run.updated_at, run.run_id.as_str())
+                    > (existing.updated_at, existing.run_id.as_str())
+            }
+            None => true,
+        };
+        if replace {
+            latest_runs.insert(run.issue_id.clone(), run);
+        }
+    }
+    Ok(latest_runs
+        .into_iter()
+        .map(|(issue_id, run)| (issue_id, run.run_id))
+        .collect())
 }
 
 fn run_is_active(status: &ExecuteRunStatus) -> bool {
