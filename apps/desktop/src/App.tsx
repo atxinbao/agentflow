@@ -681,7 +681,7 @@ function App() {
   const tasks = useMemo(
     () =>
       buildTaskItems(
-        inputSnapshotState.snapshot?.issues ?? [],
+        inputSnapshotState.snapshot ? inputSnapshotState.snapshot.issues : null,
         issueStatusIndexState.index,
         workspaceData.projectViewModel,
         workspaceData.workbench,
@@ -2227,7 +2227,7 @@ function TaskList({
           ...group,
           issues: group.issues.filter((issue) => taskIdSet.has(issue.id)),
         }))
-        .filter((group) => group.issues.length || group.missingIssueIds.length) ?? [],
+        .filter((group) => group.issues.length || group.missingIssueIds.length || group.counts.issueCount === 0) ?? [],
     [taskIdSet, taskTree],
   );
   const visibleUngroupedIssues = useMemo(
@@ -2410,6 +2410,9 @@ function TaskProjectGroupRow({
               缺失引用：{issueId}
             </p>
           ))}
+          {!group.issues.length && !group.missingIssueIds.length ? (
+            <p className="v16-empty-text v16-task-project-empty">项目下还没有任务。</p>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -3480,12 +3483,12 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
 }
 
 function buildTaskItems(
-  inputIssues: InputIssue[],
+  inputIssues: InputIssue[] | null,
   issueStatusIndex: IssueStatusIndex | null,
   projectViewModel: ProjectMilestoneIssueViewModelSnapshot | null,
   workbench: WorkbenchSnapshot | null,
 ): V1Issue[] {
-  if (inputIssues.length) {
+  if (inputIssues) {
     return sortTasksByDisplayStatus(inputIssues.map((issue) => inputIssueToV1Issue(issue, issueStatusIndex)));
   }
   if (projectViewModel?.issues.length) {

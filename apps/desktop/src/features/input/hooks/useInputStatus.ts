@@ -4,6 +4,7 @@ import {
   BROWSER_PREVIEW_PROJECT_ROOT,
   createBrowserPreviewInputSnapshot,
   createBrowserPreviewInputStatus,
+  currentBrowserPreviewTaskHierarchyScenario,
 } from "../../../browserPreviewData";
 import type { InputSnapshot, InputStatusSnapshot } from "../../../types";
 import { isBrowserPreviewRuntime } from "../../project-files";
@@ -49,8 +50,9 @@ export function useInputStatus(projectRoot: string | null, refreshToken = 0) {
     }
 
     if (isBrowserPreviewRuntime()) {
+      const scenario = currentBrowserPreviewTaskHierarchyScenario();
       setInputStatusState({
-        status: createBrowserPreviewInputStatus(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT),
+        status: createBrowserPreviewInputStatus(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT, scenario),
         error: null,
         source: "preview",
       });
@@ -127,8 +129,9 @@ export function useInputSnapshot(projectRoot: string | null, refreshToken = 0) {
     }
 
     if (isBrowserPreviewRuntime()) {
+      const scenario = currentBrowserPreviewTaskHierarchyScenario();
       setInputSnapshotState({
-        snapshot: createBrowserPreviewInputSnapshot(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT),
+        snapshot: createBrowserPreviewInputSnapshot(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT, scenario),
         error: null,
         source: "preview",
       });

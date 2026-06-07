@@ -20,6 +20,7 @@ import type {
   WorkbenchSnapshot,
   AgentEnvironmentStatus,
   InputIssue,
+  InputProject,
   InputSnapshot,
   InputStatusSnapshot,
   IssueStatusIndex,
@@ -49,6 +50,38 @@ const previewAuditId = "audit-browser-preview-001";
 const previewDeliveryRunId = "run-browser-preview-001";
 const previewProjectId = "project-browser-preview";
 const previewSpecId = "spec-browser-preview";
+const previewProjectIssueIds = ["iss-ready", "iss-progress", "iss-review", "iss-audit-ready", "iss-done", "iss-cancel"];
+
+export type BrowserPreviewTaskHierarchyScenario =
+  | "default"
+  | "empty"
+  | "ungrouped"
+  | "empty-project"
+  | "missing-issue";
+
+const browserPreviewTaskHierarchyScenarios = new Set<BrowserPreviewTaskHierarchyScenario>([
+  "default",
+  "empty",
+  "ungrouped",
+  "empty-project",
+  "missing-issue",
+]);
+
+export function resolveBrowserPreviewTaskHierarchyScenario(search?: string | null): BrowserPreviewTaskHierarchyScenario {
+  const query = search ?? "";
+  const params = new URLSearchParams(query.startsWith("?") ? query : `?${query}`);
+  const value = params.get("taskHierarchyScenario") ?? params.get("taskScenario") ?? "default";
+  return browserPreviewTaskHierarchyScenarios.has(value as BrowserPreviewTaskHierarchyScenario)
+    ? (value as BrowserPreviewTaskHierarchyScenario)
+    : "default";
+}
+
+export function currentBrowserPreviewTaskHierarchyScenario(): BrowserPreviewTaskHierarchyScenario {
+  if (typeof window === "undefined") {
+    return "default";
+  }
+  return resolveBrowserPreviewTaskHierarchyScenario(window.location.search);
+}
 
 const previewIssueContract: IssueContract = {
   id: "ISSUE-PREVIEW-001",
@@ -192,6 +225,91 @@ function previewAuditExpectedOutputs(auditId: string) {
     "findings.json": `${outputDir}/findings.json`,
     "traceability.json": `${outputDir}/traceability.json`,
   };
+}
+
+function browserPreviewInputProject(
+  options: {
+    issueIds?: string[];
+    objective?: string;
+    projectId?: string;
+    summary?: string;
+    title?: string;
+  } = {},
+): InputProject {
+  const projectId = options.projectId ?? previewProjectId;
+  return {
+    version: "input-project.browser-preview",
+    projectId,
+    sourceSpecId: previewSpecId,
+    title: options.title ?? "浏览器预览任务项目",
+    summary: options.summary ?? "用于验证 Project Summary 和 Issue Contract 阅读器。",
+    objective: options.objective ?? "在任务页展示项目分组、推荐任务、依赖摘要和 issue 合约。",
+    scope: ["展示项目摘要。", "展示 issue 所属项目和输出目标。", "验证建议任务按钮会切换到 issue 合约。"],
+    nonGoals: ["不写入真实 .agentflow/input。", "不创建远程对象。"],
+    successCriteria: ["项目行可选中。", "右侧可显示 Project Summary。", "查看建议任务后右侧显示 Issue Contract。"],
+    issueIds: options.issueIds ?? previewProjectIssueIds,
+    status: "active",
+    panel: {
+      snapshotId: null,
+      contextPackId: null,
+    },
+    system: {
+      createdBy: "browser-preview",
+      createdAt: previewTimestamp,
+      updatedAt: previewTimestamp,
+      path: `.agentflow/input/projects/${projectId}.json`,
+      revision: 1,
+    },
+  };
+}
+
+function browserPreviewIssuesForScenario(scenario: BrowserPreviewTaskHierarchyScenario) {
+  if (scenario === "empty" || scenario === "empty-project" || scenario === "missing-issue") {
+    return [];
+  }
+  if (scenario === "ungrouped") {
+    return [previewInputIssues[0]];
+  }
+  return previewInputIssues;
+}
+
+function browserPreviewProjectsForScenario(scenario: BrowserPreviewTaskHierarchyScenario) {
+  if (scenario === "empty" || scenario === "ungrouped") {
+    return [];
+  }
+  if (scenario === "empty-project") {
+    return [
+      browserPreviewInputProject({
+        issueIds: [],
+        objective: "验证 Project 存在但还没有任何 Issue 时的空态。",
+        projectId: "project-empty-browser-preview",
+        summary: "用于验证 Project 下没有 Issue 的空态。",
+        title: "空任务项目",
+      }),
+    ];
+  }
+  if (scenario === "missing-issue") {
+    return [
+      browserPreviewInputProject({
+        issueIds: ["iss-missing-browser-preview"],
+        objective: "验证 Project 引用缺失 Issue 时的 warning。",
+        projectId: "project-missing-browser-preview",
+        summary: "用于验证 Project 引用缺失 Issue 的 warning。",
+        title: "缺失引用项目",
+      }),
+    ];
+  }
+  return [browserPreviewInputProject()];
+}
+
+function browserPreviewRelationsForScenario(scenario: BrowserPreviewTaskHierarchyScenario) {
+  if (scenario !== "default") {
+    return [];
+  }
+  return [
+    { fromIssueId: "iss-progress", toIssueId: "iss-ready", type: "blocked-by" as const },
+    { fromIssueId: "iss-progress", toIssueId: "iss-review", type: "blocks" as const },
+  ];
 }
 
 export function createBrowserPreviewWorkbenchSnapshot(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): WorkbenchSnapshot {
@@ -711,7 +829,12 @@ export function createBrowserPreviewAgentEnvironmentStatus(
   };
 }
 
-export function createBrowserPreviewInputStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): InputStatusSnapshot {
+export function createBrowserPreviewInputStatus(
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+  scenario = currentBrowserPreviewTaskHierarchyScenario(),
+): InputStatusSnapshot {
+  const issues = browserPreviewIssuesForScenario(scenario);
+  const projects = browserPreviewProjectsForScenario(scenario);
   return {
     version: "input-status.browser-preview",
     projectRoot,
@@ -723,8 +846,8 @@ export function createBrowserPreviewInputStatus(projectRoot = BROWSER_PREVIEW_PR
       intake: 1,
       draftSpecs: 1,
       approvedSpecs: 1,
-      projects: 1,
-      issues: previewInputIssues.length,
+      projects: projects.length,
+      issues: issues.length,
       blockedIssues: 0,
       highRiskIssues: 0,
     },
@@ -734,12 +857,18 @@ export function createBrowserPreviewInputStatus(projectRoot = BROWSER_PREVIEW_PR
   };
 }
 
-export function createBrowserPreviewInputSnapshot(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): InputSnapshot {
+export function createBrowserPreviewInputSnapshot(
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+  scenario = currentBrowserPreviewTaskHierarchyScenario(),
+): InputSnapshot {
+  const issues = browserPreviewIssuesForScenario(scenario);
+  const projects = browserPreviewProjectsForScenario(scenario);
+  const relations = browserPreviewRelationsForScenario(scenario);
   return {
     version: "input-snapshot.browser-preview",
     projectRoot,
     ready: true,
-    status: createBrowserPreviewInputStatus(projectRoot),
+    status: createBrowserPreviewInputStatus(projectRoot, scenario),
     manifest: {
       version: "input-manifest.browser-preview",
       projectRoot,
@@ -747,7 +876,7 @@ export function createBrowserPreviewInputSnapshot(projectRoot = BROWSER_PREVIEW_
     },
     index: {
       version: "input-index.browser-preview",
-      issues: previewInputIssues.map((issue) => ({
+      issues: issues.map((issue) => ({
         id: issue.issueId,
         title: issue.title,
         path: issue.system?.path ?? `.agentflow/input/issues/${issue.issueId}.json`,
@@ -757,48 +886,24 @@ export function createBrowserPreviewInputSnapshot(projectRoot = BROWSER_PREVIEW_
     },
     intake: [],
     specs: [],
-    projects: [
-      {
-        version: "input-project.browser-preview",
-        projectId: previewProjectId,
-        sourceSpecId: previewSpecId,
-        title: "浏览器预览任务项目",
-        summary: "用于验证 Project Summary 和 Issue Contract 阅读器。",
-        objective: "在任务页展示项目分组、推荐任务、依赖摘要和 issue 合约。",
-        scope: ["展示项目摘要。", "展示 issue 所属项目和输出目标。", "验证建议任务按钮会切换到 issue 合约。"],
-        nonGoals: ["不写入真实 .agentflow/input。", "不创建远程对象。"],
-        successCriteria: ["项目行可选中。", "右侧可显示 Project Summary。", "查看建议任务后右侧显示 Issue Contract。"],
-        issueIds: ["iss-ready", "iss-progress", "iss-review", "iss-audit-ready", "iss-done", "iss-cancel"],
-        status: "active",
-        panel: {
-          snapshotId: null,
-          contextPackId: null,
-        },
-        system: {
-          createdBy: "browser-preview",
-          createdAt: previewTimestamp,
-          updatedAt: previewTimestamp,
-          path: `.agentflow/input/projects/${previewProjectId}.json`,
-          revision: 1,
-        },
-      },
-    ],
-    issues: previewInputIssues,
+    projects,
+    issues,
     relations: {
       version: "input-issue-relations.browser-preview",
-      relations: [
-        { fromIssueId: "iss-progress", toIssueId: "iss-ready", type: "blocked-by" },
-        { fromIssueId: "iss-progress", toIssueId: "iss-review", type: "blocks" },
-      ],
+      relations,
     },
   };
 }
 
-export function createBrowserPreviewIssueStatusIndex(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): IssueStatusIndex {
+export function createBrowserPreviewIssueStatusIndex(
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+  scenario = currentBrowserPreviewTaskHierarchyScenario(),
+): IssueStatusIndex {
+  const issues = browserPreviewIssuesForScenario(scenario);
   return {
     version: "state-issue-status-index.browser-preview",
     updatedAt: previewTimestamp,
-    issues: previewInputIssues.map((issue) => ({
+    issues: issues.map((issue) => ({
       issueId: issue.issueId,
       displayStatus: issue.displayStatus,
       riskLevel: issue.riskLevel,

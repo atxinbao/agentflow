@@ -4,6 +4,7 @@ import {
   BROWSER_PREVIEW_PROJECT_ROOT,
   createBrowserPreviewIssueStatusIndex,
   createBrowserPreviewStateStatus,
+  currentBrowserPreviewTaskHierarchyScenario,
 } from "../../../browserPreviewData";
 import type { IssueStatusIndex, StateStatusSnapshot } from "../../../types";
 import { isBrowserPreviewRuntime } from "../../project-files";
@@ -94,8 +95,9 @@ export function useIssueStatusIndex(projectRoot: string | null, refreshToken = 0
     }
 
     if (isBrowserPreviewRuntime()) {
+      const scenario = currentBrowserPreviewTaskHierarchyScenario();
       setIssueStatusIndexState({
-        index: createBrowserPreviewIssueStatusIndex(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT),
+        index: createBrowserPreviewIssueStatusIndex(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT, scenario),
         error: null,
         source: "preview",
       });
