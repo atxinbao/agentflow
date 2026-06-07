@@ -288,6 +288,12 @@ button.af-list-row {
   color: var(--af-accent);
 }
 
+.af-status-badge-done {
+  border-color: color-mix(in srgb, #0891b2, transparent 54%);
+  background: color-mix(in srgb, #0891b2, transparent 92%);
+  color: #0e7490;
+}
+
 .af-status-badge-warning,
 .af-risk-badge-medium {
   border-color: color-mix(in srgb, var(--af-warning), transparent 56%);

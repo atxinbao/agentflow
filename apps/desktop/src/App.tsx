@@ -3218,7 +3218,7 @@ function statusChipForDisplayStatus(status: IssueDisplayStatus = "backlog"): Sta
   const chips: Record<IssueDisplayStatus, StatusChipStatus> = {
     backlog: "idle",
     cancel: "blocked",
-    done: "ready",
+    done: "done",
     "in-progress": "working",
     ready: "ready",
     review: "warning",
