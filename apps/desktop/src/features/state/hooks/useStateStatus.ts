@@ -20,7 +20,7 @@ const initialStateStatusState: StateStatusState = {
   source: "idle",
 };
 
-export function useStateStatus(projectRoot: string | null) {
+export function useStateStatus(projectRoot: string | null, refreshToken = 0) {
   const [stateStatusState, setStateStatusState] = useState<StateStatusState>(initialStateStatusState);
 
   useEffect(() => {
@@ -39,7 +39,9 @@ export function useStateStatus(projectRoot: string | null) {
     }
 
     let cancelled = false;
-    setStateStatusState((current) => ({ ...current, error: null, source: "loading" }));
+    setStateStatusState((current) =>
+      current.status ? { ...current, error: null } : { ...current, error: null, source: "loading" },
+    );
     void invoke<StateStatusSnapshot>("load_state_status", { projectRoot })
       .then((status) => {
         if (!cancelled) {
@@ -48,18 +50,23 @@ export function useStateStatus(projectRoot: string | null) {
       })
       .catch((error) => {
         if (!cancelled) {
-          setStateStatusState({
-            status: null,
-            error: error instanceof Error ? error.message : String(error),
-            source: "unavailable",
-          });
+          const message = error instanceof Error ? error.message : String(error);
+          setStateStatusState((current) =>
+            current.status
+              ? { ...current, error: message }
+              : {
+                  status: null,
+                  error: message,
+                  source: "unavailable",
+                },
+          );
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [projectRoot]);
+  }, [projectRoot, refreshToken]);
 
   return stateStatusState;
 }
@@ -96,7 +103,9 @@ export function useIssueStatusIndex(projectRoot: string | null, refreshToken = 0
     }
 
     let cancelled = false;
-    setIssueStatusIndexState((current) => ({ ...current, error: null, source: "loading" }));
+    setIssueStatusIndexState((current) =>
+      current.index ? { ...current, error: null } : { ...current, error: null, source: "loading" },
+    );
     void invoke<IssueStatusIndex>("load_issue_status_index", { projectRoot })
       .then((index) => {
         if (!cancelled) {
@@ -105,11 +114,16 @@ export function useIssueStatusIndex(projectRoot: string | null, refreshToken = 0
       })
       .catch((error) => {
         if (!cancelled) {
-          setIssueStatusIndexState({
-            index: null,
-            error: error instanceof Error ? error.message : String(error),
-            source: "unavailable",
-          });
+          const message = error instanceof Error ? error.message : String(error);
+          setIssueStatusIndexState((current) =>
+            current.index
+              ? { ...current, error: message }
+              : {
+                  index: null,
+                  error: message,
+                  source: "unavailable",
+                },
+          );
         }
       });
 

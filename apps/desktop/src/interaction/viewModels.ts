@@ -196,7 +196,7 @@ export function buildDeliveryInteractionState(
   selectedDeliveryRunId: string | null,
 ): DeliveryInteractionState {
   const selectedDelivery =
-    deliveries.find((delivery) => delivery.runId === selectedDeliveryRunId) ?? deliveries.at(-1) ?? null;
+    deliveries.find((delivery) => delivery.runId === selectedDeliveryRunId) ?? deliveries.at(0) ?? null;
   return {
     empty: deliveries.length === 0,
     selectedDelivery,
@@ -206,7 +206,7 @@ export function buildDeliveryInteractionState(
 }
 
 export function buildAuditInteractionState(audits: AuditIndexEntry[], selectedAuditId: string | null): AuditInteractionState {
-  const selectedAudit = audits.find((audit) => audit.auditId === selectedAuditId) ?? audits.at(-1) ?? null;
+  const selectedAudit = audits.find((audit) => audit.auditId === selectedAuditId) ?? audits.at(0) ?? null;
   return {
     empty: audits.length === 0,
     selectedAudit,

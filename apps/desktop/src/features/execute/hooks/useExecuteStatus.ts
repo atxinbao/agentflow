@@ -19,7 +19,7 @@ const initialExecuteStatusState: ExecuteStatusState = {
   source: "idle",
 };
 
-export function useExecuteStatus(projectRoot: string | null) {
+export function useExecuteStatus(projectRoot: string | null, refreshToken = 0) {
   const [executeStatusState, setExecuteStatusState] = useState<ExecuteStatusState>(initialExecuteStatusState);
 
   useEffect(() => {
@@ -38,7 +38,9 @@ export function useExecuteStatus(projectRoot: string | null) {
     }
 
     let cancelled = false;
-    setExecuteStatusState((current) => ({ ...current, error: null, source: "loading" }));
+    setExecuteStatusState((current) =>
+      current.status ? { ...current, error: null } : { ...current, error: null, source: "loading" },
+    );
     void invoke<ExecuteStatusSnapshot>("load_execute_status", { projectRoot })
       .then((status) => {
         if (!cancelled) {
@@ -47,18 +49,23 @@ export function useExecuteStatus(projectRoot: string | null) {
       })
       .catch((error) => {
         if (!cancelled) {
-          setExecuteStatusState({
-            status: null,
-            error: error instanceof Error ? error.message : String(error),
-            source: "unavailable",
-          });
+          const message = error instanceof Error ? error.message : String(error);
+          setExecuteStatusState((current) =>
+            current.status
+              ? { ...current, error: message }
+              : {
+                  status: null,
+                  error: message,
+                  source: "unavailable",
+                },
+          );
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [projectRoot]);
+  }, [projectRoot, refreshToken]);
 
   return executeStatusState;
 }

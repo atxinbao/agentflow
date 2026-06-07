@@ -16,6 +16,7 @@ agentflow-execute = { path = "../../../crates/execute" }
 agentflow-output = { path = "../../../crates/output" }
 agentflow-state = { path = "../../../crates/state" }
 base64 = "0.22"
+notify = "8"
 rfd = "0.15"
 serde.workspace = true
 serde_json.workspace = true
