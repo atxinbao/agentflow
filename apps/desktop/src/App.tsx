@@ -1411,9 +1411,9 @@ function LoginModal({ onConnect }: { onConnect: (provider: Provider) => void }) 
           <span className="v16-titlebar-action muted">未登录</span>
         </div>
         <div className="v16-titlebar-project" data-tauri-drag-region>
-          <span className="v16-titlebar-status-dot warning" aria-hidden="true" />
+          <span className="v16-titlebar-status-dot idle" aria-hidden="true" />
           <strong>AgentFlow</strong>
-          <small>not-authenticated</small>
+          <small className="v16-titlebar-status-text idle">not-authenticated</small>
         </div>
         <span className="v16-command-key">⌘K</span>
       </header>
@@ -1661,15 +1661,16 @@ function TitleBar({
   projectName: string;
   statusText: string;
 }) {
+  const statusTone = titlebarStatusDotStatus(statusText);
   return (
     <TopBar className="v16-titlebar" aria-label="应用顶部栏" data-tauri-drag-region onMouseDown={startWindowDrag}>
       <div className="v16-titlebar-left" data-tauri-drag-region>
         {isBrowserPreviewRuntime() ? <WindowDots /> : null}
       </div>
       <div className="v16-titlebar-project" data-tauri-drag-region>
-        <span className="v16-titlebar-status-dot" aria-hidden="true" />
+        <span className={`v16-titlebar-status-dot ${statusTone}`} aria-hidden="true" />
         <strong>{projectName}</strong>
-        <small>{statusText}</small>
+        <small className={`v16-titlebar-status-text ${statusTone}`}>{statusText}</small>
       </div>
       <div className="v16-titlebar-right">
         <span className="v16-command-key">⌘K</span>
@@ -3210,6 +3211,28 @@ function statusBarProjectSummary(
     return { dot: "idle", label: "missing" };
   }
   return { dot: "ready", label: "ready" };
+}
+
+function titlebarStatusDotStatus(statusText: string): StatusChipStatus {
+  if (statusText === "blocked") {
+    return "blocked";
+  }
+  if (statusText === "error") {
+    return "failed";
+  }
+  if (statusText === "loading" || statusText === "agent-running") {
+    return "working";
+  }
+  if (statusText === "delivered" || statusText === "audit-completed") {
+    return "done";
+  }
+  if (statusText === "workspace-ready" || statusText === "未选择项目 · 本地模式") {
+    return "ready";
+  }
+  if (statusText === "not-authenticated" || statusText === "first-run") {
+    return "idle";
+  }
+  return "warning";
 }
 
 function CompanionShell({
