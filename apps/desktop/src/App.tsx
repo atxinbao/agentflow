@@ -2146,11 +2146,10 @@ function TaskList({
                   type="button"
                 >
                   <span className="v16-task-queue-main">
-                    <strong className="v16-list-item-id">{task.id}</strong>
+                    <span className="v16-list-item-id">{task.id}</span>
                     <span className="v16-task-queue-title-line">
                       <span>{task.title}</span>
                     </span>
-                    <small>{issueCategoryLabelZh(task.issueCategory)} · {agentRoleLabelZh(task.requiredAgentRole)}</small>
                   </span>
                   <span className="v16-task-queue-state">
                     <StatusBadge
@@ -2249,14 +2248,13 @@ function TaskDetail({
   }
 
   const handoffError = taskHandoffValidationError(task);
-  const targetDescriptionItems = taskTargetDescriptionItems(task);
+  const auditDescriptionItems = taskAuditDescriptionItems(task);
   const outputItems = taskOutputItems(task);
 
   return (
-    <aside className="v16-detail-pane" aria-label="任务合约">
+    <aside className="v16-detail-pane" aria-label="任务详情">
       <header>
-        <p className="v16-kicker">任务合约</p>
-        <h2>任务合约：{task.id}</h2>
+        <h2>{task.id}</h2>
         <p>{task.title}</p>
         <div className="v16-detail-meta-strip">
           <span className="v16-detail-meta-item">
@@ -2273,7 +2271,7 @@ function TaskDetail({
           </span>
           <span className="v16-detail-meta-item">
             <span className="v16-detail-meta-label">角色</span>
-            <strong>{agentRoleLabelZh(task.requiredAgentRole)}</strong>
+            <strong className="v16-role-text">{agentRoleLabelZh(task.requiredAgentRole)}</strong>
           </span>
         </div>
       </header>
@@ -2281,11 +2279,8 @@ function TaskDetail({
         <DescriptionList
           items={[
             ["任务类型", issueCategoryLabelZh(task.issueCategory)],
-            ["执行角色", agentRoleLabelZh(task.requiredAgentRole)],
-            ["执行线程", codexThreadNameForRole(task.requiredAgentRole)],
-            ["状态", displayStatusLabelZh(task.displayStatus)],
             ["进入执行", handedOff ? "已做本地标记" : "未标记"],
-            ...targetDescriptionItems,
+            ...auditDescriptionItems,
             ...(task.auditTrigger ? [["触发来源", auditTriggerLabel(task.auditTrigger)] as [string, string]] : []),
           ]}
         />
@@ -3323,20 +3318,16 @@ function agentInstructionForTask(task: V1Issue) {
   return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。不要写 audit report、findings、evidence-map 或 traceability。";
 }
 
-function taskTargetDescriptionItems(task: V1Issue): Array<[string, string]> {
-  if (task.issueCategory === "audit") {
-    return [
-      ["审计目标", task.auditId || "未提供"],
-      ["关联 Release", task.sourceReleaseId || "未提供"],
-      ["交付文件", task.sourceDeliveryPath || "未提供"],
-      ["输出目录", task.auditOutputDir || "未提供"],
-    ];
+function taskAuditDescriptionItems(task: V1Issue): Array<[string, string]> {
+  if (task.issueCategory !== "audit") {
+    return [];
   }
 
   return [
-    ["来源规格", task.sourceSpecId || "未提供"],
-    ["规格文件", task.sourceSpecPath || "未提供"],
-    ["Issue 文件", task.issuePath || "未提供"],
+    ["审计目标", task.auditId || "未提供"],
+    ["关联 Release", task.sourceReleaseId || "未提供"],
+    ["交付文件", task.sourceDeliveryPath || "未提供"],
+    ["输出目录", task.auditOutputDir || "未提供"],
   ];
 }
 
@@ -3594,37 +3585,30 @@ function buildNextStep(
 }
 
 function buildCodexHandoff(task: V1Issue) {
-  const agentThreadName = codexThreadNameForRole(task.requiredAgentRole);
   const handoffPackage =
     task.issueCategory === "audit"
       ? {
           agentInstruction: agentInstructionForTask(task),
           auditId: task.auditId,
           auditOutputDir: task.auditOutputDir,
-          agentThreadName,
           expectedOutputs: task.expectedOutputs,
           handoffId: task.handoffId,
           handoffVersion: "agent-handoff.v1",
           issueCategory: "audit",
           issueId: task.id,
-          issuePath: task.issuePath,
           requiredAgentRole: task.requiredAgentRole ?? "audit-agent",
           sourceDeliveryPath: task.sourceDeliveryPath,
           sourceReleaseId: task.sourceReleaseId,
         }
       : {
           agentInstruction: agentInstructionForTask(task),
-          agentThreadName,
           contextPackPath: task.contextPackPath,
           expectedOutputs: task.expectedOutputs,
           handoffId: task.handoffId,
           handoffVersion: "agent-handoff.v1",
           issueCategory: "spec",
           issueId: task.id,
-          issuePath: task.issuePath,
           requiredAgentRole: task.requiredAgentRole ?? "build-agent",
-          sourceSpecId: task.sourceSpecId,
-          sourceSpecPath: task.sourceSpecPath,
         };
   return [
     `# ${task.title}`,
@@ -3640,7 +3624,6 @@ function buildCodexHandoff(task: V1Issue) {
     `任务：${task.id}`,
     `任务类型：${issueCategoryLabelZh(task.issueCategory)}`,
     `执行角色：${agentRoleLabelZh(task.requiredAgentRole)}`,
-    `执行线程：${agentThreadName}`,
     `风险：${displayRiskLabelZh(task.riskLevel)}`,
     `指令：${agentInstructionForTask(task)}`,
     ...(task.issueCategory === "audit"
@@ -3650,9 +3633,7 @@ function buildCodexHandoff(task: V1Issue) {
           `审计输出目录：${task.auditOutputDir ?? ""}`,
         ]
       : [
-          `来源 SPEC：${task.sourceSpecId ?? ""}`,
-          `SPEC 路径：${task.sourceSpecPath ?? ""}`,
-          `Issue 路径：${task.issuePath ?? ""}`,
+          `上下文包：${task.contextPackPath ?? ""}`,
         ]),
     "",
     "## 角色边界",
