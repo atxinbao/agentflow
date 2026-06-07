@@ -39,7 +39,7 @@ async function loadInputStatusWithRepair(projectRoot: string) {
   }
 }
 
-export function useInputStatus(projectRoot: string | null) {
+export function useInputStatus(projectRoot: string | null, refreshToken = 0) {
   const [inputStatusState, setInputStatusState] = useState<InputStatusState>(initialInputStatusState);
 
   useEffect(() => {
@@ -58,7 +58,9 @@ export function useInputStatus(projectRoot: string | null) {
     }
 
     let cancelled = false;
-    setInputStatusState((current) => ({ ...current, error: null, source: "loading" }));
+    setInputStatusState((current) =>
+      current.status ? { ...current, error: null } : { ...current, error: null, source: "loading" },
+    );
     void loadInputStatusWithRepair(projectRoot)
       .then((status) => {
         if (!cancelled) {
@@ -67,18 +69,23 @@ export function useInputStatus(projectRoot: string | null) {
       })
       .catch((error) => {
         if (!cancelled) {
-          setInputStatusState({
-            status: null,
-            error: error instanceof Error ? error.message : String(error),
-            source: "unavailable",
-          });
+          const message = error instanceof Error ? error.message : String(error);
+          setInputStatusState((current) =>
+            current.status
+              ? { ...current, error: message }
+              : {
+                  status: null,
+                  error: message,
+                  source: "unavailable",
+                },
+          );
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [projectRoot]);
+  }, [projectRoot, refreshToken]);
 
   return inputStatusState;
 }
@@ -109,7 +116,7 @@ async function loadInputSnapshotWithRepair(projectRoot: string) {
   }
 }
 
-export function useInputSnapshot(projectRoot: string | null) {
+export function useInputSnapshot(projectRoot: string | null, refreshToken = 0) {
   const [inputSnapshotState, setInputSnapshotState] =
     useState<InputSnapshotState>(initialInputSnapshotState);
 
@@ -129,7 +136,9 @@ export function useInputSnapshot(projectRoot: string | null) {
     }
 
     let cancelled = false;
-    setInputSnapshotState((current) => ({ ...current, error: null, source: "loading" }));
+    setInputSnapshotState((current) =>
+      current.snapshot ? { ...current, error: null } : { ...current, error: null, source: "loading" },
+    );
     void loadInputSnapshotWithRepair(projectRoot)
       .then((snapshot) => {
         if (!cancelled) {
@@ -138,18 +147,23 @@ export function useInputSnapshot(projectRoot: string | null) {
       })
       .catch((error) => {
         if (!cancelled) {
-          setInputSnapshotState({
-            snapshot: null,
-            error: error instanceof Error ? error.message : String(error),
-            source: "unavailable",
-          });
+          const message = error instanceof Error ? error.message : String(error);
+          setInputSnapshotState((current) =>
+            current.snapshot
+              ? { ...current, error: message }
+              : {
+                  snapshot: null,
+                  error: message,
+                  source: "unavailable",
+                },
+          );
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [projectRoot]);
+  }, [projectRoot, refreshToken]);
 
   return inputSnapshotState;
 }

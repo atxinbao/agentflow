@@ -38,7 +38,9 @@ export function useOutputStatus(projectRoot: string | null, refreshToken = 0) {
     }
 
     let cancelled = false;
-    setOutputStatusState((current) => ({ ...current, error: null, source: "loading" }));
+    setOutputStatusState((current) =>
+      current.status ? { ...current, error: null } : { ...current, error: null, source: "loading" },
+    );
     void invoke<OutputStatusSnapshot>("load_output_status", { projectRoot })
       .then((status) => {
         if (!cancelled) {
@@ -47,11 +49,16 @@ export function useOutputStatus(projectRoot: string | null, refreshToken = 0) {
       })
       .catch((error) => {
         if (!cancelled) {
-          setOutputStatusState({
-            status: null,
-            error: error instanceof Error ? error.message : String(error),
-            source: "unavailable",
-          });
+          const message = error instanceof Error ? error.message : String(error);
+          setOutputStatusState((current) =>
+            current.status
+              ? { ...current, error: message }
+              : {
+                  status: null,
+                  error: message,
+                  source: "unavailable",
+                },
+          );
         }
       });
 

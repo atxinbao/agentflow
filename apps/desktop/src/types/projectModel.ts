@@ -174,6 +174,8 @@ export type V1Issue = {
   sourceSpecId?: string | null;
   sourceSpecPath?: string | null;
   issuePath?: string | null;
+  createdAt?: number | null;
+  updatedAt?: number | null;
   handoffId?: string | null;
   contextPackPath?: string | null;
   auditTrigger?: string | null;

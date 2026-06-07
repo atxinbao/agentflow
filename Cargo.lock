@@ -52,6 +52,7 @@ dependencies = [
  "agentflow-state",
  "agentflow-workflow-acceptance",
  "base64 0.22.1",
+ "notify",
  "rfd",
  "serde",
  "serde_json",

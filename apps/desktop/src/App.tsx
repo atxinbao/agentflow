@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   CheckCircle2,
@@ -160,6 +161,23 @@ type ProjectInitializationState = {
 type ProjectWorkspaceSummary = {
   initializationStatus?: ProjectInitializationStatus | null;
 };
+
+type AgentflowWorkspaceChangedEvent = {
+  agentflowPath: string;
+  changedAreas: string[];
+  eventKind: string;
+  paths: string[];
+  projectRoot: string;
+  updatedAt: number;
+  version: string;
+  watcherBackend: string;
+  watcherStatus: string;
+};
+
+const AGENTFLOW_WORKSPACE_CHANGED_EVENT = "agentflow-workspace-changed";
+const AGENTFLOW_WATCHER_REFRESH_DELAY_MS = 500;
+const AGENTFLOW_WATCHER_REFRESH_COOLDOWN_MS = 1200;
+const AGENTFLOW_DERIVED_CHANGE_AREAS = new Set(["state"]);
 
 type NextStepViewModel = {
   action: string;
@@ -371,7 +389,11 @@ function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedDeliveryRunId, setSelectedDeliveryRunId] = useState<string | null>(null);
   const [selectedAuditId, setSelectedAuditId] = useState<string | null>(null);
+  const [inputStatusRefreshToken, setInputStatusRefreshToken] = useState(0);
+  const [taskListRefreshToken, setTaskListRefreshToken] = useState(0);
+  const [executeRefreshToken, setExecuteRefreshToken] = useState(0);
   const [outputRefreshToken, setOutputRefreshToken] = useState(0);
+  const [stateRefreshToken, setStateRefreshToken] = useState(0);
   const [selectedIntent, setSelectedIntent] = useState("我要新增功能");
   const [onboardingFeedback, setOnboardingFeedback] = useState<string | null>(null);
   const [taskActionFeedback, setTaskActionFeedback] = useState<string | null>(null);
@@ -396,12 +418,15 @@ function App() {
   } = useProjectFiles(projectRoot);
   const { agentManualState, loadAgentManual } = useAgentManual(projectRoot);
   const { projectPanelState, prepareProjectPanel } = useProjectPanel(projectRoot);
-  const inputStatusState = useInputStatus(projectRoot);
-  const inputSnapshotState = useInputSnapshot(projectRoot);
-  const executeStatusState = useExecuteStatus(projectRoot);
+  const inputStatusState = useInputStatus(projectRoot, inputStatusRefreshToken);
+  const inputSnapshotState = useInputSnapshot(projectRoot, taskListRefreshToken);
+  const executeStatusState = useExecuteStatus(projectRoot, executeRefreshToken);
   const outputStatusState = useOutputStatus(projectRoot, outputRefreshToken);
-  const stateStatusState = useStateStatus(projectRoot);
-  const issueStatusIndexState = useIssueStatusIndex(projectRoot, outputRefreshToken);
+  const stateStatusState = useStateStatus(projectRoot, stateRefreshToken);
+  const issueStatusIndexState = useIssueStatusIndex(
+    projectRoot,
+    taskListRefreshToken + executeRefreshToken + outputRefreshToken,
+  );
   const workspaceData = useWorkspaceData(projectRoot);
   const outputBundle = useOutputBundle(projectRoot, outputRefreshToken);
   const initializationState = useProjectInitializationStatus(projectRoot, outputRefreshToken);
@@ -457,6 +482,109 @@ function App() {
   }, [projectRoot]);
 
   useEffect(() => {
+    if (!projectRoot || isBrowserPreviewRuntime()) {
+      return;
+    }
+
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    let startAttempt = 0;
+    let refreshTimer: number | null = null;
+    let lastRefreshAt = 0;
+    const queuedAreas = new Set<string>();
+
+    const flushQueuedRefresh = () => {
+      refreshTimer = null;
+      if (cancelled) {
+        return;
+      }
+
+      const changedAreas = new Set(queuedAreas);
+      queuedAreas.clear();
+      if (changedAreas.size === 0) {
+        return;
+      }
+
+      lastRefreshAt = Date.now();
+      const refreshAll = changedAreas.has("all");
+      const refreshInput = refreshAll || changedAreas.has("input");
+      const refreshExecute = refreshAll || changedAreas.has("execute");
+      const refreshOutput = refreshAll || changedAreas.has("output");
+      const refreshPanel = refreshAll || changedAreas.has("panel");
+      const refreshTaskList = refreshInput || refreshExecute || refreshOutput || refreshAll;
+
+      if (refreshTaskList) {
+        setTaskListRefreshToken((current) => current + 1);
+      }
+
+      if (refreshOutput && activePage === "delivery") {
+        setOutputRefreshToken((current) => current + 1);
+      }
+      if (refreshOutput && activePage === "audit") {
+        setOutputRefreshToken((current) => current + 1);
+      }
+      if (refreshPanel && activePage === "files") {
+        void loadProjectFiles(projectRoot);
+      }
+    };
+
+    const scheduleQueuedRefresh = () => {
+      if (refreshTimer !== null) {
+        return;
+      }
+      const elapsed = Date.now() - lastRefreshAt;
+      const delay = Math.max(
+        AGENTFLOW_WATCHER_REFRESH_DELAY_MS,
+        AGENTFLOW_WATCHER_REFRESH_COOLDOWN_MS - elapsed,
+      );
+      refreshTimer = window.setTimeout(flushQueuedRefresh, delay);
+    };
+
+    const startWatcher = () => {
+      startAttempt += 1;
+      void invoke("start_agentflow_workspace_watcher", { projectRoot }).catch(() => {
+        if (!cancelled && startAttempt < 5) {
+          window.setTimeout(startWatcher, 800);
+        }
+      });
+    };
+
+    void listen<AgentflowWorkspaceChangedEvent>(AGENTFLOW_WORKSPACE_CHANGED_EVENT, (event) => {
+      if (cancelled) {
+        return;
+      }
+      const payload = event.payload;
+      if (normalizeProjectRootKey(payload.projectRoot) !== normalizeProjectRootKey(projectRoot)) {
+        return;
+      }
+      const changedAreas = payload.changedAreas.filter(
+        (area) => area === "all" || !AGENTFLOW_DERIVED_CHANGE_AREAS.has(area),
+      );
+      if (changedAreas.length === 0) {
+        return;
+      }
+      changedAreas.forEach((area) => queuedAreas.add(area));
+      scheduleQueuedRefresh();
+    }).then((cleanup) => {
+      if (cancelled) {
+        cleanup();
+      } else {
+        unlisten = cleanup;
+      }
+    });
+
+    startWatcher();
+
+    return () => {
+      cancelled = true;
+      if (refreshTimer !== null) {
+        window.clearTimeout(refreshTimer);
+      }
+      unlisten?.();
+    };
+  }, [activePage, loadProjectFiles, projectRoot]);
+
+  useEffect(() => {
     if (!projectRoot || isBrowserPreviewRuntime() || preparedProjectRoots.current.has(projectRoot)) {
       return;
     }
@@ -494,7 +622,11 @@ function App() {
             }),
           }),
         );
+        setInputStatusRefreshToken((current) => current + 1);
+        setTaskListRefreshToken((current) => current + 1);
+        setExecuteRefreshToken((current) => current + 1);
         setOutputRefreshToken((current) => current + 1);
+        setStateRefreshToken((current) => current + 1);
         void loadProjectFiles(projectRoot);
         void loadAgentManual(projectRoot);
         setOnboardingFeedback(summary.initializationStatus?.message ?? null);
@@ -741,7 +873,11 @@ function App() {
     void loadProjectFiles(projectRoot);
     void loadAgentManual(projectRoot);
     void prepareProjectPanel(projectRoot);
+    setInputStatusRefreshToken((current) => current + 1);
+    setTaskListRefreshToken((current) => current + 1);
+    setExecuteRefreshToken((current) => current + 1);
     setOutputRefreshToken((current) => current + 1);
+    setStateRefreshToken((current) => current + 1);
   }
 
   async function handleTaskAction(action: TaskInteractionAction, task: V1Issue) {
@@ -797,7 +933,7 @@ function App() {
     }
 
     if (action === "view-audit") {
-      const audit = outputBundle.auditIndex?.audits.at(-1) ?? null;
+      const audit = sortAuditsByLatest(outputBundle.auditIndex?.audits ?? []).at(0) ?? null;
       if (audit) {
         setSelectedAuditId(audit.auditId);
         setActivePage("audit");
@@ -1056,16 +1192,19 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
     }
 
     let cancelled = false;
-    setState((current) => ({ ...current, error: null, source: "loading" }));
+    setState((current) =>
+      current.outputIndex || current.auditIndex
+        ? { ...current, error: null }
+        : { ...current, error: null, source: "loading" },
+    );
     void Promise.all([
       invoke<OutputIndex>("load_output_index", { projectRoot }),
       invoke<AuditIndex>("load_audit_index", { projectRoot }),
     ])
       .then(async ([outputIndex, auditIndex]) => {
-        const latestAuditWithReport = [...auditIndex.audits]
-          .filter((audit) => auditHasReport(audit))
-          .sort((left, right) => left.requestedAt - right.requestedAt)
-          .at(-1);
+        const latestAuditWithReport = sortAuditsByLatest(auditIndex.audits).find((audit) =>
+          auditHasReport(audit),
+        );
         const auditReport = latestAuditWithReport
           ? await invoke<HumanAuditReport>("load_audit_report", { auditId: latestAuditWithReport.auditId, projectRoot })
           : null;
@@ -1076,13 +1215,18 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
       })
       .catch((error) => {
         if (!cancelled) {
-          setState({
-            auditIndex: null,
-            auditReport: null,
-            error: error instanceof Error ? error.message : String(error),
-            outputIndex: null,
-            source: "unavailable",
-          });
+          const message = error instanceof Error ? error.message : String(error);
+          setState((current) =>
+            current.outputIndex || current.auditIndex
+              ? { ...current, error: message }
+              : {
+                  auditIndex: null,
+                  auditReport: null,
+                  error: message,
+                  outputIndex: null,
+                  source: "unavailable",
+                },
+          );
         }
       });
 
@@ -2183,8 +2327,8 @@ function DeliveryPage({
   selectedDeliveryRunId: string | null;
   selectedTask: V1Issue | null;
 }) {
-  const deliveries = outputBundle.outputIndex?.releaseDeliveries ?? [];
-  const evidence = outputBundle.outputIndex?.evidence ?? [];
+  const deliveries = sortOutputEntriesByLatest(outputBundle.outputIndex?.releaseDeliveries ?? []);
+  const evidence = sortOutputEntriesByLatest(outputBundle.outputIndex?.evidence ?? []);
   const deliveryInteractionState = buildDeliveryInteractionState(deliveries, selectedDeliveryRunId);
   const selectedDelivery = deliveryInteractionState.selectedDelivery;
 
@@ -2327,7 +2471,7 @@ function AuditPage({
   outputBundle: OutputBundleState;
   selectedAuditId: string | null;
 }) {
-  const audits = outputBundle.auditIndex?.audits ?? [];
+  const audits = sortAuditsByLatest(outputBundle.auditIndex?.audits ?? []);
   const auditInteractionState = buildAuditInteractionState(audits, selectedAuditId);
   const selectedReport =
     outputBundle.auditReport?.audit.auditId === auditInteractionState.selectedAuditId ? outputBundle.auditReport : null;
@@ -2842,6 +2986,7 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
     auditId,
     auditOutputDir,
     contextPackPath: issue.contextPackPath ?? null,
+    createdAt: issue.system?.createdAt ?? null,
     handoffId: issue.handoffId ?? `handoff-${issue.issueId}`,
     issueCategory,
     issuePath: issue.issuePath ?? issue.system?.path ?? `.agentflow/input/issues/${issue.issueId}.json`,
@@ -2860,6 +3005,7 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
     scope: issue.scope,
     status: issue.status,
     title: issue.title,
+    updatedAt: issue.system?.updatedAt ?? issue.system?.createdAt ?? null,
     validationCommands: issue.validationCommands?.length ? issue.validationCommands : issue.validationHints,
   };
 }
@@ -2883,6 +3029,7 @@ function issueContractToV1Issue(issue: IssueContract): V1Issue {
     auditId: null,
     auditOutputDir: null,
     contextPackPath: null,
+    createdAt: null,
     handoffId: `handoff-${issue.id}`,
     issueCategory: "spec",
     issuePath: `.agentflow/input/issues/${issue.id}.json`,
@@ -2899,6 +3046,7 @@ function issueContractToV1Issue(issue: IssueContract): V1Issue {
     scope: issue.scope,
     status: issue.status,
     title: issue.title,
+    updatedAt: null,
     validationCommands: issue.validation.commands,
   };
 }
@@ -2980,10 +3128,30 @@ function defaultForbiddenActions(issueCategory?: string | null) {
 
 function sortTasksByDisplayStatus(tasks: V1Issue[]) {
   return [...tasks].sort((left, right) => {
+    const timeDiff = issueSortTime(right) - issueSortTime(left);
+    if (timeDiff) {
+      return timeDiff;
+    }
     const leftOrder = displayStatusOrder.get(left.displayStatus ?? "backlog") ?? 0;
     const rightOrder = displayStatusOrder.get(right.displayStatus ?? "backlog") ?? 0;
     return leftOrder - rightOrder || left.id.localeCompare(right.id);
   });
+}
+
+function issueSortTime(issue: V1Issue) {
+  return issue.updatedAt ?? issue.createdAt ?? 0;
+}
+
+function sortOutputEntriesByLatest(entries: OutputIndexEntry[]) {
+  return [...entries].sort(
+    (left, right) => right.updatedAt - left.updatedAt || right.runId.localeCompare(left.runId),
+  );
+}
+
+function sortAuditsByLatest(audits: AuditIndexEntry[]) {
+  return [...audits].sort(
+    (left, right) => right.requestedAt - left.requestedAt || right.auditId.localeCompare(left.auditId),
+  );
 }
 
 function displayStatusFromLegacyStatus(status: string): IssueDisplayStatus {
@@ -3197,8 +3365,7 @@ function riskTextClass(risk?: string | null) {
 }
 
 function findDeliveryForTask(deliveries: OutputIndexEntry[], taskId: string) {
-  return [...deliveries]
-    .reverse()
+  return sortOutputEntriesByLatest(deliveries)
     .find((delivery) => delivery.issueId === taskId || delivery.runId.includes(taskId)) ?? null;
 }
 
@@ -3207,8 +3374,7 @@ function auditHasReport(audit: AuditIndexEntry | null | undefined) {
 }
 
 function findAuditForDelivery(audits: AuditIndexEntry[], deliveryRunId: string) {
-  return [...audits]
-    .reverse()
+  return sortAuditsByLatest(audits)
     .find(
       (audit) =>
         audit.sourceRunId === deliveryRunId ||
@@ -3285,14 +3451,14 @@ function buildRecentActivities(
       title: "项目更新已记录",
     })) ?? [];
   const deliveryItems =
-    outputBundle.outputIndex?.releaseDeliveries.slice(-2).map((delivery) => ({
+    sortOutputEntriesByLatest(outputBundle.outputIndex?.releaseDeliveries ?? []).slice(0, 2).map((delivery) => ({
       detail: `${delivery.issueId || "关联任务"} · ${artifactStatusLabel(delivery.status)}`,
       id: `delivery-${delivery.runId}`,
       target: "delivery" as const,
       title: "交付页面同步结构",
     })) ?? [];
   const auditItems =
-    outputBundle.auditIndex?.audits.slice(-2).map((audit) => ({
+    sortAuditsByLatest(outputBundle.auditIndex?.audits ?? []).slice(0, 2).map((audit) => ({
       detail: `${audit.auditId} · ${artifactStatusLabel(audit.status)}`,
       id: `audit-${audit.auditId}`,
       target: "audit" as const,
@@ -3301,7 +3467,7 @@ function buildRecentActivities(
 
   const items = [...initializationItems, ...projectUpdates, ...deliveryItems, ...auditItems];
   if (items.length) {
-    return items.slice(-4).reverse();
+    return items.slice(0, 4);
   }
 
   return [
