@@ -270,6 +270,8 @@ After confirmation, it may write Approved SPEC files only under `.agentflow/inpu
 
 It does not execute issues. Generated spec issues must use `issueCategory=spec`, `requiredAgentRole=build-agent`, `displayStatus=ready` or `displayStatus=backlog`, `sourceSpecId`, `sourceSpecPath`, `issuePath`, `handoffId`, explicit `contextPackPath`, allowed / forbidden paths, forbidden actions, validation commands, and `expectedOutputs.executeRunDir`, `expectedOutputs.evidencePath`, `expectedOutputs.releaseDeliveryDir`.
 
+When Spec Agent writes an initial input package, relation files are part of the package. `.agentflow/input/relations/issue-relations.json` and `.agentflow/input/relations/dependency-graph.json` must use canonical camelCase relation edges with `fromIssueId`, `toIssueId`, and `type`. Do not write legacy `from` / `to` relation fields.
+
 It cannot execute issues, write source code, run commands, write execute facts, write output evidence, write release delivery, create PRs, merge, deploy, or audit.
 
 ### 2. Build Agent
@@ -638,13 +640,15 @@ Convert Approved SPEC into AgentFlow input issues.
 
 - Do not generate issues from chat directly.
 - Generate only from Approved SPEC with `product.md`, `tech.md`, and `approval.json`.
-- Write issues only to `.agentflow/input/issues/<issue-id>.json`.
+- Write issue files only to `.agentflow/input/issues/<issue-id>.json`.
+- When generating a project issue package, update `.agentflow/input/projects/**`, `.agentflow/input/index.json`, `.agentflow/input/manifest.json`, and `.agentflow/input/relations/**` with the same canonical issue IDs.
 - Do not write `.agentflow/define/issues/**`, `.agentflow/define/goals/**`, or `.agentflow/define/milestones/**`.
 - Do not write legacy `.agentflow/spec/**`.
 - Do not write legacy `.agentflow/goal-tree/**`.
 - Do not execute issues.
 - Do not start AgentRun.
 - Every generated Spec Issue must include `issueCategory=spec`, `requiredAgentRole=build-agent`, `sourceSpecId`, `sourceSpecPath`, `issuePath`, `handoffId`, explicit `contextPackPath`, `allowedPaths`, `forbiddenPaths`, `forbiddenActions`, `validationCommands`, and build `expectedOutputs`.
+- Relation files are part of the initial input package. `.agentflow/input/relations/issue-relations.json` and `.agentflow/input/relations/dependency-graph.json` must use `fromIssueId` and `toIssueId`. Do not write legacy `from` / `to` fields.
 
 ## Mapping
 
@@ -657,6 +661,49 @@ Convert Approved SPEC into AgentFlow input issues.
 - SPEC validation plan -> Issue.validationHints
 - SPEC dependencies -> Issue.relations
 - Spec Agent judgment -> Issue.riskLevel
+
+## Relation File Schema
+
+Use this schema for `.agentflow/input/relations/issue-relations.json`:
+
+```json
+{
+  "version": "input-issue-relations.v1",
+  "relations": [
+    {
+      "fromIssueId": "AF-002",
+      "toIssueId": "AF-001",
+      "type": "blocked-by"
+    }
+  ]
+}
+```
+
+Use this schema for `.agentflow/input/relations/dependency-graph.json`:
+
+```json
+{
+  "version": "input-dependency-graph.v1",
+  "nodes": ["AF-001", "AF-002"],
+  "edges": [
+    {
+      "fromIssueId": "AF-002",
+      "toIssueId": "AF-001",
+      "type": "blocked-by"
+    }
+  ]
+}
+```
+
+Allowed relation `type` values are `blocked-by`, `blocks`, `related`, and `duplicate-of`.
+
+Invalid legacy shape:
+
+```json
+{ "from": "AF-002", "to": "AF-001", "type": "blocked-by" }
+```
+
+If a relation points at a missing issue ID, stop and fix the initial input package before reporting completion.
 "#;
 
 const BOUNDARY_CHECK_SKILL: &str = r#"# boundary-check

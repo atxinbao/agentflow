@@ -131,6 +131,11 @@ mod tests {
                 .unwrap()
                 .contains("release-auto")
         );
+        let agentflow_manual =
+            fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md")).unwrap();
+        assert!(agentflow_manual.contains("fromIssueId"));
+        assert!(agentflow_manual.contains("toIssueId"));
+        assert!(agentflow_manual.contains("Do not write legacy `from` / `to` relation fields."));
         assert!(
             fs::read_to_string(dir.path().join(".agentflow/define/audit/AUDIT.md"))
                 .unwrap()
@@ -169,6 +174,16 @@ mod tests {
         .unwrap();
         assert!(spec_authoring_skill.contains("SPEC Draft Preview must be human-readable"));
         assert!(spec_authoring_skill.contains("`spec.json`: metadata"));
+        let input_issue_generation_skill = fs::read_to_string(
+            dir.path()
+                .join(".agentflow/define/agent/skills/input-issue-generation/SKILL.md"),
+        )
+        .unwrap();
+        assert!(input_issue_generation_skill.contains("## Relation File Schema"));
+        assert!(input_issue_generation_skill.contains("fromIssueId"));
+        assert!(input_issue_generation_skill.contains("toIssueId"));
+        assert!(input_issue_generation_skill.contains("Invalid legacy shape"));
+        assert!(input_issue_generation_skill.contains("\"from\": \"AF-002\""));
     }
 
     #[test]
