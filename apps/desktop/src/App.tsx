@@ -3528,6 +3528,7 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
     auditId,
     auditOutputDir,
     issue.audit?.expectedOutputs,
+    false,
   );
   return {
     acceptanceCriteria: issue.acceptanceCriteria,
@@ -3628,19 +3629,27 @@ function normalizeExpectedOutputs(
   auditId?: string | null,
   auditOutputDir?: string | null,
   auditOutputs?: ExpectedOutputs | string[] | null,
+  allowDefaultOutputs = true,
 ): ExpectedOutputs {
   if (issueCategory === "audit") {
     const normalizedAuditOutputs = normalizeOutputValue(auditOutputs);
     if (Object.keys(normalizedAuditOutputs).length) {
       return normalizedAuditOutputs;
     }
+    const normalizedDirectOutputs = normalizeOutputValue(outputs);
+    if (Object.keys(normalizedDirectOutputs).length) {
+      return normalizedDirectOutputs;
+    }
     const outputDir = auditOutputDir || (auditId ? `.agentflow/output/audit/${auditId}` : "");
-    return outputDir ? auditExpectedOutputs(outputDir) : {};
+    return allowDefaultOutputs && outputDir ? auditExpectedOutputs(outputDir) : {};
   }
 
   const normalized = normalizeOutputValue(outputs);
   if (Object.keys(normalized).length) {
     return normalized;
+  }
+  if (!allowDefaultOutputs) {
+    return {};
   }
   return {
     evidencePath: `.agentflow/output/evidence/${issueId}.json`,
@@ -4002,7 +4011,7 @@ function hasCompleteBuildAgentPipeline(task: V1Issue) {
 
 function taskHandoffValidationError(task: V1Issue) {
   if (task.issueCategory === "audit") {
-    if (!task.auditId || !task.auditOutputDir || !Object.keys(task.expectedOutputs ?? {}).length) {
+    if (!task.auditId || !task.auditOutputDir || !hasExpectedOutputs(task.expectedOutputs)) {
       return INCOMPLETE_HANDOFF_MESSAGE;
     }
     return null;
@@ -4011,9 +4020,7 @@ function taskHandoffValidationError(task: V1Issue) {
   const outputs = task.expectedOutputs ?? {};
   if (
     !task.sourceSpecId ||
-    !outputs.executeRunDir ||
-    !outputs.evidencePath ||
-    !outputs.releaseDeliveryDir ||
+    !hasBuildExpectedOutputs(outputs) ||
     !hasCompleteBuildAgentPipeline(task)
   ) {
     return INCOMPLETE_HANDOFF_MESSAGE;
@@ -4021,12 +4028,24 @@ function taskHandoffValidationError(task: V1Issue) {
   return null;
 }
 
+function hasExpectedOutputs(outputs?: ExpectedOutputs | null) {
+  return Object.values(outputs ?? {}).some((value) => typeof value === "string" && value.trim().length > 0);
+}
+
+function hasBuildExpectedOutputs(outputs?: ExpectedOutputs | null) {
+  return Boolean(
+    outputs?.executeRunDir?.trim() &&
+      outputs.evidencePath?.trim() &&
+      outputs.releaseDeliveryDir?.trim(),
+  );
+}
+
 function taskActionDisplayLabel(action: TaskInteractionAction, task: V1Issue, copyState: ButtonInteractionState) {
   if (action === "copy-handoff") {
     if (copyState === "success") {
       return "已复制";
     }
-    return `复制 ${agentRoleEnglishName(task.requiredAgentRole)} 任务包`;
+    return task.issueCategory === "audit" ? "复制 Audit Agent 任务包" : "复制 Build Agent 任务包";
   }
   return taskActionLabel(action);
 }
@@ -4277,6 +4296,7 @@ function buildCodexHandoff(task: V1Issue) {
           handoffVersion: "agent-handoff.v1",
           issueCategory: "audit",
           issueId: task.id,
+          projectId: task.projectId,
           requiredAgentRole: task.requiredAgentRole ?? "audit-agent",
           sourceDeliveryPath: task.sourceDeliveryPath,
           sourceReleaseId: task.sourceReleaseId,
@@ -4310,7 +4330,11 @@ function buildCodexHandoff(task: V1Issue) {
           handoffVersion: "agent-handoff.v1",
           issueCategory: "spec",
           issueId: task.id,
+          issuePath: task.issuePath,
+          projectId: task.projectId,
           requiredAgentRole: task.requiredAgentRole ?? "build-agent",
+          sourceSpecId: task.sourceSpecId,
+          sourceSpecPath: task.sourceSpecPath,
         };
   return [
     `# ${task.title}`,
