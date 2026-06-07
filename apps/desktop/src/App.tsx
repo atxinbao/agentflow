@@ -19,7 +19,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { detectAppLocale } from "./appLocale";
 import {
   BROWSER_PREVIEW_PROJECT_ROOT,
@@ -377,6 +377,7 @@ function App() {
   const [taskActionFeedback, setTaskActionFeedback] = useState<string | null>(null);
   const [taskCopyState, setTaskCopyState] = useState<ButtonInteractionState>("enabled");
   const [handedOffIssues, setHandedOffIssues] = useState<Set<string>>(() => readStoredIssueSet());
+  const preparedProjectRoots = useRef(new Set<string>());
   const { activePageByProject, activeProjectRoot, expandedProjectRoots, projects } = projectRegistry;
   const activeProject = projects.find((project) => project.root === activeProjectRoot) ?? null;
   const activeProjectRegistryStatus = activeProject?.status ?? null;
@@ -456,6 +457,75 @@ function App() {
   }, [projectRoot]);
 
   useEffect(() => {
+    if (!projectRoot || isBrowserPreviewRuntime() || preparedProjectRoots.current.has(projectRoot)) {
+      return;
+    }
+
+    let cancelled = false;
+    preparedProjectRoots.current.add(projectRoot);
+    setProjectRegistry((current) =>
+      upsertProject(current, {
+        ...createProjectRef({
+          expanded: true,
+          lastActivePage: activePage,
+          name: projectNameFromPath(projectRoot) || "本地项目",
+          root: projectRoot,
+          status: "loading",
+        }),
+      }),
+    );
+
+    void invoke<ProjectWorkspaceSummary>("prepare_local_project_workspace", {
+      appLocale: detectAppLocale(),
+      projectRoot,
+    })
+      .then((summary) => {
+        if (cancelled) {
+          return;
+        }
+        setProjectRegistry((current) =>
+          upsertProject(current, {
+            ...createProjectRef({
+              expanded: true,
+              lastActivePage: activePage,
+              name: projectNameFromPath(projectRoot) || "本地项目",
+              root: projectRoot,
+              status: "ready",
+            }),
+          }),
+        );
+        setOutputRefreshToken((current) => current + 1);
+        void loadProjectFiles(projectRoot);
+        void loadAgentManual(projectRoot);
+        setOnboardingFeedback(summary.initializationStatus?.message ?? null);
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        preparedProjectRoots.current.delete(projectRoot);
+        if (cancelled) {
+          return;
+        }
+        setProjectRegistry((current) =>
+          upsertProject(current, {
+            ...createProjectRef({
+              expanded: true,
+              lastActivePage: activePage,
+              name: projectNameFromPath(projectRoot) || "本地项目",
+              root: projectRoot,
+              status: "error",
+            }),
+            error: message,
+          }),
+        );
+        reportProjectFilesError(message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectRoot]);
+
+  useEffect(() => {
     if (!projectRoot) {
       return;
     }
@@ -506,25 +576,30 @@ function App() {
     () => buildNextStep(stateStatusState, inputStatusState.status, outputStatusState, selectedTask),
     [inputStatusState.status, outputStatusState, selectedTask, stateStatusState],
   );
+  const activeProjectLiveStatus = projectRoot
+    ? activeProjectRegistryStatus === "missing"
+      ? "missing"
+      : activeProjectStatus(projectFilesState, stateStatusState)
+    : null;
   const appInteractionState: AppInteractionState = useMemo(
-    () =>
-      buildAppInteractionState({
+    () => {
+      const outputPageHasError = (activePage === "delivery" || activePage === "audit") && Boolean(outputBundle.error);
+      return buildAppInteractionState({
         activePage,
         hasError: Boolean(
-          outputBundle.error ||
-            activeProjectRegistryStatus === "error" ||
-            activeProjectRegistryStatus === "missing",
+          outputPageHasError || activeProjectLiveStatus === "error" || activeProjectLiveStatus === "missing",
         ),
         onboardingComplete,
         projectLoading:
-          activeProjectRegistryStatus === "loading" || projectFilesState.loading || workspaceData.source === "loading",
+          activeProjectLiveStatus === "loading" || projectFilesState.loading || workspaceData.source === "loading",
         projectRoot,
         providerConnected: Boolean(connectedProvider),
         workspaceBlocked: Boolean(stateStatusState.status?.blockers.length),
-      }),
+      });
+    },
     [
       activePage,
-      activeProjectRegistryStatus,
+      activeProjectLiveStatus,
       connectedProvider,
       onboardingComplete,
       outputBundle.error,
@@ -754,10 +829,10 @@ function App() {
 
   const projectDisplayName = projectNameFromPath(projectRoot ?? "") || "未选择项目";
   const projectAvailabilityStatus =
-    activeProjectRegistryStatus === "loading" ||
-    activeProjectRegistryStatus === "error" ||
-    activeProjectRegistryStatus === "missing"
-      ? activeProjectRegistryStatus
+    activeProjectLiveStatus === "loading" ||
+    activeProjectLiveStatus === "error" ||
+    activeProjectLiveStatus === "missing"
+      ? activeProjectLiveStatus
       : null;
   const navigationProjects = projectsWithLiveStatus(projects, projectRoot, projectFilesState, stateStatusState);
   const activeNavigationProject = navigationProjects.find((project) => project.root === projectRoot) ?? null;

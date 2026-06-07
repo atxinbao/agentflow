@@ -310,6 +310,7 @@ function readProjects(): AgentFlowProjectRef[] {
   return value.filter(isProjectRef).map((project) => ({
     ...project,
     lastActivePage: isAgentFlowProjectPage(project.lastActivePage) ? project.lastActivePage : "home",
+    status: project.status === "loading" ? "ready" : project.status,
   }));
 }
 
