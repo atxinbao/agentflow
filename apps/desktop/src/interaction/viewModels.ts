@@ -46,7 +46,6 @@ export type TaskInteractionAction =
   | "mark-handed-off"
   | "check-writeback"
   | "view-delivery"
-  | "view-audit"
   | "readonly";
 
 export type TaskInteractionState = {
@@ -350,10 +349,10 @@ export function taskActionsForTask(task: V1Issue): TaskInteractionAction[] {
     const actions: Record<IssueDisplayStatus, TaskInteractionAction[]> = {
       backlog: ["view-requirement"],
       cancel: ["readonly"],
-      done: ["view-audit"],
-      "in-progress": ["copy-handoff", "view-audit"],
+      done: [],
+      "in-progress": ["copy-handoff"],
       ready: ["copy-handoff"],
-      review: ["view-audit"],
+      review: [],
     };
     return actions[task.displayStatus ?? "backlog"];
   }
@@ -365,10 +364,10 @@ function taskActionsForStatus(status: IssueDisplayStatus = "backlog"): TaskInter
   const actions: Record<IssueDisplayStatus, TaskInteractionAction[]> = {
     backlog: ["view-requirement"],
     cancel: ["readonly"],
-    done: ["view-delivery", "view-audit"],
+    done: ["view-delivery"],
     "in-progress": ["mark-handed-off", "check-writeback"],
     ready: ["copy-handoff"],
-    review: ["view-delivery", "view-audit"],
+    review: ["view-delivery"],
   };
   return actions[status];
 }
@@ -379,7 +378,6 @@ export function taskActionLabel(action: TaskInteractionAction) {
     "copy-handoff": "复制任务包",
     "mark-handed-off": "我已交给执行助手",
     readonly: "只读查看",
-    "view-audit": "查看审计",
     "view-delivery": "查看交付",
     "view-requirement": "查看需求",
   };

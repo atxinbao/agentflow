@@ -99,7 +99,7 @@ export function DesignSystemPreview() {
           <ListPanel count={2} title="任务列表">
             <ListRow
               meta={<StatusBadge status="ready">Ready</StatusBadge>}
-              subtitle="normal · 2 条验证命令"
+              subtitle="低 · 2 条验证命令"
               title="实现 Figma SVG Style Foundation"
             />
             <ListRow

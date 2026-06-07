@@ -1418,6 +1418,10 @@
   padding: 8px 10px 9px;
 }
 
+.v16-task-node-row {
+  min-height: 60px;
+}
+
 .v16-context-suggestion {
   cursor: default;
   min-height: 58px;
@@ -1470,8 +1474,7 @@ button.v16-task-project-row:hover {
   color: var(--v16-subtle);
 }
 
-.v16-task-project-status,
-.v16-task-risk-dot {
+.v16-task-project-status {
   width: 7px;
   height: 7px;
   border-radius: 999px;
@@ -1484,26 +1487,19 @@ button.v16-task-project-row:hover {
   min-width: 0;
 }
 
-.v16-task-project-title,
-.v16-task-project-summary {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .v16-task-project-title {
+  min-width: 0;
   color: var(--v16-text);
+  display: -webkit-box;
   font-size: 12px;
   font-weight: 620;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   line-height: 1.25;
-}
-
-.v16-task-project-summary {
-  color: var(--v16-muted);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.25;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .v16-task-project-meta {
@@ -1524,10 +1520,6 @@ button.v16-task-project-row:hover {
 
 .v16-task-node-row {
   padding-left: 26px;
-}
-
-.v16-task-risk-dot {
-  flex: 0 0 auto;
 }
 
 .v16-task-ungrouped-row {
@@ -1560,8 +1552,7 @@ button.v16-task-project-row:hover {
 }
 
 .v16-task-queue-row .v16-list-item-id,
-.v16-context-suggestion .v16-list-item-id,
-.v16-task-queue-title-line > span {
+.v16-context-suggestion .v16-list-item-id {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1587,17 +1578,20 @@ button.v16-task-project-row:hover {
 }
 
 .v16-task-queue-title-line {
-  display: flex;
-  align-items: center;
-  gap: 7px;
+  display: block;
   min-width: 0;
 }
 
 .v16-task-queue-title-line > span {
+  display: block;
   color: var(--v16-text);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.3;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .v16-task-queue-state {
@@ -1618,21 +1612,12 @@ button.v16-task-project-row:hover {
   white-space: normal;
 }
 
-.v16-task-queue-row .af-status-badge.v16-task-status-risk::before {
-  background: var(--v16-task-risk-dot, currentColor);
-  background-color: var(--v16-task-risk-dot, currentColor);
-}
-
 .v16-task-queue-row .af-status-badge-done {
   color: #0e7490;
 }
 
 .v16-risk-dot-low {
   --v16-task-risk-dot: var(--af-success);
-}
-
-.v16-risk-dot-normal {
-  --v16-task-risk-dot: var(--af-accent);
 }
 
 .v16-risk-dot-medium {
@@ -1645,10 +1630,6 @@ button.v16-task-project-row:hover {
 
 .v16-list-pane .af-risk-badge-low {
   color: var(--af-success);
-}
-
-.v16-list-pane .af-risk-badge-normal {
-  color: var(--af-accent);
 }
 
 .v16-list-pane .af-risk-badge-medium {
@@ -1754,12 +1735,6 @@ button.v16-task-project-row:hover {
   --v16-risk-text-bg: color-mix(in srgb, var(--af-success), transparent 92%);
   --v16-risk-text-border: color-mix(in srgb, var(--af-success), transparent 56%);
   color: var(--af-success);
-}
-
-.v16-risk-text-normal {
-  --v16-risk-text-bg: color-mix(in srgb, var(--af-accent), transparent 92%);
-  --v16-risk-text-border: color-mix(in srgb, var(--af-accent), transparent 56%);
-  color: var(--af-accent);
 }
 
 .v16-risk-text-medium {

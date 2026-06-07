@@ -3,7 +3,7 @@ import { Button } from "../Button";
 import type { StatusChipStatus } from "../StatusChip";
 
 type Tone = "neutral" | "success" | "warning" | "blocked" | "danger";
-type RiskLevel = "low" | "normal" | "medium" | "high" | "critical" | string;
+type RiskLevel = "low" | "medium" | "high" | string;
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -250,29 +250,23 @@ export function StatusBadge({ children, className, status = "idle", ...props }: 
 export function RiskBadge({
   "aria-label": ariaLabel,
   className,
-  risk = "normal",
+  risk = "low",
   ...props
 }: HTMLAttributes<HTMLSpanElement> & { risk?: RiskLevel }) {
-  const normalized = String(risk || "normal").toLowerCase();
-  const level = normalized.includes("critical")
-    ? "critical"
-    : normalized.includes("high")
-      ? "high"
-      : normalized.includes("medium")
-        ? "medium"
-        : normalized.includes("low")
-          ? "low"
-          : "normal";
+  const normalized = String(risk || "low").toLowerCase();
+  const level = normalized.includes("critical") || normalized.includes("high")
+    ? "high"
+    : normalized.includes("medium")
+      ? "medium"
+      : normalized.includes("low")
+        ? "low"
+        : "low";
   const label =
-    level === "critical"
-      ? "严重"
-      : level === "high"
-        ? "高"
-        : level === "medium"
-          ? "中"
-          : level === "low"
-            ? "低"
-            : "普通";
+    level === "high"
+      ? "高"
+      : level === "medium"
+        ? "中"
+        : "低";
   return (
     <span
       aria-label={ariaLabel ?? `风险：${label}`}
