@@ -82,12 +82,16 @@ import {
   buildAuditInteractionState,
   buildDeliveryInteractionState,
   buildTaskInteractionState,
+  buildTaskProjectTreeViewModel,
   displayStatusLabelZh,
   pickTaskId,
   taskActionLabel,
   type AppInteractionState,
   type ButtonInteractionState,
   type TaskInteractionAction,
+  type TaskIssueNode,
+  type TaskProjectGroup,
+  type TaskProjectTreeViewModel,
 } from "./interaction/viewModels";
 import type {
   AuditIndex,
@@ -685,6 +689,19 @@ function App() {
     });
   }, [taskSearch, tasks]);
   const activeIssueId = workspaceData.workbench?.goalLoop?.activeIssueId ?? null;
+  const taskProjectTree = useMemo(
+    () =>
+      inputSnapshotState.snapshot
+        ? buildTaskProjectTreeViewModel({
+            activeIssueId,
+            issueStatusIndex: issueStatusIndexState.index,
+            issues: inputSnapshotState.snapshot.issues,
+            projects: inputSnapshotState.snapshot.projects,
+            relations: inputSnapshotState.snapshot.relations,
+          })
+        : null,
+    [activeIssueId, inputSnapshotState.snapshot, issueStatusIndexState.index],
+  );
   const selectedTaskCandidateId = useMemo(
     () => pickTaskId(tasks, selectedTaskId, activeIssueId),
     [activeIssueId, selectedTaskId, tasks],
@@ -1087,8 +1104,10 @@ function App() {
             handedOff={selectedTask ? handedOffIssues.has(selectedTask.id) : false}
             onTaskAction={(action, task) => void handleTaskAction(action, task)}
             onSelectTask={setSelectedTaskId}
+            projectRoot={projectRoot}
             selectedTask={selectedTask}
             suggestions={initializationState.status?.recentContext ?? []}
+            taskTree={taskProjectTree}
             tasks={filteredTasks}
           />
         ) : null}
@@ -2080,7 +2099,9 @@ function TasksPage({
   onTaskAction,
   onSelectTask,
   selectedTask,
+  projectRoot,
   suggestions,
+  taskTree,
   tasks,
 }: {
   actionFeedback: string | null;
@@ -2089,8 +2110,10 @@ function TasksPage({
   handedOff: boolean;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   onSelectTask: (taskId: string) => void;
+  projectRoot: string | null;
   selectedTask: V1Issue | null;
   suggestions: ProjectInitializationContext[];
+  taskTree: TaskProjectTreeViewModel | null;
   tasks: V1Issue[];
 }) {
   return (
@@ -2102,8 +2125,10 @@ function TasksPage({
         handedOff={handedOff}
         onSelectTask={onSelectTask}
         onTaskAction={onTaskAction}
+        projectRoot={projectRoot}
         selectedTask={selectedTask}
         suggestions={suggestions}
+        taskTree={taskTree}
         tasks={tasks}
       />
     </section>
@@ -2117,8 +2142,10 @@ function TaskList({
   handedOff,
   onSelectTask,
   onTaskAction,
+  projectRoot,
   selectedTask,
   suggestions,
+  taskTree,
   tasks,
 }: {
   actionFeedback: string | null;
@@ -2127,21 +2154,111 @@ function TaskList({
   handedOff: boolean;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
+  projectRoot: string | null;
   selectedTask: V1Issue | null;
   suggestions: ProjectInitializationContext[];
+  taskTree: TaskProjectTreeViewModel | null;
   tasks: V1Issue[];
 }) {
   const showContextSuggestions = !tasks.length && suggestions.length > 0;
+  const taskIdSet = useMemo(() => new Set(tasks.map((task) => task.id)), [tasks]);
+  const taskTreeProjectIds = taskTree?.groups.map((group) => group.id).join("|") ?? "";
+  const taskTreeStorageKey = `agentflow.task-project-tree.expanded.v1:${projectRoot ?? "no-project"}`;
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    if (!taskTree) {
+      setExpandedProjectIds(new Set());
+      return;
+    }
+    const projectIds = taskTree.groups.map((group) => group.id);
+    const saved = window.localStorage.getItem(taskTreeStorageKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setExpandedProjectIds(new Set(parsed.filter((id): id is string => projectIds.includes(id))));
+          return;
+        }
+      } catch {
+        // Fall back to the default expanded state.
+      }
+    }
+    setExpandedProjectIds(new Set(projectIds));
+  }, [taskTree, taskTreeProjectIds, taskTreeStorageKey]);
+
+  const visibleTaskGroups = useMemo(
+    () =>
+      taskTree?.groups
+        .map((group) => ({
+          ...group,
+          issues: group.issues.filter((issue) => taskIdSet.has(issue.id)),
+        }))
+        .filter((group) => group.issues.length || group.missingIssueIds.length) ?? [],
+    [taskIdSet, taskTree],
+  );
+  const visibleUngroupedIssues = useMemo(
+    () => taskTree?.ungroupedIssues.filter((issue) => taskIdSet.has(issue.id)) ?? [],
+    [taskIdSet, taskTree],
+  );
+  const visibleTaskCount =
+    visibleTaskGroups.reduce((total, group) => total + group.issues.length, 0) + visibleUngroupedIssues.length;
+  const countLabel = showContextSuggestions
+    ? `${suggestions.length} 条`
+    : taskTree
+      ? `${visibleTaskCount} 项`
+      : `${tasks.length} 项`;
+
+  const toggleProjectGroup = (projectId: string) => {
+    setExpandedProjectIds((current) => {
+      const next = new Set(current);
+      if (next.has(projectId)) {
+        next.delete(projectId);
+      } else {
+        next.add(projectId);
+      }
+      window.localStorage.setItem(taskTreeStorageKey, JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   return (
     <div className="v16-task-list-layout" aria-label="任务流转">
       <aside className="v16-list-pane v16-task-queue-pane" aria-label="任务流转">
         <header>
           <h2>任务流转</h2>
-          <span>{showContextSuggestions ? `${suggestions.length} 条` : `${tasks.length} 项`}</span>
+          <span>{countLabel}</span>
         </header>
         <div className="v16-task-queue-items">
-          {tasks.length
+          {taskTree && visibleTaskGroups.length
+            ? visibleTaskGroups.map((group) => (
+                <TaskProjectGroupRow
+                  expanded={expandedProjectIds.has(group.id)}
+                  group={group}
+                  key={group.id}
+                  onSelectTask={onSelectTask}
+                  onToggle={toggleProjectGroup}
+                  selectedTaskId={selectedTask?.id ?? null}
+                />
+              ))
+            : null}
+          {taskTree && visibleUngroupedIssues.length ? (
+            <UngroupedIssueSection
+              issues={visibleUngroupedIssues}
+              onSelectTask={onSelectTask}
+              selectedTaskId={selectedTask?.id ?? null}
+            />
+          ) : null}
+          {taskTree?.warnings.length ? (
+            <div className="v16-task-tree-warnings" role="status">
+              {taskTree.warnings.slice(0, 3).map((warning) => (
+                <p key={`${warning.kind}-${warning.projectId ?? ""}-${warning.issueId ?? ""}-${warning.message}`}>
+                  {warning.message}
+                </p>
+              ))}
+            </div>
+          ) : null}
+          {!taskTree && tasks.length
             ? tasks.map((task) => (
                 <button
                   className={task.id === selectedTask?.id ? "v16-task-queue-row active" : "v16-task-queue-row"}
@@ -2180,7 +2297,7 @@ function TaskList({
                 </article>
               ))
             : null}
-          {!tasks.length && !suggestions.length ? (
+          {!visibleTaskCount && !tasks.length && !suggestions.length ? (
             <p className="v16-empty-text v16-list-empty-state">还没有任务。</p>
           ) : null}
         </div>
@@ -2195,6 +2312,128 @@ function TaskList({
         task={selectedTask}
       />
     </div>
+  );
+}
+
+function TaskProjectGroupRow({
+  expanded,
+  group,
+  onSelectTask,
+  onToggle,
+  selectedTaskId,
+}: {
+  expanded: boolean;
+  group: TaskProjectGroup;
+  onSelectTask: (taskId: string) => void;
+  onToggle: (projectId: string) => void;
+  selectedTaskId: string | null;
+}) {
+  const progress = group.counts.issueCount
+    ? `${group.counts.doneIssueCount}/${group.counts.issueCount}`
+    : "0/0";
+  const risk = groupRiskLevel(group.issues);
+
+  return (
+    <section className="v16-task-project-group" aria-label={group.title}>
+      <button
+        aria-expanded={expanded}
+        className="v16-task-project-row"
+        onClick={() => onToggle(group.id)}
+        title={`${group.title} ${progress}`}
+        type="button"
+      >
+        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        <span className={`v16-task-project-status ${riskStatusDotClass(risk)}`} aria-hidden="true" />
+        <span className="v16-task-project-main">
+          <span className="v16-task-project-title">{group.title}</span>
+          <span className="v16-task-project-summary">{group.summary || group.objective || group.id}</span>
+        </span>
+        <span className="v16-task-project-meta">
+          <span>{progress}</span>
+          <span>{displayRiskTextZh(risk)}</span>
+        </span>
+      </button>
+      {expanded ? (
+        <div className="v16-task-project-children">
+          {group.issues.map((issue) => (
+            <TaskIssueNodeRow
+              issue={issue}
+              key={issue.id}
+              onSelectTask={onSelectTask}
+              selected={issue.id === selectedTaskId}
+            />
+          ))}
+          {group.missingIssueIds.map((issueId) => (
+            <p className="v16-task-tree-warning" key={issueId}>
+              缺失引用：{issueId}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function UngroupedIssueSection({
+  issues,
+  onSelectTask,
+  selectedTaskId,
+}: {
+  issues: TaskIssueNode[];
+  onSelectTask: (taskId: string) => void;
+  selectedTaskId: string | null;
+}) {
+  return (
+    <section className="v16-task-project-group v16-task-ungrouped-section" aria-label="未归属任务">
+      <div className="v16-task-project-row v16-task-ungrouped-row">
+        <span className="v16-task-project-main">
+          <span className="v16-task-project-title">未归属任务</span>
+        </span>
+        <span className="v16-task-project-meta">{issues.length} 项</span>
+      </div>
+      <div className="v16-task-project-children">
+        {issues.map((issue) => (
+          <TaskIssueNodeRow
+            issue={issue}
+            key={issue.id}
+            onSelectTask={onSelectTask}
+            selected={issue.id === selectedTaskId}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function TaskIssueNodeRow({
+  issue,
+  onSelectTask,
+  selected,
+}: {
+  issue: TaskIssueNode;
+  onSelectTask: (taskId: string) => void;
+  selected: boolean;
+}) {
+  return (
+    <button
+      className={selected ? "v16-task-queue-row v16-task-node-row active" : "v16-task-queue-row v16-task-node-row"}
+      onClick={() => onSelectTask(issue.id)}
+      title={`${issue.id} ${issue.title} ${issueCategoryLabelZh(issue.issueCategory)} ${agentRoleLabelZh(issue.requiredAgentRole)}`}
+      type="button"
+    >
+      <span className="v16-task-queue-main">
+        <span className="v16-list-item-id">{issue.id}</span>
+        <span className="v16-task-queue-title-line">
+          <span>{issue.title}</span>
+        </span>
+      </span>
+      <span className="v16-task-queue-state">
+        <span className={`v16-task-risk-dot ${riskStatusDotClass(issue.riskLevel)}`} aria-hidden="true" />
+        <StatusBadge status={statusChipForDisplayStatus(issue.displayStatus)}>
+          {displayStatusLabelZh(issue.displayStatus)}
+        </StatusBadge>
+      </span>
+    </button>
   );
 }
 
@@ -3499,6 +3738,20 @@ function riskToneKey(risk?: string | null) {
     return "medium";
   }
   if (normalized.includes("low")) {
+    return "low";
+  }
+  return "normal";
+}
+
+function groupRiskLevel(issues: TaskIssueNode[]) {
+  const tones = issues.map((issue) => riskToneKey(issue.riskLevel));
+  if (tones.includes("high")) {
+    return "high";
+  }
+  if (tones.includes("medium")) {
+    return "medium";
+  }
+  if (tones.includes("low")) {
     return "low";
   }
   return "normal";
