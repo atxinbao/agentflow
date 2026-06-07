@@ -91,6 +91,20 @@ const previewInputIssues: InputIssue[] = [
     issueModel: "project",
     projectId: previewProjectId,
   }),
+  browserPreviewInputIssue("iss-audit-ready", "复制审计任务包", "ready-for-execute", "ready", "审计任务可以交给 Audit Agent。", {
+    audit: {
+      auditId: previewAuditId,
+      auditOutputDir: `.agentflow/output/audit/${previewAuditId}`,
+      expectedOutputs: previewAuditExpectedOutputs(previewAuditId),
+      sourceDeliveryPath: `.agentflow/output/release/${previewDeliveryRunId}/delivery.json`,
+      sourceReleaseId: previewDeliveryRunId,
+      trigger: "manual",
+    },
+    issueCategory: "audit",
+    issueModel: "project",
+    projectId: previewProjectId,
+    requiredAgentRole: "audit-agent",
+  }),
   browserPreviewInputIssue("iss-done", "确认交付完成", "done", "done", "审计已通过。", {
     issueModel: "project",
     projectId: previewProjectId,
@@ -105,17 +119,24 @@ function browserPreviewInputIssue(
   displayStatus: InputIssue["displayStatus"],
   summary: string,
   options: {
+    audit?: InputIssue["audit"];
     blockedBy?: string[];
     blocks?: string[];
+    expectedOutputs?: InputIssue["expectedOutputs"];
+    issueCategory?: InputIssue["issueCategory"];
     issueModel?: InputIssue["issueModel"];
     projectId?: string | null;
+    requiredAgentRole?: InputIssue["requiredAgentRole"];
     riskLevel?: string;
   } = {},
 ): InputIssue {
+  const issueCategory = options.issueCategory ?? "spec";
   return {
     version: "input-issue.browser-preview",
     issueId,
     issueModel: options.issueModel ?? "direct",
+    issueCategory,
+    requiredAgentRole: options.requiredAgentRole ?? (issueCategory === "audit" ? "audit-agent" : "build-agent"),
     sourceSpecId: previewSpecId,
     projectId: options.projectId ?? null,
     title,
@@ -125,6 +146,7 @@ function browserPreviewInputIssue(
     status,
     displayStatus,
     riskLevel: options.riskLevel ?? "low",
+    expectedOutputs: options.expectedOutputs ?? (issueCategory === "spec" ? previewBuildExpectedOutputs(issueId) : undefined),
     scope: previewIssueContract.scope,
     nonGoals: previewIssueContract.nonGoals,
     acceptanceCriteria: previewIssueContract.evidenceRequirements,
@@ -139,6 +161,7 @@ function browserPreviewInputIssue(
       snapshotId: null,
       contextPackId: null,
     },
+    audit: options.audit ?? null,
     system: {
       createdBy: "browser-preview",
       createdAt: previewTimestamp,
@@ -146,6 +169,25 @@ function browserPreviewInputIssue(
       path: `.agentflow/input/issues/${issueId}.json`,
       revision: 1,
     },
+  };
+}
+
+function previewBuildExpectedOutputs(issueId: string) {
+  return {
+    evidencePath: `.agentflow/output/evidence/${issueId}.json`,
+    executeRunDir: `.agentflow/execute/runs/${issueId}`,
+    releaseDeliveryDir: `.agentflow/output/release/${issueId}`,
+  };
+}
+
+function previewAuditExpectedOutputs(auditId: string) {
+  const outputDir = `.agentflow/output/audit/${auditId}`;
+  return {
+    "audit-report.md": `${outputDir}/audit-report.md`,
+    "audit.json": `${outputDir}/audit.json`,
+    "evidence-map.json": `${outputDir}/evidence-map.json`,
+    "findings.json": `${outputDir}/findings.json`,
+    "traceability.json": `${outputDir}/traceability.json`,
   };
 }
 
@@ -723,7 +765,7 @@ export function createBrowserPreviewInputSnapshot(projectRoot = BROWSER_PREVIEW_
         scope: ["展示项目摘要。", "展示 issue 所属项目和输出目标。", "验证建议任务按钮会切换到 issue 合约。"],
         nonGoals: ["不写入真实 .agentflow/input。", "不创建远程对象。"],
         successCriteria: ["项目行可选中。", "右侧可显示 Project Summary。", "查看建议任务后右侧显示 Issue Contract。"],
-        issueIds: ["iss-ready", "iss-progress", "iss-review", "iss-done"],
+        issueIds: ["iss-ready", "iss-progress", "iss-review", "iss-audit-ready", "iss-done"],
         status: "active",
         panel: {
           snapshotId: null,
