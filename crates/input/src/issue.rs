@@ -610,9 +610,11 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "github-preflight".to_string(),
                 label: "GitHub 自动化预检".to_string(),
-                goal: "确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。".to_string(),
+                goal: "确认 Build Agent 只基于 AgentFlow input issue 和 executionPipeline 执行；确认没有把外部 issue、任务、计划、队列、线程或工具状态当作任务源；确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。".to_string(),
                 required: true,
                 evidence: vec![
+                    "AgentFlow issueId and executionPipeline are the only active task source".to_string(),
+                    "no external issue/task/plan/queue/thread/tool state is used as task authority".to_string(),
                     "gh --version".to_string(),
                     "gh auth status".to_string(),
                     "git status --short".to_string(),

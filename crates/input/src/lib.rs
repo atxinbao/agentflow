@@ -391,8 +391,21 @@ mod tests {
             .iter()
             .find(|stage| stage.stage_id == "github-preflight")
             .unwrap();
+        assert!(preflight_stage
+            .goal
+            .contains("只基于 AgentFlow input issue"));
+        assert!(preflight_stage
+            .goal
+            .contains("外部 issue、任务、计划、队列、线程或工具状态"));
         assert!(preflight_stage.goal.contains("build-agent complete"));
         assert!(preflight_stage.goal.contains("target/release/agentflow"));
+        assert!(preflight_stage.evidence.contains(
+            &"AgentFlow issueId and executionPipeline are the only active task source".to_string()
+        ));
+        assert!(preflight_stage.evidence.contains(
+            &"no external issue/task/plan/queue/thread/tool state is used as task authority"
+                .to_string()
+        ));
         assert!(preflight_stage.evidence.contains(
             &"cargo build --release --bin agentflow or target/debug/agentflow fallback".to_string()
         ));

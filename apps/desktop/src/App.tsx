@@ -257,7 +257,7 @@ const codexRoleGuides: CodexRoleGuide[] = [
     title: "需求助手",
   },
   {
-    cannotDo: ["不执行 audit issue", "不写 audit report", "不写 findings.json", "不绕过 GitHub 预检 / deploy"],
+    cannotDo: ["不执行 audit issue", "不写 audit report", "不写 findings.json", "不使用外部任务源"],
     englishName: "Build Agent",
     role: "build-agent",
     startupInstruction: [
@@ -266,6 +266,10 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "你只能执行：",
       "issueCategory = spec",
       "requiredAgentRole = build-agent",
+      "AgentFlow 当前 issue / handoff package / executionPipeline 是唯一任务源。",
+      "不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源。",
+      "不要用外部状态拆分、重排或推进 AgentFlow 任务。",
+      "GitHub 命令只允许用于当前 executionPipeline 里的 PR 阶段。",
       "",
       "你要做：",
       "1. GitHub 自动化预检。",
@@ -285,6 +289,8 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "- 不绕过 GitHub 自动化预检",
       "- 不绕过沙箱验证",
       "- 不越过 mergeMode 合并 PR",
+      "- 不把外部 issue / task / plan / queue 当成任务源",
+      "- 不用外部状态拆分、重排或推进 AgentFlow 任务",
       "- 不 deploy",
       "",
       "创建 PR 前必须完成 GitHub 自动化预检和沙箱验证。",
@@ -980,7 +986,7 @@ function App() {
       try {
         await navigator.clipboard.writeText(buildCodexHandoff(task));
         setTaskCopyState("success");
-        setTaskActionFeedback(`已复制。请粘贴到 ${codexThreadNameForRole(task.requiredAgentRole)}。`);
+        setTaskActionFeedback("已复制，请粘贴到 Build Agent 会话中。");
         window.setTimeout(() => setTaskCopyState("enabled"), 1400);
       } catch {
         setTaskCopyState("error");
@@ -1132,7 +1138,6 @@ function App() {
             actionFeedback={taskActionFeedback}
             actions={taskInteractionState.actions}
             copyState={taskCopyState}
-            handedOff={selectedTask ? handedOffIssues.has(selectedTask.id) : false}
             onTaskAction={(action, task) => void handleTaskAction(action, task)}
             onSelectProjectGroup={handleSelectTaskProject}
             onSelectTask={handleSelectTask}
@@ -2128,7 +2133,6 @@ function TasksPage({
   actionFeedback,
   actions,
   copyState,
-  handedOff,
   onSelectProjectGroup,
   onTaskAction,
   onSelectTask,
@@ -2142,7 +2146,6 @@ function TasksPage({
   actionFeedback: string | null;
   actions: TaskInteractionAction[];
   copyState: ButtonInteractionState;
-  handedOff: boolean;
   onSelectProjectGroup: (projectId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   onSelectTask: (taskId: string) => void;
@@ -2159,7 +2162,6 @@ function TasksPage({
         actionFeedback={actionFeedback}
         actions={actions}
         copyState={copyState}
-        handedOff={handedOff}
         onSelectProjectGroup={onSelectProjectGroup}
         onSelectTask={onSelectTask}
         onTaskAction={onTaskAction}
@@ -2178,7 +2180,6 @@ function TaskList({
   actionFeedback,
   actions,
   copyState,
-  handedOff,
   onSelectProjectGroup,
   onSelectTask,
   onTaskAction,
@@ -2192,7 +2193,6 @@ function TaskList({
   actionFeedback: string | null;
   actions: TaskInteractionAction[];
   copyState: ButtonInteractionState;
-  handedOff: boolean;
   onSelectProjectGroup: (projectId: string) => void;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
@@ -2246,13 +2246,6 @@ function TaskList({
   );
   const visibleTaskCount =
     visibleTaskGroups.reduce((total, group) => total + group.issues.length, 0) + visibleUngroupedIssues.length;
-  const selectedTaskGroup = useMemo(
-    () =>
-      selectedTask
-        ? taskTree?.groups.find((group) => group.issues.some((issue) => issue.id === selectedTask.id)) ?? null
-        : null,
-    [selectedTask, taskTree],
-  );
   const countLabel = showContextSuggestions
     ? `${suggestions.length} 条`
     : taskTree
@@ -2358,13 +2351,11 @@ function TaskList({
         actionFeedback={actionFeedback}
         actions={actions}
         copyState={copyState}
-        handedOff={handedOff}
         onTaskAction={onTaskAction}
         onSelectTask={onSelectTask}
         selectedProjectGroup={selectedProjectGroup}
         suggestions={showContextSuggestions ? suggestions : []}
         task={selectedTask}
-        taskProjectGroup={selectedTaskGroup}
         taskTreeSelection={taskTree?.selection ?? null}
       />
     </div>
@@ -2505,25 +2496,21 @@ function TaskDetail({
   actionFeedback,
   actions,
   copyState,
-  handedOff,
   onSelectTask,
   onTaskAction,
   selectedProjectGroup,
   suggestions,
   task,
-  taskProjectGroup,
   taskTreeSelection,
 }: {
   actionFeedback: string | null;
   actions: TaskInteractionAction[];
   copyState: ButtonInteractionState;
-  handedOff: boolean;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   selectedProjectGroup: TaskProjectGroup | null;
   suggestions: ProjectInitializationContext[];
   task: V1Issue | null;
-  taskProjectGroup: TaskProjectGroup | null;
   taskTreeSelection: TaskProjectTreeViewModel["selection"] | null;
 }) {
   if (selectedProjectGroup) {
@@ -2578,10 +2565,8 @@ function TaskDetail({
       actionFeedback={actionFeedback}
       actions={actions}
       copyState={copyState}
-      handedOff={handedOff}
       onTaskAction={onTaskAction}
       task={task}
-      taskProjectGroup={taskProjectGroup}
     />
   );
 }
@@ -2671,27 +2656,21 @@ function IssueContractReader({
   actionFeedback,
   actions,
   copyState,
-  handedOff,
   onTaskAction,
   task,
-  taskProjectGroup,
 }: {
   actionFeedback: string | null;
   actions: TaskInteractionAction[];
   copyState: ButtonInteractionState;
-  handedOff: boolean;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   task: V1Issue;
-  taskProjectGroup: TaskProjectGroup | null;
 }) {
   const handoffError = taskHandoffValidationError(task);
-  const auditDescriptionItems = taskAuditDescriptionItems(task);
+  const detailDescriptionItems = [
+    ...taskAuditDescriptionItems(task),
+    ...(task.auditTrigger ? [["触发来源", auditTriggerLabel(task.auditTrigger)] as [string, string]] : []),
+  ];
   const outputItems = taskOutputItems(task);
-  const owningProject = taskProjectGroup
-    ? `${taskProjectGroup.title} (${taskProjectGroup.id})`
-    : task.projectId
-      ? task.projectId
-      : "未归属任务";
 
   return (
     <aside className="v16-detail-pane" aria-label="Issue 合约">
@@ -2700,6 +2679,10 @@ function IssueContractReader({
         <h2>{task.id}</h2>
         <p>{task.title}</p>
         <div className="v16-detail-meta-strip">
+          <span className="v16-detail-meta-item">
+            <span className="v16-detail-meta-label">类型：</span>
+            <strong className="v16-role-text">{issueCategoryLabelZh(task.issueCategory)}</strong>
+          </span>
           <span className="v16-detail-meta-item">
             <span className="v16-detail-meta-label">状态</span>
             <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
@@ -2719,17 +2702,7 @@ function IssueContractReader({
         </div>
       </header>
       <div className="v16-detail-document">
-        <DescriptionList
-          items={[
-            ["所属项目", owningProject],
-            ["任务类型", issueCategoryLabelZh(task.issueCategory)],
-            ["执行角色", agentRoleLabelZh(task.requiredAgentRole)],
-            ["来源 SPEC", taskSourceSpecLabel(task)],
-            ["进入执行", handedOff ? "已做本地标记" : "未标记"],
-            ...auditDescriptionItems,
-            ...(task.auditTrigger ? [["触发来源", auditTriggerLabel(task.auditTrigger)] as [string, string]] : []),
-          ]}
-        />
+        {detailDescriptionItems.length ? <DescriptionList items={detailDescriptionItems} /> : null}
         <SectionList title="目标" items={[task.goal || task.title]} />
         <SectionList title="范围" items={task.scope} />
         <SectionList title="非目标" items={task.nonGoals} />
@@ -3318,7 +3291,7 @@ function CompanionShell({
           检查写回
         </ActionButton>
         <ActionButton disabled={!selectedTask} onClick={onOpenTasks} variant="primary">
-          复制任务包
+          复制任务
         </ActionButton>
         <ActionButton onClick={onOpenFiles} variant="secondary">
           打开文件
@@ -3414,10 +3387,10 @@ function initializationDetail(state: ProjectInitializationState) {
 }
 
 const displayStatusColumns: Array<{ id: IssueDisplayStatus; label: string }> = [
-  { id: "backlog", label: "待确认" },
-  { id: "ready", label: "可执行" },
-  { id: "in-progress", label: "等待写回" },
-  { id: "review", label: "待审计" },
+  { id: "backlog", label: "待办" },
+  { id: "ready", label: "就绪" },
+  { id: "in-progress", label: "进行中" },
+  { id: "review", label: "待审阅" },
   { id: "done", label: "已完成" },
   { id: "cancel", label: "已取消" },
 ];
@@ -3440,6 +3413,8 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
     stages: [
       {
         evidence: [
+          "AgentFlow issueId and executionPipeline are the only active task source",
+          "no external issue/task/plan/queue/thread/tool state is used as task authority",
           "gh --version",
           "gh auth status",
           "git status --short",
@@ -3448,7 +3423,7 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
           "cargo build --release --bin agentflow or target/debug/agentflow fallback",
           "target/release/agentflow build-agent complete --help or target/debug/agentflow build-agent complete --help",
         ],
-        goal: "确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。",
+        goal: "确认 Build Agent 只基于 AgentFlow input issue 和 executionPipeline 执行；确认没有把外部 issue、任务、计划、队列、线程或工具状态当作任务源；确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。",
         label: "GitHub 自动化预检",
         required: true,
         stageId: "github-preflight",
@@ -3846,7 +3821,7 @@ function agentInstructionForTask(task: V1Issue) {
   if (task.requiredAgentRole === "audit-agent") {
     return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR。";
   }
-  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。按 GitHub 自动化预检、执行、沙箱验证、创建 PR、合并 PR、写回 Done 的流程执行。写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
+  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 issue、handoff package 和 executionPipeline 是唯一任务源；不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按 GitHub 自动化预检、执行、沙箱验证、创建 PR、合并 PR、写回 Done 的流程执行。写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
 }
 
 function taskAuditDescriptionItems(task: V1Issue): Array<[string, string]> {
@@ -3868,10 +3843,6 @@ function taskOutputItems(task: V1Issue) {
     return ["未提供输出位置。"];
   }
   return entries.map(([key, value]) => `${key}: ${value}`);
-}
-
-function taskSourceSpecLabel(task: V1Issue) {
-  return task.sourceSpecId ?? task.sourceSpecPath ?? "未提供";
 }
 
 function projectRecommendedIssue(
@@ -4045,7 +4016,7 @@ function taskActionDisplayLabel(action: TaskInteractionAction, task: V1Issue, co
     if (copyState === "success") {
       return "已复制";
     }
-    return task.issueCategory === "audit" ? "复制 Audit Agent 任务包" : "复制 Build Agent 任务包";
+    return "复制任务";
   }
   return taskActionLabel(action);
 }
@@ -4366,6 +4337,10 @@ function buildCodexHandoff(task: V1Issue) {
     "- 如果你不是 requiredAgentRole，请停止执行。",
     "- 如果 issueCategory 不属于你，请停止执行。",
     "- 不要执行其他 Agent 的任务。",
+    "- AgentFlow 当前 issue、handoff package 和 executionPipeline 是唯一任务源。",
+    "- 不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源。",
+    "- 不要用外部状态拆分、重排或推进 AgentFlow 任务。",
+    "- GitHub 命令只允许用于当前 executionPipeline 里的 PR 阶段。",
     "- 不要越过任务边界。",
     "- 不要手写 `.agentflow/execute/**`、`.agentflow/output/evidence/**` 或 `.agentflow/output/release/**`。",
     ...(task.issueCategory === "spec"
