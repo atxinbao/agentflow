@@ -982,6 +982,12 @@
   overflow: hidden;
 }
 
+.v16-tasks-page {
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+  overflow: hidden;
+}
+
 .v16-empty-project-page {
   display: grid;
   place-items: center;
@@ -1761,6 +1767,30 @@
 
 .v16-list-pane > .v16-empty-text {
   padding: 14px;
+}
+
+.v16-task-queue-items > .v16-list-empty-state,
+.v16-list-items > .v16-list-empty-state {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  margin: 10px;
+  padding: 0 12px;
+  border: 1px dashed var(--v16-border);
+  border-radius: 6px;
+  background: var(--v16-surface-2);
+  color: var(--v16-muted);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.35;
+}
+
+.v16-empty-detail-pane .v16-detail-document {
+  gap: 8px;
+}
+
+.v16-empty-detail-pane .v16-section-list {
+  background: color-mix(in srgb, var(--v16-surface-2) 74%, transparent);
 }
 
 .v16-list-item {

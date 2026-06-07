@@ -1,4 +1,4 @@
-use super::model::{ProjectInitializationContext, ProjectInitializationSummary};
+use super::model::ProjectInitializationSummary;
 use agentflow_execute::{
     ExecuteChangedFile, ExecuteChangedFiles, ExecuteCommandRecord, ExecutePlan, ExecutePlanStep,
     ExecutePlanStepKind, ExecuteResult, ExecuteResultNext, ExecuteRun, ExecuteRunInput,
@@ -27,21 +27,17 @@ use std::{
     collections::BTreeMap,
     fs,
     path::Path,
-    process::{Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 const INIT_STATUS_PATH: &str = ".agentflow/state/indexes/base-release-initialization.json";
-const RECENT_CONTEXT_PATH: &str = ".agentflow/state/indexes/recent-project-context.json";
-const GIT_CONTEXT_PATH: &str = ".agentflow/state/indexes/git-context.json";
+const LEGACY_RECENT_CONTEXT_PATH: &str = ".agentflow/state/indexes/recent-project-context.json";
+const LEGACY_GIT_CONTEXT_PATH: &str = ".agentflow/state/indexes/git-context.json";
 const DEMO_SOURCE: &str = "agentflow-demo";
 const DEMO_SPEC_ID: &str = "SPEC-DEMO-001";
 const DEMO_PROJECT_ID: &str = "PROJ-DEMO-001";
 const DEMO_DELIVERY_RUN_ID: &str = "DEL-DEMO-001";
 const DEMO_AUDIT_ID: &str = "AUD-DEMO-001";
-const DOGFOOD_SOURCE: &str = "agentflow-dogfood-cutover";
-const DOGFOOD_SPEC_ID: &str = "dogfood-cutover-v1";
-const DOGFOOD_ISSUE_ID: &str = "AF-DOGFOOD-001";
 
 #[derive(Clone)]
 struct DemoIssueSeed {
@@ -55,48 +51,32 @@ struct DemoIssueSeed {
 pub(crate) fn initialize_base_release_project(
     root: &Path,
 ) -> Result<ProjectInitializationSummary, String> {
-    let git_context = collect_recent_git_context(root)?;
-    let has_git_context = !git_context.is_empty();
+    let has_git_repo = root.join(".git").is_dir();
     let has_real_issues = has_non_demo_issues(root);
     let has_any_issues = issue_json_count(root) > 0;
-    let project_kind = if has_git_context || has_real_issues {
+    let project_kind = if has_git_repo || has_real_issues {
         "existing"
     } else {
         "new"
     };
-    let mut warnings = Vec::new();
     let mut paths = Vec::new();
+    remove_legacy_git_context_files(root)?;
 
     if project_kind == "existing" {
-        if has_git_context {
-            write_git_context(root, &git_context)?;
-            paths.extend([
-                GIT_CONTEXT_PATH.to_string(),
-                RECENT_CONTEXT_PATH.to_string(),
-            ]);
-        } else {
-            warnings.push("未读取到最近 Git 提交；保留已有 .agentflow 数据。".to_string());
-        }
-        write_dogfood_cutover_input_if_agentflow(root, &mut paths)?;
-
         let summary = ProjectInitializationSummary {
             version: "base-release-initialization.v1".to_string(),
             project_kind: project_kind.to_string(),
             initialized: true,
             demo_data_created: false,
-            git_context_loaded: has_git_context,
-            recent_context_count: git_context.len(),
+            git_context_loaded: false,
+            recent_context_count: 0,
             demo_issue_count: 0,
             demo_delivery_count: 0,
             demo_audit_count: 0,
-            message: if has_git_context {
-                format!("已读取最近项目记录：{} 条。", git_context.len())
-            } else {
-                "项目已准备好。".to_string()
-            },
+            message: "项目已准备好。".to_string(),
             paths,
-            warnings,
-            recent_context: git_context,
+            warnings: Vec::new(),
+            recent_context: Vec::new(),
         };
         write_initialization_summary(root, &summary)?;
         refresh_indexes(root)?;
@@ -125,8 +105,6 @@ pub(crate) fn initialize_base_release_project(
             format!(".agentflow/output/audit/{DEMO_AUDIT_ID}/audit-report.md"),
         ]);
     }
-    write_dogfood_cutover_input_if_agentflow(root, &mut paths)?;
-
     let summary = ProjectInitializationSummary {
         version: "base-release-initialization.v1".to_string(),
         project_kind: project_kind.to_string(),
@@ -143,7 +121,7 @@ pub(crate) fn initialize_base_release_project(
             "新项目已准备好。".to_string()
         },
         paths,
-        warnings,
+        warnings: Vec::new(),
         recent_context: Vec::new(),
     };
     write_initialization_summary(root, &summary)?;
@@ -159,22 +137,18 @@ pub(crate) fn load_project_initialization_status(
         return read_json(&path);
     }
 
-    let git_context = read_json::<Value>(&root.join(RECENT_CONTEXT_PATH))
-        .ok()
-        .and_then(|value| {
-            value
-                .get("items")
-                .and_then(Value::as_array)
-                .map(|items| items.len())
-        })
-        .unwrap_or(0);
     Ok(ProjectInitializationSummary {
         version: "base-release-initialization.v1".to_string(),
-        project_kind: if git_context > 0 { "existing" } else { "new" }.to_string(),
+        project_kind: if root.join(".git").is_dir() || has_non_demo_issues(root) {
+            "existing"
+        } else {
+            "new"
+        }
+        .to_string(),
         initialized: false,
         demo_data_created: has_demo_issues(root),
-        git_context_loaded: git_context > 0,
-        recent_context_count: git_context,
+        git_context_loaded: false,
+        recent_context_count: 0,
         demo_issue_count: demo_issue_count(root),
         demo_delivery_count: usize::from(
             root.join(".agentflow/output/release")
@@ -742,157 +716,24 @@ fn write_demo_audit(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn write_dogfood_cutover_input_if_agentflow(
-    root: &Path,
-    paths: &mut Vec<String>,
-) -> Result<(), String> {
-    if !is_agentflow_self_project(root) {
-        return Ok(());
-    }
-
-    let now = unix_timestamp_seconds();
-    let spec_dir = root
-        .join(".agentflow/input/specs/approved")
-        .join(DOGFOOD_SPEC_ID);
-    ensure_directory(&spec_dir)?;
-    write_text_if_missing(
-        &spec_dir.join("product.md"),
-        "# AgentFlow Dogfood Cutover SPEC\n\nAgentFlow 自身进入 dogfood 使用阶段。后续本项目需求必须从 SPEC、Issue、Handoff、Delivery、Audit 这条链路进入，不再依赖 pre-base 文档或一次性截图说明。\n\n## 目标\n\n- 清理 Base 前遗留入口和旧目录提示。\n- 保留当前可执行事实源：input、execute、output、state。\n- 生成第一条 dogfood cutover Issue，作为 AgentFlow 自己使用 AgentFlow 的起点。\n",
-        ".agentflow/input/specs/approved/dogfood-cutover-v1/product.md",
-        paths,
-    )?;
-    write_text_if_missing(
-        &spec_dir.join("tech.md"),
-        "# 技术约束\n\n- 只写入 `.agentflow/**` 运行事实、需求文档和索引。\n- 不删除用户源码、不删除 Git 仓库、不调用模型。\n- `AGENTS.md` 由本地生成并加入忽略；如果已经被 Git 跟踪，只提示用户手动 `git rm --cached AGENTS.md`。\n- Browser Preview mock 只能保留在 `apps/desktop/src/browserPreviewData.ts`，真实客户端不能静默回退到 mock。\n",
-        ".agentflow/input/specs/approved/dogfood-cutover-v1/tech.md",
-        paths,
-    )?;
-    write_json_if_missing(
-        &spec_dir.join("spec.json"),
-        &json!({
-            "version": "input-spec.v1",
-            "specId": DOGFOOD_SPEC_ID,
-            "source": DOGFOOD_SOURCE,
-            "createdBy": DOGFOOD_SOURCE,
-            "title": "AgentFlow Dogfood Cutover",
-            "summary": "清理 pre-base 入口，启用 AgentFlow 自身 dogfood 工作流。",
-            "status": "approved",
-            "issueId": DOGFOOD_ISSUE_ID
-        }),
-        ".agentflow/input/specs/approved/dogfood-cutover-v1/spec.json",
-        paths,
-    )?;
-    write_json_if_missing(
-        &spec_dir.join("approval.json"),
-        &json!({
-            "version": "input-spec-approval.v1",
-            "specId": DOGFOOD_SPEC_ID,
-            "approved": true,
-            "approvedBy": DOGFOOD_SOURCE,
-            "approvedAt": now,
-            "source": DOGFOOD_SOURCE
-        }),
-        ".agentflow/input/specs/approved/dogfood-cutover-v1/approval.json",
-        paths,
-    )?;
-
-    let mut issue = InputIssue {
-        version: "input-issue.v1".to_string(),
-        issue_id: DOGFOOD_ISSUE_ID.to_string(),
-        issue_model: InputIssueModel::Direct,
-        issue_category: IssueCategory::Spec,
-        required_agent_role: AgentRole::BuildAgent,
-        source_spec_id: DOGFOOD_SPEC_ID.to_string(),
-        project_id: None,
-        title: "清理 pre-base 文档并启用 dogfood 工作流".to_string(),
-        summary: "完成 AgentFlow 自身 dogfood cutover：当前需求进入 SPEC、Issue、Handoff、Delivery、Audit 链路。"
-            .to_string(),
-        kind: InputIssueKind::Cleanup,
-        priority: InputPriority::High,
-        status: InputIssueStatus::ReadyForExecute,
-        display_status: DisplayStatus::Ready,
-        risk_level: InputRiskLevel::Medium,
-        scope: vec![
-            "更新 requirements 索引，明确 024-029 为 Base 后基线。".to_string(),
-            "删除 legacy define goals / milestones / issues 目录。".to_string(),
-            "确认 Browser Preview mock 只存在于前端 mock 数据边界。".to_string(),
-            "确认 release-auto 以 audit issue 作为审计入口。".to_string(),
-            "确认 AGENTS.md 本地生成并加入忽略，不强制删除已跟踪文件。".to_string(),
-        ],
-        non_goals: vec![
-            "不新增业务能力。".to_string(),
-            "不调用模型。".to_string(),
-            "不删除用户源码或 Git 仓库。".to_string(),
-            "不把 Browser Preview mock 写入真实客户端路径。".to_string(),
-        ],
-        acceptance_criteria: vec![
-            format!(".agentflow/input/specs/approved/{DOGFOOD_SPEC_ID}/spec.json 存在"),
-            format!(".agentflow/input/issues/{DOGFOOD_ISSUE_ID}.json 存在"),
-            "dogfood issue 使用 issueCategory=spec、requiredAgentRole=build-agent、displayStatus=ready。"
-                .to_string(),
-            "legacy define goals / milestones / issues 目录会在 prepare 时被删除。".to_string(),
-            "release-auto audit request 已有时也能补齐对应 audit issue。".to_string(),
-        ],
-        validation_hints: vec![
-            "cargo check --workspace".to_string(),
-            "cargo test --workspace".to_string(),
-            "npm --prefix apps/desktop run build".to_string(),
-            "git diff --check".to_string(),
-        ],
-        relations: InputIssueRelations::default(),
-        panel: InputPanelLink::default(),
-        audit: None,
-        system: InputSystemRecord {
-            created_by: DOGFOOD_SOURCE.to_string(),
-            created_at: now,
-            updated_at: now,
-            path: format!(".agentflow/input/issues/{DOGFOOD_ISSUE_ID}.json"),
-            revision: 1,
-        },
-        ..InputIssue::default()
-    };
-    issue.normalize_execution_metadata();
-    write_json_if_missing(
-        &root
-            .join(".agentflow/input/issues")
-            .join(format!("{DOGFOOD_ISSUE_ID}.json")),
-        &issue,
-        ".agentflow/input/issues/AF-DOGFOOD-001.json",
-        paths,
-    )
-}
-
-fn is_agentflow_self_project(root: &Path) -> bool {
-    let desktop_package = root.join("apps/desktop/package.json");
-    let agent_manual_crate = root.join("crates/agent-manual/Cargo.toml");
-    if !desktop_package.is_file() || !agent_manual_crate.is_file() {
-        return false;
-    }
-
-    fs::read_to_string(desktop_package)
-        .map(|content| content.contains("\"name\": \"agentflow-desktop\""))
-        .unwrap_or(false)
-}
-
-fn write_git_context(root: &Path, contexts: &[ProjectInitializationContext]) -> Result<(), String> {
-    let now = unix_timestamp_seconds();
-    let context_value = json!({
-        "version": "git-context.v1",
-        "source": "local-git",
-        "demo": false,
-        "updatedAt": now,
-        "count": contexts.len(),
-        "items": contexts,
-    });
-    write_json(&root.join(GIT_CONTEXT_PATH), &context_value)?;
-    write_json(&root.join(RECENT_CONTEXT_PATH), &context_value)
-}
-
 fn write_initialization_summary(
     root: &Path,
     summary: &ProjectInitializationSummary,
 ) -> Result<(), String> {
     write_json(&root.join(INIT_STATUS_PATH), summary)
+}
+
+fn remove_legacy_git_context_files(root: &Path) -> Result<(), String> {
+    for path in [
+        root.join(LEGACY_RECENT_CONTEXT_PATH),
+        root.join(LEGACY_GIT_CONTEXT_PATH),
+    ] {
+        if path.is_file() {
+            fs::remove_file(&path)
+                .map_err(|error| format!("remove legacy {}: {error}", path.display()))?;
+        }
+    }
+    Ok(())
 }
 
 fn refresh_indexes(root: &Path) -> Result<(), String> {
@@ -905,99 +746,6 @@ fn refresh_indexes(root: &Path) -> Result<(), String> {
     agentflow_state::refresh_state(root)
         .map_err(|error| format!("refresh state after initialization: {error}"))?;
     Ok(())
-}
-
-fn collect_recent_git_context(root: &Path) -> Result<Vec<ProjectInitializationContext>, String> {
-    if !root.join(".git").is_dir() || !git_has_commits(root) {
-        return Ok(Vec::new());
-    }
-
-    let Some(raw_log) = git_output(
-        root,
-        &[
-            "log",
-            "--max-count=10",
-            "--date=iso-strict",
-            "--pretty=format:%H%x1f%an%x1f%aI%x1f%s",
-        ],
-    ) else {
-        return Ok(Vec::new());
-    };
-    let remote_url = git_output(root, &["remote", "get-url", "origin"]);
-
-    Ok(raw_log
-        .lines()
-        .filter_map(|line| {
-            let parts = line.split('\u{1f}').collect::<Vec<_>>();
-            if parts.len() < 4 {
-                return None;
-            }
-            let sha = parts[0].to_string();
-            let title = parts[3].to_string();
-            let changed_files = git_changed_files(root, &sha);
-            Some(ProjectInitializationContext {
-                id: sha.chars().take(12).collect(),
-                title: title.clone(),
-                summary: context_summary(&title, &changed_files),
-                committed_at: Some(parts[2].to_string()),
-                author: Some(parts[1].to_string()),
-                changed_files,
-                source_url: remote_url
-                    .as_deref()
-                    .and_then(|remote| github_commit_url(remote, &sha)),
-            })
-        })
-        .collect())
-}
-
-fn context_summary(title: &str, changed_files: &[String]) -> String {
-    let area = changed_files
-        .iter()
-        .filter_map(|path| path.split('/').next())
-        .find(|part| !part.is_empty())
-        .unwrap_or("项目");
-    format!("最近合并或提交：{title}。影响范围：{area}。可承接需求：从这条记录继续整理下一步。")
-}
-
-fn git_changed_files(root: &Path, sha: &str) -> Vec<String> {
-    git_output(root, &["show", "--pretty=format:", "--name-only", sha])
-        .map(|raw| {
-            raw.lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty())
-                .take(20)
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn github_commit_url(remote: &str, sha: &str) -> Option<String> {
-    let normalized = remote
-        .trim()
-        .trim_end_matches(".git")
-        .replace("git@github.com:", "https://github.com/");
-    normalized
-        .starts_with("https://github.com/")
-        .then(|| format!("{normalized}/commit/{sha}"))
-}
-
-fn git_has_commits(root: &Path) -> bool {
-    git_output(root, &["rev-parse", "--verify", "HEAD"]).is_some()
-}
-
-fn git_output(root: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(root)
-        .stdin(Stdio::null())
-        .output()
-        .ok()?;
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
-        .filter(|value| !value.is_empty())
 }
 
 fn has_non_demo_issues(root: &Path) -> bool {
@@ -1111,20 +859,6 @@ fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), String>
     fs::write(path, content).map_err(|error| format!("write {}: {error}", path.display()))
 }
 
-fn write_json_if_missing<T: serde::Serialize>(
-    path: &Path,
-    value: &T,
-    relative_path: &str,
-    paths: &mut Vec<String>,
-) -> Result<(), String> {
-    if path.is_file() {
-        return Ok(());
-    }
-    write_json(path, value)?;
-    paths.push(relative_path.to_string());
-    Ok(())
-}
-
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
     let raw =
         fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))?;
@@ -1136,20 +870,6 @@ fn write_text(path: &Path, content: &str) -> Result<(), String> {
         ensure_directory(parent)?;
     }
     fs::write(path, content).map_err(|error| format!("write {}: {error}", path.display()))
-}
-
-fn write_text_if_missing(
-    path: &Path,
-    content: &str,
-    relative_path: &str,
-    paths: &mut Vec<String>,
-) -> Result<(), String> {
-    if path.is_file() {
-        return Ok(());
-    }
-    write_text(path, content)?;
-    paths.push(relative_path.to_string());
-    Ok(())
 }
 
 fn ensure_directory(path: &Path) -> Result<(), String> {

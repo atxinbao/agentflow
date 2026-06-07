@@ -73,9 +73,9 @@ const previewIssueContract: IssueContract = {
 
 const previewInputIssues: InputIssue[] = [
   browserPreviewInputIssue("iss-backlog", "整理需求入口", "planned", "backlog", "需求已创建，等待整理成 SPEC。"),
-  browserPreviewInputIssue("iss-ready", "生成 Codex 任务包", "ready-for-execute", "ready", "SPEC 已确认，可以交给 Agent。"),
+  browserPreviewInputIssue("iss-ready", "生成执行任务包", "ready-for-execute", "ready", "SPEC 已确认，可以交给 Agent。"),
   browserPreviewInputIssue("iss-progress", "执行受控改动", "ready-for-execute", "in-progress", "Agent 已接手任务。"),
-  browserPreviewInputIssue("iss-review", "审计交付材料", "ready-for-execute", "review", "Codex 已交付，等待人工审计。"),
+  browserPreviewInputIssue("iss-review", "审计交付材料", "ready-for-execute", "review", "任务已交付，等待人工审计。"),
   browserPreviewInputIssue("iss-done", "确认交付完成", "done", "done", "审计已通过。"),
   browserPreviewInputIssue("iss-cancel", "取消过期需求", "canceled", "cancel", "任务已取消。"),
 ];

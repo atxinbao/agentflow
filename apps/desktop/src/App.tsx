@@ -657,21 +657,6 @@ function App() {
     };
   }, [projectRoot]);
 
-  useEffect(() => {
-    if (!projectRoot) {
-      return;
-    }
-    if (activePage === "files") {
-      void loadProjectFiles(projectRoot);
-    }
-    if (activePage === "home" || activePage === "tasks") {
-      void prepareProjectPanel(projectRoot);
-    }
-    if (activePage === "delivery" || activePage === "audit") {
-      setOutputRefreshToken((current) => current + 1);
-    }
-  }, [activePage, projectRoot]);
-
   const tasks = useMemo(
     () =>
       buildTaskItems(
@@ -749,8 +734,53 @@ function App() {
     }
   }, [activeIssueId, selectedTaskId, tasks]);
 
+  function refreshProjectPage(page: AppPage, root = projectRoot) {
+    if (!root) {
+      return;
+    }
+
+    if (page === "home") {
+      void prepareProjectPanel(root);
+      setInputStatusRefreshToken((current) => current + 1);
+      setTaskListRefreshToken((current) => current + 1);
+      setOutputRefreshToken((current) => current + 1);
+      setStateRefreshToken((current) => current + 1);
+      return;
+    }
+
+    if (page === "tasks") {
+      setTaskListRefreshToken((current) => current + 1);
+      return;
+    }
+
+    if (page === "files") {
+      void loadProjectFiles(root);
+      return;
+    }
+
+    if (page === "delivery" || page === "audit") {
+      setOutputRefreshToken((current) => current + 1);
+      return;
+    }
+
+    if (page === "advanced") {
+      void loadProjectFiles(root);
+      void loadAgentManual(root);
+      void prepareProjectPanel(root);
+      setInputStatusRefreshToken((current) => current + 1);
+      setTaskListRefreshToken((current) => current + 1);
+      setExecuteRefreshToken((current) => current + 1);
+      setOutputRefreshToken((current) => current + 1);
+      setStateRefreshToken((current) => current + 1);
+    }
+  }
+
   function setActivePage(page: AppPage) {
+    const shouldRefresh = page !== activePage;
     setProjectRegistry((current) => setProjectPage(current, current.activeProjectRoot, page));
+    if (shouldRefresh) {
+      refreshProjectPage(page);
+    }
   }
 
   function handleSelectProject(projectRootToSelect: string) {
@@ -777,9 +807,12 @@ function App() {
   }
 
   function handleProjectPageChange(projectRootToSelect: string, page: AppPage) {
+    const shouldRefresh = projectRootToSelect !== projectRoot || page !== activePage;
     setProjectRegistry((current) => setProjectPage(current, projectRootToSelect, page));
     setTaskSearch("");
-    setOutputRefreshToken((current) => current + 1);
+    if (shouldRefresh) {
+      refreshProjectPage(page, projectRootToSelect);
+    }
   }
 
   async function chooseProjectFolder() {
@@ -894,7 +927,7 @@ function App() {
       try {
         await navigator.clipboard.writeText(buildCodexHandoff(task));
         setTaskCopyState("success");
-        setTaskActionFeedback(`已复制。请粘贴到 ${codexThreadNameForRole(task.requiredAgentRole)} 线程。`);
+        setTaskActionFeedback(`已复制。请粘贴到 ${codexThreadNameForRole(task.requiredAgentRole)}。`);
         window.setTimeout(() => setTaskCopyState("enabled"), 1400);
       } catch {
         setTaskCopyState("error");
@@ -905,7 +938,7 @@ function App() {
 
     if (action === "mark-handed-off") {
       setHandedOffIssues((current) => new Set(current).add(task.id));
-      setTaskActionFeedback("已做本地标记。AgentFlow 不会自动控制 Codex。");
+      setTaskActionFeedback("已做本地标记。AgentFlow 不会自动控制执行过程。");
       return;
     }
 
@@ -916,7 +949,7 @@ function App() {
         setSelectedDeliveryRunId(delivery.runId);
         setActivePage("delivery");
       } else {
-        setTaskActionFeedback("还没有检测到 Codex 写回结果。");
+        setTaskActionFeedback("还没有检测到写回结果。");
       }
       return;
     }
@@ -927,7 +960,7 @@ function App() {
         setSelectedDeliveryRunId(delivery.runId);
         setActivePage("delivery");
       } else {
-        setTaskActionFeedback("还没有交付结果。Codex 写回后会显示在交付页。");
+        setTaskActionFeedback("还没有交付结果。写回后会显示在交付页。");
       }
       return;
     }
@@ -1458,7 +1491,7 @@ function FirstRunModal({
               ))}
             </div>
             <CopyableCodeBlock
-              content={`请基于当前项目帮我处理：${selectedIntent}\n先确认需求，再生成可交给 Codex 的任务包。`}
+              content={`请基于当前项目帮我处理：${selectedIntent}\n先确认需求，再生成可执行的任务包。`}
               maxHeight={118}
               title="在聊天会话中启动输入："
             />
@@ -1985,14 +2018,14 @@ function CodexRoleGuideCard({ defaultOpen }: { defaultOpen: boolean }) {
     <details className="v16-codex-role-guide" open={defaultOpen}>
       <summary>
         <span>
-          <strong>Codex 角色使用说明</strong>
-          <small>AgentFlow 不直接控制 Codex。你需要在 Codex 里按角色开线程，每个线程只做一种工作。</small>
+          <strong>Agent 角色使用说明</strong>
+          <small>AgentFlow 不直接控制执行过程。你需要按角色开线程，每个线程只做一种工作。</small>
         </span>
         <StatusBadge status="idle">本地说明</StatusBadge>
       </summary>
       <div className="v16-codex-role-guide-body">
         <p className="v16-codex-role-warning">
-          不要让同一个 Codex 线程一会儿写代码、一会儿审计。这样容易混淆边界。
+          不要让同一个执行线程一会儿写代码、一会儿审计。这样容易混淆边界。
         </p>
         <div className="v16-codex-role-grid">
           {codexRoleGuides.map((guide) => (
@@ -2144,7 +2177,7 @@ function TaskList({
               ))
             : null}
           {!tasks.length && !suggestions.length ? (
-            <p className="v16-empty-text">还没有任务。先整理需求，生成 Issue。</p>
+            <p className="v16-empty-text v16-list-empty-state">还没有任务。</p>
           ) : null}
         </div>
       </aside>
@@ -2194,16 +2227,24 @@ function TaskDetail({
             />
             <SectionList
               title="下一步"
-              items={["先把其中一个方向整理成 SPEC，再生成 Issue。确认后才能交给 Codex。"]}
+              items={["先把其中一个方向整理成 SPEC，再生成 Issue。确认后才能进入执行。"]}
             />
           </div>
         </aside>
       );
     }
     return (
-      <aside className="v16-detail-pane">
-        <p>还没有任务。请先确认需求，生成任务。</p>
-      </aside>
+      <section className="v16-detail-pane v16-empty-detail-pane" aria-label="任务详情空态">
+        <header>
+          <p className="v16-kicker">任务详情</p>
+          <h2>还没有任务</h2>
+          <StatusBadge status="idle">等待需求</StatusBadge>
+        </header>
+        <div className="v16-detail-document">
+          <SectionList title="下一步" items={["先确认需求，再生成 Issue。"]} />
+          <SectionList title="任务来源" items={["任务只来自 AgentFlow input issues。GitHub 提交记录不会自动变成任务。"]} />
+        </div>
+      </section>
     );
   }
 
@@ -2241,9 +2282,9 @@ function TaskDetail({
           items={[
             ["任务类型", issueCategoryLabelZh(task.issueCategory)],
             ["执行角色", agentRoleLabelZh(task.requiredAgentRole)],
-            ["Codex 线程", codexThreadNameForRole(task.requiredAgentRole)],
+            ["执行线程", codexThreadNameForRole(task.requiredAgentRole)],
             ["状态", displayStatusLabelZh(task.displayStatus)],
-            ["交给 Codex", handedOff ? "已做本地标记" : "未标记"],
+            ["进入执行", handedOff ? "已做本地标记" : "未标记"],
             ...targetDescriptionItems,
             ...(task.auditTrigger ? [["触发来源", auditTriggerLabel(task.auditTrigger)] as [string, string]] : []),
           ]}
@@ -2366,9 +2407,9 @@ function DeliveryList({
         <h2>交付列表</h2>
         <span>{deliveries.length} 项</span>
       </header>
-      {deliveries.length ? (
-        <div className="v16-list-items">
-          {deliveries.map((delivery) => (
+	      {deliveries.length ? (
+	        <div className="v16-list-items">
+	          {deliveries.map((delivery) => (
             <button
               className={delivery.runId === selectedDeliveryRunId ? "v16-list-item active" : "v16-list-item"}
               key={delivery.runId}
@@ -2383,11 +2424,13 @@ function DeliveryList({
               <small>{artifactStatusLabel(delivery.status)}</small>
               <time>{formatTimestamp(delivery.updatedAt)}</time>
             </button>
-          ))}
-        </div>
-      ) : (
-        <p className="v16-empty-text">暂无 Codex 写回结果。</p>
-      )}
+	          ))}
+	        </div>
+	      ) : (
+	        <div className="v16-list-items">
+	          <p className="v16-empty-text v16-list-empty-state">还没有交付。</p>
+	        </div>
+	      )}
     </aside>
   );
 }
@@ -2410,7 +2453,7 @@ function DeliveryDetail({
   const deliveryAudit = delivery ? findAuditForDelivery(audits, delivery.runId) : null;
   const auditDisplay = deliveryAuditStatus(delivery, deliveryAudit);
   return (
-    <section className="v16-detail-pane" aria-label="交付详情">
+    <section className={delivery ? "v16-detail-pane" : "v16-detail-pane v16-empty-detail-pane"} aria-label="交付详情">
       <header>
         <p className="v16-kicker">交付包</p>
         <h2>{delivery ? `交付包：${deliveryDisplayId(delivery.runId)}` : "还没有交付材料"}</h2>
@@ -2428,7 +2471,7 @@ function DeliveryDetail({
         <SectionList
           title="交付摘要"
           items={[
-            delivery ? "任务合约页面交付记录已生成。" : "等待 Codex 写回交付记录。",
+            delivery ? "任务合约页面交付记录已生成。" : "等待写回交付记录。",
             "模式：只读",
           ]}
         />
@@ -2439,7 +2482,7 @@ function DeliveryDetail({
             delivery?.sourceSpecId ? "关联规格：已确认规格" : "关联规格：未记录",
           ]}
         />
-        <SectionList title="变更文件" items={selectedTask?.allowedFiles ?? ["等待 Codex 写回变更文件。"]} />
+        <SectionList title="变更文件" items={selectedTask?.allowedFiles ?? ["等待写回变更文件。"]} />
         <SectionList title="验证命令" items={selectedTask?.validationCommands ?? ["等待验证命令。"]} />
         <SectionList title="验证结果" items={[delivery ? `状态：${artifactStatusLabel(delivery.status)}` : "等待写回。"]} />
         <SectionList title="审计状态" items={[auditDisplay.detail]} />
@@ -2502,9 +2545,9 @@ function AuditList({
         <h2>审计列表</h2>
         <span>{audits.length} 项</span>
       </header>
-      {audits.length ? (
-        <div className="v16-list-items">
-          {audits.map((audit) => (
+	      {audits.length ? (
+	        <div className="v16-list-items">
+	          {audits.map((audit) => (
             <button
               className={audit.auditId === selectedAuditId ? "v16-list-item active" : "v16-list-item"}
               key={audit.auditId}
@@ -2519,11 +2562,13 @@ function AuditList({
               <small>{artifactStatusLabel(audit.status)}</small>
               <time>{formatTimestamp(audit.requestedAt)}</time>
             </button>
-          ))}
-        </div>
-      ) : (
-        <p className="v16-empty-text">还没有审计记录。</p>
-      )}
+	          ))}
+	        </div>
+	      ) : (
+	        <div className="v16-list-items">
+	          <p className="v16-empty-text v16-list-empty-state">还没有审计。</p>
+	        </div>
+	      )}
     </aside>
   );
 }
@@ -2554,7 +2599,7 @@ function AuditReport({
     report?.request.source?.issueId ?? report?.audit.sourceIssueId ?? selectedAudit?.sourceIssueId;
 
   return (
-    <section className="v16-detail-pane" aria-label="审计报告详情">
+    <section className={selectedAudit || report ? "v16-detail-pane" : "v16-detail-pane v16-empty-detail-pane"} aria-label="审计报告详情">
       <header>
         <p className="v16-kicker">审计报告</p>
         <h2>{selectedAudit?.auditId ?? report?.audit.auditId ?? "未登记审计"}</h2>
@@ -2822,7 +2867,7 @@ function CompanionShell({
         <strong>执行助手</strong>
         <span>
           {selectedTask
-            ? "等待 Codex 写回。请确认任务包已经粘贴，然后扫描 .agentflow/output。"
+            ? "等待写回。请确认任务包已经粘贴，然后扫描 .agentflow/output。"
             : "当前没有可交付给执行助手的任务。"}
         </span>
       </article>
@@ -2928,7 +2973,7 @@ function initializationDetail(state: ProjectInitializationState) {
 
 const displayStatusColumns: Array<{ id: IssueDisplayStatus; label: string }> = [
   { id: "backlog", label: "待确认" },
-  { id: "ready", label: "可交给 Codex" },
+  { id: "ready", label: "可执行" },
   { id: "in-progress", label: "等待写回" },
   { id: "review", label: "待审计" },
   { id: "done", label: "已完成" },
@@ -3522,7 +3567,7 @@ function buildNextStep(
   if ((inputStatus?.summary.approvedSpecs ?? 0) === 0) {
     return {
       action: "继续整理规格",
-      description: "还不能交给 Codex。原因是：这个需求还没有确认成规格。",
+      description: "还不能进入执行。原因是：这个需求还没有确认成规格。",
       reason: "Spec Agent 需要先整理需求，再由人确认。",
       status: "warning",
       title: "先确认需求",
@@ -3531,11 +3576,11 @@ function buildNextStep(
 
   if (selectedTask) {
     return {
-      action: "复制 Codex 指令",
+      action: "复制执行指令",
       description: "这个任务已经有已确认规格和任务合同。",
       reason: selectedTask.id,
       status: "ready",
-      title: "可以交给 Codex 了",
+      title: "可以进入执行了",
     };
   }
 
@@ -3549,14 +3594,14 @@ function buildNextStep(
 }
 
 function buildCodexHandoff(task: V1Issue) {
-  const codexThreadName = codexThreadNameForRole(task.requiredAgentRole);
+  const agentThreadName = codexThreadNameForRole(task.requiredAgentRole);
   const handoffPackage =
     task.issueCategory === "audit"
       ? {
           agentInstruction: agentInstructionForTask(task),
           auditId: task.auditId,
           auditOutputDir: task.auditOutputDir,
-          codexThreadName,
+          agentThreadName,
           expectedOutputs: task.expectedOutputs,
           handoffId: task.handoffId,
           handoffVersion: "agent-handoff.v1",
@@ -3569,7 +3614,7 @@ function buildCodexHandoff(task: V1Issue) {
         }
       : {
           agentInstruction: agentInstructionForTask(task),
-          codexThreadName,
+          agentThreadName,
           contextPackPath: task.contextPackPath,
           expectedOutputs: task.expectedOutputs,
           handoffId: task.handoffId,
@@ -3595,7 +3640,7 @@ function buildCodexHandoff(task: V1Issue) {
     `任务：${task.id}`,
     `任务类型：${issueCategoryLabelZh(task.issueCategory)}`,
     `执行角色：${agentRoleLabelZh(task.requiredAgentRole)}`,
-    `Codex 线程：${codexThreadName}`,
+    `执行线程：${agentThreadName}`,
     `风险：${displayRiskLabelZh(task.riskLevel)}`,
     `指令：${agentInstructionForTask(task)}`,
     ...(task.issueCategory === "audit"
@@ -3644,9 +3689,9 @@ function buildCodexHandoff(task: V1Issue) {
 
 function agentRoleRulesDocument() {
   return {
-    version: "codex-role-usage-guide.v1",
-    rule: "AgentFlow 不直接控制 Codex。用户需要在 Codex 里按角色开 3 个独立线程，每个线程只做一种工作。",
-    warning: "不要在一个 Codex 线程里混用多个角色。",
+    version: "agent-role-usage-guide.v1",
+    rule: "AgentFlow 不直接控制执行过程。用户需要按角色开 3 个独立线程，每个线程只做一种工作。",
+    warning: "不要在一个执行线程里混用多个角色。",
     source: {
       rolesJson: ".agentflow/define/agent/roles.json",
       rootAgentEntry: "AGENTS.md",
@@ -3656,7 +3701,7 @@ function agentRoleRulesDocument() {
       agentRole: guide.role,
       label: guide.title,
       englishName: guide.englishName,
-      codexThreadName: guide.threadName,
+      agentThreadName: guide.threadName,
       summary: guide.summary,
       cannotDo: guide.cannotDo,
     })),
@@ -3792,7 +3837,7 @@ function workflowStageText(stage?: string | null) {
     "audit-completed": "审计完成",
     "audit-requested": "审计已请求",
     "delivery-ready": "交付可审计",
-    "execute-ready": "可交给 Codex",
+    "execute-ready": "可执行",
     "input-ready": "需求等待确认",
     "workspace-ready": "项目已准备好",
   };
@@ -3821,10 +3866,10 @@ function titlebarStatusText(
   }
 
   if (selectedTask?.displayStatus === "ready") {
-    return "waiting-for-codex";
+    return "waiting-for-agent";
   }
   if (selectedTask?.displayStatus === "in-progress") {
-    return "codex-running";
+    return "agent-running";
   }
   if (selectedTask?.displayStatus === "review") {
     return "ready-for-audit";
@@ -3837,7 +3882,7 @@ function titlebarStatusText(
     "audit-completed": "audit-completed",
     "audit-requested": "audit-requested",
     "delivery-ready": "ready-for-audit",
-    "execute-ready": "waiting-for-codex",
+    "execute-ready": "waiting-for-agent",
     "input-ready": "needs-spec",
     "workspace-ready": "workspace-ready",
   };
@@ -3847,7 +3892,7 @@ function titlebarStatusText(
 
 function advancedCategorySummary(categoryId: string) {
   const summaries: Record<string, string> = {
-    agentRoles: "展示 Codex 三个线程的角色边界和 roles.json 只读诊断规则。",
+    agentRoles: "展示三个执行线程的角色边界和 roles.json 只读诊断规则。",
     audit: "展示审计索引和报告快照。这里不写处理结果。",
     execute: "展示执行状态快照。这里不继续执行，不清理锁。",
     initialization: "展示基础发布初始化摘要。这里不重跑初始化，不删除示例数据。",
