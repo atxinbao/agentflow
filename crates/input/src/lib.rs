@@ -30,7 +30,10 @@ mod tests {
             InputIssueStatus, InputPriority, InputRiskLevel, IssueCategory,
         },
         project::{InputProject, InputProjectStatus},
-        relations::{InputIssueRelation, InputIssueRelationKind, InputIssueRelationsFile},
+        relations::{
+            InputDependencyGraph, InputIssueRelation, InputIssueRelationKind,
+            InputIssueRelationsFile,
+        },
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
     use std::fs;
@@ -551,5 +554,115 @@ mod tests {
 
         assert_eq!(issue_entry.status, "readyforexecute");
         assert_eq!(issue_entry.display_status, Some(DisplayStatus::Ready));
+    }
+
+    #[test]
+    fn prepare_repairs_legacy_index_and_relation_field_names() {
+        let dir = tempdir().unwrap();
+        prepare_input_workspace(dir.path()).unwrap();
+        let project = InputProject {
+            project_id: "proj-001".to_string(),
+            source_spec_id: "spec-001".to_string(),
+            title: "Release audit project".to_string(),
+            status: InputProjectStatus::Planned,
+            issue_ids: vec!["iss-001".to_string(), "iss-002".to_string()],
+            ..InputProject::default()
+        };
+        let issue_one = InputIssue {
+            issue_id: "iss-001".to_string(),
+            issue_model: InputIssueModel::Project,
+            source_spec_id: "spec-001".to_string(),
+            project_id: Some("proj-001".to_string()),
+            title: "First issue".to_string(),
+            status: InputIssueStatus::ReadyForExecute,
+            risk_level: InputRiskLevel::Medium,
+            ..InputIssue::default()
+        };
+        let issue_two = InputIssue {
+            issue_id: "iss-002".to_string(),
+            issue_model: InputIssueModel::Project,
+            source_spec_id: "spec-001".to_string(),
+            project_id: Some("proj-001".to_string()),
+            title: "Second issue".to_string(),
+            status: InputIssueStatus::ReadyForExecute,
+            risk_level: InputRiskLevel::Medium,
+            ..InputIssue::default()
+        };
+
+        fs::write(
+            dir.path().join(".agentflow/input/projects/proj-001.json"),
+            serde_json::to_string_pretty(&project).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join(".agentflow/input/issues/iss-001.json"),
+            serde_json::to_string_pretty(&issue_one).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join(".agentflow/input/issues/iss-002.json"),
+            serde_json::to_string_pretty(&issue_two).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join(".agentflow/input/index.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "version": "input-index.v1",
+                "updatedAt": 1,
+                "specs": ["spec-001"],
+                "projects": ["proj-001"],
+                "issues": ["iss-001", "iss-002"]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            dir.path()
+                .join(".agentflow/input/relations/issue-relations.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "version": "input-issue-relations.v1",
+                "relations": [
+                    { "from": "iss-001", "to": "iss-002", "type": "blocks" }
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            dir.path()
+                .join(".agentflow/input/relations/dependency-graph.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "version": "input-dependency-graph.v1",
+                "nodes": ["iss-001", "iss-002"],
+                "edges": [
+                    { "from": "iss-001", "to": "iss-002", "type": "blocks" }
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let snapshot = prepare_input_workspace(dir.path()).unwrap();
+
+        assert!(snapshot.ready, "{:?}", snapshot.status.errors);
+        assert_eq!(snapshot.issues.len(), 2);
+        let index = load_input_index(dir.path()).unwrap();
+        assert_eq!(index.issues.len(), 2);
+        assert_eq!(index.issues[0].id, "iss-001");
+        assert_eq!(index.issues[0].display_status, Some(DisplayStatus::Ready));
+        let relations: InputIssueRelationsFile = crate::storage::read_json(
+            &dir.path()
+                .join(".agentflow/input/relations/issue-relations.json"),
+        )
+        .unwrap();
+        assert_eq!(relations.relations[0].from_issue_id, "iss-001");
+        assert_eq!(relations.relations[0].to_issue_id, "iss-002");
+        let dependency_graph: InputDependencyGraph = crate::storage::read_json(
+            &dir.path()
+                .join(".agentflow/input/relations/dependency-graph.json"),
+        )
+        .unwrap();
+        assert_eq!(dependency_graph.edges[0].from_issue_id, "iss-001");
+        assert_eq!(dependency_graph.edges[0].to_issue_id, "iss-002");
     }
 }
