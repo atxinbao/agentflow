@@ -318,6 +318,7 @@ fn write_demo_execute_and_output(root: &Path) -> Result<(), String> {
             spec_path: format!(".agentflow/input/specs/approved/{DEMO_SPEC_ID}"),
             panel_snapshot_id: None,
             context_pack_id: None,
+            context_pack_path: None,
         },
         paths: ExecuteRunPaths {
             preflight: format!(".agentflow/execute/runs/{run_id}/preflight.json"),

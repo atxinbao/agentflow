@@ -145,6 +145,8 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
             spec_path,
             panel_snapshot_id: issue.panel.snapshot_id.clone(),
             context_pack_id: issue.panel.context_pack_id.clone(),
+            context_pack_path: (!issue.context_pack_path.trim().is_empty())
+                .then(|| issue.context_pack_path.clone()),
         },
         paths: ExecuteRunPaths {
             preflight: format!(".agentflow/execute/runs/{run_id}/preflight.json"),

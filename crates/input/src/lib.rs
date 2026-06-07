@@ -318,6 +318,7 @@ mod tests {
             title: "Ready issue".to_string(),
             status: InputIssueStatus::ReadyForExecute,
             risk_level: InputRiskLevel::Low,
+            context_pack_path: ".agentflow/execute/runs/iss-001/context-pack.json".to_string(),
             scope: vec!["src/lib.rs".to_string()],
             validation_hints: vec!["cargo test".to_string()],
             ..InputIssue::default()
@@ -341,6 +342,11 @@ mod tests {
             ".agentflow/input/specs/approved/spec-001/spec.json"
         );
         assert_eq!(issue.handoff_id, "handoff-iss-001");
+        assert_eq!(
+            issue.context_pack_path,
+            ".agentflow/panel/context-packs/iss-001.json"
+        );
+        assert_eq!(issue.panel.context_pack_id.as_deref(), Some("iss-001"));
         assert_eq!(issue.allowed_paths, vec!["src/lib.rs".to_string()]);
         assert_eq!(issue.validation_commands, vec!["cargo test".to_string()]);
         assert_eq!(
@@ -380,6 +386,20 @@ mod tests {
                 "missing required pipeline stage {stage_id}"
             );
         }
+        let preflight_stage = pipeline
+            .stages
+            .iter()
+            .find(|stage| stage.stage_id == "github-preflight")
+            .unwrap();
+        assert!(preflight_stage.goal.contains("build-agent complete"));
+        assert!(preflight_stage.goal.contains("target/release/agentflow"));
+        assert!(preflight_stage.evidence.contains(
+            &"cargo build --release --bin agentflow or target/debug/agentflow fallback".to_string()
+        ));
+        assert!(preflight_stage.evidence.contains(
+            &"target/release/agentflow build-agent complete --help or target/debug/agentflow build-agent complete --help"
+                .to_string()
+        ));
         let merge_stage = pipeline
             .stages
             .iter()
@@ -389,6 +409,22 @@ mod tests {
         assert!(merge_stage
             .evidence
             .contains(&"gh pr merge --auto result".to_string()));
+        let writeback_stage = pipeline
+            .stages
+            .iter()
+            .find(|stage| stage.stage_id == "writeback-done")
+            .unwrap();
+        assert!(writeback_stage
+            .goal
+            .contains("预检确认过的新 AgentFlow CLI"));
+        assert!(writeback_stage
+            .evidence
+            .iter()
+            .any(|item| item.contains("cargo build --release --bin agentflow")));
+        assert!(writeback_stage
+            .evidence
+            .iter()
+            .any(|item| item.contains("target/debug/agentflow build-agent complete")));
     }
 
     #[test]

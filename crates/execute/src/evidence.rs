@@ -88,6 +88,7 @@ pub fn write_execute_evidence(
         panel: OutputEvidencePanel {
             snapshot_id: run.input.panel_snapshot_id.clone(),
             context_pack_id: run.input.context_pack_id.clone(),
+            context_pack_path: run.input.context_pack_path.clone(),
         },
         execute: OutputEvidenceExecuteArtifacts {
             run: format!(".agentflow/execute/runs/{}/run.json", run.run_id),
