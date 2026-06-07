@@ -628,16 +628,25 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "create-pr".to_string(),
                 label: "创建 PR".to_string(),
-                goal: "推送任务分支，创建 draft PR，并把验证结果写入 PR 描述。".to_string(),
+                goal: "推送任务分支，创建 PR，并把验证结果写入 PR 描述；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR。".to_string(),
                 required: true,
-                evidence: vec!["PR URL".to_string(), "PR body validation summary".to_string()],
+                evidence: vec![
+                    "PR URL".to_string(),
+                    "PR body validation summary".to_string(),
+                    "draft or ready state".to_string(),
+                ],
             },
             InputIssueExecutionStage {
                 stage_id: "merge-pr".to_string(),
                 label: "合并 PR".to_string(),
-                goal: "根据 GitHub 预检结果走人工合并或符合条件的自动合并。".to_string(),
+                goal: "manual-merge 模式下 PR ready 后等待人合并；auto-merge-if-eligible 模式下执行 gh pr ready、gh pr merge --auto，并轮询到 merged。".to_string(),
                 required: true,
-                evidence: vec!["merge mode".to_string(), "merge commit or merged PR state".to_string()],
+                evidence: vec![
+                    "merge mode".to_string(),
+                    "gh pr ready result".to_string(),
+                    "gh pr merge --auto result".to_string(),
+                    "merge commit or merged PR state".to_string(),
+                ],
             },
             InputIssueExecutionStage {
                 stage_id: "writeback-done".to_string(),
