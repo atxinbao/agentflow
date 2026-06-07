@@ -51,19 +51,6 @@ pub(crate) fn build_gate_snapshot(
         .and_then(|snapshot| snapshot.index.release_deliveries.last())
         .map(|entry| entry.path.clone());
     let mut blockers = collect_blockers(root)?;
-    if matches!(audit_status, WorkflowAuditStatus::NotRequested) {
-        if let Some(delivery_path) = output
-            .as_ref()
-            .and_then(|snapshot| snapshot.index.release_deliveries.last())
-            .map(|entry| entry.path.clone())
-        {
-            blockers.push(WorkflowBlockedAction {
-                action: "release-auto-audit-required".to_string(),
-                reason: "Release 已生成，但审计请求缺失。".to_string(),
-                source_path: Some(delivery_path),
-            });
-        }
-    }
     if let Some(input) = input.as_ref() {
         for issue in &input.issues {
             if !issue.target_metadata_complete() {
@@ -408,7 +395,6 @@ fn run_is_active(status: &ExecuteRunStatus) -> bool {
 
 fn action_label(action: &str) -> String {
     match action {
-        "release-auto-audit-required" => "Release audit required",
         "copy-handoff" => "Copy Agent handoff package",
         "start-new-input" => "Start new requirement intake",
         "prepare-release-delivery" => "Prepare release delivery",
@@ -421,9 +407,6 @@ fn action_label(action: &str) -> String {
 
 fn allowed_reason(action: &str, gate: &WorkflowGateSnapshot) -> String {
     match action {
-        "release-auto-audit-required" => {
-            "Release delivery exists but release-auto audit request is missing.".to_string()
-        }
         "start-new-input" => "Workflow can accept the next requirement intake.".to_string(),
         "prepare-release-delivery" => {
             "Evidence is ready for Build Agent delivery material.".to_string()

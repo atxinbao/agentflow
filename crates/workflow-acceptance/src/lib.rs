@@ -17,24 +17,23 @@ mod tests {
     use agentflow_state::{WorkflowAuditStatus, WorkflowStage};
 
     #[test]
-    fn full_workflow_registers_release_auto_audit_request() -> anyhow::Result<()> {
+    fn full_workflow_keeps_delivery_ready_without_auto_audit_request() -> anyhow::Result<()> {
         let ready = prepare_delivery_ready_fixture()?;
 
         assert_eq!(
             ready.delivery_state.current_stage,
-            WorkflowStage::AuditRequested
+            WorkflowStage::DeliveryReady
         );
         assert_eq!(
             ready.delivery_state.audit_status,
-            WorkflowAuditStatus::Requested
+            WorkflowAuditStatus::NotRequested
         );
         assert!(!ready
             .delivery_state
             .next_actions
             .contains(&"request-human-audit".to_string()));
         let audit_index = agentflow_output::load_audit_index(ready.fixture.root())?;
-        assert_eq!(audit_index.audits.len(), 1);
-        assert_eq!(audit_index.audits[0].trigger.as_str(), "release-auto");
+        assert_eq!(audit_index.audits.len(), 0);
         ready.fixture.assert_user_files_unchanged()?;
         boundaries::assert_write_boundary(ready.fixture.root())?;
         Ok(())
@@ -123,7 +122,7 @@ mod tests {
         assert!(contract
             .output_panel
             .contains("App 只展示审计状态，不创建审计"));
-        assert!(contract.output_panel.contains("Release 自动审计"));
+        assert!(contract.output_panel.contains("交付关联审计"));
         assert!(!contract.output_panel.contains("request_human_audit"));
         Ok(())
     }

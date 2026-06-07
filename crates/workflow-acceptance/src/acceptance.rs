@@ -82,13 +82,13 @@ pub fn prepare_delivery_ready_fixture() -> Result<DeliveryReadyFixture> {
 
     let delivery_state = agentflow_state::refresh_state(root)?;
     anyhow::ensure!(
-        delivery_state.current_stage == WorkflowStage::AuditRequested,
-        "expected audit-requested, got {:?}",
+        delivery_state.current_stage == WorkflowStage::DeliveryReady,
+        "expected delivery-ready, got {:?}",
         delivery_state.current_stage
     );
     anyhow::ensure!(
-        delivery_state.audit_status == WorkflowAuditStatus::Requested,
-        "release delivery must register release-auto audit request"
+        delivery_state.audit_status == WorkflowAuditStatus::NotRequested,
+        "release delivery must not register audit request automatically"
     );
 
     fixture.assert_user_files_unchanged()?;

@@ -2615,7 +2615,7 @@ function AuditReport({
           title="审计结论"
           items={[
             report?.reportMarkdown.split("\n").slice(0, 3).join(" ") ||
-              "Release 已生成，AgentFlow 规则要求 Agent 完成审计。App 只展示状态，不创建审计。",
+              "暂无审计报告。审计需要通过独立审计任务或人工请求触发。",
           ]}
         />
         <SectionList
@@ -3429,9 +3429,9 @@ function deliveryAuditStatus(delivery: OutputIndexEntry | null, audit: AuditInde
   }
   if (!audit) {
     return {
-      actionLabel: "审计缺失",
+      actionLabel: "暂无审计",
       canOpenReport: false,
-      detail: "Release 已生成，但审计请求缺失。AgentFlow 规则要求 Agent 完成审计。",
+      detail: "交付已生成，暂无审计请求。任务完成不会自动触发审计。",
     };
   }
   if (audit.status === "requested") {
@@ -3547,11 +3547,11 @@ function buildNextStep(
 
   if ((outputStatus.status?.summary.releaseDeliveries ?? 0) > 0) {
     return {
-      action: "查看审计状态",
-      description: "Release 已生成，AgentFlow 规则要求 Agent 完成审计。",
-      reason: "交付页已有交付、证据和验证摘要；审计由 Agent 工作流触发。",
+      action: "查看交付",
+      description: "任务已完成，交付材料已生成。审计是独立流程，不会自动触发。",
+      reason: "任务完成和审计请求分开处理。",
       status: "ready",
-      title: "等待 Agent 审计交付",
+      title: "交付已生成",
     };
   }
 
@@ -3741,7 +3741,6 @@ function agentRoleRulesDocument() {
 
 function buildNextActionLabel(action: string) {
   const labels: Record<string, string> = {
-    "release-auto-audit-required": "等待 Agent 审计",
     "start-new-input": "告诉 Agent 你想做什么",
   };
   return labels[action] ?? action;
@@ -3750,7 +3749,7 @@ function buildNextActionLabel(action: string) {
 function auditTriggerLabel(trigger?: string | null) {
   const labels: Record<string, string> = {
     "human-via-agent": "人类通过 Agent 触发",
-    "release-auto": "Release 自动审计",
+    "release-auto": "交付关联审计",
   };
   return labels[trigger ?? ""] ?? "审计规则";
 }

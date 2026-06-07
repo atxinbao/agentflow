@@ -664,7 +664,9 @@ Build Agent must not:
 
 Build Agent stops after release delivery and evidence are written.
 
-Audit Agent completes the matching `release-auto` audit request.
+Build Agent must not create audit requests when a task is done.
+
+Audit Agent starts only from an independent audit issue or explicit human audit request.
 
 The ordinary App UI only displays audit state and report material. It must not create audits.
 

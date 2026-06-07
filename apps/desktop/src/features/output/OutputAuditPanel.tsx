@@ -187,7 +187,7 @@ export function OutputAuditPanel({ outputStatusState, projectRoot }: OutputAudit
             {selectedDelivery
               ? selectedDeliveryAudit
                 ? `${selectedDelivery.runId}：${auditTriggerLabel(selectedDeliveryAudit.trigger)}，${auditStatusLabel(selectedDeliveryAudit.status)}。`
-                : `${selectedDelivery.runId}：Release 已生成，但审计请求缺失。AgentFlow 规则要求 Agent 完成审计。`
+                : `${selectedDelivery.runId}：交付已生成，暂无审计请求。任务完成不会自动触发审计。`
               : "暂无可审计交付材料。"}
           </p>
           <button className="output-audit-button" onClick={() => setRefreshToken((current) => current + 1)} type="button">
@@ -308,7 +308,7 @@ function findPanelAuditForDelivery(audits: AuditIndexEntry[], runId: string) {
 function auditTriggerLabel(trigger: AuditIndexEntry["trigger"] | undefined) {
   switch (trigger) {
     case "release-auto":
-      return "Release 自动审计";
+      return "交付关联审计";
     case "human-via-agent":
       return "人类通过 Agent 触发";
     default:

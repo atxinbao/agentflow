@@ -311,9 +311,11 @@ It cannot process `issueCategory=spec`, modify source code, modify input facts, 
 
 ## Audit Trigger Rule
 
-Every Release Delivery must have exactly one `release-auto` audit request.
+Build Agent completion and Audit Agent execution are separate flows. Completing a task and writing Release Delivery must not create an audit request.
 
-If a Release Delivery exists but no audit request exists, the Agent must treat it as blocked and report: `Release 已生成，但审计请求缺失。`
+Audit starts only when an `issueCategory=audit` issue exists or a human explicitly requests audit.
+
+If a Release Delivery exists but no audit request exists, the Agent must treat it as a normal delivery-ready state, not a blocker.
 
 The ordinary App UI must not expose create-audit actions. It only displays audit status, trigger source, reports, findings, evidence maps, and traceability.
 
