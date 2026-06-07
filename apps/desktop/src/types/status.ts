@@ -163,6 +163,46 @@ export type IssueCategory = "spec" | "audit";
 export type AgentRole = "spec-agent" | "build-agent" | "audit-agent";
 export type ExpectedOutputs = Record<string, string>;
 
+export type InputProject = {
+  version: string;
+  projectId: string;
+  sourceSpecId?: string | null;
+  title: string;
+  summary: string;
+  objective?: string | null;
+  scope: string[];
+  nonGoals: string[];
+  successCriteria: string[];
+  issueIds: string[];
+  status: string;
+  panel?: {
+    snapshotId?: string | null;
+    contextPackId?: string | null;
+  };
+  system?: {
+    createdBy?: string;
+    createdAt?: number;
+    updatedAt?: number;
+    path?: string;
+    revision?: number;
+  };
+};
+
+export type InputIssueRelationType = "blocked-by" | "blocks" | "related" | "duplicate-of";
+
+export type InputIssueRelationEdge = {
+  fromIssueId: string;
+  toIssueId: string;
+  type: InputIssueRelationType;
+};
+
+export type InputIssueRelations = {
+  version: string;
+  relations?: InputIssueRelationEdge[];
+  edges?: InputIssueRelationEdge[];
+  nodes?: string[];
+};
+
 export type InputIssue = {
   version: string;
   issueId: string;
@@ -228,9 +268,9 @@ export type InputSnapshot = {
   index: unknown;
   intake: unknown[];
   specs: unknown[];
-  projects: unknown[];
+  projects: InputProject[];
   issues: InputIssue[];
-  relations: unknown;
+  relations: InputIssueRelations;
 };
 
 export type ExecuteWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";

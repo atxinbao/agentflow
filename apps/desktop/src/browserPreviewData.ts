@@ -689,7 +689,10 @@ export function createBrowserPreviewInputSnapshot(projectRoot = BROWSER_PREVIEW_
     specs: [],
     projects: [],
     issues: previewInputIssues,
-    relations: {},
+    relations: {
+      version: "input-issue-relations.browser-preview",
+      relations: [],
+    },
   };
 }
 
