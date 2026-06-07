@@ -152,7 +152,23 @@ mod tests {
         let spec_manual =
             fs::read_to_string(dir.path().join(".agentflow/define/spec/SPEC.md")).unwrap();
         assert!(spec_manual.contains("`.agentflow/input/specs/`"));
+        assert!(spec_manual.contains("Do not show raw JSON as the default conversation output."));
+        assert!(spec_manual.contains("`product.md` is the primary human-readable requirement"));
         assert!(!spec_manual.contains("`.agentflow/spec/`"));
+        let intake_skill = fs::read_to_string(
+            dir.path()
+                .join(".agentflow/define/agent/skills/requirement-intake-filter/SKILL.md"),
+        )
+        .unwrap();
+        assert!(intake_skill.contains("Do not show raw JSON as the default conversation output."));
+        assert!(intake_skill.contains("## Internal Record Shape"));
+        let spec_authoring_skill = fs::read_to_string(
+            dir.path()
+                .join(".agentflow/define/agent/skills/spec-gate-authoring/SKILL.md"),
+        )
+        .unwrap();
+        assert!(spec_authoring_skill.contains("SPEC Draft Preview must be human-readable"));
+        assert!(spec_authoring_skill.contains("`spec.json`: metadata"));
     }
 
     #[test]

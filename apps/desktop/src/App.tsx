@@ -511,8 +511,7 @@ function App() {
       buildAppInteractionState({
         activePage,
         hasError: Boolean(
-          workspaceData.error ||
-            outputBundle.error ||
+          outputBundle.error ||
             activeProjectRegistryStatus === "error" ||
             activeProjectRegistryStatus === "missing",
         ),
@@ -532,7 +531,6 @@ function App() {
       projectFilesState.loading,
       projectRoot,
       stateStatusState.status?.blockers.length,
-      workspaceData.error,
       workspaceData.source,
     ],
   );

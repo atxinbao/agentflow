@@ -181,6 +181,8 @@ Before SPEC Gate authoring, the Agent must produce a Requirement Intake Result.
 
 Only `ready-for-spec` may proceed to SPEC Draft Preview.
 
+Requirement Intake Result and SPEC Draft Preview are human-facing conversation outputs. They must be structured prose in `agentLocale`, not raw JSON dumps. JSON is for internal records, persisted fact files, tests, or advanced-detail views.
+
 ## Input Rule
 
 Input is the canonical requirement fact source under `.agentflow/input/`. All official issues must come from Approved SPEC. Simple requirements generate direct issues; complex requirements generate a project with issues. Desktop human UI is read-only and cannot directly edit input facts.
@@ -433,9 +435,29 @@ Prefer project context before asking questions:
 - skills-lock.json
 - request-triage result
 
-## Output Contract
+## Conversation Output
 
-Return a Requirement Intake Result. Do not output SPEC files.
+Return a human-readable Requirement Intake Result in the user's `agentLocale`.
+Do not output SPEC files.
+Do not show raw JSON as the default conversation output.
+
+Use this structure unless the human asks for another format:
+
+- Conclusion
+- Requirement summary
+- Known facts
+- Missing facts
+- Suggested scope
+- Non-goals
+- Acceptance direction
+- Boundary risks
+- Recommended next step
+
+If there are no missing facts, say that no blocking facts are missing. Ask at most 3 clarifying questions only when the status is `needs-clarification`.
+
+## Internal Record Shape
+
+The normalized intake record uses this shape for persistence, tests, and advanced details. Only show this JSON when the human explicitly asks for raw output or when an AgentFlow advanced-detail surface needs it.
 
 ```json
 {
@@ -473,7 +495,7 @@ Return a Requirement Intake Result. Do not output SPEC files.
 7. Draft acceptance criteria candidates.
 8. Check AgentFlow boundaries.
 9. Decide intake status.
-10. Return Requirement Intake Result.
+10. Return a human-readable Requirement Intake Result.
 
 ## Clarification Rules
 
@@ -543,6 +565,7 @@ Result:
 - Do not copy external prompt-optimizer text.
 - Do not optimize prompts.
 - Do not output SPEC files.
+- Do not make raw JSON the main human-facing output.
 - Do not write `.agentflow/input/**` before human confirmation.
 - Do not write legacy `.agentflow/spec/**`.
 - Do not write legacy `.agentflow/goal-tree/**`.
@@ -559,21 +582,35 @@ Version: v1
 
 Generate a SPEC Draft Preview only after requirement-intake-filter returns `ready-for-spec`.
 
-## Draft Preview Contents
+## Conversation Draft Preview
 
-- Summary
-- Problem
-- Goals
+SPEC Draft Preview must be human-readable in the user's `agentLocale`.
+Do not show raw JSON as the default draft preview.
+
+Use this structure unless the human asks for another format:
+
+- Conclusion
+- Requirement goal
+- User scenario
+- Scope
 - Non-goals
-- User behavior
-- Edge cases
 - Acceptance criteria
-- Risks
-- Open questions
-- Product draft for future `product.md`
-- Tech draft for future `tech.md`
-- Tasks draft
+- Technical constraints
+- Task breakdown
 - Validation plan
+- Open questions
+- Files to write after confirmation
+
+## Approved SPEC Artifact Content
+
+After human confirmation, Approved SPEC writes structured artifacts:
+
+- `product.md`: human-readable requirement and acceptance document with background, goals, user behavior, scope, non-goals, and acceptance criteria.
+- `tech.md`: implementation boundaries, data paths, role rules, validation commands, forbidden actions, and risk notes.
+- `spec.json`: metadata, identifiers, source references, and artifact index only. It is not the primary human-facing SPEC document.
+- `approval.json`: approval metadata, approver, approval time, and source confirmation.
+
+Raw JSON belongs in `spec.json`, `approval.json`, issue files, or advanced details. It must not replace the conversation preview.
 
 ## Hard Rules
 

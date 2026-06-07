@@ -5,7 +5,9 @@ use crate::{
         InputSummary, InputWorkspaceStatus, INPUT_STATUS_VERSION,
     },
     project::InputProject,
-    relations::{InputDependencyGraph, InputIssueRelationsFile},
+    relations::{
+        InputDependencyGraph, InputIssueRelation, InputIssueRelationKind, InputIssueRelationsFile,
+    },
     spec_gate::{InputIntakeResult, InputSpecDescriptor, InputSpecStatus},
     storage::{
         canonical_project_root, ensure_directory, read_json, read_json_files,
@@ -16,6 +18,7 @@ use crate::{
     views::InputView,
 };
 use anyhow::{Context, Result};
+use serde_json::Value;
 use std::{fs, path::Path};
 
 pub fn prepare_input_workspace(project_root: impl AsRef<Path>) -> Result<InputSnapshot> {
@@ -51,6 +54,7 @@ pub fn prepare_input_workspace(project_root: impl AsRef<Path>) -> Result<InputSn
         &root.join(".agentflow/input/relations/dependency-graph.json"),
         &InputDependencyGraph::default(),
     )?;
+    repair_derived_input_files(&root)?;
     write_json_if_missing(
         &root.join(".agentflow/input/views/active.json"),
         &InputView::active(),
@@ -71,6 +75,123 @@ pub fn prepare_input_workspace(project_root: impl AsRef<Path>) -> Result<InputSn
     let snapshot = build_input_snapshot(&root)?;
     rebuild_index(&root, &snapshot)?;
     build_input_snapshot(&root)
+}
+
+fn repair_derived_input_files(root: &Path) -> Result<()> {
+    repair_input_index_file(root)?;
+    repair_issue_relations_file(root)?;
+    repair_dependency_graph_file(root)?;
+    Ok(())
+}
+
+fn repair_input_index_file(root: &Path) -> Result<()> {
+    let path = root.join(".agentflow/input/index.json");
+    if read_json::<InputIndex>(&path).is_ok() {
+        return Ok(());
+    }
+
+    write_json(
+        &path,
+        &InputIndex {
+            updated_at: unix_timestamp_seconds(),
+            ..InputIndex::default()
+        },
+    )
+}
+
+fn repair_issue_relations_file(root: &Path) -> Result<()> {
+    let path = root.join(".agentflow/input/relations/issue-relations.json");
+    if read_json::<InputIssueRelationsFile>(&path).is_ok() {
+        return Ok(());
+    }
+
+    let repaired = read_json_value(&path)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("relations")
+                .and_then(Value::as_array)
+                .map(|relations| {
+                    relations
+                        .iter()
+                        .filter_map(normalize_relation_value)
+                        .collect::<Vec<_>>()
+                })
+        })
+        .map(|relations| InputIssueRelationsFile {
+            relations,
+            ..InputIssueRelationsFile::default()
+        })
+        .unwrap_or_default();
+
+    write_json(&path, &repaired)
+}
+
+fn repair_dependency_graph_file(root: &Path) -> Result<()> {
+    let path = root.join(".agentflow/input/relations/dependency-graph.json");
+    if read_json::<InputDependencyGraph>(&path).is_ok() {
+        return Ok(());
+    }
+
+    let repaired = read_json_value(&path)
+        .ok()
+        .map(|value| {
+            let nodes = value
+                .get("nodes")
+                .and_then(Value::as_array)
+                .map(|nodes| {
+                    nodes
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let edges = value
+                .get("edges")
+                .and_then(Value::as_array)
+                .map(|edges| {
+                    edges
+                        .iter()
+                        .filter_map(normalize_relation_value)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            InputDependencyGraph {
+                nodes,
+                edges,
+                ..InputDependencyGraph::default()
+            }
+        })
+        .unwrap_or_default();
+
+    write_json(&path, &repaired)
+}
+
+fn normalize_relation_value(value: &Value) -> Option<InputIssueRelation> {
+    let from_issue_id = value
+        .get("fromIssueId")
+        .or_else(|| value.get("from"))
+        .and_then(Value::as_str)?
+        .to_string();
+    let to_issue_id = value
+        .get("toIssueId")
+        .or_else(|| value.get("to"))
+        .and_then(Value::as_str)?
+        .to_string();
+    let relation_type =
+        serde_json::from_value::<InputIssueRelationKind>(value.get("type")?.clone()).ok()?;
+
+    Some(InputIssueRelation {
+        from_issue_id,
+        to_issue_id,
+        relation_type,
+    })
+}
+
+fn read_json_value(path: &Path) -> Result<Value> {
+    let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    serde_json::from_str(&raw).with_context(|| format!("parse {}", path.display()))
 }
 
 pub(crate) fn normalize_issue_metadata_files(root: &Path) -> Result<()> {

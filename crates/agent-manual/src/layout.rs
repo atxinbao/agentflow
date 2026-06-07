@@ -553,6 +553,20 @@ SPEC is the requirement and acceptance manual for AgentFlow.
 - Approved SPEC is required before input issue generation.
 - Real SPEC artifacts live under `.agentflow/input/specs/`, not under `define/`.
 
+## Human-facing Output
+
+- Requirement Intake Result must be structured prose in the user's `agentLocale`.
+- SPEC Draft Preview must be structured prose in the user's `agentLocale`.
+- Do not show raw JSON as the default conversation output.
+- Raw JSON is allowed only for internal records, persisted fact files, tests, or advanced details.
+
+## Approved SPEC Artifacts
+
+- `product.md` is the primary human-readable requirement and acceptance document.
+- `tech.md` records implementation boundaries, data paths, validation, and forbidden actions.
+- `spec.json` records metadata, identifiers, source references, and artifact indexes.
+- `approval.json` records human approval metadata.
+
 ## V1 Boundary
 
 V1 creates this manual only. It does not create SPEC changes, approvals, or facts.
