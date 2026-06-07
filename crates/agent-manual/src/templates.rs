@@ -41,6 +41,10 @@ Every Agent MUST read and follow:
 - Do not bypass SPEC.
 - `.agentflow/input/issues/**` is the only current task fact source.
 - `.agentflow/input/specs/drafts/**` and `.agentflow/input/specs/approved/**` are the only current SPEC fact sources.
+- AgentFlow input issues, handoff packages, and executionPipeline are the only task and plan authority.
+- Do not treat any external issue, task, plan, queue, thread, or tool state as AgentFlow task authority.
+- Do not use external planning state to create, select, split, reorder, or advance AgentFlow work.
+- GitHub tools are allowed only for the PR stages explicitly listed in the current AgentFlow executionPipeline.
 - Do not create PRs, issues, or remote objects unless the current role handoff explicitly authorizes that stage.
 - Human conversation is for confirmation and feedback, not direct issue execution.
 - Raw human requirements go to Spec Agent in conversation. Do not require humans to hand-write a raw directory.
@@ -129,6 +133,8 @@ Do not mix these roles in one Codex thread. Each thread must keep one role for t
 - `input/` is the canonical requirement fact source.
 - `.agentflow/input/issues/**` is the only current task fact source.
 - `.agentflow/input/specs/drafts/**` and `.agentflow/input/specs/approved/**` are the only current SPEC fact sources.
+- AgentFlow input issues, handoff packages, and executionPipeline are the only task and plan authority.
+- External issue, task, plan, queue, thread, or tool state must not create, select, split, reorder, or advance AgentFlow work.
 - `AGENTS.md` is the canonical root Agent entry.
 - `AGENT.MD` is legacy compatibility only.
 - Legacy `.agentflow/spec/` and `.agentflow/goal-tree/` are not new write paths.
@@ -294,6 +300,8 @@ Status: enabled for Execute + Release Delivery V1.
 Owns controlled development delivery from `.agentflow/input/issues/<issue-id>.json` into `.agentflow/execute/runs/<run-id>/`, `.agentflow/output/evidence/<run-id>.json`, and `.agentflow/output/release/<run-id>/`.
 
 It may execute only `issueCategory=spec` issues with `requiredAgentRole=build-agent`. Its handoff must include source SPEC target metadata and build expected outputs. Its writeback must include `agent-claim.json` with `claimedAgentRole=build-agent`.
+
+Build Agent must use the AgentFlow input issue and executionPipeline as the only task plan. It must not treat any external issue, task, plan, queue, thread, or tool state as task authority. GitHub commands are allowed only for the PR stages explicitly listed in the AgentFlow executionPipeline.
 
 It performs the Build Agent execution pipeline:
 

@@ -313,6 +313,13 @@ mod tests {
         assert!(manual.contains(
             "The writeback stage runs only after PR merge and writes run, evidence, release delivery, and Done status."
         ));
+        assert!(manual.contains("AgentFlow input issues, handoff packages, and executionPipeline are the only task and plan authority."));
+        assert!(manual.contains(
+            "Build Agent must use the AgentFlow input issue and executionPipeline as the only task plan."
+        ));
+        assert!(manual.contains(
+            "It must not treat any external issue, task, plan, queue, thread, or tool state as task authority."
+        ));
         assert!(manual.contains("GitHub automation preflight"));
         assert!(manual.contains("auto-merge-if-eligible"));
         assert!(manual.contains("A Draft PR is only an intermediate state"));
