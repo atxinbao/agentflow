@@ -398,6 +398,7 @@ function App() {
   const [projectRegistry, setProjectRegistry] = useState(readInitialProjectRegistry);
   const [taskSearch, setTaskSearch] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskProjectId, setSelectedTaskProjectId] = useState<string | null>(null);
   const [selectedDeliveryRunId, setSelectedDeliveryRunId] = useState<string | null>(null);
   const [selectedAuditId, setSelectedAuditId] = useState<string | null>(null);
   const [inputStatusRefreshToken, setInputStatusRefreshToken] = useState(0);
@@ -704,9 +705,13 @@ function App() {
         : null,
     [activeIssueId, inputSnapshotState.snapshot, issueStatusIndexState.index],
   );
+  const selectedProjectGroup = useMemo(
+    () => taskProjectTree?.groups.find((group) => group.id === selectedTaskProjectId) ?? null,
+    [selectedTaskProjectId, taskProjectTree],
+  );
   const selectedTaskCandidateId = useMemo(
-    () => pickTaskId(tasks, selectedTaskId, activeIssueId),
-    [activeIssueId, selectedTaskId, tasks],
+    () => (selectedProjectGroup ? null : pickTaskId(tasks, selectedTaskId, activeIssueId)),
+    [activeIssueId, selectedProjectGroup, selectedTaskId, tasks],
   );
   const taskInteractionState = useMemo(
     () => buildTaskInteractionState(tasks, selectedTaskCandidateId),
@@ -752,11 +757,18 @@ function App() {
   );
 
   useEffect(() => {
+    if (selectedTaskProjectId) {
+      if (!taskProjectTree?.groups.some((group) => group.id === selectedTaskProjectId)) {
+        setSelectedTaskProjectId(null);
+      }
+      return;
+    }
+
     const nextTaskId = pickTaskId(tasks, selectedTaskId, activeIssueId);
     if (nextTaskId !== selectedTaskId) {
       setSelectedTaskId(nextTaskId);
     }
-  }, [activeIssueId, selectedTaskId, tasks]);
+  }, [activeIssueId, selectedTaskId, selectedTaskProjectId, taskProjectTree, tasks]);
 
   function refreshProjectPage(page: AppPage, root = projectRoot) {
     if (!root) {
@@ -810,6 +822,7 @@ function App() {
   function handleSelectProject(projectRootToSelect: string) {
     setProjectRegistry((current) => selectProject(current, projectRootToSelect));
     setTaskSearch("");
+    setSelectedTaskProjectId(null);
     setOutputRefreshToken((current) => current + 1);
   }
 
@@ -822,6 +835,7 @@ function App() {
     setProjectRegistry((current) => removeProject(current, projectRootToRemove));
     if (removingActiveProject) {
       setSelectedTaskId(null);
+      setSelectedTaskProjectId(null);
       setSelectedDeliveryRunId(null);
       setSelectedAuditId(null);
       setTaskSearch("");
@@ -837,6 +851,18 @@ function App() {
     if (shouldRefresh) {
       refreshProjectPage(page, projectRootToSelect);
     }
+  }
+
+  function handleSelectTask(taskId: string) {
+    setSelectedTaskProjectId(null);
+    setSelectedTaskId(taskId);
+    setTaskActionFeedback(null);
+  }
+
+  function handleSelectTaskProject(projectId: string) {
+    setSelectedTaskId(null);
+    setSelectedTaskProjectId(projectId);
+    setTaskActionFeedback(null);
   }
 
   async function chooseProjectFolder() {
@@ -1105,8 +1131,10 @@ function App() {
             copyState={taskCopyState}
             handedOff={selectedTask ? handedOffIssues.has(selectedTask.id) : false}
             onTaskAction={(action, task) => void handleTaskAction(action, task)}
-            onSelectTask={setSelectedTaskId}
+            onSelectProjectGroup={handleSelectTaskProject}
+            onSelectTask={handleSelectTask}
             projectRoot={projectRoot}
+            selectedProjectGroup={selectedProjectGroup}
             selectedTask={selectedTask}
             suggestions={initializationState.status?.recentContext ?? []}
             taskTree={taskProjectTree}
@@ -2098,8 +2126,10 @@ function TasksPage({
   actions,
   copyState,
   handedOff,
+  onSelectProjectGroup,
   onTaskAction,
   onSelectTask,
+  selectedProjectGroup,
   selectedTask,
   projectRoot,
   suggestions,
@@ -2110,9 +2140,11 @@ function TasksPage({
   actions: TaskInteractionAction[];
   copyState: ButtonInteractionState;
   handedOff: boolean;
+  onSelectProjectGroup: (projectId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   onSelectTask: (taskId: string) => void;
   projectRoot: string | null;
+  selectedProjectGroup: TaskProjectGroup | null;
   selectedTask: V1Issue | null;
   suggestions: ProjectInitializationContext[];
   taskTree: TaskProjectTreeViewModel | null;
@@ -2125,9 +2157,11 @@ function TasksPage({
         actions={actions}
         copyState={copyState}
         handedOff={handedOff}
+        onSelectProjectGroup={onSelectProjectGroup}
         onSelectTask={onSelectTask}
         onTaskAction={onTaskAction}
         projectRoot={projectRoot}
+        selectedProjectGroup={selectedProjectGroup}
         selectedTask={selectedTask}
         suggestions={suggestions}
         taskTree={taskTree}
@@ -2142,9 +2176,11 @@ function TaskList({
   actions,
   copyState,
   handedOff,
+  onSelectProjectGroup,
   onSelectTask,
   onTaskAction,
   projectRoot,
+  selectedProjectGroup,
   selectedTask,
   suggestions,
   taskTree,
@@ -2154,9 +2190,11 @@ function TaskList({
   actions: TaskInteractionAction[];
   copyState: ButtonInteractionState;
   handedOff: boolean;
+  onSelectProjectGroup: (projectId: string) => void;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   projectRoot: string | null;
+  selectedProjectGroup: TaskProjectGroup | null;
   selectedTask: V1Issue | null;
   suggestions: ProjectInitializationContext[];
   taskTree: TaskProjectTreeViewModel | null;
@@ -2205,6 +2243,13 @@ function TaskList({
   );
   const visibleTaskCount =
     visibleTaskGroups.reduce((total, group) => total + group.issues.length, 0) + visibleUngroupedIssues.length;
+  const selectedTaskGroup = useMemo(
+    () =>
+      selectedTask
+        ? taskTree?.groups.find((group) => group.issues.some((issue) => issue.id === selectedTask.id)) ?? null
+        : null,
+    [selectedTask, taskTree],
+  );
   const countLabel = showContextSuggestions
     ? `${suggestions.length} 条`
     : taskTree
@@ -2238,8 +2283,10 @@ function TaskList({
                   expanded={expandedProjectIds.has(group.id)}
                   group={group}
                   key={group.id}
+                  onSelectProjectGroup={onSelectProjectGroup}
                   onSelectTask={onSelectTask}
                   onToggle={toggleProjectGroup}
+                  selectedProjectId={selectedProjectGroup?.id ?? null}
                   selectedTaskId={selectedTask?.id ?? null}
                 />
               ))
@@ -2310,8 +2357,12 @@ function TaskList({
         copyState={copyState}
         handedOff={handedOff}
         onTaskAction={onTaskAction}
+        onSelectTask={onSelectTask}
+        selectedProjectGroup={selectedProjectGroup}
         suggestions={showContextSuggestions ? suggestions : []}
         task={selectedTask}
+        taskProjectGroup={selectedTaskGroup}
+        taskTreeSelection={taskTree?.selection ?? null}
       />
     </div>
   );
@@ -2320,27 +2371,35 @@ function TaskList({
 function TaskProjectGroupRow({
   expanded,
   group,
+  onSelectProjectGroup,
   onSelectTask,
   onToggle,
+  selectedProjectId,
   selectedTaskId,
 }: {
   expanded: boolean;
   group: TaskProjectGroup;
+  onSelectProjectGroup: (projectId: string) => void;
   onSelectTask: (taskId: string) => void;
   onToggle: (projectId: string) => void;
+  selectedProjectId: string | null;
   selectedTaskId: string | null;
 }) {
   const progress = group.counts.issueCount
     ? `${group.counts.doneIssueCount}/${group.counts.issueCount}`
     : "0/0";
   const risk = groupRiskLevel(group.issues);
+  const selected = group.id === selectedProjectId;
 
   return (
     <section className="v16-task-project-group" aria-label={group.title}>
       <button
         aria-expanded={expanded}
-        className="v16-task-project-row"
-        onClick={() => onToggle(group.id)}
+        className={selected ? "v16-task-project-row active" : "v16-task-project-row"}
+        onClick={() => {
+          onSelectProjectGroup(group.id);
+          onToggle(group.id);
+        }}
         title={`${group.title} ${progress}`}
         type="button"
       >
@@ -2444,18 +2503,36 @@ function TaskDetail({
   actions,
   copyState,
   handedOff,
+  onSelectTask,
   onTaskAction,
+  selectedProjectGroup,
   suggestions,
   task,
+  taskProjectGroup,
+  taskTreeSelection,
 }: {
   actionFeedback: string | null;
   actions: TaskInteractionAction[];
   copyState: ButtonInteractionState;
   handedOff: boolean;
+  onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
+  selectedProjectGroup: TaskProjectGroup | null;
   suggestions: ProjectInitializationContext[];
   task: V1Issue | null;
+  taskProjectGroup: TaskProjectGroup | null;
+  taskTreeSelection: TaskProjectTreeViewModel["selection"] | null;
 }) {
+  if (selectedProjectGroup) {
+    return (
+      <ProjectSummaryReader
+        group={selectedProjectGroup}
+        onSelectTask={onSelectTask}
+        treeSelection={taskTreeSelection}
+      />
+    );
+  }
+
   if (!task) {
     if (suggestions.length) {
       return (
@@ -2493,13 +2570,130 @@ function TaskDetail({
     );
   }
 
+  return (
+    <IssueContractReader
+      actionFeedback={actionFeedback}
+      actions={actions}
+      copyState={copyState}
+      handedOff={handedOff}
+      onTaskAction={onTaskAction}
+      task={task}
+      taskProjectGroup={taskProjectGroup}
+    />
+  );
+}
+
+function ProjectSummaryReader({
+  group,
+  onSelectTask,
+  treeSelection,
+}: {
+  group: TaskProjectGroup;
+  onSelectTask: (taskId: string) => void;
+  treeSelection: TaskProjectTreeViewModel["selection"] | null;
+}) {
+  const risk = groupRiskLevel(group.issues);
+  const recommendedIssue = projectRecommendedIssue(group, treeSelection);
+  const reviewIssueCount = group.issues.filter((issue) => issue.displayStatus === "review").length;
+  const readyIssueCount = group.issues.filter((issue) => issue.displayStatus === "ready").length;
+  const highRiskIssueCount = group.issues.filter((issue) => riskToneKey(issue.riskLevel) === "high").length;
+
+  return (
+    <aside className="v16-detail-pane" aria-label="项目摘要">
+      <header>
+        <p className="v16-kicker">Project Summary</p>
+        <h2>{group.title}</h2>
+        <p>{group.summary || group.objective || group.id}</p>
+        <div className="v16-detail-meta-strip">
+          <span className="v16-detail-meta-item">
+            <span className="v16-detail-meta-label">状态</span>
+            <StatusBadge status={statusChipForDisplayStatus(displayStatusFromLegacyStatus(group.status))}>
+              {group.status || "未记录"}
+            </StatusBadge>
+          </span>
+          <span className="v16-detail-meta-item">
+            <span className="v16-detail-meta-label">风险</span>
+            <strong className={`v16-risk-text ${riskTextClass(risk)}`}>{displayRiskTextZh(risk)}</strong>
+          </span>
+          <span className="v16-detail-meta-item">
+            <span className="v16-detail-meta-label">来源 SPEC</span>
+            <strong className="v16-role-text">{group.sourceSpecId ?? "未记录"}</strong>
+          </span>
+        </div>
+      </header>
+      <div className="v16-detail-document">
+        <div className="v16-summary-grid">
+          <MetricCard detail={`${group.counts.doneIssueCount} 已完成`} label="任务" value={group.counts.issueCount} />
+          <MetricCard detail={`${readyIssueCount} 就绪`} label="进行中" value={group.counts.activeIssueCount} />
+          <MetricCard detail={`${reviewIssueCount} 待审阅`} label="审计任务" value={group.counts.auditIssueCount} />
+          <MetricCard detail={`${highRiskIssueCount} 高风险`} label="风险" value={displayRiskTextZh(risk)} />
+        </div>
+        <DescriptionList
+          items={[
+            ["项目 ID", group.id],
+            ["来源 SPEC", group.sourceSpecId ?? "未记录"],
+            ["当前建议任务", recommendedIssue ? `${recommendedIssue.id} · ${recommendedIssue.title}` : "暂无"],
+            ["任务进度", `${group.counts.doneIssueCount}/${group.counts.issueCount}`],
+          ]}
+        />
+        <SectionList title="目标" items={[group.objective || group.summary || group.title]} />
+        <SectionList title="范围" items={group.project.scope} />
+        <SectionList title="非目标" items={group.project.nonGoals} />
+        <SectionList title="任务进度" items={projectProgressItems(group)} />
+        <SectionList title="风险摘要" items={projectRiskSummaryItems(group)} />
+        <SectionList title="当前建议任务" items={projectRecommendedIssueItems(recommendedIssue)} />
+        <SectionList title="依赖摘要" items={projectDependencySummaryItems(group)} />
+        {group.warnings.length || group.missingIssueIds.length ? (
+          <SectionList title="缺失引用" items={projectWarningItems(group)} />
+        ) : null}
+      </div>
+      <ActionBar sticky>
+        <ActionButton
+          disabled={!recommendedIssue}
+          onClick={() => {
+            if (recommendedIssue) {
+              onSelectTask(recommendedIssue.id);
+            }
+          }}
+          variant="primary"
+        >
+          查看建议任务
+        </ActionButton>
+      </ActionBar>
+    </aside>
+  );
+}
+
+function IssueContractReader({
+  actionFeedback,
+  actions,
+  copyState,
+  handedOff,
+  onTaskAction,
+  task,
+  taskProjectGroup,
+}: {
+  actionFeedback: string | null;
+  actions: TaskInteractionAction[];
+  copyState: ButtonInteractionState;
+  handedOff: boolean;
+  onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
+  task: V1Issue;
+  taskProjectGroup: TaskProjectGroup | null;
+}) {
   const handoffError = taskHandoffValidationError(task);
   const auditDescriptionItems = taskAuditDescriptionItems(task);
   const outputItems = taskOutputItems(task);
+  const owningProject = taskProjectGroup
+    ? `${taskProjectGroup.title} (${taskProjectGroup.id})`
+    : task.projectId
+      ? task.projectId
+      : "未归属任务";
 
   return (
-    <aside className="v16-detail-pane" aria-label="任务详情">
+    <aside className="v16-detail-pane" aria-label="Issue 合约">
       <header>
+        <p className="v16-kicker">Issue Contract</p>
         <h2>{task.id}</h2>
         <p>{task.title}</p>
         <div className="v16-detail-meta-strip">
@@ -2524,7 +2718,10 @@ function TaskDetail({
       <div className="v16-detail-document">
         <DescriptionList
           items={[
+            ["所属项目", owningProject],
             ["任务类型", issueCategoryLabelZh(task.issueCategory)],
+            ["执行角色", agentRoleLabelZh(task.requiredAgentRole)],
+            ["来源 SPEC", taskSourceSpecLabel(task)],
             ["进入执行", handedOff ? "已做本地标记" : "未标记"],
             ...auditDescriptionItems,
             ...(task.auditTrigger ? [["触发来源", auditTriggerLabel(task.auditTrigger)] as [string, string]] : []),
@@ -2538,7 +2735,7 @@ function TaskDetail({
         <SectionList title="验证命令" items={task.validationCommands} />
         {task.issueCategory === "spec" ? <SectionList title="执行流程" items={taskExecutionPipelineItems(task)} /> : null}
         <SectionList title="相关文件" items={task.allowedFiles} />
-        <SectionList title="输出位置" items={outputItems} />
+        <SectionList title="输出目标" items={outputItems} />
         <details className="v16-task-package">
           <summary>Agent 任务包</summary>
           <CopyableCodeBlock
@@ -3656,6 +3853,117 @@ function taskOutputItems(task: V1Issue) {
     return ["未提供输出位置。"];
   }
   return entries.map(([key, value]) => `${key}: ${value}`);
+}
+
+function taskSourceSpecLabel(task: V1Issue) {
+  return task.sourceSpecId ?? task.sourceSpecPath ?? "未提供";
+}
+
+function projectRecommendedIssue(
+  group: TaskProjectGroup,
+  treeSelection: TaskProjectTreeViewModel["selection"] | null,
+) {
+  const selectedIssue =
+    treeSelection?.kind === "issue"
+      ? group.issues.find((issue) => issue.id === treeSelection.issueId) ?? null
+      : null;
+  if (selectedIssue) {
+    return selectedIssue;
+  }
+
+  return (
+    group.issues.find((issue) => issue.displayStatus === "in-progress") ??
+    group.issues.find((issue) => issue.displayStatus === "ready") ??
+    group.issues.find((issue) => issue.displayStatus === "review") ??
+    group.issues.find((issue) => issue.displayStatus === "backlog") ??
+    group.issues.find((issue) => issue.displayStatus !== "done" && issue.displayStatus !== "cancel") ??
+    group.issues[0] ??
+    null
+  );
+}
+
+function projectProgressItems(group: TaskProjectGroup) {
+  if (!group.issues.length) {
+    return ["还没有任务。"];
+  }
+
+  const readyCount = group.issues.filter((issue) => issue.displayStatus === "ready").length;
+  const reviewCount = group.issues.filter((issue) => issue.displayStatus === "review").length;
+  const backlogCount = group.issues.filter((issue) => issue.displayStatus === "backlog").length;
+
+  return [
+    `总任务：${group.counts.issueCount}`,
+    `进行中：${group.counts.activeIssueCount}`,
+    `就绪：${readyCount}`,
+    `待审阅：${reviewCount}`,
+    `待办：${backlogCount}`,
+    `已完成：${group.counts.doneIssueCount}`,
+    `审计任务：${group.counts.auditIssueCount}`,
+  ];
+}
+
+function projectRiskSummaryItems(group: TaskProjectGroup) {
+  if (!group.issues.length) {
+    return ["还没有任务风险记录。"];
+  }
+
+  const risk = groupRiskLevel(group.issues);
+  const elevatedIssues = group.issues.filter((issue) => {
+    const tone = riskToneKey(issue.riskLevel);
+    return tone === "high" || tone === "medium";
+  });
+
+  return [
+    `整体风险：${displayRiskTextZh(risk)}`,
+    ...(elevatedIssues.length
+      ? elevatedIssues.slice(0, 5).map((issue) => `${issue.id}：${displayRiskTextZh(issue.riskLevel)} · ${issue.title}`)
+      : ["没有中高风险任务。"]),
+  ];
+}
+
+function projectRecommendedIssueItems(issue: TaskIssueNode | null) {
+  if (!issue) {
+    return ["暂无建议任务。"];
+  }
+
+  return [
+    `${issue.id}：${issue.title}`,
+    `状态：${displayStatusLabelZh(issue.displayStatus)}`,
+    `任务类型：${issueCategoryLabelZh(issue.issueCategory)}`,
+    `执行角色：${agentRoleLabelZh(issue.requiredAgentRole)}`,
+    issue.blockedBy.length ? `前置依赖：${issue.blockedBy.join("、")}` : "前置依赖：无",
+  ];
+}
+
+function projectDependencySummaryItems(group: TaskProjectGroup) {
+  if (!group.issues.length) {
+    return ["还没有任务。"];
+  }
+
+  const details = group.issues.flatMap((issue) => [
+    ...(issue.blockedBy.length ? [`${issue.id} 被 ${issue.blockedBy.join("、")} 阻塞。`] : []),
+    ...(issue.blocks.length ? [`${issue.id} 阻塞 ${issue.blocks.join("、")}。`] : []),
+  ]);
+  const blockedByCount = group.issues.reduce((total, issue) => total + issue.blockedBy.length, 0);
+  const blocksCount = group.issues.reduce((total, issue) => total + issue.blocks.length, 0);
+
+  if (!details.length) {
+    return ["没有记录依赖关系。"];
+  }
+
+  return [
+    `前置依赖：${blockedByCount}`,
+    `阻塞下游：${blocksCount}`,
+    ...details.slice(0, 6),
+    ...(details.length > 6 ? [`还有 ${details.length - 6} 条依赖未显示。`] : []),
+  ];
+}
+
+function projectWarningItems(group: TaskProjectGroup) {
+  return [
+    ...group.missingIssueIds.map((issueId) => `缺失 issue 引用：${issueId}`),
+    ...group.warnings.map((warning) => warning.message),
+  ];
 }
 
 function taskExecutionPipeline(task: V1Issue) {
