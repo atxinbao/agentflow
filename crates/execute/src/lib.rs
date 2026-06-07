@@ -263,6 +263,32 @@ mod tests {
     }
 
     #[test]
+    fn preflight_generates_panel_context_pack_for_issue() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path(), "spec-001");
+        write_issue(dir.path(), "iss-001", "spec-001", InputRiskLevel::Low);
+        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+
+        let preflight = execute_run_preflight(dir.path(), run.run_id.clone()).unwrap();
+        let loaded = load_execute_run(dir.path(), run.run_id).unwrap();
+
+        assert_eq!(preflight.status, "ready");
+        assert!(preflight.checks.iter().any(|check| {
+            check.name == "context-pack" && matches!(check.status, ExecuteCheckStatus::Passed)
+        }));
+        assert!(dir
+            .path()
+            .join(".agentflow/panel/context-packs/iss-001.json")
+            .is_file());
+        assert_eq!(loaded.input.context_pack_id.as_deref(), Some("iss-001"));
+        assert_eq!(
+            loaded.input.context_pack_path.as_deref(),
+            Some(".agentflow/panel/context-packs/iss-001.json")
+        );
+    }
+
+    #[test]
     fn low_and_medium_risk_do_not_require_confirmation() {
         let dir = tempdir().unwrap();
         prepare_root(dir.path());
@@ -393,6 +419,11 @@ mod tests {
             .join(".agentflow/output/evidence")
             .join(format!("{}.json", run.run_id))
             .is_file());
+        let evidence = load_output_evidence(dir.path(), run.run_id.clone()).unwrap();
+        assert_eq!(
+            evidence.panel.context_pack_path.as_deref(),
+            Some(".agentflow/panel/context-packs/iss-001.json")
+        );
         let lease: ExecuteLease = storage::read_json(
             &dir.path()
                 .join(".agentflow/execute/leases")

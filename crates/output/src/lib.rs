@@ -46,6 +46,7 @@ mod tests {
             panel: OutputEvidencePanel {
                 snapshot_id: Some("panel-snapshot-001".to_string()),
                 context_pack_id: Some("ctx-001".to_string()),
+                context_pack_path: Some(".agentflow/panel/context-packs/ctx-001.json".to_string()),
             },
             execute: OutputEvidenceExecuteArtifacts {
                 run: format!(".agentflow/execute/runs/{run_id}/run.json"),

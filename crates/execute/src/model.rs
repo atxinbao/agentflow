@@ -178,6 +178,8 @@ pub struct ExecuteRunInput {
     pub spec_path: String,
     pub panel_snapshot_id: Option<String>,
     pub context_pack_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_pack_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

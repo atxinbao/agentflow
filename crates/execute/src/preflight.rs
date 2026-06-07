@@ -2,14 +2,17 @@ use crate::{
     manager::load_issue_for_run,
     model::{
         ExecuteCheckStatus, ExecuteHumanConfirmation, ExecuteLease, ExecuteLeaseStatus,
-        ExecutePreflight, ExecutePreflightCheck, ExecuteRunStatus, EXECUTE_PREFLIGHT_VERSION,
+        ExecutePreflight, ExecutePreflightCheck, ExecuteRun, ExecuteRunStatus,
+        EXECUTE_PREFLIGHT_VERSION,
     },
     storage::{
-        canonical_project_root, read_json, read_run, rebuild_index, run_dir, update_run_status,
-        write_json,
+        canonical_project_root, read_json, read_run, rebuild_index, run_dir,
+        unix_timestamp_seconds, update_run_status, write_json, write_run,
     },
 };
-use agentflow_input::issue::{validate_agent_issue_permission, AgentRole, InputRiskLevel};
+use agentflow_input::issue::{
+    validate_agent_issue_permission, AgentRole, InputIssue, InputRiskLevel,
+};
 use anyhow::Result;
 use std::path::Path;
 
@@ -52,7 +55,7 @@ pub fn execute_run_preflight(
     run_id: String,
 ) -> Result<ExecutePreflight> {
     let root = canonical_project_root(project_root)?;
-    let run = read_run(&root, &run_id)?;
+    let mut run = read_run(&root, &run_id)?;
     let issue = load_issue_for_run(&root, &run).ok();
     let mut checks = Vec::new();
 
@@ -149,6 +152,8 @@ pub fn execute_run_preflight(
                 human_confirmation_required: None,
                 confirmed: None,
             });
+
+            checks.push(prepare_context_pack_for_issue(&root, &mut run, issue));
 
             let approved_spec = root
                 .join(".agentflow/input/specs/approved")
@@ -276,6 +281,81 @@ pub fn execute_run_preflight(
         return Err(error);
     }
     Ok(preflight)
+}
+
+fn prepare_context_pack_for_issue(
+    root: &Path,
+    run: &mut ExecuteRun,
+    issue: &InputIssue,
+) -> ExecutePreflightCheck {
+    let objective = if issue.summary.trim().is_empty() {
+        issue.scope.join("\n")
+    } else {
+        issue.summary.clone()
+    };
+    let context_pack_id = context_pack_id_for_issue(issue);
+    let canonical_path = format!(".agentflow/panel/context-packs/{context_pack_id}.json");
+
+    match agentflow_panel::panel_preflight(
+        root,
+        "issue",
+        Some(&issue.issue_id),
+        &issue.title,
+        &objective,
+        &issue.acceptance_criteria,
+    ) {
+        Ok(snapshot) if snapshot.ready => {
+            let context_pack_path = snapshot.context_pack_path.unwrap_or(canonical_path);
+            run.input.context_pack_id = Some(context_pack_id);
+            run.input.context_pack_path = Some(context_pack_path.clone());
+            run.updated_at = unix_timestamp_seconds();
+
+            if let Err(error) = write_run(root, run) {
+                return ExecutePreflightCheck {
+                    name: "context-pack".to_string(),
+                    status: ExecuteCheckStatus::Failed,
+                    message: Some(format!(
+                        "Panel Context Pack generated but run update failed: {error}"
+                    )),
+                    risk_level: None,
+                    human_confirmation_required: None,
+                    confirmed: None,
+                };
+            }
+
+            ExecutePreflightCheck {
+                name: "context-pack".to_string(),
+                status: ExecuteCheckStatus::Passed,
+                message: Some(format!("Panel Context Pack is ready: {context_pack_path}.")),
+                risk_level: None,
+                human_confirmation_required: None,
+                confirmed: None,
+            }
+        }
+        Ok(snapshot) => ExecutePreflightCheck {
+            name: "context-pack".to_string(),
+            status: ExecuteCheckStatus::Blocked,
+            message: Some(format!(
+                "Panel Context Pack cannot be generated: {}",
+                snapshot.reason
+            )),
+            risk_level: None,
+            human_confirmation_required: None,
+            confirmed: None,
+        },
+        Err(error) => ExecutePreflightCheck {
+            name: "context-pack".to_string(),
+            status: ExecuteCheckStatus::Blocked,
+            message: Some(format!("Panel Context Pack cannot be generated: {error}")),
+            risk_level: None,
+            human_confirmation_required: None,
+            confirmed: None,
+        },
+    }
+}
+
+fn context_pack_id_for_issue(issue: &InputIssue) -> String {
+    issue.issue_id.replace('/', "-")
 }
 
 fn push_check(

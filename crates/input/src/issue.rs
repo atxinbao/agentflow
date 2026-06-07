@@ -345,12 +345,6 @@ impl InputIssue {
         if self.handoff_id.trim().is_empty() && !self.issue_id.trim().is_empty() {
             self.handoff_id = format!("handoff-{}", self.issue_id);
         }
-        if self.context_pack_path.trim().is_empty() {
-            if let Some(context_pack_id) = self.panel.context_pack_id.as_deref() {
-                self.context_pack_path =
-                    format!(".agentflow/panel/context-packs/{context_pack_id}.json");
-            }
-        }
         if self.validation_commands.is_empty() {
             self.validation_commands = self.validation_hints.clone();
         }
@@ -480,6 +474,27 @@ impl InputIssue {
     }
 
     fn normalize_spec_metadata(&mut self) {
+        if !self.issue_id.trim().is_empty() {
+            let context_pack_id = self.issue_id.replace('/', "-");
+            if self
+                .panel
+                .context_pack_id
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default()
+                .is_empty()
+            {
+                self.panel.context_pack_id = Some(context_pack_id.clone());
+            }
+            if !self
+                .context_pack_path
+                .trim()
+                .starts_with(".agentflow/panel/context-packs/")
+            {
+                self.context_pack_path =
+                    format!(".agentflow/panel/context-packs/{context_pack_id}.json");
+            }
+        }
         if self.source_spec_path.trim().is_empty() && !self.source_spec_id.trim().is_empty() {
             self.source_spec_path = format!(
                 ".agentflow/input/specs/approved/{}/spec.json",
@@ -595,8 +610,7 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "github-preflight".to_string(),
                 label: "GitHub 自动化预检".to_string(),
-                goal: "确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用。"
-                    .to_string(),
+                goal: "确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。".to_string(),
                 required: true,
                 evidence: vec![
                     "gh --version".to_string(),
@@ -604,6 +618,8 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
                     "git status --short".to_string(),
                     "git remote -v".to_string(),
                     "gh repo view --json nameWithOwner,defaultBranchRef".to_string(),
+                    "cargo build --release --bin agentflow or target/debug/agentflow fallback".to_string(),
+                    "target/release/agentflow build-agent complete --help or target/debug/agentflow build-agent complete --help".to_string(),
                 ],
             },
             InputIssueExecutionStage {
@@ -651,11 +667,12 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "writeback-done".to_string(),
                 label: "写回 Done".to_string(),
-                goal: "PR 合并后调用 build-agent complete 写回 run、evidence、delivery 和任务 Done 状态。"
-                    .to_string(),
+                goal: "PR 合并后使用预检确认过的新 AgentFlow CLI 调用 build-agent complete，写回 run、evidence、delivery 和任务 Done 状态。".to_string(),
                 required: true,
                 evidence: vec![
-                    "agentflow build-agent complete --request <completion-request.json>"
+                    "target/release/agentflow build-agent complete --request <completion-request.json> after cargo build --release --bin agentflow"
+                        .to_string(),
+                    "or target/debug/agentflow build-agent complete --request <completion-request.json>"
                         .to_string(),
                     "issue status done".to_string(),
                 ],

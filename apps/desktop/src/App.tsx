@@ -291,6 +291,9 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "合并 PR 只能按 mergeMode：manual-merge 或 auto-merge-if-eligible。",
       "如果 mergeMode = auto-merge-if-eligible，不能停在 Draft PR；必须执行 gh pr ready、gh pr merge --auto，并轮询 PR 是否 merged。",
       "如果 mergeMode = manual-merge，PR ready 后等待人合并，合并前不能写回 Done。",
+      "写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete。",
+      "如果使用 target/release/agentflow，必须先运行 cargo build --release --bin agentflow；否则使用 target/debug/agentflow。",
+      "不要直接复用可能过期的 target/release/agentflow。",
       "如果任务不是 spec issue，必须停止。",
       "如果 requiredAgentRole 不是 build-agent，必须停止。",
     ].join("\n"),
@@ -3442,8 +3445,10 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
           "git status --short",
           "git remote -v",
           "gh repo view --json nameWithOwner,defaultBranchRef",
+          "cargo build --release --bin agentflow or target/debug/agentflow fallback",
+          "target/release/agentflow build-agent complete --help or target/debug/agentflow build-agent complete --help",
         ],
-        goal: "确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用。",
+        goal: "确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。",
         label: "GitHub 自动化预检",
         required: true,
         stageId: "github-preflight",
@@ -3478,10 +3483,11 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
       },
       {
         evidence: [
-          "agentflow build-agent complete --request <completion-request.json>",
+          "target/release/agentflow build-agent complete --request <completion-request.json> after cargo build --release --bin agentflow",
+          "or target/debug/agentflow build-agent complete --request <completion-request.json>",
           "issue status done",
         ],
-        goal: "PR 合并后调用 build-agent complete 写回 run、evidence、delivery 和任务 Done 状态。",
+        goal: "PR 合并后使用预检确认过的新 AgentFlow CLI 调用 build-agent complete，写回 run、evidence、delivery 和任务 Done 状态。",
         label: "写回 Done",
         required: true,
         stageId: "writeback-done",
@@ -3831,7 +3837,7 @@ function agentInstructionForTask(task: V1Issue) {
   if (task.requiredAgentRole === "audit-agent") {
     return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR。";
   }
-  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。按 GitHub 自动化预检、执行、沙箱验证、创建 PR、合并 PR、写回 Done 的流程执行。不要写 audit report、findings、evidence-map 或 traceability。";
+  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。按 GitHub 自动化预检、执行、沙箱验证、创建 PR、合并 PR、写回 Done 的流程执行。写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
 }
 
 function taskAuditDescriptionItems(task: V1Issue): Array<[string, string]> {
@@ -4278,7 +4284,7 @@ function buildCodexHandoff(task: V1Issue) {
       : {
           agentInstruction: agentInstructionForTask(task),
           completionWriteback: {
-            cli: "agentflow build-agent complete --request <completion-request.json>",
+            cli: "target/release/agentflow build-agent complete --request <completion-request.json> after cargo build --release --bin agentflow, or target/debug/agentflow build-agent complete --request <completion-request.json>",
             command: "complete_build_agent_issue",
             request: {
               changedFiles: task.allowedFiles.slice(0, 3).map((path) => ({
@@ -4350,6 +4356,9 @@ function buildCodexHandoff(task: V1Issue) {
           "- mergeMode = manual-merge：把 PR 标记 ready 后等待人合并，合并前停止。",
           "- mergeMode = auto-merge-if-eligible：执行 `gh pr ready`，再执行 `gh pr merge --auto`，轮询 PR merged 状态。",
           "- PR 合并后才写回 Done。",
+          "- 写回 Done 前必须确认当前 AgentFlow CLI 支持 `build-agent complete`。",
+          "- 如果使用 `target/release/agentflow`，必须先运行 `cargo build --release --bin agentflow`；否则使用 `target/debug/agentflow`。",
+          "- 不要直接复用可能过期的 `target/release/agentflow`。",
         ]
       : []),
     "",
@@ -4380,7 +4389,9 @@ function buildCodexHandoff(task: V1Issue) {
       ? [
           "",
           "## 完成写回",
-          "- 完成代码任务后，调用 `agentflow build-agent complete --request <completion-request.json>`。",
+          "- 完成代码任务并确认 PR 已合并后，调用已验证的新 CLI 写回。",
+          "- 使用 `target/release/agentflow` 前必须先运行 `cargo build --release --bin agentflow`。",
+          "- 如果 release binary 不支持 `build-agent complete`，使用 `target/debug/agentflow build-agent complete --request <completion-request.json>`。",
           "- 桌面端内部命令名为 `complete_build_agent_issue`。",
           "- request.issueId 必须等于当前任务 id。",
           "- request.changedFiles 填写实际修改文件。",
