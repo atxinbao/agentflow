@@ -308,9 +308,13 @@ The GitHub automation preflight verifies tools, auth, branch state, remote repos
 
 The sandbox verification stage runs local validation commands and records stdout, stderr, exit code, browser smoke evidence, screenshots, or other required evidence.
 
-The create PR stage pushes the task branch, creates a draft PR, and includes validation results in the PR body.
+The create PR stage pushes the task branch, creates a PR, and includes validation results in the PR body. A Draft PR is only an intermediate state, not the Build Agent endpoint.
 
-The merge PR stage supports two modes: `manual-merge` and `auto-merge-if-eligible`. If auto-merge is not eligible, the Build Agent must stop at PR-ready and wait for human merge.
+The merge PR stage supports two modes: `manual-merge` and `auto-merge-if-eligible`.
+
+In `manual-merge`, the Build Agent must mark the PR ready and then stop at PR-ready until the human merges it.
+
+In `auto-merge-if-eligible`, the Build Agent must not stop at Draft PR. It must run `gh pr ready`, then `gh pr merge --auto`, then poll the PR until GitHub reports it as merged. If GitHub rejects auto-merge, the Build Agent must report the reason and stop at PR-ready.
 
 The writeback stage runs only after PR merge and writes run, evidence, release delivery, and Done status.
 

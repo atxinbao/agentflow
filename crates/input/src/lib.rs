@@ -380,6 +380,15 @@ mod tests {
                 "missing required pipeline stage {stage_id}"
             );
         }
+        let merge_stage = pipeline
+            .stages
+            .iter()
+            .find(|stage| stage.stage_id == "merge-pr")
+            .unwrap();
+        assert!(merge_stage.goal.contains("gh pr merge --auto"));
+        assert!(merge_stage
+            .evidence
+            .contains(&"gh pr merge --auto result".to_string()));
     }
 
     #[test]

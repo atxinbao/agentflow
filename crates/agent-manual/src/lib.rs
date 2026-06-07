@@ -315,6 +315,8 @@ mod tests {
         ));
         assert!(manual.contains("GitHub automation preflight"));
         assert!(manual.contains("auto-merge-if-eligible"));
+        assert!(manual.contains("A Draft PR is only an intermediate state"));
+        assert!(manual.contains("gh pr merge --auto"));
         assert!(!manual.contains("`release-auto` audit request"));
     }
 
