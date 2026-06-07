@@ -1024,17 +1024,6 @@ function App() {
       return;
     }
 
-    if (action === "view-audit") {
-      const audit = sortAuditsByLatest(outputBundle.auditIndex?.audits ?? []).at(0) ?? null;
-      if (audit) {
-        setSelectedAuditId(audit.auditId);
-        setActivePage("audit");
-      } else {
-        setTaskActionFeedback("还没有审计报告。Release 生成后，AgentFlow 规则会要求 Agent 完成审计。");
-      }
-      return;
-    }
-
     if (action === "view-requirement") {
       setTaskActionFeedback("需求详情来自已确认规格。普通页面暂不展示原始规格。");
       return;
@@ -2020,7 +2009,7 @@ function ProjectHomePage({
             <button className="v16-current-task-card" onClick={onOpenTasks} type="button">
               <span className="v16-current-task-meta">
                 <span>{selectedTask.id}</span>
-                <RiskBadge risk={selectedTask.riskLevel || "normal"} />
+                <RiskBadge risk={selectedTask.riskLevel || "low"} />
               </span>
               <strong>{selectedTask.title}</strong>
               <dl>
@@ -2320,7 +2309,6 @@ function TaskList({
                   </span>
                   <span className="v16-task-queue-state">
                     <StatusBadge
-                      className={`v16-task-status-risk ${riskStatusDotClass(task.riskLevel)}`}
                       status={statusChipForDisplayStatus(task.displayStatus)}
                     >
                       {displayStatusLabelZh(task.displayStatus)}
@@ -2401,11 +2389,9 @@ function TaskProjectGroupRow({
         <span className={`v16-task-project-status ${riskStatusDotClass(risk)}`} aria-hidden="true" />
         <span className="v16-task-project-main">
           <span className="v16-task-project-title">{group.title}</span>
-          <span className="v16-task-project-summary">{group.summary || group.objective || group.id}</span>
         </span>
         <span className="v16-task-project-meta">
           <span>{progress}</span>
-          <span>{displayRiskTextZh(risk)}</span>
         </span>
       </button>
       {expanded ? (
@@ -2483,7 +2469,6 @@ function TaskIssueNodeRow({
         </span>
       </span>
       <span className="v16-task-queue-state">
-        <span className={`v16-task-risk-dot ${riskStatusDotClass(issue.riskLevel)}`} aria-hidden="true" />
         <StatusBadge status={statusChipForDisplayStatus(issue.displayStatus)}>
           {displayStatusLabelZh(issue.displayStatus)}
         </StatusBadge>
@@ -2585,19 +2570,17 @@ function ProjectSummaryReader({
   const reviewIssueCount = group.issues.filter((issue) => issue.displayStatus === "review").length;
   const readyIssueCount = group.issues.filter((issue) => issue.displayStatus === "ready").length;
   const highRiskIssueCount = group.issues.filter((issue) => riskToneKey(issue.riskLevel) === "high").length;
+  const projectStatus = projectDisplayStatusForGroup(group);
 
   return (
     <aside className="v16-detail-pane" aria-label="项目摘要">
       <header>
-        <p className="v16-kicker">Project Summary</p>
         <h2>{group.title}</h2>
         <p>{group.summary || group.objective || group.id}</p>
         <div className="v16-detail-meta-strip">
           <span className="v16-detail-meta-item">
             <span className="v16-detail-meta-label">状态</span>
-            <StatusBadge status={statusChipForDisplayStatus(displayStatusFromLegacyStatus(group.status))}>
-              {group.status || "未记录"}
-            </StatusBadge>
+            <StatusBadge status={statusChipForProjectStatus(projectStatus)}>{projectDisplayStatusLabelZh(projectStatus)}</StatusBadge>
           </span>
           <span className="v16-detail-meta-item">
             <span className="v16-detail-meta-label">风险</span>
@@ -2675,7 +2658,6 @@ function IssueContractReader({
   return (
     <aside className="v16-detail-pane" aria-label="Issue 合约">
       <header>
-        <p className="v16-kicker">Issue Contract</p>
         <h2>{task.id}</h2>
         <p>{task.title}</p>
         <div className="v16-detail-meta-strip">
@@ -2722,19 +2704,21 @@ function IssueContractReader({
         </details>
       </div>
       {actionFeedback ? <p className="v16-feedback">{actionFeedback}</p> : null}
-      <ActionBar sticky>
-        {actions.map((action, index) => (
-          <ActionButton
-            disabled={action === "readonly"}
-            key={action}
-            loading={action === "copy-handoff" && copyState === "loading"}
-            onClick={() => onTaskAction(action, task)}
-            variant={index === 0 && action !== "readonly" ? "primary" : "secondary"}
-          >
-            {taskActionDisplayLabel(action, task, copyState)}
-          </ActionButton>
-        ))}
-      </ActionBar>
+      {actions.length ? (
+        <ActionBar sticky>
+          {actions.map((action, index) => (
+            <ActionButton
+              disabled={action === "readonly"}
+              key={action}
+              loading={action === "copy-handoff" && copyState === "loading"}
+              onClick={() => onTaskAction(action, task)}
+              variant={index === 0 && action !== "readonly" ? "primary" : "secondary"}
+            >
+              {taskActionDisplayLabel(action, task, copyState)}
+            </ActionButton>
+          ))}
+        </ActionBar>
+      ) : null}
     </aside>
   );
 }
@@ -3532,7 +3516,7 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
     projectId: issue.projectId ?? null,
     rawStatus: issue.status,
     requiredAgentRole,
-    riskLevel: issue.riskLevel || indexed?.riskLevel || "normal",
+    riskLevel: issue.riskLevel || indexed?.riskLevel || "low",
     sourceDeliveryPath: issue.audit?.sourceDeliveryPath ?? null,
     sourceReleaseId: issue.audit?.sourceReleaseId ?? null,
     sourceSpecId: issue.sourceSpecId ?? null,
@@ -3576,7 +3560,7 @@ function issueContractToV1Issue(issue: IssueContract): V1Issue {
     projectId: null,
     rawStatus: issue.status,
     requiredAgentRole: "build-agent",
-    riskLevel: "normal",
+    riskLevel: "low",
     sourceDeliveryPath: null,
     sourceReleaseId: null,
     sourceSpecId: "legacy-workbench",
@@ -3732,6 +3716,65 @@ function statusChipForDisplayStatus(status: IssueDisplayStatus = "backlog"): Sta
   return chips[status];
 }
 
+type ProjectDisplayStatus = "planned" | "active" | "blocked" | "done" | "canceled";
+
+function projectDisplayStatusForGroup(group: TaskProjectGroup): ProjectDisplayStatus {
+  if (!group.issues.length) {
+    return normalizeProjectDisplayStatus(group.status);
+  }
+
+  const finishedIssues = group.issues.filter((issue) => issue.displayStatus === "done" || issue.displayStatus === "cancel");
+  if (finishedIssues.length === group.issues.length) {
+    return group.issues.every((issue) => issue.displayStatus === "cancel") ? "canceled" : "done";
+  }
+
+  const unfinishedIssues = group.issues.filter((issue) => issue.displayStatus !== "done" && issue.displayStatus !== "cancel");
+  if (unfinishedIssues.length && unfinishedIssues.every((issue) => issue.status === "blocked")) {
+    return "blocked";
+  }
+
+  return "active";
+}
+
+function normalizeProjectDisplayStatus(status?: string | null): ProjectDisplayStatus {
+  const normalized = (status ?? "planned").toLowerCase();
+  if (normalized.includes("cancel")) {
+    return "canceled";
+  }
+  if (normalized.includes("done") || normalized.includes("complete")) {
+    return "done";
+  }
+  if (normalized.includes("blocked")) {
+    return "blocked";
+  }
+  if (normalized.includes("active") || normalized.includes("running") || normalized.includes("progress")) {
+    return "active";
+  }
+  return "planned";
+}
+
+function statusChipForProjectStatus(status: ProjectDisplayStatus): StatusChipStatus {
+  const chips: Record<ProjectDisplayStatus, StatusChipStatus> = {
+    active: "working",
+    blocked: "blocked",
+    canceled: "blocked",
+    done: "done",
+    planned: "idle",
+  };
+  return chips[status];
+}
+
+function projectDisplayStatusLabelZh(status: ProjectDisplayStatus) {
+  const labels: Record<ProjectDisplayStatus, string> = {
+    active: "进行中",
+    blocked: "有阻断",
+    canceled: "已取消",
+    done: "已完成",
+    planned: "已计划",
+  };
+  return labels[status];
+}
+
 function projectStatusLabel(status: AgentFlowProjectStatus) {
   const labels: Record<AgentFlowProjectStatus, string> = {
     blocked: "有阻断",
@@ -3776,17 +3819,7 @@ function activeProjectStatus(
 }
 
 function displayRiskLabelZh(risk?: string | null) {
-  const normalized = (risk ?? "normal").toLowerCase();
-  if (normalized === "low") {
-    return "低";
-  }
-  if (normalized === "medium" || normalized === "med") {
-    return "中";
-  }
-  if (normalized === "high") {
-    return "高";
-  }
-  return "普通";
+  return displayRiskTextZh(risk);
 }
 
 function issueCategoryLabelZh(category?: string | null) {
@@ -4029,14 +4062,11 @@ function displayRiskTextZh(risk?: string | null) {
   if (tone === "medium") {
     return "中";
   }
-  if (tone === "low") {
-    return "低";
-  }
-  return "普通";
+  return "低";
 }
 
 function riskToneKey(risk?: string | null) {
-  const normalized = (risk ?? "normal").toLowerCase();
+  const normalized = (risk ?? "low").toLowerCase();
   if (normalized.includes("critical") || normalized.includes("high")) {
     return "high";
   }
@@ -4046,7 +4076,7 @@ function riskToneKey(risk?: string | null) {
   if (normalized.includes("low")) {
     return "low";
   }
-  return "normal";
+  return "low";
 }
 
 function groupRiskLevel(issues: TaskIssueNode[]) {
@@ -4060,7 +4090,7 @@ function groupRiskLevel(issues: TaskIssueNode[]) {
   if (tones.includes("low")) {
     return "low";
   }
-  return "normal";
+  return "low";
 }
 
 function riskStatusDotClass(risk?: string | null) {

@@ -557,6 +557,8 @@ SPEC is the requirement and acceptance manual for AgentFlow.
 
 - Requirement Intake Result must be structured prose in the user's `agentLocale`.
 - SPEC Draft Preview must be structured prose in the user's `agentLocale`.
+- Approved SPEC product / tech prose must follow the user's `agentLocale`.
+- Input Project and Issue human-facing fields must follow the user's `agentLocale`.
 - Do not show raw JSON as the default conversation output.
 - Raw JSON is allowed only for internal records, persisted fact files, tests, or advanced details.
 

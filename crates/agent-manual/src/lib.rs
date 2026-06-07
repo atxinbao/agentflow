@@ -159,6 +159,9 @@ mod tests {
         assert!(spec_manual.contains("`.agentflow/input/specs/`"));
         assert!(spec_manual.contains("Do not show raw JSON as the default conversation output."));
         assert!(spec_manual.contains("`product.md` is the primary human-readable requirement"));
+        assert!(spec_manual.contains(
+            "Input Project and Issue human-facing fields must follow the user's `agentLocale`."
+        ));
         assert!(!spec_manual.contains("`.agentflow/spec/`"));
         let intake_skill = fs::read_to_string(
             dir.path()
@@ -184,6 +187,9 @@ mod tests {
         assert!(input_issue_generation_skill.contains("toIssueId"));
         assert!(input_issue_generation_skill.contains("Invalid legacy shape"));
         assert!(input_issue_generation_skill.contains("\"from\": \"AF-002\""));
+        assert!(input_issue_generation_skill.contains(
+            "Project and Issue human-facing natural-language fields MUST follow the current `agentLocale`."
+        ));
     }
 
     #[test]

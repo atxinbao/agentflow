@@ -282,8 +282,7 @@ button.af-list-row {
   color: var(--af-success);
 }
 
-.af-status-badge-working,
-.af-risk-badge-normal {
+.af-status-badge-working {
   border-color: color-mix(in srgb, var(--af-accent), transparent 56%);
   color: var(--af-accent);
 }

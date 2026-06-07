@@ -218,6 +218,7 @@ This includes:
 - clarification questions
 - Requirement Intake Result explanations
 - SPEC Draft Preview prose
+- Input Project titles, summaries, objectives, scope, non-goals, and success criteria
 - Issue titles and summaries
 - acceptance criteria prose
 - TDD plans
@@ -696,6 +697,7 @@ Convert Approved SPEC into AgentFlow input issues.
 - Do not execute issues.
 - Do not start AgentRun.
 - Every generated Spec Issue must include `issueCategory=spec`, `requiredAgentRole=build-agent`, `sourceSpecId`, `sourceSpecPath`, `issuePath`, `handoffId`, explicit `contextPackPath`, `allowedPaths`, `forbiddenPaths`, `forbiddenActions`, `validationCommands`, and build `expectedOutputs`.
+- Project and Issue human-facing natural-language fields MUST follow the current `agentLocale`. This includes Project `title`, `summary`, `objective`, `scope`, `nonGoals`, and `successCriteria`, plus Issue `title`, `summary`, `scope`, `nonGoals`, `acceptanceCriteria`, and `validationHints`.
 - Relation files are part of the initial input package. `.agentflow/input/relations/issue-relations.json` and `.agentflow/input/relations/dependency-graph.json` must use `fromIssueId` and `toIssueId`. Do not write legacy `from` / `to` fields.
 
 ## Mapping
