@@ -1461,6 +1461,11 @@ button.v16-task-project-row:hover {
   background: color-mix(in srgb, var(--v16-surface-2) 76%, transparent);
 }
 
+.v16-task-project-row.active {
+  background: color-mix(in srgb, var(--v16-accent-soft) 72%, transparent);
+  box-shadow: inset 2px 0 0 var(--v16-accent);
+}
+
 .v16-task-project-row svg {
   color: var(--v16-subtle);
 }

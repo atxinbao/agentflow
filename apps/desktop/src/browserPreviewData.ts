@@ -47,6 +47,7 @@ const previewTimestamp = 1780291200;
 const previewIssueId = "iss-001";
 const previewAuditId = "audit-browser-preview-001";
 const previewDeliveryRunId = "run-browser-preview-001";
+const previewProjectId = "project-browser-preview";
 const previewSpecId = "spec-browser-preview";
 
 const previewIssueContract: IssueContract = {
@@ -73,10 +74,27 @@ const previewIssueContract: IssueContract = {
 
 const previewInputIssues: InputIssue[] = [
   browserPreviewInputIssue("iss-backlog", "整理需求入口", "planned", "backlog", "需求已创建，等待整理成 SPEC。"),
-  browserPreviewInputIssue("iss-ready", "生成执行任务包", "ready-for-execute", "ready", "SPEC 已确认，可以交给 Agent。"),
-  browserPreviewInputIssue("iss-progress", "执行受控改动", "ready-for-execute", "in-progress", "Agent 已接手任务。"),
-  browserPreviewInputIssue("iss-review", "审计交付材料", "ready-for-execute", "review", "任务已交付，等待人工审计。"),
-  browserPreviewInputIssue("iss-done", "确认交付完成", "done", "done", "审计已通过。"),
+  browserPreviewInputIssue("iss-ready", "生成执行任务包", "ready-for-execute", "ready", "SPEC 已确认，可以交给 Agent。", {
+    blocks: ["iss-progress"],
+    issueModel: "project",
+    projectId: previewProjectId,
+  }),
+  browserPreviewInputIssue("iss-progress", "执行受控改动", "ready-for-execute", "in-progress", "Agent 已接手任务。", {
+    blockedBy: ["iss-ready"],
+    blocks: ["iss-review"],
+    issueModel: "project",
+    projectId: previewProjectId,
+    riskLevel: "medium",
+  }),
+  browserPreviewInputIssue("iss-review", "审计交付材料", "ready-for-execute", "review", "任务已交付，等待人工审计。", {
+    blockedBy: ["iss-progress"],
+    issueModel: "project",
+    projectId: previewProjectId,
+  }),
+  browserPreviewInputIssue("iss-done", "确认交付完成", "done", "done", "审计已通过。", {
+    issueModel: "project",
+    projectId: previewProjectId,
+  }),
   browserPreviewInputIssue("iss-cancel", "取消过期需求", "canceled", "cancel", "任务已取消。"),
 ];
 
@@ -86,27 +104,34 @@ function browserPreviewInputIssue(
   status: InputIssue["status"],
   displayStatus: InputIssue["displayStatus"],
   summary: string,
+  options: {
+    blockedBy?: string[];
+    blocks?: string[];
+    issueModel?: InputIssue["issueModel"];
+    projectId?: string | null;
+    riskLevel?: string;
+  } = {},
 ): InputIssue {
   return {
     version: "input-issue.browser-preview",
     issueId,
-    issueModel: "direct",
+    issueModel: options.issueModel ?? "direct",
     sourceSpecId: previewSpecId,
-    projectId: null,
+    projectId: options.projectId ?? null,
     title,
     summary,
     kind: "feature",
     priority: "normal",
     status,
     displayStatus,
-    riskLevel: "low",
+    riskLevel: options.riskLevel ?? "low",
     scope: previewIssueContract.scope,
     nonGoals: previewIssueContract.nonGoals,
     acceptanceCriteria: previewIssueContract.evidenceRequirements,
     validationHints: previewIssueContract.validation.commands,
     relations: {
-      blockedBy: [],
-      blocks: [],
+      blockedBy: options.blockedBy ?? [],
+      blocks: options.blocks ?? [],
       related: [],
       duplicateOf: null,
     },
@@ -653,7 +678,7 @@ export function createBrowserPreviewInputStatus(projectRoot = BROWSER_PREVIEW_PR
       intake: 1,
       draftSpecs: 1,
       approvedSpecs: 1,
-      projects: 0,
+      projects: 1,
       issues: previewInputIssues.length,
       blockedIssues: 0,
       highRiskIssues: 0,
@@ -687,11 +712,39 @@ export function createBrowserPreviewInputSnapshot(projectRoot = BROWSER_PREVIEW_
     },
     intake: [],
     specs: [],
-    projects: [],
+    projects: [
+      {
+        version: "input-project.browser-preview",
+        projectId: previewProjectId,
+        sourceSpecId: previewSpecId,
+        title: "浏览器预览任务项目",
+        summary: "用于验证 Project Summary 和 Issue Contract 阅读器。",
+        objective: "在任务页展示项目分组、推荐任务、依赖摘要和 issue 合约。",
+        scope: ["展示项目摘要。", "展示 issue 所属项目和输出目标。", "验证建议任务按钮会切换到 issue 合约。"],
+        nonGoals: ["不写入真实 .agentflow/input。", "不创建远程对象。"],
+        successCriteria: ["项目行可选中。", "右侧可显示 Project Summary。", "查看建议任务后右侧显示 Issue Contract。"],
+        issueIds: ["iss-ready", "iss-progress", "iss-review", "iss-done"],
+        status: "active",
+        panel: {
+          snapshotId: null,
+          contextPackId: null,
+        },
+        system: {
+          createdBy: "browser-preview",
+          createdAt: previewTimestamp,
+          updatedAt: previewTimestamp,
+          path: `.agentflow/input/projects/${previewProjectId}.json`,
+          revision: 1,
+        },
+      },
+    ],
     issues: previewInputIssues,
     relations: {
       version: "input-issue-relations.browser-preview",
-      relations: [],
+      relations: [
+        { fromIssueId: "iss-progress", toIssueId: "iss-ready", type: "blocked-by" },
+        { fromIssueId: "iss-progress", toIssueId: "iss-review", type: "blocks" },
+      ],
     },
   };
 }
