@@ -170,7 +170,7 @@ export function taskActionLabel(action: TaskInteractionAction) {
   const labels: Record<TaskInteractionAction, string> = {
     "check-writeback": "检查写回",
     "copy-handoff": "复制任务包",
-    "mark-handed-off": "我已交给 Codex",
+    "mark-handed-off": "我已交给执行助手",
     readonly: "只读查看",
     "view-audit": "查看审计",
     "view-delivery": "查看交付",

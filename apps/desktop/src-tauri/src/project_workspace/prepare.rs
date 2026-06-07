@@ -233,11 +233,11 @@ mod tests {
         assert!(summary.created_agentflow);
         assert!(summary.protected_git_exclude);
         let initialization_status = summary.initialization_status.as_ref().unwrap();
-        assert_eq!(initialization_status.project_kind, "new");
-        assert!(initialization_status.demo_data_created);
-        assert_eq!(initialization_status.demo_issue_count, 5);
-        assert_eq!(initialization_status.demo_delivery_count, 1);
-        assert_eq!(initialization_status.demo_audit_count, 1);
+        assert_eq!(initialization_status.project_kind, "existing");
+        assert!(!initialization_status.demo_data_created);
+        assert_eq!(initialization_status.demo_issue_count, 0);
+        assert_eq!(initialization_status.demo_delivery_count, 0);
+        assert_eq!(initialization_status.demo_audit_count, 0);
         assert!(dir.path().join(".agentflow/workspace.yaml").is_file());
         assert!(dir.path().join(".agentflow/config.yaml").is_file());
         assert!(dir
@@ -261,18 +261,18 @@ mod tests {
         assert!(dir.path().join(".agentflow/input/index.json").is_file());
         assert!(dir.path().join(".agentflow/input/projects").is_dir());
         assert!(dir.path().join(".agentflow/input/issues").is_dir());
-        assert!(dir
+        assert!(!dir
             .path()
             .join(".agentflow/input/issues/AF-DEMO-001.json")
-            .is_file());
-        assert!(dir
+            .exists());
+        assert!(!dir
             .path()
             .join(".agentflow/output/release/DEL-DEMO-001/delivery.json")
-            .is_file());
-        assert!(dir
+            .exists());
+        assert!(!dir
             .path()
             .join(".agentflow/output/audit/AUD-DEMO-001/audit-report.md")
-            .is_file());
+            .exists());
         assert!(dir
             .path()
             .join(".agentflow/state/indexes/base-release-initialization.json")
@@ -325,27 +325,34 @@ mod tests {
     }
 
     #[test]
-    fn prepare_workspace_existing_git_project_uses_recent_context_without_demo_data() {
+    fn prepare_workspace_existing_git_project_starts_with_empty_task_context() {
         let dir = tempdir().unwrap();
         initialize_git_repo_with_commit(dir.path());
+        prepare_local_project_workspace_at(&dir.path().display().to_string(), None).unwrap();
+        let indexes_dir = dir.path().join(".agentflow/state/indexes");
+        fs::create_dir_all(&indexes_dir).unwrap();
+        fs::write(indexes_dir.join("git-context.json"), "{}\n").unwrap();
+        fs::write(indexes_dir.join("recent-project-context.json"), "{}\n").unwrap();
 
         let summary =
             prepare_local_project_workspace_at(&dir.path().display().to_string(), None).unwrap();
 
         let initialization_status = summary.initialization_status.as_ref().unwrap();
         assert_eq!(initialization_status.project_kind, "existing");
-        assert!(initialization_status.git_context_loaded);
+        assert!(!initialization_status.git_context_loaded);
+        assert_eq!(initialization_status.recent_context_count, 0);
+        assert!(initialization_status.recent_context.is_empty());
         assert_eq!(initialization_status.demo_issue_count, 0);
         assert_eq!(initialization_status.demo_delivery_count, 0);
         assert_eq!(initialization_status.demo_audit_count, 0);
-        assert!(dir
+        assert!(!dir
             .path()
             .join(".agentflow/state/indexes/git-context.json")
-            .is_file());
-        assert!(dir
+            .exists());
+        assert!(!dir
             .path()
             .join(".agentflow/state/indexes/recent-project-context.json")
-            .is_file());
+            .exists());
         assert!(!dir
             .path()
             .join(".agentflow/input/intake/git-context.json")
@@ -361,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn prepare_workspace_agentflow_repo_seeds_dogfood_cutover_issue() {
+    fn prepare_workspace_agentflow_repo_starts_with_empty_issue_list() {
         let dir = tempdir().unwrap();
         initialize_git_repo_with_commit(dir.path());
         write_agentflow_project_markers(dir.path());
@@ -373,24 +380,20 @@ mod tests {
         assert_eq!(initialization_status.project_kind, "existing");
         assert!(!initialization_status.demo_data_created);
         assert_eq!(initialization_status.demo_issue_count, 0);
-        assert!(dir
+        assert!(!dir
             .path()
             .join(".agentflow/input/specs/approved/dogfood-cutover-v1/spec.json")
-            .is_file());
-        let dogfood_issue_path = dir
+            .exists());
+        assert!(!dir
             .path()
-            .join(".agentflow/input/issues/AF-DOGFOOD-001.json");
-        assert!(dogfood_issue_path.is_file());
-        let dogfood_issue: agentflow_input::issue::InputIssue =
-            serde_json::from_str(&fs::read_to_string(&dogfood_issue_path).unwrap()).unwrap();
-        assert_eq!(dogfood_issue.source_spec_id, "dogfood-cutover-v1");
-        assert_eq!(dogfood_issue.issue_category.as_str(), "spec");
-        assert_eq!(dogfood_issue.required_agent_role.as_str(), "build-agent");
-        assert_eq!(dogfood_issue.display_status.as_str(), "ready");
-        assert!(matches!(
-            dogfood_issue.risk_level,
-            agentflow_input::issue::InputRiskLevel::Medium
-        ));
+            .join(".agentflow/input/issues/AF-DOGFOOD-001.json")
+            .exists());
+        assert_eq!(
+            fs::read_dir(dir.path().join(".agentflow/input/issues"))
+                .unwrap()
+                .count(),
+            0
+        );
         assert!(!dir
             .path()
             .join(".agentflow/input/issues/AF-DEMO-001.json")

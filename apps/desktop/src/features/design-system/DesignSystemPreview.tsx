@@ -90,9 +90,9 @@ export function DesignSystemPreview() {
         />
         <div className="af-preview-grid">
           <Panel
-            title="可以交给 Codex 了"
+            title="可以进入执行了"
             description="这个任务已经有 approved SPEC 和 Issue。"
-            footer={<ActionButton variant="primary">复制 Codex 指令</ActionButton>}
+            footer={<ActionButton variant="primary">复制执行指令</ActionButton>}
           >
             <StatusBadge status="ready">Ready</StatusBadge>
           </Panel>
@@ -141,7 +141,7 @@ export function DesignSystemPreview() {
             primaryAction={<Button variant="primary">开始整理</Button>}
           />
           <BlockedState
-            title="还不能交给 Codex。"
+            title="还不能进入执行。"
             reason="这个需求还没有确认成 SPEC。"
             action={<Button variant="secondary">继续整理 SPEC</Button>}
           />
@@ -153,7 +153,7 @@ export function DesignSystemPreview() {
       <section className="af-preview-section" aria-label="代码块和高级详情">
         <h3 className="af-title">代码块和高级详情</h3>
         <div className="af-preview-grid">
-          <CopyableCodeBlock content={handoffExample} language="md" title="Codex 指令" />
+          <CopyableCodeBlock content={handoffExample} language="md" title="执行指令" />
           <AdvancedDetailsDrawer description="默认隐藏内部细节" title="高级详情">
             <p>这里可以放 workflow gates、blockers、audit index 和 report refs。普通用户默认不用看。</p>
           </AdvancedDetailsDrawer>
