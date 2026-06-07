@@ -4,6 +4,15 @@ use std::collections::BTreeMap;
 
 pub const AGENT_ROLES_VERSION: &str = "agent-roles.v1";
 pub const AGENT_CLAIM_VERSION: &str = "agent-claim.v1";
+pub const BUILD_AGENT_EXECUTION_PIPELINE_VERSION: &str = "build-agent-execution-pipeline.v1";
+pub const BUILD_AGENT_PIPELINE_STAGE_IDS: [&str; 6] = [
+    "github-preflight",
+    "implement",
+    "sandbox-verify",
+    "create-pr",
+    "merge-pr",
+    "writeback-done",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -219,6 +228,25 @@ pub struct InputIssueAudit {
     pub expected_outputs: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InputIssueExecutionStage {
+    pub stage_id: String,
+    pub label: String,
+    pub goal: String,
+    pub required: bool,
+    pub evidence: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InputIssueExecutionPipeline {
+    pub version: String,
+    pub agent_role: AgentRole,
+    pub stages: Vec<InputIssueExecutionStage>,
+    pub merge_modes: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InputIssue {
@@ -261,6 +289,8 @@ pub struct InputIssue {
     pub validation_commands: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_expected_outputs")]
     pub expected_outputs: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_pipeline: Option<InputIssueExecutionPipeline>,
     pub relations: InputIssueRelations,
     pub panel: InputPanelLink,
     #[serde(default)]
@@ -298,6 +328,7 @@ impl Default for InputIssue {
             validation_hints: Vec::new(),
             validation_commands: Vec::new(),
             expected_outputs: BTreeMap::new(),
+            execution_pipeline: None,
             relations: InputIssueRelations::default(),
             panel: InputPanelLink::default(),
             audit: None,
@@ -363,6 +394,37 @@ impl InputIssue {
                     {
                         errors.push(format!(
                             "issue {} expectedOutputs is missing {key}",
+                            self.issue_id
+                        ));
+                    }
+                }
+                let Some(pipeline) = self.execution_pipeline.as_ref() else {
+                    errors.push(format!(
+                        "issue {} is missing executionPipeline",
+                        self.issue_id
+                    ));
+                    return errors;
+                };
+                if pipeline.version != BUILD_AGENT_EXECUTION_PIPELINE_VERSION {
+                    errors.push(format!(
+                        "issue {} executionPipeline version must be {}",
+                        self.issue_id, BUILD_AGENT_EXECUTION_PIPELINE_VERSION
+                    ));
+                }
+                if pipeline.agent_role != AgentRole::BuildAgent {
+                    errors.push(format!(
+                        "issue {} executionPipeline agentRole must be build-agent",
+                        self.issue_id
+                    ));
+                }
+                for stage_id in BUILD_AGENT_PIPELINE_STAGE_IDS {
+                    if !pipeline
+                        .stages
+                        .iter()
+                        .any(|stage| stage.stage_id == stage_id && stage.required)
+                    {
+                        errors.push(format!(
+                            "issue {} executionPipeline is missing required stage {stage_id}",
                             self.issue_id
                         ));
                     }
@@ -462,6 +524,9 @@ impl InputIssue {
                 ),
             ]);
         }
+        if self.execution_pipeline.is_none() {
+            self.execution_pipeline = Some(default_build_agent_execution_pipeline());
+        }
     }
 
     fn normalize_audit_metadata(&mut self) {
@@ -515,6 +580,78 @@ impl InputIssue {
                 audit.expected_outputs = audit_expected_outputs(&audit.audit_output_dir);
             }
         }
+    }
+}
+
+pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
+    InputIssueExecutionPipeline {
+        version: BUILD_AGENT_EXECUTION_PIPELINE_VERSION.to_string(),
+        agent_role: AgentRole::BuildAgent,
+        merge_modes: vec![
+            "manual-merge".to_string(),
+            "auto-merge-if-eligible".to_string(),
+        ],
+        stages: vec![
+            InputIssueExecutionStage {
+                stage_id: "github-preflight".to_string(),
+                label: "GitHub 自动化预检".to_string(),
+                goal: "确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用。"
+                    .to_string(),
+                required: true,
+                evidence: vec![
+                    "gh --version".to_string(),
+                    "gh auth status".to_string(),
+                    "git status --short".to_string(),
+                    "git remote -v".to_string(),
+                    "gh repo view --json nameWithOwner,defaultBranchRef".to_string(),
+                ],
+            },
+            InputIssueExecutionStage {
+                stage_id: "implement".to_string(),
+                label: "Agent 执行 issue".to_string(),
+                goal: "按 issue 合同在 allowedPaths 内完成代码、配置或测试改动。".to_string(),
+                required: true,
+                evidence: vec!["git diff --stat".to_string(), "changed-files summary".to_string()],
+            },
+            InputIssueExecutionStage {
+                stage_id: "sandbox-verify".to_string(),
+                label: "沙箱测试与结果验证".to_string(),
+                goal: "在受控本地沙箱中运行验证命令并收集 stdout、stderr、exit code、浏览器或截图证据。"
+                    .to_string(),
+                required: true,
+                evidence: vec![
+                    "validation command records".to_string(),
+                    "browser smoke evidence when applicable".to_string(),
+                    "git diff --check".to_string(),
+                ],
+            },
+            InputIssueExecutionStage {
+                stage_id: "create-pr".to_string(),
+                label: "创建 PR".to_string(),
+                goal: "推送任务分支，创建 draft PR，并把验证结果写入 PR 描述。".to_string(),
+                required: true,
+                evidence: vec!["PR URL".to_string(), "PR body validation summary".to_string()],
+            },
+            InputIssueExecutionStage {
+                stage_id: "merge-pr".to_string(),
+                label: "合并 PR".to_string(),
+                goal: "根据 GitHub 预检结果走人工合并或符合条件的自动合并。".to_string(),
+                required: true,
+                evidence: vec!["merge mode".to_string(), "merge commit or merged PR state".to_string()],
+            },
+            InputIssueExecutionStage {
+                stage_id: "writeback-done".to_string(),
+                label: "写回 Done".to_string(),
+                goal: "PR 合并后调用 build-agent complete 写回 run、evidence、delivery 和任务 Done 状态。"
+                    .to_string(),
+                required: true,
+                evidence: vec![
+                    "agentflow build-agent complete --request <completion-request.json>"
+                        .to_string(),
+                    "issue status done".to_string(),
+                ],
+            },
+        ],
     }
 }
 

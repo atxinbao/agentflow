@@ -1,9 +1,10 @@
 import type { HTMLAttributes, ReactNode } from "react";
 
-export type StatusChipStatus = "ready" | "working" | "warning" | "blocked" | "failed" | "idle";
+export type StatusChipStatus = "ready" | "working" | "warning" | "blocked" | "failed" | "idle" | "done";
 
 const statusLabels: Record<StatusChipStatus, string> = {
   blocked: "已阻断",
+  done: "已完成",
   failed: "异常",
   idle: "未开始",
   ready: "已就绪",

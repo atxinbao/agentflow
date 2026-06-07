@@ -129,7 +129,7 @@ mod tests {
         assert!(
             fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md"))
                 .unwrap()
-                .contains("release-auto")
+                .contains("Build Agent execution pipeline")
         );
         let agentflow_manual =
             fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md")).unwrap();
@@ -311,8 +311,11 @@ mod tests {
         assert!(manual.contains("Status: enabled for Execute + Release Delivery V1."));
         assert!(manual.contains(".agentflow/output/release/<run-id>/"));
         assert!(manual.contains(
-            "PR draft, PR metadata, review material, changelog, release note, and delivery record"
+            "The writeback stage runs only after PR merge and writes run, evidence, release delivery, and Done status."
         ));
+        assert!(manual.contains("GitHub automation preflight"));
+        assert!(manual.contains("auto-merge-if-eligible"));
+        assert!(!manual.contains("`release-auto` audit request"));
     }
 
     #[test]
@@ -326,8 +329,10 @@ mod tests {
         assert!(release_manual.contains("There is no standalone Release Agent in V1."));
         assert!(release_manual.contains(".agentflow/output/release/<run-id>/"));
         assert!(release_manual.contains("delivery.json"));
+        assert!(release_manual.contains("must not automatically create an audit request"));
         assert!(!release_manual.contains("future Release Agent execution"));
         assert!(!release_manual.contains("Release Agent is currently not authorized yet"));
+        assert!(!release_manual.contains("release-auto"));
     }
 
     #[test]

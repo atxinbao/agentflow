@@ -411,7 +411,7 @@ mod tests {
     }
 
     #[test]
-    fn prepare_output_workspace_creates_release_auto_audit_request() {
+    fn prepare_output_workspace_does_not_create_audit_request_for_release_delivery() {
         let dir = tempdir().unwrap();
         prepare_output_workspace(dir.path()).unwrap();
         write_evidence(dir.path(), "run-001");
@@ -420,61 +420,26 @@ mod tests {
         prepare_output_workspace(dir.path()).unwrap();
 
         let index = load_audit_index(dir.path()).unwrap();
-        assert_eq!(index.audits.len(), 1);
-        let audit = &index.audits[0];
-        assert_eq!(audit.status, AuditStatus::Requested);
-        assert_eq!(audit.trigger, AuditTrigger::ReleaseAuto);
-        assert_eq!(audit.source_run_id.as_deref(), Some("run-001"));
-        assert!(dir
+        assert_eq!(index.audits.len(), 0);
+        assert!(!dir
             .path()
             .join(".agentflow/output/audit/audit-001/audit-request.json")
             .is_file());
         let audit_issue_path = dir
             .path()
             .join(".agentflow/input/issues/audit-run-001.json");
-        assert!(audit_issue_path.is_file());
-        let audit_issue: agentflow_input::issue::InputIssue = read_json(&audit_issue_path).unwrap();
-        assert_eq!(audit_issue.issue_category.as_str(), "audit");
-        assert_eq!(audit_issue.required_agent_role.as_str(), "audit-agent");
-        let audit_metadata = audit_issue.audit.as_ref().unwrap();
-        assert_eq!(audit_metadata.audit_id, "audit-001");
-        assert_eq!(audit_metadata.source_release_id, "run-001");
-        assert_eq!(
-            audit_metadata.source_delivery_path,
-            ".agentflow/output/release/run-001/delivery.json"
-        );
-        assert_eq!(
-            audit_metadata.audit_output_dir,
-            ".agentflow/output/audit/audit-001"
-        );
-        assert!(audit_metadata.expected_outputs.contains_key("audit.json"));
-        assert!(audit_metadata
-            .expected_outputs
-            .contains_key("audit-report.md"));
-        assert!(audit_metadata
-            .expected_outputs
-            .contains_key("findings.json"));
-        assert!(audit_metadata
-            .expected_outputs
-            .contains_key("evidence-map.json"));
-        assert!(audit_metadata
-            .expected_outputs
-            .contains_key("traceability.json"));
-        assert!(!dir
-            .path()
-            .join(".agentflow/output/audit/audit-001/audit.json")
-            .exists());
+        assert!(!audit_issue_path.is_file());
     }
 
     #[test]
-    fn release_auto_audit_request_is_idempotent() {
+    fn explicit_release_auto_audit_request_is_idempotent() {
         let dir = tempdir().unwrap();
         prepare_output_workspace(dir.path()).unwrap();
         write_evidence(dir.path(), "run-001");
         write_release_delivery(dir.path(), "run-001");
 
-        prepare_output_workspace(dir.path()).unwrap();
-        prepare_output_workspace(dir.path()).unwrap();
+        ensure_release_auto_audits(dir.path()).unwrap();
+        ensure_release_auto_audits(dir.path()).unwrap();
 
         let index = load_audit_index(dir.path()).unwrap();
         assert_eq!(index.audits.len(), 1);
@@ -482,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn prepare_output_workspace_backfills_issue_for_existing_release_auto_request() {
+    fn explicit_release_auto_audit_backfills_issue_for_existing_release_auto_request() {
         let dir = tempdir().unwrap();
         let audit_dir = dir
             .path()
@@ -496,7 +461,7 @@ mod tests {
                 trigger: AuditTrigger::ReleaseAuto,
                 requested_by: "agentflow-release-auto".to_string(),
                 requested_at: 1,
-                reason: "Release 已生成，AgentFlow 规则要求进行审计。".to_string(),
+                reason: "审计请求已独立登记，用于核对交付材料。".to_string(),
                 source: Some(AuditRequestSource {
                     kind: "release-delivery".to_string(),
                     delivery_id: Some("release-v0.1.0".to_string()),
@@ -525,7 +490,7 @@ mod tests {
         )
         .unwrap();
 
-        prepare_output_workspace(dir.path()).unwrap();
+        ensure_release_auto_audits(dir.path()).unwrap();
 
         let audit_issue_path = dir
             .path()

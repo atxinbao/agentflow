@@ -28,6 +28,7 @@ mod tests {
         issue::{
             validate_agent_issue_permission, AgentRole, DisplayStatus, InputIssue, InputIssueModel,
             InputIssueStatus, InputPriority, InputRiskLevel, IssueCategory,
+            BUILD_AGENT_EXECUTION_PIPELINE_VERSION, BUILD_AGENT_PIPELINE_STAGE_IDS,
         },
         project::{InputProject, InputProjectStatus},
         relations::{
@@ -363,6 +364,22 @@ mod tests {
                 .map(String::as_str),
             Some(".agentflow/output/release/iss-001")
         );
+        let pipeline = issue.execution_pipeline.as_ref().unwrap();
+        assert_eq!(pipeline.version, BUILD_AGENT_EXECUTION_PIPELINE_VERSION);
+        assert_eq!(pipeline.agent_role, AgentRole::BuildAgent);
+        assert!(pipeline.merge_modes.contains(&"manual-merge".to_string()));
+        assert!(pipeline
+            .merge_modes
+            .contains(&"auto-merge-if-eligible".to_string()));
+        for stage_id in BUILD_AGENT_PIPELINE_STAGE_IDS {
+            assert!(
+                pipeline
+                    .stages
+                    .iter()
+                    .any(|stage| stage.stage_id == stage_id && stage.required),
+                "missing required pipeline stage {stage_id}"
+            );
+        }
     }
 
     #[test]

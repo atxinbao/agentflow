@@ -1,5 +1,5 @@
 use crate::{
-    audit::{ensure_audit_workspace, ensure_release_auto_audits, rebuild_audit_manifest_and_index},
+    audit::{ensure_audit_workspace, rebuild_audit_manifest_and_index},
     model::{
         OutputEvidence, OutputIndex, OutputIndexEntry, OutputManifest, OutputReleaseDelivery,
         OutputSnapshot, OutputStatusSnapshot, OutputSummary, OutputWorkspaceStatus,
@@ -22,7 +22,6 @@ pub fn prepare_output_workspace(project_root: impl AsRef<Path>) -> Result<Output
     }
     ensure_audit_workspace(&root)?;
     rebuild_audit_manifest_and_index(&root)?;
-    ensure_release_auto_audits(&root)?;
 
     let index = rebuild_output_index(&root)?;
     let summary = output_summary(&root, &index)?;

@@ -163,6 +163,21 @@ export type IssueCategory = "spec" | "audit";
 export type AgentRole = "spec-agent" | "build-agent" | "audit-agent";
 export type ExpectedOutputs = Record<string, string>;
 
+export type ExecutionPipelineStage = {
+  stageId: string;
+  label: string;
+  goal: string;
+  required: boolean;
+  evidence: string[];
+};
+
+export type ExecutionPipeline = {
+  version: string;
+  agentRole: AgentRole;
+  stages: ExecutionPipelineStage[];
+  mergeModes: string[];
+};
+
 export type InputProject = {
   version: string;
   projectId: string;
@@ -231,6 +246,7 @@ export type InputIssue = {
   validationHints: string[];
   validationCommands?: string[];
   expectedOutputs?: ExpectedOutputs;
+  executionPipeline?: ExecutionPipeline | null;
   relations?: {
     blockedBy?: string[];
     blocks?: string[];

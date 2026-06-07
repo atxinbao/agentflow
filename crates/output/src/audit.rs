@@ -526,7 +526,7 @@ fn write_release_auto_audit_request(root: &Path, release: &OutputReleaseDelivery
         trigger: AuditTrigger::ReleaseAuto,
         requested_by: "agentflow-release-auto".to_string(),
         requested_at,
-        reason: "Release 已生成，AgentFlow 规则要求进行审计。".to_string(),
+        reason: "审计请求已独立登记，用于核对交付材料。".to_string(),
         source: Some(AuditRequestSource {
             kind: "release-delivery".to_string(),
             delivery_id: Some(release.run_id.clone()),

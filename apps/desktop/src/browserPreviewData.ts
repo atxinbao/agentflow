@@ -821,7 +821,7 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
   return {
     request: {
       trigger: "release-auto",
-      reason: "Release 已生成，AgentFlow 规则要求进行审计。",
+      reason: "审计请求已独立登记，用于核对交付材料。",
       source: {
         kind: "release-delivery",
         deliveryId: previewDeliveryRunId,
@@ -830,7 +830,7 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
         specId: previewSpecId,
       },
       scope: {
-        description: "Release 自动审计 Build Agent delivery。",
+        description: "交付关联审计 Build Agent delivery。",
         refs: [
           {
             kind: "spec",

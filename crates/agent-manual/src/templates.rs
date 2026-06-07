@@ -41,10 +41,11 @@ Every Agent MUST read and follow:
 - Do not bypass SPEC.
 - `.agentflow/input/issues/**` is the only current task fact source.
 - `.agentflow/input/specs/drafts/**` and `.agentflow/input/specs/approved/**` are the only current SPEC fact sources.
-- Do not create PRs, issues, or remote objects unless explicitly authorized.
+- Do not create PRs, issues, or remote objects unless the current role handoff explicitly authorizes that stage.
 - Human conversation is for confirmation and feedback, not direct issue execution.
 - Raw human requirements go to Spec Agent in conversation. Do not require humans to hand-write a raw directory.
-- Every Release Delivery requires audit. AgentFlow creates `release-auto` Audit Issues; `audit-request.json` is compatibility metadata, not the Agent execution entry.
+- Task completion and audit are separate flows. A Build Agent Done writeback must not create an audit request.
+- Audit starts only from an independent Audit Issue or explicit human audit request. `audit-request.json` is compatibility metadata, not the Agent execution entry.
 - Do not ask the human to click an App button to create audit. The App only displays audit state, reports, findings, evidence maps, traceability, and trigger source.
 - AgentFlow does not create or control Codex threads. Humans must keep separate Codex threads for Spec Agent, Build Agent, and Audit Agent.
 - Do not mix roles in one Codex thread. A thread that writes code must not also audit the same delivery.
@@ -78,9 +79,15 @@ Conversation with human
 → Human confirmation
 → Approved SPEC
 → Input issue generation
-→ Build Agent delivery
-→ `release-auto` audit request
-→ Audit Agent report
+→ Build Agent execution pipeline
+→ GitHub automation preflight
+→ Implement issue
+→ Sandbox verification
+→ Create PR
+→ Merge PR
+→ Write back Done
+→ Optional independent Audit Issue
+→ Audit Agent report when requested
 
 If any rule conflicts, AgentFlow rules win.
 
@@ -129,10 +136,10 @@ Do not mix these roles in one Codex thread. Each thread must keep one role for t
 - Input issues are derived from Approved SPEC.
 - Panel canonical path is `.agentflow/panel/`.
 - Output canonical paths are `.agentflow/output/evidence/`, `.agentflow/output/release/`, and `.agentflow/output/audit/`.
-- Every Release Delivery requires an audit request.
-- Every Release Delivery requires an Audit Issue under `.agentflow/input/issues/audit-<release-id>.json`.
+- Task completion and audit are separate flows.
+- A Build Agent Done writeback must not create an audit request.
+- Audit starts only from an independent Audit Issue under `.agentflow/input/issues/audit-<release-id>.json` or explicit human audit request.
 - `audit-request.json` is compatibility metadata only. Audit Issue is the Audit Agent execution entry.
-- `release-auto` is created for a Release Delivery by AgentFlow output preparation.
 - `human-via-agent` may be created only when the human asks an Agent in conversation, not from an ordinary App button.
 - The App only displays audit state, reports, findings, evidence maps, traceability, and trigger source.
 
@@ -157,7 +164,7 @@ Do not mix these roles in one Codex thread. Each thread must keep one role for t
 - Do not write legacy `.agentflow/goal-tree/**`.
 - Do not write Approved SPEC without human confirmation.
 - Do not start AgentRun.
-- Do not create PRs or remote issues.
+- Do not create PRs or remote issues unless the current role handoff explicitly authorizes that stage.
 - Do not use legacy workflow paths.
 
 ## Required Workflow
@@ -169,9 +176,15 @@ Conversation
 → Human confirmation
 → Approved SPEC
 → Input issue generation
-→ Build Agent delivery
-→ `release-auto` audit request
-→ Audit Agent report
+→ Build Agent execution pipeline
+→ GitHub automation preflight
+→ Implement issue
+→ Sandbox verification
+→ Create PR
+→ Merge PR
+→ Write back Done
+→ Optional independent Audit Issue
+→ Audit Agent report when requested
 
 ## SPEC First Rule
 
@@ -282,9 +295,26 @@ Owns controlled development delivery from `.agentflow/input/issues/<issue-id>.js
 
 It may execute only `issueCategory=spec` issues with `requiredAgentRole=build-agent`. Its handoff must include source SPEC target metadata and build expected outputs. Its writeback must include `agent-claim.json` with `claimedAgentRole=build-agent`.
 
-It performs preflight, lease, plan, checkpoint, patch, command record, validation, result, evidence, PR draft, PR metadata, review material, changelog, release note, and delivery record.
+It performs the Build Agent execution pipeline:
 
-It cannot process `issueCategory=audit`, ask for audit target metadata, modify input issues, modify Approved SPEC, bypass preflight, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge, deploy, call models, or write audit reports.
+1. GitHub automation preflight
+2. Implement issue
+3. Sandbox verification
+4. Create PR
+5. Merge PR
+6. Write back Done
+
+The GitHub automation preflight verifies tools, auth, branch state, remote repository, PR creation capability, merge policy, and whether auto-merge is eligible.
+
+The sandbox verification stage runs local validation commands and records stdout, stderr, exit code, browser smoke evidence, screenshots, or other required evidence.
+
+The create PR stage pushes the task branch, creates a draft PR, and includes validation results in the PR body.
+
+The merge PR stage supports two modes: `manual-merge` and `auto-merge-if-eligible`. If auto-merge is not eligible, the Build Agent must stop at PR-ready and wait for human merge.
+
+The writeback stage runs only after PR merge and writes run, evidence, release delivery, and Done status.
+
+It cannot process `issueCategory=audit`, ask for audit target metadata, modify input issues, modify Approved SPEC, bypass GitHub automation preflight, bypass sandbox verification, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge outside `mergeMode`, deploy, call models, create audit requests from Done writeback, or write audit reports.
 
 ### 3. Audit Agent
 
@@ -305,21 +335,27 @@ It writes only audit artifacts for the selected audit request:
 - evidence-map.json
 - traceability.json
 
-It must not create duplicate `release-auto` audits for the same Release Delivery.
+It must not create duplicate audit artifacts for the same audit request.
 
 It cannot process `issueCategory=spec`, modify source code, modify input facts, modify execute patches, modify release delivery, generate release, execute commands, create PRs, merge, or deploy.
 
 ## Audit Trigger Rule
 
-Every Release Delivery must have exactly one `release-auto` audit request.
+Build Agent completion and Audit Agent execution are separate flows. Completing a task and writing Done must not create an audit request.
 
-If a Release Delivery exists but no audit request exists, the Agent must treat it as blocked and report: `Release 已生成，但审计请求缺失。`
+Audit starts only when an `issueCategory=audit` issue exists or a human explicitly requests audit.
+
+If a Release Delivery exists but no audit request exists, the Agent must treat it as a normal delivery-ready state, not a blocker.
 
 The ordinary App UI must not expose create-audit actions. It only displays audit status, trigger source, reports, findings, evidence maps, and traceability.
 
 ## Execution Boundary
 
-AgentRun is not authorized in this stage. Agents must stop before source writes, command execution, tests, PR creation, or remote issue creation.
+Spec Agent must stop before source writes, command execution, tests, PR creation, or remote issue creation.
+
+Build Agent may perform source writes, local command execution, sandbox validation, PR creation, PR merge, and Done writeback only inside a complete Build Agent execution pipeline handoff.
+
+Audit Agent must not modify source code, execute spec issues, create PRs, merge, or deploy.
 
 ## Validation Rule
 

@@ -53,9 +53,9 @@ mod tests {
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
     use agentflow_output::{
-        request_human_audit, AuditIndex, AuditScope, AuditScopeRef, HumanAuditRequestDraft,
+        request_human_audit, AuditScope, AuditScopeRef, HumanAuditRequestDraft,
         OutputCommandEvidence, OutputEvidence, OutputEvidenceExecuteArtifacts, OutputEvidenceInput,
-        OutputEvidencePanel, OutputIndex, OutputManualProof, OutputReleaseDelivery,
+        OutputEvidencePanel, OutputManualProof, OutputReleaseDelivery,
         OutputReleaseDeliveryArtifacts, OutputValidationSummary, OUTPUT_EVIDENCE_VERSION,
         OUTPUT_RELEASE_DELIVERY_VERSION,
     };
@@ -328,51 +328,35 @@ mod tests {
     }
 
     #[test]
-    fn workflow_gate_registers_release_auto_audit_after_delivery() {
+    fn workflow_gate_keeps_delivery_ready_without_auto_audit_after_delivery() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());
         let run = complete_run(dir.path());
         write_evidence_and_delivery(dir.path(), &run);
         agentflow_output::prepare_output_workspace(dir.path()).unwrap();
         let status = refresh_state(dir.path()).unwrap();
-        assert_eq!(status.current_stage, WorkflowStage::AuditRequested);
-        assert_eq!(status.audit_status, WorkflowAuditStatus::Requested);
+        assert_eq!(status.current_stage, WorkflowStage::DeliveryReady);
+        assert_eq!(status.audit_status, WorkflowAuditStatus::NotRequested);
         assert!(!status
             .next_actions
             .contains(&"request-human-audit".to_string()));
         let audit_index = agentflow_output::load_audit_index(dir.path()).unwrap();
-        assert_eq!(audit_index.audits.len(), 1);
+        assert_eq!(audit_index.audits.len(), 0);
     }
 
     #[test]
-    fn workflow_gate_blocks_when_release_auto_audit_request_is_missing() {
+    fn workflow_gate_does_not_block_when_delivery_has_no_audit_request() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());
         let run = complete_run(dir.path());
         write_evidence_and_delivery(dir.path(), &run);
         agentflow_output::prepare_output_workspace(dir.path()).unwrap();
-        fs::remove_dir_all(dir.path().join(".agentflow/output/audit/audit-001")).unwrap();
-        crate::storage::write_json(
-            &dir.path().join(".agentflow/output/audit/index.json"),
-            &AuditIndex::default(),
-        )
-        .unwrap();
-        let mut output_index: OutputIndex =
-            crate::storage::read_json(&dir.path().join(".agentflow/output/index.json")).unwrap();
-        output_index.audits.clear();
-        crate::storage::write_json(
-            &dir.path().join(".agentflow/output/index.json"),
-            &output_index,
-        )
-        .unwrap();
 
         let status = refresh_state(dir.path()).unwrap();
 
+        assert_eq!(status.current_stage, WorkflowStage::DeliveryReady);
         assert_eq!(status.audit_status, WorkflowAuditStatus::NotRequested);
-        assert!(status
-            .blockers
-            .iter()
-            .any(|blocker| blocker.reason == "Release 已生成，但审计请求缺失。"));
+        assert!(status.blockers.is_empty());
     }
 
     #[test]
