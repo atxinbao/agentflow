@@ -179,6 +179,16 @@ type AgentflowWorkspaceChangedEvent = {
   watcherStatus: string;
 };
 
+type WorkflowEventDispatchSummary = {
+  contextPackFailed: number;
+  contextPackReady: number;
+  contextPackRequests: number;
+  emittedIssueReadyEvents: number;
+  errors: string[];
+  pendingPanelEvents: number;
+  version: string;
+};
+
 const AGENTFLOW_WORKSPACE_CHANGED_EVENT = "agentflow-workspace-changed";
 const AGENTFLOW_WATCHER_REFRESH_DELAY_MS = 500;
 const AGENTFLOW_WATCHER_REFRESH_COOLDOWN_MS = 1200;
@@ -688,6 +698,56 @@ function App() {
       ),
     [inputSnapshotState.snapshot, issueStatusIndexState.index, workspaceData.projectViewModel, workspaceData.workbench],
   );
+  const contextPackDispatchKey = useMemo(
+    () =>
+      (inputSnapshotState.snapshot?.issues ?? [])
+        .map((issue) =>
+          [
+            issue.issueId,
+            issue.displayStatus,
+            issue.status,
+            issue.contextPackPath ?? "",
+            issue.system?.revision ?? 0,
+          ].join(":"),
+        )
+        .join("|"),
+    [inputSnapshotState.snapshot],
+  );
+
+  useEffect(() => {
+    if (
+      !projectRoot ||
+      isBrowserPreviewRuntime() ||
+      inputSnapshotState.source !== "tauri" ||
+      !inputSnapshotState.snapshot?.issues.length
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    void invoke<WorkflowEventDispatchSummary>("dispatch_workflow_events", { projectRoot })
+      .then((summary) => {
+        if (cancelled) {
+          return;
+        }
+        if (summary.contextPackReady > 0 || summary.contextPackFailed > 0) {
+          void prepareProjectPanel(projectRoot);
+          setStateRefreshToken((current) => current + 1);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    contextPackDispatchKey,
+    inputSnapshotState.snapshot?.issues.length,
+    inputSnapshotState.source,
+    prepareProjectPanel,
+    projectRoot,
+  ]);
+
   const filteredTasks = useMemo(() => {
     const query = taskSearch.trim().toLowerCase();
     if (!query) {

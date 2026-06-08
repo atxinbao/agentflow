@@ -15,6 +15,8 @@ agentflow-input = { path = "../../../crates/input" }
 agentflow-execute = { path = "../../../crates/execute" }
 agentflow-output = { path = "../../../crates/output" }
 agentflow-state = { path = "../../../crates/state" }
+agentflow-workflow-events = { path = "../../../crates/workflow-events" }
+anyhow.workspace = true
 base64 = "0.22"
 notify = "8"
 rfd = "0.15"
