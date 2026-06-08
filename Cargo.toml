@@ -8,6 +8,7 @@ members = [
     "crates/output",
     "crates/execute",
     "crates/state",
+    "crates/workflow-events",
     "crates/workflow-acceptance",
     "apps/desktop/src-tauri",
 ]

@@ -54,6 +54,8 @@ dependencies = [
  "agentflow-panel",
  "agentflow-state",
  "agentflow-workflow-acceptance",
+ "agentflow-workflow-events",
+ "anyhow",
  "base64 0.22.1",
  "notify",
  "rfd",
@@ -156,6 +158,16 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
+]
+
+[[package]]
+name = "agentflow-workflow-events"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 
