@@ -179,20 +179,21 @@ type AgentflowWorkspaceChangedEvent = {
   watcherStatus: string;
 };
 
-type WorkflowEventDispatchSummary = {
+type WorkflowEventsDispatchedEvent = {
   contextPackFailed: number;
   contextPackReady: number;
   contextPackRequests: number;
-  emittedIssueReadyEvents: number;
   errors: string[];
   pendingPanelEvents: number;
+  projectRoot: string;
   version: string;
 };
 
 const AGENTFLOW_WORKSPACE_CHANGED_EVENT = "agentflow-workspace-changed";
+const AGENTFLOW_WORKFLOW_EVENTS_DISPATCHED_EVENT = "agentflow-workflow-events-dispatched";
 const AGENTFLOW_WATCHER_REFRESH_DELAY_MS = 500;
 const AGENTFLOW_WATCHER_REFRESH_COOLDOWN_MS = 1200;
-const AGENTFLOW_DERIVED_CHANGE_AREAS = new Set(["state"]);
+const AGENTFLOW_DERIVED_CHANGE_AREAS = new Set(["events", "state"]);
 
 type NextStepViewModel = {
   action: string;
@@ -283,11 +284,12 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "",
       "你要做：",
       "1. GitHub 自动化预检。",
-      "2. Agent 执行 issue。",
-      "3. 沙箱测试与结果验证。",
-      "4. 创建 PR。",
-      "5. 合并 PR。",
-      "6. 写回 Done。",
+      "2. 测试设计。",
+      "3. Agent 执行 issue。",
+      "4. 沙箱验证。",
+      "5. 创建 PR。",
+      "6. 合并 PR。",
+      "7. 写回 Done。",
       "",
       "你不能做：",
       "- 不执行 audit issue",
@@ -297,16 +299,17 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "- 不写 traceability.json",
       "- 不越过任务边界",
       "- 不绕过 GitHub 自动化预检",
+      "- 不绕过测试设计",
       "- 不绕过沙箱验证",
       "- 不越过 mergeMode 合并 PR",
       "- 不把外部 issue / task / plan / queue 当成任务源",
       "- 不用外部状态拆分、重排或推进 AgentFlow 任务",
       "- 不 deploy",
       "",
-      "创建 PR 前必须完成 GitHub 自动化预检和沙箱验证。",
+      "创建 PR 前必须完成 GitHub 自动化预检、测试设计和沙箱验证。",
       "合并 PR 只能按 mergeMode：manual-merge 或 auto-merge-if-eligible。",
       "如果 mergeMode = auto-merge-if-eligible，不能停在 Draft PR；必须执行 gh pr ready、gh pr merge --auto，并轮询 PR 是否 merged。",
-      "如果 mergeMode = manual-merge，PR ready 后等待人合并，合并前不能写回 Done。",
+      "如果 mergeMode = manual-merge，PR ready 后进入 waiting-for-merge，等待人合并；本地检测确认 PR merged 后才能写回 Done。",
       "写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete。",
       "如果使用 target/release/agentflow，必须先运行 cargo build --release --bin agentflow；否则使用 target/debug/agentflow。",
       "不要直接复用可能过期的 target/release/agentflow。",
@@ -544,6 +547,15 @@ function App() {
       const refreshPanel = refreshAll || changedAreas.has("panel");
       const refreshTaskList = refreshInput || refreshExecute || refreshOutput || refreshAll;
 
+      if (refreshInput) {
+        void invoke("prepare_input_workspace", { projectRoot })
+          .then(() => {
+            setStateRefreshToken((current) => current + 1);
+          })
+          .catch(() => undefined);
+        setInputStatusRefreshToken((current) => current + 1);
+      }
+
       if (refreshTaskList) {
         setTaskListRefreshToken((current) => current + 1);
       }
@@ -614,6 +626,37 @@ function App() {
       unlisten?.();
     };
   }, [activePage, loadProjectFiles, projectRoot]);
+
+  useEffect(() => {
+    if (!projectRoot || isBrowserPreviewRuntime()) {
+      return;
+    }
+
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void listen<WorkflowEventsDispatchedEvent>(AGENTFLOW_WORKFLOW_EVENTS_DISPATCHED_EVENT, (event) => {
+      if (cancelled) {
+        return;
+      }
+      const payload = event.payload;
+      if (normalizeProjectRootKey(payload.projectRoot) !== normalizeProjectRootKey(projectRoot)) {
+        return;
+      }
+      setTaskListRefreshToken((current) => current + 1);
+      setStateRefreshToken((current) => current + 1);
+    }).then((cleanup) => {
+      if (cancelled) {
+        cleanup();
+      } else {
+        unlisten = cleanup;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [projectRoot]);
 
   useEffect(() => {
     if (!projectRoot || isBrowserPreviewRuntime() || preparedProjectRoots.current.has(projectRoot)) {
@@ -695,58 +738,9 @@ function App() {
         issueStatusIndexState.index,
         workspaceData.projectViewModel,
         workspaceData.workbench,
-      ),
+    ),
     [inputSnapshotState.snapshot, issueStatusIndexState.index, workspaceData.projectViewModel, workspaceData.workbench],
   );
-  const contextPackDispatchKey = useMemo(
-    () =>
-      (inputSnapshotState.snapshot?.issues ?? [])
-        .map((issue) =>
-          [
-            issue.issueId,
-            issue.displayStatus,
-            issue.status,
-            issue.contextPackPath ?? "",
-            issue.system?.revision ?? 0,
-          ].join(":"),
-        )
-        .join("|"),
-    [inputSnapshotState.snapshot],
-  );
-
-  useEffect(() => {
-    if (
-      !projectRoot ||
-      isBrowserPreviewRuntime() ||
-      inputSnapshotState.source !== "tauri" ||
-      !inputSnapshotState.snapshot?.issues.length
-    ) {
-      return;
-    }
-
-    let cancelled = false;
-    void invoke<WorkflowEventDispatchSummary>("dispatch_workflow_events", { projectRoot })
-      .then((summary) => {
-        if (cancelled) {
-          return;
-        }
-        if (summary.contextPackReady > 0 || summary.contextPackFailed > 0) {
-          void prepareProjectPanel(projectRoot);
-          setStateRefreshToken((current) => current + 1);
-        }
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    contextPackDispatchKey,
-    inputSnapshotState.snapshot?.issues.length,
-    inputSnapshotState.source,
-    prepareProjectPanel,
-    projectRoot,
-  ]);
 
   const filteredTasks = useMemo(() => {
     const query = taskSearch.trim().toLowerCase();
@@ -3469,6 +3463,7 @@ const displayStatusOrder = new Map(displayStatusColumns.map((column, index) => [
 
 const buildAgentPipelineStageIds = [
   "github-preflight",
+  "test-design",
   "implement",
   "sandbox-verify",
   "create-pr",
@@ -3499,8 +3494,19 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
         stageId: "github-preflight",
       },
       {
+        evidence: [
+          "test points derived from SPEC and issue",
+          "failing test result or TDD-not-applicable reason",
+          "planned sandbox validation commands",
+        ],
+        goal: "从 SPEC 和当前 issue 推导测试点；能 TDD 的任务先补失败测试，不适合 TDD 的任务必须记录原因，并明确替代验证方式。",
+        label: "测试设计",
+        required: true,
+        stageId: "test-design",
+      },
+      {
         evidence: ["git diff --stat", "changed-files summary"],
-        goal: "按 issue 合同在 allowedPaths 内完成代码、配置或测试改动。",
+        goal: "按测试设计和 issue 合同在 allowedPaths 内完成代码、配置或测试改动。",
         label: "Agent 执行 issue",
         required: true,
         stageId: "implement",
@@ -3508,20 +3514,31 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
       {
         evidence: ["validation command records", "browser smoke evidence when applicable", "git diff --check"],
         goal: "在受控本地沙箱中运行验证命令并收集 stdout、stderr、exit code、浏览器或截图证据。",
-        label: "沙箱测试与结果验证",
+        label: "沙箱验证",
         required: true,
         stageId: "sandbox-verify",
       },
       {
-        evidence: ["PR URL", "PR body validation summary", "draft or ready state"],
-        goal: "推送任务分支，创建 PR，并把验证结果写入 PR 描述；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR。",
+        evidence: [
+          "PR URL",
+          "AgentFlow Build Agent PR template completed",
+          "PR body validation summary",
+          "draft or ready state",
+        ],
+        goal: "推送任务分支，按 AgentFlow Build Agent PR 模板创建 PR，并把任务、范围、验证结果、影响、回滚和 review gate 写入 PR 描述；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR。",
         label: "创建 PR",
         required: true,
         stageId: "create-pr",
       },
       {
-        evidence: ["merge mode", "gh pr ready result", "gh pr merge --auto result", "merge commit or merged PR state"],
-        goal: "manual-merge 模式下 PR ready 后等待人合并；auto-merge-if-eligible 模式下执行 gh pr ready、gh pr merge --auto，并轮询到 merged。",
+        evidence: [
+          "merge mode",
+          "waiting-for-merge state when manual-merge",
+          "gh pr ready result",
+          "gh pr merge --auto result",
+          "merge commit or merged PR state",
+        ],
+        goal: "manual-merge 模式下 PR ready 后进入 waiting-for-merge，等待人合并，再由本地检测确认 PR merged 后继续；auto-merge-if-eligible 模式下执行 gh pr ready、gh pr merge --auto，并轮询到 merged。",
         label: "合并 PR",
         required: true,
         stageId: "merge-pr",
@@ -3940,7 +3957,7 @@ function agentInstructionForTask(task: V1Issue) {
   if (task.requiredAgentRole === "audit-agent") {
     return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR。";
   }
-  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 issue、handoff package 和 executionPipeline 是唯一任务源；不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按 GitHub 自动化预检、执行、沙箱验证、创建 PR、合并 PR、写回 Done 的流程执行。写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
+  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 issue、handoff package 和 executionPipeline 是唯一任务源；不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按 GitHub 自动化预检、测试设计、执行、沙箱验证、创建 PR、合并 PR、写回 Done 的流程执行。写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
 }
 
 function taskAuditDescriptionItems(task: V1Issue): Array<[string, string]> {
@@ -4371,6 +4388,102 @@ function buildNextStep(
   };
 }
 
+function buildAgentPullRequestTemplate(task: V1Issue) {
+  const issuePath = task.issuePath ?? `.agentflow/input/issues/${task.id}.json`;
+  const sourceSpec = task.sourceSpecPath ?? task.sourceSpecId ?? "未记录";
+  const validationCommands = task.validationCommands.length
+    ? task.validationCommands.map((command) => `- ${command}`)
+    : ["- 未记录"];
+  const importantFiles = task.allowedFiles.length ? task.allowedFiles.map((path) => `- ${path}`) : ["- 未记录"];
+  const outputs = taskOutputItems(task).map((item) => `- ${item}`);
+
+  return [
+    "# AgentFlow Build Agent Pull Request",
+    "",
+    "AgentFlow keeps every Build Agent PR bound to one input issue, one branch, one review gate, and one Done writeback.",
+    "",
+    "## Task",
+    "",
+    `- Issue ID: ${task.id}`,
+    `- Source issue file: ${issuePath}`,
+    `- Source SPEC: ${sourceSpec}`,
+    "- Owner role: build-agent",
+    "- Review role: human-reviewer",
+    `- Risk level: ${displayRiskLabelZh(task.riskLevel)}`,
+    "- Branch: ",
+    "- Merge mode: manual-merge / auto-merge-if-eligible",
+    "- Lease file: ",
+    "",
+    "## Summary",
+    "",
+    "<!-- What changed, why it changed, and what behavior is affected. -->",
+    "",
+    "## Plain-Language Summary",
+    "",
+    "<!-- Explain plainly: what changed, what did not change, validation results, behavior impact, and whether auto-merge is allowed. -->",
+    "",
+    "## Files Changed",
+    "",
+    ...importantFiles,
+    "",
+    "## Scope Checklist",
+    "",
+    "- [ ] This PR covers one AgentFlow issue only.",
+    "- [ ] Touched paths match the issue allowed paths.",
+    "- [ ] No unrelated refactors or formatting churn.",
+    "- [ ] No forbidden paths were modified.",
+    "- [ ] No audit report, findings, evidence map, or traceability files were written by Build Agent.",
+    "- [ ] Input facts and Approved SPEC were not modified unless explicitly allowed by the issue.",
+    "- [ ] Public behavior is unchanged, or migration notes are included.",
+    "",
+    "## Build Agent Loop",
+    "",
+    "- [ ] GitHub automation preflight completed.",
+    "- [ ] Test design completed, with failing test evidence or a reason TDD does not apply.",
+    "- [ ] Issue implementation stayed inside scope.",
+    "- [ ] Sandbox verification completed.",
+    "- [ ] PR created with validation evidence.",
+    "- [ ] Merge mode is respected.",
+    "- [ ] Done writeback is not performed before PR merge.",
+    "",
+    "## Evidence",
+    "",
+    "- Evidence file:",
+    "- Release delivery:",
+    "- Plain-language summary:",
+    "- Commands run:",
+    ...validationCommands,
+    "- Command result summary:",
+    "- Tests added or updated:",
+    "- Tests not run and reason:",
+    "- Browser or screenshot evidence:",
+    "",
+    "## Expected Outputs",
+    "",
+    ...outputs,
+    "",
+    "## Impact",
+    "",
+    "- Runtime behavior impact:",
+    "- Public API impact:",
+    "- Data or file format impact:",
+    "- Migration note status:",
+    "- Release delivery impact:",
+    "",
+    "## Rollback Plan",
+    "",
+    "<!-- Exact revert or rollback steps. -->",
+    "",
+    "## Review Gate",
+    "",
+    "- [ ] Owner role did not approve its own task.",
+    "- [ ] Verification evidence is present or explicitly not required for this risk level.",
+    "- [ ] `waiting-for-merge` is not treated as `done`.",
+    "- [ ] `BLOCKED` is not treated as `DONE`.",
+    "- [ ] `QA_PASSED` is not treated as `DONE`.",
+  ].join("\n");
+}
+
 function buildCodexHandoff(task: V1Issue) {
   const handoffPackage =
     task.issueCategory === "audit"
@@ -4466,14 +4579,19 @@ function buildCodexHandoff(task: V1Issue) {
           ...taskExecutionPipelineItems(task).map((item) => `- ${item}`),
           "",
           "## 合并规则",
-          "- 创建 PR 前必须完成 GitHub 自动化预检和沙箱测试与结果验证。",
+          "- 创建 PR 前必须完成 GitHub 自动化预检、测试设计和沙箱验证。",
           "- 创建 PR 不是终点。Draft PR 只是中间产物，不能直接写回 Done。",
-          "- mergeMode = manual-merge：把 PR 标记 ready 后等待人合并，合并前停止。",
+          "- mergeMode = manual-merge：把 PR 标记 ready 后进入 waiting-for-merge，等待人合并；本地检测确认 PR merged 后继续写回。",
           "- mergeMode = auto-merge-if-eligible：执行 `gh pr ready`，再执行 `gh pr merge --auto`，轮询 PR merged 状态。",
           "- PR 合并后才写回 Done。",
           "- 写回 Done 前必须确认当前 AgentFlow CLI 支持 `build-agent complete`。",
           "- 如果使用 `target/release/agentflow`，必须先运行 `cargo build --release --bin agentflow`；否则使用 `target/debug/agentflow`。",
           "- 不要直接复用可能过期的 `target/release/agentflow`。",
+          "",
+          "## PR 描述模板",
+          "```md",
+          buildAgentPullRequestTemplate(task),
+          "```",
         ]
       : []),
     "",

@@ -1,12 +1,17 @@
+use tauri::AppHandle;
+
 #[tauri::command]
 pub(crate) fn prepare_project_panel(
     project_root: String,
+    app: AppHandle,
 ) -> Result<agentflow_panel::PanelStatusSnapshot, String> {
-    agentflow_panel::prepare_project_panel(
-        project_root,
+    let status = agentflow_panel::prepare_project_panel(
+        &project_root,
         agentflow_panel::PanelPrepareMode::Background,
     )
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+    let _ = crate::commands::workflow_events::dispatch_workflow_events_for_app(&project_root, &app);
+    Ok(status)
 }
 
 #[tauri::command]

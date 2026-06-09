@@ -413,15 +413,46 @@ mod tests {
             &"target/release/agentflow build-agent complete --help or target/debug/agentflow build-agent complete --help"
                 .to_string()
         ));
+        let test_design_stage = pipeline
+            .stages
+            .iter()
+            .find(|stage| stage.stage_id == "test-design")
+            .unwrap();
+        assert_eq!(test_design_stage.label, "测试设计");
+        assert!(test_design_stage.goal.contains("不适合 TDD"));
+        assert!(test_design_stage
+            .evidence
+            .contains(&"failing test result or TDD-not-applicable reason".to_string()));
+        let sandbox_stage = pipeline
+            .stages
+            .iter()
+            .find(|stage| stage.stage_id == "sandbox-verify")
+            .unwrap();
+        assert_eq!(sandbox_stage.label, "沙箱验证");
+        let create_pr_stage = pipeline
+            .stages
+            .iter()
+            .find(|stage| stage.stage_id == "create-pr")
+            .unwrap();
+        assert!(create_pr_stage
+            .goal
+            .contains("AgentFlow Build Agent PR 模板"));
+        assert!(create_pr_stage
+            .evidence
+            .contains(&"AgentFlow Build Agent PR template completed".to_string()));
         let merge_stage = pipeline
             .stages
             .iter()
             .find(|stage| stage.stage_id == "merge-pr")
             .unwrap();
         assert!(merge_stage.goal.contains("gh pr merge --auto"));
+        assert!(merge_stage.goal.contains("waiting-for-merge"));
         assert!(merge_stage
             .evidence
             .contains(&"gh pr merge --auto result".to_string()));
+        assert!(merge_stage
+            .evidence
+            .contains(&"waiting-for-merge state when manual-merge".to_string()));
         let writeback_stage = pipeline
             .stages
             .iter()
@@ -438,6 +469,49 @@ mod tests {
             .evidence
             .iter()
             .any(|item| item.contains("target/debug/agentflow build-agent complete")));
+    }
+
+    #[test]
+    fn prepare_publishes_ready_spec_issue_event() {
+        let dir = tempdir().unwrap();
+        prepare_input_workspace(dir.path()).unwrap();
+        let issue = InputIssue {
+            issue_id: "iss-ready-event".to_string(),
+            source_spec_id: "spec-001".to_string(),
+            title: "Ready issue event".to_string(),
+            summary: "Publish ready event from input prepare.".to_string(),
+            status: InputIssueStatus::ReadyForExecute,
+            display_status: DisplayStatus::Ready,
+            risk_level: InputRiskLevel::Low,
+            scope: vec!["src/lib.rs".to_string()],
+            validation_hints: vec!["cargo test".to_string()],
+            ..InputIssue::default()
+        };
+        fs::write(
+            dir.path()
+                .join(".agentflow/input/issues/iss-ready-event.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+
+        prepare_input_workspace(dir.path()).unwrap();
+
+        let events = agentflow_workflow_events::load_events(dir.path()).unwrap();
+        let ready_events = events
+            .iter()
+            .filter(|event| {
+                event.event_type == agentflow_workflow_events::EVENT_TYPE_INPUT_ISSUE_READY
+                    && event.subject_id == "iss-ready-event"
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(ready_events.len(), 1);
+        let payload: agentflow_workflow_events::IssueReadyPayload =
+            serde_json::from_value(ready_events[0].payload.clone()).unwrap();
+        assert_eq!(payload.issue_id, "iss-ready-event");
+        assert_eq!(
+            payload.context_pack_path.as_deref(),
+            Some(".agentflow/panel/context-packs/iss-ready-event.json")
+        );
     }
 
     #[test]

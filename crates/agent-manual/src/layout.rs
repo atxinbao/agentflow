@@ -578,14 +578,16 @@ const TDD_MANUAL: &str = r#"# TDD.md
 
 Version: tdd-manual.v1
 
-TDD is the test-first working manual for future Build Agent execution.
+TDD is the test-first discipline used by the Build Agent execution pipeline.
 
 ## Rules
 
 - Quality standards come from SPEC acceptance criteria.
 - TDD does not redefine requirement quality.
 - Build Agent is authorized only inside a complete Build Agent execution pipeline handoff.
-- Implementation must derive tests from SPEC and input issue context before code changes.
+- The test design stage must derive tests from SPEC and input issue context before code changes.
+- If TDD fits the task, Build Agent records the failing test before implementation.
+- If TDD does not fit the task, Build Agent records why and defines the replacement smoke, build, screenshot, or command verification.
 - Sandbox verification evidence must be recorded before PR creation and Done writeback.
 
 ## Code Comment Language and Style

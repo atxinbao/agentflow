@@ -1,6 +1,5 @@
-use agentflow_input::issue::{
-    AgentRole, DisplayStatus, InputIssue, InputIssueStatus, IssueCategory,
-};
+use agentflow_input::issue::DisplayStatus;
+use agentflow_panel::PanelStatus;
 use agentflow_workflow_events::{
     append_dead_letter, append_event_once, load_pending_events, mark_event_consumed,
     prepare_events_workspace, ContextPackFailedPayload, ContextPackReadyPayload,
@@ -9,9 +8,12 @@ use agentflow_workflow_events::{
     EVENT_TYPE_PANEL_CONTEXT_PACK_READY, EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED,
 };
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use tauri::{AppHandle, Emitter};
 
 const WORKFLOW_EVENT_DISPATCH_VERSION: &str = "workflow-event-dispatch.v1";
+pub(crate) const AGENTFLOW_WORKFLOW_EVENTS_DISPATCHED_EVENT: &str =
+    "agentflow-workflow-events-dispatched";
 
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,13 +27,47 @@ pub(crate) struct WorkflowEventDispatchSummary {
     errors: Vec<String>,
 }
 
+impl WorkflowEventDispatchSummary {
+    fn should_refresh_ui(&self) -> bool {
+        self.context_pack_ready > 0 || self.context_pack_failed > 0
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkflowEventsDispatchedEvent {
+    version: String,
+    project_root: String,
+    pending_panel_events: usize,
+    context_pack_requests: usize,
+    context_pack_ready: usize,
+    context_pack_failed: usize,
+    errors: Vec<String>,
+}
+
 #[tauri::command]
 pub(crate) fn dispatch_workflow_events(
     project_root: String,
+    app: AppHandle,
 ) -> Result<WorkflowEventDispatchSummary, String> {
-    let root = PathBuf::from(&project_root)
+    dispatch_workflow_events_for_app(project_root, &app)
+}
+
+pub(crate) fn dispatch_workflow_events_for_app(
+    project_root: impl AsRef<Path>,
+    app: &AppHandle,
+) -> Result<WorkflowEventDispatchSummary, String> {
+    dispatch_workflow_events_inner(project_root, Some(app))
+}
+
+fn dispatch_workflow_events_inner(
+    project_root: impl AsRef<Path>,
+    app: Option<&AppHandle>,
+) -> Result<WorkflowEventDispatchSummary, String> {
+    let root = project_root
+        .as_ref()
         .canonicalize()
-        .map_err(|error| format!("canonicalize project root: {error}"))?;
+        .map_err(|error| format!("canonicalize {}: {error}", project_root.as_ref().display()))?;
     prepare_events_workspace(&root).map_err(|error| error.to_string())?;
 
     let mut summary = WorkflowEventDispatchSummary {
@@ -39,29 +75,13 @@ pub(crate) fn dispatch_workflow_events(
         ..WorkflowEventDispatchSummary::default()
     };
 
-    let input_snapshot =
-        agentflow_input::load_input_snapshot(&root).map_err(|error| error.to_string())?;
     let issue_status_index = agentflow_state::load_issue_status_index(&root).ok();
-    for issue in input_snapshot
-        .issues
-        .iter()
-        .filter(|issue| issue_ready_for_panel(issue, issue_status_index.as_ref()))
-    {
-        let before_count = agentflow_workflow_events::load_events(&root)
-            .map_err(|error| error.to_string())?
-            .len();
-        emit_issue_ready_event(&root, issue).map_err(|error| error.to_string())?;
-        let after_count = agentflow_workflow_events::load_events(&root)
-            .map_err(|error| error.to_string())?
-            .len();
-        if after_count > before_count {
-            summary.emitted_issue_ready_events += 1;
-        }
-    }
-
     let pending = load_pending_events(&root, CONSUMER_PANEL, &[EVENT_TYPE_INPUT_ISSUE_READY])
         .map_err(|error| error.to_string())?;
     summary.pending_panel_events = pending.len();
+    if !panel_ready_for_context_pack(&root) {
+        return Ok(summary);
+    }
 
     for event in pending {
         let payload = match serde_json::from_value::<IssueReadyPayload>(event.payload.clone()) {
@@ -75,6 +95,11 @@ pub(crate) fn dispatch_workflow_events(
                 continue;
             }
         };
+        if !event_ready_for_panel(&payload, issue_status_index.as_ref()) {
+            mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
+                .map_err(|error| error.to_string())?;
+            continue;
+        }
 
         let requested = ContextPackRequestedPayload {
             issue_id: payload.issue_id.clone(),
@@ -149,61 +174,42 @@ pub(crate) fn dispatch_workflow_events(
     }
 
     let _ = prepare_events_workspace(&root);
+    if summary.should_refresh_ui() {
+        if let Some(app) = app {
+            let payload = WorkflowEventsDispatchedEvent {
+                version: WORKFLOW_EVENT_DISPATCH_VERSION.to_string(),
+                project_root: root.display().to_string(),
+                pending_panel_events: summary.pending_panel_events,
+                context_pack_requests: summary.context_pack_requests,
+                context_pack_ready: summary.context_pack_ready,
+                context_pack_failed: summary.context_pack_failed,
+                errors: summary.errors.clone(),
+            };
+            let _ = app.emit(AGENTFLOW_WORKFLOW_EVENTS_DISPATCHED_EVENT, payload);
+        }
+    }
     Ok(summary)
 }
 
-fn issue_ready_for_panel(
-    issue: &InputIssue,
+fn panel_ready_for_context_pack(root: &Path) -> bool {
+    agentflow_panel::load_project_panel_status(root)
+        .map(|status| matches!(status.status, PanelStatus::Ready | PanelStatus::Degraded))
+        .unwrap_or(false)
+}
+
+fn event_ready_for_panel(
+    payload: &IssueReadyPayload,
     issue_status_index: Option<&agentflow_state::IssueStatusIndex>,
 ) -> bool {
-    let display_status = issue_status_index
+    issue_status_index
         .and_then(|index| {
             index
                 .issues
                 .iter()
-                .find(|entry| entry.issue_id == issue.issue_id)
+                .find(|entry| entry.issue_id == payload.issue_id)
         })
-        .map(|entry| &entry.display_status)
-        .unwrap_or(&issue.display_status);
-
-    matches!(issue.issue_category, IssueCategory::Spec)
-        && matches!(issue.required_agent_role, AgentRole::BuildAgent)
-        && matches!(issue.status, InputIssueStatus::ReadyForExecute)
-        && matches!(display_status, DisplayStatus::Ready)
-        && !issue.context_pack_path.trim().is_empty()
-}
-
-fn emit_issue_ready_event(root: &Path, issue: &InputIssue) -> anyhow::Result<()> {
-    let payload = IssueReadyPayload {
-        issue_id: issue.issue_id.clone(),
-        issue_path: issue.issue_path.clone(),
-        issue_category: issue.issue_category.as_str().to_string(),
-        required_agent_role: issue.required_agent_role.as_str().to_string(),
-        display_status: issue.display_status.as_str().to_string(),
-        title: issue.title.clone(),
-        objective: if issue.summary.trim().is_empty() {
-            issue.scope.join("\n")
-        } else {
-            issue.summary.clone()
-        },
-        acceptance_criteria: issue.acceptance_criteria.clone(),
-        context_pack_path: Some(issue.context_pack_path.clone()),
-    };
-    append_event_once(
-        root,
-        WorkflowEventDraft {
-            event_type: EVENT_TYPE_INPUT_ISSUE_READY.to_string(),
-            source: "input".to_string(),
-            subject_id: issue.issue_id.clone(),
-            subject_path: Some(issue.issue_path.clone()),
-            dedupe_key: format!(
-                "input.issue.ready:{}:{}",
-                issue.issue_id, issue.system.revision
-            ),
-            payload: serde_json::to_value(payload)?,
-        },
-    )?;
-    Ok(())
+        .map(|entry| matches!(entry.display_status, DisplayStatus::Ready))
+        .unwrap_or(true)
 }
 
 fn ensure_context_pack(root: &Path, payload: &IssueReadyPayload) -> anyhow::Result<String> {
@@ -258,7 +264,8 @@ fn append_context_pack_event<T: Serialize>(
 mod tests {
     use super::*;
     use agentflow_input::issue::{
-        InputIssueKind, InputPriority, InputRiskLevel, InputSystemRecord,
+        AgentRole, InputIssue, InputIssueKind, InputIssueStatus, InputPriority, InputRiskLevel,
+        InputSystemRecord, IssueCategory,
     };
     use agentflow_panel::PanelPrepareMode;
     use agentflow_state::{IssueStatusIndex, IssueStatusIndexEntry, WorkflowAuditStatus};
@@ -277,7 +284,18 @@ mod tests {
             ..InputIssue::default()
         };
         issue.normalize_execution_metadata();
-        assert!(issue_ready_for_panel(&issue, None));
+        let payload = IssueReadyPayload {
+            issue_id: issue.issue_id.clone(),
+            issue_path: issue.issue_path.clone(),
+            issue_category: issue.issue_category.as_str().to_string(),
+            required_agent_role: issue.required_agent_role.as_str().to_string(),
+            display_status: issue.display_status.as_str().to_string(),
+            title: issue.title.clone(),
+            objective: issue.summary.clone(),
+            acceptance_criteria: issue.acceptance_criteria.clone(),
+            context_pack_path: Some(issue.context_pack_path.clone()),
+        };
+        assert!(event_ready_for_panel(&payload, None));
 
         let issue_status_index = IssueStatusIndex {
             version: "state-issue-status-index.v1".to_string(),
@@ -294,7 +312,7 @@ mod tests {
             }],
         };
 
-        assert!(!issue_ready_for_panel(&issue, Some(&issue_status_index)));
+        assert!(!event_ready_for_panel(&payload, Some(&issue_status_index)));
     }
 
     #[test]
@@ -341,7 +359,7 @@ mod tests {
         agentflow_input::prepare_input_workspace(dir.path()).unwrap();
         agentflow_panel::prepare_project_panel(dir.path(), PanelPrepareMode::Blocking).unwrap();
 
-        let summary = dispatch_workflow_events(dir.path().display().to_string()).unwrap();
+        let summary = dispatch_workflow_events_inner(dir.path(), None).unwrap();
 
         assert_eq!(summary.context_pack_ready, 1);
         assert!(dir

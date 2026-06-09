@@ -1,5 +1,5 @@
 use crate::{
-    issue::InputIssue,
+    issue::{AgentRole, DisplayStatus, InputIssue, InputIssueStatus, IssueCategory},
     model::{
         InputIndex, InputIndexEntry, InputManifest, InputSnapshot, InputStatusSnapshot,
         InputSummary, InputWorkspaceStatus, INPUT_STATUS_VERSION,
@@ -11,11 +11,15 @@ use crate::{
     spec_gate::{InputIntakeResult, InputSpecDescriptor, InputSpecStatus},
     storage::{
         canonical_project_root, ensure_directory, read_json, read_json_files,
-        unix_timestamp_seconds, write_json, write_json_if_missing, INPUT_DIRECTORIES,
-        INPUT_REQUIRED_FILES,
+        unix_timestamp_seconds, write_json, write_json_if_changed, write_json_if_missing,
+        INPUT_DIRECTORIES, INPUT_REQUIRED_FILES,
     },
     validate::build_input_snapshot,
     views::InputView,
+};
+use agentflow_workflow_events::{
+    append_event_once, prepare_events_workspace, IssueReadyPayload, WorkflowEventDraft,
+    EVENT_TYPE_INPUT_ISSUE_READY,
 };
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -38,7 +42,7 @@ pub fn prepare_input_workspace(project_root: impl AsRef<Path>) -> Result<InputSn
 
     let summary = load_summary(&root)?;
     let manifest = InputManifest::new(root.display().to_string(), summary);
-    write_json(&root.join(".agentflow/input/manifest.json"), &manifest)?;
+    write_json_if_changed(&root.join(".agentflow/input/manifest.json"), &manifest)?;
     write_json_if_missing(
         &root.join(".agentflow/input/index.json"),
         &InputIndex {
@@ -74,7 +78,9 @@ pub fn prepare_input_workspace(project_root: impl AsRef<Path>) -> Result<InputSn
 
     let snapshot = build_input_snapshot(&root)?;
     rebuild_index(&root, &snapshot)?;
-    build_input_snapshot(&root)
+    let snapshot = build_input_snapshot(&root)?;
+    publish_ready_issue_events(&root, &snapshot)?;
+    Ok(snapshot)
 }
 
 fn repair_derived_input_files(root: &Path) -> Result<()> {
@@ -340,7 +346,7 @@ pub(crate) fn status(
 }
 
 fn rebuild_index(root: &Path, snapshot: &InputSnapshot) -> Result<()> {
-    let index = InputIndex {
+    let mut index = InputIndex {
         version: crate::model::INPUT_INDEX_VERSION.to_string(),
         updated_at: unix_timestamp_seconds(),
         specs: snapshot
@@ -377,7 +383,69 @@ fn rebuild_index(root: &Path, snapshot: &InputSnapshot) -> Result<()> {
             })
             .collect(),
     };
-    write_json(&root.join(".agentflow/input/index.json"), &index)
+    let path = root.join(".agentflow/input/index.json");
+    if let Ok(existing) = read_json::<InputIndex>(&path) {
+        let mut existing_without_timestamp = existing.clone();
+        existing_without_timestamp.updated_at = 0;
+        let mut next_without_timestamp = index.clone();
+        next_without_timestamp.updated_at = 0;
+        if serde_json::to_value(&existing_without_timestamp)?
+            == serde_json::to_value(&next_without_timestamp)?
+        {
+            return Ok(());
+        }
+    }
+    index.updated_at = unix_timestamp_seconds();
+    write_json_if_changed(&path, &index)?;
+    Ok(())
+}
+
+fn publish_ready_issue_events(root: &Path, snapshot: &InputSnapshot) -> Result<()> {
+    prepare_events_workspace(root)?;
+    for issue in snapshot
+        .issues
+        .iter()
+        .filter(|issue| issue_ready_for_event(issue))
+    {
+        let payload = IssueReadyPayload {
+            issue_id: issue.issue_id.clone(),
+            issue_path: issue.issue_path.clone(),
+            issue_category: issue.issue_category.as_str().to_string(),
+            required_agent_role: issue.required_agent_role.as_str().to_string(),
+            display_status: issue.display_status.as_str().to_string(),
+            title: issue.title.clone(),
+            objective: if issue.summary.trim().is_empty() {
+                issue.scope.join("\n")
+            } else {
+                issue.summary.clone()
+            },
+            acceptance_criteria: issue.acceptance_criteria.clone(),
+            context_pack_path: Some(issue.context_pack_path.clone()),
+        };
+        append_event_once(
+            root,
+            WorkflowEventDraft {
+                event_type: EVENT_TYPE_INPUT_ISSUE_READY.to_string(),
+                source: "input".to_string(),
+                subject_id: issue.issue_id.clone(),
+                subject_path: Some(issue.issue_path.clone()),
+                dedupe_key: format!(
+                    "input.issue.ready:{}:{}",
+                    issue.issue_id, issue.system.revision
+                ),
+                payload: serde_json::to_value(payload)?,
+            },
+        )?;
+    }
+    Ok(())
+}
+
+fn issue_ready_for_event(issue: &InputIssue) -> bool {
+    matches!(issue.issue_category, IssueCategory::Spec)
+        && matches!(issue.required_agent_role, AgentRole::BuildAgent)
+        && matches!(issue.status, InputIssueStatus::ReadyForExecute)
+        && matches!(issue.display_status, DisplayStatus::Ready)
+        && !issue.context_pack_path.trim().is_empty()
 }
 
 fn load_specs(root: &Path) -> Result<Vec<InputSpecDescriptor>> {

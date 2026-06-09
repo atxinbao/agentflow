@@ -61,6 +61,7 @@ export function useProjectPanel(projectRoot: string | null) {
           error: null,
           source: "tauri",
         }));
+        void invoke("dispatch_workflow_events", { projectRoot: root }).catch(() => undefined);
       } catch (error) {
         if (isBrowserPreviewRuntime()) {
           setProjectPanelState((current) => ({
@@ -101,6 +102,7 @@ export function useProjectPanel(projectRoot: string | null) {
           error: null,
           source: "tauri",
         }));
+        void invoke("dispatch_workflow_events", { projectRoot: root }).catch(() => undefined);
         if (status.status === "indexing") {
           window.setTimeout(() => {
             void loadProjectPanel(root);
