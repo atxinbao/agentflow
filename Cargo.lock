@@ -86,6 +86,7 @@ name = "agentflow-input"
 version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
+ "agentflow-workflow-events",
  "anyhow",
  "serde",
  "serde_json",

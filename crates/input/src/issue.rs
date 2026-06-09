@@ -5,8 +5,9 @@ use std::collections::BTreeMap;
 pub const AGENT_ROLES_VERSION: &str = "agent-roles.v1";
 pub const AGENT_CLAIM_VERSION: &str = "agent-claim.v1";
 pub const BUILD_AGENT_EXECUTION_PIPELINE_VERSION: &str = "build-agent-execution-pipeline.v1";
-pub const BUILD_AGENT_PIPELINE_STAGE_IDS: [&str; 6] = [
+pub const BUILD_AGENT_PIPELINE_STAGE_IDS: [&str; 7] = [
     "github-preflight",
+    "test-design",
     "implement",
     "sandbox-verify",
     "create-pr",
@@ -625,15 +626,26 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
                 ],
             },
             InputIssueExecutionStage {
+                stage_id: "test-design".to_string(),
+                label: "测试设计".to_string(),
+                goal: "从 SPEC 和当前 issue 推导测试点；能 TDD 的任务先补失败测试，不适合 TDD 的任务必须记录原因，并明确替代验证方式。".to_string(),
+                required: true,
+                evidence: vec![
+                    "test points derived from SPEC and issue".to_string(),
+                    "failing test result or TDD-not-applicable reason".to_string(),
+                    "planned sandbox validation commands".to_string(),
+                ],
+            },
+            InputIssueExecutionStage {
                 stage_id: "implement".to_string(),
                 label: "Agent 执行 issue".to_string(),
-                goal: "按 issue 合同在 allowedPaths 内完成代码、配置或测试改动。".to_string(),
+                goal: "按测试设计和 issue 合同在 allowedPaths 内完成代码、配置或测试改动。".to_string(),
                 required: true,
                 evidence: vec!["git diff --stat".to_string(), "changed-files summary".to_string()],
             },
             InputIssueExecutionStage {
                 stage_id: "sandbox-verify".to_string(),
-                label: "沙箱测试与结果验证".to_string(),
+                label: "沙箱验证".to_string(),
                 goal: "在受控本地沙箱中运行验证命令并收集 stdout、stderr、exit code、浏览器或截图证据。"
                     .to_string(),
                 required: true,
@@ -646,10 +658,11 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "create-pr".to_string(),
                 label: "创建 PR".to_string(),
-                goal: "推送任务分支，创建 PR，并把验证结果写入 PR 描述；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR。".to_string(),
+                goal: "推送任务分支，按 AgentFlow Build Agent PR 模板创建 PR，并把任务、范围、验证结果、影响、回滚和 review gate 写入 PR 描述；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR。".to_string(),
                 required: true,
                 evidence: vec![
                     "PR URL".to_string(),
+                    "AgentFlow Build Agent PR template completed".to_string(),
                     "PR body validation summary".to_string(),
                     "draft or ready state".to_string(),
                 ],
@@ -657,10 +670,11 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "merge-pr".to_string(),
                 label: "合并 PR".to_string(),
-                goal: "manual-merge 模式下 PR ready 后等待人合并；auto-merge-if-eligible 模式下执行 gh pr ready、gh pr merge --auto，并轮询到 merged。".to_string(),
+                goal: "manual-merge 模式下 PR ready 后进入 waiting-for-merge，等待人合并，再由本地检测确认 PR merged 后继续；auto-merge-if-eligible 模式下执行 gh pr ready、gh pr merge --auto，并轮询到 merged。".to_string(),
                 required: true,
                 evidence: vec![
                     "merge mode".to_string(),
+                    "waiting-for-merge state when manual-merge".to_string(),
                     "gh pr ready result".to_string(),
                     "gh pr merge --auto result".to_string(),
                     "merge commit or merged PR state".to_string(),

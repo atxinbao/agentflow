@@ -133,6 +133,8 @@ mod tests {
         );
         let agentflow_manual =
             fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md")).unwrap();
+        assert!(agentflow_manual.contains("Test design"));
+        assert!(agentflow_manual.contains("waiting-for-merge"));
         assert!(agentflow_manual.contains("fromIssueId"));
         assert!(agentflow_manual.contains("toIssueId"));
         assert!(agentflow_manual.contains("Do not write legacy `from` / `to` relation fields."));
@@ -533,6 +535,7 @@ mod tests {
         assert!(agentflow.contains("newly authored code comments"));
         assert!(agentflow.contains("Do not mass-translate existing code comments."));
         assert!(tdd.contains("Code Comment Language and Style"));
+        assert!(tdd.contains("test design stage"));
         assert!(tdd.contains("agentLocale"));
         assert!(tdd.contains("plain-work-style"));
     }

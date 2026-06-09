@@ -70,6 +70,22 @@ pub fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     fs::write(path, content).with_context(|| format!("write {}", path.display()))
 }
 
+pub fn write_json_if_changed<T: Serialize>(path: &Path, value: &T) -> Result<bool> {
+    if let Some(parent) = path.parent() {
+        ensure_directory(parent)?;
+    }
+    let content = serde_json::to_string_pretty(value)? + "\n";
+    if path.is_file() {
+        let existing =
+            fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+        if existing == content {
+            return Ok(false);
+        }
+    }
+    fs::write(path, content).with_context(|| format!("write {}", path.display()))?;
+    Ok(true)
+}
+
 pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
     let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     serde_json::from_str(&raw).with_context(|| format!("parse {}", path.display()))

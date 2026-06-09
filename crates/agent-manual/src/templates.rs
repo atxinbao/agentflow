@@ -85,6 +85,7 @@ Conversation with human
 → Input issue generation
 → Build Agent execution pipeline
 → GitHub automation preflight
+→ Test design
 → Implement issue
 → Sandbox verification
 → Create PR
@@ -184,6 +185,7 @@ Conversation
 → Input issue generation
 → Build Agent execution pipeline
 → GitHub automation preflight
+→ Test design
 → Implement issue
 → Sandbox verification
 → Create PR
@@ -307,21 +309,24 @@ Build Agent must use the AgentFlow input issue and executionPipeline as the only
 It performs the Build Agent execution pipeline:
 
 1. GitHub automation preflight
-2. Implement issue
-3. Sandbox verification
-4. Create PR
-5. Merge PR
-6. Write back Done
+2. Test design
+3. Implement issue
+4. Sandbox verification
+5. Create PR
+6. Merge PR
+7. Write back Done
 
 The GitHub automation preflight verifies tools, auth, branch state, remote repository, PR creation capability, merge policy, and whether auto-merge is eligible.
 
+The test design stage derives test points from SPEC and the current issue. If TDD fits the task, Build Agent adds or updates the failing test first. If TDD does not fit the task, Build Agent records the reason and defines the replacement smoke, build, screenshot, or command verification.
+
 The sandbox verification stage runs local validation commands and records stdout, stderr, exit code, browser smoke evidence, screenshots, or other required evidence.
 
-The create PR stage pushes the task branch, creates a PR, and includes validation results in the PR body. A Draft PR is only an intermediate state, not the Build Agent endpoint.
+The create PR stage pushes the task branch, creates a PR, and completes the AgentFlow Build Agent PR template in the PR body. The PR body must include task metadata, changed files, scope checklist, Build Agent loop checklist, evidence, impact, rollback plan, and review gate. A Draft PR is only an intermediate state, not the Build Agent endpoint.
 
 The merge PR stage supports two modes: `manual-merge` and `auto-merge-if-eligible`.
 
-In `manual-merge`, the Build Agent must mark the PR ready and then stop at PR-ready until the human merges it.
+In `manual-merge`, the Build Agent must mark the PR ready and enter `waiting-for-merge`. A human merges the PR. AgentFlow local detection can then confirm GitHub reports the PR as merged and continue to Done writeback.
 
 In `auto-merge-if-eligible`, the Build Agent must not stop at Draft PR. It must run `gh pr ready`, then `gh pr merge --auto`, then poll the PR until GitHub reports it as merged. If GitHub rejects auto-merge, the Build Agent must report the reason and stop at PR-ready.
 
@@ -366,7 +371,7 @@ The ordinary App UI must not expose create-audit actions. It only displays audit
 
 Spec Agent must stop before source writes, command execution, tests, PR creation, or remote issue creation.
 
-Build Agent may perform source writes, local command execution, sandbox validation, PR creation, PR merge, and Done writeback only inside a complete Build Agent execution pipeline handoff.
+Build Agent may perform test design, source writes, local command execution, sandbox validation, PR creation, PR merge, and Done writeback only inside a complete Build Agent execution pipeline handoff.
 
 Audit Agent must not modify source code, execute spec issues, create PRs, merge, or deploy.
 
