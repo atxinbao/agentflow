@@ -588,7 +588,7 @@ TDD is the test-first discipline used by the Build Agent execution pipeline.
 - The test design stage must derive tests from SPEC and input issue context before code changes.
 - If TDD fits the task, Build Agent records the failing test before implementation.
 - If TDD does not fit the task, Build Agent records why and defines the replacement smoke, build, screenshot, or command verification.
-- Sandbox verification evidence must be recorded before PR creation and Done writeback.
+- Sandbox verification evidence must be recorded before PR/MR creation and Done writeback.
 
 ## Code Comment Language and Style
 
@@ -670,7 +670,7 @@ Build Agent must not:
 
 ## Audit Handoff
 
-Build Agent stops after PR merge and Done writeback are recorded.
+Build Agent stops after PR/MR merge and Done writeback are recorded.
 
 Build Agent must not create audit requests when a task is done.
 
@@ -681,8 +681,8 @@ The ordinary App UI only displays audit state and report material. It must not c
 ## Required Outputs
 
 - delivery.json
-- pr-draft.md
-- pr-metadata.json
+- pr-or-mr-draft.md
+- pr-or-mr-metadata.json
 - review-checklist.md
 - changelog.md
 - release-note.md

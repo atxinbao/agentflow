@@ -8,7 +8,6 @@ pub(crate) mod agent_manual;
 pub(crate) mod agentflow_watcher;
 pub(crate) mod execute;
 pub(crate) mod input;
-pub(crate) mod legacy_core;
 pub(crate) mod output;
 pub(crate) mod panel;
 pub(crate) mod project_files;

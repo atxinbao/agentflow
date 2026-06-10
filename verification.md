@@ -68,6 +68,45 @@
   - 输出：`Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.`
 - `git diff --check`：pass。
 
+## 2026-06-09 Desktop Legacy Runtime Cleanup
+
+日期：2026-06-09
+执行者：Codex
+
+范围：
+
+- 搜索 `legacy` 文档和代码命中。
+- 清理 Desktop 运行时旧 workbench / Project-Milestone-Issue read-model fallback。
+- 保留 legacy 禁写规则、迁移 repair、ownership guard 和 CLI 临时只读兼容命令。
+
+实现结果：
+
+- Desktop 任务列表只从 `.agentflow/input/issues/**` 派生，不再从旧 workbench / IssueContract fallback 补任务。
+- 删除 `apps/desktop/src-tauri/src/commands/legacy_core.rs`。
+- 删除 Desktop Tauri 注册的旧 snapshot commands。
+- 删除前端旧 `WorkbenchSnapshot` / `IssueContract` / `ProjectMilestoneIssueViewModelSnapshot` 类型导出。
+- 删除 Browser Preview 中未使用的旧 workbench / metrics / project-model / search mock snapshot。
+- 收窄 `agentflow-core::active` 和 named legacy re-export，不再对外暴露 Desktop workbench snapshot reader。
+- 更新 `docs/architecture/current-module-boundaries.md`、`docs/architecture/legacy-code-map.md`、`docs/architecture/legacy-removal-audit.md`。
+
+边界：
+
+- 没有删除 private archive `crates/agentflow-core/src/legacy/archive_2026_05.rs`。
+- 没有删除 CLI `metrics` / `projects` / `search` 临时只读兼容路径。
+- 没有删除 agent manual / input manifest 中用于防回流的 legacy marker。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test -p agentflow-core`：pass，61 tests。
+- `cargo test -p agentflow-cli`：pass，2 tests。
+- `cargo test -p agentflow-desktop`：pass，24 tests。
+- `cargo test -p agentflow-input`：pass，19 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `npm --prefix apps/desktop run preview:smoke`：pass。
+  - 输出：`Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.`
+- `git diff --check`：pass。
+
 ## 2026-06-05 Execute Patch / Checkpoint V1
 
 执行者：Codex

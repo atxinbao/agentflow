@@ -6,16 +6,11 @@
 //! New write flows must not be added here without a new requirement.
 
 pub mod boundary;
-pub mod desktop_snapshot;
 pub mod local_metrics;
 pub mod local_project_model;
 pub mod local_search;
 
 pub use boundary::WorkbenchBoundary;
-pub use desktop_snapshot::{read_desktop_workbench_snapshot, DesktopWorkbenchSnapshot};
 pub use local_metrics::{read_local_metrics_snapshot, LocalMetricsSnapshot};
-pub use local_project_model::{
-    read_local_project_model_snapshot, read_project_milestone_issue_view_model_snapshot,
-    LocalProjectModelSnapshot, ProjectMilestoneIssueViewModelSnapshot,
-};
+pub use local_project_model::{read_local_project_model_snapshot, LocalProjectModelSnapshot};
 pub use local_search::{read_local_search_snapshot, LocalSearchSnapshot};

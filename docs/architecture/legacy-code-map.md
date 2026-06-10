@@ -77,16 +77,8 @@ Current quarantine layout:
 
 - `crates/agentflow-core/src/lib.rs` no longer re-exports `legacy::*`.
 - `crates/agentflow-core/src/legacy/archive_2026_05.rs` contains the archived implementation and is private to the `legacy` module.
-- `legacy/goal_protocol.rs` exposes only DTOs still nested in active read models.
-- `legacy/product_feature.rs` no longer exposes archived product feature entrypoints.
-- `legacy/team_project_milestone_issue.rs` exposes active read-model symbols only.
-- `legacy/workflow_control.rs` exposes active read-model symbols only.
-- `legacy/run_verify_review.rs` exposes DTOs needed by active snapshot shapes only.
-- `legacy/eligibility_lease.rs` no longer exposes archived eligibility / lease entrypoints.
-- `legacy/project_closure.rs` no longer exposes archived closure entrypoints.
-- `legacy/project_audit_docs_refresh.rs` no longer exposes archived audit / docs refresh entrypoints.
-- `legacy/saved_view.rs` exposes saved-view DTOs needed by active snapshot shapes only.
-- `legacy/sqlite_index.rs` no longer exposes archived SQLite index entrypoints.
+- `legacy/team_project_milestone_issue.rs` exposes only the temporary CLI `projects` read model.
+- `legacy/workflow_control.rs` exposes only the temporary CLI `metrics` and `search` read models.
 
 Removed in 005:
 
@@ -102,18 +94,25 @@ Retired in 006:
 
 Detailed reachability and removal classification lives in `docs/architecture/legacy-removal-audit.md`.
 
-## Desktop Transitional Read Models
+## Desktop Legacy Read Models
 
-Desktop still needs read-only data to render the current UI. These APIs are transitional, not new workflow authorization:
+Desktop no longer reads legacy workbench or Project/Milestone/Issue snapshots. The
+current task list is derived from `.agentflow/input/issues/**` through the input
+snapshot and state status index.
 
-- `read_desktop_workbench_snapshot`
+Removed from Desktop runtime in the current cleanup slice:
+
+- `apps/desktop/src-tauri/src/commands/legacy_core.rs`
+- Tauri command registration for `load_workbench_snapshot`
+- Tauri command registration for `load_project_milestone_issue_view_model_snapshot`
+- Browser Preview workbench / metrics / project-model / search mock snapshots
+- frontend fallback that converted old `IssueContract` records into current task rows
+
+The remaining active legacy read models are CLI-only temporary inspection paths:
+
 - `read_local_metrics_snapshot`
 - `read_local_project_model_snapshot`
-- `read_project_milestone_issue_view_model_snapshot`
 - `read_local_search_snapshot`
-- `WorkbenchBoundary`
-
-They may remain available through `active/` wrappers while the new Goal Tree model is still undefined.
 
 ## Legacy Data Paths
 
@@ -139,10 +138,10 @@ Do not delete legacy code or data handling only because it is old. It can be rem
 - the replacement requirement is explicit;
 - `cargo test`, desktop build, and relevant smoke checks pass.
 
-005 deletion result:
+Current deletion result:
 
 - deleted unused public compatibility exposure, not active behavior;
 - retired CLI legacy write/automation commands and kept only temporary read-only commands;
-- retained active Desktop read models;
+- removed Desktop legacy read-model commands and task fallback;
 - retained Graph watcher fallback;
-- retained Project File Reader fallback and browser-preview mock data.
+- retained Project File Reader fallback and current Browser Preview mock data.

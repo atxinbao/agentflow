@@ -3,10 +3,6 @@ import type {
   PanelManifestSnapshot,
   PanelSearchSnapshot,
   PanelStatusSnapshot,
-  IssueContract,
-  LocalMetricsSnapshot,
-  LocalProjectModelSnapshot,
-  LocalSearchSnapshot,
   ProjectDirectoryPage,
   ProjectFileChild,
   ProjectFileContent,
@@ -15,9 +11,6 @@ import type {
   ProjectFileTextRange,
   ProjectFileViewMode,
   ProjectFilesSnapshot,
-  ProjectMilestoneIssueViewModelSnapshot,
-  WorkbenchBoundary,
-  WorkbenchSnapshot,
   AgentEnvironmentStatus,
   InputIssue,
   InputProject,
@@ -39,11 +32,6 @@ import {
 
 export const BROWSER_PREVIEW_PROJECT_ROOT = "/Users/mac/Documents/AgentFlow";
 
-const previewBoundary: WorkbenchBoundary = {
-  readOnly: true,
-  disallowedActions: ["不执行命令", "不写入项目文件", "不调用模型", "不创建远程对象"],
-};
-
 const previewTimestamp = 1780291200;
 const previewIssueId = "iss-001";
 const previewAuditId = "audit-browser-preview-001";
@@ -51,6 +39,18 @@ const previewDeliveryRunId = "run-browser-preview-001";
 const previewProjectId = "project-browser-preview";
 const previewSpecId = "spec-browser-preview";
 const previewProjectIssueIds = ["iss-ready", "iss-progress", "iss-review", "iss-audit-ready", "iss-done", "iss-cancel"];
+const previewIssueScope = [
+  "展示浏览器预览专用文件树。",
+  "展示 Markdown、配置文件、代码和目录概览。",
+  "保持真实桌面客户端只读取真实本地文件。",
+];
+const previewIssueNonGoals = ["不执行命令。", "不写入本地工作区。", "不调用模型。", "不创建远程对象。"];
+const previewIssueAcceptanceCriteria = [
+  "浏览器预览可展示项目文件列表。",
+  "真实客户端不使用 mock fallback。",
+  "无法读取本地文件时不暴露 raw invoke 错误。",
+];
+const previewIssueValidationCommands = ["npm --prefix apps/desktop run build", "cargo test", "git diff --check"];
 
 export type BrowserPreviewTaskHierarchyScenario =
   | "default"
@@ -82,28 +82,6 @@ export function currentBrowserPreviewTaskHierarchyScenario(): BrowserPreviewTask
   }
   return resolveBrowserPreviewTaskHierarchyScenario(window.location.search);
 }
-
-const previewIssueContract: IssueContract = {
-  id: "ISSUE-PREVIEW-001",
-  title: "浏览器预览文件阅读器",
-  status: "todo",
-  intent: "验证浏览器预览环境下的项目文件阅读器、文件列表和只读边界。",
-  scope: ["展示浏览器预览专用文件树。", "展示 Markdown、配置文件、代码和目录概览。", "保持真实桌面客户端只读取真实本地文件。"],
-  nonGoals: ["不执行命令。", "不写入本地工作区。", "不调用模型。", "不创建远程对象。"],
-  context: {
-    repo: BROWSER_PREVIEW_PROJECT_ROOT,
-    files: ["apps/desktop/src/App.tsx", "apps/desktop/src/features/project-files/hooks/useProjectFiles.ts"],
-  },
-  executionPlan: ["在浏览器预览中加载 mock 文件树。", "点击文件后在阅读器展示 mock 内容。", "真实 Tauri 客户端仍通过本地命令读取文件。"],
-  validation: {
-    commands: ["npm --prefix apps/desktop run build", "cargo test", "git diff --check"],
-  },
-  evidenceRequirements: ["浏览器预览可展示项目文件列表。", "真实客户端不使用 mock fallback。", "无法读取本地文件时不暴露 raw invoke 错误。"],
-  humanGate: {
-    beforeExternalNetwork: true,
-    beforeFileEdits: true,
-  },
-};
 
 const previewInputIssues: InputIssue[] = [
   browserPreviewInputIssue("iss-backlog", "整理需求入口", "planned", "backlog", "需求已创建，等待整理成 SPEC。"),
@@ -183,10 +161,10 @@ function browserPreviewInputIssue(
     displayStatus,
     riskLevel: options.riskLevel ?? "low",
     expectedOutputs: options.expectedOutputs ?? (issueCategory === "spec" ? previewBuildExpectedOutputs(issueId) : undefined),
-    scope: previewIssueContract.scope,
-    nonGoals: previewIssueContract.nonGoals,
-    acceptanceCriteria: previewIssueContract.evidenceRequirements,
-    validationHints: previewIssueContract.validation.commands,
+    scope: previewIssueScope,
+    nonGoals: previewIssueNonGoals,
+    acceptanceCriteria: previewIssueAcceptanceCriteria,
+    validationHints: previewIssueValidationCommands,
     relations: {
       blockedBy: options.blockedBy ?? [],
       blocks: options.blocks ?? [],
@@ -310,354 +288,6 @@ function browserPreviewRelationsForScenario(scenario: BrowserPreviewTaskHierarch
     { fromIssueId: "iss-progress", toIssueId: "iss-ready", type: "blocked-by" as const },
     { fromIssueId: "iss-progress", toIssueId: "iss-review", type: "blocks" as const },
   ];
-}
-
-export function createBrowserPreviewWorkbenchSnapshot(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): WorkbenchSnapshot {
-  return {
-    version: "workbench.browser-preview",
-    initialized: true,
-    projectRoot,
-    projectSummaryMarkdown: "# AgentFlow 浏览器预览\n\n用于在浏览器中验证 Desktop 文件阅读器和项目结构展示。",
-    goalLoopSummaryMarkdown: null,
-    goalLoop: {
-      version: "goal-loop.browser-preview",
-      goalReady: true,
-      activeIssueId: previewIssueContract.id,
-      incompleteIssues: [
-        {
-          id: previewIssueContract.id,
-          title: previewIssueContract.title,
-          status: previewIssueContract.status,
-          nextAction: "浏览器预览验证",
-        },
-      ],
-      nextAction: "浏览器预览验证",
-      recommendedIssueIntent: previewIssueContract.intent,
-      recommendedCommand: "npm --prefix apps/desktop run build",
-      rationale: ["浏览器预览使用显式 mock 数据；真实桌面客户端仍读取本地文件。"],
-      counts: {
-        issues: 1,
-        completedIssues: 0,
-        runs: 0,
-        evidenceReports: 0,
-        reviews: 0,
-        projectUpdates: 0,
-      },
-      sources: {
-        preview: "apps/desktop/src/browserPreviewData.ts",
-      },
-    },
-    issues: [previewIssueContract],
-    runs: [],
-    savedViews: [
-      {
-        version: "saved-view.browser-preview",
-        id: "view-preview-files",
-        name: "浏览器预览文件",
-        filter: {
-          issueStatus: "todo",
-          runStatus: null,
-          validationStatus: null,
-          issueId: previewIssueContract.id,
-        },
-      },
-    ],
-    evidence: [],
-    reviews: [],
-    projectUpdates: [],
-    counts: {
-      issues: 1,
-      completedIssues: 0,
-      runs: 0,
-      passedRuns: 0,
-      evidenceReports: 0,
-      reviews: 0,
-      projectUpdates: 0,
-      savedViews: 1,
-    },
-    boundary: previewBoundary,
-  };
-}
-
-export function createBrowserPreviewMetricsSnapshot(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): LocalMetricsSnapshot {
-  return {
-    version: "metrics.browser-preview",
-    initialized: true,
-    projectRoot,
-    issues: {
-      total: 1,
-      completed: 0,
-      planned: 1,
-      active: 0,
-    },
-    runs: {
-      total: 0,
-      passed: 0,
-      failed: 0,
-      missingValidation: 0,
-    },
-    artifacts: {
-      evidenceReports: 0,
-      reviews: 0,
-      projectUpdates: 0,
-      savedViews: 1,
-    },
-    goalReady: true,
-    activeIssueId: previewIssueContract.id,
-    nextAction: "浏览器预览验证",
-    recommendedCommand: "npm --prefix apps/desktop run build",
-    sources: ["apps/desktop/src/browserPreviewData.ts"],
-    boundary: previewBoundary,
-  };
-}
-
-export function createBrowserPreviewProjectModelSnapshot(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): LocalProjectModelSnapshot {
-  return {
-    version: "project-model.browser-preview",
-    initialized: true,
-    projectRoot,
-    workspace: {
-      version: "workspace.browser-preview",
-      id: "workspace-browser-preview",
-      name: "浏览器预览工作区",
-      defaultTeamId: "core",
-      activeProjectId: "agentflow-browser-preview",
-      teamIds: ["core"],
-      projectIds: ["agentflow-browser-preview"],
-      issueCount: 1,
-      completedIssueCount: 0,
-    },
-    teams: [
-      {
-        version: "team.browser-preview",
-        id: "core",
-        name: "Core",
-        workflow: ["define", "execute", "output"],
-        defaultValidationCommands: ["npm --prefix apps/desktop run build"],
-        wipLimit: 1,
-        issueIds: [previewIssueContract.id],
-      },
-    ],
-    projects: [
-      {
-        version: "project.browser-preview",
-        id: "agentflow-browser-preview",
-        name: "AgentFlow",
-        status: "active",
-        canonicalStatus: "active",
-        goal: "验证浏览器预览环境下的项目文件阅读器。",
-        teamIds: ["core"],
-        activeMilestoneId: "milestone-browser-preview",
-        milestones: [
-          {
-            id: "milestone-browser-preview",
-            name: "浏览器预览",
-            description: "验证 mock 文件树和文件阅读器。",
-            sortOrder: 1,
-            target: "Desktop browser preview",
-            status: "active",
-            progress: {
-              doneIssueCount: 0,
-              totalIssueCount: 1,
-              nonCanceledIssueCount: 1,
-              canceledIssueCount: 0,
-              percent: 0,
-            },
-            issueIds: [previewIssueContract.id],
-            completedIssueIds: [],
-            nextIssueIntent: previewIssueContract.intent,
-          },
-        ],
-        issueIds: [previewIssueContract.id],
-        issueCount: 1,
-        completedIssueCount: 0,
-        nextIssueIntent: previewIssueContract.intent,
-        recommendedCommand: "npm --prefix apps/desktop run build",
-      },
-    ],
-    issueRefs: [
-      {
-        id: previewIssueContract.id,
-        title: previewIssueContract.title,
-        status: "todo",
-        canonicalStatus: "todo",
-        nextAction: "浏览器预览验证",
-        latestRunId: null,
-        latestRunStatus: null,
-        validationStatus: "not_run",
-        executionState: "ready",
-        evidencePath: null,
-        reviewPath: null,
-        projectUpdatePath: null,
-      },
-    ],
-    goalLoopSelection: {
-      activeProjectId: "agentflow-browser-preview",
-      source: "browser-preview",
-      nextAction: "浏览器预览验证",
-      nextIssueIntent: previewIssueContract.intent,
-      recommendedCommand: "npm --prefix apps/desktop run build",
-      rationale: ["浏览器预览使用显式 mock 数据，便于 UI 验证。"],
-    },
-    sources: ["apps/desktop/src/browserPreviewData.ts"],
-    boundary: previewBoundary,
-  };
-}
-
-export function createBrowserPreviewProjectViewModelSnapshot(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): ProjectMilestoneIssueViewModelSnapshot {
-  return {
-    version: "project-view-model.browser-preview",
-    initialized: true,
-    projectRoot,
-    workspace: {
-      id: "workspace-browser-preview",
-      name: "浏览器预览工作区",
-      activeProjectId: "agentflow-browser-preview",
-      teamIds: ["core"],
-      projectIds: ["agentflow-browser-preview"],
-    },
-    teams: [
-      {
-        id: "core",
-        name: "Core",
-        projectIds: ["agentflow-browser-preview"],
-        issueIds: [previewIssueContract.id],
-      },
-    ],
-    projects: [
-      {
-        id: "agentflow-browser-preview",
-        name: "AgentFlow",
-        status: "active",
-        rawStatus: "active",
-        goal: "验证浏览器预览环境下的项目文件阅读器。",
-        targetMaturity: "MVP",
-        targetLayers: ["Desktop", "Project Files"],
-        scope: previewIssueContract.scope,
-        nonGoals: previewIssueContract.nonGoals,
-        successCriteria: ["浏览器预览可展示 mock 文件树。", "真实客户端仍使用 Tauri 命令读取本地文件。"],
-        milestones: [
-          {
-            id: "milestone-browser-preview",
-            projectId: "agentflow-browser-preview",
-            name: "浏览器预览",
-            status: "active",
-            rawStatus: "active",
-            goal: "验证 mock 文件树和文件阅读器。",
-            entryCriteria: ["打开 http://127.0.0.1:1420/。"],
-            scope: ["浏览器预览 UI。"],
-            nonGoals: ["不写入真实工作区。"],
-            issueIds: [previewIssueContract.id],
-            exitCriteria: ["页面可展示文件列表和文件内容。"],
-            validation: ["npm --prefix apps/desktop run build"],
-            evidenceRequired: ["浏览器 smoke 结果。"],
-            nextMilestoneGate: "真实客户端继续读取真实文件。",
-            progress: {
-              doneIssueCount: 0,
-              totalIssueCount: 1,
-              nonCanceledIssueCount: 1,
-              canceledIssueCount: 0,
-              percent: 0,
-            },
-          },
-        ],
-        issueOrder: [previewIssueContract.id],
-        validationGate: previewIssueContract.validation.commands,
-        evidenceRequired: previewIssueContract.evidenceRequirements,
-        queueRule: ["浏览器预览不执行任务。"],
-        closureGate: [],
-      },
-    ],
-    issues: [
-      {
-        id: previewIssueContract.id,
-        projectId: "agentflow-browser-preview",
-        milestoneId: "milestone-browser-preview",
-        title: previewIssueContract.title,
-        issueCategory: "spec",
-        requiredAgentRole: "build-agent",
-        sourceSpecId: "browser-preview-spec",
-        sourceSpecPath: ".agentflow/input/specs/approved/browser-preview-spec/spec.json",
-        issuePath: `.agentflow/input/issues/${previewIssueContract.id}.json`,
-        handoffId: `handoff-${previewIssueContract.id}`,
-        contextPackPath: null,
-        status: "todo",
-        rawStatus: "todo",
-        goal: previewIssueContract.intent,
-        scope: previewIssueContract.scope,
-        nonGoals: previewIssueContract.nonGoals,
-        dependencies: [],
-        codexInstructions: previewIssueContract.executionPlan,
-        acceptanceCriteria: ["浏览器预览可展示 mock 文件内容。", "真实客户端不使用 mock fallback。"],
-        validationCommands: previewIssueContract.validation.commands,
-        expectedOutputs: {
-          executeRunDir: `.agentflow/execute/runs/${previewIssueContract.id}`,
-          evidencePath: `.agentflow/output/evidence/${previewIssueContract.id}.json`,
-          releaseDeliveryDir: `.agentflow/output/release/${previewIssueContract.id}`,
-        },
-        evidenceRequired: previewIssueContract.evidenceRequirements,
-        allowedFiles: previewIssueContract.context.files,
-        forbiddenFiles: [".agentflow/*", ".codex/*", "agent-artifacts/*"],
-        forbiddenActions: ["process-audit-issue", "write-audit-report", "write-audit-findings"],
-        boundary: previewIssueContract.nonGoals,
-        riskLevel: "low",
-      },
-    ],
-    views: [
-      {
-        id: "view-browser-preview",
-        name: "浏览器预览任务",
-        entity: "issue",
-        filter: {
-          issueStatus: "todo",
-          runStatus: null,
-          validationStatus: null,
-          issueId: previewIssueContract.id,
-        },
-        sort: [{ field: "id", direction: "asc" }],
-        layout: "list",
-      },
-    ],
-    invariants: ["浏览器预览可使用 mock 数据。", "真实 Tauri 客户端不能使用 mock fallback。"],
-    sources: ["apps/desktop/src/browserPreviewData.ts"],
-    boundary: previewBoundary,
-  };
-}
-
-export function createBrowserPreviewSearchSnapshot(query: string, projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): LocalSearchSnapshot {
-  return {
-    version: "search.browser-preview",
-    initialized: true,
-    projectRoot,
-    query: { query },
-    searchedPaths: ["README.md", "apps/desktop/src/App.tsx", "apps/desktop/src/features/project-files/hooks/useProjectFiles.ts"],
-    excludedPaths: [],
-    results: [
-      {
-        sourceType: "browser-preview",
-        entityKind: "file",
-        entityId: null,
-        path: "README.md",
-        title: "README.md",
-        field: "content",
-        line: 1,
-        snippet: `浏览器预览 mock 搜索结果：${query}`,
-        score: 1,
-      },
-      {
-        sourceType: "browser-preview",
-        entityKind: "issue",
-        entityId: previewIssueContract.id,
-        path: "apps/desktop/src/browserPreviewData.ts",
-        title: previewIssueContract.title,
-        field: "intent",
-        line: 1,
-        snippet: previewIssueContract.intent,
-        score: 0.82,
-      },
-    ],
-    boundary: previewBoundary,
-  };
 }
 
 export function createBrowserPreviewProjectFilesSnapshot(

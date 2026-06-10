@@ -11,7 +11,7 @@ follow-up 006 CLI retirement delta.
 The goal is not to delete every archived implementation from
 `crates/agentflow-core/src/legacy/archive_2026_05.rs`. The goal is to remove
 legacy code that is safely unreachable, narrow the public export surface, and
-record which compatibility paths still exist because Desktop, CLI, or tests use
+record which compatibility paths still exist because CLI or tests use
 them.
 
 ## Audit Commands
@@ -49,7 +49,7 @@ legacy submodule explicitly re-exports them.
 
 | Category | Meaning | Action |
 | --- | --- | --- |
-| `active-read-model` | Current Desktop read-only snapshots still need this path through `active/`. | Keep through `agentflow_core::active`. |
+| `active-read-model` | Temporary read-only CLI inspection still needs this path through `active/`. | Keep through `agentflow_core::active` until the CLI compatibility surface is retired. |
 | `cli-retired` | Old CLI command still parses but must not execute archived writes. | Route through `agentflow-cli/src/retirement.rs`. |
 | `test-only` | Used by archived unit tests or internal helpers but not by active/CLI import paths. | Keep in private archive unless a later test-retirement requirement removes it. |
 | `unused` | No active/CLI/Desktop/test compatibility import. | Delete or hide public compatibility export. |
@@ -62,16 +62,12 @@ legacy product authorization:
 
 | Symbol | Kind | Source compatibility module | Used by | Category | Action |
 | --- | --- | --- | --- | --- | --- |
-| `read_desktop_workbench_snapshot` | fn | `legacy::workflow_control` | Tauri `load_workbench_snapshot` | active-read-model | keep |
-| `DesktopWorkbenchSnapshot` | struct | `legacy::workflow_control` | Tauri return type | active-read-model | keep |
-| `read_local_metrics_snapshot` | fn | `legacy::workflow_control` | Tauri + CLI metrics | active-read-model | keep |
-| `LocalMetricsSnapshot` | struct | `legacy::workflow_control` | Tauri + CLI metrics | active-read-model | keep |
-| `read_local_project_model_snapshot` | fn | `legacy::team_project_milestone_issue` | Tauri + CLI projects | active-read-model | keep |
-| `LocalProjectModelSnapshot` | struct | `legacy::team_project_milestone_issue` | Tauri + CLI projects | active-read-model | keep |
-| `read_project_milestone_issue_view_model_snapshot` | fn | `legacy::team_project_milestone_issue` | Tauri legacy read model | active-read-model | keep |
-| `ProjectMilestoneIssueViewModelSnapshot` | struct | `legacy::team_project_milestone_issue` | Tauri legacy read model | active-read-model | keep |
-| `read_local_search_snapshot` | fn | `legacy::workflow_control` | Tauri + CLI search | active-read-model | keep |
-| `LocalSearchSnapshot` | struct | `legacy::workflow_control` | Tauri + CLI search | active-read-model | keep |
+| `read_local_metrics_snapshot` | fn | `legacy::workflow_control` | CLI metrics | active-read-model | keep temporarily |
+| `LocalMetricsSnapshot` | struct | `legacy::workflow_control` | CLI metrics | active-read-model | keep temporarily |
+| `read_local_project_model_snapshot` | fn | `legacy::team_project_milestone_issue` | CLI projects | active-read-model | keep temporarily |
+| `LocalProjectModelSnapshot` | struct | `legacy::team_project_milestone_issue` | CLI projects | active-read-model | keep temporarily |
+| `read_local_search_snapshot` | fn | `legacy::workflow_control` | CLI search | active-read-model | keep temporarily |
+| `LocalSearchSnapshot` | struct | `legacy::workflow_control` | CLI search | active-read-model | keep temporarily |
 | `WorkbenchBoundary` | struct | `legacy::workflow_control` | active boundary wrapper | active-read-model | keep |
 
 ## 006 CLI Retirement Delta
@@ -95,32 +91,16 @@ DTOs required by those read-model return shapes.
 
 | Module | Exposed surface after 006 | Category | Action |
 | --- | --- | --- | --- |
-| `legacy::goal_protocol` | `GoalLoop*`, `ProjectDefinition*`, `ProjectGoal` DTOs | active-read-model nested DTO | keep temporarily |
-| `legacy::product_feature` | no public entrypoint | retired writer surface | no re-export |
 | `legacy::team_project_milestone_issue` | local project snapshot readers and DTOs | active-read-model | keep |
-| `legacy::workflow_control` | desktop / metrics / search readers and DTOs | active-read-model | keep |
-| `legacy::run_verify_review` | `AgentRun`, `CommandRecord`, `HumanGate`, `RunOutputs`, `ValidationSpec` DTOs | active-read-model nested DTO | keep temporarily |
-| `legacy::eligibility_lease` | no public entrypoint | retired writer surface | no re-export |
-| `legacy::project_closure` | no public entrypoint | retired writer surface | no re-export |
-| `legacy::project_audit_docs_refresh` | no public entrypoint | retired writer surface | no re-export |
-| `legacy::saved_view` | `SavedView`, `SavedViewFilter`, `ViewFilterV1Preview` DTOs | active-read-model nested DTO | keep temporarily |
-| `legacy::sqlite_index` | no public entrypoint | retired writer surface | no re-export |
+| `legacy::workflow_control` | metrics / search readers and DTOs | active-read-model | keep |
 
 ## Legacy Re-export Audit
 
 | Compatibility module | Status | Classification | Action |
 | --- | --- | --- | --- |
 | `legacy::archive_2026_05` | no longer public | unused public exposure | removed public module visibility |
-| `legacy::goal_protocol` | DTO-only re-export list | active-read-model nested DTO | keep temporarily |
-| `legacy::product_feature` | no re-exported entrypoints | retired writer surface | no public export |
 | `legacy::team_project_milestone_issue` | read-model re-export list | active-read-model | keep temporarily |
 | `legacy::workflow_control` | read-model re-export list | active-read-model | keep temporarily |
-| `legacy::run_verify_review` | DTO-only re-export list | active-read-model nested DTO | keep temporarily |
-| `legacy::eligibility_lease` | no re-exported entrypoints | retired writer surface | no public export |
-| `legacy::project_closure` | no re-exported entrypoints | retired writer surface | no public export |
-| `legacy::project_audit_docs_refresh` | no re-exported entrypoints | retired writer surface | no public export |
-| `legacy::saved_view` | DTO-only re-export list | active-read-model nested DTO | keep temporarily |
-| `legacy::sqlite_index` | no re-exported entrypoints | retired writer surface | no public export |
 | `legacy::evidence` | no active/CLI/Desktop import | unused | deleted |
 
 ## Deleted Legacy Surface
@@ -133,6 +113,9 @@ The following legacy public exposure was removed in this slice:
 | `pub mod archive_2026_05` in `legacy/mod.rs` | Entire archived implementation was directly importable. | Too broad; callers must use named compatibility modules. |
 | `pub use archive_2026_05::*` in `legacy/mod.rs` | Every archived symbol was visible as `agentflow_core::legacy::*`. | Too broad; prevents meaningful deletion/audit. |
 | `legacy/evidence.rs` module | Re-exported `AepIssueProtocol`, `IndexedRun`, `IndexedUpdate`. | No active/CLI/Desktop import outside the private archive. |
+| `apps/desktop/src-tauri/src/commands/legacy_core.rs` | Exposed legacy workbench and Project/Milestone/Issue snapshots to Desktop. | Desktop now reads tasks from input snapshots and no longer needs old Tauri read models. |
+| `active/desktop_snapshot.rs` | Re-exported the old workbench snapshot reader. | No current caller after Desktop fallback removal. |
+| Desktop Project/Milestone/Issue view-model re-export | Allowed old project view-model snapshot to reach the UI. | Current task hierarchy is built from input projects/issues instead. |
 
 No archived implementation function was deleted because the remaining candidates
 are either used by active read models, archived tests, or nested DTO/serde
@@ -164,7 +147,7 @@ or internally needed by archived functions:
 | Graph native watcher | `crates/graph/src/watcher/native.rs` | current graph capability | keep |
 | Project File Reader fallback states | `apps/desktop/src/features/project-files/**` and `apps/desktop/src-tauri/src/project_files/**` | browser preview / unsupported file / large text fallback | keep |
 | Browser preview mock data | Desktop frontend runtime mock path | required for browser verification without Tauri | keep |
-| Desktop active transitional read model | `crates/agentflow-core/src/active/**` | required read-only compatibility | keep |
+| CLI active transitional read model | `crates/agentflow-core/src/active/local_metrics.rs`, `local_project_model.rs`, `local_search.rs` | temporary CLI read-only compatibility | keep temporarily |
 | Legacy root exports | `pub use legacy::*`, `pub use archive_2026_05::*` | obsolete exposure | delete |
 | Legacy evidence compatibility module | `legacy/evidence.rs` | unused public compatibility export | delete |
 | Legacy GoalLoop / eligibility / lease / closure writers | private archive only | cli-retired / test-only | no public re-export; not authorized for new product flows |
@@ -187,14 +170,15 @@ It no longer calls old writer symbols through named legacy compatibility modules
 
 ## Desktop Boundary Result
 
-`apps/desktop/src-tauri/src/commands/legacy_core.rs` imports transitional read
-models from:
+Desktop no longer registers legacy workbench, metrics, project-model, project
+milestone/issue, or search snapshot commands. The task page uses
+`.agentflow/input/issues/**` as its only task fact source.
 
-```rust
-agentflow_core::active
+The removed command module was:
+
+```text
+apps/desktop/src-tauri/src/commands/legacy_core.rs
 ```
-
-Tauri command names are unchanged. Desktop remains read-only.
 
 ## Residual Risk
 

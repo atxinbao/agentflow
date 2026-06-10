@@ -6,9 +6,9 @@
 //! requirement explicitly re-authorizes it.
 
 pub use super::archive_2026_05::{
-    read_desktop_workbench_snapshot, read_local_metrics_snapshot, read_local_search_snapshot,
-    AgentScopeState, ContextFile, DesktopWorkbenchSnapshot, GoalLoopSelection,
-    LocalArtifactMetrics, LocalMetricArtifactRef, LocalMetricRunRef, LocalMetricsSnapshot,
-    LocalRunMetrics, LocalSearchQuery, LocalSearchResult, LocalSearchSnapshot, ProjectContext,
-    Settings, WorkbenchBoundary, WorkbenchCounts, WorkbenchTextArtifact,
+    read_local_metrics_snapshot, read_local_search_snapshot, AgentScopeState, ContextFile,
+    GoalLoopSelection, LocalArtifactMetrics, LocalMetricArtifactRef, LocalMetricRunRef,
+    LocalMetricsSnapshot, LocalRunMetrics, LocalSearchQuery, LocalSearchResult,
+    LocalSearchSnapshot, ProjectContext, Settings, WorkbenchBoundary, WorkbenchCounts,
+    WorkbenchTextArtifact,
 };
