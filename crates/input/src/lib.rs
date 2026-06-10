@@ -28,7 +28,8 @@ mod tests {
         issue::{
             validate_agent_issue_permission, AgentRole, DisplayStatus, InputIssue, InputIssueModel,
             InputIssueStatus, InputPriority, InputRiskLevel, IssueCategory,
-            BUILD_AGENT_EXECUTION_PIPELINE_VERSION, BUILD_AGENT_PIPELINE_STAGE_IDS,
+            BUILD_AGENT_EXECUTION_PIPELINE_VERSION, BUILD_AGENT_GIT_PROVIDERS,
+            BUILD_AGENT_PIPELINE_STAGE_IDS,
         },
         project::{InputProject, InputProjectStatus},
         relations::{
@@ -373,6 +374,9 @@ mod tests {
         let pipeline = issue.execution_pipeline.as_ref().unwrap();
         assert_eq!(pipeline.version, BUILD_AGENT_EXECUTION_PIPELINE_VERSION);
         assert_eq!(pipeline.agent_role, AgentRole::BuildAgent);
+        for provider in BUILD_AGENT_GIT_PROVIDERS {
+            assert!(pipeline.git_providers.contains(&provider.to_string()));
+        }
         assert!(pipeline.merge_modes.contains(&"manual-merge".to_string()));
         assert!(pipeline
             .merge_modes
@@ -389,7 +393,7 @@ mod tests {
         let preflight_stage = pipeline
             .stages
             .iter()
-            .find(|stage| stage.stage_id == "github-preflight")
+            .find(|stage| stage.stage_id == "git-provider-preflight")
             .unwrap();
         assert!(preflight_stage
             .goal
@@ -397,6 +401,7 @@ mod tests {
         assert!(preflight_stage
             .goal
             .contains("外部 issue、任务、计划、队列、线程或工具状态"));
+        assert!(preflight_stage.goal.contains("GitHub 还是 GitLab"));
         assert!(preflight_stage.goal.contains("build-agent complete"));
         assert!(preflight_stage.goal.contains("target/release/agentflow"));
         assert!(preflight_stage.evidence.contains(
@@ -406,6 +411,17 @@ mod tests {
             &"no external issue/task/plan/queue/thread/tool state is used as task authority"
                 .to_string()
         ));
+        assert!(preflight_stage
+            .evidence
+            .contains(&"Git provider detected as github or gitlab".to_string()));
+        assert!(preflight_stage
+            .evidence
+            .iter()
+            .any(|item| item.contains("gh auth status")));
+        assert!(preflight_stage
+            .evidence
+            .iter()
+            .any(|item| item.contains("glab auth status")));
         assert!(preflight_stage.evidence.contains(
             &"cargo build --release --bin agentflow or target/debug/agentflow fallback".to_string()
         ));
@@ -436,20 +452,26 @@ mod tests {
             .unwrap();
         assert!(create_pr_stage
             .goal
-            .contains("AgentFlow Build Agent PR 模板"));
+            .contains("AgentFlow Build Agent PR/MR 模板"));
         assert!(create_pr_stage
             .evidence
-            .contains(&"AgentFlow Build Agent PR template completed".to_string()));
+            .contains(&"AgentFlow Build Agent PR/MR template completed".to_string()));
         let merge_stage = pipeline
             .stages
             .iter()
             .find(|stage| stage.stage_id == "merge-pr")
             .unwrap();
         assert!(merge_stage.goal.contains("gh pr merge --auto"));
+        assert!(merge_stage.goal.contains("glab mr merge --auto-merge"));
         assert!(merge_stage.goal.contains("waiting-for-merge"));
         assert!(merge_stage
             .evidence
-            .contains(&"gh pr merge --auto result".to_string()));
+            .iter()
+            .any(|item| item.contains("gh pr merge --auto")));
+        assert!(merge_stage
+            .evidence
+            .iter()
+            .any(|item| item.contains("glab mr merge --auto-merge")));
         assert!(merge_stage
             .evidence
             .contains(&"waiting-for-merge state when manual-merge".to_string()));
@@ -561,6 +583,91 @@ mod tests {
         assert_eq!(issue.required_agent_role, AgentRole::BuildAgent);
         validate_agent_issue_permission(&issue, &AgentRole::BuildAgent).unwrap();
         assert!(validate_agent_issue_permission(&issue, &AgentRole::AuditAgent).is_err());
+    }
+
+    #[test]
+    fn prepare_repairs_simplified_execution_pipeline_shape() {
+        let dir = tempdir().unwrap();
+        prepare_input_workspace(dir.path()).unwrap();
+        fs::write(
+            dir.path().join(".agentflow/input/issues/AF-0201.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "version": "input-issue.v1",
+                "issueId": "AF-0201",
+                "issueModel": "direct",
+                "issueCategory": "spec",
+                "requiredAgentRole": "build-agent",
+                "sourceSpecId": "agentflow-v0.2.0-codex-bridge",
+                "sourceSpecPath": ".agentflow/input/specs/approved/agentflow-v0.2.0-codex-bridge/spec.json",
+                "issuePath": ".agentflow/input/issues/AF-0201.json",
+                "handoffId": "handoff-AF-0201",
+                "contextPackPath": ".agentflow/panel/context-packs/AF-0201.json",
+                "projectId": null,
+                "title": "落地 Codex 角色使用说明",
+                "summary": "简化 executionPipeline 也不能让 input loader 失败。",
+                "kind": "feature",
+                "priority": "high",
+                "status": "ready-for-execute",
+                "displayStatus": "ready",
+                "riskLevel": "medium",
+                "scope": ["apps/desktop/src/**"],
+                "nonGoals": [],
+                "acceptanceCriteria": ["客户端能读取任务。"],
+                "validationHints": ["npm --prefix apps/desktop run build"],
+                "expectedOutputs": {
+                    "executeRunDir": ".agentflow/execute/runs/AF-0201",
+                    "evidencePath": ".agentflow/output/evidence/AF-0201.json",
+                    "releaseDeliveryDir": ".agentflow/output/release/AF-0201"
+                },
+                "executionPipeline": {
+                    "version": "build-agent-execution-pipeline.v1",
+                    "mergeMode": "manual-merge",
+                    "allowedMergeModes": ["manual-merge", "auto-merge-if-eligible"],
+                    "prTemplateSource": "handoff/executionPipeline",
+                    "auditTriggerPolicy": "done-and-task-delivery-do-not-create-audit-issue"
+                },
+                "relations": {
+                    "blockedBy": [],
+                    "blocks": [],
+                    "related": [],
+                    "duplicateOf": null
+                },
+                "panel": {
+                    "snapshotId": null,
+                    "contextPackId": "AF-0201"
+                },
+                "system": {
+                    "createdBy": "fixture",
+                    "createdAt": 1,
+                    "updatedAt": 1,
+                    "path": ".agentflow/input/issues/AF-0201.json",
+                    "revision": 1
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let snapshot = prepare_input_workspace(dir.path()).unwrap();
+
+        assert!(snapshot.ready, "{:?}", snapshot.status.errors);
+        let issue: InputIssue =
+            crate::storage::read_json(&dir.path().join(".agentflow/input/issues/AF-0201.json"))
+                .unwrap();
+        let pipeline = issue.execution_pipeline.as_ref().unwrap();
+        assert_eq!(pipeline.agent_role, AgentRole::BuildAgent);
+        for provider in BUILD_AGENT_GIT_PROVIDERS {
+            assert!(pipeline.git_providers.contains(&provider.to_string()));
+        }
+        for stage_id in BUILD_AGENT_PIPELINE_STAGE_IDS {
+            assert!(
+                pipeline
+                    .stages
+                    .iter()
+                    .any(|stage| stage.stage_id == stage_id && stage.required),
+                "missing required pipeline stage {stage_id}"
+            );
+        }
     }
 
     #[test]

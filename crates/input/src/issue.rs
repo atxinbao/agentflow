@@ -6,7 +6,7 @@ pub const AGENT_ROLES_VERSION: &str = "agent-roles.v1";
 pub const AGENT_CLAIM_VERSION: &str = "agent-claim.v1";
 pub const BUILD_AGENT_EXECUTION_PIPELINE_VERSION: &str = "build-agent-execution-pipeline.v1";
 pub const BUILD_AGENT_PIPELINE_STAGE_IDS: [&str; 7] = [
-    "github-preflight",
+    "git-provider-preflight",
     "test-design",
     "implement",
     "sandbox-verify",
@@ -14,6 +14,7 @@ pub const BUILD_AGENT_PIPELINE_STAGE_IDS: [&str; 7] = [
     "merge-pr",
     "writeback-done",
 ];
+pub const BUILD_AGENT_GIT_PROVIDERS: [&str; 2] = ["github", "gitlab"];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -242,9 +243,15 @@ pub struct InputIssueExecutionStage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InputIssueExecutionPipeline {
+    #[serde(default = "default_build_agent_execution_pipeline_version")]
     pub version: String,
+    #[serde(default)]
     pub agent_role: AgentRole,
+    #[serde(default)]
+    pub git_providers: Vec<String>,
+    #[serde(default)]
     pub stages: Vec<InputIssueExecutionStage>,
+    #[serde(default = "default_build_agent_merge_modes")]
     pub merge_modes: Vec<String>,
 }
 
@@ -540,7 +547,12 @@ impl InputIssue {
                 ),
             ]);
         }
-        if self.execution_pipeline.is_none() {
+        let pipeline_complete = self
+            .execution_pipeline
+            .as_ref()
+            .map(build_agent_execution_pipeline_complete)
+            .unwrap_or(false);
+        if !pipeline_complete {
             self.execution_pipeline = Some(default_build_agent_execution_pipeline());
         }
     }
@@ -601,26 +613,24 @@ impl InputIssue {
 
 pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
     InputIssueExecutionPipeline {
-        version: BUILD_AGENT_EXECUTION_PIPELINE_VERSION.to_string(),
+        version: default_build_agent_execution_pipeline_version(),
         agent_role: AgentRole::BuildAgent,
-        merge_modes: vec![
-            "manual-merge".to_string(),
-            "auto-merge-if-eligible".to_string(),
-        ],
+        git_providers: default_build_agent_git_providers(),
+        merge_modes: default_build_agent_merge_modes(),
         stages: vec![
             InputIssueExecutionStage {
-                stage_id: "github-preflight".to_string(),
-                label: "GitHub 自动化预检".to_string(),
-                goal: "确认 Build Agent 只基于 AgentFlow input issue 和 executionPipeline 执行；确认没有把外部 issue、任务、计划、队列、线程或工具状态当作任务源；确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。".to_string(),
+                stage_id: "git-provider-preflight".to_string(),
+                label: "GitHub/GitLab 自动化预检".to_string(),
+                goal: "确认 Build Agent 只基于 AgentFlow input issue 和 executionPipeline 执行；确认没有把外部 issue、任务、计划、队列、线程或工具状态当作任务源；识别当前远端代码托管 provider 是 GitHub 还是 GitLab；确认对应 CLI、认证、仓库同步、PR/MR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。".to_string(),
                 required: true,
                 evidence: vec![
                     "AgentFlow issueId and executionPipeline are the only active task source".to_string(),
                     "no external issue/task/plan/queue/thread/tool state is used as task authority".to_string(),
-                    "gh --version".to_string(),
-                    "gh auth status".to_string(),
+                    "Git provider detected as github or gitlab".to_string(),
                     "git status --short".to_string(),
                     "git remote -v".to_string(),
-                    "gh repo view --json nameWithOwner,defaultBranchRef".to_string(),
+                    "GitHub path: gh --version, gh auth status, gh repo view --json nameWithOwner,defaultBranchRef".to_string(),
+                    "GitLab path: glab --version, glab auth status, glab repo view".to_string(),
                     "cargo build --release --bin agentflow or target/debug/agentflow fallback".to_string(),
                     "target/release/agentflow build-agent complete --help or target/debug/agentflow build-agent complete --help".to_string(),
                 ],
@@ -657,33 +667,33 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             },
             InputIssueExecutionStage {
                 stage_id: "create-pr".to_string(),
-                label: "创建 PR".to_string(),
-                goal: "推送任务分支，按 AgentFlow Build Agent PR 模板创建 PR，并把任务、范围、验证结果、影响、回滚和 review gate 写入 PR 描述；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR。".to_string(),
+                label: "创建 PR/MR".to_string(),
+                goal: "推送任务分支，按 AgentFlow Build Agent PR/MR 模板创建 GitHub PR 或 GitLab MR，并把任务、范围、验证结果、影响、回滚和 review gate 写入描述；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR/MR。".to_string(),
                 required: true,
                 evidence: vec![
-                    "PR URL".to_string(),
-                    "AgentFlow Build Agent PR template completed".to_string(),
-                    "PR body validation summary".to_string(),
+                    "PR/MR URL".to_string(),
+                    "AgentFlow Build Agent PR/MR template completed".to_string(),
+                    "PR/MR body validation summary".to_string(),
                     "draft or ready state".to_string(),
                 ],
             },
             InputIssueExecutionStage {
                 stage_id: "merge-pr".to_string(),
-                label: "合并 PR".to_string(),
-                goal: "manual-merge 模式下 PR ready 后进入 waiting-for-merge，等待人合并，再由本地检测确认 PR merged 后继续；auto-merge-if-eligible 模式下执行 gh pr ready、gh pr merge --auto，并轮询到 merged。".to_string(),
+                label: "合并 PR/MR".to_string(),
+                goal: "manual-merge 模式下 PR/MR ready 后进入 waiting-for-merge，等待人合并，再由本地检测确认 PR/MR merged 后继续；auto-merge-if-eligible 模式下按 provider 执行自动合并：GitHub 使用 gh pr ready 和 gh pr merge --auto；GitLab 使用 glab mr update --ready 和 glab mr merge --auto-merge，并轮询到 merged。".to_string(),
                 required: true,
                 evidence: vec![
                     "merge mode".to_string(),
                     "waiting-for-merge state when manual-merge".to_string(),
-                    "gh pr ready result".to_string(),
-                    "gh pr merge --auto result".to_string(),
-                    "merge commit or merged PR state".to_string(),
+                    "GitHub path: gh pr ready result and gh pr merge --auto result".to_string(),
+                    "GitLab path: glab mr update --ready result and glab mr merge --auto-merge result".to_string(),
+                    "merge commit or merged PR/MR state".to_string(),
                 ],
             },
             InputIssueExecutionStage {
                 stage_id: "writeback-done".to_string(),
                 label: "写回 Done".to_string(),
-                goal: "PR 合并后使用预检确认过的新 AgentFlow CLI 调用 build-agent complete，写回 run、evidence、delivery 和任务 Done 状态。".to_string(),
+                goal: "PR/MR 合并后使用预检确认过的新 AgentFlow CLI 调用 build-agent complete，写回 run、evidence、delivery 和任务 Done 状态。".to_string(),
                 required: true,
                 evidence: vec![
                     "target/release/agentflow build-agent complete --request <completion-request.json> after cargo build --release --bin agentflow"
@@ -695,6 +705,42 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             },
         ],
     }
+}
+
+fn default_build_agent_execution_pipeline_version() -> String {
+    BUILD_AGENT_EXECUTION_PIPELINE_VERSION.to_string()
+}
+
+fn default_build_agent_merge_modes() -> Vec<String> {
+    vec![
+        "manual-merge".to_string(),
+        "auto-merge-if-eligible".to_string(),
+    ]
+}
+
+fn default_build_agent_git_providers() -> Vec<String> {
+    BUILD_AGENT_GIT_PROVIDERS
+        .iter()
+        .map(|provider| provider.to_string())
+        .collect()
+}
+
+fn build_agent_execution_pipeline_complete(pipeline: &InputIssueExecutionPipeline) -> bool {
+    pipeline.version == BUILD_AGENT_EXECUTION_PIPELINE_VERSION
+        && pipeline.agent_role == AgentRole::BuildAgent
+        && BUILD_AGENT_GIT_PROVIDERS
+            .iter()
+            .all(|provider| pipeline.git_providers.contains(&provider.to_string()))
+        && pipeline.merge_modes.contains(&"manual-merge".to_string())
+        && pipeline
+            .merge_modes
+            .contains(&"auto-merge-if-eligible".to_string())
+        && BUILD_AGENT_PIPELINE_STAGE_IDS.iter().all(|stage_id| {
+            pipeline
+                .stages
+                .iter()
+                .any(|stage| stage.stage_id == *stage_id && stage.required)
+        })
 }
 
 pub fn audit_expected_outputs(audit_output_dir: &str) -> BTreeMap<String, String> {

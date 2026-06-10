@@ -174,6 +174,7 @@ export type ExecutionPipelineStage = {
 export type ExecutionPipeline = {
   version: string;
   agentRole: AgentRole;
+  gitProviders?: string[];
   stages: ExecutionPipelineStage[];
   mergeModes: string[];
 };

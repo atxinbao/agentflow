@@ -111,11 +111,11 @@ Hook boundaries:
 - `hooks/useProjectFileTextRange.ts` owns large text range loading.
 - `hooks/projectFileRuntime.ts` owns browser-preview detection and readable error text.
 
-## Legacy Core Read Model
+## Legacy CLI Read Model
 
 Scope:
 
-- keep current Desktop read-only views rendering while the new workflow model is undefined;
+- keep temporary CLI read-only inspection commands working while current product flows move to input / panel / execute / output / state modules;
 - expose transitional snapshots only through explicit compatibility wrappers.
 
 Non-goals:
@@ -132,7 +132,6 @@ Implemented modules:
 
 Active read-model wrappers:
 
-- `active/desktop_snapshot.rs`
 - `active/local_metrics.rs`
 - `active/local_project_model.rs`
 - `active/local_search.rs`
@@ -141,16 +140,8 @@ Active read-model wrappers:
 Legacy compatibility areas:
 
 - `legacy/archive_2026_05.rs` keeps the archived implementation for compatibility and is private to `legacy`.
-- `legacy/goal_protocol.rs`
-- `legacy/product_feature.rs`
 - `legacy/team_project_milestone_issue.rs`
 - `legacy/workflow_control.rs`
-- `legacy/run_verify_review.rs`
-- `legacy/eligibility_lease.rs`
-- `legacy/project_closure.rs`
-- `legacy/project_audit_docs_refresh.rs`
-- `legacy/saved_view.rs`
-- `legacy/sqlite_index.rs`
 
 005 boundary tightening:
 
@@ -158,7 +149,7 @@ Legacy compatibility areas:
 - `legacy/mod.rs` no longer exposes `pub use archive_2026_05::*`.
 - `legacy/evidence.rs` was removed because it had no active/CLI/Desktop import.
 - CLI legacy dispatch no longer imports old writer compatibility modules.
-- Desktop legacy Tauri commands import only `agentflow_core::active` read models.
+- Desktop no longer registers legacy read-model Tauri commands; tasks come from input snapshots.
 
 Shared neutral boundaries:
 

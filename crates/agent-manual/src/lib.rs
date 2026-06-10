@@ -319,7 +319,7 @@ mod tests {
         assert!(manual.contains("Status: enabled for Execute + Release Delivery V1."));
         assert!(manual.contains(".agentflow/output/release/<run-id>/"));
         assert!(manual.contains(
-            "The writeback stage runs only after PR merge and writes run, evidence, release delivery, and Done status."
+            "The writeback stage runs only after PR/MR merge and writes run, evidence, release delivery, and Done status."
         ));
         assert!(manual.contains("AgentFlow input issues, handoff packages, and executionPipeline are the only task and plan authority."));
         assert!(manual.contains(
@@ -328,10 +328,11 @@ mod tests {
         assert!(manual.contains(
             "It must not treat any external issue, task, plan, queue, thread, or tool state as task authority."
         ));
-        assert!(manual.contains("GitHub automation preflight"));
+        assert!(manual.contains("GitHub/GitLab automation preflight"));
         assert!(manual.contains("auto-merge-if-eligible"));
-        assert!(manual.contains("A Draft PR is only an intermediate state"));
+        assert!(manual.contains("A Draft PR/MR is only an intermediate state"));
         assert!(manual.contains("gh pr merge --auto"));
+        assert!(manual.contains("glab mr merge --auto-merge"));
         assert!(!manual.contains("`release-auto` audit request"));
     }
 

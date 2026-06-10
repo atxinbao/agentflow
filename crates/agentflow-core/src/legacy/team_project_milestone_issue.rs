@@ -7,10 +7,8 @@
 
 pub use super::archive_2026_05::{
     canonical_issue_status, canonical_issue_status_string, canonical_project_status,
-    canonical_project_status_string, read_local_project_model_snapshot,
-    read_project_milestone_issue_view_model_snapshot, IssueContext, IssueContract, IssueStatus,
-    LocalMilestone, LocalProject, LocalProjectIssueRef, LocalProjectModelSnapshot, LocalTeam,
-    LocalWorkspace, MilestoneDerivedProgress, ProjectMilestoneIssueViewModelSnapshot,
-    ProjectStatus, V1Issue, V1Milestone, V1Project, V1TeamRef, V1View, V1ViewFilter, V1ViewSort,
-    V1WorkspaceRef,
+    canonical_project_status_string, read_local_project_model_snapshot, IssueContext,
+    IssueContract, IssueStatus, LocalMilestone, LocalProject, LocalProjectIssueRef,
+    LocalProjectModelSnapshot, LocalTeam, LocalWorkspace, MilestoneDerivedProgress, ProjectStatus,
+    V1Issue, V1Milestone, V1Project, V1TeamRef, V1View, V1ViewFilter, V1ViewSort, V1WorkspaceRef,
 };

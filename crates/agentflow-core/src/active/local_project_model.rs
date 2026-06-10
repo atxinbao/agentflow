@@ -4,6 +4,5 @@
 //! so Desktop can render current read-only project snapshots.
 
 pub use crate::legacy::team_project_milestone_issue::{
-    read_local_project_model_snapshot, read_project_milestone_issue_view_model_snapshot,
-    LocalProjectModelSnapshot, ProjectMilestoneIssueViewModelSnapshot,
+    read_local_project_model_snapshot, LocalProjectModelSnapshot,
 };

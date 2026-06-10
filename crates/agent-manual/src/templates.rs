@@ -44,8 +44,8 @@ Every Agent MUST read and follow:
 - AgentFlow input issues, handoff packages, and executionPipeline are the only task and plan authority.
 - Do not treat any external issue, task, plan, queue, thread, or tool state as AgentFlow task authority.
 - Do not use external planning state to create, select, split, reorder, or advance AgentFlow work.
-- GitHub tools are allowed only for the PR stages explicitly listed in the current AgentFlow executionPipeline.
-- Do not create PRs, issues, or remote objects unless the current role handoff explicitly authorizes that stage.
+- GitHub/GitLab tools are allowed only for the PR/MR stages explicitly listed in the current AgentFlow executionPipeline.
+- Do not create PRs/MRs, issues, or remote objects unless the current role handoff explicitly authorizes that stage.
 - Human conversation is for confirmation and feedback, not direct issue execution.
 - Raw human requirements go to Spec Agent in conversation. Do not require humans to hand-write a raw directory.
 - Task completion and audit are separate flows. A Build Agent Done writeback must not create an audit request.
@@ -84,12 +84,12 @@ Conversation with human
 → Approved SPEC
 → Input issue generation
 → Build Agent execution pipeline
-→ GitHub automation preflight
+→ GitHub/GitLab automation preflight
 → Test design
 → Implement issue
 → Sandbox verification
-→ Create PR
-→ Merge PR
+→ Create PR/MR
+→ Merge PR/MR
 → Write back Done
 → Optional independent Audit Issue
 → Audit Agent report when requested
@@ -171,7 +171,7 @@ Do not mix these roles in one Codex thread. Each thread must keep one role for t
 - Do not write legacy `.agentflow/goal-tree/**`.
 - Do not write Approved SPEC without human confirmation.
 - Do not start AgentRun.
-- Do not create PRs or remote issues unless the current role handoff explicitly authorizes that stage.
+- Do not create PRs/MRs or remote issues unless the current role handoff explicitly authorizes that stage.
 - Do not use legacy workflow paths.
 
 ## Required Workflow
@@ -184,12 +184,12 @@ Conversation
 → Approved SPEC
 → Input issue generation
 → Build Agent execution pipeline
-→ GitHub automation preflight
+→ GitHub/GitLab automation preflight
 → Test design
 → Implement issue
 → Sandbox verification
-→ Create PR
-→ Merge PR
+→ Create PR/MR
+→ Merge PR/MR
 → Write back Done
 → Optional independent Audit Issue
 → Audit Agent report when requested
@@ -294,7 +294,7 @@ It does not execute issues. Generated spec issues must use `issueCategory=spec`,
 
 When Spec Agent writes an initial input package, relation files are part of the package. `.agentflow/input/relations/issue-relations.json` and `.agentflow/input/relations/dependency-graph.json` must use canonical camelCase relation edges with `fromIssueId`, `toIssueId`, and `type`. Do not write legacy `from` / `to` relation fields.
 
-It cannot execute issues, write source code, run commands, write execute facts, write output evidence, write release delivery, create PRs, merge, deploy, or audit.
+It cannot execute issues, write source code, run commands, write execute facts, write output evidence, write release delivery, create PRs/MRs, merge, deploy, or audit.
 
 ### 2. Build Agent
 
@@ -304,35 +304,35 @@ Owns controlled development delivery from `.agentflow/input/issues/<issue-id>.js
 
 It may execute only `issueCategory=spec` issues with `requiredAgentRole=build-agent`. Its handoff must include source SPEC target metadata and build expected outputs. Its writeback must include `agent-claim.json` with `claimedAgentRole=build-agent`.
 
-Build Agent must use the AgentFlow input issue and executionPipeline as the only task plan. It must not treat any external issue, task, plan, queue, thread, or tool state as task authority. GitHub commands are allowed only for the PR stages explicitly listed in the AgentFlow executionPipeline.
+Build Agent must use the AgentFlow input issue and executionPipeline as the only task plan. It must not treat any external issue, task, plan, queue, thread, or tool state as task authority. GitHub/GitLab commands are allowed only for the PR/MR stages explicitly listed in the AgentFlow executionPipeline.
 
 It performs the Build Agent execution pipeline:
 
-1. GitHub automation preflight
+1. GitHub/GitLab automation preflight
 2. Test design
 3. Implement issue
 4. Sandbox verification
-5. Create PR
-6. Merge PR
+5. Create PR/MR
+6. Merge PR/MR
 7. Write back Done
 
-The GitHub automation preflight verifies tools, auth, branch state, remote repository, PR creation capability, merge policy, and whether auto-merge is eligible.
+The GitHub/GitLab automation preflight detects whether the remote provider is GitHub or GitLab, then verifies the matching CLI, auth, branch state, remote repository, PR/MR creation capability, merge policy, and whether auto-merge is eligible.
 
 The test design stage derives test points from SPEC and the current issue. If TDD fits the task, Build Agent adds or updates the failing test first. If TDD does not fit the task, Build Agent records the reason and defines the replacement smoke, build, screenshot, or command verification.
 
 The sandbox verification stage runs local validation commands and records stdout, stderr, exit code, browser smoke evidence, screenshots, or other required evidence.
 
-The create PR stage pushes the task branch, creates a PR, and completes the AgentFlow Build Agent PR template in the PR body. The PR body must include task metadata, changed files, scope checklist, Build Agent loop checklist, evidence, impact, rollback plan, and review gate. A Draft PR is only an intermediate state, not the Build Agent endpoint.
+The create PR/MR stage pushes the task branch, creates a GitHub PR or GitLab MR, and completes the AgentFlow Build Agent PR/MR template in the description. The description must include task metadata, changed files, scope checklist, Build Agent loop checklist, evidence, impact, rollback plan, and review gate. A Draft PR/MR is only an intermediate state, not the Build Agent endpoint.
 
 The merge PR stage supports two modes: `manual-merge` and `auto-merge-if-eligible`.
 
-In `manual-merge`, the Build Agent must mark the PR ready and enter `waiting-for-merge`. A human merges the PR. AgentFlow local detection can then confirm GitHub reports the PR as merged and continue to Done writeback.
+In `manual-merge`, the Build Agent must mark the PR/MR ready and enter `waiting-for-merge`. A human merges the PR/MR. AgentFlow local detection can then confirm GitHub or GitLab reports the PR/MR as merged and continue to Done writeback.
 
-In `auto-merge-if-eligible`, the Build Agent must not stop at Draft PR. It must run `gh pr ready`, then `gh pr merge --auto`, then poll the PR until GitHub reports it as merged. If GitHub rejects auto-merge, the Build Agent must report the reason and stop at PR-ready.
+In `auto-merge-if-eligible`, the Build Agent must not stop at Draft PR/MR. For GitHub it must run `gh pr ready`, then `gh pr merge --auto`, then poll the PR until GitHub reports it as merged. For GitLab it must run `glab mr update --ready`, then `glab mr merge --auto-merge`, then poll the MR until GitLab reports it as merged. If the provider rejects auto-merge, the Build Agent must report the reason and stop at ready-for-merge.
 
-The writeback stage runs only after PR merge and writes run, evidence, release delivery, and Done status.
+The writeback stage runs only after PR/MR merge and writes run, evidence, release delivery, and Done status.
 
-It cannot process `issueCategory=audit`, ask for audit target metadata, modify input issues, modify Approved SPEC, bypass GitHub automation preflight, bypass sandbox verification, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge outside `mergeMode`, deploy, call models, create audit requests from Done writeback, or write audit reports.
+It cannot process `issueCategory=audit`, ask for audit target metadata, modify input issues, modify Approved SPEC, bypass GitHub/GitLab automation preflight, bypass sandbox verification, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge outside `mergeMode`, deploy, call models, create audit requests from Done writeback, or write audit reports.
 
 ### 3. Audit Agent
 
@@ -355,7 +355,7 @@ It writes only audit artifacts for the selected audit request:
 
 It must not create duplicate audit artifacts for the same audit request.
 
-It cannot process `issueCategory=spec`, modify source code, modify input facts, modify execute patches, modify release delivery, generate release, execute commands, create PRs, merge, or deploy.
+It cannot process `issueCategory=spec`, modify source code, modify input facts, modify execute patches, modify release delivery, generate release, execute commands, create PRs/MRs, merge, or deploy.
 
 ## Audit Trigger Rule
 
@@ -369,11 +369,11 @@ The ordinary App UI must not expose create-audit actions. It only displays audit
 
 ## Execution Boundary
 
-Spec Agent must stop before source writes, command execution, tests, PR creation, or remote issue creation.
+Spec Agent must stop before source writes, command execution, tests, PR/MR creation, or remote issue creation.
 
-Build Agent may perform test design, source writes, local command execution, sandbox validation, PR creation, PR merge, and Done writeback only inside a complete Build Agent execution pipeline handoff.
+Build Agent may perform test design, source writes, local command execution, sandbox validation, PR/MR creation, PR/MR merge, and Done writeback only inside a complete Build Agent execution pipeline handoff.
 
-Audit Agent must not modify source code, execute spec issues, create PRs, merge, or deploy.
+Audit Agent must not modify source code, execute spec issues, create PRs/MRs, merge, or deploy.
 
 ## Validation Rule
 

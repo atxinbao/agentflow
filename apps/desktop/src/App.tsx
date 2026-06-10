@@ -27,8 +27,6 @@ import {
   createBrowserPreviewAuditIndex,
   createBrowserPreviewHumanAuditReport,
   createBrowserPreviewOutputIndex,
-  createBrowserPreviewProjectViewModelSnapshot,
-  createBrowserPreviewWorkbenchSnapshot,
 } from "./browserPreviewData";
 import {
   ActionButton,
@@ -102,12 +100,9 @@ import type {
   InputIssue,
   IssueDisplayStatus,
   IssueStatusIndex,
-  IssueContract,
   OutputIndex,
   OutputIndexEntry,
-  ProjectMilestoneIssueViewModelSnapshot,
   V1Issue,
-  WorkbenchSnapshot,
   ExpectedOutputs,
 } from "./types";
 import "./AppShell.css";
@@ -118,9 +113,7 @@ type DataSource = "idle" | "loading" | "tauri" | "preview" | "unavailable";
 
 type WorkspaceDataState = {
   error: string | null;
-  projectViewModel: ProjectMilestoneIssueViewModelSnapshot | null;
   source: DataSource;
-  workbench: WorkbenchSnapshot | null;
 };
 
 type OutputBundleState = {
@@ -280,15 +273,15 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "AgentFlow 当前 issue / handoff package / executionPipeline 是唯一任务源。",
       "不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源。",
       "不要用外部状态拆分、重排或推进 AgentFlow 任务。",
-      "GitHub 命令只允许用于当前 executionPipeline 里的 PR 阶段。",
+      "GitHub/GitLab 命令只允许用于当前 executionPipeline 里的 PR/MR 阶段。",
       "",
       "你要做：",
-      "1. GitHub 自动化预检。",
+      "1. GitHub/GitLab 自动化预检。",
       "2. 测试设计。",
       "3. Agent 执行 issue。",
       "4. 沙箱验证。",
-      "5. 创建 PR。",
-      "6. 合并 PR。",
+      "5. 创建 PR/MR。",
+      "6. 合并 PR/MR。",
       "7. 写回 Done。",
       "",
       "你不能做：",
@@ -298,18 +291,18 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "- 不写 evidence-map.json",
       "- 不写 traceability.json",
       "- 不越过任务边界",
-      "- 不绕过 GitHub 自动化预检",
+      "- 不绕过 GitHub/GitLab 自动化预检",
       "- 不绕过测试设计",
       "- 不绕过沙箱验证",
-      "- 不越过 mergeMode 合并 PR",
+      "- 不越过 mergeMode 合并 PR/MR",
       "- 不把外部 issue / task / plan / queue 当成任务源",
       "- 不用外部状态拆分、重排或推进 AgentFlow 任务",
       "- 不 deploy",
       "",
-      "创建 PR 前必须完成 GitHub 自动化预检、测试设计和沙箱验证。",
-      "合并 PR 只能按 mergeMode：manual-merge 或 auto-merge-if-eligible。",
-      "如果 mergeMode = auto-merge-if-eligible，不能停在 Draft PR；必须执行 gh pr ready、gh pr merge --auto，并轮询 PR 是否 merged。",
-      "如果 mergeMode = manual-merge，PR ready 后进入 waiting-for-merge，等待人合并；本地检测确认 PR merged 后才能写回 Done。",
+      "创建 PR/MR 前必须完成 GitHub/GitLab 自动化预检、测试设计和沙箱验证。",
+      "合并 PR/MR 只能按 mergeMode：manual-merge 或 auto-merge-if-eligible。",
+      "如果 mergeMode = auto-merge-if-eligible，不能停在 Draft PR/MR；GitHub 执行 gh pr ready、gh pr merge --auto；GitLab 执行 glab mr update --ready、glab mr merge --auto-merge；然后轮询 PR/MR 是否 merged。",
+      "如果 mergeMode = manual-merge，PR/MR ready 后进入 waiting-for-merge，等待人合并；本地检测确认 PR/MR merged 后才能写回 Done。",
       "写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete。",
       "如果使用 target/release/agentflow，必须先运行 cargo build --release --bin agentflow；否则使用 target/debug/agentflow。",
       "不要直接复用可能过期的 target/release/agentflow。",
@@ -321,7 +314,7 @@ const codexRoleGuides: CodexRoleGuide[] = [
     title: "执行助手",
   },
   {
-    cannotDo: ["不改代码", "不执行 spec issue", "不生成 release", "不创建 PR / merge / deploy"],
+    cannotDo: ["不改代码", "不执行 spec issue", "不生成 release", "不创建 PR/MR / merge / deploy"],
     englishName: "Audit Agent",
     role: "audit-agent",
     startupInstruction: [
@@ -344,7 +337,7 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "- 不改代码",
       "- 不执行 spec issue",
       "- 不生成 release",
-      "- 不创建 PR",
+      "- 不创建 PR/MR",
       "- 不 merge",
       "- 不 deploy",
       "- 不修改用户源码",
@@ -732,14 +725,8 @@ function App() {
   }, [projectRoot]);
 
   const tasks = useMemo(
-    () =>
-      buildTaskItems(
-        inputSnapshotState.snapshot ? inputSnapshotState.snapshot.issues : null,
-        issueStatusIndexState.index,
-        workspaceData.projectViewModel,
-        workspaceData.workbench,
-    ),
-    [inputSnapshotState.snapshot, issueStatusIndexState.index, workspaceData.projectViewModel, workspaceData.workbench],
+    () => buildTaskItems(inputSnapshotState.snapshot ? inputSnapshotState.snapshot.issues : null, issueStatusIndexState.index),
+    [inputSnapshotState.snapshot, issueStatusIndexState.index],
   );
 
   const filteredTasks = useMemo(() => {
@@ -754,27 +741,26 @@ function App() {
       return searchable.includes(query);
     });
   }, [taskSearch, tasks]);
-  const activeIssueId = workspaceData.workbench?.goalLoop?.activeIssueId ?? null;
   const taskProjectTree = useMemo(
     () =>
       inputSnapshotState.snapshot
         ? buildTaskProjectTreeViewModel({
-            activeIssueId,
+            activeIssueId: null,
             issueStatusIndex: issueStatusIndexState.index,
             issues: inputSnapshotState.snapshot.issues,
             projects: inputSnapshotState.snapshot.projects,
             relations: inputSnapshotState.snapshot.relations,
           })
         : null,
-    [activeIssueId, inputSnapshotState.snapshot, issueStatusIndexState.index],
+    [inputSnapshotState.snapshot, issueStatusIndexState.index],
   );
   const selectedProjectGroup = useMemo(
     () => taskProjectTree?.groups.find((group) => group.id === selectedTaskProjectId) ?? null,
     [selectedTaskProjectId, taskProjectTree],
   );
   const selectedTaskCandidateId = useMemo(
-    () => (selectedProjectGroup ? null : pickTaskId(tasks, selectedTaskId, activeIssueId)),
-    [activeIssueId, selectedProjectGroup, selectedTaskId, tasks],
+    () => (selectedProjectGroup ? null : pickTaskId(tasks, selectedTaskId, null)),
+    [selectedProjectGroup, selectedTaskId, tasks],
   );
   const taskInteractionState = useMemo(
     () => buildTaskInteractionState(tasks, selectedTaskCandidateId),
@@ -827,11 +813,11 @@ function App() {
       return;
     }
 
-    const nextTaskId = pickTaskId(tasks, selectedTaskId, activeIssueId);
+    const nextTaskId = pickTaskId(tasks, selectedTaskId, null);
     if (nextTaskId !== selectedTaskId) {
       setSelectedTaskId(nextTaskId);
     }
-  }, [activeIssueId, selectedTaskId, selectedTaskProjectId, taskProjectTree, tasks]);
+  }, [selectedTaskId, selectedTaskProjectId, taskProjectTree, tasks]);
 
   function refreshProjectPage(page: AppPage, root = projectRoot) {
     if (!root) {
@@ -1252,52 +1238,24 @@ function App() {
 function useWorkspaceData(projectRoot: string | null): WorkspaceDataState {
   const [state, setState] = useState<WorkspaceDataState>({
     error: null,
-    projectViewModel: null,
     source: "idle",
-    workbench: null,
   });
 
   useEffect(() => {
     if (!projectRoot) {
-      setState({ error: null, projectViewModel: null, source: "idle", workbench: null });
+      setState({ error: null, source: "idle" });
       return;
     }
 
     if (isBrowserPreviewRuntime()) {
       setState({
         error: null,
-        projectViewModel: createBrowserPreviewProjectViewModelSnapshot(projectRoot),
         source: "preview",
-        workbench: createBrowserPreviewWorkbenchSnapshot(projectRoot),
       });
       return;
     }
 
-    let cancelled = false;
-    setState((current) => ({ ...current, error: null, source: "loading" }));
-    void Promise.all([
-      invoke<WorkbenchSnapshot>("load_workbench_snapshot"),
-      invoke<ProjectMilestoneIssueViewModelSnapshot>("load_project_milestone_issue_view_model_snapshot"),
-    ])
-      .then(([workbench, projectViewModel]) => {
-        if (!cancelled) {
-          setState({ error: null, projectViewModel, source: "tauri", workbench });
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setState({
-            error: error instanceof Error ? error.message : String(error),
-            projectViewModel: null,
-            source: "unavailable",
-            workbench: null,
-          });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    setState({ error: null, source: "idle" });
   }, [projectRoot]);
 
   return state;
@@ -2022,7 +1980,7 @@ function ProjectHomePage({
   const panelStatus = projectPanelState.status;
   const outputSummary = outputStatusState.status?.summary;
   const filesMode = isBrowserPreviewRuntime() ? "浏览器预览" : "客户端真实读取";
-  const recentActivities = buildRecentActivities(workspaceData, outputBundle, initializationState.status, outputSummary);
+  const recentActivities = buildRecentActivities(outputBundle, initializationState.status, outputSummary);
 
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
@@ -2604,7 +2562,7 @@ function TaskDetail({
   }
 
   return (
-    <IssueContractReader
+    <TaskDetailReader
       actionFeedback={actionFeedback}
       actions={actions}
       copyState={copyState}
@@ -2693,7 +2651,7 @@ function ProjectSummaryReader({
   );
 }
 
-function IssueContractReader({
+function TaskDetailReader({
   actionFeedback,
   actions,
   copyState,
@@ -3462,7 +3420,7 @@ const displayStatusColumns: Array<{ id: IssueDisplayStatus; label: string }> = [
 const displayStatusOrder = new Map(displayStatusColumns.map((column, index) => [column.id, index]));
 
 const buildAgentPipelineStageIds = [
-  "github-preflight",
+  "git-provider-preflight",
   "test-design",
   "implement",
   "sandbox-verify",
@@ -3474,24 +3432,25 @@ const buildAgentPipelineStageIds = [
 function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
   return {
     agentRole: "build-agent",
+    gitProviders: ["github", "gitlab"],
     mergeModes: ["manual-merge", "auto-merge-if-eligible"],
     stages: [
       {
         evidence: [
           "AgentFlow issueId and executionPipeline are the only active task source",
           "no external issue/task/plan/queue/thread/tool state is used as task authority",
-          "gh --version",
-          "gh auth status",
+          "Git provider detected as github or gitlab",
           "git status --short",
           "git remote -v",
-          "gh repo view --json nameWithOwner,defaultBranchRef",
+          "GitHub path: gh --version, gh auth status, gh repo view --json nameWithOwner,defaultBranchRef",
+          "GitLab path: glab --version, glab auth status, glab repo view",
           "cargo build --release --bin agentflow or target/debug/agentflow fallback",
           "target/release/agentflow build-agent complete --help or target/debug/agentflow build-agent complete --help",
         ],
-        goal: "确认 Build Agent 只基于 AgentFlow input issue 和 executionPipeline 执行；确认没有把外部 issue、任务、计划、队列、线程或工具状态当作任务源；确认 GitHub 工具、认证、仓库同步、PR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。",
-        label: "GitHub 自动化预检",
+        goal: "确认 Build Agent 只基于 AgentFlow input issue 和 executionPipeline 执行；确认没有把外部 issue、任务、计划、队列、线程或工具状态当作任务源；识别当前远端代码托管 provider 是 GitHub 还是 GitLab；确认对应 CLI、认证、仓库同步、PR/MR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。",
+        label: "GitHub/GitLab 自动化预检",
         required: true,
-        stageId: "github-preflight",
+        stageId: "git-provider-preflight",
       },
       {
         evidence: [
@@ -3520,13 +3479,13 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
       },
       {
         evidence: [
-          "PR URL",
-          "AgentFlow Build Agent PR template completed",
-          "PR body validation summary",
+          "PR/MR URL",
+          "AgentFlow Build Agent PR/MR template completed",
+          "PR/MR body validation summary",
           "draft or ready state",
         ],
-        goal: "推送任务分支，按 AgentFlow Build Agent PR 模板创建 PR，并把任务、范围、验证结果、影响、回滚和 review gate 写入 PR 描述；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR。",
-        label: "创建 PR",
+        goal: "推送任务分支，按 AgentFlow Build Agent PR/MR 模板创建 GitHub PR 或 GitLab MR，并把任务、范围、验证结果、影响、回滚和 review gate 写入描述；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR/MR。",
+        label: "创建 PR/MR",
         required: true,
         stageId: "create-pr",
       },
@@ -3534,12 +3493,12 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
         evidence: [
           "merge mode",
           "waiting-for-merge state when manual-merge",
-          "gh pr ready result",
-          "gh pr merge --auto result",
-          "merge commit or merged PR state",
+          "GitHub path: gh pr ready result and gh pr merge --auto result",
+          "GitLab path: glab mr update --ready result and glab mr merge --auto-merge result",
+          "merge commit or merged PR/MR state",
         ],
-        goal: "manual-merge 模式下 PR ready 后进入 waiting-for-merge，等待人合并，再由本地检测确认 PR merged 后继续；auto-merge-if-eligible 模式下执行 gh pr ready、gh pr merge --auto，并轮询到 merged。",
-        label: "合并 PR",
+        goal: "manual-merge 模式下 PR/MR ready 后进入 waiting-for-merge，等待人合并，再由本地检测确认 PR/MR merged 后继续；auto-merge-if-eligible 模式下按 provider 执行自动合并：GitHub 使用 gh pr ready 和 gh pr merge --auto；GitLab 使用 glab mr update --ready 和 glab mr merge --auto-merge，并轮询到 merged。",
+        label: "合并 PR/MR",
         required: true,
         stageId: "merge-pr",
       },
@@ -3549,7 +3508,7 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
           "or target/debug/agentflow build-agent complete --request <completion-request.json>",
           "issue status done",
         ],
-        goal: "PR 合并后使用预检确认过的新 AgentFlow CLI 调用 build-agent complete，写回 run、evidence、delivery 和任务 Done 状态。",
+        goal: "PR/MR 合并后使用预检确认过的新 AgentFlow CLI 调用 build-agent complete，写回 run、evidence、delivery 和任务 Done 状态。",
         label: "写回 Done",
         required: true,
         stageId: "writeback-done",
@@ -3559,21 +3518,11 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
   };
 }
 
-function buildTaskItems(
-  inputIssues: InputIssue[] | null,
-  issueStatusIndex: IssueStatusIndex | null,
-  projectViewModel: ProjectMilestoneIssueViewModelSnapshot | null,
-  workbench: WorkbenchSnapshot | null,
-): V1Issue[] {
+function buildTaskItems(inputIssues: InputIssue[] | null, issueStatusIndex: IssueStatusIndex | null): V1Issue[] {
   if (inputIssues) {
     return sortTasksByDisplayStatus(inputIssues.map((issue) => inputIssueToV1Issue(issue, issueStatusIndex)));
   }
-  if (projectViewModel?.issues.length) {
-    return sortTasksByDisplayStatus(
-      projectViewModel.issues.map((issue) => withDisplayStatus(issue, issueStatusIndex)),
-    );
-  }
-  return sortTasksByDisplayStatus((workbench?.issues ?? []).map(issueContractToV1Issue));
+  return [];
 }
 
 function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusIndex | null): V1Issue {
@@ -3631,56 +3580,6 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
     title: issue.title,
     updatedAt: issue.system?.updatedAt ?? issue.system?.createdAt ?? null,
     validationCommands: issue.validationCommands?.length ? issue.validationCommands : issue.validationHints,
-  };
-}
-
-function issueContractToV1Issue(issue: IssueContract): V1Issue {
-  const expectedOutputs = normalizeExpectedOutputs(undefined, "spec", issue.id, null, null);
-  return {
-    acceptanceCriteria: issue.evidenceRequirements,
-    allowedFiles: issue.context.files,
-    boundary: issue.nonGoals,
-    codexInstructions: issue.executionPlan,
-    dependencies: [],
-    displayStatus: displayStatusFromLegacyStatus(issue.status),
-    evidenceRequired: issue.evidenceRequirements,
-    executionPipeline: defaultBuildAgentExecutionPipeline(),
-    expectedOutputs,
-    forbiddenActions: defaultForbiddenActions("spec"),
-    forbiddenFiles: [".agentflow/*", ".codex/*", "agent-artifacts/*"],
-    goal: issue.intent,
-    id: issue.id,
-    auditTrigger: null,
-    auditId: null,
-    auditOutputDir: null,
-    contextPackPath: null,
-    createdAt: null,
-    handoffId: `handoff-${issue.id}`,
-    issueCategory: "spec",
-    issuePath: `.agentflow/input/issues/${issue.id}.json`,
-    milestoneId: null,
-    nonGoals: issue.nonGoals,
-    projectId: null,
-    rawStatus: issue.status,
-    requiredAgentRole: "build-agent",
-    riskLevel: "low",
-    sourceDeliveryPath: null,
-    sourceReleaseId: null,
-    sourceSpecId: "legacy-workbench",
-    sourceSpecPath: ".agentflow/input/specs/approved/legacy-workbench/spec.json",
-    scope: issue.scope,
-    status: issue.status,
-    title: issue.title,
-    updatedAt: null,
-    validationCommands: issue.validation.commands,
-  };
-}
-
-function withDisplayStatus(issue: V1Issue, issueStatusIndex: IssueStatusIndex | null): V1Issue {
-  const indexed = issueStatusIndex?.issues.find((item) => item.issueId === issue.id);
-  return {
-    ...issue,
-    displayStatus: indexed?.displayStatus ?? issue.displayStatus ?? displayStatusFromLegacyStatus(issue.status),
   };
 }
 
@@ -3785,26 +3684,6 @@ function sortAuditsByLatest(audits: AuditIndexEntry[]) {
   return [...audits].sort(
     (left, right) => right.requestedAt - left.requestedAt || right.auditId.localeCompare(left.auditId),
   );
-}
-
-function displayStatusFromLegacyStatus(status: string): IssueDisplayStatus {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("cancel")) {
-    return "cancel";
-  }
-  if (normalized.includes("done") || normalized.includes("complete")) {
-    return "done";
-  }
-  if (normalized.includes("review") || normalized.includes("delivered")) {
-    return "review";
-  }
-  if (normalized.includes("running") || normalized.includes("progress")) {
-    return "in-progress";
-  }
-  if (normalized === "ready" || normalized === "todo" || normalized === "ready-for-execute") {
-    return "ready";
-  }
-  return "backlog";
 }
 
 function statusChipForDisplayStatus(status: IssueDisplayStatus = "backlog"): StatusChipStatus {
@@ -3955,9 +3834,9 @@ function agentRoleEnglishName(role?: string | null) {
 
 function agentInstructionForTask(task: V1Issue) {
   if (task.requiredAgentRole === "audit-agent") {
-    return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR。";
+    return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR/MR。";
   }
-  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 issue、handoff package 和 executionPipeline 是唯一任务源；不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按 GitHub 自动化预检、测试设计、执行、沙箱验证、创建 PR、合并 PR、写回 Done 的流程执行。写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
+  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 issue、handoff package 和 executionPipeline 是唯一任务源；不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按 GitHub/GitLab 自动化预检、测试设计、执行、沙箱验证、创建 PR/MR、合并 PR/MR、写回 Done 的流程执行。写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
 }
 
 function taskAuditDescriptionItems(task: V1Issue): Array<[string, string]> {
@@ -4260,7 +4139,6 @@ function deliveryAuditStatus(delivery: OutputIndexEntry | null, audit: AuditInde
 }
 
 function buildRecentActivities(
-  workspaceData: WorkspaceDataState,
   outputBundle: OutputBundleState,
   initializationStatus: ProjectInitializationStatus | null,
   outputSummary?: NonNullable<OutputStatusState["status"]>["summary"],
@@ -4283,13 +4161,6 @@ function buildRecentActivities(
         ]
       : []),
   ];
-  const projectUpdates =
-    workspaceData.workbench?.projectUpdates.slice(-2).map((update, index) => ({
-      detail: update.title || update.path,
-      id: `update-${index}-${update.path}`,
-      target: "tasks" as const,
-      title: "项目更新已记录",
-    })) ?? [];
   const deliveryItems =
     sortOutputEntriesByLatest(outputBundle.outputIndex?.releaseDeliveries ?? []).slice(0, 2).map((delivery) => ({
       detail: `${delivery.issueId || "关联任务"} · ${artifactStatusLabel(delivery.status)}`,
@@ -4305,7 +4176,7 @@ function buildRecentActivities(
       title: "审计页面同步结构",
     })) ?? [];
 
-  const items = [...initializationItems, ...projectUpdates, ...deliveryItems, ...auditItems];
+  const items = [...initializationItems, ...deliveryItems, ...auditItems];
   if (items.length) {
     return items.slice(0, 4);
   }
@@ -4438,13 +4309,13 @@ function buildAgentPullRequestTemplate(task: V1Issue) {
     "",
     "## Build Agent Loop",
     "",
-    "- [ ] GitHub automation preflight completed.",
+    "- [ ] Git provider automation preflight completed.",
     "- [ ] Test design completed, with failing test evidence or a reason TDD does not apply.",
     "- [ ] Issue implementation stayed inside scope.",
     "- [ ] Sandbox verification completed.",
-    "- [ ] PR created with validation evidence.",
+    "- [ ] PR/MR created with validation evidence.",
     "- [ ] Merge mode is respected.",
-    "- [ ] Done writeback is not performed before PR merge.",
+    "- [ ] Done writeback is not performed before PR/MR merge.",
     "",
     "## Evidence",
     "",
@@ -4569,7 +4440,7 @@ function buildCodexHandoff(task: V1Issue) {
     "- AgentFlow 当前 issue、handoff package 和 executionPipeline 是唯一任务源。",
     "- 不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源。",
     "- 不要用外部状态拆分、重排或推进 AgentFlow 任务。",
-    "- GitHub 命令只允许用于当前 executionPipeline 里的 PR 阶段。",
+    "- GitHub/GitLab 命令只允许用于当前 executionPipeline 里的 PR/MR 阶段。",
     "- 不要越过任务边界。",
     "- 不要手写 `.agentflow/execute/**`、`.agentflow/output/evidence/**` 或 `.agentflow/output/release/**`。",
     ...(task.issueCategory === "spec"
@@ -4579,11 +4450,11 @@ function buildCodexHandoff(task: V1Issue) {
           ...taskExecutionPipelineItems(task).map((item) => `- ${item}`),
           "",
           "## 合并规则",
-          "- 创建 PR 前必须完成 GitHub 自动化预检、测试设计和沙箱验证。",
-          "- 创建 PR 不是终点。Draft PR 只是中间产物，不能直接写回 Done。",
-          "- mergeMode = manual-merge：把 PR 标记 ready 后进入 waiting-for-merge，等待人合并；本地检测确认 PR merged 后继续写回。",
-          "- mergeMode = auto-merge-if-eligible：执行 `gh pr ready`，再执行 `gh pr merge --auto`，轮询 PR merged 状态。",
-          "- PR 合并后才写回 Done。",
+          "- 创建 PR/MR 前必须完成 GitHub/GitLab 自动化预检、测试设计和沙箱验证。",
+          "- 创建 PR/MR 不是终点。Draft PR/MR 只是中间产物，不能直接写回 Done。",
+          "- mergeMode = manual-merge：把 PR/MR 标记 ready 后进入 waiting-for-merge，等待人合并；本地检测确认 PR/MR merged 后继续写回。",
+          "- mergeMode = auto-merge-if-eligible：GitHub 执行 `gh pr ready` 和 `gh pr merge --auto`；GitLab 执行 `glab mr update --ready` 和 `glab mr merge --auto-merge`；轮询 PR/MR merged 状态。",
+          "- PR/MR 合并后才写回 Done。",
           "- 写回 Done 前必须确认当前 AgentFlow CLI 支持 `build-agent complete`。",
           "- 如果使用 `target/release/agentflow`，必须先运行 `cargo build --release --bin agentflow`；否则使用 `target/debug/agentflow`。",
           "- 不要直接复用可能过期的 `target/release/agentflow`。",
