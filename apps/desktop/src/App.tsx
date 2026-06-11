@@ -2693,7 +2693,7 @@ function ProjectSummaryReader({
         <div className="v16-summary-grid">
           <MetricCard detail={`${group.counts.doneIssueCount} 已完成`} label="任务" value={group.counts.issueCount} />
           <MetricCard detail={`${todoIssueCount} 准备开工`} label="正在做" value={group.counts.activeIssueCount} />
-          <MetricCard detail={`${reviewIssueCount} 正在 Review`} label="审计任务" value={group.counts.auditIssueCount} />
+          <MetricCard detail={`${reviewIssueCount} 正在评审`} label="审计任务" value={group.counts.auditIssueCount} />
           <MetricCard detail={`${urgentIssueCount} 个 P0/P1`} label="最高优先级" value={displayPriority(priority)} />
         </div>
         <DescriptionList
@@ -2831,7 +2831,7 @@ const issueStatusFlowSteps: Array<{ id: IssueDisplayStatus; label: string; note:
   { id: "backlog", label: "待处理", note: "任务已生成" },
   { id: "todo", label: "准备开工", note: "等待执行" },
   { id: "in_progress", label: "正在做", note: "执行中" },
-  { id: "in_review", label: "正在 Review", note: "等待合并或核对" },
+  { id: "in_review", label: "正在评审", note: "等待合并或核对" },
   { id: "done", label: "已完成", note: "已写回" },
 ];
 
@@ -3836,7 +3836,7 @@ const displayStatusColumns: Array<{ id: IssueDisplayStatus; label: string }> = [
   { id: "backlog", label: "待处理" },
   { id: "todo", label: "准备开工" },
   { id: "in_progress", label: "正在做" },
-  { id: "in_review", label: "正在 Review" },
+  { id: "in_review", label: "正在评审" },
   { id: "done", label: "已完成" },
   { id: "blocked", label: "已阻断" },
   { id: "cancel", label: "已取消" },
@@ -4329,7 +4329,7 @@ function projectProgressItems(group: TaskProjectGroup) {
     `总任务：${group.counts.issueCount}`,
     `正在做：${group.counts.activeIssueCount}`,
     `准备开工：${todoCount}`,
-    `正在 Review：${reviewCount}`,
+    `正在评审：${reviewCount}`,
     `待处理：${backlogCount}`,
     `已完成：${group.counts.doneIssueCount}`,
     `审计任务：${group.counts.auditIssueCount}`,
