@@ -142,7 +142,7 @@ impl ProjectLoopSnapshot {
 #[serde(rename_all = "camelCase")]
 pub struct IssueLoopProjection {
     pub version: String,
-    pub project_id: String,
+    pub project_id: Option<String>,
     pub issue_id: String,
     pub stage: IssueLoopStage,
     pub run_id: Option<String>,
@@ -153,14 +153,10 @@ pub struct IssueLoopProjection {
 }
 
 impl IssueLoopProjection {
-    pub fn new(
-        project_id: impl Into<String>,
-        issue_id: impl Into<String>,
-        updated_at: u64,
-    ) -> Self {
+    pub fn new(project_id: Option<String>, issue_id: impl Into<String>, updated_at: u64) -> Self {
         Self {
             version: LOOP_ISSUE_PROJECTION_VERSION.to_string(),
-            project_id: project_id.into(),
+            project_id,
             issue_id: issue_id.into(),
             stage: IssueLoopStage::Backlog,
             run_id: None,

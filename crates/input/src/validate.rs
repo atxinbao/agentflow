@@ -188,7 +188,7 @@ fn validate_issue_graph(
         match issue.issue_model {
             InputIssueModel::Direct => {
                 warnings.push(format!(
-                    "legacy direct issue {} is readable but not eligible for Project Loop scheduling",
+                    "direct issue {} is readable and eligible for Direct Issue Loop scheduling",
                     issue.issue_id
                 ));
                 if issue.project_id.is_some() {
