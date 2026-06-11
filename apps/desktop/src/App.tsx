@@ -1026,7 +1026,7 @@ function App() {
       try {
         await navigator.clipboard.writeText(buildCodexHandoff(task));
         setTaskCopyState("success");
-        setTaskActionFeedback("已复制，请粘贴到 Build Agent 会话中。");
+        setTaskActionFeedback(`已复制。请粘贴到 ${codexThreadNameForRole(task.requiredAgentRole)} 线程。`);
         window.setTimeout(() => setTaskCopyState("enabled"), 1400);
       } catch {
         setTaskCopyState("error");
@@ -2698,6 +2698,10 @@ function TaskDetailReader({
             <span className="v16-detail-meta-label">角色</span>
             <strong className="v16-role-text">{agentRoleLabelZh(task.requiredAgentRole)}</strong>
           </span>
+          <span className="v16-detail-meta-item">
+            <span className="v16-detail-meta-label">Codex 线程</span>
+            <strong className="v16-role-text">{codexThreadNameForRole(task.requiredAgentRole)}</strong>
+          </span>
         </div>
       </header>
       <div className="v16-detail-document">
@@ -4350,6 +4354,7 @@ function buildCodexHandoff(task: V1Issue) {
           agentInstruction: agentInstructionForTask(task),
           auditId: task.auditId,
           auditOutputDir: task.auditOutputDir,
+          codexThreadName: codexThreadNameForRole(task.requiredAgentRole),
           expectedOutputs: task.expectedOutputs,
           handoffId: task.handoffId,
           handoffVersion: "agent-handoff.v1",
@@ -4363,6 +4368,7 @@ function buildCodexHandoff(task: V1Issue) {
         }
       : {
           agentInstruction: agentInstructionForTask(task),
+          codexThreadName: codexThreadNameForRole(task.requiredAgentRole),
           completionWriteback: {
             cli: "target/release/agentflow build-agent complete --request <completion-request.json> after cargo build --release --bin agentflow, or target/debug/agentflow build-agent complete --request <completion-request.json>",
             command: "complete_build_agent_issue",
@@ -4411,6 +4417,7 @@ function buildCodexHandoff(task: V1Issue) {
     `任务：${task.id}`,
     `任务类型：${issueCategoryLabelZh(task.issueCategory)}`,
     `执行角色：${agentRoleLabelZh(task.requiredAgentRole)}`,
+    `Codex 线程：${codexThreadNameForRole(task.requiredAgentRole)}`,
     `优先级：${displayPriority(task.priority)}`,
     `指令：${agentInstructionForTask(task)}`,
     ...(task.issueCategory === "audit"
@@ -4510,6 +4517,7 @@ function agentRoleRulesDocument() {
       agentRole: guide.role,
       label: guide.title,
       englishName: guide.englishName,
+      codexThreadName: guide.threadName,
       agentThreadName: guide.threadName,
       summary: guide.summary,
       cannotDo: guide.cannotDo,
