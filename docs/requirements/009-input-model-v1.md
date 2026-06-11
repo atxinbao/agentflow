@@ -724,15 +724,15 @@ p3
 
 ```text
 backlog
-blocked
-ready
-in-progress
-review
+todo
+in_progress
+in_review
 done
+blocked
 cancel
 ```
 
-其中 `blocked` 是 state 派生状态。Spec Agent 默认只生成 backlog / ready / done / cancel 这类事实状态；依赖未完成、Git provider 预检失败或执行预检失败时，由 state/gates 派生为 blocked。
+其中 `blocked` 是 state 派生状态。Spec Agent 默认只生成 backlog / todo / done / cancel 这类事实状态；依赖未完成、任务目标缺失、Context Pack 不可用或执行前置检测硬失败时，由 state/gates 派生为 blocked。GitHub/GitLab CLI 缺失、认证缺失、工作区不干净等 PR/MR 现场问题不直接把一批 issue 标成 blocked，应由 Build Agent 在创建 PR/MR 或合并 PR/MR 阶段记录。
 
 ---
 
@@ -813,7 +813,7 @@ define/audit/AUDIT.md
   "summary": "定义 .agentflow ownership 状态、marker、recommended action。",
   "kind": "feature",
   "priority": "p2",
-  "status": "planned",
+  "status": "backlog",
   "executionRisk": "medium",
 
   "scope": [
@@ -1331,7 +1331,7 @@ state/gates 派生 blocked displayStatus
 - [ ] 不新增 automation / humanGates / prAutomation 字段。
 - [ ] issue relations 支持 blocked-by / blocks / related / duplicate-of。
 - [ ] 未完成 blockedBy 依赖会在 state/gates/blockers.json 记录阻断，并把相关 issue 派生显示为 blocked。
-- [ ] Git provider 预检失败会在 state/gates/blockers.json 记录阻断，并把相关 issue 派生显示为 blocked。
+- [ ] GitHub/GitLab provider 不作为执行前置检测 blocker；工具、认证和工作区状态由 Build Agent 在 PR/MR 阶段记录。
 - [ ] Desktop 只读展示 input 状态。
 - [ ] 不启动 AgentRun。
 - [ ] 不写用户源码。

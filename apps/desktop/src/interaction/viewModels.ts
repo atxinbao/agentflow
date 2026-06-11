@@ -238,8 +238,8 @@ export function pickTaskId(tasks: V1Issue[], currentTaskId: string | null, activ
     return activeIssueId;
   }
   return (
-    tasks.find((task) => task.displayStatus === "in-progress")?.id ??
-    tasks.find((task) => task.displayStatus === "ready")?.id ??
+    tasks.find((task) => task.displayStatus === "in_progress")?.id ??
+    tasks.find((task) => task.displayStatus === "todo")?.id ??
     tasks[0].id
   );
 }
@@ -353,9 +353,9 @@ export function taskActionsForTask(task: V1Issue): TaskInteractionAction[] {
       blocked: ["view-requirement"],
       cancel: ["readonly"],
       done: [],
-      "in-progress": ["copy-handoff"],
-      ready: ["copy-handoff"],
-      review: [],
+      in_progress: ["copy-handoff"],
+      in_review: [],
+      todo: ["copy-handoff"],
     };
     return actions[task.displayStatus ?? "backlog"];
   }
@@ -369,9 +369,9 @@ function taskActionsForStatus(status: IssueDisplayStatus = "backlog"): TaskInter
     blocked: ["view-requirement"],
     cancel: ["readonly"],
     done: ["view-delivery"],
-    "in-progress": ["mark-handed-off", "check-writeback"],
-    ready: ["copy-handoff"],
-    review: ["view-delivery"],
+    in_progress: ["mark-handed-off", "check-writeback"],
+    in_review: ["view-delivery"],
+    todo: ["copy-handoff"],
   };
   return actions[status];
 }
@@ -390,13 +390,13 @@ export function taskActionLabel(action: TaskInteractionAction) {
 
 export function displayStatusLabelZh(status: IssueDisplayStatus = "backlog") {
   const labels: Record<IssueDisplayStatus, string> = {
-    backlog: "待办",
+    backlog: "待处理",
     blocked: "已阻断",
     cancel: "已取消",
     done: "已完成",
-    "in-progress": "进行中",
-    ready: "就绪",
-    review: "待审阅",
+    in_progress: "正在做",
+    in_review: "正在 Review",
+    todo: "准备开工",
   };
   return labels[status];
 }
@@ -528,7 +528,7 @@ function projectIssueOrder(project: InputProject, issues: InputIssue[]) {
 
 function taskProjectTreeCounts(issues: TaskIssueNode[], projectCount: number): TaskProjectTreeCounts {
   return {
-    activeIssueCount: issues.filter((issue) => issue.displayStatus === "in-progress").length,
+    activeIssueCount: issues.filter((issue) => issue.displayStatus === "in_progress").length,
     auditIssueCount: issues.filter((issue) => issue.issueCategory === "audit").length,
     doneIssueCount: issues.filter((issue) => issue.displayStatus === "done").length,
     issueCount: issues.length,
@@ -545,8 +545,8 @@ function pickTaskSelection(
   const activeIssue = activeIssueId ? issues.find((issue) => issue.id === activeIssueId) : null;
   const issue =
     activeIssue ??
-    issues.find((item) => item.displayStatus === "in-progress") ??
-    issues.find((item) => item.displayStatus === "ready");
+    issues.find((item) => item.displayStatus === "in_progress") ??
+    issues.find((item) => item.displayStatus === "todo");
   if (issue) {
     return {
       issueId: issue.id,
@@ -569,19 +569,7 @@ function defaultAgentRoleForIssueCategory(issueCategory: IssueCategory): AgentRo
 }
 
 function displayStatusFromInputStatus(status: InputIssueStatus): IssueDisplayStatus {
-  if (status === "done") {
-    return "done";
-  }
-  if (status === "canceled") {
-    return "cancel";
-  }
-  if (status === "blocked") {
-    return "blocked";
-  }
-  if (status === "ready-for-execute") {
-    return "ready";
-  }
-  return "backlog";
+  return status;
 }
 
 function taskProjectTreeWarning(

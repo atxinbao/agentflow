@@ -1,11 +1,12 @@
 use crate::{
-    manager::assert_build_agent_run,
+    manager::{assert_build_agent_run, update_input_issue_status},
     model::{ExecuteResult, ExecuteRunStatus},
     storage::{
         canonical_project_root, ensure_directory, read_json, read_run, run_dir,
         unix_timestamp_seconds, write_json,
     },
 };
+use agentflow_input::issue::InputIssueStatus;
 use agentflow_output::{
     OutputEvidence, OutputPrMetadata, OutputReleaseDelivery, OutputReleaseDeliveryArtifacts,
     OUTPUT_PR_METADATA_VERSION, OUTPUT_RELEASE_DELIVERY_VERSION,
@@ -109,6 +110,7 @@ pub fn prepare_release_delivery(
     };
     write_json(&release_dir.join("delivery.json"), &delivery)?;
     agentflow_output::prepare_output_workspace(&root)?;
+    update_input_issue_status(&root, &delivery.issue_id, InputIssueStatus::InReview)?;
     Ok(delivery)
 }
 

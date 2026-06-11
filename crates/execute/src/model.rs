@@ -333,6 +333,21 @@ pub struct ExecuteChangedFiles {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ExecuteBranchCheck {
+    pub version: String,
+    pub run_id: String,
+    pub issue_id: String,
+    pub project_id: Option<String>,
+    pub base_branch: String,
+    pub issue_branch: String,
+    pub current_branch_before: String,
+    pub current_branch_after: String,
+    pub status: String,
+    pub blocked_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExecutePatchOutcome {
     pub run_id: String,
     pub changed_files: ExecuteChangedFiles,
@@ -366,6 +381,8 @@ pub struct BuildAgentValidationCommand {
 #[serde(rename_all = "camelCase")]
 pub struct BuildAgentCompletionRequest {
     pub issue_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
     #[serde(default)]
     pub changed_files: Vec<ExecuteChangedFile>,
     #[serde(default)]

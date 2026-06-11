@@ -62,7 +62,7 @@ pub enum InputIssueGenerationMode {
 
 impl Default for InputIssueGenerationMode {
     fn default() -> Self {
-        Self::Direct
+        Self::Project
     }
 }
 

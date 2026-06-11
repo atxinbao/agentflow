@@ -211,7 +211,7 @@ fn event_ready_for_panel(
         .map(|entry| {
             matches!(
                 entry.display_status,
-                DisplayStatus::Ready | DisplayStatus::Blocked
+                DisplayStatus::Todo | DisplayStatus::Blocked
             )
         })
         .unwrap_or(true)
@@ -283,8 +283,8 @@ mod tests {
             issue_id: "iss-done".to_string(),
             issue_category: IssueCategory::Spec,
             required_agent_role: AgentRole::BuildAgent,
-            status: InputIssueStatus::ReadyForExecute,
-            display_status: DisplayStatus::Ready,
+            status: InputIssueStatus::Todo,
+            display_status: DisplayStatus::Todo,
             context_pack_path: ".agentflow/panel/context-packs/iss-done.json".to_string(),
             ..InputIssue::default()
         };
@@ -360,8 +360,8 @@ mod tests {
             summary: "为任务生成 Panel Context Pack。".to_string(),
             kind: InputIssueKind::Validation,
             priority: InputPriority::P1,
-            status: InputIssueStatus::ReadyForExecute,
-            display_status: DisplayStatus::Ready,
+            status: InputIssueStatus::Todo,
+            display_status: DisplayStatus::Todo,
             execution_risk: InputRiskLevel::Medium,
             scope: vec!["apps/desktop/src/**".to_string()],
             acceptance_criteria: vec!["context pack exists".to_string()],

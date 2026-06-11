@@ -233,7 +233,7 @@ mod tests {
             issue_path: ".agentflow/input/issues/iss-001.json".to_string(),
             issue_category: "spec".to_string(),
             required_agent_role: "build-agent".to_string(),
-            display_status: "ready".to_string(),
+            display_status: "todo".to_string(),
             title: "Build issue".to_string(),
             objective: "Build something".to_string(),
             acceptance_criteria: vec!["passes".to_string()],

@@ -1,20 +1,21 @@
 use crate::{
     checkpoint::create_execute_checkpoint,
     delivery::prepare_release_delivery,
-    lease::acquire_execute_lease,
-    manager::{create_execute_run, load_issue_for_run},
+    lease::{acquire_execute_lease, has_active_lease_for_run},
+    manager::{assert_build_agent_run, load_issue_for_run, update_input_issue_status},
     model::{
         BuildAgentCompletion, BuildAgentCompletionRequest, BuildAgentValidationCommand,
-        ExecuteChangedFiles, ExecuteCommandRecord, ExecutePlanDraft, ExecuteRunStatus,
+        ExecuteChangedFiles, ExecuteCommandRecord, ExecutePlanDraft, ExecutePreflight, ExecuteRun,
+        ExecuteRunStatus,
     },
     plan::write_execute_plan,
-    preflight::execute_run_preflight,
     storage::{
-        canonical_project_root, next_named_id, read_run, rebuild_index, run_dir,
+        canonical_project_root, next_named_id, read_json, read_run, rebuild_index, run_dir,
         unix_timestamp_seconds, update_run_status, write_json,
     },
     validation::validate_execute_run,
 };
+use agentflow_input::issue::InputIssueStatus;
 use anyhow::{Context, Result};
 use std::{fs, path::Path};
 
@@ -27,22 +28,31 @@ pub fn complete_build_agent_issue(
     if issue_id.is_empty() {
         anyhow::bail!("build agent completion requires issueId");
     }
+    let run_id = request
+        .run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("build agent completion requires runId"))?;
     if request.validation_commands.is_empty() {
         anyhow::bail!("build agent completion requires validation command results");
     }
 
-    let run = create_execute_run(&root, issue_id.to_string())?;
-    let preflight = execute_run_preflight(&root, run.run_id.clone())?;
-    if preflight.status != "ready" {
+    let run = read_run(&root, run_id)
+        .with_context(|| format!("build agent completion requires existing run {run_id}"))?;
+    if run.issue_id != issue_id {
         anyhow::bail!(
-            "build agent completion requires ready preflight for {}: {}",
-            run.run_id,
-            preflight
-                .blocked_reason
-                .unwrap_or_else(|| preflight.status.clone())
+            "build agent completion issueId mismatch: request {issue_id}, run {}",
+            run.issue_id
         );
     }
-    acquire_execute_lease(&root, run.run_id.clone())?;
+    assert_build_agent_run(&root, &run)?;
+    require_ready_preflight(&root, &run)?;
+    require_branch_metadata(&root, &run)?;
+    require_merge_proof(&root, &run)?;
+    if !has_active_lease_for_run(&root, &run.run_id)? {
+        acquire_execute_lease(&root, run.run_id.clone())?;
+    }
 
     let run = read_run(&root, &run.run_id)?;
     let issue = load_issue_for_run(&root, &run)?;
@@ -71,6 +81,7 @@ pub fn complete_build_agent_issue(
 
     let result = validate_execute_run(&root, run.run_id.clone())?;
     let delivery = prepare_release_delivery(&root, run.run_id.clone())?;
+    update_input_issue_status(&root, &run.issue_id, InputIssueStatus::Done)?;
     let run = read_run(&root, &run.run_id)?;
     rebuild_index(&root)?;
 
@@ -86,6 +97,59 @@ fn allowed_commands(commands: &[BuildAgentValidationCommand]) -> Vec<String> {
         .iter()
         .map(|command| normalize_command(&command.program, &command.args))
         .collect()
+}
+
+fn require_ready_preflight(root: &Path, run: &ExecuteRun) -> Result<()> {
+    let preflight: ExecutePreflight = read_json(&run_dir(root, &run.run_id).join("preflight.json"))
+        .with_context(|| format!("load ready preflight for {}", run.run_id))?;
+    if preflight.status != "ready" {
+        anyhow::bail!(
+            "build agent completion requires ready preflight for {}: {}",
+            run.run_id,
+            preflight
+                .blocked_reason
+                .unwrap_or_else(|| preflight.status.clone())
+        );
+    }
+    Ok(())
+}
+
+fn require_branch_metadata(root: &Path, run: &ExecuteRun) -> Result<()> {
+    let branch_path = run_dir(root, &run.run_id).join("branch.json");
+    if !branch_path.is_file() {
+        anyhow::bail!(
+            "build agent completion requires branch metadata for {}",
+            run.run_id
+        );
+    }
+    let metadata: serde_json::Value = read_json(&branch_path)?;
+    let status = metadata
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    if status == "blocked" {
+        anyhow::bail!("build agent completion requires non-blocked branch metadata");
+    }
+    Ok(())
+}
+
+fn require_merge_proof(root: &Path, run: &ExecuteRun) -> Result<()> {
+    let proof_path = run_dir(root, &run.run_id).join("review/merge-proof.json");
+    if !proof_path.is_file() {
+        anyhow::bail!(
+            "build agent completion requires merge proof for {}",
+            run.run_id
+        );
+    }
+    let proof: serde_json::Value = read_json(&proof_path)?;
+    let merged = proof
+        .get("merged")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    if !merged {
+        anyhow::bail!("build agent completion requires merged PR/MR proof");
+    }
+    Ok(())
 }
 
 fn write_changed_files(

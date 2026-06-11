@@ -134,7 +134,7 @@ mod tests {
         let agentflow_manual =
             fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md")).unwrap();
         assert!(agentflow_manual.contains("Test design"));
-        assert!(agentflow_manual.contains("waiting-for-merge"));
+        assert!(agentflow_manual.contains("keep the issue in `in_review`"));
         assert!(agentflow_manual.contains("fromIssueId"));
         assert!(agentflow_manual.contains("toIssueId"));
         assert!(agentflow_manual.contains("Do not write legacy `from` / `to` relation fields."));
@@ -319,7 +319,7 @@ mod tests {
         assert!(manual.contains("Status: enabled for Execute + Release Delivery V1."));
         assert!(manual.contains(".agentflow/output/release/<run-id>/"));
         assert!(manual.contains(
-            "The writeback stage runs only after PR/MR merge and writes run, evidence, release delivery, and Done status."
+            "The writeback stage runs only after PR/MR merge and writes run, evidence, release delivery, and `done` status."
         ));
         assert!(manual.contains("AgentFlow input issues, handoff packages, and executionPipeline are the only task and plan authority."));
         assert!(manual.contains(
@@ -328,7 +328,8 @@ mod tests {
         assert!(manual.contains(
             "It must not treat any external issue, task, plan, queue, thread, or tool state as task authority."
         ));
-        assert!(manual.contains("GitHub/GitLab automation preflight"));
+        assert!(manual.contains("Issue preflight"));
+        assert!(manual.contains("After this stage passes, AgentFlow moves the issue to `todo`."));
         assert!(manual.contains("auto-merge-if-eligible"));
         assert!(manual.contains("A Draft PR/MR is only an intermediate state"));
         assert!(manual.contains("gh pr merge --auto"));

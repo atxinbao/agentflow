@@ -90,7 +90,7 @@ mod tests {
             project_id: None,
             title: format!("Execute {issue_id}"),
             summary: "Execute fixture issue".to_string(),
-            status: InputIssueStatus::ReadyForExecute,
+            status: InputIssueStatus::Todo,
             execution_risk: risk_level,
             scope: vec!["src/lib.rs".to_string()],
             validation_hints: vec!["printf ok".to_string()],
@@ -154,11 +154,28 @@ mod tests {
         prepare_root(dir.path());
         write_approved_spec(dir.path(), "spec-001");
         write_issue(dir.path(), "iss-001", "spec-001", InputRiskLevel::Low);
+        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        let preflight = execute_run_preflight(dir.path(), run.run_id.clone()).unwrap();
+        assert_eq!(preflight.status, "ready");
+        storage::write_json(
+            &storage::run_dir(dir.path(), &run.run_id).join("review/merge-proof.json"),
+            &serde_json::json!({
+                "version": "execute-merge-proof.v1",
+                "runId": run.run_id,
+                "issueId": "iss-001",
+                "provider": "github",
+                "mergeMode": "auto-merge-if-eligible",
+                "merged": true,
+                "remoteUrl": "https://github.com/atxinbao/agentflow/pull/1"
+            }),
+        )
+        .unwrap();
 
         let completion = complete_build_agent_issue(
             dir.path(),
             BuildAgentCompletionRequest {
                 issue_id: "iss-001".to_string(),
+                run_id: Some(run.run_id.clone()),
                 changed_files: vec![ExecuteChangedFile {
                     path: "src/lib.rs".to_string(),
                     change_type: "modified".to_string(),
@@ -183,6 +200,14 @@ mod tests {
         assert_eq!(completion.result.status, ExecuteRunStatus::Completed);
         assert!(completion.result.validation.passed);
         assert_eq!(completion.delivery.status, "drafted");
+        let issue_after: InputIssue =
+            crate::storage::read_json(&dir.path().join(".agentflow/input/issues/iss-001.json"))
+                .unwrap();
+        assert_eq!(issue_after.status, InputIssueStatus::Done);
+        assert_eq!(
+            issue_after.display_status,
+            agentflow_input::issue::DisplayStatus::Done
+        );
 
         let execute_index = load_execute_index(dir.path()).unwrap();
         assert_eq!(execute_index.runs.len(), 1);
@@ -202,6 +227,24 @@ mod tests {
     }
 
     #[test]
+    fn backlog_issue_cannot_start_runtime_preflight() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path(), "spec-001");
+        let mut issue = write_issue(dir.path(), "iss-001", "spec-001", InputRiskLevel::Low);
+        issue.status = InputIssueStatus::Backlog;
+        fs::write(
+            dir.path().join(".agentflow/input/issues/iss-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+
+        let error = create_execute_run(dir.path(), "iss-001".to_string()).unwrap_err();
+
+        assert!(error.to_string().contains("must be todo"));
+    }
+
+    #[test]
     fn audit_issue_cannot_create_build_agent_run() {
         let dir = tempdir().unwrap();
         prepare_root(dir.path());
@@ -215,7 +258,7 @@ mod tests {
             project_id: None,
             title: "Audit release".to_string(),
             summary: "Audit release delivery".to_string(),
-            status: InputIssueStatus::ReadyForExecute,
+            status: InputIssueStatus::Backlog,
             execution_risk: InputRiskLevel::High,
             validation_hints: vec!["audit output".to_string()],
             ..InputIssue::default()
@@ -331,18 +374,16 @@ mod tests {
     }
 
     #[test]
-    fn same_issue_cannot_have_two_active_leases() {
+    fn same_issue_cannot_start_a_second_run_after_preflight() {
         let dir = tempdir().unwrap();
         let first = ready_low_risk_run(dir.path(), "iss-001");
-        let second = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
-        execute_run_preflight(dir.path(), second.run_id.clone()).ok();
-        let error = acquire_execute_lease(dir.path(), second.run_id).unwrap_err();
-        assert!(error.to_string().contains("active lease"));
+        let error = create_execute_run(dir.path(), "iss-001".to_string()).unwrap_err();
+        assert!(error.to_string().contains("must be todo"));
         release_execute_lease(dir.path(), first.run_id).unwrap();
     }
 
     #[test]
-    fn released_lease_does_not_block_second_run_preflight() {
+    fn released_lease_does_not_reset_issue_to_backlog() {
         let dir = tempdir().unwrap();
         let first = ready_low_risk_run(dir.path(), "iss-001");
         release_execute_lease(dir.path(), first.run_id).unwrap();
@@ -354,13 +395,8 @@ mod tests {
         .unwrap();
         assert_eq!(lease.status, ExecuteLeaseStatus::Released);
 
-        let second = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
-        let preflight = execute_run_preflight(dir.path(), second.run_id).unwrap();
-
-        assert!(preflight.checks.iter().any(|check| {
-            check.name == "lease" && matches!(check.status, ExecuteCheckStatus::Passed)
-        }));
-        assert_eq!(preflight.status, "ready");
+        let error = create_execute_run(dir.path(), "iss-001".to_string()).unwrap_err();
+        assert!(error.to_string().contains("must be todo"));
     }
 
     #[test]
@@ -617,14 +653,14 @@ mod tests {
     }
 
     #[test]
-    fn execute_does_not_write_input_issue_or_approved_spec() {
+    fn execute_only_updates_input_issue_status() {
         let dir = tempdir().unwrap();
         let run = ready_low_risk_run(dir.path(), "iss-001");
         let issue_path = dir.path().join(".agentflow/input/issues/iss-001.json");
         let spec_path = dir
             .path()
             .join(".agentflow/input/specs/approved/spec-001/approval.json");
-        let issue_before = fs::read_to_string(&issue_path).unwrap();
+        let issue_before: InputIssue = crate::storage::read_json(&issue_path).unwrap();
         let spec_before = fs::read_to_string(&spec_path).unwrap();
         run_execute_command(
             dir.path(),
@@ -638,7 +674,11 @@ mod tests {
         )
         .unwrap();
         validate_execute_run(dir.path(), run.run_id).unwrap();
-        assert_eq!(issue_before, fs::read_to_string(&issue_path).unwrap());
+        let issue_after: InputIssue = crate::storage::read_json(&issue_path).unwrap();
+        assert_eq!(issue_after.status, InputIssueStatus::InReview);
+        assert_eq!(issue_after.issue_id, issue_before.issue_id);
+        assert_eq!(issue_after.title, issue_before.title);
+        assert_eq!(issue_after.source_spec_id, issue_before.source_spec_id);
         assert_eq!(spec_before, fs::read_to_string(&spec_path).unwrap());
     }
 }

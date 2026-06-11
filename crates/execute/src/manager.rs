@@ -1,8 +1,8 @@
 use crate::{
     model::{
-        ExecuteIndex, ExecuteManifest, ExecuteResult, ExecuteRun, ExecuteRunInput, ExecuteRunPaths,
-        ExecuteRunStatus, ExecuteSnapshot, ExecuteStatusSnapshot, ExecuteSummary,
-        ExecuteWorkspaceStatus, EXECUTE_SNAPSHOT_VERSION, EXECUTE_STATUS_VERSION,
+        ExecuteBranchCheck, ExecuteIndex, ExecuteManifest, ExecuteResult, ExecuteRun,
+        ExecuteRunInput, ExecuteRunPaths, ExecuteRunStatus, ExecuteSnapshot, ExecuteStatusSnapshot,
+        ExecuteSummary, ExecuteWorkspaceStatus, EXECUTE_SNAPSHOT_VERSION, EXECUTE_STATUS_VERSION,
     },
     storage::{
         canonical_project_root, ensure_directory, load_leases, load_runs, next_run_id, read_json,
@@ -12,10 +12,10 @@ use crate::{
 };
 use agentflow_input::issue::{
     validate_agent_claim, validate_agent_issue_permission, validate_agent_write_paths, AgentClaim,
-    AgentRole, AgentRolesDocument, InputIssue,
+    AgentRole, AgentRolesDocument, InputIssue, InputIssueStatus,
 };
 use anyhow::{Context, Result};
-use std::path::Path;
+use std::{path::Path, process::Command};
 
 pub fn prepare_execute_workspace(project_root: impl AsRef<Path>) -> Result<ExecuteSnapshot> {
     let root = canonical_project_root(project_root)?;
@@ -112,6 +112,12 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
         );
     }
     validate_agent_issue_permission(&issue, &AgentRole::BuildAgent)?;
+    if !matches!(issue.status, InputIssueStatus::Todo) {
+        anyhow::bail!(
+            "input issue {} must be todo before Build Agent runtime preflight",
+            issue.issue_id
+        );
+    }
 
     let run_id = next_run_id(&root)?;
     let run_path = run_dir(&root, &run_id);
@@ -164,6 +170,19 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
             format!("handoff-{}", issue.issue_id),
         ),
     )?;
+    let branch_check = write_branch_check(&root, &run, &issue)?;
+    if branch_check.status == "blocked" {
+        update_run_status(&root, &run_id, ExecuteRunStatus::Blocked)?;
+        update_input_issue_status(&root, &issue.issue_id, InputIssueStatus::Blocked)?;
+        anyhow::bail!(
+            "issue branch check blocked {}: {}",
+            issue.issue_id,
+            branch_check
+                .blocked_reason
+                .unwrap_or_else(|| "branch check failed".to_string())
+        );
+    }
+    update_input_issue_status(&root, &issue.issue_id, InputIssueStatus::InProgress)?;
     rebuild_index(&root)?;
     build_execute_snapshot(&root)?;
     Ok(run)
@@ -268,6 +287,14 @@ pub(crate) fn load_summary(root: &Path) -> Result<ExecuteSummary> {
     })
 }
 
+pub(crate) fn update_input_issue_status(
+    root: &Path,
+    issue_id: &str,
+    status: InputIssueStatus,
+) -> Result<InputIssue> {
+    agentflow_input::update_input_issue_status(root, issue_id, status)
+}
+
 pub(crate) fn missing_execute_paths(root: &Path) -> Vec<String> {
     EXECUTE_DIRECTORIES
         .iter()
@@ -334,4 +361,130 @@ pub(crate) fn assert_build_agent_run(root: &Path, run: &ExecuteRun) -> Result<In
         &AgentRolesDocument::default(),
     )?;
     Ok(issue)
+}
+
+fn write_branch_check(
+    root: &Path,
+    run: &ExecuteRun,
+    issue: &InputIssue,
+) -> Result<ExecuteBranchCheck> {
+    let before = current_git_branch(root).unwrap_or_else(|| "not-git".to_string());
+    let base_branch = default_base_branch(root).unwrap_or_else(|| "main".to_string());
+    let project_id = issue
+        .project_id
+        .clone()
+        .unwrap_or_else(|| "direct".to_string());
+    let issue_branch = format!(
+        "agentflow/{}/{}",
+        sanitize_branch_segment(&project_id),
+        sanitize_branch_segment(&issue.issue_id)
+    );
+
+    let (after, status, blocked_reason) = if before == "not-git" {
+        (before.clone(), "skipped-not-git".to_string(), None)
+    } else if before == issue_branch {
+        (before.clone(), "ready".to_string(), None)
+    } else if git_worktree_dirty(root) {
+        (
+            before.clone(),
+            "blocked".to_string(),
+            Some(
+                "current branch does not match issue branch and worktree has uncommitted changes"
+                    .to_string(),
+            ),
+        )
+    } else {
+        match Command::new("git")
+            .args(["switch", "-C", &issue_branch])
+            .current_dir(root)
+            .output()
+        {
+            Ok(output) if output.status.success() => (
+                current_git_branch(root).unwrap_or_else(|| issue_branch.clone()),
+                "ready".to_string(),
+                None,
+            ),
+            Ok(output) => (
+                before.clone(),
+                "blocked".to_string(),
+                Some(format!(
+                    "git switch failed: {}{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                )),
+            ),
+            Err(error) => (
+                before.clone(),
+                "blocked".to_string(),
+                Some(format!("git switch failed: {error}")),
+            ),
+        }
+    };
+
+    let check = ExecuteBranchCheck {
+        version: "execute-branch-check.v1".to_string(),
+        run_id: run.run_id.clone(),
+        issue_id: issue.issue_id.clone(),
+        project_id: issue.project_id.clone(),
+        base_branch,
+        issue_branch,
+        current_branch_before: before,
+        current_branch_after: after,
+        status,
+        blocked_reason,
+    };
+    write_json(&run_dir(root, &run.run_id).join("branch.json"), &check)?;
+    Ok(check)
+}
+
+fn current_git_branch(root: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(root)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .filter(|branch| !branch.is_empty())
+}
+
+fn default_base_branch(root: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
+        .current_dir(root)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .strip_prefix("origin/")
+        .map(str::to_string)
+}
+
+fn git_worktree_dirty(root: &Path) -> bool {
+    Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(root)
+        .output()
+        .map(|output| output.status.success() && !output.stdout.is_empty())
+        .unwrap_or(false)
+}
+
+fn sanitize_branch_segment(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string()
 }

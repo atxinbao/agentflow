@@ -72,7 +72,7 @@ pub(crate) fn build_input_snapshot(root: &Path) -> Result<InputSnapshot> {
 
     validate_manifest(&manifest, &mut errors);
     validate_spec_gate(root, &specs, &mut errors);
-    validate_issue_graph(&projects, &issues, &relations, &mut errors);
+    validate_issue_graph(&projects, &issues, &relations, &mut warnings, &mut errors);
     normalize_display_statuses(&mut issues);
 
     let ready = errors.is_empty() && missing_paths.is_empty();
@@ -171,6 +171,7 @@ fn validate_issue_graph(
     projects: &[InputProject],
     issues: &[InputIssue],
     relations: &InputIssueRelationsFile,
+    warnings: &mut Vec<String>,
     errors: &mut Vec<String>,
 ) {
     let project_ids = projects
@@ -186,6 +187,10 @@ fn validate_issue_graph(
         errors.extend(issue.target_metadata_errors());
         match issue.issue_model {
             InputIssueModel::Direct => {
+                warnings.push(format!(
+                    "legacy direct issue {} is readable but not eligible for Project Loop scheduling",
+                    issue.issue_id
+                ));
                 if issue.project_id.is_some() {
                     errors.push(format!(
                         "direct issue {} must use projectId = null",
@@ -194,7 +199,21 @@ fn validate_issue_graph(
                 }
             }
             InputIssueModel::Project => match issue.project_id.as_deref() {
-                Some(project_id) if project_ids.contains(project_id) => {}
+                Some(project_id) if project_ids.contains(project_id) => {
+                    let project_contains_issue = projects.iter().any(|project| {
+                        project.project_id == project_id
+                            && project
+                                .issue_ids
+                                .iter()
+                                .any(|candidate| candidate == &issue.issue_id)
+                    });
+                    if !project_contains_issue {
+                        errors.push(format!(
+                            "project issue {} must be listed in project {} issueIds",
+                            issue.issue_id, project_id
+                        ));
+                    }
+                }
                 Some(project_id) => errors.push(format!(
                     "issue {} references missing project {}",
                     issue.issue_id, project_id

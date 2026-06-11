@@ -97,7 +97,7 @@ try {
   assert.equal(inputSnapshot.issues.length, 7);
   assert.deepEqual(
     inputSnapshot.issues.map((issue) => issue.displayStatus),
-    ["backlog", "ready", "in-progress", "review", "ready", "done", "cancel"],
+    ["backlog", "todo", "in_progress", "in_review", "todo", "done", "cancel"],
   );
   assert.deepEqual(
     inputSnapshot.issues.map((issue) => issue.priority),
@@ -107,7 +107,7 @@ try {
   assert.equal(inputSnapshot.issues.every((issue) => "executionRisk" in issue), true);
   assert.deepEqual(
     issueStatusIndex.issues.map((issue) => issue.displayStatus),
-    ["backlog", "ready", "in-progress", "review", "ready", "done", "cancel"],
+    ["backlog", "todo", "in_progress", "in_review", "todo", "done", "cancel"],
   );
   assert.equal(outputIndex.releaseDeliveries.length, 1);
   assert.equal(outputIndex.releaseDeliveries[0].runId, "run-browser-preview-001");
@@ -172,6 +172,10 @@ try {
   assert.ok(appEntry.includes("添加本地项目"));
   assert.ok(appEntry.includes("removeItem(interactionStorageKeys.projectRoot)"));
   assert.ok(appEntry.includes("data-agentflow-page-id"));
+  assert.ok(appEntry.includes("agentManualState.status?.locale.agentLocale"));
+  assert.ok(appEntry.includes("function buildAgentPullRequestTemplateZh"));
+  assert.ok(appEntry.includes("## 大白话说明"));
+  assert.ok(appEntry.includes("buildAgentPullRequestTemplate(task, agentLocale)"));
   assert.ok(appEntry.includes('data-agentflow-page="project-unavailable"'));
   assert.ok(appEntry.includes('data-agentflow-ux="v16"'));
   assert.ok(appEntry.includes('data-agentflow-screen="login"'));

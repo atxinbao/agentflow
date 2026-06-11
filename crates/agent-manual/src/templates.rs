@@ -84,7 +84,7 @@ Conversation with human
 → Approved SPEC
 → Input issue generation
 → Build Agent execution pipeline
-→ GitHub/GitLab automation preflight
+→ Issue preflight
 → Test design
 → Implement issue
 → Sandbox verification
@@ -184,7 +184,7 @@ Conversation
 → Approved SPEC
 → Input issue generation
 → Build Agent execution pipeline
-→ GitHub/GitLab automation preflight
+→ Issue preflight
 → Test design
 → Implement issue
 → Sandbox verification
@@ -290,7 +290,9 @@ Before confirmation, it only produces Requirement Intake Result and SPEC Draft P
 
 After confirmation, it may write Approved SPEC files only under `.agentflow/input/specs/approved/<spec-id>/` and generate direct issues or project issues under `.agentflow/input/issues/**` / `.agentflow/input/projects/**`.
 
-It does not execute issues. Generated spec issues must use `issueCategory=spec`, `requiredAgentRole=build-agent`, `displayStatus=ready` or `displayStatus=backlog`, `sourceSpecId`, `sourceSpecPath`, `issuePath`, `handoffId`, explicit `contextPackPath`, allowed / forbidden paths, forbidden actions, validation commands, and `expectedOutputs.executeRunDir`, `expectedOutputs.evidencePath`, `expectedOutputs.releaseDeliveryDir`.
+Issue IDs are system-assigned and must use `<prefix>-<number>` format, for example `AF-001` or `AF-TASK-HIER-001`. Do not invent free-form slug IDs.
+
+It does not execute issues. Generated spec issues must use `issueCategory=spec`, `requiredAgentRole=build-agent`, `status=backlog` by default, and only move to `status=todo` when the issue is ready to enter the Build Agent pipeline. Issue status values are limited to `backlog`, `todo`, `in_progress`, `in_review`, `done`, `blocked`, and `cancel`; newly written input must not use legacy status names. Generated spec issues must include `sourceSpecId`, `sourceSpecPath`, `issuePath`, `handoffId`, explicit `contextPackPath`, allowed / forbidden paths, forbidden actions, validation commands, and `expectedOutputs.executeRunDir`, `expectedOutputs.evidencePath`, `expectedOutputs.releaseDeliveryDir`.
 
 When Spec Agent writes an initial input package, relation files are part of the package. `.agentflow/input/relations/issue-relations.json` and `.agentflow/input/relations/dependency-graph.json` must use canonical camelCase relation edges with `fromIssueId`, `toIssueId`, and `type`. Do not write legacy `from` / `to` relation fields.
 
@@ -308,7 +310,7 @@ Build Agent must use the AgentFlow input issue and executionPipeline as the only
 
 It performs the Build Agent execution pipeline:
 
-1. GitHub/GitLab automation preflight
+1. Issue preflight
 2. Test design
 3. Implement issue
 4. Sandbox verification
@@ -316,23 +318,23 @@ It performs the Build Agent execution pipeline:
 6. Merge PR/MR
 7. Write back Done
 
-The GitHub/GitLab automation preflight first requires every `blockedBy` dependency issue to be Done. It then detects whether the remote provider is GitHub or GitLab, verifies only the matching provider CLI, auth, branch state, remote repository, PR/MR creation capability, merge policy, and whether auto-merge is eligible. GitHub requires `gh`; GitLab requires `glab`; the two CLIs are alternatives and do not both need to be installed. Dependency or provider failures are written to `state/gates/blockers.json`, and the affected issue is shown as blocked.
+The issue preflight confirms the current task is an AgentFlow input issue, the issue status is `backlog`, every `blockedBy` dependency issue is Done, the issue contract is complete, and the Panel Context Pack exists or can be generated. After this stage passes, AgentFlow moves the issue to `todo`. GitHub/GitLab checks are not part of this loop stage; CLI, auth, branch, PR/MR creation, and merge capability are recorded only in the create PR/MR and merge PR/MR stages.
 
-The test design stage derives test points from SPEC and the current issue. If TDD fits the task, Build Agent adds or updates the failing test first. If TDD does not fit the task, Build Agent records the reason and defines the replacement smoke, build, screenshot, or command verification.
+The test design stage derives test points from SPEC and the current issue. If TDD fits the task, Build Agent adds or updates the failing test first. If TDD does not fit the task, Build Agent records the reason and defines the replacement smoke, build, screenshot, or command verification. Entering this stage moves the issue to `in_progress`.
 
 The sandbox verification stage runs local validation commands and records stdout, stderr, exit code, browser smoke evidence, screenshots, or other required evidence.
 
-The create PR/MR stage pushes the task branch, creates a GitHub PR or GitLab MR, and completes the AgentFlow Build Agent PR/MR template in the description. The description must include task metadata, changed files, scope checklist, Build Agent loop checklist, evidence, impact, rollback plan, and review gate. A Draft PR/MR is only an intermediate state, not the Build Agent endpoint.
+The create PR/MR stage pushes the task branch, creates a GitHub PR or GitLab MR, and completes the AgentFlow Build Agent PR/MR template in the description. The PR/MR description is user-facing natural-language output and must follow `agentLocale`. The description must include task metadata, changed files, scope checklist, Build Agent loop checklist, evidence, impact, rollback plan, and review gate. A Draft PR/MR is only an intermediate state, not the Build Agent endpoint.
 
 The merge PR stage supports two modes: `manual-merge` and `auto-merge-if-eligible`.
 
-In `manual-merge`, the Build Agent must mark the PR/MR ready and enter `waiting-for-merge`. A human merges the PR/MR. AgentFlow local detection can then confirm GitHub or GitLab reports the PR/MR as merged and continue to Done writeback.
+In `manual-merge`, the Build Agent must mark the PR/MR ready and keep the issue in `in_review` while waiting for a human merge. AgentFlow local detection can then confirm GitHub or GitLab reports the PR/MR as merged and continue to Done writeback.
 
-In `auto-merge-if-eligible`, the Build Agent must not stop at Draft PR/MR. For GitHub it must run `gh pr ready`, then `gh pr merge --auto`, then poll the PR until GitHub reports it as merged. For GitLab it must run `glab mr update --ready`, then `glab mr merge --auto-merge`, then poll the MR until GitLab reports it as merged. If the provider rejects auto-merge, the Build Agent must report the reason and stop at ready-for-merge.
+In `auto-merge-if-eligible`, the Build Agent must not stop at Draft PR/MR. For GitHub it must run `gh pr ready`, then `gh pr merge --auto`, then poll the PR until GitHub reports it as merged. For GitLab it must run `glab mr update --ready`, then `glab mr merge --auto-merge`, then poll the MR until GitLab reports it as merged. If the provider rejects auto-merge, the Build Agent must report the reason and keep the issue in `in_review`.
 
-The writeback stage runs only after PR/MR merge and writes run, evidence, release delivery, and Done status.
+The writeback stage runs only after PR/MR merge and writes run, evidence, release delivery, and `done` status.
 
-It cannot process `issueCategory=audit`, ask for audit target metadata, modify input issues, modify Approved SPEC, bypass GitHub/GitLab automation preflight, bypass sandbox verification, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge outside `mergeMode`, deploy, call models, create audit requests from Done writeback, or write audit reports.
+It cannot process `issueCategory=audit`, ask for audit target metadata, modify input issues outside AgentFlow issue status transitions, modify Approved SPEC, bypass issue preflight, bypass sandbox verification, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge outside `mergeMode`, deploy, call models, create audit requests from Done writeback, or write audit reports.
 
 ### 3. Audit Agent
 

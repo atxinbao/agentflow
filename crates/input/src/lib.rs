@@ -11,8 +11,9 @@ mod storage;
 mod validate;
 
 pub use manager::{
-    load_input_index, load_input_manifest, load_input_snapshot, load_input_status,
-    prepare_input_workspace, validate_input_workspace,
+    load_input_index, load_input_issue, load_input_manifest, load_input_project,
+    load_input_snapshot, load_input_status, prepare_input_workspace, update_input_issue_status,
+    update_input_project_status, validate_input_workspace,
 };
 pub use model::{
     InputIndex, InputManifest, InputSnapshot, InputStatusSnapshot, INPUT_INDEX_VERSION,
@@ -26,10 +27,9 @@ mod tests {
     use super::*;
     use crate::{
         issue::{
-            default_build_agent_execution_pipeline, validate_agent_issue_permission, AgentRole,
-            DisplayStatus, InputIssue, InputIssueModel, InputIssueStatus, InputPriority,
-            InputRiskLevel, IssueCategory, BUILD_AGENT_EXECUTION_PIPELINE_VERSION,
-            BUILD_AGENT_GIT_PROVIDERS, BUILD_AGENT_PIPELINE_STAGE_IDS,
+            validate_agent_issue_permission, AgentRole, DisplayStatus, InputIssue, InputIssueModel,
+            InputIssueStatus, InputPriority, InputRiskLevel, IssueCategory,
+            BUILD_AGENT_EXECUTION_PIPELINE_VERSION, BUILD_AGENT_PIPELINE_STAGE_IDS,
         },
         project::{InputProject, InputProjectStatus},
         relations::{
@@ -121,25 +121,21 @@ mod tests {
     }
 
     #[test]
-    fn build_agent_pipeline_accepts_one_matching_git_provider() {
-        for provider in BUILD_AGENT_GIT_PROVIDERS {
-            let mut issue = InputIssue {
-                issue_id: format!("iss-{provider}"),
-                issue_category: IssueCategory::Spec,
-                required_agent_role: AgentRole::BuildAgent,
-                ..InputIssue::default()
-            };
-            let mut pipeline = default_build_agent_execution_pipeline();
-            pipeline.git_providers = vec![provider.to_string()];
-            issue.execution_pipeline = Some(pipeline);
+    fn build_agent_pipeline_starts_with_issue_preflight() {
+        let mut issue = InputIssue {
+            issue_id: "iss-001".to_string(),
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::BuildAgent,
+            ..InputIssue::default()
+        };
+        issue.normalize_execution_metadata();
 
-            issue.normalize_execution_metadata();
-
-            assert_eq!(
-                issue.execution_pipeline.unwrap().git_providers,
-                vec![provider.to_string()]
-            );
-        }
+        let pipeline = issue.execution_pipeline.unwrap();
+        assert!(pipeline.git_providers.is_empty());
+        assert_eq!(
+            pipeline.stages.first().map(|stage| stage.stage_id.as_str()),
+            Some("issue-preflight")
+        );
     }
 
     #[test]
@@ -176,6 +172,60 @@ mod tests {
         assert_eq!(repaired["priority"], "p1");
         assert_eq!(repaired["executionRisk"], "medium");
         assert!(repaired.get("riskLevel").is_none());
+    }
+
+    #[test]
+    fn prepare_rejects_legacy_issue_status_values() {
+        let dir = tempdir().unwrap();
+        prepare_input_workspace(dir.path()).unwrap();
+        let path = dir
+            .path()
+            .join(".agentflow/input/issues/iss-legacy-status.json");
+        fs::write(
+            &path,
+            serde_json::to_string_pretty(&serde_json::json!({
+                "version": "input-issue.v1",
+                "issueId": "iss-legacy-status",
+                "issueModel": "direct",
+                "issueCategory": "spec",
+                "requiredAgentRole": "build-agent",
+                "sourceSpecId": "spec-001",
+                "projectId": null,
+                "title": "Legacy status",
+                "summary": "Reject old issue status values.",
+                "kind": "feature",
+                "priority": "p1",
+                "status": "ready-for-execute",
+                "displayStatus": "ready",
+                "executionRisk": "medium",
+                "scope": ["src/lib.rs"],
+                "nonGoals": [],
+                "acceptanceCriteria": [],
+                "validationHints": ["cargo test"],
+                "relations": {
+                    "blockedBy": [],
+                    "blocks": [],
+                    "related": [],
+                    "duplicateOf": null
+                },
+                "panel": {
+                    "snapshotId": null,
+                    "contextPackId": null
+                },
+                "system": {
+                    "createdBy": "fixture",
+                    "createdAt": 1,
+                    "updatedAt": 1,
+                    "path": ".agentflow/input/issues/iss-legacy-status.json",
+                    "revision": 1
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let error = prepare_input_workspace(dir.path()).unwrap_err();
+        assert!(error.to_string().contains("iss-legacy-status.json"));
     }
 
     #[test]
@@ -351,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn display_status_serializes_as_kebab_case() {
+    fn display_status_serializes_as_canonical_issue_status() {
         assert_eq!(
             serde_json::to_value(DisplayStatus::Backlog).unwrap(),
             "backlog"
@@ -360,14 +410,14 @@ mod tests {
             serde_json::to_value(DisplayStatus::Blocked).unwrap(),
             "blocked"
         );
-        assert_eq!(serde_json::to_value(DisplayStatus::Ready).unwrap(), "ready");
+        assert_eq!(serde_json::to_value(DisplayStatus::Todo).unwrap(), "todo");
         assert_eq!(
             serde_json::to_value(DisplayStatus::InProgress).unwrap(),
-            "in-progress"
+            "in_progress"
         );
         assert_eq!(
-            serde_json::to_value(DisplayStatus::Review).unwrap(),
-            "review"
+            serde_json::to_value(DisplayStatus::InReview).unwrap(),
+            "in_review"
         );
         assert_eq!(serde_json::to_value(DisplayStatus::Done).unwrap(), "done");
         assert_eq!(
@@ -382,14 +432,14 @@ mod tests {
             issue_id: "iss-001".to_string(),
             source_spec_id: "spec-001".to_string(),
             title: "Ready issue".to_string(),
-            status: InputIssueStatus::ReadyForExecute,
-            display_status: DisplayStatus::Review,
+            status: InputIssueStatus::Todo,
+            display_status: DisplayStatus::InReview,
             ..InputIssue::default()
         })
         .unwrap();
 
-        assert_eq!(issue["status"], "ready-for-execute");
-        assert_eq!(issue["displayStatus"], "review");
+        assert_eq!(issue["status"], "todo");
+        assert_eq!(issue["displayStatus"], "in_review");
     }
 
     #[test]
@@ -400,7 +450,7 @@ mod tests {
             issue_id: "iss-001".to_string(),
             source_spec_id: "spec-001".to_string(),
             title: "Ready issue".to_string(),
-            status: InputIssueStatus::ReadyForExecute,
+            status: InputIssueStatus::Todo,
             execution_risk: InputRiskLevel::Low,
             context_pack_path: ".agentflow/execute/runs/iss-001/context-pack.json".to_string(),
             scope: vec!["src/lib.rs".to_string()],
@@ -457,9 +507,7 @@ mod tests {
         let pipeline = issue.execution_pipeline.as_ref().unwrap();
         assert_eq!(pipeline.version, BUILD_AGENT_EXECUTION_PIPELINE_VERSION);
         assert_eq!(pipeline.agent_role, AgentRole::BuildAgent);
-        for provider in BUILD_AGENT_GIT_PROVIDERS {
-            assert!(pipeline.git_providers.contains(&provider.to_string()));
-        }
+        assert!(pipeline.git_providers.is_empty());
         assert!(pipeline.merge_modes.contains(&"manual-merge".to_string()));
         assert!(pipeline
             .merge_modes
@@ -476,18 +524,20 @@ mod tests {
         let preflight_stage = pipeline
             .stages
             .iter()
-            .find(|stage| stage.stage_id == "git-provider-preflight")
+            .find(|stage| stage.stage_id == "issue-preflight")
             .unwrap();
+        assert_eq!(preflight_stage.label, "执行前置检测");
         assert!(preflight_stage
             .goal
-            .contains("只基于 AgentFlow input issue"));
+            .contains("当前执行对象是 AgentFlow input issue"));
+        assert!(preflight_stage.goal.contains("状态为 backlog"));
+        assert!(preflight_stage.goal.contains("依赖已完成"));
+        assert!(preflight_stage.goal.contains("任务合同完整"));
+        assert!(preflight_stage.goal.contains("Panel Context Pack"));
+        assert!(preflight_stage.goal.contains("切换为 todo"));
         assert!(preflight_stage
             .goal
-            .contains("外部 issue、任务、计划、队列、线程或工具状态"));
-        assert!(preflight_stage.goal.contains("GitHub 还是 GitLab"));
-        assert!(preflight_stage.goal.contains("不要求同时安装 gh 和 glab"));
-        assert!(preflight_stage.goal.contains("build-agent complete"));
-        assert!(preflight_stage.goal.contains("target/release/agentflow"));
+            .contains("GitHub/GitLab 不在这个 loop 阶段检测"));
         assert!(preflight_stage.evidence.contains(
             &"AgentFlow issueId and executionPipeline are the only active task source".to_string()
         ));
@@ -497,25 +547,17 @@ mod tests {
         ));
         assert!(preflight_stage
             .evidence
-            .contains(&"Git provider detected as github or gitlab".to_string()));
+            .contains(&"input issue status is backlog before preflight".to_string()));
         assert!(preflight_stage
             .evidence
-            .contains(&"only the CLI matching the detected provider is required".to_string()));
+            .contains(&"Panel Context Pack exists or is generated".to_string()));
+        assert!(preflight_stage
+            .evidence
+            .contains(&"input issue status changed to todo after preflight".to_string()));
         assert!(preflight_stage
             .evidence
             .iter()
-            .any(|item| item.contains("gh auth status")));
-        assert!(preflight_stage
-            .evidence
-            .iter()
-            .any(|item| item.contains("glab auth status")));
-        assert!(preflight_stage.evidence.contains(
-            &"cargo build --release --bin agentflow or target/debug/agentflow fallback".to_string()
-        ));
-        assert!(preflight_stage.evidence.contains(
-            &"target/release/agentflow build-agent complete --help or target/debug/agentflow build-agent complete --help"
-                .to_string()
-        ));
+            .all(|item| !item.contains("gh ") && !item.contains("glab ")));
         let test_design_stage = pipeline
             .stages
             .iter()
@@ -550,7 +592,7 @@ mod tests {
             .unwrap();
         assert!(merge_stage.goal.contains("gh pr merge --auto"));
         assert!(merge_stage.goal.contains("glab mr merge --auto-merge"));
-        assert!(merge_stage.goal.contains("waiting-for-merge"));
+        assert!(merge_stage.goal.contains("in_review"));
         assert!(merge_stage
             .evidence
             .iter()
@@ -561,7 +603,7 @@ mod tests {
             .any(|item| item.contains("glab mr merge --auto-merge")));
         assert!(merge_stage
             .evidence
-            .contains(&"waiting-for-merge state when manual-merge".to_string()));
+            .contains(&"in_review wait evidence when manual-merge".to_string()));
         let writeback_stage = pipeline
             .stages
             .iter()
@@ -589,8 +631,8 @@ mod tests {
             source_spec_id: "spec-001".to_string(),
             title: "Ready issue event".to_string(),
             summary: "Publish ready event from input prepare.".to_string(),
-            status: InputIssueStatus::ReadyForExecute,
-            display_status: DisplayStatus::Ready,
+            status: InputIssueStatus::Todo,
+            display_status: DisplayStatus::Todo,
             execution_risk: InputRiskLevel::Low,
             scope: vec!["src/lib.rs".to_string()],
             validation_hints: vec!["cargo test".to_string()],
@@ -624,18 +666,18 @@ mod tests {
     }
 
     #[test]
-    fn legacy_issue_without_display_status_defaults_to_backlog() {
+    fn issue_without_display_status_defaults_to_backlog() {
         let issue: InputIssue = serde_json::from_value(serde_json::json!({
             "version": "input-issue.v1",
-            "issueId": "iss-legacy",
+            "issueId": "iss-display-default",
             "issueModel": "direct",
             "sourceSpecId": "spec-001",
             "projectId": null,
-            "title": "Legacy issue",
-            "summary": "Legacy issue without displayStatus",
+            "title": "Issue without display status",
+            "summary": "Issue without displayStatus",
             "kind": "feature",
             "priority": "p2",
-            "status": "ready-for-execute",
+            "status": "todo",
             "executionRisk": "low",
             "scope": [],
             "nonGoals": [],
@@ -655,7 +697,7 @@ mod tests {
                 "createdBy": "fixture",
                 "createdAt": 1,
                 "updatedAt": 1,
-                "path": ".agentflow/input/issues/iss-legacy.json",
+                "path": ".agentflow/input/issues/iss-display-default.json",
                 "revision": 1
             }
         }))
@@ -664,7 +706,7 @@ mod tests {
         assert_eq!(issue.display_status, DisplayStatus::Backlog);
         assert_eq!(
             DisplayStatus::from_input_status(&issue.status),
-            DisplayStatus::Ready
+            DisplayStatus::Todo
         );
         assert_eq!(issue.issue_category, IssueCategory::Spec);
         assert_eq!(issue.required_agent_role, AgentRole::BuildAgent);
@@ -694,8 +736,8 @@ mod tests {
                 "summary": "简化 executionPipeline 也不能让 input loader 失败。",
                 "kind": "feature",
                 "priority": "p1",
-                "status": "ready-for-execute",
-                "displayStatus": "ready",
+                "status": "todo",
+                "displayStatus": "todo",
                 "executionRisk": "medium",
                 "scope": ["apps/desktop/src/**"],
                 "nonGoals": [],
@@ -743,9 +785,7 @@ mod tests {
                 .unwrap();
         let pipeline = issue.execution_pipeline.as_ref().unwrap();
         assert_eq!(pipeline.agent_role, AgentRole::BuildAgent);
-        for provider in BUILD_AGENT_GIT_PROVIDERS {
-            assert!(pipeline.git_providers.contains(&provider.to_string()));
-        }
+        assert!(pipeline.git_providers.is_empty());
         for stage_id in BUILD_AGENT_PIPELINE_STAGE_IDS {
             assert!(
                 pipeline
@@ -758,7 +798,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_audit_expected_outputs_array_is_supported() {
+    fn audit_expected_outputs_array_is_supported() {
         let mut issue: InputIssue = serde_json::from_value(serde_json::json!({
             "version": "input-issue.v1",
             "issueId": "audit-release-v0.1.0",
@@ -771,8 +811,8 @@ mod tests {
             "summary": "Audit release",
             "kind": "validation",
             "priority": "p1",
-            "status": "ready-for-execute",
-            "displayStatus": "ready",
+            "status": "todo",
+            "displayStatus": "todo",
             "executionRisk": "high",
             "scope": [],
             "nonGoals": [],
@@ -877,7 +917,7 @@ mod tests {
             issue_id: "iss-001".to_string(),
             source_spec_id: "spec-001".to_string(),
             title: "Ready issue".to_string(),
-            status: InputIssueStatus::ReadyForExecute,
+            status: InputIssueStatus::Todo,
             execution_risk: InputRiskLevel::Low,
             ..InputIssue::default()
         };
@@ -895,8 +935,8 @@ mod tests {
             .find(|entry| entry.id == "iss-001")
             .unwrap();
 
-        assert_eq!(issue_entry.status, "readyforexecute");
-        assert_eq!(issue_entry.display_status, Some(DisplayStatus::Ready));
+        assert_eq!(issue_entry.status, "todo");
+        assert_eq!(issue_entry.display_status, Some(DisplayStatus::Todo));
     }
 
     #[test]
@@ -917,7 +957,7 @@ mod tests {
             source_spec_id: "spec-001".to_string(),
             project_id: Some("proj-001".to_string()),
             title: "First issue".to_string(),
-            status: InputIssueStatus::ReadyForExecute,
+            status: InputIssueStatus::Todo,
             execution_risk: InputRiskLevel::Medium,
             ..InputIssue::default()
         };
@@ -927,7 +967,7 @@ mod tests {
             source_spec_id: "spec-001".to_string(),
             project_id: Some("proj-001".to_string()),
             title: "Second issue".to_string(),
-            status: InputIssueStatus::ReadyForExecute,
+            status: InputIssueStatus::Todo,
             execution_risk: InputRiskLevel::Medium,
             ..InputIssue::default()
         };
@@ -992,7 +1032,7 @@ mod tests {
         let index = load_input_index(dir.path()).unwrap();
         assert_eq!(index.issues.len(), 2);
         assert_eq!(index.issues[0].id, "iss-001");
-        assert_eq!(index.issues[0].display_status, Some(DisplayStatus::Ready));
+        assert_eq!(index.issues[0].display_status, Some(DisplayStatus::Todo));
         let relations: InputIssueRelationsFile = crate::storage::read_json(
             &dir.path()
                 .join(".agentflow/input/relations/issue-relations.json"),

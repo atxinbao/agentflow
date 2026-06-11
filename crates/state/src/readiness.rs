@@ -8,7 +8,6 @@ use agentflow_output::OutputSnapshot;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
-    process::{Command, Stdio},
 };
 
 #[derive(Debug, Clone)]
@@ -20,7 +19,7 @@ pub(crate) struct IssueReadinessBlocker {
 }
 
 pub(crate) fn issue_readiness_blockers(
-    root: &Path,
+    _root: &Path,
     input: Option<&InputSnapshot>,
     execute: Option<&agentflow_execute::ExecuteSnapshot>,
     output: Option<&OutputSnapshot>,
@@ -31,9 +30,7 @@ pub(crate) fn issue_readiness_blockers(
 
     let latest_runs = latest_runs_by_issue(execute);
     let blocked_by = blocked_by_map(input);
-    let mut blockers = dependency_blockers(input, output, &latest_runs, &blocked_by);
-    blockers.extend(git_provider_blockers(root, input, output, &latest_runs));
-    blockers
+    dependency_blockers(input, output, &latest_runs, &blocked_by)
 }
 
 pub(crate) fn issue_has_readiness_blocker(
@@ -45,10 +42,8 @@ pub(crate) fn issue_has_readiness_blocker(
         return false;
     }
     blockers.iter().any(|blocker| {
-        matches!(
-            blocker.action.as_str(),
-            "dependency-ready" | "git-provider-ready"
-        ) && blocker.source_path.as_deref() == Some(issue_path)
+        blocker.action.as_str() == "dependency-ready"
+            && blocker.source_path.as_deref() == Some(issue_path)
     })
 }
 
@@ -104,163 +99,6 @@ fn dependency_blockers(
     }
 
     blockers
-}
-
-fn git_provider_blockers(
-    root: &Path,
-    input: &InputSnapshot,
-    output: Option<&OutputSnapshot>,
-    latest_runs: &BTreeMap<String, ExecuteRunIndexEntry>,
-) -> Vec<IssueReadinessBlocker> {
-    let gated_issues = input
-        .issues
-        .iter()
-        .filter(|issue| {
-            issue_requires_git_provider_gate(issue)
-                && !issue_terminal(issue, latest_runs.get(&issue.issue_id), output)
-        })
-        .collect::<Vec<_>>();
-    if gated_issues.is_empty() {
-        return Vec::new();
-    }
-
-    let reasons = git_provider_gate_reasons(root);
-    if reasons.is_empty() {
-        return Vec::new();
-    }
-
-    gated_issues
-        .into_iter()
-        .flat_map(|issue| {
-            reasons.iter().map(move |reason| IssueReadinessBlocker {
-                issue_id: issue.issue_id.clone(),
-                action: "git-provider-ready".to_string(),
-                reason: format!("任务 {} 的 Git 自动化预检失败：{}", issue.issue_id, reason),
-                source_path: issue_source_path(issue),
-            })
-        })
-        .collect()
-}
-
-fn issue_requires_git_provider_gate(issue: &InputIssue) -> bool {
-    if matches!(
-        issue.status,
-        InputIssueStatus::Done | InputIssueStatus::Canceled
-    ) {
-        return false;
-    }
-    issue.execution_pipeline.as_ref().is_some_and(|pipeline| {
-        pipeline
-            .stages
-            .iter()
-            .any(|stage| stage.stage_id == "git-provider-preflight" && stage.required)
-    })
-}
-
-fn git_provider_gate_reasons(root: &Path) -> Vec<String> {
-    let mut reasons = Vec::new();
-    if command_stdout(root, "git", &["rev-parse", "--is-inside-work-tree"])
-        .map(|value| value.trim() == "true")
-        != Ok(true)
-    {
-        return vec!["当前项目不是 Git 仓库。".to_string()];
-    }
-
-    let remote_url = command_stdout(root, "git", &["remote", "get-url", "origin"])
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| first_remote_url(root));
-    let Some(remote_url) = remote_url else {
-        reasons.push("没有可用的 Git remote。".to_string());
-        return reasons;
-    };
-    let Some(provider) = detect_git_provider(&remote_url) else {
-        reasons.push(format!("远端 provider 不支持：{remote_url}"));
-        return reasons;
-    };
-
-    let branch = command_stdout(root, "git", &["branch", "--show-current"])
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    if branch.is_empty() {
-        reasons.push("当前不在可提交分支上。".to_string());
-    }
-
-    if let Ok(status) = command_stdout(root, "git", &["status", "--short"]) {
-        if !status.trim().is_empty() {
-            reasons.push("工作区不干净，请先提交或清理本地改动。".to_string());
-        }
-    } else {
-        reasons.push("无法读取 Git 工作区状态。".to_string());
-    }
-
-    match provider {
-        "github" => {
-            if !command_success(root, "gh", &["--version"]) {
-                reasons.push("当前远端是 GitHub，但 gh CLI 不可用。".to_string());
-            } else if !command_success(root, "gh", &["auth", "status"]) {
-                reasons.push("当前远端是 GitHub，但 gh 未完成认证。".to_string());
-            }
-        }
-        "gitlab" => {
-            if !command_success(root, "glab", &["--version"]) {
-                reasons.push("当前远端是 GitLab，但 glab CLI 不可用。".to_string());
-            } else if !command_success(root, "glab", &["auth", "status"]) {
-                reasons.push("当前远端是 GitLab，但 glab 未完成认证。".to_string());
-            }
-        }
-        _ => {}
-    }
-
-    reasons
-}
-
-fn first_remote_url(root: &Path) -> Option<String> {
-    let remotes = command_stdout(root, "git", &["remote"]).ok()?;
-    remotes
-        .lines()
-        .map(str::trim)
-        .find(|remote| !remote.is_empty())
-        .and_then(|remote| command_stdout(root, "git", &["remote", "get-url", remote]).ok())
-        .filter(|value| !value.trim().is_empty())
-}
-
-fn detect_git_provider(remote_url: &str) -> Option<&'static str> {
-    let remote = remote_url.to_ascii_lowercase();
-    if remote.contains("github.com") {
-        Some("github")
-    } else if remote.contains("gitlab.com") {
-        Some("gitlab")
-    } else {
-        None
-    }
-}
-
-fn command_success(root: &Path, program: &str, args: &[&str]) -> bool {
-    Command::new(program)
-        .args(args)
-        .current_dir(root)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
-}
-
-fn command_stdout(root: &Path, program: &str, args: &[&str]) -> Result<String, String> {
-    let output = Command::new(program)
-        .args(args)
-        .current_dir(root)
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|error| error.to_string())?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
-    }
 }
 
 fn blocked_by_map(input: &InputSnapshot) -> BTreeMap<String, BTreeSet<String>> {
@@ -329,19 +167,22 @@ pub(crate) fn issue_display_status(
     latest_run: Option<&ExecuteRunIndexEntry>,
     output: Option<&OutputSnapshot>,
 ) -> DisplayStatus {
-    if matches!(issue.status, InputIssueStatus::Canceled) {
+    if matches!(issue.status, InputIssueStatus::Cancel) {
         return DisplayStatus::Cancel;
+    }
+    if matches!(issue.status, InputIssueStatus::Done) {
+        return DisplayStatus::Done;
     }
     if let Some(run) = latest_run {
         return match run.status {
             ExecuteRunStatus::Cancelled => DisplayStatus::Cancel,
-            ExecuteRunStatus::Completed => DisplayStatus::Done,
-            ExecuteRunStatus::Failed => DisplayStatus::Review,
+            ExecuteRunStatus::Completed => DisplayStatus::InReview,
+            ExecuteRunStatus::Failed => DisplayStatus::InReview,
             ExecuteRunStatus::Blocked => DisplayStatus::Blocked,
-            ExecuteRunStatus::Queued
-            | ExecuteRunStatus::Preflight
-            | ExecuteRunStatus::Planned
-            | ExecuteRunStatus::Checkpointed
+            ExecuteRunStatus::Queued | ExecuteRunStatus::Preflight | ExecuteRunStatus::Planned => {
+                DisplayStatus::Todo
+            }
+            ExecuteRunStatus::Checkpointed
             | ExecuteRunStatus::Patching
             | ExecuteRunStatus::Running
             | ExecuteRunStatus::Validating => DisplayStatus::InProgress,
@@ -352,7 +193,7 @@ pub(crate) fn issue_display_status(
         &issue.issue_id,
         latest_run.map(|run| run.run_id.as_str()),
     ) {
-        return DisplayStatus::Done;
+        return DisplayStatus::InReview;
     }
     DisplayStatus::from_input_status(&issue.status)
 }
@@ -444,10 +285,10 @@ mod tests {
 
     #[test]
     fn dependency_gate_blocks_until_blocked_by_issue_is_done() {
-        let mut blocked = issue("AF-002", InputIssueStatus::ReadyForExecute);
+        let mut blocked = issue("AF-002", InputIssueStatus::Todo);
         blocked.relations.blocked_by = vec!["AF-001".to_string()];
         let input = snapshot(
-            vec![issue("AF-001", InputIssueStatus::ReadyForExecute), blocked],
+            vec![issue("AF-001", InputIssueStatus::Todo), blocked],
             InputIssueRelationsFile::default(),
         );
 
@@ -460,7 +301,7 @@ mod tests {
 
     #[test]
     fn dependency_gate_allows_when_blocked_by_issue_is_done() {
-        let mut blocked = issue("AF-002", InputIssueStatus::ReadyForExecute);
+        let mut blocked = issue("AF-002", InputIssueStatus::Todo);
         blocked.relations.blocked_by = vec!["AF-001".to_string()];
         let input = snapshot(
             vec![issue("AF-001", InputIssueStatus::Done), blocked],
@@ -473,30 +314,14 @@ mod tests {
     }
 
     #[test]
-    fn git_provider_gate_only_runs_for_pipeline_issues() {
-        let mut gated = issue("AF-001", InputIssueStatus::ReadyForExecute);
-        gated.execution_pipeline = Some(default_build_agent_execution_pipeline());
-        let plain = issue("AF-002", InputIssueStatus::ReadyForExecute);
-        let input = snapshot(vec![gated, plain], InputIssueRelationsFile::default());
+    fn readiness_blockers_only_include_dependency_checks() {
+        let mut issue = issue("AF-001", InputIssueStatus::Todo);
+        issue.execution_pipeline = Some(default_build_agent_execution_pipeline());
+        let input = snapshot(vec![issue], InputIssueRelationsFile::default());
 
         let blockers =
             issue_readiness_blockers(Path::new("/tmp/not-a-git-repo"), Some(&input), None, None);
 
-        assert!(blockers.iter().any(|blocker| {
-            blocker.issue_id == "AF-001" && blocker.action == "git-provider-ready"
-        }));
-        assert!(!blockers.iter().any(|blocker| blocker.issue_id == "AF-002"));
-    }
-
-    #[test]
-    fn git_provider_detection_treats_github_and_gitlab_as_alternatives() {
-        assert_eq!(
-            detect_git_provider("git@github.com:owner/repo.git"),
-            Some("github")
-        );
-        assert_eq!(
-            detect_git_provider("https://gitlab.com/owner/repo.git"),
-            Some("gitlab")
-        );
+        assert!(blockers.is_empty());
     }
 }

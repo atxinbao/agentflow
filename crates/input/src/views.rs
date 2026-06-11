@@ -12,7 +12,11 @@ pub struct InputView {
 
 impl InputView {
     pub fn active() -> Self {
-        Self::new("active", "Active input issues", "status in planned,blocked")
+        Self::new(
+            "active",
+            "Active input issues",
+            "status in backlog,todo,in_progress,in_review,blocked",
+        )
     }
 
     pub fn blocked() -> Self {
