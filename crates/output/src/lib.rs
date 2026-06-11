@@ -206,6 +206,10 @@ mod tests {
                 remote_pr_url: None,
                 status: "draft-only".to_string(),
                 created_remote_pr: false,
+                provider: None,
+                merge_mode: None,
+                merged: false,
+                checked_at: None,
             },
         )
         .unwrap();

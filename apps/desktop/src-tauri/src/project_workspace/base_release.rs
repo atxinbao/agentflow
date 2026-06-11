@@ -539,6 +539,10 @@ fn write_demo_delivery(root: &Path, now: u64) -> Result<(), String> {
             remote_pr_url: None,
             status: "demo-only".to_string(),
             created_remote_pr: false,
+            provider: None,
+            merge_mode: None,
+            merged: false,
+            checked_at: None,
         },
     )?;
     write_text(

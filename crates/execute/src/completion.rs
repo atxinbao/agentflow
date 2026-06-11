@@ -81,7 +81,8 @@ pub fn complete_build_agent_issue(
 
     let result = validate_execute_run(&root, run.run_id.clone())?;
     let delivery = prepare_release_delivery(&root, run.run_id.clone())?;
-    update_input_issue_status(&root, &run.issue_id, InputIssueStatus::Done)?;
+    let issue = update_input_issue_status(&root, &run.issue_id, InputIssueStatus::Done)?;
+    write_done_issue_loop_projection(&root, &run, issue.project_id)?;
     let run = read_run(&root, &run.run_id)?;
     rebuild_index(&root)?;
 
@@ -90,6 +91,47 @@ pub fn complete_build_agent_issue(
         result,
         delivery,
     })
+}
+
+fn write_done_issue_loop_projection(
+    root: &Path,
+    run: &ExecuteRun,
+    project_id: Option<String>,
+) -> Result<()> {
+    let branch_name =
+        read_json::<serde_json::Value>(&run_dir(root, &run.run_id).join("branch.json"))
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("issueBranch")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            });
+    write_json(
+        &root
+            .join(".agentflow/state/loops/issues")
+            .join(format!("{}.json", sanitize_projection_id(&run.issue_id))),
+        &serde_json::json!({
+            "version": "agentflow-loop-issue.v1",
+            "projectId": project_id,
+            "issueId": run.issue_id,
+            "stage": "done",
+            "runId": run.run_id,
+            "branchName": branch_name,
+            "reviewSubstate": "merged",
+            "blockers": [],
+            "updatedAt": unix_timestamp_seconds()
+        }),
+    )
+}
+
+fn sanitize_projection_id(id: &str) -> String {
+    id.chars()
+        .map(|ch| match ch {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            _ => ch,
+        })
+        .collect()
 }
 
 fn allowed_commands(commands: &[BuildAgentValidationCommand]) -> Vec<String> {

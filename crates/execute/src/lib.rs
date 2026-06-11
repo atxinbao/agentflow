@@ -232,6 +232,7 @@ mod tests {
         assert_eq!(completion.run.status, ExecuteRunStatus::Completed);
         assert_eq!(completion.result.status, ExecuteRunStatus::Completed);
         assert!(completion.result.validation.passed);
+        assert!(!completion.result.next.needs_audit);
         assert_eq!(completion.delivery.status, "drafted");
         let issue_after: InputIssue =
             crate::storage::read_json(&dir.path().join(".agentflow/input/issues/iss-001.json"))
@@ -249,6 +250,37 @@ mod tests {
         let output_index = agentflow_output::load_output_index(dir.path()).unwrap();
         assert_eq!(output_index.evidence.len(), 1);
         assert_eq!(output_index.release_deliveries.len(), 1);
+        let pr_metadata: agentflow_output::OutputPrMetadata = crate::storage::read_json(
+            &dir.path()
+                .join(".agentflow/output/release")
+                .join(&completion.run.run_id)
+                .join("pr-metadata.json"),
+        )
+        .unwrap();
+        assert_eq!(
+            pr_metadata.branch_name.as_deref(),
+            Some("agentflow/direct/iss-001")
+        );
+        assert_eq!(
+            pr_metadata.remote_pr_url.as_deref(),
+            Some("https://github.com/atxinbao/agentflow/pull/1")
+        );
+        assert_eq!(pr_metadata.status, "merged");
+        assert_eq!(pr_metadata.provider.as_deref(), Some("github"));
+        assert_eq!(
+            pr_metadata.merge_mode.as_deref(),
+            Some("auto-merge-if-eligible")
+        );
+        assert!(pr_metadata.created_remote_pr);
+        assert!(pr_metadata.merged);
+        let loop_projection: serde_json::Value = crate::storage::read_json(
+            &dir.path()
+                .join(".agentflow/state/loops/issues/iss-001.json"),
+        )
+        .unwrap();
+        assert_eq!(loop_projection["stage"], "done");
+        assert_eq!(loop_projection["runId"], completion.run.run_id);
+        assert_eq!(loop_projection["branchName"], "agentflow/direct/iss-001");
     }
 
     #[test]
@@ -505,7 +537,7 @@ mod tests {
         let result = validate_execute_run(dir.path(), run.run_id.clone()).unwrap();
         assert_eq!(result.status, ExecuteRunStatus::Completed);
         assert!(result.next.ready_for_delivery);
-        assert!(result.next.needs_audit);
+        assert!(!result.next.needs_audit);
         assert!(dir
             .path()
             .join(".agentflow/execute/runs")
