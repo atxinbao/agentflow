@@ -3253,6 +3253,7 @@ function AuditReport({
 
 type AdvancedJsonFile = {
   description: string;
+  displayName?: string;
   error?: string | null;
   loading?: boolean;
   name: string;
@@ -3532,7 +3533,7 @@ function AdvancedStateViewer({
               onClick={() => setSelectedFileName(file.name)}
               type="button"
             >
-              <strong>{file.name}</strong>
+              <strong>{file.displayName ?? file.name}</strong>
               <span>{file.description}</span>
             </button>
           )) : <p className="v16-empty-text">没有可展示的 JSON 文件。</p>}
@@ -5294,9 +5295,17 @@ function advancedFilesForCategory(
 ): AdvancedJsonFile[] {
   const files: Record<string, AdvancedJsonFile[]> = {
     agentRoles: [
-      { name: ".agentflow/define/agent/roles.json", description: "三类 Agent 的可处理任务和写入边界" },
-      { name: "AGENTS.md", description: "根级 Agent 入口规则" },
-      { name: ".agentflow/define/agent/Agentflow.md", description: "AgentFlow 工作手册" },
+      {
+        name: ".agentflow/define/agent/roles.json",
+        displayName: "roles.json",
+        description: "三类 Agent 的可处理任务和写入边界",
+      },
+      { name: "AGENTS.md", displayName: "AGENTS.md", description: "根级 Agent 入口规则" },
+      {
+        name: ".agentflow/define/agent/Agentflow.md",
+        displayName: "Agentflow.md",
+        description: "AgentFlow 工作手册",
+      },
     ],
     audit: [
       { name: "index.json", description: "审计报告索引" },
