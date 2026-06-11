@@ -255,8 +255,8 @@ function buildInputStatus(inputStatusState: InputStatusState): AgentStatusChanne
       { label: "Draft SPEC", value: status.summary.draftSpecs },
       { label: "Approved SPEC", value: status.summary.approvedSpecs },
       { label: "Projects", value: status.summary.projects },
-      { label: "Issues", value: status.summary.issues },
-      { label: "High Risk", value: status.summary.highRiskIssues },
+      { label: "任务", value: status.summary.issues },
+      { label: "高优先级", value: status.summary.highRiskIssues },
     ],
     error: status.errors.at(0) ?? null,
   };

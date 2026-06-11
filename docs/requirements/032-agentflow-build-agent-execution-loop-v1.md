@@ -42,6 +42,7 @@ Build Agent 必须按 7 个阶段执行：
 - `backlog → todo` 由 Project Loop / Project Scheduler 完成，Build Agent 不能绕过 Project Loop 直接执行 `backlog` issue
 - 通过 runtime preflight 后，把当前 issue 状态切换成 `in_progress`
 - Panel Context Pack 必须存在，或者能由 Panel 生成
+- 当前工作区不能有未提交的用户源码改动
 - 所有 `blockedBy` 前置 issue 必须已经 `done`
 - AgentFlow CLI 支持 `build-agent complete`
 
@@ -136,15 +137,7 @@ Draft PR/MR 只是中间状态，不是完成状态。
 
 ### 6. 合并 PR/MR
 
-按 `mergeMode` 处理：
-
-#### manual-merge
-
-Build Agent 将 PR/MR 转 Ready 后，issue 保持 `in_review`。
-
-人类在 GitHub 合并 PR，或在 GitLab 合并 MR。
-
-AgentFlow 本地检测器检测到 PR/MR merged 后，继续写回 Done。
+默认先走 `auto-merge-if-eligible`，`manual-merge` 只作为自动合并不可用时的 fallback。
 
 #### auto-merge-if-eligible
 
@@ -162,9 +155,17 @@ glab mr update --ready
 glab mr merge --auto-merge
 ```
 
-然后轮询当前 provider，直到 PR/MR 进入 merged 状态。
+然后轮询 PR/MR 是否 merged。
 
-如果 provider 拒绝 auto-merge，Build Agent 必须报告原因，issue 保持 `in_review`。
+#### manual-merge fallback
+
+如果 provider 拒绝自动合并，或仓库规则不允许自动合并：
+
+1. 记录自动合并不可用原因。
+2. 将 PR/MR 保持 ready。
+3. issue 保持 `in_review`。
+4. 等待人类在 GitHub 合并 PR，或在 GitLab 合并 MR。
+5. AgentFlow 本地检测器检测到 PR/MR merged 后，继续写回 Done。
 
 ### 7. 写回 Done
 
@@ -186,6 +187,7 @@ glab mr merge --auto-merge
 - `sandbox-verify` 的显示名称为“沙箱验证”。
 - Build Agent 只能执行 `todo` issue，不能直接执行 `backlog` issue。
 - Runtime preflight 通过后 issue 进入 `in_progress`。
+- Runtime preflight 必须确认 Context Pack 可读，并且当前工作区没有未提交的用户源码改动。
 - `build-agent complete` 必须基于已有 `runId`，不能重新 create run。
 - `build-agent complete` 必须校验 `agent-claim.json`、`branch.json` 和 `review/merge-proof.json`。
 - 复制任务包展示 7 步 Build Agent 执行流程。
@@ -196,8 +198,9 @@ glab mr merge --auto-merge
 - 有未完成 `blockedBy` 依赖时，相关 issue 派生状态为 blocked，不能复制任务执行。
 - GitHub/GitLab 不作为执行前置检测的 blocker。
 - GitHub/GitLab 工具、认证、当前分支和工作区状态只在 PR/MR 创建或合并阶段记录。
-- `manual-merge` 不直接 Done，而是保持 `in_review`，等待检测 PR/MR merged。
-- `manual-merge` 同时适用于 GitHub PR 和 GitLab MR。
+- 默认先尝试 `auto-merge-if-eligible`，失败后才进入 `manual-merge` fallback。
+- `manual-merge` fallback 不直接 Done，而是保持 `in_review`，等待检测 PR/MR merged。
+- `manual-merge` fallback 同时适用于 GitHub PR 和 GitLab MR。
 - `auto-merge-if-eligible` 不停在 Draft PR/MR。
 - `auto-merge-if-eligible` 同时定义 GitHub `gh` 路径和 GitLab `glab` 路径。
 - Agent manual 与 Desktop 任务包文案保持一致。

@@ -1,4 +1,4 @@
-export type AgentFlowProjectPage = "home" | "tasks" | "files" | "delivery" | "audit" | "advanced";
+export type AgentFlowProjectPage = "home" | "tasks" | "execute" | "delivery" | "audit" | "files" | "advanced";
 
 export type AgentFlowProjectStatus = "ready" | "loading" | "blocked" | "error" | "missing";
 
@@ -29,7 +29,7 @@ export const projectRegistryStorageKeys = {
   projects: "agentflow.projects.v1",
 } as const;
 
-const projectPages: AgentFlowProjectPage[] = ["home", "tasks", "files", "delivery", "audit", "advanced"];
+const projectPages: AgentFlowProjectPage[] = ["home", "tasks", "execute", "delivery", "audit", "files", "advanced"];
 
 export function isAgentFlowProjectPage(value: unknown): value is AgentFlowProjectPage {
   return typeof value === "string" && projectPages.includes(value as AgentFlowProjectPage);

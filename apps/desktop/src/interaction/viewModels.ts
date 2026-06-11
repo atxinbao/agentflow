@@ -286,7 +286,7 @@ export function buildTaskProjectTreeViewModel({
       if (assignedIssueIds.has(issueId)) {
         const warning = taskProjectTreeWarning(
           "duplicate-project-issue",
-          `Issue ${issueId} 被多个 project 引用，只保留第一次分组。`,
+          `任务 ${issueId} 被多个 project 引用，只保留第一次分组。`,
           project.projectId,
           issueId,
         );
@@ -322,7 +322,7 @@ export function buildTaskProjectTreeViewModel({
       if (issue.projectId && !projectById.has(issue.projectId)) {
         const warning = taskProjectTreeWarning(
           "missing-project",
-          `Issue ${issue.issueId} 指向不存在的 project ${issue.projectId}，已放入未归属任务。`,
+          `任务 ${issue.issueId} 指向不存在的 project ${issue.projectId}，已放入未归属任务。`,
           issue.projectId,
           issue.issueId,
         );
@@ -494,7 +494,7 @@ function addTaskRelation(
     warnings.push(
       taskProjectTreeWarning(
         "missing-relation-issue",
-        `Relation ${relation.fromIssueId} -> ${relation.toIssueId} 指向缺失 issue。`,
+        `Relation ${relation.fromIssueId} -> ${relation.toIssueId} 指向缺失任务。`,
         undefined,
         fromExists ? relation.toIssueId : relation.fromIssueId,
       ),

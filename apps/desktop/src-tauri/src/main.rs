@@ -63,6 +63,7 @@ fn main() {
             commands::state::update_state_session,
             commands::state::load_state_locks,
             commands::workflow_events::dispatch_workflow_events,
+            commands::project_loop::run_project_loop,
             commands::agent_manual::prepare_agent_working_manual,
             commands::agent_manual::load_agent_environment_status,
             commands::agent_manual::repair_agent_working_manual,

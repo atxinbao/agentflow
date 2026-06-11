@@ -1,5 +1,5 @@
 use crate::{
-    manager::load_issue_for_run,
+    manager::{load_issue_for_run, update_input_issue_status},
     model::{
         ExecuteCheckStatus, ExecuteHumanConfirmation, ExecuteLease, ExecuteLeaseStatus,
         ExecutePreflight, ExecutePreflightCheck, ExecuteRun, ExecuteRunStatus,
@@ -11,10 +11,10 @@ use crate::{
     },
 };
 use agentflow_input::issue::{
-    validate_agent_issue_permission, AgentRole, InputIssue, InputRiskLevel,
+    validate_agent_issue_permission, AgentRole, InputIssue, InputIssueStatus, InputRiskLevel,
 };
 use anyhow::Result;
-use std::path::Path;
+use std::{path::Path, process::Command};
 
 pub fn confirm_high_risk_execute_run(
     project_root: impl AsRef<Path>,
@@ -245,6 +245,19 @@ pub fn execute_run_preflight(
         "Project root is readable.",
         "Project root cannot be read.",
     );
+    let cleanliness = working_tree_cleanliness(&root);
+    checks.push(ExecutePreflightCheck {
+        name: "working-tree-clean".to_string(),
+        status: if cleanliness.clean {
+            ExecuteCheckStatus::Passed
+        } else {
+            ExecuteCheckStatus::Blocked
+        },
+        message: Some(cleanliness.message),
+        risk_level: None,
+        human_confirmation_required: None,
+        confirmed: None,
+    });
 
     let blocked_reason = checks
         .iter()
@@ -274,6 +287,17 @@ pub fn execute_run_preflight(
             ExecuteRunStatus::Blocked
         },
     )?;
+    if let Some(issue) = issue.as_ref() {
+        update_input_issue_status(
+            &root,
+            &issue.issue_id,
+            if ready {
+                InputIssueStatus::InProgress
+            } else {
+                InputIssueStatus::Blocked
+            },
+        )?;
+    }
     if let Err(error) = rebuild_index(&root) {
         if has_unreadable_lease_block(&preflight) {
             return Ok(preflight);
@@ -356,6 +380,86 @@ fn prepare_context_pack_for_issue(
 
 fn context_pack_id_for_issue(issue: &InputIssue) -> String {
     issue.issue_id.replace('/', "-")
+}
+
+struct WorkingTreeCleanliness {
+    clean: bool,
+    message: String,
+}
+
+fn working_tree_cleanliness(root: &Path) -> WorkingTreeCleanliness {
+    if !git_available(root) {
+        return WorkingTreeCleanliness {
+            clean: true,
+            message: "Non-Git project; working tree cleanliness check skipped.".to_string(),
+        };
+    }
+
+    match Command::new("git")
+        .args(["status", "--porcelain", "--untracked-files=all"])
+        .current_dir(root)
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let dirty_paths = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .filter_map(status_line_path)
+                .filter(|path| !agentflow_generated_path(path))
+                .collect::<Vec<_>>();
+            if dirty_paths.is_empty() {
+                WorkingTreeCleanliness {
+                    clean: true,
+                    message: "Working tree is clean for issue execution.".to_string(),
+                }
+            } else {
+                WorkingTreeCleanliness {
+                    clean: false,
+                    message: format!(
+                        "Working tree has uncommitted changes before issue execution: {}",
+                        dirty_paths.join(", ")
+                    ),
+                }
+            }
+        }
+        Ok(output) => WorkingTreeCleanliness {
+            clean: false,
+            message: format!(
+                "Working tree cleanliness check failed: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        },
+        Err(error) => WorkingTreeCleanliness {
+            clean: false,
+            message: format!("Working tree cleanliness check failed: {error}"),
+        },
+    }
+}
+
+fn git_available(root: &Path) -> bool {
+    Command::new("git")
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .current_dir(root)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+fn status_line_path(line: &str) -> Option<String> {
+    let path = line.get(3..)?.trim();
+    if let Some((from, to)) = path.split_once(" -> ") {
+        return Some(format!("{from},{to}"));
+    }
+    Some(path.to_string())
+}
+
+fn agentflow_generated_path(path: &str) -> bool {
+    path.split(',').all(|part| {
+        let part = part.trim();
+        part == "AGENTS.md" || part.starts_with(".agentflow/") || part.starts_with("\".agentflow/")
+    })
 }
 
 fn push_check(

@@ -108,7 +108,8 @@ Spec Agent 写入 Project + backlog Issues
 #87 Issue Loop Runtime Preflight
   Issue Loop 只处理 todo issue。
   backlog issue 不能被 Build Agent 直接执行。
-  Runtime preflight 通过后创建 run，写 agent-claim.json / branch.json，并把 Issue 切到 in_progress。
+  create_execute_run 只创建 run、agent-claim.json 和 branch.json，不代表 Issue 已经开工。
+  Runtime preflight 会确认 Context Pack 可读取或可补生成，并确认当前工作区没有未提交的用户源码改动；全部通过后才把 Issue 切到 in_progress。
 
 #88 Issue Branch Check
   默认 issue branch 为 agentflow/<project-id>/<issue-id>。
@@ -1309,11 +1310,12 @@ Git provider status
 ```text
 1. Issue Loop 只接受 todo Issue。
 2. Runtime Preflight 增加 branch check。
-3. create_execute_run 后 Issue 进入 in_progress。
-4. PR/MR 创建后 Issue 进入 in_review。
-5. build-agent complete 改为 runId finalizer。
-6. complete 后 Issue 进入 done。
-7. branch.json 写入 run 目录。
+3. create_execute_run 只创建 run，不代表 Issue 已经开工。
+4. runtime preflight 确认 Context Pack 可读取或可补生成后，Issue 才进入 in_progress。
+5. PR/MR 创建后 Issue 进入 in_review。
+6. build-agent complete 改为 runId finalizer。
+7. complete 后 Issue 进入 done。
+8. branch.json 写入 run 目录。
 ```
 
 ---
@@ -1483,10 +1485,12 @@ Issue Loop 只处理 todo Issue。
 ```text
 1. backlog Issue 不能被 Build Agent 执行。
 2. todo Issue 可进入 Runtime Preflight。
-3. Context / Skill / MCP 检查通过后创建 run。
+3. create_execute_run 写 run、agent-claim.json 和 branch.json，但不切换 Issue 到 in_progress。
 4. 写 agent-claim.json。
 5. 写 branch.json。
-6. Issue 状态切换为 in_progress。
+6. Runtime Preflight 确认 Context Pack 可读取或可补生成。
+7. Runtime Preflight 确认当前工作区没有未提交的用户源码改动。
+8. Runtime Preflight 全部通过后，Issue 状态切换为 in_progress。
 ```
 
 ---
