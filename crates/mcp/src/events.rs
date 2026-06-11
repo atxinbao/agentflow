@@ -1,0 +1,13 @@
+pub const MCP_PROVIDER_CHECKED: &str = "mcp.provider.checked";
+pub const MCP_PROVIDER_READY: &str = "mcp.provider.ready";
+pub const MCP_PROVIDER_FAILED: &str = "mcp.provider.failed";
+pub const MCP_GITHUB_PR_CREATED: &str = "mcp.github.pr.created";
+pub const MCP_GITHUB_PR_READY: &str = "mcp.github.pr.ready";
+pub const MCP_GITHUB_PR_AUTO_MERGE_REQUESTED: &str = "mcp.github.pr.auto_merge_requested";
+pub const MCP_GITHUB_PR_MERGED: &str = "mcp.github.pr.merged";
+pub const MCP_GITLAB_MR_CREATED: &str = "mcp.gitlab.mr.created";
+pub const MCP_GITLAB_MR_READY: &str = "mcp.gitlab.mr.ready";
+pub const MCP_GITLAB_MR_AUTO_MERGE_REQUESTED: &str = "mcp.gitlab.mr.auto_merge_requested";
+pub const MCP_GITLAB_MR_MERGED: &str = "mcp.gitlab.mr.merged";
+pub const MCP_CODEX_CLI_CHECKED: &str = "mcp.codex.cli.checked";
+pub const MCP_CODEX_COMPLETE_SUPPORTED: &str = "mcp.codex.complete.supported";

@@ -5,6 +5,8 @@ members = [
     "crates/agent-manual",
     "crates/panel",
     "crates/input",
+    "crates/mcp",
+    "crates/loop",
     "crates/output",
     "crates/execute",
     "crates/state",
