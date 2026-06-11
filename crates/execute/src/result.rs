@@ -49,7 +49,7 @@ pub(crate) fn build_execute_result(
         },
         next: ExecuteResultNext {
             ready_for_delivery: passed,
-            needs_audit: true,
+            needs_audit: false,
         },
     };
     write_review_artifacts(root, run_id, &changed, &result)?;

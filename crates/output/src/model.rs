@@ -259,6 +259,14 @@ pub struct OutputPrMetadata {
     pub remote_pr_url: Option<String>,
     pub status: String,
     pub created_remote_pr: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_mode: Option<String>,
+    #[serde(default)]
+    pub merged: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
