@@ -395,7 +395,7 @@ export function displayStatusLabelZh(status: IssueDisplayStatus = "backlog") {
     cancel: "已取消",
     done: "已完成",
     in_progress: "正在做",
-    in_review: "正在 Review",
+    in_review: "正在评审",
     todo: "准备开工",
   };
   return labels[status];

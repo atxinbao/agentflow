@@ -103,7 +103,7 @@ export function DesignSystemPreview() {
               title="实现 Figma SVG Style Foundation"
             />
             <ListRow
-              meta={<StatusBadge status="warning">Review</StatusBadge>}
+              meta={<StatusBadge status="warning">评审</StatusBadge>}
               subtitle="high · 1 条验证命令"
               title="核对交付证据"
             />
