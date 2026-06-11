@@ -77,7 +77,7 @@ goal-tree/ 负责需求拆出来的施工清单。
 
 ## 一句话定义
 
-> **Input Model V1 负责把原来的 `spec/` 和 `goal-tree/` 收敛成一个统一的 `input/` 需求事实源。所有正式 issue 都必须先经过 Spec Gate，也就是 `product.md + tech.md + approval`。之后小需求直接生成 issues，复杂需求先生成 project，再由 project 包含多个 issues。Issue 只保留 `riskLevel: low | medium | high`，风险级别由 Spec Agent 生成 issue 时判断；只有 high 风险 issue 执行前需要人类确认。**
+> **当前修订：Issue 对人和调度暴露 `priority: p0 | p1 | p2 | p3`，用于决定处理顺序；技术执行风险改名为 `executionRisk: low | medium | high`，只用于执行前安全确认。旧 `priority: high | normal | low` 和 `riskLevel` 由 prepare 自动迁移。**
 
 ---
 
@@ -677,7 +677,7 @@ summary
 kind
 priority
 status
-riskLevel
+executionRisk
 
 scope
 nonGoals
@@ -691,41 +691,48 @@ system
 
 ---
 
-## 7.2 riskLevel
+## 7.2 priority 与 executionRisk
 
-Issue 只保留一个风险字段：
+Issue 的处理顺序使用：
 
 ```json
 {
-  "riskLevel": "medium"
+  "priority": "p1"
 }
 ```
 
 取值：
 
 ```text
-low
-medium
-high
+p0
+p1
+p2
+p3
 ```
 
-中文：
+执行阶段另保留内部技术风险：
+
+```json
+{
+  "executionRisk": "medium"
+}
+```
+
+`priority` 由 Spec Agent 根据任务紧急程度和业务顺序生成；`executionRisk` 只决定是否需要执行前人工确认。二者不能互相替代。
+
+`displayStatus` 面向前端展示，可取：
 
 ```text
-低风险
-中风险
-高风险
+backlog
+blocked
+ready
+in-progress
+review
+done
+cancel
 ```
 
-风险级别由：
-
-```text
-Spec Agent
-```
-
-在生成 issue 时判断。
-
-模型里不硬编码高风险具体规则。
+其中 `blocked` 是 state 派生状态。Spec Agent 默认只生成 backlog / ready / done / cancel 这类事实状态；依赖未完成、Git provider 预检失败或执行预检失败时，由 state/gates 派生为 blocked。
 
 ---
 
@@ -774,7 +781,7 @@ Issue 是施工清单事实源，不是自动化策略文件。
 后续 Agent 读到：
 
 ```json
-"riskLevel": "high"
+"executionRisk": "high"
 ```
 
 就知道执行前需要人类确认。
@@ -805,9 +812,9 @@ define/audit/AUDIT.md
   "title": "新增 WorkspaceOwnershipStatus 模型",
   "summary": "定义 .agentflow ownership 状态、marker、recommended action。",
   "kind": "feature",
-  "priority": "normal",
+  "priority": "p2",
   "status": "planned",
-  "riskLevel": "medium",
+  "executionRisk": "medium",
 
   "scope": [
     "新增 WorkspaceOwnershipStatus",
@@ -1256,7 +1263,7 @@ draft -> approved
 ```text
 direct issue 模式
 project -> issues 模式
-riskLevel 字段
+priority 与 executionRisk 字段
 relations
 views
 ```
@@ -1267,8 +1274,9 @@ views
 
 ```text
 所有 issue 必须有 sourceSpecId
-所有 issue 必须有 riskLevel
-riskLevel 必须是 low / medium / high
+所有 issue 必须有 priority
+priority 必须是 p0 / p1 / p2 / p3
+executionRisk 必须是 low / medium / high
 high risk issue 标记为需要人类确认
 direct issue projectId = null
 project issue projectId 必须存在
@@ -1284,6 +1292,7 @@ relations 不能引用不存在的 issue
 Input 状态通道
 Browser Preview mock
 只读 input snapshot
+state/gates 派生 blocked displayStatus
 ```
 
 ---
@@ -1314,12 +1323,15 @@ Browser Preview mock
 - [ ] Direct issue 模型支持 projectId = null。
 - [ ] Project issue 模型支持 projectId。
 - [ ] Project 模型包含 issueIds。
-- [ ] Issue 模型包含 riskLevel。
-- [ ] riskLevel 只允许 low / medium / high。
+- [ ] Issue 模型包含 priority。
+- [ ] priority 只允许 p0 / p1 / p2 / p3。
+- [ ] executionRisk 只允许 low / medium / high。
 - [ ] low / medium 不需要人类确认。
 - [ ] high 需要人类确认。
 - [ ] 不新增 automation / humanGates / prAutomation 字段。
 - [ ] issue relations 支持 blocked-by / blocks / related / duplicate-of。
+- [ ] 未完成 blockedBy 依赖会在 state/gates/blockers.json 记录阻断，并把相关 issue 派生显示为 blocked。
+- [ ] Git provider 预检失败会在 state/gates/blockers.json 记录阻断，并把相关 issue 派生显示为 blocked。
 - [ ] Desktop 只读展示 input 状态。
 - [ ] 不启动 AgentRun。
 - [ ] 不写用户源码。
@@ -1359,7 +1371,7 @@ PR 描述必须说明：
 3. Spec Gate 为什么是 product.md + tech.md + approval.json。
 4. 两种 issue 模型是什么：direct issues / project -> issues。
 5. 为什么 V1 不做 milestone 三层。
-6. Issue riskLevel 如何定义。
+6. Issue priority 与 executionRisk 如何定义。
 7. 为什么不新增 automation / humanGates 字段。
 8. 旧 spec/ 和 goal-tree/ 如何处理。
 9. 本次没有启动 AgentRun。
@@ -1383,11 +1395,11 @@ PR 描述必须说明：
 3. product.md + tech.md + approval.json 是所有 issue 的共同前置。
 4. V1 只支持两层模型：direct issues 或 project -> issues。
 5. V1 不做 milestone 三层模型。
-6. Issue 模型必须包含 riskLevel。
-7. riskLevel 只允许 low / medium / high。
+6. Issue 模型必须包含 priority。
+7. priority 只允许 p0 / p1 / p2 / p3。
 8. low / medium 不需要人类确认。
 9. high 需要人类确认。
-10. riskLevel 由 Spec Agent 生成 issue 时判断。
+10. priority 由 Spec Agent 生成 issue 时判断。
 11. 不新增 automation / humanGates / prAutomation 字段。
 12. 不启动 AgentRun。
 13. 不写用户源码。
@@ -1404,7 +1416,7 @@ PR 描述必须说明：
 - 新增 Spec Gate 模型：product.md / tech.md / approval.json / spec.json。
 - 新增 InputProject 模型。
 - 新增 InputIssue 模型。
-- 新增 riskLevel 字段。
+- 新增 priority 与 executionRisk 字段。
 - 新增 relations 模型。
 - 新增 views 派生视图。
 - workspace-manifest 增加 input path，并将 spec / goalTree 标记为 legacy。
@@ -1454,10 +1466,16 @@ Approved SPEC
 → issues
 ```
 
-Issue 风险 V1.0 是：
+Issue 优先级是：
 
 ```text
-riskLevel = low | medium | high
+priority = p0 | p1 | p2 | p3
+```
+
+执行风险是：
+
+```text
+executionRisk = low | medium | high
 
 low / medium
 = 不需要人类确认
@@ -1468,4 +1486,4 @@ high
 
 最终一句话：
 
-> **Input Model V1 把需求输入、SPEC 确认和施工清单统一到 input/；所有 issues 都来自 Approved SPEC；简单需求直接 issues，复杂需求 project 包含 issues；Issue 只用 riskLevel 控制风险，不引入复杂自动化字段。**
+> **Input Model V1 把需求输入、SPEC 确认和施工清单统一到 input/；所有 issues 都来自 Approved SPEC；简单需求直接 issues，复杂需求 project 包含 issues；Issue 使用 priority 决定顺序，executionRisk 控制执行确认。**

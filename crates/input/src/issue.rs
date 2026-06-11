@@ -100,16 +100,31 @@ impl Default for InputIssueKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
 pub enum InputPriority {
-    Low,
-    Normal,
-    High,
+    #[serde(rename = "p0")]
+    P0,
+    #[serde(rename = "p1", alias = "high")]
+    P1,
+    #[serde(rename = "p2", alias = "normal")]
+    P2,
+    #[serde(rename = "p3", alias = "low")]
+    P3,
+}
+
+impl InputPriority {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::P0 => "p0",
+            Self::P1 => "p1",
+            Self::P2 => "p2",
+            Self::P3 => "p3",
+        }
+    }
 }
 
 impl Default for InputPriority {
     fn default() -> Self {
-        Self::Normal
+        Self::P2
     }
 }
 
@@ -133,6 +148,7 @@ impl Default for InputIssueStatus {
 #[serde(rename_all = "kebab-case")]
 pub enum DisplayStatus {
     Backlog,
+    Blocked,
     Ready,
     InProgress,
     Review,
@@ -143,7 +159,8 @@ pub enum DisplayStatus {
 impl DisplayStatus {
     pub fn from_input_status(status: &InputIssueStatus) -> Self {
         match status {
-            InputIssueStatus::Planned | InputIssueStatus::Blocked => Self::Backlog,
+            InputIssueStatus::Planned => Self::Backlog,
+            InputIssueStatus::Blocked => Self::Blocked,
             InputIssueStatus::ReadyForExecute => Self::Ready,
             InputIssueStatus::Done => Self::Done,
             InputIssueStatus::Canceled => Self::Cancel,
@@ -153,6 +170,7 @@ impl DisplayStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Backlog => "backlog",
+            Self::Blocked => "blocked",
             Self::Ready => "ready",
             Self::InProgress => "in-progress",
             Self::Review => "review",
@@ -282,7 +300,8 @@ pub struct InputIssue {
     pub status: InputIssueStatus,
     #[serde(default)]
     pub display_status: DisplayStatus,
-    pub risk_level: InputRiskLevel,
+    #[serde(default, alias = "riskLevel")]
+    pub execution_risk: InputRiskLevel,
     #[serde(default)]
     pub allowed_paths: Vec<String>,
     #[serde(default)]
@@ -326,7 +345,7 @@ impl Default for InputIssue {
             priority: InputPriority::default(),
             status: InputIssueStatus::default(),
             display_status: DisplayStatus::default(),
-            risk_level: InputRiskLevel::default(),
+            execution_risk: InputRiskLevel::default(),
             allowed_paths: Vec::new(),
             forbidden_paths: Vec::new(),
             forbidden_actions: Vec::new(),
@@ -621,12 +640,13 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "git-provider-preflight".to_string(),
                 label: "GitHub/GitLab 自动化预检".to_string(),
-                goal: "确认 Build Agent 只基于 AgentFlow input issue 和 executionPipeline 执行；确认没有把外部 issue、任务、计划、队列、线程或工具状态当作任务源；识别当前远端代码托管 provider 是 GitHub 还是 GitLab；确认对应 CLI、认证、仓库同步、PR/MR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。".to_string(),
+                goal: "确认 Build Agent 只基于 AgentFlow input issue 和 executionPipeline 执行；确认没有把外部 issue、任务、计划、队列、线程或工具状态当作任务源；识别当前远端代码托管 provider 是 GitHub 还是 GitLab；只要求当前 provider 对应的 CLI、认证、仓库同步、PR/MR 创建和合并能力可用，不要求同时安装 gh 和 glab；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。".to_string(),
                 required: true,
                 evidence: vec![
                     "AgentFlow issueId and executionPipeline are the only active task source".to_string(),
                     "no external issue/task/plan/queue/thread/tool state is used as task authority".to_string(),
                     "Git provider detected as github or gitlab".to_string(),
+                    "only the CLI matching the detected provider is required".to_string(),
                     "git status --short".to_string(),
                     "git remote -v".to_string(),
                     "GitHub path: gh --version, gh auth status, gh repo view --json nameWithOwner,defaultBranchRef".to_string(),
@@ -730,7 +750,7 @@ fn build_agent_execution_pipeline_complete(pipeline: &InputIssueExecutionPipelin
         && pipeline.agent_role == AgentRole::BuildAgent
         && BUILD_AGENT_GIT_PROVIDERS
             .iter()
-            .all(|provider| pipeline.git_providers.contains(&provider.to_string()))
+            .any(|provider| pipeline.git_providers.contains(&provider.to_string()))
         && pipeline.merge_modes.contains(&"manual-merge".to_string())
         && pipeline
             .merge_modes

@@ -316,7 +316,7 @@ It performs the Build Agent execution pipeline:
 6. Merge PR/MR
 7. Write back Done
 
-The GitHub/GitLab automation preflight detects whether the remote provider is GitHub or GitLab, then verifies the matching CLI, auth, branch state, remote repository, PR/MR creation capability, merge policy, and whether auto-merge is eligible.
+The GitHub/GitLab automation preflight first requires every `blockedBy` dependency issue to be Done. It then detects whether the remote provider is GitHub or GitLab, verifies only the matching provider CLI, auth, branch state, remote repository, PR/MR creation capability, merge policy, and whether auto-merge is eligible. GitHub requires `gh`; GitLab requires `glab`; the two CLIs are alternatives and do not both need to be installed. Dependency or provider failures are written to `state/gates/blockers.json`, and the affected issue is shown as blocked.
 
 The test design stage derives test points from SPEC and the current issue. If TDD fits the task, Build Agent adds or updates the failing test first. If TDD does not fit the task, Build Agent records the reason and defines the replacement smoke, build, screenshot, or command verification.
 
@@ -715,7 +715,8 @@ Convert Approved SPEC into AgentFlow input issues.
 - SPEC acceptance criteria -> Issue.acceptanceCriteria
 - SPEC validation plan -> Issue.validationHints
 - SPEC dependencies -> Issue.relations
-- Spec Agent judgment -> Issue.riskLevel
+- Spec Agent scheduling judgment -> Issue.priority (`p0` / `p1` / `p2` / `p3`)
+- Spec Agent execution-safety judgment -> Issue.executionRisk (`low` / `medium` / `high`)
 
 ## Relation File Schema
 

@@ -6,6 +6,7 @@ mod health;
 mod indexes;
 mod locks;
 mod manager;
+mod readiness;
 mod sessions;
 mod storage;
 
@@ -101,7 +102,7 @@ mod tests {
             title: "Fixture issue".to_string(),
             summary: "Fixture issue".to_string(),
             status: InputIssueStatus::ReadyForExecute,
-            risk_level,
+            execution_risk: risk_level,
             validation_hints: vec!["printf ok".to_string()],
             scope: vec!["src/lib.rs".to_string()],
             ..InputIssue::default()
@@ -412,7 +413,7 @@ mod tests {
             title: "Missing target".to_string(),
             summary: "Missing target metadata".to_string(),
             status: InputIssueStatus::ReadyForExecute,
-            risk_level: InputRiskLevel::Low,
+            execution_risk: InputRiskLevel::Low,
             ..InputIssue::default()
         };
         fs::write(

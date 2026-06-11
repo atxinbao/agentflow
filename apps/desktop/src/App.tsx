@@ -35,7 +35,7 @@ import {
   MetricCard,
   PageHeader,
   Panel,
-  RiskBadge,
+  PriorityBadge,
   Section,
   Sidebar,
   StatusBadge,
@@ -735,7 +735,7 @@ function App() {
       return tasks;
     }
     return tasks.filter((task) => {
-      const searchable = [task.id, task.title, task.displayStatus, task.status, task.riskLevel, task.goal]
+      const searchable = [task.id, task.title, task.displayStatus, task.status, task.priority, task.goal]
         .join(" ")
         .toLowerCase();
       return searchable.includes(query);
@@ -2022,7 +2022,7 @@ function ProjectHomePage({
             <button className="v16-current-task-card" onClick={onOpenTasks} type="button">
               <span className="v16-current-task-meta">
                 <span>{selectedTask.id}</span>
-                <RiskBadge risk={selectedTask.riskLevel || "low"} />
+                <PriorityBadge priority={selectedTask.priority} />
               </span>
               <strong>{selectedTask.title}</strong>
               <dl>
@@ -2383,7 +2383,7 @@ function TaskProjectGroupRow({
   const progress = group.counts.issueCount
     ? `${group.counts.doneIssueCount}/${group.counts.issueCount}`
     : "0/0";
-  const risk = groupRiskLevel(group.issues);
+  const priority = groupHighestPriority(group.issues);
   const selected = group.id === selectedProjectId;
 
   return (
@@ -2399,7 +2399,7 @@ function TaskProjectGroupRow({
         type="button"
       >
         {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <span className={`v16-task-project-status ${riskStatusDotClass(risk)}`} aria-hidden="true" />
+        <span className={`v16-task-project-status ${priorityStatusDotClass(priority)}`} aria-hidden="true" />
         <span className="v16-task-project-main">
           <span className="v16-task-project-title">{group.title}</span>
         </span>
@@ -2485,6 +2485,7 @@ function TaskIssueNodeRow({
         </span>
       </span>
       <span className="v16-task-queue-state">
+        <PriorityBadge priority={issue.priority} />
         <StatusBadge status={statusChipForDisplayStatus(issue.displayStatus)}>
           {displayStatusLabelZh(issue.displayStatus)}
         </StatusBadge>
@@ -2581,11 +2582,11 @@ function ProjectSummaryReader({
   onSelectTask: (taskId: string) => void;
   treeSelection: TaskProjectTreeViewModel["selection"] | null;
 }) {
-  const risk = groupRiskLevel(group.issues);
+  const priority = groupHighestPriority(group.issues);
   const recommendedIssue = projectRecommendedIssue(group, treeSelection);
   const reviewIssueCount = group.issues.filter((issue) => issue.displayStatus === "review").length;
   const readyIssueCount = group.issues.filter((issue) => issue.displayStatus === "ready").length;
-  const highRiskIssueCount = group.issues.filter((issue) => riskToneKey(issue.riskLevel) === "high").length;
+  const urgentIssueCount = group.issues.filter((issue) => priorityRank(issue.priority) <= 1).length;
   const projectStatus = projectDisplayStatusForGroup(group);
 
   return (
@@ -2599,8 +2600,8 @@ function ProjectSummaryReader({
             <StatusBadge status={statusChipForProjectStatus(projectStatus)}>{projectDisplayStatusLabelZh(projectStatus)}</StatusBadge>
           </span>
           <span className="v16-detail-meta-item">
-            <span className="v16-detail-meta-label">风险</span>
-            <strong className={`v16-risk-text ${riskTextClass(risk)}`}>{displayRiskTextZh(risk)}</strong>
+            <span className="v16-detail-meta-label">优先级</span>
+            <strong className={`v16-priority-text ${priorityTextClass(priority)}`}>{displayPriority(priority)}</strong>
           </span>
           <span className="v16-detail-meta-item">
             <span className="v16-detail-meta-label">来源 SPEC</span>
@@ -2613,7 +2614,7 @@ function ProjectSummaryReader({
           <MetricCard detail={`${group.counts.doneIssueCount} 已完成`} label="任务" value={group.counts.issueCount} />
           <MetricCard detail={`${readyIssueCount} 就绪`} label="进行中" value={group.counts.activeIssueCount} />
           <MetricCard detail={`${reviewIssueCount} 待审阅`} label="审计任务" value={group.counts.auditIssueCount} />
-          <MetricCard detail={`${highRiskIssueCount} 高风险`} label="风险" value={displayRiskTextZh(risk)} />
+          <MetricCard detail={`${urgentIssueCount} 个 P0/P1`} label="最高优先级" value={displayPriority(priority)} />
         </div>
         <DescriptionList
           items={[
@@ -2627,7 +2628,7 @@ function ProjectSummaryReader({
         <SectionList title="范围" items={group.project.scope} />
         <SectionList title="非目标" items={group.project.nonGoals} />
         <SectionList title="任务进度" items={projectProgressItems(group)} />
-        <SectionList title="风险摘要" items={projectRiskSummaryItems(group)} />
+        <SectionList title="优先级摘要" items={projectPrioritySummaryItems(group)} />
         <SectionList title="当前建议任务" items={projectRecommendedIssueItems(recommendedIssue)} />
         <SectionList title="依赖摘要" items={projectDependencySummaryItems(group)} />
         {group.warnings.length || group.missingIssueIds.length ? (
@@ -2688,9 +2689,9 @@ function TaskDetailReader({
             </StatusBadge>
           </span>
           <span className="v16-detail-meta-item">
-            <span className="v16-detail-meta-label">风险</span>
-            <strong className={`v16-risk-text ${riskTextClass(task.riskLevel)}`}>
-              {displayRiskTextZh(task.riskLevel)}
+            <span className="v16-detail-meta-label">优先级</span>
+            <strong className={`v16-priority-text ${priorityTextClass(task.priority)}`}>
+              {displayPriority(task.priority)}
             </strong>
           </span>
           <span className="v16-detail-meta-item">
@@ -3410,6 +3411,7 @@ function initializationDetail(state: ProjectInitializationState) {
 
 const displayStatusColumns: Array<{ id: IssueDisplayStatus; label: string }> = [
   { id: "backlog", label: "待办" },
+  { id: "blocked", label: "已阻断" },
   { id: "ready", label: "就绪" },
   { id: "in-progress", label: "进行中" },
   { id: "review", label: "待审阅" },
@@ -3440,6 +3442,7 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
           "AgentFlow issueId and executionPipeline are the only active task source",
           "no external issue/task/plan/queue/thread/tool state is used as task authority",
           "Git provider detected as github or gitlab",
+          "only the CLI matching the detected provider is required",
           "git status --short",
           "git remote -v",
           "GitHub path: gh --version, gh auth status, gh repo view --json nameWithOwner,defaultBranchRef",
@@ -3447,7 +3450,7 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
           "cargo build --release --bin agentflow or target/debug/agentflow fallback",
           "target/release/agentflow build-agent complete --help or target/debug/agentflow build-agent complete --help",
         ],
-        goal: "确认 Build Agent 只基于 AgentFlow input issue 和 executionPipeline 执行；确认没有把外部 issue、任务、计划、队列、线程或工具状态当作任务源；识别当前远端代码托管 provider 是 GitHub 还是 GitLab；确认对应 CLI、认证、仓库同步、PR/MR 创建和合并能力可用；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。",
+        goal: "确认 Build Agent 只基于 AgentFlow input issue 和 executionPipeline 执行；确认没有把外部 issue、任务、计划、队列、线程或工具状态当作任务源；识别当前远端代码托管 provider 是 GitHub 还是 GitLab；只要求当前 provider 对应的 CLI、认证、仓库同步、PR/MR 创建和合并能力可用，不要求同时安装 gh 和 glab；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。",
         label: "GitHub/GitLab 自动化预检",
         required: true,
         stageId: "git-provider-preflight",
@@ -3566,9 +3569,10 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
     milestoneId: null,
     nonGoals: issue.nonGoals,
     projectId: issue.projectId ?? null,
+    priority: indexed?.priority ?? issue.priority ?? "p2",
     rawStatus: issue.status,
     requiredAgentRole,
-    riskLevel: issue.riskLevel || indexed?.riskLevel || "low",
+    executionRisk: issue.executionRisk || indexed?.executionRisk || "low",
     sourceDeliveryPath: issue.audit?.sourceDeliveryPath ?? null,
     sourceReleaseId: issue.audit?.sourceReleaseId ?? null,
     sourceSpecId: issue.sourceSpecId ?? null,
@@ -3660,6 +3664,10 @@ function defaultForbiddenActions(issueCategory?: string | null) {
 
 function sortTasksByDisplayStatus(tasks: V1Issue[]) {
   return [...tasks].sort((left, right) => {
+    const priorityDiff = priorityRank(left.priority) - priorityRank(right.priority);
+    if (priorityDiff) {
+      return priorityDiff;
+    }
     const timeDiff = issueSortTime(right) - issueSortTime(left);
     if (timeDiff) {
       return timeDiff;
@@ -3689,6 +3697,7 @@ function sortAuditsByLatest(audits: AuditIndexEntry[]) {
 function statusChipForDisplayStatus(status: IssueDisplayStatus = "backlog"): StatusChipStatus {
   const chips: Record<IssueDisplayStatus, StatusChipStatus> = {
     backlog: "idle",
+    blocked: "blocked",
     cancel: "blocked",
     done: "done",
     "in-progress": "working",
@@ -3711,7 +3720,7 @@ function projectDisplayStatusForGroup(group: TaskProjectGroup): ProjectDisplaySt
   }
 
   const unfinishedIssues = group.issues.filter((issue) => issue.displayStatus !== "done" && issue.displayStatus !== "cancel");
-  if (unfinishedIssues.length && unfinishedIssues.every((issue) => issue.status === "blocked")) {
+  if (unfinishedIssues.length && unfinishedIssues.every((issue) => issue.displayStatus === "blocked" || issue.status === "blocked")) {
     return "blocked";
   }
 
@@ -3798,10 +3807,6 @@ function activeProjectStatus(
     return "blocked";
   }
   return "ready";
-}
-
-function displayRiskLabelZh(risk?: string | null) {
-  return displayRiskTextZh(risk);
 }
 
 function issueCategoryLabelZh(category?: string | null) {
@@ -3903,22 +3908,19 @@ function projectProgressItems(group: TaskProjectGroup) {
   ];
 }
 
-function projectRiskSummaryItems(group: TaskProjectGroup) {
+function projectPrioritySummaryItems(group: TaskProjectGroup) {
   if (!group.issues.length) {
-    return ["还没有任务风险记录。"];
+    return ["还没有任务优先级记录。"];
   }
 
-  const risk = groupRiskLevel(group.issues);
-  const elevatedIssues = group.issues.filter((issue) => {
-    const tone = riskToneKey(issue.riskLevel);
-    return tone === "high" || tone === "medium";
-  });
+  const priority = groupHighestPriority(group.issues);
+  const elevatedIssues = group.issues.filter((issue) => priorityRank(issue.priority) <= 1);
 
   return [
-    `整体风险：${displayRiskTextZh(risk)}`,
+    `最高优先级：${displayPriority(priority)}`,
     ...(elevatedIssues.length
-      ? elevatedIssues.slice(0, 5).map((issue) => `${issue.id}：${displayRiskTextZh(issue.riskLevel)} · ${issue.title}`)
-      : ["没有中高风险任务。"]),
+      ? elevatedIssues.slice(0, 5).map((issue) => `${issue.id}：${displayPriority(issue.priority)} · ${issue.title}`)
+      : ["没有 P0/P1 任务。"]),
   ];
 }
 
@@ -4036,51 +4038,37 @@ function taskActionDisplayLabel(action: TaskInteractionAction, task: V1Issue, co
   return taskActionLabel(action);
 }
 
-function displayRiskTextZh(risk?: string | null) {
-  const tone = riskToneKey(risk);
-  if (tone === "high") {
-    return "高";
-  }
-  if (tone === "medium") {
-    return "中";
-  }
-  return "低";
+function normalizePriority(priority?: string | null) {
+  const normalized = (priority ?? "p2").toLowerCase();
+  return normalized === "p0" || normalized === "p1" || normalized === "p2" || normalized === "p3"
+    ? normalized
+    : "p2";
 }
 
-function riskToneKey(risk?: string | null) {
-  const normalized = (risk ?? "low").toLowerCase();
-  if (normalized.includes("critical") || normalized.includes("high")) {
-    return "high";
-  }
-  if (normalized.includes("medium") || normalized === "med") {
-    return "medium";
-  }
-  if (normalized.includes("low")) {
-    return "low";
-  }
-  return "low";
+function priorityRank(priority?: string | null) {
+  return { p0: 0, p1: 1, p2: 2, p3: 3 }[normalizePriority(priority)];
 }
 
-function groupRiskLevel(issues: TaskIssueNode[]) {
-  const tones = issues.map((issue) => riskToneKey(issue.riskLevel));
-  if (tones.includes("high")) {
-    return "high";
-  }
-  if (tones.includes("medium")) {
-    return "medium";
-  }
-  if (tones.includes("low")) {
-    return "low";
-  }
-  return "low";
+function displayPriority(priority?: string | null) {
+  return normalizePriority(priority).toUpperCase();
 }
 
-function riskStatusDotClass(risk?: string | null) {
-  return `v16-risk-dot-${riskToneKey(risk)}`;
+function groupHighestPriority(issues: TaskIssueNode[]) {
+  return issues.reduce(
+    (highest, issue) =>
+      priorityRank(issue.priority) < priorityRank(highest)
+        ? normalizePriority(issue.priority)
+        : highest,
+    "p3",
+  );
 }
 
-function riskTextClass(risk?: string | null) {
-  return `v16-risk-text-${riskToneKey(risk)}`;
+function priorityStatusDotClass(priority?: string | null) {
+  return `v16-priority-dot-${normalizePriority(priority)}`;
+}
+
+function priorityTextClass(priority?: string | null) {
+  return `v16-priority-text-${normalizePriority(priority)}`;
 }
 
 function findDeliveryForTask(deliveries: OutputIndexEntry[], taskId: string) {
@@ -4280,7 +4268,7 @@ function buildAgentPullRequestTemplate(task: V1Issue) {
     `- Source SPEC: ${sourceSpec}`,
     "- Owner role: build-agent",
     "- Review role: human-reviewer",
-    `- Risk level: ${displayRiskLabelZh(task.riskLevel)}`,
+    `- Priority: ${displayPriority(task.priority)}`,
     "- Branch: ",
     "- Merge mode: manual-merge / auto-merge-if-eligible",
     "- Lease file: ",
@@ -4348,7 +4336,7 @@ function buildAgentPullRequestTemplate(task: V1Issue) {
     "## Review Gate",
     "",
     "- [ ] Owner role did not approve its own task.",
-    "- [ ] Verification evidence is present or explicitly not required for this risk level.",
+    "- [ ] Verification evidence is present or explicitly not required for this execution risk.",
     "- [ ] `waiting-for-merge` is not treated as `done`.",
     "- [ ] `BLOCKED` is not treated as `DONE`.",
     "- [ ] `QA_PASSED` is not treated as `DONE`.",
@@ -4367,6 +4355,7 @@ function buildCodexHandoff(task: V1Issue) {
           handoffVersion: "agent-handoff.v1",
           issueCategory: "audit",
           issueId: task.id,
+          priority: task.priority,
           projectId: task.projectId,
           requiredAgentRole: task.requiredAgentRole ?? "audit-agent",
           sourceDeliveryPath: task.sourceDeliveryPath,
@@ -4402,6 +4391,7 @@ function buildCodexHandoff(task: V1Issue) {
           issueCategory: "spec",
           issueId: task.id,
           issuePath: task.issuePath,
+          priority: task.priority,
           projectId: task.projectId,
           requiredAgentRole: task.requiredAgentRole ?? "build-agent",
           sourceSpecId: task.sourceSpecId,
@@ -4421,7 +4411,7 @@ function buildCodexHandoff(task: V1Issue) {
     `任务：${task.id}`,
     `任务类型：${issueCategoryLabelZh(task.issueCategory)}`,
     `执行角色：${agentRoleLabelZh(task.requiredAgentRole)}`,
-    `风险：${displayRiskLabelZh(task.riskLevel)}`,
+    `优先级：${displayPriority(task.priority)}`,
     `指令：${agentInstructionForTask(task)}`,
     ...(task.issueCategory === "audit"
       ? [

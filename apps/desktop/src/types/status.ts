@@ -133,7 +133,7 @@ export type WorkspaceOwnershipStatus = {
 
 export type InputWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";
 
-export type IssueDisplayStatus = "backlog" | "ready" | "in-progress" | "review" | "done" | "cancel";
+export type IssueDisplayStatus = "backlog" | "blocked" | "ready" | "in-progress" | "review" | "done" | "cancel";
 
 export type InputSummary = {
   intake: number;
@@ -237,7 +237,7 @@ export type InputIssue = {
   priority: string;
   status: InputIssueStatus;
   displayStatus: IssueDisplayStatus;
-  riskLevel: string;
+  executionRisk: string;
   allowedPaths?: string[];
   forbiddenPaths?: string[];
   forbiddenActions?: string[];
@@ -462,7 +462,8 @@ export type StateStatusSnapshot = {
 export type IssueStatusIndexEntry = {
   issueId: string;
   displayStatus: IssueDisplayStatus;
-  riskLevel: string;
+  priority?: string;
+  executionRisk?: string;
   latestRunId?: string | null;
   executeStatus?: string | null;
   evidenceStatus: string;

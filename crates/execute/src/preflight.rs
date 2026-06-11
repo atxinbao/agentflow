@@ -24,7 +24,7 @@ pub fn confirm_high_risk_execute_run(
     let root = canonical_project_root(project_root)?;
     let run = read_run(&root, &run_id)?;
     let issue = load_issue_for_run(&root, &run)?;
-    if !issue.risk_level.requires_human_confirmation() {
+    if !issue.execution_risk.requires_human_confirmation() {
         anyhow::bail!(
             "run {} is not high risk and does not require confirmation",
             run.run_id
@@ -177,7 +177,7 @@ pub fn execute_run_preflight(
                 confirmed: None,
             });
 
-            let high_risk = matches!(issue.risk_level, InputRiskLevel::High);
+            let high_risk = matches!(issue.execution_risk, InputRiskLevel::High);
             let confirmed = !high_risk
                 || run_dir(&root, &run_id)
                     .join("confirmations/high-risk-confirmation.json")
@@ -194,7 +194,7 @@ pub fn execute_run_preflight(
                 } else {
                     "Risk check passed.".to_string()
                 }),
-                risk_level: Some(format!("{:?}", issue.risk_level).to_lowercase()),
+                risk_level: Some(format!("{:?}", issue.execution_risk).to_lowercase()),
                 human_confirmation_required: Some(high_risk),
                 confirmed: Some(confirmed),
             });

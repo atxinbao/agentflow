@@ -100,6 +100,12 @@ try {
     ["backlog", "ready", "in-progress", "review", "ready", "done", "cancel"],
   );
   assert.deepEqual(
+    inputSnapshot.issues.map((issue) => issue.priority),
+    ["p3", "p1", "p0", "p2", "p2", "p2", "p2"],
+  );
+  assert.equal(inputSnapshot.issues.some((issue) => "riskLevel" in issue), false);
+  assert.equal(inputSnapshot.issues.every((issue) => "executionRisk" in issue), true);
+  assert.deepEqual(
     issueStatusIndex.issues.map((issue) => issue.displayStatus),
     ["backlog", "ready", "in-progress", "review", "ready", "done", "cancel"],
   );
@@ -191,6 +197,8 @@ try {
   assert.ok(appEntry.includes("审计"));
   assert.ok(appEntry.includes("高级"));
   assert.ok(appEntry.includes("复制任务"));
+  assert.ok(appEntry.includes("优先级"));
+  assert.equal(appEntry.includes("displayRiskLabelZh"), false);
   assert.equal(appEntry.includes("请求人工审计"), false);
   assert.ok(appEntry.includes("等待 Agent 审计"));
   assert.ok(appEntry.includes("displayStatusColumns"));

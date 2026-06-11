@@ -5,6 +5,7 @@ use crate::{
         STATE_ISSUE_STATUS_INDEX_VERSION, STATE_OUTPUT_STATUS_INDEX_VERSION,
         STATE_RUN_STATUS_INDEX_VERSION, STATE_WORKSPACE_STATUS_INDEX_VERSION,
     },
+    readiness::issue_has_readiness_blocker,
     storage::{unix_timestamp_seconds, write_json},
 };
 use agentflow_execute::{ExecuteRunIndexEntry, ExecuteRunStatus};
@@ -57,8 +58,10 @@ pub(crate) fn write_indexes(
                             latest_run,
                             output.as_ref(),
                             latest_run_id.as_deref(),
+                            issue_has_readiness_blocker(issue, &gate.blocked_actions),
                         ),
-                        risk_level: format!("{:?}", issue.risk_level).to_lowercase(),
+                        priority: issue.priority.as_str().to_string(),
+                        execution_risk: format!("{:?}", issue.execution_risk).to_lowercase(),
                         latest_run_id: latest_run_id.clone(),
                         execute_status: latest_run
                             .map(|run| format!("{:?}", run.status).to_lowercase()),
@@ -134,6 +137,7 @@ fn display_status(
     latest_run: Option<&ExecuteRunIndexEntry>,
     output: Option<&agentflow_output::OutputSnapshot>,
     latest_run_id: Option<&str>,
+    blocked_by_gate: bool,
 ) -> DisplayStatus {
     if matches!(issue.status, InputIssueStatus::Canceled) {
         return DisplayStatus::Cancel;
@@ -148,9 +152,9 @@ fn display_status(
             ExecuteRunStatus::Cancelled => DisplayStatus::Cancel,
             ExecuteRunStatus::Completed => DisplayStatus::Done,
             ExecuteRunStatus::Failed => DisplayStatus::Review,
+            ExecuteRunStatus::Blocked => DisplayStatus::Blocked,
             ExecuteRunStatus::Queued
             | ExecuteRunStatus::Preflight
-            | ExecuteRunStatus::Blocked
             | ExecuteRunStatus::Planned
             | ExecuteRunStatus::Checkpointed
             | ExecuteRunStatus::Patching
@@ -161,6 +165,9 @@ fn display_status(
 
     if output_has_issue_delivery(output, &issue.issue_id, latest_run_id) {
         return DisplayStatus::Done;
+    }
+    if blocked_by_gate {
+        return DisplayStatus::Blocked;
     }
 
     DisplayStatus::from_input_status(&issue.status)
@@ -310,11 +317,17 @@ mod tests {
     #[test]
     fn display_status_mapping_covers_input_execute_output_and_audit_states() {
         assert_eq!(
-            display_status(&issue(InputIssueStatus::Planned), None, None, None),
+            display_status(&issue(InputIssueStatus::Planned), None, None, None, false),
             DisplayStatus::Backlog
         );
         assert_eq!(
-            display_status(&issue(InputIssueStatus::ReadyForExecute), None, None, None),
+            display_status(
+                &issue(InputIssueStatus::ReadyForExecute),
+                None,
+                None,
+                None,
+                false
+            ),
             DisplayStatus::Ready
         );
         assert_eq!(
@@ -323,6 +336,7 @@ mod tests {
                 Some(&run(ExecuteRunStatus::Running)),
                 None,
                 Some("run-001"),
+                false,
             ),
             DisplayStatus::InProgress
         );
@@ -332,6 +346,7 @@ mod tests {
                 Some(&run(ExecuteRunStatus::Completed)),
                 None,
                 Some("run-001"),
+                false,
             ),
             DisplayStatus::Done
         );
@@ -342,8 +357,29 @@ mod tests {
                 None,
                 Some(&output),
                 Some("run-001"),
+                false,
             ),
             DisplayStatus::Done
+        );
+        assert_eq!(
+            display_status(
+                &issue(InputIssueStatus::ReadyForExecute),
+                None,
+                None,
+                None,
+                true
+            ),
+            DisplayStatus::Blocked
+        );
+        assert_eq!(
+            display_status(
+                &issue(InputIssueStatus::ReadyForExecute),
+                Some(&run(ExecuteRunStatus::Blocked)),
+                None,
+                Some("run-001"),
+                false,
+            ),
+            DisplayStatus::Blocked
         );
         assert_eq!(
             audit_display_status(Some(&output_with_audit("requested")), "iss-001"),
@@ -354,7 +390,7 @@ mod tests {
             Some(DisplayStatus::Done)
         );
         assert_eq!(
-            display_status(&issue(InputIssueStatus::Canceled), None, None, None),
+            display_status(&issue(InputIssueStatus::Canceled), None, None, None, false),
             DisplayStatus::Cancel
         );
     }

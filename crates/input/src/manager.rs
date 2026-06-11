@@ -217,10 +217,16 @@ pub(crate) fn normalize_issue_metadata_files(root: &Path) -> Result<()> {
         if path.extension().and_then(|value| value.to_str()) != Some("json") {
             continue;
         }
+        let raw_issue = read_json_value(&path)?;
+        let legacy_priority = raw_issue
+            .get("priority")
+            .and_then(Value::as_str)
+            .is_some_and(|value| matches!(value, "low" | "normal" | "high"));
+        let legacy_risk_field = raw_issue.get("riskLevel").is_some();
         let mut issue: InputIssue = read_json(&path)?;
         let before = serde_json::to_value(&issue)?;
         issue.normalize_execution_metadata();
-        if serde_json::to_value(&issue)? != before {
+        if legacy_priority || legacy_risk_field || serde_json::to_value(&issue)? != before {
             write_json(&path, &issue)?;
         }
     }
@@ -269,7 +275,7 @@ pub(crate) fn load_summary(root: &Path) -> Result<InputSummary> {
             .count(),
         high_risk_issues: issues
             .iter()
-            .filter(|issue| issue.risk_level.requires_human_confirmation())
+            .filter(|issue| issue.execution_risk.requires_human_confirmation())
             .count(),
     })
 }

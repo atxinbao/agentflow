@@ -376,7 +376,7 @@ fn write_release_auto_audit_issue_record(
         issue.issue_category = IssueCategory::Audit;
         issue.required_agent_role = AgentRole::AuditAgent;
         issue.display_status = DisplayStatus::Ready;
-        issue.risk_level = InputRiskLevel::High;
+        issue.execution_risk = InputRiskLevel::High;
         issue.audit = Some(release_auto_issue_audit(
             release_id,
             audit_id,
@@ -404,10 +404,10 @@ fn write_release_auto_audit_issue_record(
             release_id
         ),
         kind: InputIssueKind::Validation,
-        priority: InputPriority::High,
+        priority: InputPriority::P1,
         status: InputIssueStatus::ReadyForExecute,
         display_status: DisplayStatus::Ready,
-        risk_level: InputRiskLevel::High,
+        execution_risk: InputRiskLevel::High,
         scope: vec![
             format!("读取 {release_id} 的 delivery.json"),
             "读取关联 SPEC / Issue / Evidence".to_string(),

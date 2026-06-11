@@ -134,7 +134,7 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
         issue_id: issue.issue_id.clone(),
         source_spec_id: issue.source_spec_id.clone(),
         project_id: issue.project_id.clone(),
-        risk_level: format!("{:?}", issue.risk_level).to_lowercase(),
+        risk_level: format!("{:?}", issue.execution_risk).to_lowercase(),
         status: ExecuteRunStatus::Preflight,
         agent_role: issue.required_agent_role.as_str().to_string(),
         created_by: AgentRole::BuildAgent.as_str().to_string(),

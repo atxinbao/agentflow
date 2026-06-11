@@ -91,7 +91,7 @@ mod tests {
             title: format!("Execute {issue_id}"),
             summary: "Execute fixture issue".to_string(),
             status: InputIssueStatus::ReadyForExecute,
-            risk_level,
+            execution_risk: risk_level,
             scope: vec!["src/lib.rs".to_string()],
             validation_hints: vec!["printf ok".to_string()],
             ..InputIssue::default()
@@ -216,7 +216,7 @@ mod tests {
             title: "Audit release".to_string(),
             summary: "Audit release delivery".to_string(),
             status: InputIssueStatus::ReadyForExecute,
-            risk_level: InputRiskLevel::High,
+            execution_risk: InputRiskLevel::High,
             validation_hints: vec!["audit output".to_string()],
             ..InputIssue::default()
         };

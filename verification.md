@@ -68,6 +68,40 @@
   - 输出：`Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.`
 - `git diff --check`：pass。
 
+## 033 - Issue Priority And Build Agent Readiness Gates
+
+日期：2026-06-11
+执行者：Codex
+
+实现结果：
+
+- Issue 面向人和调度的级别改为 `priority: p0 / p1 / p2 / p3`。
+- 技术执行风险保留为 `executionRisk: low / medium / high`，并兼容旧 `riskLevel` 读取迁移。
+- State 派生层新增 issue readiness gates：
+  - `dependency-ready`：`blockedBy` 前置 issue 必须为 Done。
+  - `git-provider-ready`：自动检测当前远端 provider，只检查 GitHub 或 GitLab 其中当前匹配的一套 CLI / auth / remote / branch / worktree。
+- readiness gate 失败会写入 `.agentflow/state/gates/blockers.json`。
+- readiness gate 失败的 issue 在 `.agentflow/state/indexes/issue-status.json` 派生为 `displayStatus: blocked`。
+- Desktop 任务页支持 `blocked` 状态和 P0/P1/P2/P3 badge。
+- Panel context pack 事件仍允许 blocked issue 生成上下文包；blocked 只阻断 Build Agent 执行，不阻断 Panel 后台准备。
+- Build Agent loop 文档和 Agent manual 已同步依赖门禁、Git provider 门禁和 blocked 派生规则。
+
+Browser Preview 核对：
+
+- URL：`http://127.0.0.1:1420/`。
+- 任务页显示 P0 / P1 / P2 / P3 优先级 badge。
+- 任务状态显示 `进行中`、`就绪`、`待审阅`、`已完成`、`已取消`、`待办`。
+- 页面能正常渲染任务详情、执行流程和验证命令。
+
+验证：
+
+- `cargo fmt --check`：pass。
+- `cargo test --workspace`：pass，agent-manual 32 tests + CLI 2 tests + core 61 tests + desktop 24 tests + execute 18 tests + input 22 tests + output 21 tests + panel 27 tests + state 18 tests + workflow-acceptance 6 tests + workflow-events 2 tests。
+- `npm --prefix apps/desktop run build`：pass。
+- `npm --prefix apps/desktop run preview:smoke`：pass。
+  - 输出：`Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.`
+- `git diff --check`：pass。
+
 ## 2026-06-09 Desktop Legacy Runtime Cleanup
 
 日期：2026-06-09
