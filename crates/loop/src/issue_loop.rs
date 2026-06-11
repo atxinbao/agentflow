@@ -33,7 +33,11 @@ impl IssueLoop {
     }
 
     pub fn projection(&self, updated_at: u64) -> IssueLoopProjection {
-        IssueLoopProjection::new(self.project_id.clone(), self.issue_id.clone(), updated_at)
+        IssueLoopProjection::new(
+            Some(self.project_id.clone()),
+            self.issue_id.clone(),
+            updated_at,
+        )
     }
 
     pub fn start_runtime_preflight(

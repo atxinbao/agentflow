@@ -1,4 +1,5 @@
 pub mod audit_gate;
+pub mod direct_issue_loop;
 pub mod error;
 pub mod events;
 pub mod issue_loop;
@@ -7,6 +8,7 @@ pub mod project_loop;
 pub mod storage;
 
 pub use audit_gate::ProjectAuditGate;
+pub use direct_issue_loop::{DirectIssueLoop, DirectIssueLoopSummary};
 pub use issue_loop::IssueLoop;
 pub use model::{
     AuditGateKind, AuditGateStatus, IssueLoopProjection, IssueLoopStage, LoopBlocker,
@@ -150,6 +152,49 @@ mod tests {
         prepare_root(dir.path());
 
         schedule_issue(dir.path());
+    }
+
+    #[test]
+    fn direct_issue_loop_moves_backlog_issue_to_todo() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        let mut issue = InputIssue {
+            issue_id: "AF-DIRECT-001".to_string(),
+            issue_model: InputIssueModel::Direct,
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::BuildAgent,
+            source_spec_id: "spec-001".to_string(),
+            project_id: None,
+            title: "Direct Issue Loop fixture".to_string(),
+            summary: "Schedule one direct issue.".to_string(),
+            status: InputIssueStatus::Backlog,
+            execution_risk: InputRiskLevel::Low,
+            scope: vec!["src/lib.rs".to_string()],
+            validation_hints: vec!["printf ok".to_string()],
+            ..InputIssue::default()
+        };
+        issue.normalize_execution_metadata();
+        fs::write(
+            dir.path()
+                .join(".agentflow/input/issues/AF-DIRECT-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+
+        let summary = DirectIssueLoop::schedule_ready_issues(dir.path()).unwrap();
+
+        assert_eq!(summary.active_issue_ids, vec!["AF-DIRECT-001"]);
+        let issue = agentflow_input::load_input_issue(dir.path(), "AF-DIRECT-001").unwrap();
+        assert_eq!(issue.status, InputIssueStatus::Todo);
+        assert!(dir
+            .path()
+            .join(".agentflow/panel/context-packs/AF-DIRECT-001.json")
+            .is_file());
+        let projection = storage::read_issue_loop_projection(dir.path(), "AF-DIRECT-001").unwrap();
+        assert_eq!(projection.project_id, None);
+        assert_eq!(projection.stage, IssueLoopStage::Todo);
     }
 
     #[test]

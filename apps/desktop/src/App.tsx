@@ -187,6 +187,7 @@ type WorkflowEventsDispatchedEvent = {
 type ProjectLoopTickedEvent = {
   activeIssueCount: number;
   blockedIssueCount: number;
+  directIssueCount: number;
   doneIssueCount: number;
   errors: string[];
   projectCount: number;

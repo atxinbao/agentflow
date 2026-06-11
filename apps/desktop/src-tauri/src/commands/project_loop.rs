@@ -1,4 +1,4 @@
-use agentflow_loop::{LoopBlocker, ProjectLoopSnapshot};
+use agentflow_loop::{DirectIssueLoopSummary, LoopBlocker, ProjectLoopSnapshot};
 use serde::Serialize;
 use std::path::Path;
 use tauri::{AppHandle, Emitter};
@@ -12,6 +12,7 @@ pub(crate) struct ProjectLoopRunSummary {
     version: String,
     project_root: String,
     project_count: usize,
+    direct_issue_count: usize,
     active_issue_count: usize,
     blocked_issue_count: usize,
     done_issue_count: usize,
@@ -36,6 +37,7 @@ struct ProjectLoopTickedEvent {
     version: String,
     project_root: String,
     project_count: usize,
+    direct_issue_count: usize,
     active_issue_count: usize,
     blocked_issue_count: usize,
     done_issue_count: usize,
@@ -59,6 +61,7 @@ pub(crate) fn run_project_loop_for_app(
         version: summary.version.clone(),
         project_root: summary.project_root.clone(),
         project_count: summary.project_count,
+        direct_issue_count: summary.direct_issue_count,
         active_issue_count: summary.active_issue_count,
         blocked_issue_count: summary.blocked_issue_count,
         done_issue_count: summary.done_issue_count,
@@ -77,12 +80,18 @@ pub(crate) fn run_project_loop_inner(
         version: PROJECT_LOOP_RUN_VERSION.to_string(),
         project_root: root.display().to_string(),
         project_count: snapshot.projects.len(),
+        direct_issue_count: 0,
         active_issue_count: 0,
         blocked_issue_count: 0,
         done_issue_count: 0,
         projects: Vec::new(),
         errors: Vec::new(),
     };
+
+    match agentflow_loop::DirectIssueLoop::schedule_ready_issues(&root) {
+        Ok(direct_summary) => push_direct_summary(&mut summary, direct_summary),
+        Err(error) => summary.errors.push(format!("direct issues: {error}")),
+    }
 
     for project in snapshot.projects {
         let project_id = project.project_id;
@@ -98,6 +107,23 @@ pub(crate) fn run_project_loop_inner(
 
     let _ = agentflow_state::refresh_state(&root);
     Ok(summary)
+}
+
+fn push_direct_summary(summary: &mut ProjectLoopRunSummary, snapshot: DirectIssueLoopSummary) {
+    summary.direct_issue_count += snapshot.active_issue_ids.len()
+        + snapshot.blocked_issue_ids.len()
+        + snapshot.done_issue_ids.len();
+    summary.active_issue_count += snapshot.active_issue_ids.len();
+    summary.blocked_issue_count += snapshot.blocked_issue_ids.len();
+    summary.done_issue_count += snapshot.done_issue_ids.len();
+    if !snapshot.blockers.is_empty() {
+        summary.errors.extend(
+            snapshot
+                .blockers
+                .into_iter()
+                .map(|blocker| format!("{}: {}", blocker.code, blocker.reason)),
+        );
+    }
 }
 
 fn push_project_summary(summary: &mut ProjectLoopRunSummary, snapshot: ProjectLoopSnapshot) {
@@ -140,6 +166,7 @@ mod tests {
         let summary = run_project_loop_inner(dir.path()).unwrap();
 
         assert_eq!(summary.project_count, 1);
+        assert_eq!(summary.direct_issue_count, 0);
         assert_eq!(summary.active_issue_count, 1);
         assert_eq!(summary.blocked_issue_count, 0);
         assert!(summary.errors.is_empty());
@@ -163,6 +190,35 @@ mod tests {
             .is_file());
     }
 
+    #[test]
+    fn run_project_loop_schedules_direct_backlog_issue_from_desktop_entrypoint() {
+        let dir = tempdir().unwrap();
+        prepare_fixture_project(dir.path());
+        write_approved_spec_with_mode(dir.path(), InputIssueGenerationMode::Direct);
+        write_direct_backlog_issue(dir.path());
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+
+        let summary = run_project_loop_inner(dir.path()).unwrap();
+
+        assert_eq!(summary.project_count, 0);
+        assert_eq!(summary.direct_issue_count, 1);
+        assert_eq!(summary.active_issue_count, 1);
+        assert_eq!(summary.blocked_issue_count, 0);
+        assert!(summary.errors.is_empty());
+
+        let issue = agentflow_input::load_input_issue(dir.path(), "AF-DIRECT-001").unwrap();
+        assert_eq!(issue.status, InputIssueStatus::Todo);
+        assert_eq!(issue.display_status, DisplayStatus::Todo);
+        assert!(dir
+            .path()
+            .join(".agentflow/panel/context-packs/AF-DIRECT-001.json")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/state/loops/issues/AF-DIRECT-001.json")
+            .is_file());
+    }
+
     fn prepare_fixture_project(root: &Path) {
         fs::create_dir_all(root.join("apps/desktop/src")).unwrap();
         fs::write(root.join("README.md"), "# AgentFlow fixture\n").unwrap();
@@ -177,6 +233,10 @@ mod tests {
     }
 
     fn write_approved_spec(root: &Path) {
+        write_approved_spec_with_mode(root, InputIssueGenerationMode::Project);
+    }
+
+    fn write_approved_spec_with_mode(root: &Path, issue_generation_mode: InputIssueGenerationMode) {
         let spec_dir = root.join(".agentflow/input/specs/approved/spec-loop");
         fs::create_dir_all(&spec_dir).unwrap();
         fs::write(spec_dir.join("product.md"), "# Product\n").unwrap();
@@ -186,10 +246,46 @@ mod tests {
             spec_dir.join("approval.json"),
             serde_json::to_string_pretty(&InputSpecApproval {
                 spec_id: "spec-loop".to_string(),
-                issue_generation_mode: InputIssueGenerationMode::Project,
+                issue_generation_mode,
                 ..InputSpecApproval::default()
             })
             .unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn write_direct_backlog_issue(root: &Path) {
+        let mut issue = InputIssue {
+            issue_id: "AF-DIRECT-001".to_string(),
+            issue_model: InputIssueModel::Direct,
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::BuildAgent,
+            source_spec_id: "spec-loop".to_string(),
+            project_id: None,
+            title: "验证 Direct Issue Loop 调度".to_string(),
+            summary: "把 direct backlog 任务推进到 todo，并生成上下文包。".to_string(),
+            kind: InputIssueKind::Validation,
+            priority: InputPriority::P2,
+            status: InputIssueStatus::Backlog,
+            display_status: DisplayStatus::Backlog,
+            execution_risk: InputRiskLevel::Low,
+            scope: vec!["apps/desktop/src/**".to_string()],
+            acceptance_criteria: vec!["任务状态变成 todo".to_string()],
+            validation_hints: vec!["npm --prefix apps/desktop run build".to_string()],
+            system: InputSystemRecord {
+                created_by: "test".to_string(),
+                created_at: 1,
+                updated_at: 1,
+                path: ".agentflow/input/issues/AF-DIRECT-001.json".to_string(),
+                revision: 1,
+            },
+            ..InputIssue::default()
+        };
+        issue.normalize_execution_metadata();
+
+        fs::write(
+            root.join(".agentflow/input/issues/AF-DIRECT-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
         )
         .unwrap();
     }
