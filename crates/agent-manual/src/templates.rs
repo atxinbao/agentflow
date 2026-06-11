@@ -318,19 +318,19 @@ It performs the Build Agent execution pipeline:
 6. Merge PR/MR
 7. Write back Done
 
-The issue preflight confirms the current task is an AgentFlow input issue, the issue status is `backlog`, every `blockedBy` dependency issue is Done, the issue contract is complete, and the Panel Context Pack exists or can be generated. After this stage passes, AgentFlow moves the issue to `todo`. GitHub/GitLab checks are not part of this loop stage; CLI, auth, branch, PR/MR creation, and merge capability are recorded only in the create PR/MR and merge PR/MR stages.
+The issue preflight confirms the current task is an AgentFlow input issue, the issue status is `backlog`, every `blockedBy` dependency issue is Done, the issue contract is complete, and the Panel Context Pack exists or can be generated. After this stage passes, AgentFlow moves the issue to `todo`. Runtime preflight must also confirm the Panel Context Pack is readable and the current working tree has no uncommitted user source changes before the issue can enter `in_progress`. GitHub/GitLab checks are not part of this loop stage; CLI, auth, branch, PR/MR creation, and merge capability are recorded only in the create PR/MR and merge PR/MR stages.
 
-The test design stage derives test points from SPEC and the current issue. If TDD fits the task, Build Agent adds or updates the failing test first. If TDD does not fit the task, Build Agent records the reason and defines the replacement smoke, build, screenshot, or command verification. Entering this stage moves the issue to `in_progress`.
+After runtime preflight confirms the Panel Context Pack is readable or successfully generated, AgentFlow moves the issue to `in_progress`. The test design stage then derives test points from SPEC and the current issue. If TDD fits the task, Build Agent adds or updates the failing test first. If TDD does not fit the task, Build Agent records the reason and defines the replacement smoke, build, screenshot, or command verification.
 
 The sandbox verification stage runs local validation commands and records stdout, stderr, exit code, browser smoke evidence, screenshots, or other required evidence.
 
 The create PR/MR stage pushes the task branch, creates a GitHub PR or GitLab MR, and completes the AgentFlow Build Agent PR/MR template in the description. The PR/MR description is user-facing natural-language output and must follow `agentLocale`. The description must include task metadata, changed files, scope checklist, Build Agent loop checklist, evidence, impact, rollback plan, and review gate. A Draft PR/MR is only an intermediate state, not the Build Agent endpoint.
 
-The merge PR stage supports two modes: `manual-merge` and `auto-merge-if-eligible`.
+The merge PR stage defaults to `auto-merge-if-eligible` first and uses `manual-merge` only as a fallback.
 
-In `manual-merge`, the Build Agent must mark the PR/MR ready and keep the issue in `in_review` while waiting for a human merge. AgentFlow local detection can then confirm GitHub or GitLab reports the PR/MR as merged and continue to Done writeback.
+In `auto-merge-if-eligible`, the Build Agent must not stop at Draft PR/MR. For GitHub it must run `gh pr ready`, then `gh pr merge --auto`, then poll the PR until GitHub reports it as merged. For GitLab it must run `glab mr update --ready`, then `glab mr merge --auto-merge`, then poll the MR until GitLab reports it as merged.
 
-In `auto-merge-if-eligible`, the Build Agent must not stop at Draft PR/MR. For GitHub it must run `gh pr ready`, then `gh pr merge --auto`, then poll the PR until GitHub reports it as merged. For GitLab it must run `glab mr update --ready`, then `glab mr merge --auto-merge`, then poll the MR until GitLab reports it as merged. If the provider rejects auto-merge, the Build Agent must report the reason and keep the issue in `in_review`.
+If the provider rejects auto-merge or the repository is not eligible, the Build Agent must record the reason, mark the PR/MR ready, keep the issue in `in_review`, and wait for a human merge. AgentFlow local detection can then confirm GitHub or GitLab reports the PR/MR as merged and continue to Done writeback.
 
 The writeback stage runs only after PR/MR merge and writes run, evidence, release delivery, and `done` status.
 

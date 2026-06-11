@@ -10,6 +10,7 @@ import {
   GitBranch,
   LayoutDashboard,
   ListChecks,
+  PlayCircle,
   RefreshCw,
   Search,
   Settings,
@@ -45,7 +46,7 @@ import {
   type StatusChipStatus,
 } from "./components";
 import { useAgentManual } from "./features/agent-manual";
-import { useExecuteStatus } from "./features/execute";
+import { useExecuteStatus, type ExecuteStatusState } from "./features/execute";
 import { useInputSnapshot, useInputStatus } from "./features/input";
 import { useOutputStatus, type OutputStatusState } from "./features/output";
 import {
@@ -183,8 +184,19 @@ type WorkflowEventsDispatchedEvent = {
   version: string;
 };
 
+type ProjectLoopTickedEvent = {
+  activeIssueCount: number;
+  blockedIssueCount: number;
+  doneIssueCount: number;
+  errors: string[];
+  projectCount: number;
+  projectRoot: string;
+  version: string;
+};
+
 const AGENTFLOW_WORKSPACE_CHANGED_EVENT = "agentflow-workspace-changed";
 const AGENTFLOW_WORKFLOW_EVENTS_DISPATCHED_EVENT = "agentflow-workflow-events-dispatched";
+const AGENTFLOW_PROJECT_LOOP_TICKED_EVENT = "agentflow-project-loop-ticked";
 const AGENTFLOW_WATCHER_REFRESH_DELAY_MS = 500;
 const AGENTFLOW_WATCHER_REFRESH_COOLDOWN_MS = 1200;
 const AGENTFLOW_DERIVED_CHANGE_AREAS = new Set(["events", "state"]);
@@ -200,9 +212,10 @@ type NextStepViewModel = {
 const pages: Array<{ icon: LucideIcon; id: AppPage; label: string }> = [
   { icon: LayoutDashboard, id: "home", label: "工作台" },
   { icon: ClipboardList, id: "tasks", label: "任务" },
-  { icon: FileSearch, id: "files", label: "文件" },
+  { icon: PlayCircle, id: "execute", label: "执行" },
   { icon: ClipboardCheck, id: "delivery", label: "交付" },
   { icon: ShieldCheck, id: "audit", label: "审计" },
+  { icon: FileSearch, id: "files", label: "文件" },
   { icon: Settings, id: "advanced", label: "高级" },
 ];
 
@@ -216,7 +229,7 @@ const interactionStorageKeys = {
   provider: "agentflow.interaction.provider.v1",
 } as const;
 const appearanceThemeClass = "af-theme-light";
-const INCOMPLETE_HANDOFF_MESSAGE = "这个任务包不完整，缺少执行目标。请先修复 Issue 元数据。";
+const INCOMPLETE_HANDOFF_MESSAGE = "这个任务包不完整，缺少执行目标。请先修复任务元数据。";
 
 type CodexRoleGuide = {
   cannotDo: string[];
@@ -239,7 +252,7 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "你只做三件事：",
       "1. 确认用户需求。",
       "2. 整理 SPEC。",
-      "3. 生成 Issue。",
+      "3. 生成任务。",
       "",
       "你不能做：",
       "- 不改代码",
@@ -301,12 +314,13 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "- 不 deploy",
       "",
       "创建 PR/MR 前必须完成执行前置检测、测试设计和沙箱验证。",
-      "合并 PR/MR 只能按 mergeMode：manual-merge 或 auto-merge-if-eligible。",
+      "合并 PR/MR 默认先走 auto-merge-if-eligible，manual-merge 只作为 fallback。",
       "如果 mergeMode = auto-merge-if-eligible，不能停在 Draft PR/MR；GitHub 执行 gh pr ready、gh pr merge --auto；GitLab 执行 glab mr update --ready、glab mr merge --auto-merge；然后轮询 PR/MR 是否 merged。",
-      "如果 mergeMode = manual-merge，PR/MR ready 后 issue 保持 in_review，等待人合并；本地检测确认 PR/MR merged 后才能写回 Done。",
+      "如果自动合并条件不满足，回落到 manual-merge：PR/MR ready 后 issue 保持 in_review，等待人合并；本地检测确认 PR/MR merged 后才能写回 Done。",
       "写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete。",
       "如果使用 target/release/agentflow，必须先运行 cargo build --release --bin agentflow；否则使用 target/debug/agentflow。",
       "不要直接复用可能过期的 target/release/agentflow。",
+      "进入 in_progress 前必须确认 Context Pack 可读，且当前工作区没有未提交的用户源码改动。",
       "如果任务不是 spec issue，必须停止。",
       "如果 requiredAgentRole 不是 build-agent，必须停止。",
     ].join("\n"),
@@ -326,8 +340,8 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "requiredAgentRole = audit-agent",
       "",
       "你要做：",
-      "1. 读取 Audit Issue。",
-      "2. 读取关联 SPEC / Issue / Evidence / Release。",
+      "1. 读取审计任务。",
+      "2. 读取关联 SPEC / 任务 / Evidence / Release。",
       "3. 检查是否符合需求、范围和边界。",
       "4. 写入 audit report。",
       "5. 写入 findings.json。",
@@ -545,6 +559,12 @@ function App() {
         void invoke("prepare_input_workspace", { projectRoot })
           .then(() => {
             setStateRefreshToken((current) => current + 1);
+            return invoke("run_project_loop", { projectRoot });
+          })
+          .then(() => {
+            setTaskListRefreshToken((current) => current + 1);
+            setInputStatusRefreshToken((current) => current + 1);
+            setStateRefreshToken((current) => current + 1);
           })
           .catch(() => undefined);
         setInputStatusRefreshToken((current) => current + 1);
@@ -637,6 +657,38 @@ function App() {
         return;
       }
       setTaskListRefreshToken((current) => current + 1);
+      setStateRefreshToken((current) => current + 1);
+    }).then((cleanup) => {
+      if (cancelled) {
+        cleanup();
+      } else {
+        unlisten = cleanup;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [projectRoot]);
+
+  useEffect(() => {
+    if (!projectRoot || isBrowserPreviewRuntime()) {
+      return;
+    }
+
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void listen<ProjectLoopTickedEvent>(AGENTFLOW_PROJECT_LOOP_TICKED_EVENT, (event) => {
+      if (cancelled) {
+        return;
+      }
+      const payload = event.payload;
+      if (normalizeProjectRootKey(payload.projectRoot) !== normalizeProjectRootKey(projectRoot)) {
+        return;
+      }
+      setTaskListRefreshToken((current) => current + 1);
+      setInputStatusRefreshToken((current) => current + 1);
       setStateRefreshToken((current) => current + 1);
     }).then((cleanup) => {
       if (cancelled) {
@@ -837,7 +889,19 @@ function App() {
     }
 
     if (page === "tasks") {
+      void invoke("run_project_loop", { projectRoot: root })
+        .then(() => {
+          setInputStatusRefreshToken((current) => current + 1);
+          setStateRefreshToken((current) => current + 1);
+          setTaskListRefreshToken((current) => current + 1);
+        })
+        .catch(() => undefined);
       setTaskListRefreshToken((current) => current + 1);
+      return;
+    }
+
+    if (page === "execute") {
+      setExecuteRefreshToken((current) => current + 1);
       return;
     }
 
@@ -1181,6 +1245,9 @@ function App() {
             taskTree={taskProjectTree}
             tasks={filteredTasks}
           />
+        ) : null}
+        {projectRoot && !projectAvailabilityStatus && activePage === "execute" ? (
+          <ExecutePage executeStatusState={executeStatusState} />
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "files" ? (
           <FilesPage
@@ -1887,7 +1954,7 @@ function EmptyProjectPage({ onAddProject }: { onAddProject: () => void }) {
         <div className="v16-empty-project-copy">
           <p className="v16-empty-project-kicker">项目列表</p>
           <h2>还没有项目</h2>
-          <p>添加一个本地项目后，AgentFlow 会准备任务、文件、交付和审计工作区。</p>
+          <p>添加一个本地项目后，AgentFlow 会准备任务、执行、交付、审计和文件工作区。</p>
           <p className="v16-empty-project-note">移除项目不会删除你的本地文件。</p>
         </div>
         <ActionBar>
@@ -2544,7 +2611,7 @@ function TaskDetail({
           <header>
             <p className="v16-kicker">上下文建议</p>
             <h2>从最近记录继续</h2>
-            <p>这些只是项目上下文，还不是已确认 Issue。</p>
+            <p>这些只是项目上下文，还不是已确认任务。</p>
           </header>
           <div className="v16-detail-document">
             <SectionList
@@ -2553,7 +2620,7 @@ function TaskDetail({
             />
             <SectionList
               title="下一步"
-              items={["先把其中一个方向整理成 SPEC，再生成 Issue。确认后才能进入执行。"]}
+              items={["先把其中一个方向整理成 SPEC，再生成任务。确认后才能进入执行。"]}
             />
           </div>
         </aside>
@@ -2562,13 +2629,11 @@ function TaskDetail({
     return (
       <section className="v16-detail-pane v16-empty-detail-pane" aria-label="任务详情空态">
         <header>
-          <p className="v16-kicker">任务详情</p>
           <h2>还没有任务</h2>
           <StatusBadge status="idle">等待需求</StatusBadge>
         </header>
         <div className="v16-detail-document">
-          <SectionList title="下一步" items={["先确认需求，再生成 Issue。"]} />
-          <SectionList title="任务来源" items={["任务只来自 AgentFlow input issues。GitHub 提交记录不会自动变成任务。"]} />
+          <SectionList title="下一步" items={["先确认需求，再生成任务。"]} />
         </div>
       </section>
     );
@@ -2688,7 +2753,7 @@ function TaskDetailReader({
   const outputItems = taskOutputItems(task);
 
   return (
-    <aside className="v16-detail-pane" aria-label="Issue 合约">
+    <aside className="v16-detail-pane" aria-label="任务合约">
       <header>
         <h2>{task.id}</h2>
         <p>{task.title}</p>
@@ -2778,7 +2843,7 @@ function IssueStatusFlow({ status }: { status: IssueDisplayStatus }) {
   const activeIndex = issueStatusFlowSteps.findIndex((step) => step.id === status);
 
   return (
-    <section className="v16-issue-status-flow" aria-label="Issue 状态流转">
+    <section className="v16-issue-status-flow" aria-label="任务状态流转">
       <div className="v16-issue-status-flow-header">
         <span>状态流转</span>
         <strong>{displayStatusLabelZh(status)}</strong>
@@ -2885,6 +2950,77 @@ function DeliveryPage({
   );
 }
 
+function ExecutePage({ executeStatusState }: { executeStatusState: ExecuteStatusState }) {
+  const status = executeStatusState.status;
+  const summary = status?.summary;
+  const runCount = summary?.runs ?? 0;
+  const hasRuns = runCount > 0;
+  const badgeStatus = executeWorkspaceStatusTone(status?.status, executeStatusState.error);
+  const badgeLabel = executeWorkspaceStatusLabel(status?.status, executeStatusState.source, executeStatusState.error);
+
+  return (
+    <section className="v16-page v16-split-page" data-agentflow-page="execute">
+      <aside className="v16-list-pane" aria-label="执行列表">
+        <header>
+          <h2>执行列表</h2>
+          <span>{runCount} 项</span>
+        </header>
+        {hasRuns ? (
+          <div className="v16-list-items">
+            <button className="v16-list-item active" type="button">
+              <span className="v16-list-item-main">
+                <strong>执行概览</strong>
+                <span>{summary?.activeRuns ? `${summary.activeRuns} 个进行中` : `${summary?.completedRuns ?? 0} 个已完成`}</span>
+              </span>
+              <small>{badgeLabel}</small>
+            </button>
+          </div>
+        ) : (
+          <div className="v16-list-items">
+            <p className="v16-empty-text v16-list-empty-state">还没有执行。</p>
+          </div>
+        )}
+      </aside>
+      <section className={hasRuns || status ? "v16-detail-pane" : "v16-detail-pane v16-empty-detail-pane"} aria-label="执行详情">
+        <header>
+          <h2>{hasRuns ? "执行状态" : "还没有执行记录"}</h2>
+          <StatusBadge status={badgeStatus}>{badgeLabel}</StatusBadge>
+        </header>
+        <div className="v16-detail-document">
+          <SectionList
+            title="当前状态"
+            items={[
+              `状态：${badgeLabel}`,
+              status?.ready ? "执行工作区已就绪。" : "执行工作区还没有准备好。",
+              executeStatusState.error ? `错误：${executeStatusState.error}` : "没有执行错误。",
+            ]}
+          />
+          <SectionList
+            title="执行摘要"
+            items={[
+              `阻断执行：${summary?.blockedRuns ?? 0}`,
+              `manifest：${status?.manifestExists ? "已生成" : "未生成"}`,
+              `index：${status?.indexExists ? "已生成" : "未生成"}`,
+            ]}
+          />
+          <SectionList
+            title="提醒"
+            items={
+              status?.warnings.length
+                ? status.warnings
+                : ["这里只读展示执行状态。任务执行和写回仍由 Build Agent 按任务流程完成。"]
+            }
+          />
+          <SectionList
+            title="缺失路径"
+            items={status?.missingPaths.length ? status.missingPaths : ["没有缺失路径。"]}
+          />
+        </div>
+      </section>
+    </section>
+  );
+}
+
 function DeliveryList({
   deliveries,
   onSelectDelivery,
@@ -2948,19 +3084,12 @@ function DeliveryDetail({
   return (
     <section className={delivery ? "v16-detail-pane" : "v16-detail-pane v16-empty-detail-pane"} aria-label="交付详情">
       <header>
-        <p className="v16-kicker">交付包</p>
         <h2>{delivery ? `交付包：${deliveryDisplayId(delivery.runId)}` : "还没有交付材料"}</h2>
         <StatusBadge status={delivery ? "ready" : "idle"}>
           {delivery ? artifactStatusLabel(delivery.status) : "等待写回"}
         </StatusBadge>
       </header>
       <div className="v16-detail-document">
-        <div className="v16-summary-grid">
-          <MetricCard label="证据" value={outputStatusState.status?.summary.evidence ?? evidence.length} />
-          <MetricCard label="验证命令" value={selectedTask?.validationCommands.length ?? 0} />
-          <MetricCard label="变更文件" value={selectedTask?.allowedFiles.length ?? 0} />
-          <MetricCard label="缺失证据" value={outputStatusState.status?.summary.incompleteEvidence ?? 0} />
-        </div>
         <SectionList
           title="交付摘要"
           items={[
@@ -3085,30 +3214,15 @@ function AuditReport({
     : Array.isArray((report?.findings as { findings?: unknown[] } | undefined)?.findings)
       ? (report?.findings as { findings: AuditFindingSummary[] }).findings
     : [];
-  const trigger = report?.request.trigger ?? report?.audit.trigger ?? selectedAudit?.trigger;
-  const sourceRunId =
-    report?.request.source?.runId ?? report?.audit.sourceRunId ?? selectedAudit?.sourceRunId ?? selectedAudit?.sourceDeliveryId;
-  const sourceIssueId =
-    report?.request.source?.issueId ?? report?.audit.sourceIssueId ?? selectedAudit?.sourceIssueId;
-
   return (
     <section className={selectedAudit || report ? "v16-detail-pane" : "v16-detail-pane v16-empty-detail-pane"} aria-label="审计报告详情">
       <header>
-        <p className="v16-kicker">审计报告</p>
         <h2>{selectedAudit?.auditId ?? report?.audit.auditId ?? "未登记审计"}</h2>
         <StatusBadge status={selectedAudit || report ? "warning" : "idle"}>
           {artifactStatusLabel(selectedAudit?.status ?? report?.audit.status ?? "未登记")}
         </StatusBadge>
       </header>
       <div className="v16-detail-document">
-        <SectionList
-          title="触发来源"
-          items={[
-            auditTriggerLabel(trigger),
-            sourceRunId ? `关联交付：${sourceRunId}` : "关联交付：等待 Agent 写入",
-            sourceIssueId ? `关联任务：${sourceIssueId}` : "关联任务：等待 Agent 写入",
-          ]}
-        />
         <SectionList
           title="审计结论"
           items={[
@@ -3512,7 +3626,7 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
   return {
     agentRole: "build-agent",
     gitProviders: [],
-    mergeModes: ["manual-merge", "auto-merge-if-eligible"],
+    mergeModes: ["auto-merge-if-eligible", "manual-merge"],
     stages: [
       {
         evidence: [
@@ -3521,9 +3635,10 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
           "input issue status is backlog before preflight",
           "blockedBy dependencies are done",
           "Panel Context Pack exists or is generated",
+          "working tree has no uncommitted user source changes before in_progress",
           "input issue status changed to todo after preflight",
         ],
-        goal: "确认当前执行对象是 AgentFlow input issue，且状态为 backlog；确认依赖已完成、任务合同完整、Panel Context Pack 可用；通过后把当前 issue 切换为 todo，为测试设计和 in_progress 执行做准备。GitHub/GitLab 不在这个 loop 阶段检测。",
+        goal: "确认当前执行对象是 AgentFlow input issue，且状态为 backlog；确认依赖已完成、任务合同完整、Panel Context Pack 可用；通过后把当前 issue 切换为 todo，为测试设计和 in_progress 执行做准备。Runtime preflight 还必须确认当前工作区没有未提交的用户源码改动。GitHub/GitLab 不在这个 loop 阶段检测。",
         label: "执行前置检测",
         required: true,
         stageId: "issue-preflight",
@@ -3568,12 +3683,13 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
       {
         evidence: [
           "merge mode",
-          "in_review wait evidence when manual-merge",
           "GitHub path: gh pr ready result and gh pr merge --auto result",
           "GitLab path: glab mr update --ready result and glab mr merge --auto-merge result",
+          "auto-merge rejection reason when falling back to manual-merge",
+          "in_review wait evidence when manual-merge fallback is active",
           "merge commit or merged PR/MR state",
         ],
-        goal: "manual-merge 模式下 PR/MR ready 后在 in_review 阶段等待人合并，再由本地检测确认 PR/MR merged 后继续；auto-merge-if-eligible 模式下按 provider 执行自动合并：GitHub 使用 gh pr ready 和 gh pr merge --auto；GitLab 使用 glab mr update --ready 和 glab mr merge --auto-merge，并轮询到 merged。",
+        goal: "默认先走 auto-merge-if-eligible：PR/MR ready 后按 provider 执行自动合并，GitHub 使用 gh pr ready 和 gh pr merge --auto，GitLab 使用 glab mr update --ready 和 glab mr merge --auto-merge，并轮询到 merged；如果自动合并条件不满足，回落到 manual-merge，issue 保持 in_review，等待人合并，再由本地检测确认 PR/MR merged 后继续。",
         label: "合并 PR/MR",
         required: true,
         stageId: "merge-pr",
@@ -4044,7 +4160,7 @@ function projectDependencySummaryItems(group: TaskProjectGroup) {
 
 function projectWarningItems(group: TaskProjectGroup) {
   return [
-    ...group.missingIssueIds.map((issueId) => `缺失 issue 引用：${issueId}`),
+    ...group.missingIssueIds.map((issueId) => `缺失任务引用：${issueId}`),
     ...group.warnings.map((warning) => warning.message),
   ];
 }
@@ -4360,7 +4476,7 @@ function buildAgentPullRequestTemplateEn(task: V1Issue) {
     "- Review role: human-reviewer",
     `- Priority: ${displayPriority(task.priority)}`,
     "- Branch: ",
-    "- Merge mode: manual-merge / auto-merge-if-eligible",
+    "- Merge mode: auto-merge-if-eligible / manual-merge fallback",
     "- Lease file: ",
     "",
     "## Summary",
@@ -4449,14 +4565,14 @@ function buildAgentPullRequestTemplateZh(task: V1Issue) {
     "",
     "## 任务",
     "",
-    `- Issue ID：${task.id}`,
-    `- Issue 文件：${issuePath}`,
+    `- 任务 ID：${task.id}`,
+    `- 任务文件：${issuePath}`,
     `- 来源 SPEC：${sourceSpec}`,
     "- 执行角色：build-agent",
     "- 审查角色：human-reviewer",
     `- 优先级：${displayPriority(task.priority)}`,
     "- 分支：",
-    "- 合并模式：manual-merge / auto-merge-if-eligible",
+    "- 合并模式：auto-merge-if-eligible / manual-merge fallback",
     "- Lease 文件：",
     "",
     "## 变更摘要",
@@ -4631,9 +4747,10 @@ function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
           "## 合并规则",
           "- 创建 PR/MR 前必须完成执行前置检测、测试设计和沙箱验证。",
           "- 创建 PR/MR 不是终点。Draft PR/MR 只是中间产物，不能直接写回 Done。",
-          "- mergeMode = manual-merge：把 PR/MR 标记 ready 后 issue 保持 in_review，等待人合并；本地检测确认 PR/MR merged 后继续写回。",
           "- mergeMode = auto-merge-if-eligible：GitHub 执行 `gh pr ready` 和 `gh pr merge --auto`；GitLab 执行 `glab mr update --ready` 和 `glab mr merge --auto-merge`；轮询 PR/MR merged 状态。",
+          "- 自动合并条件不满足时，回落到 manual-merge：把 PR/MR 标记 ready 后 issue 保持 in_review，等待人合并；本地检测确认 PR/MR merged 后继续写回。",
           "- PR/MR 合并后才写回 Done。",
+          "- 进入 in_progress 前必须确认 Context Pack 可读，且当前工作区没有未提交的用户源码改动。",
           "- 写回 Done 前必须确认当前 AgentFlow CLI 支持 `build-agent complete`。",
           "- 如果使用 `target/release/agentflow`，必须先运行 `cargo build --release --bin agentflow`；否则使用 `target/debug/agentflow`。",
           "- 不要直接复用可能过期的 `target/release/agentflow`。",
@@ -4823,11 +4940,46 @@ function pageTitle(page: AppPage) {
     advanced: "高级",
     audit: "审计",
     delivery: "交付",
+    execute: "执行",
     files: "文件",
     home: "工作台",
     tasks: "任务流转",
   };
   return labels[page] ?? "工作台";
+}
+
+function executeWorkspaceStatusLabel(status: string | undefined, source: ExecuteStatusState["source"], error: string | null) {
+  if (error) {
+    return "异常";
+  }
+
+  if (source === "loading") {
+    return "检查中";
+  }
+
+  const labels: Record<string, string> = {
+    blocked: "已阻断",
+    degraded: "需注意",
+    failed: "异常",
+    missing: "未初始化",
+    ready: "已就绪",
+  };
+  return labels[status ?? ""] ?? "未检查";
+}
+
+function executeWorkspaceStatusTone(status: string | undefined, error: string | null): StatusChipStatus {
+  if (error) {
+    return "failed";
+  }
+
+  const tones: Record<string, StatusChipStatus> = {
+    blocked: "blocked",
+    degraded: "warning",
+    failed: "failed",
+    missing: "idle",
+    ready: "ready",
+  };
+  return tones[status ?? ""] ?? "idle";
 }
 
 function workflowStageText(stage?: string | null) {
@@ -4894,7 +5046,7 @@ function advancedCategorySummary(categoryId: string) {
     audit: "展示审计索引和报告快照。这里不写处理结果。",
     execute: "展示执行状态快照。这里不继续执行，不清理锁。",
     initialization: "展示基础发布初始化摘要。这里不重跑初始化，不删除示例数据。",
-    input: "展示需求和 Issue 状态快照。普通页面只展示人能读懂的摘要。",
+    input: "展示需求和任务状态快照。普通页面只展示人能读懂的摘要。",
     output: "展示证据、交付和审计输出摘要。",
     panel: "展示项目现场读取结果和上下文包摘要。",
     settings: "展示本地设置、文件阅读器和工作台数据源状态。",

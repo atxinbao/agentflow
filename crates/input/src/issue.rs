@@ -669,7 +669,7 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "issue-preflight".to_string(),
                 label: "执行前置检测".to_string(),
-                goal: "确认当前执行对象是 AgentFlow input issue，且状态为 backlog；确认依赖已完成、任务合同完整、Panel Context Pack 可用；通过后把当前 issue 切换为 todo，为测试设计和 in_progress 执行做准备。GitHub/GitLab 不在这个 loop 阶段检测。".to_string(),
+                goal: "确认当前执行对象是 AgentFlow input issue，且状态为 backlog；确认依赖已完成、任务合同完整、Panel Context Pack 可用；通过后把当前 issue 切换为 todo，为测试设计和 in_progress 执行做准备。Runtime preflight 还必须确认当前工作区没有未提交的用户源码改动。GitHub/GitLab 不在这个 loop 阶段检测。".to_string(),
                 required: true,
                 evidence: vec![
                     "AgentFlow issueId and executionPipeline are the only active task source".to_string(),
@@ -677,6 +677,7 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
                     "input issue status is backlog before preflight".to_string(),
                     "blockedBy dependencies are done".to_string(),
                     "Panel Context Pack exists or is generated".to_string(),
+                    "working tree has no uncommitted user source changes before in_progress".to_string(),
                     "input issue status changed to todo after preflight".to_string(),
                 ],
             },
@@ -725,13 +726,14 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "merge-pr".to_string(),
                 label: "合并 PR/MR".to_string(),
-                goal: "manual-merge 模式下 PR/MR ready 后在 in_review 阶段等待人合并，再由本地检测确认 PR/MR merged 后继续；auto-merge-if-eligible 模式下按 provider 执行自动合并：GitHub 使用 gh pr ready 和 gh pr merge --auto；GitLab 使用 glab mr update --ready 和 glab mr merge --auto-merge，并轮询到 merged。".to_string(),
+                goal: "默认先走 auto-merge-if-eligible：PR/MR ready 后按 provider 执行自动合并，GitHub 使用 gh pr ready 和 gh pr merge --auto，GitLab 使用 glab mr update --ready 和 glab mr merge --auto-merge，并轮询到 merged；如果自动合并条件不满足，回落到 manual-merge，issue 保持 in_review，等待人合并，再由本地检测确认 PR/MR merged 后继续。".to_string(),
                 required: true,
                 evidence: vec![
                     "merge mode".to_string(),
-                    "in_review wait evidence when manual-merge".to_string(),
                     "GitHub path: gh pr ready result and gh pr merge --auto result".to_string(),
                     "GitLab path: glab mr update --ready result and glab mr merge --auto-merge result".to_string(),
+                    "auto-merge rejection reason when falling back to manual-merge".to_string(),
+                    "in_review wait evidence when manual-merge fallback is active".to_string(),
                     "merge commit or merged PR/MR state".to_string(),
                 ],
             },
@@ -758,8 +760,8 @@ fn default_build_agent_execution_pipeline_version() -> String {
 
 fn default_build_agent_merge_modes() -> Vec<String> {
     vec![
-        "manual-merge".to_string(),
         "auto-merge-if-eligible".to_string(),
+        "manual-merge".to_string(),
     ]
 }
 

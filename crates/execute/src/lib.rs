@@ -43,7 +43,7 @@ mod tests {
         },
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
-    use std::{fs, path::Path};
+    use std::{fs, path::Path, process::Command};
     use tempfile::tempdir;
 
     fn prepare_root(root: &Path) {
@@ -146,6 +146,39 @@ mod tests {
         assert_eq!(result.status, ExecuteRunStatus::Completed);
         assert!(result.next.ready_for_delivery);
         run
+    }
+
+    fn init_clean_git_repo(root: &Path) {
+        fs::write(root.join(".gitignore"), ".agentflow/\nAGENTS.md\n").unwrap();
+        Command::new("git")
+            .arg("init")
+            .current_dir(root)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["add", ".gitignore", "README.md", "src/lib.rs"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        let output = Command::new("git")
+            .args([
+                "-c",
+                "user.name=AgentFlow Test",
+                "-c",
+                "user.email=agentflow-test@example.com",
+                "commit",
+                "-m",
+                "initial",
+            ])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]
@@ -297,7 +330,9 @@ mod tests {
         write_issue(dir.path(), "iss-001", "missing-spec", InputRiskLevel::Low);
         let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
         let preflight = execute_run_preflight(dir.path(), run.run_id).unwrap();
+        let issue = agentflow_input::load_input_issue(dir.path(), "iss-001").unwrap();
         assert_eq!(preflight.status, "blocked");
+        assert_eq!(issue.status, InputIssueStatus::Blocked);
         assert!(preflight
             .checks
             .iter()
@@ -312,11 +347,17 @@ mod tests {
         write_approved_spec(dir.path(), "spec-001");
         write_issue(dir.path(), "iss-001", "spec-001", InputRiskLevel::Low);
         let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        let issue_before_preflight =
+            agentflow_input::load_input_issue(dir.path(), "iss-001").unwrap();
+        assert_eq!(issue_before_preflight.status, InputIssueStatus::Todo);
 
         let preflight = execute_run_preflight(dir.path(), run.run_id.clone()).unwrap();
         let loaded = load_execute_run(dir.path(), run.run_id).unwrap();
+        let issue_after_preflight =
+            agentflow_input::load_input_issue(dir.path(), "iss-001").unwrap();
 
         assert_eq!(preflight.status, "ready");
+        assert_eq!(issue_after_preflight.status, InputIssueStatus::InProgress);
         assert!(preflight.checks.iter().any(|check| {
             check.name == "context-pack" && matches!(check.status, ExecuteCheckStatus::Passed)
         }));
@@ -329,6 +370,27 @@ mod tests {
             loaded.input.context_pack_path.as_deref(),
             Some(".agentflow/panel/context-packs/iss-001.json")
         );
+    }
+
+    #[test]
+    fn runtime_preflight_blocks_dirty_worktree_before_in_progress() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        init_clean_git_repo(dir.path());
+        write_approved_spec(dir.path(), "spec-001");
+        write_issue(dir.path(), "iss-001", "spec-001", InputRiskLevel::Low);
+        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        fs::write(dir.path().join("README.md"), "# dirty\n").unwrap();
+
+        let preflight = execute_run_preflight(dir.path(), run.run_id).unwrap();
+        let issue = agentflow_input::load_input_issue(dir.path(), "iss-001").unwrap();
+
+        assert_eq!(preflight.status, "blocked");
+        assert_eq!(issue.status, InputIssueStatus::Blocked);
+        assert!(preflight.checks.iter().any(|check| {
+            check.name == "working-tree-clean"
+                && matches!(check.status, ExecuteCheckStatus::Blocked)
+        }));
     }
 
     #[test]

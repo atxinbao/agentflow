@@ -91,7 +91,7 @@ export function DesignSystemPreview() {
         <div className="af-preview-grid">
           <Panel
             title="可以进入执行了"
-            description="这个任务已经有 approved SPEC 和 Issue。"
+            description="这个任务已经有 approved SPEC 和任务。"
             footer={<ActionButton variant="primary">复制执行指令</ActionButton>}
           >
             <StatusBadge status="ready">Ready</StatusBadge>

@@ -7,7 +7,6 @@ version.workspace = true
 [dependencies]
 agentflow-input = { path = "../input" }
 agentflow-execute = { path = "../execute" }
-agentflow-mcp = { path = "../mcp" }
 agentflow-output = { path = "../output" }
 agentflow-panel = { path = "../panel" }
 anyhow.workspace = true

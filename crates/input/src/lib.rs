@@ -508,10 +508,13 @@ mod tests {
         assert_eq!(pipeline.version, BUILD_AGENT_EXECUTION_PIPELINE_VERSION);
         assert_eq!(pipeline.agent_role, AgentRole::BuildAgent);
         assert!(pipeline.git_providers.is_empty());
-        assert!(pipeline.merge_modes.contains(&"manual-merge".to_string()));
-        assert!(pipeline
-            .merge_modes
-            .contains(&"auto-merge-if-eligible".to_string()));
+        assert_eq!(
+            pipeline.merge_modes,
+            vec![
+                "auto-merge-if-eligible".to_string(),
+                "manual-merge".to_string()
+            ]
+        );
         for stage_id in BUILD_AGENT_PIPELINE_STAGE_IDS {
             assert!(
                 pipeline
@@ -551,6 +554,9 @@ mod tests {
         assert!(preflight_stage
             .evidence
             .contains(&"Panel Context Pack exists or is generated".to_string()));
+        assert!(preflight_stage.evidence.contains(
+            &"working tree has no uncommitted user source changes before in_progress".to_string()
+        ));
         assert!(preflight_stage
             .evidence
             .contains(&"input issue status changed to todo after preflight".to_string()));
@@ -601,9 +607,12 @@ mod tests {
             .evidence
             .iter()
             .any(|item| item.contains("glab mr merge --auto-merge")));
+        assert!(merge_stage.evidence.contains(
+            &"auto-merge rejection reason when falling back to manual-merge".to_string()
+        ));
         assert!(merge_stage
             .evidence
-            .contains(&"in_review wait evidence when manual-merge".to_string()));
+            .contains(&"in_review wait evidence when manual-merge fallback is active".to_string()));
         let writeback_stage = pipeline
             .stages
             .iter()
@@ -750,8 +759,8 @@ mod tests {
                 },
                 "executionPipeline": {
                     "version": "build-agent-execution-pipeline.v1",
-                    "mergeMode": "manual-merge",
-                    "allowedMergeModes": ["manual-merge", "auto-merge-if-eligible"],
+                    "mergeMode": "auto-merge-if-eligible",
+                    "allowedMergeModes": ["auto-merge-if-eligible", "manual-merge"],
                     "prTemplateSource": "handoff/executionPipeline",
                     "auditTriggerPolicy": "done-and-task-delivery-do-not-create-audit-issue"
                 },

@@ -129,7 +129,7 @@ mod tests {
     }
 
     #[test]
-    fn project_preflight_blocks_when_git_remote_is_missing() {
+    fn project_preflight_does_not_block_on_missing_git_remote() {
         let dir = tempdir().unwrap();
         prepare_root(dir.path());
         write_approved_spec(dir.path());
@@ -140,11 +140,8 @@ mod tests {
             .run_preflight(dir.path())
             .unwrap();
 
-        assert_eq!(snapshot.status, ProjectLoopStatus::PreflightBlocked);
-        assert!(snapshot
-            .blockers
-            .iter()
-            .any(|blocker| blocker.code == "git-remote-missing"));
+        assert_eq!(snapshot.status, ProjectLoopStatus::Active);
+        assert!(snapshot.blockers.is_empty());
     }
 
     #[test]

@@ -573,8 +573,14 @@ fn publish_ready_issue_events(root: &Path, snapshot: &InputSnapshot) -> Result<(
 fn issue_ready_for_event(issue: &InputIssue) -> bool {
     matches!(issue.issue_category, IssueCategory::Spec)
         && matches!(issue.required_agent_role, AgentRole::BuildAgent)
-        && matches!(issue.status, InputIssueStatus::Todo)
-        && matches!(issue.display_status, DisplayStatus::Todo)
+        && matches!(
+            issue.status,
+            InputIssueStatus::Backlog | InputIssueStatus::Todo
+        )
+        && matches!(
+            issue.display_status,
+            DisplayStatus::Backlog | DisplayStatus::Todo
+        )
         && !issue.context_pack_path.trim().is_empty()
 }
 

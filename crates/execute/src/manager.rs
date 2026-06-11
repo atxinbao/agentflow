@@ -118,6 +118,16 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
             issue.issue_id
         );
     }
+    if let Some(active_run) = load_runs(&root)?
+        .into_iter()
+        .find(|run| run.issue_id == issue.issue_id && execute_run_active(&run.status))
+    {
+        anyhow::bail!(
+            "input issue {} already has active execute run {}",
+            issue.issue_id,
+            active_run.run_id
+        );
+    }
 
     let run_id = next_run_id(&root)?;
     let run_path = run_dir(&root, &run_id);
@@ -182,10 +192,22 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
                 .unwrap_or_else(|| "branch check failed".to_string())
         );
     }
-    update_input_issue_status(&root, &issue.issue_id, InputIssueStatus::InProgress)?;
     rebuild_index(&root)?;
     build_execute_snapshot(&root)?;
     Ok(run)
+}
+
+fn execute_run_active(status: &ExecuteRunStatus) -> bool {
+    matches!(
+        status,
+        ExecuteRunStatus::Queued
+            | ExecuteRunStatus::Preflight
+            | ExecuteRunStatus::Planned
+            | ExecuteRunStatus::Checkpointed
+            | ExecuteRunStatus::Patching
+            | ExecuteRunStatus::Running
+            | ExecuteRunStatus::Validating
+    )
 }
 
 pub fn cancel_execute_run(project_root: impl AsRef<Path>, run_id: String) -> Result<ExecuteRun> {

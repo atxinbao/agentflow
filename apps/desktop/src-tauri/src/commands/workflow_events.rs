@@ -173,6 +173,23 @@ fn dispatch_workflow_events_inner(
         }
     }
 
+    if summary.context_pack_ready > 0 {
+        match app {
+            Some(app) => {
+                if let Err(error) =
+                    crate::commands::project_loop::run_project_loop_for_app(&root, app)
+                {
+                    summary.errors.push(error);
+                }
+            }
+            None => {
+                if let Err(error) = crate::commands::project_loop::run_project_loop_inner(&root) {
+                    summary.errors.push(error.to_string());
+                }
+            }
+        }
+    }
+
     let _ = prepare_events_workspace(&root);
     if summary.should_refresh_ui() {
         if let Some(app) = app {
@@ -211,7 +228,7 @@ fn event_ready_for_panel(
         .map(|entry| {
             matches!(
                 entry.display_status,
-                DisplayStatus::Todo | DisplayStatus::Blocked
+                DisplayStatus::Backlog | DisplayStatus::Todo | DisplayStatus::Blocked
             )
         })
         .unwrap_or(true)
@@ -268,9 +285,13 @@ fn append_context_pack_event<T: Serialize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentflow_input::issue::{
-        AgentRole, InputIssue, InputIssueKind, InputIssueStatus, InputPriority, InputRiskLevel,
-        InputSystemRecord, IssueCategory,
+    use agentflow_input::{
+        issue::{
+            AgentRole, InputIssue, InputIssueKind, InputIssueModel, InputIssueStatus,
+            InputPriority, InputRiskLevel, InputSystemRecord, IssueCategory,
+        },
+        project::{InputProject, InputProjectStatus},
+        spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
     use agentflow_panel::PanelPrepareMode;
     use agentflow_state::{IssueStatusIndex, IssueStatusIndexEntry, WorkflowAuditStatus};
@@ -398,5 +419,116 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| event.event_type == EVENT_TYPE_PANEL_CONTEXT_PACK_READY));
+    }
+
+    #[test]
+    fn dispatch_runs_project_loop_for_backlog_project_issue_after_context_pack_ready() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("apps/desktop/src")).unwrap();
+        fs::write(
+            dir.path().join("apps/desktop/src/App.tsx"),
+            "export function App() { return null; }\n",
+        )
+        .unwrap();
+
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+        write_approved_spec(dir.path());
+        write_project_issue(dir.path());
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+        agentflow_panel::prepare_project_panel(dir.path(), PanelPrepareMode::Blocking).unwrap();
+
+        let summary = dispatch_workflow_events_inner(dir.path(), None).unwrap();
+
+        assert_eq!(summary.context_pack_ready, 1);
+        let issue = agentflow_input::load_input_issue(dir.path(), "AF-EVENT-001").unwrap();
+        assert_eq!(issue.status, InputIssueStatus::Todo);
+        assert!(dir
+            .path()
+            .join(".agentflow/panel/context-packs/AF-EVENT-001.json")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/state/loops/projects/proj-event.json")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/state/loops/issues/AF-EVENT-001.json")
+            .is_file());
+    }
+
+    fn write_approved_spec(root: &std::path::Path) {
+        let spec_dir = root.join(".agentflow/input/specs/approved/spec-event");
+        fs::create_dir_all(&spec_dir).unwrap();
+        fs::write(spec_dir.join("product.md"), "# Product\n").unwrap();
+        fs::write(spec_dir.join("tech.md"), "# Tech\n").unwrap();
+        fs::write(spec_dir.join("spec.json"), "{}\n").unwrap();
+        fs::write(
+            spec_dir.join("approval.json"),
+            serde_json::to_string_pretty(&InputSpecApproval {
+                spec_id: "spec-event".to_string(),
+                issue_generation_mode: InputIssueGenerationMode::Project,
+                ..InputSpecApproval::default()
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn write_project_issue(root: &std::path::Path) {
+        let project = InputProject {
+            project_id: "proj-event".to_string(),
+            source_spec_id: "spec-event".to_string(),
+            title: "事件驱动 Project Loop".to_string(),
+            summary: "通过事件生成上下文包后推进任务。".to_string(),
+            objective: "通过事件生成上下文包后推进任务。".to_string(),
+            issue_ids: vec!["AF-EVENT-001".to_string()],
+            status: InputProjectStatus::Planned,
+            system: InputSystemRecord {
+                created_by: "test".to_string(),
+                created_at: 1,
+                updated_at: 1,
+                path: ".agentflow/input/projects/proj-event.json".to_string(),
+                revision: 1,
+            },
+            ..InputProject::default()
+        };
+        let mut issue = InputIssue {
+            issue_id: "AF-EVENT-001".to_string(),
+            issue_model: InputIssueModel::Project,
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::BuildAgent,
+            source_spec_id: "spec-event".to_string(),
+            project_id: Some("proj-event".to_string()),
+            title: "事件驱动任务".to_string(),
+            summary: "验证 backlog 任务可以由事件链路推进到 todo。".to_string(),
+            kind: InputIssueKind::Validation,
+            priority: InputPriority::P2,
+            status: InputIssueStatus::Backlog,
+            display_status: DisplayStatus::Backlog,
+            execution_risk: InputRiskLevel::Low,
+            scope: vec!["apps/desktop/src/**".to_string()],
+            acceptance_criteria: vec!["context pack exists".to_string()],
+            validation_hints: vec!["npm --prefix apps/desktop run build".to_string()],
+            system: InputSystemRecord {
+                created_by: "test".to_string(),
+                created_at: 1,
+                updated_at: 1,
+                path: ".agentflow/input/issues/AF-EVENT-001.json".to_string(),
+                revision: 1,
+            },
+            ..InputIssue::default()
+        };
+        issue.normalize_execution_metadata();
+
+        fs::write(
+            root.join(".agentflow/input/projects/proj-event.json"),
+            serde_json::to_string_pretty(&project).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            root.join(".agentflow/input/issues/AF-EVENT-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
     }
 }

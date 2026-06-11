@@ -9,16 +9,10 @@ use agentflow_input::{
     issue::{AgentRole, InputIssue, InputIssueModel, InputIssueStatus, IssueCategory},
     project::{InputProject, InputProjectStatus},
 };
-use agentflow_mcp::{
-    check_github_provider, check_gitlab_provider,
-    storage::{write_provider_status, write_registry_for_statuses},
-    McpProviderStatus, McpProviderStatusCode,
-};
 use anyhow::{Context, Result};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
-    process::Command,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,26 +49,6 @@ impl ProjectLoop {
                 "Project has no input issues to schedule.",
                 Some(project.system.path.clone()),
             ));
-        }
-
-        let provider_status = check_git_provider(&root, &mut blockers)?;
-        if let Some(status) = provider_status {
-            write_provider_status(&root, &status)?;
-            write_registry_for_statuses(&root, &[status.clone()])?;
-            if status.status != McpProviderStatusCode::Ready {
-                blockers.push(blocker(
-                    "git-provider-not-ready",
-                    format!(
-                        "{} provider is not ready: {}",
-                        status.provider,
-                        status.errors.join("; ")
-                    ),
-                    Some(format!(
-                        ".agentflow/state/mcp/providers/{}.json",
-                        status.provider
-                    )),
-                ));
-            }
         }
 
         loop_snapshot.blockers = blockers;
@@ -362,46 +336,6 @@ fn issue_stage(status: &InputIssueStatus) -> IssueLoopStage {
         InputIssueStatus::Blocked => IssueLoopStage::Blocked,
         InputIssueStatus::Cancel => IssueLoopStage::Cancel,
     }
-}
-
-fn check_git_provider(
-    root: &Path,
-    blockers: &mut Vec<LoopBlocker>,
-) -> Result<Option<McpProviderStatus>> {
-    let remote = git_remote_origin(root);
-    let Some(remote) = remote else {
-        blockers.push(blocker(
-            "git-remote-missing",
-            "Project Git remote origin is missing.",
-            None,
-        ));
-        return Ok(None);
-    };
-    if remote.contains("github.com") {
-        return Ok(Some(check_github_provider(root)));
-    }
-    if remote.contains("gitlab.com") {
-        return Ok(Some(check_gitlab_provider(root)));
-    }
-    blockers.push(blocker(
-        "git-provider-unsupported",
-        format!("Unsupported Git provider remote: {remote}"),
-        None,
-    ));
-    Ok(None)
-}
-
-fn git_remote_origin(root: &Path) -> Option<String> {
-    let output = Command::new("git")
-        .args(["remote", "get-url", "origin"])
-        .current_dir(root)
-        .output()
-        .ok()?;
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
-        .filter(|remote| !remote.is_empty())
 }
 
 fn find_project<'a>(projects: &'a [InputProject], project_id: &str) -> Result<&'a InputProject> {
