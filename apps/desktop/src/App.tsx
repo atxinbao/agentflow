@@ -1284,6 +1284,7 @@ function App() {
             inputStatusState={inputStatusState}
             outputBundle={outputBundle}
             outputStatusState={outputStatusState}
+            projectRoot={projectRoot}
             projectFilesState={projectFilesState}
             projectPanelState={projectPanelState}
             initializationState={initializationState}
@@ -3250,12 +3251,200 @@ function AuditReport({
   );
 }
 
+type AdvancedJsonFile = {
+  description: string;
+  error?: string | null;
+  loading?: boolean;
+  name: string;
+  value?: unknown;
+};
+
+type AdvancedCategory = {
+  files: AdvancedJsonFile[];
+  id: string;
+  label: string;
+  value: unknown;
+};
+
+type AdvancedStateJsonFilesState = {
+  errors: Record<string, string>;
+  files: Record<string, unknown>;
+  source: DataSource;
+};
+
+const advancedStateFileNames = [
+  "workflow.json",
+  "gates.json",
+  "blockers.json",
+  "locks.json",
+  "sessions.json",
+  "next-actions.json",
+] as const;
+
+const initialAdvancedStateJsonFilesState: AdvancedStateJsonFilesState = {
+  errors: {},
+  files: {},
+  source: "idle",
+};
+
+function useAdvancedStateJsonFiles(
+  projectRoot: string | null,
+  stateStatus: StateStatusSnapshot | null,
+): AdvancedStateJsonFilesState {
+  const [stateJsonFilesState, setStateJsonFilesState] =
+    useState<AdvancedStateJsonFilesState>(initialAdvancedStateJsonFilesState);
+
+  useEffect(() => {
+    if (!projectRoot) {
+      setStateJsonFilesState(initialAdvancedStateJsonFilesState);
+      return;
+    }
+
+    if (isBrowserPreviewRuntime()) {
+      setStateJsonFilesState({
+        errors: {},
+        files: buildBrowserPreviewAdvancedStateFiles(projectRoot, stateStatus),
+        source: "preview",
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setStateJsonFilesState((current) => ({ ...current, errors: {}, source: "loading" }));
+
+    void loadAdvancedStateFiles(projectRoot, stateStatus)
+      .then((nextState) => {
+        if (!cancelled) {
+          setStateJsonFilesState(nextState);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          setStateJsonFilesState({
+            errors: Object.fromEntries(advancedStateFileNames.map((name) => [name, message])),
+            files: {},
+            source: "unavailable",
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectRoot, stateStatus?.updatedAt]);
+
+  return stateJsonFilesState;
+}
+
+async function loadAdvancedStateFiles(
+  projectRoot: string,
+  stateStatus: StateStatusSnapshot | null,
+): Promise<AdvancedStateJsonFilesState> {
+  const loaders: Array<[string, Promise<unknown>]> = [
+    ["workflow.json", stateStatus ? Promise.resolve(stateStatus) : invoke("load_state_status", { projectRoot })],
+    ["gates.json", invoke("load_workflow_gates", { projectRoot })],
+    ["blockers.json", invoke("load_blockers", { projectRoot })],
+    ["locks.json", invoke("load_state_locks", { projectRoot })],
+    [
+      "sessions.json",
+      invoke<Record<string, unknown>>("load_state_index", { projectRoot }).then((index) => ({
+        version: "state-sessions.reader.v1",
+        sessions: Array.isArray(index.sessions) ? index.sessions : [],
+      })),
+    ],
+    ["next-actions.json", invoke("load_next_actions", { projectRoot })],
+  ];
+  const entries = await Promise.all(
+    loaders.map(async ([name, loader]) => {
+      try {
+        return { name, status: "fulfilled" as const, value: await loader };
+      } catch (error) {
+        return {
+          error: error instanceof Error ? error.message : String(error),
+          name,
+          status: "rejected" as const,
+        };
+      }
+    }),
+  );
+
+  const files: Record<string, unknown> = {};
+  const errors: Record<string, string> = {};
+  entries.forEach((entry) => {
+    if (entry.status === "fulfilled") {
+      files[entry.name] = entry.value;
+    } else {
+      errors[entry.name] = entry.error;
+    }
+  });
+
+  return {
+    errors,
+    files,
+    source: Object.keys(errors).length ? "unavailable" : "tauri",
+  };
+}
+
+function buildBrowserPreviewAdvancedStateFiles(
+  projectRoot: string,
+  stateStatus: StateStatusSnapshot | null,
+): Record<string, unknown> {
+  const workflow = stateStatus ?? {
+    version: "state-status.browser-preview",
+    projectRoot,
+    status: "ready",
+    currentStage: "workspace-ready",
+    auditStatus: "not-requested",
+    activeIssueId: null,
+    activeRunId: null,
+    health: {},
+    nextActions: [],
+    blockers: [],
+    updatedAt: 0,
+  };
+
+  return {
+    "blockers.json": {
+      version: "workflow-blockers.browser-preview",
+      blockers: workflow.blockers ?? [],
+    },
+    "gates.json": {
+      version: "workflow-gates.browser-preview",
+      allowedNextActions: workflow.nextActions ?? [],
+      auditStatus: workflow.auditStatus,
+      blockers: workflow.blockers ?? [],
+      currentStage: workflow.currentStage,
+      health: workflow.health ?? {},
+    },
+    "locks.json": {
+      version: "state-locks.browser-preview",
+      active: [],
+      cleanupCandidates: [],
+      stale: [],
+    },
+    "next-actions.json": {
+      version: "workflow-next-actions.browser-preview",
+      actions: (workflow.nextActions ?? []).map((action) => ({
+        action,
+        label: buildNextActionLabel(action),
+      })),
+    },
+    "sessions.json": {
+      version: "state-sessions.browser-preview",
+      sessions: [],
+    },
+    "workflow.json": workflow,
+  };
+}
+
 function AdvancedPage({
   agentManualState,
   executeStatusState,
   inputStatusState,
   outputBundle,
   outputStatusState,
+  projectRoot,
   projectFilesState,
   projectPanelState,
   initializationState,
@@ -3267,22 +3456,24 @@ function AdvancedPage({
   inputStatusState: unknown;
   outputBundle: OutputBundleState;
   outputStatusState: OutputStatusState;
+  projectRoot: string | null;
   projectFilesState: ProjectFilesState;
   projectPanelState: ProjectPanelState;
   initializationState: ProjectInitializationState;
   stateStatusState: StateStatusState;
   workspaceData: WorkspaceDataState;
 }) {
+  const stateJsonFilesState = useAdvancedStateJsonFiles(projectRoot, stateStatusState.status);
   const categories = [
-    { id: "state", label: "状态", value: stateStatusState, files: advancedFilesForCategory("state") },
-    { id: "agentRoles", label: "Agent 角色", value: agentRoleRulesDocument(), files: advancedFilesForCategory("agentRoles") },
-    { id: "initialization", label: "初始化", value: initializationState, files: advancedFilesForCategory("initialization") },
-    { id: "panel", label: "Panel", value: projectPanelState, files: advancedFilesForCategory("panel") },
-    { id: "input", label: "Input", value: inputStatusState, files: advancedFilesForCategory("input") },
-    { id: "execute", label: "Execute", value: executeStatusState, files: advancedFilesForCategory("execute") },
-    { id: "output", label: "Output", value: { outputBundle, outputStatusState }, files: advancedFilesForCategory("output") },
-    { id: "audit", label: "Audit", value: outputBundle.auditReport, files: advancedFilesForCategory("audit") },
-    { id: "settings", label: "设置", value: { agentManualState, projectFilesState, workspaceData }, files: advancedFilesForCategory("settings") },
+    { id: "state", label: "状态", value: stateStatusState, files: advancedFilesForCategory("state", stateStatusState, stateJsonFilesState) },
+    { id: "agentRoles", label: "Agent 角色", value: agentRoleRulesDocument(), files: advancedFilesForCategory("agentRoles", agentRoleRulesDocument()) },
+    { id: "initialization", label: "初始化", value: initializationState, files: advancedFilesForCategory("initialization", initializationState) },
+    { id: "panel", label: "Panel", value: projectPanelState, files: advancedFilesForCategory("panel", projectPanelState) },
+    { id: "input", label: "Input", value: inputStatusState, files: advancedFilesForCategory("input", inputStatusState) },
+    { id: "execute", label: "Execute", value: executeStatusState, files: advancedFilesForCategory("execute", executeStatusState) },
+    { id: "output", label: "Output", value: { outputBundle, outputStatusState }, files: advancedFilesForCategory("output", { outputBundle, outputStatusState }) },
+    { id: "audit", label: "Audit", value: outputBundle.auditReport, files: advancedFilesForCategory("audit", outputBundle.auditReport) },
+    { id: "settings", label: "设置", value: { agentManualState, projectFilesState, workspaceData }, files: advancedFilesForCategory("settings", { agentManualState, projectFilesState, workspaceData }) },
   ];
   const [activeCategory, setActiveCategory] = useState(categories[0].id);
   const selectedCategory = categories.find((category) => category.id === activeCategory) ?? categories[0];
@@ -3303,10 +3494,18 @@ function AdvancedStateViewer({
   onSelectCategory,
   selectedCategory,
 }: {
-  categories: Array<{ files: Array<{ description: string; name: string }>; id: string; label: string; value: unknown }>;
+  categories: AdvancedCategory[];
   onSelectCategory: (categoryId: string) => void;
-  selectedCategory: { files: Array<{ description: string; name: string }>; id: string; label: string; value: unknown };
+  selectedCategory: AdvancedCategory;
 }) {
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(selectedCategory.files[0]?.name ?? null);
+  const selectedFile =
+    selectedCategory.files.find((file) => file.name === selectedFileName) ?? selectedCategory.files[0] ?? null;
+
+  useEffect(() => {
+    setSelectedFileName(selectedCategory.files[0]?.name ?? null);
+  }, [selectedCategory.id, selectedCategory.files[0]?.name]);
+
   return (
     <div className="v16-advanced-layout" aria-label="高级详情">
       <aside className="v16-advanced-nav">
@@ -3325,29 +3524,61 @@ function AdvancedStateViewer({
         <h2>{selectedCategory.label}</h2>
         <p>{advancedCategorySummary(selectedCategory.id)}</p>
         <div className="v16-advanced-file-list">
-          {selectedCategory.files.map((file) => (
-            <article key={file.name}>
+          {selectedCategory.files.length ? selectedCategory.files.map((file) => (
+            <button
+              aria-current={file.name === selectedFile?.name ? "true" : undefined}
+              className={file.name === selectedFile?.name ? "active" : ""}
+              key={file.name}
+              onClick={() => setSelectedFileName(file.name)}
+              type="button"
+            >
               <strong>{file.name}</strong>
               <span>{file.description}</span>
-            </article>
-          ))}
+            </button>
+          )) : <p className="v16-empty-text">没有可展示的 JSON 文件。</p>}
         </div>
       </section>
       <section className="v16-advanced-reader">
         <header>
-          <h2>JSON Reader</h2>
-          <p>只读展示。这里不编辑 JSON，不修复状态，不清理锁，不触发审计。</p>
+          <h2>{selectedFile?.name ?? "JSON Reader"}</h2>
+          <p>{selectedFile?.description ?? "没有可展示的 JSON 文件。"} 只读展示，不编辑 JSON，不修复状态，不清理锁，不触发审计。</p>
         </header>
-        <JsonReader value={selectedCategory.value} />
+        <JsonReader
+          emptyMessage={selectedFile ? "这个 JSON 文件暂无可展示内容。" : "没有可展示的 JSON 文件。"}
+          error={selectedFile?.error ?? null}
+          loading={selectedFile?.loading ?? false}
+          value={selectedFile?.value ?? selectedCategory.value}
+        />
       </section>
     </div>
   );
 }
 
-function JsonReader({ value }: { value: unknown }) {
+function JsonReader({
+  emptyMessage = "没有可展示的 JSON 内容。",
+  error,
+  loading,
+  value,
+}: {
+  emptyMessage?: string;
+  error?: string | null;
+  loading?: boolean;
+  value: unknown;
+}) {
+  let content = "";
+  if (loading) {
+    content = "正在读取 JSON 文件。";
+  } else if (error) {
+    content = `读取失败：${error}`;
+  } else if (value === null || value === undefined) {
+    content = emptyMessage;
+  } else {
+    content = JSON.stringify(value, null, 2);
+  }
+
   return (
     <pre className="v16-json-reader" aria-label="JSON Reader">
-      <code>{JSON.stringify(value, null, 2)}</code>
+      <code>{content}</code>
     </pre>
   );
 }
@@ -5056,8 +5287,12 @@ function advancedCategorySummary(categoryId: string) {
   return summaries[categoryId] ?? "这里展示开发者调试信息。普通页面不显示原始 JSON。";
 }
 
-function advancedFilesForCategory(categoryId: string) {
-  const files: Record<string, Array<{ description: string; name: string }>> = {
+function advancedFilesForCategory(
+  categoryId: string,
+  categoryValue?: unknown,
+  stateJsonFilesState?: AdvancedStateJsonFilesState,
+): AdvancedJsonFile[] {
+  const files: Record<string, AdvancedJsonFile[]> = {
     agentRoles: [
       { name: ".agentflow/define/agent/roles.json", description: "三类 Agent 的可处理任务和写入边界" },
       { name: "AGENTS.md", description: "根级 Agent 入口规则" },
@@ -5108,7 +5343,16 @@ function advancedFilesForCategory(categoryId: string) {
       { name: "next-actions.json", description: "下一步候选动作" },
     ],
   };
-  return files[categoryId] ?? files.state;
+  const categoryFiles = files[categoryId] ?? files.state;
+  if (categoryId !== "state") {
+    return categoryFiles.map((file) => ({ ...file, value: categoryValue }));
+  }
+  return categoryFiles.map((file) => ({
+    ...file,
+    error: stateJsonFilesState?.errors[file.name] ?? null,
+    loading: stateJsonFilesState?.source === "loading" && stateJsonFilesState.files[file.name] === undefined,
+    value: stateJsonFilesState?.files[file.name],
+  }));
 }
 
 function lifecycleLabel(state: AppInteractionState["lifecycle"]) {

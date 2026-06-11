@@ -2218,13 +2218,26 @@ button.v16-list-item {
   margin-top: 10px;
 }
 
-.v16-advanced-file-list article {
+.v16-advanced-file-list button {
   display: grid;
   gap: 3px;
+  width: 100%;
   padding: 9px;
   border: 1px solid var(--v16-border-soft);
   border-radius: 5px;
   background: var(--v16-surface-2);
+  color: inherit;
+  text-align: left;
+}
+
+.v16-advanced-file-list button:hover,
+.v16-advanced-file-list button.active {
+  border-color: var(--v16-accent);
+  background: var(--v16-surface-3);
+}
+
+.v16-advanced-file-list button.active {
+  box-shadow: inset 3px 0 0 var(--v16-accent);
 }
 
 .v16-advanced-file-list span {
