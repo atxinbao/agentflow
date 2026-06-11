@@ -208,7 +208,12 @@ fn event_ready_for_panel(
                 .iter()
                 .find(|entry| entry.issue_id == payload.issue_id)
         })
-        .map(|entry| matches!(entry.display_status, DisplayStatus::Ready))
+        .map(|entry| {
+            matches!(
+                entry.display_status,
+                DisplayStatus::Ready | DisplayStatus::Blocked
+            )
+        })
         .unwrap_or(true)
 }
 
@@ -303,7 +308,8 @@ mod tests {
             issues: vec![IssueStatusIndexEntry {
                 issue_id: issue.issue_id.clone(),
                 display_status: DisplayStatus::Done,
-                risk_level: "low".to_string(),
+                priority: "p2".to_string(),
+                execution_risk: "low".to_string(),
                 latest_run_id: Some("run-001".to_string()),
                 execute_status: Some("completed".to_string()),
                 evidence_status: "ready".to_string(),
@@ -313,6 +319,25 @@ mod tests {
         };
 
         assert!(!event_ready_for_panel(&payload, Some(&issue_status_index)));
+        let blocked_issue_status_index = IssueStatusIndex {
+            version: "state-issue-status-index.v1".to_string(),
+            updated_at: 1,
+            issues: vec![IssueStatusIndexEntry {
+                issue_id: issue.issue_id.clone(),
+                display_status: DisplayStatus::Blocked,
+                priority: "p2".to_string(),
+                execution_risk: "low".to_string(),
+                latest_run_id: None,
+                execute_status: None,
+                evidence_status: "missing".to_string(),
+                delivery_status: "missing".to_string(),
+                audit_status: WorkflowAuditStatus::NotRequested,
+            }],
+        };
+        assert!(event_ready_for_panel(
+            &payload,
+            Some(&blocked_issue_status_index)
+        ));
     }
 
     #[test]
@@ -334,10 +359,10 @@ mod tests {
             title: "准备上下文包".to_string(),
             summary: "为任务生成 Panel Context Pack。".to_string(),
             kind: InputIssueKind::Validation,
-            priority: InputPriority::High,
+            priority: InputPriority::P1,
             status: InputIssueStatus::ReadyForExecute,
             display_status: DisplayStatus::Ready,
-            risk_level: InputRiskLevel::Medium,
+            execution_risk: InputRiskLevel::Medium,
             scope: vec!["apps/desktop/src/**".to_string()],
             acceptance_criteria: vec!["context pack exists".to_string()],
             validation_hints: vec!["npm --prefix apps/desktop run build".to_string()],

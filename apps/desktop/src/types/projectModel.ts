@@ -36,5 +36,6 @@ export type V1Issue = {
   forbiddenFiles: string[];
   forbiddenActions: string[];
   boundary: string[];
-  riskLevel: string;
+  priority: string;
+  executionRisk: string;
 };

@@ -37,9 +37,11 @@ Build Agent 必须按 7 个阶段执行：
 
 检查工具和权限是否满足后续自动化：
 
+- 所有 `blockedBy` 前置 issue 必须已经 Done
 - 识别当前远端 provider：GitHub 或 GitLab
 - GitHub 路径：`gh` 可用，GitHub 认证可用
 - GitLab 路径：`glab` 可用，GitLab 认证可用
+- 只检查当前远端对应的 provider。GitHub 项目不要求安装 `glab`，GitLab 项目不要求安装 `gh`。
 - 远端仓库正确
 - 当前分支和工作区状态安全
 - GitHub PR 或 GitLab MR 创建能力可用
@@ -50,6 +52,7 @@ Build Agent 必须按 7 个阶段执行：
 
 - AgentFlow input issue 和 `executionPipeline` 是唯一任务源
 - 不使用外部 issue、任务、计划、队列、线程或工具状态作为任务权威
+- 如果依赖或 Git provider 预检失败，失败原因写入 `state/gates/blockers.json`，相关 issue 派生状态显示为 blocked
 
 ### 2. 测试设计
 
@@ -179,6 +182,8 @@ glab mr merge --auto-merge
 - 复制任务包包含 AgentFlow Build Agent PR 描述模板。
 - PR/MR 模板来自 Handoff / executionPipeline，不要求写入 `.github/pull_request_template.md`。
 - 创建 PR/MR 前必须要求完成 GitHub/GitLab 自动化预检、测试设计和沙箱验证。
+- 有未完成 `blockedBy` 依赖时，相关 issue 派生状态为 blocked，不能复制任务执行。
+- Git provider 预检失败时，失败原因写入 `state/gates/blockers.json`，相关 issue 派生状态为 blocked。
 - `manual-merge` 不直接 Done，而是进入 `waiting-for-merge`，等待检测 PR/MR merged。
 - `manual-merge` 同时适用于 GitHub PR 和 GitLab MR。
 - `auto-merge-if-eligible` 不停在 Draft PR/MR。

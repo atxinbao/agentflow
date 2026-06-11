@@ -84,18 +84,22 @@ export function currentBrowserPreviewTaskHierarchyScenario(): BrowserPreviewTask
 }
 
 const previewInputIssues: InputIssue[] = [
-  browserPreviewInputIssue("iss-backlog", "整理需求入口", "planned", "backlog", "需求已创建，等待整理成 SPEC。"),
+  browserPreviewInputIssue("iss-backlog", "整理需求入口", "planned", "backlog", "需求已创建，等待整理成 SPEC。", {
+    priority: "p3",
+  }),
   browserPreviewInputIssue("iss-ready", "生成执行任务包", "ready-for-execute", "ready", "SPEC 已确认，可以交给 Agent。", {
     blocks: ["iss-progress"],
     issueModel: "project",
+    priority: "p1",
     projectId: previewProjectId,
   }),
   browserPreviewInputIssue("iss-progress", "执行受控改动", "ready-for-execute", "in-progress", "Agent 已接手任务。", {
     blockedBy: ["iss-ready"],
     blocks: ["iss-review"],
     issueModel: "project",
+    priority: "p0",
     projectId: previewProjectId,
-    riskLevel: "medium",
+    executionRisk: "medium",
   }),
   browserPreviewInputIssue("iss-review", "审计交付材料", "ready-for-execute", "review", "任务已交付，等待人工审计。", {
     blockedBy: ["iss-progress"],
@@ -140,8 +144,9 @@ function browserPreviewInputIssue(
     issueCategory?: InputIssue["issueCategory"];
     issueModel?: InputIssue["issueModel"];
     projectId?: string | null;
+    priority?: string;
     requiredAgentRole?: InputIssue["requiredAgentRole"];
-    riskLevel?: string;
+    executionRisk?: string;
   } = {},
 ): InputIssue {
   const issueCategory = options.issueCategory ?? "spec";
@@ -156,10 +161,10 @@ function browserPreviewInputIssue(
     title,
     summary,
     kind: "feature",
-    priority: "normal",
+    priority: options.priority ?? "p2",
     status,
     displayStatus,
-    riskLevel: options.riskLevel ?? "low",
+    executionRisk: options.executionRisk ?? "low",
     expectedOutputs: options.expectedOutputs ?? (issueCategory === "spec" ? previewBuildExpectedOutputs(issueId) : undefined),
     scope: previewIssueScope,
     nonGoals: previewIssueNonGoals,
@@ -536,7 +541,8 @@ export function createBrowserPreviewIssueStatusIndex(
     issues: issues.map((issue) => ({
       issueId: issue.issueId,
       displayStatus: issue.displayStatus,
-      riskLevel: issue.riskLevel,
+      priority: issue.priority,
+      executionRisk: issue.executionRisk,
       latestRunId: issue.displayStatus === "in-progress" || issue.displayStatus === "review" || issue.displayStatus === "done" ? previewDeliveryRunId : null,
       executeStatus:
         issue.displayStatus === "in-progress"

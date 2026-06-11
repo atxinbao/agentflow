@@ -252,10 +252,10 @@ fn write_demo_input(root: &Path) -> Result<(), String> {
             title: seed.title.to_string(),
             summary: seed.summary.to_string(),
             kind: InputIssueKind::Feature,
-            priority: InputPriority::Normal,
+            priority: InputPriority::P2,
             status: seed.status.clone(),
             display_status: seed.display_status.clone(),
-            risk_level: InputRiskLevel::Low,
+            execution_risk: InputRiskLevel::Low,
             scope: vec!["示例任务范围只覆盖 .agentflow 演示数据。".to_string()],
             non_goals: vec![
                 "不修改项目源码。".to_string(),
@@ -390,7 +390,7 @@ fn write_demo_execute_and_output(root: &Path) -> Result<(), String> {
             "changedFiles": 1,
             "insertions": 1,
             "deletions": 0,
-            "riskLevel": "low",
+            "executionRisk": "low",
             "notes": ["示例交付只写入 .agentflow。"],
             "demo": true,
             "source": DEMO_SOURCE

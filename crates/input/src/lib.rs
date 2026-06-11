@@ -26,10 +26,10 @@ mod tests {
     use super::*;
     use crate::{
         issue::{
-            validate_agent_issue_permission, AgentRole, DisplayStatus, InputIssue, InputIssueModel,
-            InputIssueStatus, InputPriority, InputRiskLevel, IssueCategory,
-            BUILD_AGENT_EXECUTION_PIPELINE_VERSION, BUILD_AGENT_GIT_PROVIDERS,
-            BUILD_AGENT_PIPELINE_STAGE_IDS,
+            default_build_agent_execution_pipeline, validate_agent_issue_permission, AgentRole,
+            DisplayStatus, InputIssue, InputIssueModel, InputIssueStatus, InputPriority,
+            InputRiskLevel, IssueCategory, BUILD_AGENT_EXECUTION_PIPELINE_VERSION,
+            BUILD_AGENT_GIT_PROVIDERS, BUILD_AGENT_PIPELINE_STAGE_IDS,
         },
         project::{InputProject, InputProjectStatus},
         relations::{
@@ -101,7 +101,85 @@ mod tests {
     }
 
     #[test]
-    fn direct_issue_requires_null_project_id_and_risk_level() {
+    fn priority_serializes_as_p0_to_p3_and_reads_legacy_values() {
+        assert_eq!(serde_json::to_value(InputPriority::P0).unwrap(), "p0");
+        assert_eq!(serde_json::to_value(InputPriority::P1).unwrap(), "p1");
+        assert_eq!(serde_json::to_value(InputPriority::P2).unwrap(), "p2");
+        assert_eq!(serde_json::to_value(InputPriority::P3).unwrap(), "p3");
+        assert_eq!(
+            serde_json::from_value::<InputPriority>(serde_json::json!("high")).unwrap(),
+            InputPriority::P1
+        );
+        assert_eq!(
+            serde_json::from_value::<InputPriority>(serde_json::json!("normal")).unwrap(),
+            InputPriority::P2
+        );
+        assert_eq!(
+            serde_json::from_value::<InputPriority>(serde_json::json!("low")).unwrap(),
+            InputPriority::P3
+        );
+    }
+
+    #[test]
+    fn build_agent_pipeline_accepts_one_matching_git_provider() {
+        for provider in BUILD_AGENT_GIT_PROVIDERS {
+            let mut issue = InputIssue {
+                issue_id: format!("iss-{provider}"),
+                issue_category: IssueCategory::Spec,
+                required_agent_role: AgentRole::BuildAgent,
+                ..InputIssue::default()
+            };
+            let mut pipeline = default_build_agent_execution_pipeline();
+            pipeline.git_providers = vec![provider.to_string()];
+            issue.execution_pipeline = Some(pipeline);
+
+            issue.normalize_execution_metadata();
+
+            assert_eq!(
+                issue.execution_pipeline.unwrap().git_providers,
+                vec![provider.to_string()]
+            );
+        }
+    }
+
+    #[test]
+    fn prepare_migrates_legacy_priority_and_risk_field_names() {
+        let dir = tempdir().unwrap();
+        prepare_input_workspace(dir.path()).unwrap();
+        let path = dir.path().join(".agentflow/input/issues/iss-legacy.json");
+        let legacy_issue = InputIssue {
+            issue_id: "iss-legacy".to_string(),
+            issue_model: InputIssueModel::Direct,
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::BuildAgent,
+            source_spec_id: "spec-001".to_string(),
+            title: "Legacy priority".to_string(),
+            summary: "Migrate old issue metadata.".to_string(),
+            kind: crate::issue::InputIssueKind::Cleanup,
+            priority: InputPriority::P1,
+            execution_risk: InputRiskLevel::Medium,
+            ..InputIssue::default()
+        };
+        let mut legacy_value = serde_json::to_value(legacy_issue).unwrap();
+        legacy_value["priority"] = serde_json::json!("high");
+        legacy_value["riskLevel"] = legacy_value["executionRisk"].clone();
+        legacy_value
+            .as_object_mut()
+            .unwrap()
+            .remove("executionRisk");
+        fs::write(&path, serde_json::to_string_pretty(&legacy_value).unwrap()).unwrap();
+
+        prepare_input_workspace(dir.path()).unwrap();
+
+        let repaired: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+        assert_eq!(repaired["priority"], "p1");
+        assert_eq!(repaired["executionRisk"], "medium");
+        assert!(repaired.get("riskLevel").is_none());
+    }
+
+    #[test]
+    fn direct_issue_requires_null_project_id_and_execution_risk() {
         let dir = tempdir().unwrap();
         prepare_input_workspace(dir.path()).unwrap();
         let issue = InputIssue {
@@ -110,7 +188,7 @@ mod tests {
             source_spec_id: "spec-001".to_string(),
             project_id: Some("proj-001".to_string()),
             title: "Direct issue should not point to project".to_string(),
-            risk_level: InputRiskLevel::Medium,
+            execution_risk: InputRiskLevel::Medium,
             ..InputIssue::default()
         };
         fs::write(
@@ -139,7 +217,7 @@ mod tests {
             source_spec_id: "spec-001".to_string(),
             project_id: Some("missing-project".to_string()),
             title: "Project issue points to missing project".to_string(),
-            risk_level: InputRiskLevel::Low,
+            execution_risk: InputRiskLevel::Low,
             ..InputIssue::default()
         };
         fs::write(
@@ -176,8 +254,8 @@ mod tests {
             source_spec_id: "spec-001".to_string(),
             project_id: Some("proj-001".to_string()),
             title: "First issue".to_string(),
-            priority: InputPriority::Normal,
-            risk_level: InputRiskLevel::Medium,
+            priority: InputPriority::P2,
+            execution_risk: InputRiskLevel::Medium,
             ..InputIssue::default()
         };
         let issue_two = InputIssue {
@@ -186,7 +264,7 @@ mod tests {
             source_spec_id: "spec-001".to_string(),
             project_id: Some("proj-001".to_string()),
             title: "Second issue".to_string(),
-            risk_level: InputRiskLevel::High,
+            execution_risk: InputRiskLevel::High,
             ..InputIssue::default()
         };
         let relations = InputIssueRelationsFile {
@@ -255,12 +333,13 @@ mod tests {
             issue_id: "iss-001".to_string(),
             source_spec_id: "spec-001".to_string(),
             title: "No automation fields".to_string(),
-            risk_level: InputRiskLevel::Low,
+            execution_risk: InputRiskLevel::Low,
             ..InputIssue::default()
         })
         .unwrap();
 
-        assert!(issue.get("riskLevel").is_some());
+        assert!(issue.get("executionRisk").is_some());
+        assert!(issue.get("riskLevel").is_none());
         assert!(issue.get("automation").is_none());
         assert!(issue.get("humanGates").is_none());
         assert!(issue.get("prAutomation").is_none());
@@ -276,6 +355,10 @@ mod tests {
         assert_eq!(
             serde_json::to_value(DisplayStatus::Backlog).unwrap(),
             "backlog"
+        );
+        assert_eq!(
+            serde_json::to_value(DisplayStatus::Blocked).unwrap(),
+            "blocked"
         );
         assert_eq!(serde_json::to_value(DisplayStatus::Ready).unwrap(), "ready");
         assert_eq!(
@@ -318,7 +401,7 @@ mod tests {
             source_spec_id: "spec-001".to_string(),
             title: "Ready issue".to_string(),
             status: InputIssueStatus::ReadyForExecute,
-            risk_level: InputRiskLevel::Low,
+            execution_risk: InputRiskLevel::Low,
             context_pack_path: ".agentflow/execute/runs/iss-001/context-pack.json".to_string(),
             scope: vec!["src/lib.rs".to_string()],
             validation_hints: vec!["cargo test".to_string()],
@@ -402,6 +485,7 @@ mod tests {
             .goal
             .contains("外部 issue、任务、计划、队列、线程或工具状态"));
         assert!(preflight_stage.goal.contains("GitHub 还是 GitLab"));
+        assert!(preflight_stage.goal.contains("不要求同时安装 gh 和 glab"));
         assert!(preflight_stage.goal.contains("build-agent complete"));
         assert!(preflight_stage.goal.contains("target/release/agentflow"));
         assert!(preflight_stage.evidence.contains(
@@ -414,6 +498,9 @@ mod tests {
         assert!(preflight_stage
             .evidence
             .contains(&"Git provider detected as github or gitlab".to_string()));
+        assert!(preflight_stage
+            .evidence
+            .contains(&"only the CLI matching the detected provider is required".to_string()));
         assert!(preflight_stage
             .evidence
             .iter()
@@ -504,7 +591,7 @@ mod tests {
             summary: "Publish ready event from input prepare.".to_string(),
             status: InputIssueStatus::ReadyForExecute,
             display_status: DisplayStatus::Ready,
-            risk_level: InputRiskLevel::Low,
+            execution_risk: InputRiskLevel::Low,
             scope: vec!["src/lib.rs".to_string()],
             validation_hints: vec!["cargo test".to_string()],
             ..InputIssue::default()
@@ -547,9 +634,9 @@ mod tests {
             "title": "Legacy issue",
             "summary": "Legacy issue without displayStatus",
             "kind": "feature",
-            "priority": "normal",
+            "priority": "p2",
             "status": "ready-for-execute",
-            "riskLevel": "low",
+            "executionRisk": "low",
             "scope": [],
             "nonGoals": [],
             "acceptanceCriteria": [],
@@ -606,10 +693,10 @@ mod tests {
                 "title": "落地 Codex 角色使用说明",
                 "summary": "简化 executionPipeline 也不能让 input loader 失败。",
                 "kind": "feature",
-                "priority": "high",
+                "priority": "p1",
                 "status": "ready-for-execute",
                 "displayStatus": "ready",
-                "riskLevel": "medium",
+                "executionRisk": "medium",
                 "scope": ["apps/desktop/src/**"],
                 "nonGoals": [],
                 "acceptanceCriteria": ["客户端能读取任务。"],
@@ -683,10 +770,10 @@ mod tests {
             "title": "Audit release",
             "summary": "Audit release",
             "kind": "validation",
-            "priority": "high",
+            "priority": "p1",
             "status": "ready-for-execute",
             "displayStatus": "ready",
-            "riskLevel": "high",
+            "executionRisk": "high",
             "scope": [],
             "nonGoals": [],
             "acceptanceCriteria": [],
@@ -791,7 +878,7 @@ mod tests {
             source_spec_id: "spec-001".to_string(),
             title: "Ready issue".to_string(),
             status: InputIssueStatus::ReadyForExecute,
-            risk_level: InputRiskLevel::Low,
+            execution_risk: InputRiskLevel::Low,
             ..InputIssue::default()
         };
         fs::write(
@@ -831,7 +918,7 @@ mod tests {
             project_id: Some("proj-001".to_string()),
             title: "First issue".to_string(),
             status: InputIssueStatus::ReadyForExecute,
-            risk_level: InputRiskLevel::Medium,
+            execution_risk: InputRiskLevel::Medium,
             ..InputIssue::default()
         };
         let issue_two = InputIssue {
@@ -841,7 +928,7 @@ mod tests {
             project_id: Some("proj-001".to_string()),
             title: "Second issue".to_string(),
             status: InputIssueStatus::ReadyForExecute,
-            risk_level: InputRiskLevel::Medium,
+            execution_risk: InputRiskLevel::Medium,
             ..InputIssue::default()
         };
 

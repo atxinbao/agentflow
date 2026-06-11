@@ -130,7 +130,8 @@ export type TaskIssueNode = {
   requiredAgentRole: AgentRole;
   status: InputIssueStatus;
   displayStatus: IssueDisplayStatus;
-  riskLevel: string;
+  priority: string;
+  executionRisk: string;
   blockedBy: string[];
   blocks: string[];
   latestRunId?: string | null;
@@ -301,7 +302,7 @@ export function buildTaskProjectTreeViewModel({
     return {
       counts: taskProjectTreeCounts(groupIssues, 1),
       id: project.projectId,
-      issues: groupIssues,
+      issues: sortTaskIssuesByPriority(groupIssues),
       missingIssueIds,
       objective: project.objective ?? null,
       project,
@@ -331,7 +332,8 @@ export function buildTaskProjectTreeViewModel({
       return issue.issueModel === "direct" || !issue.projectId || !projectById.has(issue.projectId);
     })
     .map((issue) => nodeById.get(issue.issueId))
-    .filter((node): node is TaskIssueNode => Boolean(node));
+    .filter((node): node is TaskIssueNode => Boolean(node))
+    .sort(compareTaskIssuePriority);
   const allIssues = [...groups.flatMap((group) => group.issues), ...ungroupedIssues];
 
   return {
@@ -348,6 +350,7 @@ export function taskActionsForTask(task: V1Issue): TaskInteractionAction[] {
   if (task.issueCategory === "audit") {
     const actions: Record<IssueDisplayStatus, TaskInteractionAction[]> = {
       backlog: ["view-requirement"],
+      blocked: ["view-requirement"],
       cancel: ["readonly"],
       done: [],
       "in-progress": ["copy-handoff"],
@@ -363,6 +366,7 @@ export function taskActionsForTask(task: V1Issue): TaskInteractionAction[] {
 function taskActionsForStatus(status: IssueDisplayStatus = "backlog"): TaskInteractionAction[] {
   const actions: Record<IssueDisplayStatus, TaskInteractionAction[]> = {
     backlog: ["view-requirement"],
+    blocked: ["view-requirement"],
     cancel: ["readonly"],
     done: ["view-delivery"],
     "in-progress": ["mark-handed-off", "check-writeback"],
@@ -387,6 +391,7 @@ export function taskActionLabel(action: TaskInteractionAction) {
 export function displayStatusLabelZh(status: IssueDisplayStatus = "backlog") {
   const labels: Record<IssueDisplayStatus, string> = {
     backlog: "待办",
+    blocked: "已阻断",
     cancel: "已取消",
     done: "已完成",
     "in-progress": "进行中",
@@ -418,8 +423,9 @@ function inputIssueToTaskIssueNode(
     issueCategory,
     latestRunId: indexed?.latestRunId ?? null,
     projectId: issue.projectId ?? null,
+    priority: indexed?.priority ?? issue.priority ?? "p2",
     requiredAgentRole: issue.requiredAgentRole ?? defaultAgentRoleForIssueCategory(issueCategory),
-    riskLevel: indexed?.riskLevel ?? issue.riskLevel,
+    executionRisk: indexed?.executionRisk ?? issue.executionRisk,
     sourceSpecId: issue.sourceSpecId ?? null,
     sourceSpecPath: issue.sourceSpecPath ?? null,
     status: issue.status,
@@ -427,6 +433,19 @@ function inputIssueToTaskIssueNode(
     title: issue.title,
     warnings: [],
   };
+}
+
+function sortTaskIssuesByPriority(issues: TaskIssueNode[]) {
+  return [...issues].sort(compareTaskIssuePriority);
+}
+
+function compareTaskIssuePriority(left: TaskIssueNode, right: TaskIssueNode) {
+  return priorityRank(left.priority) - priorityRank(right.priority) || left.id.localeCompare(right.id);
+}
+
+function priorityRank(priority?: string | null) {
+  const normalized = (priority ?? "p2").toLowerCase();
+  return { p0: 0, p1: 1, p2: 2, p3: 3 }[normalized as "p0" | "p1" | "p2" | "p3"] ?? 2;
 }
 
 function buildTaskRelationMap(
@@ -555,6 +574,9 @@ function displayStatusFromInputStatus(status: InputIssueStatus): IssueDisplaySta
   }
   if (status === "canceled") {
     return "cancel";
+  }
+  if (status === "blocked") {
+    return "blocked";
   }
   if (status === "ready-for-execute") {
     return "ready";

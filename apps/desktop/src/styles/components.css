@@ -232,6 +232,7 @@ button.af-list-row {
 
 .af-badge,
 .af-status-badge,
+.af-priority-badge,
 .af-risk-badge,
 .af-readonly-badge {
   display: inline-flex;
@@ -247,6 +248,34 @@ button.af-list-row {
   font-size: var(--af-text-xs);
   font-weight: 700;
   line-height: 1.4;
+}
+
+.af-priority-badge {
+  justify-content: center;
+  min-width: 30px;
+  font-variant-numeric: tabular-nums;
+}
+
+.af-priority-badge-p0 {
+  border-color: color-mix(in srgb, var(--af-danger), transparent 50%);
+  background: color-mix(in srgb, var(--af-danger), transparent 91%);
+  color: var(--af-danger);
+}
+
+.af-priority-badge-p1 {
+  border-color: color-mix(in srgb, var(--af-warning), transparent 48%);
+  background: color-mix(in srgb, var(--af-warning), transparent 91%);
+  color: color-mix(in srgb, var(--af-warning), #8a4b00 36%);
+}
+
+.af-priority-badge-p2 {
+  border-color: color-mix(in srgb, var(--af-accent), transparent 54%);
+  background: color-mix(in srgb, var(--af-accent), transparent 92%);
+  color: var(--af-accent);
+}
+
+.af-priority-badge-p3 {
+  color: var(--af-text-subtle);
 }
 
 .af-status-badge::before {

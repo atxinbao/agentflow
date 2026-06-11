@@ -322,12 +322,19 @@ pub struct WorkspaceStatusIndex {
 pub struct IssueStatusIndexEntry {
     pub issue_id: String,
     pub display_status: agentflow_input::issue::DisplayStatus,
-    pub risk_level: String,
+    #[serde(default = "default_issue_priority")]
+    pub priority: String,
+    #[serde(default, alias = "riskLevel")]
+    pub execution_risk: String,
     pub latest_run_id: Option<String>,
     pub execute_status: Option<String>,
     pub evidence_status: String,
     pub delivery_status: String,
     pub audit_status: WorkflowAuditStatus,
+}
+
+fn default_issue_priority() -> String {
+    "p2".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

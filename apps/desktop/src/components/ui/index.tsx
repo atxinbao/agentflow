@@ -4,6 +4,7 @@ import type { StatusChipStatus } from "../StatusChip";
 
 type Tone = "neutral" | "success" | "warning" | "blocked" | "danger";
 type RiskLevel = "low" | "medium" | "high" | string;
+type PriorityLevel = "p0" | "p1" | "p2" | "p3" | string;
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -275,6 +276,32 @@ export function RiskBadge({
       {...props}
     />
   );
+}
+
+export function PriorityBadge({
+  "aria-label": ariaLabel,
+  className,
+  priority = "p2",
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & { priority?: PriorityLevel }) {
+  const normalized = normalizePriority(priority);
+  return (
+    <span
+      aria-label={ariaLabel ?? `优先级：${normalized.toUpperCase()}`}
+      className={cx("af-priority-badge", `af-priority-badge-${normalized}`, className)}
+      data-agentflow-component="priority-badge"
+      {...props}
+    >
+      {normalized.toUpperCase()}
+    </span>
+  );
+}
+
+function normalizePriority(priority: PriorityLevel) {
+  const normalized = String(priority || "p2").toLowerCase();
+  return normalized === "p0" || normalized === "p1" || normalized === "p2" || normalized === "p3"
+    ? normalized
+    : "p2";
 }
 
 export function ReadOnlyBadge({ children = "只读", className, ...props }: HTMLAttributes<HTMLSpanElement>) {

@@ -15,6 +15,7 @@ export {
   ListRow,
   PageHeader,
   Panel,
+  PriorityBadge,
   ReadOnlyBadge,
   RiskBadge,
   Section,

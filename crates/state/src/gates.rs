@@ -4,6 +4,7 @@ use crate::{
         WorkflowHealthSnapshot, WorkflowNextAction, WorkflowNextActionsSnapshot, WorkflowStage,
         STATE_BLOCKERS_VERSION, STATE_NEXT_ACTIONS_VERSION, STATE_WORKFLOW_GATES_VERSION,
     },
+    readiness::issue_readiness_blockers,
     storage::{read_json, sorted_child_paths, unix_timestamp_seconds, write_json},
 };
 use agentflow_execute::{ExecutePreflight, ExecuteRun, ExecuteRunStatus};
@@ -51,7 +52,19 @@ pub(crate) fn build_gate_snapshot(
         .as_ref()
         .and_then(|snapshot| snapshot.index.release_deliveries.last())
         .map(|entry| entry.path.clone());
-    let mut blockers = collect_blockers(root)?;
+    let mut blockers =
+        issue_readiness_blockers(root, input.as_ref(), execute.as_ref(), output.as_ref())
+            .into_iter()
+            .map(|blocker| {
+                let _issue_id = blocker.issue_id;
+                WorkflowBlockedAction {
+                    action: blocker.action,
+                    reason: blocker.reason,
+                    source_path: blocker.source_path,
+                }
+            })
+            .collect::<Vec<_>>();
+    blockers.extend(collect_blockers(root)?);
     if let Some(input) = input.as_ref() {
         for issue in &input.issues {
             if !issue.target_metadata_complete() {
@@ -205,7 +218,7 @@ fn derive_stage(
             matches!(
                 issue.status,
                 agentflow_input::issue::InputIssueStatus::ReadyForExecute
-            ) && !issue.risk_level.requires_human_confirmation()
+            ) && !issue.execution_risk.requires_human_confirmation()
         })
     }) {
         return WorkflowStage::ExecuteReady;
@@ -215,7 +228,7 @@ fn derive_stage(
             matches!(
                 issue.status,
                 agentflow_input::issue::InputIssueStatus::ReadyForExecute
-            ) && issue.risk_level.requires_human_confirmation()
+            ) && issue.execution_risk.requires_human_confirmation()
         })
     }) {
         return WorkflowStage::ExecuteBlocked;
