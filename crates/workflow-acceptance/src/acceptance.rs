@@ -285,7 +285,7 @@ fn write_issue(
         title: "End-to-end workflow acceptance issue".to_string(),
         summary: "Validate AgentFlow end-to-end workflow without modifying user source."
             .to_string(),
-        status: InputIssueStatus::ReadyForExecute,
+        status: InputIssueStatus::Todo,
         execution_risk: risk_level,
         scope: vec!["src/lib.rs".to_string()],
         non_goals: vec!["Do not modify fixture source.".to_string()],

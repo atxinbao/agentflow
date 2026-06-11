@@ -7,8 +7,8 @@ use crate::{
     model::{
         IssueStatusIndex, StateEventIndex, StateIndex, StateIndexEntry, StateManifest,
         StateManifestSummary, StateStatusSnapshot, StateTimelineEventDraft, StateWorkspaceStatus,
-        WorkflowBlockedAction, WorkflowHealthSnapshot, STATE_INDEX_VERSION, STATE_MANIFEST_VERSION,
-        STATE_STATUS_VERSION,
+        WorkflowBlockedAction, WorkflowHealthSnapshot, WorkflowStage, STATE_INDEX_VERSION,
+        STATE_MANIFEST_VERSION, STATE_STATUS_VERSION,
     },
     sessions::load_sessions,
     storage::{
@@ -151,7 +151,10 @@ fn state_status(
     if health.iter().any(|item| item.status == "blocked") {
         return StateWorkspaceStatus::Blocked;
     }
-    if !gate.blocked_actions.is_empty() {
+    if matches!(
+        gate.current_stage,
+        WorkflowStage::WorkspaceBlocked | WorkflowStage::ExecuteBlocked
+    ) {
         return StateWorkspaceStatus::Blocked;
     }
     if health.iter().any(|item| item.status == "failed") {
@@ -222,4 +225,47 @@ fn ensure_required_files(root: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{WorkflowAuditStatus, WorkflowGateSnapshot};
+
+    fn gate(stage: WorkflowStage, blockers: Vec<WorkflowBlockedAction>) -> WorkflowGateSnapshot {
+        WorkflowGateSnapshot {
+            version: STATE_STATUS_VERSION.to_string(),
+            current_stage: stage,
+            audit_status: WorkflowAuditStatus::NotRequested,
+            active_issue_id: None,
+            active_run_id: None,
+            latest_evidence_path: None,
+            latest_delivery_path: None,
+            allowed_next_actions: Vec::new(),
+            blocked_actions: blockers,
+            updated_at: 0,
+        }
+    }
+
+    fn blocker() -> WorkflowBlockedAction {
+        WorkflowBlockedAction {
+            action: "dependency-ready".to_string(),
+            reason: "blocked".to_string(),
+            source_path: Some(".agentflow/input/issues/AF-002.json".to_string()),
+        }
+    }
+
+    #[test]
+    fn issue_level_blockers_do_not_mark_delivery_ready_workspace_blocked() {
+        let gate = gate(WorkflowStage::DeliveryReady, vec![blocker()]);
+
+        assert_eq!(state_status(&[], &gate), StateWorkspaceStatus::Ready);
+    }
+
+    #[test]
+    fn execute_blocked_stage_marks_workspace_blocked() {
+        let gate = gate(WorkflowStage::ExecuteBlocked, vec![blocker()]);
+
+        assert_eq!(state_status(&[], &gate), StateWorkspaceStatus::Blocked);
+    }
 }

@@ -868,16 +868,16 @@ button.saved-view.active {
   background: var(--af-theme-warning-text);
 }
 
-.task-progress-segment.canceled {
+.task-progress-segment.cancel {
   background: var(--af-theme-text-subtle);
 }
 
-.status-badge.in-progress {
+.status-badge.in_progress {
   background: var(--af-theme-accent-soft);
   color: var(--af-theme-accent);
 }
 
-.status-badge.in-review {
+.status-badge.in_review {
   background: color-mix(in srgb, var(--af-theme-accent-soft) 70%, var(--af-theme-danger-bg));
   color: var(--af-theme-accent);
 }

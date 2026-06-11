@@ -139,8 +139,11 @@ fn display_status(
     latest_run_id: Option<&str>,
     blocked_by_gate: bool,
 ) -> DisplayStatus {
-    if matches!(issue.status, InputIssueStatus::Canceled) {
+    if matches!(issue.status, InputIssueStatus::Cancel) {
         return DisplayStatus::Cancel;
+    }
+    if matches!(issue.status, InputIssueStatus::Done) {
+        return DisplayStatus::Done;
     }
 
     if let Some(status) = audit_display_status(output, &issue.issue_id) {
@@ -150,13 +153,13 @@ fn display_status(
     if let Some(run) = latest_run {
         return match run.status {
             ExecuteRunStatus::Cancelled => DisplayStatus::Cancel,
-            ExecuteRunStatus::Completed => DisplayStatus::Done,
-            ExecuteRunStatus::Failed => DisplayStatus::Review,
+            ExecuteRunStatus::Completed => DisplayStatus::InReview,
+            ExecuteRunStatus::Failed => DisplayStatus::InReview,
             ExecuteRunStatus::Blocked => DisplayStatus::Blocked,
-            ExecuteRunStatus::Queued
-            | ExecuteRunStatus::Preflight
-            | ExecuteRunStatus::Planned
-            | ExecuteRunStatus::Checkpointed
+            ExecuteRunStatus::Queued | ExecuteRunStatus::Preflight | ExecuteRunStatus::Planned => {
+                DisplayStatus::Todo
+            }
+            ExecuteRunStatus::Checkpointed
             | ExecuteRunStatus::Patching
             | ExecuteRunStatus::Running
             | ExecuteRunStatus::Validating => DisplayStatus::InProgress,
@@ -164,7 +167,7 @@ fn display_status(
     }
 
     if output_has_issue_delivery(output, &issue.issue_id, latest_run_id) {
-        return DisplayStatus::Done;
+        return DisplayStatus::InReview;
     }
     if blocked_by_gate {
         return DisplayStatus::Blocked;
@@ -186,7 +189,7 @@ fn audit_display_status(
             .find(|entry| entry.issue_id == issue_id)
             .and_then(|entry| match entry.status.as_str() {
                 "passed" | "passed-with-warnings" => Some(DisplayStatus::Done),
-                "failed" => Some(DisplayStatus::Review),
+                "failed" => Some(DisplayStatus::InReview),
                 "cancelled" => Some(DisplayStatus::Cancel),
                 "requested" | "running" => None,
                 _ => None,
@@ -317,22 +320,16 @@ mod tests {
     #[test]
     fn display_status_mapping_covers_input_execute_output_and_audit_states() {
         assert_eq!(
-            display_status(&issue(InputIssueStatus::Planned), None, None, None, false),
+            display_status(&issue(InputIssueStatus::Backlog), None, None, None, false),
             DisplayStatus::Backlog
         );
         assert_eq!(
-            display_status(
-                &issue(InputIssueStatus::ReadyForExecute),
-                None,
-                None,
-                None,
-                false
-            ),
-            DisplayStatus::Ready
+            display_status(&issue(InputIssueStatus::Todo), None, None, None, false),
+            DisplayStatus::Todo
         );
         assert_eq!(
             display_status(
-                &issue(InputIssueStatus::ReadyForExecute),
+                &issue(InputIssueStatus::Todo),
                 Some(&run(ExecuteRunStatus::Running)),
                 None,
                 Some("run-001"),
@@ -342,38 +339,36 @@ mod tests {
         );
         assert_eq!(
             display_status(
-                &issue(InputIssueStatus::ReadyForExecute),
+                &issue(InputIssueStatus::Todo),
                 Some(&run(ExecuteRunStatus::Completed)),
                 None,
                 Some("run-001"),
                 false,
             ),
-            DisplayStatus::Done
+            DisplayStatus::InReview
         );
         let output = output_with_delivery("drafted");
         assert_eq!(
             display_status(
-                &issue(InputIssueStatus::ReadyForExecute),
+                &issue(InputIssueStatus::Todo),
                 None,
                 Some(&output),
                 Some("run-001"),
                 false,
             ),
+            DisplayStatus::InReview
+        );
+        assert_eq!(
+            display_status(&issue(InputIssueStatus::Done), None, None, None, false),
             DisplayStatus::Done
         );
         assert_eq!(
-            display_status(
-                &issue(InputIssueStatus::ReadyForExecute),
-                None,
-                None,
-                None,
-                true
-            ),
+            display_status(&issue(InputIssueStatus::Todo), None, None, None, true),
             DisplayStatus::Blocked
         );
         assert_eq!(
             display_status(
-                &issue(InputIssueStatus::ReadyForExecute),
+                &issue(InputIssueStatus::Todo),
                 Some(&run(ExecuteRunStatus::Blocked)),
                 None,
                 Some("run-001"),
@@ -390,7 +385,7 @@ mod tests {
             Some(DisplayStatus::Done)
         );
         assert_eq!(
-            display_status(&issue(InputIssueStatus::Canceled), None, None, None, false),
+            display_status(&issue(InputIssueStatus::Cancel), None, None, None, false),
             DisplayStatus::Cancel
         );
     }

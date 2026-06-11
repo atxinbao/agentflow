@@ -21,7 +21,7 @@ pub use validate::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{ensure_directory, read_json, write_json};
+    use crate::storage::{ensure_directory, write_json};
     use serde_json::json;
     use std::fs;
     use tempfile::tempdir;
@@ -448,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    fn explicit_release_auto_audit_backfills_issue_for_existing_release_auto_request() {
+    fn explicit_release_auto_audit_request_does_not_backfill_input_issue() {
         let dir = tempdir().unwrap();
         let audit_dir = dir
             .path()
@@ -496,21 +496,13 @@ mod tests {
         let audit_issue_path = dir
             .path()
             .join(".agentflow/input/issues/audit-release-v0.1.0.json");
-        assert!(audit_issue_path.is_file());
-        let audit_issue: agentflow_input::issue::InputIssue = read_json(&audit_issue_path).unwrap();
-        assert_eq!(audit_issue.source_spec_id, "dogfood-cutover-v1");
-        assert_eq!(audit_issue.issue_category.as_str(), "audit");
-        assert_eq!(audit_issue.required_agent_role.as_str(), "audit-agent");
-        assert_eq!(audit_issue.display_status.as_str(), "ready");
-        let audit_metadata = audit_issue.audit.as_ref().unwrap();
-        assert_eq!(audit_metadata.audit_id, "audit-release-v0.1.0");
+        assert!(!audit_issue_path.is_file());
+        let audit_index = load_audit_index(dir.path()).unwrap();
+        assert_eq!(audit_index.audits.len(), 1);
+        assert_eq!(audit_index.audits[0].audit_id, "audit-release-v0.1.0");
         assert_eq!(
-            audit_metadata.audit_output_dir,
-            ".agentflow/output/audit/audit-release-v0.1.0"
-        );
-        assert_eq!(
-            audit_metadata.source_delivery_path,
-            ".agentflow/output/release/release-v0.1.0/delivery.json"
+            audit_index.audits[0].source_issue_id.as_deref(),
+            Some("AF-DOGFOOD-001")
         );
     }
 

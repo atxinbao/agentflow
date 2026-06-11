@@ -84,16 +84,16 @@ export function currentBrowserPreviewTaskHierarchyScenario(): BrowserPreviewTask
 }
 
 const previewInputIssues: InputIssue[] = [
-  browserPreviewInputIssue("iss-backlog", "整理需求入口", "planned", "backlog", "需求已创建，等待整理成 SPEC。", {
+  browserPreviewInputIssue("iss-backlog", "整理需求入口", "backlog", "backlog", "需求已创建，等待整理成 SPEC。", {
     priority: "p3",
   }),
-  browserPreviewInputIssue("iss-ready", "生成执行任务包", "ready-for-execute", "ready", "SPEC 已确认，可以交给 Agent。", {
+  browserPreviewInputIssue("iss-ready", "生成执行任务包", "todo", "todo", "SPEC 已确认，可以交给 Agent。", {
     blocks: ["iss-progress"],
     issueModel: "project",
     priority: "p1",
     projectId: previewProjectId,
   }),
-  browserPreviewInputIssue("iss-progress", "执行受控改动", "ready-for-execute", "in-progress", "Agent 已接手任务。", {
+  browserPreviewInputIssue("iss-progress", "执行受控改动", "todo", "in_progress", "Agent 已接手任务。", {
     blockedBy: ["iss-ready"],
     blocks: ["iss-review"],
     issueModel: "project",
@@ -101,12 +101,12 @@ const previewInputIssues: InputIssue[] = [
     projectId: previewProjectId,
     executionRisk: "medium",
   }),
-  browserPreviewInputIssue("iss-review", "审计交付材料", "ready-for-execute", "review", "任务已交付，等待人工审计。", {
+  browserPreviewInputIssue("iss-review", "审计交付材料", "todo", "in_review", "任务已交付，等待人工审计。", {
     blockedBy: ["iss-progress"],
     issueModel: "project",
     projectId: previewProjectId,
   }),
-  browserPreviewInputIssue("iss-audit-ready", "复制审计任务包", "ready-for-execute", "ready", "审计任务可以交给 Audit Agent。", {
+  browserPreviewInputIssue("iss-audit-ready", "复制审计任务包", "todo", "todo", "审计任务可以交给 Audit Agent。", {
     audit: {
       auditId: previewAuditId,
       auditOutputDir: `.agentflow/output/audit/${previewAuditId}`,
@@ -124,7 +124,7 @@ const previewInputIssues: InputIssue[] = [
     issueModel: "project",
     projectId: previewProjectId,
   }),
-  browserPreviewInputIssue("iss-cancel", "取消过期需求", "canceled", "cancel", "任务已取消。", {
+  browserPreviewInputIssue("iss-cancel", "取消过期需求", "cancel", "cancel", "任务已取消。", {
     issueModel: "project",
     projectId: previewProjectId,
   }),
@@ -543,16 +543,16 @@ export function createBrowserPreviewIssueStatusIndex(
       displayStatus: issue.displayStatus,
       priority: issue.priority,
       executionRisk: issue.executionRisk,
-      latestRunId: issue.displayStatus === "in-progress" || issue.displayStatus === "review" || issue.displayStatus === "done" ? previewDeliveryRunId : null,
+      latestRunId: issue.displayStatus === "in_progress" || issue.displayStatus === "in_review" || issue.displayStatus === "done" ? previewDeliveryRunId : null,
       executeStatus:
-        issue.displayStatus === "in-progress"
+        issue.displayStatus === "in_progress"
           ? "running"
-          : issue.displayStatus === "review" || issue.displayStatus === "done"
+          : issue.displayStatus === "in_review" || issue.displayStatus === "done"
             ? "completed"
             : null,
-      evidenceStatus: issue.displayStatus === "review" || issue.displayStatus === "done" ? "complete" : "missing",
-      deliveryStatus: issue.displayStatus === "review" || issue.displayStatus === "done" ? "drafted" : "missing",
-      auditStatus: issue.displayStatus === "done" ? "passed" : issue.displayStatus === "review" ? "failed" : "not-requested",
+      evidenceStatus: issue.displayStatus === "in_review" || issue.displayStatus === "done" ? "complete" : "missing",
+      deliveryStatus: issue.displayStatus === "in_review" || issue.displayStatus === "done" ? "drafted" : "missing",
+      auditStatus: issue.displayStatus === "done" ? "passed" : issue.displayStatus === "in_review" ? "failed" : "not-requested",
     })),
   };
 }

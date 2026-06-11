@@ -6,7 +6,7 @@ pub const AGENT_ROLES_VERSION: &str = "agent-roles.v1";
 pub const AGENT_CLAIM_VERSION: &str = "agent-claim.v1";
 pub const BUILD_AGENT_EXECUTION_PIPELINE_VERSION: &str = "build-agent-execution-pipeline.v1";
 pub const BUILD_AGENT_PIPELINE_STAGE_IDS: [&str; 7] = [
-    "git-provider-preflight",
+    "issue-preflight",
     "test-design",
     "implement",
     "sandbox-verify",
@@ -14,7 +14,6 @@ pub const BUILD_AGENT_PIPELINE_STAGE_IDS: [&str; 7] = [
     "merge-pr",
     "writeback-done",
 ];
-pub const BUILD_AGENT_GIT_PROVIDERS: [&str; 2] = ["github", "gitlab"];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -129,52 +128,82 @@ impl Default for InputPriority {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
 pub enum InputIssueStatus {
-    Planned,
-    Blocked,
-    ReadyForExecute,
+    #[serde(rename = "backlog")]
+    Backlog,
+    #[serde(rename = "todo")]
+    Todo,
+    #[serde(rename = "in_progress")]
+    InProgress,
+    #[serde(rename = "in_review")]
+    InReview,
+    #[serde(rename = "done")]
     Done,
-    Canceled,
+    #[serde(rename = "blocked")]
+    Blocked,
+    #[serde(rename = "cancel")]
+    Cancel,
 }
 
 impl Default for InputIssueStatus {
     fn default() -> Self {
-        Self::Planned
+        Self::Backlog
+    }
+}
+
+impl InputIssueStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Backlog => "backlog",
+            Self::Todo => "todo",
+            Self::InProgress => "in_progress",
+            Self::InReview => "in_review",
+            Self::Done => "done",
+            Self::Blocked => "blocked",
+            Self::Cancel => "cancel",
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
 pub enum DisplayStatus {
+    #[serde(rename = "backlog")]
     Backlog,
-    Blocked,
-    Ready,
+    #[serde(rename = "todo")]
+    Todo,
+    #[serde(rename = "in_progress")]
     InProgress,
-    Review,
+    #[serde(rename = "in_review")]
+    InReview,
+    #[serde(rename = "done")]
     Done,
+    #[serde(rename = "blocked")]
+    Blocked,
+    #[serde(rename = "cancel")]
     Cancel,
 }
 
 impl DisplayStatus {
     pub fn from_input_status(status: &InputIssueStatus) -> Self {
         match status {
-            InputIssueStatus::Planned => Self::Backlog,
-            InputIssueStatus::Blocked => Self::Blocked,
-            InputIssueStatus::ReadyForExecute => Self::Ready,
+            InputIssueStatus::Backlog => Self::Backlog,
+            InputIssueStatus::Todo => Self::Todo,
+            InputIssueStatus::InProgress => Self::InProgress,
+            InputIssueStatus::InReview => Self::InReview,
             InputIssueStatus::Done => Self::Done,
-            InputIssueStatus::Canceled => Self::Cancel,
+            InputIssueStatus::Blocked => Self::Blocked,
+            InputIssueStatus::Cancel => Self::Cancel,
         }
     }
 
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Backlog => "backlog",
-            Self::Blocked => "blocked",
-            Self::Ready => "ready",
-            Self::InProgress => "in-progress",
-            Self::Review => "review",
+            Self::Todo => "todo",
+            Self::InProgress => "in_progress",
+            Self::InReview => "in_review",
             Self::Done => "done",
+            Self::Blocked => "blocked",
             Self::Cancel => "cancel",
         }
     }
@@ -634,25 +663,21 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
     InputIssueExecutionPipeline {
         version: default_build_agent_execution_pipeline_version(),
         agent_role: AgentRole::BuildAgent,
-        git_providers: default_build_agent_git_providers(),
+        git_providers: Vec::new(),
         merge_modes: default_build_agent_merge_modes(),
         stages: vec![
             InputIssueExecutionStage {
-                stage_id: "git-provider-preflight".to_string(),
-                label: "GitHub/GitLab 自动化预检".to_string(),
-                goal: "确认 Build Agent 只基于 AgentFlow input issue 和 executionPipeline 执行；确认没有把外部 issue、任务、计划、队列、线程或工具状态当作任务源；识别当前远端代码托管 provider 是 GitHub 还是 GitLab；只要求当前 provider 对应的 CLI、认证、仓库同步、PR/MR 创建和合并能力可用，不要求同时安装 gh 和 glab；同时确认当前 AgentFlow CLI 支持 build-agent complete，不能直接复用过期 target/release/agentflow。".to_string(),
+                stage_id: "issue-preflight".to_string(),
+                label: "执行前置检测".to_string(),
+                goal: "确认当前执行对象是 AgentFlow input issue，且状态为 backlog；确认依赖已完成、任务合同完整、Panel Context Pack 可用；通过后把当前 issue 切换为 todo，为测试设计和 in_progress 执行做准备。GitHub/GitLab 不在这个 loop 阶段检测。".to_string(),
                 required: true,
                 evidence: vec![
                     "AgentFlow issueId and executionPipeline are the only active task source".to_string(),
                     "no external issue/task/plan/queue/thread/tool state is used as task authority".to_string(),
-                    "Git provider detected as github or gitlab".to_string(),
-                    "only the CLI matching the detected provider is required".to_string(),
-                    "git status --short".to_string(),
-                    "git remote -v".to_string(),
-                    "GitHub path: gh --version, gh auth status, gh repo view --json nameWithOwner,defaultBranchRef".to_string(),
-                    "GitLab path: glab --version, glab auth status, glab repo view".to_string(),
-                    "cargo build --release --bin agentflow or target/debug/agentflow fallback".to_string(),
-                    "target/release/agentflow build-agent complete --help or target/debug/agentflow build-agent complete --help".to_string(),
+                    "input issue status is backlog before preflight".to_string(),
+                    "blockedBy dependencies are done".to_string(),
+                    "Panel Context Pack exists or is generated".to_string(),
+                    "input issue status changed to todo after preflight".to_string(),
                 ],
             },
             InputIssueExecutionStage {
@@ -700,11 +725,11 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "merge-pr".to_string(),
                 label: "合并 PR/MR".to_string(),
-                goal: "manual-merge 模式下 PR/MR ready 后进入 waiting-for-merge，等待人合并，再由本地检测确认 PR/MR merged 后继续；auto-merge-if-eligible 模式下按 provider 执行自动合并：GitHub 使用 gh pr ready 和 gh pr merge --auto；GitLab 使用 glab mr update --ready 和 glab mr merge --auto-merge，并轮询到 merged。".to_string(),
+                goal: "manual-merge 模式下 PR/MR ready 后在 in_review 阶段等待人合并，再由本地检测确认 PR/MR merged 后继续；auto-merge-if-eligible 模式下按 provider 执行自动合并：GitHub 使用 gh pr ready 和 gh pr merge --auto；GitLab 使用 glab mr update --ready 和 glab mr merge --auto-merge，并轮询到 merged。".to_string(),
                 required: true,
                 evidence: vec![
                     "merge mode".to_string(),
-                    "waiting-for-merge state when manual-merge".to_string(),
+                    "in_review wait evidence when manual-merge".to_string(),
                     "GitHub path: gh pr ready result and gh pr merge --auto result".to_string(),
                     "GitLab path: glab mr update --ready result and glab mr merge --auto-merge result".to_string(),
                     "merge commit or merged PR/MR state".to_string(),
@@ -738,19 +763,9 @@ fn default_build_agent_merge_modes() -> Vec<String> {
     ]
 }
 
-fn default_build_agent_git_providers() -> Vec<String> {
-    BUILD_AGENT_GIT_PROVIDERS
-        .iter()
-        .map(|provider| provider.to_string())
-        .collect()
-}
-
 fn build_agent_execution_pipeline_complete(pipeline: &InputIssueExecutionPipeline) -> bool {
     pipeline.version == BUILD_AGENT_EXECUTION_PIPELINE_VERSION
         && pipeline.agent_role == AgentRole::BuildAgent
-        && BUILD_AGENT_GIT_PROVIDERS
-            .iter()
-            .any(|provider| pipeline.git_providers.contains(&provider.to_string()))
         && pipeline.merge_modes.contains(&"manual-merge".to_string())
         && pipeline
             .merge_modes

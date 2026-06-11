@@ -97,6 +97,12 @@ dependencies = [
 name = "agentflow-loop"
 version = "0.1.0"
 dependencies = [
+ "agentflow-agent-manual",
+ "agentflow-execute",
+ "agentflow-input",
+ "agentflow-mcp",
+ "agentflow-output",
+ "agentflow-panel",
  "anyhow",
  "serde",
  "serde_json",

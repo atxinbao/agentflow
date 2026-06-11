@@ -4,7 +4,7 @@ use crate::{
         InputIndex, InputIndexEntry, InputManifest, InputSnapshot, InputStatusSnapshot,
         InputSummary, InputWorkspaceStatus, INPUT_STATUS_VERSION,
     },
-    project::InputProject,
+    project::{InputProject, InputProjectStatus},
     relations::{
         InputDependencyGraph, InputIssueRelation, InputIssueRelationKind, InputIssueRelationsFile,
     },
@@ -59,19 +59,19 @@ pub fn prepare_input_workspace(project_root: impl AsRef<Path>) -> Result<InputSn
         &InputDependencyGraph::default(),
     )?;
     repair_derived_input_files(&root)?;
-    write_json_if_missing(
+    write_json_if_changed(
         &root.join(".agentflow/input/views/active.json"),
         &InputView::active(),
     )?;
-    write_json_if_missing(
+    write_json_if_changed(
         &root.join(".agentflow/input/views/blocked.json"),
         &InputView::blocked(),
     )?;
-    write_json_if_missing(
+    write_json_if_changed(
         &root.join(".agentflow/input/views/by-spec.json"),
         &InputView::by_spec(),
     )?;
-    write_json_if_missing(
+    write_json_if_changed(
         &root.join(".agentflow/input/views/by-project.json"),
         &InputView::by_project(),
     )?;
@@ -217,21 +217,64 @@ pub(crate) fn normalize_issue_metadata_files(root: &Path) -> Result<()> {
         if path.extension().and_then(|value| value.to_str()) != Some("json") {
             continue;
         }
-        let raw_issue = read_json_value(&path)?;
+        let mut raw_issue = read_json_value(&path)?;
+        let legacy_status = migrate_issue_status_fields(&mut raw_issue);
         let legacy_priority = raw_issue
             .get("priority")
             .and_then(Value::as_str)
             .is_some_and(|value| matches!(value, "low" | "normal" | "high"));
         let legacy_risk_field = raw_issue.get("riskLevel").is_some();
-        let mut issue: InputIssue = read_json(&path)?;
+        let mut issue: InputIssue = serde_json::from_value(raw_issue.clone())
+            .with_context(|| format!("parse {}", path.display()))?;
         let before = serde_json::to_value(&issue)?;
         issue.normalize_execution_metadata();
-        if legacy_priority || legacy_risk_field || serde_json::to_value(&issue)? != before {
+        if legacy_status
+            || legacy_priority
+            || legacy_risk_field
+            || serde_json::to_value(&issue)? != before
+        {
             write_json(&path, &issue)?;
         }
     }
 
     Ok(())
+}
+
+fn migrate_issue_status_fields(issue: &mut Value) -> bool {
+    let mut changed = false;
+    changed |= migrate_issue_status_field(issue, "status");
+    changed |= migrate_issue_status_field(issue, "displayStatus");
+    changed
+}
+
+fn migrate_issue_status_field(issue: &mut Value, key: &str) -> bool {
+    let Some(value) = issue.get_mut(key) else {
+        return false;
+    };
+    let Some(status) = value.as_str() else {
+        return false;
+    };
+    let Some(canonical) = canonical_issue_status(status) else {
+        return false;
+    };
+    if canonical == status {
+        return false;
+    }
+    *value = Value::String(canonical.to_string());
+    true
+}
+
+fn canonical_issue_status(status: &str) -> Option<&'static str> {
+    match status {
+        "backlog" => Some("backlog"),
+        "todo" => Some("todo"),
+        "in_progress" => Some("in_progress"),
+        "in_review" => Some("in_review"),
+        "done" => Some("done"),
+        "blocked" => Some("blocked"),
+        "cancel" => Some("cancel"),
+        _ => None,
+    }
 }
 
 pub fn validate_input_workspace(project_root: impl AsRef<Path>) -> Result<InputSnapshot> {
@@ -255,6 +298,87 @@ pub fn load_input_manifest(project_root: impl AsRef<Path>) -> Result<InputManife
 pub fn load_input_index(project_root: impl AsRef<Path>) -> Result<InputIndex> {
     let root = canonical_project_root(project_root)?;
     read_json(&root.join(".agentflow/input/index.json"))
+}
+
+pub fn load_input_issue(project_root: impl AsRef<Path>, issue_id: &str) -> Result<InputIssue> {
+    let root = canonical_project_root(project_root)?;
+    let issue_path = root
+        .join(".agentflow/input/issues")
+        .join(format!("{issue_id}.json"));
+    let mut issue: InputIssue = read_json(&issue_path)?;
+    issue.normalize_execution_metadata();
+    if issue.issue_id != issue_id {
+        anyhow::bail!(
+            "input issue id mismatch: requested {issue_id}, found {}",
+            issue.issue_id
+        );
+    }
+    Ok(issue)
+}
+
+pub fn load_input_project(
+    project_root: impl AsRef<Path>,
+    project_id: &str,
+) -> Result<InputProject> {
+    let root = canonical_project_root(project_root)?;
+    let project_path = root
+        .join(".agentflow/input/projects")
+        .join(format!("{project_id}.json"));
+    let project: InputProject = read_json(&project_path)?;
+    if project.project_id != project_id {
+        anyhow::bail!(
+            "input project id mismatch: requested {project_id}, found {}",
+            project.project_id
+        );
+    }
+    Ok(project)
+}
+
+pub fn update_input_issue_status(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    status: InputIssueStatus,
+) -> Result<InputIssue> {
+    let root = canonical_project_root(project_root)?;
+    let issue_path = root
+        .join(".agentflow/input/issues")
+        .join(format!("{issue_id}.json"));
+    let mut issue: InputIssue = read_json(&issue_path)?;
+    if issue.issue_id != issue_id {
+        anyhow::bail!(
+            "input issue id mismatch: requested {issue_id}, found {}",
+            issue.issue_id
+        );
+    }
+    issue.status = status;
+    issue.display_status = DisplayStatus::from_input_status(&issue.status);
+    issue.system.updated_at = unix_timestamp_seconds();
+    issue.system.revision = issue.system.revision.saturating_add(1);
+    write_json_if_changed(&issue_path, &issue)?;
+    Ok(issue)
+}
+
+pub fn update_input_project_status(
+    project_root: impl AsRef<Path>,
+    project_id: &str,
+    status: InputProjectStatus,
+) -> Result<InputProject> {
+    let root = canonical_project_root(project_root)?;
+    let project_path = root
+        .join(".agentflow/input/projects")
+        .join(format!("{project_id}.json"));
+    let mut project: InputProject = read_json(&project_path)?;
+    if project.project_id != project_id {
+        anyhow::bail!(
+            "input project id mismatch: requested {project_id}, found {}",
+            project.project_id
+        );
+    }
+    project.status = status;
+    project.system.updated_at = unix_timestamp_seconds();
+    project.system.revision = project.system.revision.saturating_add(1);
+    write_json_if_changed(&project_path, &project)?;
+    Ok(project)
 }
 
 pub(crate) fn load_summary(root: &Path) -> Result<InputSummary> {
@@ -384,7 +508,7 @@ fn rebuild_index(root: &Path, snapshot: &InputSnapshot) -> Result<()> {
                 id: issue.issue_id.clone(),
                 title: issue.title.clone(),
                 path: issue.system.path.clone(),
-                status: format!("{:?}", issue.status).to_lowercase(),
+                status: issue.status.as_str().to_string(),
                 display_status: Some(issue.display_status.clone()),
             })
             .collect(),
@@ -449,8 +573,8 @@ fn publish_ready_issue_events(root: &Path, snapshot: &InputSnapshot) -> Result<(
 fn issue_ready_for_event(issue: &InputIssue) -> bool {
     matches!(issue.issue_category, IssueCategory::Spec)
         && matches!(issue.required_agent_role, AgentRole::BuildAgent)
-        && matches!(issue.status, InputIssueStatus::ReadyForExecute)
-        && matches!(issue.display_status, DisplayStatus::Ready)
+        && matches!(issue.status, InputIssueStatus::Todo)
+        && matches!(issue.display_status, DisplayStatus::Todo)
         && !issue.context_pack_path.trim().is_empty()
 }
 

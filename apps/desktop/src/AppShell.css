@@ -1700,6 +1700,100 @@ button.v16-task-project-row:hover {
   overflow: hidden;
 }
 
+.v16-issue-status-flow {
+  overflow: hidden;
+  border: 1px solid var(--v16-border);
+  border-radius: 6px;
+  background: var(--v16-surface-muted);
+}
+
+.v16-issue-status-flow-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--v16-border);
+  color: var(--v16-text-muted);
+  font-size: 12px;
+}
+
+.v16-issue-status-flow-header strong {
+  color: var(--v16-text);
+  font-weight: 600;
+}
+
+.v16-issue-status-flow ol {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.v16-issue-status-step {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 58px;
+  padding: 12px;
+  border-right: 1px solid var(--v16-border);
+  color: var(--v16-text-muted);
+}
+
+.v16-issue-status-step:last-child {
+  border-right: 0;
+}
+
+.v16-issue-status-step strong,
+.v16-issue-status-step small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.v16-issue-status-step strong {
+  color: var(--v16-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.v16-issue-status-step small {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.v16-issue-status-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 3px;
+  border-radius: 999px;
+  background: var(--v16-border-strong);
+}
+
+.v16-issue-status-step.done .v16-issue-status-dot {
+  background: var(--af-success);
+}
+
+.v16-issue-status-step.current .v16-issue-status-dot {
+  background: var(--af-accent);
+}
+
+.v16-issue-status-step.blocked .v16-issue-status-dot {
+  background: var(--af-danger);
+}
+
+.v16-issue-status-step.cancel .v16-issue-status-dot {
+  background: var(--af-text-muted);
+}
+
+.v16-issue-status-step.current {
+  background: var(--v16-accent-soft);
+}
+
 .v16-detail-pane > header {
   display: grid;
   gap: 6px;

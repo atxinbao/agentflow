@@ -8,7 +8,7 @@ use crate::{
     storage::{read_json, sorted_child_paths, unix_timestamp_seconds, write_json},
 };
 use agentflow_execute::{ExecutePreflight, ExecuteRun, ExecuteRunStatus};
-use agentflow_input::issue::{validate_agent_claim, AgentClaim};
+use agentflow_input::issue::{validate_agent_claim, AgentClaim, InputIssue, InputIssueStatus};
 use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -28,20 +28,6 @@ pub(crate) fn build_gate_snapshot(
             .runs
             .iter()
             .find(|run| run_is_active(&run.status))
-    });
-    let active_issue_id = active_run.map(|run| run.issue_id.clone()).or_else(|| {
-        input.as_ref().and_then(|snapshot| {
-            snapshot
-                .issues
-                .iter()
-                .find(|issue| {
-                    matches!(
-                        issue.status,
-                        agentflow_input::issue::InputIssueStatus::ReadyForExecute
-                    )
-                })
-                .map(|issue| issue.issue_id.clone())
-        })
     });
     let active_run_id = active_run.map(|run| run.run_id.clone());
     let latest_evidence = output
@@ -76,13 +62,18 @@ pub(crate) fn build_gate_snapshot(
             }
         }
     }
+    let active_issue_id = active_run
+        .map(|run| run.issue_id.clone())
+        .or_else(|| active_ready_issue_id(input.as_ref(), &blockers))
+        .or_else(|| first_ready_issue_id(input.as_ref()));
+    let has_execution_blockers = blockers_force_execute_blocked(input.as_ref(), &blockers);
     let current_stage = derive_stage(
         health,
         input.as_ref(),
         execute.as_ref(),
         output.as_ref(),
         &audit_status,
-        !blockers.is_empty(),
+        has_execution_blockers,
     );
     let allowed_next_actions = allowed_actions(&current_stage);
     Ok(WorkflowGateSnapshot {
@@ -97,6 +88,87 @@ pub(crate) fn build_gate_snapshot(
         blocked_actions: blockers,
         updated_at: unix_timestamp_seconds(),
     })
+}
+
+fn active_ready_issue_id(
+    input: Option<&agentflow_input::InputSnapshot>,
+    blockers: &[WorkflowBlockedAction],
+) -> Option<String> {
+    input.and_then(|snapshot| active_ready_issue_id_for_issues(&snapshot.issues, blockers))
+}
+
+fn active_ready_issue_id_for_issues(
+    issues: &[InputIssue],
+    blockers: &[WorkflowBlockedAction],
+) -> Option<String> {
+    issues
+        .iter()
+        .find(|issue| issue_is_unblocked_ready_for_execute(issue, blockers))
+        .map(|issue| issue.issue_id.clone())
+}
+
+fn first_ready_issue_id(input: Option<&agentflow_input::InputSnapshot>) -> Option<String> {
+    input.and_then(|snapshot| {
+        snapshot
+            .issues
+            .iter()
+            .find(|issue| matches!(issue.status, InputIssueStatus::Todo))
+            .map(|issue| issue.issue_id.clone())
+    })
+}
+
+fn blockers_force_execute_blocked(
+    input: Option<&agentflow_input::InputSnapshot>,
+    blockers: &[WorkflowBlockedAction],
+) -> bool {
+    if blockers.is_empty() {
+        return false;
+    }
+    let Some(input) = input else {
+        return true;
+    };
+    blockers_force_execute_blocked_for_issues(&input.issues, blockers)
+}
+
+fn blockers_force_execute_blocked_for_issues(
+    issues: &[InputIssue],
+    blockers: &[WorkflowBlockedAction],
+) -> bool {
+    let ready_issues = issues
+        .iter()
+        .filter(|issue| matches!(issue.status, InputIssueStatus::Todo))
+        .collect::<Vec<_>>();
+    if ready_issues.is_empty() {
+        return blockers
+            .iter()
+            .any(|blocker| !blocker_is_issue_level(blocker));
+    }
+    !ready_issues
+        .iter()
+        .any(|issue| issue_is_unblocked_ready_for_execute(issue, blockers))
+}
+
+fn issue_is_unblocked_ready_for_execute(
+    issue: &InputIssue,
+    blockers: &[WorkflowBlockedAction],
+) -> bool {
+    matches!(issue.status, InputIssueStatus::Todo)
+        && !issue.execution_risk.requires_human_confirmation()
+        && !issue_has_gate_blocker(issue, blockers)
+}
+
+fn issue_has_gate_blocker(issue: &InputIssue, blockers: &[WorkflowBlockedAction]) -> bool {
+    let issue_path = issue.issue_path.trim();
+    if issue_path.is_empty() {
+        return false;
+    }
+    blockers.iter().any(|blocker| {
+        blocker_is_issue_level(blocker) && blocker.source_path.as_deref() == Some(issue_path)
+    })
+}
+
+fn blocker_is_issue_level(blocker: &WorkflowBlockedAction) -> bool {
+    matches!(blocker.action.as_str(), "dependency-ready" | "copy-handoff")
 }
 
 pub(crate) fn write_gate_files(root: &Path, gate: &WorkflowGateSnapshot) -> Result<()> {
@@ -215,20 +287,16 @@ fn derive_stage(
     }
     if input.as_ref().is_some_and(|snapshot| {
         snapshot.issues.iter().any(|issue| {
-            matches!(
-                issue.status,
-                agentflow_input::issue::InputIssueStatus::ReadyForExecute
-            ) && !issue.execution_risk.requires_human_confirmation()
+            matches!(issue.status, agentflow_input::issue::InputIssueStatus::Todo)
+                && !issue.execution_risk.requires_human_confirmation()
         })
     }) {
         return WorkflowStage::ExecuteReady;
     }
     if input.as_ref().is_some_and(|snapshot| {
         snapshot.issues.iter().any(|issue| {
-            matches!(
-                issue.status,
-                agentflow_input::issue::InputIssueStatus::ReadyForExecute
-            ) && issue.execution_risk.requires_human_confirmation()
+            matches!(issue.status, agentflow_input::issue::InputIssueStatus::Todo)
+                && issue.execution_risk.requires_human_confirmation()
         })
     }) {
         return WorkflowStage::ExecuteBlocked;
@@ -479,5 +547,60 @@ fn allowed_reason(action: &str, gate: &WorkflowGateSnapshot) -> String {
             .map(|issue_id| format!("Issue {issue_id} is ready for controlled execute."))
             .unwrap_or_else(|| "An issue is ready for controlled execute.".to_string()),
         _ => "Action is allowed by workflow gate.".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agentflow_input::issue::{InputIssue, InputIssueStatus, InputRiskLevel};
+
+    fn issue(issue_id: &str, status: InputIssueStatus) -> InputIssue {
+        InputIssue {
+            issue_id: issue_id.to_string(),
+            issue_path: format!(".agentflow/input/issues/{issue_id}.json"),
+            source_spec_id: "spec-001".to_string(),
+            title: issue_id.to_string(),
+            summary: issue_id.to_string(),
+            status,
+            execution_risk: InputRiskLevel::Low,
+            ..InputIssue::default()
+        }
+    }
+
+    fn issue_blocker(issue_id: &str, action: &str) -> WorkflowBlockedAction {
+        WorkflowBlockedAction {
+            action: action.to_string(),
+            reason: "blocked".to_string(),
+            source_path: Some(format!(".agentflow/input/issues/{issue_id}.json")),
+        }
+    }
+
+    #[test]
+    fn downstream_issue_blocker_keeps_unblocked_ready_path_executable() {
+        let issues = vec![
+            issue("AF-001", InputIssueStatus::Todo),
+            issue("AF-002", InputIssueStatus::Todo),
+        ];
+        let blockers = vec![issue_blocker("AF-002", "dependency-ready")];
+
+        assert_eq!(
+            active_ready_issue_id_for_issues(&issues, &blockers).as_deref(),
+            Some("AF-001")
+        );
+        assert!(!blockers_force_execute_blocked_for_issues(
+            &issues, &blockers
+        ));
+    }
+
+    #[test]
+    fn blockers_force_execute_blocked_when_all_ready_paths_are_blocked() {
+        let issues = vec![issue("AF-001", InputIssueStatus::Todo)];
+        let blockers = vec![issue_blocker("AF-001", "dependency-ready")];
+
+        assert!(active_ready_issue_id_for_issues(&issues, &blockers).is_none());
+        assert!(blockers_force_execute_blocked_for_issues(
+            &issues, &blockers
+        ));
     }
 }

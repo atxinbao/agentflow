@@ -133,7 +133,7 @@ export type WorkspaceOwnershipStatus = {
 
 export type InputWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";
 
-export type IssueDisplayStatus = "backlog" | "blocked" | "ready" | "in-progress" | "review" | "done" | "cancel";
+export type IssueDisplayStatus = "backlog" | "blocked" | "todo" | "in_progress" | "in_review" | "done" | "cancel";
 
 export type InputSummary = {
   intake: number;
@@ -158,7 +158,7 @@ export type InputStatusSnapshot = {
   errors: string[];
 };
 
-export type InputIssueStatus = "planned" | "blocked" | "ready-for-execute" | "done" | "canceled";
+export type InputIssueStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done" | "blocked" | "cancel";
 export type IssueCategory = "spec" | "audit";
 export type AgentRole = "spec-agent" | "build-agent" | "audit-agent";
 export type ExpectedOutputs = Record<string, string>;

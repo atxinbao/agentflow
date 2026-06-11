@@ -101,7 +101,7 @@ mod tests {
             project_id: None,
             title: "Fixture issue".to_string(),
             summary: "Fixture issue".to_string(),
-            status: InputIssueStatus::ReadyForExecute,
+            status: InputIssueStatus::Todo,
             execution_risk: risk_level,
             validation_hints: vec!["printf ok".to_string()],
             scope: vec!["src/lib.rs".to_string()],
@@ -412,7 +412,7 @@ mod tests {
             project_id: None,
             title: "Missing target".to_string(),
             summary: "Missing target metadata".to_string(),
-            status: InputIssueStatus::ReadyForExecute,
+            status: InputIssueStatus::Todo,
             execution_risk: InputRiskLevel::Low,
             ..InputIssue::default()
         };
@@ -590,7 +590,7 @@ mod tests {
             .find(|item| item.issue_id == "iss-001")
             .unwrap();
         assert_eq!(issue.latest_run_id.as_deref(), Some(run.run_id.as_str()));
-        assert_eq!(issue.display_status, DisplayStatus::Review);
+        assert_eq!(issue.display_status, DisplayStatus::InReview);
         assert_eq!(issue.delivery_status, "drafted");
         assert_eq!(issue.audit_status, WorkflowAuditStatus::Failed);
     }

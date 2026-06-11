@@ -1003,11 +1003,11 @@ pre {
   border-left-color: #eab308;
 }
 
-.issue-row.in-progress {
+.issue-row.in_progress {
   border-left-color: #3b82f6;
 }
 
-.issue-row.in-review {
+.issue-row.in_review {
   border-left-color: #8b5cf6;
 }
 
@@ -1015,7 +1015,7 @@ pre {
   border-left-color: #22c55e;
 }
 
-.issue-row.canceled {
+.issue-row.cancel {
   border-left-color: #9ca3af;
 }
 
@@ -1075,7 +1075,7 @@ pre {
 }
 
 .status-badge.failed,
-.status-badge.canceled {
+.status-badge.cancel {
   background: #fde2df;
   color: #8a1c14;
 }
@@ -1092,12 +1092,12 @@ pre {
   color: #334155;
 }
 
-.status-badge.in-progress {
+.status-badge.in_progress {
   background: #e6f1ff;
   color: #17446f;
 }
 
-.status-badge.in-review {
+.status-badge.in_review {
   background: #f0eaff;
   color: #51328f;
 }
@@ -4140,7 +4140,7 @@ button.saved-view.active {
   }
 
   .status-badge.failed,
-  .status-badge.canceled {
+  .status-badge.cancel {
     background: #451915;
     color: #ffb8b1;
   }
@@ -4157,12 +4157,12 @@ button.saved-view.active {
     color: #dce6f3;
   }
 
-  .status-badge.in-progress {
+  .status-badge.in_progress {
     background: #102f4a;
     color: #a9d4ff;
   }
 
-  .status-badge.in-review {
+  .status-badge.in_review {
     background: #2e2148;
     color: #d7c8ff;
   }
@@ -4604,7 +4604,7 @@ button.saved-view.active {
 }
 
 .status-badge.failed,
-.status-badge.canceled {
+.status-badge.cancel {
   background: #451915;
   color: #ffb8b1;
 }
@@ -4616,12 +4616,12 @@ button.saved-view.active {
   color: #f7d88a;
 }
 
-.status-badge.in-progress {
+.status-badge.in_progress {
   background: #102f4a;
   color: #a9d4ff;
 }
 
-.status-badge.in-review {
+.status-badge.in_review {
   background: #2e2148;
   color: #d7c8ff;
 }

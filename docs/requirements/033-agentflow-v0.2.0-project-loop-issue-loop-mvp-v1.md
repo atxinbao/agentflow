@@ -84,6 +84,60 @@ Spec Agent 写入 Project + backlog Issues
 
 ---
 
+## 0.1 本轮实现落地规则
+
+本轮把 GitHub issues #84 - #92 收口为以下硬规则：
+
+```text
+#84 Project-bound Issue Generation
+  新生成的 Issue 默认必须属于 Project。
+  issueModel=project，projectId 必填，Project issueIds 必须包含该 Issue。
+  Direct Issue 只作为 legacy 可读输入，不能进入 Project Loop scheduling。
+
+#85 Project Environment Preflight
+  Project Preflight 只检测当前 repo 对应的 Git provider。
+  GitHub repo 只检测 GitHub，GitLab repo 只检测 GitLab。
+  Provider 状态写入 .agentflow/state/mcp/providers/<provider>.json。
+  Project Preflight 不直接修改 Issue 状态。
+
+#86 Project Issue Scheduler
+  Scheduler 只扫描当前 Project 下的 backlog issues。
+  通过依赖、合同、Context Pack、Project Preflight 后，把 Issue 推到 todo。
+  Scheduler 不创建 run，不执行命令，不创建 PR/MR。
+
+#87 Issue Loop Runtime Preflight
+  Issue Loop 只处理 todo issue。
+  backlog issue 不能被 Build Agent 直接执行。
+  Runtime preflight 通过后创建 run，写 agent-claim.json / branch.json，并把 Issue 切到 in_progress。
+
+#88 Issue Branch Check
+  默认 issue branch 为 agentflow/<project-id>/<issue-id>。
+  分支检查结果写入 .agentflow/execute/runs/<run-id>/branch.json。
+  分支不匹配且工作区有未提交改动时阻断当前 Issue。
+
+#89 PR/MR Auto Merge Default + Manual Fallback
+  沙箱验证后 Issue 进入 in_review。
+  auto-merge-if-eligible 默认尝试 provider 自动合并。
+  自动合并不可用时保持 in_review，并写 manual-merge waiting proof。
+  waiting-for-merge 不是 Issue 状态。
+
+#90 Run-based Build Agent Complete
+  build-agent complete 必须传 runId。
+  complete 不能重新 create run。
+  complete 必须校验 agent-claim.json、branch.json、review/merge-proof.json。
+  complete 成功后写 evidence / release delivery，并把 Issue 从 in_review 切到 done。
+
+#91 Delivery Audit Report
+  Issue done 后由 Project Loop 直接生成 output/audit/delivery-<run-id>/audit-report.md。
+  不创建 Audit Issue。
+
+#92 Project Final Audit Report
+  所有 Project Issues done 且 Delivery Audits passed 后生成 project-final audit package。
+  Project 状态切到 done。
+```
+
+---
+
 ## 1. 一句话目标
 
 AgentFlow v0.2.0 要先完成一个 **Project 完整 MVP 闭环**：
