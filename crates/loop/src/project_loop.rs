@@ -16,6 +16,7 @@ use anyhow::{Context, Result};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
+    process::Command,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,6 +114,22 @@ impl ProjectLoop {
                 }
                 InputIssueStatus::Blocked => {
                     if issue_has_runtime_block(root.as_path(), issue) {
+                        if runtime_block_can_retry(root.as_path(), issue) {
+                            let issue = agentflow_input::update_input_issue_status(
+                                &root,
+                                &issue.issue_id,
+                                InputIssueStatus::Todo,
+                            )?;
+                            loop_snapshot.active_issue_ids.push(issue.issue_id.clone());
+                            write_issue_projection(
+                                &root,
+                                &project.project_id,
+                                &issue,
+                                IssueLoopStage::Todo,
+                                Vec::new(),
+                            )?;
+                            continue;
+                        }
                         let blockers = blocked_runtime_issue_blockers(root.as_path(), issue);
                         loop_snapshot.blocked_issue_ids.push(issue.issue_id.clone());
                         write_issue_projection(
@@ -330,6 +347,33 @@ fn issue_has_runtime_block(root: &Path, issue: &InputIssue) -> bool {
         .unwrap_or(false)
 }
 
+fn runtime_block_can_retry(root: &Path, issue: &InputIssue) -> bool {
+    let Some(run_id) = issue.latest_run_id.as_deref() else {
+        return false;
+    };
+    let branch_path = agentflow_execute::storage::run_dir(root, run_id).join("branch.json");
+    let branch: serde_json::Value = match agentflow_execute::storage::read_json(&branch_path) {
+        Ok(value) => value,
+        Err(_) => return false,
+    };
+    let status = branch
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    let blocked_reason = branch
+        .get("blockedReason")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| {
+            branch
+                .get("blocked_reason")
+                .and_then(serde_json::Value::as_str)
+        })
+        .unwrap_or_default();
+    status == "blocked"
+        && blocked_reason.contains("worktree has uncommitted changes")
+        && !git_worktree_dirty(root)
+}
+
 fn blocked_runtime_issue_blockers(root: &Path, issue: &InputIssue) -> Vec<LoopBlocker> {
     if let Ok(projection) = read_issue_loop_projection(root, &issue.issue_id) {
         if !projection.blockers.is_empty() {
@@ -368,6 +412,15 @@ fn blocked_runtime_issue_blockers(root: &Path, issue: &InputIssue) -> Vec<LoopBl
         blocked_reason,
         Some(format!(".agentflow/execute/runs/{run_id}/preflight.json")),
     )]
+}
+
+fn git_worktree_dirty(root: &Path) -> bool {
+    Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(root)
+        .output()
+        .map(|output| output.status.success() && !output.stdout.is_empty())
+        .unwrap_or(false)
 }
 
 fn schedule_blockers(
