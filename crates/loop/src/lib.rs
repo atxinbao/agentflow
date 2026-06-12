@@ -663,6 +663,19 @@ mod tests {
             storage::read_project_loop_snapshot(dir.path(), "proj-001").expect("project snapshot");
         assert_eq!(stored_snapshot.status, ProjectLoopStatus::Executing);
         assert_eq!(stored_snapshot.active_issue_ids, vec!["AF-001"]);
+        assert_eq!(stored_snapshot.runtime_issue_id.as_deref(), Some("AF-001"));
+        assert_eq!(
+            stored_snapshot.runtime_run_id.as_deref(),
+            Some(launch.run_id.as_str())
+        );
+        assert_eq!(
+            stored_snapshot.runtime_stage,
+            Some(IssueLoopStage::InProgress)
+        );
+        assert_eq!(
+            stored_snapshot.runtime_launch_request_path.as_deref(),
+            Some(launch.launch_request_path.as_str())
+        );
     }
 
     #[test]
@@ -751,6 +764,22 @@ mod tests {
         let second_tick = ProjectExecutor::new("proj-001").tick(dir.path()).unwrap();
         assert!(second_tick.launch.is_none());
         assert!(launch_request_path.is_file());
+        assert_eq!(
+            second_tick.snapshot.runtime_issue_id.as_deref(),
+            Some("AF-001")
+        );
+        assert_eq!(
+            second_tick.snapshot.runtime_run_id.as_deref(),
+            Some(launch.run_id.as_str())
+        );
+        assert_eq!(
+            second_tick.snapshot.runtime_stage,
+            Some(IssueLoopStage::InProgress)
+        );
+        assert_eq!(
+            second_tick.snapshot.runtime_launch_request_path.as_deref(),
+            Some(launch.launch_request_path.as_str())
+        );
     }
 
     #[test]

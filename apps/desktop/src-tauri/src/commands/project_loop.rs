@@ -144,10 +144,22 @@ fn push_project_summary(summary: &mut ProjectLoopRunSummary, tick: ProjectExecut
         active_issue_ids: snapshot.active_issue_ids,
         blocked_issue_ids: snapshot.blocked_issue_ids,
         done_issue_ids: snapshot.done_issue_ids,
-        runtime_issue_id: launch.as_ref().map(|item| item.issue_id.clone()),
-        runtime_run_id: launch.as_ref().map(|item| item.run_id.clone()),
-        runtime_stage: launch.as_ref().map(|item| item.stage.as_str().to_string()),
-        runtime_launch_request_path: launch.as_ref().map(|item| item.launch_request_path.clone()),
+        runtime_issue_id: launch
+            .as_ref()
+            .map(|item| item.issue_id.clone())
+            .or(snapshot.runtime_issue_id.clone()),
+        runtime_run_id: launch
+            .as_ref()
+            .map(|item| item.run_id.clone())
+            .or(snapshot.runtime_run_id.clone()),
+        runtime_stage: launch
+            .as_ref()
+            .map(|item| item.stage.as_str().to_string())
+            .or(snapshot.runtime_stage.as_ref().map(|stage| stage.as_str().to_string())),
+        runtime_launch_request_path: launch
+            .as_ref()
+            .map(|item| item.launch_request_path.clone())
+            .or(snapshot.runtime_launch_request_path.clone()),
         blockers: snapshot.blockers,
     });
 }
