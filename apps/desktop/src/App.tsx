@@ -2105,9 +2105,6 @@ function CodexRoleGuideCard() {
         <StatusBadge status="idle">本地说明</StatusBadge>
       </header>
       <div className="v16-codex-role-guide-body">
-        <p className="v16-codex-role-warning">
-          不要让同一个执行线程一会儿写代码、一会儿审计。这样容易混淆边界。
-        </p>
         <div className="v16-codex-role-grid">
           {codexRoleGuides.map((guide) => (
             <article className="v16-codex-role-card" key={guide.role}>
