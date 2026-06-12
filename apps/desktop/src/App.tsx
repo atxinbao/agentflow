@@ -557,7 +557,7 @@ function App() {
       const refreshExecute = refreshAll || changedAreas.has("execute");
       const refreshOutput = refreshAll || changedAreas.has("output");
       const refreshPanel = refreshAll || changedAreas.has("panel");
-      const refreshTaskList = refreshInput || refreshExecute || refreshOutput || refreshAll;
+      const refreshTaskList = refreshInput || refreshOutput || refreshAll;
 
       if (refreshInput) {
         void invoke("prepare_input_workspace", { projectRoot })
@@ -576,6 +576,10 @@ function App() {
 
       if (refreshTaskList) {
         setTaskListRefreshToken((current) => current + 1);
+      }
+
+      if (refreshExecute && activePage === "execute") {
+        setExecuteRefreshToken((current) => current + 1);
       }
 
       if (refreshOutput && activePage === "delivery") {
