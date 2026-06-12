@@ -2056,11 +2056,6 @@ function ProjectHomePage({
             </div>
           )}
           <p className="v16-home-next-step">{nextStep.description}</p>
-          <ActionBar>
-            <ActionButton disabled={!selectedTask} onClick={onOpenTasks} variant="primary">
-              进入任务页
-            </ActionButton>
-          </ActionBar>
         </Panel>
 
         <Panel className="v16-home-column" title="最近活动">
