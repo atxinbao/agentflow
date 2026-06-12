@@ -201,6 +201,7 @@ impl ProjectLoop {
                 | InputIssueStatus::InProgress
                 | InputIssueStatus::InReview => {
                     loop_snapshot.active_issue_ids.push(issue.issue_id.clone());
+                    hydrate_runtime_snapshot(&mut loop_snapshot, root.as_path(), issue);
                     write_issue_projection(
                         &root,
                         &project.project_id,
@@ -588,6 +589,29 @@ fn issue_stage(status: &InputIssueStatus) -> IssueLoopStage {
         InputIssueStatus::Done => IssueLoopStage::Done,
         InputIssueStatus::Blocked => IssueLoopStage::Blocked,
         InputIssueStatus::Cancel => IssueLoopStage::Cancel,
+    }
+}
+
+fn hydrate_runtime_snapshot(snapshot: &mut ProjectLoopSnapshot, root: &Path, issue: &InputIssue) {
+    let Some(run_id) = issue.latest_run_id.clone() else {
+        return;
+    };
+    if !matches!(
+        issue.status,
+        InputIssueStatus::InProgress | InputIssueStatus::InReview
+    ) {
+        return;
+    }
+
+    snapshot.runtime_issue_id = Some(issue.issue_id.clone());
+    snapshot.runtime_run_id = Some(run_id.clone());
+    snapshot.runtime_stage = Some(issue_stage(&issue.status));
+
+    let launch_request_path = agentflow_execute::storage::run_dir(root, &run_id)
+        .join("launcher/build-agent-request.json");
+    if launch_request_path.is_file() {
+        snapshot.runtime_launch_request_path =
+            Some(agentflow_execute::storage::relative_path(root, &launch_request_path));
     }
 }
 

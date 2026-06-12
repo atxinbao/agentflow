@@ -81,10 +81,10 @@ impl ProjectExecutor {
             .collect::<BTreeMap<_, _>>();
 
         if let Some(active_issue) = active_runtime_issue(project, &issues_by_id) {
-            ensure_existing_launch_request(root, active_issue)?;
+            let restored_launch_request = ensure_existing_launch_request(root, active_issue)?;
             return Ok(RuntimeAdvance {
                 launch: None,
-                state_changed: false,
+                state_changed: restored_launch_request,
             });
         }
 
@@ -271,17 +271,20 @@ fn append_build_agent_launch_event(
     Ok(())
 }
 
-fn ensure_existing_launch_request(root: &Path, issue: &InputIssue) -> Result<()> {
+fn ensure_existing_launch_request(root: &Path, issue: &InputIssue) -> Result<bool> {
     let run_id = issue
         .latest_run_id
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("active issue {} is missing latestRunId", issue.issue_id))?;
     let branch_name = branch_name_from_run(root, run_id).ok();
     let launch_request_path = run_dir(root, run_id).join("launcher/build-agent-request.json");
-    let relative_launch_request_path = if launch_request_path.is_file() {
-        relative_path(root, &launch_request_path)
+    let (relative_launch_request_path, restored_launch_request) = if launch_request_path.is_file() {
+        (relative_path(root, &launch_request_path), false)
     } else {
-        write_build_agent_launch_request(root, issue, run_id, branch_name.clone())?
+        (
+            write_build_agent_launch_request(root, issue, run_id, branch_name.clone())?,
+            true,
+        )
     };
     append_build_agent_launch_event(
         root,
@@ -290,7 +293,7 @@ fn ensure_existing_launch_request(root: &Path, issue: &InputIssue) -> Result<()>
         branch_name,
         &relative_launch_request_path,
     )?;
-    Ok(())
+    Ok(restored_launch_request)
 }
 
 fn active_runtime_issue<'a>(

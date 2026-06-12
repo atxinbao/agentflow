@@ -118,6 +118,14 @@ pub struct ProjectLoopSnapshot {
     pub active_issue_ids: Vec<String>,
     pub blocked_issue_ids: Vec<String>,
     pub done_issue_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_issue_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_stage: Option<IssueLoopStage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_launch_request_path: Option<String>,
     pub audit_status: AuditGateStatus,
     pub blockers: Vec<LoopBlocker>,
     pub updated_at: u64,
@@ -132,6 +140,10 @@ impl ProjectLoopSnapshot {
             active_issue_ids: Vec::new(),
             blocked_issue_ids: Vec::new(),
             done_issue_ids: Vec::new(),
+            runtime_issue_id: None,
+            runtime_run_id: None,
+            runtime_stage: None,
+            runtime_launch_request_path: None,
             audit_status: AuditGateStatus::Pending,
             blockers: Vec::new(),
             updated_at,
