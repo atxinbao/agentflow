@@ -329,6 +329,8 @@ pub struct InputIssue {
     pub status: InputIssueStatus,
     #[serde(default)]
     pub display_status: DisplayStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_run_id: Option<String>,
     #[serde(default, alias = "riskLevel")]
     pub execution_risk: InputRiskLevel,
     #[serde(default)]
@@ -374,6 +376,7 @@ impl Default for InputIssue {
             priority: InputPriority::default(),
             status: InputIssueStatus::default(),
             display_status: DisplayStatus::default(),
+            latest_run_id: None,
             execution_risk: InputRiskLevel::default(),
             allowed_paths: Vec::new(),
             forbidden_paths: Vec::new(),

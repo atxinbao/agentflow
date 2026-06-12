@@ -155,6 +155,47 @@ mod tests {
     }
 
     #[test]
+    fn project_scheduler_preserves_runtime_projection_fields_after_done() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        write_project_issue(dir.path(), InputIssueStatus::Done);
+        let mut issue = agentflow_input::load_input_issue(dir.path(), "AF-001").unwrap();
+        issue.latest_run_id = Some("run-001".to_string());
+        fs::write(
+            dir.path().join(".agentflow/input/issues/AF-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow/execute/runs/run-001")).unwrap();
+        fs::write(
+            dir.path()
+                .join(".agentflow/execute/runs/run-001/branch.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "issueBranch": "agentflow/proj-001/AF-001"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+        mark_project_preflight_ready(dir.path());
+
+        let snapshot = ProjectLoop::new("proj-001")
+            .schedule_ready_issues(dir.path())
+            .unwrap();
+
+        assert_eq!(snapshot.done_issue_ids, vec!["AF-001"]);
+        let projection = storage::read_issue_loop_projection(dir.path(), "AF-001").unwrap();
+        assert_eq!(projection.stage, IssueLoopStage::Done);
+        assert_eq!(projection.run_id.as_deref(), Some("run-001"));
+        assert_eq!(
+            projection.branch_name.as_deref(),
+            Some("agentflow/proj-001/AF-001")
+        );
+        assert_eq!(projection.review_substate.as_deref(), Some("merged"));
+    }
+
+    #[test]
     fn direct_issue_loop_moves_backlog_issue_to_todo() {
         let dir = tempdir().unwrap();
         prepare_root(dir.path());
@@ -195,6 +236,59 @@ mod tests {
         let projection = storage::read_issue_loop_projection(dir.path(), "AF-DIRECT-001").unwrap();
         assert_eq!(projection.project_id, None);
         assert_eq!(projection.stage, IssueLoopStage::Todo);
+    }
+
+    #[test]
+    fn direct_issue_loop_preserves_runtime_projection_fields_after_done() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        let mut issue = InputIssue {
+            issue_id: "AF-DIRECT-001".to_string(),
+            issue_model: InputIssueModel::Direct,
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::BuildAgent,
+            source_spec_id: "spec-001".to_string(),
+            project_id: None,
+            title: "Direct Issue Loop fixture".to_string(),
+            summary: "Schedule one direct issue.".to_string(),
+            status: InputIssueStatus::Done,
+            latest_run_id: Some("run-001".to_string()),
+            execution_risk: InputRiskLevel::Low,
+            scope: vec!["src/lib.rs".to_string()],
+            validation_hints: vec!["printf ok".to_string()],
+            ..InputIssue::default()
+        };
+        issue.normalize_execution_metadata();
+        fs::write(
+            dir.path()
+                .join(".agentflow/input/issues/AF-DIRECT-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow/execute/runs/run-001")).unwrap();
+        fs::write(
+            dir.path()
+                .join(".agentflow/execute/runs/run-001/branch.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "issueBranch": "agentflow/direct/AF-DIRECT-001"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+
+        let summary = DirectIssueLoop::schedule_ready_issues(dir.path()).unwrap();
+
+        assert_eq!(summary.done_issue_ids, vec!["AF-DIRECT-001"]);
+        let projection = storage::read_issue_loop_projection(dir.path(), "AF-DIRECT-001").unwrap();
+        assert_eq!(projection.stage, IssueLoopStage::Done);
+        assert_eq!(projection.run_id.as_deref(), Some("run-001"));
+        assert_eq!(
+            projection.branch_name.as_deref(),
+            Some("agentflow/direct/AF-DIRECT-001")
+        );
+        assert_eq!(projection.review_substate.as_deref(), Some("merged"));
     }
 
     #[test]
