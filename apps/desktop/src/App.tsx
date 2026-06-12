@@ -80,6 +80,7 @@ import {
   buildAppInteractionState,
   buildAuditInteractionState,
   buildDeliveryInteractionState,
+  buildTaskStatusContract,
   buildTaskInteractionState,
   buildTaskProjectTreeViewModel,
   displayStatusLabelZh,
@@ -2668,6 +2669,7 @@ function TaskDetailReader({
 }) {
   const [handoffOpen, setHandoffOpen] = useState(false);
   const handoffError = useMemo(() => taskHandoffValidationError(task), [task]);
+  const statusContract = useMemo(() => buildTaskStatusContract(task), [task]);
   const detailDescriptionItems = useMemo(
     () => [
       ...taskAuditDescriptionItems(task),
@@ -2717,7 +2719,18 @@ function TaskDetailReader({
       </header>
       <div className="v16-detail-document">
         {detailDescriptionItems.length ? <DescriptionList items={detailDescriptionItems} /> : null}
-        <IssueStatusFlow status={task.displayStatus ?? "backlog"} />
+        <IssueStatusFlow contract={statusContract} status={task.displayStatus ?? "backlog"} />
+        <SectionList
+          title="状态说明"
+          items={[
+            statusContract.businessMeaning,
+            `责任角色：${statusContract.ownerRoleLabel}`,
+            `下一步入口：${statusContract.nextEntry}`,
+          ]}
+        />
+        <SectionList title="阶段动作" items={[statusContract.stageAction]} />
+        <SectionList title="阶段产物" items={statusContract.stageOutputs} />
+        <SectionList title="界面摘要" items={statusContract.uiSummary} />
         <SectionList title="目标" items={[task.goal || task.title]} />
         <SectionList title="范围" items={task.scope} />
         <SectionList title="非目标" items={task.nonGoals} />
@@ -2769,12 +2782,18 @@ const issueStatusFlowSteps: Array<{ id: IssueDisplayStatus; label: string; note:
   { id: "done", label: "已完成", note: "已写回" },
 ];
 
-function IssueStatusFlow({ status }: { status: IssueDisplayStatus }) {
+function IssueStatusFlow({
+  contract,
+  status,
+}: {
+  contract: ReturnType<typeof buildTaskStatusContract>;
+  status: IssueDisplayStatus;
+}) {
   const exception =
     status === "blocked"
-      ? { label: "已阻断", note: "被外部因素卡住" }
+      ? { label: "已阻断", note: contract.businessMeaning }
       : status === "cancel"
-        ? { label: "已取消", note: "任务已停止" }
+        ? { label: "已取消", note: contract.businessMeaning }
         : null;
   const activeIndex = issueStatusFlowSteps.findIndex((step) => step.id === status);
 
@@ -2782,7 +2801,7 @@ function IssueStatusFlow({ status }: { status: IssueDisplayStatus }) {
     <section className="v16-issue-status-flow" aria-label="任务状态流转">
       <div className="v16-issue-status-flow-header">
         <span>状态流转</span>
-        <strong>{displayStatusLabelZh(status)}</strong>
+        <strong>{contract.label}</strong>
       </div>
       <ol>
         {issueStatusFlowSteps.map((step, index) => {
