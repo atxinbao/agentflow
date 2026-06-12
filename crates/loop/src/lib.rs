@@ -106,6 +106,108 @@ mod tests {
         .unwrap();
     }
 
+    fn write_project_issue_chain(root: &Path) {
+        let project = InputProject {
+            project_id: "proj-001".to_string(),
+            source_spec_id: "spec-001".to_string(),
+            title: "Project Loop chain fixture".to_string(),
+            summary: "Schedule dependent issues.".to_string(),
+            objective: "Schedule dependent issues.".to_string(),
+            issue_ids: vec!["AF-001".to_string(), "AF-002".to_string()],
+            status: InputProjectStatus::Planned,
+            ..InputProject::default()
+        };
+        let mut first = InputIssue {
+            issue_id: "AF-001".to_string(),
+            issue_model: InputIssueModel::Project,
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::BuildAgent,
+            source_spec_id: "spec-001".to_string(),
+            project_id: Some("proj-001".to_string()),
+            title: "First issue".to_string(),
+            summary: "Run first.".to_string(),
+            status: InputIssueStatus::Backlog,
+            execution_risk: InputRiskLevel::Low,
+            scope: vec!["src/lib.rs".to_string()],
+            validation_hints: vec!["printf ok".to_string()],
+            ..InputIssue::default()
+        };
+        first.normalize_execution_metadata();
+
+        let mut second = InputIssue {
+            issue_id: "AF-002".to_string(),
+            issue_model: InputIssueModel::Project,
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::BuildAgent,
+            source_spec_id: "spec-001".to_string(),
+            project_id: Some("proj-001".to_string()),
+            title: "Second issue".to_string(),
+            summary: "Run after first.".to_string(),
+            status: InputIssueStatus::Backlog,
+            execution_risk: InputRiskLevel::Low,
+            scope: vec!["src/lib.rs".to_string()],
+            validation_hints: vec!["printf ok".to_string()],
+            ..InputIssue::default()
+        };
+        second.relations.blocked_by = vec!["AF-001".to_string()];
+        second.normalize_execution_metadata();
+
+        fs::write(
+            root.join(".agentflow/input/projects/proj-001.json"),
+            serde_json::to_string_pretty(&project).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            root.join(".agentflow/input/issues/AF-001.json"),
+            serde_json::to_string_pretty(&first).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            root.join(".agentflow/input/issues/AF-002.json"),
+            serde_json::to_string_pretty(&second).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn write_project_issue_with_invalid_role(root: &Path, status: InputIssueStatus) {
+        let project = InputProject {
+            project_id: "proj-001".to_string(),
+            source_spec_id: "spec-001".to_string(),
+            title: "Project Loop invalid-role fixture".to_string(),
+            summary: "Schedule one invalid issue.".to_string(),
+            objective: "Schedule one invalid issue.".to_string(),
+            issue_ids: vec!["AF-001".to_string()],
+            status: InputProjectStatus::Planned,
+            ..InputProject::default()
+        };
+        let mut issue = InputIssue {
+            issue_id: "AF-001".to_string(),
+            issue_model: InputIssueModel::Project,
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::AuditAgent,
+            source_spec_id: "spec-001".to_string(),
+            project_id: Some("proj-001".to_string()),
+            title: "Invalid role issue".to_string(),
+            summary: "Should stay blocked.".to_string(),
+            status,
+            execution_risk: InputRiskLevel::Low,
+            scope: vec!["src/lib.rs".to_string()],
+            validation_hints: vec!["printf ok".to_string()],
+            ..InputIssue::default()
+        };
+        issue.normalize_execution_metadata();
+        fs::write(
+            root.join(".agentflow/input/projects/proj-001.json"),
+            serde_json::to_string_pretty(&project).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            root.join(".agentflow/input/issues/AF-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+    }
+
     fn mark_project_preflight_ready(root: &Path) {
         let mut snapshot = ProjectLoop::new("proj-001").snapshot(100);
         snapshot.status = ProjectLoopStatus::Active;
@@ -152,6 +254,69 @@ mod tests {
         prepare_root(dir.path());
 
         schedule_issue(dir.path());
+    }
+
+    #[test]
+    fn project_scheduler_keeps_dependency_waiting_issue_in_backlog() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        write_project_issue_chain(dir.path());
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+        mark_project_preflight_ready(dir.path());
+
+        let snapshot = ProjectLoop::new("proj-001")
+            .schedule_ready_issues(dir.path())
+            .unwrap();
+
+        assert_eq!(snapshot.active_issue_ids, vec!["AF-001"]);
+        assert!(snapshot.blocked_issue_ids.is_empty());
+
+        let first = agentflow_input::load_input_issue(dir.path(), "AF-001").unwrap();
+        let second = agentflow_input::load_input_issue(dir.path(), "AF-002").unwrap();
+        assert_eq!(first.status, InputIssueStatus::Todo);
+        assert_eq!(second.status, InputIssueStatus::Backlog);
+
+        let second_projection = storage::read_issue_loop_projection(dir.path(), "AF-002").unwrap();
+        assert_eq!(second_projection.stage, IssueLoopStage::Backlog);
+        assert_eq!(
+            second_projection.display_status,
+            Some(agentflow_input::issue::DisplayStatus::Backlog)
+        );
+        assert_eq!(second_projection.blockers.len(), 1);
+        assert_eq!(second_projection.blockers[0].code, "dependency-not-done");
+    }
+
+    #[test]
+    fn project_scheduler_preserves_blocker_reasons_for_true_blocked_issue() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        write_project_issue_with_invalid_role(dir.path(), InputIssueStatus::Backlog);
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+        mark_project_preflight_ready(dir.path());
+
+        ProjectLoop::new("proj-001")
+            .schedule_ready_issues(dir.path())
+            .unwrap();
+        let first_projection = storage::read_issue_loop_projection(dir.path(), "AF-001").unwrap();
+        assert_eq!(first_projection.stage, IssueLoopStage::Blocked);
+        assert!(first_projection
+            .blockers
+            .iter()
+            .any(|blocker| blocker.code == "build-agent-contract-invalid"));
+
+        let snapshot = ProjectLoop::new("proj-001")
+            .schedule_ready_issues(dir.path())
+            .unwrap();
+        assert_eq!(snapshot.blocked_issue_ids, vec!["AF-001"]);
+
+        let second_projection = storage::read_issue_loop_projection(dir.path(), "AF-001").unwrap();
+        assert_eq!(second_projection.stage, IssueLoopStage::Blocked);
+        assert!(second_projection
+            .blockers
+            .iter()
+            .any(|blocker| blocker.code == "build-agent-contract-invalid"));
     }
 
     #[test]

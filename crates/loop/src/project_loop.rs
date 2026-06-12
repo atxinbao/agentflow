@@ -1,7 +1,8 @@
 use crate::{
     model::{AuditGateStatus, IssueLoopStage, LoopBlocker, ProjectLoopSnapshot, ProjectLoopStatus},
     storage::{
-        read_project_loop_snapshot, write_issue_loop_projection, write_project_loop_snapshot,
+        read_issue_loop_projection, read_project_loop_snapshot, write_issue_loop_projection,
+        write_project_loop_snapshot,
     },
     IssueLoop,
 };
@@ -111,14 +112,73 @@ impl ProjectLoop {
                     )?;
                 }
                 InputIssueStatus::Blocked => {
-                    loop_snapshot.blocked_issue_ids.push(issue.issue_id.clone());
-                    write_issue_projection(
+                    if issue_has_runtime_block(root.as_path(), issue) {
+                        let blockers = blocked_runtime_issue_blockers(root.as_path(), issue);
+                        loop_snapshot.blocked_issue_ids.push(issue.issue_id.clone());
+                        write_issue_projection(
+                            &root,
+                            &project.project_id,
+                            issue,
+                            IssueLoopStage::Blocked,
+                            blockers,
+                        )?;
+                        continue;
+                    }
+
+                    match classify_schedule_outcome(schedule_blockers(
                         &root,
-                        &project.project_id,
+                        &project,
                         issue,
-                        IssueLoopStage::Blocked,
-                        Vec::new(),
-                    )?;
+                        &done_issues,
+                        project_preflight_ready,
+                    )) {
+                        ScheduleOutcome::Ready => {
+                            ensure_context_pack(&root, issue)?;
+                            agentflow_input::update_input_issue_status(
+                                &root,
+                                &issue.issue_id,
+                                InputIssueStatus::Todo,
+                            )?;
+                            loop_snapshot.active_issue_ids.push(issue.issue_id.clone());
+                            write_issue_projection(
+                                &root,
+                                &project.project_id,
+                                issue,
+                                IssueLoopStage::Todo,
+                                Vec::new(),
+                            )?;
+                        }
+                        ScheduleOutcome::Waiting(blockers) => {
+                            agentflow_input::update_input_issue_status(
+                                &root,
+                                &issue.issue_id,
+                                InputIssueStatus::Backlog,
+                            )?;
+                            write_issue_projection(
+                                &root,
+                                &project.project_id,
+                                issue,
+                                IssueLoopStage::Backlog,
+                                blockers,
+                            )?;
+                        }
+                        ScheduleOutcome::Blocked(blockers) => {
+                            agentflow_input::update_input_issue_status(
+                                &root,
+                                &issue.issue_id,
+                                InputIssueStatus::Blocked,
+                            )?;
+                            loop_snapshot.blocked_issue_ids.push(issue.issue_id.clone());
+                            loop_snapshot.blockers.extend(blockers.clone());
+                            write_issue_projection(
+                                &root,
+                                &project.project_id,
+                                issue,
+                                IssueLoopStage::Blocked,
+                                blockers,
+                            )?;
+                        }
+                    }
                 }
                 InputIssueStatus::Todo
                 | InputIssueStatus::InProgress
@@ -142,43 +202,59 @@ impl ProjectLoop {
                     )?;
                 }
                 InputIssueStatus::Backlog => {
-                    let blockers = schedule_blockers(
+                    match classify_schedule_outcome(schedule_blockers(
                         &root,
                         &project,
                         issue,
                         &done_issues,
                         project_preflight_ready,
-                    );
-                    if blockers.is_empty() {
-                        ensure_context_pack(&root, issue)?;
-                        agentflow_input::update_input_issue_status(
-                            &root,
-                            &issue.issue_id,
-                            InputIssueStatus::Todo,
-                        )?;
-                        loop_snapshot.active_issue_ids.push(issue.issue_id.clone());
-                        write_issue_projection(
-                            &root,
-                            &project.project_id,
-                            issue,
-                            IssueLoopStage::Todo,
-                            Vec::new(),
-                        )?;
-                    } else {
-                        agentflow_input::update_input_issue_status(
-                            &root,
-                            &issue.issue_id,
-                            InputIssueStatus::Blocked,
-                        )?;
-                        loop_snapshot.blocked_issue_ids.push(issue.issue_id.clone());
-                        write_issue_projection(
-                            &root,
-                            &project.project_id,
-                            issue,
-                            IssueLoopStage::Blocked,
-                            blockers.clone(),
-                        )?;
-                        loop_snapshot.blockers.extend(blockers);
+                    )) {
+                        ScheduleOutcome::Ready => {
+                            ensure_context_pack(&root, issue)?;
+                            agentflow_input::update_input_issue_status(
+                                &root,
+                                &issue.issue_id,
+                                InputIssueStatus::Todo,
+                            )?;
+                            loop_snapshot.active_issue_ids.push(issue.issue_id.clone());
+                            write_issue_projection(
+                                &root,
+                                &project.project_id,
+                                issue,
+                                IssueLoopStage::Todo,
+                                Vec::new(),
+                            )?;
+                        }
+                        ScheduleOutcome::Waiting(blockers) => {
+                            agentflow_input::update_input_issue_status(
+                                &root,
+                                &issue.issue_id,
+                                InputIssueStatus::Backlog,
+                            )?;
+                            write_issue_projection(
+                                &root,
+                                &project.project_id,
+                                issue,
+                                IssueLoopStage::Backlog,
+                                blockers,
+                            )?;
+                        }
+                        ScheduleOutcome::Blocked(blockers) => {
+                            agentflow_input::update_input_issue_status(
+                                &root,
+                                &issue.issue_id,
+                                InputIssueStatus::Blocked,
+                            )?;
+                            loop_snapshot.blocked_issue_ids.push(issue.issue_id.clone());
+                            loop_snapshot.blockers.extend(blockers.clone());
+                            write_issue_projection(
+                                &root,
+                                &project.project_id,
+                                issue,
+                                IssueLoopStage::Blocked,
+                                blockers,
+                            )?;
+                        }
                     }
                 }
             }
@@ -216,6 +292,82 @@ impl ProjectLoop {
         agentflow_input::prepare_input_workspace(&root)?;
         Ok(loop_snapshot)
     }
+}
+
+enum ScheduleOutcome {
+    Ready,
+    Waiting(Vec<LoopBlocker>),
+    Blocked(Vec<LoopBlocker>),
+}
+
+fn classify_schedule_outcome(blockers: Vec<LoopBlocker>) -> ScheduleOutcome {
+    if blockers.is_empty() {
+        return ScheduleOutcome::Ready;
+    }
+
+    let (waiting, hard): (Vec<_>, Vec<_>) = blockers
+        .into_iter()
+        .partition(|blocker| blocker.code == "dependency-not-done");
+
+    if !hard.is_empty() {
+        let mut combined = hard;
+        combined.extend(waiting);
+        return ScheduleOutcome::Blocked(combined);
+    }
+
+    ScheduleOutcome::Waiting(waiting)
+}
+
+fn issue_has_runtime_block(root: &Path, issue: &InputIssue) -> bool {
+    if issue.latest_run_id.is_some() {
+        return true;
+    }
+
+    read_issue_loop_projection(root, &issue.issue_id)
+        .map(|projection| {
+            projection.run_id.is_some() && matches!(projection.stage, IssueLoopStage::Blocked)
+        })
+        .unwrap_or(false)
+}
+
+fn blocked_runtime_issue_blockers(root: &Path, issue: &InputIssue) -> Vec<LoopBlocker> {
+    if let Ok(projection) = read_issue_loop_projection(root, &issue.issue_id) {
+        if !projection.blockers.is_empty() {
+            return projection.blockers;
+        }
+    }
+
+    let Some(run_id) = issue.latest_run_id.as_deref() else {
+        return vec![blocker(
+            "runtime-preflight-blocked",
+            "Runtime preflight blocked.",
+            None,
+        )];
+    };
+
+    let preflight_path = agentflow_execute::storage::run_dir(root, run_id).join("preflight.json");
+    let blocked_reason =
+        agentflow_execute::storage::read_json::<serde_json::Value>(&preflight_path)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("blockedReason")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| {
+                        value
+                            .get("blocked_reason")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string)
+                    })
+            })
+            .unwrap_or_else(|| "Runtime preflight blocked.".to_string());
+
+    vec![blocker(
+        "runtime-preflight-blocked",
+        blocked_reason,
+        Some(format!(".agentflow/execute/runs/{run_id}/preflight.json")),
+    )]
 }
 
 fn schedule_blockers(
