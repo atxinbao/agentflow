@@ -591,6 +591,7 @@ mod tests {
         let tick = ProjectExecutor::new("proj-001").tick(dir.path()).unwrap();
 
         assert_eq!(tick.snapshot.status, ProjectLoopStatus::Executing);
+        assert_eq!(tick.snapshot.active_issue_ids, vec!["AF-001"]);
         let launch = tick.launch.expect("expected runtime launch");
         assert_eq!(launch.issue_id, "AF-001");
         assert_eq!(launch.stage, IssueLoopStage::InProgress);
@@ -628,6 +629,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(pending.len(), 1);
+        let stored_snapshot =
+            storage::read_project_loop_snapshot(dir.path(), "proj-001").expect("project snapshot");
+        assert_eq!(stored_snapshot.status, ProjectLoopStatus::Executing);
+        assert_eq!(stored_snapshot.active_issue_ids, vec!["AF-001"]);
     }
 
     #[test]
@@ -660,6 +665,43 @@ mod tests {
 
         let second_issue = agentflow_input::load_input_issue(dir.path(), "AF-002").unwrap();
         assert_eq!(second_issue.status, InputIssueStatus::InProgress);
+    }
+
+    #[test]
+    fn project_executor_keeps_snapshot_blocked_when_runtime_preflight_blocks() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        init_clean_git_repo(dir.path());
+        write_approved_spec(dir.path());
+        write_project_issue(dir.path(), InputIssueStatus::Backlog);
+        fs::write(dir.path().join("README.md"), "# dirty\n").unwrap();
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+
+        let tick = ProjectExecutor::new("proj-001").tick(dir.path()).unwrap();
+
+        assert!(tick.launch.is_none());
+        assert_eq!(tick.snapshot.status, ProjectLoopStatus::Blocked);
+        assert_eq!(tick.snapshot.blocked_issue_ids, vec!["AF-001"]);
+        let issue = agentflow_input::load_input_issue(dir.path(), "AF-001").unwrap();
+        assert_eq!(issue.status, InputIssueStatus::Blocked);
+        assert!(issue.latest_run_id.is_some());
+        let launch_request_glob = dir
+            .path()
+            .join(".agentflow/execute/runs")
+            .join(issue.latest_run_id.unwrap())
+            .join("launcher/build-agent-request.json");
+        assert!(!launch_request_glob.is_file());
+        let pending = agentflow_workflow_events::load_pending_events(
+            dir.path(),
+            agentflow_workflow_events::CONSUMER_BUILD_AGENT,
+            &[agentflow_workflow_events::EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED],
+        )
+        .unwrap();
+        assert!(pending.is_empty());
+        let stored_snapshot =
+            storage::read_project_loop_snapshot(dir.path(), "proj-001").expect("project snapshot");
+        assert_eq!(stored_snapshot.status, ProjectLoopStatus::Blocked);
+        assert_eq!(stored_snapshot.blocked_issue_ids, vec!["AF-001"]);
     }
 
     #[test]
