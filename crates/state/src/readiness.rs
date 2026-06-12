@@ -1,4 +1,4 @@
-use agentflow_execute::{ExecuteRunIndexEntry, ExecuteRunStatus};
+use agentflow_execute::ExecuteRunIndexEntry;
 use agentflow_input::{
     issue::{DisplayStatus, InputIssue, InputIssueStatus},
     relations::InputIssueRelationKind,
@@ -172,21 +172,6 @@ pub(crate) fn issue_display_status(
     }
     if matches!(issue.status, InputIssueStatus::Done) {
         return DisplayStatus::Done;
-    }
-    if let Some(run) = latest_run {
-        return match run.status {
-            ExecuteRunStatus::Cancelled => DisplayStatus::Cancel,
-            ExecuteRunStatus::Completed => DisplayStatus::InReview,
-            ExecuteRunStatus::Failed => DisplayStatus::InReview,
-            ExecuteRunStatus::Blocked => DisplayStatus::Blocked,
-            ExecuteRunStatus::Queued | ExecuteRunStatus::Preflight | ExecuteRunStatus::Planned => {
-                DisplayStatus::Todo
-            }
-            ExecuteRunStatus::Checkpointed
-            | ExecuteRunStatus::Patching
-            | ExecuteRunStatus::Running
-            | ExecuteRunStatus::Validating => DisplayStatus::InProgress,
-        };
     }
     if output_has_issue_delivery(
         output,

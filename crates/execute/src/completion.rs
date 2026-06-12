@@ -2,7 +2,10 @@ use crate::{
     checkpoint::create_execute_checkpoint,
     delivery::prepare_release_delivery,
     lease::{acquire_execute_lease, has_active_lease_for_run},
-    manager::{assert_build_agent_run, load_issue_for_run, update_input_issue_status},
+    manager::{
+        assert_build_agent_run, load_issue_for_run, sync_issue_loop_projection,
+        update_input_issue_status,
+    },
     model::{
         BuildAgentCompletion, BuildAgentCompletionRequest, BuildAgentValidationCommand,
         ExecuteChangedFiles, ExecuteCommandRecord, ExecutePlanDraft, ExecutePreflight, ExecuteRun,
@@ -56,33 +59,51 @@ pub fn complete_build_agent_issue(
 
     let run = read_run(&root, &run.run_id)?;
     let issue = load_issue_for_run(&root, &run)?;
-    let allowed_write_paths = if issue.allowed_paths.is_empty() {
-        issue.scope.clone()
+    let result_path = run_dir(&root, &run.run_id).join("result.json");
+    let delivery_path = root
+        .join(".agentflow/output/release")
+        .join(&run.run_id)
+        .join("delivery.json");
+    let result = if result_path.is_file() {
+        read_json(&result_path)?
     } else {
-        issue.allowed_paths.clone()
+        let allowed_write_paths = if issue.allowed_paths.is_empty() {
+            issue.scope.clone()
+        } else {
+            issue.allowed_paths.clone()
+        };
+        if allowed_write_paths.is_empty() {
+            anyhow::bail!("build agent completion requires issue allowedPaths or scope");
+        }
+
+        write_execute_plan(
+            &root,
+            run.run_id.clone(),
+            ExecutePlanDraft {
+                steps: Vec::new(),
+                allowed_write_paths,
+                allowed_commands: allowed_commands(&request.validation_commands),
+            },
+        )?;
+        create_execute_checkpoint(&root, run.run_id.clone())?;
+        write_changed_files(&root, &run.run_id, request.changed_files)?;
+        write_validation_command_records(&root, &run.run_id, &request.validation_commands)?;
+        update_run_status(&root, &run.run_id, ExecuteRunStatus::Running)?;
+        validate_execute_run(&root, run.run_id.clone())?
     };
-    if allowed_write_paths.is_empty() {
-        anyhow::bail!("build agent completion requires issue allowedPaths or scope");
-    }
-
-    write_execute_plan(
+    let delivery = if delivery_path.is_file() {
+        agentflow_output::load_release_delivery(&root, run.run_id.clone())?
+    } else {
+        prepare_release_delivery(&root, run.run_id.clone())?
+    };
+    update_input_issue_status(&root, &run.issue_id, InputIssueStatus::Done)?;
+    sync_issue_loop_projection(
         &root,
-        run.run_id.clone(),
-        ExecutePlanDraft {
-            steps: Vec::new(),
-            allowed_write_paths,
-            allowed_commands: allowed_commands(&request.validation_commands),
-        },
+        &run,
+        InputIssueStatus::Done,
+        Some("merged".to_string()),
+        Vec::new(),
     )?;
-    create_execute_checkpoint(&root, run.run_id.clone())?;
-    write_changed_files(&root, &run.run_id, request.changed_files)?;
-    write_validation_command_records(&root, &run.run_id, &request.validation_commands)?;
-    update_run_status(&root, &run.run_id, ExecuteRunStatus::Running)?;
-
-    let result = validate_execute_run(&root, run.run_id.clone())?;
-    let delivery = prepare_release_delivery(&root, run.run_id.clone())?;
-    let issue = update_input_issue_status(&root, &run.issue_id, InputIssueStatus::Done)?;
-    write_done_issue_loop_projection(&root, &run, issue.project_id)?;
     let run = read_run(&root, &run.run_id)?;
     rebuild_index(&root)?;
 
@@ -91,47 +112,6 @@ pub fn complete_build_agent_issue(
         result,
         delivery,
     })
-}
-
-fn write_done_issue_loop_projection(
-    root: &Path,
-    run: &ExecuteRun,
-    project_id: Option<String>,
-) -> Result<()> {
-    let branch_name =
-        read_json::<serde_json::Value>(&run_dir(root, &run.run_id).join("branch.json"))
-            .ok()
-            .and_then(|value| {
-                value
-                    .get("issueBranch")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_string)
-            });
-    write_json(
-        &root
-            .join(".agentflow/state/loops/issues")
-            .join(format!("{}.json", sanitize_projection_id(&run.issue_id))),
-        &serde_json::json!({
-            "version": "agentflow-loop-issue.v1",
-            "projectId": project_id,
-            "issueId": run.issue_id,
-            "stage": "done",
-            "runId": run.run_id,
-            "branchName": branch_name,
-            "reviewSubstate": "merged",
-            "blockers": [],
-            "updatedAt": unix_timestamp_seconds()
-        }),
-    )
-}
-
-fn sanitize_projection_id(id: &str) -> String {
-    id.chars()
-        .map(|ch| match ch {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-            _ => ch,
-        })
-        .collect()
 }
 
 fn allowed_commands(commands: &[BuildAgentValidationCommand]) -> Vec<String> {
@@ -194,7 +174,7 @@ fn require_merge_proof(root: &Path, run: &ExecuteRun) -> Result<()> {
     Ok(())
 }
 
-fn write_changed_files(
+pub(crate) fn write_changed_files(
     root: &Path,
     run_id: &str,
     changed_files: Vec<crate::model::ExecuteChangedFile>,
@@ -209,7 +189,7 @@ fn write_changed_files(
     )
 }
 
-fn write_validation_command_records(
+pub(crate) fn write_validation_command_records(
     root: &Path,
     run_id: &str,
     commands: &[BuildAgentValidationCommand],

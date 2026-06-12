@@ -11,7 +11,7 @@ use crate::{
 use agentflow_execute::{ExecuteRunIndexEntry, ExecuteRunStatus};
 use agentflow_input::issue::{DisplayStatus, InputIssue, InputIssueStatus};
 use anyhow::Result;
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
 pub(crate) fn write_indexes(
     root: &Path,
@@ -38,24 +38,21 @@ pub(crate) fn write_indexes(
     let issues = input
         .as_ref()
         .map(|snapshot| {
+            let runs_by_issue = runs_by_issue(execute.as_ref());
             snapshot
                 .issues
                 .iter()
                 .map(|issue| {
-                    let latest_run = execute.as_ref().and_then(|execute| {
-                        execute
-                            .index
-                            .runs
-                            .iter()
-                            .filter(|run| run.issue_id == issue.issue_id)
-                            .max_by_key(|run| run.updated_at)
-                    });
+                    let latest_run = authoritative_run_for_issue(
+                        issue,
+                        runs_by_issue.get(&issue.issue_id).map(Vec::as_slice),
+                        output.as_ref(),
+                    );
                     let latest_run_id = latest_run.map(|run| run.run_id.clone());
                     IssueStatusIndexEntry {
                         issue_id: issue.issue_id.clone(),
                         display_status: display_status(
                             issue,
-                            latest_run,
                             output.as_ref(),
                             latest_run_id.as_deref(),
                             issue_has_readiness_blocker(issue, &gate.blocked_actions),
@@ -134,7 +131,6 @@ pub(crate) fn write_indexes(
 
 fn display_status(
     issue: &InputIssue,
-    latest_run: Option<&ExecuteRunIndexEntry>,
     output: Option<&agentflow_output::OutputSnapshot>,
     latest_run_id: Option<&str>,
     blocked_by_gate: bool,
@@ -150,30 +146,127 @@ fn display_status(
         return status;
     }
 
-    if let Some(run) = latest_run {
-        return match run.status {
-            ExecuteRunStatus::Cancelled => DisplayStatus::Cancel,
-            ExecuteRunStatus::Completed => DisplayStatus::InReview,
-            ExecuteRunStatus::Failed => DisplayStatus::InReview,
-            ExecuteRunStatus::Blocked => DisplayStatus::Blocked,
-            ExecuteRunStatus::Queued | ExecuteRunStatus::Preflight | ExecuteRunStatus::Planned => {
-                DisplayStatus::Todo
-            }
-            ExecuteRunStatus::Checkpointed
-            | ExecuteRunStatus::Patching
-            | ExecuteRunStatus::Running
-            | ExecuteRunStatus::Validating => DisplayStatus::InProgress,
-        };
-    }
-
     if output_has_issue_delivery(output, &issue.issue_id, latest_run_id) {
         return DisplayStatus::InReview;
     }
-    if blocked_by_gate {
+    if blocked_by_gate
+        && matches!(
+            issue.status,
+            InputIssueStatus::Backlog | InputIssueStatus::Todo
+        )
+    {
         return DisplayStatus::Blocked;
     }
 
     DisplayStatus::from_input_status(&issue.status)
+}
+
+fn runs_by_issue(
+    execute: Option<&agentflow_execute::ExecuteSnapshot>,
+) -> BTreeMap<String, Vec<ExecuteRunIndexEntry>> {
+    let mut grouped = BTreeMap::<String, Vec<ExecuteRunIndexEntry>>::new();
+    let Some(execute) = execute else {
+        return grouped;
+    };
+    for run in &execute.index.runs {
+        grouped
+            .entry(run.issue_id.clone())
+            .or_default()
+            .push(run.clone());
+    }
+    for runs in grouped.values_mut() {
+        runs.sort_by(|left, right| {
+            (right.updated_at, right.run_id.as_str()).cmp(&(left.updated_at, left.run_id.as_str()))
+        });
+    }
+    grouped
+}
+
+fn authoritative_run_for_issue<'a>(
+    issue: &InputIssue,
+    runs: Option<&'a [ExecuteRunIndexEntry]>,
+    output: Option<&agentflow_output::OutputSnapshot>,
+) -> Option<&'a ExecuteRunIndexEntry> {
+    let runs = runs?;
+    let delivery_run_id = latest_output_run_id(output, &issue.issue_id);
+    match issue.status {
+        InputIssueStatus::Done | InputIssueStatus::InReview => delivery_run_id
+            .and_then(|run_id| runs.iter().find(|run| run.run_id == run_id))
+            .or_else(|| {
+                runs.iter().find(|run| {
+                    matches!(
+                        run.status,
+                        ExecuteRunStatus::Completed | ExecuteRunStatus::Failed
+                    )
+                })
+            })
+            .or_else(|| runs.first()),
+        InputIssueStatus::InProgress => runs
+            .iter()
+            .find(|run| {
+                matches!(
+                    run.status,
+                    ExecuteRunStatus::Queued
+                        | ExecuteRunStatus::Preflight
+                        | ExecuteRunStatus::Planned
+                        | ExecuteRunStatus::Checkpointed
+                        | ExecuteRunStatus::Patching
+                        | ExecuteRunStatus::Running
+                        | ExecuteRunStatus::Validating
+                )
+            })
+            .or_else(|| {
+                runs.iter()
+                    .find(|run| run.status == ExecuteRunStatus::Completed)
+            })
+            .or_else(|| runs.first()),
+        InputIssueStatus::Blocked => runs
+            .iter()
+            .find(|run| run.status == ExecuteRunStatus::Blocked)
+            .or_else(|| runs.first()),
+        InputIssueStatus::Todo | InputIssueStatus::Backlog => runs
+            .iter()
+            .find(|run| {
+                matches!(
+                    run.status,
+                    ExecuteRunStatus::Queued
+                        | ExecuteRunStatus::Preflight
+                        | ExecuteRunStatus::Planned
+                        | ExecuteRunStatus::Checkpointed
+                        | ExecuteRunStatus::Patching
+                        | ExecuteRunStatus::Running
+                        | ExecuteRunStatus::Validating
+                )
+            })
+            .or_else(|| runs.first()),
+        InputIssueStatus::Cancel => runs
+            .iter()
+            .find(|run| run.status == ExecuteRunStatus::Cancelled)
+            .or_else(|| runs.first()),
+    }
+}
+
+fn latest_output_run_id<'a>(
+    output: Option<&'a agentflow_output::OutputSnapshot>,
+    issue_id: &str,
+) -> Option<&'a str> {
+    let snapshot = output?;
+    snapshot
+        .index
+        .release_deliveries
+        .iter()
+        .filter(|entry| entry.issue_id == issue_id)
+        .max_by_key(|entry| (entry.updated_at, entry.run_id.as_str()))
+        .map(|entry| entry.run_id.as_str())
+        .or_else(|| {
+            snapshot
+                .index
+                .evidence
+                .iter()
+                .filter(|entry| entry.issue_id == issue_id)
+                .max_by_key(|entry| (entry.updated_at, entry.run_id.as_str()))
+                .map(|entry| entry.run_id.as_str())
+        })
 }
 
 fn audit_display_status(
@@ -269,12 +362,16 @@ mod tests {
         }
     }
 
-    fn run(status: ExecuteRunStatus) -> ExecuteRunIndexEntry {
+    fn run_with_id(
+        run_id: &str,
+        status: ExecuteRunStatus,
+        updated_at: u64,
+    ) -> ExecuteRunIndexEntry {
         ExecuteRunIndexEntry {
-            run_id: "run-001".to_string(),
+            run_id: run_id.to_string(),
             issue_id: "iss-001".to_string(),
             status,
-            updated_at: 1,
+            updated_at,
             ..ExecuteRunIndexEntry::default()
         }
     }
@@ -320,38 +417,21 @@ mod tests {
     #[test]
     fn display_status_mapping_covers_input_execute_output_and_audit_states() {
         assert_eq!(
-            display_status(&issue(InputIssueStatus::Backlog), None, None, None, false),
+            display_status(&issue(InputIssueStatus::Backlog), None, None, false),
             DisplayStatus::Backlog
         );
         assert_eq!(
-            display_status(&issue(InputIssueStatus::Todo), None, None, None, false),
+            display_status(&issue(InputIssueStatus::Todo), None, None, false),
             DisplayStatus::Todo
         );
         assert_eq!(
-            display_status(
-                &issue(InputIssueStatus::Todo),
-                Some(&run(ExecuteRunStatus::Running)),
-                None,
-                Some("run-001"),
-                false,
-            ),
+            display_status(&issue(InputIssueStatus::InProgress), None, None, false,),
             DisplayStatus::InProgress
-        );
-        assert_eq!(
-            display_status(
-                &issue(InputIssueStatus::Todo),
-                Some(&run(ExecuteRunStatus::Completed)),
-                None,
-                Some("run-001"),
-                false,
-            ),
-            DisplayStatus::InReview
         );
         let output = output_with_delivery("drafted");
         assert_eq!(
             display_status(
                 &issue(InputIssueStatus::Todo),
-                None,
                 Some(&output),
                 Some("run-001"),
                 false,
@@ -359,21 +439,15 @@ mod tests {
             DisplayStatus::InReview
         );
         assert_eq!(
-            display_status(&issue(InputIssueStatus::Done), None, None, None, false),
+            display_status(&issue(InputIssueStatus::Done), None, None, false),
             DisplayStatus::Done
         );
         assert_eq!(
-            display_status(&issue(InputIssueStatus::Todo), None, None, None, true),
+            display_status(&issue(InputIssueStatus::Todo), None, None, true),
             DisplayStatus::Blocked
         );
         assert_eq!(
-            display_status(
-                &issue(InputIssueStatus::Todo),
-                Some(&run(ExecuteRunStatus::Blocked)),
-                None,
-                Some("run-001"),
-                false,
-            ),
+            display_status(&issue(InputIssueStatus::Blocked), None, None, false,),
             DisplayStatus::Blocked
         );
         assert_eq!(
@@ -385,9 +459,32 @@ mod tests {
             Some(DisplayStatus::Done)
         );
         assert_eq!(
-            display_status(&issue(InputIssueStatus::Cancel), None, None, None, false),
+            display_status(&issue(InputIssueStatus::Cancel), None, None, false),
             DisplayStatus::Cancel
         );
+    }
+
+    #[test]
+    fn authoritative_run_prefers_completed_delivery_run_over_newer_blocked_run_after_review() {
+        let issue = issue(InputIssueStatus::InReview);
+        let output = output_with_delivery("drafted");
+        let runs = vec![
+            run_with_id("run-002", ExecuteRunStatus::Blocked, 2),
+            run_with_id("run-001", ExecuteRunStatus::Completed, 1),
+        ];
+        let selected = authoritative_run_for_issue(&issue, Some(&runs), Some(&output)).unwrap();
+        assert_eq!(selected.run_id, "run-001");
+    }
+
+    #[test]
+    fn authoritative_run_prefers_active_run_during_in_progress() {
+        let issue = issue(InputIssueStatus::InProgress);
+        let runs = vec![
+            run_with_id("run-002", ExecuteRunStatus::Blocked, 2),
+            run_with_id("run-001", ExecuteRunStatus::Running, 1),
+        ];
+        let selected = authoritative_run_for_issue(&issue, Some(&runs), None).unwrap();
+        assert_eq!(selected.run_id, "run-001");
     }
 
     fn output_with_audit(status: &str) -> agentflow_output::OutputSnapshot {

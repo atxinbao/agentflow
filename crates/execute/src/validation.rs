@@ -1,12 +1,10 @@
 use crate::{
     evidence::write_execute_evidence,
     lease::finalize_run_and_release,
-    manager::update_input_issue_status,
     model::{ExecuteResult, ExecuteRunStatus},
     result::build_execute_result,
-    storage::{canonical_project_root, load_command_records, read_run, rebuild_index, write_json},
+    storage::{canonical_project_root, load_command_records, rebuild_index, write_json},
 };
-use agentflow_input::issue::InputIssueStatus;
 use anyhow::Result;
 use std::path::Path;
 
@@ -33,8 +31,6 @@ pub fn validate_execute_run(
             ExecuteRunStatus::Failed
         },
     )?;
-    let run = read_run(&root, &run_id)?;
-    update_input_issue_status(&root, &run.issue_id, InputIssueStatus::InReview)?;
     rebuild_index(&root)?;
     Ok(result)
 }
