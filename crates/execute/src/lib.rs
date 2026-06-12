@@ -242,6 +242,7 @@ mod tests {
             issue_after.display_status,
             agentflow_input::issue::DisplayStatus::Done
         );
+        assert_eq!(issue_after.latest_run_id.as_deref(), Some("run-001"));
 
         let execute_index = load_execute_index(dir.path()).unwrap();
         assert_eq!(execute_index.runs.len(), 1);
@@ -291,12 +292,19 @@ mod tests {
         write_issue(dir.path(), "iss-001", "spec-001", InputRiskLevel::Low);
 
         let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        let issue_after: InputIssue =
+            crate::storage::read_json(&dir.path().join(".agentflow/input/issues/iss-001.json"))
+                .unwrap();
         let loop_projection: serde_json::Value = crate::storage::read_json(
             &dir.path()
                 .join(".agentflow/state/loops/issues/iss-001.json"),
         )
         .unwrap();
 
+        assert_eq!(
+            issue_after.latest_run_id.as_deref(),
+            Some(run.run_id.as_str())
+        );
         assert_eq!(loop_projection["stage"], "todo");
         assert_eq!(loop_projection["runId"], run.run_id);
         assert_eq!(loop_projection["branchName"], "agentflow/direct/iss-001");

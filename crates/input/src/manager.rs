@@ -358,6 +358,29 @@ pub fn update_input_issue_status(
     Ok(issue)
 }
 
+pub fn update_input_issue_latest_run(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    latest_run_id: Option<String>,
+) -> Result<InputIssue> {
+    let root = canonical_project_root(project_root)?;
+    let issue_path = root
+        .join(".agentflow/input/issues")
+        .join(format!("{issue_id}.json"));
+    let mut issue: InputIssue = read_json(&issue_path)?;
+    if issue.issue_id != issue_id {
+        anyhow::bail!(
+            "input issue id mismatch: requested {issue_id}, found {}",
+            issue.issue_id
+        );
+    }
+    issue.latest_run_id = latest_run_id;
+    issue.system.updated_at = unix_timestamp_seconds();
+    issue.system.revision = issue.system.revision.saturating_add(1);
+    write_json_if_changed(&issue_path, &issue)?;
+    Ok(issue)
+}
+
 pub fn update_input_project_status(
     project_root: impl AsRef<Path>,
     project_id: &str,

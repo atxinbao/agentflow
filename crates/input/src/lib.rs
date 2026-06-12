@@ -12,8 +12,8 @@ mod validate;
 
 pub use manager::{
     load_input_index, load_input_issue, load_input_manifest, load_input_project,
-    load_input_snapshot, load_input_status, prepare_input_workspace, update_input_issue_status,
-    update_input_project_status, validate_input_workspace,
+    load_input_snapshot, load_input_status, prepare_input_workspace, update_input_issue_latest_run,
+    update_input_issue_status, update_input_project_status, validate_input_workspace,
 };
 pub use model::{
     InputIndex, InputManifest, InputSnapshot, InputStatusSnapshot, INPUT_INDEX_VERSION,
@@ -434,12 +434,14 @@ mod tests {
             title: "Ready issue".to_string(),
             status: InputIssueStatus::Todo,
             display_status: DisplayStatus::InReview,
+            latest_run_id: Some("run-001".to_string()),
             ..InputIssue::default()
         })
         .unwrap();
 
         assert_eq!(issue["status"], "todo");
         assert_eq!(issue["displayStatus"], "in_review");
+        assert_eq!(issue["latestRunId"], "run-001");
     }
 
     #[test]

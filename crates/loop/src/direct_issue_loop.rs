@@ -196,11 +196,60 @@ fn write_direct_issue_projection(
     stage: IssueLoopStage,
     blockers: Vec<LoopBlocker>,
 ) -> Result<()> {
-    let mut projection = IssueLoopProjection::new(None, &issue.issue_id, now());
+    let mut projection = existing_projection(root, &issue.issue_id)
+        .unwrap_or_else(|| IssueLoopProjection::new(None, &issue.issue_id, now()));
+    let review_substate = if projection.review_substate.is_none() {
+        derived_review_substate(root, issue, &stage)
+    } else {
+        projection.review_substate.clone()
+    };
     projection.stage = stage;
     projection.blockers = blockers;
+    projection.updated_at = now();
+    projection.project_id = None;
+    if projection.run_id.is_none() {
+        projection.run_id = issue.latest_run_id.clone();
+    }
+    if projection.branch_name.is_none() {
+        projection.branch_name = issue_branch_name(root, issue);
+    }
+    projection.review_substate = review_substate;
     write_issue_loop_projection(root, &projection)?;
     Ok(())
+}
+
+fn existing_projection(root: &Path, issue_id: &str) -> Option<IssueLoopProjection> {
+    crate::storage::read_issue_loop_projection(root, issue_id).ok()
+}
+
+fn issue_branch_name(root: &Path, issue: &InputIssue) -> Option<String> {
+    let run_id = issue.latest_run_id.as_deref()?;
+    let value: serde_json::Value = agentflow_execute::storage::read_json(
+        &agentflow_execute::storage::run_dir(root, run_id).join("branch.json"),
+    )
+    .ok()?;
+    value
+        .get("issueBranch")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+}
+
+fn derived_review_substate(
+    root: &Path,
+    issue: &InputIssue,
+    stage: &IssueLoopStage,
+) -> Option<String> {
+    let run_id = issue.latest_run_id.as_deref()?;
+    match stage {
+        IssueLoopStage::InReview => root
+            .join(".agentflow/output/release")
+            .join(run_id)
+            .join("delivery.json")
+            .is_file()
+            .then_some("delivery-prepared".to_string()),
+        IssueLoopStage::Done => Some("merged".to_string()),
+        _ => None,
+    }
 }
 
 fn issue_stage(status: &InputIssueStatus) -> IssueLoopStage {

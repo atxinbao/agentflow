@@ -191,6 +191,7 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
     let branch_check = write_branch_check(&root, &run, &issue)?;
     if branch_check.status == "blocked" {
         update_run_status(&root, &run_id, ExecuteRunStatus::Blocked)?;
+        update_input_issue_latest_run(&root, &issue.issue_id, Some(run_id.clone()))?;
         update_input_issue_status(&root, &issue.issue_id, InputIssueStatus::Blocked)?;
         sync_issue_loop_projection(
             &root,
@@ -215,6 +216,7 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
                 .unwrap_or_else(|| "branch check failed".to_string())
         );
     }
+    update_input_issue_latest_run(&root, &issue.issue_id, Some(run_id.clone()))?;
     sync_issue_loop_projection(&root, &run, InputIssueStatus::Todo, None, Vec::new())?;
     rebuild_index(&root)?;
     build_execute_snapshot(&root)?;
@@ -339,6 +341,14 @@ pub(crate) fn update_input_issue_status(
     status: InputIssueStatus,
 ) -> Result<InputIssue> {
     agentflow_input::update_input_issue_status(root, issue_id, status)
+}
+
+pub(crate) fn update_input_issue_latest_run(
+    root: &Path,
+    issue_id: &str,
+    latest_run_id: Option<String>,
+) -> Result<InputIssue> {
+    agentflow_input::update_input_issue_latest_run(root, issue_id, latest_run_id)
 }
 
 pub(crate) fn sync_issue_loop_projection(
