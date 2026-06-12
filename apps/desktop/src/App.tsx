@@ -2055,7 +2055,7 @@ function ProjectHomePage({
               <span>先确认需求，生成任务合约。</span>
             </div>
           )}
-          <p className="v16-home-next-step">{nextStep.description}</p>
+          {nextStep.description ? <p className="v16-home-next-step">{nextStep.description}</p> : null}
         </Panel>
 
         <Panel className="v16-home-column" title="最近活动">
@@ -4557,7 +4557,7 @@ function buildNextStep(
   if ((outputStatus.status?.summary.releaseDeliveries ?? 0) > 0) {
     return {
       action: "查看交付",
-      description: "任务已完成，交付材料已生成。审计是独立流程，不会自动触发。",
+      description: "",
       reason: "任务完成和审计请求分开处理。",
       status: "ready",
       title: "交付已生成",
