@@ -1102,7 +1102,7 @@
 
 .v16-home-columns {
   display: grid;
-  grid-template-columns: minmax(220px, 0.9fr) minmax(280px, 1.1fr) minmax(220px, 0.9fr);
+  grid-template-columns: minmax(300px, 1.1fr) minmax(240px, 0.9fr);
   gap: 12px;
   min-height: 0;
   overflow: hidden;
@@ -1117,14 +1117,12 @@
   overflow: auto;
 }
 
-.v16-status-stack,
 .v16-activity-list {
   display: grid;
   gap: 8px;
   min-width: 0;
 }
 
-.v16-home-status-item,
 .v16-current-task-card,
 .v16-home-empty,
 .v16-activity-list button {
@@ -1151,8 +1149,6 @@
   background: color-mix(in srgb, var(--v16-accent-soft) 56%, var(--v16-surface-2));
 }
 
-.v16-home-status-item p,
-.v16-home-status-item span,
 .v16-home-empty span,
 .v16-activity-list span,
 .v16-home-next-step {
@@ -1162,16 +1158,11 @@
   line-height: 1.45;
 }
 
-.v16-home-status-item strong,
 .v16-current-task-card strong,
 .v16-home-empty strong,
 .v16-activity-list strong {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.v16-home-status-item .af-status-badge {
-  justify-self: start;
 }
 
 .v16-current-task-card > span {
