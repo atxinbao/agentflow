@@ -561,7 +561,7 @@ mod tests {
             .evidence
             .contains(&"Panel Context Pack exists or is generated".to_string()));
         assert!(preflight_stage.evidence.contains(
-            &"current run is created by AgentFlow official runtime entrypoint before source edits"
+            &"current run is created by `agentflow build-agent start --issue-id <issue-id>` before source edits"
                 .to_string()
         ));
         assert!(preflight_stage.evidence.contains(
@@ -634,7 +634,21 @@ mod tests {
             .unwrap();
         assert!(writeback_stage
             .goal
-            .contains("预检确认过的新 AgentFlow CLI"));
+            .contains("build-agent prepare-review"));
+        assert!(writeback_stage
+            .goal
+            .contains("build-agent write-merge-proof"));
+        assert!(writeback_stage
+            .goal
+            .contains("build-agent complete"));
+        assert!(writeback_stage
+            .evidence
+            .iter()
+            .any(|item| item.contains("target/release/agentflow build-agent prepare-review")));
+        assert!(writeback_stage
+            .evidence
+            .iter()
+            .any(|item| item.contains("target/release/agentflow build-agent write-merge-proof")));
         assert!(writeback_stage
             .evidence
             .iter()

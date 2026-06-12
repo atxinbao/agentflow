@@ -4,7 +4,10 @@
 //! users receive a clear migration message, but old writers are no longer
 //! executed from the CLI.
 
-use crate::active::complete_build_agent_issue_from_request;
+use crate::active::{
+    complete_build_agent_issue_from_request, prepare_build_agent_review_from_request,
+    start_build_agent_issue, write_build_agent_merge_proof,
+};
 use crate::args::{BuildAgentCommand, Cli, Command};
 use crate::retirement::{
     legacy_command_status, print_legacy_retirement_message, should_disable_legacy_command,
@@ -191,17 +194,58 @@ pub(crate) fn run() -> Result<()> {
                 println!("  snippet: {}", result.snippet);
             }
         }
-        Command::BuildAgent {
-            command: BuildAgentCommand::Complete { request },
-        } => {
-            let completion = complete_build_agent_issue_from_request(&cwd, &request)?;
-            println!("build agent completion: done");
-            println!("issue: {}", completion.run.issue_id);
-            println!("run: {}", completion.run.run_id);
-            println!("run status: {:?}", completion.run.status);
-            println!("delivery: {}", completion.delivery.run_id);
-            println!("validation passed: {}", completion.result.validation.passed);
-        }
+        Command::BuildAgent { command } => match command {
+            BuildAgentCommand::Start { issue_id } => {
+                let start = start_build_agent_issue(&cwd, &issue_id)?;
+                println!("build agent start: ready");
+                println!("issue: {}", start.issue_id);
+                println!("run: {}", start.run_id);
+                println!("stage: {}", start.stage);
+                println!("branch: {}", start.branch_name.as_deref().unwrap_or("none"));
+                println!("project: {}", start.project_id.as_deref().unwrap_or("none"));
+            }
+            BuildAgentCommand::PrepareReview { request } => {
+                let prepared = prepare_build_agent_review_from_request(&cwd, &request)?;
+                println!("build agent review: prepared");
+                println!("issue: {}", prepared.run.issue_id);
+                println!("run: {}", prepared.run.run_id);
+                println!("run status: {:?}", prepared.run.status);
+                println!("delivery: {}", prepared.delivery.run_id);
+                println!("validation passed: {}", prepared.result.validation.passed);
+            }
+            BuildAgentCommand::WriteMergeProof {
+                issue_id,
+                run_id,
+                provider,
+                merge_mode,
+                remote_url,
+                merged,
+            } => {
+                let proof = write_build_agent_merge_proof(
+                    &cwd,
+                    &issue_id,
+                    &run_id,
+                    &provider,
+                    &merge_mode,
+                    remote_url,
+                    merged,
+                )?;
+                println!("build agent merge proof: recorded");
+                println!("issue: {}", proof.issue_id);
+                println!("run: {}", proof.run_id);
+                println!("merged: {}", proof.merged);
+                println!("path: {}", proof.proof_path.display());
+            }
+            BuildAgentCommand::Complete { request } => {
+                let completion = complete_build_agent_issue_from_request(&cwd, &request)?;
+                println!("build agent completion: done");
+                println!("issue: {}", completion.run.issue_id);
+                println!("run: {}", completion.run.run_id);
+                println!("run status: {:?}", completion.run.status);
+                println!("delivery: {}", completion.delivery.run_id);
+                println!("validation passed: {}", completion.result.validation.passed);
+            }
+        },
         command => {
             let status = legacy_command_status(&command);
             print_legacy_retirement_message(&status);

@@ -25,6 +25,8 @@ version = "0.1.0"
 dependencies = [
  "agentflow-core",
  "agentflow-execute",
+ "agentflow-input",
+ "agentflow-loop",
  "agentflow-state",
  "anyhow",
  "clap",

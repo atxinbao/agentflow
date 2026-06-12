@@ -9,7 +9,7 @@ pub mod storage;
 
 pub use audit_gate::ProjectAuditGate;
 pub use direct_issue_loop::{DirectIssueLoop, DirectIssueLoopSummary};
-pub use issue_loop::IssueLoop;
+pub use issue_loop::{write_issue_merge_proof, IssueLoop};
 pub use model::{
     AuditGateKind, AuditGateStatus, IssueLoopProjection, IssueLoopStage, LoopBlocker,
     ProjectLoopSnapshot, ProjectLoopStatus, LOOP_ISSUE_PROJECTION_VERSION,
@@ -304,6 +304,52 @@ mod tests {
         assert_eq!(projection.stage, IssueLoopStage::InProgress);
         assert!(projection.run_id.is_some());
         let issue = agentflow_input::load_input_issue(dir.path(), "AF-001").unwrap();
+        assert_eq!(issue.status, InputIssueStatus::InProgress);
+        assert!(dir
+            .path()
+            .join(format!(
+                ".agentflow/execute/runs/{}/branch.json",
+                projection.run_id.unwrap()
+            ))
+            .is_file());
+    }
+
+    #[test]
+    fn direct_issue_loop_starts_todo_issue_and_writes_branch_projection() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        let mut issue = InputIssue {
+            issue_id: "AF-DIRECT-START-001".to_string(),
+            issue_model: InputIssueModel::Direct,
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::BuildAgent,
+            source_spec_id: "spec-001".to_string(),
+            project_id: None,
+            title: "Direct runtime fixture".to_string(),
+            summary: "Start runtime preflight.".to_string(),
+            status: InputIssueStatus::Backlog,
+            execution_risk: InputRiskLevel::Low,
+            scope: vec!["src/lib.rs".to_string()],
+            validation_hints: vec!["printf ok".to_string()],
+            ..InputIssue::default()
+        };
+        issue.normalize_execution_metadata();
+        fs::write(
+            dir.path()
+                .join(".agentflow/input/issues/AF-DIRECT-START-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+        DirectIssueLoop::schedule_ready_issues(dir.path()).unwrap();
+
+        let projection =
+            DirectIssueLoop::start_runtime_preflight(dir.path(), "AF-DIRECT-START-001").unwrap();
+
+        assert_eq!(projection.stage, IssueLoopStage::InProgress);
+        assert!(projection.run_id.is_some());
+        let issue = agentflow_input::load_input_issue(dir.path(), "AF-DIRECT-START-001").unwrap();
         assert_eq!(issue.status, InputIssueStatus::InProgress);
         assert!(dir
             .path()

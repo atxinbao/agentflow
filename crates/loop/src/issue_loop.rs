@@ -99,24 +99,46 @@ impl IssueLoop {
         remote_url: Option<String>,
         merged: bool,
     ) -> Result<PathBuf> {
-        let root = canonical_project_root(project_root)?;
-        let proof_path = run_dir(&root, run_id).join("review/merge-proof.json");
-        agentflow_execute::storage::write_json(
-            &proof_path,
-            &serde_json::json!({
-                "version": "execute-merge-proof.v1",
-                "runId": run_id,
-                "issueId": self.issue_id,
-                "projectId": self.project_id,
-                "provider": provider,
-                "mergeMode": merge_mode,
-                "remoteUrl": remote_url,
-                "merged": merged,
-                "checkedAt": now()
-            }),
-        )?;
-        Ok(proof_path)
+        write_issue_merge_proof(
+            project_root,
+            &self.issue_id,
+            Some(&self.project_id),
+            run_id,
+            provider,
+            merge_mode,
+            remote_url,
+            merged,
+        )
     }
+}
+
+pub fn write_issue_merge_proof(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    project_id: Option<&str>,
+    run_id: &str,
+    provider: &str,
+    merge_mode: &str,
+    remote_url: Option<String>,
+    merged: bool,
+) -> Result<PathBuf> {
+    let root = canonical_project_root(project_root)?;
+    let proof_path = run_dir(&root, run_id).join("review/merge-proof.json");
+    agentflow_execute::storage::write_json(
+        &proof_path,
+        &serde_json::json!({
+            "version": "execute-merge-proof.v1",
+            "runId": run_id,
+            "issueId": issue_id,
+            "projectId": project_id,
+            "provider": provider,
+            "mergeMode": merge_mode,
+            "remoteUrl": remote_url,
+            "merged": merged,
+            "checkedAt": now()
+        }),
+    )?;
+    Ok(proof_path)
 }
 
 fn branch_name(root: &Path, run_id: &str) -> Result<String> {

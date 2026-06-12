@@ -53,6 +53,58 @@ pub fn complete_build_agent_issue(
     require_ready_preflight(&root, &run)?;
     require_branch_metadata(&root, &run)?;
     require_merge_proof(&root, &run)?;
+    let prepared = prepare_build_agent_review(&root, request)?;
+    let run = prepared.run;
+    let result = prepared.result;
+    let delivery = prepared.delivery;
+    update_input_issue_status(&root, &run.issue_id, InputIssueStatus::Done)?;
+    sync_issue_loop_projection(
+        &root,
+        &run,
+        InputIssueStatus::Done,
+        Some("merged".to_string()),
+        Vec::new(),
+    )?;
+    let run = read_run(&root, &run.run_id)?;
+    rebuild_index(&root)?;
+
+    Ok(BuildAgentCompletion {
+        run,
+        result,
+        delivery,
+    })
+}
+
+pub fn prepare_build_agent_review(
+    project_root: impl AsRef<Path>,
+    request: BuildAgentCompletionRequest,
+) -> Result<BuildAgentCompletion> {
+    let root = canonical_project_root(project_root)?;
+    let issue_id = request.issue_id.trim();
+    if issue_id.is_empty() {
+        anyhow::bail!("build agent review preparation requires issueId");
+    }
+    let run_id = request
+        .run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("build agent review preparation requires runId"))?;
+    if request.validation_commands.is_empty() {
+        anyhow::bail!("build agent review preparation requires validation command results");
+    }
+
+    let run = read_run(&root, run_id).with_context(|| {
+        format!("build agent review preparation requires existing run {run_id}")
+    })?;
+    if run.issue_id != issue_id {
+        anyhow::bail!(
+            "build agent review preparation issueId mismatch: request {issue_id}, run {}",
+            run.issue_id
+        );
+    }
+    assert_build_agent_run(&root, &run)?;
+    require_ready_preflight(&root, &run)?;
     if !has_active_lease_for_run(&root, &run.run_id)? {
         acquire_execute_lease(&root, run.run_id.clone())?;
     }
@@ -73,7 +125,7 @@ pub fn complete_build_agent_issue(
             issue.allowed_paths.clone()
         };
         if allowed_write_paths.is_empty() {
-            anyhow::bail!("build agent completion requires issue allowedPaths or scope");
+            anyhow::bail!("build agent review preparation requires issue allowedPaths or scope");
         }
 
         write_execute_plan(
@@ -96,14 +148,6 @@ pub fn complete_build_agent_issue(
     } else {
         prepare_release_delivery(&root, run.run_id.clone())?
     };
-    update_input_issue_status(&root, &run.issue_id, InputIssueStatus::Done)?;
-    sync_issue_loop_projection(
-        &root,
-        &run,
-        InputIssueStatus::Done,
-        Some("merged".to_string()),
-        Vec::new(),
-    )?;
     let run = read_run(&root, &run.run_id)?;
     rebuild_index(&root)?;
 
