@@ -2114,7 +2114,6 @@ function CodexRoleGuideCard() {
               <span>{guide.englishName}</span>
               <strong>{guide.title}</strong>
               <p>{guide.summary}</p>
-              <small>线程名：{guide.threadName}</small>
               <pre className="v16-codex-role-instruction">{guide.startupInstruction}</pre>
               <ActionButton onClick={() => copyStartupInstruction(guide)} variant="secondary">
                 复制 {guide.englishName} 启动指令
