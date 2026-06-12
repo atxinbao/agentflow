@@ -532,17 +532,21 @@ mod tests {
         assert_eq!(preflight_stage.label, "执行前置检测");
         assert!(preflight_stage
             .goal
-            .contains("当前执行对象是 AgentFlow input issue"));
-        assert!(preflight_stage.goal.contains("状态为 backlog"));
+            .contains("只认当前 AgentFlow input issue"));
+        assert!(preflight_stage.goal.contains("仍在 backlog"));
         assert!(preflight_stage.goal.contains("依赖已完成"));
-        assert!(preflight_stage.goal.contains("任务合同完整"));
-        assert!(preflight_stage.goal.contains("Panel Context Pack"));
-        assert!(preflight_stage.goal.contains("切换为 todo"));
+        assert!(preflight_stage.goal.contains("合同完整"));
+        assert!(preflight_stage.goal.contains("Context Pack"));
+        assert!(preflight_stage.goal.contains("切到 todo"));
+        assert!(preflight_stage.goal.contains("创建当前 run"));
         assert!(preflight_stage
             .goal
-            .contains("GitHub/GitLab 不在这个 loop 阶段检测"));
+            .contains("不是禁止调用 AgentFlow 官方命令"));
+        assert!(preflight_stage
+            .goal
+            .contains("GitHub/GitLab 不在这个阶段检测"));
         assert!(preflight_stage.evidence.contains(
-            &"AgentFlow issueId and executionPipeline are the only active task source".to_string()
+            &"AgentFlow input issue is the only active task source; executionPipeline is read from that issue contract".to_string()
         ));
         assert!(preflight_stage.evidence.contains(
             &"no external issue/task/plan/queue/thread/tool state is used as task authority"
@@ -554,6 +558,14 @@ mod tests {
         assert!(preflight_stage
             .evidence
             .contains(&"Panel Context Pack exists or is generated".to_string()));
+        assert!(preflight_stage.evidence.contains(
+            &"current run is created by AgentFlow official runtime entrypoint before source edits"
+                .to_string()
+        ));
+        assert!(preflight_stage.evidence.contains(
+            &"no `.agentflow/**` facts are handwritten; official AgentFlow loop commands are used instead"
+                .to_string()
+        ));
         assert!(preflight_stage.evidence.contains(
             &"working tree has no uncommitted user source changes before in_progress".to_string()
         ));
@@ -570,7 +582,7 @@ mod tests {
             .find(|stage| stage.stage_id == "test-design")
             .unwrap();
         assert_eq!(test_design_stage.label, "测试设计");
-        assert!(test_design_stage.goal.contains("不适合 TDD"));
+        assert!(test_design_stage.goal.contains("不能做 TDD"));
         assert!(test_design_stage
             .evidence
             .contains(&"failing test result or TDD-not-applicable reason".to_string()));
@@ -596,8 +608,8 @@ mod tests {
             .iter()
             .find(|stage| stage.stage_id == "merge-pr")
             .unwrap();
-        assert!(merge_stage.goal.contains("gh pr merge --auto"));
-        assert!(merge_stage.goal.contains("glab mr merge --auto-merge"));
+        assert!(merge_stage.goal.contains("auto-merge-if-eligible"));
+        assert!(merge_stage.goal.contains("manual-merge"));
         assert!(merge_stage.goal.contains("in_review"));
         assert!(merge_stage
             .evidence

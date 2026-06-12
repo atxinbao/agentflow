@@ -321,15 +321,30 @@ mod tests {
         assert!(manual.contains(
             "The writeback stage runs only after PR/MR merge and writes run, evidence, release delivery, and `done` status."
         ));
-        assert!(manual.contains("AgentFlow input issues, handoff packages, and executionPipeline are the only task and plan authority."));
+        assert!(manual.contains("The current AgentFlow input issue is the only task authority."));
         assert!(manual.contains(
-            "Build Agent must use the AgentFlow input issue and executionPipeline as the only task plan."
+            "The handoff package is only a derived transport snapshot of that input issue."
+        ));
+        assert!(manual.contains(
+            "`executionPipeline` is part of the input issue contract, not a separate task authority."
+        ));
+        assert!(manual.contains(
+            "Build Agent must use the current AgentFlow input issue as the only task authority."
         ));
         assert!(manual.contains(
             "It must not treat any external issue, task, plan, queue, thread, or tool state as task authority."
         ));
+        assert!(manual.contains(
+            "`Do not handwrite .agentflow/**` means Build Agent must not directly edit AgentFlow facts by hand;"
+        ));
         assert!(manual.contains("Issue preflight"));
-        assert!(manual.contains("After this stage passes, AgentFlow moves the issue to `todo`."));
+        assert!(manual.contains("After preflight passes, AgentFlow moves the issue to `todo`"));
+        assert!(manual.contains(
+            "Runtime preflight must then create the current run through the official AgentFlow run loop before any source code change starts."
+        ));
+        assert!(manual.contains(
+            "After runtime preflight confirms the Panel Context Pack is readable or successfully generated and the current run has been created"
+        ));
         assert!(manual.contains("auto-merge-if-eligible"));
         assert!(manual.contains("A Draft PR/MR is only an intermediate state"));
         assert!(manual.contains("gh pr merge --auto"));

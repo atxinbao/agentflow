@@ -285,7 +285,9 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "你只能执行：",
       "issueCategory = spec",
       "requiredAgentRole = build-agent",
-      "AgentFlow 当前 issue / handoff package / executionPipeline 是唯一任务源。",
+      "AgentFlow 当前 input issue 是唯一任务源。",
+      "handoff package 只是这份 issue 的派生快照。",
+      "executionPipeline 只是这份 issue 合同里的一部分，不是独立任务源。",
       "不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源。",
       "不要用外部状态拆分、重排或推进 AgentFlow 任务。",
       "GitHub/GitLab 命令只允许用于当前 executionPipeline 里的 PR/MR 阶段。",
@@ -3784,15 +3786,18 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
     stages: [
       {
         evidence: [
-          "AgentFlow issueId and executionPipeline are the only active task source",
+          "AgentFlow input issue is the only active task source; executionPipeline is read from that issue contract",
           "no external issue/task/plan/queue/thread/tool state is used as task authority",
           "input issue status is backlog before preflight",
           "blockedBy dependencies are done",
           "Panel Context Pack exists or is generated",
+          "current run is created by AgentFlow official runtime entrypoint before source edits",
+          "no `.agentflow/**` facts are handwritten; official AgentFlow loop commands are used instead",
           "working tree has no uncommitted user source changes before in_progress",
           "input issue status changed to todo after preflight",
         ],
-        goal: "确认当前执行对象是 AgentFlow input issue，且状态为 backlog；确认依赖已完成、任务合同完整、Panel Context Pack 可用；通过后把当前 issue 切换为 todo，为测试设计和 in_progress 执行做准备。Runtime preflight 还必须确认当前工作区没有未提交的用户源码改动。GitHub/GitLab 不在这个 loop 阶段检测。",
+        goal:
+          "只认当前 AgentFlow input issue。确认 issue 仍在 backlog，依赖已完成、合同完整、Context Pack 可读或可补生成、工作区干净；随后通过 AgentFlow 官方 run loop / runtime preflight 创建当前 run。preflight 通过后先把 issue 切到 todo，再准备进入 in_progress。禁止手写 `.agentflow/**` 只表示不能直接改事实文件，不是禁止调用 AgentFlow 官方命令推进 loop。GitHub/GitLab 不在这个阶段检测。",
         label: "执行前置检测",
         required: true,
         stageId: "issue-preflight",
@@ -3803,21 +3808,21 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
           "failing test result or TDD-not-applicable reason",
           "planned sandbox validation commands",
         ],
-        goal: "从 SPEC 和当前 issue 推导测试点；能 TDD 的任务先补失败测试，不适合 TDD 的任务必须记录原因，并明确替代验证方式。",
+        goal: "从 SPEC 和当前 issue 推导测试点。能做 TDD 就先补失败测试；不能做 TDD 就记录原因，并给出替代验证方式。",
         label: "测试设计",
         required: true,
         stageId: "test-design",
       },
       {
         evidence: ["git diff --stat", "changed-files summary"],
-        goal: "按测试设计和 issue 合同在 allowedPaths 内完成代码、配置或测试改动。",
+        goal: "按测试设计和 issue 合同，在 allowedPaths 内完成代码、配置或测试改动。",
         label: "Agent 执行 issue",
         required: true,
         stageId: "implement",
       },
       {
         evidence: ["validation command records", "browser smoke evidence when applicable", "git diff --check"],
-        goal: "在受控本地沙箱中运行验证命令并收集 stdout、stderr、exit code、浏览器或截图证据。",
+        goal: "在本地受控沙箱中运行验证命令，并收集 stdout、stderr、exit code 以及浏览器或截图证据。",
         label: "沙箱验证",
         required: true,
         stageId: "sandbox-verify",
@@ -3829,7 +3834,7 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
           "PR/MR body validation summary",
           "draft or ready state",
         ],
-        goal: "推送任务分支，按 AgentFlow Build Agent PR/MR 模板创建 GitHub PR 或 GitLab MR，并把任务、范围、验证结果、影响、回滚和 review gate 写入描述；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR/MR。",
+        goal: "推送任务分支，按 AgentFlow Build Agent PR/MR 模板创建 GitHub PR 或 GitLab MR，并写入任务、范围、验证结果、影响、回滚和 review gate；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR/MR。",
         label: "创建 PR/MR",
         required: true,
         stageId: "create-pr",
@@ -3843,7 +3848,7 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
           "in_review wait evidence when manual-merge fallback is active",
           "merge commit or merged PR/MR state",
         ],
-        goal: "默认先走 auto-merge-if-eligible：PR/MR ready 后按 provider 执行自动合并，GitHub 使用 gh pr ready 和 gh pr merge --auto，GitLab 使用 glab mr update --ready 和 glab mr merge --auto-merge，并轮询到 merged；如果自动合并条件不满足，回落到 manual-merge，issue 保持 in_review，等待人合并，再由本地检测确认 PR/MR merged 后继续。",
+        goal: "默认先走 auto-merge-if-eligible：PR/MR ready 后按 provider 自动合并，并轮询到 merged；如果自动合并条件不满足，就回落到 manual-merge，issue 保持 in_review，等待人合并，再由本地检测确认 merged 后继续。",
         label: "合并 PR/MR",
         required: true,
         stageId: "merge-pr",
@@ -3854,7 +3859,7 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
           "or target/debug/agentflow build-agent complete --request <completion-request.json>",
           "issue status done",
         ],
-        goal: "PR/MR 合并后使用预检确认过的新 AgentFlow CLI 调用 build-agent complete，写回 run、evidence、delivery 和任务 Done 状态。",
+        goal: "PR/MR 合并后，用预检确认过的新 AgentFlow CLI 调用 build-agent complete，写回 run、evidence、delivery 和任务 Done 状态。",
         label: "写回 Done",
         required: true,
         stageId: "writeback-done",
@@ -4191,7 +4196,7 @@ function agentInstructionForTask(task: V1Issue) {
   if (task.requiredAgentRole === "audit-agent") {
     return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR/MR。";
   }
-  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 issue、handoff package 和 executionPipeline 是唯一任务源；不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按执行前置检测、测试设计、执行、沙箱验证、创建 PR/MR、合并 PR/MR、写回 Done 的流程执行。写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
+  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 input issue 是唯一任务源；handoff package 只是这份 issue 的派生快照；executionPipeline 只是这份 issue 合同里的一部分，不是独立任务源。不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按执行前置检测、测试设计、执行、沙箱验证、创建 PR/MR、合并 PR/MR、写回 Done 的流程执行。先通过 AgentFlow 官方 run loop / runtime preflight 创建当前 run，再开始改源码；没有 run 就不能开工。不要手写 `.agentflow/**`，但这不等于不能调用 AgentFlow 官方命令推进 loop、补生成 Context Pack 或写回完成结果。写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
 }
 
 function taskAuditDescriptionItems(task: V1Issue): Array<[string, string]> {
@@ -4658,6 +4663,7 @@ function buildAgentPullRequestTemplateEn(task: V1Issue) {
     "## Build Agent Loop",
     "",
     "- [ ] Issue preflight completed and the issue moved from backlog to todo.",
+    "- [ ] Current run was created by the official AgentFlow runtime entrypoint before source edits started.",
     "- [ ] Test design completed, with failing test evidence or a reason TDD does not apply.",
     "- [ ] Issue implementation stayed inside scope.",
     "- [ ] Sandbox verification completed.",
@@ -4886,12 +4892,15 @@ function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
     "- 如果你不是 requiredAgentRole，请停止执行。",
     "- 如果 issueCategory 不属于你，请停止执行。",
     "- 不要执行其他 Agent 的任务。",
-    "- AgentFlow 当前 issue、handoff package 和 executionPipeline 是唯一任务源。",
+    "- AgentFlow 当前 input issue 是唯一任务源。",
+    "- handoff package 只是当前 issue 的派生快照。",
+    "- executionPipeline 只是当前 issue 合同的一部分，不是独立任务源。",
     "- 不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源。",
     "- 不要用外部状态拆分、重排或推进 AgentFlow 任务。",
     "- GitHub/GitLab 命令只允许用于当前 executionPipeline 里的 PR/MR 阶段。",
     "- 不要越过任务边界。",
     "- 不要手写 `.agentflow/execute/**`、`.agentflow/output/evidence/**` 或 `.agentflow/output/release/**`。",
+    "- 不要把“不要手写 `.agentflow/**`”理解成不能调用 AgentFlow 官方 loop 命令；官方 run 创建、Context Pack 生成和 complete 写回都必须走 AgentFlow 入口。",
     ...(task.issueCategory === "spec"
       ? [
           "",
@@ -4904,6 +4913,7 @@ function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
           "- mergeMode = auto-merge-if-eligible：GitHub 执行 `gh pr ready` 和 `gh pr merge --auto`；GitLab 执行 `glab mr update --ready` 和 `glab mr merge --auto-merge`；轮询 PR/MR merged 状态。",
           "- 自动合并条件不满足时，回落到 manual-merge：把 PR/MR 标记 ready 后 issue 保持 in_review，等待人合并；本地检测确认 PR/MR merged 后继续写回。",
           "- PR/MR 合并后才写回 Done。",
+          "- 进入 in_progress 前必须先通过 AgentFlow 官方 run loop / runtime preflight 创建当前 run；没有 run 不得开始改源码。",
           "- 进入 in_progress 前必须确认 Context Pack 可读，且当前工作区没有未提交的用户源码改动。",
           "- 写回 Done 前必须确认当前 AgentFlow CLI 支持 `build-agent complete`。",
           "- 如果使用 `target/release/agentflow`，必须先运行 `cargo build --release --bin agentflow`；否则使用 `target/debug/agentflow`。",

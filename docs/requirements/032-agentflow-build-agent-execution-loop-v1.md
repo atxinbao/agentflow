@@ -35,24 +35,25 @@ Build Agent 必须按 7 个阶段执行：
 
 ### 1. 执行前置检测
 
-检查当前 issue 是否可以进入执行准备：
+只检查当前 `input issue` 是否可以进入执行准备：
 
 - 当前执行对象必须是 AgentFlow `.agentflow/input/issues/<issue-id>.json`
-- 当前 issue 状态必须是 `todo`
-- `backlog → todo` 由 Project Loop / Project Scheduler 完成，Build Agent 不能绕过 Project Loop 直接执行 `backlog` issue
-- 通过 runtime preflight 后，把当前 issue 状态切换成 `in_progress`
-- Panel Context Pack 必须存在，或者能由 Panel 生成
-- 当前工作区不能有未提交的用户源码改动
+- 当前 issue 状态必须仍是 `backlog`
 - 所有 `blockedBy` 前置 issue 必须已经 `done`
-- AgentFlow CLI 支持 `build-agent complete`
+- 任务合同必须完整
+- Panel Context Pack 必须可读，或者能由 Panel 生成
+- 当前工作区不能有未提交的用户源码改动
+- 必须先通过 AgentFlow 官方 run loop / runtime preflight 创建当前 run，之后才能改源码
+- AgentFlow CLI 必须支持 `build-agent complete`
 
 这一步也必须确认：
 
-- AgentFlow input issue 和 `executionPipeline` 是唯一任务源
+- 当前 `input issue` 是唯一任务源
+- handoff package 只是这份 issue 的派生快照
+- `executionPipeline` 只是这份 issue 合同里的字段，不是独立任务源
 - 不使用外部 issue、任务、计划、队列、线程或工具状态作为任务权威
-- 未完成依赖由 Project Scheduler 阻断，相关 issue 派生状态显示为 blocked
 - GitHub/GitLab 不在这个 loop 阶段检测
-- CLI 缺失、认证缺失、工作区不干净等执行现场问题只在创建 PR/MR 或合并 PR/MR 阶段记录
+- preflight 通过后，issue 先从 `backlog` 切到 `todo`，再准备进入 `in_progress`
 
 ### 2. 测试设计
 
@@ -92,7 +93,7 @@ Build Agent 必须按 7 个阶段执行：
 
 ### 4. 沙箱验证
 
-在本地受控环境运行验证命令，并核对结果。
+在本地受控沙箱中运行验证命令，并核对结果。
 
 必须记录：
 
@@ -185,8 +186,8 @@ glab mr merge --auto-merge
 - 新 Spec Issue 默认包含 7 个 required execution stages。
 - `test-design` 是 required stage。
 - `sandbox-verify` 的显示名称为“沙箱验证”。
-- Build Agent 只能执行 `todo` issue，不能直接执行 `backlog` issue。
-- Runtime preflight 通过后 issue 进入 `in_progress`。
+- Build Agent loop 从 `backlog` issue 开始，不允许跳过 preflight 直接执行。
+- Preflight 通过后 issue 先进入 `todo`，runtime preflight 完成且 run 已创建后再进入 `in_progress`。
 - Runtime preflight 必须确认 Context Pack 可读，并且当前工作区没有未提交的用户源码改动。
 - `build-agent complete` 必须基于已有 `runId`，不能重新 create run。
 - `build-agent complete` 必须校验 `agent-claim.json`、`branch.json` 和 `review/merge-proof.json`。
