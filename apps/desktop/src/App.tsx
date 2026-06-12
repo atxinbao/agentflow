@@ -2078,12 +2078,12 @@ function ProjectHomePage({
           </div>
         </Panel>
       </section>
-      <CodexRoleGuideCard defaultOpen={!selectedTask} />
+      <CodexRoleGuideCard />
     </section>
   );
 }
 
-function CodexRoleGuideCard({ defaultOpen }: { defaultOpen: boolean }) {
+function CodexRoleGuideCard() {
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   async function copyStartupInstruction(guide: CodexRoleGuide) {
@@ -2096,14 +2096,14 @@ function CodexRoleGuideCard({ defaultOpen }: { defaultOpen: boolean }) {
   }
 
   return (
-    <details className="v16-codex-role-guide" open={defaultOpen}>
-      <summary>
+    <section className="v16-codex-role-guide" aria-labelledby="v16-codex-role-guide-title">
+      <header className="v16-codex-role-guide-header">
         <span>
-          <strong>Agent 角色使用说明</strong>
+          <strong id="v16-codex-role-guide-title">Agent 角色使用说明</strong>
           <small>AgentFlow 不直接控制执行过程。你需要按角色开线程，每个线程只做一种工作。</small>
         </span>
         <StatusBadge status="idle">本地说明</StatusBadge>
-      </summary>
+      </header>
       <div className="v16-codex-role-guide-body">
         <p className="v16-codex-role-warning">
           不要让同一个执行线程一会儿写代码、一会儿审计。这样容易混淆边界。
@@ -2115,6 +2115,7 @@ function CodexRoleGuideCard({ defaultOpen }: { defaultOpen: boolean }) {
               <strong>{guide.title}</strong>
               <p>{guide.summary}</p>
               <small>线程名：{guide.threadName}</small>
+              <pre className="v16-codex-role-instruction">{guide.startupInstruction}</pre>
               <ActionButton onClick={() => copyStartupInstruction(guide)} variant="secondary">
                 复制 {guide.englishName} 启动指令
               </ActionButton>
@@ -2123,7 +2124,7 @@ function CodexRoleGuideCard({ defaultOpen }: { defaultOpen: boolean }) {
         </div>
         {copyFeedback ? <p className="v16-feedback">{copyFeedback}</p> : null}
       </div>
-    </details>
+    </section>
   );
 }
 

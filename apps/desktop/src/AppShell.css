@@ -1006,8 +1006,9 @@
 }
 
 .v16-home-page {
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
 }
 
 .v16-tasks-page {
@@ -1103,6 +1104,7 @@
 .v16-home-columns {
   display: grid;
   grid-template-columns: minmax(300px, 1.1fr) minmax(240px, 0.9fr);
+  flex: 0 0 auto;
   gap: 12px;
   min-height: 0;
   overflow: hidden;
@@ -1187,40 +1189,36 @@
 
 .v16-codex-role-guide {
   display: grid;
+  flex: 0 0 auto;
   min-width: 0;
   border: 1px solid var(--v16-border);
   border-radius: 6px;
   background: var(--v16-surface);
-  overflow: hidden;
+  overflow: visible;
 }
 
-.v16-codex-role-guide summary {
+.v16-codex-role-guide-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   min-height: 46px;
-  padding: 10px 12px;
-  cursor: pointer;
-  list-style: none;
+  padding: 10px 12px 9px;
+  border-bottom: 1px solid var(--v16-border-soft);
 }
 
-.v16-codex-role-guide summary::-webkit-details-marker {
-  display: none;
-}
-
-.v16-codex-role-guide summary > span {
+.v16-codex-role-guide-header > span {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.v16-codex-role-guide summary strong {
+.v16-codex-role-guide-header strong {
   font-size: 13px;
   line-height: 1.25;
 }
 
-.v16-codex-role-guide summary small,
+.v16-codex-role-guide-header small,
 .v16-codex-role-card p,
 .v16-codex-role-card small,
 .v16-codex-role-warning {
@@ -1233,12 +1231,11 @@
 .v16-codex-role-guide-body {
   display: grid;
   gap: 10px;
-  padding: 0 12px 12px;
-  border-top: 1px solid var(--v16-border-soft);
+  padding: 10px 12px 12px;
 }
 
 .v16-codex-role-warning {
-  padding-top: 10px;
+  max-width: 860px;
 }
 
 .v16-codex-role-grid {
@@ -1249,7 +1246,8 @@
 
 .v16-codex-role-card {
   display: grid;
-  gap: 6px;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 7px;
   min-width: 0;
   padding: 10px;
   border: 1px solid var(--v16-border-soft);
@@ -1267,6 +1265,22 @@
 .v16-codex-role-card strong {
   font-size: 13px;
   line-height: 1.25;
+}
+
+.v16-codex-role-instruction {
+  min-height: 112px;
+  max-height: 136px;
+  margin: 0;
+  padding: 9px;
+  overflow: auto;
+  border: 1px solid var(--v16-border-soft);
+  border-radius: 6px;
+  background: var(--v16-surface);
+  color: var(--v16-text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .v16-codex-role-card .af-button {
