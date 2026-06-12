@@ -10,9 +10,12 @@ use crate::{
         write_json, write_json_if_missing, write_run, EXECUTE_DIRECTORIES, EXECUTE_REQUIRED_FILES,
     },
 };
-use agentflow_input::issue::{
-    validate_agent_claim, validate_agent_issue_permission, validate_agent_write_paths, AgentClaim,
-    AgentRole, AgentRolesDocument, InputIssue, InputIssueStatus,
+use agentflow_input::{
+    issue::{
+        validate_agent_claim, validate_agent_issue_permission, validate_agent_write_paths,
+        AgentClaim, AgentRole, AgentRolesDocument, DisplayStatus, InputIssue, InputIssueStatus,
+    },
+    update_input_issue_branch_name,
 };
 use anyhow::{Context, Result};
 use std::{path::Path, process::Command};
@@ -192,6 +195,11 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
     if branch_check.status == "blocked" {
         update_run_status(&root, &run_id, ExecuteRunStatus::Blocked)?;
         update_input_issue_latest_run(&root, &issue.issue_id, Some(run_id.clone()))?;
+        update_input_issue_branch_name(
+            &root,
+            &issue.issue_id,
+            Some(branch_check.issue_branch.clone()),
+        )?;
         update_input_issue_status(&root, &issue.issue_id, InputIssueStatus::Blocked)?;
         sync_issue_loop_projection(
             &root,
@@ -217,6 +225,11 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
         );
     }
     update_input_issue_latest_run(&root, &issue.issue_id, Some(run_id.clone()))?;
+    update_input_issue_branch_name(
+        &root,
+        &issue.issue_id,
+        Some(branch_check.issue_branch.clone()),
+    )?;
     sync_issue_loop_projection(&root, &run, InputIssueStatus::Todo, None, Vec::new())?;
     rebuild_index(&root)?;
     build_execute_snapshot(&root)?;
@@ -360,6 +373,8 @@ pub(crate) fn sync_issue_loop_projection(
 ) -> Result<()> {
     let issue_projection_dir = root.join(".agentflow/state/loops/issues");
     ensure_directory(&issue_projection_dir)?;
+    let branch_name = issue_loop_branch_name(root, &run.run_id);
+    update_input_issue_branch_name(root, &run.issue_id, branch_name.clone())?;
     write_json(
         &issue_projection_dir.join(format!("{}.json", sanitize_projection_id(&run.issue_id))),
         &serde_json::json!({
@@ -367,8 +382,9 @@ pub(crate) fn sync_issue_loop_projection(
             "projectId": run.project_id.clone(),
             "issueId": run.issue_id.clone(),
             "stage": stage.as_str(),
+            "displayStatus": DisplayStatus::from_input_status(&stage).as_str(),
             "runId": run.run_id.clone(),
-            "branchName": issue_loop_branch_name(root, &run.run_id),
+            "branchName": branch_name,
             "reviewSubstate": review_substate,
             "blockers": blockers,
             "updatedAt": unix_timestamp_seconds()

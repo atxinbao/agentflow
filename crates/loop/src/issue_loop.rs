@@ -6,7 +6,7 @@ use agentflow_execute::{
     create_execute_run, execute_run_preflight,
     storage::{read_json, run_dir},
 };
-use agentflow_input::issue::InputIssueStatus;
+use agentflow_input::issue::{DisplayStatus, InputIssueStatus};
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
@@ -85,6 +85,7 @@ impl IssueLoop {
                 InputIssueStatus::Blocked,
             )?;
         }
+        projection.display_status = Some(stage_display_status(&projection.stage));
 
         write_issue_loop_projection(&root, &projection)?;
         Ok(projection)
@@ -162,4 +163,16 @@ fn now() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+fn stage_display_status(stage: &IssueLoopStage) -> DisplayStatus {
+    match stage {
+        IssueLoopStage::Backlog => DisplayStatus::Backlog,
+        IssueLoopStage::Todo => DisplayStatus::Todo,
+        IssueLoopStage::InProgress => DisplayStatus::InProgress,
+        IssueLoopStage::InReview => DisplayStatus::InReview,
+        IssueLoopStage::Done => DisplayStatus::Done,
+        IssueLoopStage::Blocked => DisplayStatus::Blocked,
+        IssueLoopStage::Cancel => DisplayStatus::Cancel,
+    }
 }

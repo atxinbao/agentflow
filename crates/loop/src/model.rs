@@ -1,3 +1,4 @@
+use agentflow_input::issue::DisplayStatus;
 use serde::{Deserialize, Serialize};
 
 pub const LOOP_PROJECT_SNAPSHOT_VERSION: &str = "agentflow-loop-project.v1";
@@ -145,6 +146,8 @@ pub struct IssueLoopProjection {
     pub project_id: Option<String>,
     pub issue_id: String,
     pub stage: IssueLoopStage,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_status: Option<DisplayStatus>,
     pub run_id: Option<String>,
     pub branch_name: Option<String>,
     pub review_substate: Option<String>,
@@ -159,6 +162,7 @@ impl IssueLoopProjection {
             project_id,
             issue_id: issue_id.into(),
             stage: IssueLoopStage::Backlog,
+            display_status: None,
             run_id: None,
             branch_name: None,
             review_substate: None,

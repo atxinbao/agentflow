@@ -187,6 +187,10 @@ mod tests {
         assert_eq!(snapshot.done_issue_ids, vec!["AF-001"]);
         let projection = storage::read_issue_loop_projection(dir.path(), "AF-001").unwrap();
         assert_eq!(projection.stage, IssueLoopStage::Done);
+        assert_eq!(
+            projection.display_status,
+            Some(agentflow_input::issue::DisplayStatus::Done)
+        );
         assert_eq!(projection.run_id.as_deref(), Some("run-001"));
         assert_eq!(
             projection.branch_name.as_deref(),
@@ -236,6 +240,10 @@ mod tests {
         let projection = storage::read_issue_loop_projection(dir.path(), "AF-DIRECT-001").unwrap();
         assert_eq!(projection.project_id, None);
         assert_eq!(projection.stage, IssueLoopStage::Todo);
+        assert_eq!(
+            projection.display_status,
+            Some(agentflow_input::issue::DisplayStatus::Todo)
+        );
     }
 
     #[test]
@@ -283,6 +291,10 @@ mod tests {
         assert_eq!(summary.done_issue_ids, vec!["AF-DIRECT-001"]);
         let projection = storage::read_issue_loop_projection(dir.path(), "AF-DIRECT-001").unwrap();
         assert_eq!(projection.stage, IssueLoopStage::Done);
+        assert_eq!(
+            projection.display_status,
+            Some(agentflow_input::issue::DisplayStatus::Done)
+        );
         assert_eq!(projection.run_id.as_deref(), Some("run-001"));
         assert_eq!(
             projection.branch_name.as_deref(),
@@ -302,6 +314,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(projection.stage, IssueLoopStage::InProgress);
+        assert_eq!(
+            projection.display_status,
+            Some(agentflow_input::issue::DisplayStatus::InProgress)
+        );
         assert!(projection.run_id.is_some());
         let issue = agentflow_input::load_input_issue(dir.path(), "AF-001").unwrap();
         assert_eq!(issue.status, InputIssueStatus::InProgress);
@@ -350,6 +366,10 @@ mod tests {
             DirectIssueLoop::start_runtime_preflight(dir.path(), "AF-DIRECT-START-001").unwrap();
 
         assert_eq!(projection.stage, IssueLoopStage::InProgress);
+        assert_eq!(
+            projection.display_status,
+            Some(agentflow_input::issue::DisplayStatus::InProgress)
+        );
         assert!(projection.run_id.is_some());
         let issue = agentflow_input::load_input_issue(dir.path(), "AF-DIRECT-START-001").unwrap();
         assert_eq!(issue.status, InputIssueStatus::InProgress);
