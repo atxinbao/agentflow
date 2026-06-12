@@ -31,6 +31,12 @@ pub struct ProjectExecutionTick {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeAdvance {
+    launch: Option<ProjectExecutionLaunch>,
+    state_changed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectExecutor {
     project_id: String,
 }
@@ -50,12 +56,18 @@ impl ProjectExecutor {
         let root = canonical_project_root(project_root)?;
         let loop_driver = ProjectLoop::new(self.project_id.clone());
         loop_driver.run_preflight(&root)?;
-        let snapshot = loop_driver.schedule_ready_issues(&root)?;
-        let launch = self.maybe_start_runtime(&root)?;
-        Ok(ProjectExecutionTick { snapshot, launch })
+        let mut snapshot = loop_driver.schedule_ready_issues(&root)?;
+        let runtime = self.maybe_start_runtime(&root)?;
+        if runtime.state_changed {
+            snapshot = loop_driver.schedule_ready_issues(&root)?;
+        }
+        Ok(ProjectExecutionTick {
+            snapshot,
+            launch: runtime.launch,
+        })
     }
 
-    fn maybe_start_runtime(&self, root: &Path) -> Result<Option<ProjectExecutionLaunch>> {
+    fn maybe_start_runtime(&self, root: &Path) -> Result<RuntimeAdvance> {
         let workspace = agentflow_input::prepare_input_workspace(root)?;
         let project = workspace
             .projects
@@ -70,14 +82,41 @@ impl ProjectExecutor {
 
         if let Some(active_issue) = active_runtime_issue(project, &issues_by_id) {
             ensure_existing_launch_request(root, active_issue)?;
-            return Ok(None);
+            return Ok(RuntimeAdvance {
+                launch: None,
+                state_changed: false,
+            });
         }
 
         let Some(issue) = next_todo_issue(project.issue_ids.iter(), &issues_by_id) else {
-            return Ok(None);
+            return Ok(RuntimeAdvance {
+                launch: None,
+                state_changed: false,
+            });
         };
         let projection =
-            IssueLoop::new(&self.project_id, &issue.issue_id).start_runtime_preflight(root)?;
+            match IssueLoop::new(&self.project_id, &issue.issue_id).start_runtime_preflight(root) {
+                Ok(projection) => projection,
+                Err(error) => {
+                    let refreshed_issue = agentflow_input::load_input_issue(root, &issue.issue_id)
+                        .with_context(|| format!("reload input issue {}", issue.issue_id))?;
+                    if matches!(refreshed_issue.status, InputIssueStatus::Blocked)
+                        && refreshed_issue.latest_run_id.is_some()
+                    {
+                        return Ok(RuntimeAdvance {
+                            launch: None,
+                            state_changed: true,
+                        });
+                    }
+                    return Err(error);
+                }
+            };
+        if !matches!(projection.stage, IssueLoopStage::InProgress) {
+            return Ok(RuntimeAdvance {
+                launch: None,
+                state_changed: true,
+            });
+        }
         let run_id = projection
             .run_id
             .clone()
@@ -97,13 +136,16 @@ impl ProjectExecutor {
             projection.branch_name.clone(),
             &launch_request_path,
         )?;
-        Ok(Some(ProjectExecutionLaunch {
-            issue_id: issue.issue_id.clone(),
-            run_id,
-            branch_name: projection.branch_name.clone(),
-            stage: projection.stage,
-            launch_request_path,
-        }))
+        Ok(RuntimeAdvance {
+            launch: Some(ProjectExecutionLaunch {
+                issue_id: issue.issue_id.clone(),
+                run_id,
+                branch_name: projection.branch_name.clone(),
+                stage: projection.stage,
+                launch_request_path,
+            }),
+            state_changed: true,
+        })
     }
 }
 
