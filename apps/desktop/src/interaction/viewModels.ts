@@ -177,6 +177,16 @@ export type BuildTaskProjectTreeViewModelInput = {
   relations?: InputIssueRelations | null;
 };
 
+type ExecutionOrderedTask = {
+  id: string;
+  dependencies?: string[];
+  blockedBy?: string[];
+  priority?: string | null;
+  displayStatus?: IssueDisplayStatus;
+  updatedAt?: number | null;
+  createdAt?: number | null;
+};
+
 export function buildAppInteractionState({
   activePage,
   hasError,
@@ -302,7 +312,7 @@ export function buildTaskProjectTreeViewModel({
     return {
       counts: taskProjectTreeCounts(groupIssues, 1),
       id: project.projectId,
-      issues: sortTaskIssuesByPriority(groupIssues),
+      issues: sortTasksByExecutionOrder(groupIssues),
       missingIssueIds,
       objective: project.objective ?? null,
       project,
@@ -314,26 +324,27 @@ export function buildTaskProjectTreeViewModel({
     };
   });
 
-  const ungroupedIssues = issues
-    .filter((issue) => {
-      if (assignedIssueIds.has(issue.issueId)) {
-        return false;
-      }
-      if (issue.projectId && !projectById.has(issue.projectId)) {
-        const warning = taskProjectTreeWarning(
-          "missing-project",
-          `任务 ${issue.issueId} 指向不存在的 project ${issue.projectId}，已放入未归属任务。`,
-          issue.projectId,
-          issue.issueId,
-        );
-        warnings.push(warning);
-        nodeById.get(issue.issueId)?.warnings.push(warning);
-      }
-      return issue.issueModel === "direct" || !issue.projectId || !projectById.has(issue.projectId);
-    })
-    .map((issue) => nodeById.get(issue.issueId))
-    .filter((node): node is TaskIssueNode => Boolean(node))
-    .sort(compareTaskIssuePriority);
+  const ungroupedIssues = sortTasksByExecutionOrder(
+    issues
+      .filter((issue) => {
+        if (assignedIssueIds.has(issue.issueId)) {
+          return false;
+        }
+        if (issue.projectId && !projectById.has(issue.projectId)) {
+          const warning = taskProjectTreeWarning(
+            "missing-project",
+            `任务 ${issue.issueId} 指向不存在的 project ${issue.projectId}，已放入未归属任务。`,
+            issue.projectId,
+            issue.issueId,
+          );
+          warnings.push(warning);
+          nodeById.get(issue.issueId)?.warnings.push(warning);
+        }
+        return issue.issueModel === "direct" || !issue.projectId || !projectById.has(issue.projectId);
+      })
+      .map((issue) => nodeById.get(issue.issueId))
+      .filter((node): node is TaskIssueNode => Boolean(node)),
+  );
   const allIssues = [...groups.flatMap((group) => group.issues), ...ungroupedIssues];
 
   return {
@@ -435,12 +446,135 @@ function inputIssueToTaskIssueNode(
   };
 }
 
-function sortTaskIssuesByPriority(issues: TaskIssueNode[]) {
-  return [...issues].sort(compareTaskIssuePriority);
+export function sortTasksByExecutionOrder<T extends ExecutionOrderedTask>(issues: T[]): T[] {
+  const nodes = issues.map((issue, index) => ({
+    dependents: [] as string[],
+    externalDependencyCount: 0,
+    id: issue.id,
+    localDependencyCount: 0,
+    remainingDependencyCount: 0,
+    issue,
+    position: index,
+  }));
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+  for (const node of nodes) {
+    const dedupedDependencies = [...new Set(executionDependencies(node.issue))];
+    const localDependencies = dedupedDependencies.filter((dependencyId) => nodeById.has(dependencyId));
+    node.localDependencyCount = localDependencies.length;
+    node.externalDependencyCount = dedupedDependencies.length - localDependencies.length;
+    node.remainingDependencyCount = node.localDependencyCount + node.externalDependencyCount;
+
+    for (const dependencyId of localDependencies) {
+      nodeById.get(dependencyId)?.dependents.push(node.id);
+    }
+  }
+
+  const sorted: T[] = [];
+  const scheduled = new Set<string>();
+  const ready = nodes.filter((node) => node.remainingDependencyCount === 0);
+  ready.sort(compareExecutionCandidate);
+
+  while (ready.length) {
+    const current = ready.shift();
+    if (!current || scheduled.has(current.id)) {
+      continue;
+    }
+
+    scheduled.add(current.id);
+    sorted.push(current.issue);
+
+    for (const dependentId of current.dependents) {
+      const dependent = nodeById.get(dependentId);
+      if (!dependent || scheduled.has(dependent.id)) {
+        continue;
+      }
+      dependent.remainingDependencyCount = Math.max(0, dependent.remainingDependencyCount - 1);
+      if (dependent.remainingDependencyCount === 0) {
+        ready.push(dependent);
+      }
+    }
+
+    ready.sort(compareExecutionCandidate);
+  }
+
+  const pending = nodes
+    .filter((node) => !scheduled.has(node.id))
+    .sort(compareExecutionCandidate)
+    .map((node) => node.issue);
+
+  return [...sorted, ...pending];
 }
 
-function compareTaskIssuePriority(left: TaskIssueNode, right: TaskIssueNode) {
-  return priorityRank(left.priority) - priorityRank(right.priority) || left.id.localeCompare(right.id);
+function executionDependencies(issue: ExecutionOrderedTask) {
+  const dependencies = issue.dependencies ?? issue.blockedBy ?? [];
+  return dependencies.filter(Boolean);
+}
+
+function compareExecutionCandidate<T extends ExecutionOrderedTask>(
+  left: {
+    id: string;
+    issue: T;
+    localDependencyCount: number;
+    position: number;
+    remainingDependencyCount: number;
+  },
+  right: {
+    id: string;
+    issue: T;
+    localDependencyCount: number;
+    position: number;
+    remainingDependencyCount: number;
+  },
+) {
+  const remainingDiff = left.remainingDependencyCount - right.remainingDependencyCount;
+  if (remainingDiff) {
+    return remainingDiff;
+  }
+
+  const dependencyDiff = left.localDependencyCount - right.localDependencyCount;
+  if (dependencyDiff) {
+    return dependencyDiff;
+  }
+
+  const positionDiff = left.position - right.position;
+  if (positionDiff) {
+    return positionDiff;
+  }
+
+  const priorityDiff = priorityRank(left.issue.priority) - priorityRank(right.issue.priority);
+  if (priorityDiff) {
+    return priorityDiff;
+  }
+
+  const statusDiff = executionStatusRank(left.issue.displayStatus) - executionStatusRank(right.issue.displayStatus);
+  if (statusDiff) {
+    return statusDiff;
+  }
+
+  const timeDiff = executionSortTime(right.issue) - executionSortTime(left.issue);
+  if (timeDiff) {
+    return timeDiff;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+function executionStatusRank(status?: IssueDisplayStatus | null) {
+  const normalized = status ?? "backlog";
+  return {
+    in_progress: 0,
+    todo: 1,
+    in_review: 2,
+    backlog: 3,
+    blocked: 4,
+    done: 5,
+    cancel: 6,
+  }[normalized] ?? 3;
+}
+
+function executionSortTime(issue: ExecutionOrderedTask) {
+  return issue.updatedAt ?? issue.createdAt ?? 0;
 }
 
 function priorityRank(priority?: string | null) {

@@ -84,6 +84,7 @@ import {
   buildTaskProjectTreeViewModel,
   displayStatusLabelZh,
   pickTaskId,
+  sortTasksByExecutionOrder,
   taskActionLabel,
   type AppInteractionState,
   type ButtonInteractionState,
@@ -3862,7 +3863,7 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
 
 function buildTaskItems(inputIssues: InputIssue[] | null, issueStatusIndex: IssueStatusIndex | null): V1Issue[] {
   if (inputIssues) {
-    return sortTasksByDisplayStatus(inputIssues.map((issue) => inputIssueToV1Issue(issue, issueStatusIndex)));
+    return sortTasksByExecutionOrder(inputIssues.map((issue) => inputIssueToV1Issue(issue, issueStatusIndex)));
   }
   return [];
 }
@@ -3999,26 +4000,6 @@ function defaultForbiddenActions(issueCategory?: string | null) {
     return ["process-spec-issue", "write-source-code", "execute-project-commands", "generate-release-delivery"];
   }
   return ["process-audit-issue", "write-audit-report", "write-audit-findings"];
-}
-
-function sortTasksByDisplayStatus(tasks: V1Issue[]) {
-  return [...tasks].sort((left, right) => {
-    const priorityDiff = priorityRank(left.priority) - priorityRank(right.priority);
-    if (priorityDiff) {
-      return priorityDiff;
-    }
-    const timeDiff = issueSortTime(right) - issueSortTime(left);
-    if (timeDiff) {
-      return timeDiff;
-    }
-    const leftOrder = displayStatusOrder.get(left.displayStatus ?? "backlog") ?? 0;
-    const rightOrder = displayStatusOrder.get(right.displayStatus ?? "backlog") ?? 0;
-    return leftOrder - rightOrder || left.id.localeCompare(right.id);
-  });
-}
-
-function issueSortTime(issue: V1Issue) {
-  return issue.updatedAt ?? issue.createdAt ?? 0;
 }
 
 function sortOutputEntriesByLatest(entries: OutputIndexEntry[]) {
