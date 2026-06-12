@@ -164,21 +164,14 @@ fn latest_runs_by_issue(
 
 pub(crate) fn issue_display_status(
     issue: &InputIssue,
-    latest_run: Option<&ExecuteRunIndexEntry>,
-    output: Option<&OutputSnapshot>,
+    _latest_run: Option<&ExecuteRunIndexEntry>,
+    _output: Option<&OutputSnapshot>,
 ) -> DisplayStatus {
     if matches!(issue.status, InputIssueStatus::Cancel) {
         return DisplayStatus::Cancel;
     }
     if matches!(issue.status, InputIssueStatus::Done) {
         return DisplayStatus::Done;
-    }
-    if output_has_issue_delivery(
-        output,
-        &issue.issue_id,
-        latest_run.map(|run| run.run_id.as_str()),
-    ) {
-        return DisplayStatus::InReview;
     }
     DisplayStatus::from_input_status(&issue.status)
 }
@@ -192,21 +185,6 @@ fn issue_terminal(
         issue_display_status(issue, latest_run, output),
         DisplayStatus::Done | DisplayStatus::Cancel
     )
-}
-
-fn output_has_issue_delivery(
-    output: Option<&OutputSnapshot>,
-    issue_id: &str,
-    latest_run_id: Option<&str>,
-) -> bool {
-    let Some(snapshot) = output else {
-        return false;
-    };
-    snapshot.index.release_deliveries.iter().any(|entry| {
-        entry.issue_id == issue_id || latest_run_id.is_some_and(|run_id| entry.run_id == run_id)
-    }) || snapshot.index.evidence.iter().any(|entry| {
-        entry.issue_id == issue_id || latest_run_id.is_some_and(|run_id| entry.run_id == run_id)
-    })
 }
 
 fn issue_source_path(issue: &InputIssue) -> Option<String> {
@@ -223,6 +201,10 @@ mod tests {
         },
         model::{InputIndex, InputManifest, InputStatusSnapshot, InputWorkspaceStatus},
         relations::InputIssueRelationsFile,
+    };
+    use agentflow_output::{
+        OutputIndex, OutputIndexEntry, OutputManifest, OutputStatusSnapshot, OutputSummary,
+        OutputWorkspaceStatus,
     };
 
     fn snapshot(issues: Vec<InputIssue>, relations: InputIssueRelationsFile) -> InputSnapshot {
@@ -308,5 +290,55 @@ mod tests {
             issue_readiness_blockers(Path::new("/tmp/not-a-git-repo"), Some(&input), None, None);
 
         assert!(blockers.is_empty());
+    }
+
+    #[test]
+    fn issue_display_status_does_not_promote_todo_from_evidence_only() {
+        let issue = issue("AF-001", InputIssueStatus::Todo);
+        let run = ExecuteRunIndexEntry {
+            run_id: "run-001".to_string(),
+            issue_id: "AF-001".to_string(),
+            ..ExecuteRunIndexEntry::default()
+        };
+        let output = OutputSnapshot {
+            version: agentflow_output::OUTPUT_SNAPSHOT_VERSION.to_string(),
+            project_root: "/tmp/agentflow-test".to_string(),
+            ready: true,
+            status: OutputStatusSnapshot {
+                version: agentflow_output::OUTPUT_STATUS_VERSION.to_string(),
+                project_root: "/tmp/agentflow-test".to_string(),
+                status: OutputWorkspaceStatus::Ready,
+                ready: true,
+                manifest_exists: true,
+                index_exists: true,
+                summary: OutputSummary::default(),
+                missing_paths: Vec::new(),
+                warnings: Vec::new(),
+                errors: Vec::new(),
+            },
+            manifest: OutputManifest {
+                version: agentflow_output::OUTPUT_MANIFEST_VERSION.to_string(),
+                project_root: "/tmp/agentflow-test".to_string(),
+                status: OutputWorkspaceStatus::Ready,
+                paths: std::collections::BTreeMap::new(),
+                summary: OutputSummary::default(),
+                updated_at: 1,
+            },
+            index: agentflow_output::OutputIndex {
+                evidence: vec![OutputIndexEntry {
+                    run_id: "run-001".to_string(),
+                    issue_id: "AF-001".to_string(),
+                    status: "ready".to_string(),
+                    updated_at: 1,
+                    ..OutputIndexEntry::default()
+                }],
+                ..OutputIndex::default()
+            },
+        };
+
+        assert_eq!(
+            issue_display_status(&issue, Some(&run), Some(&output)),
+            DisplayStatus::Todo
+        );
     }
 }

@@ -132,7 +132,7 @@ pub(crate) fn write_indexes(
 fn display_status(
     issue: &InputIssue,
     output: Option<&agentflow_output::OutputSnapshot>,
-    latest_run_id: Option<&str>,
+    _latest_run_id: Option<&str>,
     blocked_by_gate: bool,
 ) -> DisplayStatus {
     if matches!(issue.status, InputIssueStatus::Cancel) {
@@ -144,10 +144,6 @@ fn display_status(
 
     if let Some(status) = audit_display_status(output, &issue.issue_id) {
         return status;
-    }
-
-    if output_has_issue_delivery(output, &issue.issue_id, latest_run_id) {
-        return DisplayStatus::InReview;
     }
     if blocked_by_gate
         && matches!(
@@ -290,22 +286,6 @@ fn audit_display_status(
     })
 }
 
-fn output_has_issue_delivery(
-    output: Option<&agentflow_output::OutputSnapshot>,
-    issue_id: &str,
-    latest_run_id: Option<&str>,
-) -> bool {
-    let Some(snapshot) = output else {
-        return false;
-    };
-
-    snapshot.index.release_deliveries.iter().any(|entry| {
-        entry.issue_id == issue_id || latest_run_id.is_some_and(|run_id| entry.run_id == run_id)
-    }) || snapshot.index.evidence.iter().any(|entry| {
-        entry.issue_id == issue_id || latest_run_id.is_some_and(|run_id| entry.run_id == run_id)
-    })
-}
-
 fn evidence_status(
     output: Option<&agentflow_output::OutputSnapshot>,
     run_id: Option<&str>,
@@ -432,6 +412,15 @@ mod tests {
         assert_eq!(
             display_status(
                 &issue(InputIssueStatus::Todo),
+                Some(&output),
+                Some("run-001"),
+                false,
+            ),
+            DisplayStatus::Todo
+        );
+        assert_eq!(
+            display_status(
+                &issue(InputIssueStatus::InReview),
                 Some(&output),
                 Some("run-001"),
                 false,
