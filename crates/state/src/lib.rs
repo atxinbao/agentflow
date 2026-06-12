@@ -402,6 +402,44 @@ mod tests {
     }
 
     #[test]
+    fn runtime_preflight_refresh_aligns_issue_and_run_indexes() {
+        let dir = tempdir().unwrap();
+        prepare_layers(dir.path());
+        write_spec(dir.path());
+        write_issue(dir.path(), InputRiskLevel::Low);
+        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+
+        let preflight = execute_run_preflight(dir.path(), run.run_id.clone()).unwrap();
+        assert_eq!(preflight.status, "ready");
+
+        refresh_state(dir.path()).unwrap();
+
+        let issue_index: IssueStatusIndex = crate::storage::read_json(
+            &dir.path()
+                .join(".agentflow/state/indexes/issue-status.json"),
+        )
+        .unwrap();
+        let issue = issue_index
+            .issues
+            .iter()
+            .find(|item| item.issue_id == "iss-001")
+            .unwrap();
+        assert_eq!(issue.display_status, DisplayStatus::InProgress);
+        assert_eq!(issue.execute_status.as_deref(), Some("planned"));
+        assert_eq!(issue.latest_run_id.as_deref(), Some(run.run_id.as_str()));
+
+        let run_index: RunStatusIndex =
+            crate::storage::read_json(&dir.path().join(".agentflow/state/indexes/run-status.json"))
+                .unwrap();
+        let run_entry = run_index
+            .runs
+            .iter()
+            .find(|item| item.run_id == run.run_id)
+            .unwrap();
+        assert_eq!(run_entry.execute_status, "planned");
+    }
+
+    #[test]
     fn missing_issue_target_metadata_blocks_handoff_copy() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());

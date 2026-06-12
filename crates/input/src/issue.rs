@@ -672,18 +672,20 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "issue-preflight".to_string(),
                 label: "执行前置检测".to_string(),
-                goal: "只认当前 AgentFlow input issue。确认 issue 仍在 backlog，依赖已完成、合同完整、Context Pack 可读或可补生成、工作区干净；随后调用 `agentflow build-agent start --issue-id <issue-id>` 创建当前 run。preflight 通过后先把 issue 切到 todo，再准备进入 in_progress。禁止手写 `.agentflow/**` 只表示不能直接改事实文件，不是禁止调用 AgentFlow 官方命令推进 loop。GitHub/GitLab 不在这个阶段检测。".to_string(),
+                goal: "只认当前 AgentFlow input issue。确认 issue 仍在 backlog，依赖已完成、合同完整、Context Pack 可读或可补生成、工作区干净；AgentFlow 先把 issue 切到 todo，再调用 `agentflow build-agent start --issue-id <issue-id>` 创建当前 run。runtime preflight 通过后，当前 run 进入 planned，issue 再进入 in_progress。禁止手写 `.agentflow/**` 只表示不能直接改事实文件，不是禁止调用 AgentFlow 官方命令推进 loop。GitHub/GitLab 不在这个阶段检测。".to_string(),
                 required: true,
                 evidence: vec![
                     "AgentFlow input issue is the only active task source; executionPipeline is read from that issue contract".to_string(),
                     "no external issue/task/plan/queue/thread/tool state is used as task authority".to_string(),
-                    "input issue status is backlog before preflight".to_string(),
+                    "input issue status is backlog before scheduling".to_string(),
                     "blockedBy dependencies are done".to_string(),
                     "Panel Context Pack exists or is generated".to_string(),
+                    "input issue status changed to todo before runtime preflight".to_string(),
                     "current run is created by `agentflow build-agent start --issue-id <issue-id>` before source edits".to_string(),
+                    "current run status changed to planned after runtime preflight".to_string(),
                     "no `.agentflow/**` facts are handwritten; official AgentFlow loop commands are used instead".to_string(),
                     "working tree has no uncommitted user source changes before in_progress".to_string(),
-                    "input issue status changed to todo after preflight".to_string(),
+                    "input issue status changed to in_progress after runtime preflight".to_string(),
                 ],
             },
             InputIssueExecutionStage {

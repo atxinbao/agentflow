@@ -281,11 +281,14 @@ pub fn execute_run_preflight(
         blocked_reason,
     };
     write_json(&run_dir(&root, &run_id).join("preflight.json"), &preflight)?;
+    // Runtime preflight completion is the point where the current run becomes
+    // the active execution record. Keep blocked runs explicit, but move ready
+    // runs forward so run indexes stay aligned with issue/loop `in_progress`.
     update_run_status(
         &root,
         &run_id,
         if ready {
-            ExecuteRunStatus::Preflight
+            ExecuteRunStatus::Planned
         } else {
             ExecuteRunStatus::Blocked
         },

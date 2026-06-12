@@ -345,6 +345,7 @@ mod tests {
         assert!(manual.contains(
             "After runtime preflight confirms the Panel Context Pack is readable or successfully generated and the current run has been created"
         ));
+        assert!(manual.contains("AgentFlow moves the current run to `planned`"));
         assert!(manual.contains("auto-merge-if-eligible"));
         assert!(manual.contains("A Draft PR/MR is only an intermediate state"));
         assert!(manual.contains("gh pr merge --auto"));
