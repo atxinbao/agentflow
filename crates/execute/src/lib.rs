@@ -504,6 +504,7 @@ mod tests {
             agentflow_input::load_input_issue(dir.path(), "iss-001").unwrap();
 
         assert_eq!(preflight.status, "ready");
+        assert_eq!(loaded.status, ExecuteRunStatus::Planned);
         assert_eq!(issue_after_preflight.status, InputIssueStatus::InProgress);
         assert!(preflight.checks.iter().any(|check| {
             check.name == "context-pack" && matches!(check.status, ExecuteCheckStatus::Passed)

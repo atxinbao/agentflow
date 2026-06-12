@@ -21,9 +21,9 @@ pub use project_loop::ProjectLoop;
 mod tests {
     use super::*;
     use agentflow_execute::{
-        acquire_execute_lease, apply_execute_patch, create_execute_checkpoint,
+        acquire_execute_lease, apply_execute_patch, create_execute_checkpoint, load_execute_run,
         prepare_release_delivery, run_execute_command, validate_execute_run, write_execute_plan,
-        ExecuteCommandRequest, ExecutePlanDraft,
+        ExecuteCommandRequest, ExecutePlanDraft, ExecuteRunStatus,
     };
     use agentflow_input::{
         issue::{
@@ -305,6 +305,8 @@ mod tests {
         assert!(projection.run_id.is_some());
         let issue = agentflow_input::load_input_issue(dir.path(), "AF-001").unwrap();
         assert_eq!(issue.status, InputIssueStatus::InProgress);
+        let run = load_execute_run(dir.path(), projection.run_id.clone().unwrap()).unwrap();
+        assert_eq!(run.status, ExecuteRunStatus::Planned);
         assert!(dir
             .path()
             .join(format!(
@@ -351,6 +353,8 @@ mod tests {
         assert!(projection.run_id.is_some());
         let issue = agentflow_input::load_input_issue(dir.path(), "AF-DIRECT-START-001").unwrap();
         assert_eq!(issue.status, InputIssueStatus::InProgress);
+        let run = load_execute_run(dir.path(), projection.run_id.clone().unwrap()).unwrap();
+        assert_eq!(run.status, ExecuteRunStatus::Planned);
         assert!(dir
             .path()
             .join(format!(

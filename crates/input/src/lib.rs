@@ -541,6 +541,8 @@ mod tests {
         assert!(preflight_stage.goal.contains("Context Pack"));
         assert!(preflight_stage.goal.contains("切到 todo"));
         assert!(preflight_stage.goal.contains("创建当前 run"));
+        assert!(preflight_stage.goal.contains("当前 run 进入 planned"));
+        assert!(preflight_stage.goal.contains("issue 再进入 in_progress"));
         assert!(preflight_stage
             .goal
             .contains("不是禁止调用 AgentFlow 官方命令"));
@@ -556,13 +558,19 @@ mod tests {
         ));
         assert!(preflight_stage
             .evidence
-            .contains(&"input issue status is backlog before preflight".to_string()));
+            .contains(&"input issue status is backlog before scheduling".to_string()));
         assert!(preflight_stage
             .evidence
             .contains(&"Panel Context Pack exists or is generated".to_string()));
+        assert!(preflight_stage
+            .evidence
+            .contains(&"input issue status changed to todo before runtime preflight".to_string()));
         assert!(preflight_stage.evidence.contains(
             &"current run is created by `agentflow build-agent start --issue-id <issue-id>` before source edits"
                 .to_string()
+        ));
+        assert!(preflight_stage.evidence.contains(
+            &"current run status changed to planned after runtime preflight".to_string()
         ));
         assert!(preflight_stage.evidence.contains(
             &"no `.agentflow/**` facts are handwritten; official AgentFlow loop commands are used instead"
@@ -571,9 +579,9 @@ mod tests {
         assert!(preflight_stage.evidence.contains(
             &"working tree has no uncommitted user source changes before in_progress".to_string()
         ));
-        assert!(preflight_stage
-            .evidence
-            .contains(&"input issue status changed to todo after preflight".to_string()));
+        assert!(preflight_stage.evidence.contains(
+            &"input issue status changed to in_progress after runtime preflight".to_string()
+        ));
         assert!(preflight_stage
             .evidence
             .iter()
@@ -632,15 +640,11 @@ mod tests {
             .iter()
             .find(|stage| stage.stage_id == "writeback-done")
             .unwrap();
-        assert!(writeback_stage
-            .goal
-            .contains("build-agent prepare-review"));
+        assert!(writeback_stage.goal.contains("build-agent prepare-review"));
         assert!(writeback_stage
             .goal
             .contains("build-agent write-merge-proof"));
-        assert!(writeback_stage
-            .goal
-            .contains("build-agent complete"));
+        assert!(writeback_stage.goal.contains("build-agent complete"));
         assert!(writeback_stage
             .evidence
             .iter()
