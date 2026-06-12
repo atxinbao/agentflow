@@ -672,7 +672,7 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "issue-preflight".to_string(),
                 label: "执行前置检测".to_string(),
-                goal: "只认当前 AgentFlow input issue。确认 issue 仍在 backlog，依赖已完成、合同完整、Context Pack 可读或可补生成、工作区干净；随后通过 AgentFlow 官方 run loop / runtime preflight 创建当前 run。preflight 通过后先把 issue 切到 todo，再准备进入 in_progress。禁止手写 `.agentflow/**` 只表示不能直接改事实文件，不是禁止调用 AgentFlow 官方命令推进 loop。GitHub/GitLab 不在这个阶段检测。".to_string(),
+                goal: "只认当前 AgentFlow input issue。确认 issue 仍在 backlog，依赖已完成、合同完整、Context Pack 可读或可补生成、工作区干净；随后调用 `agentflow build-agent start --issue-id <issue-id>` 创建当前 run。preflight 通过后先把 issue 切到 todo，再准备进入 in_progress。禁止手写 `.agentflow/**` 只表示不能直接改事实文件，不是禁止调用 AgentFlow 官方命令推进 loop。GitHub/GitLab 不在这个阶段检测。".to_string(),
                 required: true,
                 evidence: vec![
                     "AgentFlow input issue is the only active task source; executionPipeline is read from that issue contract".to_string(),
@@ -680,7 +680,7 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
                     "input issue status is backlog before preflight".to_string(),
                     "blockedBy dependencies are done".to_string(),
                     "Panel Context Pack exists or is generated".to_string(),
-                    "current run is created by AgentFlow official runtime entrypoint before source edits".to_string(),
+                    "current run is created by `agentflow build-agent start --issue-id <issue-id>` before source edits".to_string(),
                     "no `.agentflow/**` facts are handwritten; official AgentFlow loop commands are used instead".to_string(),
                     "working tree has no uncommitted user source changes before in_progress".to_string(),
                     "input issue status changed to todo after preflight".to_string(),
@@ -745,9 +745,15 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "writeback-done".to_string(),
                 label: "写回 Done".to_string(),
-                goal: "PR/MR 合并后，用预检确认过的新 AgentFlow CLI 调用 build-agent complete，写回 run、evidence、delivery 和任务 Done 状态。".to_string(),
+                goal: "本地验证完成后先调用 `agentflow build-agent prepare-review --request <completion-request.json>` 生成 result、evidence、delivery 并把 issue 推到 in_review；PR/MR ready 或 merged 后调用 `agentflow build-agent write-merge-proof ...` 写入 review 证明；PR/MR 合并后再调用 `agentflow build-agent complete --request <completion-request.json>` 写回 Done。".to_string(),
                 required: true,
                 evidence: vec![
+                    "target/release/agentflow build-agent prepare-review --request <completion-request.json> after cargo build --release --bin agentflow"
+                        .to_string(),
+                    "or target/debug/agentflow build-agent prepare-review --request <completion-request.json>"
+                        .to_string(),
+                    "target/release/agentflow build-agent write-merge-proof --issue-id <issue-id> --run-id <run-id> --provider <github|gitlab> --merge-mode <auto-merge-if-eligible|manual-merge> [--remote-url <url>] [--merged]"
+                        .to_string(),
                     "target/release/agentflow build-agent complete --request <completion-request.json> after cargo build --release --bin agentflow"
                         .to_string(),
                     "or target/debug/agentflow build-agent complete --request <completion-request.json>"

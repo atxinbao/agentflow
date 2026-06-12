@@ -19,7 +19,7 @@ pub use agentflow_output::{
 };
 pub use checkpoint::create_execute_checkpoint;
 pub use command::run_execute_command;
-pub use completion::complete_build_agent_issue;
+pub use completion::{complete_build_agent_issue, prepare_build_agent_review};
 pub use delivery::prepare_release_delivery;
 pub use evidence::write_execute_evidence;
 pub use lease::{acquire_execute_lease, release_execute_lease};
@@ -282,6 +282,60 @@ mod tests {
         assert_eq!(loop_projection["stage"], "done");
         assert_eq!(loop_projection["runId"], completion.run.run_id);
         assert_eq!(loop_projection["branchName"], "agentflow/direct/iss-001");
+    }
+
+    #[test]
+    fn build_agent_review_preparation_moves_issue_to_in_review() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path(), "spec-001");
+        write_issue(dir.path(), "iss-001", "spec-001", InputRiskLevel::Low);
+        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        let preflight = execute_run_preflight(dir.path(), run.run_id.clone()).unwrap();
+        assert_eq!(preflight.status, "ready");
+
+        let prepared = prepare_build_agent_review(
+            dir.path(),
+            BuildAgentCompletionRequest {
+                issue_id: "iss-001".to_string(),
+                run_id: Some(run.run_id.clone()),
+                changed_files: vec![ExecuteChangedFile {
+                    path: "src/lib.rs".to_string(),
+                    change_type: "modified".to_string(),
+                    insertions: 1,
+                    deletions: 1,
+                }],
+                validation_commands: vec![BuildAgentValidationCommand {
+                    label: "printf ok".to_string(),
+                    program: "printf".to_string(),
+                    args: vec!["ok".to_string()],
+                    exit_code: Some(0),
+                    stdout: Some("ok".to_string()),
+                    stderr: None,
+                    source: Some("test".to_string()),
+                }],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(prepared.run.status, ExecuteRunStatus::Completed);
+        assert_eq!(prepared.result.status, ExecuteRunStatus::Completed);
+        assert_eq!(prepared.delivery.status, "drafted");
+        let issue_after: InputIssue =
+            crate::storage::read_json(&dir.path().join(".agentflow/input/issues/iss-001.json"))
+                .unwrap();
+        assert_eq!(issue_after.status, InputIssueStatus::InReview);
+        assert_eq!(
+            issue_after.display_status,
+            agentflow_input::issue::DisplayStatus::InReview
+        );
+        let loop_projection: serde_json::Value = crate::storage::read_json(
+            &dir.path()
+                .join(".agentflow/state/loops/issues/iss-001.json"),
+        )
+        .unwrap();
+        assert_eq!(loop_projection["stage"], "in_review");
+        assert_eq!(loop_projection["reviewSubstate"], "delivery-prepared");
     }
 
     #[test]

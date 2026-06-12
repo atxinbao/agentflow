@@ -110,6 +110,63 @@ impl DirectIssueLoop {
         agentflow_input::prepare_input_workspace(&root)?;
         Ok(summary)
     }
+
+    pub fn start_runtime_preflight(
+        project_root: impl AsRef<Path>,
+        issue_id: &str,
+    ) -> Result<IssueLoopProjection> {
+        let root = canonical_project_root(project_root)?;
+        let issue = agentflow_input::load_input_issue(&root, issue_id)?;
+        if !matches!(issue.issue_model, InputIssueModel::Direct) {
+            anyhow::bail!(
+                "Direct Issue Loop can only start direct issues; {} is {}",
+                issue.issue_id,
+                format!("{:?}", issue.issue_model).to_lowercase()
+            );
+        }
+        if !matches!(issue.status, InputIssueStatus::Todo) {
+            anyhow::bail!(
+                "Direct Issue Loop can only start todo issues; {} is {}",
+                issue.issue_id,
+                issue.status.as_str()
+            );
+        }
+
+        let run = agentflow_execute::create_execute_run(&root, issue.issue_id.clone())?;
+        let preflight = agentflow_execute::execute_run_preflight(&root, run.run_id.clone())?;
+        let mut projection = IssueLoopProjection::new(None, issue.issue_id.clone(), now());
+        projection.run_id = Some(run.run_id.clone());
+        projection.branch_name = issue_branch_name_from_run(&root, &run.run_id);
+
+        if preflight.status == "ready" {
+            projection.stage = IssueLoopStage::InProgress;
+            agentflow_input::update_input_issue_status(
+                &root,
+                &issue.issue_id,
+                InputIssueStatus::InProgress,
+            )?;
+        } else {
+            projection.stage = IssueLoopStage::Blocked;
+            projection.blockers.push(blocker(
+                "runtime-preflight-blocked",
+                preflight
+                    .blocked_reason
+                    .unwrap_or_else(|| "Runtime preflight blocked.".to_string()),
+                Some(format!(
+                    ".agentflow/execute/runs/{}/preflight.json",
+                    run.run_id
+                )),
+            ));
+            agentflow_input::update_input_issue_status(
+                &root,
+                &issue.issue_id,
+                InputIssueStatus::Blocked,
+            )?;
+        }
+
+        write_issue_loop_projection(&root, &projection)?;
+        Ok(projection)
+    }
 }
 
 fn direct_schedule_blockers(
@@ -224,6 +281,10 @@ fn existing_projection(root: &Path, issue_id: &str) -> Option<IssueLoopProjectio
 
 fn issue_branch_name(root: &Path, issue: &InputIssue) -> Option<String> {
     let run_id = issue.latest_run_id.as_deref()?;
+    issue_branch_name_from_run(root, run_id)
+}
+
+fn issue_branch_name_from_run(root: &Path, run_id: &str) -> Option<String> {
     let value: serde_json::Value = agentflow_execute::storage::read_json(
         &agentflow_execute::storage::run_dir(root, run_id).join("branch.json"),
     )

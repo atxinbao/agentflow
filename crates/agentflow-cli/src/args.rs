@@ -206,6 +206,28 @@ pub(crate) enum IssueCommand {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum BuildAgentCommand {
+    Start {
+        #[arg(long = "issue-id")]
+        issue_id: String,
+    },
+    PrepareReview {
+        #[arg(long)]
+        request: PathBuf,
+    },
+    WriteMergeProof {
+        #[arg(long = "issue-id")]
+        issue_id: String,
+        #[arg(long = "run-id")]
+        run_id: String,
+        #[arg(long)]
+        provider: String,
+        #[arg(long = "merge-mode")]
+        merge_mode: String,
+        #[arg(long = "remote-url")]
+        remote_url: Option<String>,
+        #[arg(long)]
+        merged: bool,
+    },
     Complete {
         #[arg(long)]
         request: PathBuf,

@@ -4,6 +4,12 @@
 //! They must not call archived 2026-05 writers.
 
 use agentflow_execute::{BuildAgentCompletion, BuildAgentCompletionRequest};
+use agentflow_input::issue::{
+    AgentRole, InputIssue, InputIssueModel, InputIssueStatus, IssueCategory,
+};
+use agentflow_loop::{
+    write_issue_merge_proof, DirectIssueLoop, IssueLoop, IssueLoopProjection, ProjectLoop,
+};
 use anyhow::{Context, Result};
 use std::{
     fs,
@@ -23,6 +29,23 @@ const CLI_FRESHNESS_PATHS: [&str; 9] = [
     "crates/loop/src",
 ];
 
+#[derive(Debug, Clone)]
+pub(crate) struct BuildAgentStart {
+    pub issue_id: String,
+    pub run_id: String,
+    pub stage: String,
+    pub branch_name: Option<String>,
+    pub project_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BuildAgentMergeProof {
+    pub issue_id: String,
+    pub run_id: String,
+    pub merged: bool,
+    pub proof_path: PathBuf,
+}
+
 pub(crate) fn complete_build_agent_issue_from_request(
     root: &Path,
     request_path: &Path,
@@ -35,6 +58,138 @@ pub(crate) fn complete_build_agent_issue_from_request(
     let completion = agentflow_execute::complete_build_agent_issue(root, request)?;
     agentflow_state::refresh_state(root)?;
     Ok(completion)
+}
+
+pub(crate) fn prepare_build_agent_review_from_request(
+    root: &Path,
+    request_path: &Path,
+) -> Result<BuildAgentCompletion> {
+    assert_current_cli_is_fresh(root)?;
+    let raw = fs::read_to_string(request_path)
+        .with_context(|| format!("read review preparation request {}", request_path.display()))?;
+    let request: BuildAgentCompletionRequest = serde_json::from_str(&raw).with_context(|| {
+        format!(
+            "parse review preparation request {}",
+            request_path.display()
+        )
+    })?;
+    let prepared = agentflow_execute::prepare_build_agent_review(root, request)?;
+    agentflow_state::refresh_state(root)?;
+    Ok(prepared)
+}
+
+pub(crate) fn start_build_agent_issue(root: &Path, issue_id: &str) -> Result<BuildAgentStart> {
+    assert_current_cli_is_fresh(root)?;
+    let issue_id = issue_id.trim();
+    if issue_id.is_empty() {
+        anyhow::bail!("build agent start requires issueId");
+    }
+    let mut issue = agentflow_input::load_input_issue(root, issue_id)
+        .with_context(|| format!("load input issue {issue_id}"))?;
+    assert_build_agent_contract(&issue)?;
+    if matches!(issue.status, InputIssueStatus::Backlog) {
+        schedule_issue_for_runtime(root, &issue)?;
+        issue = agentflow_input::load_input_issue(root, issue_id)
+            .with_context(|| format!("reload input issue {issue_id} after scheduling"))?;
+    }
+    if !matches!(issue.status, InputIssueStatus::Todo) {
+        anyhow::bail!(
+            "build agent start requires todo issue after scheduling; {} is {}",
+            issue.issue_id,
+            issue.status.as_str()
+        );
+    }
+
+    let projection = start_issue_runtime_preflight(root, &issue)?;
+    agentflow_state::refresh_state(root)?;
+    Ok(BuildAgentStart {
+        issue_id: issue.issue_id,
+        run_id: projection
+            .run_id
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("runtime preflight did not produce runId"))?,
+        stage: projection.stage.as_str().to_string(),
+        branch_name: projection.branch_name,
+        project_id: projection.project_id,
+    })
+}
+
+pub(crate) fn write_build_agent_merge_proof(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+    provider: &str,
+    merge_mode: &str,
+    remote_url: Option<String>,
+    merged: bool,
+) -> Result<BuildAgentMergeProof> {
+    assert_current_cli_is_fresh(root)?;
+    let issue = agentflow_input::load_input_issue(root, issue_id)
+        .with_context(|| format!("load input issue {issue_id}"))?;
+    assert_build_agent_contract(&issue)?;
+    let proof_path = write_issue_merge_proof(
+        root,
+        &issue.issue_id,
+        issue.project_id.as_deref(),
+        run_id,
+        provider,
+        merge_mode,
+        remote_url,
+        merged,
+    )?;
+    agentflow_state::refresh_state(root)?;
+    Ok(BuildAgentMergeProof {
+        issue_id: issue.issue_id,
+        run_id: run_id.to_string(),
+        merged,
+        proof_path,
+    })
+}
+
+fn assert_build_agent_contract(issue: &InputIssue) -> Result<()> {
+    if !matches!(issue.issue_category, IssueCategory::Spec) {
+        anyhow::bail!(
+            "build agent start only supports spec issues; {} is {}",
+            issue.issue_id,
+            issue.issue_category.as_str()
+        );
+    }
+    if !matches!(issue.required_agent_role, AgentRole::BuildAgent) {
+        anyhow::bail!(
+            "build agent start only supports build-agent issues; {} is {}",
+            issue.issue_id,
+            issue.required_agent_role.as_str()
+        );
+    }
+    Ok(())
+}
+
+fn schedule_issue_for_runtime(root: &Path, issue: &InputIssue) -> Result<()> {
+    match issue.issue_model {
+        InputIssueModel::Direct => {
+            DirectIssueLoop::schedule_ready_issues(root)?;
+        }
+        InputIssueModel::Project => {
+            let project_id = issue.project_id.as_deref().ok_or_else(|| {
+                anyhow::anyhow!("project issue {} is missing projectId", issue.issue_id)
+            })?;
+            ProjectLoop::new(project_id).run_preflight(root)?;
+            ProjectLoop::new(project_id).schedule_ready_issues(root)?;
+        }
+    }
+    Ok(())
+}
+
+fn start_issue_runtime_preflight(root: &Path, issue: &InputIssue) -> Result<IssueLoopProjection> {
+    match issue.issue_model {
+        InputIssueModel::Direct => DirectIssueLoop::start_runtime_preflight(root, &issue.issue_id),
+        InputIssueModel::Project => {
+            let project_id = issue.project_id.as_deref().ok_or_else(|| {
+                anyhow::anyhow!("project issue {} is missing projectId", issue.issue_id)
+            })?;
+            IssueLoop::new(project_id, &issue.issue_id).start_runtime_preflight(root)
+        }
+    }
 }
 
 fn assert_current_cli_is_fresh(root: &Path) -> Result<()> {

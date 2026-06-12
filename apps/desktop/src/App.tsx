@@ -4193,7 +4193,7 @@ function agentInstructionForTask(task: V1Issue) {
   if (task.requiredAgentRole === "audit-agent") {
     return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR/MR。";
   }
-  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 input issue 是唯一任务源；handoff package 只是这份 issue 的派生快照；executionPipeline 只是这份 issue 合同里的一部分，不是独立任务源。不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按执行前置检测、测试设计、执行、沙箱验证、创建 PR/MR、合并 PR/MR、写回 Done 的流程执行。先通过 AgentFlow 官方 run loop / runtime preflight 创建当前 run，再开始改源码；没有 run 就不能开工。不要手写 `.agentflow/**`，但这不等于不能调用 AgentFlow 官方命令推进 loop、补生成 Context Pack 或写回完成结果。写回 Done 前必须确认当前 AgentFlow CLI 支持 build-agent complete；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
+  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 input issue 是唯一任务源；handoff package 只是这份 issue 的派生快照；executionPipeline 只是这份 issue 合同里的一部分，不是独立任务源。不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按执行前置检测、测试设计、执行、沙箱验证、创建 PR/MR、合并 PR/MR、写回 Done 的流程执行。先调用 `agentflow build-agent start --issue-id <issue-id>` 创建当前 run；没有 run 就不能开工。完成本地验证后，调用 `agentflow build-agent prepare-review --request <completion-request.json>` 生成 result、evidence、delivery，并把 issue 推到 in_review。PR/MR 创建或合并后，调用 `agentflow build-agent write-merge-proof --issue-id <issue-id> --run-id <run-id> --provider <github|gitlab> --merge-mode <auto-merge-if-eligible|manual-merge> [--remote-url <url>] [--merged]` 记录 review 状态。PR/MR 合并后，再调用 `agentflow build-agent complete --request <completion-request.json>` 写回 Done。不要手写 `.agentflow/**`，但这不等于不能调用 AgentFlow 官方命令推进 loop、补生成 Context Pack 或写回完成结果。写回 Done 前必须确认当前 AgentFlow CLI 支持这些 build-agent 命令；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
 }
 
 function taskAuditDescriptionItems(task: V1Issue): Array<[string, string]> {
@@ -4803,6 +4803,19 @@ function buildAgentPullRequestTemplateZh(task: V1Issue) {
 }
 
 function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
+  const validationCommandTemplates = task.validationCommands.slice(0, 3).map((command) => ({
+    args: command.split(" ").slice(1),
+    exitCode: 0,
+    label: command,
+    program: command.split(" ")[0] ?? command,
+    source: "build-agent",
+  }));
+  const changedFileTemplates = task.allowedFiles.slice(0, 3).map((path) => ({
+    changeType: "modified",
+    deletions: 0,
+    insertions: 0,
+    path,
+  }));
   const handoffPackage =
     task.issueCategory === "audit"
       ? {
@@ -4824,24 +4837,37 @@ function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
       : {
           agentInstruction: agentInstructionForTask(task),
           codexThreadName: codexThreadNameForRole(task.requiredAgentRole),
+          runtimeStart: {
+            cli: "target/release/agentflow build-agent start --issue-id <issue-id> after cargo build --release --bin agentflow, or target/debug/agentflow build-agent start --issue-id <issue-id>",
+            issueId: task.id,
+          },
+          reviewPreparation: {
+            cli: "target/release/agentflow build-agent prepare-review --request <completion-request.json> after cargo build --release --bin agentflow, or target/debug/agentflow build-agent prepare-review --request <completion-request.json>",
+            request: {
+              changedFiles: changedFileTemplates,
+              issueId: task.id,
+              runId: "<run-id-from-build-agent-start>",
+              validationCommands: validationCommandTemplates,
+            },
+          },
+          mergeProofWriteback: {
+            cli: "target/release/agentflow build-agent write-merge-proof --issue-id <issue-id> --run-id <run-id> --provider <github|gitlab> --merge-mode <auto-merge-if-eligible|manual-merge> [--remote-url <url>] [--merged] after cargo build --release --bin agentflow, or target/debug/agentflow build-agent write-merge-proof --issue-id <issue-id> --run-id <run-id> --provider <github|gitlab> --merge-mode <auto-merge-if-eligible|manual-merge> [--remote-url <url>] [--merged]",
+            request: {
+              issueId: task.id,
+              merged: false,
+              mergeMode: "<auto-merge-if-eligible|manual-merge>",
+              provider: "<github|gitlab>",
+              remoteUrl: "<pr-or-mr-url>",
+              runId: "<run-id-from-build-agent-start>",
+            },
+          },
           completionWriteback: {
             cli: "target/release/agentflow build-agent complete --request <completion-request.json> after cargo build --release --bin agentflow, or target/debug/agentflow build-agent complete --request <completion-request.json>",
-            command: "complete_build_agent_issue",
             request: {
-              changedFiles: task.allowedFiles.slice(0, 3).map((path) => ({
-                changeType: "modified",
-                deletions: 0,
-                insertions: 0,
-                path,
-              })),
+              changedFiles: changedFileTemplates,
               issueId: task.id,
-              validationCommands: task.validationCommands.slice(0, 3).map((command) => ({
-                args: command.split(" ").slice(1),
-                exitCode: 0,
-                label: command,
-                program: command.split(" ")[0] ?? command,
-                source: "build-agent",
-              })),
+              runId: "<run-id-from-build-agent-start>",
+              validationCommands: validationCommandTemplates,
             },
           },
           contextPackPath: task.contextPackPath,
@@ -4910,9 +4936,11 @@ function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
           "- mergeMode = auto-merge-if-eligible：GitHub 执行 `gh pr ready` 和 `gh pr merge --auto`；GitLab 执行 `glab mr update --ready` 和 `glab mr merge --auto-merge`；轮询 PR/MR merged 状态。",
           "- 自动合并条件不满足时，回落到 manual-merge：把 PR/MR 标记 ready 后 issue 保持 in_review，等待人合并；本地检测确认 PR/MR merged 后继续写回。",
           "- PR/MR 合并后才写回 Done。",
-          "- 进入 in_progress 前必须先通过 AgentFlow 官方 run loop / runtime preflight 创建当前 run；没有 run 不得开始改源码。",
+          "- 进入 in_progress 前必须先执行 `agentflow build-agent start --issue-id <issue-id>`；没有 run 不得开始改源码。",
           "- 进入 in_progress 前必须确认 Context Pack 可读，且当前工作区没有未提交的用户源码改动。",
-          "- 写回 Done 前必须确认当前 AgentFlow CLI 支持 `build-agent complete`。",
+          "- 本地验证完成后执行 `agentflow build-agent prepare-review --request <completion-request.json>`，把 issue 推到 in_review。",
+          "- PR/MR ready 或 merged 后执行 `agentflow build-agent write-merge-proof ...`，把 remoteUrl / mergeMode / merged 状态写回官方 review 证明。",
+          "- 写回 Done 前必须确认当前 AgentFlow CLI 支持 `build-agent start`、`build-agent prepare-review`、`build-agent write-merge-proof` 和 `build-agent complete`。",
           "- 如果使用 `target/release/agentflow`，必须先运行 `cargo build --release --bin agentflow`；否则使用 `target/debug/agentflow`。",
           "- 不要直接复用可能过期的 `target/release/agentflow`。",
           "",
@@ -4950,11 +4978,15 @@ function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
       ? [
           "",
           "## 完成写回",
+          "- 进入执行前先运行 `target/release/agentflow build-agent start --issue-id <issue-id>`；如果 release binary 过期或不支持，使用 `target/debug/agentflow build-agent start --issue-id <issue-id>`。",
+          "- 记录 `build-agent start` 返回的 `runId`，后续 `prepare-review`、`write-merge-proof`、`complete` 都必须复用这个 `runId`。",
+          "- 本地验证完成后运行 `target/release/agentflow build-agent prepare-review --request <completion-request.json>`；如果 release binary 过期或不支持，使用 `target/debug/agentflow build-agent prepare-review --request <completion-request.json>`。",
+          "- PR/MR ready 或 merged 后运行 `target/release/agentflow build-agent write-merge-proof --issue-id <issue-id> --run-id <run-id> --provider <github|gitlab> --merge-mode <auto-merge-if-eligible|manual-merge> [--remote-url <url>] [--merged]`；如果 release binary 过期或不支持，使用对应 debug binary。",
           "- 完成代码任务并确认 PR 已合并后，调用已验证的新 CLI 写回。",
           "- 使用 `target/release/agentflow` 前必须先运行 `cargo build --release --bin agentflow`。",
           "- 如果 release binary 不支持 `build-agent complete`，使用 `target/debug/agentflow build-agent complete --request <completion-request.json>`。",
-          "- 桌面端内部命令名为 `complete_build_agent_issue`。",
           "- request.issueId 必须等于当前任务 id。",
+          "- request.runId 必须等于 `build-agent start` 返回的 `runId`。",
           "- request.changedFiles 填写实际修改文件。",
           "- request.validationCommands 填写已执行的验证命令和 exitCode。",
           "- AgentFlow 会自动生成规范 run、evidence、release，并把任务派生成已完成。",
