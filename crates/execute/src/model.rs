@@ -12,6 +12,7 @@ pub const EXECUTE_LEASE_VERSION: &str = "execute-lease.v1";
 pub const EXECUTE_CHECKPOINT_VERSION: &str = "execute-checkpoint.v1";
 pub const EXECUTE_COMMAND_VERSION: &str = "execute-command.v1";
 pub const EXECUTE_RESULT_VERSION: &str = "execute-result.v1";
+pub const EXECUTE_BUILD_AGENT_LAUNCH_STATE_VERSION: &str = "build-agent-launch-state.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -65,6 +66,39 @@ pub enum ExecuteCheckStatus {
 pub enum ExecuteLeaseStatus {
     Active,
     Released,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BuildAgentLaunchStatus {
+    Queued,
+    Claimed,
+    InReview,
+    Done,
+    Failed,
+}
+
+impl Default for BuildAgentLaunchStatus {
+    fn default() -> Self {
+        Self::Queued
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildAgentLaunchState {
+    pub version: String,
+    pub issue_id: String,
+    pub project_id: Option<String>,
+    pub run_id: String,
+    pub branch_name: Option<String>,
+    pub launch_request_path: String,
+    pub status: BuildAgentLaunchStatus,
+    pub event_id: Option<String>,
+    pub claimed_at: Option<u64>,
+    pub review_prepared_at: Option<u64>,
+    pub completed_at: Option<u64>,
+    pub updated_at: u64,
 }
 
 impl Default for ExecuteLeaseStatus {

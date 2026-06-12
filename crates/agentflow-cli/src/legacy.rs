@@ -5,8 +5,9 @@
 //! executed from the CLI.
 
 use crate::active::{
-    complete_build_agent_issue_from_request, prepare_build_agent_review_from_request,
-    start_build_agent_issue, write_build_agent_merge_proof,
+    claim_next_build_agent_launch, complete_build_agent_issue_from_request,
+    prepare_build_agent_review_from_request, start_build_agent_issue,
+    write_build_agent_merge_proof,
 };
 use crate::args::{BuildAgentCommand, Cli, Command};
 use crate::retirement::{
@@ -204,6 +205,18 @@ pub(crate) fn run() -> Result<()> {
                 println!("branch: {}", start.branch_name.as_deref().unwrap_or("none"));
                 println!("project: {}", start.project_id.as_deref().unwrap_or("none"));
             }
+            BuildAgentCommand::ClaimLaunch => {
+                if let Some(claim) = claim_next_build_agent_launch(&cwd)? {
+                    println!("build agent launch: claimed");
+                    println!("event: {}", claim.event_id);
+                    println!("issue: {}", claim.issue_id);
+                    println!("run: {}", claim.run_id);
+                    println!("branch: {}", claim.branch_name.as_deref().unwrap_or("none"));
+                    println!("request: {}", claim.launch_request_path.display());
+                } else {
+                    println!("build agent launch: none");
+                }
+            }
             BuildAgentCommand::PrepareReview { request } => {
                 let prepared = prepare_build_agent_review_from_request(&cwd, &request)?;
                 println!("build agent review: prepared");
@@ -237,13 +250,20 @@ pub(crate) fn run() -> Result<()> {
                 println!("path: {}", proof.proof_path.display());
             }
             BuildAgentCommand::Complete { request } => {
-                let completion = complete_build_agent_issue_from_request(&cwd, &request)?;
+                let outcome = complete_build_agent_issue_from_request(&cwd, &request)?;
+                let completion = outcome.completion;
                 println!("build agent completion: done");
                 println!("issue: {}", completion.run.issue_id);
                 println!("run: {}", completion.run.run_id);
                 println!("run status: {:?}", completion.run.status);
                 println!("delivery: {}", completion.delivery.run_id);
                 println!("validation passed: {}", completion.result.validation.passed);
+                if let Some(next_launch) = outcome.next_launch {
+                    println!("next issue: {}", next_launch.issue_id);
+                    println!("next run: {}", next_launch.run_id);
+                    println!("next stage: {}", next_launch.stage.as_str());
+                    println!("next request: {}", next_launch.launch_request_path);
+                }
             }
         },
         command => {

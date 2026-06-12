@@ -28,9 +28,11 @@ dependencies = [
  "agentflow-input",
  "agentflow-loop",
  "agentflow-state",
+ "agentflow-workflow-events",
  "anyhow",
  "clap",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -105,6 +107,7 @@ dependencies = [
  "agentflow-input",
  "agentflow-output",
  "agentflow-panel",
+ "agentflow-workflow-events",
  "anyhow",
  "serde",
  "serde_json",

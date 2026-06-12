@@ -1,4 +1,4 @@
-use agentflow_loop::{DirectIssueLoopSummary, LoopBlocker, ProjectLoopSnapshot};
+use agentflow_loop::{DirectIssueLoopSummary, LoopBlocker, ProjectExecutionTick, ProjectExecutor};
 use serde::Serialize;
 use std::path::Path;
 use tauri::{AppHandle, Emitter};
@@ -13,6 +13,7 @@ pub(crate) struct ProjectLoopRunSummary {
     project_root: String,
     project_count: usize,
     direct_issue_count: usize,
+    runtime_launch_count: usize,
     active_issue_count: usize,
     blocked_issue_count: usize,
     done_issue_count: usize,
@@ -28,6 +29,10 @@ pub(crate) struct ProjectLoopProjectSummary {
     active_issue_ids: Vec<String>,
     blocked_issue_ids: Vec<String>,
     done_issue_ids: Vec<String>,
+    runtime_issue_id: Option<String>,
+    runtime_run_id: Option<String>,
+    runtime_stage: Option<String>,
+    runtime_launch_request_path: Option<String>,
     blockers: Vec<LoopBlocker>,
 }
 
@@ -38,6 +43,7 @@ struct ProjectLoopTickedEvent {
     project_root: String,
     project_count: usize,
     direct_issue_count: usize,
+    runtime_launch_count: usize,
     active_issue_count: usize,
     blocked_issue_count: usize,
     done_issue_count: usize,
@@ -62,6 +68,7 @@ pub(crate) fn run_project_loop_for_app(
         project_root: summary.project_root.clone(),
         project_count: summary.project_count,
         direct_issue_count: summary.direct_issue_count,
+        runtime_launch_count: summary.runtime_launch_count,
         active_issue_count: summary.active_issue_count,
         blocked_issue_count: summary.blocked_issue_count,
         done_issue_count: summary.done_issue_count,
@@ -81,6 +88,7 @@ pub(crate) fn run_project_loop_inner(
         project_root: root.display().to_string(),
         project_count: snapshot.projects.len(),
         direct_issue_count: 0,
+        runtime_launch_count: 0,
         active_issue_count: 0,
         blocked_issue_count: 0,
         done_issue_count: 0,
@@ -95,12 +103,8 @@ pub(crate) fn run_project_loop_inner(
 
     for project in snapshot.projects {
         let project_id = project.project_id;
-        let project_loop = agentflow_loop::ProjectLoop::new(project_id.clone());
-        match project_loop
-            .run_preflight(&root)
-            .and_then(|_| project_loop.schedule_ready_issues(&root))
-        {
-            Ok(loop_snapshot) => push_project_summary(&mut summary, loop_snapshot),
+        match ProjectExecutor::new(project_id.clone()).tick(&root) {
+            Ok(execution_tick) => push_project_summary(&mut summary, execution_tick),
             Err(error) => summary.errors.push(format!("{project_id}: {error}")),
         }
     }
@@ -126,16 +130,24 @@ fn push_direct_summary(summary: &mut ProjectLoopRunSummary, snapshot: DirectIssu
     }
 }
 
-fn push_project_summary(summary: &mut ProjectLoopRunSummary, snapshot: ProjectLoopSnapshot) {
+fn push_project_summary(summary: &mut ProjectLoopRunSummary, tick: ProjectExecutionTick) {
+    let ProjectExecutionTick { snapshot, launch } = tick;
     summary.active_issue_count += snapshot.active_issue_ids.len();
     summary.blocked_issue_count += snapshot.blocked_issue_ids.len();
     summary.done_issue_count += snapshot.done_issue_ids.len();
+    if launch.is_some() {
+        summary.runtime_launch_count += 1;
+    }
     summary.projects.push(ProjectLoopProjectSummary {
         project_id: snapshot.project_id,
         status: snapshot.status.as_str().to_string(),
         active_issue_ids: snapshot.active_issue_ids,
         blocked_issue_ids: snapshot.blocked_issue_ids,
         done_issue_ids: snapshot.done_issue_ids,
+        runtime_issue_id: launch.as_ref().map(|item| item.issue_id.clone()),
+        runtime_run_id: launch.as_ref().map(|item| item.run_id.clone()),
+        runtime_stage: launch.as_ref().map(|item| item.stage.as_str().to_string()),
+        runtime_launch_request_path: launch.as_ref().map(|item| item.launch_request_path.clone()),
         blockers: snapshot.blockers,
     });
 }
@@ -167,19 +179,43 @@ mod tests {
 
         assert_eq!(summary.project_count, 1);
         assert_eq!(summary.direct_issue_count, 0);
+        assert_eq!(summary.runtime_launch_count, 1);
         assert_eq!(summary.active_issue_count, 1);
         assert_eq!(summary.blocked_issue_count, 0);
         assert!(summary.errors.is_empty());
         assert_eq!(summary.projects[0].status, "executing");
         assert_eq!(summary.projects[0].active_issue_ids, vec!["AF-LOOP-001"]);
+        assert_eq!(
+            summary.projects[0].runtime_issue_id.as_deref(),
+            Some("AF-LOOP-001")
+        );
+        assert_eq!(
+            summary.projects[0].runtime_stage.as_deref(),
+            Some("in_progress")
+        );
 
         let issue = agentflow_input::load_input_issue(dir.path(), "AF-LOOP-001").unwrap();
-        assert_eq!(issue.status, InputIssueStatus::Todo);
-        assert_eq!(issue.display_status, DisplayStatus::Todo);
+        assert_eq!(issue.status, InputIssueStatus::InProgress);
+        assert_eq!(issue.display_status, DisplayStatus::InProgress);
         assert!(dir
             .path()
             .join(".agentflow/panel/context-packs/AF-LOOP-001.json")
             .is_file());
+        assert!(issue.latest_run_id.is_some());
+        let expected_launch_request_path = issue.latest_run_id.as_deref().map(|run_id| {
+            format!(".agentflow/execute/runs/{run_id}/launcher/build-agent-request.json")
+        });
+        assert_eq!(
+            summary.projects[0].runtime_launch_request_path.as_deref(),
+            expected_launch_request_path.as_deref()
+        );
+        let launch_request_path = dir.path().join(
+            summary.projects[0]
+                .runtime_launch_request_path
+                .as_deref()
+                .unwrap(),
+        );
+        assert!(launch_request_path.is_file());
         assert!(dir
             .path()
             .join(".agentflow/state/loops/projects/proj-loop.json")
@@ -202,6 +238,7 @@ mod tests {
 
         assert_eq!(summary.project_count, 0);
         assert_eq!(summary.direct_issue_count, 1);
+        assert_eq!(summary.runtime_launch_count, 0);
         assert_eq!(summary.active_issue_count, 1);
         assert_eq!(summary.blocked_issue_count, 0);
         assert!(summary.errors.is_empty());

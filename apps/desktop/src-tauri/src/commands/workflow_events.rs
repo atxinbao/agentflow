@@ -441,7 +441,7 @@ mod tests {
 
         assert_eq!(summary.context_pack_ready, 1);
         let issue = agentflow_input::load_input_issue(dir.path(), "AF-EVENT-001").unwrap();
-        assert_eq!(issue.status, InputIssueStatus::Todo);
+        assert_eq!(issue.status, InputIssueStatus::InProgress);
         assert!(dir
             .path()
             .join(".agentflow/panel/context-packs/AF-EVENT-001.json")
