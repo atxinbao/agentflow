@@ -2100,7 +2100,7 @@ function CodexRoleGuideCard() {
       <header className="v16-codex-role-guide-header">
         <span>
           <strong id="v16-codex-role-guide-title">Agent 角色使用说明</strong>
-          <small>AgentFlow 不直接控制执行过程。你需要按角色开线程，每个线程只做一种工作。</small>
+          <small>你需要按角色开启会话，每个会话只做一种工作。</small>
         </span>
         <StatusBadge status="idle">本地说明</StatusBadge>
       </header>
