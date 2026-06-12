@@ -169,6 +169,17 @@ export type TaskProjectTreeViewModel = {
   warnings: TaskProjectTreeWarning[];
 };
 
+export type TaskStatusContract = {
+  status: IssueDisplayStatus;
+  label: string;
+  businessMeaning: string;
+  ownerRoleLabel: string;
+  stageAction: string;
+  stageOutputs: string[];
+  nextEntry: string;
+  uiSummary: string[];
+};
+
 export type BuildTaskProjectTreeViewModelInput = {
   activeIssueId?: string | null;
   issues: InputIssue[];
@@ -410,6 +421,163 @@ export function displayStatusLabelZh(status: IssueDisplayStatus = "backlog") {
     todo: "准备开工",
   };
   return labels[status];
+}
+
+export function buildTaskStatusContract(task: V1Issue): TaskStatusContract {
+  const status = task.displayStatus ?? "backlog";
+  const roleLabel = statusOwnerRoleLabel(status, task.issueCategory);
+  const validationCount = task.validationCommands.length;
+  const outputCount = Object.keys(task.expectedOutputs ?? {}).length;
+  const hasDependencies = task.dependencies.length > 0;
+
+  const contracts: Record<IssueDisplayStatus, TaskStatusContract> = {
+    backlog: {
+      status,
+      label: displayStatusLabelZh(status),
+      businessMeaning: "任务已经进入任务池，但还没有进入执行准备。",
+      ownerRoleLabel: roleLabel,
+      stageAction: "整理任务边界，确认范围、非目标和依赖关系。",
+      stageOutputs: [
+        "任务合同已生成。",
+        hasDependencies ? `前置依赖：${task.dependencies.join("、")}` : "前置依赖：无。",
+        `允许范围：${task.allowedFiles.length ? task.allowedFiles.join("、") : "待补充"}`,
+      ],
+      nextEntry: "先确认任务合同，再进入执行前置检测。",
+      uiSummary: [
+        "任务已创建。",
+        "还没有进入执行。",
+      ],
+    },
+    todo: {
+      status,
+      label: displayStatusLabelZh(status),
+      businessMeaning: "任务已经满足开工前提，正在等待正式进入执行。",
+      ownerRoleLabel: roleLabel,
+      stageAction: "执行前置检测，确认合同完整、Context Pack 可读、工作区干净。",
+      stageOutputs: [
+        task.contextPackPath ? `Context Pack：${task.contextPackPath}` : "Context Pack：等待生成。",
+        "当前 run 已准备就绪。",
+        validationCount ? `验证命令：${validationCount} 条` : "验证命令：待补充。",
+      ],
+      nextEntry: "通过前置检测后进入 in_progress。",
+      uiSummary: [
+        "可以开工。",
+        "等待 Build Agent 接手。",
+      ],
+    },
+    in_progress: {
+      status,
+      label: displayStatusLabelZh(status),
+      businessMeaning: "任务正在执行，Build Agent 正在按合同修改代码并做本地验证。",
+      ownerRoleLabel: roleLabel,
+      stageAction: "完成测试设计、实现改动和沙箱验证。",
+      stageOutputs: [
+        validationCount ? `验证命令：${validationCount} 条` : "验证命令：待记录。",
+        outputCount ? `预期输出：${outputCount} 项` : "预期输出：待记录。",
+        "本地验证结果会在进入评审前补齐。",
+      ],
+      nextEntry: "验证通过后进入 in_review。",
+      uiSummary: [
+        "Agent 正在做。",
+        "还没有进入评审。",
+      ],
+    },
+    in_review: {
+      status,
+      label: displayStatusLabelZh(status),
+      businessMeaning: "任务代码和本地验证已经完成，正在等待 PR/MR 合并或最终核对。",
+      ownerRoleLabel: roleLabel,
+      stageAction: "整理交付结果，创建评审请求，等待自动合并或人工合并。",
+      stageOutputs: [
+        "交付材料应已生成。",
+        "验证结果应已记录。",
+        "等待 merge proof 和最终写回。",
+      ],
+      nextEntry: "PR/MR merged 后写回 done。",
+      uiSummary: [
+        "实现已完成。",
+        "等待合并或最终写回。",
+      ],
+    },
+    done: {
+      status,
+      label: displayStatusLabelZh(status),
+      businessMeaning: "任务已经完成写回，执行链路到这里收口。",
+      ownerRoleLabel: roleLabel,
+      stageAction: "保留交付和证据，等待后续独立审计或查看交付。",
+      stageOutputs: [
+        "任务状态已写回 done。",
+        "交付材料已保留。",
+        "证据记录已保留。",
+      ],
+      nextEntry: "需要时查看交付，不自动进入审计。",
+      uiSummary: [
+        "任务已完成。",
+        "主链路已经结束。",
+      ],
+    },
+    blocked: {
+      status,
+      label: displayStatusLabelZh(status),
+      businessMeaning: "任务被关键阻断项卡住，当前不能继续推进。",
+      ownerRoleLabel: roleLabel,
+      stageAction: "先解除阻断，再重新回到待执行阶段。",
+      stageOutputs: [
+        hasDependencies ? `阻断依赖：${task.dependencies.join("、")}` : "阻断原因：等待补充。",
+        "当前不会继续执行。",
+      ],
+      nextEntry: "解除阻断后回到 backlog 或 todo。",
+      uiSummary: [
+        "任务被卡住。",
+        "需要先处理阻断原因。",
+      ],
+    },
+    cancel: {
+      status,
+      label: displayStatusLabelZh(status),
+      businessMeaning: "任务已取消，不再继续推进。",
+      ownerRoleLabel: roleLabel,
+      stageAction: "保留任务记录，不再执行后续动作。",
+      stageOutputs: [
+        "当前任务已停止。",
+        "不会再进入执行或评审。",
+      ],
+      nextEntry: "如需恢复，重新生成新任务。",
+      uiSummary: [
+        "任务已取消。",
+        "当前链路终止。",
+      ],
+    },
+  };
+
+  return contracts[status];
+}
+
+function statusOwnerRoleLabel(status: IssueDisplayStatus, issueCategory?: IssueCategory) {
+  if (issueCategory === "audit") {
+    if (status === "done") {
+      return "Audit Agent";
+    }
+    if (status === "blocked" || status === "cancel") {
+      return "Audit Agent / 人";
+    }
+    return "Audit Agent";
+  }
+
+  switch (status) {
+    case "backlog":
+      return "Spec Agent";
+    case "todo":
+    case "in_progress":
+    case "in_review":
+    case "done":
+      return "Build Agent";
+    case "blocked":
+    case "cancel":
+      return "Build Agent / 人";
+    default:
+      return "Build Agent";
+  }
 }
 
 function inputIssueToTaskIssueNode(
