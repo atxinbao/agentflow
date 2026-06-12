@@ -133,7 +133,7 @@ fn display_status(
     issue: &InputIssue,
     output: Option<&agentflow_output::OutputSnapshot>,
     _latest_run_id: Option<&str>,
-    blocked_by_gate: bool,
+    _blocked_by_gate: bool,
 ) -> DisplayStatus {
     if matches!(issue.status, InputIssueStatus::Cancel) {
         return DisplayStatus::Cancel;
@@ -144,14 +144,6 @@ fn display_status(
 
     if let Some(status) = audit_display_status(output, &issue.issue_id) {
         return status;
-    }
-    if blocked_by_gate
-        && matches!(
-            issue.status,
-            InputIssueStatus::Backlog | InputIssueStatus::Todo
-        )
-    {
-        return DisplayStatus::Blocked;
     }
 
     DisplayStatus::from_input_status(&issue.status)
@@ -433,7 +425,7 @@ mod tests {
         );
         assert_eq!(
             display_status(&issue(InputIssueStatus::Todo), None, None, true),
-            DisplayStatus::Blocked
+            DisplayStatus::Todo
         );
         assert_eq!(
             display_status(&issue(InputIssueStatus::Blocked), None, None, false,),

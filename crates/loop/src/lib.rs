@@ -34,7 +34,7 @@ mod tests {
         project::{InputProject, InputProjectStatus},
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
-    use std::{fs, path::Path};
+    use std::{fs, path::Path, process::Command};
     use tempfile::tempdir;
 
     fn prepare_root(root: &Path) {
@@ -50,6 +50,39 @@ mod tests {
             .unwrap();
         agentflow_input::prepare_input_workspace(root).unwrap();
         agentflow_execute::prepare_execute_workspace(root).unwrap();
+    }
+
+    fn init_clean_git_repo(root: &Path) {
+        fs::write(root.join(".gitignore"), ".agentflow/\nAGENTS.md\n").unwrap();
+        Command::new("git")
+            .args(["init", "-b", "main"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["add", ".gitignore", "README.md", "src/lib.rs"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        let output = Command::new("git")
+            .args([
+                "-c",
+                "user.name=AgentFlow Test",
+                "-c",
+                "user.email=agentflow-test@example.com",
+                "commit",
+                "-m",
+                "initial",
+            ])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     fn write_approved_spec(root: &Path) {
@@ -319,6 +352,54 @@ mod tests {
             .blockers
             .iter()
             .any(|blocker| blocker.code == "build-agent-contract-invalid"));
+    }
+
+    #[test]
+    fn project_scheduler_recovers_retryable_branch_block_to_todo() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        init_clean_git_repo(dir.path());
+        write_approved_spec(dir.path());
+        write_project_issue(dir.path(), InputIssueStatus::Blocked);
+        let mut issue = agentflow_input::load_input_issue(dir.path(), "AF-001").unwrap();
+        issue.latest_run_id = Some("run-001".to_string());
+        fs::write(
+            dir.path().join(".agentflow/input/issues/AF-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow/execute/runs/run-001")).unwrap();
+        fs::write(
+            dir.path()
+                .join(".agentflow/execute/runs/run-001/branch.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "version": "execute-branch-check.v1",
+                "runId": "run-001",
+                "issueId": "AF-001",
+                "projectId": "proj-001",
+                "baseBranch": "main",
+                "issueBranch": "agentflow/proj-001/AF-001",
+                "currentBranchBefore": "main",
+                "currentBranchAfter": "main",
+                "status": "blocked",
+                "blockedReason": "current branch does not match issue branch and worktree has uncommitted changes"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+        mark_project_preflight_ready(dir.path());
+
+        let snapshot = ProjectLoop::new("proj-001")
+            .schedule_ready_issues(dir.path())
+            .unwrap();
+
+        assert_eq!(snapshot.active_issue_ids, vec!["AF-001"]);
+        assert!(snapshot.blocked_issue_ids.is_empty());
+        let issue = agentflow_input::load_input_issue(dir.path(), "AF-001").unwrap();
+        assert_eq!(issue.status, InputIssueStatus::Todo);
+        let projection = storage::read_issue_loop_projection(dir.path(), "AF-001").unwrap();
+        assert_eq!(projection.stage, IssueLoopStage::Todo);
     }
 
     #[test]
