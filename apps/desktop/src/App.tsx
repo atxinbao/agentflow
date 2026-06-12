@@ -1212,22 +1212,14 @@ function App() {
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "home" ? (
           <ProjectHomePage
-            connectedProvider={connectedProvider}
             nextStep={nextStep}
             onOpenAudit={() => setActivePage("audit")}
             onOpenDelivery={() => setActivePage("delivery")}
-            onOpenFiles={() => setActivePage("files")}
             onOpenTasks={() => setActivePage("tasks")}
             outputBundle={outputBundle}
             outputStatusState={outputStatusState}
-            projectPanelState={projectPanelState}
-            projectFilesState={projectFilesState}
-            projectName={projectDisplayName}
-            projectRoot={projectRoot}
             selectedTask={selectedTask}
             initializationState={initializationState}
-            stateStatusState={stateStatusState}
-            workspaceData={workspaceData}
           />
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "tasks" ? (
@@ -2016,80 +2008,30 @@ function ProjectAvailabilityPage({
 }
 
 function ProjectHomePage({
-  connectedProvider,
   nextStep,
   onOpenAudit,
   onOpenDelivery,
-  onOpenFiles,
   onOpenTasks,
   outputBundle,
   outputStatusState,
-  projectPanelState,
-  projectFilesState,
   initializationState,
-  projectName,
-  projectRoot,
   selectedTask,
-  stateStatusState,
-  workspaceData,
 }: {
-  connectedProvider: Provider;
   nextStep: NextStepViewModel;
   onOpenAudit: () => void;
   onOpenDelivery: () => void;
-  onOpenFiles: () => void;
   onOpenTasks: () => void;
   outputBundle: OutputBundleState;
   outputStatusState: OutputStatusState;
-  projectPanelState: ProjectPanelState;
-  projectFilesState: ProjectFilesState;
   initializationState: ProjectInitializationState;
-  projectName: string;
-  projectRoot: string | null;
   selectedTask: V1Issue | null;
-  stateStatusState: StateStatusState;
-  workspaceData: WorkspaceDataState;
 }) {
-  const panelStatus = projectPanelState.status;
   const outputSummary = outputStatusState.status?.summary;
-  const filesMode = isBrowserPreviewRuntime() ? "浏览器预览" : "客户端真实读取";
   const recentActivities = buildRecentActivities(outputBundle, initializationState.status, outputSummary);
 
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
       <section className="v16-home-columns" aria-label="工作台总览">
-        <Panel className="v16-home-column" title="项目状态">
-          <div className="v16-status-stack">
-            <HomeStatusItem
-              detail={workflowStageText(stateStatusState.status?.currentStage)}
-              label="项目"
-              status={stateStatusState.status?.currentStage ? "就绪" : "等待"}
-              title={projectName}
-            />
-            <HomeStatusItem
-              detail={initializationDetail(initializationState)}
-              label="初始化"
-              status={initializationState.status?.initialized ? "已就绪" : "等待"}
-              title={initializationTitle(initializationState.status)}
-            />
-            <HomeStatusItem
-              detail={`${connectedProvider} · 本地只读客户端`}
-              label="工作台 Shell"
-              status={projectRoot ? "已就绪" : "未选择项目"}
-              title="AgentFlow"
-            />
-            <HomeStatusItem
-              detail={`${filesMode} · 只读`}
-              label="项目文件"
-              status={projectFilesState.snapshot ? "已读取" : "等待读取"}
-              title={projectFilesState.snapshot?.projectRoot ? projectNameFromPath(projectFilesState.snapshot.projectRoot) : "文件阅读器"}
-            />
-          </div>
-          <ActionBar>
-            <ActionButton onClick={onOpenFiles} variant="secondary">打开文件页</ActionButton>
-          </ActionBar>
-        </Panel>
-
         <Panel className="v16-home-column v16-home-task-column" title="当前任务">
           {selectedTask ? (
             <button className="v16-current-task-card" onClick={onOpenTasks} type="button">
@@ -2180,27 +2122,6 @@ function CodexRoleGuideCard({ defaultOpen }: { defaultOpen: boolean }) {
         {copyFeedback ? <p className="v16-feedback">{copyFeedback}</p> : null}
       </div>
     </details>
-  );
-}
-
-function HomeStatusItem({
-  detail,
-  label,
-  status,
-  title,
-}: {
-  detail: string;
-  label: string;
-  status: string;
-  title: string;
-}) {
-  return (
-    <article className="v16-home-status-item">
-      <p>{label}</p>
-      <strong>{title}</strong>
-      <span>{detail}</span>
-      <StatusBadge status={status.includes("等待") || status.includes("未") ? "idle" : "ready"}>{status}</StatusBadge>
-    </article>
   );
 }
 
