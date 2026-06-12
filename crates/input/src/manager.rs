@@ -350,8 +350,12 @@ pub fn update_input_issue_status(
             issue.issue_id
         );
     }
+    let next_display_status = DisplayStatus::from_input_status(&status);
+    if issue.status == status && issue.display_status == next_display_status {
+        return Ok(issue);
+    }
     issue.status = status;
-    issue.display_status = DisplayStatus::from_input_status(&issue.status);
+    issue.display_status = next_display_status;
     issue.system.updated_at = unix_timestamp_seconds();
     issue.system.revision = issue.system.revision.saturating_add(1);
     write_json_if_changed(&issue_path, &issue)?;
@@ -373,6 +377,9 @@ pub fn update_input_issue_latest_run(
             "input issue id mismatch: requested {issue_id}, found {}",
             issue.issue_id
         );
+    }
+    if issue.latest_run_id == latest_run_id {
+        return Ok(issue);
     }
     issue.latest_run_id = latest_run_id;
     issue.system.updated_at = unix_timestamp_seconds();
@@ -397,6 +404,9 @@ pub fn update_input_issue_branch_name(
             issue.issue_id
         );
     }
+    if issue.branch_name == branch_name {
+        return Ok(issue);
+    }
     issue.branch_name = branch_name;
     issue.system.updated_at = unix_timestamp_seconds();
     issue.system.revision = issue.system.revision.saturating_add(1);
@@ -419,6 +429,9 @@ pub fn update_input_project_status(
             "input project id mismatch: requested {project_id}, found {}",
             project.project_id
         );
+    }
+    if project.status == status {
+        return Ok(project);
     }
     project.status = status;
     project.system.updated_at = unix_timestamp_seconds();

@@ -2666,12 +2666,22 @@ function TaskDetailReader({
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   task: V1Issue;
 }) {
-  const handoffError = taskHandoffValidationError(task);
-  const detailDescriptionItems = [
-    ...taskAuditDescriptionItems(task),
-    ...(task.auditTrigger ? [["触发来源", auditTriggerLabel(task.auditTrigger)] as [string, string]] : []),
-  ];
-  const outputItems = taskOutputItems(task);
+  const [handoffOpen, setHandoffOpen] = useState(false);
+  const handoffError = useMemo(() => taskHandoffValidationError(task), [task]);
+  const detailDescriptionItems = useMemo(
+    () => [
+      ...taskAuditDescriptionItems(task),
+      ...(task.auditTrigger ? [["触发来源", auditTriggerLabel(task.auditTrigger)] as [string, string]] : []),
+    ],
+    [task],
+  );
+  const outputItems = useMemo(() => taskOutputItems(task), [task]);
+  const handoffContent = useMemo(() => {
+    if (!handoffOpen) {
+      return "";
+    }
+    return handoffError ?? buildCodexHandoff(task, agentLocale);
+  }, [agentLocale, handoffError, handoffOpen, task]);
 
   return (
     <aside className="v16-detail-pane" aria-label="任务合约">
@@ -2717,13 +2727,18 @@ function TaskDetailReader({
         {task.issueCategory === "spec" ? <SectionList title="执行流程" items={taskExecutionPipelineItems(task)} /> : null}
         <SectionList title="相关文件" items={task.allowedFiles} />
         <SectionList title="输出目标" items={outputItems} />
-        <details className="v16-task-package">
+        <details
+          className="v16-task-package"
+          onToggle={(event) => setHandoffOpen((event.currentTarget as HTMLDetailsElement).open)}
+        >
           <summary>Agent 任务包</summary>
-          <CopyableCodeBlock
-            content={handoffError ?? buildCodexHandoff(task, agentLocale)}
-            maxHeight={210}
-            title="Agent 任务包"
-          />
+          {handoffOpen ? (
+            <CopyableCodeBlock
+              content={handoffContent}
+              maxHeight={210}
+              title="Agent 任务包"
+            />
+          ) : null}
         </details>
       </div>
       {actionFeedback ? <p className="v16-feedback">{actionFeedback}</p> : null}
