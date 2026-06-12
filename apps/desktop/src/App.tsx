@@ -2102,7 +2102,6 @@ function CodexRoleGuideCard() {
           <strong id="v16-codex-role-guide-title">Agent 角色使用说明</strong>
           <small>你需要按角色开启会话，每个会话只做一种工作。</small>
         </span>
-        <StatusBadge status="idle">本地说明</StatusBadge>
       </header>
       <div className="v16-codex-role-guide-body">
         <div className="v16-codex-role-grid">
