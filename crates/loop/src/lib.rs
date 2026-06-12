@@ -323,6 +323,36 @@ mod tests {
     }
 
     #[test]
+    fn project_scheduler_does_not_rewrite_waiting_backlog_issue_or_active_project_when_status_unchanged()
+    {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        write_project_issue_chain(dir.path());
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+        mark_project_preflight_ready(dir.path());
+
+        ProjectLoop::new("proj-001")
+            .schedule_ready_issues(dir.path())
+            .unwrap();
+
+        let waiting_before = agentflow_input::load_input_issue(dir.path(), "AF-002").unwrap();
+        let project_before = agentflow_input::load_input_project(dir.path(), "proj-001").unwrap();
+
+        ProjectLoop::new("proj-001")
+            .schedule_ready_issues(dir.path())
+            .unwrap();
+
+        let waiting_after = agentflow_input::load_input_issue(dir.path(), "AF-002").unwrap();
+        let project_after = agentflow_input::load_input_project(dir.path(), "proj-001").unwrap();
+
+        assert_eq!(waiting_after.status, InputIssueStatus::Backlog);
+        assert_eq!(waiting_after.system.revision, waiting_before.system.revision);
+        assert_eq!(project_after.status, InputProjectStatus::Active);
+        assert_eq!(project_after.system.revision, project_before.system.revision);
+    }
+
+    #[test]
     fn project_scheduler_preserves_blocker_reasons_for_true_blocked_issue() {
         let dir = tempdir().unwrap();
         prepare_root(dir.path());
