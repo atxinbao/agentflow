@@ -3,6 +3,7 @@ pub mod command;
 pub mod completion;
 pub mod delivery;
 pub mod evidence;
+pub mod launcher;
 pub mod lease;
 pub mod manager;
 pub mod model;
@@ -22,6 +23,10 @@ pub use command::run_execute_command;
 pub use completion::{complete_build_agent_issue, prepare_build_agent_review};
 pub use delivery::prepare_release_delivery;
 pub use evidence::write_execute_evidence;
+pub use launcher::{
+    claim_build_agent_launch, ensure_build_agent_launch_state, load_build_agent_launch_state,
+    mark_build_agent_launch_done, mark_build_agent_launch_in_review,
+};
 pub use lease::{acquire_execute_lease, release_execute_lease};
 pub use manager::{
     cancel_execute_run, create_execute_run, load_execute_index, load_execute_manifest,

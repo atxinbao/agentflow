@@ -210,6 +210,7 @@ pub(crate) enum BuildAgentCommand {
         #[arg(long = "issue-id")]
         issue_id: String,
     },
+    ClaimLaunch,
     PrepareReview {
         #[arg(long)]
         request: PathBuf,

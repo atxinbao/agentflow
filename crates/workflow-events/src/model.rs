@@ -10,8 +10,10 @@ pub const EVENT_TYPE_INPUT_ISSUE_READY: &str = "input.issue.ready";
 pub const EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED: &str = "panel.context-pack.requested";
 pub const EVENT_TYPE_PANEL_CONTEXT_PACK_READY: &str = "panel.context-pack.ready";
 pub const EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED: &str = "panel.context-pack.failed";
+pub const EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED: &str = "build-agent.launch.requested";
 
 pub const CONSUMER_PANEL: &str = "panel";
+pub const CONSUMER_BUILD_AGENT: &str = "build-agent";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -112,6 +114,19 @@ pub struct ContextPackFailedPayload {
     pub issue_id: String,
     pub context_pack_path: Option<String>,
     pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildAgentLaunchRequestedPayload {
+    pub issue_id: String,
+    pub project_id: String,
+    pub run_id: String,
+    pub branch_name: Option<String>,
+    pub issue_path: String,
+    pub context_pack_path: String,
+    pub launch_request_path: String,
+    pub display_status: String,
 }
 
 pub trait WorkflowEventPayload: Serialize {

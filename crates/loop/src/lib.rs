@@ -4,6 +4,7 @@ pub mod error;
 pub mod events;
 pub mod issue_loop;
 pub mod model;
+pub mod project_executor;
 pub mod project_loop;
 pub mod storage;
 
@@ -15,6 +16,7 @@ pub use model::{
     ProjectLoopSnapshot, ProjectLoopStatus, LOOP_ISSUE_PROJECTION_VERSION,
     LOOP_PROJECT_SNAPSHOT_VERSION,
 };
+pub use project_executor::{ProjectExecutionLaunch, ProjectExecutionTick, ProjectExecutor};
 pub use project_loop::ProjectLoop;
 
 #[cfg(test)]
@@ -495,6 +497,107 @@ mod tests {
                 projection.run_id.unwrap()
             ))
             .is_file());
+    }
+
+    #[test]
+    fn project_executor_starts_first_todo_issue_runtime() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        write_project_issue(dir.path(), InputIssueStatus::Backlog);
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+
+        let tick = ProjectExecutor::new("proj-001").tick(dir.path()).unwrap();
+
+        assert_eq!(tick.snapshot.status, ProjectLoopStatus::Executing);
+        let launch = tick.launch.expect("expected runtime launch");
+        assert_eq!(launch.issue_id, "AF-001");
+        assert_eq!(launch.stage, IssueLoopStage::InProgress);
+
+        let issue = agentflow_input::load_input_issue(dir.path(), "AF-001").unwrap();
+        assert_eq!(issue.status, InputIssueStatus::InProgress);
+        assert_eq!(issue.latest_run_id.as_deref(), Some(launch.run_id.as_str()));
+        let run = load_execute_run(dir.path(), launch.run_id.clone()).unwrap();
+        assert_eq!(run.status, ExecuteRunStatus::Planned);
+        let launch_request_path = dir.path().join(&launch.launch_request_path);
+        assert!(launch_request_path.is_file());
+        let launch_request: serde_json::Value =
+            agentflow_execute::storage::read_json(&launch_request_path).unwrap();
+        assert_eq!(
+            launch_request
+                .get("issueId")
+                .and_then(serde_json::Value::as_str),
+            Some("AF-001")
+        );
+        assert_eq!(
+            launch_request
+                .get("runId")
+                .and_then(serde_json::Value::as_str),
+            Some(launch.run_id.as_str())
+        );
+        let events = agentflow_workflow_events::load_events(dir.path()).unwrap();
+        assert!(events.iter().any(|event| {
+            event.event_type == agentflow_workflow_events::EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED
+                && event.subject_id == "AF-001"
+        }));
+        let pending = agentflow_workflow_events::load_pending_events(
+            dir.path(),
+            agentflow_workflow_events::CONSUMER_BUILD_AGENT,
+            &[agentflow_workflow_events::EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED],
+        )
+        .unwrap();
+        assert_eq!(pending.len(), 1);
+    }
+
+    #[test]
+    fn project_executor_starts_next_issue_after_previous_done() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        write_project_issue_chain(dir.path());
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+
+        let first_tick = ProjectExecutor::new("proj-001").tick(dir.path()).unwrap();
+        let first_launch = first_tick.launch.expect("expected first runtime launch");
+        assert_eq!(first_launch.issue_id, "AF-001");
+
+        agentflow_input::update_input_issue_status(dir.path(), "AF-001", InputIssueStatus::Done)
+            .unwrap();
+        let mut first_issue = agentflow_input::load_input_issue(dir.path(), "AF-001").unwrap();
+        first_issue.latest_run_id = Some(first_launch.run_id.clone());
+        fs::write(
+            dir.path().join(".agentflow/input/issues/AF-001.json"),
+            serde_json::to_string_pretty(&first_issue).unwrap(),
+        )
+        .unwrap();
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+
+        let second_tick = ProjectExecutor::new("proj-001").tick(dir.path()).unwrap();
+        let second_launch = second_tick.launch.expect("expected second runtime launch");
+        assert_eq!(second_launch.issue_id, "AF-002");
+        assert_eq!(second_launch.stage, IssueLoopStage::InProgress);
+
+        let second_issue = agentflow_input::load_input_issue(dir.path(), "AF-002").unwrap();
+        assert_eq!(second_issue.status, InputIssueStatus::InProgress);
+    }
+
+    #[test]
+    fn project_executor_restores_missing_launch_request_for_active_runtime() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        write_project_issue(dir.path(), InputIssueStatus::Backlog);
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+
+        let first_tick = ProjectExecutor::new("proj-001").tick(dir.path()).unwrap();
+        let launch = first_tick.launch.expect("expected runtime launch");
+        let launch_request_path = dir.path().join(&launch.launch_request_path);
+        std::fs::remove_file(&launch_request_path).unwrap();
+        assert!(!launch_request_path.exists());
+
+        let second_tick = ProjectExecutor::new("proj-001").tick(dir.path()).unwrap();
+        assert!(second_tick.launch.is_none());
+        assert!(launch_request_path.is_file());
     }
 
     #[test]
