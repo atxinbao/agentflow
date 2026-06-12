@@ -243,6 +243,10 @@ mod tests {
             agentflow_input::issue::DisplayStatus::Done
         );
         assert_eq!(issue_after.latest_run_id.as_deref(), Some("run-001"));
+        assert_eq!(
+            issue_after.branch_name.as_deref(),
+            Some("agentflow/direct/iss-001")
+        );
 
         let execute_index = load_execute_index(dir.path()).unwrap();
         assert_eq!(execute_index.runs.len(), 1);
@@ -280,6 +284,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(loop_projection["stage"], "done");
+        assert_eq!(loop_projection["displayStatus"], "done");
         assert_eq!(loop_projection["runId"], completion.run.run_id);
         assert_eq!(loop_projection["branchName"], "agentflow/direct/iss-001");
     }
@@ -329,12 +334,17 @@ mod tests {
             issue_after.display_status,
             agentflow_input::issue::DisplayStatus::InReview
         );
+        assert_eq!(
+            issue_after.branch_name.as_deref(),
+            Some("agentflow/direct/iss-001")
+        );
         let loop_projection: serde_json::Value = crate::storage::read_json(
             &dir.path()
                 .join(".agentflow/state/loops/issues/iss-001.json"),
         )
         .unwrap();
         assert_eq!(loop_projection["stage"], "in_review");
+        assert_eq!(loop_projection["displayStatus"], "in_review");
         assert_eq!(loop_projection["reviewSubstate"], "delivery-prepared");
     }
 
@@ -359,7 +369,12 @@ mod tests {
             issue_after.latest_run_id.as_deref(),
             Some(run.run_id.as_str())
         );
+        assert_eq!(
+            issue_after.branch_name.as_deref(),
+            Some("agentflow/direct/iss-001")
+        );
         assert_eq!(loop_projection["stage"], "todo");
+        assert_eq!(loop_projection["displayStatus"], "todo");
         assert_eq!(loop_projection["runId"], run.run_id);
         assert_eq!(loop_projection["branchName"], "agentflow/direct/iss-001");
     }
@@ -395,6 +410,7 @@ mod tests {
 
         assert_eq!(issue_after.status, InputIssueStatus::InReview);
         assert_eq!(loop_projection["stage"], "in_review");
+        assert_eq!(loop_projection["displayStatus"], "in_review");
         assert_eq!(loop_projection["reviewSubstate"], "delivery-prepared");
     }
 

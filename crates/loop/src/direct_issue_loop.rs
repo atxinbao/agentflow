@@ -3,7 +3,7 @@ use crate::{
     storage::write_issue_loop_projection,
 };
 use agentflow_input::issue::{
-    AgentRole, InputIssue, InputIssueModel, InputIssueStatus, IssueCategory,
+    AgentRole, DisplayStatus, InputIssue, InputIssueModel, InputIssueStatus, IssueCategory,
 };
 use anyhow::{Context, Result};
 use std::{
@@ -163,6 +163,7 @@ impl DirectIssueLoop {
                 InputIssueStatus::Blocked,
             )?;
         }
+        projection.display_status = Some(stage_display_status(&projection.stage));
 
         write_issue_loop_projection(&root, &projection)?;
         Ok(projection)
@@ -261,6 +262,7 @@ fn write_direct_issue_projection(
         projection.review_substate.clone()
     };
     projection.stage = stage;
+    projection.display_status = Some(stage_display_status(&projection.stage));
     projection.blockers = blockers;
     projection.updated_at = now();
     projection.project_id = None;
@@ -349,4 +351,16 @@ fn now() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+fn stage_display_status(stage: &IssueLoopStage) -> DisplayStatus {
+    match stage {
+        IssueLoopStage::Backlog => DisplayStatus::Backlog,
+        IssueLoopStage::Todo => DisplayStatus::Todo,
+        IssueLoopStage::InProgress => DisplayStatus::InProgress,
+        IssueLoopStage::InReview => DisplayStatus::InReview,
+        IssueLoopStage::Done => DisplayStatus::Done,
+        IssueLoopStage::Blocked => DisplayStatus::Blocked,
+        IssueLoopStage::Cancel => DisplayStatus::Cancel,
+    }
 }

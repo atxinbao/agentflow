@@ -6,7 +6,9 @@ use crate::{
     IssueLoop,
 };
 use agentflow_input::{
-    issue::{AgentRole, InputIssue, InputIssueModel, InputIssueStatus, IssueCategory},
+    issue::{
+        AgentRole, DisplayStatus, InputIssue, InputIssueModel, InputIssueStatus, IssueCategory,
+    },
     project::{InputProject, InputProjectStatus},
 };
 use anyhow::{Context, Result};
@@ -327,6 +329,7 @@ fn write_issue_projection(
         projection.review_substate.clone()
     };
     projection.stage = stage;
+    projection.display_status = Some(stage_display_status(&projection.stage));
     projection.blockers = blockers;
     projection.updated_at = now();
     projection.project_id = Some(project_id.to_string());
@@ -407,6 +410,18 @@ fn now() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+fn stage_display_status(stage: &IssueLoopStage) -> DisplayStatus {
+    match stage {
+        IssueLoopStage::Backlog => DisplayStatus::Backlog,
+        IssueLoopStage::Todo => DisplayStatus::Todo,
+        IssueLoopStage::InProgress => DisplayStatus::InProgress,
+        IssueLoopStage::InReview => DisplayStatus::InReview,
+        IssueLoopStage::Done => DisplayStatus::Done,
+        IssueLoopStage::Blocked => DisplayStatus::Blocked,
+        IssueLoopStage::Cancel => DisplayStatus::Cancel,
+    }
 }
 
 fn canonical_project_root(project_root: impl AsRef<Path>) -> Result<PathBuf> {

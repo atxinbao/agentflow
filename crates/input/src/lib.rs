@@ -12,8 +12,9 @@ mod validate;
 
 pub use manager::{
     load_input_index, load_input_issue, load_input_manifest, load_input_project,
-    load_input_snapshot, load_input_status, prepare_input_workspace, update_input_issue_latest_run,
-    update_input_issue_status, update_input_project_status, validate_input_workspace,
+    load_input_snapshot, load_input_status, prepare_input_workspace,
+    update_input_issue_branch_name, update_input_issue_latest_run, update_input_issue_status,
+    update_input_project_status, validate_input_workspace,
 };
 pub use model::{
     InputIndex, InputManifest, InputSnapshot, InputStatusSnapshot, INPUT_INDEX_VERSION,
