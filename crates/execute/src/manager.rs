@@ -17,6 +17,14 @@ use agentflow_input::issue::{
 use anyhow::{Context, Result};
 use std::{path::Path, process::Command};
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IssueLoopProjectionBlocker {
+    pub code: String,
+    pub reason: String,
+    pub source_path: Option<String>,
+}
+
 pub fn prepare_execute_workspace(project_root: impl AsRef<Path>) -> Result<ExecuteSnapshot> {
     let root = canonical_project_root(project_root)?;
     let ownership = agentflow_agent_manual::assert_agentflow_workspace_owned_or_creatable(&root)?;
@@ -184,6 +192,21 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
     if branch_check.status == "blocked" {
         update_run_status(&root, &run_id, ExecuteRunStatus::Blocked)?;
         update_input_issue_status(&root, &issue.issue_id, InputIssueStatus::Blocked)?;
+        sync_issue_loop_projection(
+            &root,
+            &run,
+            InputIssueStatus::Blocked,
+            None,
+            vec![IssueLoopProjectionBlocker {
+                code: "branch-check-blocked".to_string(),
+                reason: branch_check
+                    .blocked_reason
+                    .clone()
+                    .unwrap_or_else(|| "Issue branch check blocked.".to_string()),
+                source_path: Some(format!(".agentflow/execute/runs/{run_id}/branch.json")),
+            }],
+        )?;
+        rebuild_index(&root)?;
         anyhow::bail!(
             "issue branch check blocked {}: {}",
             issue.issue_id,
@@ -192,6 +215,7 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
                 .unwrap_or_else(|| "branch check failed".to_string())
         );
     }
+    sync_issue_loop_projection(&root, &run, InputIssueStatus::Todo, None, Vec::new())?;
     rebuild_index(&root)?;
     build_execute_snapshot(&root)?;
     Ok(run)
@@ -315,6 +339,51 @@ pub(crate) fn update_input_issue_status(
     status: InputIssueStatus,
 ) -> Result<InputIssue> {
     agentflow_input::update_input_issue_status(root, issue_id, status)
+}
+
+pub(crate) fn sync_issue_loop_projection(
+    root: &Path,
+    run: &ExecuteRun,
+    stage: InputIssueStatus,
+    review_substate: Option<String>,
+    blockers: Vec<IssueLoopProjectionBlocker>,
+) -> Result<()> {
+    let issue_projection_dir = root.join(".agentflow/state/loops/issues");
+    ensure_directory(&issue_projection_dir)?;
+    write_json(
+        &issue_projection_dir.join(format!("{}.json", sanitize_projection_id(&run.issue_id))),
+        &serde_json::json!({
+            "version": "agentflow-loop-issue.v1",
+            "projectId": run.project_id.clone(),
+            "issueId": run.issue_id.clone(),
+            "stage": stage.as_str(),
+            "runId": run.run_id.clone(),
+            "branchName": issue_loop_branch_name(root, &run.run_id),
+            "reviewSubstate": review_substate,
+            "blockers": blockers,
+            "updatedAt": unix_timestamp_seconds()
+        }),
+    )
+}
+
+pub(crate) fn issue_loop_branch_name(root: &Path, run_id: &str) -> Option<String> {
+    read_json::<serde_json::Value>(&run_dir(root, run_id).join("branch.json"))
+        .ok()
+        .and_then(|value| {
+            value
+                .get("issueBranch")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        })
+}
+
+pub(crate) fn sanitize_projection_id(id: &str) -> String {
+    id.chars()
+        .map(|ch| match ch {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            _ => ch,
+        })
+        .collect()
 }
 
 pub(crate) fn missing_execute_paths(root: &Path) -> Vec<String> {

@@ -1,5 +1,8 @@
 use crate::{
-    manager::{load_issue_for_run, update_input_issue_status},
+    manager::{
+        load_issue_for_run, sync_issue_loop_projection, update_input_issue_status,
+        IssueLoopProjectionBlocker,
+    },
     model::{
         ExecuteCheckStatus, ExecuteHumanConfirmation, ExecuteLease, ExecuteLeaseStatus,
         ExecutePreflight, ExecutePreflightCheck, ExecuteRun, ExecuteRunStatus,
@@ -295,6 +298,28 @@ pub fn execute_run_preflight(
                 InputIssueStatus::InProgress
             } else {
                 InputIssueStatus::Blocked
+            },
+        )?;
+        sync_issue_loop_projection(
+            &root,
+            &run,
+            if ready {
+                InputIssueStatus::InProgress
+            } else {
+                InputIssueStatus::Blocked
+            },
+            None,
+            if ready {
+                Vec::new()
+            } else {
+                vec![IssueLoopProjectionBlocker {
+                    code: "runtime-preflight-blocked".to_string(),
+                    reason: preflight
+                        .blocked_reason
+                        .clone()
+                        .unwrap_or_else(|| "Runtime preflight blocked.".to_string()),
+                    source_path: Some(format!(".agentflow/execute/runs/{run_id}/preflight.json")),
+                }]
             },
         )?;
     }

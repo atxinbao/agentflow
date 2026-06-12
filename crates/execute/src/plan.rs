@@ -1,5 +1,5 @@
 use crate::{
-    manager::{assert_build_agent_run, update_input_issue_status},
+    manager::{assert_build_agent_run, sync_issue_loop_projection, update_input_issue_status},
     model::{ExecutePlan, ExecutePlanDraft, ExecuteRunStatus, EXECUTE_PLAN_VERSION},
     storage::{
         canonical_project_root, read_run, rebuild_index, run_dir, update_run_status, write_json,
@@ -35,6 +35,7 @@ pub fn write_execute_plan(
     write_json(&run_dir(&root, &run_id).join("plan.json"), &plan)?;
     update_run_status(&root, &run_id, ExecuteRunStatus::Planned)?;
     update_input_issue_status(&root, &run.issue_id, InputIssueStatus::InProgress)?;
+    sync_issue_loop_projection(&root, &run, InputIssueStatus::InProgress, None, Vec::new())?;
     rebuild_index(&root)?;
     Ok(plan)
 }

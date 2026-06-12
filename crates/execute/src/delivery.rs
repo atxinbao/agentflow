@@ -1,5 +1,5 @@
 use crate::{
-    manager::{assert_build_agent_run, update_input_issue_status},
+    manager::{assert_build_agent_run, sync_issue_loop_projection, update_input_issue_status},
     model::{ExecuteResult, ExecuteRunStatus},
     storage::{
         canonical_project_root, ensure_directory, read_json, read_run, run_dir,
@@ -117,9 +117,9 @@ pub fn prepare_release_delivery(
     let delivery = OutputReleaseDelivery {
         version: OUTPUT_RELEASE_DELIVERY_VERSION.to_string(),
         run_id: run_id.clone(),
-        issue_id: run.issue_id,
-        source_spec_id: run.source_spec_id,
-        risk_level: run.risk_level,
+        issue_id: run.issue_id.clone(),
+        source_spec_id: run.source_spec_id.clone(),
+        risk_level: run.risk_level.clone(),
         status: "drafted".to_string(),
         created_by: "Build Agent".to_string(),
         created_at: unix_timestamp_seconds(),
@@ -133,6 +133,13 @@ pub fn prepare_release_delivery(
     write_json(&release_dir.join("delivery.json"), &delivery)?;
     agentflow_output::prepare_output_workspace(&root)?;
     update_input_issue_status(&root, &delivery.issue_id, InputIssueStatus::InReview)?;
+    sync_issue_loop_projection(
+        &root,
+        &run,
+        InputIssueStatus::InReview,
+        Some("delivery-prepared".to_string()),
+        Vec::new(),
+    )?;
     Ok(delivery)
 }
 

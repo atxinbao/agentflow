@@ -284,6 +284,59 @@ mod tests {
     }
 
     #[test]
+    fn create_run_writes_todo_projection_with_run_and_branch() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path(), "spec-001");
+        write_issue(dir.path(), "iss-001", "spec-001", InputRiskLevel::Low);
+
+        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
+        let loop_projection: serde_json::Value = crate::storage::read_json(
+            &dir.path()
+                .join(".agentflow/state/loops/issues/iss-001.json"),
+        )
+        .unwrap();
+
+        assert_eq!(loop_projection["stage"], "todo");
+        assert_eq!(loop_projection["runId"], run.run_id);
+        assert_eq!(loop_projection["branchName"], "agentflow/direct/iss-001");
+    }
+
+    #[test]
+    fn delivery_stage_moves_issue_and_projection_to_in_review() {
+        let dir = tempdir().unwrap();
+        let run = ready_low_risk_run(dir.path(), "iss-001");
+        let patch = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,3 @@\n pub fn value() -> u8 {\n-    1\n+    2\n }\n";
+        apply_execute_patch(dir.path(), run.run_id.clone(), patch.to_string()).unwrap();
+        run_execute_command(
+            dir.path(),
+            run.run_id.clone(),
+            ExecuteCommandRequest {
+                label: "printf ok".to_string(),
+                program: "printf".to_string(),
+                args: vec!["ok".to_string()],
+                source: Some("test".to_string()),
+            },
+        )
+        .unwrap();
+        validate_execute_run(dir.path(), run.run_id.clone()).unwrap();
+        prepare_release_delivery(dir.path(), run.run_id.clone()).unwrap();
+
+        let issue_after: InputIssue =
+            crate::storage::read_json(&dir.path().join(".agentflow/input/issues/iss-001.json"))
+                .unwrap();
+        let loop_projection: serde_json::Value = crate::storage::read_json(
+            &dir.path()
+                .join(".agentflow/state/loops/issues/iss-001.json"),
+        )
+        .unwrap();
+
+        assert_eq!(issue_after.status, InputIssueStatus::InReview);
+        assert_eq!(loop_projection["stage"], "in_review");
+        assert_eq!(loop_projection["reviewSubstate"], "delivery-prepared");
+    }
+
+    #[test]
     fn missing_input_issue_cannot_create_run() {
         let dir = tempdir().unwrap();
         prepare_root(dir.path());
@@ -769,7 +822,7 @@ mod tests {
         .unwrap();
         validate_execute_run(dir.path(), run.run_id).unwrap();
         let issue_after: InputIssue = crate::storage::read_json(&issue_path).unwrap();
-        assert_eq!(issue_after.status, InputIssueStatus::InReview);
+        assert_eq!(issue_after.status, InputIssueStatus::InProgress);
         assert_eq!(issue_after.issue_id, issue_before.issue_id);
         assert_eq!(issue_after.title, issue_before.title);
         assert_eq!(issue_after.source_spec_id, issue_before.source_spec_id);
