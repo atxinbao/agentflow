@@ -669,14 +669,16 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "issue-preflight".to_string(),
                 label: "执行前置检测".to_string(),
-                goal: "确认当前执行对象是 AgentFlow input issue，且状态为 backlog；确认依赖已完成、任务合同完整、Panel Context Pack 可用；通过后把当前 issue 切换为 todo，为测试设计和 in_progress 执行做准备。Runtime preflight 还必须确认当前工作区没有未提交的用户源码改动。GitHub/GitLab 不在这个 loop 阶段检测。".to_string(),
+                goal: "只认当前 AgentFlow input issue。确认 issue 仍在 backlog，依赖已完成、合同完整、Context Pack 可读或可补生成、工作区干净；随后通过 AgentFlow 官方 run loop / runtime preflight 创建当前 run。preflight 通过后先把 issue 切到 todo，再准备进入 in_progress。禁止手写 `.agentflow/**` 只表示不能直接改事实文件，不是禁止调用 AgentFlow 官方命令推进 loop。GitHub/GitLab 不在这个阶段检测。".to_string(),
                 required: true,
                 evidence: vec![
-                    "AgentFlow issueId and executionPipeline are the only active task source".to_string(),
+                    "AgentFlow input issue is the only active task source; executionPipeline is read from that issue contract".to_string(),
                     "no external issue/task/plan/queue/thread/tool state is used as task authority".to_string(),
                     "input issue status is backlog before preflight".to_string(),
                     "blockedBy dependencies are done".to_string(),
                     "Panel Context Pack exists or is generated".to_string(),
+                    "current run is created by AgentFlow official runtime entrypoint before source edits".to_string(),
+                    "no `.agentflow/**` facts are handwritten; official AgentFlow loop commands are used instead".to_string(),
                     "working tree has no uncommitted user source changes before in_progress".to_string(),
                     "input issue status changed to todo after preflight".to_string(),
                 ],
@@ -684,7 +686,7 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "test-design".to_string(),
                 label: "测试设计".to_string(),
-                goal: "从 SPEC 和当前 issue 推导测试点；能 TDD 的任务先补失败测试，不适合 TDD 的任务必须记录原因，并明确替代验证方式。".to_string(),
+                goal: "从 SPEC 和当前 issue 推导测试点。能做 TDD 就先补失败测试；不能做 TDD 就记录原因，并给出替代验证方式。".to_string(),
                 required: true,
                 evidence: vec![
                     "test points derived from SPEC and issue".to_string(),
@@ -695,14 +697,14 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "implement".to_string(),
                 label: "Agent 执行 issue".to_string(),
-                goal: "按测试设计和 issue 合同在 allowedPaths 内完成代码、配置或测试改动。".to_string(),
+                goal: "按测试设计和 issue 合同，在 allowedPaths 内完成代码、配置或测试改动。".to_string(),
                 required: true,
                 evidence: vec!["git diff --stat".to_string(), "changed-files summary".to_string()],
             },
             InputIssueExecutionStage {
                 stage_id: "sandbox-verify".to_string(),
                 label: "沙箱验证".to_string(),
-                goal: "在受控本地沙箱中运行验证命令并收集 stdout、stderr、exit code、浏览器或截图证据。"
+                goal: "在本地受控沙箱中运行验证命令，并收集 stdout、stderr、exit code 以及浏览器或截图证据。"
                     .to_string(),
                 required: true,
                 evidence: vec![
@@ -714,7 +716,7 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "create-pr".to_string(),
                 label: "创建 PR/MR".to_string(),
-                goal: "推送任务分支，按 AgentFlow Build Agent PR/MR 模板创建 GitHub PR 或 GitLab MR，并把任务、范围、验证结果、影响、回滚和 review gate 写入描述；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR/MR。".to_string(),
+                goal: "推送任务分支，按 AgentFlow Build Agent PR/MR 模板创建 GitHub PR 或 GitLab MR，并写入任务、范围、验证结果、影响、回滚和 review gate；如果 mergeMode 是 auto-merge-if-eligible，不能停在 Draft PR/MR。".to_string(),
                 required: true,
                 evidence: vec![
                     "PR/MR URL".to_string(),
@@ -726,7 +728,7 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "merge-pr".to_string(),
                 label: "合并 PR/MR".to_string(),
-                goal: "默认先走 auto-merge-if-eligible：PR/MR ready 后按 provider 执行自动合并，GitHub 使用 gh pr ready 和 gh pr merge --auto，GitLab 使用 glab mr update --ready 和 glab mr merge --auto-merge，并轮询到 merged；如果自动合并条件不满足，回落到 manual-merge，issue 保持 in_review，等待人合并，再由本地检测确认 PR/MR merged 后继续。".to_string(),
+                goal: "默认先走 auto-merge-if-eligible：PR/MR ready 后按 provider 自动合并，并轮询到 merged；如果自动合并条件不满足，就回落到 manual-merge，issue 保持 in_review，等待人合并，再由本地检测确认 merged 后继续。".to_string(),
                 required: true,
                 evidence: vec![
                     "merge mode".to_string(),
@@ -740,7 +742,7 @@ pub fn default_build_agent_execution_pipeline() -> InputIssueExecutionPipeline {
             InputIssueExecutionStage {
                 stage_id: "writeback-done".to_string(),
                 label: "写回 Done".to_string(),
-                goal: "PR/MR 合并后使用预检确认过的新 AgentFlow CLI 调用 build-agent complete，写回 run、evidence、delivery 和任务 Done 状态。".to_string(),
+                goal: "PR/MR 合并后，用预检确认过的新 AgentFlow CLI 调用 build-agent complete，写回 run、evidence、delivery 和任务 Done 状态。".to_string(),
                 required: true,
                 evidence: vec![
                     "target/release/agentflow build-agent complete --request <completion-request.json> after cargo build --release --bin agentflow"

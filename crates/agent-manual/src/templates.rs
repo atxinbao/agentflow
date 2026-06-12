@@ -41,7 +41,9 @@ Every Agent MUST read and follow:
 - Do not bypass SPEC.
 - `.agentflow/input/issues/**` is the only current task fact source.
 - `.agentflow/input/specs/drafts/**` and `.agentflow/input/specs/approved/**` are the only current SPEC fact sources.
-- AgentFlow input issues, handoff packages, and executionPipeline are the only task and plan authority.
+- The current AgentFlow input issue is the only task authority.
+- The handoff package is only a derived transport snapshot of that input issue.
+- `executionPipeline` is part of the input issue contract, not a separate task authority.
 - Do not treat any external issue, task, plan, queue, thread, or tool state as AgentFlow task authority.
 - Do not use external planning state to create, select, split, reorder, or advance AgentFlow work.
 - GitHub/GitLab tools are allowed only for the PR/MR stages explicitly listed in the current AgentFlow executionPipeline.
@@ -134,7 +136,9 @@ Do not mix these roles in one Codex thread. Each thread must keep one role for t
 - `input/` is the canonical requirement fact source.
 - `.agentflow/input/issues/**` is the only current task fact source.
 - `.agentflow/input/specs/drafts/**` and `.agentflow/input/specs/approved/**` are the only current SPEC fact sources.
-- AgentFlow input issues, handoff packages, and executionPipeline are the only task and plan authority.
+- The current AgentFlow input issue is the only task authority.
+- The handoff package is only a derived transport snapshot of that input issue.
+- `executionPipeline` is part of the input issue contract, not a separate task authority.
 - External issue, task, plan, queue, thread, or tool state must not create, select, split, reorder, or advance AgentFlow work.
 - `AGENTS.md` is the canonical root Agent entry.
 - `AGENT.MD` is legacy compatibility only.
@@ -306,7 +310,7 @@ Owns controlled development delivery from `.agentflow/input/issues/<issue-id>.js
 
 It may execute only `issueCategory=spec` issues with `requiredAgentRole=build-agent`. Its handoff must include source SPEC target metadata and build expected outputs. Its writeback must include `agent-claim.json` with `claimedAgentRole=build-agent`.
 
-Build Agent must use the AgentFlow input issue and executionPipeline as the only task plan. It must not treat any external issue, task, plan, queue, thread, or tool state as task authority. GitHub/GitLab commands are allowed only for the PR/MR stages explicitly listed in the AgentFlow executionPipeline.
+Build Agent must use the current AgentFlow input issue as the only task authority. The handoff package is only a derived snapshot for transport, and `executionPipeline` is only one field inside the input issue contract, not a separate task source. It must not treat any external issue, task, plan, queue, thread, or tool state as task authority. GitHub/GitLab commands are allowed only for the PR/MR stages explicitly listed in the AgentFlow executionPipeline. `Do not handwrite .agentflow/**` means Build Agent must not directly edit AgentFlow facts by hand; it does not forbid calling official AgentFlow runtime entrypoints for run creation, Context Pack preparation, or loop writeback.
 
 It performs the Build Agent execution pipeline:
 
@@ -318,9 +322,9 @@ It performs the Build Agent execution pipeline:
 6. Merge PR/MR
 7. Write back Done
 
-The issue preflight confirms the current task is an AgentFlow input issue, the issue status is `backlog`, every `blockedBy` dependency issue is Done, the issue contract is complete, and the Panel Context Pack exists or can be generated. After this stage passes, AgentFlow moves the issue to `todo`. Runtime preflight must also confirm the Panel Context Pack is readable and the current working tree has no uncommitted user source changes before the issue can enter `in_progress`. GitHub/GitLab checks are not part of this loop stage; CLI, auth, branch, PR/MR creation, and merge capability are recorded only in the create PR/MR and merge PR/MR stages.
+The issue preflight only trusts the current AgentFlow input issue. It confirms the issue is still `backlog`, every `blockedBy` dependency issue is Done, the issue contract is complete, the Panel Context Pack is readable or can be generated, and the working tree is clean. Runtime preflight must then create the current run through the official AgentFlow run loop before any source code change starts. After preflight passes, AgentFlow moves the issue to `todo` and prepares it to enter `in_progress`. GitHub/GitLab checks are not part of this loop stage; CLI, auth, branch, PR/MR creation, and merge capability are recorded only in the create PR/MR and merge PR/MR stages.
 
-After runtime preflight confirms the Panel Context Pack is readable or successfully generated, AgentFlow moves the issue to `in_progress`. The test design stage then derives test points from SPEC and the current issue. If TDD fits the task, Build Agent adds or updates the failing test first. If TDD does not fit the task, Build Agent records the reason and defines the replacement smoke, build, screenshot, or command verification.
+After runtime preflight confirms the Panel Context Pack is readable or successfully generated and the current run has been created, AgentFlow moves the issue to `in_progress`. The test design stage then derives test points from SPEC and the current issue. If TDD fits the task, Build Agent adds or updates the failing test first. If TDD does not fit the task, Build Agent records the reason and defines the replacement smoke, build, screenshot, or command verification.
 
 The sandbox verification stage runs local validation commands and records stdout, stderr, exit code, browser smoke evidence, screenshots, or other required evidence.
 
