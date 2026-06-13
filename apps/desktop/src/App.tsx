@@ -3,14 +3,12 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   CheckCircle2,
-  ClipboardCheck,
   ClipboardList,
   FileSearch,
   FolderOpen,
   GitBranch,
   LayoutDashboard,
   ListChecks,
-  PlayCircle,
   RefreshCw,
   Search,
   Settings,
@@ -259,8 +257,6 @@ type NextStepViewModel = {
 const pages: Array<{ icon: LucideIcon; id: AppPage; label: string }> = [
   { icon: LayoutDashboard, id: "home", label: "工作台" },
   { icon: ClipboardList, id: "tasks", label: "任务" },
-  { icon: PlayCircle, id: "execute", label: "执行" },
-  { icon: ClipboardCheck, id: "delivery", label: "交付" },
   { icon: ShieldCheck, id: "audit", label: "审计" },
   { icon: FileSearch, id: "files", label: "文件" },
   { icon: Settings, id: "advanced", label: "高级" },
@@ -422,6 +418,9 @@ function readStoredProvider(): Provider | null {
 
 function readStoredPage(): AppPage {
   const value = window.localStorage.getItem(interactionStorageKeys.activePage);
+  if (value === "execute" || value === "delivery") {
+    return "tasks";
+  }
   return isAgentFlowProjectPage(value) ? value : "home";
 }
 
@@ -479,6 +478,7 @@ function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskProjectId, setSelectedTaskProjectId] = useState<string | null>(null);
   const [selectedDeliveryRunId, setSelectedDeliveryRunId] = useState<string | null>(null);
+  const [taskDetailFocus, setTaskDetailFocus] = useState<"delivery" | null>(null);
   const [selectedAuditId, setSelectedAuditId] = useState<string | null>(null);
   const [inputStatusRefreshToken, setInputStatusRefreshToken] = useState(0);
   const [taskListRefreshToken, setTaskListRefreshToken] = useState(0);
@@ -565,6 +565,7 @@ function App() {
     setSelectedAuditId(null);
     setTaskSearch("");
     setTaskActionFeedback(null);
+    setTaskDetailFocus(null);
   }, [projectRoot]);
 
   useEffect(() => {
@@ -606,7 +607,7 @@ function App() {
       const refreshExecute = refreshAll || changedAreas.has("execute");
       const refreshOutput = refreshAll || changedAreas.has("output");
       const refreshPanel = refreshAll || changedAreas.has("panel");
-      const refreshTaskList = refreshInput || refreshOutput || refreshAll;
+      const refreshTaskList = refreshInput || refreshExecute || refreshOutput || refreshAll;
 
       if (refreshInput) {
         void invoke("prepare_input_workspace", { projectRoot })
@@ -624,11 +625,12 @@ function App() {
         setTaskListRefreshToken((current) => current + 1);
       }
 
-      if (refreshExecute && activePage === "execute") {
+      if (refreshExecute && (activePage === "tasks" || activePage === "advanced")) {
         setExecuteRefreshToken((current) => current + 1);
+        setMcpRefreshToken((current) => current + 1);
       }
 
-      if (refreshOutput && activePage === "delivery") {
+      if (refreshOutput && (activePage === "tasks" || activePage === "advanced")) {
         setOutputRefreshToken((current) => current + 1);
       }
       if (refreshOutput && activePage === "audit") {
@@ -896,7 +898,7 @@ function App() {
     : null;
   const appInteractionState: AppInteractionState = useMemo(
     () => {
-      const outputPageHasError = (activePage === "delivery" || activePage === "audit") && Boolean(outputBundle.error);
+      const outputPageHasError = (activePage === "tasks" || activePage === "audit") && Boolean(outputBundle.error);
       return buildAppInteractionState({
         activePage,
         hasError: Boolean(
@@ -959,6 +961,12 @@ function App() {
     }
 
     if (page === "tasks") {
+      setInputStatusRefreshToken((current) => current + 1);
+      setTaskListRefreshToken((current) => current + 1);
+      setExecuteRefreshToken((current) => current + 1);
+      setMcpRefreshToken((current) => current + 1);
+      setOutputRefreshToken((current) => current + 1);
+      setStateRefreshToken((current) => current + 1);
       if (triggerProjectLoop) {
         void invoke("run_project_loop", { projectRoot: root })
           .then(() => {
@@ -967,17 +975,10 @@ function App() {
             setTaskListRefreshToken((current) => current + 1);
             setMcpRefreshToken((current) => current + 1);
             setExecuteRefreshToken((current) => current + 1);
+            setOutputRefreshToken((current) => current + 1);
           })
           .catch(() => undefined);
-        setTaskListRefreshToken((current) => current + 1);
-        setMcpRefreshToken((current) => current + 1);
       }
-      return;
-    }
-
-    if (page === "execute") {
-      setExecuteRefreshToken((current) => current + 1);
-      setMcpRefreshToken((current) => current + 1);
       return;
     }
 
@@ -986,7 +987,7 @@ function App() {
       return;
     }
 
-    if (page === "delivery" || page === "audit") {
+    if (page === "audit") {
       setOutputRefreshToken((current) => current + 1);
       return;
     }
@@ -1050,12 +1051,14 @@ function App() {
     setSelectedTaskProjectId(null);
     setSelectedTaskId(taskId);
     setTaskActionFeedback(null);
+    setTaskDetailFocus(null);
   }
 
   function handleSelectTaskProject(projectId: string) {
     setSelectedTaskId(null);
     setSelectedTaskProjectId(projectId);
     setTaskActionFeedback(null);
+    setTaskDetailFocus(null);
   }
 
   async function chooseProjectFolder() {
@@ -1211,7 +1214,10 @@ function App() {
       const delivery = findDeliveryForTask(outputBundle.outputIndex?.releaseDeliveries ?? [], task.id);
       if (delivery) {
         setSelectedDeliveryRunId(delivery.runId);
-        setActivePage("delivery");
+        setSelectedTaskId(task.id);
+        setTaskDetailFocus("delivery");
+        setActivePage("tasks");
+        setTaskActionFeedback("已定位交付信息。交付摘要和最终交付卡在当前任务详情中查看。");
       } else {
         setTaskActionFeedback("还没有检测到写回结果。");
       }
@@ -1222,9 +1228,12 @@ function App() {
       const delivery = findDeliveryForTask(outputBundle.outputIndex?.releaseDeliveries ?? [], task.id);
       if (delivery) {
         setSelectedDeliveryRunId(delivery.runId);
-        setActivePage("delivery");
+        setSelectedTaskId(task.id);
+        setTaskDetailFocus("delivery");
+        setActivePage("tasks");
+        setTaskActionFeedback("已定位交付信息。交付摘要和最终交付卡在当前任务详情中查看。");
       } else {
-        setTaskActionFeedback("还没有交付结果。写回后会显示在交付页。");
+        setTaskActionFeedback("还没有交付结果。写回后会显示在当前任务详情中。");
       }
       return;
     }
@@ -1312,7 +1321,6 @@ function App() {
             onRunProjectLoop={() => void handleRunProjectLoop()}
             nextStep={nextStep}
             onOpenAudit={() => setActivePage("audit")}
-            onOpenDelivery={() => setActivePage("delivery")}
             onOpenTasks={() => setActivePage("tasks")}
             outputBundle={outputBundle}
             outputStatusState={outputStatusState}
@@ -1328,8 +1336,10 @@ function App() {
             actions={taskInteractionState.actions}
             agentLocale={agentLocale}
             copyState={taskCopyState}
+            detailFocus={taskDetailFocus}
             executeStatusState={executeStatusState}
             mcpSessionsState={mcpSessionsState}
+            onDetailFocusHandled={() => setTaskDetailFocus(null)}
             onTaskAction={(action, task) => void handleTaskAction(action, task)}
             onSelectProjectGroup={handleSelectTaskProject}
             onSelectTask={handleSelectTask}
@@ -1342,15 +1352,6 @@ function App() {
             tasks={filteredTasks}
           />
         ) : null}
-        {projectRoot && !projectAvailabilityStatus && activePage === "execute" ? (
-          <ExecutePage
-            executeStatusState={executeStatusState}
-            mcpSessionsState={mcpSessionsState}
-            projectRoot={projectRoot}
-            selectedTask={selectedTask}
-            tasks={tasks}
-          />
-        ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "files" ? (
           <FilesPage
             fileState={projectFilesState}
@@ -1359,17 +1360,6 @@ function App() {
             onLoadTextRange={loadProjectFileTextRange}
             onSearchFiles={searchProjectFiles}
             onSelectFile={selectProjectFile}
-          />
-        ) : null}
-        {projectRoot && !projectAvailabilityStatus && activePage === "delivery" ? (
-          <DeliveryPage
-            mcpSessionsState={mcpSessionsState}
-            onOpenAudit={() => setActivePage("audit")}
-            onSelectDelivery={setSelectedDeliveryRunId}
-            outputBundle={outputBundle}
-            selectedDeliveryRunId={selectedDeliveryRunId}
-            selectedTask={selectedTask}
-            tasks={tasks}
           />
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "audit" ? (
@@ -2168,7 +2158,7 @@ function EmptyProjectPage({ onAddProject }: { onAddProject: () => void }) {
         <div className="v16-empty-project-copy">
           <p className="v16-empty-project-kicker">项目列表</p>
           <h2>还没有项目</h2>
-          <p>添加一个本地项目后，AgentFlow 会准备任务、执行、交付、审计和文件工作区。</p>
+          <p>添加一个本地项目后，AgentFlow 会准备任务、审计和文件工作区，并在任务页串起执行与交付信息。</p>
           <p className="v16-empty-project-note">移除项目不会删除你的本地文件。</p>
         </div>
         <ActionBar>
@@ -2230,7 +2220,6 @@ function ProjectAvailabilityPage({
 function ProjectHomePage({
   nextStep,
   onOpenAudit,
-  onOpenDelivery,
   onRunProjectLoop,
   onOpenTasks,
   outputBundle,
@@ -2242,7 +2231,6 @@ function ProjectHomePage({
 }: {
   nextStep: NextStepViewModel;
   onOpenAudit: () => void;
-  onOpenDelivery: () => void;
   onRunProjectLoop: () => void;
   onOpenTasks: () => void;
   outputBundle: OutputBundleState;
@@ -2297,7 +2285,7 @@ function ProjectHomePage({
             {recentActivities.map((activity) => (
               <button
                 key={activity.id}
-                onClick={activity.target === "delivery" ? onOpenDelivery : activity.target === "audit" ? onOpenAudit : onOpenTasks}
+                onClick={activity.target === "audit" ? onOpenAudit : onOpenTasks}
                 type="button"
               >
                 <strong>{activity.title}</strong>
@@ -2357,8 +2345,10 @@ function TasksPage({
   actions,
   agentLocale,
   copyState,
+  detailFocus,
   executeStatusState,
   mcpSessionsState,
+  onDetailFocusHandled,
   onSelectProjectGroup,
   onTaskAction,
   onSelectTask,
@@ -2374,8 +2364,10 @@ function TasksPage({
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  detailFocus: "delivery" | null;
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
+  onDetailFocusHandled: () => void;
   onSelectProjectGroup: (projectId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   onSelectTask: (taskId: string) => void;
@@ -2394,8 +2386,10 @@ function TasksPage({
         actions={actions}
         agentLocale={agentLocale}
         copyState={copyState}
+        detailFocus={detailFocus}
         executeStatusState={executeStatusState}
         mcpSessionsState={mcpSessionsState}
+        onDetailFocusHandled={onDetailFocusHandled}
         onSelectProjectGroup={onSelectProjectGroup}
         onSelectTask={onSelectTask}
         onTaskAction={onTaskAction}
@@ -2416,8 +2410,10 @@ function TaskList({
   actions,
   agentLocale,
   copyState,
+  detailFocus,
   executeStatusState,
   mcpSessionsState,
+  onDetailFocusHandled,
   onSelectProjectGroup,
   onSelectTask,
   onTaskAction,
@@ -2433,8 +2429,10 @@ function TaskList({
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  detailFocus: "delivery" | null;
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
+  onDetailFocusHandled: () => void;
   onSelectProjectGroup: (projectId: string) => void;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
@@ -2594,8 +2592,10 @@ function TaskList({
         actions={actions}
         agentLocale={agentLocale}
         copyState={copyState}
+        detailFocus={detailFocus}
         executeStatusState={executeStatusState}
         mcpSessionsState={mcpSessionsState}
+        onDetailFocusHandled={onDetailFocusHandled}
         onTaskAction={onTaskAction}
         onSelectTask={onSelectTask}
         outputBundle={outputBundle}
@@ -2744,8 +2744,10 @@ function TaskDetail({
   actions,
   agentLocale,
   copyState,
+  detailFocus,
   executeStatusState,
   mcpSessionsState,
+  onDetailFocusHandled,
   onSelectTask,
   onTaskAction,
   outputBundle,
@@ -2758,8 +2760,10 @@ function TaskDetail({
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  detailFocus: "delivery" | null;
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
+  onDetailFocusHandled: () => void;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
@@ -2819,8 +2823,10 @@ function TaskDetail({
       actions={actions}
       agentLocale={agentLocale}
       copyState={copyState}
+      detailFocus={detailFocus}
       executeStatusState={executeStatusState}
       mcpSessionsState={mcpSessionsState}
+      onDetailFocusHandled={onDetailFocusHandled}
       onTaskAction={onTaskAction}
       outputBundle={outputBundle}
       task={task}
@@ -2912,8 +2918,10 @@ function TaskDetailReader({
   actions,
   agentLocale,
   copyState,
+  detailFocus,
   executeStatusState,
   mcpSessionsState,
+  onDetailFocusHandled,
   onTaskAction,
   outputBundle,
   task,
@@ -2922,13 +2930,16 @@ function TaskDetailReader({
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  detailFocus: "delivery" | null;
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
+  onDetailFocusHandled: () => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
   task: V1Issue;
 }) {
   const [handoffOpen, setHandoffOpen] = useState(false);
+  const deliveryFocusRef = useRef<HTMLDivElement | null>(null);
   const handoffError = useMemo(() => taskHandoffValidationError(task), [task]);
   const statusContract = useMemo(() => buildTaskStatusContract(task), [task]);
   const session = useMemo(
@@ -3002,6 +3013,17 @@ function TaskDetailReader({
     return handoffError ?? buildCodexHandoff(task, agentLocale);
   }, [agentLocale, handoffError, handoffOpen, task]);
 
+  useEffect(() => {
+    if (detailFocus !== "delivery") {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      deliveryFocusRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      onDetailFocusHandled();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [detailFocus, onDetailFocusHandled, task.id]);
+
   return (
     <aside className="v16-detail-pane" aria-label="任务工作流">
       <header>
@@ -3053,13 +3075,15 @@ function TaskDetailReader({
               reviewItems={deliveryReviewItems(task, deliveryArtifacts, session)}
               stageItems={stageOutputItems}
             />
-            <TaskArtifactFlow
-              deliveryItems={deliveryProjection.summaryItems}
-              missingItems={deliveryProjection.missingItems}
-              outputItems={outputSummaryItems}
-              releaseNoteItems={deliveryReleaseNoteItems(task, deliveryArtifacts)}
-            />
-            <TaskFinalDeliveryCard artifact={deliveryArtifacts} deliveryProjection={deliveryProjection} task={task} />
+            <div ref={deliveryFocusRef} className="v16-task-delivery-focus-region">
+              <TaskArtifactFlow
+                deliveryItems={deliveryProjection.summaryItems}
+                missingItems={deliveryProjection.missingItems}
+                outputItems={outputSummaryItems}
+                releaseNoteItems={deliveryReleaseNoteItems(task, deliveryArtifacts)}
+              />
+              <TaskFinalDeliveryCard artifact={deliveryArtifacts} deliveryProjection={deliveryProjection} task={task} />
+            </div>
           </div>
           <TaskWorkflowPanelShell yamlModel={workflowYaml} />
         </div>
@@ -5537,8 +5561,8 @@ function buildRecentActivities(
     sortOutputEntriesByLatest(outputBundle.outputIndex?.releaseDeliveries ?? []).slice(0, 2).map((delivery) => ({
       detail: `${delivery.issueId || "关联任务"} · ${artifactStatusLabel(delivery.status)}`,
       id: `delivery-${delivery.runId}`,
-      target: "delivery" as const,
-      title: "交付页面同步结构",
+      target: "tasks" as const,
+      title: "任务交付区域同步结构",
     })) ?? [];
   const auditItems =
     sortAuditsByLatest(outputBundle.auditIndex?.audits ?? []).slice(0, 2).map((audit) => ({
@@ -5557,8 +5581,8 @@ function buildRecentActivities(
     {
       detail: `${outputSummary?.releaseDeliveries ?? 0} 个交付，${outputSummary?.audits ?? 0} 个审计`,
       id: "activity-output",
-      target: "delivery" as const,
-      title: "交付页面同步结构",
+      target: "tasks" as const,
+      title: "任务交付区域同步结构",
     },
     {
       detail: "任务合约和状态按钮已按状态收口。",
@@ -6214,8 +6238,6 @@ function pageTitle(page: AppPage) {
   const labels: Record<AppPage, string> = {
     advanced: "高级",
     audit: "审计",
-    delivery: "交付",
-    execute: "执行",
     files: "文件",
     home: "工作台",
     tasks: "任务流转",

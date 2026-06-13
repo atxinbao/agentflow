@@ -1,4 +1,4 @@
-export type AgentFlowProjectPage = "home" | "tasks" | "execute" | "delivery" | "audit" | "files" | "advanced";
+export type AgentFlowProjectPage = "home" | "tasks" | "audit" | "files" | "advanced";
 
 export type AgentFlowProjectStatus = "ready" | "loading" | "blocked" | "error" | "missing";
 
@@ -29,10 +29,17 @@ export const projectRegistryStorageKeys = {
   projects: "agentflow.projects.v1",
 } as const;
 
-const projectPages: AgentFlowProjectPage[] = ["home", "tasks", "execute", "delivery", "audit", "files", "advanced"];
+const projectPages: AgentFlowProjectPage[] = ["home", "tasks", "audit", "files", "advanced"];
 
 export function isAgentFlowProjectPage(value: unknown): value is AgentFlowProjectPage {
   return typeof value === "string" && projectPages.includes(value as AgentFlowProjectPage);
+}
+
+function normalizeProjectPage(value: unknown): AgentFlowProjectPage | null {
+  if (isAgentFlowProjectPage(value)) {
+    return value;
+  }
+  return value === "execute" || value === "delivery" ? "tasks" : null;
 }
 
 export function stableProjectId(root: string) {
@@ -309,7 +316,7 @@ function readProjects(): AgentFlowProjectRef[] {
   }
   return value.filter(isProjectRef).map((project) => ({
     ...project,
-    lastActivePage: isAgentFlowProjectPage(project.lastActivePage) ? project.lastActivePage : "home",
+    lastActivePage: normalizeProjectPage(project.lastActivePage) ?? "home",
     status: project.status === "loading" ? "ready" : project.status,
   }));
 }
@@ -321,9 +328,9 @@ function readActivePageByProject(): Record<string, AgentFlowProjectPage> {
   }
 
   return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, AgentFlowProjectPage] =>
-      isAgentFlowProjectPage(entry[1]),
-    ),
+    Object.entries(value)
+      .map(([root, page]) => [root, normalizeProjectPage(page)] as const)
+      .filter((entry): entry is [string, AgentFlowProjectPage] => entry[1] !== null),
   );
 }
 
