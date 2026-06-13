@@ -1945,7 +1945,7 @@ button.v16-task-project-row:hover {
 
 .v16-task-workflow-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 8px;
 }
 

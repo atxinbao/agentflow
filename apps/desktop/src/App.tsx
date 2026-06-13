@@ -3112,6 +3112,11 @@ function TaskWorkflowSummary({
       detail: executeProgressLabel(task.executeStatus),
     },
     {
+      label: "下一步入口",
+      value: contract.nextEntry,
+      detail: contract.uiSummary[0] ?? "当前状态的下一步会在这里提示。",
+    },
+    {
       label: "最终交付",
       value: deliveryReady ? "已就绪" : task.displayStatus === "done" ? "需补齐" : "未到阶段",
       detail: deliveryReady
