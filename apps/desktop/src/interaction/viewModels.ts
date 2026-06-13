@@ -440,7 +440,7 @@ export function buildTaskStatusContract(task: V1Issue): TaskStatusContract {
       stageOutputs: [
         "任务合同已生成。",
         hasDependencies ? `前置依赖：${task.dependencies.join("、")}` : "前置依赖：无。",
-        `允许范围：${task.allowedFiles.length ? task.allowedFiles.join("、") : "待补充"}`,
+        task.allowedFiles.length ? "允许变更范围已锁定。" : "允许变更范围待补充。",
       ],
       nextEntry: "先确认任务合同，再进入执行前置检测。",
       uiSummary: [
@@ -459,16 +459,16 @@ export function buildTaskStatusContract(task: V1Issue): TaskStatusContract {
         "当前 run 已准备就绪。",
         validationCount ? `验证命令：${validationCount} 条` : "验证命令：待补充。",
       ],
-      nextEntry: "通过前置检测后进入 in_progress。",
+      nextEntry: "通过前置检测后进入正在做。",
       uiSummary: [
         "可以开工。",
-        "等待 Build Agent 接手。",
+        "等待执行助手接手。",
       ],
     },
     in_progress: {
       status,
       label: displayStatusLabelZh(status),
-      businessMeaning: "任务正在执行，Build Agent 正在按合同修改代码并做本地验证。",
+      businessMeaning: "任务正在执行，执行助手正在按合同修改代码并做本地验证。",
       ownerRoleLabel: roleLabel,
       stageAction: "完成测试设计、实现改动和沙箱验证。",
       stageOutputs: [
@@ -476,9 +476,9 @@ export function buildTaskStatusContract(task: V1Issue): TaskStatusContract {
         outputCount ? `预期输出：${outputCount} 项` : "预期输出：待记录。",
         "本地验证结果会在进入评审前补齐。",
       ],
-      nextEntry: "验证通过后进入 in_review。",
+      nextEntry: "验证通过后进入正在评审。",
       uiSummary: [
-        "Agent 正在做。",
+        "执行助手正在处理。",
         "还没有进入评审。",
       ],
     },
@@ -491,9 +491,9 @@ export function buildTaskStatusContract(task: V1Issue): TaskStatusContract {
       stageOutputs: [
         "交付材料应已生成。",
         "验证结果应已记录。",
-        "等待 merge proof 和最终写回。",
+        "等待合并凭证和最终写回。",
       ],
-      nextEntry: "PR/MR merged 后写回 done。",
+      nextEntry: "PR/MR 合并后写回已完成。",
       uiSummary: [
         "实现已完成。",
         "等待合并或最终写回。",
@@ -556,27 +556,27 @@ export function buildTaskStatusContract(task: V1Issue): TaskStatusContract {
 function statusOwnerRoleLabel(status: IssueDisplayStatus, issueCategory?: IssueCategory) {
   if (issueCategory === "audit") {
     if (status === "done") {
-      return "Audit Agent";
+      return "审计助手";
     }
     if (status === "blocked" || status === "cancel") {
-      return "Audit Agent / 人";
+      return "审计助手 / 人";
     }
-    return "Audit Agent";
+    return "审计助手";
   }
 
   switch (status) {
     case "backlog":
-      return "Spec Agent";
+      return "需求助手";
     case "todo":
     case "in_progress":
     case "in_review":
     case "done":
-      return "Build Agent";
+      return "执行助手";
     case "blocked":
     case "cancel":
-      return "Build Agent / 人";
+      return "执行助手 / 人";
     default:
-      return "Build Agent";
+      return "执行助手";
   }
 }
 
