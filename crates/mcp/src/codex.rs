@@ -80,6 +80,11 @@ pub fn check_codex_provider(project_root: impl AsRef<Path>) -> McpProviderStatus
             status.cli = Some(CODEX_PROGRAM.to_string());
             codex_exec_available = true;
             status.capabilities.push(McpCapability::with_detail(
+                "launch",
+                true,
+                "codex exec launch is available",
+            ));
+            status.capabilities.push(McpCapability::with_detail(
                 "codex.exec",
                 true,
                 "codex exec is available",
@@ -91,6 +96,11 @@ pub fn check_codex_provider(project_root: impl AsRef<Path>) -> McpProviderStatus
                 help.combined_output().trim()
             ));
             status.capabilities.push(McpCapability::with_detail(
+                "launch",
+                false,
+                "codex exec launch is unavailable",
+            ));
+            status.capabilities.push(McpCapability::with_detail(
                 "codex.exec",
                 false,
                 "codex exec is unavailable",
@@ -98,6 +108,11 @@ pub fn check_codex_provider(project_root: impl AsRef<Path>) -> McpProviderStatus
         }
         Err(error) => {
             status.warnings.push(format!("{CODEX_PROGRAM}: {error}"));
+            status.capabilities.push(McpCapability::with_detail(
+                "launch",
+                false,
+                "codex exec launch is unavailable",
+            ));
             status.capabilities.push(McpCapability::with_detail(
                 "codex.exec",
                 false,
@@ -156,10 +171,8 @@ pub fn check_codex_provider(project_root: impl AsRef<Path>) -> McpProviderStatus
         ));
     }
 
-    status.status = if codex_exec_available && build_agent_complete_supported {
+    status.status = if codex_exec_available {
         McpProviderStatusCode::Ready
-    } else if codex_exec_available {
-        McpProviderStatusCode::Unsupported
     } else {
         McpProviderStatusCode::Unavailable
     };
@@ -204,6 +217,9 @@ impl McpAgentProvider for CodexProvider {
             "--ask-for-approval".to_string(),
             self.approval_policy.clone(),
             "exec".to_string(),
+            "--ephemeral".to_string(),
+            "--ignore-user-config".to_string(),
+            "--ignore-rules".to_string(),
             "--cd".to_string(),
             request.working_directory.clone(),
             "--sandbox".to_string(),
@@ -628,6 +644,9 @@ mod tests {
         assert_eq!(plan.session_id, "codex-run-001");
         assert_eq!(plan.args[0], "--ask-for-approval");
         assert!(plan.args.iter().any(|arg| arg == "exec"));
+        assert!(plan.args.iter().any(|arg| arg == "--ephemeral"));
+        assert!(plan.args.iter().any(|arg| arg == "--ignore-user-config"));
+        assert!(plan.args.iter().any(|arg| arg == "--ignore-rules"));
         assert!(plan.args.iter().any(|arg| arg == "--json"));
         assert!(plan.args.iter().any(|arg| arg == "--output-last-message"));
         assert_eq!(

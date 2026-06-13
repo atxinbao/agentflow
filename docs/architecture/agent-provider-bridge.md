@@ -168,6 +168,12 @@ Provider session 事实写在：
 - PR / merge 状态回写到 session snapshot；
 - 前端任务页 / 执行页只读展示 session 状态和日志。
 
+补充约束：
+
+- provider 是否允许拉起外部会话，只看 `launch` capability；
+- `build-agent complete` 缺失或本地 binary 过旧，只记 warning，不阻断会话创建；
+- `codex exec` 默认使用隔离参数启动，避免读取本机用户配置或外部规则，把 AgentFlow 任务包保持为唯一执行源。
+
 这轮再补了一层生命周期收口：
 
 - provider bridge 创建会话成功后，正式 claim 当前 launch，并写 `build-agent.launch.claimed`；
