@@ -3298,11 +3298,21 @@ function TaskFinalDeliveryCard({
       ? "交付待补齐"
       : "最终交付已就绪"
     : "等待任务完成";
+  const releaseTitle = artifact?.releaseNote?.title ?? null;
   const releaseSummary = artifact?.releaseNote?.summaryLines.length
     ? artifact.releaseNote.summaryLines.slice(0, 3)
     : deliveryProjection.deliveryRunId
       ? ["交付包已登记，release note 摘要未读取到。"]
       : ["任务完成后显示交付包摘要。"];
+  const packageSummary = [
+    releaseTitle ? `交付标题：${releaseTitle}` : null,
+    deliveryProjection.deliveryPath ? `交付文件：${deliveryProjection.deliveryPath}` : "交付文件：未记录",
+    deliveryProjection.evidencePath ? `验证证据：${deliveryProjection.evidencePath}` : "验证证据：未记录",
+    deliveryProjection.releaseDeliveryDir ? `交付目录：${deliveryProjection.releaseDeliveryDir}` : "交付目录：未记录",
+    deliveryProjection.releaseNotePath ? `交付说明：${deliveryProjection.releaseNotePath}` : "交付说明：未记录",
+    deliveryProjection.prUrl ? `评审链接：${deliveryProjection.prUrl}` : "评审链接：未记录",
+    deliveryProjection.mergeState ? `合并状态：${deliveryProjection.mergeState}` : "合并状态：未记录",
+  ].filter((item): item is string => Boolean(item));
 
   return (
     <section className={isDone ? "v16-final-delivery-card done" : "v16-final-delivery-card"} aria-label="最终交付卡">
@@ -3313,6 +3323,9 @@ function TaskFinalDeliveryCard({
       </div>
       <ul>
         {releaseSummary.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+        {packageSummary.map((item) => (
           <li key={item}>{item}</li>
         ))}
         <li>{deliveryProjection.missingItems.length ? `待补齐：${deliveryProjection.missingItems.length} 项` : "交付包摘要已匹配当前任务状态。"}</li>
