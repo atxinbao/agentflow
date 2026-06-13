@@ -45,13 +45,13 @@ const previewSpecId = "spec-browser-preview";
 const previewProjectIssueIds = ["iss-ready", "iss-progress", "iss-review", "iss-audit-ready", "iss-done", "iss-cancel"];
 const previewIssueScope = [
   "展示任务状态流和项目分组。",
-  "展示任务页里的执行摘要、交付摘要和 YAML workflow 面板。",
+  "展示任务页里的当前阶段、最终交付和高级详情。",
   "保持真实桌面客户端只读取真实本地数据。",
 ];
 const previewIssueNonGoals = ["不执行命令。", "不写入本地工作区。", "不调用模型。", "不创建远程对象。"];
 const previewIssueAcceptanceCriteria = [
   "浏览器预览可展示任务工作台新结构。",
-  "任务页主链路展示 workflow、执行、交付和 YAML 面板。",
+  "任务页主链路展示状态流、当前阶段和最终交付。",
   "导航收口后任务、文件和审计入口仍可用，执行与交付在任务页内展示。",
 ];
 const previewIssueValidationCommands = [
@@ -234,10 +234,10 @@ function browserPreviewInputProject(
     sourceSpecId: previewSpecId,
     title: options.title ?? "浏览器预览任务项目",
     summary: options.summary ?? "用于验证任务页里的项目分组和任务工作流。",
-    objective: options.objective ?? "在任务页展示项目分组、执行摘要、交付摘要和 YAML workflow。",
-    scope: ["展示项目摘要。", "展示任务页内的执行与交付主链路。", "验证建议任务按钮会切换到任务工作流。"],
+    objective: options.objective ?? "在任务页展示项目分组、项目调度视图和任务工作流。",
+    scope: ["展示项目调度概览。", "展示任务页内的当前阶段与最终交付主链路。", "验证查看当前任务按钮会切换到任务工作流。"],
     nonGoals: ["不写入真实 .agentflow/input。", "不创建远程对象。"],
-    successCriteria: ["项目行可选中。", "右侧可显示 Project Summary。", "查看建议任务后右侧显示任务工作流。"],
+    successCriteria: ["项目行可选中。", "右侧可显示项目调度视图。", "查看当前任务后右侧显示任务工作流。"],
     issueIds: options.issueIds ?? previewProjectIssueIds,
     status: "active",
     panel: {

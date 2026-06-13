@@ -1800,7 +1800,7 @@ button.v16-task-project-row:hover {
 
 .v16-issue-status-flow ol {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1810,14 +1810,14 @@ button.v16-task-project-row:hover {
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr);
   gap: 8px;
-  min-height: 58px;
+  min-height: 0;
   padding: 12px;
-  border-right: 1px solid var(--v16-border);
+  border-bottom: 1px solid var(--v16-border);
   color: var(--v16-text-muted);
 }
 
 .v16-issue-status-step:last-child {
-  border-right: 0;
+  border-bottom: 0;
 }
 
 .v16-issue-status-step strong,
@@ -2247,6 +2247,27 @@ button.v16-task-project-row:hover {
 
 .v16-task-package .v16-section-list {
   margin-top: 8px;
+}
+
+.v16-task-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.v16-task-package-nested {
+  align-content: start;
+}
+
+.v16-task-package-nested h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.v16-task-package-nested .af-button {
+  justify-self: flex-start;
 }
 
 .v16-section-list li {
@@ -2719,6 +2740,7 @@ button.v16-list-item {
   }
 
   .v16-task-workspace-shell,
+  .v16-task-advanced-grid,
   .v16-summary-grid,
   .v16-task-workflow-summary,
   .v16-intent-grid,
@@ -2745,7 +2767,8 @@ button.v16-list-item {
 }
 
 @media (max-width: 900px) {
-  .v16-task-workspace-shell {
+  .v16-task-workspace-shell,
+  .v16-task-advanced-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
