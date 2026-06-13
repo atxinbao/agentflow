@@ -1943,6 +1943,55 @@ button.v16-task-project-row:hover {
   overflow: auto;
 }
 
+.v16-task-workspace-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.68fr) minmax(280px, 0.92fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.v16-task-workspace-main {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.v16-task-workflow-panel-shell {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--v16-border-soft);
+  border-radius: 6px;
+  background: var(--v16-surface-muted);
+}
+
+.v16-task-workflow-panel-shell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.v16-task-workflow-panel-shell-header span {
+  color: var(--v16-muted);
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.3;
+}
+
+.v16-task-workflow-panel-shell-header strong {
+  color: var(--v16-text);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
+.v16-task-workflow-panel-shell .v16-section-list {
+  background: var(--v16-surface);
+}
+
 .v16-task-workflow-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
@@ -2592,6 +2641,7 @@ button.v16-list-item {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .v16-task-workspace-shell,
   .v16-summary-grid,
   .v16-task-workflow-summary,
   .v16-intent-grid,
@@ -2613,5 +2663,11 @@ button.v16-list-item {
 
   .v16-status-bar section:last-child {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 900px) {
+  .v16-task-workspace-shell {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

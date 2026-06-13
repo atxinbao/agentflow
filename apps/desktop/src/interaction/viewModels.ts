@@ -299,57 +299,59 @@ export function buildTaskProjectTreeViewModel({
     ]),
   );
   const assignedIssueIds = new Set<string>();
-  const groups = projects.map((project) => {
-    const groupWarnings: TaskProjectTreeWarning[] = [];
-    const issueIds = projectIssueOrder(project, issues);
-    const groupIssues: TaskIssueNode[] = [];
-    const missingIssueIds: string[] = [];
+  const groups = projects
+    .map((project) => {
+      const groupWarnings: TaskProjectTreeWarning[] = [];
+      const issueIds = projectIssueOrder(project, issues);
+      const groupIssues: TaskIssueNode[] = [];
+      const missingIssueIds: string[] = [];
 
-    issueIds.forEach((issueId) => {
-      const node = nodeById.get(issueId);
-      if (!node) {
-        const warning = taskProjectTreeWarning(
-          "missing-issue",
-          `Project ${project.projectId} 引用了不存在的 issue ${issueId}。`,
-          project.projectId,
-          issueId,
-        );
-        groupWarnings.push(warning);
-        warnings.push(warning);
-        missingIssueIds.push(issueId);
-        return;
-      }
+      issueIds.forEach((issueId) => {
+        const node = nodeById.get(issueId);
+        if (!node) {
+          const warning = taskProjectTreeWarning(
+            "missing-issue",
+            `Project ${project.projectId} 引用了不存在的 issue ${issueId}。`,
+            project.projectId,
+            issueId,
+          );
+          groupWarnings.push(warning);
+          warnings.push(warning);
+          missingIssueIds.push(issueId);
+          return;
+        }
 
-      if (assignedIssueIds.has(issueId)) {
-        const warning = taskProjectTreeWarning(
-          "duplicate-project-issue",
-          `任务 ${issueId} 被多个 project 引用，只保留第一次分组。`,
-          project.projectId,
-          issueId,
-        );
-        groupWarnings.push(warning);
-        warnings.push(warning);
-        return;
-      }
+        if (assignedIssueIds.has(issueId)) {
+          const warning = taskProjectTreeWarning(
+            "duplicate-project-issue",
+            `任务 ${issueId} 被多个 project 引用，只保留第一次分组。`,
+            project.projectId,
+            issueId,
+          );
+          groupWarnings.push(warning);
+          warnings.push(warning);
+          return;
+        }
 
-      assignedIssueIds.add(issueId);
-      groupIssues.push(node);
-    });
+        assignedIssueIds.add(issueId);
+        groupIssues.push(node);
+      });
 
-    return {
-      counts: taskProjectTreeCounts(groupIssues, 1),
-      id: project.projectId,
-      issues: sortTasksByExecutionOrder(groupIssues),
-      missingIssueIds,
-      objective: project.objective ?? null,
-      project,
-      sourceSpecId: project.sourceSpecId ?? null,
-      status: project.status,
-      summary: project.summary,
-      title: project.title,
-      warnings: groupWarnings,
-    };
-  });
+      return {
+        counts: taskProjectTreeCounts(groupIssues, 1),
+        id: project.projectId,
+        issues: sortTasksByExecutionOrder(groupIssues),
+        missingIssueIds,
+        objective: project.objective ?? null,
+        project,
+        sourceSpecId: project.sourceSpecId ?? null,
+        status: project.status,
+        summary: project.summary,
+        title: project.title,
+        warnings: groupWarnings,
+      };
+    })
+    .sort(compareTaskProjectGroupByLatest);
 
   const ungroupedIssues = sortTasksByExecutionOrder(
     issues
@@ -759,6 +761,15 @@ function executionStatusRank(status?: IssueDisplayStatus | null) {
 
 function executionSortTime(issue: ExecutionOrderedTask) {
   return issue.updatedAt ?? issue.createdAt ?? 0;
+}
+
+function compareTaskProjectGroupByLatest(left: TaskProjectGroup, right: TaskProjectGroup) {
+  const leftTime = left.project.system?.updatedAt ?? left.project.system?.createdAt ?? 0;
+  const rightTime = right.project.system?.updatedAt ?? right.project.system?.createdAt ?? 0;
+  if (leftTime !== rightTime) {
+    return rightTime - leftTime;
+  }
+  return left.title.localeCompare(right.title, "zh-CN");
 }
 
 function priorityRank(priority?: string | null) {
