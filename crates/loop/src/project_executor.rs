@@ -1,7 +1,8 @@
 use crate::{IssueLoop, IssueLoopStage, ProjectLoop, ProjectLoopSnapshot};
 use agentflow_execute::{
-    ensure_build_agent_launch_state,
+    ensure_build_agent_launch_state, load_build_agent_launch_state,
     storage::{relative_path, run_dir, write_json},
+    BuildAgentLaunchStatus,
 };
 use agentflow_input::issue::{InputIssue, InputIssueStatus};
 use agentflow_workflow_events::{
@@ -264,11 +265,21 @@ fn append_build_agent_launch_event(
             source: "project-loop".to_string(),
             subject_id: issue.issue_id.clone(),
             subject_path: Some(issue.issue_path.clone()),
-            dedupe_key: format!("build-agent.launch.requested:{}:{run_id}", issue.issue_id),
+            dedupe_key: build_agent_launch_event_dedupe_key(root, issue, run_id),
             payload: serde_json::to_value(payload)?,
         },
     )?;
     Ok(())
+}
+
+fn build_agent_launch_event_dedupe_key(root: &Path, issue: &InputIssue, run_id: &str) -> String {
+    match load_build_agent_launch_state(root, run_id) {
+        Ok(state) if matches!(state.status, BuildAgentLaunchStatus::Failed) => format!(
+            "build-agent.launch.requested:{}:{}:retry:{}",
+            issue.issue_id, run_id, state.updated_at
+        ),
+        _ => format!("build-agent.launch.requested:{}:{run_id}", issue.issue_id),
+    }
 }
 
 fn ensure_existing_launch_request(root: &Path, issue: &InputIssue) -> Result<bool> {

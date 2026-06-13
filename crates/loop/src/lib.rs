@@ -789,6 +789,57 @@ mod tests {
     }
 
     #[test]
+    fn project_executor_requeues_failed_launch_for_active_runtime() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        write_project_issue(dir.path(), InputIssueStatus::Backlog);
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+
+        let first_tick = ProjectExecutor::new("proj-001").tick(dir.path()).unwrap();
+        let launch = first_tick.launch.expect("expected runtime launch");
+        let first_event = agentflow_workflow_events::load_pending_events(
+            dir.path(),
+            agentflow_workflow_events::CONSUMER_PROVIDER_BRIDGE,
+            &[agentflow_workflow_events::EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED],
+        )
+        .unwrap()
+        .into_iter()
+        .next()
+        .expect("first launch event");
+        agentflow_workflow_events::mark_event_consumed(
+            dir.path(),
+            agentflow_workflow_events::CONSUMER_PROVIDER_BRIDGE,
+            &first_event.event_id,
+        )
+        .unwrap();
+        agentflow_workflow_events::mark_event_consumed(
+            dir.path(),
+            agentflow_workflow_events::CONSUMER_BUILD_AGENT,
+            &first_event.event_id,
+        )
+        .unwrap();
+        agentflow_execute::mark_build_agent_launch_failed(dir.path(), &launch.run_id)
+            .unwrap()
+            .expect("failed launch state");
+
+        let second_tick = ProjectExecutor::new("proj-001").tick(dir.path()).unwrap();
+        assert!(second_tick.launch.is_none());
+
+        let pending = agentflow_workflow_events::load_pending_events(
+            dir.path(),
+            agentflow_workflow_events::CONSUMER_PROVIDER_BRIDGE,
+            &[agentflow_workflow_events::EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED],
+        )
+        .unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_ne!(pending[0].event_id, first_event.event_id);
+        assert!(pending[0]
+            .dedupe_key
+            .starts_with("build-agent.launch.requested:AF-001:run-001:retry:"));
+    }
+
+    #[test]
     fn direct_issue_loop_starts_todo_issue_and_writes_branch_projection() {
         let dir = tempdir().unwrap();
         prepare_root(dir.path());
