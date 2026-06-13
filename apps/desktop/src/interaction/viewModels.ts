@@ -11,6 +11,7 @@ import type {
   IssueDisplayStatus,
   IssueStatusIndex,
   IssueStatusIndexEntry,
+  McpSessionSnapshot,
   OutputIndexEntry,
   V1Issue,
   WorkflowAuditStatus,
@@ -66,6 +67,21 @@ export type DeliveryInteractionState = {
   selectedDelivery: OutputIndexEntry | null;
   selectedDeliveryRunId: string | null;
   status: PageInteractionState;
+};
+
+export type TaskDeliveryProjection = {
+  taskId: string;
+  status: IssueDisplayStatus;
+  deliveryRunId: string | null;
+  deliveryPath: string | null;
+  evidencePath: string | null;
+  releaseDeliveryDir: string | null;
+  prUrl: string | null;
+  mergeState: string | null;
+  releaseNotePath: string | null;
+  summaryItems: string[];
+  packageItems: string[];
+  missingItems: string[];
 };
 
 export type AuditInteractionState = {
@@ -900,6 +916,99 @@ export function buildDeliveryInteractionState(
     selectedDeliveryRunId: selectedDelivery?.runId ?? null,
     status: deliveries.length ? "ready" : "empty",
   };
+}
+
+export function buildTaskDeliveryProjection({
+  audit,
+  delivery,
+  evidence,
+  session,
+  task,
+}: {
+  audit: AuditIndexEntry | null;
+  delivery: OutputIndexEntry | null;
+  evidence: OutputIndexEntry | null;
+  session: McpSessionSnapshot | null;
+  task: V1Issue;
+}): TaskDeliveryProjection {
+  const status = task.displayStatus ?? "backlog";
+  const expectedReleaseDir = stringExpectedOutput(task.expectedOutputs, "releaseDeliveryDir");
+  const releaseDeliveryDir = delivery?.path ? parentDirectory(delivery.path) : expectedReleaseDir;
+  const releaseNotePath = stringExpectedOutput(task.expectedOutputs, "releaseNotePath");
+  const deliveryRequired = status === "in_review" || status === "done";
+  const missingItems = [
+    ...(deliveryRequired && !delivery ? ["交付包：当前状态需要交付包，但 output index 还没有对应记录。"] : []),
+    ...(deliveryRequired && !evidence ? ["验证证据：当前状态需要证据，但 output index 还没有对应记录。"] : []),
+    ...(deliveryRequired && !session?.prUrl ? ["PR/MR metadata：未记录评审链接。"] : []),
+    ...(deliveryRequired && !releaseNotePath ? ["Release note：未记录 release note 路径。"] : []),
+  ];
+
+  return {
+    deliveryPath: delivery?.path ?? null,
+    deliveryRunId: delivery?.runId ?? task.latestRunId ?? null,
+    evidencePath: evidence?.path ?? stringExpectedOutput(task.expectedOutputs, "evidencePath"),
+    mergeState: session?.mergeState ?? null,
+    missingItems,
+    packageItems: [
+      delivery ? `交付包：${delivery.runId}` : deliveryRequired ? "交付包：未找到记录" : "交付包：当前阶段还未生成",
+      releaseDeliveryDir ? `交付目录：${releaseDeliveryDir}` : "交付目录：未记录",
+      evidence ? `验证证据：${evidence.path}` : "验证证据：未找到记录",
+      session?.prUrl ? `PR/MR：${session.prUrl}` : "PR/MR：未记录",
+      session?.mergeState ? `合并状态：${session.mergeState}` : "合并状态：未记录",
+      releaseNotePath ? `Release note：${releaseNotePath}` : "Release note：未记录",
+      audit ? `后续审计：${artifactProjectionStatusLabel(audit.status)}` : "后续审计：独立入口，未并入任务主链路。",
+    ],
+    prUrl: session?.prUrl ?? null,
+    releaseDeliveryDir,
+    releaseNotePath,
+    status,
+    summaryItems: [
+      `任务状态：${displayStatusLabelZh(status)}`,
+      delivery ? `交付包状态：${artifactProjectionStatusLabel(delivery.status)}` : deliveryRequired ? "交付包状态：缺失" : "交付包状态：未到生成阶段",
+      evidence ? `证据状态：${artifactProjectionStatusLabel(evidence.status)}` : deliveryRequired ? "证据状态：缺失" : "证据状态：未到生成阶段",
+      session?.prUrl ? "PR/MR metadata：已记录" : "PR/MR metadata：未记录",
+      releaseNotePath ? "Release note：已记录" : "Release note：未记录",
+      audit ? `审计提示：${artifactProjectionStatusLabel(audit.status)}` : "审计提示：交付后的独立入口。",
+    ],
+    taskId: task.id,
+  };
+}
+
+function artifactProjectionStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    accepted: "已接受",
+    approved: "已确认",
+    audit: "待审计",
+    audited: "已审计",
+    blocked: "阻断",
+    completed: "已完成",
+    complete: "已完成",
+    delivered: "已交付",
+    drafted: "已生成草稿",
+    done: "已完成",
+    failed: "失败",
+    missing: "缺失",
+    pass: "通过",
+    passed: "通过",
+    "passed-with-warnings": "通过，有警告",
+    pending: "待处理",
+    ready: "就绪",
+    requested: "已请求",
+    running: "运行中",
+    validated: "已验证",
+    waiting: "等待",
+  };
+  return status ? labels[status.toLowerCase()] ?? status : "未记录";
+}
+
+function stringExpectedOutput(outputs: V1Issue["expectedOutputs"], key: string) {
+  const value = outputs?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function parentDirectory(path: string) {
+  const index = path.lastIndexOf("/");
+  return index > 0 ? path.slice(0, index) : path;
 }
 
 export function buildAuditInteractionState(audits: AuditIndexEntry[], selectedAuditId: string | null): AuditInteractionState {

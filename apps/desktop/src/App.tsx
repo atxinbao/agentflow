@@ -81,6 +81,7 @@ import {
   buildAppInteractionState,
   buildAuditInteractionState,
   buildDeliveryInteractionState,
+  buildTaskDeliveryProjection,
   buildTaskStatusContract,
   buildTaskInteractionState,
   buildTaskProjectTreeViewModel,
@@ -108,6 +109,7 @@ import type {
   IssueStatusIndex,
   OutputIndex,
   OutputIndexEntry,
+  ProjectFileContent,
   StateStatusSnapshot,
   V1Issue,
   ExpectedOutputs,
@@ -126,9 +128,40 @@ type WorkspaceDataState = {
 type OutputBundleState = {
   auditIndex: AuditIndex | null;
   auditReport: HumanAuditReport | null;
+  deliveryArtifacts: Record<string, DeliveryArtifactState>;
   error: string | null;
   outputIndex: OutputIndex | null;
   source: DataSource;
+};
+
+type DeliveryPrMetadataState = {
+  branchName?: string | null;
+  createdRemotePr: boolean;
+  mergeMode?: string | null;
+  merged: boolean;
+  provider?: string | null;
+  remotePrUrl?: string | null;
+  status?: string | null;
+  title?: string | null;
+};
+
+type DeliveryMergeProofState = {
+  mergeMode?: string | null;
+  merged: boolean;
+  provider?: string | null;
+  remoteUrl?: string | null;
+};
+
+type DeliveryReleaseNoteState = {
+  summaryLines: string[];
+  title?: string | null;
+};
+
+type DeliveryArtifactState = {
+  mergeProof: DeliveryMergeProofState | null;
+  prMetadata: DeliveryPrMetadataState | null;
+  releaseNote: DeliveryReleaseNoteState | null;
+  runId: string;
 };
 
 type ProjectInitializationContext = {
@@ -1296,7 +1329,6 @@ function App() {
             onSelectProjectGroup={handleSelectTaskProject}
             onSelectTask={handleSelectTask}
             outputBundle={outputBundle}
-            outputStatusState={outputStatusState}
             projectRoot={projectRoot}
             selectedProjectGroup={selectedProjectGroup}
             selectedTask={selectedTask}
@@ -1326,10 +1358,10 @@ function App() {
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "delivery" ? (
           <DeliveryPage
+            mcpSessionsState={mcpSessionsState}
             onOpenAudit={() => setActivePage("audit")}
             onSelectDelivery={setSelectedDeliveryRunId}
             outputBundle={outputBundle}
-            outputStatusState={outputStatusState}
             selectedDeliveryRunId={selectedDeliveryRunId}
             selectedTask={selectedTask}
             tasks={tasks}
@@ -1403,6 +1435,7 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
   const [state, setState] = useState<OutputBundleState>({
     auditIndex: null,
     auditReport: null,
+    deliveryArtifacts: {},
     error: null,
     outputIndex: null,
     source: "idle",
@@ -1410,16 +1443,25 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
 
   useEffect(() => {
     if (!projectRoot) {
-      setState({ auditIndex: null, auditReport: null, error: null, outputIndex: null, source: "idle" });
+      setState({
+        auditIndex: null,
+        auditReport: null,
+        deliveryArtifacts: {},
+        error: null,
+        outputIndex: null,
+        source: "idle",
+      });
       return;
     }
 
     if (isBrowserPreviewRuntime()) {
+      const outputIndex = createBrowserPreviewOutputIndex();
       setState({
         auditIndex: createBrowserPreviewAuditIndex(),
         auditReport: createBrowserPreviewHumanAuditReport(),
+        deliveryArtifacts: createBrowserPreviewDeliveryArtifacts(outputIndex),
         error: null,
-        outputIndex: createBrowserPreviewOutputIndex(),
+        outputIndex,
         source: "preview",
       });
       return;
@@ -1442,9 +1484,10 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
         const auditReport = latestAuditWithReport
           ? await invoke<HumanAuditReport>("load_audit_report", { auditId: latestAuditWithReport.auditId, projectRoot })
           : null;
+        const deliveryArtifacts = await loadDeliveryArtifacts(projectRoot, outputIndex.releaseDeliveries);
 
         if (!cancelled) {
-          setState({ auditIndex, auditReport, error: null, outputIndex, source: "tauri" });
+          setState({ auditIndex, auditReport, deliveryArtifacts, error: null, outputIndex, source: "tauri" });
         }
       })
       .catch((error) => {
@@ -1456,6 +1499,7 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
               : {
                   auditIndex: null,
                   auditReport: null,
+                  deliveryArtifacts: {},
                   error: message,
                   outputIndex: null,
                   source: "unavailable",
@@ -1470,6 +1514,104 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
   }, [projectRoot, refreshToken]);
 
   return state;
+}
+
+function createBrowserPreviewDeliveryArtifacts(outputIndex: OutputIndex): Record<string, DeliveryArtifactState> {
+  const delivery = outputIndex.releaseDeliveries[0];
+  if (!delivery) {
+    return {};
+  }
+  const merged = delivery.status === "delivered" || delivery.status === "done";
+  return {
+    [delivery.runId]: {
+      mergeProof: {
+        mergeMode: merged ? "auto-merge-if-eligible" : "manual-merge",
+        merged,
+        provider: "github",
+        remoteUrl: `https://github.com/atxinbao/agentflow/pull/${merged ? 101 : 102}`,
+      },
+      prMetadata: {
+        branchName: `agentflow/browser-preview/${delivery.issueId}`,
+        createdRemotePr: true,
+        mergeMode: merged ? "auto-merge-if-eligible" : "manual-merge",
+        merged,
+        provider: "github",
+        remotePrUrl: `https://github.com/atxinbao/agentflow/pull/${merged ? 101 : 102}`,
+        status: merged ? "merged" : "open",
+        title: `Preview ${delivery.issueId}`,
+      },
+      releaseNote: {
+        summaryLines: ["交付已准备完成。", "这里只展示浏览器预览用的模拟 release note。"],
+        title: "Release Note",
+      },
+      runId: delivery.runId,
+    },
+  };
+}
+
+async function loadDeliveryArtifacts(
+  projectRoot: string,
+  deliveries: OutputIndexEntry[],
+): Promise<Record<string, DeliveryArtifactState>> {
+  const entries = await Promise.all(
+    deliveries.map(async (delivery) => {
+      const runId = delivery.runId;
+      const [prMetadataContent, mergeProofContent, releaseNoteContent] = await Promise.all([
+        readProjectFileContent(projectRoot, `.agentflow/output/release/${runId}/pr-metadata.json`),
+        readProjectFileContent(projectRoot, `.agentflow/execute/runs/${runId}/review/merge-proof.json`),
+        readProjectFileContent(projectRoot, `.agentflow/output/release/${runId}/release-note.md`),
+      ]);
+      const prMetadata = parseJsonText<DeliveryPrMetadataState>(prMetadataContent?.content);
+      const mergeProof = parseJsonText<DeliveryMergeProofState>(mergeProofContent?.content);
+      const releaseNote = releaseNoteContent?.content
+        ? parseReleaseNote(releaseNoteContent.content)
+        : null;
+      return [
+        runId,
+        {
+          mergeProof,
+          prMetadata,
+          releaseNote,
+          runId,
+        } satisfies DeliveryArtifactState,
+      ] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
+}
+
+async function readProjectFileContent(
+  projectRoot: string,
+  relativePath: string,
+): Promise<ProjectFileContent | null> {
+  try {
+    return await invoke<ProjectFileContent>("load_project_file_content", { projectRoot, relativePath });
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonText<T>(content?: string | null): T | null {
+  if (!content) {
+    return null;
+  }
+  try {
+    return JSON.parse(content) as T;
+  } catch {
+    return null;
+  }
+}
+
+function parseReleaseNote(content: string): DeliveryReleaseNoteState {
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const [titleLine, ...bodyLines] = lines;
+  return {
+    summaryLines: bodyLines.slice(0, 3),
+    title: titleLine?.startsWith("#") ? titleLine.replace(/^#+\s*/, "") : titleLine ?? null,
+  };
 }
 
 function useProjectInitializationStatus(
@@ -2216,7 +2358,6 @@ function TasksPage({
   onTaskAction,
   onSelectTask,
   outputBundle,
-  outputStatusState,
   selectedProjectGroup,
   selectedTask,
   projectRoot,
@@ -2234,7 +2375,6 @@ function TasksPage({
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   onSelectTask: (taskId: string) => void;
   outputBundle: OutputBundleState;
-  outputStatusState: OutputStatusState;
   projectRoot: string | null;
   selectedProjectGroup: TaskProjectGroup | null;
   selectedTask: V1Issue | null;
@@ -2255,7 +2395,6 @@ function TasksPage({
         onSelectTask={onSelectTask}
         onTaskAction={onTaskAction}
         outputBundle={outputBundle}
-        outputStatusState={outputStatusState}
         projectRoot={projectRoot}
         selectedProjectGroup={selectedProjectGroup}
         selectedTask={selectedTask}
@@ -2278,7 +2417,6 @@ function TaskList({
   onSelectTask,
   onTaskAction,
   outputBundle,
-  outputStatusState,
   projectRoot,
   selectedProjectGroup,
   selectedTask,
@@ -2296,7 +2434,6 @@ function TaskList({
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
-  outputStatusState: OutputStatusState;
   projectRoot: string | null;
   selectedProjectGroup: TaskProjectGroup | null;
   selectedTask: V1Issue | null;
@@ -2457,7 +2594,6 @@ function TaskList({
         onTaskAction={onTaskAction}
         onSelectTask={onSelectTask}
         outputBundle={outputBundle}
-        outputStatusState={outputStatusState}
         selectedProjectGroup={selectedProjectGroup}
         suggestions={showContextSuggestions ? suggestions : []}
         task={selectedTask}
@@ -2608,7 +2744,6 @@ function TaskDetail({
   onSelectTask,
   onTaskAction,
   outputBundle,
-  outputStatusState,
   selectedProjectGroup,
   suggestions,
   task,
@@ -2623,7 +2758,6 @@ function TaskDetail({
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
-  outputStatusState: OutputStatusState;
   selectedProjectGroup: TaskProjectGroup | null;
   suggestions: ProjectInitializationContext[];
   task: V1Issue | null;
@@ -2684,7 +2818,6 @@ function TaskDetail({
       mcpSessionsState={mcpSessionsState}
       onTaskAction={onTaskAction}
       outputBundle={outputBundle}
-      outputStatusState={outputStatusState}
       task={task}
     />
   );
@@ -2778,7 +2911,6 @@ function TaskDetailReader({
   mcpSessionsState,
   onTaskAction,
   outputBundle,
-  outputStatusState,
   task,
 }: {
   actionFeedback: string | null;
@@ -2789,7 +2921,6 @@ function TaskDetailReader({
   mcpSessionsState: McpSessionsState;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
-  outputStatusState: OutputStatusState;
   task: V1Issue;
 }) {
   const [handoffOpen, setHandoffOpen] = useState(false);
@@ -2827,13 +2958,13 @@ function TaskDetailReader({
     () => taskExecuteSummaryItems(task, session, mcpSessionsState, executeStatusState),
     [executeStatusState, mcpSessionsState, session, task],
   );
-  const deliverySummaryItems = useMemo(
-    () => taskDeliverySummaryItems(task, delivery, evidence, audit, outputStatusState),
-    [audit, delivery, evidence, outputStatusState, task],
+  const deliveryProjection = useMemo(
+    () => buildTaskDeliveryProjection({ audit, delivery, evidence, session, task }),
+    [audit, delivery, evidence, session, task],
   );
-  const finalDeliveryItems = useMemo(
-    () => taskFinalDeliveryItems(task, delivery, evidence, audit),
-    [audit, delivery, evidence, task],
+  const deliveryArtifacts = useMemo(
+    () => outputBundle.deliveryArtifacts[delivery?.runId ?? task.latestRunId ?? ""] ?? null,
+    [delivery?.runId, outputBundle.deliveryArtifacts, task.latestRunId],
   );
   const handoffContent = useMemo(() => {
     if (!handoffOpen) {
@@ -2881,8 +3012,11 @@ function TaskDetailReader({
         <IssueStatusFlow contract={statusContract} status={task.displayStatus ?? "backlog"} />
         <SectionList title="当前阶段输出" items={stageOutputItems} />
         <SectionList title="执行摘要" items={executeSummaryItems} />
-        <SectionList title="交付摘要" items={deliverySummaryItems} />
-        <SectionList title="最终交付" items={finalDeliveryItems} />
+        <SectionList title="交付摘要" items={deliveryProjection.summaryItems} />
+        <SectionList title="交付空态" items={deliveryProjection.missingItems.length ? deliveryProjection.missingItems : ["交付摘要没有缺失项。"]} />
+        <SectionList title="评审信息" items={deliveryReviewItems(task, deliveryArtifacts, session)} />
+        <SectionList title="Release note" items={deliveryReleaseNoteItems(task, deliveryArtifacts)} />
+        <SectionList title="最终交付" items={deliveryProjection.packageItems} />
         <SectionList
           title="状态说明"
           items={[
@@ -3029,18 +3163,18 @@ function FilesPage({
 }
 
 function DeliveryPage({
+  mcpSessionsState,
   onOpenAudit,
   onSelectDelivery,
   outputBundle,
-  outputStatusState,
   selectedDeliveryRunId,
   selectedTask,
   tasks,
 }: {
+  mcpSessionsState: McpSessionsState;
   onOpenAudit: () => void;
   onSelectDelivery: (runId: string) => void;
   outputBundle: OutputBundleState;
-  outputStatusState: OutputStatusState;
   selectedDeliveryRunId: string | null;
   selectedTask: V1Issue | null;
   tasks: V1Issue[];
@@ -3052,6 +3186,7 @@ function DeliveryPage({
   const deliveryTask = selectedDelivery
     ? tasks.find((task) => task.id === selectedDelivery.issueId) ?? null
     : selectedTask;
+  const taskSession = deliveryTask ? pickLatestMcpSessionForIssue(mcpSessionsState.sessions, deliveryTask.id) : null;
 
   return (
     <section className="v16-page v16-split-page" data-agentflow-page="delivery">
@@ -3065,7 +3200,8 @@ function DeliveryPage({
         delivery={selectedDelivery}
         evidence={evidence}
         onOpenAudit={onOpenAudit}
-        outputStatusState={outputStatusState}
+        outputBundle={outputBundle}
+        session={taskSession}
         selectedTask={deliveryTask}
       />
     </section>
@@ -3368,14 +3504,16 @@ function DeliveryDetail({
   delivery,
   evidence,
   onOpenAudit,
-  outputStatusState,
+  outputBundle,
+  session,
   selectedTask,
 }: {
   audits: AuditIndexEntry[];
   delivery: OutputIndexEntry | null;
   evidence: OutputIndexEntry[];
   onOpenAudit: () => void;
-  outputStatusState: OutputStatusState;
+  outputBundle: OutputBundleState;
+  session: McpSessionSnapshot | null;
   selectedTask: V1Issue | null;
 }) {
   const deliveryAudit = delivery ? findAuditForDelivery(audits, delivery.runId) : null;
@@ -3384,21 +3522,16 @@ function DeliveryDetail({
     () => findEvidenceEntryForTask(evidence, selectedTask),
     [evidence, selectedTask],
   );
-  const deliverySummaryItems = useMemo(
+  const deliveryProjection = useMemo(
     () =>
       selectedTask
-        ? taskDeliverySummaryItems(selectedTask, delivery, taskEvidence, deliveryAudit, outputStatusState)
-        : ["先在任务页选择一个任务，或在左侧选择一个交付包。"],
-    [delivery, deliveryAudit, outputStatusState, selectedTask, taskEvidence],
+        ? buildTaskDeliveryProjection({ audit: deliveryAudit, delivery, evidence: taskEvidence, session, task: selectedTask })
+        : null,
+    [delivery, deliveryAudit, selectedTask, session, taskEvidence],
   );
-  const finalDeliveryItems = useMemo(
-    () =>
-      selectedTask
-        ? taskFinalDeliveryItems(selectedTask, delivery, taskEvidence, deliveryAudit)
-        : delivery
-          ? [`交付包：${deliveryDisplayId(delivery.runId)}`, `关联任务：${delivery.issueId || "未记录"}`]
-          : ["还没有交付包。"],
-    [delivery, deliveryAudit, selectedTask, taskEvidence],
+  const deliveryArtifacts = useMemo(
+    () => outputBundle.deliveryArtifacts[delivery?.runId ?? selectedTask?.latestRunId ?? ""] ?? null,
+    [delivery?.runId, outputBundle.deliveryArtifacts, selectedTask?.latestRunId],
   );
   return (
     <section className={delivery || selectedTask ? "v16-detail-pane" : "v16-detail-pane v16-empty-detail-pane"} aria-label="交付详情">
@@ -3421,8 +3554,23 @@ function DeliveryDetail({
               : ["当前没有选中的任务。"]
           }
         />
-        <SectionList title="交付摘要" items={deliverySummaryItems} />
-        <SectionList title="最终交付" items={finalDeliveryItems} />
+        <SectionList
+          title="交付摘要"
+          items={
+            deliveryProjection?.summaryItems ??
+            (delivery ? [`交付包：${deliveryDisplayId(delivery.runId)}`, `关联任务：${delivery.issueId || "未记录"}`] : ["先在任务页选择一个任务，或在左侧选择一个交付包。"])
+          }
+        />
+        <SectionList
+          title="交付空态"
+          items={deliveryProjection ? (deliveryProjection.missingItems.length ? deliveryProjection.missingItems : ["交付摘要没有缺失项。"]) : ["未绑定任务，无法判断任务状态所需交付项。"]}
+        />
+        <SectionList title="评审信息" items={deliveryReviewItems(selectedTask, deliveryArtifacts, session)} />
+        <SectionList title="Release note" items={deliveryReleaseNoteItems(selectedTask, deliveryArtifacts)} />
+        <SectionList
+          title="最终交付"
+          items={deliveryProjection?.packageItems ?? (delivery ? [`交付包：${deliveryDisplayId(delivery.runId)}`, `关联任务：${delivery.issueId || "未记录"}`] : ["还没有交付包。"])}
+        />
         <SectionList
           title="关联记录"
           items={[
@@ -4787,87 +4935,67 @@ function taskExecuteSummaryItems(
   return items;
 }
 
-function taskDeliverySummaryItems(
-  task: V1Issue,
-  delivery: OutputIndexEntry | null,
-  evidence: OutputIndexEntry | null,
-  audit: AuditIndexEntry | null,
-  outputStatusState: OutputStatusState,
+function deliveryReviewItems(
+  task: V1Issue | null,
+  artifact: DeliveryArtifactState | null,
+  session: McpSessionSnapshot | null,
 ) {
-  const items = [
-    `交付状态：${delivery ? artifactStatusLabel(delivery.status) : deliveryStatusLabel(task.deliveryStatus)}`,
-    `证据状态：${evidence ? artifactStatusLabel(evidence.status) : evidenceStatusLabel(task.evidenceStatus)}`,
-    `审计状态：${audit ? artifactStatusLabel(audit.status) : auditStateLabel(task.auditStatus)}`,
-  ];
-
-  if (delivery) {
-    items.push(`交付包：${deliveryDisplayId(delivery.runId)}`);
-  } else if (task.displayStatus === "in_review" || task.displayStatus === "done") {
-    items.push("交付包：当前阶段应该已生成，但还没有找到记录。");
-  } else {
-    items.push("交付包：当前阶段还没有生成。");
+  if (!task) {
+    return ["先选择一个任务。"];
   }
 
-  if (outputStatusState.error) {
-    items.push(`交付工作区：${outputStatusState.error}`);
-  } else if (outputStatusState.status?.warnings.length) {
-    items.push(`交付工作区：${outputStatusState.status.warnings[0]}`);
-  } else {
-    items.push("交付工作区：没有额外告警。");
+  const mergeProof = artifact?.mergeProof;
+  const prMetadata = artifact?.prMetadata;
+  const provider = mergeProof?.provider ?? prMetadata?.provider ?? session?.provider ?? null;
+  const reviewUrl = mergeProof?.remoteUrl ?? prMetadata?.remotePrUrl ?? session?.prUrl ?? null;
+  const mergeMode = mergeProof?.mergeMode ?? prMetadata?.mergeMode ?? null;
+  const branchName = prMetadata?.branchName ?? session?.branchName ?? null;
+  const merged = mergeProof?.merged ?? prMetadata?.merged ?? session?.mergeState === "merged";
+
+  if (!mergeProof && !prMetadata && !session) {
+    return task.displayStatus === "in_review" || task.displayStatus === "done"
+      ? ["评审信息缺失：当前状态应该已经创建评审记录，但还没有读取到 PR/MR metadata 或 merge proof。"]
+      : ["当前阶段还没有评审信息。"];
   }
 
-  return items;
-}
-
-function taskFinalDeliveryItems(
-  task: V1Issue,
-  delivery: OutputIndexEntry | null,
-  evidence: OutputIndexEntry | null,
-  audit: AuditIndexEntry | null,
-) {
-  if (!delivery) {
-    return task.displayStatus === "done"
-      ? ["任务已经写回完成，但还没有读取到最终交付包记录。"]
-      : ["完成写回后，这里会显示最终交付包摘要。"];
-  }
+  const reviewState = merged
+    ? "评审状态：已合并。"
+    : prMetadata?.createdRemotePr || reviewUrl
+      ? "评审状态：已创建远端评审请求。"
+      : prMetadata?.status === "draft-only"
+        ? "评审状态：只有本地草稿，还没有远端评审请求。"
+        : session?.status === "in-review"
+          ? "评审状态：正在评审。"
+          : "评审状态：评审信息已写入。";
 
   return [
-    `交付包：${deliveryDisplayId(delivery.runId)}`,
-    `来源规格：${task.sourceSpecId ?? "未记录"}`,
-    `验证证据：${evidence ? artifactStatusLabel(evidence.status) : "未记录"}`,
-    audit ? `后续审计：${artifactStatusLabel(audit.status)}` : "后续审计：独立流程，按需触发。",
+    reviewState,
+    reviewUrl ? `评审链接：${reviewUrl}` : "评审链接：未记录",
+    provider ? `Provider：${mcpProviderLabel(provider)}` : "Provider：未记录",
+    mergeMode ? `合并模式：${mergeMode}` : "合并模式：未记录",
+    branchName ? `工作分支：${branchName}` : "工作分支：未记录",
   ];
 }
 
-function deliveryStatusLabel(status?: string | null) {
-  const labels: Record<string, string> = {
-    drafted: "已生成草稿交付包",
-    missing: "还没有交付包",
-    ready: "交付包已就绪",
-  };
-  return labels[status ?? ""] ?? "交付状态未记录";
-}
+function deliveryReleaseNoteItems(task: V1Issue | null, artifact: DeliveryArtifactState | null) {
+  if (!task) {
+    return ["先选择一个任务。"];
+  }
 
-function evidenceStatusLabel(status?: string | null) {
-  const labels: Record<string, string> = {
-    complete: "证据已完成",
-    missing: "还没有证据",
-    ready: "证据已就绪",
-  };
-  return labels[status ?? ""] ?? "证据状态未记录";
-}
+  if (!artifact?.releaseNote) {
+    return task.displayStatus === "in_review" || task.displayStatus === "done"
+      ? ["交付说明缺失：当前状态应该已经有 release note，但还没有读取到 release-note.md。"]
+      : ["当前阶段还没有交付说明。"];
+  }
 
-function auditStateLabel(status?: string | null) {
-  const labels: Record<string, string> = {
-    cancelled: "审计已取消",
-    failed: "审计未通过",
-    "not-requested": "未请求审计",
-    passed: "审计通过",
-    "passed-with-warnings": "审计通过但有提醒",
-    requested: "等待审计",
-    running: "审计中",
-  };
-  return labels[status ?? ""] ?? "审计状态未记录";
+  const summaryLines = artifact.releaseNote.summaryLines.length
+    ? artifact.releaseNote.summaryLines
+    : ["交付说明没有更多摘要内容。"];
+
+  return [
+    artifact.releaseNote.title ? `标题：${artifact.releaseNote.title}` : "标题：未记录",
+    ...summaryLines.map((line, index) => `摘要 ${index + 1}：${line}`),
+  ];
 }
 
 function projectRecommendedIssue(
