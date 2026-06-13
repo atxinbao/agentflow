@@ -169,7 +169,7 @@ function assertDeliveryProjection() {
     task: workflowTask("todo"),
   });
   assertEqual(todoProjection.missingItems.length, 0, "todo delivery missing items");
-  assertIncludes(todoProjection.summaryItems, "交付包状态：未到生成阶段", "todo delivery state");
+  assertIncludes(todoProjection.summaryItems, "交付包：未到生成阶段", "todo delivery state");
 
   const reviewTask = workflowTask("in_review");
   const reviewDelivery = outputEntry("run-in_review", reviewTask.id, "drafted");
@@ -181,7 +181,8 @@ function assertDeliveryProjection() {
     task: reviewTask,
   });
   assertEqual(reviewProjection.missingItems.length, 0, "in_review delivery missing items");
-  assertIncludes(reviewProjection.summaryItems, "交付包状态：已生成草稿", "in_review delivery status");
+  assertIncludes(reviewProjection.summaryItems, "交付包：run-in_review · 已生成草稿", "in_review delivery status");
+  assertIncludes(reviewProjection.packageItems, "交付说明：.agentflow/output/release/run-in_review/release-note.md", "in_review release note path");
   assertIncludes(reviewProjection.summaryItems, "审计提示：交付后的独立入口。", "in_review audit independence");
 
   const doneTask = workflowTask("done");
@@ -194,7 +195,8 @@ function assertDeliveryProjection() {
   });
   assertEqual(doneProjection.deliveryRunId, "run-done", "done delivery run");
   assertEqual(doneProjection.missingItems.length, 0, "done delivery missing items");
-  assertIncludes(doneProjection.summaryItems, "交付包状态：已交付", "done delivery status");
+  assertIncludes(doneProjection.summaryItems, "交付包：run-done · 已交付", "done delivery status");
+  assertIncludes(doneProjection.packageItems, "交付说明：.agentflow/output/release/run-done/release-note.md", "done release note path");
   assertIncludes(doneProjection.packageItems, "后续审计：通过，有警告", "done audit remains projection only");
 }
 
