@@ -2012,6 +2012,7 @@ button.v16-task-project-row:hover {
 .v16-task-workflow-summary span,
 .v16-final-delivery-card span,
 .v16-task-stage-panel-header span,
+.v16-task-execution-panel-header span,
 .v16-task-artifact-flow-header span {
   color: var(--v16-muted);
   font-size: 11px;
@@ -2022,6 +2023,7 @@ button.v16-task-project-row:hover {
 .v16-task-workflow-summary strong,
 .v16-final-delivery-card strong,
 .v16-task-stage-panel-header strong,
+.v16-task-execution-panel-header strong,
 .v16-task-artifact-flow-header strong {
   min-width: 0;
   color: var(--v16-text);
@@ -2041,6 +2043,7 @@ button.v16-task-project-row:hover {
 }
 
 .v16-task-stage-panel,
+.v16-task-execution-panel,
 .v16-task-artifact-flow {
   display: grid;
   gap: 8px;
@@ -2052,6 +2055,7 @@ button.v16-task-project-row:hover {
 }
 
 .v16-task-stage-panel-header,
+.v16-task-execution-panel-header,
 .v16-task-artifact-flow-header {
   display: flex;
   align-items: center;
@@ -2061,11 +2065,13 @@ button.v16-task-project-row:hover {
 }
 
 .v16-task-stage-panel-header strong,
+.v16-task-execution-panel-header strong,
 .v16-task-artifact-flow-header strong {
   text-align: right;
 }
 
 .v16-task-stage-grid,
+.v16-task-execution-grid,
 .v16-task-artifact-columns {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2073,6 +2079,8 @@ button.v16-task-project-row:hover {
 }
 
 .v16-task-stage-grid .v16-section-list,
+.v16-task-execution-grid .v16-section-list,
+.v16-task-execution-panel > .v16-section-list,
 .v16-task-artifact-columns .v16-section-list,
 .v16-task-artifact-flow > .v16-section-list {
   background: var(--v16-surface);
@@ -2650,6 +2658,7 @@ button.v16-list-item {
   }
 
   .v16-task-stage-grid,
+  .v16-task-execution-grid,
   .v16-task-artifact-columns,
   .v16-final-delivery-card {
     grid-template-columns: minmax(0, 1fr);

@@ -8,6 +8,7 @@ import {
 import type { AuditIndexEntry, IssueDisplayStatus, McpSessionSnapshot, OutputIndexEntry, V1Issue } from "../types";
 import {
   buildTaskDeliveryProjection,
+  buildTaskExecutionProjection,
   buildTaskStatusContract,
   displayStatusLabelZh,
   taskActionsForTask,
@@ -197,6 +198,35 @@ function assertDeliveryProjection() {
   assertIncludes(doneProjection.packageItems, "后续审计：通过，有警告", "done audit remains projection only");
 }
 
+function assertExecutionProjection() {
+  const progressTask = workflowTask("in_progress");
+  const progressProjection = buildTaskExecutionProjection({
+    executeWorkspaceStatus: "ready",
+    mcpSessionsSource: "tauri",
+    session: session("in_progress"),
+    task: progressTask,
+  });
+  assertEqual(progressProjection.runId, "run-in_progress", "in_progress execution run");
+  assertEqual(progressProjection.missingItems.length, 0, "in_progress execution missing items");
+  assertIncludes(progressProjection.summaryItems, "Execute status：正在执行", "in_progress execute status");
+  assertIncludes(progressProjection.summaryItems, "Session：运行中", "in_progress session status");
+  assertIncludes(progressProjection.validationItems, "Validation：2 条验证命令", "in_progress validation summary");
+
+  const missingProjection = buildTaskExecutionProjection({
+    executeWorkspaceStatus: "ready",
+    mcpSessionsSource: "tauri",
+    session: null,
+    task: {
+      ...progressTask,
+      latestRunId: null,
+      validationCommands: [],
+    },
+  });
+  assertIncludes(missingProjection.missingItems, "Run：当前状态需要 run，但任务索引未记录。", "missing run");
+  assertIncludes(missingProjection.missingItems, "Session：当前状态通常应有会话记录，当前未读取到。", "missing session");
+  assertIncludes(missingProjection.missingItems, "Validation：未登记验证命令。", "missing validation");
+}
+
 function assertBrowserPreviewWorkflowData() {
   const input = createBrowserPreviewInputSnapshot();
   const statusIndex = createBrowserPreviewIssueStatusIndex();
@@ -235,6 +265,7 @@ export function runWorkflowRegressionChecks() {
   assertWorkflowStatusContracts();
   assertWorkflowActions();
   assertDeliveryProjection();
+  assertExecutionProjection();
   assertBrowserPreviewWorkflowData();
 }
 
