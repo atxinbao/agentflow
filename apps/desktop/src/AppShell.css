@@ -1549,10 +1549,35 @@ button.v16-task-project-row:hover {
 .v16-task-project-children {
   display: grid;
   align-content: start;
+  padding: 4px 0 6px;
+}
+
+.v16-task-ungrouped-children {
+  padding: 0;
+}
+
+.v16-task-timeline-section {
+  display: grid;
+  align-content: start;
+}
+
+.v16-task-timeline-section + .v16-task-timeline-section {
+  border-top: 1px solid var(--v16-border-soft);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+
+.v16-task-timeline-items {
+  display: grid;
+  align-content: start;
 }
 
 .v16-task-node-row {
-  padding-left: 26px;
+  padding-left: 30px;
+}
+
+.v16-task-ungrouped-children .v16-task-node-row {
+  padding-left: 10px;
 }
 
 .v16-task-ungrouped-row {
@@ -1610,6 +1635,54 @@ button.v16-task-project-row:hover {
   line-height: 1.2;
 }
 
+.v16-task-queue-id-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.v16-task-queue-phase-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: var(--v16-subtle);
+}
+
+.v16-task-queue-phase-dot.future {
+  background: var(--af-accent);
+}
+
+.v16-task-queue-phase-dot.done {
+  background: var(--af-success);
+}
+
+.v16-task-queue-phase-dot.cancel {
+  background: var(--af-danger);
+}
+
+.v16-task-queue-phase-dot.current {
+  background: var(--af-warning);
+}
+
+.v16-task-queue-phase-dot.current::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1.5px solid color-mix(in srgb, var(--af-warning) 88%, white 12%);
+  border-top-color: transparent;
+  border-radius: 999px;
+  animation: v16-task-phase-spin 1s linear infinite;
+}
+
+@keyframes v16-task-phase-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .v16-task-queue-title-line {
   display: block;
   min-width: 0;
@@ -1627,26 +1700,22 @@ button.v16-task-project-row:hover {
   white-space: normal;
 }
 
+.v16-task-queue-summary {
+  min-width: 0;
+  color: var(--v16-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .v16-task-queue-state {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   justify-self: end;
-}
-
-.v16-task-queue-row .af-status-badge {
-  width: 66px;
-  min-height: 24px;
-  max-width: 66px;
-  justify-content: center;
-  line-height: 1.15;
-  text-align: center;
-  white-space: normal;
-}
-
-.v16-task-queue-row .af-status-badge-done {
-  color: #0e7490;
 }
 
 .v16-priority-dot-p0 {

@@ -2553,18 +2553,23 @@ function TaskList({
                   title={`${task.id} ${task.title}`}
                   type="button"
                 >
-                  <span className="v16-task-queue-main">
-                    <span className="v16-list-item-id">{task.id}</span>
-                    <span className="v16-task-queue-title-line">
-                      <span>{task.title}</span>
-                    </span>
-                  </span>
+                  {(() => {
+                    const summary = taskMenuStatusSummary(task);
+                    return (
+                      <span className="v16-task-queue-main">
+                        <span className="v16-task-queue-id-line">
+                          <span className={`v16-task-queue-phase-dot ${taskTimelineToneForIssue(task)}`} aria-hidden="true" />
+                          <span className="v16-list-item-id">{task.id}</span>
+                        </span>
+                        <span className="v16-task-queue-title-line">
+                          <span>{task.title}</span>
+                        </span>
+                        {summary ? <small className="v16-task-queue-summary">{summary}</small> : null}
+                      </span>
+                    );
+                  })()}
                   <span className="v16-task-queue-state">
-                    <StatusBadge
-                      status={statusChipForDisplayStatus(task.displayStatus)}
-                    >
-                      {displayStatusLabelZh(task.displayStatus)}
-                    </StatusBadge>
+                    <PriorityBadge priority={task.priority} />
                   </span>
                 </button>
               ))
@@ -2628,7 +2633,8 @@ function TaskProjectGroupRow({
   const progress = group.counts.issueCount
     ? `${group.counts.doneIssueCount}/${group.counts.issueCount}`
     : "0/0";
-  const priority = groupHighestPriority(group.issues);
+  const workflowStatus = projectMenuWorkflowStatus(group);
+  const timelineSections = taskProjectTimelineSections(group.issues);
   const selected = group.id === selectedProjectId;
 
   return (
@@ -2640,11 +2646,11 @@ function TaskProjectGroupRow({
           onSelectProjectGroup(group.id);
           onToggle(group.id);
         }}
-        title={`${group.title} ${progress}`}
+        title={`${group.title} ${displayStatusLabelZh(workflowStatus)} ${progress}`}
         type="button"
       >
         {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <span className={`v16-task-project-status ${priorityStatusDotClass(priority)}`} aria-hidden="true" />
+        <StatusDot status={statusChipForDisplayStatus(workflowStatus)} />
         <span className="v16-task-project-main">
           <span className="v16-task-project-title">{group.title}</span>
         </span>
@@ -2654,12 +2660,12 @@ function TaskProjectGroupRow({
       </button>
       {expanded ? (
         <div className="v16-task-project-children">
-          {group.issues.map((issue) => (
-            <TaskIssueNodeRow
-              issue={issue}
-              key={issue.id}
+          {timelineSections.map((section) => (
+            <TaskProjectTimelineSection
+              key={section.id}
               onSelectTask={onSelectTask}
-              selected={issue.id === selectedTaskId}
+              section={section}
+              selectedTaskId={selectedTaskId}
             />
           ))}
           {group.missingIssueIds.map((issueId) => (
@@ -2676,6 +2682,32 @@ function TaskProjectGroupRow({
   );
 }
 
+function TaskProjectTimelineSection({
+  onSelectTask,
+  section,
+  selectedTaskId,
+}: {
+  onSelectTask: (taskId: string) => void;
+  section: { id: "current" | "past" | "future"; issues: TaskIssueNode[] };
+  selectedTaskId: string | null;
+}) {
+  return (
+    <section className={`v16-task-timeline-section v16-task-timeline-section-${section.id}`} aria-label={section.id}>
+      <div className="v16-task-timeline-items">
+        {section.issues.map((issue) => (
+          <TaskIssueNodeRow
+            issue={issue}
+            key={issue.id}
+            onSelectTask={onSelectTask}
+            selected={issue.id === selectedTaskId}
+            timelineTone={taskTimelineToneForIssue(issue)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function UngroupedIssueSection({
   issues,
   onSelectTask,
@@ -2686,14 +2718,14 @@ function UngroupedIssueSection({
   selectedTaskId: string | null;
 }) {
   return (
-    <section className="v16-task-project-group v16-task-ungrouped-section" aria-label="未归属任务">
+    <section className="v16-task-project-group v16-task-ungrouped-section" aria-label="单项任务">
       <div className="v16-task-project-row v16-task-ungrouped-row">
         <span className="v16-task-project-main">
-          <span className="v16-task-project-title">未归属任务</span>
+          <span className="v16-task-project-title">单项任务</span>
         </span>
         <span className="v16-task-project-meta">{issues.length} 项</span>
       </div>
-      <div className="v16-task-project-children">
+      <div className="v16-task-project-children v16-task-ungrouped-children">
         {issues.map((issue) => (
           <TaskIssueNodeRow
             issue={issue}
@@ -2711,11 +2743,16 @@ function TaskIssueNodeRow({
   issue,
   onSelectTask,
   selected,
+  timelineTone,
 }: {
   issue: TaskIssueNode;
   onSelectTask: (taskId: string) => void;
   selected: boolean;
+  timelineTone?: TaskTimelineTone;
 }) {
+  const tone = timelineTone ?? taskTimelineToneForIssue(issue);
+  const summary = taskMenuStatusSummary(issue);
+
   return (
     <button
       className={selected ? "v16-task-queue-row v16-task-node-row active" : "v16-task-queue-row v16-task-node-row"}
@@ -2724,16 +2761,17 @@ function TaskIssueNodeRow({
       type="button"
     >
       <span className="v16-task-queue-main">
-        <span className="v16-list-item-id">{issue.id}</span>
+        <span className="v16-task-queue-id-line">
+          <span className={`v16-task-queue-phase-dot ${tone}`} aria-hidden="true" />
+          <span className="v16-list-item-id">{issue.id}</span>
+        </span>
         <span className="v16-task-queue-title-line">
           <span>{issue.title}</span>
         </span>
+        {summary ? <small className="v16-task-queue-summary">{summary}</small> : null}
       </span>
       <span className="v16-task-queue-state">
         <PriorityBadge priority={issue.priority} />
-        <StatusBadge status={statusChipForDisplayStatus(issue.displayStatus)}>
-          {displayStatusLabelZh(issue.displayStatus)}
-        </StatusBadge>
       </span>
     </button>
   );
@@ -4877,6 +4915,101 @@ function statusChipForDisplayStatus(status: IssueDisplayStatus = "backlog"): Sta
     todo: "ready",
   };
   return chips[status];
+}
+
+function taskMenuStatusSummary(task: {
+  displayStatus?: IssueDisplayStatus;
+  blockedBy?: string[];
+  dependencies?: string[];
+  deliveryStatus?: string | null;
+}) {
+  const status = task.displayStatus ?? "backlog";
+  const blockerCount = task.blockedBy?.length ?? task.dependencies?.length ?? 0;
+
+  const summaries: Record<IssueDisplayStatus, string> = {
+    backlog: "还没有进入执行",
+    blocked: blockerCount ? `等待 ${blockerCount} 个阻断项解除` : "等待解除阻断",
+    cancel: "",
+    done: "",
+    in_progress: "正在实现并做本地验证",
+    in_review: "等待合并与最终写回",
+    todo: "前置检测已通过，等待开工",
+  };
+  return summaries[status];
+}
+
+function projectMenuWorkflowStatus(group: TaskProjectGroup): IssueDisplayStatus {
+  if (!group.issues.length) {
+    return "backlog";
+  }
+
+  const cancelledIssues = group.issues.filter((issue) => issue.displayStatus === "cancel");
+  if (cancelledIssues.length === group.issues.length) {
+    return "cancel";
+  }
+
+  const finishedIssues = group.issues.filter((issue) => issue.displayStatus === "done" || issue.displayStatus === "cancel");
+  if (finishedIssues.length === group.issues.length) {
+    return "done";
+  }
+
+  if (group.issues.some((issue) => issue.displayStatus === "in_progress")) {
+    return "in_progress";
+  }
+  if (group.issues.some((issue) => issue.displayStatus === "in_review")) {
+    return "in_review";
+  }
+  if (group.issues.some((issue) => issue.displayStatus === "todo")) {
+    return "todo";
+  }
+
+  const unfinishedIssues = group.issues.filter((issue) => issue.displayStatus !== "done" && issue.displayStatus !== "cancel");
+  if (unfinishedIssues.length && unfinishedIssues.every((issue) => issue.displayStatus === "blocked" || issue.status === "blocked")) {
+    return "blocked";
+  }
+
+  return "backlog";
+}
+
+function taskProjectTimelineSections(issues: TaskIssueNode[]) {
+  const past = issues.filter((issue) => issue.displayStatus === "done" || issue.displayStatus === "cancel");
+  const current = issues.filter((issue) =>
+    ["todo", "in_progress", "in_review", "blocked"].includes(issue.displayStatus),
+  );
+  const futurePool = issues.filter((issue) => issue.displayStatus === "backlog");
+
+  const currentIssues = current.length ? current : futurePool.slice(0, 1);
+  const futureIssues = current.length ? futurePool : futurePool.slice(1);
+
+  return [
+    {
+      id: "current" as const,
+      issues: currentIssues,
+    },
+    {
+      id: "past" as const,
+      issues: past,
+    },
+    {
+      id: "future" as const,
+      issues: futureIssues,
+    },
+  ].filter((section) => section.issues.length);
+}
+
+type TaskTimelineTone = "current" | "future" | "done" | "cancel";
+
+function taskTimelineToneForIssue(issue: { displayStatus?: IssueDisplayStatus }): TaskTimelineTone {
+  switch (issue.displayStatus) {
+    case "done":
+      return "done";
+    case "cancel":
+      return "cancel";
+    case "backlog":
+      return "future";
+    default:
+      return "current";
+  }
 }
 
 type ProjectDisplayStatus = "planned" | "active" | "blocked" | "done" | "canceled";
