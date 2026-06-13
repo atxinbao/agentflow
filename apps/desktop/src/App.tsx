@@ -79,9 +79,11 @@ import {
   buildAppInteractionState,
   buildAuditInteractionState,
   buildDeliveryInteractionState,
+  buildTaskCurrentStageSections,
   buildTaskDeliveryProjection,
   buildTaskExecutionProjection,
   buildTaskStatusContract,
+  buildTaskStatusTimeline,
   buildTaskInteractionState,
   buildTaskProjectTreeViewModel,
   buildTaskWorkflowYamlModel,
@@ -3073,7 +3075,6 @@ function TaskDetailReader({
     () => (delivery ? findAuditForDelivery(outputBundle.auditIndex?.audits ?? [], delivery.runId) : null),
     [delivery, outputBundle.auditIndex?.audits],
   );
-  const outputSummaryItems = useMemo(() => taskOutputSummaryItems(task), [task]);
   const stageOutputItems = useMemo(
     () => taskCurrentStageOutputItems(task, session, delivery, evidence, audit),
     [audit, delivery, evidence, session, task],
@@ -3167,17 +3168,14 @@ function TaskDetailReader({
         </div>
       </header>
       <div className="v16-detail-document">
-        <IssueStatusFlow contract={statusContract} status={task.displayStatus ?? "backlog"} />
-        <TaskCurrentStageCard
-          contract={statusContract}
+        <IssueStatusFlow
+          task={task}
           executeItems={executeSummaryItems}
           reviewItems={deliveryReviewItems(task, deliveryArtifacts, session)}
           stageItems={stageOutputItems}
-          task={task}
+          status={task.displayStatus ?? "backlog"}
         />
-        <div ref={deliveryFocusRef} className="v16-task-delivery-focus-region">
-          <TaskFinalDeliveryCard artifact={deliveryArtifacts} deliveryProjection={deliveryProjection} task={task} />
-        </div>
+        <div ref={deliveryFocusRef} className="v16-task-delivery-focus-region" />
         <details className="v16-task-package">
           <summary>高级详情</summary>
           <div className="v16-task-advanced-grid">
@@ -3256,66 +3254,6 @@ function TaskWorkflowPanelShell({
   );
 }
 
-function TaskCurrentStageCard({
-  contract,
-  executeItems,
-  reviewItems,
-  stageItems,
-  task,
-}: {
-  contract: ReturnType<typeof buildTaskStatusContract>;
-  executeItems: string[];
-  reviewItems: string[];
-  stageItems: string[];
-  task: V1Issue;
-}) {
-  const detailSections =
-    task.displayStatus === "in_review"
-      ? [
-          { title: "当前阶段", items: stageItems },
-          { title: "评审状态", items: reviewItems },
-          { title: "执行结果", items: executeItems },
-        ]
-      : task.displayStatus === "done"
-        ? [
-            { title: "最终结果", items: stageItems },
-            { title: "交付保留", items: reviewItems },
-            { title: "执行记录", items: executeItems },
-          ]
-        : task.displayStatus === "blocked" || task.displayStatus === "cancel"
-          ? [
-              { title: "当前状态", items: stageItems },
-              { title: "执行记录", items: executeItems },
-              { title: "后续处理", items: [contract.nextEntry] },
-            ]
-          : [
-              { title: "当前阶段", items: stageItems },
-              { title: "执行现场", items: executeItems },
-              { title: "下一步", items: [contract.nextEntry, ...contract.uiSummary] },
-            ];
-
-  return (
-    <section className="v16-task-stage-panel" aria-label="当前阶段详情">
-      <div className="v16-task-stage-panel-header">
-        <span>当前阶段详情</span>
-        <strong>{contract.label}</strong>
-      </div>
-      <DescriptionList
-        items={[
-          ["状态说明", contract.businessMeaning],
-          ["阶段动作", contract.stageAction],
-          ["责任角色", contract.ownerRoleLabel],
-        ]}
-      />
-      <div className="v16-task-stage-grid">
-        {detailSections.map((section) => (
-          <SectionList key={section.title} title={section.title} items={section.items} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function TaskFinalDeliveryCard({
   artifact,
   deliveryProjection,
@@ -3374,67 +3312,338 @@ function TaskFinalDeliveryCard({
   );
 }
 
-const issueStatusFlowSteps: Array<{ id: IssueDisplayStatus; label: string; note: string }> = [
-  { id: "backlog", label: "待处理", note: "任务已生成" },
-  { id: "todo", label: "准备开工", note: "等待执行" },
-  { id: "in_progress", label: "正在做", note: "执行中" },
-  { id: "in_review", label: "正在评审", note: "等待合并或核对" },
-  { id: "done", label: "已完成", note: "已写回" },
-];
-
 function IssueStatusFlow({
-  contract,
+  task,
+  executeItems,
+  reviewItems,
+  stageItems,
   status,
 }: {
-  contract: ReturnType<typeof buildTaskStatusContract>;
+  task: V1Issue;
+  executeItems: string[];
+  reviewItems: string[];
+  stageItems: string[];
   status: IssueDisplayStatus;
 }) {
-  const exception =
-    status === "blocked"
-      ? { label: "已阻断", note: contract.businessMeaning }
-      : status === "cancel"
-        ? { label: "已取消", note: contract.businessMeaning }
-        : null;
-  const activeIndex = issueStatusFlowSteps.findIndex((step) => step.id === status);
+  const contract = buildTaskStatusContract(task);
+  const steps = buildTaskStatusTimeline(status, contract);
+  const [selectedStepId, setSelectedStepId] = useState<IssueDisplayStatus>(status);
+
+  useEffect(() => {
+    setSelectedStepId(status);
+  }, [status, task.id]);
+
+  const selectedStepLabel = steps.find((step) => step.id === selectedStepId)?.label ?? contract.label;
 
   return (
     <section className="v16-issue-status-flow" aria-label="任务状态流转">
       <div className="v16-issue-status-flow-header">
         <span>状态流转</span>
-        <strong>{contract.label}</strong>
+        <strong>{selectedStepLabel}</strong>
       </div>
       <ol>
-        {issueStatusFlowSteps.map((step, index) => {
-          const state =
-            exception !== null
-              ? "idle"
-              : index < activeIndex
-                ? "done"
-                : index === activeIndex
-                  ? "current"
-                  : "idle";
+        {steps.map((step) => {
+          const state = step.state === "exception" ? step.id : step.state;
+          const expanded = step.id === selectedStepId;
+          const detail = expanded
+            ? buildTaskStatusStepDetail({
+                currentStatus: status,
+                executeItems,
+                reviewItems,
+                stageItems,
+                task,
+                viewedStatus: step.id,
+              })
+            : null;
           return (
-            <li aria-current={state === "current" ? "step" : undefined} className={`v16-issue-status-step ${state}`} key={step.id}>
+            <li
+              aria-current={expanded ? "step" : undefined}
+              className={`v16-issue-status-step ${state}${expanded ? " selected" : ""}`}
+              key={step.id}
+            >
               <span className="v16-issue-status-dot" aria-hidden="true" />
-              <span>
-                <strong>{step.label}</strong>
-                <small>{step.note}</small>
-              </span>
+              <div className="v16-issue-status-step-body">
+                <button
+                  aria-expanded={expanded}
+                  className="v16-issue-status-step-toggle"
+                  onClick={() => setSelectedStepId(step.id)}
+                  type="button"
+                >
+                  <strong>{step.label}</strong>
+                  <small>{step.note}</small>
+                </button>
+                {expanded && detail ? (
+                  <div className="v16-issue-status-step-details">
+                    <div className="v16-issue-status-event-stream">
+                      <ul className="v16-issue-status-meta-list">
+                        {detail.descriptionItems.map(([label, value]) => (
+                          <li className="v16-issue-status-meta-item" key={`${label}-${value}`}>
+                            <span className="v16-issue-status-event-label">{label}</span>
+                            <span className="v16-issue-status-event-text">{value}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="v16-issue-status-event-groups">
+                        {detail.sections.map((section) => (
+                          <section className="v16-issue-status-event-group" key={section.title}>
+                            <h3>{section.title}</h3>
+                            <ol className="v16-issue-status-event-list">
+                              {section.items.map((item) => (
+                                <li className="v16-issue-status-event-item" key={item}>
+                                  <span className="v16-issue-status-event-text">{item}</span>
+                                </li>
+                              ))}
+                            </ol>
+                          </section>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </li>
           );
         })}
-        {exception ? (
-          <li aria-current="step" className={`v16-issue-status-step ${status}`}>
-            <span className="v16-issue-status-dot" aria-hidden="true" />
-            <span>
-              <strong>{exception.label}</strong>
-              <small>{exception.note}</small>
-            </span>
-          </li>
-        ) : null}
       </ol>
     </section>
   );
+}
+
+function taskStatusTransitionLabel(status: IssueDisplayStatus, nextEntry: string) {
+  const nextStatus: Partial<Record<IssueDisplayStatus, string>> = {
+    backlog: "准备开工",
+    blocked: "待恢复",
+    cancel: "已结束",
+    done: "已完成",
+    in_progress: "正在评审",
+    in_review: "已完成",
+    todo: "正在做",
+  };
+  const label = nextStatus[status];
+  return label ? `要进入${label}：${nextEntry}` : nextEntry;
+}
+
+function buildTaskStatusStepDetail({
+  currentStatus,
+  executeItems,
+  reviewItems,
+  stageItems,
+  task,
+  viewedStatus,
+}: {
+  currentStatus: IssueDisplayStatus;
+  executeItems: string[];
+  reviewItems: string[];
+  stageItems: string[];
+  task: V1Issue;
+  viewedStatus: IssueDisplayStatus;
+}) {
+  const stepTask = viewedStatus === currentStatus ? task : { ...task, displayStatus: viewedStatus };
+  const contract = buildTaskStatusContract(stepTask);
+  if (isFutureTaskStatus(viewedStatus, currentStatus)) {
+    return {
+      descriptionItems: [
+        ["当前状态", contract.businessMeaning],
+        ["等待条件", `当前任务还处在${displayStatusLabelZh(currentStatus)}，还没有进入${contract.label}。`],
+        ["进入下一步", taskStatusTransitionLabel(viewedStatus, contract.nextEntry)],
+        ["信息流", "这个阶段还没开始，先看等待摘要。"],
+      ] as Array<[string, string]>,
+      sections: [
+        {
+          title: "等待摘要",
+          items: taskStatusWaitingSummaryItems(viewedStatus, currentStatus, task),
+        },
+      ],
+    };
+  }
+
+  const sectionItems = taskStatusSectionItems({
+    contract,
+    currentStatus,
+    executeItems,
+    reviewItems,
+    stageItems,
+    task,
+    viewedStatus,
+  });
+  const live = viewedStatus === currentStatus && ["todo", "in_progress", "in_review", "blocked"].includes(currentStatus);
+
+  return {
+    descriptionItems: [
+      ["当前状态", contract.businessMeaning],
+      ["当前动作", contract.stageAction],
+      ["进入下一步", taskStatusTransitionLabel(viewedStatus, contract.nextEntry)],
+      ["信息流", live ? "当前阶段展示实时信息流。" : "这个阶段已结束，保留阶段日志。"],
+    ] as Array<[string, string]>,
+    sections: buildTaskCurrentStageSections({
+      contract,
+      executeItems: sectionItems.executeItems,
+      reviewItems: sectionItems.reviewItems,
+      stageItems: sectionItems.stageItems,
+      status: viewedStatus,
+    }),
+  };
+}
+
+function isFutureTaskStatus(viewedStatus: IssueDisplayStatus, currentStatus: IssueDisplayStatus) {
+  if (currentStatus === "blocked" || currentStatus === "cancel") {
+    return false;
+  }
+  const order = ["backlog", "todo", "in_progress", "in_review", "done"] as const;
+  const currentIndex = order.indexOf(currentStatus as (typeof order)[number]);
+  const viewedIndex = order.indexOf(viewedStatus as (typeof order)[number]);
+  return currentIndex >= 0 && viewedIndex > currentIndex;
+}
+
+function taskStatusWaitingSummaryItems(viewedStatus: IssueDisplayStatus, currentStatus: IssueDisplayStatus, task: V1Issue) {
+  const items = [
+    `当前任务还处在${displayStatusLabelZh(currentStatus)}。`,
+    `要进入${displayStatusLabelZh(viewedStatus)}，先完成当前阶段。`,
+  ];
+
+  if (task.dependencies.length) {
+    items.push(`前置依赖：${task.dependencies.join("、")}`);
+  }
+
+  switch (viewedStatus) {
+    case "todo":
+      items.push("任务合同确认后，这里会展示前置检测和开工准备。");
+      break;
+    case "in_progress":
+      items.push("正式开工后，这里会开始显示执行中的实时信息流。");
+      break;
+    case "in_review":
+      items.push("本地验证完成并创建评审请求后，这里会保留评审日志。");
+      break;
+    case "done":
+      items.push("合并和写回完成后，这里会保留最终结果和交付日志。");
+      break;
+    default:
+      items.push("当前阶段还没有更多状态信息。");
+      break;
+  }
+
+  return items;
+}
+
+function taskStatusSectionItems({
+  contract,
+  currentStatus,
+  executeItems,
+  reviewItems,
+  stageItems,
+  task,
+  viewedStatus,
+}: {
+  contract: ReturnType<typeof buildTaskStatusContract>;
+  currentStatus: IssueDisplayStatus;
+  executeItems: string[];
+  reviewItems: string[];
+  stageItems: string[];
+  task: V1Issue;
+  viewedStatus: IssueDisplayStatus;
+}) {
+  const effectiveExecuteItems = executeItems.length ? executeItems : taskStatusExecuteLogItems(viewedStatus);
+  const effectiveReviewItems = reviewItems.length ? reviewItems : taskStatusReviewLogItems(viewedStatus);
+  const effectiveStageItems = stageItems.length ? stageItems : contract.stageOutputs;
+  const runLabel = task.latestRunId ? `执行 Run：${task.latestRunId}` : "执行 Run：未记录。";
+
+  switch (viewedStatus) {
+    case "backlog":
+      return {
+        executeItems: [
+          currentStatus === "backlog" ? "当前还没有进入执行。" : `这个阶段已经结束，后续已推进到${displayStatusLabelZh(currentStatus)}。`,
+          currentStatus === "backlog" ? "等待整理任务边界。" : "任务边界已整理完成。",
+        ],
+        reviewItems: ["当前阶段不涉及评审。"],
+        stageItems: [
+          "任务合同已生成。",
+          task.dependencies.length ? `前置依赖：${task.dependencies.join("、")}` : "前置依赖：无。",
+          task.allowedFiles.length ? "允许变更范围已锁定。" : "允许变更范围待补充。",
+        ],
+      };
+    case "todo":
+      return {
+        executeItems:
+          currentStatus === "todo"
+            ? effectiveExecuteItems
+            : [runLabel, "前置检测已完成。", "任务已经进入正式执行阶段。"],
+        reviewItems: ["当前阶段不涉及评审。"],
+        stageItems: [
+          task.contextPackPath ? `Context Pack：${task.contextPackPath}` : "Context Pack：等待生成。",
+          task.latestRunId ? runLabel : "执行 Run：等待创建。",
+          currentStatus === "todo" ? `执行准备：${executeProgressLabel(task.executeStatus)}` : "执行准备已完成。",
+        ],
+      };
+    case "in_progress":
+      return {
+        executeItems: effectiveExecuteItems,
+        reviewItems: effectiveReviewItems,
+        stageItems:
+          currentStatus === "in_progress"
+            ? effectiveStageItems
+            : [runLabel, "代码改动已完成。", "本地验证结果已归档。"],
+      };
+    case "in_review":
+      return {
+        executeItems: effectiveExecuteItems,
+        reviewItems: effectiveReviewItems,
+        stageItems:
+          currentStatus === "in_review"
+            ? effectiveStageItems
+            : [runLabel, "交付材料已生成。", "等待合并和最终写回。"],
+      };
+    case "done":
+      return {
+        executeItems: effectiveExecuteItems,
+        reviewItems: effectiveReviewItems,
+        stageItems: effectiveStageItems,
+      };
+    case "blocked":
+    case "cancel":
+    default:
+      return {
+        executeItems: effectiveExecuteItems,
+        reviewItems: effectiveReviewItems,
+        stageItems: effectiveStageItems,
+      };
+  }
+}
+
+function taskStatusExecuteLogItems(status: IssueDisplayStatus) {
+  switch (status) {
+    case "backlog":
+      return ["还没有执行记录。", "等待任务合同确认后进入准备开工。"];
+    case "todo":
+      return ["当前还没有正式开工。", "前置检测通过后会创建 run 并进入正在做。"];
+    case "in_progress":
+      return ["执行线程已拉起。", "正在处理改动和本地验证。"];
+    case "in_review":
+      return ["本地验证已完成。", "等待 PR/MR 合并或最终核对。"];
+    case "done":
+      return ["执行链路已结束。", "最终状态和交付已写回。"];
+    case "blocked":
+      return ["执行被关键因素阻断。", "解除阻断前不会继续推进。"];
+    case "cancel":
+      return ["任务已取消。", "不会再继续执行。"];
+    default:
+      return ["暂无执行记录。"];
+  }
+}
+
+function taskStatusReviewLogItems(status: IssueDisplayStatus) {
+  switch (status) {
+    case "in_review":
+      return ["评审请求已创建。", "等待合并后写回已完成。"];
+    case "done":
+      return ["评审已收口。", "合并凭证和写回都已完成。"];
+    case "blocked":
+      return ["当前不进入评审。", "先处理阻断原因。"];
+    case "cancel":
+      return ["当前不进入评审。", "任务已取消。"];
+    default:
+      return ["当前还没有评审记录。", "进入评审后这里会显示评审动作。"];
+  }
 }
 
 function FilesPage({
