@@ -2882,69 +2882,139 @@ function ProjectSummaryReader({
   treeSelection: TaskProjectTreeViewModel["selection"] | null;
 }) {
   const priority = groupHighestPriority(group.issues);
-  const recommendedIssue = projectRecommendedIssue(group, treeSelection);
-  const reviewIssueCount = group.issues.filter((issue) => issue.displayStatus === "in_review").length;
-  const todoIssueCount = group.issues.filter((issue) => issue.displayStatus === "todo").length;
-  const urgentIssueCount = group.issues.filter((issue) => priorityRank(issue.priority) <= 1).length;
   const projectStatus = projectDisplayStatusForGroup(group);
+  const currentIssue = projectRecommendedIssue(group, treeSelection);
+  const nextIssue = projectNextScheduledIssue(group, currentIssue?.id ?? null);
+  const currentLaneCount = group.issues.filter((issue) =>
+    ["todo", "in_progress", "in_review", "blocked"].includes(issue.displayStatus),
+  ).length;
+  const futureLaneCount = group.issues.filter((issue) => issue.displayStatus === "backlog").length;
+  const completedLaneCount = group.issues.filter((issue) => issue.displayStatus === "done").length;
+  const canceledLaneCount = group.issues.filter((issue) => issue.displayStatus === "cancel").length;
+  const blockedLaneCount = group.issues.filter((issue) => issue.displayStatus === "blocked").length;
+  const reviewIssueCount = group.issues.filter((issue) => issue.displayStatus === "in_review").length;
 
   return (
-    <aside className="v16-detail-pane" aria-label="项目摘要">
+    <aside className="v16-detail-pane" aria-label="项目调度视图">
       <header>
         <h2>{group.title}</h2>
-        <p>{group.summary || group.objective || group.id}</p>
+        <p>{group.summary || group.objective || "查看这个项目当前推进到哪一步，以及下一条应该接哪项任务。"}</p>
         <div className="v16-detail-meta-strip">
           <span className="v16-detail-meta-item">
             <span className="v16-detail-meta-label">状态</span>
             <StatusBadge status={statusChipForProjectStatus(projectStatus)}>{projectDisplayStatusLabelZh(projectStatus)}</StatusBadge>
           </span>
           <span className="v16-detail-meta-item">
-            <span className="v16-detail-meta-label">优先级</span>
-            <strong className={`v16-priority-text ${priorityTextClass(priority)}`}>{displayPriority(priority)}</strong>
+            <span className="v16-detail-meta-label">任务进度</span>
+            <strong className="v16-role-text">{group.counts.doneIssueCount}/{group.counts.issueCount || 0}</strong>
           </span>
           <span className="v16-detail-meta-item">
-            <span className="v16-detail-meta-label">来源 SPEC</span>
-            <strong className="v16-role-text">{group.sourceSpecId ?? "未记录"}</strong>
+            <span className="v16-detail-meta-label">最高优先级</span>
+            <strong className={`v16-priority-text ${priorityTextClass(priority)}`}>{displayPriority(priority)}</strong>
           </span>
         </div>
       </header>
       <div className="v16-detail-document">
         <div className="v16-summary-grid">
-          <MetricCard detail={`${group.counts.doneIssueCount} 已完成`} label="任务" value={group.counts.issueCount} />
-          <MetricCard detail={`${todoIssueCount} 准备开工`} label="正在做" value={group.counts.activeIssueCount} />
-          <MetricCard detail={`${reviewIssueCount} 正在评审`} label="审计任务" value={group.counts.auditIssueCount} />
-          <MetricCard detail={`${urgentIssueCount} 个 P0/P1`} label="最高优先级" value={displayPriority(priority)} />
+          <MetricCard detail={`${group.counts.issueCount} 条任务`} label="项目状态" value={projectDisplayStatusLabelZh(projectStatus)} />
+          <MetricCard detail={`${reviewIssueCount} 条正在评审`} label="当前队列" value={currentLaneCount} />
+          <MetricCard detail={`${group.counts.doneIssueCount} 已完成`} label="未来队列" value={futureLaneCount} />
+          <MetricCard detail={canceledLaneCount ? `${canceledLaneCount} 已取消` : "无取消任务"} label="已结束" value={completedLaneCount} />
         </div>
-        <DescriptionList
-          items={[
-            ["项目 ID", group.id],
-            ["来源 SPEC", group.sourceSpecId ?? "未记录"],
-            ["当前建议任务", recommendedIssue ? `${recommendedIssue.id} · ${recommendedIssue.title}` : "暂无"],
-            ["任务进度", `${group.counts.doneIssueCount}/${group.counts.issueCount}`],
-          ]}
-        />
-        <SectionList title="目标" items={[group.objective || group.summary || group.title]} />
-        <SectionList title="范围" items={group.project.scope} />
-        <SectionList title="非目标" items={group.project.nonGoals} />
-        <SectionList title="任务进度" items={projectProgressItems(group)} />
-        <SectionList title="优先级摘要" items={projectPrioritySummaryItems(group)} />
-        <SectionList title="当前建议任务" items={projectRecommendedIssueItems(recommendedIssue)} />
-        <SectionList title="依赖摘要" items={projectDependencySummaryItems(group)} />
-        {group.warnings.length || group.missingIssueIds.length ? (
-          <SectionList title="缺失引用" items={projectWarningItems(group)} />
-        ) : null}
+        <section className="v16-task-stage-panel" aria-label="项目调度概览">
+          <div className="v16-task-stage-panel-header">
+            <span>项目调度</span>
+            <strong>{currentIssue ? currentIssue.id : "等待首条任务"}</strong>
+          </div>
+          <div className="v16-task-stage-grid">
+            <SectionList
+              title="当前任务"
+              items={
+                currentIssue
+                  ? [
+                      `${currentIssue.id} · ${currentIssue.title}`,
+                      `状态：${displayStatusLabelZh(currentIssue.displayStatus)}`,
+                      `角色：${agentRoleLabelZh(currentIssue.requiredAgentRole)}`,
+                    ]
+                  : ["当前没有正在推进的任务。"]
+              }
+            />
+            <SectionList
+              title="下一条任务"
+              items={
+                nextIssue
+                  ? [
+                      `${nextIssue.id} · ${nextIssue.title}`,
+                      nextIssue.blockedBy.length ? `前置依赖：${nextIssue.blockedBy.join("、")}` : "当前没有前置依赖。",
+                      `优先级：${displayPriority(nextIssue.priority)}`,
+                    ]
+                  : ["当前没有下一条待调度任务。"]
+              }
+            />
+            <SectionList
+              title="调度状态"
+              items={[
+                `当前队列：${currentLaneCount} 条`,
+                `未来队列：${futureLaneCount} 条`,
+                blockedLaneCount ? `阻断：${blockedLaneCount} 条` : "当前没有阻断任务。",
+              ]}
+            />
+          </div>
+        </section>
+        <section className="v16-task-stage-panel" aria-label="项目状态流">
+          <div className="v16-task-stage-panel-header">
+            <span>状态流</span>
+            <strong>{projectDisplayStatusLabelZh(projectStatus)}</strong>
+          </div>
+          <div className="v16-task-stage-grid">
+            <SectionList
+              title="当前"
+              items={projectCurrentLaneItems(group)}
+            />
+            <SectionList
+              title="过去"
+              items={projectPastLaneItems(group)}
+            />
+            <SectionList
+              title="未来"
+              items={projectFutureLaneItems(group)}
+            />
+          </div>
+        </section>
+        <details className="v16-task-package">
+          <summary>高级详情</summary>
+          <div className="v16-task-advanced-grid">
+            <SectionList title="目标" items={[group.objective || group.summary || group.title]} />
+            <SectionList title="范围" items={group.project.scope} />
+            <SectionList title="非目标" items={group.project.nonGoals} />
+            <SectionList title="依赖摘要" items={projectDependencySummaryItems(group)} />
+            <SectionList title="优先级摘要" items={projectPrioritySummaryItems(group)} />
+            <SectionList title="任务进度" items={projectProgressItems(group)} />
+            <SectionList
+              title="项目信息"
+              items={[
+                `项目 ID：${group.id}`,
+                `来源 SPEC：${group.sourceSpecId ?? "未记录"}`,
+                `任务数量：${group.counts.issueCount}`,
+              ]}
+            />
+            {group.warnings.length || group.missingIssueIds.length ? (
+              <SectionList title="缺失引用" items={projectWarningItems(group)} />
+            ) : null}
+          </div>
+        </details>
       </div>
       <ActionBar sticky>
         <ActionButton
-          disabled={!recommendedIssue}
+          disabled={!currentIssue}
           onClick={() => {
-            if (recommendedIssue) {
-              onSelectTask(recommendedIssue.id);
+            if (currentIssue) {
+              onSelectTask(currentIssue.id);
             }
           }}
           variant="primary"
         >
-          查看建议任务
+          查看当前任务
         </ActionButton>
       </ActionBar>
     </aside>
@@ -3097,72 +3167,57 @@ function TaskDetailReader({
         </div>
       </header>
       <div className="v16-detail-document">
-        {detailDescriptionItems.length ? <DescriptionList items={detailDescriptionItems} /> : null}
-        <div className="v16-task-workspace-shell">
-          <div className="v16-task-workspace-main">
-            <TaskWorkflowSummary
-              task={task}
-              contract={statusContract}
-              deliveryProjection={deliveryProjection}
-              executionProjection={executionProjection}
-            />
-            <IssueStatusFlow contract={statusContract} status={task.displayStatus ?? "backlog"} />
-            <TaskExecutionStatusPanel projection={executionProjection} />
-            <TaskStageOutputPanel
-              executeItems={executeSummaryItems}
-              reviewItems={deliveryReviewItems(task, deliveryArtifacts, session)}
-              stageItems={stageOutputItems}
-            />
-            <div ref={deliveryFocusRef} className="v16-task-delivery-focus-region">
-              <TaskArtifactFlow
-                deliveryItems={deliveryProjection.summaryItems}
-                missingItems={deliveryProjection.missingItems}
-                outputItems={outputSummaryItems}
-                releaseNoteItems={deliveryReleaseNoteItems(task, deliveryArtifacts)}
-              />
-              <TaskFinalDeliveryCard artifact={deliveryArtifacts} deliveryProjection={deliveryProjection} task={task} />
-            </div>
-          </div>
-          <TaskWorkflowPanelShell yamlModel={workflowYaml} />
+        <IssueStatusFlow contract={statusContract} status={task.displayStatus ?? "backlog"} />
+        <TaskCurrentStageCard
+          contract={statusContract}
+          executeItems={executeSummaryItems}
+          reviewItems={deliveryReviewItems(task, deliveryArtifacts, session)}
+          stageItems={stageOutputItems}
+          task={task}
+        />
+        <div ref={deliveryFocusRef} className="v16-task-delivery-focus-region">
+          <TaskFinalDeliveryCard artifact={deliveryArtifacts} deliveryProjection={deliveryProjection} task={task} />
         </div>
         <details className="v16-task-package">
-          <summary>任务说明与边界</summary>
-          <SectionList
-            title="状态说明"
-            items={[
-              statusContract.businessMeaning,
-              `责任角色：${statusContract.ownerRoleLabel}`,
-              `下一步入口：${statusContract.nextEntry}`,
-            ]}
-          />
-          <SectionList title="阶段动作" items={[statusContract.stageAction]} />
-          <SectionList title="阶段产物" items={statusContract.stageOutputs} />
-          <SectionList title="界面摘要" items={statusContract.uiSummary} />
-          <SectionList title="目标" items={[task.goal || task.title]} />
-          <SectionList title="范围" items={task.scope} />
-          <SectionList title="非目标" items={task.nonGoals} />
-          <SectionList title="验收标准" items={task.acceptanceCriteria} />
-          <SectionList title="验证命令" items={task.validationCommands} />
-          {task.issueCategory === "spec" ? <SectionList title="执行流程" items={taskExecutionPipelineItems(task)} /> : null}
-        </details>
-        <details className="v16-task-package">
-          <summary>路径和产物明细</summary>
-          <SectionList title="预期产物路径" items={taskOutputItems(task)} />
-          <SectionList title="最终交付明细" items={deliveryProjection.packageItems} />
-          <SectionList title="证据要求" items={task.evidenceRequired} />
-        </details>
-        <details
-          className="v16-task-package"
-          onToggle={(event) => setHandoffOpen((event.currentTarget as HTMLDetailsElement).open)}
-        >
-          <summary>Agent 任务包</summary>
-          {handoffOpen ? (
-            <CopyableCodeBlock
-              content={handoffContent}
-              maxHeight={210}
-              title="Agent 任务包"
+          <summary>高级详情</summary>
+          <div className="v16-task-advanced-grid">
+            <SectionList
+              title="状态说明"
+              items={[
+                statusContract.businessMeaning,
+                `责任角色：${statusContract.ownerRoleLabel}`,
+                `下一步入口：${statusContract.nextEntry}`,
+              ]}
             />
-          ) : null}
+            <SectionList title="目标" items={[task.goal || task.title]} />
+            <SectionList title="范围" items={task.scope} />
+            <SectionList title="非目标" items={task.nonGoals} />
+            <SectionList title="验收标准" items={task.acceptanceCriteria} />
+            <SectionList title="验证命令" items={task.validationCommands} />
+            <SectionList title="预期产物路径" items={taskOutputItems(task)} />
+            <SectionList title="交付路径明细" items={deliveryProjection.packageItems} />
+            <SectionList title="交付状态摘要" items={deliveryProjection.summaryItems} />
+            <SectionList title="证据要求" items={task.evidenceRequired} />
+            {detailDescriptionItems.length ? <SectionList title="补充信息" items={detailDescriptionItems.map(([label, value]) => `${label}：${value}`)} /> : null}
+            {task.issueCategory === "spec" ? <SectionList title="执行流程" items={taskExecutionPipelineItems(task)} /> : null}
+            <TaskWorkflowPanelShell yamlModel={workflowYaml} />
+            <section className="v16-task-package v16-task-package-nested">
+              <h3>Agent 任务包</h3>
+              <ActionButton
+                onClick={() => setHandoffOpen((current) => !current)}
+                variant="secondary"
+              >
+                {handoffOpen ? "收起任务包" : "展开任务包"}
+              </ActionButton>
+              {handoffOpen ? (
+                <CopyableCodeBlock
+                  content={handoffContent}
+                  maxHeight={210}
+                  title="Agent 任务包"
+                />
+              ) : null}
+            </section>
+          </div>
         </details>
       </div>
       {actionFeedback ? <p className="v16-feedback">{actionFeedback}</p> : null}
@@ -3201,132 +3256,62 @@ function TaskWorkflowPanelShell({
   );
 }
 
-function TaskWorkflowSummary({
+function TaskCurrentStageCard({
   contract,
-  deliveryProjection,
-  executionProjection,
-  task,
-}: {
-  contract: ReturnType<typeof buildTaskStatusContract>;
-  deliveryProjection: TaskDeliveryProjection;
-  executionProjection: TaskExecutionProjection;
-  task: V1Issue;
-}) {
-  const deliveryReady =
-    task.displayStatus === "done" && deliveryProjection.deliveryRunId && !deliveryProjection.missingItems.length;
-  const cards = [
-    {
-      label: "当前阶段",
-      value: contract.label,
-      detail: contract.stageAction,
-    },
-    {
-      label: "责任角色",
-      value: contract.ownerRoleLabel,
-      detail: agentRoleLabelZh(task.requiredAgentRole),
-    },
-    {
-      label: "执行 Run",
-      value: executionProjection.runId ?? "未记录",
-      detail: executionProjection.summaryItems[1] ?? executeProgressLabel(task.executeStatus),
-    },
-    {
-      label: "下一步入口",
-      value: contract.nextEntry,
-      detail: contract.uiSummary[0] ?? "当前状态的下一步会在这里提示。",
-    },
-    {
-      label: "最终交付",
-      value: deliveryReady ? "已就绪" : task.displayStatus === "done" ? "需补齐" : "未到阶段",
-      detail: deliveryReady
-        ? `交付包 ${deliveryProjection.deliveryRunId}`
-        : task.displayStatus === "done"
-          ? "done 状态需要交付包和证据。"
-          : "完成后显示交付包摘要。",
-    },
-  ];
-
-  return (
-    <section className="v16-task-workflow-summary" aria-label="任务工作流摘要">
-      {cards.map((card) => (
-        <article key={card.label}>
-          <span>{card.label}</span>
-          <strong>{card.value}</strong>
-          <small>{card.detail}</small>
-        </article>
-      ))}
-    </section>
-  );
-}
-
-function TaskExecutionStatusPanel({
-  projection,
-}: {
-  projection: TaskExecutionProjection;
-}) {
-  return (
-    <section className="v16-task-execution-panel" aria-label="执行摘要">
-      <div className="v16-task-execution-panel-header">
-        <span>执行摘要</span>
-        <strong>{projection.missingItems.length ? `${projection.missingItems.length} 项缺失` : "摘要完整"}</strong>
-      </div>
-      <div className="v16-task-execution-grid">
-        <SectionList title="Run 与状态" items={projection.summaryItems} />
-        <SectionList title="Session" items={projection.sessionItems} />
-        <SectionList title="Validation" items={projection.validationItems} />
-      </div>
-      {projection.missingItems.length ? <SectionList title="缺失说明" items={projection.missingItems} /> : null}
-    </section>
-  );
-}
-
-function TaskStageOutputPanel({
   executeItems,
   reviewItems,
   stageItems,
+  task,
 }: {
+  contract: ReturnType<typeof buildTaskStatusContract>;
   executeItems: string[];
   reviewItems: string[];
   stageItems: string[];
+  task: V1Issue;
 }) {
-  return (
-    <section className="v16-task-stage-panel" aria-label="当前阶段输出">
-      <div className="v16-task-stage-panel-header">
-        <span>当前阶段输出</span>
-        <strong>{stageItems[0] ?? "暂无阶段输出"}</strong>
-      </div>
-      <div className="v16-task-stage-grid">
-        <SectionList title="阶段结果" items={stageItems} />
-        <SectionList title="执行摘要" items={executeItems} />
-        <SectionList title="评审信息" items={reviewItems} />
-      </div>
-    </section>
-  );
-}
+  const detailSections =
+    task.displayStatus === "in_review"
+      ? [
+          { title: "当前阶段", items: stageItems },
+          { title: "评审状态", items: reviewItems },
+          { title: "执行结果", items: executeItems },
+        ]
+      : task.displayStatus === "done"
+        ? [
+            { title: "最终结果", items: stageItems },
+            { title: "交付保留", items: reviewItems },
+            { title: "执行记录", items: executeItems },
+          ]
+        : task.displayStatus === "blocked" || task.displayStatus === "cancel"
+          ? [
+              { title: "当前状态", items: stageItems },
+              { title: "执行记录", items: executeItems },
+              { title: "后续处理", items: [contract.nextEntry] },
+            ]
+          : [
+              { title: "当前阶段", items: stageItems },
+              { title: "执行现场", items: executeItems },
+              { title: "下一步", items: [contract.nextEntry, ...contract.uiSummary] },
+            ];
 
-function TaskArtifactFlow({
-  deliveryItems,
-  missingItems,
-  outputItems,
-  releaseNoteItems,
-}: {
-  deliveryItems: string[];
-  missingItems: string[];
-  outputItems: string[];
-  releaseNoteItems: string[];
-}) {
   return (
-    <section className="v16-task-artifact-flow" aria-label="完整产物流">
-      <div className="v16-task-artifact-flow-header">
-        <span>完整产物流</span>
-        <strong>{missingItems.length ? `${missingItems.length} 项待补齐` : "摘要完整"}</strong>
+    <section className="v16-task-stage-panel" aria-label="当前阶段详情">
+      <div className="v16-task-stage-panel-header">
+        <span>当前阶段详情</span>
+        <strong>{contract.label}</strong>
       </div>
-      <div className="v16-task-artifact-columns">
-        <SectionList title="预期产物" items={outputItems} />
-        <SectionList title="交付摘要" items={deliveryItems} />
-        <SectionList title="交付说明" items={releaseNoteItems} />
+      <DescriptionList
+        items={[
+          ["状态说明", contract.businessMeaning],
+          ["阶段动作", contract.stageAction],
+          ["责任角色", contract.ownerRoleLabel],
+        ]}
+      />
+      <div className="v16-task-stage-grid">
+        {detailSections.map((section) => (
+          <SectionList key={section.title} title={section.title} items={section.items} />
+        ))}
       </div>
-      {missingItems.length ? <SectionList title="待补齐" items={missingItems} /> : null}
     </section>
   );
 }
@@ -3345,7 +3330,9 @@ function TaskFinalDeliveryCard({
     ? deliveryProjection.missingItems.length
       ? "交付待补齐"
       : "最终交付已就绪"
-    : "等待任务完成";
+    : task.displayStatus === "in_review"
+      ? "交付已生成，等待评审收口"
+      : "等待进入交付阶段";
   const releaseTitle = artifact?.releaseNote?.title ?? null;
   const releaseSummary = artifact?.releaseNote?.summaryLines.length
     ? artifact.releaseNote.summaryLines.slice(0, 3)
@@ -3353,17 +3340,19 @@ function TaskFinalDeliveryCard({
       ? ["交付包已登记，release note 摘要未读取到。"]
       : ["任务完成后显示交付包摘要。"];
   const packageSummary = [
-    releaseTitle ? `交付标题：${releaseTitle}` : null,
-    deliveryProjection.deliveryPath ? `交付文件：${deliveryProjection.deliveryPath}` : "交付文件：未记录",
-    deliveryProjection.evidencePath ? `验证证据：${deliveryProjection.evidencePath}` : "验证证据：未记录",
-    deliveryProjection.releaseDeliveryDir ? `交付目录：${deliveryProjection.releaseDeliveryDir}` : "交付目录：未记录",
-    deliveryProjection.releaseNotePath ? `交付说明：${deliveryProjection.releaseNotePath}` : "交付说明：未记录",
-    deliveryProjection.prUrl ? `评审链接：${deliveryProjection.prUrl}` : "评审链接：未记录",
-    deliveryProjection.mergeState ? `合并状态：${deliveryProjection.mergeState}` : "合并状态：未记录",
-  ].filter((item): item is string => Boolean(item));
+    releaseTitle ? `交付标题：${releaseTitle}` : "交付标题：等待生成",
+    deliveryProjection.deliveryRunId ? `交付编号：${deliveryDisplayId(deliveryProjection.deliveryRunId)}` : "交付编号：未生成",
+    `验证证据：${deliveryProjection.evidencePath ? "已记录" : "未记录"}`,
+    `评审链接：${deliveryProjection.prUrl ? "已记录" : "未记录"}`,
+    `合并状态：${deliveryProjection.mergeState ? artifactStatusLabel(deliveryProjection.mergeState) : "未记录"}`,
+  ];
+  const waitingItems =
+    task.displayStatus === "in_review" || task.displayStatus === "done"
+      ? []
+      : ["当前还没有进入最终交付阶段。", "任务完成本地验证并进入评审后，这里会显示交付摘要。"];
 
   return (
-    <section className={isDone ? "v16-final-delivery-card done" : "v16-final-delivery-card"} aria-label="最终交付卡">
+    <section className={isDone ? "v16-final-delivery-card done" : "v16-final-delivery-card"} aria-label="最终交付">
       <div>
         <span>最终交付</span>
         <strong>{deliveryProjection.deliveryRunId ?? "未生成"}</strong>
@@ -3376,8 +3365,10 @@ function TaskFinalDeliveryCard({
         {packageSummary.map((item) => (
           <li key={item}>{item}</li>
         ))}
-        <li>{deliveryProjection.missingItems.length ? `待补齐：${deliveryProjection.missingItems.length} 项` : "交付包摘要已匹配当前任务状态。"}</li>
-        <li>审计保持独立入口，不并入任务主链路。</li>
+        {waitingItems.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+        <li>{deliveryProjection.missingItems.length ? `待补齐：${deliveryProjection.missingItems.length} 项` : "交付摘要已和当前状态对齐。"}</li>
       </ul>
     </section>
   );
@@ -5477,6 +5468,47 @@ function projectRecommendedIssueItems(issue: TaskIssueNode | null) {
     `执行角色：${agentRoleLabelZh(issue.requiredAgentRole)}`,
     issue.blockedBy.length ? `前置依赖：${issue.blockedBy.join("、")}` : "前置依赖：无",
   ];
+}
+
+function projectCurrentLaneItems(group: TaskProjectGroup) {
+  const items = group.issues.filter((issue) =>
+    ["todo", "in_progress", "in_review", "blocked"].includes(issue.displayStatus),
+  );
+  if (!items.length) {
+    return ["当前没有正在推进的任务。"];
+  }
+  return items.slice(0, 4).map((issue) => `${issue.id} · ${displayStatusLabelZh(issue.displayStatus)} · ${issue.title}`);
+}
+
+function projectPastLaneItems(group: TaskProjectGroup) {
+  const items = group.issues.filter((issue) => ["done", "cancel"].includes(issue.displayStatus));
+  if (!items.length) {
+    return ["还没有已结束任务。"];
+  }
+  return items.slice(0, 4).map((issue) => `${issue.id} · ${displayStatusLabelZh(issue.displayStatus)} · ${issue.title}`);
+}
+
+function projectFutureLaneItems(group: TaskProjectGroup) {
+  const items = group.issues.filter((issue) => issue.displayStatus === "backlog");
+  if (!items.length) {
+    return ["后续没有待进入的任务。"];
+  }
+  return items.slice(0, 4).map((issue) => `${issue.id} · ${displayPriority(issue.priority)} · ${issue.title}`);
+}
+
+function projectNextScheduledIssue(group: TaskProjectGroup, currentIssueId: string | null) {
+  const runnableIssues = group.issues.filter((issue) => !["done", "cancel"].includes(issue.displayStatus));
+  if (!runnableIssues.length) {
+    return null;
+  }
+  if (!currentIssueId) {
+    return runnableIssues[0] ?? null;
+  }
+  const currentIndex = runnableIssues.findIndex((issue) => issue.id === currentIssueId);
+  if (currentIndex >= 0) {
+    return runnableIssues.slice(currentIndex + 1).find((issue) => issue.displayStatus === "backlog") ?? null;
+  }
+  return runnableIssues.find((issue) => issue.displayStatus === "backlog") ?? null;
 }
 
 function projectDependencySummaryItems(group: TaskProjectGroup) {
