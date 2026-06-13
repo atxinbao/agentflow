@@ -179,6 +179,53 @@ export type ExecutionPipeline = {
   mergeModes: string[];
 };
 
+export type McpLaunchMode =
+  | "cli-exec-stdin"
+  | "cli-exec-prompt-file"
+  | "app-server-thread"
+  | "mcp-remote-session";
+
+export type McpSessionStatus =
+  | "queued"
+  | "claimed"
+  | "starting"
+  | "running"
+  | "in-review"
+  | "done"
+  | "failed"
+  | "cancelled";
+
+export type McpSessionSnapshot = {
+  version: string;
+  provider: string;
+  issueId: string;
+  projectId?: string | null;
+  runId: string;
+  sessionId: string;
+  status: McpSessionStatus;
+  launchMode: McpLaunchMode;
+  launchRequestPath: string;
+  planPath: string;
+  logPath?: string | null;
+  branchName?: string | null;
+  pid?: number | null;
+  remoteSessionId?: string | null;
+  prUrl?: string | null;
+  mergeState?: string | null;
+  note?: string | null;
+  lastError?: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type McpLogChunk = {
+  version: string;
+  provider: string;
+  sessionId: string;
+  cursor?: string | null;
+  lines: string[];
+};
+
 export type InputProject = {
   version: string;
   projectId: string;

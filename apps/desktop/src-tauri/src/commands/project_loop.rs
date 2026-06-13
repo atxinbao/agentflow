@@ -155,7 +155,10 @@ fn push_project_summary(summary: &mut ProjectLoopRunSummary, tick: ProjectExecut
         runtime_stage: launch
             .as_ref()
             .map(|item| item.stage.as_str().to_string())
-            .or(snapshot.runtime_stage.as_ref().map(|stage| stage.as_str().to_string())),
+            .or(snapshot
+                .runtime_stage
+                .as_ref()
+                .map(|stage| stage.as_str().to_string())),
         runtime_launch_request_path: launch
             .as_ref()
             .map(|item| item.launch_request_path.clone())

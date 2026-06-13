@@ -25,7 +25,8 @@ pub use delivery::prepare_release_delivery;
 pub use evidence::write_execute_evidence;
 pub use launcher::{
     claim_build_agent_launch, ensure_build_agent_launch_state, load_build_agent_launch_state,
-    mark_build_agent_launch_done, mark_build_agent_launch_in_review,
+    mark_build_agent_launch_done, mark_build_agent_launch_failed,
+    mark_build_agent_launch_in_review,
 };
 pub use lease::{acquire_execute_lease, release_execute_lease};
 pub use manager::{

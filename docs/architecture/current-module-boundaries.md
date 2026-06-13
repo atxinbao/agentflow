@@ -111,6 +111,44 @@ Hook boundaries:
 - `hooks/useProjectFileTextRange.ts` owns large text range loading.
 - `hooks/projectFileRuntime.ts` owns browser-preview detection and readable error text.
 
+## MCP Provider Bridge
+
+Scope:
+
+- external provider health and capability discovery;
+- provider launch plan generation;
+- provider session snapshot persistence;
+- provider session polling and log tail;
+- provider-specific command mapping for GitHub, GitLab, Codex, Browser Preview, and future external coding agents.
+
+Non-goals:
+
+- no ownership of Project Loop or Issue Loop state transitions;
+- no replacement of execute run / validation / delivery writeback;
+- no external provider authority over AgentFlow task ordering.
+
+Implemented backend modules:
+
+- `crates/mcp/src/model.rs`
+- `crates/mcp/src/provider.rs`
+- `crates/mcp/src/registry.rs`
+- `crates/mcp/src/storage.rs`
+- `crates/mcp/src/github.rs`
+- `crates/mcp/src/gitlab.rs`
+- `crates/mcp/src/codex.rs`
+- `crates/mcp/src/browser.rs`
+- `crates/mcp/src/events.rs`
+- `crates/mcp/src/health.rs`
+- `crates/mcp/src/error.rs`
+
+Notes:
+
+- `crates/mcp` is the Agent Provider Bridge for the current codebase.
+- `loop` decides whether an issue can launch; `mcp` defines how a provider is probed and how a provider session is represented.
+- `execute` remains the only owner of run, evidence, delivery, and completion writeback.
+- `mcp` can append provider lifecycle facts such as `launch.claimed` and `session.running`, but it still does not own issue status transitions.
+- Desktop reads provider sessions through `apps/desktop/src-tauri/src/commands/mcp.rs`, including snapshot polling and session log chunks.
+
 ## Legacy CLI Read Model
 
 Scope:

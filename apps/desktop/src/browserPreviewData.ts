@@ -16,6 +16,7 @@ import type {
   InputProject,
   InputSnapshot,
   InputStatusSnapshot,
+  McpSessionSnapshot,
   IssueStatusIndex,
   ExecuteStatusSnapshot,
   OutputStatusSnapshot,
@@ -558,6 +559,16 @@ export function createBrowserPreviewIssueStatusIndex(
 }
 
 export function createBrowserPreviewExecuteStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): ExecuteStatusSnapshot {
+  const sessions = createBrowserPreviewMcpSessions(projectRoot, currentBrowserPreviewTaskHierarchyScenario());
+  const activeRuns = sessions.filter((session) =>
+    ["queued", "claimed", "starting", "running"].includes(session.status),
+  ).length;
+  const completedRuns = sessions.filter((session) =>
+    ["in-review", "done"].includes(session.status),
+  ).length;
+  const blockedRuns = sessions.filter((session) =>
+    ["failed", "cancelled"].includes(session.status),
+  ).length;
   return {
     version: "execute-status.browser-preview",
     projectRoot,
@@ -566,16 +577,65 @@ export function createBrowserPreviewExecuteStatus(projectRoot = BROWSER_PREVIEW_
     manifestExists: true,
     indexExists: true,
     summary: {
-      runs: 0,
-      activeRuns: 0,
-      blockedRuns: 0,
-      completedRuns: 0,
+      runs: sessions.length,
+      activeRuns,
+      blockedRuns,
+      completedRuns,
       activeLeases: 0,
     },
     missingPaths: [],
     warnings: ["浏览器预览只展示 mock execute 状态，不执行命令、不应用 patch。"],
     errors: [],
   };
+}
+
+export function createBrowserPreviewMcpSessions(
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+  scenario = currentBrowserPreviewTaskHierarchyScenario(),
+): McpSessionSnapshot[] {
+  if (scenario === "empty" || scenario === "empty-project" || scenario === "missing-issue") {
+    return [];
+  }
+
+  const issues = browserPreviewIssuesForScenario(scenario);
+  return issues
+    .filter((issue) => ["in_progress", "in_review", "done"].includes(issue.displayStatus))
+    .map((issue, index) => {
+      const runId = issue.displayStatus === "done" ? "run-browser-preview-003" : issue.displayStatus === "in_review" ? "run-browser-preview-002" : "run-browser-preview-001";
+      const sessionId = `codex-${runId}`;
+      const status =
+        issue.displayStatus === "done"
+          ? "done"
+          : issue.displayStatus === "in_review"
+            ? "in-review"
+            : "running";
+      return {
+        version: "agentflow-mcp-session.browser-preview",
+        provider: "codex",
+        issueId: issue.issueId,
+        projectId: issue.projectId ?? null,
+        runId,
+        sessionId,
+        status,
+        launchMode: "cli-exec-stdin",
+        launchRequestPath: `.agentflow/execute/runs/${runId}/launcher/build-agent-request.json`,
+        planPath: `.agentflow/state/mcp/plans/${sessionId}.json`,
+        logPath: `.agentflow/state/mcp/sessions/${sessionId}.jsonl`,
+        branchName: `agentflow/browser-preview/${issue.issueId}`,
+        pid: null,
+        remoteSessionId: null,
+        prUrl:
+          status === "running"
+            ? null
+            : `https://github.com/atxinbao/agentflow/pull/${100 + index + 1}`,
+        mergeState: status === "done" ? "merged" : status === "in-review" ? "open" : null,
+        note: `${projectRoot} 浏览器预览执行会话`,
+        lastError: null,
+        createdAt: previewTimestamp - (index + 1) * 120,
+        updatedAt: previewTimestamp - index * 60,
+      } satisfies McpSessionSnapshot;
+    })
+    .sort((left, right) => right.updatedAt - left.updatedAt || right.sessionId.localeCompare(left.sessionId));
 }
 
 export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): OutputStatusSnapshot {

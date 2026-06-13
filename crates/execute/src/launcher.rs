@@ -108,6 +108,15 @@ pub fn mark_build_agent_launch_done(
     })
 }
 
+pub fn mark_build_agent_launch_failed(
+    project_root: impl AsRef<Path>,
+    run_id: &str,
+) -> Result<Option<BuildAgentLaunchState>> {
+    update_build_agent_launch_state_if_exists(project_root, run_id, |state, _now| {
+        state.status = BuildAgentLaunchStatus::Failed;
+    })
+}
+
 pub fn build_agent_launch_state_path(root: &Path, run_id: &str) -> PathBuf {
     run_dir(root, run_id).join("launcher/worker-state.json")
 }
@@ -178,5 +187,24 @@ mod tests {
 
         let loaded = load_build_agent_launch_state(dir.path(), "run-001").unwrap();
         assert_eq!(loaded.status, BuildAgentLaunchStatus::Done);
+    }
+
+    #[test]
+    fn launcher_state_can_be_marked_failed() {
+        let dir = tempdir().unwrap();
+        ensure_build_agent_launch_state(
+            dir.path(),
+            "AF-001",
+            Some("proj-001"),
+            "run-001",
+            None,
+            ".agentflow/execute/runs/run-001/launcher/build-agent-request.json".to_string(),
+        )
+        .unwrap();
+
+        let failed = mark_build_agent_launch_failed(dir.path(), "run-001")
+            .unwrap()
+            .expect("failed state");
+        assert_eq!(failed.status, BuildAgentLaunchStatus::Failed);
     }
 }
