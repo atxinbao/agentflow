@@ -82,6 +82,7 @@ import {
   buildAuditInteractionState,
   buildDeliveryInteractionState,
   buildTaskDeliveryProjection,
+  buildTaskExecutionProjection,
   buildTaskStatusContract,
   buildTaskInteractionState,
   buildTaskProjectTreeViewModel,
@@ -92,6 +93,7 @@ import {
   type AppInteractionState,
   type ButtonInteractionState,
   type TaskDeliveryProjection,
+  type TaskExecutionProjection,
   type TaskInteractionAction,
   type TaskIssueNode,
   type TaskProjectGroup,
@@ -2959,6 +2961,20 @@ function TaskDetailReader({
     () => taskExecuteSummaryItems(task, session, mcpSessionsState, executeStatusState),
     [executeStatusState, mcpSessionsState, session, task],
   );
+  const executionProjection = useMemo(
+    () =>
+      buildTaskExecutionProjection({
+        executeStatusError: executeStatusState.error,
+        executeStatusSource: executeStatusState.source,
+        executeWorkspaceStatus: executeStatusState.status?.status ?? null,
+        executeWorkspaceWarnings: executeStatusState.status?.warnings ?? [],
+        mcpSessionsError: mcpSessionsState.error,
+        mcpSessionsSource: mcpSessionsState.source,
+        session,
+        task,
+      }),
+    [executeStatusState, mcpSessionsState, session, task],
+  );
   const deliveryProjection = useMemo(
     () => buildTaskDeliveryProjection({ audit, delivery, evidence, session, task }),
     [audit, delivery, evidence, session, task],
@@ -3012,8 +3028,14 @@ function TaskDetailReader({
         {detailDescriptionItems.length ? <DescriptionList items={detailDescriptionItems} /> : null}
         <div className="v16-task-workspace-shell">
           <div className="v16-task-workspace-main">
-            <TaskWorkflowSummary task={task} contract={statusContract} deliveryProjection={deliveryProjection} />
+            <TaskWorkflowSummary
+              task={task}
+              contract={statusContract}
+              deliveryProjection={deliveryProjection}
+              executionProjection={executionProjection}
+            />
             <IssueStatusFlow contract={statusContract} status={task.displayStatus ?? "backlog"} />
+            <TaskExecutionStatusPanel projection={executionProjection} />
             <TaskStageOutputPanel
               executeItems={executeSummaryItems}
               reviewItems={deliveryReviewItems(task, deliveryArtifacts, session)}
@@ -3134,10 +3156,12 @@ function TaskWorkflowPanelShell({
 function TaskWorkflowSummary({
   contract,
   deliveryProjection,
+  executionProjection,
   task,
 }: {
   contract: ReturnType<typeof buildTaskStatusContract>;
   deliveryProjection: TaskDeliveryProjection;
+  executionProjection: TaskExecutionProjection;
   task: V1Issue;
 }) {
   const deliveryReady =
@@ -3155,8 +3179,8 @@ function TaskWorkflowSummary({
     },
     {
       label: "执行 Run",
-      value: task.latestRunId ?? "未记录",
-      detail: executeProgressLabel(task.executeStatus),
+      value: executionProjection.runId ?? "未记录",
+      detail: executionProjection.summaryItems[1] ?? executeProgressLabel(task.executeStatus),
     },
     {
       label: "下一步入口",
@@ -3183,6 +3207,27 @@ function TaskWorkflowSummary({
           <small>{card.detail}</small>
         </article>
       ))}
+    </section>
+  );
+}
+
+function TaskExecutionStatusPanel({
+  projection,
+}: {
+  projection: TaskExecutionProjection;
+}) {
+  return (
+    <section className="v16-task-execution-panel" aria-label="执行摘要">
+      <div className="v16-task-execution-panel-header">
+        <span>执行摘要</span>
+        <strong>{projection.missingItems.length ? `${projection.missingItems.length} 项缺失` : "摘要完整"}</strong>
+      </div>
+      <div className="v16-task-execution-grid">
+        <SectionList title="Run 与状态" items={projection.summaryItems} />
+        <SectionList title="Session" items={projection.sessionItems} />
+        <SectionList title="Validation" items={projection.validationItems} />
+      </div>
+      {projection.missingItems.length ? <SectionList title="缺失说明" items={projection.missingItems} /> : null}
     </section>
   );
 }

@@ -84,6 +84,29 @@ export type TaskDeliveryProjection = {
   missingItems: string[];
 };
 
+export type TaskExecutionProjection = {
+  taskId: string;
+  status: IssueDisplayStatus;
+  runId: string | null;
+  executeStatus: string | null;
+  sessionStatus: string | null;
+  summaryItems: string[];
+  missingItems: string[];
+  validationItems: string[];
+  sessionItems: string[];
+};
+
+export type TaskExecutionProjectionInput = {
+  task: V1Issue;
+  session: McpSessionSnapshot | null;
+  executeStatusError?: string | null;
+  executeStatusSource?: string | null;
+  executeWorkspaceStatus?: string | null;
+  executeWorkspaceWarnings?: string[];
+  mcpSessionsError?: string | null;
+  mcpSessionsSource?: string | null;
+};
+
 export type AuditInteractionState = {
   empty: boolean;
   selectedAudit: AuditIndexEntry | null;
@@ -929,6 +952,78 @@ export function buildDeliveryInteractionState(
   };
 }
 
+export function buildTaskExecutionProjection({
+  executeStatusError,
+  executeStatusSource,
+  executeWorkspaceStatus,
+  executeWorkspaceWarnings = [],
+  mcpSessionsError,
+  mcpSessionsSource,
+  session,
+  task,
+}: TaskExecutionProjectionInput): TaskExecutionProjection {
+  const status = task.displayStatus ?? "backlog";
+  const runId = task.latestRunId ?? session?.runId ?? null;
+  const executeStatus = task.executeStatus ?? null;
+  const sessionStatus = session?.status ?? null;
+  const executionExpected = status === "in_progress" || status === "in_review" || status === "done";
+  const validationExpected = status === "in_progress" || status === "in_review" || status === "done";
+  const missingItems = [
+    ...(executionExpected && !runId ? ["Run：当前状态需要 run，但任务索引未记录。"] : []),
+    ...(executionExpected && !executeStatus ? ["Execute status：当前状态需要执行状态，但任务索引未记录。"] : []),
+    ...(executionExpected && !session ? ["Session：当前状态通常应有会话记录，当前未读取到。"] : []),
+    ...(validationExpected && !task.validationCommands.length ? ["Validation：未登记验证命令。"] : []),
+  ];
+  const consistency = taskExecutionConsistencyLabel(status, executeStatus, sessionStatus);
+  const workspaceItem = executeStatusError
+    ? `执行工作区：读取失败，${executeStatusError}`
+    : executeWorkspaceWarnings.length
+      ? `执行工作区：${executeWorkspaceWarnings[0]}`
+      : executeWorkspaceStatus
+        ? `执行工作区：${executeWorkspaceStatusLabel(executeWorkspaceStatus)}`
+        : executeStatusSource === "loading"
+          ? "执行工作区：正在读取。"
+          : "执行工作区：没有额外告警。";
+  const sessionItems = session
+    ? [
+        `Session：${mcpSessionStatusLabel(session.status)}`,
+        `Session ID：${session.sessionId}`,
+        `Run：${session.runId}`,
+        `分支：${session.branchName ?? "未记录"}`,
+        `PR/MR：${session.prUrl ?? "未记录"}`,
+      ]
+    : mcpSessionsSource === "loading"
+      ? ["Session：正在读取。"]
+      : mcpSessionsError
+        ? [`Session：读取失败，${mcpSessionsError}`]
+        : ["Session：当前没有会话记录。"];
+  const validationItems = task.validationCommands.length
+    ? [
+        `Validation：${task.validationCommands.length} 条验证命令`,
+        ...task.validationCommands.slice(0, 3).map((command) => `命令：${command}`),
+      ]
+    : ["Validation：未登记验证命令。"];
+
+  return {
+    executeStatus,
+    missingItems,
+    runId,
+    sessionItems,
+    sessionStatus,
+    status,
+    summaryItems: [
+      runId ? `Run：${runId}` : "Run：还没有创建。",
+      `Execute status：${executeStatusLabel(executeStatus)}`,
+      session ? `Session：${mcpSessionStatusLabel(session.status)}` : "Session：当前没有会话记录。",
+      validationItems[0],
+      consistency,
+      workspaceItem,
+    ],
+    taskId: task.id,
+    validationItems,
+  };
+}
+
 export function buildTaskDeliveryProjection({
   audit,
   delivery,
@@ -983,6 +1078,87 @@ export function buildTaskDeliveryProjection({
     ],
     taskId: task.id,
   };
+}
+
+function taskExecutionConsistencyLabel(
+  status: IssueDisplayStatus,
+  executeStatus: string | null,
+  sessionStatus: string | null,
+) {
+  const allowedExecuteStatuses: Record<IssueDisplayStatus, Array<string | null>> = {
+    backlog: [null],
+    blocked: [null, "blocked", "failed"],
+    cancel: [null, "cancelled"],
+    done: ["completed"],
+    in_progress: ["checkpointed", "patching", "preflight", "running", "validating"],
+    in_review: ["completed", "validating"],
+    todo: [null, "planned", "preflight", "queued"],
+  };
+  const allowedSessionStatuses: Record<IssueDisplayStatus, Array<string | null>> = {
+    backlog: [null],
+    blocked: [null, "failed", "cancelled"],
+    cancel: [null, "cancelled"],
+    done: ["done"],
+    in_progress: ["queued", "claimed", "starting", "running"],
+    in_review: ["in-review", "done"],
+    todo: [null, "queued", "claimed", "starting"],
+  };
+  const executeMatches = allowedExecuteStatuses[status].includes(executeStatus);
+  const sessionMatches = allowedSessionStatuses[status].includes(sessionStatus);
+
+  if (executeMatches && sessionMatches) {
+    return "状态一致性：任务状态和执行摘要一致。";
+  }
+
+  return `状态一致性：任务为${displayStatusLabelZh(status)}，执行状态为${executeStatusLabel(executeStatus)}，Session 为${mcpSessionStatusLabel(sessionStatus)}，需要核对。`;
+}
+
+function executeStatusLabel(status?: string | null) {
+  if (!status) {
+    return "还没有进入执行";
+  }
+  const labels: Record<string, string> = {
+    blocked: "执行被阻断",
+    cancelled: "执行已取消",
+    checkpointed: "已记录检查点",
+    completed: "执行已完成",
+    failed: "执行失败",
+    patching: "正在应用改动",
+    planned: "前置检测完成",
+    preflight: "正在做前置检测",
+    queued: "等待拉起执行",
+    running: "正在执行",
+    validating: "正在做沙箱验证",
+  };
+  return labels[status] ?? status;
+}
+
+function executeWorkspaceStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    blocked: "已阻断",
+    degraded: "需注意",
+    failed: "异常",
+    missing: "未初始化",
+    ready: "已就绪",
+  };
+  return labels[status] ?? status;
+}
+
+function mcpSessionStatusLabel(status?: string | null) {
+  if (!status) {
+    return "未记录";
+  }
+  const labels: Record<string, string> = {
+    cancelled: "已取消",
+    claimed: "已认领",
+    done: "已完成",
+    failed: "失败",
+    "in-review": "评审中",
+    queued: "排队中",
+    running: "运行中",
+    starting: "启动中",
+  };
+  return labels[status] ?? status;
 }
 
 function artifactProjectionStatusLabel(status?: string | null) {
