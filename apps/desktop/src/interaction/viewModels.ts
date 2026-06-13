@@ -939,8 +939,8 @@ export function buildTaskDeliveryProjection({
   const missingItems = [
     ...(deliveryRequired && !delivery ? ["交付包：当前状态需要交付包，但 output index 还没有对应记录。"] : []),
     ...(deliveryRequired && !evidence ? ["验证证据：当前状态需要证据，但 output index 还没有对应记录。"] : []),
-    ...(deliveryRequired && !session?.prUrl ? ["PR/MR metadata：未记录评审链接。"] : []),
-    ...(deliveryRequired && !releaseNotePath ? ["Release note：未记录 release note 路径。"] : []),
+    ...(deliveryRequired && !session?.prUrl ? ["评审信息：未记录评审链接。"] : []),
+    ...(deliveryRequired && !releaseNotePath ? ["交付说明：未记录 release note 路径。"] : []),
   ];
 
   return {
@@ -949,15 +949,15 @@ export function buildTaskDeliveryProjection({
     evidencePath: evidence?.path ?? stringExpectedOutput(task.expectedOutputs, "evidencePath"),
     mergeState: session?.mergeState ?? null,
     missingItems,
-    packageItems: [
-      delivery ? `交付包：${delivery.runId}` : deliveryRequired ? "交付包：未找到记录" : "交付包：当前阶段还未生成",
-      releaseDeliveryDir ? `交付目录：${releaseDeliveryDir}` : "交付目录：未记录",
-      evidence ? `验证证据：${evidence.path}` : "验证证据：未找到记录",
-      session?.prUrl ? `PR/MR：${session.prUrl}` : "PR/MR：未记录",
-      session?.mergeState ? `合并状态：${session.mergeState}` : "合并状态：未记录",
-      releaseNotePath ? `Release note：${releaseNotePath}` : "Release note：未记录",
-      audit ? `后续审计：${artifactProjectionStatusLabel(audit.status)}` : "后续审计：独立入口，未并入任务主链路。",
-    ],
+	    packageItems: [
+	      delivery ? `交付包：${delivery.runId}` : deliveryRequired ? "交付包：未找到记录" : "交付包：当前阶段还未生成",
+	      releaseDeliveryDir ? "交付目录：已记录" : "交付目录：未记录",
+	      evidence ? `验证证据：${artifactProjectionStatusLabel(evidence.status)}` : "验证证据：未找到记录",
+	      session?.prUrl ? "评审链接：已记录" : "评审链接：未记录",
+	      session?.mergeState ? `合并状态：${session.mergeState}` : "合并状态：未记录",
+	      releaseNotePath ? "交付说明：已记录" : "交付说明：未记录",
+	      audit ? `后续审计：${artifactProjectionStatusLabel(audit.status)}` : "后续审计：独立入口，未并入任务主链路。",
+	    ],
     prUrl: session?.prUrl ?? null,
     releaseDeliveryDir,
     releaseNotePath,
@@ -966,8 +966,8 @@ export function buildTaskDeliveryProjection({
       `任务状态：${displayStatusLabelZh(status)}`,
       delivery ? `交付包状态：${artifactProjectionStatusLabel(delivery.status)}` : deliveryRequired ? "交付包状态：缺失" : "交付包状态：未到生成阶段",
       evidence ? `证据状态：${artifactProjectionStatusLabel(evidence.status)}` : deliveryRequired ? "证据状态：缺失" : "证据状态：未到生成阶段",
-      session?.prUrl ? "PR/MR metadata：已记录" : "PR/MR metadata：未记录",
-      releaseNotePath ? "Release note：已记录" : "Release note：未记录",
+      session?.prUrl ? "评审信息：已记录" : "评审信息：未记录",
+      releaseNotePath ? "交付说明：已记录" : "交付说明：未记录",
       audit ? `审计提示：${artifactProjectionStatusLabel(audit.status)}` : "审计提示：交付后的独立入口。",
     ],
     taskId: task.id,

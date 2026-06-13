@@ -1943,6 +1943,124 @@ button.v16-task-project-row:hover {
   overflow: auto;
 }
 
+.v16-task-workflow-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.v16-task-workflow-summary article,
+.v16-final-delivery-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--v16-border-soft);
+  border-radius: 6px;
+  background: var(--v16-surface-2);
+}
+
+.v16-task-workflow-summary span,
+.v16-final-delivery-card span,
+.v16-task-stage-panel-header span,
+.v16-task-artifact-flow-header span {
+  color: var(--v16-muted);
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.3;
+}
+
+.v16-task-workflow-summary strong,
+.v16-final-delivery-card strong,
+.v16-task-stage-panel-header strong,
+.v16-task-artifact-flow-header strong {
+  min-width: 0;
+  color: var(--v16-text);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.v16-task-workflow-summary small,
+.v16-final-delivery-card small {
+  min-width: 0;
+  color: var(--v16-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.v16-task-stage-panel,
+.v16-task-artifact-flow {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--v16-border-soft);
+  border-radius: 6px;
+  background: var(--v16-surface-muted);
+}
+
+.v16-task-stage-panel-header,
+.v16-task-artifact-flow-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.v16-task-stage-panel-header strong,
+.v16-task-artifact-flow-header strong {
+  text-align: right;
+}
+
+.v16-task-stage-grid,
+.v16-task-artifact-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.v16-task-stage-grid .v16-section-list,
+.v16-task-artifact-columns .v16-section-list,
+.v16-task-artifact-flow > .v16-section-list {
+  background: var(--v16-surface);
+}
+
+.v16-final-delivery-card {
+  grid-template-columns: minmax(150px, 0.38fr) minmax(0, 1fr);
+  align-items: start;
+  background: color-mix(in srgb, var(--af-success), var(--v16-surface) 94%);
+}
+
+.v16-final-delivery-card.done {
+  border-color: color-mix(in srgb, var(--af-success), var(--v16-border) 50%);
+}
+
+.v16-final-delivery-card > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.v16-final-delivery-card ul {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+  padding-left: 17px;
+}
+
+.v16-final-delivery-card li {
+  min-width: 0;
+  color: var(--v16-text);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .v16-section-list,
 .v16-json-summary,
 .v16-human-summary,
@@ -1999,6 +2117,10 @@ button.v16-task-project-row:hover {
   cursor: pointer;
   color: var(--v16-text);
   font-weight: 720;
+}
+
+.v16-task-package .v16-section-list {
+  margin-top: 8px;
 }
 
 .v16-section-list li {
@@ -2471,9 +2593,16 @@ button.v16-list-item {
   }
 
   .v16-summary-grid,
+  .v16-task-workflow-summary,
   .v16-intent-grid,
   .v16-codex-role-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .v16-task-stage-grid,
+  .v16-task-artifact-columns,
+  .v16-final-delivery-card {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .v16-status-bar {
