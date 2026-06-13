@@ -610,8 +610,10 @@ fn hydrate_runtime_snapshot(snapshot: &mut ProjectLoopSnapshot, root: &Path, iss
     let launch_request_path = agentflow_execute::storage::run_dir(root, &run_id)
         .join("launcher/build-agent-request.json");
     if launch_request_path.is_file() {
-        snapshot.runtime_launch_request_path =
-            Some(agentflow_execute::storage::relative_path(root, &launch_request_path));
+        snapshot.runtime_launch_request_path = Some(agentflow_execute::storage::relative_path(
+            root,
+            &launch_request_path,
+        ));
     }
 }
 

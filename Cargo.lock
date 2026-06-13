@@ -55,6 +55,7 @@ dependencies = [
  "agentflow-execute",
  "agentflow-input",
  "agentflow-loop",
+ "agentflow-mcp",
  "agentflow-output",
  "agentflow-panel",
  "agentflow-state",
@@ -118,6 +119,9 @@ dependencies = [
 name = "agentflow-mcp"
 version = "0.1.0"
 dependencies = [
+ "agentflow-execute",
+ "agentflow-input",
+ "agentflow-workflow-events",
  "anyhow",
  "serde",
  "serde_json",

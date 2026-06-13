@@ -1,11 +1,18 @@
+use agentflow_execute::{claim_build_agent_launch, mark_build_agent_launch_failed};
 use agentflow_input::issue::DisplayStatus;
+use agentflow_mcp::{
+    default_provider_bridge, write_provider_status, write_registry_for_statuses, McpLaunchRequest,
+};
 use agentflow_panel::PanelStatus;
 use agentflow_workflow_events::{
     append_dead_letter, append_event_once, load_pending_events, mark_event_consumed,
-    prepare_events_workspace, ContextPackFailedPayload, ContextPackReadyPayload,
-    ContextPackRequestedPayload, IssueReadyPayload, WorkflowEventDraft, CONSUMER_PANEL,
-    EVENT_TYPE_INPUT_ISSUE_READY, EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED,
-    EVENT_TYPE_PANEL_CONTEXT_PACK_READY, EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED,
+    prepare_events_workspace, BuildAgentLaunchClaimedPayload, BuildAgentLaunchRequestedPayload,
+    ContextPackFailedPayload, ContextPackReadyPayload, ContextPackRequestedPayload,
+    IssueReadyPayload, WorkflowEventDraft, CONSUMER_BUILD_AGENT, CONSUMER_PANEL,
+    CONSUMER_PROVIDER_BRIDGE, EVENT_TYPE_BUILD_AGENT_LAUNCH_CLAIMED,
+    EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED, EVENT_TYPE_INPUT_ISSUE_READY,
+    EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED, EVENT_TYPE_PANEL_CONTEXT_PACK_READY,
+    EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -21,15 +28,19 @@ pub(crate) struct WorkflowEventDispatchSummary {
     version: String,
     emitted_issue_ready_events: usize,
     pending_panel_events: usize,
+    pending_build_agent_launch_events: usize,
     context_pack_requests: usize,
     context_pack_ready: usize,
     context_pack_failed: usize,
+    build_agent_launch_sessions_created: usize,
     errors: Vec<String>,
 }
 
 impl WorkflowEventDispatchSummary {
     fn should_refresh_ui(&self) -> bool {
-        self.context_pack_ready > 0 || self.context_pack_failed > 0
+        self.context_pack_ready > 0
+            || self.context_pack_failed > 0
+            || self.build_agent_launch_sessions_created > 0
     }
 }
 
@@ -39,9 +50,11 @@ struct WorkflowEventsDispatchedEvent {
     version: String,
     project_root: String,
     pending_panel_events: usize,
+    pending_build_agent_launch_events: usize,
     context_pack_requests: usize,
     context_pack_ready: usize,
     context_pack_failed: usize,
+    build_agent_launch_sessions_created: usize,
     errors: Vec<String>,
 }
 
@@ -79,115 +92,100 @@ fn dispatch_workflow_events_inner(
     let pending = load_pending_events(&root, CONSUMER_PANEL, &[EVENT_TYPE_INPUT_ISSUE_READY])
         .map_err(|error| error.to_string())?;
     summary.pending_panel_events = pending.len();
-    if !panel_ready_for_context_pack(&root) {
-        return Ok(summary);
-    }
-
-    for event in pending {
-        let payload = match serde_json::from_value::<IssueReadyPayload>(event.payload.clone()) {
-            Ok(payload) => payload,
-            Err(error) => {
-                let message = format!("parse issue ready payload: {error}");
-                let _ = append_dead_letter(&root, CONSUMER_PANEL, &event, message.clone());
-                let _ = mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id);
-                summary.errors.push(message);
-                summary.context_pack_failed += 1;
+    if panel_ready_for_context_pack(&root) {
+        for event in pending {
+            let payload = match serde_json::from_value::<IssueReadyPayload>(event.payload.clone()) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    let message = format!("parse issue ready payload: {error}");
+                    let _ = append_dead_letter(&root, CONSUMER_PANEL, &event, message.clone());
+                    let _ = mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id);
+                    summary.errors.push(message);
+                    summary.context_pack_failed += 1;
+                    continue;
+                }
+            };
+            if !event_ready_for_panel(&payload, issue_status_index.as_ref()) {
+                mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
+                    .map_err(|error| error.to_string())?;
                 continue;
             }
-        };
-        if !event_ready_for_panel(&payload, issue_status_index.as_ref()) {
-            mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
-                .map_err(|error| error.to_string())?;
-            continue;
-        }
 
-        let requested = ContextPackRequestedPayload {
-            issue_id: payload.issue_id.clone(),
-            context_pack_path: payload.context_pack_path.clone(),
-        };
-        if let Err(error) = append_context_pack_event(
-            &root,
-            EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED,
-            "panel",
-            &payload.issue_id,
-            payload.context_pack_path.clone(),
-            format!(
-                "panel.context-pack.requested:{}:{}",
-                payload.issue_id, event.event_id
-            ),
-            requested,
-        ) {
-            summary.errors.push(error.to_string());
-        } else {
-            summary.context_pack_requests += 1;
-        }
-
-        match ensure_context_pack(&root, &payload) {
-            Ok(context_pack_path) => {
-                let ready = ContextPackReadyPayload {
-                    issue_id: payload.issue_id.clone(),
-                    context_pack_path: context_pack_path.clone(),
-                };
-                append_context_pack_event(
-                    &root,
-                    EVENT_TYPE_PANEL_CONTEXT_PACK_READY,
-                    "panel",
-                    &payload.issue_id,
-                    Some(context_pack_path),
-                    format!(
-                        "panel.context-pack.ready:{}:{}",
-                        payload.issue_id, event.event_id
-                    ),
-                    ready,
-                )
-                .map_err(|error| error.to_string())?;
-                mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
-                    .map_err(|error| error.to_string())?;
-                summary.context_pack_ready += 1;
+            let requested = ContextPackRequestedPayload {
+                issue_id: payload.issue_id.clone(),
+                context_pack_path: payload.context_pack_path.clone(),
+            };
+            if let Err(error) = append_context_pack_event(
+                &root,
+                EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED,
+                "panel",
+                &payload.issue_id,
+                payload.context_pack_path.clone(),
+                format!(
+                    "panel.context-pack.requested:{}:{}",
+                    payload.issue_id, event.event_id
+                ),
+                requested,
+            ) {
+                summary.errors.push(error.to_string());
+            } else {
+                summary.context_pack_requests += 1;
             }
-            Err(error) => {
-                let message = error.to_string();
-                let failed = ContextPackFailedPayload {
-                    issue_id: payload.issue_id.clone(),
-                    context_pack_path: payload.context_pack_path.clone(),
-                    error: message.clone(),
-                };
-                let _ = append_context_pack_event(
-                    &root,
-                    EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED,
-                    "panel",
-                    &payload.issue_id,
-                    payload.context_pack_path.clone(),
-                    format!(
-                        "panel.context-pack.failed:{}:{}",
-                        payload.issue_id, event.event_id
-                    ),
-                    failed,
-                );
-                let _ = append_dead_letter(&root, CONSUMER_PANEL, &event, message.clone());
-                mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
+
+            match ensure_context_pack(&root, &payload) {
+                Ok(context_pack_path) => {
+                    let ready = ContextPackReadyPayload {
+                        issue_id: payload.issue_id.clone(),
+                        context_pack_path: context_pack_path.clone(),
+                    };
+                    append_context_pack_event(
+                        &root,
+                        EVENT_TYPE_PANEL_CONTEXT_PACK_READY,
+                        "panel",
+                        &payload.issue_id,
+                        Some(context_pack_path),
+                        format!(
+                            "panel.context-pack.ready:{}:{}",
+                            payload.issue_id, event.event_id
+                        ),
+                        ready,
+                    )
                     .map_err(|error| error.to_string())?;
-                summary.errors.push(message);
-                summary.context_pack_failed += 1;
+                    mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
+                        .map_err(|error| error.to_string())?;
+                    summary.context_pack_ready += 1;
+                }
+                Err(error) => {
+                    let message = error.to_string();
+                    let failed = ContextPackFailedPayload {
+                        issue_id: payload.issue_id.clone(),
+                        context_pack_path: payload.context_pack_path.clone(),
+                        error: message.clone(),
+                    };
+                    let _ = append_context_pack_event(
+                        &root,
+                        EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED,
+                        "panel",
+                        &payload.issue_id,
+                        payload.context_pack_path.clone(),
+                        format!(
+                            "panel.context-pack.failed:{}:{}",
+                            payload.issue_id, event.event_id
+                        ),
+                        failed,
+                    );
+                    let _ = append_dead_letter(&root, CONSUMER_PANEL, &event, message.clone());
+                    mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
+                        .map_err(|error| error.to_string())?;
+                    summary.errors.push(message);
+                    summary.context_pack_failed += 1;
+                }
             }
         }
     }
 
-    if summary.context_pack_ready > 0 {
-        match app {
-            Some(app) => {
-                if let Err(error) =
-                    crate::commands::project_loop::run_project_loop_for_app(&root, app)
-                {
-                    summary.errors.push(error);
-                }
-            }
-            None => {
-                if let Err(error) = crate::commands::project_loop::run_project_loop_inner(&root) {
-                    summary.errors.push(error.to_string());
-                }
-            }
-        }
+    if let Err(error) = dispatch_build_agent_launch_events(&root, &mut summary) {
+        summary.errors.push(error.to_string());
     }
 
     let _ = prepare_events_workspace(&root);
@@ -197,9 +195,11 @@ fn dispatch_workflow_events_inner(
                 version: WORKFLOW_EVENT_DISPATCH_VERSION.to_string(),
                 project_root: root.display().to_string(),
                 pending_panel_events: summary.pending_panel_events,
+                pending_build_agent_launch_events: summary.pending_build_agent_launch_events,
                 context_pack_requests: summary.context_pack_requests,
                 context_pack_ready: summary.context_pack_ready,
                 context_pack_failed: summary.context_pack_failed,
+                build_agent_launch_sessions_created: summary.build_agent_launch_sessions_created,
                 errors: summary.errors.clone(),
             };
             let _ = app.emit(AGENTFLOW_WORKFLOW_EVENTS_DISPATCHED_EVENT, payload);
@@ -280,6 +280,152 @@ fn append_context_pack_event<T: Serialize>(
         },
     )?;
     Ok(())
+}
+
+fn dispatch_build_agent_launch_events(
+    root: &Path,
+    summary: &mut WorkflowEventDispatchSummary,
+) -> anyhow::Result<()> {
+    let provider_bridge = default_provider_bridge();
+    let provider = provider_bridge
+        .provider("codex")
+        .ok_or_else(|| anyhow::anyhow!("codex provider is not registered"))?;
+
+    let provider_status = provider.check_health(root);
+    write_provider_status(root, &provider_status)?;
+    write_registry_for_statuses(root, &[provider_status.clone()])?;
+
+    let pending = load_pending_events(
+        root,
+        CONSUMER_PROVIDER_BRIDGE,
+        &[EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED],
+    )?;
+    summary.pending_build_agent_launch_events = pending.len();
+
+    if !provider_status.ready() {
+        if !pending.is_empty() {
+            summary.errors.push(format!(
+                "build-agent launch pending: {} provider is {}",
+                provider.provider_id(),
+                provider_status.status.as_str()
+            ));
+        }
+        return Ok(());
+    }
+
+    for event in pending {
+        let payload =
+            match serde_json::from_value::<BuildAgentLaunchRequestedPayload>(event.payload.clone())
+            {
+                Ok(payload) => payload,
+                Err(error) => {
+                    let message = format!("parse build-agent launch payload: {error}");
+                    let _ =
+                        append_dead_letter(root, CONSUMER_PROVIDER_BRIDGE, &event, message.clone());
+                    let _ = mark_event_consumed(root, CONSUMER_PROVIDER_BRIDGE, &event.event_id);
+                    summary.errors.push(message);
+                    continue;
+                }
+            };
+
+        let request = match build_provider_launch_request(root, &payload) {
+            Ok(request) => request,
+            Err(error) => {
+                let message = format!("build codex launch request {}: {error}", payload.issue_id);
+                let _ = append_dead_letter(root, CONSUMER_PROVIDER_BRIDGE, &event, message.clone());
+                let _ = mark_event_consumed(root, CONSUMER_PROVIDER_BRIDGE, &event.event_id);
+                summary.errors.push(message);
+                continue;
+            }
+        };
+
+        match provider.create_session(root, &request) {
+            Ok(session) => {
+                if let Err(error) = claim_build_agent_launch(
+                    root,
+                    &payload.issue_id,
+                    Some(&payload.project_id),
+                    &payload.run_id,
+                    payload.branch_name.clone(),
+                    payload.launch_request_path.clone(),
+                    event.event_id.clone(),
+                ) {
+                    summary.errors.push(format!(
+                        "claim build-agent launch {}: {error}",
+                        payload.issue_id
+                    ));
+                    continue;
+                }
+                if let Err(error) = append_event_once(
+                    root,
+                    WorkflowEventDraft {
+                        event_type: EVENT_TYPE_BUILD_AGENT_LAUNCH_CLAIMED.to_string(),
+                        source: "provider-bridge".to_string(),
+                        subject_id: payload.issue_id.clone(),
+                        subject_path: Some(payload.launch_request_path.clone()),
+                        dedupe_key: format!(
+                            "build-agent.launch.claimed:{}:{}",
+                            payload.issue_id, payload.run_id
+                        ),
+                        payload: serde_json::to_value(BuildAgentLaunchClaimedPayload {
+                            issue_id: payload.issue_id.clone(),
+                            project_id: Some(payload.project_id.clone()),
+                            run_id: payload.run_id.clone(),
+                            session_id: session.session_id.clone(),
+                            provider: session.provider.clone(),
+                            branch_name: payload.branch_name.clone(),
+                            launch_request_path: payload.launch_request_path.clone(),
+                            log_path: session.log_path.clone(),
+                        })?,
+                    },
+                ) {
+                    summary.errors.push(format!(
+                        "append claimed event {}: {error}",
+                        payload.issue_id
+                    ));
+                    continue;
+                }
+                mark_event_consumed(root, CONSUMER_PROVIDER_BRIDGE, &event.event_id)?;
+                mark_event_consumed(root, CONSUMER_BUILD_AGENT, &event.event_id)?;
+                summary.build_agent_launch_sessions_created += 1;
+            }
+            Err(error) => {
+                let _ = mark_build_agent_launch_failed(root, &payload.run_id);
+                let message = format!("create provider session {}: {error}", payload.issue_id);
+                let _ = append_dead_letter(root, CONSUMER_PROVIDER_BRIDGE, &event, message.clone());
+                let _ = mark_event_consumed(root, CONSUMER_PROVIDER_BRIDGE, &event.event_id);
+                summary.errors.push(message);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn build_provider_launch_request(
+    root: &Path,
+    payload: &BuildAgentLaunchRequestedPayload,
+) -> anyhow::Result<McpLaunchRequest> {
+    let mut request = McpLaunchRequest::new(
+        "codex",
+        payload.issue_id.clone(),
+        payload.run_id.clone(),
+        "build-agent",
+        root.display().to_string(),
+        payload.launch_request_path.clone(),
+    );
+    request.project_id = Some(payload.project_id.clone());
+    request.prompt_path = Some(payload.launch_request_path.clone());
+    request.context_pack_path = Some(payload.context_pack_path.clone());
+    request.branch_name = payload.branch_name.clone();
+    if let Ok(issue) = agentflow_input::load_input_issue(root, &payload.issue_id) {
+        request.agent_role = issue.required_agent_role.as_str().to_string();
+        request.merge_mode = issue
+            .execution_pipeline
+            .as_ref()
+            .and_then(|pipeline| pipeline.merge_modes.first().cloned());
+    }
+    Ok(request)
 }
 
 #[cfg(test)]
@@ -422,7 +568,7 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_runs_project_loop_for_backlog_project_issue_after_context_pack_ready() {
+    fn dispatch_does_not_run_project_loop_for_backlog_project_issue_after_context_pack_ready() {
         let dir = tempdir().unwrap();
         fs::create_dir_all(dir.path().join("apps/desktop/src")).unwrap();
         fs::write(
@@ -441,16 +587,16 @@ mod tests {
 
         assert_eq!(summary.context_pack_ready, 1);
         let issue = agentflow_input::load_input_issue(dir.path(), "AF-EVENT-001").unwrap();
-        assert_eq!(issue.status, InputIssueStatus::InProgress);
+        assert_eq!(issue.status, InputIssueStatus::Backlog);
         assert!(dir
             .path()
             .join(".agentflow/panel/context-packs/AF-EVENT-001.json")
             .is_file());
-        assert!(dir
+        assert!(!dir
             .path()
             .join(".agentflow/state/loops/projects/proj-event.json")
             .is_file());
-        assert!(dir
+        assert!(!dir
             .path()
             .join(".agentflow/state/loops/issues/AF-EVENT-001.json")
             .is_file());

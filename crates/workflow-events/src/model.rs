@@ -11,9 +11,15 @@ pub const EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED: &str = "panel.context-pack.re
 pub const EVENT_TYPE_PANEL_CONTEXT_PACK_READY: &str = "panel.context-pack.ready";
 pub const EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED: &str = "panel.context-pack.failed";
 pub const EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED: &str = "build-agent.launch.requested";
+pub const EVENT_TYPE_BUILD_AGENT_LAUNCH_CLAIMED: &str = "build-agent.launch.claimed";
+pub const EVENT_TYPE_BUILD_AGENT_SESSION_RUNNING: &str = "build-agent.session.running";
+pub const EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY: &str = "build-agent.session.review-ready";
+pub const EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED: &str = "build-agent.merge.confirmed";
+pub const EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED: &str = "build-agent.writeback.completed";
 
 pub const CONSUMER_PANEL: &str = "panel";
 pub const CONSUMER_BUILD_AGENT: &str = "build-agent";
+pub const CONSUMER_PROVIDER_BRIDGE: &str = "provider-bridge";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -127,6 +133,64 @@ pub struct BuildAgentLaunchRequestedPayload {
     pub context_pack_path: String,
     pub launch_request_path: String,
     pub display_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildAgentLaunchClaimedPayload {
+    pub issue_id: String,
+    pub project_id: Option<String>,
+    pub run_id: String,
+    pub session_id: String,
+    pub provider: String,
+    pub branch_name: Option<String>,
+    pub launch_request_path: String,
+    pub log_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildAgentSessionRunningPayload {
+    pub issue_id: String,
+    pub project_id: Option<String>,
+    pub run_id: String,
+    pub session_id: String,
+    pub provider: String,
+    pub branch_name: Option<String>,
+    pub log_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildAgentSessionReviewReadyPayload {
+    pub issue_id: String,
+    pub project_id: Option<String>,
+    pub run_id: String,
+    pub provider: String,
+    pub delivery_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildAgentMergeConfirmedPayload {
+    pub issue_id: String,
+    pub project_id: Option<String>,
+    pub run_id: String,
+    pub provider: String,
+    pub merge_mode: String,
+    pub remote_url: Option<String>,
+    pub merged: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildAgentWritebackCompletedPayload {
+    pub issue_id: String,
+    pub project_id: Option<String>,
+    pub run_id: String,
+    pub provider: String,
+    pub delivery_path: Option<String>,
+    pub next_issue_id: Option<String>,
 }
 
 pub trait WorkflowEventPayload: Serialize {

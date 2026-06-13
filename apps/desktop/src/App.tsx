@@ -48,6 +48,7 @@ import {
 import { useAgentManual } from "./features/agent-manual";
 import { useExecuteStatus, type ExecuteStatusState } from "./features/execute";
 import { useInputSnapshot, useInputStatus } from "./features/input";
+import { useMcpSessions, type McpSessionsState } from "./features/mcp";
 import { useOutputStatus, type OutputStatusState } from "./features/output";
 import {
   ProjectLocalFilesPage,
@@ -99,6 +100,8 @@ import type {
   AuditIndexEntry,
   ExecutionPipeline,
   HumanAuditReport,
+  McpLogChunk,
+  McpSessionSnapshot,
   AgentRole,
   InputIssue,
   IssueDisplayStatus,
@@ -177,10 +180,12 @@ type AgentflowWorkspaceChangedEvent = {
 };
 
 type WorkflowEventsDispatchedEvent = {
+  buildAgentLaunchSessionsCreated: number;
   contextPackFailed: number;
   contextPackReady: number;
   contextPackRequests: number;
   errors: string[];
+  pendingBuildAgentLaunchEvents: number;
   pendingPanelEvents: number;
   projectRoot: string;
   version: string;
@@ -194,6 +199,7 @@ type ProjectLoopTickedEvent = {
   errors: string[];
   projectCount: number;
   projectRoot: string;
+  runtimeLaunchCount: number;
   version: string;
 };
 
@@ -439,12 +445,15 @@ function App() {
   const [inputStatusRefreshToken, setInputStatusRefreshToken] = useState(0);
   const [taskListRefreshToken, setTaskListRefreshToken] = useState(0);
   const [executeRefreshToken, setExecuteRefreshToken] = useState(0);
+  const [mcpRefreshToken, setMcpRefreshToken] = useState(0);
   const [outputRefreshToken, setOutputRefreshToken] = useState(0);
   const [stateRefreshToken, setStateRefreshToken] = useState(0);
   const [selectedIntent, setSelectedIntent] = useState("我要新增功能");
   const [onboardingFeedback, setOnboardingFeedback] = useState<string | null>(null);
   const [taskActionFeedback, setTaskActionFeedback] = useState<string | null>(null);
   const [taskCopyState, setTaskCopyState] = useState<ButtonInteractionState>("enabled");
+  const [projectLoopState, setProjectLoopState] = useState<ButtonInteractionState>("enabled");
+  const [projectLoopFeedback, setProjectLoopFeedback] = useState<string | null>(null);
   const [handedOffIssues, setHandedOffIssues] = useState<Set<string>>(() => readStoredIssueSet());
   const preparedProjectRoots = useRef(new Set<string>());
   const { activePageByProject, activeProjectRoot, expandedProjectRoots, projects } = projectRegistry;
@@ -468,6 +477,7 @@ function App() {
   const inputStatusState = useInputStatus(projectRoot, inputStatusRefreshToken);
   const inputSnapshotState = useInputSnapshot(projectRoot, taskListRefreshToken);
   const executeStatusState = useExecuteStatus(projectRoot, executeRefreshToken);
+  const mcpSessionsState = useMcpSessions(projectRoot, mcpRefreshToken);
   const outputStatusState = useOutputStatus(projectRoot, outputRefreshToken);
   const stateStatusState = useStateStatus(projectRoot, stateRefreshToken);
   const issueStatusIndexState = useIssueStatusIndex(
@@ -564,9 +574,6 @@ function App() {
         void invoke("prepare_input_workspace", { projectRoot })
           .then(() => {
             setStateRefreshToken((current) => current + 1);
-            return invoke("run_project_loop", { projectRoot });
-          })
-          .then(() => {
             setTaskListRefreshToken((current) => current + 1);
             setInputStatusRefreshToken((current) => current + 1);
             setStateRefreshToken((current) => current + 1);
@@ -667,6 +674,10 @@ function App() {
       }
       setTaskListRefreshToken((current) => current + 1);
       setStateRefreshToken((current) => current + 1);
+      if (payload.buildAgentLaunchSessionsCreated > 0) {
+        setMcpRefreshToken((current) => current + 1);
+        setExecuteRefreshToken((current) => current + 1);
+      }
     }).then((cleanup) => {
       if (cancelled) {
         cleanup();
@@ -699,6 +710,11 @@ function App() {
       setTaskListRefreshToken((current) => current + 1);
       setInputStatusRefreshToken((current) => current + 1);
       setStateRefreshToken((current) => current + 1);
+      if (payload.runtimeLaunchCount > 0) {
+        setMcpRefreshToken((current) => current + 1);
+        setExecuteRefreshToken((current) => current + 1);
+        void invoke("dispatch_workflow_events", { projectRoot }).catch(() => undefined);
+      }
     }).then((cleanup) => {
       if (cancelled) {
         cleanup();
@@ -754,6 +770,7 @@ function App() {
         setInputStatusRefreshToken((current) => current + 1);
         setTaskListRefreshToken((current) => current + 1);
         setExecuteRefreshToken((current) => current + 1);
+        setMcpRefreshToken((current) => current + 1);
         setOutputRefreshToken((current) => current + 1);
         setStateRefreshToken((current) => current + 1);
         void loadProjectFiles(projectRoot);
@@ -883,34 +900,46 @@ function App() {
     }
   }, [selectedTaskId, selectedTaskProjectId, taskProjectTree, tasks]);
 
-  function refreshProjectPage(page: AppPage, root = projectRoot) {
+  function refreshProjectPage(
+    page: AppPage,
+    root = projectRoot,
+    options: { triggerProjectLoop?: boolean } = {},
+  ) {
     if (!root) {
       return;
     }
+    const triggerProjectLoop = options.triggerProjectLoop ?? false;
 
     if (page === "home") {
       void prepareProjectPanel(root);
       setInputStatusRefreshToken((current) => current + 1);
       setTaskListRefreshToken((current) => current + 1);
+      setMcpRefreshToken((current) => current + 1);
       setOutputRefreshToken((current) => current + 1);
       setStateRefreshToken((current) => current + 1);
       return;
     }
 
     if (page === "tasks") {
-      void invoke("run_project_loop", { projectRoot: root })
-        .then(() => {
-          setInputStatusRefreshToken((current) => current + 1);
-          setStateRefreshToken((current) => current + 1);
-          setTaskListRefreshToken((current) => current + 1);
-        })
-        .catch(() => undefined);
-      setTaskListRefreshToken((current) => current + 1);
+      if (triggerProjectLoop) {
+        void invoke("run_project_loop", { projectRoot: root })
+          .then(() => {
+            setInputStatusRefreshToken((current) => current + 1);
+            setStateRefreshToken((current) => current + 1);
+            setTaskListRefreshToken((current) => current + 1);
+            setMcpRefreshToken((current) => current + 1);
+            setExecuteRefreshToken((current) => current + 1);
+          })
+          .catch(() => undefined);
+        setTaskListRefreshToken((current) => current + 1);
+        setMcpRefreshToken((current) => current + 1);
+      }
       return;
     }
 
     if (page === "execute") {
       setExecuteRefreshToken((current) => current + 1);
+      setMcpRefreshToken((current) => current + 1);
       return;
     }
 
@@ -931,6 +960,7 @@ function App() {
       setInputStatusRefreshToken((current) => current + 1);
       setTaskListRefreshToken((current) => current + 1);
       setExecuteRefreshToken((current) => current + 1);
+      setMcpRefreshToken((current) => current + 1);
       setOutputRefreshToken((current) => current + 1);
       setStateRefreshToken((current) => current + 1);
     }
@@ -940,7 +970,7 @@ function App() {
     const shouldRefresh = page !== activePage;
     setProjectRegistry((current) => setProjectPage(current, current.activeProjectRoot, page));
     if (shouldRefresh) {
-      refreshProjectPage(page);
+      refreshProjectPage(page, projectRoot, { triggerProjectLoop: false });
     }
   }
 
@@ -974,7 +1004,7 @@ function App() {
     setProjectRegistry((current) => setProjectPage(current, projectRootToSelect, page));
     setTaskSearch("");
     if (shouldRefresh) {
-      refreshProjectPage(page, projectRootToSelect);
+      refreshProjectPage(page, projectRootToSelect, { triggerProjectLoop: false });
     }
   }
 
@@ -1078,14 +1108,35 @@ function App() {
     if (!projectRoot) {
       return;
     }
-    void loadProjectFiles(projectRoot);
-    void loadAgentManual(projectRoot);
-    void prepareProjectPanel(projectRoot);
-    setInputStatusRefreshToken((current) => current + 1);
-    setTaskListRefreshToken((current) => current + 1);
-    setExecuteRefreshToken((current) => current + 1);
-    setOutputRefreshToken((current) => current + 1);
-    setStateRefreshToken((current) => current + 1);
+    refreshProjectPage(activePage, projectRoot, { triggerProjectLoop: false });
+  }
+
+  async function handleRunProjectLoop() {
+    if (!projectRoot || isBrowserPreviewRuntime()) {
+      return;
+    }
+
+    setProjectLoopState("loading");
+    setProjectLoopFeedback(null);
+    try {
+      const summary = await invoke<ProjectLoopTickedEvent>("run_project_loop", { projectRoot });
+      setProjectLoopState("success");
+      setProjectLoopFeedback(
+        summary.runtimeLaunchCount > 0
+          ? `已触发 Project Loop，拉起 ${summary.runtimeLaunchCount} 条执行。`
+          : summary.activeIssueCount > 0
+            ? `Project Loop 已运行，当前有 ${summary.activeIssueCount} 条进行中任务。`
+            : summary.blockedIssueCount > 0
+              ? `Project Loop 已运行，当前有 ${summary.blockedIssueCount} 条阻断任务。`
+              : "Project Loop 已运行，当前没有可推进任务。",
+      );
+      window.setTimeout(() => setProjectLoopState("enabled"), 1200);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setProjectLoopState("error");
+      setProjectLoopFeedback(`运行失败：${message}`);
+      window.setTimeout(() => setProjectLoopState("enabled"), 1600);
+    }
   }
 
   async function handleTaskAction(action: TaskInteractionAction, task: V1Issue) {
@@ -1220,12 +1271,15 @@ function App() {
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "home" ? (
           <ProjectHomePage
+            onRunProjectLoop={() => void handleRunProjectLoop()}
             nextStep={nextStep}
             onOpenAudit={() => setActivePage("audit")}
             onOpenDelivery={() => setActivePage("delivery")}
             onOpenTasks={() => setActivePage("tasks")}
             outputBundle={outputBundle}
             outputStatusState={outputStatusState}
+            projectLoopFeedback={projectLoopFeedback}
+            projectLoopState={projectLoopState}
             selectedTask={selectedTask}
             initializationState={initializationState}
           />
@@ -1236,6 +1290,7 @@ function App() {
             actions={taskInteractionState.actions}
             agentLocale={agentLocale}
             copyState={taskCopyState}
+            mcpSessionsState={mcpSessionsState}
             onTaskAction={(action, task) => void handleTaskAction(action, task)}
             onSelectProjectGroup={handleSelectTaskProject}
             onSelectTask={handleSelectTask}
@@ -1248,7 +1303,11 @@ function App() {
           />
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "execute" ? (
-          <ExecutePage executeStatusState={executeStatusState} />
+          <ExecutePage
+            executeStatusState={executeStatusState}
+            mcpSessionsState={mcpSessionsState}
+            projectRoot={projectRoot}
+          />
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "files" ? (
           <FilesPage
@@ -2019,19 +2078,25 @@ function ProjectHomePage({
   nextStep,
   onOpenAudit,
   onOpenDelivery,
+  onRunProjectLoop,
   onOpenTasks,
   outputBundle,
   outputStatusState,
   initializationState,
+  projectLoopFeedback,
+  projectLoopState,
   selectedTask,
 }: {
   nextStep: NextStepViewModel;
   onOpenAudit: () => void;
   onOpenDelivery: () => void;
+  onRunProjectLoop: () => void;
   onOpenTasks: () => void;
   outputBundle: OutputBundleState;
   outputStatusState: OutputStatusState;
   initializationState: ProjectInitializationState;
+  projectLoopFeedback: string | null;
+  projectLoopState: ButtonInteractionState;
   selectedTask: V1Issue | null;
 }) {
   const outputSummary = outputStatusState.status?.summary;
@@ -2062,6 +2127,16 @@ function ProjectHomePage({
             </div>
           )}
           {nextStep.description ? <p className="v16-home-next-step">{nextStep.description}</p> : null}
+          <ActionBar>
+            <ActionButton
+              loading={projectLoopState === "loading"}
+              onClick={onRunProjectLoop}
+              variant="secondary"
+            >
+              运行 Project Loop
+            </ActionButton>
+          </ActionBar>
+          {projectLoopFeedback ? <p className="v16-feedback">{projectLoopFeedback}</p> : null}
         </Panel>
 
         <Panel className="v16-home-column" title="最近活动">
@@ -2129,6 +2204,7 @@ function TasksPage({
   actions,
   agentLocale,
   copyState,
+  mcpSessionsState,
   onSelectProjectGroup,
   onTaskAction,
   onSelectTask,
@@ -2143,6 +2219,7 @@ function TasksPage({
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  mcpSessionsState: McpSessionsState;
   onSelectProjectGroup: (projectId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   onSelectTask: (taskId: string) => void;
@@ -2160,6 +2237,7 @@ function TasksPage({
         actions={actions}
         agentLocale={agentLocale}
         copyState={copyState}
+        mcpSessionsState={mcpSessionsState}
         onSelectProjectGroup={onSelectProjectGroup}
         onSelectTask={onSelectTask}
         onTaskAction={onTaskAction}
@@ -2179,6 +2257,7 @@ function TaskList({
   actions,
   agentLocale,
   copyState,
+  mcpSessionsState,
   onSelectProjectGroup,
   onSelectTask,
   onTaskAction,
@@ -2193,6 +2272,7 @@ function TaskList({
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  mcpSessionsState: McpSessionsState;
   onSelectProjectGroup: (projectId: string) => void;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
@@ -2351,6 +2431,7 @@ function TaskList({
         actions={actions}
         agentLocale={agentLocale}
         copyState={copyState}
+        mcpSessionsState={mcpSessionsState}
         onTaskAction={onTaskAction}
         onSelectTask={onSelectTask}
         selectedProjectGroup={selectedProjectGroup}
@@ -2498,6 +2579,7 @@ function TaskDetail({
   actions,
   agentLocale,
   copyState,
+  mcpSessionsState,
   onSelectTask,
   onTaskAction,
   selectedProjectGroup,
@@ -2509,6 +2591,7 @@ function TaskDetail({
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  mcpSessionsState: McpSessionsState;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   selectedProjectGroup: TaskProjectGroup | null;
@@ -2567,6 +2650,7 @@ function TaskDetail({
       actions={actions}
       agentLocale={agentLocale}
       copyState={copyState}
+      mcpSessionsState={mcpSessionsState}
       onTaskAction={onTaskAction}
       task={task}
     />
@@ -2657,6 +2741,7 @@ function TaskDetailReader({
   actions,
   agentLocale,
   copyState,
+  mcpSessionsState,
   onTaskAction,
   task,
 }: {
@@ -2664,12 +2749,17 @@ function TaskDetailReader({
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  mcpSessionsState: McpSessionsState;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   task: V1Issue;
 }) {
   const [handoffOpen, setHandoffOpen] = useState(false);
   const handoffError = useMemo(() => taskHandoffValidationError(task), [task]);
   const statusContract = useMemo(() => buildTaskStatusContract(task), [task]);
+  const session = useMemo(
+    () => pickLatestMcpSessionForIssue(mcpSessionsState.sessions, task.id),
+    [mcpSessionsState.sessions, task.id],
+  );
   const detailDescriptionItems = useMemo(
     () => [
       ...taskAuditDescriptionItems(task),
@@ -2739,6 +2829,7 @@ function TaskDetailReader({
         <SectionList title="验证命令" items={task.validationCommands} />
         {task.issueCategory === "spec" ? <SectionList title="执行流程" items={taskExecutionPipelineItems(task)} /> : null}
         <SectionList title="相关文件" items={task.allowedFiles} />
+        <SectionList title="执行会话" items={taskMcpSessionItems(session, mcpSessionsState)} />
         <SectionList title="输出目标" items={outputItems} />
         <details
           className="v16-task-package"
@@ -2905,13 +2996,113 @@ function DeliveryPage({
   );
 }
 
-function ExecutePage({ executeStatusState }: { executeStatusState: ExecuteStatusState }) {
+function ExecutePage({
+  executeStatusState,
+  mcpSessionsState,
+  projectRoot,
+}: {
+  executeStatusState: ExecuteStatusState;
+  mcpSessionsState: McpSessionsState;
+  projectRoot: string | null;
+}) {
   const status = executeStatusState.status;
   const summary = status?.summary;
-  const runCount = summary?.runs ?? 0;
-  const hasRuns = runCount > 0;
+  const sessions = useMemo(() => sortMcpSessionsByLatest(mcpSessionsState.sessions), [mcpSessionsState.sessions]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [sessionLogState, setSessionLogState] = useState<{
+    content: string;
+    error: string | null;
+    loading: boolean;
+  }>({
+    content: "",
+    error: null,
+    loading: false,
+  });
+
+  useEffect(() => {
+    if (!sessions.length) {
+      setSelectedSessionId(null);
+      return;
+    }
+    if (!selectedSessionId || !sessions.some((session) => session.sessionId === selectedSessionId)) {
+      setSelectedSessionId(sessions[0]?.sessionId ?? null);
+    }
+  }, [selectedSessionId, sessions]);
+
+  const selectedSession = sessions.find((session) => session.sessionId === selectedSessionId) ?? sessions[0] ?? null;
+  const runCount = sessions.length || summary?.runs || 0;
+  const hasRuns = sessions.length > 0;
   const badgeStatus = executeWorkspaceStatusTone(status?.status, executeStatusState.error);
   const badgeLabel = executeWorkspaceStatusLabel(status?.status, executeStatusState.source, executeStatusState.error);
+
+  useEffect(() => {
+    if (!projectRoot || !selectedSession) {
+      setSessionLogState({
+        content: "",
+        error: null,
+        loading: false,
+      });
+      return;
+    }
+    if (mcpSessionsState.source === "preview") {
+      setSessionLogState({
+        content: "Browser Preview mock 会话不写入真实日志。",
+        error: null,
+        loading: false,
+      });
+      return;
+    }
+
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const loadLogs = async () => {
+      try {
+        const chunk = await invoke<McpLogChunk>("load_mcp_session_log_chunk", {
+          projectRoot,
+          sessionId: selectedSession.sessionId,
+          cursor: null,
+        });
+        if (cancelled) {
+          return;
+        }
+        setSessionLogState({
+          content: chunk.lines.join("\n"),
+          error: null,
+          loading: false,
+        });
+        if (mcpSessionNeedsPolling(selectedSession.status)) {
+          timer = window.setTimeout(() => {
+            void loadLogs();
+          }, 1500);
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        setSessionLogState({
+          content: "",
+          error: message,
+          loading: false,
+        });
+      }
+    };
+
+    setSessionLogState({
+      content: "",
+      error: null,
+      loading: true,
+    });
+    void loadLogs();
+
+    return () => {
+      cancelled = true;
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [projectRoot, selectedSession?.sessionId, selectedSession?.status, mcpSessionsState.source]);
 
   return (
     <section className="v16-page v16-split-page" data-agentflow-page="execute">
@@ -2922,53 +3113,83 @@ function ExecutePage({ executeStatusState }: { executeStatusState: ExecuteStatus
         </header>
         {hasRuns ? (
           <div className="v16-list-items">
-            <button className="v16-list-item active" type="button">
-              <span className="v16-list-item-main">
-                <strong>执行概览</strong>
-                <span>{summary?.activeRuns ? `${summary.activeRuns} 个进行中` : `${summary?.completedRuns ?? 0} 个已完成`}</span>
-              </span>
-              <small>{badgeLabel}</small>
-            </button>
+            {sessions.map((session) => (
+              <button
+                className={session.sessionId === selectedSession?.sessionId ? "v16-list-item active" : "v16-list-item"}
+                key={session.sessionId}
+                onClick={() => setSelectedSessionId(session.sessionId)}
+                title={`${session.issueId} ${mcpSessionStatusLabelZh(session.status)}`}
+                type="button"
+              >
+                <span className="v16-list-item-main">
+                  <strong>{session.issueId}</strong>
+                  <span>{mcpProviderLabel(session.provider)}</span>
+                </span>
+                <small>{mcpSessionStatusLabelZh(session.status)}</small>
+                <time>{formatTimestamp(session.updatedAt)}</time>
+              </button>
+            ))}
           </div>
         ) : (
           <div className="v16-list-items">
-            <p className="v16-empty-text v16-list-empty-state">还没有执行。</p>
+            <p className="v16-empty-text v16-list-empty-state">还没有执行会话。</p>
           </div>
         )}
       </aside>
       <section className={hasRuns || status ? "v16-detail-pane" : "v16-detail-pane v16-empty-detail-pane"} aria-label="执行详情">
         <header>
-          <h2>{hasRuns ? "执行状态" : "还没有执行记录"}</h2>
-          <StatusBadge status={badgeStatus}>{badgeLabel}</StatusBadge>
+          <h2>{selectedSession ? `执行会话：${selectedSession.issueId}` : "还没有执行会话"}</h2>
+          <StatusBadge status={selectedSession ? mcpSessionStatusTone(selectedSession.status) : badgeStatus}>
+            {selectedSession ? mcpSessionStatusLabelZh(selectedSession.status) : badgeLabel}
+          </StatusBadge>
         </header>
         <div className="v16-detail-document">
           <SectionList
             title="当前状态"
             items={[
-              `状态：${badgeLabel}`,
-              status?.ready ? "执行工作区已就绪。" : "执行工作区还没有准备好。",
-              executeStatusState.error ? `错误：${executeStatusState.error}` : "没有执行错误。",
+              selectedSession ? `状态：${mcpSessionStatusLabelZh(selectedSession.status)}` : `状态：${badgeLabel}`,
+              selectedSession ? `Provider：${mcpProviderLabel(selectedSession.provider)}` : "还没有会话被拉起。",
+              selectedSession?.lastError ?? executeStatusState.error
+                ? `错误：${selectedSession?.lastError ?? executeStatusState.error}`
+                : "没有执行错误。",
             ]}
           />
           <SectionList
-            title="执行摘要"
+            title="会话信息"
+            items={selectedSession ? executeSessionItems(selectedSession) : ["等待 Project Loop 拉起执行会话。"]}
+          />
+          {selectedSession ? (
+            <CopyableCodeBlock
+              content={
+                sessionLogState.error
+                  ? `读取失败：${sessionLogState.error}`
+                  : sessionLogState.loading && !sessionLogState.content
+                    ? "正在读取执行日志..."
+                    : sessionLogState.content || "当前会话还没有输出日志。"
+              }
+              language="log"
+              maxHeight={260}
+              title="执行日志"
+            />
+          ) : null}
+          <SectionList
+            title="工作区摘要"
             items={[
-              `阻断执行：${summary?.blockedRuns ?? 0}`,
-              `manifest：${status?.manifestExists ? "已生成" : "未生成"}`,
-              `index：${status?.indexExists ? "已生成" : "未生成"}`,
+              `执行会话：${sessions.length}`,
+              `运行中：${summary?.activeRuns ?? sessions.filter((session) => session.status === "running").length}`,
+              `已完成：${summary?.completedRuns ?? sessions.filter((session) => session.status === "done").length}`,
+              `阻断：${summary?.blockedRuns ?? sessions.filter((session) => ["failed", "cancelled"].includes(session.status)).length}`,
             ]}
           />
           <SectionList
             title="提醒"
             items={
-              status?.warnings.length
-                ? status.warnings
-                : ["这里只读展示执行状态。任务执行和写回仍由 Build Agent 按任务流程完成。"]
+              mcpSessionsState.error
+                ? [mcpSessionsState.error]
+                : status?.warnings.length
+                  ? status.warnings
+                  : ["这里只读展示执行会话和执行工作区摘要。真实执行仍由 Build Agent 按任务流程完成。"]
             }
-          />
-          <SectionList
-            title="缺失路径"
-            items={status?.missingPaths.length ? status.missingPaths : ["没有缺失路径。"]}
           />
         </div>
       </section>
@@ -4052,6 +4273,23 @@ function sortAuditsByLatest(audits: AuditIndexEntry[]) {
   );
 }
 
+function sortMcpSessionsByLatest(sessions: McpSessionSnapshot[]) {
+  return [...sessions].sort(
+    (left, right) => right.updatedAt - left.updatedAt || right.sessionId.localeCompare(left.sessionId),
+  );
+}
+
+function mcpSessionNeedsPolling(status?: McpSessionSnapshot["status"] | null) {
+  return status ? ["queued", "claimed", "starting", "running", "in-review"].includes(status) : false;
+}
+
+function pickLatestMcpSessionForIssue(sessions: McpSessionSnapshot[], issueId?: string | null) {
+  if (!issueId) {
+    return null;
+  }
+  return sortMcpSessionsByLatest(sessions).find((session) => session.issueId === issueId) ?? null;
+}
+
 function statusChipForDisplayStatus(status: IssueDisplayStatus = "backlog"): StatusChipStatus {
   const chips: Record<IssueDisplayStatus, StatusChipStatus> = {
     backlog: "idle",
@@ -5090,6 +5328,53 @@ function artifactStatusLabel(status?: string | null) {
   return labels[status.toLowerCase()] ?? status;
 }
 
+function mcpProviderLabel(provider?: string | null) {
+  const labels: Record<string, string> = {
+    codex: "Codex",
+    github: "GitHub",
+    gitlab: "GitLab",
+  };
+  return labels[(provider ?? "").toLowerCase()] ?? (provider || "未记录");
+}
+
+function mcpSessionStatusLabelZh(status?: McpSessionSnapshot["status"] | null) {
+  const labels: Record<McpSessionSnapshot["status"], string> = {
+    claimed: "已接单",
+    cancelled: "已取消",
+    done: "已完成",
+    failed: "失败",
+    "in-review": "正在评审",
+    queued: "等待启动",
+    running: "正在做",
+    starting: "启动中",
+  };
+  return status ? labels[status] ?? status : "未记录";
+}
+
+function mcpSessionStatusTone(status?: McpSessionSnapshot["status"] | null): StatusChipStatus {
+  const tones: Record<McpSessionSnapshot["status"], StatusChipStatus> = {
+    claimed: "ready",
+    cancelled: "blocked",
+    done: "done",
+    failed: "failed",
+    "in-review": "warning",
+    queued: "idle",
+    running: "working",
+    starting: "ready",
+  };
+  return status ? tones[status] ?? "idle" : "idle";
+}
+
+function mcpLaunchModeLabelZh(mode?: McpSessionSnapshot["launchMode"] | null) {
+  const labels: Record<McpSessionSnapshot["launchMode"], string> = {
+    "app-server-thread": "App 服务线程",
+    "cli-exec-prompt-file": "CLI Prompt 文件",
+    "cli-exec-stdin": "CLI 标准输入",
+    "mcp-remote-session": "远程 MCP 会话",
+  };
+  return mode ? labels[mode] ?? mode : "未记录";
+}
+
 function deliveryDisplayId(runId: string) {
   const suffix = runId.match(/(\d+)$/)?.[1];
   return suffix ? `DEL-${suffix.padStart(3, "0").slice(-3)}` : `DEL-${runId.slice(-6)}`;
@@ -5186,6 +5471,41 @@ function executeWorkspaceStatusTone(status: string | undefined, error: string | 
     ready: "ready",
   };
   return tones[status ?? ""] ?? "idle";
+}
+
+function taskMcpSessionItems(session: McpSessionSnapshot | null, mcpSessionsState: McpSessionsState) {
+  if (session) {
+    return [
+      `状态：${mcpSessionStatusLabelZh(session.status)}`,
+      `Run：${session.runId}`,
+      `分支：${session.branchName ?? "未记录"}`,
+      `任务包：${session.launchRequestPath}`,
+      `计划文件：${session.planPath}`,
+      `PR/MR：${session.prUrl ?? "未记录"}`,
+    ];
+  }
+  if (mcpSessionsState.source === "loading") {
+    return ["正在读取执行会话。"];
+  }
+  if (mcpSessionsState.error) {
+    return [`读取失败：${mcpSessionsState.error}`];
+  }
+  return ["还没有执行会话。"];
+}
+
+function executeSessionItems(session: McpSessionSnapshot) {
+  return [
+    `会话 ID：${session.sessionId}`,
+    `任务：${session.issueId}`,
+    `Run：${session.runId}`,
+    `启动模式：${mcpLaunchModeLabelZh(session.launchMode)}`,
+    `分支：${session.branchName ?? "未记录"}`,
+    `任务包：${session.launchRequestPath}`,
+    `计划文件：${session.planPath}`,
+    `日志：${session.logPath ?? "未记录"}`,
+    `PR/MR：${session.prUrl ?? "未记录"}`,
+    `合并状态：${session.mergeState ?? "未记录"}`,
+  ];
 }
 
 function workflowStageText(stage?: string | null) {

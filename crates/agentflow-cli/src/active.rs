@@ -15,8 +15,11 @@ use agentflow_loop::{
     ProjectExecutionLaunch, ProjectExecutor, ProjectLoop,
 };
 use agentflow_workflow_events::{
-    load_pending_events, mark_event_consumed, BuildAgentLaunchRequestedPayload,
-    CONSUMER_BUILD_AGENT, EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED,
+    append_event_once, load_pending_events, mark_event_consumed, BuildAgentLaunchRequestedPayload,
+    BuildAgentMergeConfirmedPayload, BuildAgentSessionReviewReadyPayload,
+    BuildAgentWritebackCompletedPayload, WorkflowEventDraft, CONSUMER_BUILD_AGENT,
+    EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED, EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED,
+    EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY, EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED,
 };
 use anyhow::{Context, Result};
 use std::{
@@ -87,6 +90,7 @@ pub(crate) fn complete_build_agent_issue_from_request(
         .map(|project_id| ProjectExecutor::new(project_id).tick(root))
         .transpose()?
         .and_then(|tick| tick.launch);
+    append_build_agent_writeback_completed_event(root, &completion, next_launch.as_ref())?;
     agentflow_state::refresh_state(root)?;
     Ok(BuildAgentCompletionOutcome {
         completion,
@@ -109,6 +113,7 @@ pub(crate) fn prepare_build_agent_review_from_request(
     })?;
     let prepared = agentflow_execute::prepare_build_agent_review(root, request)?;
     mark_build_agent_launch_in_review(root, &prepared.run.run_id)?;
+    append_build_agent_review_ready_event(root, &prepared)?;
     agentflow_state::refresh_state(root)?;
     Ok(prepared)
 }
@@ -211,6 +216,16 @@ pub(crate) fn write_build_agent_merge_proof(
         remote_url,
         merged,
     )?;
+    if merged {
+        append_build_agent_merge_confirmed_event(
+            root,
+            &issue,
+            run_id,
+            provider,
+            merge_mode,
+            proof_path.as_path(),
+        )?;
+    }
     agentflow_state::refresh_state(root)?;
     Ok(BuildAgentMergeProof {
         issue_id: issue.issue_id,
@@ -235,6 +250,104 @@ fn assert_build_agent_contract(issue: &InputIssue) -> Result<()> {
             issue.required_agent_role.as_str()
         );
     }
+    Ok(())
+}
+
+fn append_build_agent_review_ready_event(
+    root: &Path,
+    completion: &BuildAgentCompletion,
+) -> Result<()> {
+    let run = &completion.run;
+    append_event_once(
+        root,
+        WorkflowEventDraft {
+            event_type: EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY.to_string(),
+            source: "agentflow-cli".to_string(),
+            subject_id: run.issue_id.clone(),
+            subject_path: Some(format!(".agentflow/input/issues/{}.json", run.issue_id)),
+            dedupe_key: format!("build-agent.session.review-ready:{}", run.run_id),
+            payload: serde_json::to_value(BuildAgentSessionReviewReadyPayload {
+                issue_id: run.issue_id.clone(),
+                project_id: run.project_id.clone(),
+                run_id: run.run_id.clone(),
+                provider: "codex".to_string(),
+                delivery_path: Some(format!(
+                    ".agentflow/output/release/{}/delivery.json",
+                    run.run_id
+                )),
+            })?,
+        },
+    )?;
+    Ok(())
+}
+
+fn append_build_agent_merge_confirmed_event(
+    root: &Path,
+    issue: &InputIssue,
+    run_id: &str,
+    provider: &str,
+    merge_mode: &str,
+    proof_path: &Path,
+) -> Result<()> {
+    let payload = serde_json::to_value(BuildAgentMergeConfirmedPayload {
+        issue_id: issue.issue_id.clone(),
+        project_id: issue.project_id.clone(),
+        run_id: run_id.to_string(),
+        provider: provider.to_string(),
+        merge_mode: merge_mode.to_string(),
+        remote_url: serde_json::from_str::<serde_json::Value>(&fs::read_to_string(proof_path)?)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("remoteUrl")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            }),
+        merged: true,
+    })?;
+    append_event_once(
+        root,
+        WorkflowEventDraft {
+            event_type: EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED.to_string(),
+            source: "agentflow-cli".to_string(),
+            subject_id: issue.issue_id.clone(),
+            subject_path: Some(format!(
+                ".agentflow/execute/runs/{run_id}/review/merge-proof.json"
+            )),
+            dedupe_key: format!("build-agent.merge.confirmed:{run_id}"),
+            payload,
+        },
+    )?;
+    Ok(())
+}
+
+fn append_build_agent_writeback_completed_event(
+    root: &Path,
+    completion: &BuildAgentCompletion,
+    next_launch: Option<&ProjectExecutionLaunch>,
+) -> Result<()> {
+    let run = &completion.run;
+    append_event_once(
+        root,
+        WorkflowEventDraft {
+            event_type: EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED.to_string(),
+            source: "agentflow-cli".to_string(),
+            subject_id: run.issue_id.clone(),
+            subject_path: Some(format!(".agentflow/input/issues/{}.json", run.issue_id)),
+            dedupe_key: format!("build-agent.writeback.completed:{}", run.run_id),
+            payload: serde_json::to_value(BuildAgentWritebackCompletedPayload {
+                issue_id: run.issue_id.clone(),
+                project_id: run.project_id.clone(),
+                run_id: run.run_id.clone(),
+                provider: "codex".to_string(),
+                delivery_path: Some(format!(
+                    ".agentflow/output/release/{}/delivery.json",
+                    run.run_id
+                )),
+                next_issue_id: next_launch.map(|launch| launch.issue_id.clone()),
+            })?,
+        },
+    )?;
     Ok(())
 }
 
@@ -368,8 +481,10 @@ mod tests {
     };
     use agentflow_loop::ProjectExecutor;
     use agentflow_workflow_events::{
-        append_event_once, load_pending_events, BuildAgentLaunchRequestedPayload,
+        append_event_once, load_events, load_pending_events, BuildAgentLaunchRequestedPayload,
         WorkflowEventDraft, CONSUMER_BUILD_AGENT, EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED,
+        EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED, EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY,
+        EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED,
     };
     use std::{
         fs,
@@ -523,6 +638,10 @@ mod tests {
         assert_eq!(prepared.run.issue_id, "AF-001");
         let in_review_state = load_build_agent_launch_state(dir.path(), &launch.run_id).unwrap();
         assert_eq!(in_review_state.status, BuildAgentLaunchStatus::InReview);
+        let review_events = load_events(dir.path()).unwrap();
+        assert!(review_events.iter().any(|event| event.event_type
+            == EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY
+            && event.subject_id == "AF-001"));
 
         commit_and_merge_issue_branch(
             dir.path(),
@@ -540,11 +659,19 @@ mod tests {
             true,
         )
         .unwrap();
+        let merge_events = load_events(dir.path()).unwrap();
+        assert!(merge_events.iter().any(|event| event.event_type
+            == EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED
+            && event.subject_id == "AF-001"));
 
         let outcome = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap();
         assert_eq!(outcome.completion.run.issue_id, "AF-001");
         let done_state = load_build_agent_launch_state(dir.path(), &launch.run_id).unwrap();
         assert_eq!(done_state.status, BuildAgentLaunchStatus::Done);
+        let completion_events = load_events(dir.path()).unwrap();
+        assert!(completion_events.iter().any(|event| event.event_type
+            == EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED
+            && event.subject_id == "AF-001"));
 
         let next_launch = outcome.next_launch.expect("next issue launch");
         assert_eq!(next_launch.issue_id, "AF-002");

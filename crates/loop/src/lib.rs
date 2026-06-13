@@ -323,8 +323,8 @@ mod tests {
     }
 
     #[test]
-    fn project_scheduler_does_not_rewrite_waiting_backlog_issue_or_active_project_when_status_unchanged()
-    {
+    fn project_scheduler_does_not_rewrite_waiting_backlog_issue_or_active_project_when_status_unchanged(
+    ) {
         let dir = tempdir().unwrap();
         prepare_root(dir.path());
         write_approved_spec(dir.path());
@@ -347,9 +347,15 @@ mod tests {
         let project_after = agentflow_input::load_input_project(dir.path(), "proj-001").unwrap();
 
         assert_eq!(waiting_after.status, InputIssueStatus::Backlog);
-        assert_eq!(waiting_after.system.revision, waiting_before.system.revision);
+        assert_eq!(
+            waiting_after.system.revision,
+            waiting_before.system.revision
+        );
         assert_eq!(project_after.status, InputProjectStatus::Active);
-        assert_eq!(project_after.system.revision, project_before.system.revision);
+        assert_eq!(
+            project_after.system.revision,
+            project_before.system.revision
+        );
     }
 
     #[test]
