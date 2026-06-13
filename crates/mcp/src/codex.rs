@@ -32,6 +32,9 @@ const CLI_FRESHNESS_PATHS: [&str; 9] = [
 ];
 
 const CODEX_PROGRAM: &str = "codex";
+const DEFAULT_CODEX_MODEL: &str = "gpt-5.5";
+const AGENTFLOW_CODEX_MODEL_ENV: &str = "AGENTFLOW_CODEX_MODEL";
+const CODEX_MODEL_ENV: &str = "CODEX_MODEL";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CodexProvider {
@@ -47,7 +50,7 @@ impl Default for CodexProvider {
             program: CODEX_PROGRAM.to_string(),
             sandbox: "workspace-write".to_string(),
             approval_policy: "never".to_string(),
-            model: None,
+            model: Some(detect_codex_model()),
         }
     }
 }
@@ -68,6 +71,55 @@ impl CodexProvider {
     fn session_last_message_path(&self, session_id: &str) -> String {
         format!(".agentflow/state/mcp/sessions/{session_id}-last-message.txt")
     }
+}
+
+fn detect_codex_model() -> String {
+    env_model_override()
+        .or_else(configured_codex_model)
+        .unwrap_or_else(|| DEFAULT_CODEX_MODEL.to_string())
+}
+
+fn env_model_override() -> Option<String> {
+    [AGENTFLOW_CODEX_MODEL_ENV, CODEX_MODEL_ENV]
+        .into_iter()
+        .find_map(|name| std::env::var(name).ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn configured_codex_model() -> Option<String> {
+    let home = std::env::var_os("HOME")?;
+    let path = Path::new(&home).join(".codex/config.toml");
+    configured_codex_model_from_path(&path)
+}
+
+fn configured_codex_model_from_path(path: &Path) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    configured_codex_model_from_content(&content)
+}
+
+fn configured_codex_model_from_content(content: &str) -> Option<String> {
+    for raw_line in content.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with('[') {
+            continue;
+        }
+        let (key, value) = line.split_once('=')?;
+        if key.trim() != "model" {
+            continue;
+        }
+        let value = value.trim();
+        if let Some(stripped) = value
+            .strip_prefix('"')
+            .and_then(|value| value.strip_suffix('"'))
+        {
+            let model = stripped.trim();
+            if !model.is_empty() {
+                return Some(model.to_string());
+            }
+        }
+    }
+    None
 }
 
 pub fn check_codex_provider(project_root: impl AsRef<Path>) -> McpProviderStatus {
@@ -602,7 +654,10 @@ fn sanitize_id(id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{agentflow_cli_candidates, is_local_target_binary, CodexProvider};
+    use super::{
+        agentflow_cli_candidates, configured_codex_model_from_content, is_local_target_binary,
+        CodexProvider, DEFAULT_CODEX_MODEL,
+    };
     use crate::{model::McpLaunchRequest, provider::McpAgentProvider};
     use std::path::Path;
 
@@ -649,6 +704,8 @@ mod tests {
         assert!(plan.args.iter().any(|arg| arg == "--ignore-rules"));
         assert!(plan.args.iter().any(|arg| arg == "--json"));
         assert!(plan.args.iter().any(|arg| arg == "--output-last-message"));
+        assert!(plan.args.iter().any(|arg| arg == "--model"));
+        assert!(plan.args.iter().any(|arg| arg == DEFAULT_CODEX_MODEL));
         assert_eq!(
             plan.stdin_path.as_deref(),
             Some(".agentflow/execute/runs/run-001/launcher/build-agent-request.json")
@@ -657,6 +714,29 @@ mod tests {
             plan.output_path.as_deref(),
             Some(".agentflow/state/mcp/sessions/codex-run-001.jsonl")
         );
+    }
+
+    #[test]
+    fn parses_model_from_codex_config_content() {
+        let content = r#"
+model = "gpt-5.5"
+approval_policy = "never"
+"#;
+        assert_eq!(
+            configured_codex_model_from_content(content).as_deref(),
+            Some("gpt-5.5")
+        );
+    }
+
+    #[test]
+    fn ignores_non_top_level_model_content() {
+        let content = r#"
+[projects."/repo"]
+trust_level = "trusted"
+
+# model = "comment-only"
+"#;
+        assert_eq!(configured_codex_model_from_content(content), None);
     }
 
     #[test]
