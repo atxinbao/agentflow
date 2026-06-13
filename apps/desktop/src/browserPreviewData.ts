@@ -34,9 +34,12 @@ import {
 export const BROWSER_PREVIEW_PROJECT_ROOT = "/Users/mac/Documents/AgentFlow";
 
 const previewTimestamp = 1780291200;
-const previewIssueId = "iss-001";
+const previewDoneIssueId = "iss-done";
 const previewAuditId = "audit-browser-preview-001";
-const previewDeliveryRunId = "run-browser-preview-001";
+const previewProgressRunId = "run-browser-preview-001";
+const previewReviewRunId = "run-browser-preview-002";
+const previewDoneRunId = "run-browser-preview-003";
+const previewDeliveryRunId = previewDoneRunId;
 const previewProjectId = "project-browser-preview";
 const previewSpecId = "spec-browser-preview";
 const previewProjectIssueIds = ["iss-ready", "iss-progress", "iss-review", "iss-audit-ready", "iss-done", "iss-cancel"];
@@ -544,7 +547,7 @@ export function createBrowserPreviewIssueStatusIndex(
       displayStatus: issue.displayStatus,
       priority: issue.priority,
       executionRisk: issue.executionRisk,
-      latestRunId: issue.displayStatus === "in_progress" || issue.displayStatus === "in_review" || issue.displayStatus === "done" ? previewDeliveryRunId : null,
+      latestRunId: previewRunIdForIssue(issue),
       executeStatus:
         issue.displayStatus === "in_progress"
           ? "running"
@@ -552,10 +555,28 @@ export function createBrowserPreviewIssueStatusIndex(
             ? "completed"
             : null,
       evidenceStatus: issue.displayStatus === "in_review" || issue.displayStatus === "done" ? "complete" : "missing",
-      deliveryStatus: issue.displayStatus === "in_review" || issue.displayStatus === "done" ? "drafted" : "missing",
+      deliveryStatus:
+        issue.displayStatus === "done"
+          ? "delivered"
+          : issue.displayStatus === "in_review"
+            ? "drafted"
+            : "missing",
       auditStatus: issue.displayStatus === "done" ? "passed" : issue.displayStatus === "in_review" ? "failed" : "not-requested",
     })),
   };
+}
+
+function previewRunIdForIssue(issue: InputIssue) {
+  if (issue.displayStatus === "in_progress") {
+    return previewProgressRunId;
+  }
+  if (issue.displayStatus === "in_review") {
+    return previewReviewRunId;
+  }
+  if (issue.displayStatus === "done") {
+    return previewDoneRunId;
+  }
+  return null;
 }
 
 export function createBrowserPreviewExecuteStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): ExecuteStatusSnapshot {
@@ -601,7 +622,7 @@ export function createBrowserPreviewMcpSessions(
   return issues
     .filter((issue) => ["in_progress", "in_review", "done"].includes(issue.displayStatus))
     .map((issue, index) => {
-      const runId = issue.displayStatus === "done" ? "run-browser-preview-003" : issue.displayStatus === "in_review" ? "run-browser-preview-002" : "run-browser-preview-001";
+      const runId = previewRunIdForIssue(issue) ?? previewProgressRunId;
       const sessionId = `codex-${runId}`;
       const status =
         issue.displayStatus === "done"
@@ -647,8 +668,8 @@ export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_P
     manifestExists: true,
     indexExists: true,
     summary: {
-      evidence: 1,
-      releaseDeliveries: 1,
+      evidence: 2,
+      releaseDeliveries: 2,
       audits: 1,
       logs: 0,
       backups: 0,
@@ -662,11 +683,18 @@ export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_P
 }
 
 export function createBrowserPreviewOutputIndex(): OutputIndex {
-  const releaseDelivery = browserPreviewOutputEntry(
-    previewDeliveryRunId,
-    previewIssueId,
+  const reviewDelivery = browserPreviewOutputEntry(
+    previewReviewRunId,
+    "iss-review",
     previewSpecId,
-    ".agentflow/output/release/run-browser-preview-001/delivery.json",
+    `.agentflow/output/release/${previewReviewRunId}/delivery.json`,
+    "drafted",
+  );
+  const doneDelivery = browserPreviewOutputEntry(
+    previewDoneRunId,
+    previewDoneIssueId,
+    previewSpecId,
+    `.agentflow/output/release/${previewDoneRunId}/delivery.json`,
     "delivered",
   );
   return {
@@ -674,18 +702,25 @@ export function createBrowserPreviewOutputIndex(): OutputIndex {
     updatedAt: previewTimestamp,
     evidence: [
       browserPreviewOutputEntry(
-        previewDeliveryRunId,
-        previewIssueId,
+        previewReviewRunId,
+        "iss-review",
         previewSpecId,
-        ".agentflow/output/evidence/run-browser-preview-001.json",
+        `.agentflow/output/evidence/${previewReviewRunId}.json`,
+        "complete",
+      ),
+      browserPreviewOutputEntry(
+        previewDoneRunId,
+        previewDoneIssueId,
+        previewSpecId,
+        `.agentflow/output/evidence/${previewDoneRunId}.json`,
         "complete",
       ),
     ],
-    releaseDeliveries: [releaseDelivery],
+    releaseDeliveries: [reviewDelivery, doneDelivery],
     audits: [
       browserPreviewOutputEntry(
-        previewDeliveryRunId,
-        previewIssueId,
+        previewDoneRunId,
+        previewDoneIssueId,
         previewSpecId,
         ".agentflow/output/audit/audit-browser-preview-001/audit-report.md",
         "passed-with-warnings",
@@ -707,7 +742,7 @@ export function createBrowserPreviewAuditIndex(): AuditIndex {
         requestedAt: previewTimestamp,
         sourceDeliveryId: previewDeliveryRunId,
         sourceRunId: previewDeliveryRunId,
-        sourceIssueId: previewIssueId,
+        sourceIssueId: previewDoneIssueId,
         sourceSpecId: previewSpecId,
         reportPath: ".agentflow/output/audit/audit-browser-preview-001/audit-report.md",
         auditPath: ".agentflow/output/audit/audit-browser-preview-001/audit.json",
@@ -725,7 +760,7 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
         kind: "release-delivery",
         deliveryId: previewDeliveryRunId,
         runId: previewDeliveryRunId,
-        issueId: previewIssueId,
+        issueId: previewDoneIssueId,
         specId: previewSpecId,
       },
       scope: {
@@ -738,8 +773,8 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
           },
           {
             kind: "issue",
-            id: previewIssueId,
-            path: `.agentflow/input/issues/${previewIssueId}.json`,
+            id: previewDoneIssueId,
+            path: `.agentflow/input/issues/${previewDoneIssueId}.json`,
           },
           {
             kind: "execute-run",
@@ -767,7 +802,7 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
       requestedAt: previewTimestamp,
       sourceDeliveryId: previewDeliveryRunId,
       sourceRunId: previewDeliveryRunId,
-      sourceIssueId: previewIssueId,
+      sourceIssueId: previewDoneIssueId,
       summary: {
         findings: 1,
         warnings: 1,
@@ -798,12 +833,12 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
       "- [x] Request Human Audit 在浏览器预览中禁用\n" +
       "- [x] audit-report.md 可只读展示\n",
     evidenceMap: {
-      evidence: [".agentflow/output/evidence/run-browser-preview-001.json"],
-      releaseDelivery: [".agentflow/output/release/run-browser-preview-001/delivery.json"],
+      evidence: [`.agentflow/output/evidence/${previewDeliveryRunId}.json`],
+      releaseDelivery: [`.agentflow/output/release/${previewDeliveryRunId}/delivery.json`],
     },
     traceability: {
       sourceSpecId: previewSpecId,
-      issueId: previewIssueId,
+      issueId: previewDoneIssueId,
       runId: previewDeliveryRunId,
       auditId: previewAuditId,
     },
