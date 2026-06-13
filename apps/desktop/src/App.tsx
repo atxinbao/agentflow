@@ -91,6 +91,7 @@ import {
   taskActionLabel,
   type AppInteractionState,
   type ButtonInteractionState,
+  type TaskDeliveryProjection,
   type TaskInteractionAction,
   type TaskIssueNode,
   type TaskProjectGroup,
@@ -2974,10 +2975,10 @@ function TaskDetailReader({
   }, [agentLocale, handoffError, handoffOpen, task]);
 
   return (
-    <aside className="v16-detail-pane" aria-label="任务合约">
+    <aside className="v16-detail-pane" aria-label="任务工作流">
       <header>
-        <h2>{task.id}</h2>
-        <p>{task.title}</p>
+        <h2>{task.title}</h2>
+        <p>{task.id} · {task.goal || task.title}</p>
         <div className="v16-detail-meta-strip">
           <span className="v16-detail-meta-item">
             <span className="v16-detail-meta-label">类型：</span>
@@ -3009,33 +3010,46 @@ function TaskDetailReader({
       </header>
       <div className="v16-detail-document">
         {detailDescriptionItems.length ? <DescriptionList items={detailDescriptionItems} /> : null}
+        <TaskWorkflowSummary task={task} contract={statusContract} deliveryProjection={deliveryProjection} />
         <IssueStatusFlow contract={statusContract} status={task.displayStatus ?? "backlog"} />
-        <SectionList title="当前阶段输出" items={stageOutputItems} />
-        <SectionList title="执行摘要" items={executeSummaryItems} />
-        <SectionList title="交付摘要" items={deliveryProjection.summaryItems} />
-        <SectionList title="交付空态" items={deliveryProjection.missingItems.length ? deliveryProjection.missingItems : ["交付摘要没有缺失项。"]} />
-        <SectionList title="评审信息" items={deliveryReviewItems(task, deliveryArtifacts, session)} />
-        <SectionList title="Release note" items={deliveryReleaseNoteItems(task, deliveryArtifacts)} />
-        <SectionList title="最终交付" items={deliveryProjection.packageItems} />
-        <SectionList
-          title="状态说明"
-          items={[
-            statusContract.businessMeaning,
-            `责任角色：${statusContract.ownerRoleLabel}`,
-            `下一步入口：${statusContract.nextEntry}`,
-          ]}
+        <TaskStageOutputPanel
+          executeItems={executeSummaryItems}
+          reviewItems={deliveryReviewItems(task, deliveryArtifacts, session)}
+          stageItems={stageOutputItems}
         />
-        <SectionList title="阶段动作" items={[statusContract.stageAction]} />
-        <SectionList title="阶段产物" items={statusContract.stageOutputs} />
-        <SectionList title="界面摘要" items={statusContract.uiSummary} />
-        <SectionList title="目标" items={[task.goal || task.title]} />
-        <SectionList title="范围" items={task.scope} />
-        <SectionList title="非目标" items={task.nonGoals} />
-        <SectionList title="预期产物" items={outputSummaryItems} />
-        <SectionList title="验收标准" items={task.acceptanceCriteria} />
-        <SectionList title="证据要求" items={task.evidenceRequired} />
-        <SectionList title="验证命令" items={task.validationCommands} />
-        {task.issueCategory === "spec" ? <SectionList title="执行流程" items={taskExecutionPipelineItems(task)} /> : null}
+        <TaskArtifactFlow
+          deliveryItems={deliveryProjection.summaryItems}
+          missingItems={deliveryProjection.missingItems}
+          outputItems={outputSummaryItems}
+          releaseNoteItems={deliveryReleaseNoteItems(task, deliveryArtifacts)}
+        />
+        <TaskFinalDeliveryCard artifact={deliveryArtifacts} deliveryProjection={deliveryProjection} task={task} />
+        <details className="v16-task-package">
+          <summary>任务说明与边界</summary>
+          <SectionList
+            title="状态说明"
+            items={[
+              statusContract.businessMeaning,
+              `责任角色：${statusContract.ownerRoleLabel}`,
+              `下一步入口：${statusContract.nextEntry}`,
+            ]}
+          />
+          <SectionList title="阶段动作" items={[statusContract.stageAction]} />
+          <SectionList title="阶段产物" items={statusContract.stageOutputs} />
+          <SectionList title="界面摘要" items={statusContract.uiSummary} />
+          <SectionList title="目标" items={[task.goal || task.title]} />
+          <SectionList title="范围" items={task.scope} />
+          <SectionList title="非目标" items={task.nonGoals} />
+          <SectionList title="验收标准" items={task.acceptanceCriteria} />
+          <SectionList title="验证命令" items={task.validationCommands} />
+          {task.issueCategory === "spec" ? <SectionList title="执行流程" items={taskExecutionPipelineItems(task)} /> : null}
+        </details>
+        <details className="v16-task-package">
+          <summary>路径和产物明细</summary>
+          <SectionList title="预期产物路径" items={taskOutputItems(task)} />
+          <SectionList title="最终交付明细" items={deliveryProjection.packageItems} />
+          <SectionList title="证据要求" items={task.evidenceRequired} />
+        </details>
         <details
           className="v16-task-package"
           onToggle={(event) => setHandoffOpen((event.currentTarget as HTMLDetailsElement).open)}
@@ -3067,6 +3081,147 @@ function TaskDetailReader({
         </ActionBar>
       ) : null}
     </aside>
+  );
+}
+
+function TaskWorkflowSummary({
+  contract,
+  deliveryProjection,
+  task,
+}: {
+  contract: ReturnType<typeof buildTaskStatusContract>;
+  deliveryProjection: TaskDeliveryProjection;
+  task: V1Issue;
+}) {
+  const deliveryReady =
+    task.displayStatus === "done" && deliveryProjection.deliveryRunId && !deliveryProjection.missingItems.length;
+  const cards = [
+    {
+      label: "当前阶段",
+      value: contract.label,
+      detail: contract.stageAction,
+    },
+    {
+      label: "责任角色",
+      value: contract.ownerRoleLabel,
+      detail: agentRoleLabelZh(task.requiredAgentRole),
+    },
+    {
+      label: "执行 Run",
+      value: task.latestRunId ?? "未记录",
+      detail: executeProgressLabel(task.executeStatus),
+    },
+    {
+      label: "最终交付",
+      value: deliveryReady ? "已就绪" : task.displayStatus === "done" ? "需补齐" : "未到阶段",
+      detail: deliveryReady
+        ? `交付包 ${deliveryProjection.deliveryRunId}`
+        : task.displayStatus === "done"
+          ? "done 状态需要交付包和证据。"
+          : "完成后显示交付包摘要。",
+    },
+  ];
+
+  return (
+    <section className="v16-task-workflow-summary" aria-label="任务工作流摘要">
+      {cards.map((card) => (
+        <article key={card.label}>
+          <span>{card.label}</span>
+          <strong>{card.value}</strong>
+          <small>{card.detail}</small>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function TaskStageOutputPanel({
+  executeItems,
+  reviewItems,
+  stageItems,
+}: {
+  executeItems: string[];
+  reviewItems: string[];
+  stageItems: string[];
+}) {
+  return (
+    <section className="v16-task-stage-panel" aria-label="当前阶段输出">
+      <div className="v16-task-stage-panel-header">
+        <span>当前阶段输出</span>
+        <strong>{stageItems[0] ?? "暂无阶段输出"}</strong>
+      </div>
+      <div className="v16-task-stage-grid">
+        <SectionList title="阶段结果" items={stageItems} />
+        <SectionList title="执行摘要" items={executeItems} />
+        <SectionList title="评审信息" items={reviewItems} />
+      </div>
+    </section>
+  );
+}
+
+function TaskArtifactFlow({
+  deliveryItems,
+  missingItems,
+  outputItems,
+  releaseNoteItems,
+}: {
+  deliveryItems: string[];
+  missingItems: string[];
+  outputItems: string[];
+  releaseNoteItems: string[];
+}) {
+  return (
+    <section className="v16-task-artifact-flow" aria-label="完整产物流">
+      <div className="v16-task-artifact-flow-header">
+        <span>完整产物流</span>
+        <strong>{missingItems.length ? `${missingItems.length} 项待补齐` : "摘要完整"}</strong>
+      </div>
+      <div className="v16-task-artifact-columns">
+        <SectionList title="预期产物" items={outputItems} />
+        <SectionList title="交付摘要" items={deliveryItems} />
+        <SectionList title="交付说明" items={releaseNoteItems} />
+      </div>
+      {missingItems.length ? <SectionList title="待补齐" items={missingItems} /> : null}
+    </section>
+  );
+}
+
+function TaskFinalDeliveryCard({
+  artifact,
+  deliveryProjection,
+  task,
+}: {
+  artifact: DeliveryArtifactState | null;
+  deliveryProjection: TaskDeliveryProjection;
+  task: V1Issue;
+}) {
+  const isDone = task.displayStatus === "done";
+  const statusLabel = isDone
+    ? deliveryProjection.missingItems.length
+      ? "交付待补齐"
+      : "最终交付已就绪"
+    : "等待任务完成";
+  const releaseSummary = artifact?.releaseNote?.summaryLines.length
+    ? artifact.releaseNote.summaryLines.slice(0, 3)
+    : deliveryProjection.deliveryRunId
+      ? ["交付包已登记，release note 摘要未读取到。"]
+      : ["任务完成后显示交付包摘要。"];
+
+  return (
+    <section className={isDone ? "v16-final-delivery-card done" : "v16-final-delivery-card"} aria-label="最终交付卡">
+      <div>
+        <span>最终交付</span>
+        <strong>{deliveryProjection.deliveryRunId ?? "未生成"}</strong>
+        <small>{statusLabel}</small>
+      </div>
+      <ul>
+        {releaseSummary.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+        <li>{deliveryProjection.missingItems.length ? `待补齐：${deliveryProjection.missingItems.length} 项` : "交付包摘要已匹配当前任务状态。"}</li>
+        <li>审计保持独立入口，不并入任务主链路。</li>
+      </ul>
+    </section>
   );
 }
 
@@ -3407,7 +3562,7 @@ function ExecutePage({
             title="当前状态"
             items={[
               selectedSession ? `状态：${mcpSessionStatusLabelZh(selectedSession.status)}` : `状态：${badgeLabel}`,
-              selectedSession ? `Provider：${mcpProviderLabel(selectedSession.provider)}` : "还没有会话被拉起。",
+              selectedSession ? `平台：${mcpProviderLabel(selectedSession.provider)}` : "还没有会话被拉起。",
               selectedSession?.lastError ?? executeStatusState.error
                 ? `错误：${selectedSession?.lastError ?? executeStatusState.error}`
                 : "没有执行错误。",
@@ -3566,7 +3721,7 @@ function DeliveryDetail({
           items={deliveryProjection ? (deliveryProjection.missingItems.length ? deliveryProjection.missingItems : ["交付摘要没有缺失项。"]) : ["未绑定任务，无法判断任务状态所需交付项。"]}
         />
         <SectionList title="评审信息" items={deliveryReviewItems(selectedTask, deliveryArtifacts, session)} />
-        <SectionList title="Release note" items={deliveryReleaseNoteItems(selectedTask, deliveryArtifacts)} />
+        <SectionList title="交付说明" items={deliveryReleaseNoteItems(selectedTask, deliveryArtifacts)} />
         <SectionList
           title="最终交付"
           items={deliveryProjection?.packageItems ?? (delivery ? [`交付包：${deliveryDisplayId(delivery.runId)}`, `关联任务：${delivery.issueId || "未记录"}`] : ["还没有交付包。"])}
@@ -4903,7 +5058,7 @@ function taskExecuteSummaryItems(
 
   if (session) {
     items.push(`外部会话：${mcpSessionStatusLabelZh(session.status)}`);
-    items.push(`Provider：${mcpProviderLabel(session.provider)}`);
+    items.push(`平台：${mcpProviderLabel(session.provider)}`);
     if (session.branchName) {
       items.push(`工作分支：${session.branchName}`);
     }
@@ -4954,7 +5109,7 @@ function deliveryReviewItems(
 
   if (!mergeProof && !prMetadata && !session) {
     return task.displayStatus === "in_review" || task.displayStatus === "done"
-      ? ["评审信息缺失：当前状态应该已经创建评审记录，但还没有读取到 PR/MR metadata 或 merge proof。"]
+      ? ["评审信息缺失：当前状态应该已经创建评审记录，但还没有读取到评审元数据或 merge proof。"]
       : ["当前阶段还没有评审信息。"];
   }
 
@@ -4971,7 +5126,7 @@ function deliveryReviewItems(
   return [
     reviewState,
     reviewUrl ? `评审链接：${reviewUrl}` : "评审链接：未记录",
-    provider ? `Provider：${mcpProviderLabel(provider)}` : "Provider：未记录",
+    provider ? `平台：${mcpProviderLabel(provider)}` : "平台：未记录",
     mergeMode ? `合并模式：${mergeMode}` : "合并模式：未记录",
     branchName ? `工作分支：${branchName}` : "工作分支：未记录",
   ];
