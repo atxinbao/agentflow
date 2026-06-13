@@ -107,6 +107,12 @@ export type TaskExecutionProjectionInput = {
   mcpSessionsSource?: string | null;
 };
 
+export type TaskWorkflowYamlModel = {
+  content: string;
+  fileName: string;
+  summary: string;
+};
+
 export type AuditInteractionState = {
   empty: boolean;
   selectedAudit: AuditIndexEntry | null;
@@ -1090,6 +1096,83 @@ export function buildTaskDeliveryProjection({
   };
 }
 
+export function buildTaskWorkflowYamlModel({
+  contract,
+  deliveryProjection,
+  executionProjection,
+  task,
+}: {
+  contract: TaskStatusContract;
+  deliveryProjection: TaskDeliveryProjection;
+  executionProjection: TaskExecutionProjection;
+  task: V1Issue;
+}): TaskWorkflowYamlModel {
+  const status = task.displayStatus ?? "backlog";
+  const resultFinalState = taskWorkflowResultFinalState(status, deliveryProjection);
+  const lines = [
+    "task:",
+    `  id: ${yamlScalar(task.id)}`,
+    `  title: ${yamlScalar(task.title)}`,
+    `  status: ${yamlScalar(status)}`,
+    `  statusLabel: ${yamlScalar(displayStatusLabelZh(status))}`,
+    `  priority: ${yamlScalar(task.priority)}`,
+    `  issueCategory: ${yamlScalar(task.issueCategory ?? "spec")}`,
+    `  requiredAgentRole: ${yamlScalar(task.requiredAgentRole ?? defaultAgentRoleForIssueCategory(task.issueCategory ?? "spec"))}`,
+    "workflow:",
+    `  currentStage: ${yamlScalar(contract.stageAction)}`,
+    `  nextEntry: ${yamlScalar(contract.nextEntry)}`,
+    `  ownerRole: ${yamlScalar(contract.ownerRoleLabel)}`,
+    "  stageOutputs:",
+    ...yamlList(taskStatusYamlOutputs(contract.stageOutputs), 4),
+    "execution:",
+    `  runId: ${yamlScalar(executionProjection.runId)}`,
+    `  executeStatus: ${yamlScalar(executionProjection.executeStatus)}`,
+    `  executeStatusLabel: ${yamlScalar(executeStatusLabel(executionProjection.executeStatus))}`,
+    `  sessionStatus: ${yamlScalar(executionProjection.sessionStatus)}`,
+    `  sessionStatusLabel: ${yamlScalar(mcpSessionStatusLabel(executionProjection.sessionStatus))}`,
+    "  validationCommands:",
+    ...yamlList(task.validationCommands, 4),
+    "  missingItems:",
+    ...yamlList(executionProjection.missingItems, 4),
+    "delivery:",
+    `  evidenceStatus: ${yamlScalar(task.evidenceStatus ?? "missing")}`,
+    `  deliveryStatus: ${yamlScalar(task.deliveryStatus ?? "missing")}`,
+    `  deliveryRunId: ${yamlScalar(deliveryProjection.deliveryRunId)}`,
+    `  deliveryPath: ${yamlScalar(deliveryProjection.deliveryPath)}`,
+    `  evidencePath: ${yamlScalar(deliveryProjection.evidencePath)}`,
+    `  releaseNotePath: ${yamlScalar(deliveryProjection.releaseNotePath)}`,
+    "  missingItems:",
+    ...yamlList(deliveryProjection.missingItems, 4),
+    "result:",
+    `  finalState: ${yamlScalar(resultFinalState)}`,
+    `  auditStatus: ${yamlScalar(task.auditStatus ?? "not-requested")}`,
+    `  prUrl: ${yamlScalar(deliveryProjection.prUrl)}`,
+    `  mergeState: ${yamlScalar(deliveryProjection.mergeState)}`,
+  ];
+
+  return {
+    content: lines.join("\n"),
+    fileName: "workflow.yml",
+    summary: `${contract.label} · ${resultFinalState}`,
+  };
+}
+
+function taskWorkflowResultFinalState(status: IssueDisplayStatus, deliveryProjection: TaskDeliveryProjection) {
+  if (status === "done") {
+    return deliveryProjection.missingItems.length ? "done_missing_delivery" : "delivered";
+  }
+  if (status === "in_review") {
+    return deliveryProjection.missingItems.length ? "review_missing_delivery" : "ready_for_merge";
+  }
+  if (status === "cancel") {
+    return "cancelled";
+  }
+  if (status === "blocked") {
+    return "blocked";
+  }
+  return "not_final";
+}
+
 function taskExecutionConsistencyLabel(
   status: IssueDisplayStatus,
   executeStatus: string | null,
@@ -1201,6 +1284,25 @@ function artifactProjectionStatusLabel(status?: string | null) {
 function stringExpectedOutput(outputs: V1Issue["expectedOutputs"], key: string) {
   const value = outputs?.[key];
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function yamlScalar(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return "null";
+  }
+  if (typeof value === "boolean" || typeof value === "number") {
+    return String(value);
+  }
+  return JSON.stringify(String(value));
+}
+
+function yamlList(items: unknown[], indent: number) {
+  const prefix = " ".repeat(indent);
+  return items.length ? items.map((item) => `${prefix}- ${yamlScalar(item)}`) : [`${prefix}[]`];
+}
+
+function taskStatusYamlOutputs(items: string[]) {
+  return items.length ? items : ["未记录"];
 }
 
 function parentDirectory(path: string) {

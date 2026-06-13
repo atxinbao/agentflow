@@ -86,6 +86,7 @@ import {
   buildTaskStatusContract,
   buildTaskInteractionState,
   buildTaskProjectTreeViewModel,
+  buildTaskWorkflowYamlModel,
   displayStatusLabelZh,
   pickTaskId,
   sortTasksByExecutionOrder,
@@ -98,6 +99,7 @@ import {
   type TaskIssueNode,
   type TaskProjectGroup,
   type TaskProjectTreeViewModel,
+  type TaskWorkflowYamlModel,
 } from "./interaction/viewModels";
 import type {
   AuditIndex,
@@ -2979,6 +2981,16 @@ function TaskDetailReader({
     () => buildTaskDeliveryProjection({ audit, delivery, evidence, session, task }),
     [audit, delivery, evidence, session, task],
   );
+  const workflowYaml = useMemo(
+    () =>
+      buildTaskWorkflowYamlModel({
+        contract: statusContract,
+        deliveryProjection,
+        executionProjection,
+        task,
+      }),
+    [deliveryProjection, executionProjection, statusContract, task],
+  );
   const deliveryArtifacts = useMemo(
     () => outputBundle.deliveryArtifacts[delivery?.runId ?? task.latestRunId ?? ""] ?? null,
     [delivery?.runId, outputBundle.deliveryArtifacts, task.latestRunId],
@@ -3049,7 +3061,7 @@ function TaskDetailReader({
             />
             <TaskFinalDeliveryCard artifact={deliveryArtifacts} deliveryProjection={deliveryProjection} task={task} />
           </div>
-          <TaskWorkflowPanelShell contract={statusContract} task={task} />
+          <TaskWorkflowPanelShell yamlModel={workflowYaml} />
         </div>
         <details className="v16-task-package">
           <summary>任务说明与边界</summary>
@@ -3112,43 +3124,17 @@ function TaskDetailReader({
 }
 
 function TaskWorkflowPanelShell({
-  contract,
-  task,
+  yamlModel,
 }: {
-  contract: ReturnType<typeof buildTaskStatusContract>;
-  task: V1Issue;
+  yamlModel: TaskWorkflowYamlModel;
 }) {
   return (
-    <section className="v16-task-workflow-panel-shell" aria-label="工作流面板骨架">
+    <section className="v16-task-workflow-panel-shell" aria-label="YAML workflow 面板">
       <div className="v16-task-workflow-panel-shell-header">
-        <span>Workflow 面板</span>
-        <strong>结构预留</strong>
+        <span>YAML workflow</span>
+        <strong>{yamlModel.summary}</strong>
       </div>
-      <SectionList
-        title="当前任务"
-        items={[
-          `${task.id} · ${task.title}`,
-          `当前状态：${contract.label}`,
-          `下一步：${contract.nextEntry}`,
-        ]}
-      />
-      <SectionList
-        title="当前主链"
-        items={[
-          "任务流列表负责选中当前任务。",
-          "主详情负责展示状态、阶段输出和交付摘要。",
-          "这里预留 workflow 结构视图的位置，后续再接入动态 YAML 内容。",
-        ]}
-      />
-      <SectionList
-        title="后续接入字段"
-        items={[
-          "task：当前任务合同和状态。",
-          "workflow：当前阶段、下一步入口和阶段动作。",
-          "execution：run、session、validation。",
-          "delivery：evidence、release、result。",
-        ]}
-      />
+      <CopyableCodeBlock content={yamlModel.content} language="yaml" maxHeight={420} title={yamlModel.fileName} />
     </section>
   );
 }

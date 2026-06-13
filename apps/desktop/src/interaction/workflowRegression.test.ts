@@ -10,6 +10,7 @@ import {
   buildTaskDeliveryProjection,
   buildTaskExecutionProjection,
   buildTaskStatusContract,
+  buildTaskWorkflowYamlModel,
   displayStatusLabelZh,
   taskActionsForTask,
 } from "./viewModels";
@@ -229,6 +230,60 @@ function assertExecutionProjection() {
   assertIncludes(missingProjection.missingItems, "Validation：未登记验证命令。", "missing validation");
 }
 
+function assertWorkflowYamlProjection() {
+  const progressTask = workflowTask("in_progress");
+  const progressYaml = buildTaskWorkflowYamlModel({
+    contract: buildTaskStatusContract(progressTask),
+    deliveryProjection: buildTaskDeliveryProjection({
+      audit: null,
+      delivery: null,
+      evidence: null,
+      session: session("in_progress"),
+      task: progressTask,
+    }),
+    executionProjection: buildTaskExecutionProjection({
+      executeWorkspaceStatus: "ready",
+      mcpSessionsSource: "tauri",
+      session: session("in_progress"),
+      task: progressTask,
+    }),
+    task: progressTask,
+  });
+  assertEqual(progressYaml.fileName, "workflow.yml", "yaml file name");
+  assertIncludes(progressYaml.content.split("\n"), "task:", "yaml task root");
+  assert(progressYaml.content.includes("workflow:"), "yaml workflow root");
+  assert(progressYaml.content.includes("execution:"), "yaml execution root");
+  assert(progressYaml.content.includes("delivery:"), "yaml delivery root");
+  assert(progressYaml.content.includes("result:"), "yaml result root");
+  assert(progressYaml.content.includes('  id: "issue-in_progress"'), "yaml task id");
+  assert(progressYaml.content.includes('  executeStatus: "running"'), "yaml execute status");
+  assert(progressYaml.content.includes('  evidenceStatus: "missing"'), "yaml evidence status");
+  assert(progressYaml.content.includes('  deliveryStatus: "missing"'), "yaml delivery status");
+  assert(progressYaml.content.includes('  finalState: "not_final"'), "yaml result final state");
+
+  const doneTask = workflowTask("done");
+  const doneYaml = buildTaskWorkflowYamlModel({
+    contract: buildTaskStatusContract(doneTask),
+    deliveryProjection: buildTaskDeliveryProjection({
+      audit: auditForDone(),
+      delivery: outputEntry("run-done", doneTask.id, "delivered"),
+      evidence: outputEntry("run-done", doneTask.id, "complete"),
+      session: session("done"),
+      task: doneTask,
+    }),
+    executionProjection: buildTaskExecutionProjection({
+      executeWorkspaceStatus: "ready",
+      mcpSessionsSource: "tauri",
+      session: session("done"),
+      task: doneTask,
+    }),
+    task: doneTask,
+  });
+  assert(doneYaml.content.includes('  id: "issue-done"'), "yaml switched task id");
+  assert(doneYaml.content.includes('  finalState: "delivered"'), "yaml done result final state");
+  assert(progressYaml.content !== doneYaml.content, "yaml content changes by task");
+}
+
 function assertBrowserPreviewWorkflowData() {
   const input = createBrowserPreviewInputSnapshot();
   const statusIndex = createBrowserPreviewIssueStatusIndex();
@@ -268,6 +323,7 @@ export function runWorkflowRegressionChecks() {
   assertWorkflowActions();
   assertDeliveryProjection();
   assertExecutionProjection();
+  assertWorkflowYamlProjection();
   assertBrowserPreviewWorkflowData();
 }
 
