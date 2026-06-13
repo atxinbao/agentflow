@@ -113,6 +113,20 @@ export type TaskWorkflowYamlModel = {
   summary: string;
 };
 
+export type TaskStatusTimelineStepState = "done" | "current" | "idle" | "exception";
+
+export type TaskStatusTimelineStep = {
+  id: IssueDisplayStatus;
+  label: string;
+  note: string;
+  state: TaskStatusTimelineStepState;
+};
+
+export type TaskCurrentStageSection = {
+  title: string;
+  items: string[];
+};
+
 export type AuditInteractionState = {
   empty: boolean;
   selectedAudit: AuditIndexEntry | null;
@@ -598,6 +612,111 @@ export function buildTaskStatusContract(task: V1Issue): TaskStatusContract {
   };
 
   return contracts[status];
+}
+
+const taskStatusTimelineBaseSteps: Array<{ id: IssueDisplayStatus; label: string; note: string }> = [
+  { id: "backlog", label: "待处理", note: "任务已生成" },
+  { id: "todo", label: "准备开工", note: "等待执行" },
+  { id: "in_progress", label: "正在做", note: "执行中" },
+  { id: "in_review", label: "正在评审", note: "等待合并或核对" },
+  { id: "done", label: "已完成", note: "已写回" },
+];
+
+export function buildTaskStatusTimeline(
+  status: IssueDisplayStatus,
+  contract: TaskStatusContract,
+): TaskStatusTimelineStep[] {
+  const exceptionStep =
+    status === "blocked"
+      ? { id: status, label: "已阻断", note: contract.businessMeaning, state: "exception" as const }
+      : status === "cancel"
+        ? { id: status, label: "已取消", note: contract.businessMeaning, state: "exception" as const }
+        : null;
+  const activeIndex = taskStatusTimelineBaseSteps.findIndex((step) => step.id === status);
+  const baseSteps = taskStatusTimelineBaseSteps.map((step, index) => {
+    const state: TaskStatusTimelineStepState =
+      exceptionStep !== null
+        ? "idle"
+        : index < activeIndex
+          ? "done"
+          : index === activeIndex
+            ? "current"
+            : "idle";
+    return {
+      ...step,
+      state,
+    };
+  });
+
+  return exceptionStep ? [...baseSteps, exceptionStep] : baseSteps;
+}
+
+export function buildTaskCurrentStageSections({
+  contract,
+  executeItems,
+  reviewItems,
+  stageItems,
+  status,
+}: {
+  contract: TaskStatusContract;
+  executeItems: string[];
+  reviewItems: string[];
+  stageItems: string[];
+  status: IssueDisplayStatus;
+}): TaskCurrentStageSection[] {
+  if (status === "in_review") {
+    return [
+      { title: "当前阶段", items: stageItems },
+      { title: "评审状态", items: reviewItems },
+      { title: "执行结果", items: executeItems },
+    ];
+  }
+
+  if (status === "done") {
+    return [
+      { title: "最终结果", items: stageItems },
+      { title: "评审和合并", items: reviewItems },
+      { title: "执行记录", items: executeItems },
+    ];
+  }
+
+  if (status === "blocked") {
+    return [
+      { title: "阻断信息", items: stageItems },
+      { title: "执行记录", items: executeItems },
+      { title: "解除方式", items: [contract.nextEntry, ...contract.uiSummary] },
+    ];
+  }
+
+  if (status === "cancel") {
+    return [
+      { title: "取消信息", items: stageItems },
+      { title: "执行记录", items: executeItems },
+      { title: "后续处理", items: [contract.nextEntry] },
+    ];
+  }
+
+  if (status === "todo") {
+    return [
+      { title: "前置检测", items: stageItems },
+      { title: "开工准备", items: executeItems },
+      { title: "下一步", items: [contract.nextEntry, ...contract.uiSummary] },
+    ];
+  }
+
+  if (status === "in_progress") {
+    return [
+      { title: "执行信息", items: executeItems },
+      { title: "阶段产物", items: stageItems },
+      { title: "下一步", items: [contract.nextEntry, ...contract.uiSummary] },
+    ];
+  }
+
+  return [
+    { title: "当前阶段", items: stageItems },
+    { title: "任务合同", items: contract.stageOutputs },
+    { title: "下一步", items: [contract.nextEntry, ...contract.uiSummary] },
+  ];
 }
 
 function statusOwnerRoleLabel(status: IssueDisplayStatus, issueCategory?: IssueCategory) {

@@ -8,18 +8,20 @@ import {
 import type { AuditIndexEntry, IssueDisplayStatus, McpSessionSnapshot, OutputIndexEntry, V1Issue } from "../types";
 import {
   buildTaskDeliveryProjection,
+  buildTaskCurrentStageSections,
   buildTaskExecutionProjection,
   buildTaskProjectTreeViewModel,
   buildTaskStatusContract,
+  buildTaskStatusTimeline,
   buildTaskWorkflowYamlModel,
   displayStatusLabelZh,
   taskActionsForTask,
   type TaskIssueNode,
 } from "./viewModels";
 
-type WorkflowStatus = Extract<IssueDisplayStatus, "todo" | "in_progress" | "in_review" | "done">;
+type WorkflowStatus = IssueDisplayStatus;
 
-const workflowStatuses: WorkflowStatus[] = ["todo", "in_progress", "in_review", "done"];
+const workflowStatuses: WorkflowStatus[] = ["backlog", "todo", "in_progress", "in_review", "done", "blocked", "cancel"];
 
 const statusExpectations: Record<
   WorkflowStatus,
@@ -29,6 +31,21 @@ const statusExpectations: Record<
     output: string;
   }
 > = {
+  backlog: {
+    action: "整理任务边界，确认范围、非目标和依赖关系。",
+    nextEntry: "先确认任务合同，再进入执行前置检测。",
+    output: "任务合同已生成。",
+  },
+  blocked: {
+    action: "先解除阻断，再重新回到待执行阶段。",
+    nextEntry: "解除阻断后回到 backlog 或 todo。",
+    output: "当前不会继续执行。",
+  },
+  cancel: {
+    action: "保留任务记录，不再执行后续动作。",
+    nextEntry: "如需恢复，重新生成新任务。",
+    output: "当前任务已停止。",
+  },
   done: {
     action: "保留交付和证据，等待后续独立审计或查看交付。",
     nextEntry: "需要时查看交付，不自动进入审计。",
@@ -52,6 +69,7 @@ const statusExpectations: Record<
 };
 
 function workflowTask(status: WorkflowStatus): V1Issue {
+  const executionStarted = status === "in_progress" || status === "in_review" || status === "done";
   return {
     acceptanceCriteria: ["状态展示链路可验证。"],
     allowedFiles: ["apps/desktop/src/**"],
@@ -63,7 +81,16 @@ function workflowTask(status: WorkflowStatus): V1Issue {
     displayStatus: status,
     evidenceRequired: ["本地验证证据。"],
     evidenceStatus: status === "done" || status === "in_review" ? "complete" : "missing",
-    executeStatus: status === "in_progress" ? "running" : status === "todo" ? "planned" : "completed",
+    executeStatus:
+      status === "in_progress"
+        ? "running"
+        : status === "todo"
+          ? "planned"
+          : status === "blocked"
+            ? "blocked"
+            : status === "cancel"
+              ? "cancelled"
+              : "completed",
     expectedOutputs: {
       evidencePath: `.agentflow/output/evidence/run-${status}.json`,
       executeRunDir: `.agentflow/execute/runs/run-${status}`,
@@ -77,7 +104,7 @@ function workflowTask(status: WorkflowStatus): V1Issue {
     goal: `验证 ${status} 状态`,
     id: `issue-${status}`,
     issueCategory: "spec",
-    latestRunId: status === "todo" ? null : `run-${status}`,
+    latestRunId: executionStarted ? `run-${status}` : null,
     nonGoals: ["不扩展新功能。"],
     priority: "p1",
     rawStatus: status,
@@ -101,7 +128,7 @@ function outputEntry(runId: string, issueId: string, status: string): OutputInde
 }
 
 function session(status: WorkflowStatus): McpSessionSnapshot | null {
-  if (status === "todo") {
+  if (status === "backlog" || status === "todo" || status === "blocked" || status === "cancel") {
     return null;
   }
   return {
@@ -178,16 +205,65 @@ function taskFromPreviewNode(node: TaskIssueNode): V1Issue {
 }
 
 function assertWorkflowStatusContracts() {
+  const ownerByStatus: Record<WorkflowStatus, string> = {
+    backlog: "需求助手",
+    blocked: "执行助手 / 人",
+    cancel: "执行助手 / 人",
+    done: "执行助手",
+    in_progress: "执行助手",
+    in_review: "执行助手",
+    todo: "执行助手",
+  };
+
   for (const status of workflowStatuses) {
     const task = workflowTask(status);
     const contract = buildTaskStatusContract(task);
     const expected = statusExpectations[status];
 
     assertEqual(contract.label, displayStatusLabelZh(status), `${status} label`);
-    assertEqual(contract.ownerRoleLabel, "执行助手", `${status} owner`);
+    assertEqual(contract.ownerRoleLabel, ownerByStatus[status], `${status} owner`);
     assertEqual(contract.stageAction, expected.action, `${status} action`);
     assertIncludes(contract.stageOutputs, expected.output, `${status} output`);
     assertEqual(contract.nextEntry, expected.nextEntry, `${status} next entry`);
+  }
+}
+
+function assertWorkflowTimelineAndStageDetails() {
+  const timelineCurrentByStatus: Record<WorkflowStatus, IssueDisplayStatus> = {
+    backlog: "backlog",
+    blocked: "blocked",
+    cancel: "cancel",
+    done: "done",
+    in_progress: "in_progress",
+    in_review: "in_review",
+    todo: "todo",
+  };
+  const firstSectionByStatus: Record<WorkflowStatus, string> = {
+    backlog: "当前阶段",
+    blocked: "阻断信息",
+    cancel: "取消信息",
+    done: "最终结果",
+    in_progress: "执行信息",
+    in_review: "当前阶段",
+    todo: "前置检测",
+  };
+
+  for (const status of workflowStatuses) {
+    const task = workflowTask(status);
+    const contract = buildTaskStatusContract(task);
+    const timeline = buildTaskStatusTimeline(status, contract);
+    const currentStep = timeline.find((step) => step.state === "current" || step.state === "exception");
+    const sections = buildTaskCurrentStageSections({
+      contract,
+      executeItems: ["Run：测试运行。"],
+      reviewItems: ["评审链接：测试链接。"],
+      stageItems: contract.stageOutputs,
+      status,
+    });
+
+    assertEqual(currentStep?.id, timelineCurrentByStatus[status], `${status} timeline current step`);
+    assertEqual(sections.length, 3, `${status} current stage section count`);
+    assertEqual(sections[0]?.title, firstSectionByStatus[status], `${status} current stage primary section`);
   }
 }
 
@@ -425,6 +501,7 @@ function assertIncludes<T>(items: T[], expected: T, label: string) {
 
 export function runWorkflowRegressionChecks() {
   assertWorkflowStatusContracts();
+  assertWorkflowTimelineAndStageDetails();
   assertWorkflowActions();
   assertDeliveryProjection();
   assertExecutionProjection();
