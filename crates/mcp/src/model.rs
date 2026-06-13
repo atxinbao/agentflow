@@ -121,6 +121,18 @@ impl McpProviderStatus {
     pub fn ready(&self) -> bool {
         matches!(self.status, McpProviderStatusCode::Ready)
     }
+
+    pub fn capability(&self, name: &str) -> Option<&McpCapability> {
+        self.capabilities
+            .iter()
+            .find(|capability| capability.name == name)
+    }
+
+    pub fn capability_available(&self, name: &str) -> bool {
+        self.capability(name)
+            .map(|capability| capability.available)
+            .unwrap_or(false)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -356,5 +368,23 @@ impl McpLogChunk {
             cursor: None,
             lines: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{McpCapability, McpProviderKind, McpProviderStatus};
+
+    #[test]
+    fn provider_status_checks_capabilities_by_name() {
+        let mut status = McpProviderStatus::new(McpProviderKind::Codex, 1);
+        status.capabilities = vec![
+            McpCapability::new("launch", true),
+            McpCapability::new("build_agent.complete", false),
+        ];
+
+        assert!(status.capability_available("launch"));
+        assert!(!status.capability_available("build_agent.complete"));
+        assert!(!status.capability_available("missing"));
     }
 }

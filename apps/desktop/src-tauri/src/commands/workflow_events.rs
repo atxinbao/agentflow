@@ -208,6 +208,10 @@ fn dispatch_workflow_events_inner(
     Ok(summary)
 }
 
+fn provider_ready_for_build_agent_launch(status: &agentflow_mcp::McpProviderStatus) -> bool {
+    status.capability_available("launch")
+}
+
 fn panel_ready_for_context_pack(root: &Path) -> bool {
     agentflow_panel::load_project_panel_status(root)
         .map(|status| matches!(status.status, PanelStatus::Ready | PanelStatus::Degraded))
@@ -302,12 +306,16 @@ fn dispatch_build_agent_launch_events(
     )?;
     summary.pending_build_agent_launch_events = pending.len();
 
-    if !provider_status.ready() {
+    if !provider_ready_for_build_agent_launch(&provider_status) {
         if !pending.is_empty() {
+            let launch_reason = provider_status
+                .capability("launch")
+                .and_then(|capability| capability.detail.clone())
+                .unwrap_or_else(|| provider_status.status.as_str().to_string());
             summary.errors.push(format!(
-                "build-agent launch pending: {} provider is {}",
+                "build-agent launch pending: {} launch capability is unavailable ({})",
                 provider.provider_id(),
-                provider_status.status.as_str()
+                launch_reason
             ));
         }
         return Ok(());
@@ -600,6 +608,16 @@ mod tests {
             .path()
             .join(".agentflow/state/loops/issues/AF-EVENT-001.json")
             .is_file());
+    }
+
+    #[test]
+    fn launch_dispatch_uses_launch_capability_instead_of_status_code() {
+        let mut status =
+            agentflow_mcp::McpProviderStatus::new(agentflow_mcp::McpProviderKind::Codex, 1);
+        status.status = agentflow_mcp::McpProviderStatusCode::Unsupported;
+        status.capabilities = vec![agentflow_mcp::McpCapability::new("launch", true)];
+
+        assert!(provider_ready_for_build_agent_launch(&status));
     }
 
     fn write_approved_spec(root: &std::path::Path) {
