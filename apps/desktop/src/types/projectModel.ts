@@ -1,4 +1,11 @@
-import type { AgentRole, ExecutionPipeline, ExpectedOutputs, IssueCategory, IssueDisplayStatus } from "./status";
+import type {
+  AgentRole,
+  ExecutionPipeline,
+  ExpectedOutputs,
+  IssueCategory,
+  IssueDisplayStatus,
+  WorkflowAuditStatus,
+} from "./status";
 
 export type V1Issue = {
   id: string;
@@ -31,6 +38,11 @@ export type V1Issue = {
   validationCommands: string[];
   expectedOutputs: ExpectedOutputs;
   executionPipeline?: ExecutionPipeline | null;
+  latestRunId?: string | null;
+  executeStatus?: string | null;
+  evidenceStatus?: string | null;
+  deliveryStatus?: string | null;
+  auditStatus?: WorkflowAuditStatus;
   evidenceRequired: string[];
   allowedFiles: string[];
   forbiddenFiles: string[];

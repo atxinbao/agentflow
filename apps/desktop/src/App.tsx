@@ -1290,10 +1290,13 @@ function App() {
             actions={taskInteractionState.actions}
             agentLocale={agentLocale}
             copyState={taskCopyState}
+            executeStatusState={executeStatusState}
             mcpSessionsState={mcpSessionsState}
             onTaskAction={(action, task) => void handleTaskAction(action, task)}
             onSelectProjectGroup={handleSelectTaskProject}
             onSelectTask={handleSelectTask}
+            outputBundle={outputBundle}
+            outputStatusState={outputStatusState}
             projectRoot={projectRoot}
             selectedProjectGroup={selectedProjectGroup}
             selectedTask={selectedTask}
@@ -1307,6 +1310,8 @@ function App() {
             executeStatusState={executeStatusState}
             mcpSessionsState={mcpSessionsState}
             projectRoot={projectRoot}
+            selectedTask={selectedTask}
+            tasks={tasks}
           />
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "files" ? (
@@ -1327,6 +1332,7 @@ function App() {
             outputStatusState={outputStatusState}
             selectedDeliveryRunId={selectedDeliveryRunId}
             selectedTask={selectedTask}
+            tasks={tasks}
           />
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "audit" ? (
@@ -2204,10 +2210,13 @@ function TasksPage({
   actions,
   agentLocale,
   copyState,
+  executeStatusState,
   mcpSessionsState,
   onSelectProjectGroup,
   onTaskAction,
   onSelectTask,
+  outputBundle,
+  outputStatusState,
   selectedProjectGroup,
   selectedTask,
   projectRoot,
@@ -2219,10 +2228,13 @@ function TasksPage({
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onSelectProjectGroup: (projectId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   onSelectTask: (taskId: string) => void;
+  outputBundle: OutputBundleState;
+  outputStatusState: OutputStatusState;
   projectRoot: string | null;
   selectedProjectGroup: TaskProjectGroup | null;
   selectedTask: V1Issue | null;
@@ -2237,10 +2249,13 @@ function TasksPage({
         actions={actions}
         agentLocale={agentLocale}
         copyState={copyState}
+        executeStatusState={executeStatusState}
         mcpSessionsState={mcpSessionsState}
         onSelectProjectGroup={onSelectProjectGroup}
         onSelectTask={onSelectTask}
         onTaskAction={onTaskAction}
+        outputBundle={outputBundle}
+        outputStatusState={outputStatusState}
         projectRoot={projectRoot}
         selectedProjectGroup={selectedProjectGroup}
         selectedTask={selectedTask}
@@ -2257,10 +2272,13 @@ function TaskList({
   actions,
   agentLocale,
   copyState,
+  executeStatusState,
   mcpSessionsState,
   onSelectProjectGroup,
   onSelectTask,
   onTaskAction,
+  outputBundle,
+  outputStatusState,
   projectRoot,
   selectedProjectGroup,
   selectedTask,
@@ -2272,10 +2290,13 @@ function TaskList({
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onSelectProjectGroup: (projectId: string) => void;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
+  outputBundle: OutputBundleState;
+  outputStatusState: OutputStatusState;
   projectRoot: string | null;
   selectedProjectGroup: TaskProjectGroup | null;
   selectedTask: V1Issue | null;
@@ -2431,9 +2452,12 @@ function TaskList({
         actions={actions}
         agentLocale={agentLocale}
         copyState={copyState}
+        executeStatusState={executeStatusState}
         mcpSessionsState={mcpSessionsState}
         onTaskAction={onTaskAction}
         onSelectTask={onSelectTask}
+        outputBundle={outputBundle}
+        outputStatusState={outputStatusState}
         selectedProjectGroup={selectedProjectGroup}
         suggestions={showContextSuggestions ? suggestions : []}
         task={selectedTask}
@@ -2579,9 +2603,12 @@ function TaskDetail({
   actions,
   agentLocale,
   copyState,
+  executeStatusState,
   mcpSessionsState,
   onSelectTask,
   onTaskAction,
+  outputBundle,
+  outputStatusState,
   selectedProjectGroup,
   suggestions,
   task,
@@ -2591,9 +2618,12 @@ function TaskDetail({
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
+  outputBundle: OutputBundleState;
+  outputStatusState: OutputStatusState;
   selectedProjectGroup: TaskProjectGroup | null;
   suggestions: ProjectInitializationContext[];
   task: V1Issue | null;
@@ -2650,8 +2680,11 @@ function TaskDetail({
       actions={actions}
       agentLocale={agentLocale}
       copyState={copyState}
+      executeStatusState={executeStatusState}
       mcpSessionsState={mcpSessionsState}
       onTaskAction={onTaskAction}
+      outputBundle={outputBundle}
+      outputStatusState={outputStatusState}
       task={task}
     />
   );
@@ -2741,16 +2774,22 @@ function TaskDetailReader({
   actions,
   agentLocale,
   copyState,
+  executeStatusState,
   mcpSessionsState,
   onTaskAction,
+  outputBundle,
+  outputStatusState,
   task,
 }: {
   actionFeedback: string | null;
   actions: TaskInteractionAction[];
   agentLocale: string;
   copyState: ButtonInteractionState;
+  executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
+  outputBundle: OutputBundleState;
+  outputStatusState: OutputStatusState;
   task: V1Issue;
 }) {
   const [handoffOpen, setHandoffOpen] = useState(false);
@@ -2767,7 +2806,35 @@ function TaskDetailReader({
     ],
     [task],
   );
-  const outputItems = useMemo(() => taskOutputItems(task), [task]);
+  const delivery = useMemo(
+    () => findDeliveryEntryForTask(outputBundle.outputIndex?.releaseDeliveries ?? [], task),
+    [outputBundle.outputIndex?.releaseDeliveries, task],
+  );
+  const evidence = useMemo(
+    () => findEvidenceEntryForTask(outputBundle.outputIndex?.evidence ?? [], task),
+    [outputBundle.outputIndex?.evidence, task],
+  );
+  const audit = useMemo(
+    () => (delivery ? findAuditForDelivery(outputBundle.auditIndex?.audits ?? [], delivery.runId) : null),
+    [delivery, outputBundle.auditIndex?.audits],
+  );
+  const outputSummaryItems = useMemo(() => taskOutputSummaryItems(task), [task]);
+  const stageOutputItems = useMemo(
+    () => taskCurrentStageOutputItems(task, session, delivery, evidence, audit),
+    [audit, delivery, evidence, session, task],
+  );
+  const executeSummaryItems = useMemo(
+    () => taskExecuteSummaryItems(task, session, mcpSessionsState, executeStatusState),
+    [executeStatusState, mcpSessionsState, session, task],
+  );
+  const deliverySummaryItems = useMemo(
+    () => taskDeliverySummaryItems(task, delivery, evidence, audit, outputStatusState),
+    [audit, delivery, evidence, outputStatusState, task],
+  );
+  const finalDeliveryItems = useMemo(
+    () => taskFinalDeliveryItems(task, delivery, evidence, audit),
+    [audit, delivery, evidence, task],
+  );
   const handoffContent = useMemo(() => {
     if (!handoffOpen) {
       return "";
@@ -2802,14 +2869,20 @@ function TaskDetailReader({
             <strong className="v16-role-text">{agentRoleLabelZh(task.requiredAgentRole)}</strong>
           </span>
           <span className="v16-detail-meta-item">
-            <span className="v16-detail-meta-label">Codex 线程</span>
-            <strong className="v16-role-text">{codexThreadNameForRole(task.requiredAgentRole)}</strong>
+            <span className="v16-detail-meta-label">更新时间</span>
+            <strong className="v16-role-text">
+              {task.updatedAt || task.createdAt ? formatTimestamp(task.updatedAt ?? task.createdAt ?? 0) : "未记录"}
+            </strong>
           </span>
         </div>
       </header>
       <div className="v16-detail-document">
         {detailDescriptionItems.length ? <DescriptionList items={detailDescriptionItems} /> : null}
         <IssueStatusFlow contract={statusContract} status={task.displayStatus ?? "backlog"} />
+        <SectionList title="当前阶段输出" items={stageOutputItems} />
+        <SectionList title="执行摘要" items={executeSummaryItems} />
+        <SectionList title="交付摘要" items={deliverySummaryItems} />
+        <SectionList title="最终交付" items={finalDeliveryItems} />
         <SectionList
           title="状态说明"
           items={[
@@ -2824,13 +2897,11 @@ function TaskDetailReader({
         <SectionList title="目标" items={[task.goal || task.title]} />
         <SectionList title="范围" items={task.scope} />
         <SectionList title="非目标" items={task.nonGoals} />
+        <SectionList title="预期产物" items={outputSummaryItems} />
         <SectionList title="验收标准" items={task.acceptanceCriteria} />
         <SectionList title="证据要求" items={task.evidenceRequired} />
         <SectionList title="验证命令" items={task.validationCommands} />
         {task.issueCategory === "spec" ? <SectionList title="执行流程" items={taskExecutionPipelineItems(task)} /> : null}
-        <SectionList title="相关文件" items={task.allowedFiles} />
-        <SectionList title="执行会话" items={taskMcpSessionItems(session, mcpSessionsState)} />
-        <SectionList title="输出目标" items={outputItems} />
         <details
           className="v16-task-package"
           onToggle={(event) => setHandoffOpen((event.currentTarget as HTMLDetailsElement).open)}
@@ -2964,6 +3035,7 @@ function DeliveryPage({
   outputStatusState,
   selectedDeliveryRunId,
   selectedTask,
+  tasks,
 }: {
   onOpenAudit: () => void;
   onSelectDelivery: (runId: string) => void;
@@ -2971,18 +3043,22 @@ function DeliveryPage({
   outputStatusState: OutputStatusState;
   selectedDeliveryRunId: string | null;
   selectedTask: V1Issue | null;
+  tasks: V1Issue[];
 }) {
   const deliveries = sortOutputEntriesByLatest(outputBundle.outputIndex?.releaseDeliveries ?? []);
   const evidence = sortOutputEntriesByLatest(outputBundle.outputIndex?.evidence ?? []);
   const deliveryInteractionState = buildDeliveryInteractionState(deliveries, selectedDeliveryRunId);
-  const selectedDelivery = deliveryInteractionState.selectedDelivery;
+  const selectedDelivery = deliveryInteractionState.selectedDelivery ?? findDeliveryEntryForTask(deliveries, selectedTask);
+  const deliveryTask = selectedDelivery
+    ? tasks.find((task) => task.id === selectedDelivery.issueId) ?? null
+    : selectedTask;
 
   return (
     <section className="v16-page v16-split-page" data-agentflow-page="delivery">
       <DeliveryList
         deliveries={deliveries}
         onSelectDelivery={onSelectDelivery}
-        selectedDeliveryRunId={deliveryInteractionState.selectedDeliveryRunId}
+        selectedDeliveryRunId={selectedDelivery?.runId ?? deliveryInteractionState.selectedDeliveryRunId}
       />
       <DeliveryDetail
         audits={outputBundle.auditIndex?.audits ?? []}
@@ -2990,7 +3066,7 @@ function DeliveryPage({
         evidence={evidence}
         onOpenAudit={onOpenAudit}
         outputStatusState={outputStatusState}
-        selectedTask={selectedTask}
+        selectedTask={deliveryTask}
       />
     </section>
   );
@@ -3000,10 +3076,14 @@ function ExecutePage({
   executeStatusState,
   mcpSessionsState,
   projectRoot,
+  selectedTask,
+  tasks,
 }: {
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   projectRoot: string | null;
+  selectedTask: V1Issue | null;
+  tasks: V1Issue[];
 }) {
   const status = executeStatusState.status;
   const summary = status?.summary;
@@ -3030,10 +3110,31 @@ function ExecutePage({
   }, [selectedSessionId, sessions]);
 
   const selectedSession = sessions.find((session) => session.sessionId === selectedSessionId) ?? sessions[0] ?? null;
+  const focusedTask = selectedSession
+    ? tasks.find((task) => task.id === selectedSession.issueId) ?? null
+    : selectedTask;
+  const taskSession = useMemo(
+    () => (focusedTask ? pickLatestMcpSessionForIssue(sessions, focusedTask.id) : null),
+    [focusedTask, sessions],
+  );
   const runCount = sessions.length || summary?.runs || 0;
   const hasRuns = sessions.length > 0;
   const badgeStatus = executeWorkspaceStatusTone(status?.status, executeStatusState.error);
   const badgeLabel = executeWorkspaceStatusLabel(status?.status, executeStatusState.source, executeStatusState.error);
+  const taskExecuteItems = useMemo(
+    () =>
+      focusedTask
+        ? taskExecuteSummaryItems(focusedTask, taskSession, mcpSessionsState, executeStatusState)
+        : ["先在任务页选择一个任务，再查看它的执行摘要。"],
+    [executeStatusState, focusedTask, mcpSessionsState, taskSession],
+  );
+  const taskStageItems = useMemo(
+    () =>
+      focusedTask
+        ? taskCurrentStageOutputItems(focusedTask, taskSession, null, null, null)
+        : ["当前没有选中的任务。"],
+    [focusedTask, taskSession],
+  );
 
   useEffect(() => {
     if (!projectRoot || !selectedSession) {
@@ -3046,7 +3147,7 @@ function ExecutePage({
     }
     if (mcpSessionsState.source === "preview") {
       setSessionLogState({
-        content: "Browser Preview mock 会话不写入真实日志。",
+        content: "浏览器预览的模拟会话不会写入真实日志。",
         error: null,
         loading: false,
       });
@@ -3138,12 +3239,34 @@ function ExecutePage({
       </aside>
       <section className={hasRuns || status ? "v16-detail-pane" : "v16-detail-pane v16-empty-detail-pane"} aria-label="执行详情">
         <header>
-          <h2>{selectedSession ? `执行会话：${selectedSession.issueId}` : "还没有执行会话"}</h2>
-          <StatusBadge status={selectedSession ? mcpSessionStatusTone(selectedSession.status) : badgeStatus}>
-            {selectedSession ? mcpSessionStatusLabelZh(selectedSession.status) : badgeLabel}
+          <h2>{focusedTask ? `执行摘要：${focusedTask.id}` : selectedSession ? `执行会话：${selectedSession.issueId}` : "还没有执行会话"}</h2>
+          <StatusBadge
+            status={
+              focusedTask
+                ? statusChipForDisplayStatus(focusedTask.displayStatus)
+                : selectedSession
+                  ? mcpSessionStatusTone(selectedSession.status)
+                  : badgeStatus
+            }
+          >
+            {focusedTask ? displayStatusLabelZh(focusedTask.displayStatus) : selectedSession ? mcpSessionStatusLabelZh(selectedSession.status) : badgeLabel}
           </StatusBadge>
         </header>
         <div className="v16-detail-document">
+          <SectionList
+            title="当前任务"
+            items={
+              focusedTask
+                ? [
+                    `${focusedTask.id} · ${focusedTask.title}`,
+                    `状态：${displayStatusLabelZh(focusedTask.displayStatus)}`,
+                    `角色：${agentRoleLabelZh(focusedTask.requiredAgentRole)}`,
+                  ]
+                : ["先在任务页选择一个任务。"]
+            }
+          />
+          <SectionList title="执行摘要" items={taskExecuteItems} />
+          <SectionList title="当前阶段输出" items={taskStageItems} />
           <SectionList
             title="当前状态"
             items={[
@@ -3188,7 +3311,7 @@ function ExecutePage({
                 ? [mcpSessionsState.error]
                 : status?.warnings.length
                   ? status.warnings
-                  : ["这里只读展示执行会话和执行工作区摘要。真实执行仍由 Build Agent 按任务流程完成。"]
+                  : ["这里只读展示执行会话和执行工作区摘要。真实执行仍由执行助手按任务流程完成。"]
             }
           />
         </div>
@@ -3257,22 +3380,49 @@ function DeliveryDetail({
 }) {
   const deliveryAudit = delivery ? findAuditForDelivery(audits, delivery.runId) : null;
   const auditDisplay = deliveryAuditStatus(delivery, deliveryAudit);
+  const taskEvidence = useMemo(
+    () => findEvidenceEntryForTask(evidence, selectedTask),
+    [evidence, selectedTask],
+  );
+  const deliverySummaryItems = useMemo(
+    () =>
+      selectedTask
+        ? taskDeliverySummaryItems(selectedTask, delivery, taskEvidence, deliveryAudit, outputStatusState)
+        : ["先在任务页选择一个任务，或在左侧选择一个交付包。"],
+    [delivery, deliveryAudit, outputStatusState, selectedTask, taskEvidence],
+  );
+  const finalDeliveryItems = useMemo(
+    () =>
+      selectedTask
+        ? taskFinalDeliveryItems(selectedTask, delivery, taskEvidence, deliveryAudit)
+        : delivery
+          ? [`交付包：${deliveryDisplayId(delivery.runId)}`, `关联任务：${delivery.issueId || "未记录"}`]
+          : ["还没有交付包。"],
+    [delivery, deliveryAudit, selectedTask, taskEvidence],
+  );
   return (
-    <section className={delivery ? "v16-detail-pane" : "v16-detail-pane v16-empty-detail-pane"} aria-label="交付详情">
+    <section className={delivery || selectedTask ? "v16-detail-pane" : "v16-detail-pane v16-empty-detail-pane"} aria-label="交付详情">
       <header>
-        <h2>{delivery ? `交付包：${deliveryDisplayId(delivery.runId)}` : "还没有交付材料"}</h2>
-        <StatusBadge status={delivery ? "ready" : "idle"}>
-          {delivery ? artifactStatusLabel(delivery.status) : "等待写回"}
+        <h2>{delivery ? `交付包：${deliveryDisplayId(delivery.runId)}` : selectedTask ? `交付摘要：${selectedTask.id}` : "还没有交付材料"}</h2>
+        <StatusBadge status={delivery ? "ready" : selectedTask ? statusChipForDisplayStatus(selectedTask.displayStatus) : "idle"}>
+          {delivery ? artifactStatusLabel(delivery.status) : selectedTask ? displayStatusLabelZh(selectedTask.displayStatus) : "等待写回"}
         </StatusBadge>
       </header>
       <div className="v16-detail-document">
         <SectionList
-          title="交付摘要"
-          items={[
-            delivery ? "任务合约页面交付记录已生成。" : "等待写回交付记录。",
-            "模式：只读",
-          ]}
+          title="当前任务"
+          items={
+            selectedTask
+              ? [
+                  `${selectedTask.id} · ${selectedTask.title}`,
+                  `状态：${displayStatusLabelZh(selectedTask.displayStatus)}`,
+                  `角色：${agentRoleLabelZh(selectedTask.requiredAgentRole)}`,
+                ]
+              : ["当前没有选中的任务。"]
+          }
         />
+        <SectionList title="交付摘要" items={deliverySummaryItems} />
+        <SectionList title="最终交付" items={finalDeliveryItems} />
         <SectionList
           title="关联记录"
           items={[
@@ -3280,8 +3430,6 @@ function DeliveryDetail({
             delivery?.sourceSpecId ? "关联规格：已确认规格" : "关联规格：未记录",
           ]}
         />
-        <SectionList title="变更文件" items={selectedTask?.allowedFiles ?? ["等待写回变更文件。"]} />
-        <SectionList title="验证命令" items={selectedTask?.validationCommands ?? ["等待验证命令。"]} />
         <SectionList title="验证结果" items={[delivery ? `状态：${artifactStatusLabel(delivery.status)}` : "等待写回。"]} />
         <SectionList title="审计状态" items={[auditDisplay.detail]} />
         <SectionList
@@ -3289,7 +3437,7 @@ function DeliveryDetail({
           title="证据"
           items={evidence.length ? evidence.map((item) => `${deliveryDisplayId(item.runId)} · ${artifactStatusLabel(item.status)}`) : ["暂无证据。"]}
         />
-        <SectionList title="越界检查" items={["普通页面只展示摘要；原始路径和 JSON 在高级页查看。"]} />
+        <SectionList title="提醒" items={["普通页面默认只展示摘要；原始路径和 JSON 在高级页查看。"]} />
       </div>
       <ActionBar sticky>
         <ActionButton disabled={!auditDisplay.canOpenReport} onClick={onOpenAudit} variant="primary">
@@ -4146,11 +4294,15 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
   return {
     acceptanceCriteria: issue.acceptanceCriteria,
     allowedFiles: issue.allowedPaths?.length ? issue.allowedPaths : issue.scope,
+    auditStatus: indexed?.auditStatus ?? "not-requested",
     boundary: issue.nonGoals,
     codexInstructions: issue.validationHints,
     dependencies: issue.relations?.blockedBy ?? [],
+    deliveryStatus: indexed?.deliveryStatus ?? "missing",
     displayStatus,
+    evidenceStatus: indexed?.evidenceStatus ?? "missing",
     evidenceRequired: issue.acceptanceCriteria,
+    executeStatus: indexed?.executeStatus ?? null,
     executionPipeline: issueCategory === "spec" ? (issue.executionPipeline ?? defaultBuildAgentExecutionPipeline()) : null,
     expectedOutputs,
     forbiddenActions: issue.forbiddenActions?.length ? issue.forbiddenActions : defaultForbiddenActions(issueCategory),
@@ -4165,6 +4317,7 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
     handoffId: issue.handoffId ?? `handoff-${issue.issueId}`,
     issueCategory,
     issuePath: issue.issuePath ?? issue.system?.path ?? `.agentflow/input/issues/${issue.issueId}.json`,
+    latestRunId: indexed?.latestRunId ?? null,
     milestoneId: null,
     nonGoals: issue.nonGoals,
     projectId: issue.projectId ?? null,
@@ -4460,12 +4613,261 @@ function taskAuditDescriptionItems(task: V1Issue): Array<[string, string]> {
   ];
 }
 
+function taskOutputSummaryItems(task: V1Issue) {
+  const entries = Object.entries(task.expectedOutputs ?? {});
+  if (!entries.length) {
+    return ["还没有登记预期产物。"];
+  }
+  return entries.map(([key]) => expectedOutputLabelZh(key));
+}
+
 function taskOutputItems(task: V1Issue) {
   const entries = Object.entries(task.expectedOutputs ?? {});
   if (!entries.length) {
     return ["未提供输出位置。"];
   }
   return entries.map(([key, value]) => `${key}: ${value}`);
+}
+
+function findDeliveryEntryForTask(deliveries: OutputIndexEntry[], task: V1Issue | null) {
+  if (!task) {
+    return null;
+  }
+  const latestRunId = task.latestRunId ?? null;
+  return (
+    sortOutputEntriesByLatest(deliveries).find((delivery) =>
+      (latestRunId ? delivery.runId === latestRunId : false) || delivery.issueId === task.id,
+    ) ?? null
+  );
+}
+
+function findEvidenceEntryForTask(evidenceEntries: OutputIndexEntry[], task: V1Issue | null) {
+  if (!task) {
+    return null;
+  }
+  const latestRunId = task.latestRunId ?? null;
+  return (
+    sortOutputEntriesByLatest(evidenceEntries).find((evidence) =>
+      (latestRunId ? evidence.runId === latestRunId : false) || evidence.issueId === task.id,
+    ) ?? null
+  );
+}
+
+function expectedOutputLabelZh(key: string) {
+  const labels: Record<string, string> = {
+    "audit-report.md": "审计报告",
+    "audit.json": "审计结论",
+    "evidence-map.json": "证据映射",
+    "findings.json": "审计发现",
+    "traceability.json": "追溯关系",
+    evidencePath: "验证证据",
+    executeRunDir: "执行 Run",
+    releaseDeliveryDir: "交付包",
+  };
+  return labels[key] ?? key;
+}
+
+function executeProgressLabel(status?: string | null) {
+  if (!status) {
+    return "还没有进入执行。";
+  }
+  const labels: Record<string, string> = {
+    blocked: "执行被阻断",
+    cancelled: "执行已取消",
+    checkpointed: "已记录检查点",
+    completed: "执行已完成",
+    failed: "执行失败",
+    patching: "正在应用改动",
+    planned: "前置检测完成，等待正式执行",
+    preflight: "正在做前置检测",
+    queued: "等待拉起执行",
+    running: "正在执行",
+    validating: "正在做沙箱验证",
+  };
+  return labels[status] ?? status;
+}
+
+function taskCurrentStageOutputItems(
+  task: V1Issue,
+  session: McpSessionSnapshot | null,
+  delivery: OutputIndexEntry | null,
+  evidence: OutputIndexEntry | null,
+  audit: AuditIndexEntry | null,
+) {
+  switch (task.displayStatus ?? "backlog") {
+    case "backlog":
+      return [
+        "任务合同已生成。",
+        task.dependencies.length ? `前置依赖：${task.dependencies.join("、")}` : "当前没有前置依赖。",
+        task.contextPackPath ? "Context Pack 已登记，等待进入执行准备。" : "Context Pack 还没有准备到执行阶段。",
+      ];
+    case "todo":
+      return [
+        task.latestRunId ? `当前 Run：${task.latestRunId}` : "当前 Run：等待创建。",
+        task.contextPackPath ? "Context Pack 已可用。" : "Context Pack：等待生成。",
+        `执行准备：${executeProgressLabel(task.executeStatus)}`,
+      ];
+    case "in_progress":
+      return [
+        task.latestRunId ? `当前 Run：${task.latestRunId}` : "当前 Run：未记录。",
+        `执行进度：${executeProgressLabel(task.executeStatus)}`,
+        session
+          ? `会话状态：${mcpSessionStatusLabelZh(session.status)}`
+          : "会话状态：还没有拉起，或已提前退出。",
+        ...(session?.lastError ? [`最近错误：${session.lastError}`] : []),
+      ];
+    case "in_review":
+      return [
+        task.latestRunId ? `当前 Run：${task.latestRunId}` : "当前 Run：未记录。",
+        delivery ? `交付包：${deliveryDisplayId(delivery.runId)}` : "交付包：等待写回。",
+        evidence ? `验证证据：${artifactStatusLabel(evidence.status)}` : "验证证据：等待写回。",
+        session?.prUrl ? `PR/MR：已创建` : "PR/MR：等待记录。",
+      ];
+    case "done":
+      return [
+        task.latestRunId ? `最终 Run：${task.latestRunId}` : "最终 Run：未记录。",
+        delivery ? `交付包：${deliveryDisplayId(delivery.runId)}` : "交付包：未找到记录。",
+        evidence ? `验证证据：${artifactStatusLabel(evidence.status)}` : "验证证据：未找到记录。",
+        audit ? `后续审计：${artifactStatusLabel(audit.status)}` : "后续审计：独立流程，按需触发。",
+      ];
+    case "blocked":
+      return [
+        "当前任务被关键因素阻断。",
+        task.dependencies.length ? `相关依赖：${task.dependencies.join("、")}` : "阻断原因等待补充。",
+      ];
+    case "cancel":
+      return ["当前任务已取消，不再继续执行。"];
+    default:
+      return ["还没有阶段输出。"];
+  }
+}
+
+function taskExecuteSummaryItems(
+  task: V1Issue,
+  session: McpSessionSnapshot | null,
+  mcpSessionsState: McpSessionsState,
+  executeStatusState: ExecuteStatusState,
+) {
+  const items = [
+    task.latestRunId ? `当前 Run：${task.latestRunId}` : "当前 Run：还没有创建。",
+    `执行状态：${executeProgressLabel(task.executeStatus)}`,
+  ];
+
+  if (session) {
+    items.push(`外部会话：${mcpSessionStatusLabelZh(session.status)}`);
+    items.push(`Provider：${mcpProviderLabel(session.provider)}`);
+    if (session.branchName) {
+      items.push(`工作分支：${session.branchName}`);
+    }
+    if (session.prUrl) {
+      items.push("PR/MR：已记录。");
+    }
+    if (session.lastError) {
+      items.push(`最近错误：${session.lastError}`);
+    }
+    return items;
+  }
+
+  if (mcpSessionsState.source === "loading") {
+    items.push("执行会话：正在读取。");
+  } else if (mcpSessionsState.error) {
+    items.push(`执行会话：读取失败，${mcpSessionsState.error}`);
+  } else {
+    items.push("执行会话：当前没有会话记录。");
+  }
+
+  if (executeStatusState.error) {
+    items.push(`执行工作区：${executeStatusState.error}`);
+  } else if (executeStatusState.status?.warnings.length) {
+    items.push(`执行工作区：${executeStatusState.status.warnings[0]}`);
+  } else {
+    items.push("执行工作区：没有额外告警。");
+  }
+
+  return items;
+}
+
+function taskDeliverySummaryItems(
+  task: V1Issue,
+  delivery: OutputIndexEntry | null,
+  evidence: OutputIndexEntry | null,
+  audit: AuditIndexEntry | null,
+  outputStatusState: OutputStatusState,
+) {
+  const items = [
+    `交付状态：${delivery ? artifactStatusLabel(delivery.status) : deliveryStatusLabel(task.deliveryStatus)}`,
+    `证据状态：${evidence ? artifactStatusLabel(evidence.status) : evidenceStatusLabel(task.evidenceStatus)}`,
+    `审计状态：${audit ? artifactStatusLabel(audit.status) : auditStateLabel(task.auditStatus)}`,
+  ];
+
+  if (delivery) {
+    items.push(`交付包：${deliveryDisplayId(delivery.runId)}`);
+  } else if (task.displayStatus === "in_review" || task.displayStatus === "done") {
+    items.push("交付包：当前阶段应该已生成，但还没有找到记录。");
+  } else {
+    items.push("交付包：当前阶段还没有生成。");
+  }
+
+  if (outputStatusState.error) {
+    items.push(`交付工作区：${outputStatusState.error}`);
+  } else if (outputStatusState.status?.warnings.length) {
+    items.push(`交付工作区：${outputStatusState.status.warnings[0]}`);
+  } else {
+    items.push("交付工作区：没有额外告警。");
+  }
+
+  return items;
+}
+
+function taskFinalDeliveryItems(
+  task: V1Issue,
+  delivery: OutputIndexEntry | null,
+  evidence: OutputIndexEntry | null,
+  audit: AuditIndexEntry | null,
+) {
+  if (!delivery) {
+    return task.displayStatus === "done"
+      ? ["任务已经写回完成，但还没有读取到最终交付包记录。"]
+      : ["完成写回后，这里会显示最终交付包摘要。"];
+  }
+
+  return [
+    `交付包：${deliveryDisplayId(delivery.runId)}`,
+    `来源规格：${task.sourceSpecId ?? "未记录"}`,
+    `验证证据：${evidence ? artifactStatusLabel(evidence.status) : "未记录"}`,
+    audit ? `后续审计：${artifactStatusLabel(audit.status)}` : "后续审计：独立流程，按需触发。",
+  ];
+}
+
+function deliveryStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    drafted: "已生成草稿交付包",
+    missing: "还没有交付包",
+    ready: "交付包已就绪",
+  };
+  return labels[status ?? ""] ?? "交付状态未记录";
+}
+
+function evidenceStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    complete: "证据已完成",
+    missing: "还没有证据",
+    ready: "证据已就绪",
+  };
+  return labels[status ?? ""] ?? "证据状态未记录";
+}
+
+function auditStateLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    cancelled: "审计已取消",
+    failed: "审计未通过",
+    "not-requested": "未请求审计",
+    passed: "审计通过",
+    "passed-with-warnings": "审计通过但有提醒",
+    requested: "等待审计",
+    running: "审计中",
+  };
+  return labels[status ?? ""] ?? "审计状态未记录";
 }
 
 function projectRecommendedIssue(
@@ -5308,6 +5710,9 @@ function artifactStatusLabel(status?: string | null) {
     audited: "已审计",
     blocked: "阻断",
     completed: "已完成",
+    complete: "已完成",
+    delivered: "已交付",
+    drafted: "已生成草稿",
     done: "已完成",
     failed: "失败",
     missing: "缺失",

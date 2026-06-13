@@ -94,7 +94,7 @@ const previewInputIssues: InputIssue[] = [
     priority: "p1",
     projectId: previewProjectId,
   }),
-  browserPreviewInputIssue("iss-progress", "执行受控改动", "todo", "in_progress", "Agent 已接手任务。", {
+  browserPreviewInputIssue("iss-progress", "执行受控改动", "todo", "in_progress", "执行助手已接手任务。", {
     blockedBy: ["iss-ready"],
     blocks: ["iss-review"],
     issueModel: "project",
@@ -372,7 +372,7 @@ export function createBrowserPreviewAgentEnvironmentStatus(
       version: "v1",
     })),
     repairs: [],
-    warnings: ["Browser Preview shows mock Agent Manual state and does not write AGENTS.md."],
+    warnings: ["浏览器预览只展示模拟的 Agent Manual 状态，不会写入 AGENTS.md。"],
     errors: [],
     workspaceManifest: {
       exists: true,
@@ -584,7 +584,7 @@ export function createBrowserPreviewExecuteStatus(projectRoot = BROWSER_PREVIEW_
       activeLeases: 0,
     },
     missingPaths: [],
-    warnings: ["浏览器预览只展示 mock execute 状态，不执行命令、不应用 patch。"],
+    warnings: ["浏览器预览只展示模拟的执行状态，不执行命令，也不会应用补丁。"],
     errors: [],
   };
 }
@@ -656,7 +656,7 @@ export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_P
       incompleteDeliveries: 0,
     },
     missingPaths: [],
-    warnings: ["浏览器预览只展示 mock output 状态；human audit 触发只在真实客户端 Tauri 命令中写 output/audit。"],
+    warnings: ["浏览器预览只展示模拟的交付状态；人工审计触发只会在真实客户端通过 Tauri 命令写入 output/audit。"],
     errors: [],
   };
 }
@@ -729,7 +729,7 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
         specId: previewSpecId,
       },
       scope: {
-        description: "交付关联审计 Build Agent delivery。",
+        description: "交付关联审计，用于核对执行助手的交付结果。",
         refs: [
           {
             kind: "spec",
@@ -790,7 +790,7 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
       {
         id: "finding-browser-preview-001",
         severity: "warning",
-        summary: "Browser Preview 使用 mock audit package。",
+        summary: "浏览器预览使用模拟审计包。",
       },
     ],
     checklistMarkdown:
