@@ -9,10 +9,12 @@ import type { AuditIndexEntry, IssueDisplayStatus, McpSessionSnapshot, OutputInd
 import {
   buildTaskDeliveryProjection,
   buildTaskExecutionProjection,
+  buildTaskProjectTreeViewModel,
   buildTaskStatusContract,
   buildTaskWorkflowYamlModel,
   displayStatusLabelZh,
   taskActionsForTask,
+  type TaskIssueNode,
 } from "./viewModels";
 
 type WorkflowStatus = Extract<IssueDisplayStatus, "todo" | "in_progress" | "in_review" | "done">;
@@ -137,6 +139,41 @@ function auditForDone(): AuditIndexEntry {
     sourceSpecId: "spec-workflow-regression",
     status: "passed-with-warnings",
     trigger: "release-auto",
+  };
+}
+
+function taskFromPreviewNode(node: TaskIssueNode): V1Issue {
+  return {
+    acceptanceCriteria: node.issue.acceptanceCriteria,
+    allowedFiles: node.issue.allowedPaths?.length ? node.issue.allowedPaths : node.issue.scope,
+    auditStatus: node.auditStatus,
+    boundary: node.issue.nonGoals,
+    codexInstructions: node.issue.validationHints,
+    dependencies: node.blockedBy,
+    deliveryStatus: node.deliveryStatus,
+    displayStatus: node.displayStatus,
+    evidenceRequired: node.issue.acceptanceCriteria,
+    evidenceStatus: node.evidenceStatus,
+    executeStatus: node.executeStatus ?? null,
+    expectedOutputs: node.expectedOutputs,
+    executionPipeline: node.issue.executionPipeline ?? null,
+    executionRisk: node.executionRisk,
+    forbiddenActions: node.issue.forbiddenActions ?? [],
+    forbiddenFiles: node.issue.forbiddenPaths ?? [],
+    goal: node.summary,
+    id: node.id,
+    issueCategory: node.issueCategory,
+    latestRunId: node.latestRunId ?? null,
+    nonGoals: node.issue.nonGoals,
+    priority: node.priority,
+    rawStatus: node.status,
+    requiredAgentRole: node.requiredAgentRole,
+    scope: node.issue.scope,
+    sourceSpecId: node.sourceSpecId ?? null,
+    sourceSpecPath: node.sourceSpecPath ?? null,
+    status: node.status,
+    title: node.title,
+    validationCommands: node.issue.validationCommands?.length ? node.issue.validationCommands : node.issue.validationHints,
   };
 }
 
@@ -294,14 +331,82 @@ function assertBrowserPreviewWorkflowData() {
   const statusByIssue = new Map(statusIndex.issues.map((issue) => [issue.issueId, issue]));
 
   assertEqual(issues.get("iss-ready")?.displayStatus, "todo", "preview todo issue");
+  assertEqual(issues.get("iss-review")?.title, "整理评审交付", "preview review title");
+  assertEqual(issues.get("iss-review")?.summary, "执行和本地验证已完成，等待 PR/MR 合并。", "preview review summary");
+  assertEqual(issues.get("iss-done")?.summary, "交付已写回，后续审计保持独立入口。", "preview done summary");
   assertEqual(statusByIssue.get("iss-progress")?.latestRunId, "run-browser-preview-001", "preview in_progress run");
   assertEqual(statusByIssue.get("iss-review")?.latestRunId, "run-browser-preview-002", "preview in_review run");
   assertEqual(statusByIssue.get("iss-done")?.latestRunId, "run-browser-preview-003", "preview done run");
+  assertEqual(statusByIssue.get("iss-review")?.auditStatus, "not-requested", "preview review audit stays independent");
   assert(sessions.some((item) => item.issueId === "iss-review" && item.status === "in-review"), "preview review session");
   assert(sessions.some((item) => item.issueId === "iss-done" && item.mergeState === "merged"), "preview done session");
   assert(output.releaseDeliveries.some((item) => item.issueId === "iss-review" && item.runId === "run-browser-preview-002"), "preview review delivery");
   assert(output.releaseDeliveries.some((item) => item.issueId === "iss-done" && item.runId === "run-browser-preview-003"), "preview done delivery");
+  assert(audit.audits.every((item) => item.trigger === "human-via-agent"), "preview audit trigger stays independent");
   assert(audit.audits.every((item) => item.sourceIssueId === "iss-done"), "preview audit stays after delivery");
+  assert(issues.get("iss-progress")?.validationCommands?.includes("npm --prefix apps/desktop run build"), "preview build validation command");
+  assert(issues.get("iss-progress")?.validationCommands?.includes("git diff --check"), "preview diff validation command");
+  assertEqual(issues.get("iss-progress")?.validationCommands?.includes("cargo test"), false, "preview avoids backend validation command");
+}
+
+function assertBrowserPreviewTaskWorkspaceSmoke() {
+  const input = createBrowserPreviewInputSnapshot();
+  const statusIndex = createBrowserPreviewIssueStatusIndex();
+  const sessions = createBrowserPreviewMcpSessions();
+  const output = createBrowserPreviewOutputIndex();
+  const audit = createBrowserPreviewAuditIndex();
+  const tree = buildTaskProjectTreeViewModel({
+    activeIssueId: "iss-progress",
+    issueStatusIndex: statusIndex,
+    issues: input.issues,
+    projects: input.projects,
+    relations: input.relations,
+  });
+  const project = tree.groups.find((group) => group.id === "project-browser-preview");
+  assert(project, "preview project group");
+  assertEqual(tree.selection.kind, "issue", "preview task selection kind");
+  assertEqual(tree.selection.kind === "issue" ? tree.selection.issueId : null, "iss-progress", "preview active task selection");
+  assertEqual(project.counts.activeIssueCount, 1, "preview active issue count");
+  assertEqual(project.counts.doneIssueCount, 1, "preview done issue count");
+
+  for (const issueId of ["iss-progress", "iss-review", "iss-done"]) {
+    const node = project.issues.find((item) => item.id === issueId);
+    assert(node, `${issueId} node`);
+    const task = taskFromPreviewNode(node);
+    const session = sessions.find((item) => item.issueId === issueId) ?? null;
+    const delivery = output.releaseDeliveries.find((item) => item.issueId === issueId) ?? null;
+    const evidence = output.evidence.find((item) => item.issueId === issueId) ?? null;
+    const linkedAudit = delivery
+      ? audit.audits.find((item) => item.sourceIssueId === issueId || item.sourceRunId === delivery.runId) ?? null
+      : null;
+    const contract = buildTaskStatusContract(task);
+    const executionProjection = buildTaskExecutionProjection({
+      executeWorkspaceStatus: "ready",
+      mcpSessionsSource: "preview",
+      session,
+      task,
+    });
+    const deliveryProjection = buildTaskDeliveryProjection({
+      audit: linkedAudit,
+      delivery,
+      evidence,
+      session,
+      task,
+    });
+    const yaml = buildTaskWorkflowYamlModel({
+      contract,
+      deliveryProjection,
+      executionProjection,
+      task,
+    });
+
+    assertEqual(executionProjection.missingItems.length, 0, `${issueId} execution completeness`);
+    assertEqual(deliveryProjection.missingItems.length, 0, `${issueId} delivery completeness`);
+    assert(yaml.content.includes("workflow:"), `${issueId} yaml workflow panel`);
+    assert(yaml.content.includes("execution:"), `${issueId} yaml execution panel`);
+    assert(yaml.content.includes("delivery:"), `${issueId} yaml delivery panel`);
+    assert(yaml.content.includes(`  id: "${issueId}"`), `${issueId} yaml selected task`);
+  }
 }
 
 function assert(condition: unknown, label: string): asserts condition {
@@ -325,6 +430,7 @@ export function runWorkflowRegressionChecks() {
   assertExecutionProjection();
   assertWorkflowYamlProjection();
   assertBrowserPreviewWorkflowData();
+  assertBrowserPreviewTaskWorkspaceSmoke();
 }
 
 runWorkflowRegressionChecks();

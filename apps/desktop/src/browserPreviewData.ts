@@ -44,17 +44,20 @@ const previewProjectId = "project-browser-preview";
 const previewSpecId = "spec-browser-preview";
 const previewProjectIssueIds = ["iss-ready", "iss-progress", "iss-review", "iss-audit-ready", "iss-done", "iss-cancel"];
 const previewIssueScope = [
-  "展示浏览器预览专用文件树。",
-  "展示 Markdown、配置文件、代码和目录概览。",
-  "保持真实桌面客户端只读取真实本地文件。",
+  "展示任务状态流和项目分组。",
+  "展示任务页里的执行摘要、交付摘要和 YAML workflow 面板。",
+  "保持真实桌面客户端只读取真实本地数据。",
 ];
 const previewIssueNonGoals = ["不执行命令。", "不写入本地工作区。", "不调用模型。", "不创建远程对象。"];
 const previewIssueAcceptanceCriteria = [
-  "浏览器预览可展示项目文件列表。",
-  "真实客户端不使用 mock fallback。",
-  "无法读取本地文件时不暴露 raw invoke 错误。",
+  "浏览器预览可展示任务工作台新结构。",
+  "任务页主链路展示 workflow、执行、交付和 YAML 面板。",
+  "导航收口后任务、文件和审计入口仍可用，执行与交付在任务页内展示。",
 ];
-const previewIssueValidationCommands = ["npm --prefix apps/desktop run build", "cargo test", "git diff --check"];
+const previewIssueValidationCommands = [
+  "npm --prefix apps/desktop run build",
+  "git diff --check",
+];
 
 export type BrowserPreviewTaskHierarchyScenario =
   | "default"
@@ -105,7 +108,7 @@ const previewInputIssues: InputIssue[] = [
     projectId: previewProjectId,
     executionRisk: "medium",
   }),
-  browserPreviewInputIssue("iss-review", "审计交付材料", "todo", "in_review", "任务已交付，等待人工审计。", {
+  browserPreviewInputIssue("iss-review", "整理评审交付", "todo", "in_review", "执行和本地验证已完成，等待 PR/MR 合并。", {
     blockedBy: ["iss-progress"],
     issueModel: "project",
     projectId: previewProjectId,
@@ -117,14 +120,14 @@ const previewInputIssues: InputIssue[] = [
       expectedOutputs: previewAuditExpectedOutputs(previewAuditId),
       sourceDeliveryPath: `.agentflow/output/release/${previewDeliveryRunId}/delivery.json`,
       sourceReleaseId: previewDeliveryRunId,
-      trigger: "manual",
+      trigger: "human-via-agent",
     },
     issueCategory: "audit",
     issueModel: "project",
     projectId: previewProjectId,
     requiredAgentRole: "audit-agent",
   }),
-  browserPreviewInputIssue("iss-done", "确认交付完成", "done", "done", "审计已通过。", {
+  browserPreviewInputIssue("iss-done", "确认交付完成", "done", "done", "交付已写回，后续审计保持独立入口。", {
     issueModel: "project",
     projectId: previewProjectId,
   }),
@@ -174,6 +177,7 @@ function browserPreviewInputIssue(
     nonGoals: previewIssueNonGoals,
     acceptanceCriteria: previewIssueAcceptanceCriteria,
     validationHints: previewIssueValidationCommands,
+    validationCommands: previewIssueValidationCommands,
     relations: {
       blockedBy: options.blockedBy ?? [],
       blocks: options.blocks ?? [],
@@ -229,11 +233,11 @@ function browserPreviewInputProject(
     projectId,
     sourceSpecId: previewSpecId,
     title: options.title ?? "浏览器预览任务项目",
-    summary: options.summary ?? "用于验证 Project Summary 和 Issue Contract 阅读器。",
-    objective: options.objective ?? "在任务页展示项目分组、推荐任务、依赖摘要和 issue 合约。",
-    scope: ["展示项目摘要。", "展示 issue 所属项目和输出目标。", "验证建议任务按钮会切换到 issue 合约。"],
+    summary: options.summary ?? "用于验证任务页里的项目分组和任务工作流。",
+    objective: options.objective ?? "在任务页展示项目分组、执行摘要、交付摘要和 YAML workflow。",
+    scope: ["展示项目摘要。", "展示任务页内的执行与交付主链路。", "验证建议任务按钮会切换到任务工作流。"],
     nonGoals: ["不写入真实 .agentflow/input。", "不创建远程对象。"],
-    successCriteria: ["项目行可选中。", "右侧可显示 Project Summary。", "查看建议任务后右侧显示 Issue Contract。"],
+    successCriteria: ["项目行可选中。", "右侧可显示 Project Summary。", "查看建议任务后右侧显示任务工作流。"],
     issueIds: options.issueIds ?? previewProjectIssueIds,
     status: "active",
     panel: {
@@ -561,7 +565,7 @@ export function createBrowserPreviewIssueStatusIndex(
           : issue.displayStatus === "in_review"
             ? "drafted"
             : "missing",
-      auditStatus: issue.displayStatus === "done" ? "passed" : issue.displayStatus === "in_review" ? "failed" : "not-requested",
+      auditStatus: issue.displayStatus === "done" ? "passed" : "not-requested",
     })),
   };
 }
@@ -677,7 +681,7 @@ export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_P
       incompleteDeliveries: 0,
     },
     missingPaths: [],
-    warnings: ["浏览器预览只展示模拟的交付状态；人工审计触发只会在真实客户端通过 Tauri 命令写入 output/audit。"],
+    warnings: ["浏览器预览只展示模拟的交付与审计状态；任务主链路不会自动进入审计。"],
     errors: [],
   };
 }
@@ -737,8 +741,8 @@ export function createBrowserPreviewAuditIndex(): AuditIndex {
       {
         auditId: previewAuditId,
         status: "passed-with-warnings",
-        trigger: "release-auto",
-        requestedBy: "agentflow-release-auto",
+        trigger: "human-via-agent",
+        requestedBy: "agentflow-human-audit",
         requestedAt: previewTimestamp,
         sourceDeliveryId: previewDeliveryRunId,
         sourceRunId: previewDeliveryRunId,
@@ -754,7 +758,7 @@ export function createBrowserPreviewAuditIndex(): AuditIndex {
 export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null {
   return {
     request: {
-      trigger: "release-auto",
+      trigger: "human-via-agent",
       reason: "审计请求已独立登记，用于核对交付材料。",
       source: {
         kind: "release-delivery",
@@ -797,8 +801,8 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
     audit: {
       auditId: previewAuditId,
       status: "passed-with-warnings",
-      trigger: "release-auto",
-      requestedBy: "agentflow-release-auto",
+      trigger: "human-via-agent",
+      requestedBy: "agentflow-human-audit",
       requestedAt: previewTimestamp,
       sourceDeliveryId: previewDeliveryRunId,
       sourceRunId: previewDeliveryRunId,
