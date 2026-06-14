@@ -73,7 +73,6 @@ dependencies = [
  "agentflow-agent-manual",
  "agentflow-core",
  "agentflow-event-store",
- "agentflow-execute",
  "agentflow-input",
  "agentflow-mcp",
  "agentflow-output",

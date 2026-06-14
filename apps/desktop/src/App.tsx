@@ -44,10 +44,8 @@ import {
   type StatusChipStatus,
 } from "./components";
 import { useAgentManual } from "./features/agent-manual";
-import { useExecuteStatus, type ExecuteStatusState } from "./features/execute";
 import { useInputSnapshot, type InputSnapshotState } from "./features/input";
 import { useMcpSessions, type McpSessionsState } from "./features/mcp";
-import { useOutputStatus, type OutputStatusState } from "./features/output";
 import {
   ProjectLocalFilesPage,
   isBrowserPreviewRuntime,
@@ -110,6 +108,7 @@ import {
 import type {
   AuditIndex,
   AuditIndexEntry,
+  ExecuteStatusSnapshot,
   ExecutionPipeline,
   HumanAuditReport,
   McpLogChunk,
@@ -120,7 +119,6 @@ import type {
   IssueStatusIndex,
   OutputIndex,
   OutputIndexEntry,
-  ProjectFileContent,
   ProjectionPhase,
   StateStatusSnapshot,
   TaskProjection,
@@ -146,6 +144,12 @@ type OutputBundleState = {
   error: string | null;
   outputIndex: OutputIndex | null;
   source: DataSource;
+};
+
+type ExecuteStatusState = {
+  status: ExecuteStatusSnapshot | null;
+  error: string | null;
+  source: "idle" | "loading" | "tauri" | "preview" | "unavailable";
 };
 
 type DeliveryPrMetadataState = {
@@ -319,7 +323,7 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "- 先写 docs/requirements/**，确认后再写 .agentflow/spec/**",
       "- 不修改用户源码",
       "- 不写 .agentflow/tasks/**",
-      "- 不写 .agentflow/output/audit/**",
+      "- 不写 .agentflow/audit/**",
       "",
       "如果用户要求你改代码、执行任务或审计，请停止并提示需要切换到正确 Agent。",
     ].join("\n"),
@@ -522,9 +526,11 @@ function App() {
   const { agentManualState, loadAgentManual } = useAgentManual(projectRoot);
   const { projectPanelState, prepareProjectPanel } = useProjectPanel(projectRoot);
   const inputSnapshotState = useInputSnapshot(projectRoot, taskListRefreshToken);
-  const executeStatusState = useExecuteStatus(projectRoot, executeRefreshToken);
+  const executeStatusState = useMemo<ExecuteStatusState>(
+    () => ({ error: null, source: "idle", status: null }),
+    [],
+  );
   const mcpSessionsState = useMcpSessions(projectRoot, mcpRefreshToken);
-  const outputStatusState = useOutputStatus(projectRoot, outputRefreshToken);
   const stateStatusState = useStateStatus(projectRoot, stateRefreshToken);
   const issueStatusIndexState = useIssueStatusIndex(
     projectRoot,
@@ -1217,13 +1223,11 @@ function App() {
 
     if (action === "check-writeback") {
       refreshWorkspace();
-      const delivery = findDeliveryForTask(outputBundle.outputIndex?.releaseDeliveries ?? [], task.id);
-      if (delivery) {
-        setSelectedDeliveryRunId(delivery.runId);
-        setSelectedTaskId(task.id);
+      if (["in_review", "done"].includes(task.displayStatus ?? "backlog") || task.latestRunId) {
+        setSelectedTaskId(task.id ?? null);
         setTaskDetailFocus("delivery");
         setActivePage("tasks");
-        setTaskActionFeedback("已定位交付信息。交付摘要和最终交付卡在当前任务详情中查看。");
+        setTaskActionFeedback("已刷新任务状态。交付摘要和最终记录在当前任务详情中查看。");
       } else {
         setTaskActionFeedback("还没有检测到写回结果。");
       }
@@ -1231,10 +1235,8 @@ function App() {
     }
 
     if (action === "view-delivery") {
-      const delivery = findDeliveryForTask(outputBundle.outputIndex?.releaseDeliveries ?? [], task.id);
-      if (delivery) {
-        setSelectedDeliveryRunId(delivery.runId);
-        setSelectedTaskId(task.id);
+      if (["in_review", "done"].includes(task.displayStatus ?? "backlog") || task.latestRunId) {
+        setSelectedTaskId(task.id ?? null);
         setTaskDetailFocus("delivery");
         setActivePage("tasks");
         setTaskActionFeedback("已定位交付信息。交付摘要和最终交付卡在当前任务详情中查看。");
@@ -1329,7 +1331,6 @@ function App() {
             onOpenAudit={() => setActivePage("audit")}
             onOpenTasks={() => setActivePage("tasks")}
             outputBundle={outputBundle}
-            outputStatusState={outputStatusState}
             projectLoopFeedback={projectLoopFeedback}
             projectLoopState={projectLoopState}
             selectedTask={selectedTask}
@@ -1474,21 +1475,24 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
         ? { ...current, error: null }
         : { ...current, error: null, source: "loading" },
     );
-    void Promise.all([
-      invoke<OutputIndex>("load_output_index", { projectRoot }),
-      invoke<AuditIndex>("load_audit_index", { projectRoot }),
-    ])
-      .then(async ([outputIndex, auditIndex]) => {
+    void invoke<AuditIndex>("load_audit_index", { projectRoot })
+      .then(async (auditIndex) => {
         const latestAuditWithReport = sortAuditsByLatest(auditIndex.audits).find((audit) =>
           auditHasReport(audit),
         );
         const auditReport = latestAuditWithReport
           ? await invoke<HumanAuditReport>("load_audit_report", { auditId: latestAuditWithReport.auditId, projectRoot })
           : null;
-        const deliveryArtifacts = await loadDeliveryArtifacts(projectRoot, outputIndex.releaseDeliveries);
 
         if (!cancelled) {
-          setState({ auditIndex, auditReport, deliveryArtifacts, error: null, outputIndex, source: "tauri" });
+          setState({
+            auditIndex,
+            auditReport,
+            deliveryArtifacts: {},
+            error: null,
+            outputIndex: null,
+            source: "tauri",
+          });
         }
       })
       .catch((error) => {
@@ -1547,71 +1551,6 @@ function createBrowserPreviewDeliveryArtifacts(outputIndex: OutputIndex): Record
       },
       runId: delivery.runId,
     },
-  };
-}
-
-async function loadDeliveryArtifacts(
-  projectRoot: string,
-  deliveries: OutputIndexEntry[],
-): Promise<Record<string, DeliveryArtifactState>> {
-  const entries = await Promise.all(
-    deliveries.map(async (delivery) => {
-      const runId = delivery.runId;
-      const [prMetadataContent, mergeProofContent, releaseNoteContent] = await Promise.all([
-        readProjectFileContent(projectRoot, `.agentflow/output/release/${runId}/pr-metadata.json`),
-        readProjectFileContent(projectRoot, `.agentflow/execute/runs/${runId}/review/merge-proof.json`),
-        readProjectFileContent(projectRoot, `.agentflow/output/release/${runId}/release-note.md`),
-      ]);
-      const prMetadata = parseJsonText<DeliveryPrMetadataState>(prMetadataContent?.content);
-      const mergeProof = parseJsonText<DeliveryMergeProofState>(mergeProofContent?.content);
-      const releaseNote = releaseNoteContent?.content
-        ? parseReleaseNote(releaseNoteContent.content)
-        : null;
-      return [
-        runId,
-        {
-          mergeProof,
-          prMetadata,
-          releaseNote,
-          runId,
-        } satisfies DeliveryArtifactState,
-      ] as const;
-    }),
-  );
-  return Object.fromEntries(entries);
-}
-
-async function readProjectFileContent(
-  projectRoot: string,
-  relativePath: string,
-): Promise<ProjectFileContent | null> {
-  try {
-    return await invoke<ProjectFileContent>("load_project_file_content", { projectRoot, relativePath });
-  } catch {
-    return null;
-  }
-}
-
-function parseJsonText<T>(content?: string | null): T | null {
-  if (!content) {
-    return null;
-  }
-  try {
-    return JSON.parse(content) as T;
-  } catch {
-    return null;
-  }
-}
-
-function parseReleaseNote(content: string): DeliveryReleaseNoteState {
-  const lines = content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const [titleLine, ...bodyLines] = lines;
-  return {
-    summaryLines: bodyLines.slice(0, 3),
-    title: titleLine?.startsWith("#") ? titleLine.replace(/^#+\s*/, "") : titleLine ?? null,
   };
 }
 
@@ -2229,7 +2168,6 @@ function ProjectHomePage({
   onRunProjectLoop,
   onOpenTasks,
   outputBundle,
-  outputStatusState,
   initializationState,
   projectLoopFeedback,
   projectLoopState,
@@ -2240,14 +2178,12 @@ function ProjectHomePage({
   onRunProjectLoop: () => void;
   onOpenTasks: () => void;
   outputBundle: OutputBundleState;
-  outputStatusState: OutputStatusState;
   initializationState: ProjectInitializationState;
   projectLoopFeedback: string | null;
   projectLoopState: ButtonInteractionState;
   selectedTask: V1Issue | null;
 }) {
-  const outputSummary = outputStatusState.status?.summary;
-  const recentActivities = buildRecentActivities(outputBundle, initializationState.status, outputSummary);
+  const recentActivities = buildRecentActivities(outputBundle, initializationState.status);
 
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
@@ -3086,21 +3022,12 @@ function TaskDetailReader({
     ],
     [task],
   );
-  const delivery = useMemo(
-    () => findDeliveryEntryForTask(outputBundle.outputIndex?.releaseDeliveries ?? [], task),
-    [outputBundle.outputIndex?.releaseDeliveries, task],
-  );
-  const evidence = useMemo(
-    () => findEvidenceEntryForTask(outputBundle.outputIndex?.evidence ?? [], task),
-    [outputBundle.outputIndex?.evidence, task],
-  );
-  const audit = useMemo(
-    () => (delivery ? findAuditForDelivery(outputBundle.auditIndex?.audits ?? [], delivery.runId) : null),
-    [delivery, outputBundle.auditIndex?.audits],
-  );
+  const delivery = null;
+  const evidence = null;
+  const audit = null;
   const stageOutputItems = useMemo(
-    () => taskCurrentStageOutputItems(effectiveTask, session, delivery, evidence, audit),
-    [audit, delivery, effectiveTask, evidence, session],
+    () => taskCurrentStageOutputItems(effectiveTask, session, delivery, evidence, audit, taskProjection),
+    [audit, delivery, effectiveTask, evidence, session, taskProjection],
   );
   const executeSummaryItems = useMemo(
     () => taskExecuteSummaryItems(effectiveTask, session, mcpSessionsState, executeStatusState),
@@ -3121,8 +3048,8 @@ function TaskDetailReader({
     [effectiveTask, executeStatusState, mcpSessionsState, session],
   );
   const deliveryProjection = useMemo(
-    () => buildTaskDeliveryProjection({ audit, delivery, evidence, session, task: effectiveTask }),
-    [audit, delivery, effectiveTask, evidence, session],
+    () => buildTaskDeliveryProjection({ audit, delivery, evidence, projection: taskProjection, session, task: effectiveTask }),
+    [audit, delivery, effectiveTask, evidence, session, taskProjection],
   );
   const workflowYaml = useMemo(
     () =>
@@ -3133,10 +3060,6 @@ function TaskDetailReader({
         task: effectiveTask,
       }),
     [deliveryProjection, effectiveTask, executionProjection, statusContract],
-  );
-  const deliveryArtifacts = useMemo(
-    () => outputBundle.deliveryArtifacts[delivery?.runId ?? task.latestRunId ?? ""] ?? null,
-    [delivery?.runId, outputBundle.deliveryArtifacts, task.latestRunId],
   );
   const handoffContent = useMemo(() => {
     if (!handoffOpen) {
@@ -3195,7 +3118,7 @@ function TaskDetailReader({
           task={effectiveTask}
           executeItems={executeSummaryItems}
           projection={taskProjection}
-          reviewItems={deliveryReviewItems(task, deliveryArtifacts, session)}
+          reviewItems={deliveryReviewItems(task, null, session, taskProjection)}
           stageItems={stageOutputItems}
           status={effectiveDisplayStatus}
         />
@@ -4864,7 +4787,7 @@ function CompanionShell({
         <strong>执行助手</strong>
         <span>
           {selectedTask
-            ? "等待写回。请确认任务包已经粘贴，然后扫描 .agentflow/output。"
+            ? "等待写回。请确认任务包已经执行，并刷新任务状态流。"
             : "当前没有可交付给执行助手的任务。"}
         </span>
       </article>
@@ -5094,7 +5017,7 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
   const issueCategory = issue.issueCategory ?? "spec";
   const requiredAgentRole = issue.requiredAgentRole ?? (issueCategory === "audit" ? "audit-agent" : "build-agent");
   const auditId = issue.audit?.auditId ?? (issueCategory === "audit" ? issue.issueId : null);
-  const auditOutputDir = issue.audit?.auditOutputDir ?? (auditId ? `.agentflow/output/audit/${auditId}` : null);
+  const auditOutputDir = issue.audit?.auditOutputDir ?? (auditId ? `.agentflow/audit/${auditId}` : null);
   const expectedOutputs = normalizeExpectedOutputs(
     issue.expectedOutputs,
     issueCategory,
@@ -5170,7 +5093,7 @@ function normalizeExpectedOutputs(
     if (Object.keys(normalizedDirectOutputs).length) {
       return normalizedDirectOutputs;
     }
-    const outputDir = auditOutputDir || (auditId ? `.agentflow/output/audit/${auditId}` : "");
+    const outputDir = auditOutputDir || (auditId ? `.agentflow/audit/${auditId}` : "");
     return allowDefaultOutputs && outputDir ? auditExpectedOutputs(outputDir) : {};
   }
 
@@ -5182,9 +5105,7 @@ function normalizeExpectedOutputs(
     return {};
   }
   return {
-    evidencePath: `.agentflow/output/evidence/${issueId}.json`,
-    executeRunDir: `.agentflow/execute/runs/${issueId}`,
-    releaseDeliveryDir: `.agentflow/output/release/${issueId}`,
+    evidencePath: `.agentflow/tasks/${issueId}/evidence/evidence.json`,
   };
 }
 
@@ -5215,9 +5136,9 @@ function auditExpectedOutputs(auditOutputDir: string): ExpectedOutputs {
 
 function defaultForbiddenPaths(issueCategory?: string | null) {
   if (issueCategory === "audit") {
-    return [".agentflow/execute/**", ".agentflow/output/release/**", ".agentflow/output/evidence/**"];
+    return [".agentflow/tasks/*/runs/**", ".agentflow/tasks/*/evidence/**"];
   }
-  return [".agentflow/output/audit/**", ".agentflow/spec/**", ".agentflow/goal-tree/**"];
+  return [".agentflow/audit/**", ".agentflow/spec/**"];
 }
 
 function defaultForbiddenActions(issueCategory?: string | null) {
@@ -5569,8 +5490,6 @@ function expectedOutputLabelZh(key: string) {
     "findings.json": "审计发现",
     "traceability.json": "追溯关系",
     evidencePath: "验证证据",
-    executeRunDir: "执行 Run",
-    releaseDeliveryDir: "交付包",
   };
   return labels[key] ?? key;
 }
@@ -5601,7 +5520,14 @@ function taskCurrentStageOutputItems(
   delivery: OutputIndexEntry | null,
   evidence: OutputIndexEntry | null,
   audit: AuditIndexEntry | null,
+  projection?: TaskProjection | null,
 ) {
+  const publicDelivery = projection?.publicDelivery ?? null;
+  const projectedEvidencePath = publicDelivery?.evidencePath ?? null;
+  const projectedPrUrl = publicDelivery?.prUrl ?? null;
+  const projectedMergeCommit = publicDelivery?.mergeCommit ?? null;
+  const projectedPublicRecord = publicDelivery?.changelogPath ?? publicDelivery?.releaseNotesUrl ?? null;
+
   switch (task.displayStatus ?? "backlog") {
     case "backlog":
       return [
@@ -5627,15 +5553,17 @@ function taskCurrentStageOutputItems(
     case "in_review":
       return [
         task.latestRunId ? `当前 Run：${task.latestRunId}` : "当前 Run：未记录。",
-        delivery ? `交付包：${deliveryDisplayId(delivery.runId)}` : "交付包：等待写回。",
-        evidence ? `验证证据：${artifactStatusLabel(evidence.status)}` : "验证证据：等待写回。",
-        session?.prUrl ? `PR/MR：已创建` : "PR/MR：等待记录。",
+        projectedEvidencePath ? `验证证据：${projectedEvidencePath}` : evidence ? `验证证据：${artifactStatusLabel(evidence.status)}` : "验证证据：等待写回。",
+        projectedPrUrl ? "PR/MR：已创建。" : session?.prUrl ? "PR/MR：已创建。" : "PR/MR：等待记录。",
+        projectedPublicRecord ? `公开交付：${projectedPublicRecord}` : "公开交付：等待记录。",
       ];
     case "done":
       return [
         task.latestRunId ? `最终 Run：${task.latestRunId}` : "最终 Run：未记录。",
-        delivery ? `交付包：${deliveryDisplayId(delivery.runId)}` : "交付包：未找到记录。",
-        evidence ? `验证证据：${artifactStatusLabel(evidence.status)}` : "验证证据：未找到记录。",
+        projectedEvidencePath ? `验证证据：${projectedEvidencePath}` : evidence ? `验证证据：${artifactStatusLabel(evidence.status)}` : "验证证据：未找到记录。",
+        projectedPrUrl ? `PR/MR：${projectedPrUrl}` : "PR/MR：未找到记录。",
+        projectedMergeCommit ? `合并提交：${projectedMergeCommit}` : "合并提交：未找到记录。",
+        projectedPublicRecord ? `公开交付：${projectedPublicRecord}` : "公开交付：未找到记录。",
         audit ? `后续审计：${artifactStatusLabel(audit.status)}` : "后续审计：独立流程，按需触发。",
       ];
     case "blocked":
@@ -5699,6 +5627,7 @@ function deliveryReviewItems(
   task: V1Issue | null,
   artifact: DeliveryArtifactState | null,
   session: McpSessionSnapshot | null,
+  projection?: TaskProjection | null,
 ) {
   if (!task) {
     return ["先选择一个任务。"];
@@ -5706,15 +5635,16 @@ function deliveryReviewItems(
 
   const mergeProof = artifact?.mergeProof;
   const prMetadata = artifact?.prMetadata;
+  const publicDelivery = projection?.publicDelivery ?? null;
   const provider = mergeProof?.provider ?? prMetadata?.provider ?? session?.provider ?? null;
-  const reviewUrl = mergeProof?.remoteUrl ?? prMetadata?.remotePrUrl ?? session?.prUrl ?? null;
+  const reviewUrl = publicDelivery?.prUrl ?? mergeProof?.remoteUrl ?? prMetadata?.remotePrUrl ?? session?.prUrl ?? null;
   const mergeMode = mergeProof?.mergeMode ?? prMetadata?.mergeMode ?? null;
-  const branchName = prMetadata?.branchName ?? session?.branchName ?? null;
-  const merged = mergeProof?.merged ?? prMetadata?.merged ?? session?.mergeState === "merged";
+  const branchName = projection?.branchName ?? prMetadata?.branchName ?? session?.branchName ?? null;
+  const merged = Boolean(publicDelivery?.mergeCommit) || mergeProof?.merged || prMetadata?.merged || session?.mergeState === "merged";
 
-  if (!mergeProof && !prMetadata && !session) {
+  if (!mergeProof && !prMetadata && !session && !publicDelivery?.prUrl && !publicDelivery?.mergeCommit) {
     return task.displayStatus === "in_review" || task.displayStatus === "done"
-      ? ["评审信息缺失：当前状态应该已经创建评审记录，但还没有读取到评审元数据或 merge proof。"]
+      ? ["评审信息缺失：当前状态应该已经创建评审记录，但状态投影还没有 PR/MR 或合并证明。"]
       : ["当前阶段还没有评审信息。"];
   }
 
@@ -5734,17 +5664,34 @@ function deliveryReviewItems(
     provider ? `平台：${mcpProviderLabel(provider)}` : "平台：未记录",
     mergeMode ? `合并模式：${mergeMode}` : "合并模式：未记录",
     branchName ? `工作分支：${branchName}` : "工作分支：未记录",
+    publicDelivery?.mergeCommit ? `合并提交：${publicDelivery.mergeCommit}` : "合并提交：未记录",
   ];
 }
 
-function deliveryReleaseNoteItems(task: V1Issue | null, artifact: DeliveryArtifactState | null) {
+function deliveryReleaseNoteItems(
+  task: V1Issue | null,
+  artifact: DeliveryArtifactState | null,
+  projection?: TaskProjection | null,
+) {
   if (!task) {
     return ["先选择一个任务。"];
   }
 
+  const publicDelivery = projection?.publicDelivery ?? null;
+  const publicRecordPath = publicDelivery?.changelogPath ?? publicDelivery?.releaseNotesUrl ?? null;
+  if (publicRecordPath) {
+    const changelogPath = publicDelivery?.changelogPath ?? null;
+    const releaseNotesUrl = publicDelivery?.releaseNotesUrl ?? null;
+    const prUrl = publicDelivery?.prUrl ?? null;
+    return [
+      changelogPath ? `CHANGELOG：${changelogPath}` : `Release notes：${releaseNotesUrl}`,
+      prUrl ? `PR/MR：${prUrl}` : "PR/MR：未记录",
+    ];
+  }
+
   if (!artifact?.releaseNote) {
     return task.displayStatus === "in_review" || task.displayStatus === "done"
-      ? ["交付说明缺失：当前状态应该已经有 release note，但还没有读取到 release-note.md。"]
+      ? ["公开交付缺失：当前状态应该已经有 CHANGELOG 或 release notes 记录。"]
       : ["当前阶段还没有交付说明。"];
   }
 
@@ -5955,11 +5902,7 @@ function hasExpectedOutputs(outputs?: ExpectedOutputs | null) {
 }
 
 function hasBuildExpectedOutputs(outputs?: ExpectedOutputs | null) {
-  return Boolean(
-    outputs?.executeRunDir?.trim() &&
-      outputs.evidencePath?.trim() &&
-      outputs.releaseDeliveryDir?.trim(),
-  );
+  return Boolean(outputs?.evidencePath?.trim());
 }
 
 function taskActionDisplayLabel(action: TaskInteractionAction, task: V1Issue, copyState: ButtonInteractionState) {
@@ -6063,7 +6006,6 @@ function deliveryAuditStatus(delivery: OutputIndexEntry | null, audit: AuditInde
 function buildRecentActivities(
   outputBundle: OutputBundleState,
   initializationStatus: ProjectInitializationStatus | null,
-  outputSummary?: NonNullable<OutputStatusState["status"]>["summary"],
 ) {
   const initializationItems = [
     ...(initializationStatus?.recentContext.slice(0, 2).map((context) => ({
@@ -6083,13 +6025,6 @@ function buildRecentActivities(
         ]
       : []),
   ];
-  const deliveryItems =
-    sortOutputEntriesByLatest(outputBundle.outputIndex?.releaseDeliveries ?? []).slice(0, 2).map((delivery) => ({
-      detail: `${delivery.issueId || "关联任务"} · ${artifactStatusLabel(delivery.status)}`,
-      id: `delivery-${delivery.runId}`,
-      target: "tasks" as const,
-      title: "任务交付区域同步结构",
-    })) ?? [];
   const auditItems =
     sortAuditsByLatest(outputBundle.auditIndex?.audits ?? []).slice(0, 2).map((audit) => ({
       detail: `${audit.auditId} · ${artifactStatusLabel(audit.status)}`,
@@ -6098,17 +6033,17 @@ function buildRecentActivities(
       title: "审计页面同步结构",
     })) ?? [];
 
-  const items = [...initializationItems, ...deliveryItems, ...auditItems];
+  const items = [...initializationItems, ...auditItems];
   if (items.length) {
     return items.slice(0, 4);
   }
 
   return [
     {
-      detail: `${outputSummary?.releaseDeliveries ?? 0} 个交付，${outputSummary?.audits ?? 0} 个审计`,
-      id: "activity-output",
+      detail: `${outputBundle.auditIndex?.audits.length ?? 0} 个审计`,
+      id: "activity-task-flow",
       target: "tasks" as const,
-      title: "任务交付区域同步结构",
+      title: "任务状态流等待事件",
     },
     {
       detail: "任务合约和状态按钮已按状态收口。",
@@ -6493,7 +6428,7 @@ function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
     "- 不要用外部状态拆分、重排或推进 AgentFlow 任务。",
     "- GitHub/GitLab 命令只允许用于当前 executionPipeline 里的 PR/MR 阶段。",
     "- 不要越过任务边界。",
-    "- 不要手写 `.agentflow/execute/**`、`.agentflow/output/evidence/**` 或 `.agentflow/output/release/**`。",
+    "- 不要手写 `.agentflow/tasks/**` 或 `.agentflow/events/**`。",
     "- 不要把“不要手写 `.agentflow/**`”理解成不能调用 AgentFlow 官方 loop 命令；官方 run 创建、Context Pack 生成和 complete 写回都必须走 AgentFlow 入口。",
     ...(task.issueCategory === "spec"
       ? [
@@ -6560,7 +6495,7 @@ function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
           "- request.runId 必须等于 `build-agent start` 返回的 `runId`。",
           "- request.changedFiles 填写实际修改文件。",
           "- request.validationCommands 填写已执行的验证命令和 exitCode。",
-          "- AgentFlow 会自动生成规范 run、evidence、release，并把任务派生成已完成。",
+          "- AgentFlow 会自动生成规范 run、evidence、task events，并把任务派生成已完成；公开交付记录写入 PR/MR body、CHANGELOG 或 release notes。",
         ]
       : []),
   ].join("\n");
@@ -6599,7 +6534,7 @@ function agentRoleRulesDocument() {
       {
         agentRole: "audit-agent",
         handlesIssueCategory: ["audit"],
-        writes: [".agentflow/output/audit/**"],
+        writes: [".agentflow/audit/**"],
       },
     ],
   };

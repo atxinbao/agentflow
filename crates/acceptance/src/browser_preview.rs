@@ -4,7 +4,7 @@ use std::{fs, path::PathBuf};
 pub struct BrowserPreviewSmokeContract {
     pub package_script: String,
     pub browser_preview_data: String,
-    pub output_panel: String,
+    pub desktop_app: String,
 }
 
 pub fn load_browser_preview_smoke_contract() -> Result<BrowserPreviewSmokeContract> {
@@ -20,9 +20,7 @@ pub fn load_browser_preview_smoke_contract() -> Result<BrowserPreviewSmokeContra
             repo_root.join("apps/desktop/src/browserPreviewData.ts"),
         )
         .context("read browserPreviewData.ts")?,
-        output_panel: fs::read_to_string(
-            repo_root.join("apps/desktop/src/features/output/OutputAuditPanel.tsx"),
-        )
-        .context("read OutputAuditPanel.tsx")?,
+        desktop_app: fs::read_to_string(repo_root.join("apps/desktop/src/App.tsx"))
+            .context("read App.tsx")?,
     })
 }

@@ -119,11 +119,11 @@ mod tests {
         assert!(contract
             .browser_preview_data
             .contains("createBrowserPreviewHumanAuditReport"));
+        assert!(contract.desktop_app.contains("buildTaskDeliveryProjection"));
         assert!(contract
-            .output_panel
-            .contains("App 只展示审计状态，不创建审计"));
-        assert!(contract.output_panel.contains("交付关联审计"));
-        assert!(!contract.output_panel.contains("request_human_audit"));
+            .desktop_app
+            .contains("createBrowserPreviewHumanAuditReport"));
+        assert!(!contract.desktop_app.contains("request_human_audit"));
         Ok(())
     }
 }
