@@ -7,14 +7,9 @@ use agentflow_execute::{
     mark_build_agent_launch_done, mark_build_agent_launch_in_review, BuildAgentCompletion,
     BuildAgentCompletionRequest,
 };
-use agentflow_input::issue::{
-    AgentRole, InputIssue, InputIssueModel, InputIssueStatus, IssueCategory,
-};
-use agentflow_loop::{
-    write_issue_merge_proof, DirectIssueLoop, IssueLoop, IssueLoopProjection,
-    ProjectExecutionLaunch, ProjectExecutor, ProjectLoop,
-};
-use agentflow_task_loop::{AgentLaunchPayload, AGENT_LAUNCH_REQUESTED};
+use agentflow_input::issue::{AgentRole, InputIssue, IssueCategory};
+use agentflow_loop::{write_issue_merge_proof, ProjectExecutionLaunch, ProjectExecutor};
+use agentflow_task_loop::{AgentLaunchPayload, TaskLoop, AGENT_LAUNCH_REQUESTED};
 use agentflow_workflow_events::{
     append_event_once, BuildAgentMergeConfirmedPayload, BuildAgentSessionReviewReadyPayload,
     BuildAgentWritebackCompletedPayload, WorkflowEventDraft,
@@ -124,33 +119,15 @@ pub(crate) fn start_build_agent_issue(root: &Path, issue_id: &str) -> Result<Bui
     if issue_id.is_empty() {
         anyhow::bail!("build agent start requires issueId");
     }
-    let mut issue = agentflow_input::load_input_issue(root, issue_id)
-        .with_context(|| format!("load input issue {issue_id}"))?;
-    assert_build_agent_contract(&issue)?;
-    if matches!(issue.status, InputIssueStatus::Backlog) {
-        schedule_issue_for_runtime(root, &issue)?;
-        issue = agentflow_input::load_input_issue(root, issue_id)
-            .with_context(|| format!("reload input issue {issue_id} after scheduling"))?;
-    }
-    if !matches!(issue.status, InputIssueStatus::Todo) {
-        anyhow::bail!(
-            "build agent start requires todo issue after scheduling; {} is {}",
-            issue.issue_id,
-            issue.status.as_str()
-        );
-    }
-
-    let projection = start_issue_runtime_preflight(root, &issue)?;
+    let tick = TaskLoop::start_issue(root, issue_id, "codex")?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
     agentflow_state::refresh_state(root)?;
     Ok(BuildAgentStart {
-        issue_id: issue.issue_id,
-        run_id: projection
-            .run_id
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("runtime preflight did not produce runId"))?,
-        stage: projection.stage.as_str().to_string(),
-        branch_name: projection.branch_name,
-        project_id: projection.project_id,
+        issue_id: tick.launch.issue_id,
+        run_id: tick.launch.run_id,
+        stage: "in_progress".to_string(),
+        branch_name: Some(tick.launch.branch_name),
+        project_id: tick.launch.project_id,
     })
 }
 
@@ -360,34 +337,6 @@ fn append_build_agent_writeback_completed_event(
     Ok(())
 }
 
-fn schedule_issue_for_runtime(root: &Path, issue: &InputIssue) -> Result<()> {
-    match issue.issue_model {
-        InputIssueModel::Direct => {
-            DirectIssueLoop::schedule_ready_issues(root)?;
-        }
-        InputIssueModel::Project => {
-            let project_id = issue.project_id.as_deref().ok_or_else(|| {
-                anyhow::anyhow!("project issue {} is missing projectId", issue.issue_id)
-            })?;
-            ProjectLoop::new(project_id).run_preflight(root)?;
-            ProjectLoop::new(project_id).schedule_ready_issues(root)?;
-        }
-    }
-    Ok(())
-}
-
-fn start_issue_runtime_preflight(root: &Path, issue: &InputIssue) -> Result<IssueLoopProjection> {
-    match issue.issue_model {
-        InputIssueModel::Direct => DirectIssueLoop::start_runtime_preflight(root, &issue.issue_id),
-        InputIssueModel::Project => {
-            let project_id = issue.project_id.as_deref().ok_or_else(|| {
-                anyhow::anyhow!("project issue {} is missing projectId", issue.issue_id)
-            })?;
-            IssueLoop::new(project_id, &issue.issue_id).start_runtime_preflight(root)
-        }
-    }
-}
-
 fn assert_current_cli_is_fresh(root: &Path) -> Result<()> {
     let current_exe = std::env::current_exe().context("locate current agentflow CLI binary")?;
     if !is_local_target_binary(root, &current_exe) {
@@ -473,7 +422,8 @@ mod tests {
     use super::{
         binary_is_stale, claim_next_build_agent_launch_with_bridge,
         complete_build_agent_issue_from_request, is_local_target_binary,
-        prepare_build_agent_review_from_request, rebuild_hint, write_build_agent_merge_proof,
+        prepare_build_agent_review_from_request, rebuild_hint, start_build_agent_issue,
+        write_build_agent_merge_proof,
     };
     use agentflow_execute::{
         acquire_execute_lease, apply_execute_patch, create_execute_checkpoint,
@@ -634,6 +584,47 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn build_agent_start_uses_spec_task_loop_issue() {
+        let dir = tempdir().unwrap();
+        let requirement = dir.path().join("docs/requirements/034-start-test.md");
+        fs::create_dir_all(requirement.parent().unwrap()).unwrap();
+        fs::write(
+            &requirement,
+            "# Start Test\n\n验证 CLI start 只依赖 spec/task-loop。\n",
+        )
+        .unwrap();
+        let mut issue = agentflow_spec::SpecIssueDraft::new("AF-START-001");
+        issue.project_id = Some("proj-start".to_string());
+        let issue =
+            agentflow_spec::issue_from_requirement(dir.path(), &requirement, issue).unwrap();
+        agentflow_spec::write_spec_issue(dir.path(), &issue).unwrap();
+        let mut project = agentflow_spec::SpecProjectDraft::new("proj-start");
+        project.issue_ids = vec!["AF-START-001".to_string()];
+        let project =
+            agentflow_spec::project_from_requirement(dir.path(), &requirement, project).unwrap();
+        agentflow_spec::write_spec_project(dir.path(), &project).unwrap();
+
+        let started = start_build_agent_issue(dir.path(), "AF-START-001").unwrap();
+
+        assert_eq!(started.issue_id, "AF-START-001");
+        assert_eq!(started.run_id, "run-001");
+        assert_eq!(started.stage, "in_progress");
+        assert_eq!(started.project_id.as_deref(), Some("proj-start"));
+        assert_eq!(
+            started.branch_name.as_deref(),
+            Some("agentflow/proj-start/AF-START-001")
+        );
+        assert!(dir
+            .path()
+            .join(".agentflow/tasks/AF-START-001/runs/run-001/launch/agent-request.json")
+            .is_file());
+        assert!(!dir
+            .path()
+            .join(".agentflow/input/issues/AF-START-001.json")
+            .exists());
     }
 
     #[test]
