@@ -240,9 +240,9 @@ fn should_ignore_agentflow_path(relative: &Path) -> bool {
 
     matches!(
         parts.as_slice(),
-        [".agentflow", "output", "logs", ..]
-            | [".agentflow", "output", "tmp", ..]
-            | [".agentflow", "output", "cache", ..]
+        [".agentflow", "events", "logs", ..]
+            | [".agentflow", "events", "tmp", ..]
+            | [".agentflow", "tasks", _, "tmp", ..]
             | [".agentflow", "panel", "index", ..]
             | [".agentflow", "panel", "snapshots", ..]
     )
@@ -313,25 +313,28 @@ mod tests {
         let event = Event::new(EventKind::Modify(ModifyKind::Data(
             notify::event::DataChange::Content,
         )))
-        .add_path(root.join(".agentflow/input/issues/AF-001.json"))
-        .add_path(root.join(".agentflow/output/release/run-001/release.json"))
+        .add_path(root.join(".agentflow/spec/issues/AF-001.json"))
+        .add_path(root.join(".agentflow/tasks/AF-001/evidence/evidence.json"))
         .add_path(root.join("src/main.rs"));
 
         let pending = PendingAgentflowChange::from_event(root, &event).unwrap();
 
         assert_eq!(
             pending.changed_areas.into_iter().collect::<Vec<_>>(),
-            vec!["input".to_string(), "output".to_string()]
+            vec!["spec".to_string(), "tasks".to_string()]
         );
     }
 
     #[test]
     fn ignores_high_churn_agentflow_paths() {
         assert!(should_ignore_agentflow_path(Path::new(
-            ".agentflow/output/logs/watch.log"
+            ".agentflow/events/logs/watch.log"
         )));
         assert!(should_ignore_agentflow_path(Path::new(
-            ".agentflow/output/tmp/a.json"
+            ".agentflow/events/tmp/a.json"
+        )));
+        assert!(should_ignore_agentflow_path(Path::new(
+            ".agentflow/tasks/AF-001/tmp/a.json"
         )));
         assert!(should_ignore_agentflow_path(Path::new(
             ".agentflow/panel/index/panel.db"
@@ -340,7 +343,7 @@ mod tests {
             ".agentflow/panel/snapshots/latest.json"
         )));
         assert!(!should_ignore_agentflow_path(Path::new(
-            ".agentflow/input/issues/AF-001.json"
+            ".agentflow/spec/issues/AF-001.json"
         )));
     }
 }

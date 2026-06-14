@@ -51,7 +51,6 @@ pub(crate) struct ProjectWorkspaceSummary {
     pub(crate) agents_md_git_warning: Option<String>,
     pub(crate) ownership: agentflow_agent_manual::model::WorkspaceOwnershipStatus,
     pub(crate) agent_manual_status: agentflow_agent_manual::model::AgentEnvironmentStatus,
-    pub(crate) input_status: Option<agentflow_input::model::InputStatusSnapshot>,
     pub(crate) state_status: Option<agentflow_state::StateStatusSnapshot>,
     pub(crate) initialization_status: Option<ProjectInitializationSummary>,
 }

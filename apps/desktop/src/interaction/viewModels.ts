@@ -13,6 +13,7 @@ import type {
   IssueStatusIndexEntry,
   McpSessionSnapshot,
   OutputIndexEntry,
+  TaskProjection,
   V1Issue,
   WorkflowAuditStatus,
 } from "../types";
@@ -1153,62 +1154,66 @@ export function buildTaskDeliveryProjection({
   audit,
   delivery,
   evidence,
+  projection,
   session,
   task,
 }: {
   audit: AuditIndexEntry | null;
   delivery: OutputIndexEntry | null;
   evidence: OutputIndexEntry | null;
+  projection?: TaskProjection | null;
   session: McpSessionSnapshot | null;
   task: V1Issue;
 }): TaskDeliveryProjection {
   const status = task.displayStatus ?? "backlog";
-  const expectedReleaseDir = stringExpectedOutput(task.expectedOutputs, "releaseDeliveryDir");
-  const releaseDeliveryDir = delivery?.path ? parentDirectory(delivery.path) : expectedReleaseDir;
-  const releaseNotePath = releaseDeliveryDir
-    ? `${releaseDeliveryDir}/release-note.md`
-    : stringExpectedOutput(task.expectedOutputs, "releaseNotePath");
+  const publicDelivery = projection?.publicDelivery ?? null;
+  const releaseDeliveryDir = delivery?.path ? parentDirectory(delivery.path) : null;
+  const releaseNotePath =
+    publicDelivery?.changelogPath ??
+    publicDelivery?.releaseNotesUrl ??
+    (releaseDeliveryDir ? `${releaseDeliveryDir}/release-note.md` : null);
   const deliveryRequired = status === "in_review" || status === "done";
   const deliveryPath = delivery?.path ?? (releaseDeliveryDir ? `${releaseDeliveryDir}/delivery.json` : null);
+  const evidencePath =
+    publicDelivery?.evidencePath ??
+    evidence?.path ??
+    stringExpectedOutput(task.expectedOutputs, "evidencePath");
+  const prUrl = publicDelivery?.prUrl ?? session?.prUrl ?? null;
+  const mergeState = publicDelivery?.mergeCommit
+    ? "merged"
+    : session?.mergeState ?? null;
   const missingItems = [
-    ...(deliveryRequired && !delivery ? ["交付包：当前状态需要交付包，但 output index 还没有对应记录。"] : []),
-    ...(deliveryRequired && !evidence ? ["验证证据：当前状态需要证据，但 output index 还没有对应记录。"] : []),
-    ...(deliveryRequired && !session?.prUrl ? ["评审信息：未记录评审链接。"] : []),
-    ...(deliveryRequired && !releaseNotePath ? ["交付说明：未记录 release note 路径。"] : []),
+    ...(deliveryRequired && !evidencePath ? ["验证证据：当前状态需要证据，但状态投影还没有对应记录。"] : []),
+    ...(deliveryRequired && !prUrl ? ["评审信息：未记录 PR/MR 链接。"] : []),
+    ...(deliveryRequired && !releaseNotePath ? ["公开交付：未记录 CHANGELOG 或 release notes。"] : []),
   ];
 
   return {
     deliveryPath,
-    deliveryRunId: delivery?.runId ?? task.latestRunId ?? null,
-    evidencePath: evidence?.path ?? stringExpectedOutput(task.expectedOutputs, "evidencePath"),
-    mergeState: session?.mergeState ?? null,
+    deliveryRunId: delivery?.runId ?? projection?.latestRunId ?? task.latestRunId ?? null,
+    evidencePath,
+    mergeState,
     missingItems,
     packageItems: [
-      delivery ? `交付包：${delivery.runId}` : deliveryRequired ? "交付包：未找到记录" : "交付包：当前阶段还未生成",
-      deliveryPath ? `交付文件：${deliveryPath}` : "交付文件：未记录",
-      releaseDeliveryDir ? `交付目录：${releaseDeliveryDir}` : "交付目录：未记录",
+      projection?.latestRunId ? `Run：${projection.latestRunId}` : task.latestRunId ? `Run：${task.latestRunId}` : "Run：未记录",
       evidence
         ? `验证证据：${artifactProjectionStatusLabel(evidence.status)} · ${evidence.path}`
-        : "验证证据：未找到记录",
-      session?.prUrl ? `评审链接：${session.prUrl}` : "评审链接：未记录",
-      session?.mergeState ? `合并状态：${session.mergeState}` : "合并状态：未记录",
-      releaseNotePath ? `交付说明：${releaseNotePath}` : "交付说明：未记录",
+        : evidencePath ? `验证证据：${evidencePath}` : "验证证据：未记录",
+      prUrl ? `PR/MR：${prUrl}` : "PR/MR：未记录",
+      publicDelivery?.mergeCommit ? `合并提交：${publicDelivery.mergeCommit}` : "合并提交：未记录",
+      releaseNotePath ? `公开交付：${releaseNotePath}` : "公开交付：未记录",
       audit ? `后续审计：${artifactProjectionStatusLabel(audit.status)}` : "后续审计：独立入口，未并入任务主链路。",
     ],
-    prUrl: session?.prUrl ?? null,
+    prUrl,
     releaseDeliveryDir,
     releaseNotePath,
     status,
     summaryItems: [
       `任务状态：${displayStatusLabelZh(status)}`,
-      delivery
-        ? `交付包：${delivery.runId} · ${artifactProjectionStatusLabel(delivery.status)}`
-        : deliveryRequired
-          ? "交付包：缺失"
-          : "交付包：未到生成阶段",
-      evidence ? `证据状态：${artifactProjectionStatusLabel(evidence.status)}` : deliveryRequired ? "证据状态：缺失" : "证据状态：未到生成阶段",
-      session?.prUrl ? "评审信息：已记录" : "评审信息：未记录",
-      releaseNotePath ? "交付说明：已定位" : "交付说明：未记录",
+      evidencePath ? "验证证据：已记录" : deliveryRequired ? "验证证据：缺失" : "验证证据：未到生成阶段",
+      prUrl ? "PR/MR：已记录" : "PR/MR：未记录",
+      publicDelivery?.mergeCommit ? "合并证明：已记录" : "合并证明：未记录",
+      releaseNotePath ? "公开交付：已定位" : "公开交付：未记录",
       audit ? `审计提示：${artifactProjectionStatusLabel(audit.status)}` : "审计提示：交付后的独立入口。",
     ],
     taskId: task.id,

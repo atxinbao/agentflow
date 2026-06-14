@@ -51,7 +51,6 @@ pub(crate) fn prepare_local_project_workspace_at(
             agents_md_git_warning: None,
             ownership: ownership.clone(),
             agent_manual_status,
-            input_status: None,
             state_status: None,
             initialization_status: None,
         });
@@ -80,7 +79,6 @@ pub(crate) fn prepare_local_project_workspace_at(
             agents_md_git_warning: None,
             ownership: agent_manual_status.ownership.clone(),
             agent_manual_status,
-            input_status: None,
             state_status: None,
             initialization_status: None,
         });
@@ -142,7 +140,6 @@ pub(crate) fn prepare_local_project_workspace_at(
         agents_md_git_warning: agents_gitignore.warning,
         ownership,
         agent_manual_status,
-        input_status: None,
         state_status: Some(state_status),
         initialization_status: Some(initialization_status),
     })
@@ -257,17 +254,16 @@ mod tests {
             .exists());
         assert!(!dir
             .path()
-            .join(".agentflow/output/release/DEL-DEMO-001/delivery.json")
+            .join(".agentflow/tasks/DEL-DEMO-001/evidence/evidence.json")
             .exists());
         assert!(!dir
             .path()
-            .join(".agentflow/output/audit/AUD-DEMO-001/audit-report.md")
+            .join(".agentflow/audit/AUD-DEMO-001/audit-report.md")
             .exists());
         assert!(dir
             .path()
             .join(".agentflow/state/indexes/base-release-initialization.json")
             .is_file());
-        assert!(summary.input_status.is_none());
         assert!(dir.path().join(".agentflow/spec/manifest.json").is_file());
         assert!(dir.path().join(".agentflow/spec/index.json").is_file());
         assert!(dir.path().join(".agentflow/spec/projects").is_dir());
