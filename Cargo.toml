@@ -8,6 +8,7 @@ members = [
     "crates/spec",
     "crates/workflow-core",
     "crates/event-store",
+    "crates/workflow-runtime",
     "crates/mcp",
     "crates/loop",
     "crates/output",
