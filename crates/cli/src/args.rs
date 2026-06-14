@@ -114,6 +114,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: ProjectionCommand,
     },
+    Release {
+        #[command(subcommand)]
+        command: ReleaseCommand,
+    },
     State {
         #[command(subcommand)]
         command: StateCommand,
@@ -284,6 +288,20 @@ pub(crate) enum ProjectionCommand {
     Project {
         #[arg(long = "project-id")]
         project_id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum ReleaseCommand {
+    Summary,
+    WriteDocs {
+        #[arg(long = "changelog-path", default_value = "CHANGELOG.md")]
+        changelog_path: std::path::PathBuf,
+        #[arg(
+            long = "release-notes-path",
+            default_value = "docs/release-notes/agentflow-release-notes.md"
+        )]
+        release_notes_path: std::path::PathBuf,
     },
 }
 

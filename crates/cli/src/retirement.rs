@@ -149,6 +149,11 @@ pub(crate) fn legacy_command_status(command: &Command) -> LegacyCommandStatus {
             disposition: LegacyCommandDisposition::KeepTemporary,
             reason: "active task/project projection read model command",
         },
+        Command::Release { .. } => LegacyCommandStatus {
+            command_name: "release",
+            disposition: LegacyCommandDisposition::KeepTemporary,
+            reason: "active public release document generator command",
+        },
         Command::State { .. } => LegacyCommandStatus::disabled(
             "state",
             "old workflow state snapshot writer is not inherited",
@@ -230,6 +235,13 @@ mod tests {
         assert_eq!(
             legacy_command_status(&Command::Projection {
                 command: crate::args::ProjectionCommand::Rebuild
+            })
+            .disposition,
+            LegacyCommandDisposition::KeepTemporary
+        );
+        assert_eq!(
+            legacy_command_status(&Command::Release {
+                command: crate::args::ReleaseCommand::Summary
             })
             .disposition,
             LegacyCommandDisposition::KeepTemporary

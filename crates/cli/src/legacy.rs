@@ -10,7 +10,8 @@ use crate::active::{
     write_build_agent_merge_proof,
 };
 use crate::args::{
-    AgentBridgeCommand, BuildAgentCommand, Cli, Command, ProjectionCommand, TaskLoopCommand,
+    AgentBridgeCommand, BuildAgentCommand, Cli, Command, ProjectionCommand, ReleaseCommand,
+    TaskLoopCommand,
 };
 use crate::retirement::{
     legacy_command_status, print_legacy_retirement_message, should_disable_legacy_command,
@@ -362,6 +363,30 @@ pub(crate) fn run() -> Result<()> {
             ProjectionCommand::Project { project_id } => {
                 let projection = agentflow_projection::load_project_projection(&cwd, &project_id)?;
                 println!("{}", serde_json::to_string_pretty(&projection)?);
+            }
+        },
+        Command::Release { command } => match command {
+            ReleaseCommand::Summary => {
+                let summary = agentflow_release::collect_public_release_summary(&cwd)?;
+                println!("release summary: generated");
+                println!("entries: {}", summary.entries.len());
+                println!("{}", summary.changelog_markdown);
+            }
+            ReleaseCommand::WriteDocs {
+                changelog_path,
+                release_notes_path,
+            } => {
+                let summary = agentflow_release::collect_public_release_summary(&cwd)?;
+                let target = agentflow_release::PublicReleaseDocumentTarget {
+                    changelog_path,
+                    release_notes_path,
+                };
+                let paths =
+                    agentflow_release::write_public_release_documents(&cwd, &summary, &target)?;
+                println!("release docs: written");
+                println!("changelog: {}", paths.changelog_path);
+                println!("release notes: {}", paths.release_notes_path);
+                println!("entries: {}", summary.entries.len());
             }
         },
         command => {

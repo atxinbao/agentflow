@@ -1,0 +1,15 @@
+[package]
+name = "agentflow-release"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+agentflow-projection = { path = "../projection" }
+agentflow-spec = { path = "../spec" }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

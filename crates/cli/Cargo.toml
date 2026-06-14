@@ -15,6 +15,7 @@ agentflow-execute = { path = "../execute" }
 agentflow-input = { path = "../input" }
 agentflow-loop = { path = "../loop" }
 agentflow-projection = { path = "../projection" }
+agentflow-release = { path = "../release" }
 agentflow-state = { path = "../state" }
 agentflow-task-loop = { path = "../task-loop" }
 agentflow-workflow-events = { path = "../workflow-events" }
