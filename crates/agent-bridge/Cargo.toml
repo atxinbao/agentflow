@@ -1,0 +1,17 @@
+[package]
+name = "agentflow-agent-bridge"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+agentflow-event-store = { path = "../event-store" }
+agentflow-mcp = { path = "../mcp" }
+agentflow-task-loop = { path = "../task-loop" }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+agentflow-spec = { path = "../spec" }
+tempfile.workspace = true
