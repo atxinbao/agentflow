@@ -75,8 +75,8 @@ These areas must stay behind `legacy/` or transitional `active/` read-model wrap
 
 Current quarantine layout:
 
-- `crates/agentflow-core/src/lib.rs` no longer re-exports `legacy::*`.
-- `crates/agentflow-core/src/legacy/archive_2026_05.rs` contains the archived implementation and is private to the `legacy` module.
+- `crates/core/src/lib.rs` no longer re-exports `legacy::*`.
+- `crates/core/src/legacy/archive_2026_05.rs` contains the archived implementation and is private to the `legacy` module.
 - `legacy/team_project_milestone_issue.rs` exposes only the temporary CLI `projects` read model.
 - `legacy/workflow_control.rs` exposes only the temporary CLI `metrics` and `search` read models.
 

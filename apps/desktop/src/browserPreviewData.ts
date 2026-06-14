@@ -1095,7 +1095,7 @@ function browserPreviewTopLevelEntries(): ProjectFileEntry[] {
     browserPreviewFileEntry("README.md", "file", 1280),
     browserPreviewFileEntry("design.md", "file", 2200),
     browserPreviewDirectoryEntry("apps", [browserPreviewDirectoryChild("apps/desktop")]),
-    browserPreviewDirectoryEntry("crates", [browserPreviewDirectoryChild("crates/agentflow-core")]),
+    browserPreviewDirectoryEntry("crates", [browserPreviewDirectoryChild("crates/core")]),
     browserPreviewDirectoryEntry("docs", [browserPreviewDirectoryChild("docs/requirements")]),
     browserPreviewDirectoryEntry("target", []),
   ];
@@ -1184,8 +1184,8 @@ const browserPreviewDirectoryPathSet = new Set([
   "apps/desktop/src/features",
   "apps/desktop/src/features/project-files",
   "crates",
-  "crates/agentflow-core",
-  "crates/agentflow-core/src",
+  "crates/core",
+  "crates/core/src",
   "docs",
   "docs/requirements",
   "target",
@@ -1212,9 +1212,9 @@ function browserPreviewDirectoryChildSpecs(path: string): Array<{ relativePath: 
       { relativePath: "apps/desktop/src/features/project-files/hooks/useProjectFiles.ts", kind: "file" },
       { relativePath: "apps/desktop/src/features/project-files/ProjectLocalFilesPage.tsx", kind: "file" },
     ],
-    crates: [{ relativePath: "crates/agentflow-core", kind: "directory" }],
-    "crates/agentflow-core": [{ relativePath: "crates/agentflow-core/src", kind: "directory" }],
-    "crates/agentflow-core/src": [{ relativePath: "crates/agentflow-core/src/lib.rs", kind: "file" }],
+    crates: [{ relativePath: "crates/core", kind: "directory" }],
+    "crates/core": [{ relativePath: "crates/core/src", kind: "directory" }],
+    "crates/core/src": [{ relativePath: "crates/core/src/lib.rs", kind: "file" }],
     docs: [{ relativePath: "docs/requirements", kind: "directory" }],
     "docs/requirements": [{ relativePath: "docs/requirements/001-add-local-project.md", kind: "file" }],
     target: [{ relativePath: "target/debug", kind: "directory" }],
@@ -1288,7 +1288,7 @@ function browserPreviewFileContentByPath(relativePath: string, projectRoot: stri
     "Cargo.toml": {
       language: "toml",
       mimeType: "text/plain",
-      content: '[workspace]\nmembers = ["crates/agentflow-core", "apps/desktop/src-tauri"]\nresolver = "2"\n',
+      content: '[workspace]\nmembers = ["crates/core", "apps/desktop/src-tauri"]\nresolver = "2"\n',
     },
     ".gitignore": {
       language: "config",
@@ -1331,7 +1331,7 @@ function browserPreviewFileContentByPath(relativePath: string, projectRoot: stri
       mimeType: "text/plain",
       content: "export function ProjectLocalFilesPage() {\n  return null;\n}\n",
     },
-    "crates/agentflow-core/src/lib.rs": {
+    "crates/core/src/lib.rs": {
       language: "rust",
       mimeType: "text/plain",
       content: "pub fn agentflow_preview_boundary() -> &'static str {\n    \"browser preview is read-only\"\n}\n",

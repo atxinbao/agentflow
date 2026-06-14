@@ -164,9 +164,9 @@ Non-goals:
 
 Implemented modules:
 
-- `crates/agentflow-core/src/active/`
-- `crates/agentflow-core/src/legacy/`
-- `crates/agentflow-core/src/shared/`
+- `crates/core/src/active/`
+- `crates/core/src/legacy/`
+- `crates/core/src/shared/`
 
 Active read-model wrappers:
 
@@ -215,11 +215,11 @@ Non-goals:
 
 Implemented modules:
 
-- `crates/agentflow-cli/src/args.rs`
-- `crates/agentflow-cli/src/retirement.rs`
-- `crates/agentflow-cli/src/legacy.rs`
-- `crates/agentflow-cli/src/active.rs`
-- `crates/agentflow-cli/src/print.rs`
+- `crates/cli/src/args.rs`
+- `crates/cli/src/retirement.rs`
+- `crates/cli/src/legacy.rs`
+- `crates/cli/src/active.rs`
+- `crates/cli/src/print.rs`
 
 006 boundary tightening:
 

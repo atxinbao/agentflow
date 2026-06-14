@@ -79,11 +79,11 @@ Implemented CLI files:
 
 | File | Responsibility |
 | --- | --- |
-| `crates/agentflow-cli/src/args.rs` | Preserves legacy command parsing. |
-| `crates/agentflow-cli/src/retirement.rs` | Classifies each legacy command and prints the retirement message. |
-| `crates/agentflow-cli/src/legacy.rs` | Runs only temporary read-only commands and gates all retired commands. |
-| `crates/agentflow-cli/src/active.rs` | Placeholder active CLI boundary; no write commands authorized in 006. |
-| `crates/agentflow-cli/src/print.rs` | Retired output-helper boundary kept for module clarity. |
+| `crates/cli/src/args.rs` | Preserves legacy command parsing. |
+| `crates/cli/src/retirement.rs` | Classifies each legacy command and prints the retirement message. |
+| `crates/cli/src/legacy.rs` | Runs only temporary read-only commands and gates all retired commands. |
+| `crates/cli/src/active.rs` | Placeholder active CLI boundary; no write commands authorized in 006. |
+| `crates/cli/src/print.rs` | Retired output-helper boundary kept for module clarity. |
 
 ## Archive Pruning Result
 

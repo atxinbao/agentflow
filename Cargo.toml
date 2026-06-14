@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "crates/agentflow-core",
-    "crates/agentflow-cli",
+    "crates/core",
+    "crates/cli",
     "crates/agent-manual",
     "crates/panel",
     "crates/input",
@@ -11,7 +11,7 @@ members = [
     "crates/execute",
     "crates/state",
     "crates/workflow-events",
-    "crates/workflow-acceptance",
+    "crates/acceptance",
     "apps/desktop/src-tauri",
 ]
 resolver = "2"

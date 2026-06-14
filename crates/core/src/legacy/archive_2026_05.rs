@@ -5247,14 +5247,13 @@ fn architecture_drift_findings(
                         .to_string(),
             });
         }
-        if document.path.ends_with("crates/agentflow-core/src/lib.rs") {
+        if document.path.ends_with("crates/core/src/lib.rs") {
             findings.push(ProjectCodeAuditFinding {
                 id: format!("architecture-drift-candidate-{}", findings.len() + 1),
                 path: Some(document.path.clone()),
                 line: None,
                 severity: "medium".to_string(),
-                snippet: "core workflow logic is concentrated in agentflow-core/src/lib.rs"
-                    .to_string(),
+                snippet: "core workflow logic is concentrated in core/src/lib.rs".to_string(),
                 detail: "Centralized workflow core should be reviewed before Project closure."
                     .to_string(),
             });
@@ -11484,7 +11483,7 @@ fn context_score(file: &ContextFile, tokens: &[String]) -> u32 {
     ) {
         score += 10;
     }
-    if path.starts_with("crates/agentflow-core/") || path.starts_with("crates/agentflow-cli/") {
+    if path.starts_with("crates/core/") || path.starts_with("crates/cli/") {
         score += 8;
     }
     if file.kind == "rust-source" {
@@ -13537,9 +13536,9 @@ mod tests {
         let goal_path = dir.path().join("GOAL.md");
         fs::write(&goal_path, GOAL).unwrap();
         fs::write(dir.path().join("Cargo.toml"), "[workspace]\n").unwrap();
-        fs::create_dir_all(dir.path().join("crates/agentflow-core/src")).unwrap();
+        fs::create_dir_all(dir.path().join("crates/core/src")).unwrap();
         fs::write(
-            dir.path().join("crates/agentflow-core/src/lib.rs"),
+            dir.path().join("crates/core/src/lib.rs"),
             "pub fn planner() {}\n",
         )
         .unwrap();
@@ -13557,7 +13556,7 @@ mod tests {
             .context
             .files
             .iter()
-            .any(|path| path.contains("agentflow-core")));
+            .any(|path| path.contains("crates/core")));
     }
 
     #[test]

@@ -31,7 +31,7 @@ use std::{
 const CLI_FRESHNESS_PATHS: [&str; 9] = [
     "Cargo.toml",
     "Cargo.lock",
-    "crates/agentflow-cli/src",
+    "crates/cli/src",
     "crates/execute/src",
     "crates/input/src",
     "crates/state/src",
