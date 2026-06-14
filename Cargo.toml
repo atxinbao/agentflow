@@ -10,6 +10,8 @@ members = [
     "crates/event-store",
     "crates/workflow-runtime",
     "crates/task-artifacts",
+    "crates/task-loop",
+    "crates/agent-bridge",
     "crates/mcp",
     "crates/loop",
     "crates/output",

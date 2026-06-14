@@ -10,7 +10,7 @@ pub mod storage;
 pub use model::{
     PublicDeliveryRecord, RequirementDocument, SpecExpectedOutputs, SpecIssue, SpecIssueCategory,
     SpecIssueDraft, SpecIssueStatus, SpecPriority, SpecProject, SpecProjectDraft,
-    SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord,
+    SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, DEFAULT_WORKFLOW_REF,
 };
 pub use storage::{
     issue_from_requirement, prepare_spec_workspace, project_from_requirement, read_spec_issue,

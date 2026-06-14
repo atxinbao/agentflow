@@ -9,6 +9,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "agentflow-agent-bridge"
+version = "0.1.0"
+dependencies = [
+ "agentflow-event-store",
+ "agentflow-mcp",
+ "agentflow-spec",
+ "agentflow-task-loop",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-agent-manual"
 version = "0.1.0"
 dependencies = [
@@ -204,6 +218,19 @@ dependencies = [
 name = "agentflow-task-artifacts"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "agentflow-task-loop"
+version = "0.1.0"
+dependencies = [
+ "agentflow-event-store",
+ "agentflow-spec",
+ "agentflow-task-artifacts",
  "anyhow",
  "serde",
  "serde_json",
