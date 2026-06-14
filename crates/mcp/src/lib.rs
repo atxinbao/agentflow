@@ -10,12 +10,9 @@ pub mod provider;
 pub mod registry;
 pub mod storage;
 
-use agentflow_execute::mark_build_agent_launch_failed;
-use agentflow_workflow_events::{
-    append_event_once, BuildAgentSessionRunningPayload, WorkflowEventDraft,
-    EVENT_TYPE_BUILD_AGENT_SESSION_RUNNING,
-};
+use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
 use anyhow::Result;
+use serde_json::json;
 use std::path::Path;
 
 pub use browser::browser_preview_status;
@@ -108,28 +105,42 @@ fn observe_session_transition(
         return Ok(());
     }
 
-    if matches!(updated.status, McpSessionStatus::Failed) {
-        let _ = mark_build_agent_launch_failed(project_root, &updated.run_id);
-    }
-
-    if matches!(updated.status, McpSessionStatus::Running) {
-        append_event_once(
+    if matches!(
+        updated.status,
+        McpSessionStatus::Running | McpSessionStatus::Failed
+    ) {
+        let event_type = match updated.status {
+            McpSessionStatus::Running => "agent.session.running",
+            McpSessionStatus::Failed => "agent.session.failed",
+            _ => unreachable!("session status was checked above"),
+        };
+        append_task_event_once(
             project_root,
-            WorkflowEventDraft {
-                event_type: EVENT_TYPE_BUILD_AGENT_SESSION_RUNNING.to_string(),
-                source: "mcp".to_string(),
-                subject_id: updated.issue_id.clone(),
-                subject_path: Some(updated.launch_request_path.clone()),
-                dedupe_key: format!("build-agent.session.running:{}", updated.run_id),
-                payload: serde_json::to_value(BuildAgentSessionRunningPayload {
-                    issue_id: updated.issue_id.clone(),
-                    project_id: updated.project_id.clone(),
-                    run_id: updated.run_id.clone(),
-                    session_id: updated.session_id.clone(),
-                    provider: updated.provider.clone(),
-                    branch_name: updated.branch_name.clone(),
-                    log_path: updated.log_path.clone(),
-                })?,
+            TaskEventDraft {
+                aggregate_type: "issue".to_string(),
+                aggregate_id: updated.issue_id.clone(),
+                project_id: updated.project_id.clone(),
+                issue_id: Some(updated.issue_id.clone()),
+                event_type: event_type.to_string(),
+                actor: EventActor {
+                    role: "mcp".to_string(),
+                    kind: "system".to_string(),
+                },
+                state: None,
+                correlation_id: Some(format!("corr-{}", updated.issue_id)),
+                causation_id: None,
+                payload: json!({
+                    "issueId": updated.issue_id,
+                    "projectId": updated.project_id,
+                    "runId": updated.run_id,
+                    "sessionId": updated.session_id,
+                    "provider": updated.provider,
+                    "branchName": updated.branch_name,
+                    "logPath": updated.log_path,
+                    "status": updated.status.as_str(),
+                }),
+                artifact_refs: updated.log_path.clone().into_iter().collect(),
+                idempotency_key: Some(format!("{event_type}:{}", updated.run_id)),
             },
         )?;
     }
@@ -141,7 +152,7 @@ fn observe_session_transition(
 mod tests {
     use super::observe_session_transition;
     use crate::model::{McpLaunchMode, McpSessionSnapshot, McpSessionStatus};
-    use agentflow_workflow_events::{load_events, EVENT_TYPE_BUILD_AGENT_SESSION_RUNNING};
+    use agentflow_event_store::load_task_events;
     use tempfile::tempdir;
 
     fn session(status: McpSessionStatus) -> McpSessionSnapshot {
@@ -154,8 +165,8 @@ mod tests {
             session_id: "codex-run-001".to_string(),
             status,
             launch_mode: McpLaunchMode::CliExecStdin,
-            launch_request_path:
-                ".agentflow/execute/runs/run-001/launcher/build-agent-request.json".to_string(),
+            launch_request_path: ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json"
+                .to_string(),
             plan_path: ".agentflow/state/mcp/plans/codex-run-001.json".to_string(),
             log_path: Some(".agentflow/state/mcp/sessions/codex-run-001.jsonl".to_string()),
             branch_name: Some("agentflow/proj-001/AF-001".to_string()),
@@ -186,12 +197,12 @@ mod tests {
         )
         .unwrap();
 
-        let events = load_events(dir.path()).unwrap();
+        let events = load_task_events(dir.path()).unwrap();
         let running_events = events
             .into_iter()
-            .filter(|event| event.event_type == EVENT_TYPE_BUILD_AGENT_SESSION_RUNNING)
+            .filter(|event| event.event_type == "agent.session.running")
             .collect::<Vec<_>>();
         assert_eq!(running_events.len(), 1);
-        assert_eq!(running_events[0].subject_id, "AF-001");
+        assert_eq!(running_events[0].issue_id.as_deref(), Some("AF-001"));
     }
 }

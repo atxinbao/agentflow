@@ -148,9 +148,8 @@ dependencies = [
 name = "agentflow-mcp"
 version = "0.1.0"
 dependencies = [
- "agentflow-execute",
- "agentflow-input",
- "agentflow-workflow-events",
+ "agentflow-event-store",
+ "agentflow-projection",
  "anyhow",
  "serde",
  "serde_json",
