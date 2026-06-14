@@ -8,9 +8,10 @@ use crate::{
 };
 use agentflow_input::issue::InputIssueStatus;
 use agentflow_output::{
-    OutputEvidence, OutputPrMetadata, OutputReleaseDelivery, OutputReleaseDeliveryArtifacts,
+    OutputPrMetadata, OutputReleaseDelivery, OutputReleaseDeliveryArtifacts,
     OUTPUT_PR_METADATA_VERSION, OUTPUT_RELEASE_DELIVERY_VERSION,
 };
+use agentflow_task_artifacts::TaskEvidence;
 use anyhow::{Context, Result};
 use std::{fs, path::Path};
 
@@ -42,9 +43,10 @@ pub fn prepare_release_delivery(
         anyhow::bail!("release delivery requires a completed execute result");
     }
 
-    let evidence_relative_path = format!(".agentflow/output/evidence/{run_id}.json");
+    let evidence_relative_path =
+        format!(".agentflow/tasks/{}/evidence/evidence.json", run.issue_id);
     let evidence_path = root.join(&evidence_relative_path);
-    let _evidence: OutputEvidence = read_json(&evidence_path)?;
+    let _evidence: TaskEvidence = read_json(&evidence_path)?;
 
     let changed_files_path = run_directory.join("patches/changed-files.json");
     if !changed_files_path.is_file() {

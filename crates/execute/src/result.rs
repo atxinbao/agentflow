@@ -29,7 +29,7 @@ pub(crate) fn build_execute_result(
         .iter()
         .map(|file| file.path.clone())
         .collect::<Vec<_>>();
-    let evidence_path = format!(".agentflow/output/evidence/{run_id}.json");
+    let evidence_path = format!(".agentflow/tasks/{}/evidence/evidence.json", run.issue_id);
 
     let result = ExecuteResult {
         version: EXECUTE_RESULT_VERSION.to_string(),

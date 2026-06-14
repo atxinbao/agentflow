@@ -491,14 +491,14 @@ mod tests {
                 .expected_outputs
                 .get("executeRunDir")
                 .map(String::as_str),
-            Some(".agentflow/execute/runs/iss-001")
+            Some(".agentflow/tasks/iss-001/runs")
         );
         assert_eq!(
             issue
                 .expected_outputs
                 .get("evidencePath")
                 .map(String::as_str),
-            Some(".agentflow/output/evidence/iss-001.json")
+            Some(".agentflow/tasks/iss-001/evidence/evidence.json")
         );
         assert_eq!(
             issue

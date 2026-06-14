@@ -1,11 +1,15 @@
 use crate::{
-    manager::assert_build_agent_run,
-    model::ExecuteResult,
-    storage::{canonical_project_root, load_command_records, read_run, run_dir, write_json},
+    manager::{assert_build_agent_run, ensure_task_run_for_execute_run, sync_task_run_status},
+    model::{ExecuteCommandRecord, ExecuteResult, ExecuteRunStatus},
+    storage::{canonical_project_root, load_command_records, read_run, run_dir},
 };
 use agentflow_output::{
     OutputCommandEvidence, OutputEvidence, OutputEvidenceExecuteArtifacts, OutputEvidenceInput,
     OutputEvidencePanel, OutputManualProof, OutputValidationSummary, OUTPUT_EVIDENCE_VERSION,
+};
+use agentflow_task_artifacts::{
+    load_task_evidence, write_task_command_record, write_task_evidence, write_task_validation,
+    TaskCommandInput, TaskRunStatus,
 };
 use anyhow::Result;
 use std::fs;
@@ -18,7 +22,8 @@ pub fn write_execute_evidence(
 ) -> Result<OutputEvidence> {
     let root = canonical_project_root(project_root)?;
     let run = read_run(&root, &run_id)?;
-    assert_build_agent_run(&root, &run)?;
+    let issue = assert_build_agent_run(&root, &run)?;
+    ensure_task_run_for_execute_run(&root, &issue, &run, None)?;
     let run_directory = run_dir(&root, &run_id);
     let command_records = load_command_records(&root, &run_id)?;
     let checkpoint = latest_json_artifact(&run_directory.join("checkpoints")).map(|path| {
@@ -108,14 +113,69 @@ pub fn write_execute_evidence(
         },
         manual_proof: OutputManualProof::default(),
     };
-    write_json(
-        &root
-            .join(".agentflow/output/evidence")
-            .join(format!("{}.json", run.run_id)),
-        &evidence,
-    )?;
-    agentflow_output::prepare_output_workspace(&root)?;
+    write_task_evidence_for_execute_result(&root, &run, &result, &command_records)?;
     Ok(evidence)
+}
+
+fn write_task_evidence_for_execute_result(
+    root: &Path,
+    run: &crate::model::ExecuteRun,
+    result: &ExecuteResult,
+    command_records: &[ExecuteCommandRecord],
+) -> Result<()> {
+    if load_task_evidence(root, &run.issue_id).is_ok() {
+        return Ok(());
+    }
+    if command_records.is_empty() {
+        sync_task_run_status(root, run, TaskRunStatus::Failed);
+        return Ok(());
+    }
+    sync_task_run_status(root, run, TaskRunStatus::Validating);
+    for record in command_records {
+        write_task_command_record(
+            root,
+            &run.issue_id,
+            &run.run_id,
+            TaskCommandInput {
+                label: record.label.clone(),
+                program: record.program.clone(),
+                args: record.args.clone(),
+                exit_code: record.exit_code,
+                stdout: read_optional_text(root, &record.stdout_path),
+                stderr: read_optional_text(root, &record.stderr_path),
+            },
+        )?;
+    }
+    let validation = write_task_validation(root, &run.issue_id, &run.run_id)?;
+    write_task_evidence(
+        root,
+        &run.issue_id,
+        &run.run_id,
+        format!(
+            "执行 run {} 完成，验证命令 {} 条，{}。",
+            run.run_id,
+            validation.command_ids.len(),
+            if validation.passed {
+                "全部通过"
+            } else {
+                "存在失败"
+            }
+        ),
+    )?;
+    sync_task_run_status(
+        root,
+        run,
+        if matches!(result.status, ExecuteRunStatus::Completed) {
+            TaskRunStatus::Completed
+        } else {
+            TaskRunStatus::Failed
+        },
+    );
+    Ok(())
+}
+
+fn read_optional_text(root: &Path, relative_path: &str) -> String {
+    fs::read_to_string(root.join(relative_path)).unwrap_or_default()
 }
 
 fn artifact_if_exists(path: &Path, relative_path: &str) -> Option<String> {

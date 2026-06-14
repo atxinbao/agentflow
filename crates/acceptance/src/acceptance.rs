@@ -170,7 +170,7 @@ pub fn human_audit_draft(run_id: &str) -> HumanAuditRequestDraft {
                 AuditScopeRef {
                     kind: "evidence".to_string(),
                     id: run_id.to_string(),
-                    path: format!(".agentflow/output/evidence/{run_id}.json"),
+                    path: ".agentflow/tasks/iss-001/evidence/evidence.json".to_string(),
                 },
                 AuditScopeRef {
                     kind: "release-delivery".to_string(),

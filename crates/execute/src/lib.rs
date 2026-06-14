@@ -15,8 +15,8 @@ pub mod storage;
 pub mod validation;
 
 pub use agentflow_output::{
-    load_output_evidence, load_release_delivery, OutputEvidence, OutputReleaseDelivery,
-    OutputReleaseDeliveryArtifacts, OUTPUT_EVIDENCE_VERSION, OUTPUT_RELEASE_DELIVERY_VERSION,
+    load_release_delivery, OutputEvidence, OutputReleaseDelivery, OutputReleaseDeliveryArtifacts,
+    OUTPUT_EVIDENCE_VERSION, OUTPUT_RELEASE_DELIVERY_VERSION,
 };
 pub use checkpoint::create_execute_checkpoint;
 pub use command::run_execute_command;
@@ -259,7 +259,7 @@ mod tests {
         assert_eq!(execute_index.runs[0].status, ExecuteRunStatus::Completed);
 
         let output_index = agentflow_output::load_output_index(dir.path()).unwrap();
-        assert_eq!(output_index.evidence.len(), 1);
+        assert_eq!(output_index.evidence.len(), 0);
         assert_eq!(output_index.release_deliveries.len(), 1);
         let pr_metadata: agentflow_output::OutputPrMetadata = crate::storage::read_json(
             &dir.path()
@@ -684,13 +684,12 @@ mod tests {
             .is_file());
         assert!(dir
             .path()
-            .join(".agentflow/output/evidence")
-            .join(format!("{}.json", run.run_id))
+            .join(".agentflow/tasks/iss-001/evidence/evidence.json")
             .is_file());
-        let evidence = load_output_evidence(dir.path(), run.run_id.clone()).unwrap();
+        let evidence = agentflow_task_artifacts::load_task_evidence(dir.path(), "iss-001").unwrap();
         assert_eq!(
-            evidence.panel.context_pack_path.as_deref(),
-            Some(".agentflow/panel/context-packs/iss-001.json")
+            evidence.run_path,
+            format!(".agentflow/tasks/iss-001/runs/{}/run.json", run.run_id)
         );
         let lease: ExecuteLease = storage::read_json(
             &dir.path()
@@ -717,14 +716,15 @@ mod tests {
         let run = completed_low_risk_run(dir.path(), "iss-001");
         fs::remove_file(
             dir.path()
-                .join(".agentflow/output/evidence")
-                .join(format!("{}.json", run.run_id)),
+                .join(".agentflow/tasks/iss-001/evidence/evidence.json"),
         )
         .unwrap();
 
         let error = prepare_release_delivery(dir.path(), run.run_id).unwrap_err();
 
-        assert!(error.to_string().contains(".agentflow/output/evidence"));
+        assert!(error
+            .to_string()
+            .contains(".agentflow/tasks/iss-001/evidence"));
     }
 
     #[test]
@@ -740,7 +740,7 @@ mod tests {
         assert_eq!(delivery.status, "drafted");
         assert_eq!(
             delivery.evidence_path,
-            format!(".agentflow/output/evidence/{}.json", run.run_id)
+            ".agentflow/tasks/iss-001/evidence/evidence.json"
         );
         assert_eq!(loaded.run_id, run.run_id);
         for artifact in [
