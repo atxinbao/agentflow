@@ -1,6 +1,6 @@
 # AgentFlow
 
-更新日期：2026-06-05
+更新日期：2026-06-14
 执行者：Codex
 
 ## 当前文档状态
@@ -37,20 +37,20 @@ docs/requirements/
 - Project Workspace Manager 会准备 `.agentflow/` 三段式本地工作区。
 - Agent Manual Bootstrap 会接管根目录 `AGENTS.md` 作为 canonical Agent entry，保留 `AGENT.MD` 为 legacy compatibility，并写入 `.agentflow/define/agent/**` 工作手册、skills 和 lock。
 - Workflow Directory Blueprint V1 会准备 `.agentflow/workspace-manifest.json`，并把 `define/` 收敛为 `agent/spec/tdd/release/audit` 工作手册区。
-- Input Model V1 是新的需求事实源；canonical path 为 `.agentflow/input/`，旧 `.agentflow/spec/` 和 `.agentflow/goal-tree/` 仅作为 legacy marker，不再作为新写入路径。
-- Execute Patch / Checkpoint V1 是受控执行层；canonical path 为 `.agentflow/execute/`，只能从 `.agentflow/input/issues/<issue-id>.json` 启动，结果证据写入 `.agentflow/output/evidence/`。
-- Agent Role Consolidation V2 将顶层 Agent 角色收敛为 Spec / Build / Audit；Release Agent 不再独立存在，release delivery 能力归入 Build Agent，交付材料写入 `.agentflow/output/release/`。
-- Output Evidence / Delivery / Audit V1 将 `.agentflow/output/` 收口为交付与证据层：`output/evidence` 是 Build Agent 执行证明，`output/release` 是 Build Agent 本地交付材料。
-- Human-triggered Audit Report V1 将 `output/audit` 明确为人类主动触发的完整审计报告包；它不会随 execute / output 自动生成，只在 `request_human_audit` 后写入 `.agentflow/output/audit/<audit-id>/`。
+- Spec Contract V1 将公开需求记录放在 `docs/requirements/**`，将内部 project / issue 合同放在 `.agentflow/spec/projects/**` 和 `.agentflow/spec/issues/**`。旧 `.agentflow/input/` 只作为迁移兼容层，不再作为新的任务事实源。
+- Task Workflow Runtime V1 使用 YAML workflow、事件日志和投影驱动任务状态。运行期事实写入 `.agentflow/events/**`、`.agentflow/projections/**` 和 `.agentflow/tasks/<issue-id>/**`。
+- Task Artifacts V1 将本地运行产物收敛到 `.agentflow/tasks/<issue-id>/runs/**`，验证证据收敛到 `.agentflow/tasks/<issue-id>/evidence/**`。公开交付记录进入 PR/MR body、CHANGELOG 或 release notes，不再写本地 `.agentflow/tasks/<issue-id>/delivery/**`。
+- Agent Role Consolidation V2 将顶层 Agent 角色收敛为 Spec / Build / Audit；Release Agent 不再独立存在，公开交付记录由 Build Agent 在 PR/MR 和发布记录中完成。
+- Human-triggered Audit Report V1 将审计定义为独立流程。任务 Done 不会自动触发审计；审计只从独立 audit issue 或明确的人类审计请求开始。
 - Desktop Human Audit Entry Polish 在 Desktop 里提供人工审计入口：人类选择 release delivery 并填写 reason 后才会请求 audit；浏览器预览不会写 `.agentflow/output/audit`。
-- Workflow State / Gate Orchestration V1 新增 `.agentflow/state/` 派生状态总控层，聚合 define / panel / input / execute / output / audit 健康状态，输出 gates、next actions、blockers、sessions、locks、events 和 indexes；它只写 `.agentflow/state/**`。
+- Projection V1 从 `.agentflow/spec/**` 和 `.agentflow/events/**` 重建任务页、项目状态和 issue-status index。Desktop 展示读取 projection，不把旧 input/execute/output 当成任务权威。
 - Browser Preview Verification Polish 为 Desktop 浏览器预览补齐只读 release delivery 和 audit report mock，使人工审计入口可以完成可视核对；它不写 `.agentflow/output/audit`。
 - Browser Preview Smoke Script 新增 `npm --prefix apps/desktop run preview:smoke`，用可复跑本地断言验证 Browser Preview mock、人工审计禁用边界和 `.agentflow/output/audit` 禁写。
 - AgentFlow End-to-End Workflow Acceptance V1 新增系统级验收：用临时 fixture 项目证明 define / panel / input / execute / output / state / human audit 闭环可达，并验证用户源码 hash 不变。
 - Agent Locale and Voice Style Policy V1 固定 AgentFlow managed manuals 为英文，记录 `agentLocale`，新增 `plain-work-style` 默认表达规则，并要求 Agent 新写代码注释跟随 `agentLocale`。
 - Project Panel canonical path 为 `.agentflow/panel/`；不再保留旧代码地图兼容路径。
 - Desktop human UI 不执行命令。
-- Execute API 允许 Agent-only 受控 patch / command，但必须通过 preflight、lease、plan、checkpoint 和 allowedWritePaths / allowedCommands。
+- Build Agent 只能从当前 `.agentflow/spec/issues/<issue-id>.json` 启动，并通过 workflow runtime、task loop、agent bridge 和 task artifacts 完成 preflight、运行、验证、PR/MR、合并和 Done 写回。
 - 未经 execute 流水线授权不写用户业务源码。
 - 不写旧 `.agentflow/issues`、`runs`、`evidence`、`reviews`、`updates`、`views` 路径。
 - 不调用模型。
@@ -76,7 +76,15 @@ npm run tauri -- dev
 ```bash
 npm --prefix apps/desktop run build
 cargo test -p agentflow-agent-manual
-cargo test -p agentflow-goal-tree
+cargo test -p agentflow-spec
+cargo test -p agentflow-event-store
+cargo test -p agentflow-workflow-core
+cargo test -p agentflow-workflow-runtime
+cargo test -p agentflow-task-loop
+cargo test -p agentflow-task-artifacts
+cargo test -p agentflow-projection
+cargo test -p agentflow-agent-bridge
+cargo test -p agentflow-mcp
 cargo test -p agentflow-input
 cargo test -p agentflow-output
 cargo test -p agentflow-execute
