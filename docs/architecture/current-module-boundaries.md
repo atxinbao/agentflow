@@ -1,11 +1,27 @@
 # Current Module Boundaries
 
 创建日期：2026-06-02  
+最后更新：2026-06-14
 执行者：Codex
 
 ## Purpose
 
-This document records the intended post-004 module boundaries for the current AgentFlow codebase. It is the implementation map for `004 - Legacy Cleanup and New Module Split`.
+This document records the active module boundaries for AgentFlow.
+
+The current architecture is moving from the older `input / execute / output /
+state` directory pipeline to a task-centered runtime:
+
+```text
+docs/requirements
+  -> .agentflow/spec
+  -> .agentflow/workflows
+  -> .agentflow/events
+  -> .agentflow/projections
+  -> .agentflow/tasks
+```
+
+The implementation baseline is
+`docs/requirements/034-agentflow-task-workflow-yaml-runtime-v1.md`.
 
 ## Project Workspace Manager
 
@@ -124,7 +140,7 @@ Scope:
 Non-goals:
 
 - no ownership of Project Loop or Issue Loop state transitions;
-- no replacement of execute run / validation / delivery writeback;
+- no ownership of task artifacts, validation evidence, or public delivery records;
 - no external provider authority over AgentFlow task ordering.
 
 Implemented backend modules:
@@ -144,10 +160,247 @@ Implemented backend modules:
 Notes:
 
 - `crates/mcp` is the Agent Provider Bridge for the current codebase.
-- `loop` decides whether an issue can launch; `mcp` defines how a provider is probed and how a provider session is represented.
-- `execute` remains the only owner of run, evidence, delivery, and completion writeback.
-- `mcp` can append provider lifecycle facts such as `launch.claimed` and `session.running`, but it still does not own issue status transitions.
+- `task-loop` decides whether an issue can launch; `mcp` defines how a provider is probed and how a provider session is represented.
+- `mcp` reads task/session state from `projection` and appends provider lifecycle facts to `event-store`.
+- `mcp` no longer depends on the legacy `input`, `execute`, or `workflow-events` crates.
+- `mcp` can append provider lifecycle facts such as `agent.session.running` and `agent.session.failed`, but it still does not own issue status transitions.
 - Desktop reads provider sessions through `apps/desktop/src-tauri/src/commands/mcp.rs`, including snapshot polling and session log chunks.
+
+## Spec
+
+Scope:
+
+- read public requirement records from `docs/requirements/<requirement-id>.md`;
+- manage internal task contracts under `.agentflow/spec/projects/**` and `.agentflow/spec/issues/**`;
+- validate issue fields, priority, dependency links, workflow references, allowed paths, forbidden paths, and expected outputs.
+
+Non-goals:
+
+- no runtime status transitions;
+- no event log writes;
+- no task execution;
+- no provider launch;
+- no UI projection generation.
+
+Implemented backend modules:
+
+- `crates/spec/src/model.rs`
+- `crates/spec/src/storage.rs`
+- `crates/spec/src/lib.rs`
+
+Notes:
+
+- `spec` is the replacement target for the old `input` task fact source.
+- `spec` owns task contracts only. Runtime facts must be written as task events.
+
+## Workflow Core
+
+Scope:
+
+- parse and validate task workflow YAML;
+- define workflow states, transitions, guards, actions, and terminal states;
+- keep workflow definitions independent from any project or issue instance.
+
+Non-goals:
+
+- no issue loading;
+- no event store writes;
+- no action execution;
+- no Desktop-facing projection.
+
+Implemented backend modules:
+
+- `crates/workflow-core/src/model.rs`
+- `crates/workflow-core/src/parser.rs`
+- `crates/workflow-core/src/validation.rs`
+- `crates/workflow-core/src/lib.rs`
+
+Notes:
+
+- Workflow YAML describes allowed transitions. It does not run shell commands and does not become a CI system.
+
+## Event Store
+
+Scope:
+
+- append task events to `.agentflow/events/task-events.jsonl`;
+- provide deterministic event IDs, idempotency keys, correlation IDs, and replay;
+- import old workflow events only when explicitly requested by migration code.
+
+Non-goals:
+
+- no UI projection generation;
+- no status decision logic;
+- no task execution;
+- no provider calls.
+
+Implemented backend modules:
+
+- `crates/event-store/src/model.rs`
+- `crates/event-store/src/storage.rs`
+- `crates/event-store/src/lib.rs`
+
+Notes:
+
+- Event log is the runtime fact source.
+- Projection can be rebuilt from this log.
+
+## Workflow Runtime
+
+Scope:
+
+- read workflow definition and current projection;
+- match incoming events to allowed transitions;
+- run registered guards and actions;
+- append state transition events;
+- reject illegal state jumps.
+
+Non-goals:
+
+- no arbitrary shell execution from YAML;
+- no public release writing;
+- no provider implementation;
+- no Desktop-specific rendering.
+
+Implemented backend modules:
+
+- `crates/workflow-runtime/src/runtime.rs`
+- `crates/workflow-runtime/src/lib.rs`
+
+Notes:
+
+- Runtime owns state-machine correctness. Build Agent, Desktop, and external providers must not mutate issue status directly.
+
+## Task Artifacts
+
+Scope:
+
+- manage `.agentflow/tasks/<issue-id>/runs/<run-id>/**`;
+- manage `.agentflow/tasks/<issue-id>/evidence/**`;
+- record command output, validation output, checkpoints, plans, and local evidence.
+
+Non-goals:
+
+- no `.agentflow/tasks/<issue-id>/delivery/**`;
+- no PR/MR body writes;
+- no CHANGELOG or release notes writes;
+- no issue scheduling.
+
+Implemented backend modules:
+
+- `crates/task-artifacts/src/model.rs`
+- `crates/task-artifacts/src/storage.rs`
+- `crates/task-artifacts/src/lib.rs`
+
+Notes:
+
+- Local `.agentflow` runtime artifacts end at evidence. Public delivery records live in PR/MR bodies and later release notes.
+
+## Task Loop
+
+Scope:
+
+- read spec projects and issues;
+- sort issues by dependencies, priority, and issue number;
+- schedule the next eligible issue by appending task events;
+- emit launch requests for Agent Bridge.
+
+Non-goals:
+
+- no code execution;
+- no provider-specific launch mechanics;
+- no direct Desktop rendering;
+- no public release writing.
+
+Implemented backend modules:
+
+- `crates/task-loop/src/model.rs`
+- `crates/task-loop/src/scheduler.rs`
+- `crates/task-loop/src/launcher.rs`
+- `crates/task-loop/src/loop_runtime.rs`
+- `crates/task-loop/src/lib.rs`
+
+Notes:
+
+- Project Loop is a scheduler, not an executor.
+- User-triggered project loop buttons should call this layer instead of the old `loop` crate.
+
+## Agent Bridge
+
+Scope:
+
+- consume `agent.launch.requested` events;
+- create, resume, cancel, and poll external agent sessions;
+- translate provider session changes into task events;
+- coordinate with `mcp` provider adapters.
+
+Non-goals:
+
+- no task ordering;
+- no issue status mutation outside workflow events;
+- no direct code editing;
+- no release note generation.
+
+Implemented backend modules:
+
+- `crates/agent-bridge/src/lib.rs`
+
+Notes:
+
+- Agent Bridge is the session orchestrator. It does not decide what task should run next.
+
+## Projection
+
+Scope:
+
+- rebuild task projections from task events;
+- rebuild project projections from task events and spec contracts;
+- generate issue-status indexes for the task page;
+- provide Desktop read models.
+
+Non-goals:
+
+- no spec issue writes;
+- no event writes except explicit rebuild markers when needed;
+- no provider calls;
+- no local command execution.
+
+Implemented backend modules:
+
+- `crates/projection/src/model.rs`
+- `crates/projection/src/projector.rs`
+- `crates/projection/src/storage.rs`
+- `crates/projection/src/lib.rs`
+
+Notes:
+
+- Desktop should read projection and indexes instead of reading old `input`, `execute`, `output`, or `state` files directly.
+
+## Release
+
+Scope:
+
+- collect public delivery records from completed task projections and PR/MR metadata;
+- generate CHANGELOG and release notes for version-level delivery;
+- write public release documents when explicitly invoked.
+
+Non-goals:
+
+- no single-task status transitions;
+- no Build Agent loop execution;
+- no local `.agentflow/output/**` replacement;
+- no audit decision making.
+
+Implemented backend modules:
+
+- `crates/release/src/model.rs`
+- `crates/release/src/summary.rs`
+- `crates/release/src/writer.rs`
+- `crates/release/src/lib.rs`
+
+Notes:
+
+- Release is a batch public-record layer, not the owner of task delivery.
 
 ## Legacy CLI Read Model
 
