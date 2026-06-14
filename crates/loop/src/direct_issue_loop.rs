@@ -1,5 +1,6 @@
 use crate::{
     model::{IssueLoopProjection, IssueLoopStage, LoopBlocker},
+    review_state::derived_review_substate,
     storage::write_issue_loop_projection,
 };
 use agentflow_input::issue::{
@@ -257,7 +258,7 @@ fn write_direct_issue_projection(
     let mut projection = existing_projection(root, &issue.issue_id)
         .unwrap_or_else(|| IssueLoopProjection::new(None, &issue.issue_id, now()));
     let review_substate = if projection.review_substate.is_none() {
-        derived_review_substate(root, issue, &stage)
+        derived_review_substate(root, &issue.issue_id, &stage)
     } else {
         projection.review_substate.clone()
     };
@@ -295,24 +296,6 @@ fn issue_branch_name_from_run(root: &Path, run_id: &str) -> Option<String> {
         .get("issueBranch")
         .and_then(serde_json::Value::as_str)
         .map(str::to_string)
-}
-
-fn derived_review_substate(
-    root: &Path,
-    issue: &InputIssue,
-    stage: &IssueLoopStage,
-) -> Option<String> {
-    let run_id = issue.latest_run_id.as_deref()?;
-    match stage {
-        IssueLoopStage::InReview => root
-            .join(".agentflow/output/release")
-            .join(run_id)
-            .join("delivery.json")
-            .is_file()
-            .then_some("delivery-prepared".to_string()),
-        IssueLoopStage::Done => Some("merged".to_string()),
-        _ => None,
-    }
 }
 
 fn issue_stage(status: &InputIssueStatus) -> IssueLoopStage {
