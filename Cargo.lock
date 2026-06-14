@@ -190,6 +190,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-projection"
+version = "0.1.0"
+dependencies = [
+ "agentflow-event-store",
+ "agentflow-spec",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-spec"
 version = "0.1.0"
 dependencies = [
