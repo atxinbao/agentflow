@@ -14,4 +14,7 @@ pub use model::{
     ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
 };
 pub use projector::rebuild_projections;
-pub use storage::{load_project_projection, load_task_projection, prepare_projection_workspace};
+pub use storage::{
+    load_issue_status_index, load_project_projection, load_task_projection,
+    prepare_projection_workspace,
+};

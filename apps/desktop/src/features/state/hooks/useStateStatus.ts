@@ -109,7 +109,8 @@ export function useIssueStatusIndex(projectRoot: string | null, refreshToken = 0
     setIssueStatusIndexState((current) =>
       current.index ? { ...current, error: null } : { ...current, error: null, source: "loading" },
     );
-    void invoke<IssueStatusIndex>("load_issue_status_index", { projectRoot })
+    void invoke("rebuild_task_projections", { projectRoot })
+      .then(() => invoke<IssueStatusIndex>("load_projection_issue_status_index", { projectRoot }))
       .then((index) => {
         if (!cancelled) {
           setIssueStatusIndexState({ index, error: null, source: "tauri" });
