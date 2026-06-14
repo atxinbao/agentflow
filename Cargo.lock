@@ -43,6 +43,7 @@ dependencies = [
  "agentflow-input",
  "agentflow-loop",
  "agentflow-projection",
+ "agentflow-release",
  "agentflow-state",
  "agentflow-task-loop",
  "agentflow-workflow-events",
@@ -198,6 +199,18 @@ name = "agentflow-projection"
 version = "0.1.0"
 dependencies = [
  "agentflow-event-store",
+ "agentflow-spec",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "agentflow-release"
+version = "0.1.0"
+dependencies = [
+ "agentflow-projection",
  "agentflow-spec",
  "anyhow",
  "serde",
