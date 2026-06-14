@@ -7,7 +7,7 @@ pub mod model;
 pub mod scheduler;
 
 pub use model::{
-    AgentLaunchPayload, TaskLoopLaunch, TaskLoopSchedule, AGENT_LAUNCH_REQUESTED, ISSUE_SCHEDULED,
-    TASK_LOOP_LAUNCH_REQUEST_VERSION,
+    AgentLaunchPayload, TaskLoopLaunch, TaskLoopSchedule, TaskLoopTick, AGENT_LAUNCH_REQUESTED,
+    ISSUE_SCHEDULED, TASK_LOOP_LAUNCH_REQUEST_VERSION,
 };
 pub use scheduler::TaskLoop;

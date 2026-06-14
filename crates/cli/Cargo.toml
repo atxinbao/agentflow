@@ -10,10 +10,13 @@ path = "src/main.rs"
 
 [dependencies]
 agentflow-core = { path = "../core" }
+agentflow-agent-bridge = { path = "../agent-bridge" }
 agentflow-execute = { path = "../execute" }
 agentflow-input = { path = "../input" }
 agentflow-loop = { path = "../loop" }
+agentflow-projection = { path = "../projection" }
 agentflow-state = { path = "../state" }
+agentflow-task-loop = { path = "../task-loop" }
 agentflow-workflow-events = { path = "../workflow-events" }
 anyhow.workspace = true
 clap.workspace = true

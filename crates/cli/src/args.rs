@@ -102,6 +102,18 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: BuildAgentCommand,
     },
+    TaskLoop {
+        #[command(subcommand)]
+        command: TaskLoopCommand,
+    },
+    AgentBridge {
+        #[command(subcommand)]
+        command: AgentBridgeCommand,
+    },
+    Projection {
+        #[command(subcommand)]
+        command: ProjectionCommand,
+    },
     State {
         #[command(subcommand)]
         command: StateCommand,
@@ -232,6 +244,46 @@ pub(crate) enum BuildAgentCommand {
     Complete {
         #[arg(long)]
         request: PathBuf,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum TaskLoopCommand {
+    Schedule {
+        #[arg(long = "project-id")]
+        project_id: String,
+    },
+    Launch {
+        #[arg(long = "project-id")]
+        project_id: String,
+        #[arg(long = "issue-id")]
+        issue_id: String,
+        #[arg(long, default_value = "codex")]
+        provider: String,
+    },
+    Tick {
+        #[arg(long = "project-id")]
+        project_id: String,
+        #[arg(long, default_value = "codex")]
+        provider: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum AgentBridgeCommand {
+    ClaimNext,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum ProjectionCommand {
+    Rebuild,
+    Task {
+        #[arg(long = "issue-id")]
+        issue_id: String,
+    },
+    Project {
+        #[arg(long = "project-id")]
+        project_id: String,
     },
 }
 

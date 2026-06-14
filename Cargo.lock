@@ -37,11 +37,14 @@ dependencies = [
 name = "agentflow-cli"
 version = "0.1.0"
 dependencies = [
+ "agentflow-agent-bridge",
  "agentflow-core",
  "agentflow-execute",
  "agentflow-input",
  "agentflow-loop",
+ "agentflow-projection",
  "agentflow-state",
+ "agentflow-task-loop",
  "agentflow-workflow-events",
  "anyhow",
  "clap",

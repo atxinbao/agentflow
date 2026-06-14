@@ -9,7 +9,9 @@ use crate::active::{
     prepare_build_agent_review_from_request, start_build_agent_issue,
     write_build_agent_merge_proof,
 };
-use crate::args::{BuildAgentCommand, Cli, Command};
+use crate::args::{
+    AgentBridgeCommand, BuildAgentCommand, Cli, Command, ProjectionCommand, TaskLoopCommand,
+};
 use crate::retirement::{
     legacy_command_status, print_legacy_retirement_message, should_disable_legacy_command,
 };
@@ -264,6 +266,102 @@ pub(crate) fn run() -> Result<()> {
                     println!("next stage: {}", next_launch.stage.as_str());
                     println!("next request: {}", next_launch.launch_request_path);
                 }
+            }
+        },
+        Command::TaskLoop { command } => match command {
+            TaskLoopCommand::Schedule { project_id } => {
+                let schedule =
+                    agentflow_task_loop::TaskLoop::new(&project_id).schedule_next_issue(&cwd)?;
+                if let Some(schedule) = schedule {
+                    println!("task loop schedule: created");
+                    println!("project: {}", schedule.project_id);
+                    println!("issue: {}", schedule.issue_id);
+                    println!("workflow: {}", schedule.workflow_ref);
+                    println!("event: {}", schedule.event_id);
+                } else {
+                    println!("task loop schedule: none");
+                    println!("project: {}", project_id);
+                }
+            }
+            TaskLoopCommand::Launch {
+                project_id,
+                issue_id,
+                provider,
+            } => {
+                let launch = agentflow_task_loop::TaskLoop::new(&project_id)
+                    .request_agent_launch(&cwd, &issue_id, &provider)?;
+                println!("task loop launch: requested");
+                println!(
+                    "project: {}",
+                    launch.project_id.as_deref().unwrap_or("none")
+                );
+                println!("issue: {}", launch.issue_id);
+                println!("run: {}", launch.run_id);
+                println!("branch: {}", launch.branch_name);
+                println!("request: {}", launch.launch_request_path);
+                println!("event: {}", launch.event_id);
+            }
+            TaskLoopCommand::Tick {
+                project_id,
+                provider,
+            } => {
+                let loop_driver = agentflow_task_loop::TaskLoop::new(&project_id);
+                let tick = loop_driver.tick(&cwd, &provider)?;
+                if let Some(tick) = tick {
+                    println!("task loop tick: launched");
+                    println!(
+                        "project: {}",
+                        tick.launch.project_id.as_deref().unwrap_or("none")
+                    );
+                    println!("issue: {}", tick.launch.issue_id);
+                    if let Some(schedule) = tick.schedule {
+                        println!("workflow: {}", schedule.workflow_ref);
+                        println!("schedule event: {}", schedule.event_id);
+                    } else {
+                        println!("schedule event: reused existing todo");
+                    }
+                    println!("run: {}", tick.launch.run_id);
+                    println!("branch: {}", tick.launch.branch_name);
+                    println!("request: {}", tick.launch.launch_request_path);
+                    println!("launch event: {}", tick.launch.event_id);
+                } else {
+                    println!("task loop tick: none");
+                    println!("project: {}", project_id);
+                }
+            }
+        },
+        Command::AgentBridge { command } => match command {
+            AgentBridgeCommand::ClaimNext => {
+                let claim = agentflow_agent_bridge::AgentBridge::with_default_providers()
+                    .claim_next_launch(&cwd)?;
+                if let Some(claim) = claim {
+                    println!("agent bridge claim: created");
+                    println!("issue: {}", claim.issue_id);
+                    println!("run: {}", claim.run_id);
+                    println!("provider: {}", claim.provider);
+                    println!("session: {}", claim.session_id);
+                    println!("status: {}", claim.session_status);
+                    println!("event: {}", claim.created_event_id);
+                } else {
+                    println!("agent bridge claim: none");
+                }
+            }
+        },
+        Command::Projection { command } => match command {
+            ProjectionCommand::Rebuild => {
+                let summary = agentflow_projection::rebuild_projections(&cwd)?;
+                println!("projection rebuild: done");
+                println!("tasks: {}", summary.task_count);
+                println!("projects: {}", summary.project_count);
+                println!("index: {}", summary.index_path);
+            }
+            ProjectionCommand::Task { issue_id } => {
+                let projection = agentflow_projection::load_task_projection(&cwd, &issue_id)?;
+                println!("{}", serde_json::to_string_pretty(&projection)?);
+            }
+            ProjectionCommand::Project { project_id } => {
+                let projection = agentflow_projection::load_project_projection(&cwd, &project_id)?;
+                println!("{}", serde_json::to_string_pretty(&projection)?);
             }
         },
         command => {

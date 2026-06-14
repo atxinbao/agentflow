@@ -1,6 +1,6 @@
 use crate::model::{
-    AgentLaunchPayload, TaskLoopLaunch, TaskLoopSchedule, AGENT_LAUNCH_REQUESTED, ISSUE_SCHEDULED,
-    TASK_LOOP_LAUNCH_REQUEST_VERSION,
+    AgentLaunchPayload, TaskLoopLaunch, TaskLoopSchedule, TaskLoopTick, AGENT_LAUNCH_REQUESTED,
+    ISSUE_SCHEDULED, TASK_LOOP_LAUNCH_REQUEST_VERSION,
 };
 use agentflow_event_store::{
     append_task_event_once, load_task_events, EventActor, EventStateTransition, TaskEventDraft,
@@ -100,6 +100,9 @@ impl TaskLoop {
                 state.as_str()
             );
         }
+        if launch_requested_issue_ids(&root)?.contains(&issue.issue_id) {
+            anyhow::bail!("issue {} already has a launch request", issue.issue_id);
+        }
         let run_id = next_run_id(&root, &issue.issue_id)?;
         let branch_name = branch_name(&issue);
         let run = create_task_run(
@@ -162,6 +165,35 @@ impl TaskLoop {
             event_id: event.event_id,
         })
     }
+
+    pub fn tick(
+        &self,
+        project_root: impl AsRef<Path>,
+        provider: &str,
+    ) -> Result<Option<TaskLoopTick>> {
+        let root = canonical_project_root(project_root)?;
+        let project = read_spec_project(&root, &self.project_id)?;
+        let issues = load_project_issues(&root, &project)?;
+        let states = current_issue_states(&root, &issues)?;
+        let launched = launch_requested_issue_ids(&root)?;
+
+        if let Some(issue) = next_launchable_issue(&issues, &states, &launched) {
+            let launch = self.request_agent_launch(&root, &issue.issue_id, provider)?;
+            return Ok(Some(TaskLoopTick {
+                schedule: None,
+                launch,
+            }));
+        }
+
+        let Some(schedule) = self.schedule_next_issue(&root)? else {
+            return Ok(None);
+        };
+        let launch = self.request_agent_launch(&root, &schedule.issue_id, provider)?;
+        Ok(Some(TaskLoopTick {
+            schedule: Some(schedule),
+            launch,
+        }))
+    }
 }
 
 fn load_project_issues(root: &Path, project: &SpecProject) -> Result<Vec<SpecIssue>> {
@@ -201,6 +233,35 @@ fn next_schedulable_issue<'a>(
             .then_with(|| left.issue_id.cmp(&right.issue_id))
     });
     candidates.into_iter().next()
+}
+
+fn next_launchable_issue<'a>(
+    issues: &'a [SpecIssue],
+    states: &BTreeMap<String, SpecIssueStatus>,
+    launched: &BTreeSet<String>,
+) -> Option<&'a SpecIssue> {
+    let mut candidates = issues
+        .iter()
+        .filter(|issue| {
+            states.get(&issue.issue_id) == Some(&SpecIssueStatus::Todo)
+                && !launched.contains(&issue.issue_id)
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        priority_rank(&left.priority)
+            .cmp(&priority_rank(&right.priority))
+            .then_with(|| issue_number(&left.issue_id).cmp(&issue_number(&right.issue_id)))
+            .then_with(|| left.issue_id.cmp(&right.issue_id))
+    });
+    candidates.into_iter().next()
+}
+
+fn launch_requested_issue_ids(root: &Path) -> Result<BTreeSet<String>> {
+    Ok(load_task_events(root)?
+        .into_iter()
+        .filter(|event| event.event_type == AGENT_LAUNCH_REQUESTED)
+        .filter_map(|event| event.issue_id)
+        .collect())
 }
 
 fn current_issue_states(
@@ -390,6 +451,90 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| event.event_type == AGENT_LAUNCH_REQUESTED));
+    }
+
+    #[test]
+    fn tick_schedules_and_launches_next_issue() {
+        let dir = tempdir().unwrap();
+        write_project_with_issues(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+
+        let tick = loop_driver.tick(dir.path(), "codex").unwrap().unwrap();
+
+        let schedule = tick.schedule.unwrap();
+        assert_eq!(schedule.issue_id, "AF-TASK-001");
+        assert_eq!(tick.launch.issue_id, "AF-TASK-001");
+        assert_eq!(tick.launch.run_id, "run-001");
+        assert!(dir.path().join(&tick.launch.launch_request_path).is_file());
+        let events = replay_task_events(dir.path(), ReplayFilter::issue("AF-TASK-001")).unwrap();
+        assert_eq!(events[0].event_type, ISSUE_SCHEDULED);
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == AGENT_LAUNCH_REQUESTED));
+    }
+
+    #[test]
+    fn tick_launches_existing_todo_without_rescheduling() {
+        let dir = tempdir().unwrap();
+        write_project_with_issues(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+        loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+
+        let tick = loop_driver.tick(dir.path(), "codex").unwrap().unwrap();
+
+        assert!(tick.schedule.is_none());
+        assert_eq!(tick.launch.issue_id, "AF-TASK-001");
+        let events = replay_task_events(dir.path(), ReplayFilter::issue("AF-TASK-001")).unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event.event_type == ISSUE_SCHEDULED)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn tick_does_not_duplicate_pending_launch() {
+        let dir = tempdir().unwrap();
+        write_project_with_issues(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+
+        assert!(loop_driver.tick(dir.path(), "codex").unwrap().is_some());
+        let second_tick = loop_driver.tick(dir.path(), "codex").unwrap();
+
+        assert!(second_tick.is_none());
+        let events = replay_task_events(dir.path(), ReplayFilter::issue("AF-TASK-001")).unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event.event_type == AGENT_LAUNCH_REQUESTED)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn launch_rejects_existing_launch_request() {
+        let dir = tempdir().unwrap();
+        write_project_with_issues(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+        loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+        loop_driver
+            .request_agent_launch(dir.path(), "AF-TASK-001", "codex")
+            .unwrap();
+
+        let err = loop_driver
+            .request_agent_launch(dir.path(), "AF-TASK-001", "codex")
+            .unwrap_err();
+
+        assert!(err.to_string().contains("already has a launch request"));
     }
 
     #[test]

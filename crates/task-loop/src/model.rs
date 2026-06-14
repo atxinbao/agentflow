@@ -26,6 +26,13 @@ pub struct TaskLoopLaunch {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TaskLoopTick {
+    pub schedule: Option<TaskLoopSchedule>,
+    pub launch: TaskLoopLaunch,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentLaunchPayload {
     pub version: String,
     pub provider: String,
