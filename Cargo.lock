@@ -39,11 +39,14 @@ version = "0.1.0"
 dependencies = [
  "agentflow-agent-bridge",
  "agentflow-core",
+ "agentflow-event-store",
  "agentflow-execute",
  "agentflow-input",
  "agentflow-loop",
+ "agentflow-mcp",
  "agentflow-projection",
  "agentflow-release",
+ "agentflow-spec",
  "agentflow-state",
  "agentflow-task-loop",
  "agentflow-workflow-events",
@@ -68,8 +71,10 @@ dependencies = [
 name = "agentflow-desktop"
 version = "0.1.0"
 dependencies = [
+ "agentflow-agent-bridge",
  "agentflow-agent-manual",
  "agentflow-core",
+ "agentflow-event-store",
  "agentflow-execute",
  "agentflow-input",
  "agentflow-mcp",

@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 agentflow-core = { path = "../core" }
 agentflow-agent-bridge = { path = "../agent-bridge" }
+agentflow-event-store = { path = "../event-store" }
 agentflow-execute = { path = "../execute" }
 agentflow-input = { path = "../input" }
 agentflow-loop = { path = "../loop" }
@@ -24,4 +25,6 @@ clap.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+agentflow-mcp = { path = "../mcp" }
+agentflow-spec = { path = "../spec" }
 tempfile.workspace = true
