@@ -259,6 +259,8 @@ pub(crate) fn run() -> Result<()> {
                 println!("run: {}", outcome.run_id);
                 println!("run status: {}", outcome.run_status);
                 println!("evidence: {}", outcome.evidence_path.display());
+                println!("changelog: {}", outcome.changelog_path.display());
+                println!("release notes: {}", outcome.release_notes_path.display());
                 println!("validation passed: {}", outcome.validation_passed);
                 if let Some(next_launch) = outcome.next_launch {
                     println!("next issue: {}", next_launch.issue_id);
