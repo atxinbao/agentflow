@@ -55,7 +55,7 @@ const LAYOUT_DIRECTORIES: &[&str] = &[
     ".agentflow/panel/snapshots",
     ".agentflow/panel/index",
     ".agentflow/output",
-    ".agentflow/output/audit",
+    ".agentflow/audit",
     ".agentflow/output/backup",
     ".agentflow/output/backup/agent-md",
     ".agentflow/state",
@@ -93,7 +93,7 @@ const AGENT_ROLES_JSON: &str = r#"{
       ],
       "forbiddenWrites": [
         ".agentflow/tasks/**",
-        ".agentflow/output/audit/**"
+        ".agentflow/audit/**"
       ]
     },
     {
@@ -106,7 +106,7 @@ const AGENT_ROLES_JSON: &str = r#"{
         ".agentflow/events/**"
       ],
       "forbiddenWrites": [
-        ".agentflow/output/audit/**"
+        ".agentflow/audit/**"
       ]
     },
     {
@@ -114,7 +114,7 @@ const AGENT_ROLES_JSON: &str = r#"{
       "label": "审计助手",
       "allowedIssueCategories": ["audit"],
       "allowedWrites": [
-        ".agentflow/output/audit/**",
+        ".agentflow/audit/**",
         ".agentflow/events/**"
       ],
       "forbiddenWrites": [
@@ -662,7 +662,7 @@ Audit is the code review and risk review working manual for future Audit Agent e
 - Audit Agent is enabled for Release Audit V1.
 - Audit Agent completes existing `audit` issues and `human-via-agent` audit requests.
 - Audit checks SPEC alignment, boundary compliance, architecture impact, permission / path / data-write risk, test coverage, legacy reintroduction, unauthorized execution, unauthorized writes, model calls, and evidence completeness.
-- Audit output belongs under `.agentflow/output/audit/`.
+- Audit output belongs under `.agentflow/audit/`.
 - The same Release Delivery must not have duplicate audit requests.
 - Human conversation can ask an Agent for `human-via-agent` audit. The ordinary App UI must not create audits.
 

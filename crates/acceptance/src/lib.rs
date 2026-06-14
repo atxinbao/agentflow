@@ -32,7 +32,8 @@ mod tests {
             .delivery_state
             .next_actions
             .contains(&"request-human-audit".to_string()));
-        let audit_index = agentflow_output::load_audit_index(ready.fixture.root())?;
+        let audit_index =
+            agentflow_output::load_audit_index(ready.fixture.root()).unwrap_or_default();
         assert_eq!(audit_index.audits.len(), 0);
         ready.fixture.assert_user_files_unchanged()?;
         boundaries::assert_write_boundary(ready.fixture.root())?;

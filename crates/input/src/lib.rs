@@ -876,7 +876,7 @@ mod tests {
                 "sourceReleaseId": "release-v0.1.0",
                 "sourceRunId": "release-v0.1.0",
                 "sourceDeliveryPath": ".agentflow/output/release/release-v0.1.0/delivery.json",
-                "auditOutputDir": ".agentflow/output/audit/audit-001",
+                "auditOutputDir": ".agentflow/audit/audit-001",
                 "expectedOutputs": [
                     "audit.json",
                     "audit-report.md",

@@ -568,7 +568,7 @@ impl InputIssue {
         }
         if self.forbidden_paths.is_empty() {
             self.forbidden_paths = vec![
-                ".agentflow/output/audit/**".to_string(),
+                ".agentflow/audit/**".to_string(),
                 ".agentflow/spec/**".to_string(),
                 ".agentflow/goal-tree/**".to_string(),
                 ".agentflow/define/issues/**".to_string(),
@@ -614,7 +614,7 @@ impl InputIssue {
     fn normalize_audit_metadata(&mut self) {
         if self.allowed_paths.is_empty() {
             self.allowed_paths = vec![
-                ".agentflow/output/audit/**".to_string(),
+                ".agentflow/audit/**".to_string(),
                 ".agentflow/output/release/**".to_string(),
                 ".agentflow/output/evidence/**".to_string(),
                 ".agentflow/input/issues/**".to_string(),
@@ -656,7 +656,7 @@ impl InputIssue {
                 );
             }
             if audit.audit_output_dir.trim().is_empty() && !audit.audit_id.trim().is_empty() {
-                audit.audit_output_dir = format!(".agentflow/output/audit/{}", audit.audit_id);
+                audit.audit_output_dir = format!(".agentflow/audit/{}", audit.audit_id);
             }
             if audit.expected_outputs.is_empty() && !audit.audit_output_dir.trim().is_empty() {
                 audit.expected_outputs = audit_expected_outputs(&audit.audit_output_dir);
@@ -886,7 +886,7 @@ impl Default for AgentRolesDocument {
                     forbidden_writes: vec![
                         ".agentflow/execute/**".to_string(),
                         ".agentflow/output/release/**".to_string(),
-                        ".agentflow/output/audit/**".to_string(),
+                        ".agentflow/audit/**".to_string(),
                         ".agentflow/spec/**".to_string(),
                         ".agentflow/goal-tree/**".to_string(),
                         ".agentflow/define/goals/**".to_string(),
@@ -905,7 +905,7 @@ impl Default for AgentRolesDocument {
                         ".agentflow/state/events/**".to_string(),
                     ],
                     forbidden_writes: vec![
-                        ".agentflow/output/audit/**".to_string(),
+                        ".agentflow/audit/**".to_string(),
                         ".agentflow/spec/**".to_string(),
                         ".agentflow/goal-tree/**".to_string(),
                         ".agentflow/define/goals/**".to_string(),
@@ -918,7 +918,7 @@ impl Default for AgentRolesDocument {
                     label: "审计助手".to_string(),
                     allowed_issue_categories: vec![IssueCategory::Audit],
                     allowed_writes: vec![
-                        ".agentflow/output/audit/**".to_string(),
+                        ".agentflow/audit/**".to_string(),
                         ".agentflow/state/events/**".to_string(),
                     ],
                     forbidden_writes: vec![

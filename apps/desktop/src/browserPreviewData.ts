@@ -118,7 +118,7 @@ const previewInputIssues: InputIssue[] = [
   browserPreviewInputIssue("iss-audit-ready", "复制审计任务包", "todo", "todo", "审计任务可以交给 Audit Agent。", {
     audit: {
       auditId: previewAuditId,
-      auditOutputDir: `.agentflow/output/audit/${previewAuditId}`,
+      auditOutputDir: `.agentflow/audit/${previewAuditId}`,
       expectedOutputs: previewAuditExpectedOutputs(previewAuditId),
       sourceDeliveryPath: `.agentflow/output/release/${previewDeliveryRunId}/delivery.json`,
       sourceReleaseId: previewDeliveryRunId,
@@ -210,7 +210,7 @@ function previewBuildExpectedOutputs(issueId: string) {
 }
 
 function previewAuditExpectedOutputs(auditId: string) {
-  const outputDir = `.agentflow/output/audit/${auditId}`;
+  const outputDir = `.agentflow/audit/${auditId}`;
   return {
     "audit-report.md": `${outputDir}/audit-report.md`,
     "audit.json": `${outputDir}/audit.json`,
@@ -851,7 +851,7 @@ export function createBrowserPreviewOutputIndex(): OutputIndex {
         previewDoneRunId,
         previewDoneIssueId,
         previewSpecId,
-        ".agentflow/output/audit/audit-browser-preview-001/audit-report.md",
+        ".agentflow/audit/audit-browser-preview-001/audit-report.md",
         "passed-with-warnings",
       ),
     ],
@@ -873,8 +873,8 @@ export function createBrowserPreviewAuditIndex(): AuditIndex {
         sourceRunId: previewDeliveryRunId,
         sourceIssueId: previewDoneIssueId,
         sourceSpecId: previewSpecId,
-        reportPath: ".agentflow/output/audit/audit-browser-preview-001/audit-report.md",
-        auditPath: ".agentflow/output/audit/audit-browser-preview-001/audit.json",
+        reportPath: ".agentflow/audit/audit-browser-preview-001/audit-report.md",
+        auditPath: ".agentflow/audit/audit-browser-preview-001/audit.json",
       },
     ],
   };
@@ -942,14 +942,14 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
         evidenceCompleteness: "warning",
       },
       paths: {
-        report: ".agentflow/output/audit/audit-browser-preview-001/audit-report.md",
+        report: ".agentflow/audit/audit-browser-preview-001/audit-report.md",
       },
     },
     reportMarkdown:
       "# Human Audit Browser Preview\n\n" +
       "状态：通过，有警告。\n\n" +
       "- 已核对 release delivery、execute run、evidence 和 issue scope refs。\n" +
-      "- 浏览器预览只展示 mock 审计报告，不写 `.agentflow/output/audit`。\n",
+      "- 浏览器预览只展示 mock 审计报告，不写 `.agentflow/audit`。\n",
     findings: [
       {
         id: "finding-browser-preview-001",

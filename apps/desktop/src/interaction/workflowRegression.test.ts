@@ -100,7 +100,7 @@ function workflowTask(status: WorkflowStatus): V1Issue {
     executionPipeline: null,
     executionRisk: "medium",
     forbiddenActions: ["不创建审计"],
-    forbiddenFiles: [".agentflow/output/audit/**"],
+    forbiddenFiles: [".agentflow/audit/**"],
     goal: `验证 ${status} 状态`,
     id: `issue-${status}`,
     issueCategory: "spec",
@@ -156,8 +156,8 @@ function session(status: WorkflowStatus): McpSessionSnapshot | null {
 function auditForDone(): AuditIndexEntry {
   return {
     auditId: "audit-workflow-regression",
-    auditPath: ".agentflow/output/audit/audit-workflow-regression/audit.json",
-    reportPath: ".agentflow/output/audit/audit-workflow-regression/audit-report.md",
+    auditPath: ".agentflow/audit/audit-workflow-regression/audit.json",
+    reportPath: ".agentflow/audit/audit-workflow-regression/audit-report.md",
     requestedAt: 1780291200,
     requestedBy: "workflow-regression",
     sourceDeliveryId: "run-done",

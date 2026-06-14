@@ -344,6 +344,7 @@ mod tests {
         assert!(!status
             .next_actions
             .contains(&"request-human-audit".to_string()));
+        agentflow_output::prepare_audit_workspace(dir.path()).unwrap();
         let audit_index = agentflow_output::load_audit_index(dir.path()).unwrap();
         assert_eq!(audit_index.audits.len(), 0);
     }

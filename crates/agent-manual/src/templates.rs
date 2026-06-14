@@ -348,7 +348,7 @@ It cannot process `issueCategory=audit`, ask for audit target metadata, modify s
 
 Status: enabled for Release Audit V1.
 
-Owns audit report completion for Audit Issues under `.agentflow/spec/issues/audit-<release-id>.json` and audit artifacts under `.agentflow/output/audit/<audit-id>/`.
+Owns audit report completion for Audit Issues under `.agentflow/spec/issues/audit-<release-id>.json` and audit artifacts under `.agentflow/audit/<audit-id>/`.
 
 It may execute only `issueCategory=audit` issues with `requiredAgentRole=audit-agent`. Its handoff must include `auditId`, `sourceReleaseId`, `sourceDeliveryPath`, `auditOutputDir`, and audit expected outputs. Its writeback must include `agent-claim.json` with `claimedAgentRole=audit-agent`.
 

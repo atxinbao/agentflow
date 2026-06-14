@@ -134,7 +134,7 @@ fn audit_health(root: &Path) -> WorkflowHealthSnapshot {
                 status.status
             },
             ready: true,
-            source_path: ".agentflow/output/audit/manifest.json".to_string(),
+            source_path: ".agentflow/audit/manifest.json".to_string(),
             checked_at: unix_timestamp_seconds(),
             warnings: Vec::new(),
             errors: Vec::new(),
@@ -144,7 +144,7 @@ fn audit_health(root: &Path) -> WorkflowHealthSnapshot {
             module: "audit".to_string(),
             status: "idle".to_string(),
             ready: true,
-            source_path: ".agentflow/output/audit/manifest.json".to_string(),
+            source_path: ".agentflow/audit/manifest.json".to_string(),
             checked_at: unix_timestamp_seconds(),
             warnings: Vec::new(),
             errors: Vec::new(),

@@ -1,5 +1,4 @@
 use crate::{
-    audit::{ensure_audit_workspace, rebuild_audit_manifest_and_index},
     model::{
         OutputEvidence, OutputIndex, OutputIndexEntry, OutputManifest, OutputReleaseDelivery,
         OutputSnapshot, OutputStatusSnapshot, OutputSummary, OutputWorkspaceStatus,
@@ -20,8 +19,6 @@ pub fn prepare_output_workspace(project_root: impl AsRef<Path>) -> Result<Output
     for relative_path in OUTPUT_DIRECTORIES {
         ensure_directory(&root.join(relative_path))?;
     }
-    ensure_audit_workspace(&root)?;
-    rebuild_audit_manifest_and_index(&root)?;
 
     let index = rebuild_output_index(&root)?;
     let summary = output_summary(&root, &index)?;
@@ -98,7 +95,7 @@ pub(crate) fn rebuild_output_index(root: &Path) -> Result<OutputIndex> {
 
     let mut audits = Vec::new();
     let audit_index =
-        read_json::<crate::model::AuditIndex>(&root.join(".agentflow/output/audit/index.json"))
+        read_json::<crate::model::AuditIndex>(&root.join(".agentflow/audit/index.json"))
             .unwrap_or_default();
     for record in audit_index.audits {
         audits.push(OutputIndexEntry {
@@ -166,7 +163,7 @@ fn build_output_snapshot(root: &Path) -> Result<OutputSnapshot> {
         }
     }
 
-    for path in sorted_child_paths(&root.join(".agentflow/output/audit"))? {
+    for path in sorted_child_paths(&root.join(".agentflow/audit"))? {
         if !path.is_dir() {
             continue;
         }
@@ -234,7 +231,7 @@ fn build_output_snapshot(root: &Path) -> Result<OutputSnapshot> {
 
 fn audit_scope_id(root: &Path, audit_id: &str, kind: &str) -> Option<String> {
     let request_path = root
-        .join(".agentflow/output/audit")
+        .join(".agentflow/audit")
         .join(audit_id)
         .join("audit-request.json");
     let request: crate::model::AuditRequest = read_json(&request_path).ok()?;
