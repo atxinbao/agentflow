@@ -134,6 +134,21 @@ pub(crate) fn legacy_command_status(command: &Command) -> LegacyCommandStatus {
             disposition: LegacyCommandDisposition::KeepTemporary,
             reason: "active Build Agent completion writeback command",
         },
+        Command::TaskLoop { .. } => LegacyCommandStatus {
+            command_name: "task-loop",
+            disposition: LegacyCommandDisposition::KeepTemporary,
+            reason: "active task workflow scheduler and launcher command",
+        },
+        Command::AgentBridge { .. } => LegacyCommandStatus {
+            command_name: "agent-bridge",
+            disposition: LegacyCommandDisposition::KeepTemporary,
+            reason: "active external agent launch consumer command",
+        },
+        Command::Projection { .. } => LegacyCommandStatus {
+            command_name: "projection",
+            disposition: LegacyCommandDisposition::KeepTemporary,
+            reason: "active task/project projection read model command",
+        },
         Command::State { .. } => LegacyCommandStatus::disabled(
             "state",
             "old workflow state snapshot writer is not inherited",
@@ -187,6 +202,34 @@ mod tests {
                 command: crate::args::BuildAgentCommand::Complete {
                     request: std::path::PathBuf::from("request.json")
                 }
+            })
+            .disposition,
+            LegacyCommandDisposition::KeepTemporary
+        );
+    }
+
+    #[test]
+    fn task_runtime_commands_remain_available() {
+        assert_eq!(
+            legacy_command_status(&Command::TaskLoop {
+                command: crate::args::TaskLoopCommand::Tick {
+                    project_id: "project".to_string(),
+                    provider: "codex".to_string(),
+                }
+            })
+            .disposition,
+            LegacyCommandDisposition::KeepTemporary
+        );
+        assert_eq!(
+            legacy_command_status(&Command::AgentBridge {
+                command: crate::args::AgentBridgeCommand::ClaimNext
+            })
+            .disposition,
+            LegacyCommandDisposition::KeepTemporary
+        );
+        assert_eq!(
+            legacy_command_status(&Command::Projection {
+                command: crate::args::ProjectionCommand::Rebuild
             })
             .disposition,
             LegacyCommandDisposition::KeepTemporary
