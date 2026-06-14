@@ -38,7 +38,7 @@ impl ProjectAuditGate {
             version: LOOP_AUDIT_GATE_VERSION.to_string(),
             project_id: project_id.into(),
             issue_id: Some(issue_id.into()),
-            output_dir: Some(format!(".agentflow/output/audit/delivery-{run_id}")),
+            output_dir: Some(format!(".agentflow/audit/delivery-{run_id}")),
             run_id: Some(run_id),
             kind: AuditGateKind::Delivery,
             status: AuditGateStatus::Pending,
@@ -52,9 +52,7 @@ impl ProjectAuditGate {
             version: LOOP_AUDIT_GATE_VERSION.to_string(),
             issue_id: None,
             run_id: None,
-            output_dir: Some(format!(
-                ".agentflow/output/audit/project-{project_id}-final"
-            )),
+            output_dir: Some(format!(".agentflow/audit/project-{project_id}-final")),
             project_id,
             kind: AuditGateKind::ProjectFinal,
             status: AuditGateStatus::Pending,
@@ -73,7 +71,7 @@ impl ProjectAuditGate {
         let issue_id = issue_id.into();
         let run_id = run_id.into();
         let audit_id = format!("delivery-{run_id}");
-        let audit_dir = root.join(".agentflow/output/audit").join(&audit_id);
+        let audit_dir = root.join(".agentflow/audit").join(&audit_id);
         ensure_directory(&audit_dir)?;
 
         let checks = delivery_checks(&root, &run_id);
@@ -115,15 +113,15 @@ impl ProjectAuditGate {
             paths: std::collections::BTreeMap::from([
                 (
                     "request".to_string(),
-                    format!(".agentflow/output/audit/{audit_id}/audit-request.json"),
+                    format!(".agentflow/audit/{audit_id}/audit-request.json"),
                 ),
                 (
                     "audit".to_string(),
-                    format!(".agentflow/output/audit/{audit_id}/audit.json"),
+                    format!(".agentflow/audit/{audit_id}/audit.json"),
                 ),
                 (
                     "report".to_string(),
-                    format!(".agentflow/output/audit/{audit_id}/audit-report.md"),
+                    format!(".agentflow/audit/{audit_id}/audit-report.md"),
                 ),
             ]),
         };
@@ -205,7 +203,7 @@ impl ProjectAuditGate {
                 .max_by_key(|run| run.updated_at)
                 .with_context(|| format!("project issue {issue_id} has no execute run"))?;
             let audit_path = root
-                .join(".agentflow/output/audit")
+                .join(".agentflow/audit")
                 .join(format!("delivery-{}", run.run_id))
                 .join("audit.json");
             let audit: HumanAudit = read_json(&audit_path)
@@ -219,7 +217,7 @@ impl ProjectAuditGate {
         }
 
         let audit_id = format!("project-{project_id}-final");
-        let audit_dir = root.join(".agentflow/output/audit").join(&audit_id);
+        let audit_dir = root.join(".agentflow/audit").join(&audit_id);
         ensure_directory(&audit_dir)?;
         let requested_at = now();
         let request = AuditRequest {
@@ -261,15 +259,15 @@ impl ProjectAuditGate {
             paths: std::collections::BTreeMap::from([
                 (
                     "request".to_string(),
-                    format!(".agentflow/output/audit/{audit_id}/audit-request.json"),
+                    format!(".agentflow/audit/{audit_id}/audit-request.json"),
                 ),
                 (
                     "audit".to_string(),
-                    format!(".agentflow/output/audit/{audit_id}/audit.json"),
+                    format!(".agentflow/audit/{audit_id}/audit.json"),
                 ),
                 (
                     "report".to_string(),
-                    format!(".agentflow/output/audit/{audit_id}/audit-report.md"),
+                    format!(".agentflow/audit/{audit_id}/audit-report.md"),
                 ),
             ]),
         };

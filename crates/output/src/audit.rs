@@ -47,7 +47,7 @@ pub fn request_human_audit(
     }
 
     let audit_id = next_audit_id(&root)?;
-    let audit_dir = root.join(".agentflow/output/audit").join(&audit_id);
+    let audit_dir = root.join(".agentflow/audit").join(&audit_id);
     ensure_directory(&audit_dir)?;
 
     let requested_at = unix_timestamp_seconds();
@@ -146,7 +146,7 @@ pub fn load_audit_report(
     audit_id: String,
 ) -> Result<HumanAuditReport> {
     let root = canonical_project_root(project_root)?;
-    let audit_dir = root.join(".agentflow/output/audit").join(&audit_id);
+    let audit_dir = root.join(".agentflow/audit").join(&audit_id);
     Ok(HumanAuditReport {
         request: read_json(&audit_dir.join("audit-request.json"))?,
         audit: read_json(&audit_dir.join("audit.json"))?,
@@ -162,12 +162,12 @@ pub fn load_audit_report(
 
 pub fn load_audit_index(project_root: impl AsRef<Path>) -> Result<AuditIndex> {
     let root = canonical_project_root(project_root)?;
-    read_json(&root.join(".agentflow/output/audit/index.json"))
+    read_json(&root.join(".agentflow/audit/index.json"))
 }
 
 pub fn load_audit_manifest(project_root: impl AsRef<Path>) -> Result<AuditManifest> {
     let root = canonical_project_root(project_root)?;
-    read_json(&root.join(".agentflow/output/audit/manifest.json"))
+    read_json(&root.join(".agentflow/audit/manifest.json"))
 }
 
 pub fn load_audit_status(project_root: impl AsRef<Path>) -> Result<AuditManifest> {
@@ -175,9 +175,9 @@ pub fn load_audit_status(project_root: impl AsRef<Path>) -> Result<AuditManifest
 }
 
 pub(crate) fn ensure_audit_workspace(root: &Path) -> Result<()> {
-    ensure_directory(&root.join(".agentflow/output/audit"))?;
-    let manifest_path = root.join(".agentflow/output/audit/manifest.json");
-    let index_path = root.join(".agentflow/output/audit/index.json");
+    ensure_directory(&root.join(".agentflow/audit"))?;
+    let manifest_path = root.join(".agentflow/audit/manifest.json");
+    let index_path = root.join(".agentflow/audit/index.json");
     if !index_path.is_file() {
         write_json(&index_path, &AuditIndex::default())?;
     }
@@ -190,19 +190,16 @@ pub(crate) fn ensure_audit_workspace(root: &Path) -> Result<()> {
 }
 
 pub(crate) fn rebuild_audit_manifest_and_index(root: &Path) -> Result<AuditManifest> {
-    ensure_directory(&root.join(".agentflow/output/audit"))?;
+    ensure_directory(&root.join(".agentflow/audit"))?;
     let index = rebuild_audit_index(root)?;
     let manifest = audit_manifest(root, &index);
-    write_json(
-        &root.join(".agentflow/output/audit/manifest.json"),
-        &manifest,
-    )?;
+    write_json(&root.join(".agentflow/audit/manifest.json"), &manifest)?;
     Ok(manifest)
 }
 
 fn rebuild_audit_index(root: &Path) -> Result<AuditIndex> {
     let mut audits = Vec::new();
-    for path in sorted_child_paths(&root.join(".agentflow/output/audit"))? {
+    for path in sorted_child_paths(&root.join(".agentflow/audit"))? {
         if !path.is_dir() {
             continue;
         }
@@ -244,8 +241,8 @@ fn rebuild_audit_index(root: &Path) -> Result<AuditIndex> {
             source_run_id: source.as_ref().and_then(|source| source.run_id.clone()),
             source_issue_id: source.as_ref().and_then(|source| source.issue_id.clone()),
             source_spec_id: source.as_ref().and_then(|source| source.spec_id.clone()),
-            report_path: format!(".agentflow/output/audit/{audit_id}/audit-report.md"),
-            audit_path: format!(".agentflow/output/audit/{audit_id}/audit.json"),
+            report_path: format!(".agentflow/audit/{audit_id}/audit-report.md"),
+            audit_path: format!(".agentflow/audit/{audit_id}/audit.json"),
         });
     }
     audits.sort_by(|left, right| left.audit_id.cmp(&right.audit_id));
@@ -254,7 +251,7 @@ fn rebuild_audit_index(root: &Path) -> Result<AuditIndex> {
         updated_at: unix_timestamp_seconds(),
         audits,
     };
-    write_json(&root.join(".agentflow/output/audit/index.json"), &index)?;
+    write_json(&root.join(".agentflow/audit/index.json"), &index)?;
     Ok(index)
 }
 
@@ -278,8 +275,8 @@ fn audit_manifest(root: &Path, index: &AuditIndex) -> AuditManifest {
         project_root: root.display().to_string(),
         status: "ready".to_string(),
         paths: AuditPaths {
-            audit_root: ".agentflow/output/audit".to_string(),
-            index: ".agentflow/output/audit/index.json".to_string(),
+            audit_root: ".agentflow/audit".to_string(),
+            index: ".agentflow/audit/index.json".to_string(),
         },
         summary,
     }
@@ -287,7 +284,7 @@ fn audit_manifest(root: &Path, index: &AuditIndex) -> AuditManifest {
 
 fn next_audit_id(root: &Path) -> Result<String> {
     let mut max_id = 0_u64;
-    for path in sorted_child_paths(&root.join(".agentflow/output/audit"))? {
+    for path in sorted_child_paths(&root.join(".agentflow/audit"))? {
         if !path.is_dir() {
             continue;
         }
@@ -319,7 +316,7 @@ fn release_deliveries(root: &Path) -> Result<Vec<OutputReleaseDelivery>> {
 }
 
 fn release_auto_audit_exists(root: &Path, release: &OutputReleaseDelivery) -> Result<bool> {
-    for path in sorted_child_paths(&root.join(".agentflow/output/audit"))? {
+    for path in sorted_child_paths(&root.join(".agentflow/audit"))? {
         let request_path = path.join("audit-request.json");
         if !request_path.is_file() {
             continue;
@@ -347,7 +344,7 @@ fn release_auto_audit_exists(root: &Path, release: &OutputReleaseDelivery) -> Re
 
 fn write_release_auto_audit_request(root: &Path, release: &OutputReleaseDelivery) -> Result<()> {
     let audit_id = next_audit_id(root)?;
-    let audit_dir = root.join(".agentflow/output/audit").join(&audit_id);
+    let audit_dir = root.join(".agentflow/audit").join(&audit_id);
     ensure_directory(&audit_dir)?;
     let requested_at = unix_timestamp_seconds();
     let request = AuditRequest {
@@ -866,7 +863,7 @@ fn build_traceability(
     chain.push(AuditTraceabilityItem {
         layer: "audit".to_string(),
         id: audit_id.to_string(),
-        path: format!(".agentflow/output/audit/{audit_id}/"),
+        path: format!(".agentflow/audit/{audit_id}/"),
     });
     if !chain.iter().any(|item| item.layer == "execute-run") {
         chain.insert(
@@ -984,27 +981,27 @@ fn audit_paths_for(audit_id: &str) -> BTreeMap<String, String> {
     BTreeMap::from([
         (
             "request".to_string(),
-            format!(".agentflow/output/audit/{audit_id}/audit-request.json"),
+            format!(".agentflow/audit/{audit_id}/audit-request.json"),
         ),
         (
             "report".to_string(),
-            format!(".agentflow/output/audit/{audit_id}/audit-report.md"),
+            format!(".agentflow/audit/{audit_id}/audit-report.md"),
         ),
         (
             "findings".to_string(),
-            format!(".agentflow/output/audit/{audit_id}/findings.json"),
+            format!(".agentflow/audit/{audit_id}/findings.json"),
         ),
         (
             "checklist".to_string(),
-            format!(".agentflow/output/audit/{audit_id}/checklist.md"),
+            format!(".agentflow/audit/{audit_id}/checklist.md"),
         ),
         (
             "evidenceMap".to_string(),
-            format!(".agentflow/output/audit/{audit_id}/evidence-map.json"),
+            format!(".agentflow/audit/{audit_id}/evidence-map.json"),
         ),
         (
             "traceability".to_string(),
-            format!(".agentflow/output/audit/{audit_id}/traceability.json"),
+            format!(".agentflow/audit/{audit_id}/traceability.json"),
         ),
     ])
 }

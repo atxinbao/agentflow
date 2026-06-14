@@ -20,7 +20,6 @@ pub const OUTPUT_DIRECTORIES: &[&str] = &[
     ".agentflow/output",
     ".agentflow/output/evidence",
     ".agentflow/output/release",
-    ".agentflow/output/audit",
     ".agentflow/output/logs",
     ".agentflow/output/backup",
     ".agentflow/output/cache",
@@ -30,8 +29,6 @@ pub const OUTPUT_DIRECTORIES: &[&str] = &[
 pub const OUTPUT_REQUIRED_FILES: &[&str] = &[
     ".agentflow/output/manifest.json",
     ".agentflow/output/index.json",
-    ".agentflow/output/audit/manifest.json",
-    ".agentflow/output/audit/index.json",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -604,7 +601,6 @@ pub fn output_paths() -> BTreeMap<String, String> {
             "release".to_string(),
             ".agentflow/output/release".to_string(),
         ),
-        ("audit".to_string(), ".agentflow/output/audit".to_string()),
         ("logs".to_string(), ".agentflow/output/logs".to_string()),
         ("backup".to_string(), ".agentflow/output/backup".to_string()),
         ("cache".to_string(), ".agentflow/output/cache".to_string()),

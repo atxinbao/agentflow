@@ -74,7 +74,7 @@ mod tests {
         assert!(!dir.path().join(".agentflow/goal-tree").exists());
         assert!(dir.path().join(".agentflow/panel/context-packs").is_dir());
         assert!(!dir.path().join(".agentflow/execute").exists());
-        assert!(dir.path().join(".agentflow/output/audit").is_dir());
+        assert!(dir.path().join(".agentflow/audit").is_dir());
         assert!(!dir.path().join(".agentflow/output/release").exists());
         assert!(dir.path().join(".agentflow/state/health").is_dir());
         assert!(dir

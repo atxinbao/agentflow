@@ -195,10 +195,7 @@ fn request_human_audit_for_run(root: &Path, run_id: &str) -> Result<HumanAuditRe
     ] {
         assert_path_exists(
             root,
-            &format!(
-                ".agentflow/output/audit/{}/{}",
-                report.audit.audit_id, artifact
-            ),
+            &format!(".agentflow/audit/{}/{}", report.audit.audit_id, artifact),
         )?;
     }
     Ok(report)

@@ -946,7 +946,7 @@ mod tests {
         assert!(dir
             .path()
             .join(format!(
-                ".agentflow/output/audit/delivery-{run_id}/audit-report.md"
+                ".agentflow/audit/delivery-{run_id}/audit-report.md"
             ))
             .is_file());
         assert!(!dir
@@ -959,7 +959,7 @@ mod tests {
         assert_eq!(project_gate.status, AuditGateStatus::Passed);
         assert!(dir
             .path()
-            .join(".agentflow/output/audit/project-proj-001-final/audit-report.md")
+            .join(".agentflow/audit/project-proj-001-final/audit-report.md")
             .is_file());
         let project = agentflow_input::load_input_project(dir.path(), "proj-001").unwrap();
         assert_eq!(project.status, InputProjectStatus::Done);

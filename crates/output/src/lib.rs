@@ -270,6 +270,7 @@ mod tests {
         for path in OUTPUT_DIRECTORIES {
             assert!(dir.path().join(path).is_dir(), "{path}");
         }
+        assert!(!dir.path().join(".agentflow/audit").exists());
     }
 
     #[test]
@@ -367,20 +368,11 @@ mod tests {
     #[test]
     fn prepare_audit_space_only_creates_manifest_and_index() {
         let dir = tempdir().unwrap();
-        prepare_output_workspace(dir.path()).unwrap();
+        prepare_audit_workspace(dir.path()).unwrap();
 
-        assert!(dir
-            .path()
-            .join(".agentflow/output/audit/manifest.json")
-            .is_file());
-        assert!(dir
-            .path()
-            .join(".agentflow/output/audit/index.json")
-            .is_file());
-        assert!(!dir
-            .path()
-            .join(".agentflow/output/audit/audit-001")
-            .exists());
+        assert!(dir.path().join(".agentflow/audit/manifest.json").is_file());
+        assert!(dir.path().join(".agentflow/audit/index.json").is_file());
+        assert!(!dir.path().join(".agentflow/audit/audit-001").exists());
     }
 
     #[test]
@@ -405,7 +397,7 @@ mod tests {
         ] {
             assert!(
                 dir.path()
-                    .join(".agentflow/output/audit/audit-001")
+                    .join(".agentflow/audit/audit-001")
                     .join(file)
                     .is_file(),
                 "{file}"
@@ -424,11 +416,10 @@ mod tests {
 
         prepare_output_workspace(dir.path()).unwrap();
 
-        let index = load_audit_index(dir.path()).unwrap();
-        assert_eq!(index.audits.len(), 0);
+        assert!(!dir.path().join(".agentflow/audit/index.json").exists());
         assert!(!dir
             .path()
-            .join(".agentflow/output/audit/audit-001/audit-request.json")
+            .join(".agentflow/audit/audit-001/audit-request.json")
             .is_file());
         let audit_issue_path = dir
             .path()
@@ -454,9 +445,7 @@ mod tests {
     #[test]
     fn explicit_release_auto_audit_request_does_not_backfill_input_issue() {
         let dir = tempdir().unwrap();
-        let audit_dir = dir
-            .path()
-            .join(".agentflow/output/audit/audit-release-v0.1.0");
+        let audit_dir = dir.path().join(".agentflow/audit/audit-release-v0.1.0");
         ensure_directory(&audit_dir).unwrap();
         write_json(
             &audit_dir.join("audit-request.json"),
@@ -678,5 +667,6 @@ mod tests {
         assert!(!dir.path().join(".agentflow/input").exists());
         assert!(!dir.path().join(".agentflow/panel").exists());
         assert!(!dir.path().join(".agentflow/execute").exists());
+        assert!(!dir.path().join(".agentflow/audit").exists());
     }
 }
