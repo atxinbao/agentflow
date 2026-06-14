@@ -12,6 +12,7 @@ members = [
     "crates/task-artifacts",
     "crates/task-loop",
     "crates/agent-bridge",
+    "crates/projection",
     "crates/mcp",
     "crates/loop",
     "crates/output",
