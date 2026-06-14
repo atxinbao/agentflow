@@ -197,6 +197,20 @@ pub fn read_spec_project(project_root: impl AsRef<Path>, project_id: &str) -> Re
     read_json(&root.join(format!(".agentflow/spec/projects/{project_id}.json")))
 }
 
+pub fn list_spec_issues(project_root: impl AsRef<Path>) -> Result<Vec<SpecIssue>> {
+    let root = canonical_project_root(project_root)?;
+    let mut issues: Vec<SpecIssue> = read_json_files(&root.join(".agentflow/spec/issues"))?;
+    issues.sort_by(|left, right| left.issue_id.cmp(&right.issue_id));
+    Ok(issues)
+}
+
+pub fn list_spec_projects(project_root: impl AsRef<Path>) -> Result<Vec<SpecProject>> {
+    let root = canonical_project_root(project_root)?;
+    let mut projects: Vec<SpecProject> = read_json_files(&root.join(".agentflow/spec/projects"))?;
+    projects.sort_by(|left, right| left.project_id.cmp(&right.project_id));
+    Ok(projects)
+}
+
 pub fn project_from_requirement(
     project_root: impl AsRef<Path>,
     requirement_path: impl AsRef<Path>,
