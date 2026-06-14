@@ -6,7 +6,8 @@ use agentflow_event_store::{
     append_task_event_once, load_task_events, EventActor, EventStateTransition, TaskEventDraft,
 };
 use agentflow_spec::{
-    read_spec_issue, read_spec_project, SpecIssue, SpecIssueStatus, SpecPriority, SpecProject,
+    list_spec_issues, read_spec_issue, read_spec_project, SpecIssue, SpecIssueStatus, SpecPriority,
+    SpecProject,
 };
 use agentflow_task_artifacts::create_task_run;
 use anyhow::{Context, Result};
@@ -92,78 +93,74 @@ impl TaskLoop {
     ) -> Result<TaskLoopLaunch> {
         let root = canonical_project_root(project_root)?;
         let issue = read_spec_issue(&root, issue_id)?;
-        let state = current_issue_state(&root, &issue)?;
-        if !matches!(state, SpecIssueStatus::Todo) {
+        if issue.project_id.as_deref() != Some(self.project_id.as_str()) {
             anyhow::bail!(
-                "issue {} must be todo before agent launch, found {}",
+                "issue {} does not belong to project {}",
                 issue.issue_id,
-                state.as_str()
+                self.project_id
             );
         }
-        if launch_requested_issue_ids(&root)?.contains(&issue.issue_id) {
-            anyhow::bail!("issue {} already has a launch request", issue.issue_id);
-        }
-        let run_id = next_run_id(&root, &issue.issue_id)?;
-        let branch_name = branch_name(&issue);
-        let run = create_task_run(
-            &root,
-            &issue.issue_id,
-            &run_id,
-            &issue.workflow_ref,
-            Some(branch_name.clone()),
-        )?;
-        let payload = AgentLaunchPayload {
-            version: TASK_LOOP_LAUNCH_REQUEST_VERSION.to_string(),
-            provider: provider.to_string(),
-            issue_id: issue.issue_id.clone(),
-            project_id: issue.project_id.clone(),
-            run_id: run.run_id.clone(),
-            agent_role: "build-agent".to_string(),
-            workflow_ref: issue.workflow_ref.clone(),
-            working_directory: root.display().to_string(),
-            issue_path: issue.system.path.clone(),
-            launch_request_path: launch_request_path(&issue.issue_id, &run.run_id),
-            context_pack_path: None,
-            branch_name: branch_name.clone(),
-            merge_mode: "auto-merge-if-eligible".to_string(),
+        request_issue_launch_inner(&root, issue, provider)
+    }
+
+    pub fn start_issue(
+        project_root: impl AsRef<Path>,
+        issue_id: &str,
+        provider: &str,
+    ) -> Result<TaskLoopTick> {
+        let root = canonical_project_root(project_root)?;
+        let issue = read_spec_issue(&root, issue_id)?;
+        validate_issue_scope(&root, &issue)?;
+        let state = current_issue_state(&root, &issue)?;
+        let schedule = match state {
+            SpecIssueStatus::Backlog => Some(schedule_specific_issue(&root, &issue)?),
+            SpecIssueStatus::Todo => None,
+            _ => {
+                anyhow::bail!(
+                    "issue {} must be backlog or todo before agent launch, found {}",
+                    issue.issue_id,
+                    state.as_str()
+                );
+            }
         };
-        write_launch_request(&root, &payload)?;
+        let launch = request_issue_launch_inner(&root, issue, provider)?;
+        Ok(TaskLoopTick { schedule, launch })
+    }
 
-        let event = append_task_event_once(
-            &root,
-            TaskEventDraft {
-                aggregate_type: "issue".to_string(),
-                aggregate_id: issue.issue_id.clone(),
-                project_id: issue.project_id.clone(),
-                issue_id: Some(issue.issue_id.clone()),
-                event_type: AGENT_LAUNCH_REQUESTED.to_string(),
-                actor: EventActor {
-                    role: "task-loop".to_string(),
-                    kind: "system".to_string(),
-                },
-                state: None,
-                correlation_id: Some(format!("corr-{}", issue.issue_id)),
-                causation_id: None,
-                payload: serde_json::to_value(&payload)?,
-                artifact_refs: vec![
-                    payload.launch_request_path.clone(),
-                    format!(
-                        ".agentflow/tasks/{}/runs/{}/run.json",
-                        issue.issue_id, run.run_id
-                    ),
-                ],
-                idempotency_key: Some(format!("agent.launch.requested:{}", run.run_id)),
-            },
-        )?;
+    pub fn request_direct_agent_launch(
+        project_root: impl AsRef<Path>,
+        issue_id: &str,
+        provider: &str,
+    ) -> Result<TaskLoopLaunch> {
+        let root = canonical_project_root(project_root)?;
+        let issue = read_spec_issue(&root, issue_id)?;
+        if issue.project_id.is_some() {
+            anyhow::bail!(
+                "direct launch only supports direct issues; {} belongs to {}",
+                issue.issue_id,
+                issue.project_id.as_deref().unwrap_or("unknown")
+            );
+        }
+        request_issue_launch_inner(&root, issue, provider)
+    }
 
-        Ok(TaskLoopLaunch {
-            project_id: issue.project_id.clone(),
-            issue_id: issue.issue_id,
-            run_id,
-            branch_name,
-            launch_request_path: payload.launch_request_path,
-            event_id: event.event_id,
-        })
+    pub fn schedule_direct_issue(
+        project_root: impl AsRef<Path>,
+        issue_id: &str,
+    ) -> Result<Option<TaskLoopSchedule>> {
+        let root = canonical_project_root(project_root)?;
+        let issue = read_spec_issue(&root, issue_id)?;
+        if issue.project_id.is_some() {
+            anyhow::bail!(
+                "direct schedule only supports direct issues; {} belongs to {}",
+                issue.issue_id,
+                issue.project_id.as_deref().unwrap_or("unknown")
+            );
+        }
+        if current_issue_state(&root, &issue)? != SpecIssueStatus::Backlog {
+            return Ok(None);
+        }
+        Ok(Some(schedule_specific_issue(&root, &issue)?))
     }
 
     pub fn tick(
@@ -194,6 +191,168 @@ impl TaskLoop {
             launch,
         }))
     }
+}
+
+fn request_issue_launch_inner(
+    root: &Path,
+    issue: SpecIssue,
+    provider: &str,
+) -> Result<TaskLoopLaunch> {
+    if launch_requested_issue_ids(root)?.contains(&issue.issue_id) {
+        anyhow::bail!("issue {} already has a launch request", issue.issue_id);
+    }
+    let state = current_issue_state(root, &issue)?;
+    if !matches!(state, SpecIssueStatus::Todo) {
+        anyhow::bail!(
+            "issue {} must be todo before agent launch, found {}",
+            issue.issue_id,
+            state.as_str()
+        );
+    }
+    let run_id = next_run_id(root, &issue.issue_id)?;
+    let branch_name = branch_name(&issue);
+    let run = create_task_run(
+        root,
+        &issue.issue_id,
+        &run_id,
+        &issue.workflow_ref,
+        Some(branch_name.clone()),
+    )?;
+    let payload = AgentLaunchPayload {
+        version: TASK_LOOP_LAUNCH_REQUEST_VERSION.to_string(),
+        provider: provider.to_string(),
+        issue_id: issue.issue_id.clone(),
+        project_id: issue.project_id.clone(),
+        run_id: run.run_id.clone(),
+        agent_role: "build-agent".to_string(),
+        workflow_ref: issue.workflow_ref.clone(),
+        working_directory: root.display().to_string(),
+        issue_path: issue.system.path.clone(),
+        launch_request_path: launch_request_path(&issue.issue_id, &run.run_id),
+        context_pack_path: None,
+        branch_name: branch_name.clone(),
+        merge_mode: "auto-merge-if-eligible".to_string(),
+    };
+    write_launch_request(root, &payload)?;
+
+    let event = append_task_event_once(
+        root,
+        TaskEventDraft {
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            event_type: AGENT_LAUNCH_REQUESTED.to_string(),
+            actor: EventActor {
+                role: "task-loop".to_string(),
+                kind: "system".to_string(),
+            },
+            state: Some(EventStateTransition {
+                from_state: SpecIssueStatus::Todo.as_str().to_string(),
+                to_state: SpecIssueStatus::InProgress.as_str().to_string(),
+            }),
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: serde_json::to_value(&payload)?,
+            artifact_refs: vec![
+                payload.launch_request_path.clone(),
+                format!(
+                    ".agentflow/tasks/{}/runs/{}/run.json",
+                    issue.issue_id, run.run_id
+                ),
+            ],
+            idempotency_key: Some(format!("agent.launch.requested:{}", run.run_id)),
+        },
+    )?;
+
+    Ok(TaskLoopLaunch {
+        project_id: issue.project_id.clone(),
+        issue_id: issue.issue_id,
+        run_id,
+        branch_name,
+        launch_request_path: payload.launch_request_path,
+        event_id: event.event_id,
+    })
+}
+
+fn validate_issue_scope(root: &Path, issue: &SpecIssue) -> Result<()> {
+    if let Some(project_id) = issue.project_id.as_deref() {
+        let project = read_spec_project(root, project_id)?;
+        if !project
+            .issue_ids
+            .iter()
+            .any(|value| value == &issue.issue_id)
+        {
+            anyhow::bail!(
+                "project {} does not reference issue {}",
+                project_id,
+                issue.issue_id
+            );
+        }
+    }
+    Ok(())
+}
+
+fn schedule_specific_issue(root: &Path, issue: &SpecIssue) -> Result<TaskLoopSchedule> {
+    let all_issues = list_spec_issues(root)?;
+    let states = current_issue_states(root, &all_issues)?;
+    let done = states
+        .iter()
+        .filter_map(|(issue_id, state)| {
+            matches!(state, SpecIssueStatus::Done).then_some(issue_id.clone())
+        })
+        .collect::<BTreeSet<_>>();
+    if !issue
+        .blocked_by
+        .iter()
+        .all(|dependency| done.contains(dependency))
+    {
+        anyhow::bail!("issue {} has unfinished dependencies", issue.issue_id);
+    }
+    append_issue_scheduled_event(root, issue)
+}
+
+fn append_issue_scheduled_event(root: &Path, issue: &SpecIssue) -> Result<TaskLoopSchedule> {
+    let event = append_task_event_once(
+        root,
+        TaskEventDraft {
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            event_type: ISSUE_SCHEDULED.to_string(),
+            actor: EventActor {
+                role: "task-loop".to_string(),
+                kind: "system".to_string(),
+            },
+            state: Some(EventStateTransition {
+                from_state: SpecIssueStatus::Backlog.as_str().to_string(),
+                to_state: SpecIssueStatus::Todo.as_str().to_string(),
+            }),
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: json!({
+                "workflowRef": issue.workflow_ref,
+                "transitionId": "schedule",
+                "guardsPassed": [
+                    "issue.contract.complete",
+                    "dependencies.done"
+                ]
+            }),
+            artifact_refs: vec![issue.system.path.clone()],
+            idempotency_key: Some(format!("issue.scheduled:{}", issue.issue_id)),
+        },
+    )?;
+
+    Ok(TaskLoopSchedule {
+        project_id: issue
+            .project_id
+            .clone()
+            .unwrap_or_else(|| "direct".to_string()),
+        issue_id: issue.issue_id.clone(),
+        workflow_ref: issue.workflow_ref.clone(),
+        event_id: event.event_id,
+    })
 }
 
 fn load_project_issues(root: &Path, project: &SpecProject) -> Result<Vec<SpecIssue>> {
@@ -471,6 +630,73 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| event.event_type == AGENT_LAUNCH_REQUESTED));
+    }
+
+    #[test]
+    fn start_issue_schedules_and_launches_project_issue() {
+        let dir = tempdir().unwrap();
+        write_project_with_issues(dir.path());
+
+        let tick = TaskLoop::start_issue(dir.path(), "AF-TASK-001", "codex").unwrap();
+
+        assert_eq!(
+            tick.schedule
+                .as_ref()
+                .map(|schedule| schedule.issue_id.as_str()),
+            Some("AF-TASK-001")
+        );
+        assert_eq!(tick.launch.issue_id, "AF-TASK-001");
+        assert_eq!(tick.launch.project_id.as_deref(), Some("project-task-loop"));
+        assert_eq!(
+            tick.launch.branch_name,
+            "agentflow/project-task-loop/AF-TASK-001"
+        );
+        assert!(dir.path().join(&tick.launch.launch_request_path).is_file());
+        let events = replay_task_events(dir.path(), ReplayFilter::issue("AF-TASK-001")).unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .filter_map(|event| event.state.as_ref())
+                .last()
+                .map(|state| state.to_state.as_str()),
+            Some(SpecIssueStatus::InProgress.as_str())
+        );
+    }
+
+    #[test]
+    fn start_issue_supports_direct_issue() {
+        let dir = tempdir().unwrap();
+        write_requirement(dir.path());
+        let requirement = dir.path().join("docs/requirements/034-test.md");
+        let direct = agentflow_spec::issue_from_requirement(
+            dir.path(),
+            &requirement,
+            SpecIssueDraft::new("AF-DIRECT-001"),
+        )
+        .unwrap();
+        write_spec_issue(dir.path(), &direct).unwrap();
+
+        let tick = TaskLoop::start_issue(dir.path(), "AF-DIRECT-001", "codex").unwrap();
+
+        assert_eq!(
+            tick.schedule
+                .as_ref()
+                .map(|schedule| schedule.project_id.as_str()),
+            Some("direct")
+        );
+        assert_eq!(tick.launch.project_id, None);
+        assert_eq!(tick.launch.branch_name, "agentflow/direct/AF-DIRECT-001");
+        assert!(dir.path().join(&tick.launch.launch_request_path).is_file());
+    }
+
+    #[test]
+    fn start_issue_rejects_unfinished_dependency() {
+        let dir = tempdir().unwrap();
+        write_project_with_issues(dir.path());
+
+        let err = TaskLoop::start_issue(dir.path(), "AF-TASK-002", "codex").unwrap_err();
+
+        assert!(err.to_string().contains("unfinished dependencies"));
     }
 
     #[test]
