@@ -73,6 +73,23 @@ pub fn load_task_run(
     read_json(&task_run_dir(&root, issue_id, run_id).join("run.json"))
 }
 
+pub fn update_task_run_status(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+    status: TaskRunStatus,
+) -> Result<TaskRun> {
+    let root = canonical_project_root(project_root)?;
+    validate_id("issueId", issue_id)?;
+    validate_id("runId", run_id)?;
+    let path = task_run_dir(&root, issue_id, run_id).join("run.json");
+    let mut run: TaskRun = read_json(&path)?;
+    run.status = status;
+    run.updated_at = unix_timestamp_seconds();
+    write_json(&path, &run)?;
+    Ok(run)
+}
+
 pub fn write_task_command_record(
     project_root: impl AsRef<Path>,
     issue_id: &str,
@@ -341,6 +358,31 @@ mod tests {
             .path()
             .join(".agentflow/tasks/AF-TASK-001/runs/run-001/commands/cmd-001.stdout.txt")
             .is_file());
+    }
+
+    #[test]
+    fn updates_task_run_status() {
+        let dir = tempdir().unwrap();
+        create_task_run(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            "build-agent.issue-loop@v1",
+            None,
+        )
+        .unwrap();
+
+        let updated = update_task_run_status(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            TaskRunStatus::Completed,
+        )
+        .unwrap();
+
+        assert_eq!(updated.status, TaskRunStatus::Completed);
+        let loaded = load_task_run(dir.path(), "AF-TASK-001", "run-001").unwrap();
+        assert_eq!(loaded.status, TaskRunStatus::Completed);
     }
 
     #[test]

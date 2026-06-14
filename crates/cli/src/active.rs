@@ -3,36 +3,36 @@
 //! Active commands are narrow wrappers around the current workspace crates.
 //! They must not call archived 2026-05 writers.
 
-use agentflow_execute::{
-    mark_build_agent_launch_done, mark_build_agent_launch_in_review, BuildAgentCompletion,
-    BuildAgentCompletionRequest,
+use agentflow_event_store::{
+    append_task_event_once, EventActor, EventStateTransition, TaskEventDraft,
 };
-use agentflow_input::issue::{AgentRole, InputIssue, IssueCategory};
-use agentflow_loop::{write_issue_merge_proof, ProjectExecutionLaunch, ProjectExecutor};
-use agentflow_task_loop::{AgentLaunchPayload, TaskLoop, AGENT_LAUNCH_REQUESTED};
-use agentflow_workflow_events::{
-    append_event_once, BuildAgentMergeConfirmedPayload, BuildAgentSessionReviewReadyPayload,
-    BuildAgentWritebackCompletedPayload, WorkflowEventDraft,
-    EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED, EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY,
-    EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED,
+use agentflow_spec::read_spec_issue;
+use agentflow_task_artifacts::{
+    load_task_evidence, load_task_run, task_evidence_dir, task_run_dir, update_task_run_status,
+    write_task_command_record, write_task_evidence, write_task_validation, TaskCommandInput,
+    TaskEvidence, TaskRun, TaskRunStatus,
 };
+use agentflow_task_loop::{AgentLaunchPayload, TaskLoop, TaskLoopLaunch, AGENT_LAUNCH_REQUESTED};
 use anyhow::{Context, Result};
+use serde::Deserialize;
+use serde_json::json;
 use std::{
     fs,
     path::{Path, PathBuf},
     time::SystemTime,
 };
 
-const CLI_FRESHNESS_PATHS: [&str; 9] = [
+const CLI_FRESHNESS_PATHS: [&str; 10] = [
     "Cargo.toml",
     "Cargo.lock",
     "crates/cli/src",
-    "crates/execute/src",
-    "crates/input/src",
+    "crates/event-store/src",
+    "crates/projection/src",
+    "crates/spec/src",
     "crates/state/src",
-    "crates/panel/src",
-    "crates/agent-manual/src",
-    "crates/loop/src",
+    "crates/task-artifacts/src",
+    "crates/task-loop/src",
+    "crates/agent-bridge/src",
 ];
 
 #[derive(Debug, Clone)]
@@ -62,9 +62,55 @@ pub(crate) struct BuildAgentLaunchClaim {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct BuildAgentReview {
+    pub issue_id: String,
+    pub run_id: String,
+    pub run_status: String,
+    pub validation_passed: bool,
+    pub evidence_path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct BuildAgentCompletionOutcome {
-    pub completion: BuildAgentCompletion,
-    pub next_launch: Option<ProjectExecutionLaunch>,
+    pub issue_id: String,
+    pub run_id: String,
+    pub run_status: String,
+    pub validation_passed: bool,
+    pub evidence_path: PathBuf,
+    pub next_launch: Option<TaskLoopLaunch>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildAgentCompletionRequest {
+    issue_id: String,
+    #[serde(default)]
+    run_id: Option<String>,
+    #[serde(default)]
+    changed_files: Vec<BuildAgentChangedFile>,
+    #[serde(default)]
+    validation_commands: Vec<BuildAgentValidationCommand>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildAgentChangedFile {
+    path: String,
+    change_type: String,
+    insertions: usize,
+    deletions: usize,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildAgentValidationCommand {
+    label: String,
+    program: String,
+    args: Vec<String>,
+    exit_code: Option<i32>,
+    stdout: Option<String>,
+    stderr: Option<String>,
+    source: Option<String>,
 }
 
 pub(crate) fn complete_build_agent_issue_from_request(
@@ -72,45 +118,78 @@ pub(crate) fn complete_build_agent_issue_from_request(
     request_path: &Path,
 ) -> Result<BuildAgentCompletionOutcome> {
     assert_current_cli_is_fresh(root)?;
-    let raw = fs::read_to_string(request_path)
-        .with_context(|| format!("read completion request {}", request_path.display()))?;
-    let request: BuildAgentCompletionRequest = serde_json::from_str(&raw)
-        .with_context(|| format!("parse completion request {}", request_path.display()))?;
-    let completion = agentflow_execute::complete_build_agent_issue(root, request)?;
-    mark_build_agent_launch_done(root, &completion.run.run_id)?;
-    let next_launch = completion
-        .run
-        .project_id
-        .as_deref()
-        .map(|project_id| ProjectExecutor::new(project_id).tick(root))
-        .transpose()?
-        .and_then(|tick| tick.launch);
-    append_build_agent_writeback_completed_event(root, &completion, next_launch.as_ref())?;
+    let request = read_completion_request(request_path, "completion")?;
+    let review = ensure_review_prepared(root, request.clone())?;
+    let proof = load_merge_proof(root, &review.issue_id, &review.run_id)?;
+    if !proof
+        .get("merged")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        anyhow::bail!(
+            "build agent completion requires merged PR/MR proof for {} {}",
+            review.issue_id,
+            review.run_id
+        );
+    }
+    let issue = read_spec_issue(root, &review.issue_id)?;
+    let evidence = load_task_evidence(root, &review.issue_id)?;
+    let proof_path = merge_proof_path(root, &review.issue_id, &review.run_id);
+    append_task_event_once(
+        root,
+        TaskEventDraft {
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            event_type: "issue.completed".to_string(),
+            actor: EventActor {
+                role: "build-agent".to_string(),
+                kind: "system".to_string(),
+            },
+            state: Some(EventStateTransition {
+                from_state: "in_review".to_string(),
+                to_state: "done".to_string(),
+            }),
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: json!({
+                "issueId": issue.issue_id,
+                "projectId": issue.project_id,
+                "runId": review.run_id,
+                "evidencePath": task_evidence_path(&review.issue_id),
+                "mergeProofPath": relative_path(root, &proof_path),
+                "provider": proof.get("provider").cloned().unwrap_or(serde_json::Value::Null),
+                "mergeMode": proof.get("mergeMode").cloned().unwrap_or(serde_json::Value::Null),
+                "remoteUrl": proof.get("remoteUrl").cloned().unwrap_or(serde_json::Value::Null),
+                "prUrl": proof.get("remoteUrl").cloned().unwrap_or(serde_json::Value::Null),
+            }),
+            artifact_refs: vec![
+                task_evidence_path(&review.issue_id),
+                relative_path(root, &proof_path),
+            ],
+            idempotency_key: Some(format!("issue.completed:{}", review.run_id)),
+        },
+    )?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
     agentflow_state::refresh_state(root)?;
     Ok(BuildAgentCompletionOutcome {
-        completion,
-        next_launch,
+        issue_id: review.issue_id,
+        run_id: review.run_id,
+        run_status: review.run_status,
+        validation_passed: review.validation_passed,
+        evidence_path: evidence_path(root, &evidence),
+        next_launch: None,
     })
 }
 
 pub(crate) fn prepare_build_agent_review_from_request(
     root: &Path,
     request_path: &Path,
-) -> Result<BuildAgentCompletion> {
+) -> Result<BuildAgentReview> {
     assert_current_cli_is_fresh(root)?;
-    let raw = fs::read_to_string(request_path)
-        .with_context(|| format!("read review preparation request {}", request_path.display()))?;
-    let request: BuildAgentCompletionRequest = serde_json::from_str(&raw).with_context(|| {
-        format!(
-            "parse review preparation request {}",
-            request_path.display()
-        )
-    })?;
-    let prepared = agentflow_execute::prepare_build_agent_review(root, request)?;
-    mark_build_agent_launch_in_review(root, &prepared.run.run_id)?;
-    append_build_agent_review_ready_event(root, &prepared)?;
-    agentflow_state::refresh_state(root)?;
-    Ok(prepared)
+    let request = read_completion_request(request_path, "review preparation")?;
+    ensure_review_prepared(root, request)
 }
 
 pub(crate) fn start_build_agent_issue(root: &Path, issue_id: &str) -> Result<BuildAgentStart> {
@@ -189,152 +268,302 @@ pub(crate) fn write_build_agent_merge_proof(
     merged: bool,
 ) -> Result<BuildAgentMergeProof> {
     assert_current_cli_is_fresh(root)?;
-    let issue = agentflow_input::load_input_issue(root, issue_id)
-        .with_context(|| format!("load input issue {issue_id}"))?;
-    assert_build_agent_contract(&issue)?;
-    let proof_path = write_issue_merge_proof(
-        root,
-        &issue.issue_id,
-        issue.project_id.as_deref(),
-        run_id,
-        provider,
-        merge_mode,
-        remote_url,
-        merged,
-    )?;
-    if merged {
-        append_build_agent_merge_confirmed_event(
-            root,
-            &issue,
-            run_id,
-            provider,
-            merge_mode,
-            proof_path.as_path(),
-        )?;
+    let issue =
+        read_spec_issue(root, issue_id).with_context(|| format!("load spec issue {issue_id}"))?;
+    let run = load_task_run(root, &issue.issue_id, run_id)?;
+    if run.issue_id != issue.issue_id {
+        anyhow::bail!(
+            "merge proof issueId mismatch: request {}, run {}",
+            issue.issue_id,
+            run.issue_id
+        );
     }
+    let proof_path = merge_proof_path(root, &issue.issue_id, run_id);
+    write_json(
+        &proof_path,
+        &json!({
+            "version": "task-merge-proof.v1",
+            "issueId": issue.issue_id,
+            "projectId": issue.project_id,
+            "runId": run_id,
+            "provider": provider,
+            "mergeMode": merge_mode,
+            "remoteUrl": remote_url,
+            "prUrl": remote_url,
+            "merged": merged,
+        }),
+    )?;
+    append_task_event_once(
+        root,
+        TaskEventDraft {
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue_id.to_string(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue_id.to_string()),
+            event_type: "issue.merge.proof.recorded".to_string(),
+            actor: EventActor {
+                role: "build-agent".to_string(),
+                kind: "system".to_string(),
+            },
+            state: None,
+            correlation_id: Some(format!("corr-{issue_id}")),
+            causation_id: None,
+            payload: json!({
+                "issueId": issue_id,
+                "projectId": issue.project_id,
+                "runId": run_id,
+                "provider": provider,
+                "mergeMode": merge_mode,
+                "remoteUrl": remote_url,
+                "prUrl": remote_url,
+                "merged": merged,
+            }),
+            artifact_refs: vec![relative_path(root, &proof_path)],
+            idempotency_key: Some(format!("issue.merge-proof.recorded:{run_id}")),
+        },
+    )?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
     agentflow_state::refresh_state(root)?;
     Ok(BuildAgentMergeProof {
-        issue_id: issue.issue_id,
+        issue_id: issue_id.to_string(),
         run_id: run_id.to_string(),
         merged,
         proof_path,
     })
 }
 
-fn assert_build_agent_contract(issue: &InputIssue) -> Result<()> {
-    if !matches!(issue.issue_category, IssueCategory::Spec) {
-        anyhow::bail!(
-            "build agent start only supports spec issues; {} is {}",
-            issue.issue_id,
-            issue.issue_category.as_str()
-        );
-    }
-    if !matches!(issue.required_agent_role, AgentRole::BuildAgent) {
-        anyhow::bail!(
-            "build agent start only supports build-agent issues; {} is {}",
-            issue.issue_id,
-            issue.required_agent_role.as_str()
-        );
-    }
-    Ok(())
-}
-
-fn append_build_agent_review_ready_event(
-    root: &Path,
-    completion: &BuildAgentCompletion,
-) -> Result<()> {
-    let run = &completion.run;
-    append_event_once(
-        root,
-        WorkflowEventDraft {
-            event_type: EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY.to_string(),
-            source: "agentflow-cli".to_string(),
-            subject_id: run.issue_id.clone(),
-            subject_path: Some(format!(".agentflow/input/issues/{}.json", run.issue_id)),
-            dedupe_key: format!("build-agent.session.review-ready:{}", run.run_id),
-            payload: serde_json::to_value(BuildAgentSessionReviewReadyPayload {
-                issue_id: run.issue_id.clone(),
-                project_id: run.project_id.clone(),
-                run_id: run.run_id.clone(),
-                provider: "codex".to_string(),
-                delivery_path: Some(format!(
-                    ".agentflow/output/release/{}/delivery.json",
-                    run.run_id
-                )),
-            })?,
-        },
-    )?;
-    Ok(())
-}
-
-fn append_build_agent_merge_confirmed_event(
-    root: &Path,
-    issue: &InputIssue,
-    run_id: &str,
-    provider: &str,
-    merge_mode: &str,
-    proof_path: &Path,
-) -> Result<()> {
-    let payload = serde_json::to_value(BuildAgentMergeConfirmedPayload {
-        issue_id: issue.issue_id.clone(),
-        project_id: issue.project_id.clone(),
-        run_id: run_id.to_string(),
-        provider: provider.to_string(),
-        merge_mode: merge_mode.to_string(),
-        remote_url: serde_json::from_str::<serde_json::Value>(&fs::read_to_string(proof_path)?)
-            .ok()
-            .and_then(|value| {
-                value
-                    .get("remoteUrl")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_string)
-            }),
-        merged: true,
+fn read_completion_request(
+    request_path: &Path,
+    label: &str,
+) -> Result<BuildAgentCompletionRequest> {
+    let raw = fs::read_to_string(request_path).with_context(|| {
+        format!(
+            "read build agent {label} request {}",
+            request_path.display()
+        )
     })?;
-    append_event_once(
+    serde_json::from_str(&raw).with_context(|| {
+        format!(
+            "parse build agent {label} request {}",
+            request_path.display()
+        )
+    })
+}
+
+fn ensure_review_prepared(
+    root: &Path,
+    request: BuildAgentCompletionRequest,
+) -> Result<BuildAgentReview> {
+    let issue_id = request.issue_id.trim();
+    if issue_id.is_empty() {
+        anyhow::bail!("build agent review preparation requires issueId");
+    }
+    let run_id = request
+        .run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("build agent review preparation requires runId"))?;
+    if request.validation_commands.is_empty() {
+        anyhow::bail!("build agent review preparation requires validation command results");
+    }
+
+    let issue =
+        read_spec_issue(root, issue_id).with_context(|| format!("load spec issue {issue_id}"))?;
+    let run = load_task_run(root, issue_id, run_id)?;
+    if run.issue_id != issue.issue_id {
+        anyhow::bail!(
+            "build agent review preparation issueId mismatch: request {}, run {}",
+            issue.issue_id,
+            run.issue_id
+        );
+    }
+
+    let existing_evidence = task_evidence_dir(root, issue_id).join("evidence.json");
+    let evidence = if existing_evidence.is_file() {
+        load_task_evidence(root, issue_id)?
+    } else {
+        update_task_run_status(root, issue_id, run_id, TaskRunStatus::Validating)?;
+        for command in &request.validation_commands {
+            write_task_command_record(
+                root,
+                issue_id,
+                run_id,
+                TaskCommandInput {
+                    label: command.label.clone(),
+                    program: command.program.clone(),
+                    args: command.args.clone(),
+                    exit_code: command.exit_code,
+                    stdout: command.stdout.clone().unwrap_or_default(),
+                    stderr: command.stderr.clone().unwrap_or_default(),
+                },
+            )?;
+        }
+        let validation = write_task_validation(root, issue_id, run_id)?;
+        let evidence = write_task_evidence(
+            root,
+            issue_id,
+            run_id,
+            format!(
+                "验证命令 {} 条，{}。",
+                validation.command_ids.len(),
+                if validation.passed {
+                    "全部通过"
+                } else {
+                    "存在失败"
+                }
+            ),
+        )?;
+        if validation.passed {
+            update_task_run_status(root, issue_id, run_id, TaskRunStatus::Completed)?;
+        } else {
+            update_task_run_status(root, issue_id, run_id, TaskRunStatus::Failed)?;
+            append_validation_failed_event(root, &issue, run_id, &evidence)?;
+            let _ = agentflow_projection::rebuild_projections(root)?;
+            agentflow_state::refresh_state(root)?;
+            anyhow::bail!("build agent review preparation validation failed for {issue_id}");
+        }
+        evidence
+    };
+
+    append_task_event_once(
         root,
-        WorkflowEventDraft {
-            event_type: EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED.to_string(),
-            source: "agentflow-cli".to_string(),
-            subject_id: issue.issue_id.clone(),
-            subject_path: Some(format!(
-                ".agentflow/execute/runs/{run_id}/review/merge-proof.json"
-            )),
-            dedupe_key: format!("build-agent.merge.confirmed:{run_id}"),
-            payload,
+        TaskEventDraft {
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            event_type: "issue.validation.passed".to_string(),
+            actor: EventActor {
+                role: "build-agent".to_string(),
+                kind: "system".to_string(),
+            },
+            state: Some(EventStateTransition {
+                from_state: "in_progress".to_string(),
+                to_state: "in_review".to_string(),
+            }),
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: json!({
+                "issueId": issue.issue_id,
+                "projectId": issue.project_id,
+                "runId": run_id,
+                "changedFiles": request.changed_files.iter().map(|file| {
+                    json!({
+                        "path": file.path.as_str(),
+                        "changeType": file.change_type.as_str(),
+                        "insertions": file.insertions,
+                        "deletions": file.deletions,
+                    })
+                }).collect::<Vec<_>>(),
+                "validationCommands": request.validation_commands.iter().map(|command| {
+                    json!({
+                        "label": command.label.as_str(),
+                        "program": command.program.as_str(),
+                        "args": &command.args,
+                        "exitCode": command.exit_code,
+                        "source": command.source.as_deref(),
+                    })
+                }).collect::<Vec<_>>(),
+                "validationCommandCount": request.validation_commands.len(),
+                "evidencePath": task_evidence_path(issue_id),
+            }),
+            artifact_refs: vec![task_evidence_path(issue_id)],
+            idempotency_key: Some(format!("issue.validation.passed:{run_id}")),
+        },
+    )?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
+    agentflow_state::refresh_state(root)?;
+    let run = load_task_run(root, issue_id, run_id)?;
+    Ok(BuildAgentReview {
+        issue_id: issue_id.to_string(),
+        run_id: run_id.to_string(),
+        run_status: task_run_status_as_str(&run).to_string(),
+        validation_passed: evidence.status == "passed",
+        evidence_path: evidence_path(root, &evidence),
+    })
+}
+
+fn append_validation_failed_event(
+    root: &Path,
+    issue: &agentflow_spec::SpecIssue,
+    run_id: &str,
+    evidence: &TaskEvidence,
+) -> Result<()> {
+    append_task_event_once(
+        root,
+        TaskEventDraft {
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            event_type: "issue.validation.failed".to_string(),
+            actor: EventActor {
+                role: "build-agent".to_string(),
+                kind: "system".to_string(),
+            },
+            state: Some(EventStateTransition {
+                from_state: "in_progress".to_string(),
+                to_state: "blocked".to_string(),
+            }),
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: json!({
+                "issueId": issue.issue_id,
+                "projectId": issue.project_id,
+                "runId": run_id,
+                "evidencePath": task_evidence_path(&issue.issue_id),
+                "summary": evidence.summary,
+            }),
+            artifact_refs: vec![task_evidence_path(&issue.issue_id)],
+            idempotency_key: Some(format!("issue.validation.failed:{run_id}")),
         },
     )?;
     Ok(())
 }
 
-fn append_build_agent_writeback_completed_event(
-    root: &Path,
-    completion: &BuildAgentCompletion,
-    next_launch: Option<&ProjectExecutionLaunch>,
-) -> Result<()> {
-    let run = &completion.run;
-    append_event_once(
-        root,
-        WorkflowEventDraft {
-            event_type: EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED.to_string(),
-            source: "agentflow-cli".to_string(),
-            subject_id: run.issue_id.clone(),
-            subject_path: Some(format!(".agentflow/input/issues/{}.json", run.issue_id)),
-            dedupe_key: format!("build-agent.writeback.completed:{}", run.run_id),
-            payload: serde_json::to_value(BuildAgentWritebackCompletedPayload {
-                issue_id: run.issue_id.clone(),
-                project_id: run.project_id.clone(),
-                run_id: run.run_id.clone(),
-                provider: "codex".to_string(),
-                delivery_path: Some(format!(
-                    ".agentflow/output/release/{}/delivery.json",
-                    run.run_id
-                )),
-                next_issue_id: next_launch.map(|launch| launch.issue_id.clone()),
-            })?,
-        },
-    )?;
-    Ok(())
+fn load_merge_proof(root: &Path, issue_id: &str, run_id: &str) -> Result<serde_json::Value> {
+    let path = merge_proof_path(root, issue_id, run_id);
+    let raw = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    serde_json::from_str(&raw).with_context(|| format!("parse {}", path.display()))
+}
+
+fn merge_proof_path(root: &Path, issue_id: &str, run_id: &str) -> PathBuf {
+    task_run_dir(root, issue_id, run_id).join("review/merge-proof.json")
+}
+
+fn task_evidence_path(issue_id: &str) -> String {
+    format!(".agentflow/tasks/{issue_id}/evidence/evidence.json")
+}
+
+fn evidence_path(root: &Path, evidence: &TaskEvidence) -> PathBuf {
+    task_evidence_dir(root, &evidence.issue_id).join("evidence.json")
+}
+
+fn relative_path(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+fn write_json(path: &Path, value: &serde_json::Value) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    fs::write(path, serde_json::to_string_pretty(value)? + "\n")
+        .with_context(|| format!("write {}", path.display()))
+}
+
+fn task_run_status_as_str(run: &TaskRun) -> &'static str {
+    match run.status {
+        TaskRunStatus::Queued => "queued",
+        TaskRunStatus::InProgress => "in_progress",
+        TaskRunStatus::Validating => "validating",
+        TaskRunStatus::Completed => "completed",
+        TaskRunStatus::Failed => "failed",
+        TaskRunStatus::Cancelled => "cancelled",
+    }
 }
 
 fn assert_current_cli_is_fresh(root: &Path) -> Result<()> {
@@ -425,34 +654,14 @@ mod tests {
         prepare_build_agent_review_from_request, rebuild_hint, start_build_agent_issue,
         write_build_agent_merge_proof,
     };
-    use agentflow_execute::{
-        acquire_execute_lease, apply_execute_patch, create_execute_checkpoint,
-        load_build_agent_launch_state, run_execute_command, write_execute_plan,
-        BuildAgentCompletionRequest, BuildAgentLaunchStatus, BuildAgentValidationCommand,
-        ExecuteChangedFile, ExecuteCommandRequest, ExecutePlanDraft,
-    };
-    use agentflow_input::{
-        issue::{
-            AgentRole, InputIssue, InputIssueModel, InputIssueStatus, InputRiskLevel, IssueCategory,
-        },
-        project::InputProject,
-        spec_gate::{InputIssueGenerationMode, InputSpecApproval},
-    };
-    use agentflow_loop::ProjectExecutor;
     use agentflow_mcp::{
         McpAgentProvider, McpLaunchMode, McpLaunchPlan, McpLaunchRequest, McpProviderBridge,
         McpProviderKind, McpProviderStatus, McpProviderStatusCode,
-    };
-    use agentflow_workflow_events::{
-        load_events, load_pending_events, CONSUMER_BUILD_AGENT,
-        EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED, EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED,
-        EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY, EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED,
     };
     use anyhow::Result;
     use std::{
         fs,
         path::{Path, PathBuf},
-        process::Command,
         time::{Duration, UNIX_EPOCH},
     };
     use tempfile::tempdir;
@@ -628,300 +837,116 @@ mod tests {
     }
 
     #[test]
-    fn completion_auto_launches_next_project_issue() {
+    fn build_agent_review_merge_and_complete_use_task_events() {
         let dir = tempdir().unwrap();
-        prepare_project_root(dir.path());
-        write_approved_spec(dir.path(), "spec-001");
-        write_project(dir.path(), "proj-001", &["AF-001", "AF-002"]);
-        write_project_issue(dir.path(), "AF-001", Vec::new());
-        write_project_issue(dir.path(), "AF-002", vec!["AF-001".to_string()]);
-        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+        write_spec_project_fixture(dir.path(), "proj-001", "AF-001");
+        let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
 
-        let launch = ProjectExecutor::new("proj-001")
-            .tick(dir.path())
-            .unwrap()
-            .launch
-            .expect("first project runtime launch");
-
-        acquire_execute_lease(dir.path(), launch.run_id.clone()).unwrap();
-        write_execute_plan(
-            dir.path(),
-            launch.run_id.clone(),
-            ExecutePlanDraft {
-                steps: Vec::new(),
-                allowed_write_paths: vec!["src/lib.rs".to_string()],
-                allowed_commands: vec!["printf ok".to_string()],
-            },
-        )
-        .unwrap();
-        create_execute_checkpoint(dir.path(), launch.run_id.clone()).unwrap();
-        apply_execute_patch(
-            dir.path(),
-            launch.run_id.clone(),
-            "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,3 @@\n pub fn value() -> u8 {\n-    1\n+    2\n }\n"
-                .to_string(),
-        )
-        .unwrap();
-        run_execute_command(
-            dir.path(),
-            launch.run_id.clone(),
-            ExecuteCommandRequest {
-                label: "printf ok".to_string(),
-                program: "printf".to_string(),
-                args: vec!["ok".to_string()],
-                source: Some("test".to_string()),
-            },
-        )
-        .unwrap();
-
-        let request_path = write_completion_request(dir.path(), &launch.run_id);
+        let request_path = write_completion_request(dir.path(), "AF-001", &started.run_id);
         let prepared = prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
-        assert_eq!(prepared.run.issue_id, "AF-001");
-        let in_review_state = load_build_agent_launch_state(dir.path(), &launch.run_id).unwrap();
-        assert_eq!(in_review_state.status, BuildAgentLaunchStatus::InReview);
-        let review_events = load_events(dir.path()).unwrap();
-        assert!(review_events.iter().any(|event| event.event_type
-            == EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY
-            && event.subject_id == "AF-001"));
+        assert_eq!(prepared.issue_id, "AF-001");
+        assert_eq!(prepared.run_status, "completed");
+        assert!(prepared.validation_passed);
+        assert!(prepared.evidence_path.is_file());
+        let in_review_projection =
+            agentflow_projection::load_task_projection(dir.path(), "AF-001").unwrap();
+        assert_eq!(in_review_projection.current_state, "in_review");
+        assert!(!dir.path().join(".agentflow/output").exists());
+        assert!(!dir.path().join(".agentflow/execute").exists());
+        assert!(!dir.path().join(".agentflow/input").exists());
 
-        commit_and_merge_issue_branch(
-            dir.path(),
-            "agentflow/proj-001/AF-001",
-            "main",
-            "complete AF-001",
-        );
         write_build_agent_merge_proof(
             dir.path(),
             "AF-001",
-            &launch.run_id,
+            &started.run_id,
             "github",
             "auto-merge-if-eligible",
             Some("https://github.com/atxinbao/agentflow/pull/1".to_string()),
             true,
         )
         .unwrap();
-        let merge_events = load_events(dir.path()).unwrap();
-        assert!(merge_events.iter().any(|event| event.event_type
-            == EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED
-            && event.subject_id == "AF-001"));
+        let still_review_projection =
+            agentflow_projection::load_task_projection(dir.path(), "AF-001").unwrap();
+        assert_eq!(still_review_projection.current_state, "in_review");
 
         let outcome = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap();
-        assert_eq!(outcome.completion.run.issue_id, "AF-001");
-        let done_state = load_build_agent_launch_state(dir.path(), &launch.run_id).unwrap();
-        assert_eq!(done_state.status, BuildAgentLaunchStatus::Done);
-        let completion_events = load_events(dir.path()).unwrap();
-        assert!(completion_events.iter().any(|event| event.event_type
-            == EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED
-            && event.subject_id == "AF-001"));
-
-        let next_launch = outcome.next_launch.expect("next issue launch");
-        assert_eq!(next_launch.issue_id, "AF-002");
-        let next_issue = agentflow_input::load_input_issue(dir.path(), "AF-002").unwrap();
-        assert_eq!(next_issue.status, InputIssueStatus::InProgress);
+        assert_eq!(outcome.issue_id, "AF-001");
+        assert_eq!(outcome.run_status, "completed");
+        assert!(outcome.next_launch.is_none());
+        let done_projection =
+            agentflow_projection::load_task_projection(dir.path(), "AF-001").unwrap();
+        assert_eq!(done_projection.current_state, "done");
         assert_eq!(
-            next_issue.latest_run_id.as_deref(),
-            Some(next_launch.run_id.as_str())
+            done_projection.public_delivery.pr_url.as_deref(),
+            Some("https://github.com/atxinbao/agentflow/pull/1")
         );
-        let pending = load_pending_events(
+        let events = agentflow_event_store::replay_task_events(
             dir.path(),
-            CONSUMER_BUILD_AGENT,
-            &[EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED],
+            agentflow_event_store::ReplayFilter::issue("AF-001"),
         )
         .unwrap();
-        assert!(pending.iter().any(|event| event.subject_id == "AF-002"));
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == "issue.validation.passed"));
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == "issue.merge.proof.recorded"));
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == "issue.completed"));
+        assert!(!dir.path().join(".agentflow/output").exists());
+        assert!(!dir.path().join(".agentflow/execute").exists());
+        assert!(!dir.path().join(".agentflow/input").exists());
     }
 
-    fn prepare_project_root(root: &Path) {
-        fs::create_dir_all(root.join("src")).unwrap();
-        fs::write(root.join("README.md"), "# fixture\n").unwrap();
+    fn write_spec_project_fixture(root: &Path, project_id: &str, issue_id: &str) {
+        let requirement = root.join("docs/requirements/034-complete-test.md");
+        fs::create_dir_all(requirement.parent().unwrap()).unwrap();
         fs::write(
-            root.join("src/lib.rs"),
-            "pub fn value() -> u8 {\n    1\n}\n",
+            &requirement,
+            "# Complete Test\n\n验证 Build Agent complete 写入 task event。\n",
         )
         .unwrap();
-        fs::write(root.join(".gitignore"), ".agentflow/\nAGENTS.md\n").unwrap();
-        let init = Command::new("git")
-            .args(["init", "-b", "main"])
-            .current_dir(root)
-            .output()
-            .unwrap();
-        assert!(init.status.success());
-        let add = Command::new("git")
-            .args(["add", ".gitignore", "README.md", "src/lib.rs"])
-            .current_dir(root)
-            .output()
-            .unwrap();
-        assert!(add.status.success());
-        let commit = Command::new("git")
-            .args([
-                "-c",
-                "user.name=AgentFlow Test",
-                "-c",
-                "user.email=agentflow-test@example.com",
-                "commit",
-                "-m",
-                "initial",
-            ])
-            .current_dir(root)
-            .output()
-            .unwrap();
-        assert!(
-            commit.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&commit.stdout),
-            String::from_utf8_lossy(&commit.stderr)
-        );
-        agentflow_input::prepare_input_workspace(root).unwrap();
+        let mut issue = agentflow_spec::SpecIssueDraft::new(issue_id);
+        issue.project_id = Some(project_id.to_string());
+        let issue = agentflow_spec::issue_from_requirement(root, &requirement, issue).unwrap();
+        agentflow_spec::write_spec_issue(root, &issue).unwrap();
+        let mut project = agentflow_spec::SpecProjectDraft::new(project_id);
+        project.issue_ids = vec![issue_id.to_string()];
+        let project =
+            agentflow_spec::project_from_requirement(root, &requirement, project).unwrap();
+        agentflow_spec::write_spec_project(root, &project).unwrap();
     }
 
-    fn write_approved_spec(root: &Path, spec_id: &str) {
-        let spec_dir = root.join(".agentflow/input/specs/approved").join(spec_id);
-        fs::create_dir_all(&spec_dir).unwrap();
-        fs::write(spec_dir.join("product.md"), "# Product\n").unwrap();
-        fs::write(spec_dir.join("tech.md"), "# Tech\n").unwrap();
-        fs::write(spec_dir.join("spec.json"), "{}\n").unwrap();
-        fs::write(
-            spec_dir.join("approval.json"),
-            serde_json::to_string_pretty(&InputSpecApproval {
-                spec_id: spec_id.to_string(),
-                issue_generation_mode: InputIssueGenerationMode::Project,
-                ..InputSpecApproval::default()
-            })
-            .unwrap(),
-        )
-        .unwrap();
-    }
-
-    fn write_project(root: &Path, project_id: &str, issue_ids: &[&str]) {
-        let project = InputProject {
-            project_id: project_id.to_string(),
-            source_spec_id: "spec-001".to_string(),
-            title: "Project fixture".to_string(),
-            summary: "Project fixture summary".to_string(),
-            objective: "Complete project issue chain".to_string(),
-            issue_ids: issue_ids.iter().map(|value| (*value).to_string()).collect(),
-            scope: vec!["src/lib.rs".to_string()],
-            success_criteria: vec!["All issues done".to_string()],
-            ..InputProject::default()
-        };
-        fs::write(
-            root.join(".agentflow/input/projects")
-                .join(format!("{project_id}.json")),
-            serde_json::to_string_pretty(&project).unwrap(),
-        )
-        .unwrap();
-    }
-
-    fn write_project_issue(root: &Path, issue_id: &str, blocked_by: Vec<String>) {
-        let mut issue = InputIssue {
-            issue_id: issue_id.to_string(),
-            issue_model: InputIssueModel::Project,
-            issue_category: IssueCategory::Spec,
-            required_agent_role: AgentRole::BuildAgent,
-            source_spec_id: "spec-001".to_string(),
-            project_id: Some("proj-001".to_string()),
-            title: format!("Execute {issue_id}"),
-            summary: format!("Execute {issue_id}"),
-            status: InputIssueStatus::Backlog,
-            execution_risk: InputRiskLevel::Low,
-            scope: vec!["src/lib.rs".to_string()],
-            validation_hints: vec!["printf ok".to_string()],
-            ..InputIssue::default()
-        };
-        issue.relations.blocked_by = blocked_by;
-        issue.normalize_execution_metadata();
-        fs::write(
-            root.join(".agentflow/input/issues")
-                .join(format!("{issue_id}.json")),
-            serde_json::to_string_pretty(&issue).unwrap(),
-        )
-        .unwrap();
-    }
-
-    fn write_completion_request(root: &Path, run_id: &str) -> PathBuf {
+    fn write_completion_request(root: &Path, issue_id: &str, run_id: &str) -> PathBuf {
         let path = root
             .join(".agentflow/tmp")
             .join(format!("{run_id}-completion-request.json"));
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(
             &path,
-            serde_json::to_string_pretty(&BuildAgentCompletionRequest {
-                issue_id: "AF-001".to_string(),
-                run_id: Some(run_id.to_string()),
-                changed_files: vec![ExecuteChangedFile {
-                    path: "src/lib.rs".to_string(),
-                    change_type: "modified".to_string(),
-                    insertions: 1,
-                    deletions: 1,
+            serde_json::to_string_pretty(&serde_json::json!({
+                "issueId": issue_id,
+                "runId": run_id,
+                "changedFiles": [{
+                    "path": "src/lib.rs",
+                    "changeType": "modified",
+                    "insertions": 1,
+                    "deletions": 1
                 }],
-                validation_commands: vec![BuildAgentValidationCommand {
-                    label: "printf ok".to_string(),
-                    program: "printf".to_string(),
-                    args: vec!["ok".to_string()],
-                    exit_code: Some(0),
-                    stdout: Some("ok".to_string()),
-                    stderr: None,
-                    source: Some("test".to_string()),
-                }],
-            })
+                "validationCommands": [{
+                    "label": "printf ok",
+                    "program": "printf",
+                    "args": ["ok"],
+                    "exitCode": 0,
+                    "stdout": "ok",
+                    "stderr": "",
+                    "source": "test"
+                }]
+            }))
             .unwrap(),
         )
         .unwrap();
         path
-    }
-
-    fn commit_and_merge_issue_branch(
-        root: &Path,
-        issue_branch: &str,
-        base_branch: &str,
-        message: &str,
-    ) {
-        let add = Command::new("git")
-            .args(["add", "src/lib.rs"])
-            .current_dir(root)
-            .output()
-            .unwrap();
-        assert!(add.status.success());
-        let commit = Command::new("git")
-            .args([
-                "-c",
-                "user.name=AgentFlow Test",
-                "-c",
-                "user.email=agentflow-test@example.com",
-                "commit",
-                "-m",
-                message,
-            ])
-            .current_dir(root)
-            .output()
-            .unwrap();
-        assert!(
-            commit.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&commit.stdout),
-            String::from_utf8_lossy(&commit.stderr)
-        );
-        let switch_base = Command::new("git")
-            .args(["switch", base_branch])
-            .current_dir(root)
-            .output()
-            .unwrap();
-        assert!(
-            switch_base.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&switch_base.stdout),
-            String::from_utf8_lossy(&switch_base.stderr)
-        );
-        let merge = Command::new("git")
-            .args(["merge", "--no-ff", "--no-edit", issue_branch])
-            .current_dir(root)
-            .output()
-            .unwrap();
-        assert!(
-            merge.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&merge.stdout),
-            String::from_utf8_lossy(&merge.stderr)
-        );
     }
 }

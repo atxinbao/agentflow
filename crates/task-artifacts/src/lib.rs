@@ -14,6 +14,6 @@ pub use model::{
 };
 pub use storage::{
     create_task_run, load_task_evidence, load_task_run, prepare_task_artifact_workspace,
-    task_evidence_dir, task_run_dir, write_task_command_record, write_task_evidence,
-    write_task_validation,
+    task_evidence_dir, task_run_dir, update_task_run_status, write_task_command_record,
+    write_task_evidence, write_task_validation,
 };
