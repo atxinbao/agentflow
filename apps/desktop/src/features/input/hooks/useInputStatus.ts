@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import {
   BROWSER_PREVIEW_PROJECT_ROOT,
   createBrowserPreviewInputSnapshot,
-  createBrowserPreviewInputStatus,
   currentBrowserPreviewTaskHierarchyScenario,
 } from "../../../browserPreviewData";
 import type {
@@ -17,70 +16,6 @@ import type {
   IssueCategory,
 } from "../../../types";
 import { isBrowserPreviewRuntime } from "../../project-files";
-
-export type InputStatusState = {
-  status: InputStatusSnapshot | null;
-  error: string | null;
-  source: "idle" | "loading" | "tauri" | "preview" | "unavailable";
-};
-
-const initialInputStatusState: InputStatusState = {
-  status: null,
-  error: null,
-  source: "idle",
-};
-
-export function useInputStatus(projectRoot: string | null, refreshToken = 0) {
-  const [inputStatusState, setInputStatusState] = useState<InputStatusState>(initialInputStatusState);
-
-  useEffect(() => {
-    if (!projectRoot) {
-      setInputStatusState(initialInputStatusState);
-      return;
-    }
-
-    if (isBrowserPreviewRuntime()) {
-      const scenario = currentBrowserPreviewTaskHierarchyScenario();
-      setInputStatusState({
-        status: createBrowserPreviewInputStatus(projectRoot ?? BROWSER_PREVIEW_PROJECT_ROOT, scenario),
-        error: null,
-        source: "preview",
-      });
-      return;
-    }
-
-    let cancelled = false;
-    setInputStatusState((current) =>
-      current.status ? { ...current, error: null } : { ...current, error: null, source: "loading" },
-    );
-    void invoke<InputStatusSnapshot>("load_input_status", { projectRoot })
-      .then((status) => {
-        if (!cancelled) {
-          setInputStatusState({ status, error: null, source: "tauri" });
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          const message = error instanceof Error ? error.message : String(error);
-          setInputStatusState((current) =>
-            current.status
-              ? { ...current, error: message }
-              : {
-                  status: null,
-                  error: message,
-                  source: "unavailable",
-                },
-          );
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [projectRoot, refreshToken]);
-
-  return inputStatusState;
-}
 
 export type InputSnapshotState = {
   snapshot: InputSnapshot | null;

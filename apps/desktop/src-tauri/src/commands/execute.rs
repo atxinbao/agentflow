@@ -4,13 +4,6 @@
 //! explicitly adds a human confirmation or cancel action.
 
 #[tauri::command]
-pub(crate) fn prepare_execute_workspace(
-    project_root: String,
-) -> Result<agentflow_execute::ExecuteSnapshot, String> {
-    agentflow_execute::prepare_execute_workspace(project_root).map_err(|error| error.to_string())
-}
-
-#[tauri::command]
 pub(crate) fn load_execute_status(
     project_root: String,
 ) -> Result<agentflow_execute::ExecuteStatusSnapshot, String> {
