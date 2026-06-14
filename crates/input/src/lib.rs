@@ -71,7 +71,7 @@ mod tests {
             .path()
             .join(".agentflow/input/views/active.json")
             .is_file());
-        assert!(dir.path().join(".agentflow/spec").exists() == false);
+        assert!(dir.path().join(".agentflow/spec").exists());
         assert!(dir.path().join(".agentflow/goal-tree").exists() == false);
         assert!(!dir.path().join(".agentflow/define/goals").exists());
         assert!(!dir.path().join(".agentflow/define/milestones").exists());

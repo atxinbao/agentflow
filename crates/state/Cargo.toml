@@ -9,6 +9,8 @@ agentflow-execute = { path = "../execute" }
 agentflow-input = { path = "../input" }
 agentflow-output = { path = "../output" }
 agentflow-panel = { path = "../panel" }
+agentflow-projection = { path = "../projection" }
+agentflow-spec = { path = "../spec" }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
