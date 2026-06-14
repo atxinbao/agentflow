@@ -523,3 +523,55 @@ export type IssueStatusIndex = {
   updatedAt: number;
   issues: IssueStatusIndexEntry[];
 };
+
+export type ProjectionPhase = "past" | "current" | "future" | "exception";
+
+export type TaskTimelineItem = {
+  state: IssueDisplayStatus;
+  phase: ProjectionPhase;
+  enteredAt?: number | null;
+  events: string[];
+  summary: string;
+  liveRefs: string[];
+};
+
+export type ProjectionPublicDelivery = {
+  evidencePath?: string | null;
+  prUrl?: string | null;
+  mergeCommit?: string | null;
+  changelogPath?: string | null;
+  releaseNotesUrl?: string | null;
+};
+
+export type TaskProjection = {
+  version: string;
+  issueId: string;
+  projectId?: string | null;
+  workflowRef: string;
+  currentState: IssueDisplayStatus;
+  displayStatus: IssueDisplayStatus;
+  currentTransition?: string | null;
+  latestRunId?: string | null;
+  branchName?: string | null;
+  timeline: TaskTimelineItem[];
+  publicDelivery: ProjectionPublicDelivery;
+  updatedAt: number;
+};
+
+export type ProjectProjection = {
+  version: string;
+  projectId: string;
+  title: string;
+  status: string;
+  issueIds: string[];
+  currentIssueId?: string | null;
+  issueCount: number;
+  completedIssueCount: number;
+  updatedAt: number;
+};
+
+export type ProjectionSummary = {
+  taskCount: number;
+  projectCount: number;
+  indexPath: string;
+};

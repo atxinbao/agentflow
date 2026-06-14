@@ -25,6 +25,8 @@ import type {
   AuditIndex,
   HumanAuditReport,
   StateStatusSnapshot,
+  TaskProjection,
+  TaskTimelineItem,
 } from "./types";
 import {
   getProjectFileExtensionFromName,
@@ -568,6 +570,129 @@ export function createBrowserPreviewIssueStatusIndex(
       auditStatus: issue.displayStatus === "done" ? "passed" : "not-requested",
     })),
   };
+}
+
+export function createBrowserPreviewTaskProjection(
+  issueId: string,
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+  scenario = currentBrowserPreviewTaskHierarchyScenario(),
+): TaskProjection | null {
+  void projectRoot;
+  const issue = browserPreviewIssuesForScenario(scenario).find((item) => item.issueId === issueId);
+  if (!issue) {
+    return null;
+  }
+  const currentState = issue.displayStatus;
+  const runId = previewRunIdForIssue(issue);
+  return {
+    version: "task-projection.browser-preview",
+    issueId,
+    projectId: issue.projectId ?? null,
+    workflowRef: "build-agent.issue-loop.v1",
+    currentState,
+    displayStatus: currentState,
+    currentTransition: browserPreviewTransitionForState(currentState),
+    latestRunId: runId,
+    branchName: runId ? `agentflow/browser-preview/${issueId}` : null,
+    timeline: browserPreviewTimelineForIssue(issue),
+    publicDelivery: {
+      evidencePath: runId ? `.agentflow/tasks/${issueId}/evidence/evidence.json` : null,
+      prUrl: currentState === "done" ? "https://github.com/example/agentflow/pull/100" : null,
+      mergeCommit: currentState === "done" ? "426b217f" : null,
+      changelogPath: currentState === "done" ? "CHANGELOG.md" : null,
+      releaseNotesUrl: null,
+    },
+    updatedAt: previewTimestamp + 360,
+  };
+}
+
+function browserPreviewTimelineForIssue(issue: InputIssue): TaskTimelineItem[] {
+  const states: TaskTimelineItem["state"][] = ["backlog", "todo", "in_progress", "in_review", "done"];
+  if (issue.displayStatus === "blocked" || issue.displayStatus === "cancel") {
+    states.push(issue.displayStatus);
+  }
+  const currentIndex = states.indexOf(issue.displayStatus);
+  return states.map((state, index) => {
+    const phase =
+      state === "blocked" || state === "cancel"
+        ? "exception"
+        : currentIndex < 0
+          ? "future"
+          : index < currentIndex
+            ? "past"
+            : index === currentIndex
+              ? "current"
+              : "future";
+    const events = phase === "future" ? [] : browserPreviewEventsForState(state);
+    return {
+      state,
+      phase,
+      enteredAt: events.length ? previewTimestamp + index * 60 : null,
+      events,
+      summary: browserPreviewSummaryForState(state, issue),
+      liveRefs: phase === "future" ? [] : browserPreviewLiveRefsForState(state, issue),
+    };
+  });
+}
+
+function browserPreviewEventsForState(state: TaskTimelineItem["state"]) {
+  const events: Record<TaskTimelineItem["state"], string[]> = {
+    backlog: ["issue.created"],
+    blocked: ["issue.blocked"],
+    cancel: ["issue.cancelled"],
+    done: ["issue.pr.merged", "issue.completed"],
+    in_progress: ["agent.launch.requested", "agent.session.running", "issue.validation.running"],
+    in_review: ["issue.validation.passed", "issue.pr.created"],
+    todo: ["issue.scheduled", "context-pack.ready", "workspace.clean"],
+  };
+  return events[state] ?? [];
+}
+
+function browserPreviewLiveRefsForState(state: TaskTimelineItem["state"], issue: InputIssue) {
+  const runId = previewRunIdForIssue(issue) ?? "run-browser-preview-pending";
+  const refs: Record<TaskTimelineItem["state"], string[]> = {
+    backlog: [issue.system?.path ?? `.agentflow/spec/issues/${issue.issueId}.json`],
+    blocked: [".agentflow/events/task-events.jsonl"],
+    cancel: [".agentflow/events/task-events.jsonl"],
+    done: [`PR #100`, `CHANGELOG.md`, `.agentflow/tasks/${issue.issueId}/evidence/evidence.json`],
+    in_progress: [
+      `.agentflow/tasks/${issue.issueId}/runs/${runId}/run.json`,
+      `.agentflow/tasks/${issue.issueId}/runs/${runId}/plan.json`,
+      `.agentflow/tasks/${issue.issueId}/runs/${runId}/validate.log`,
+    ],
+    in_review: [`PR #100`, `.agentflow/tasks/${issue.issueId}/evidence/evidence.json`],
+    todo: [issue.contextPackPath ?? `.agentflow/panel/context-packs/${issue.issueId}.json`],
+  };
+  return refs[state] ?? [];
+}
+
+function browserPreviewSummaryForState(state: TaskTimelineItem["state"], issue: InputIssue) {
+  if (state === issue.displayStatus) {
+    return issue.summary;
+  }
+  const summaries: Record<TaskTimelineItem["state"], string> = {
+    backlog: "任务已生成，等待调度。",
+    blocked: "任务被阻断，等待解除原因。",
+    cancel: "任务已取消。",
+    done: "任务完成，公开交付已留痕。",
+    in_progress: "执行助手正在处理任务和本地验证。",
+    in_review: "验证完成，等待 PR/MR 合并。",
+    todo: "前置条件已满足，等待开工。",
+  };
+  return summaries[state] ?? "等待事件更新。";
+}
+
+function browserPreviewTransitionForState(state: TaskTimelineItem["state"]) {
+  const transitions: Record<TaskTimelineItem["state"], string> = {
+    backlog: "issue.created",
+    blocked: "issue.blocked",
+    cancel: "issue.cancelled",
+    done: "issue.completed",
+    in_progress: "agent.session.running",
+    in_review: "issue.pr.created",
+    todo: "issue.scheduled",
+  };
+  return transitions[state] ?? "issue.updated";
 }
 
 function previewRunIdForIssue(issue: InputIssue) {
