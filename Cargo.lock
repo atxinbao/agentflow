@@ -201,6 +201,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-task-artifacts"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-workflow-acceptance"
 version = "0.1.0"
 dependencies = [
