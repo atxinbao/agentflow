@@ -7,8 +7,7 @@ use crate::{
     provider::{run_command, McpAgentProvider},
     storage::{read_session_snapshot, write_launch_plan, write_session_snapshot},
 };
-use agentflow_execute::{load_build_agent_launch_state, BuildAgentLaunchStatus};
-use agentflow_input::issue::InputIssueStatus;
+use agentflow_projection::load_task_projection;
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::{
@@ -23,12 +22,12 @@ const CLI_FRESHNESS_PATHS: [&str; 9] = [
     "Cargo.toml",
     "Cargo.lock",
     "crates/cli/src",
-    "crates/execute/src",
-    "crates/input/src",
-    "crates/state/src",
+    "crates/spec/src",
+    "crates/task-loop/src",
+    "crates/task-artifacts/src",
     "crates/panel/src",
     "crates/agent-manual/src",
-    "crates/loop/src",
+    "crates/projection/src",
 ];
 
 const CODEX_PROGRAM: &str = "codex";
@@ -362,9 +361,8 @@ impl McpAgentProvider for CodexProvider {
 
     fn poll_session(&self, project_root: &Path, session_id: &str) -> Result<McpSessionSnapshot> {
         let mut session = read_session_snapshot(project_root, session_id)?;
-        let issue = agentflow_input::load_input_issue(project_root, &session.issue_id).ok();
-        let launch_state = load_build_agent_launch_state(project_root, &session.run_id).ok();
-        let merge_proof = load_merge_proof(project_root, &session.run_id)
+        let projection = load_task_projection(project_root, &session.issue_id).ok();
+        let merge_proof = load_merge_proof(project_root, &session.issue_id, &session.run_id)
             .ok()
             .flatten();
         let pid_alive = session.pid.map(is_pid_alive).transpose()?;
@@ -381,14 +379,17 @@ impl McpAgentProvider for CodexProvider {
 
         session.status = derive_session_status(
             session.status.clone(),
-            issue.as_ref().map(|value| &value.status),
-            launch_state.as_ref().map(|value| &value.status),
+            projection
+                .as_ref()
+                .map(|value| value.current_state.as_str()),
             process_alive,
             merge_proof.as_ref(),
         );
 
         session.last_error = derive_session_error(
-            issue.as_ref().map(|value| &value.status),
+            projection
+                .as_ref()
+                .map(|value| value.current_state.as_str()),
             process_alive,
             &session.status,
             session.last_error.clone(),
@@ -474,9 +475,13 @@ fn ensure_parent_directory(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn load_merge_proof(project_root: &Path, run_id: &str) -> Result<Option<MergeProofSummary>> {
+fn load_merge_proof(
+    project_root: &Path,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<Option<MergeProofSummary>> {
     let path = project_root.join(format!(
-        ".agentflow/execute/runs/{run_id}/review/merge-proof.json"
+        ".agentflow/tasks/{issue_id}/runs/{run_id}/review/merge-proof.json"
     ));
     if !path.is_file() {
         return Ok(None);
@@ -499,8 +504,7 @@ fn load_merge_proof(project_root: &Path, run_id: &str) -> Result<Option<MergePro
 
 fn derive_session_status(
     current: McpSessionStatus,
-    issue_status: Option<&InputIssueStatus>,
-    launch_status: Option<&BuildAgentLaunchStatus>,
+    issue_state: Option<&str>,
     process_alive: bool,
     merge_proof: Option<&MergeProofSummary>,
 ) -> McpSessionStatus {
@@ -511,65 +515,38 @@ fn derive_session_status(
         return McpSessionStatus::InReview;
     }
 
-    match issue_status {
-        Some(InputIssueStatus::Done) => return McpSessionStatus::Done,
-        Some(InputIssueStatus::InReview) => return McpSessionStatus::InReview,
-        Some(InputIssueStatus::Cancel) => return McpSessionStatus::Cancelled,
-        Some(InputIssueStatus::Blocked) => return McpSessionStatus::Failed,
-        Some(InputIssueStatus::InProgress) if process_alive => return McpSessionStatus::Running,
-        Some(InputIssueStatus::Todo) if process_alive => return McpSessionStatus::Starting,
+    match issue_state {
+        Some("done") => return McpSessionStatus::Done,
+        Some("in_review") => return McpSessionStatus::InReview,
+        Some("cancel") => return McpSessionStatus::Cancelled,
+        Some("blocked") => return McpSessionStatus::Failed,
+        Some("in_progress") if process_alive => return McpSessionStatus::Running,
+        Some("todo") if process_alive => return McpSessionStatus::Starting,
         _ => {}
     }
 
-    match launch_status {
-        Some(BuildAgentLaunchStatus::Done) => McpSessionStatus::Done,
-        Some(BuildAgentLaunchStatus::InReview) => McpSessionStatus::InReview,
-        Some(BuildAgentLaunchStatus::Failed) => McpSessionStatus::Failed,
-        Some(BuildAgentLaunchStatus::Claimed) if process_alive => McpSessionStatus::Running,
-        Some(BuildAgentLaunchStatus::Claimed) => {
-            if matches!(
-                current,
-                McpSessionStatus::Claimed | McpSessionStatus::Starting | McpSessionStatus::Running
-            ) {
-                McpSessionStatus::Failed
-            } else {
-                McpSessionStatus::Claimed
-            }
-        }
-        Some(BuildAgentLaunchStatus::Queued) => {
-            if process_alive {
-                McpSessionStatus::Starting
-            } else if matches!(
-                current,
-                McpSessionStatus::Claimed | McpSessionStatus::Starting | McpSessionStatus::Running
-            ) {
-                McpSessionStatus::Failed
-            } else {
-                current
-            }
-        }
-        None if process_alive => McpSessionStatus::Running,
-        None => {
-            if matches!(
-                current,
-                McpSessionStatus::Claimed | McpSessionStatus::Starting | McpSessionStatus::Running
-            ) {
-                McpSessionStatus::Failed
-            } else {
-                current
-            }
-        }
+    if process_alive {
+        return McpSessionStatus::Running;
+    }
+
+    if matches!(
+        current,
+        McpSessionStatus::Claimed | McpSessionStatus::Starting | McpSessionStatus::Running
+    ) {
+        McpSessionStatus::Failed
+    } else {
+        current
     }
 }
 
 fn derive_session_error(
-    issue_status: Option<&InputIssueStatus>,
+    issue_state: Option<&str>,
     process_alive: bool,
     status: &McpSessionStatus,
     previous: Option<String>,
 ) -> Option<String> {
-    match issue_status {
-        Some(InputIssueStatus::Blocked) => Some("任务已阻断。".to_string()),
+    match issue_state {
+        Some("blocked") => Some("任务已阻断。".to_string()),
         _ if !process_alive && matches!(status, McpSessionStatus::Failed) => {
             Some("外部执行会话已退出，但任务没有进入审核或完成状态。".to_string())
         }
@@ -689,7 +666,7 @@ mod tests {
             "run-001",
             "build-agent",
             "/repo",
-            ".agentflow/execute/runs/run-001/launcher/build-agent-request.json",
+            ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json",
         );
 
         let plan = provider
@@ -708,7 +685,7 @@ mod tests {
         assert!(plan.args.iter().any(|arg| arg == DEFAULT_CODEX_MODEL));
         assert_eq!(
             plan.stdin_path.as_deref(),
-            Some(".agentflow/execute/runs/run-001/launcher/build-agent-request.json")
+            Some(".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json")
         );
         assert_eq!(
             plan.output_path.as_deref(),
@@ -743,8 +720,7 @@ trust_level = "trusted"
     fn claimed_launch_without_live_process_fails_session() {
         let status = super::derive_session_status(
             crate::model::McpSessionStatus::Running,
-            Some(&agentflow_input::issue::InputIssueStatus::InProgress),
-            Some(&agentflow_execute::BuildAgentLaunchStatus::Claimed),
+            Some("in_progress"),
             false,
             None,
         );
@@ -755,8 +731,7 @@ trust_level = "trusted"
     fn queued_launch_without_live_process_fails_started_session() {
         let status = super::derive_session_status(
             crate::model::McpSessionStatus::Starting,
-            Some(&agentflow_input::issue::InputIssueStatus::Todo),
-            Some(&agentflow_execute::BuildAgentLaunchStatus::Queued),
+            Some("todo"),
             false,
             None,
         );
