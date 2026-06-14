@@ -12,19 +12,17 @@ path = "src/main.rs"
 agentflow-core = { path = "../core" }
 agentflow-agent-bridge = { path = "../agent-bridge" }
 agentflow-event-store = { path = "../event-store" }
-agentflow-execute = { path = "../execute" }
-agentflow-input = { path = "../input" }
-agentflow-loop = { path = "../loop" }
 agentflow-projection = { path = "../projection" }
 agentflow-release = { path = "../release" }
+agentflow-spec = { path = "../spec" }
 agentflow-state = { path = "../state" }
+agentflow-task-artifacts = { path = "../task-artifacts" }
 agentflow-task-loop = { path = "../task-loop" }
-agentflow-workflow-events = { path = "../workflow-events" }
 anyhow.workspace = true
 clap.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
 agentflow-mcp = { path = "../mcp" }
-agentflow-spec = { path = "../spec" }
 tempfile.workspace = true

@@ -223,11 +223,11 @@ pub(crate) fn run() -> Result<()> {
             BuildAgentCommand::PrepareReview { request } => {
                 let prepared = prepare_build_agent_review_from_request(&cwd, &request)?;
                 println!("build agent review: prepared");
-                println!("issue: {}", prepared.run.issue_id);
-                println!("run: {}", prepared.run.run_id);
-                println!("run status: {:?}", prepared.run.status);
-                println!("delivery: {}", prepared.delivery.run_id);
-                println!("validation passed: {}", prepared.result.validation.passed);
+                println!("issue: {}", prepared.issue_id);
+                println!("run: {}", prepared.run_id);
+                println!("run status: {}", prepared.run_status);
+                println!("evidence: {}", prepared.evidence_path.display());
+                println!("validation passed: {}", prepared.validation_passed);
             }
             BuildAgentCommand::WriteMergeProof {
                 issue_id,
@@ -254,17 +254,16 @@ pub(crate) fn run() -> Result<()> {
             }
             BuildAgentCommand::Complete { request } => {
                 let outcome = complete_build_agent_issue_from_request(&cwd, &request)?;
-                let completion = outcome.completion;
                 println!("build agent completion: done");
-                println!("issue: {}", completion.run.issue_id);
-                println!("run: {}", completion.run.run_id);
-                println!("run status: {:?}", completion.run.status);
-                println!("delivery: {}", completion.delivery.run_id);
-                println!("validation passed: {}", completion.result.validation.passed);
+                println!("issue: {}", outcome.issue_id);
+                println!("run: {}", outcome.run_id);
+                println!("run status: {}", outcome.run_status);
+                println!("evidence: {}", outcome.evidence_path.display());
+                println!("validation passed: {}", outcome.validation_passed);
                 if let Some(next_launch) = outcome.next_launch {
                     println!("next issue: {}", next_launch.issue_id);
                     println!("next run: {}", next_launch.run_id);
-                    println!("next stage: {}", next_launch.stage.as_str());
+                    println!("next stage: in_progress");
                     println!("next request: {}", next_launch.launch_request_path);
                 }
             }
