@@ -310,10 +310,9 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "- 不执行 Build Agent 或 Audit Agent 的任务",
       "",
       "你必须遵守：",
-      "- 只写 .agentflow/input/**",
+      "- 先写 docs/requirements/**，确认后再写 .agentflow/spec/**",
       "- 不修改用户源码",
-      "- 不写 .agentflow/execute/**",
-      "- 不写 .agentflow/output/release/**",
+      "- 不写 .agentflow/tasks/**",
       "- 不写 .agentflow/output/audit/**",
       "",
       "如果用户要求你改代码、执行任务或审计，请停止并提示需要切换到正确 Agent。",
@@ -332,7 +331,7 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "你只能执行：",
       "issueCategory = spec",
       "requiredAgentRole = build-agent",
-      "AgentFlow 当前 input issue 是唯一任务源。",
+      "AgentFlow 当前 spec issue 是唯一任务源。",
       "handoff package 只是这份 issue 的派生快照。",
       "executionPipeline 只是这份 issue 合同里的一部分，不是独立任务源。",
       "不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源。",
@@ -5012,18 +5011,18 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
     stages: [
       {
         evidence: [
-          "AgentFlow input issue is the only active task source; executionPipeline is read from that issue contract",
+          "AgentFlow spec issue is the only active task source; executionPipeline is read from that issue contract",
           "no external issue/task/plan/queue/thread/tool state is used as task authority",
-          "input issue status is backlog before preflight",
+          "spec issue status is backlog before preflight",
           "blockedBy dependencies are done",
           "Panel Context Pack exists or is generated",
           "current run is created by AgentFlow official runtime entrypoint before source edits",
           "no `.agentflow/**` facts are handwritten; official AgentFlow loop commands are used instead",
           "working tree has no uncommitted user source changes before in_progress",
-          "input issue status changed to todo after preflight",
+          "spec issue status changed to todo after preflight",
         ],
         goal:
-          "只认当前 AgentFlow input issue。确认 issue 仍在 backlog，依赖已完成、合同完整、Context Pack 可读或可补生成、工作区干净；随后通过 AgentFlow 官方 run loop / runtime preflight 创建当前 run。preflight 通过后先把 issue 切到 todo，再准备进入 in_progress。禁止手写 `.agentflow/**` 只表示不能直接改事实文件，不是禁止调用 AgentFlow 官方命令推进 loop。GitHub/GitLab 不在这个阶段检测。",
+          "只认当前 AgentFlow spec issue。确认 issue 仍在 backlog，依赖已完成、合同完整、Context Pack 可读或可补生成、工作区干净；随后通过 AgentFlow 官方 run loop / runtime preflight 创建当前 run。preflight 通过后先把 issue 切到 todo，再准备进入 in_progress。禁止手写 `.agentflow/**` 只表示不能直接改事实文件，不是禁止调用 AgentFlow 官方命令推进 loop。GitHub/GitLab 不在这个阶段检测。",
         label: "执行前置检测",
         required: true,
         stageId: "issue-preflight",
@@ -5143,7 +5142,7 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
     createdAt: issue.system?.createdAt ?? null,
     handoffId: issue.handoffId ?? `handoff-${issue.issueId}`,
     issueCategory,
-    issuePath: issue.issuePath ?? issue.system?.path ?? `.agentflow/input/issues/${issue.issueId}.json`,
+    issuePath: issue.issuePath ?? issue.system?.path ?? `.agentflow/spec/issues/${issue.issueId}.json`,
     latestRunId: indexed?.latestRunId ?? null,
     milestoneId: null,
     nonGoals: issue.nonGoals,
@@ -5157,7 +5156,7 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
     sourceSpecId: issue.sourceSpecId ?? null,
     sourceSpecPath:
       issue.sourceSpecPath ??
-      (issue.sourceSpecId ? `.agentflow/input/specs/approved/${issue.sourceSpecId}/spec.json` : null),
+      (issue.sourceSpecId ? `docs/requirements/${issue.sourceSpecId}.md` : null),
     scope: issue.scope,
     status: issue.status,
     title: issue.title,
@@ -5519,7 +5518,7 @@ function agentInstructionForTask(task: V1Issue) {
   if (task.requiredAgentRole === "audit-agent") {
     return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR/MR。";
   }
-  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 input issue 是唯一任务源；handoff package 只是这份 issue 的派生快照；executionPipeline 只是这份 issue 合同里的一部分，不是独立任务源。不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按执行前置检测、测试设计、执行、沙箱验证、创建 PR/MR、合并 PR/MR、写回 Done 的流程执行。先调用 `agentflow build-agent start --issue-id <issue-id>` 创建当前 run；没有 run 就不能开工。完成本地验证后，调用 `agentflow build-agent prepare-review --request <completion-request.json>` 生成 result、evidence、delivery，并把 issue 推到 in_review。PR/MR 创建或合并后，调用 `agentflow build-agent write-merge-proof --issue-id <issue-id> --run-id <run-id> --provider <github|gitlab> --merge-mode <auto-merge-if-eligible|manual-merge> [--remote-url <url>] [--merged]` 记录 review 状态。PR/MR 合并后，再调用 `agentflow build-agent complete --request <completion-request.json>` 写回 Done。不要手写 `.agentflow/**`，但这不等于不能调用 AgentFlow 官方命令推进 loop、补生成 Context Pack 或写回完成结果。写回 Done 前必须确认当前 AgentFlow CLI 支持这些 build-agent 命令；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
+  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 spec issue 是唯一任务源；handoff package 只是这份 issue 的派生快照；executionPipeline 只是这份 issue 合同里的一部分，不是独立任务源。不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按执行前置检测、测试设计、执行、沙箱验证、创建 PR/MR、合并 PR/MR、写回 Done 的流程执行。先调用 `agentflow build-agent start --issue-id <issue-id>` 创建当前 run；没有 run 就不能开工。完成本地验证后，调用 `agentflow build-agent prepare-review --request <completion-request.json>` 生成 result、evidence、delivery，并把 issue 推到 in_review。PR/MR 创建或合并后，调用 `agentflow build-agent write-merge-proof --issue-id <issue-id> --run-id <run-id> --provider <github|gitlab> --merge-mode <auto-merge-if-eligible|manual-merge> [--remote-url <url>] [--merged]` 记录 review 状态。PR/MR 合并后，再调用 `agentflow build-agent complete --request <completion-request.json>` 写回 Done。不要手写 `.agentflow/**`，但这不等于不能调用 AgentFlow 官方命令推进 loop、补生成 Context Pack 或写回完成结果。写回 Done 前必须确认当前 AgentFlow CLI 支持这些 build-agent 命令；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
 }
 
 function taskAuditDescriptionItems(task: V1Issue): Array<[string, string]> {
@@ -6206,7 +6205,7 @@ function buildAgentPullRequestTemplate(task: V1Issue, agentLocale?: string | nul
 }
 
 function buildAgentPullRequestTemplateEn(task: V1Issue) {
-  const issuePath = task.issuePath ?? `.agentflow/input/issues/${task.id}.json`;
+  const issuePath = task.issuePath ?? `.agentflow/spec/issues/${task.id}.json`;
   const sourceSpec = task.sourceSpecPath ?? task.sourceSpecId ?? "Not recorded";
   const validationCommands = task.validationCommands.length
     ? task.validationCommands.map((command) => `- ${command}`)
@@ -6217,7 +6216,7 @@ function buildAgentPullRequestTemplateEn(task: V1Issue) {
   return [
     "# AgentFlow Build Agent Pull Request",
     "",
-    "AgentFlow keeps every Build Agent PR bound to one input issue, one branch, one review gate, and one Done writeback.",
+    "AgentFlow keeps every Build Agent PR bound to one spec issue, one branch, one review gate, and one Done writeback.",
     "",
     "## Task",
     "",
@@ -6250,7 +6249,7 @@ function buildAgentPullRequestTemplateEn(task: V1Issue) {
     "- [ ] No unrelated refactors or formatting churn.",
     "- [ ] No forbidden paths were modified.",
     "- [ ] No audit report, findings, evidence map, or traceability files were written by Build Agent.",
-    "- [ ] Input facts and Approved SPEC were not modified unless explicitly allowed by the issue.",
+    "- [ ] Spec facts and public requirement records were not modified unless explicitly allowed by the issue.",
     "- [ ] Public behavior is unchanged, or migration notes are included.",
     "",
     "## Build Agent Loop",
@@ -6303,7 +6302,7 @@ function buildAgentPullRequestTemplateEn(task: V1Issue) {
 }
 
 function buildAgentPullRequestTemplateZh(task: V1Issue) {
-  const issuePath = task.issuePath ?? `.agentflow/input/issues/${task.id}.json`;
+  const issuePath = task.issuePath ?? `.agentflow/spec/issues/${task.id}.json`;
   const sourceSpec = task.sourceSpecPath ?? task.sourceSpecId ?? "未记录";
   const validationCommands = task.validationCommands.length
     ? task.validationCommands.map((command) => `- ${command}`)
@@ -6314,7 +6313,7 @@ function buildAgentPullRequestTemplateZh(task: V1Issue) {
   return [
     "# AgentFlow Build Agent PR",
     "",
-    "AgentFlow 要求每个 Build Agent PR 只对应一个 input issue、一个分支、一个 review gate 和一次 Done 写回。",
+    "AgentFlow 要求每个 Build Agent PR 只对应一个 spec issue、一个分支、一个 review gate 和一次 Done 写回。",
     "",
     "## 任务",
     "",
@@ -6511,7 +6510,7 @@ function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
     "- 如果你不是 requiredAgentRole，请停止执行。",
     "- 如果 issueCategory 不属于你，请停止执行。",
     "- 不要执行其他 Agent 的任务。",
-    "- AgentFlow 当前 input issue 是唯一任务源。",
+    "- AgentFlow 当前 spec issue 是唯一任务源。",
     "- handoff package 只是当前 issue 的派生快照。",
     "- executionPipeline 只是当前 issue 合同的一部分，不是独立任务源。",
     "- 不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源。",
@@ -6614,12 +6613,12 @@ function agentRoleRulesDocument() {
       {
         agentRole: "spec-agent",
         handlesIssueCategory: [],
-        writes: [".agentflow/input/**"],
+        writes: ["docs/requirements/**", ".agentflow/spec/**"],
       },
       {
         agentRole: "build-agent",
         handlesIssueCategory: ["spec"],
-        writes: [".agentflow/execute/**", ".agentflow/output/evidence/**", ".agentflow/output/release/**"],
+        writes: [".agentflow/tasks/<issue-id>/runs/**", ".agentflow/tasks/<issue-id>/evidence/**", "PR/MR body", "CHANGELOG.md or release notes"],
       },
       {
         agentRole: "audit-agent",
