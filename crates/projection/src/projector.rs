@@ -106,6 +106,14 @@ fn project_issue(issue: &SpecIssue, events: Option<&Vec<TaskEvent>>) -> TaskProj
         if let Some(merge_commit) = event.payload.get("mergeCommit").and_then(Value::as_str) {
             public_delivery.merge_commit = Some(merge_commit.to_string());
         }
+        if let Some(changelog_path) = event.payload.get("changelogPath").and_then(Value::as_str) {
+            public_delivery.changelog_path = Some(changelog_path.to_string());
+        }
+        if let Some(release_notes_url) =
+            event.payload.get("releaseNotesUrl").and_then(Value::as_str)
+        {
+            public_delivery.release_notes_url = Some(release_notes_url.to_string());
+        }
         if let Some(next_state) = event_to_state(&event) {
             current_state = next_state;
         }
@@ -412,7 +420,9 @@ mod tests {
                 json!({
                     "runId": "run-001",
                     "prUrl": "https://github.com/example/repo/pull/1",
-                    "mergeCommit": "abc123"
+                    "mergeCommit": "abc123",
+                    "changelogPath": "CHANGELOG.md",
+                    "releaseNotesUrl": "docs/release-notes/agentflow-release-notes.md"
                 }),
             ),
         )
@@ -427,6 +437,14 @@ mod tests {
         assert_eq!(
             task.public_delivery.pr_url.as_deref(),
             Some("https://github.com/example/repo/pull/1")
+        );
+        assert_eq!(
+            task.public_delivery.changelog_path.as_deref(),
+            Some("CHANGELOG.md")
+        );
+        assert_eq!(
+            task.public_delivery.release_notes_url.as_deref(),
+            Some("docs/release-notes/agentflow-release-notes.md")
         );
         assert_eq!(project.completed_issue_count, 1);
         assert_eq!(project.status, "done");
