@@ -16,6 +16,7 @@ agentflow-mcp = { path = "../../../crates/mcp" }
 agentflow-execute = { path = "../../../crates/execute" }
 agentflow-loop = { path = "../../../crates/loop" }
 agentflow-output = { path = "../../../crates/output" }
+agentflow-projection = { path = "../../../crates/projection" }
 agentflow-state = { path = "../../../crates/state" }
 agentflow-workflow-events = { path = "../../../crates/workflow-events" }
 anyhow.workspace = true

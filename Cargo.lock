@@ -72,6 +72,7 @@ dependencies = [
  "agentflow-mcp",
  "agentflow-output",
  "agentflow-panel",
+ "agentflow-projection",
  "agentflow-state",
  "agentflow-workflow-acceptance",
  "agentflow-workflow-events",

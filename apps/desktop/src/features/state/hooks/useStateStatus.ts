@@ -4,9 +4,10 @@ import {
   BROWSER_PREVIEW_PROJECT_ROOT,
   createBrowserPreviewIssueStatusIndex,
   createBrowserPreviewStateStatus,
+  createBrowserPreviewTaskProjection,
   currentBrowserPreviewTaskHierarchyScenario,
 } from "../../../browserPreviewData";
-import type { IssueStatusIndex, StateStatusSnapshot } from "../../../types";
+import type { IssueStatusIndex, StateStatusSnapshot, TaskProjection } from "../../../types";
 import { isBrowserPreviewRuntime } from "../../project-files";
 
 export type StateStatusState = {
@@ -135,4 +136,70 @@ export function useIssueStatusIndex(projectRoot: string | null, refreshToken = 0
   }, [projectRoot, refreshToken]);
 
   return issueStatusIndexState;
+}
+
+export type TaskProjectionState = {
+  projection: TaskProjection | null;
+  error: string | null;
+  source: "idle" | "loading" | "tauri" | "preview" | "unavailable";
+};
+
+const initialTaskProjectionState: TaskProjectionState = {
+  projection: null,
+  error: null,
+  source: "idle",
+};
+
+export function useTaskProjection(projectRoot: string | null, issueId: string | null, refreshToken = 0) {
+  const [taskProjectionState, setTaskProjectionState] =
+    useState<TaskProjectionState>(initialTaskProjectionState);
+
+  useEffect(() => {
+    if (!projectRoot || !issueId) {
+      setTaskProjectionState(initialTaskProjectionState);
+      return;
+    }
+
+    if (isBrowserPreviewRuntime()) {
+      setTaskProjectionState({
+        projection: createBrowserPreviewTaskProjection(issueId, projectRoot, currentBrowserPreviewTaskHierarchyScenario()),
+        error: null,
+        source: "preview",
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setTaskProjectionState((current) =>
+      current.projection ? { ...current, error: null } : { ...current, error: null, source: "loading" },
+    );
+
+    void invoke("rebuild_task_projections", { projectRoot })
+      .then(() => invoke<TaskProjection>("load_task_projection", { projectRoot, issueId }))
+      .then((projection) => {
+        if (!cancelled) {
+          setTaskProjectionState({ projection, error: null, source: "tauri" });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          setTaskProjectionState((current) =>
+            current.projection
+              ? { ...current, error: message }
+              : {
+                  projection: null,
+                  error: message,
+                  source: "unavailable",
+                },
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [issueId, projectRoot, refreshToken]);
+
+  return taskProjectionState;
 }

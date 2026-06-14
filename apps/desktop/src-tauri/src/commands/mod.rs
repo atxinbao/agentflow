@@ -14,6 +14,7 @@ pub(crate) mod panel;
 pub(crate) mod project_files;
 pub(crate) mod project_loop;
 pub(crate) mod project_workspace;
+pub(crate) mod projection;
 pub(crate) mod state;
 pub(crate) mod workflow_events;
 

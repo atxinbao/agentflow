@@ -58,7 +58,7 @@ import {
   type ProjectPanelState,
   type ProjectFilesState,
 } from "./features/project-files";
-import { useIssueStatusIndex, useStateStatus, type StateStatusState } from "./features/state";
+import { useIssueStatusIndex, useStateStatus, useTaskProjection, type StateStatusState } from "./features/state";
 import {
   createBrowserPreviewProjectRegistry,
   createProjectRef,
@@ -115,7 +115,10 @@ import type {
   OutputIndex,
   OutputIndexEntry,
   ProjectFileContent,
+  ProjectionPhase,
   StateStatusSnapshot,
+  TaskProjection,
+  TaskTimelineItem,
   V1Issue,
   ExpectedOutputs,
 } from "./types";
@@ -888,6 +891,13 @@ function App() {
     [selectedTaskCandidateId, tasks],
   );
   const selectedTask = taskInteractionState.selectedTask;
+  const taskProjectionState = useTaskProjection(
+    projectRoot,
+    selectedTask?.id ?? null,
+    taskListRefreshToken + executeRefreshToken + mcpRefreshToken + outputRefreshToken,
+  );
+  const selectedTaskProjection =
+    taskProjectionState.projection?.issueId === selectedTask?.id ? taskProjectionState.projection : null;
   const agentLocale = agentManualState.status?.locale.agentLocale ?? detectAppLocale() ?? "en-US";
   const nextStep = useMemo(
     () => buildNextStep(stateStatusState, inputStatusState.status, outputStatusState, selectedTask),
@@ -1163,6 +1173,10 @@ function App() {
     setProjectLoopFeedback(null);
     try {
       const summary = await invoke<ProjectLoopTickedEvent>("run_project_loop", { projectRoot });
+      setTaskListRefreshToken((current) => current + 1);
+      setExecuteRefreshToken((current) => current + 1);
+      setMcpRefreshToken((current) => current + 1);
+      setStateRefreshToken((current) => current + 1);
       setProjectLoopState("success");
       setProjectLoopFeedback(
         summary.runtimeLaunchCount > 0
@@ -1349,6 +1363,7 @@ function App() {
             projectRoot={projectRoot}
             selectedProjectGroup={selectedProjectGroup}
             selectedTask={selectedTask}
+            selectedTaskProjection={selectedTaskProjection}
             suggestions={initializationState.status?.recentContext ?? []}
             taskTree={taskProjectTree}
             tasks={filteredTasks}
@@ -2357,6 +2372,7 @@ function TasksPage({
   outputBundle,
   selectedProjectGroup,
   selectedTask,
+  selectedTaskProjection,
   projectRoot,
   suggestions,
   taskTree,
@@ -2377,6 +2393,7 @@ function TasksPage({
   projectRoot: string | null;
   selectedProjectGroup: TaskProjectGroup | null;
   selectedTask: V1Issue | null;
+  selectedTaskProjection: TaskProjection | null;
   suggestions: ProjectInitializationContext[];
   taskTree: TaskProjectTreeViewModel | null;
   tasks: V1Issue[];
@@ -2399,6 +2416,7 @@ function TasksPage({
         projectRoot={projectRoot}
         selectedProjectGroup={selectedProjectGroup}
         selectedTask={selectedTask}
+        selectedTaskProjection={selectedTaskProjection}
         suggestions={suggestions}
         taskTree={taskTree}
         tasks={tasks}
@@ -2423,6 +2441,7 @@ function TaskList({
   projectRoot,
   selectedProjectGroup,
   selectedTask,
+  selectedTaskProjection,
   suggestions,
   taskTree,
   tasks,
@@ -2442,6 +2461,7 @@ function TaskList({
   projectRoot: string | null;
   selectedProjectGroup: TaskProjectGroup | null;
   selectedTask: V1Issue | null;
+  selectedTaskProjection: TaskProjection | null;
   suggestions: ProjectInitializationContext[];
   taskTree: TaskProjectTreeViewModel | null;
   tasks: V1Issue[];
@@ -2609,6 +2629,7 @@ function TaskList({
         selectedProjectGroup={selectedProjectGroup}
         suggestions={showContextSuggestions ? suggestions : []}
         task={selectedTask}
+        taskProjection={selectedTaskProjection}
         taskTreeSelection={taskTree?.selection ?? null}
       />
     </div>
@@ -2794,6 +2815,7 @@ function TaskDetail({
   selectedProjectGroup,
   suggestions,
   task,
+  taskProjection,
   taskTreeSelection,
 }: {
   actionFeedback: string | null;
@@ -2810,6 +2832,7 @@ function TaskDetail({
   selectedProjectGroup: TaskProjectGroup | null;
   suggestions: ProjectInitializationContext[];
   task: V1Issue | null;
+  taskProjection: TaskProjection | null;
   taskTreeSelection: TaskProjectTreeViewModel["selection"] | null;
 }) {
   if (selectedProjectGroup) {
@@ -2870,6 +2893,7 @@ function TaskDetail({
       onTaskAction={onTaskAction}
       outputBundle={outputBundle}
       task={task}
+      taskProjection={taskProjection}
     />
   );
 }
@@ -3035,6 +3059,7 @@ function TaskDetailReader({
   onTaskAction,
   outputBundle,
   task,
+  taskProjection,
 }: {
   actionFeedback: string | null;
   actions: TaskInteractionAction[];
@@ -3047,11 +3072,20 @@ function TaskDetailReader({
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
   task: V1Issue;
+  taskProjection: TaskProjection | null;
 }) {
   const [handoffOpen, setHandoffOpen] = useState(false);
   const deliveryFocusRef = useRef<HTMLDivElement | null>(null);
+  const effectiveDisplayStatus = taskProjection?.currentState ?? task.displayStatus ?? "backlog";
+  const effectiveTask: V1Issue = taskProjection
+    ? {
+        ...task,
+        displayStatus: effectiveDisplayStatus,
+        latestRunId: taskProjection.latestRunId ?? task.latestRunId,
+      }
+    : task;
   const handoffError = useMemo(() => taskHandoffValidationError(task), [task]);
-  const statusContract = useMemo(() => buildTaskStatusContract(task), [task]);
+  const statusContract = useMemo(() => buildTaskStatusContract(effectiveTask), [effectiveTask]);
   const session = useMemo(
     () => pickLatestMcpSessionForIssue(mcpSessionsState.sessions, task.id),
     [mcpSessionsState.sessions, task.id],
@@ -3076,12 +3110,12 @@ function TaskDetailReader({
     [delivery, outputBundle.auditIndex?.audits],
   );
   const stageOutputItems = useMemo(
-    () => taskCurrentStageOutputItems(task, session, delivery, evidence, audit),
-    [audit, delivery, evidence, session, task],
+    () => taskCurrentStageOutputItems(effectiveTask, session, delivery, evidence, audit),
+    [audit, delivery, effectiveTask, evidence, session],
   );
   const executeSummaryItems = useMemo(
-    () => taskExecuteSummaryItems(task, session, mcpSessionsState, executeStatusState),
-    [executeStatusState, mcpSessionsState, session, task],
+    () => taskExecuteSummaryItems(effectiveTask, session, mcpSessionsState, executeStatusState),
+    [effectiveTask, executeStatusState, mcpSessionsState, session],
   );
   const executionProjection = useMemo(
     () =>
@@ -3093,13 +3127,13 @@ function TaskDetailReader({
         mcpSessionsError: mcpSessionsState.error,
         mcpSessionsSource: mcpSessionsState.source,
         session,
-        task,
+        task: effectiveTask,
       }),
-    [executeStatusState, mcpSessionsState, session, task],
+    [effectiveTask, executeStatusState, mcpSessionsState, session],
   );
   const deliveryProjection = useMemo(
-    () => buildTaskDeliveryProjection({ audit, delivery, evidence, session, task }),
-    [audit, delivery, evidence, session, task],
+    () => buildTaskDeliveryProjection({ audit, delivery, evidence, session, task: effectiveTask }),
+    [audit, delivery, effectiveTask, evidence, session],
   );
   const workflowYaml = useMemo(
     () =>
@@ -3107,9 +3141,9 @@ function TaskDetailReader({
         contract: statusContract,
         deliveryProjection,
         executionProjection,
-        task,
+        task: effectiveTask,
       }),
-    [deliveryProjection, executionProjection, statusContract, task],
+    [deliveryProjection, effectiveTask, executionProjection, statusContract],
   );
   const deliveryArtifacts = useMemo(
     () => outputBundle.deliveryArtifacts[delivery?.runId ?? task.latestRunId ?? ""] ?? null,
@@ -3145,8 +3179,8 @@ function TaskDetailReader({
           </span>
           <span className="v16-detail-meta-item">
             <span className="v16-detail-meta-label">状态</span>
-            <StatusBadge status={statusChipForDisplayStatus(task.displayStatus)}>
-              {displayStatusLabelZh(task.displayStatus)}
+            <StatusBadge status={statusChipForDisplayStatus(effectiveDisplayStatus)}>
+              {displayStatusLabelZh(effectiveDisplayStatus)}
             </StatusBadge>
           </span>
           <span className="v16-detail-meta-item">
@@ -3169,11 +3203,12 @@ function TaskDetailReader({
       </header>
       <div className="v16-detail-document">
         <IssueStatusFlow
-          task={task}
+          task={effectiveTask}
           executeItems={executeSummaryItems}
+          projection={taskProjection}
           reviewItems={deliveryReviewItems(task, deliveryArtifacts, session)}
           stageItems={stageOutputItems}
-          status={task.displayStatus ?? "backlog"}
+          status={effectiveDisplayStatus}
         />
         <div ref={deliveryFocusRef} className="v16-task-delivery-focus-region" />
         <details className="v16-task-package">
@@ -3315,23 +3350,28 @@ function TaskFinalDeliveryCard({
 function IssueStatusFlow({
   task,
   executeItems,
+  projection,
   reviewItems,
   stageItems,
   status,
 }: {
   task: V1Issue;
   executeItems: string[];
+  projection: TaskProjection | null;
   reviewItems: string[];
   stageItems: string[];
   status: IssueDisplayStatus;
 }) {
   const contract = buildTaskStatusContract(task);
-  const steps = buildTaskStatusTimeline(status, contract);
-  const [selectedStepId, setSelectedStepId] = useState<IssueDisplayStatus>(status);
+  const projectedStatus = projection?.currentState ?? status;
+  const steps = projection
+    ? buildProjectionTaskStatusTimeline(projection, contract)
+    : buildTaskStatusTimeline(projectedStatus, contract);
+  const [selectedStepId, setSelectedStepId] = useState<IssueDisplayStatus>(projectedStatus);
 
   useEffect(() => {
-    setSelectedStepId(status);
-  }, [status, task.id]);
+    setSelectedStepId(projectedStatus);
+  }, [projectedStatus, task.id]);
 
   const selectedStepLabel = steps.find((step) => step.id === selectedStepId)?.label ?? contract.label;
 
@@ -3345,14 +3385,19 @@ function IssueStatusFlow({
         {steps.map((step) => {
           const state = step.state === "exception" ? step.id : step.state;
           const expanded = step.id === selectedStepId;
+          const projectionItem = projection?.timeline.find((item) => item.state === step.id) ?? null;
           const detail = expanded
-            ? buildTaskStatusStepDetail({
-                currentStatus: status,
-                executeItems,
-                reviewItems,
-                stageItems,
-                task,
-                viewedStatus: step.id,
+            ? enhanceTaskStatusStepDetailWithProjection({
+                detail: buildTaskStatusStepDetail({
+                  currentStatus: projectedStatus,
+                  executeItems,
+                  reviewItems,
+                  stageItems,
+                  task,
+                  viewedStatus: step.id,
+                }),
+                projection,
+                projectionItem,
               })
             : null;
           return (
@@ -3407,6 +3452,127 @@ function IssueStatusFlow({
       </ol>
     </section>
   );
+}
+
+function buildProjectionTaskStatusTimeline(
+  projection: TaskProjection,
+  contract: ReturnType<typeof buildTaskStatusContract>,
+) {
+  const knownStates = new Set<IssueDisplayStatus>([
+    "backlog",
+    "todo",
+    "in_progress",
+    "in_review",
+    "done",
+    "blocked",
+    "cancel",
+  ]);
+  const timeline = projection.timeline.filter((item) => knownStates.has(item.state));
+  if (!timeline.length) {
+    return buildTaskStatusTimeline(projection.currentState, contract);
+  }
+
+  return timeline.map((item) => ({
+    id: item.state,
+    label: displayStatusLabelZh(item.state),
+    note: item.summary || projectionPhaseLabel(item.phase),
+    state: projectionPhaseStepState(item.phase),
+  }));
+}
+
+function projectionPhaseStepState(phase: ProjectionPhase) {
+  switch (phase) {
+    case "past":
+      return "done" as const;
+    case "current":
+      return "current" as const;
+    case "exception":
+      return "exception" as const;
+    case "future":
+    default:
+      return "idle" as const;
+  }
+}
+
+function projectionPhaseLabel(phase: ProjectionPhase) {
+  const labels: Record<ProjectionPhase, string> = {
+    current: "当前阶段",
+    exception: "异常阶段",
+    future: "等待进入",
+    past: "已完成阶段",
+  };
+  return labels[phase];
+}
+
+function enhanceTaskStatusStepDetailWithProjection({
+  detail,
+  projection,
+  projectionItem,
+}: {
+  detail: ReturnType<typeof buildTaskStatusStepDetail>;
+  projection: TaskProjection | null;
+  projectionItem: TaskTimelineItem | null;
+}) {
+  if (!projection || !projectionItem) {
+    return detail;
+  }
+
+  const eventItems = projectionItem.events.length
+    ? projectionItem.events.map((eventType) => `事件：${eventType}`)
+    : projectionItem.phase === "future"
+      ? ["这个阶段还没有事件。"]
+      : ["这个阶段没有记录到事件。"];
+  const artifactItems = projectionItem.liveRefs.length
+    ? projectionItem.liveRefs.map((ref) => `产物：${ref}`)
+    : projectionItem.phase === "future"
+      ? ["这个阶段还没有产物。"]
+      : ["这个阶段没有记录到产物。"];
+  const publicDeliveryItems =
+    projectionItem.state === "done"
+      ? projectionPublicDeliveryItems(projection)
+      : [];
+
+  return {
+    descriptionItems: [
+      ...detail.descriptionItems,
+      ["事件阶段", projectionPhaseLabel(projectionItem.phase)] as [string, string],
+      [
+        "进入时间",
+        projectionItem.enteredAt ? formatTimestamp(projectionItem.enteredAt) : "未记录",
+      ] as [string, string],
+      ["事件来源", projection.currentTransition ?? "等待事件"] as [string, string],
+    ],
+    sections: [
+      {
+        title: "状态事件",
+        items: [projectionItem.summary, ...eventItems],
+      },
+      {
+        title: "事件产物",
+        items: artifactItems,
+      },
+      ...(publicDeliveryItems.length
+        ? [
+            {
+              title: "公开交付",
+              items: publicDeliveryItems,
+            },
+          ]
+        : []),
+      ...detail.sections,
+    ],
+  };
+}
+
+function projectionPublicDeliveryItems(projection: TaskProjection) {
+  const delivery = projection.publicDelivery;
+  return [
+    delivery.prUrl ? `PR/MR：${delivery.prUrl}` : "PR/MR：未记录",
+    delivery.mergeCommit ? `合并提交：${delivery.mergeCommit}` : "合并提交：未记录",
+    delivery.evidencePath ? `验证证据：${delivery.evidencePath}` : "验证证据：未记录",
+    delivery.changelogPath ? `CHANGELOG：${delivery.changelogPath}` : "CHANGELOG：未记录",
+    delivery.releaseNotesUrl ? `Release notes：${delivery.releaseNotesUrl}` : "Release notes：未记录",
+  ];
 }
 
 function taskStatusTransitionLabel(status: IssueDisplayStatus, nextEntry: string) {
