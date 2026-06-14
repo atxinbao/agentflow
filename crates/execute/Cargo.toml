@@ -8,6 +8,7 @@ agentflow-agent-manual = { path = "../agent-manual" }
 agentflow-input = { path = "../input" }
 agentflow-output = { path = "../output" }
 agentflow-panel = { path = "../panel" }
+agentflow-task-artifacts = { path = "../task-artifacts" }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

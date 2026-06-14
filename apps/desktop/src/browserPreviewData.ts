@@ -203,7 +203,7 @@ function browserPreviewInputIssue(
 
 function previewBuildExpectedOutputs(issueId: string) {
   return {
-    evidencePath: `.agentflow/output/evidence/${issueId}.json`,
+    evidencePath: `.agentflow/tasks/${issueId}/evidence/evidence.json`,
     executeRunDir: `.agentflow/execute/runs/${issueId}`,
     releaseDeliveryDir: `.agentflow/output/release/${issueId}`,
   };
@@ -834,14 +834,14 @@ export function createBrowserPreviewOutputIndex(): OutputIndex {
         previewReviewRunId,
         "iss-review",
         previewSpecId,
-        `.agentflow/output/evidence/${previewReviewRunId}.json`,
+        `.agentflow/tasks/iss-review/evidence/evidence.json`,
         "complete",
       ),
       browserPreviewOutputEntry(
         previewDoneRunId,
         previewDoneIssueId,
         previewSpecId,
-        `.agentflow/output/evidence/${previewDoneRunId}.json`,
+        `.agentflow/tasks/${previewDoneIssueId}/evidence/evidence.json`,
         "complete",
       ),
     ],
@@ -913,7 +913,7 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
           {
             kind: "evidence",
             id: previewDeliveryRunId,
-            path: `.agentflow/output/evidence/${previewDeliveryRunId}.json`,
+            path: `.agentflow/tasks/${previewDoneIssueId}/evidence/evidence.json`,
           },
           {
             kind: "release-delivery",
@@ -962,7 +962,7 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
       "- [x] Request Human Audit 在浏览器预览中禁用\n" +
       "- [x] audit-report.md 可只读展示\n",
     evidenceMap: {
-      evidence: [`.agentflow/output/evidence/${previewDeliveryRunId}.json`],
+      evidence: [`.agentflow/tasks/${previewDoneIssueId}/evidence/evidence.json`],
       releaseDelivery: [`.agentflow/output/release/${previewDeliveryRunId}/delivery.json`],
     },
     traceability: {

@@ -112,6 +112,7 @@ dependencies = [
  "agentflow-input",
  "agentflow-output",
  "agentflow-panel",
+ "agentflow-task-artifacts",
  "anyhow",
  "serde",
  "serde_json",

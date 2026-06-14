@@ -74,7 +74,7 @@ impl ProjectAuditGate {
         let audit_dir = root.join(".agentflow/audit").join(&audit_id);
         ensure_directory(&audit_dir)?;
 
-        let checks = delivery_checks(&root, &run_id);
+        let checks = delivery_checks(&root, &issue_id, &run_id);
         let status = audit_status_from_checks(&checks);
         let summary = audit_summary_from_checks(&checks);
         let requested_at = now();
@@ -319,7 +319,7 @@ impl ProjectAuditGate {
     }
 }
 
-fn delivery_checks(root: &Path, run_id: &str) -> AuditChecks {
+fn delivery_checks(root: &Path, issue_id: &str, run_id: &str) -> AuditChecks {
     AuditChecks {
         checkpoint_exists: status_for(
             root.join(format!(".agentflow/execute/runs/{run_id}/checkpoints")),
@@ -334,9 +334,9 @@ fn delivery_checks(root: &Path, run_id: &str) -> AuditChecks {
             root.join(format!(".agentflow/execute/runs/{run_id}/commands")),
         ),
         high_risk_confirmed_if_needed: AuditCheckStatus::Passed,
-        evidence_complete: status_for(
-            root.join(format!(".agentflow/output/evidence/{run_id}.json")),
-        ),
+        evidence_complete: status_for(root.join(format!(
+            ".agentflow/tasks/{issue_id}/evidence/evidence.json"
+        ))),
         release_delivery_complete: release_delivery_check(root, run_id),
     }
 }
@@ -422,7 +422,7 @@ fn delivery_scope_refs(issue_id: &str, run_id: &str) -> Vec<AuditScopeRef> {
         AuditScopeRef {
             kind: "evidence".to_string(),
             id: run_id.to_string(),
-            path: format!(".agentflow/output/evidence/{run_id}.json"),
+            path: format!(".agentflow/tasks/{issue_id}/evidence/evidence.json"),
         },
         AuditScopeRef {
             kind: "release-delivery".to_string(),

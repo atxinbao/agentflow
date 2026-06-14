@@ -589,11 +589,11 @@ impl InputIssue {
             self.expected_outputs = BTreeMap::from([
                 (
                     "executeRunDir".to_string(),
-                    format!(".agentflow/execute/runs/{}", self.issue_id),
+                    format!(".agentflow/tasks/{}/runs", self.issue_id),
                 ),
                 (
                     "evidencePath".to_string(),
-                    format!(".agentflow/output/evidence/{}.json", self.issue_id),
+                    format!(".agentflow/tasks/{}/evidence/evidence.json", self.issue_id),
                 ),
                 (
                     "releaseDeliveryDir".to_string(),
@@ -616,7 +616,7 @@ impl InputIssue {
             self.allowed_paths = vec![
                 ".agentflow/audit/**".to_string(),
                 ".agentflow/output/release/**".to_string(),
-                ".agentflow/output/evidence/**".to_string(),
+                ".agentflow/tasks/**/evidence/**".to_string(),
                 ".agentflow/input/issues/**".to_string(),
                 ".agentflow/input/specs/approved/**".to_string(),
             ];
@@ -625,7 +625,7 @@ impl InputIssue {
             self.forbidden_paths = vec![
                 ".agentflow/execute/**".to_string(),
                 ".agentflow/output/release/**".to_string(),
-                ".agentflow/output/evidence/**".to_string(),
+                ".agentflow/tasks/**".to_string(),
                 ".agentflow/spec/**".to_string(),
                 ".agentflow/goal-tree/**".to_string(),
             ];
@@ -879,19 +879,13 @@ impl Default for AgentRolesDocument {
                     label: "需求助手".to_string(),
                     allowed_issue_categories: Vec::new(),
                     allowed_writes: vec![
-                        ".agentflow/input/intake/**".to_string(),
-                        ".agentflow/input/specs/**".to_string(),
-                        ".agentflow/input/issues/**".to_string(),
+                        "docs/requirements/**".to_string(),
+                        ".agentflow/spec/projects/**".to_string(),
+                        ".agentflow/spec/issues/**".to_string(),
                     ],
                     forbidden_writes: vec![
-                        ".agentflow/execute/**".to_string(),
-                        ".agentflow/output/release/**".to_string(),
+                        ".agentflow/tasks/**".to_string(),
                         ".agentflow/audit/**".to_string(),
-                        ".agentflow/spec/**".to_string(),
-                        ".agentflow/goal-tree/**".to_string(),
-                        ".agentflow/define/goals/**".to_string(),
-                        ".agentflow/define/milestones/**".to_string(),
-                        ".agentflow/define/issues/**".to_string(),
                     ],
                 },
                 AgentRoleDescriptor {
@@ -900,18 +894,12 @@ impl Default for AgentRolesDocument {
                     allowed_issue_categories: vec![IssueCategory::Spec],
                     allowed_writes: vec![
                         ".agentflow/execute/**".to_string(),
-                        ".agentflow/output/evidence/**".to_string(),
+                        ".agentflow/tasks/<issue-id>/runs/**".to_string(),
+                        ".agentflow/tasks/<issue-id>/evidence/**".to_string(),
                         ".agentflow/output/release/**".to_string(),
-                        ".agentflow/state/events/**".to_string(),
+                        ".agentflow/events/**".to_string(),
                     ],
-                    forbidden_writes: vec![
-                        ".agentflow/audit/**".to_string(),
-                        ".agentflow/spec/**".to_string(),
-                        ".agentflow/goal-tree/**".to_string(),
-                        ".agentflow/define/goals/**".to_string(),
-                        ".agentflow/define/milestones/**".to_string(),
-                        ".agentflow/define/issues/**".to_string(),
-                    ],
+                    forbidden_writes: vec![".agentflow/audit/**".to_string()],
                 },
                 AgentRoleDescriptor {
                     agent_role: AgentRole::AuditAgent,
@@ -919,18 +907,9 @@ impl Default for AgentRolesDocument {
                     allowed_issue_categories: vec![IssueCategory::Audit],
                     allowed_writes: vec![
                         ".agentflow/audit/**".to_string(),
-                        ".agentflow/state/events/**".to_string(),
+                        ".agentflow/events/**".to_string(),
                     ],
-                    forbidden_writes: vec![
-                        ".agentflow/execute/**".to_string(),
-                        ".agentflow/output/evidence/**".to_string(),
-                        ".agentflow/output/release/**".to_string(),
-                        ".agentflow/spec/**".to_string(),
-                        ".agentflow/goal-tree/**".to_string(),
-                        ".agentflow/define/goals/**".to_string(),
-                        ".agentflow/define/milestones/**".to_string(),
-                        ".agentflow/define/issues/**".to_string(),
-                    ],
+                    forbidden_writes: vec![".agentflow/tasks/**".to_string()],
                 },
             ],
         }
@@ -1049,9 +1028,50 @@ pub fn validate_agent_write_paths(
 
 pub fn path_matches_role_pattern(path: &str, pattern: &str) -> bool {
     let normalized_path = path.trim_start_matches("./");
-    let normalized_pattern = pattern.trim_start_matches("./");
+    let normalized_pattern = pattern
+        .trim_start_matches("./")
+        .replace("<issue-id>", "*")
+        .replace("<run-id>", "*");
     if let Some(prefix) = normalized_pattern.strip_suffix("/**") {
-        return normalized_path == prefix || normalized_path.starts_with(&format!("{prefix}/"));
+        return wildcard_path_prefix_matches(normalized_path, prefix);
     }
-    normalized_path == normalized_pattern
+    wildcard_path_matches(normalized_path, &normalized_pattern)
+}
+
+fn wildcard_path_prefix_matches(path: &str, pattern_prefix: &str) -> bool {
+    if wildcard_path_matches(path, pattern_prefix) {
+        return true;
+    }
+    for (index, ch) in path.char_indices() {
+        if ch == '/' && wildcard_path_matches(&path[..index], pattern_prefix) {
+            return true;
+        }
+    }
+    false
+}
+
+fn wildcard_path_matches(path: &str, pattern: &str) -> bool {
+    if !pattern.contains('*') {
+        return path == pattern;
+    }
+    let mut remainder = path;
+    let mut first = true;
+    for part in pattern.split('*') {
+        if part.is_empty() {
+            continue;
+        }
+        if first {
+            if !remainder.starts_with(part) {
+                return false;
+            }
+            remainder = &remainder[part.len()..];
+            first = false;
+            continue;
+        }
+        let Some(index) = remainder.find(part) else {
+            return false;
+        };
+        remainder = &remainder[index + part.len()..];
+    }
+    pattern.ends_with('*') || remainder.is_empty()
 }

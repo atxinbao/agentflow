@@ -55,10 +55,7 @@ mod tests {
     };
     use agentflow_output::{
         request_human_audit, AuditScope, AuditScopeRef, HumanAuditRequestDraft,
-        OutputCommandEvidence, OutputEvidence, OutputEvidenceExecuteArtifacts, OutputEvidenceInput,
-        OutputEvidencePanel, OutputManualProof, OutputReleaseDelivery,
-        OutputReleaseDeliveryArtifacts, OutputValidationSummary, OUTPUT_EVIDENCE_VERSION,
-        OUTPUT_RELEASE_DELIVERY_VERSION,
+        OutputReleaseDelivery, OutputReleaseDeliveryArtifacts, OUTPUT_RELEASE_DELIVERY_VERSION,
     };
     use serde_json::json;
     use std::{fs, path::Path};
@@ -155,62 +152,12 @@ mod tests {
 
     fn write_evidence_and_delivery(root: &Path, run: &ExecuteRun) {
         let run_id = &run.run_id;
-        let evidence = OutputEvidence {
-            version: OUTPUT_EVIDENCE_VERSION.to_string(),
-            run_id: run_id.clone(),
-            issue_id: run.issue_id.clone(),
-            source_spec_id: run.source_spec_id.clone(),
-            risk_level: run.risk_level.clone(),
-            completed_at: 1,
-            summary: "Evidence fixture".to_string(),
-            input: OutputEvidenceInput {
-                issue_path: ".agentflow/input/issues/iss-001.json".to_string(),
-                spec_path: ".agentflow/input/specs/approved/spec-001".to_string(),
-            },
-            panel: OutputEvidencePanel::default(),
-            execute: OutputEvidenceExecuteArtifacts {
-                run: format!(".agentflow/execute/runs/{run_id}/run.json"),
-                preflight: format!(".agentflow/execute/runs/{run_id}/preflight.json"),
-                plan: format!(".agentflow/execute/runs/{run_id}/plan.json"),
-                result: format!(".agentflow/execute/runs/{run_id}/result.json"),
-                checkpoint: Some(format!(
-                    ".agentflow/execute/runs/{run_id}/checkpoints/chk-001.json"
-                )),
-                diff: Some(format!(
-                    ".agentflow/execute/runs/{run_id}/patches/worktree.diff"
-                )),
-                changed_files: Some(format!(
-                    ".agentflow/execute/runs/{run_id}/patches/changed-files.json"
-                )),
-                diff_summary: Some(format!(
-                    ".agentflow/execute/runs/{run_id}/review/diff-summary.json"
-                )),
-            },
-            commands: vec![OutputCommandEvidence {
-                command_id: "cmd-001".to_string(),
-                label: "printf ok".to_string(),
-                exit_code: Some(0),
-                record_path: format!(".agentflow/execute/runs/{run_id}/commands/cmd-001.json"),
-                stdout_path: Some(format!(
-                    ".agentflow/execute/runs/{run_id}/commands/cmd-001.stdout.txt"
-                )),
-                stderr_path: Some(format!(
-                    ".agentflow/execute/runs/{run_id}/commands/cmd-001.stderr.txt"
-                )),
-            }],
-            validation: OutputValidationSummary {
-                passed: true,
-                failed_commands: Vec::new(),
-                skipped: Vec::new(),
-            },
-            manual_proof: OutputManualProof::default(),
-        };
-        fs::write(
-            root.join(".agentflow/output/evidence")
-                .join(format!("{run_id}.json")),
-            serde_json::to_string_pretty(&evidence).unwrap(),
-        )
-        .unwrap();
+        assert!(root
+            .join(format!(
+                ".agentflow/tasks/{}/evidence/evidence.json",
+                run.issue_id
+            ))
+            .is_file());
         let release_dir = root.join(".agentflow/output/release").join(run_id);
         fs::create_dir_all(&release_dir).unwrap();
         let delivery = OutputReleaseDelivery {
@@ -222,7 +169,7 @@ mod tests {
             status: "drafted".to_string(),
             created_by: "Build Agent".to_string(),
             created_at: 1,
-            evidence_path: format!(".agentflow/output/evidence/{run_id}.json"),
+            evidence_path: format!(".agentflow/tasks/{}/evidence/evidence.json", run.issue_id),
             execute_result_path: format!(".agentflow/execute/runs/{run_id}/result.json"),
             diff_summary_path: Some(format!(
                 ".agentflow/execute/runs/{run_id}/review/diff-summary.json"

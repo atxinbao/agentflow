@@ -508,13 +508,5 @@ pub fn execute_paths() -> BTreeMap<String, String> {
             ".agentflow/execute/leases".to_string(),
         ),
         ("queue".to_string(), ".agentflow/execute/queue".to_string()),
-        (
-            "evidence".to_string(),
-            ".agentflow/output/evidence".to_string(),
-        ),
-        (
-            "release".to_string(),
-            ".agentflow/output/release".to_string(),
-        ),
     ])
 }

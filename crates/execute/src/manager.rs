@@ -17,6 +17,9 @@ use agentflow_input::{
     },
     update_input_issue_branch_name,
 };
+use agentflow_task_artifacts::{
+    create_task_run, load_task_run, prepare_task_artifact_workspace, TaskRunStatus,
+};
 use anyhow::{Context, Result};
 use std::{path::Path, process::Command};
 
@@ -41,7 +44,6 @@ pub fn prepare_execute_workspace(project_root: impl AsRef<Path>) -> Result<Execu
     for relative_path in EXECUTE_DIRECTORIES {
         ensure_directory(&root.join(relative_path))?;
     }
-    agentflow_output::prepare_output_workspace(&root)?;
 
     write_json_if_missing(
         &root.join(".agentflow/execute/queue/pending.json"),
@@ -179,7 +181,7 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
             preflight: format!(".agentflow/execute/runs/{run_id}/preflight.json"),
             plan: format!(".agentflow/execute/runs/{run_id}/plan.json"),
             result: format!(".agentflow/execute/runs/{run_id}/result.json"),
-            evidence: format!(".agentflow/output/evidence/{run_id}.json"),
+            evidence: format!(".agentflow/tasks/{}/evidence/evidence.json", issue.issue_id),
         },
     };
     write_run(&root, &run)?;
@@ -230,6 +232,7 @@ pub fn create_execute_run(project_root: impl AsRef<Path>, issue_id: String) -> R
         &issue.issue_id,
         Some(branch_check.issue_branch.clone()),
     )?;
+    ensure_task_run_for_execute_run(&root, &issue, &run, Some(branch_check.issue_branch.clone()))?;
     sync_issue_loop_projection(&root, &run, InputIssueStatus::Todo, None, Vec::new())?;
     rebuild_index(&root)?;
     build_execute_snapshot(&root)?;
@@ -472,12 +475,38 @@ pub(crate) fn assert_build_agent_run(root: &Path, run: &ExecuteRun) -> Result<In
         &AgentRole::BuildAgent,
         &[
             format!(".agentflow/execute/runs/{}", run.run_id),
-            format!(".agentflow/output/evidence/{}.json", run.run_id),
+            format!(".agentflow/tasks/{}/runs/{}", run.issue_id, run.run_id),
+            format!(".agentflow/tasks/{}/evidence/**", run.issue_id),
             format!(".agentflow/output/release/{}", run.run_id),
         ],
         &AgentRolesDocument::default(),
     )?;
     Ok(issue)
+}
+
+pub(crate) fn ensure_task_run_for_execute_run(
+    root: &Path,
+    issue: &InputIssue,
+    run: &ExecuteRun,
+    branch_name: Option<String>,
+) -> Result<()> {
+    prepare_task_artifact_workspace(root, &issue.issue_id)?;
+    if load_task_run(root, &issue.issue_id, &run.run_id).is_ok() {
+        return Ok(());
+    }
+    create_task_run(
+        root,
+        &issue.issue_id,
+        &run.run_id,
+        "build-agent.issue-loop@v1",
+        branch_name,
+    )?;
+    Ok(())
+}
+
+pub(crate) fn sync_task_run_status(root: &Path, run: &ExecuteRun, status: TaskRunStatus) {
+    let _ =
+        agentflow_task_artifacts::update_task_run_status(root, &run.issue_id, &run.run_id, status);
 }
 
 fn write_branch_check(

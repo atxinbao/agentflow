@@ -92,7 +92,7 @@ function workflowTask(status: WorkflowStatus): V1Issue {
               ? "cancelled"
               : "completed",
     expectedOutputs: {
-      evidencePath: `.agentflow/output/evidence/run-${status}.json`,
+      evidencePath: `.agentflow/tasks/issue-${status}/evidence/evidence.json`,
       executeRunDir: `.agentflow/execute/runs/run-${status}`,
       releaseDeliveryDir: `.agentflow/output/release/run-${status}`,
       releaseNotePath: `.agentflow/output/release/run-${status}/release-note.md`,
