@@ -440,7 +440,7 @@ Legacy compatibility areas:
 - `legacy/mod.rs` no longer exposes `pub use archive_2026_05::*`.
 - `legacy/evidence.rs` was removed because it had no active/CLI/Desktop import.
 - CLI legacy dispatch no longer imports old writer compatibility modules.
-- Desktop no longer registers legacy read-model Tauri commands; tasks come from input snapshots.
+- Desktop no longer registers legacy read-model Tauri commands; tasks come from spec contracts and task projections.
 
 Shared neutral boundaries:
 
