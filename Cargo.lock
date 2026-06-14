@@ -73,6 +73,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-event-store"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-execute"
 version = "0.1.0"
 dependencies = [
