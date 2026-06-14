@@ -12,6 +12,13 @@ pub(crate) fn rebuild_task_projections(
 }
 
 #[tauri::command]
+pub(crate) fn load_projection_issue_status_index(
+    project_root: String,
+) -> Result<agentflow_projection::IssueStatusIndex, String> {
+    agentflow_projection::load_issue_status_index(project_root).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub(crate) fn load_task_projection(
     project_root: String,
     issue_id: String,

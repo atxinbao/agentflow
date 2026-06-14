@@ -68,6 +68,7 @@ fn main() {
             commands::workflow_events::dispatch_workflow_events,
             commands::project_loop::run_project_loop,
             commands::projection::rebuild_task_projections,
+            commands::projection::load_projection_issue_status_index,
             commands::projection::load_task_projection,
             commands::projection::load_project_projection,
             commands::agent_manual::prepare_agent_working_manual,

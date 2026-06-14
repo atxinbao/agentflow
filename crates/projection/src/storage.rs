@@ -64,6 +64,11 @@ pub fn load_project_projection(
     read_json(&project_projection_path(&root, project_id))
 }
 
+pub fn load_issue_status_index(project_root: impl AsRef<Path>) -> Result<IssueStatusIndex> {
+    let root = canonical_project_root(project_root)?;
+    read_json(&root.join(".agentflow/indexes/issue-status.json"))
+}
+
 fn task_projection_path(root: &Path, issue_id: &str) -> PathBuf {
     root.join(".agentflow/projections/tasks")
         .join(format!("{}.json", sanitize_id(issue_id)))
