@@ -4,8 +4,8 @@
 //! They must not call archived 2026-05 writers.
 
 use agentflow_execute::{
-    claim_build_agent_launch, mark_build_agent_launch_done, mark_build_agent_launch_in_review,
-    BuildAgentCompletion, BuildAgentCompletionRequest,
+    mark_build_agent_launch_done, mark_build_agent_launch_in_review, BuildAgentCompletion,
+    BuildAgentCompletionRequest,
 };
 use agentflow_input::issue::{
     AgentRole, InputIssue, InputIssueModel, InputIssueStatus, IssueCategory,
@@ -14,12 +14,12 @@ use agentflow_loop::{
     write_issue_merge_proof, DirectIssueLoop, IssueLoop, IssueLoopProjection,
     ProjectExecutionLaunch, ProjectExecutor, ProjectLoop,
 };
+use agentflow_task_loop::{AgentLaunchPayload, AGENT_LAUNCH_REQUESTED};
 use agentflow_workflow_events::{
-    append_event_once, load_pending_events, mark_event_consumed, BuildAgentLaunchRequestedPayload,
-    BuildAgentMergeConfirmedPayload, BuildAgentSessionReviewReadyPayload,
-    BuildAgentWritebackCompletedPayload, WorkflowEventDraft, CONSUMER_BUILD_AGENT,
-    EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED, EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED,
-    EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY, EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED,
+    append_event_once, BuildAgentMergeConfirmedPayload, BuildAgentSessionReviewReadyPayload,
+    BuildAgentWritebackCompletedPayload, WorkflowEventDraft,
+    EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED, EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY,
+    EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED,
 };
 use anyhow::{Context, Result};
 use std::{
@@ -156,17 +156,20 @@ pub(crate) fn start_build_agent_issue(root: &Path, issue_id: &str) -> Result<Bui
 
 pub(crate) fn claim_next_build_agent_launch(root: &Path) -> Result<Option<BuildAgentLaunchClaim>> {
     assert_current_cli_is_fresh(root)?;
-    let pending = load_pending_events(
+    claim_next_build_agent_launch_with_bridge(
         root,
-        CONSUMER_BUILD_AGENT,
-        &[EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED],
-    )?;
-    let Some(event) = pending.into_iter().next() else {
+        &agentflow_agent_bridge::AgentBridge::with_default_providers(),
+    )
+}
+
+fn claim_next_build_agent_launch_with_bridge(
+    root: &Path,
+    bridge: &agentflow_agent_bridge::AgentBridge,
+) -> Result<Option<BuildAgentLaunchClaim>> {
+    let Some(claim) = bridge.claim_next_launch(root)? else {
         return Ok(None);
     };
-    let payload: BuildAgentLaunchRequestedPayload =
-        serde_json::from_value(event.payload.clone())
-            .with_context(|| format!("parse build-agent launch payload {}", event.event_id))?;
+    let payload = load_agent_launch_payload(root, &claim.run_id)?;
     let launch_request_path = root.join(&payload.launch_request_path);
     if !launch_request_path.is_file() {
         anyhow::bail!(
@@ -174,23 +177,29 @@ pub(crate) fn claim_next_build_agent_launch(root: &Path) -> Result<Option<BuildA
             launch_request_path.display()
         );
     }
-    claim_build_agent_launch(
-        root,
-        &payload.issue_id,
-        Some(&payload.project_id),
-        &payload.run_id,
-        payload.branch_name.clone(),
-        payload.launch_request_path.clone(),
-        event.event_id.clone(),
-    )?;
-    mark_event_consumed(root, CONSUMER_BUILD_AGENT, &event.event_id)?;
     Ok(Some(BuildAgentLaunchClaim {
-        event_id: event.event_id,
-        issue_id: payload.issue_id,
-        run_id: payload.run_id,
-        branch_name: payload.branch_name,
+        event_id: claim.created_event_id,
+        issue_id: claim.issue_id,
+        run_id: claim.run_id,
+        branch_name: Some(payload.branch_name),
         launch_request_path,
     }))
+}
+
+fn load_agent_launch_payload(root: &Path, run_id: &str) -> Result<AgentLaunchPayload> {
+    let event = agentflow_event_store::load_task_events(root)?
+        .into_iter()
+        .find(|event| {
+            event.event_type == AGENT_LAUNCH_REQUESTED
+                && event
+                    .payload
+                    .get("runId")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(run_id)
+        })
+        .ok_or_else(|| anyhow::anyhow!("missing agent launch request for run {run_id}"))?;
+    serde_json::from_value(event.payload)
+        .with_context(|| format!("parse agent launch payload {}", event.event_id))
 }
 
 pub(crate) fn write_build_agent_merge_proof(
@@ -462,9 +471,9 @@ fn binary_is_stale(binary_modified: SystemTime, newest_source_modified: SystemTi
 #[cfg(test)]
 mod tests {
     use super::{
-        binary_is_stale, claim_next_build_agent_launch, complete_build_agent_issue_from_request,
-        is_local_target_binary, prepare_build_agent_review_from_request, rebuild_hint,
-        write_build_agent_merge_proof,
+        binary_is_stale, claim_next_build_agent_launch_with_bridge,
+        complete_build_agent_issue_from_request, is_local_target_binary,
+        prepare_build_agent_review_from_request, rebuild_hint, write_build_agent_merge_proof,
     };
     use agentflow_execute::{
         acquire_execute_lease, apply_execute_patch, create_execute_checkpoint,
@@ -480,12 +489,16 @@ mod tests {
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
     use agentflow_loop::ProjectExecutor;
-    use agentflow_workflow_events::{
-        append_event_once, load_events, load_pending_events, BuildAgentLaunchRequestedPayload,
-        WorkflowEventDraft, CONSUMER_BUILD_AGENT, EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED,
-        EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED, EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY,
-        EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED,
+    use agentflow_mcp::{
+        McpAgentProvider, McpLaunchMode, McpLaunchPlan, McpLaunchRequest, McpProviderBridge,
+        McpProviderKind, McpProviderStatus, McpProviderStatusCode,
     };
+    use agentflow_workflow_events::{
+        load_events, load_pending_events, CONSUMER_BUILD_AGENT,
+        EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED, EVENT_TYPE_BUILD_AGENT_MERGE_CONFIRMED,
+        EVENT_TYPE_BUILD_AGENT_SESSION_REVIEW_READY, EVENT_TYPE_BUILD_AGENT_WRITEBACK_COMPLETED,
+    };
+    use anyhow::Result;
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -493,6 +506,43 @@ mod tests {
         time::{Duration, UNIX_EPOCH},
     };
     use tempfile::tempdir;
+
+    struct FakeProvider;
+
+    impl McpAgentProvider for FakeProvider {
+        fn provider_id(&self) -> &'static str {
+            "fake"
+        }
+
+        fn kind(&self) -> McpProviderKind {
+            McpProviderKind::Codex
+        }
+
+        fn check_health(&self, _project_root: &Path) -> McpProviderStatus {
+            let mut status = McpProviderStatus::new(McpProviderKind::Codex, 1);
+            status.provider = "fake".to_string();
+            status.status = McpProviderStatusCode::Ready;
+            status
+        }
+
+        fn build_launch_plan(
+            &self,
+            _project_root: &Path,
+            request: &McpLaunchRequest,
+        ) -> Result<McpLaunchPlan> {
+            let mut plan = McpLaunchPlan::new(
+                "fake",
+                format!("fake-{}", request.run_id),
+                request.issue_id.clone(),
+                request.run_id.clone(),
+                McpLaunchMode::CliExecPromptFile,
+                request.working_directory.clone(),
+                "fake-agent",
+            );
+            plan.stdin_path = Some(request.launch_request_path.clone());
+            Ok(plan)
+        }
+    }
 
     #[test]
     fn detects_local_target_binaries_only() {
@@ -533,37 +583,36 @@ mod tests {
     #[test]
     fn claim_next_build_agent_launch_consumes_pending_event() {
         let dir = tempdir().unwrap();
-        let request_path = dir
-            .path()
-            .join(".agentflow/execute/runs/run-001/launcher/build-agent-request.json");
-        fs::create_dir_all(request_path.parent().unwrap()).unwrap();
-        fs::write(&request_path, "{}\n").unwrap();
-        append_event_once(
-            dir.path(),
-            WorkflowEventDraft {
-                event_type: EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED.to_string(),
-                source: "project-loop".to_string(),
-                subject_id: "AF-001".to_string(),
-                subject_path: Some(".agentflow/input/issues/AF-001.json".to_string()),
-                dedupe_key: "build-agent.launch.requested:AF-001:run-001".to_string(),
-                payload: serde_json::to_value(BuildAgentLaunchRequestedPayload {
-                    issue_id: "AF-001".to_string(),
-                    project_id: "proj-001".to_string(),
-                    run_id: "run-001".to_string(),
-                    branch_name: Some("agentflow/proj-001/AF-001".to_string()),
-                    issue_path: ".agentflow/input/issues/AF-001.json".to_string(),
-                    context_pack_path: ".agentflow/panel/context-packs/AF-001.json".to_string(),
-                    launch_request_path:
-                        ".agentflow/execute/runs/run-001/launcher/build-agent-request.json"
-                            .to_string(),
-                    display_status: "in_progress".to_string(),
-                })
-                .unwrap(),
-            },
+        let requirement = dir.path().join("docs/requirements/034-claim-test.md");
+        fs::create_dir_all(requirement.parent().unwrap()).unwrap();
+        fs::write(
+            &requirement,
+            "# Claim Test\n\n验证 CLI claim 走 AgentBridge。\n",
         )
         .unwrap();
+        let mut issue = agentflow_spec::SpecIssueDraft::new("AF-001");
+        issue.project_id = Some("proj-001".to_string());
+        let issue =
+            agentflow_spec::issue_from_requirement(dir.path(), &requirement, issue).unwrap();
+        agentflow_spec::write_spec_issue(dir.path(), &issue).unwrap();
+        let mut project = agentflow_spec::SpecProjectDraft::new("proj-001");
+        project.issue_ids = vec!["AF-001".to_string()];
+        let project =
+            agentflow_spec::project_from_requirement(dir.path(), &requirement, project).unwrap();
+        agentflow_spec::write_spec_project(dir.path(), &project).unwrap();
+        let loop_driver = agentflow_task_loop::TaskLoop::new("proj-001");
+        loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+        let launch = loop_driver
+            .request_agent_launch(dir.path(), "AF-001", "fake")
+            .unwrap();
+        let mut providers = McpProviderBridge::new();
+        providers.register(Box::new(FakeProvider));
+        let bridge = agentflow_agent_bridge::AgentBridge::new(providers);
 
-        let claim = claim_next_build_agent_launch(dir.path())
+        let claim = claim_next_build_agent_launch_with_bridge(dir.path(), &bridge)
             .unwrap()
             .expect("expected launch claim");
         assert_eq!(claim.issue_id, "AF-001");
@@ -572,18 +621,19 @@ mod tests {
             claim.branch_name.as_deref(),
             Some("agentflow/proj-001/AF-001")
         );
-        assert_eq!(claim.launch_request_path, request_path);
-        let state = load_build_agent_launch_state(dir.path(), "run-001").unwrap();
-        assert_eq!(state.status, BuildAgentLaunchStatus::Claimed);
-        assert_eq!(state.event_id.as_deref(), Some(claim.event_id.as_str()));
-
-        let pending = load_pending_events(
-            dir.path(),
-            CONSUMER_BUILD_AGENT,
-            &[EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED],
-        )
-        .unwrap();
-        assert!(pending.is_empty());
+        assert_eq!(
+            claim.launch_request_path,
+            dir.path().join(&launch.launch_request_path)
+        );
+        let events = agentflow_event_store::load_task_events(dir.path()).unwrap();
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == agentflow_agent_bridge::AGENT_SESSION_CREATED));
+        assert!(
+            claim_next_build_agent_launch_with_bridge(dir.path(), &bridge)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

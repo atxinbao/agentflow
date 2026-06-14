@@ -1,18 +1,14 @@
-use agentflow_execute::{claim_build_agent_launch, mark_build_agent_launch_failed};
+use agentflow_agent_bridge::{AgentBridge, AGENT_SESSION_CREATED};
+use agentflow_event_store::load_task_events;
 use agentflow_input::issue::DisplayStatus;
-use agentflow_mcp::{
-    default_provider_bridge, write_provider_status, write_registry_for_statuses, McpLaunchRequest,
-};
 use agentflow_panel::PanelStatus;
+use agentflow_task_loop::AGENT_LAUNCH_REQUESTED;
 use agentflow_workflow_events::{
     append_dead_letter, append_event_once, load_pending_events, mark_event_consumed,
-    prepare_events_workspace, BuildAgentLaunchClaimedPayload, BuildAgentLaunchRequestedPayload,
-    ContextPackFailedPayload, ContextPackReadyPayload, ContextPackRequestedPayload,
-    IssueReadyPayload, WorkflowEventDraft, CONSUMER_BUILD_AGENT, CONSUMER_PANEL,
-    CONSUMER_PROVIDER_BRIDGE, EVENT_TYPE_BUILD_AGENT_LAUNCH_CLAIMED,
-    EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED, EVENT_TYPE_INPUT_ISSUE_READY,
-    EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED, EVENT_TYPE_PANEL_CONTEXT_PACK_READY,
-    EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED,
+    prepare_events_workspace, ContextPackFailedPayload, ContextPackReadyPayload,
+    ContextPackRequestedPayload, IssueReadyPayload, WorkflowEventDraft, CONSUMER_PANEL,
+    EVENT_TYPE_INPUT_ISSUE_READY, EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED,
+    EVENT_TYPE_PANEL_CONTEXT_PACK_READY, EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -208,10 +204,6 @@ fn dispatch_workflow_events_inner(
     Ok(summary)
 }
 
-fn provider_ready_for_build_agent_launch(status: &agentflow_mcp::McpProviderStatus) -> bool {
-    status.capability_available("launch")
-}
-
 fn panel_ready_for_context_pack(root: &Path) -> bool {
     agentflow_panel::load_project_panel_status(root)
         .map(|status| matches!(status.status, PanelStatus::Ready | PanelStatus::Degraded))
@@ -290,119 +282,23 @@ fn dispatch_build_agent_launch_events(
     root: &Path,
     summary: &mut WorkflowEventDispatchSummary,
 ) -> anyhow::Result<()> {
-    let provider_bridge = default_provider_bridge();
-    let provider = provider_bridge
-        .provider("codex")
-        .ok_or_else(|| anyhow::anyhow!("codex provider is not registered"))?;
-
-    let provider_status = provider.check_health(root);
-    write_provider_status(root, &provider_status)?;
-    write_registry_for_statuses(root, &[provider_status.clone()])?;
-
-    let pending = load_pending_events(
-        root,
-        CONSUMER_PROVIDER_BRIDGE,
-        &[EVENT_TYPE_BUILD_AGENT_LAUNCH_REQUESTED],
-    )?;
-    summary.pending_build_agent_launch_events = pending.len();
-
-    if !provider_ready_for_build_agent_launch(&provider_status) {
-        if !pending.is_empty() {
-            let launch_reason = provider_status
-                .capability("launch")
-                .and_then(|capability| capability.detail.clone())
-                .unwrap_or_else(|| provider_status.status.as_str().to_string());
-            summary.errors.push(format!(
-                "build-agent launch pending: {} launch capability is unavailable ({})",
-                provider.provider_id(),
-                launch_reason
-            ));
-        }
+    summary.pending_build_agent_launch_events = pending_agent_launch_count(root)?;
+    if summary.pending_build_agent_launch_events == 0 {
         return Ok(());
     }
 
-    for event in pending {
-        let payload =
-            match serde_json::from_value::<BuildAgentLaunchRequestedPayload>(event.payload.clone())
-            {
-                Ok(payload) => payload,
-                Err(error) => {
-                    let message = format!("parse build-agent launch payload: {error}");
-                    let _ =
-                        append_dead_letter(root, CONSUMER_PROVIDER_BRIDGE, &event, message.clone());
-                    let _ = mark_event_consumed(root, CONSUMER_PROVIDER_BRIDGE, &event.event_id);
-                    summary.errors.push(message);
-                    continue;
-                }
-            };
-
-        let request = match build_provider_launch_request(root, &payload) {
-            Ok(request) => request,
-            Err(error) => {
-                let message = format!("build codex launch request {}: {error}", payload.issue_id);
-                let _ = append_dead_letter(root, CONSUMER_PROVIDER_BRIDGE, &event, message.clone());
-                let _ = mark_event_consumed(root, CONSUMER_PROVIDER_BRIDGE, &event.event_id);
-                summary.errors.push(message);
-                continue;
-            }
-        };
-
-        match provider.create_session(root, &request) {
-            Ok(session) => {
-                if let Err(error) = claim_build_agent_launch(
-                    root,
-                    &payload.issue_id,
-                    Some(&payload.project_id),
-                    &payload.run_id,
-                    payload.branch_name.clone(),
-                    payload.launch_request_path.clone(),
-                    event.event_id.clone(),
-                ) {
-                    summary.errors.push(format!(
-                        "claim build-agent launch {}: {error}",
-                        payload.issue_id
-                    ));
-                    continue;
-                }
-                if let Err(error) = append_event_once(
-                    root,
-                    WorkflowEventDraft {
-                        event_type: EVENT_TYPE_BUILD_AGENT_LAUNCH_CLAIMED.to_string(),
-                        source: "provider-bridge".to_string(),
-                        subject_id: payload.issue_id.clone(),
-                        subject_path: Some(payload.launch_request_path.clone()),
-                        dedupe_key: format!(
-                            "build-agent.launch.claimed:{}:{}",
-                            payload.issue_id, payload.run_id
-                        ),
-                        payload: serde_json::to_value(BuildAgentLaunchClaimedPayload {
-                            issue_id: payload.issue_id.clone(),
-                            project_id: Some(payload.project_id.clone()),
-                            run_id: payload.run_id.clone(),
-                            session_id: session.session_id.clone(),
-                            provider: session.provider.clone(),
-                            branch_name: payload.branch_name.clone(),
-                            launch_request_path: payload.launch_request_path.clone(),
-                            log_path: session.log_path.clone(),
-                        })?,
-                    },
-                ) {
-                    summary.errors.push(format!(
-                        "append claimed event {}: {error}",
-                        payload.issue_id
-                    ));
-                    continue;
-                }
-                mark_event_consumed(root, CONSUMER_PROVIDER_BRIDGE, &event.event_id)?;
-                mark_event_consumed(root, CONSUMER_BUILD_AGENT, &event.event_id)?;
+    let bridge = AgentBridge::with_default_providers();
+    loop {
+        match bridge.claim_next_launch(root) {
+            Ok(Some(_claim)) => {
                 summary.build_agent_launch_sessions_created += 1;
             }
+            Ok(None) => break,
             Err(error) => {
-                let _ = mark_build_agent_launch_failed(root, &payload.run_id);
-                let message = format!("create provider session {}: {error}", payload.issue_id);
-                let _ = append_dead_letter(root, CONSUMER_PROVIDER_BRIDGE, &event, message.clone());
-                let _ = mark_event_consumed(root, CONSUMER_PROVIDER_BRIDGE, &event.event_id);
-                summary.errors.push(message);
+                summary
+                    .errors
+                    .push(format!("claim agent launch from task events: {error}"));
+                break;
             }
         }
     }
@@ -410,30 +306,30 @@ fn dispatch_build_agent_launch_events(
     Ok(())
 }
 
-fn build_provider_launch_request(
-    root: &Path,
-    payload: &BuildAgentLaunchRequestedPayload,
-) -> anyhow::Result<McpLaunchRequest> {
-    let mut request = McpLaunchRequest::new(
-        "codex",
-        payload.issue_id.clone(),
-        payload.run_id.clone(),
-        "build-agent",
-        root.display().to_string(),
-        payload.launch_request_path.clone(),
-    );
-    request.project_id = Some(payload.project_id.clone());
-    request.prompt_path = Some(payload.launch_request_path.clone());
-    request.context_pack_path = Some(payload.context_pack_path.clone());
-    request.branch_name = payload.branch_name.clone();
-    if let Ok(issue) = agentflow_input::load_input_issue(root, &payload.issue_id) {
-        request.agent_role = issue.required_agent_role.as_str().to_string();
-        request.merge_mode = issue
-            .execution_pipeline
-            .as_ref()
-            .and_then(|pipeline| pipeline.merge_modes.first().cloned());
-    }
-    Ok(request)
+fn pending_agent_launch_count(root: &Path) -> anyhow::Result<usize> {
+    let events = load_task_events(root)?;
+    let claimed_runs = events
+        .iter()
+        .filter(|event| event.event_type == AGENT_SESSION_CREATED)
+        .filter_map(|event| {
+            event
+                .payload
+                .get("runId")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    Ok(events
+        .iter()
+        .filter(|event| event.event_type == AGENT_LAUNCH_REQUESTED)
+        .filter(|event| {
+            event
+                .payload
+                .get("runId")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|run_id| !claimed_runs.contains(run_id))
+        })
+        .count())
 }
 
 #[cfg(test)]
@@ -611,13 +507,57 @@ mod tests {
     }
 
     #[test]
-    fn launch_dispatch_uses_launch_capability_instead_of_status_code() {
-        let mut status =
-            agentflow_mcp::McpProviderStatus::new(agentflow_mcp::McpProviderKind::Codex, 1);
-        status.status = agentflow_mcp::McpProviderStatusCode::Unsupported;
-        status.capabilities = vec![agentflow_mcp::McpCapability::new("launch", true)];
+    fn pending_agent_launch_count_ignores_already_claimed_runs() {
+        use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
+        use serde_json::json;
 
-        assert!(provider_ready_for_build_agent_launch(&status));
+        let dir = tempdir().unwrap();
+        for run_id in ["run-001", "run-002"] {
+            append_task_event_once(
+                dir.path(),
+                TaskEventDraft {
+                    aggregate_type: "issue".to_string(),
+                    aggregate_id: format!("AF-{run_id}"),
+                    project_id: Some("project-events".to_string()),
+                    issue_id: Some(format!("AF-{run_id}")),
+                    event_type: AGENT_LAUNCH_REQUESTED.to_string(),
+                    actor: EventActor {
+                        role: "test".to_string(),
+                        kind: "system".to_string(),
+                    },
+                    state: None,
+                    correlation_id: Some(format!("corr-{run_id}")),
+                    causation_id: None,
+                    payload: json!({ "runId": run_id }),
+                    artifact_refs: Vec::new(),
+                    idempotency_key: Some(format!("launch:{run_id}")),
+                },
+            )
+            .unwrap();
+        }
+        append_task_event_once(
+            dir.path(),
+            TaskEventDraft {
+                aggregate_type: "issue".to_string(),
+                aggregate_id: "AF-run-001".to_string(),
+                project_id: Some("project-events".to_string()),
+                issue_id: Some("AF-run-001".to_string()),
+                event_type: AGENT_SESSION_CREATED.to_string(),
+                actor: EventActor {
+                    role: "test".to_string(),
+                    kind: "system".to_string(),
+                },
+                state: None,
+                correlation_id: Some("corr-run-001".to_string()),
+                causation_id: None,
+                payload: json!({ "runId": "run-001" }),
+                artifact_refs: Vec::new(),
+                idempotency_key: Some("session:run-001".to_string()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(pending_agent_launch_count(dir.path()).unwrap(), 1);
     }
 
     fn write_approved_spec(root: &std::path::Path) {

@@ -9,7 +9,9 @@ tauri-build = { version = "=2.4.0", features = [] }
 
 [dependencies]
 agentflow-core = { path = "../../../crates/core" }
+agentflow-agent-bridge = { path = "../../../crates/agent-bridge" }
 agentflow-agent-manual = { path = "../../../crates/agent-manual" }
+agentflow-event-store = { path = "../../../crates/event-store" }
 agentflow-panel = { path = "../../../crates/panel" }
 agentflow-input = { path = "../../../crates/input" }
 agentflow-mcp = { path = "../../../crates/mcp" }
