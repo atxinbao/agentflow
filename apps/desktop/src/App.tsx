@@ -45,7 +45,7 @@ import {
 } from "./components";
 import { useAgentManual } from "./features/agent-manual";
 import { useExecuteStatus, type ExecuteStatusState } from "./features/execute";
-import { useInputSnapshot, useInputStatus } from "./features/input";
+import { useInputSnapshot, type InputSnapshotState } from "./features/input";
 import { useMcpSessions, type McpSessionsState } from "./features/mcp";
 import { useOutputStatus, type OutputStatusState } from "./features/output";
 import {
@@ -58,7 +58,13 @@ import {
   type ProjectPanelState,
   type ProjectFilesState,
 } from "./features/project-files";
-import { useIssueStatusIndex, useStateStatus, useTaskProjection, type StateStatusState } from "./features/state";
+import {
+  useIssueStatusIndex,
+  useStateStatus,
+  useTaskProjection,
+  type IssueStatusIndexState,
+  type StateStatusState,
+} from "./features/state";
 import {
   createBrowserPreviewProjectRegistry,
   createProjectRef,
@@ -249,7 +255,7 @@ const AGENTFLOW_WORKFLOW_EVENTS_DISPATCHED_EVENT = "agentflow-workflow-events-di
 const AGENTFLOW_PROJECT_LOOP_TICKED_EVENT = "agentflow-project-loop-ticked";
 const AGENTFLOW_WATCHER_REFRESH_DELAY_MS = 500;
 const AGENTFLOW_WATCHER_REFRESH_COOLDOWN_MS = 1200;
-const AGENTFLOW_DERIVED_CHANGE_AREAS = new Set(["events", "state"]);
+const AGENTFLOW_DERIVED_CHANGE_AREAS = new Set(["state"]);
 
 type NextStepViewModel = {
   action: string;
@@ -484,7 +490,6 @@ function App() {
   const [selectedDeliveryRunId, setSelectedDeliveryRunId] = useState<string | null>(null);
   const [taskDetailFocus, setTaskDetailFocus] = useState<"delivery" | null>(null);
   const [selectedAuditId, setSelectedAuditId] = useState<string | null>(null);
-  const [inputStatusRefreshToken, setInputStatusRefreshToken] = useState(0);
   const [taskListRefreshToken, setTaskListRefreshToken] = useState(0);
   const [executeRefreshToken, setExecuteRefreshToken] = useState(0);
   const [mcpRefreshToken, setMcpRefreshToken] = useState(0);
@@ -516,7 +521,6 @@ function App() {
   } = useProjectFiles(projectRoot);
   const { agentManualState, loadAgentManual } = useAgentManual(projectRoot);
   const { projectPanelState, prepareProjectPanel } = useProjectPanel(projectRoot);
-  const inputStatusState = useInputStatus(projectRoot, inputStatusRefreshToken);
   const inputSnapshotState = useInputSnapshot(projectRoot, taskListRefreshToken);
   const executeStatusState = useExecuteStatus(projectRoot, executeRefreshToken);
   const mcpSessionsState = useMcpSessions(projectRoot, mcpRefreshToken);
@@ -524,7 +528,7 @@ function App() {
   const stateStatusState = useStateStatus(projectRoot, stateRefreshToken);
   const issueStatusIndexState = useIssueStatusIndex(
     projectRoot,
-    taskListRefreshToken + executeRefreshToken + outputRefreshToken,
+    taskListRefreshToken + executeRefreshToken + mcpRefreshToken + outputRefreshToken,
   );
   const workspaceData = useWorkspaceData(projectRoot);
   const outputBundle = useOutputBundle(projectRoot, outputRefreshToken);
@@ -607,26 +611,19 @@ function App() {
 
       lastRefreshAt = Date.now();
       const refreshAll = changedAreas.has("all");
-      const refreshInput = refreshAll || changedAreas.has("input");
+      const refreshSpec = refreshAll || changedAreas.has("spec");
+      const refreshProjection = refreshAll || changedAreas.has("projections") || changedAreas.has("indexes");
+      const refreshTasks = refreshAll || changedAreas.has("tasks");
+      const refreshEvents = refreshAll || changedAreas.has("events");
       const refreshExecute = refreshAll || changedAreas.has("execute");
       const refreshOutput = refreshAll || changedAreas.has("output");
       const refreshPanel = refreshAll || changedAreas.has("panel");
-      const refreshTaskList = refreshInput || refreshExecute || refreshOutput || refreshAll;
-
-      if (refreshInput) {
-        void invoke("prepare_input_workspace", { projectRoot })
-          .then(() => {
-            setStateRefreshToken((current) => current + 1);
-            setTaskListRefreshToken((current) => current + 1);
-            setInputStatusRefreshToken((current) => current + 1);
-            setStateRefreshToken((current) => current + 1);
-          })
-          .catch(() => undefined);
-        setInputStatusRefreshToken((current) => current + 1);
-      }
+      const refreshTaskList =
+        refreshSpec || refreshProjection || refreshTasks || refreshEvents || refreshExecute || refreshOutput || refreshAll;
 
       if (refreshTaskList) {
         setTaskListRefreshToken((current) => current + 1);
+        setStateRefreshToken((current) => current + 1);
       }
 
       if (refreshExecute && (activePage === "tasks" || activePage === "advanced")) {
@@ -752,7 +749,6 @@ function App() {
         return;
       }
       setTaskListRefreshToken((current) => current + 1);
-      setInputStatusRefreshToken((current) => current + 1);
       setStateRefreshToken((current) => current + 1);
       if (payload.runtimeLaunchCount > 0) {
         setMcpRefreshToken((current) => current + 1);
@@ -811,7 +807,6 @@ function App() {
             }),
           }),
         );
-        setInputStatusRefreshToken((current) => current + 1);
         setTaskListRefreshToken((current) => current + 1);
         setExecuteRefreshToken((current) => current + 1);
         setMcpRefreshToken((current) => current + 1);
@@ -899,8 +894,8 @@ function App() {
     taskProjectionState.projection?.issueId === selectedTask?.id ? taskProjectionState.projection : null;
   const agentLocale = agentManualState.status?.locale.agentLocale ?? detectAppLocale() ?? "en-US";
   const nextStep = useMemo(
-    () => buildNextStep(stateStatusState, inputStatusState.status, outputStatusState, selectedTask),
-    [inputStatusState.status, outputStatusState, selectedTask, stateStatusState],
+    () => buildNextStep(stateStatusState, inputSnapshotState.snapshot?.issues.length ?? 0, selectedTask),
+    [inputSnapshotState.snapshot?.issues.length, selectedTask, stateStatusState],
   );
   const activeProjectLiveStatus = projectRoot
     ? activeProjectRegistryStatus === "missing"
@@ -963,7 +958,6 @@ function App() {
 
     if (page === "home") {
       void prepareProjectPanel(root);
-      setInputStatusRefreshToken((current) => current + 1);
       setTaskListRefreshToken((current) => current + 1);
       setMcpRefreshToken((current) => current + 1);
       setOutputRefreshToken((current) => current + 1);
@@ -972,7 +966,6 @@ function App() {
     }
 
     if (page === "tasks") {
-      setInputStatusRefreshToken((current) => current + 1);
       setTaskListRefreshToken((current) => current + 1);
       setExecuteRefreshToken((current) => current + 1);
       setMcpRefreshToken((current) => current + 1);
@@ -981,7 +974,6 @@ function App() {
       if (triggerProjectLoop) {
         void invoke("run_project_loop", { projectRoot: root })
           .then(() => {
-            setInputStatusRefreshToken((current) => current + 1);
             setStateRefreshToken((current) => current + 1);
             setTaskListRefreshToken((current) => current + 1);
             setMcpRefreshToken((current) => current + 1);
@@ -1007,7 +999,6 @@ function App() {
       void loadProjectFiles(root);
       void loadAgentManual(root);
       void prepareProjectPanel(root);
-      setInputStatusRefreshToken((current) => current + 1);
       setTaskListRefreshToken((current) => current + 1);
       setExecuteRefreshToken((current) => current + 1);
       setMcpRefreshToken((current) => current + 1);
@@ -1388,10 +1379,9 @@ function App() {
         {projectRoot && !projectAvailabilityStatus && activePage === "advanced" ? (
           <AdvancedPage
             agentManualState={agentManualState}
-            executeStatusState={executeStatusState}
-            inputStatusState={inputStatusState}
+            inputSnapshotState={inputSnapshotState}
+            issueStatusIndexState={issueStatusIndexState}
             outputBundle={outputBundle}
-            outputStatusState={outputStatusState}
             projectRoot={projectRoot}
             projectFilesState={projectFilesState}
             projectPanelState={projectPanelState}
@@ -4589,10 +4579,9 @@ function buildBrowserPreviewAdvancedStateFiles(
 
 function AdvancedPage({
   agentManualState,
-  executeStatusState,
-  inputStatusState,
+  inputSnapshotState,
+  issueStatusIndexState,
   outputBundle,
-  outputStatusState,
   projectRoot,
   projectFilesState,
   projectPanelState,
@@ -4601,10 +4590,9 @@ function AdvancedPage({
   workspaceData,
 }: {
   agentManualState: unknown;
-  executeStatusState: unknown;
-  inputStatusState: unknown;
+  inputSnapshotState: InputSnapshotState;
+  issueStatusIndexState: IssueStatusIndexState;
   outputBundle: OutputBundleState;
-  outputStatusState: OutputStatusState;
   projectRoot: string | null;
   projectFilesState: ProjectFilesState;
   projectPanelState: ProjectPanelState;
@@ -4618,9 +4606,8 @@ function AdvancedPage({
     { id: "agentRoles", label: "Agent 角色", value: agentRoleRulesDocument(), files: advancedFilesForCategory("agentRoles", agentRoleRulesDocument()) },
     { id: "initialization", label: "初始化", value: initializationState, files: advancedFilesForCategory("initialization", initializationState) },
     { id: "panel", label: "Panel", value: projectPanelState, files: advancedFilesForCategory("panel", projectPanelState) },
-    { id: "input", label: "Input", value: inputStatusState, files: advancedFilesForCategory("input", inputStatusState) },
-    { id: "execute", label: "Execute", value: executeStatusState, files: advancedFilesForCategory("execute", executeStatusState) },
-    { id: "output", label: "Output", value: { outputBundle, outputStatusState }, files: advancedFilesForCategory("output", { outputBundle, outputStatusState }) },
+    { id: "spec", label: "Spec", value: inputSnapshotState, files: advancedFilesForCategory("spec", inputSnapshotState) },
+    { id: "tasks", label: "任务投影", value: issueStatusIndexState, files: advancedFilesForCategory("tasks", issueStatusIndexState) },
     { id: "audit", label: "Audit", value: outputBundle.auditReport, files: advancedFilesForCategory("audit", outputBundle.auditReport) },
     { id: "settings", label: "设置", value: { agentManualState, projectFilesState, workspaceData }, files: advancedFilesForCategory("settings", { agentManualState, projectFilesState, workspaceData }) },
   ];
@@ -6140,8 +6127,7 @@ function buildRecentActivities(
 
 function buildNextStep(
   stateStatusState: StateStatusState,
-  inputStatus: ReturnType<typeof useInputStatus>["status"],
-  outputStatus: ReturnType<typeof useOutputStatus>,
+  issueCount: number,
   selectedTask: V1Issue | null,
 ): NextStepViewModel {
   const blocker = stateStatusState.status?.blockers.at(0);
@@ -6155,17 +6141,7 @@ function buildNextStep(
     };
   }
 
-  if ((outputStatus.status?.summary.releaseDeliveries ?? 0) > 0) {
-    return {
-      action: "查看交付",
-      description: "",
-      reason: "任务完成和审计请求分开处理。",
-      status: "ready",
-      title: "交付已生成",
-    };
-  }
-
-  if ((inputStatus?.summary.approvedSpecs ?? 0) === 0) {
+  if (issueCount === 0) {
     return {
       action: "继续整理规格",
       description: "还不能进入执行。原因是：这个需求还没有确认成规格。",
@@ -6915,13 +6891,12 @@ function advancedCategorySummary(categoryId: string) {
   const summaries: Record<string, string> = {
     agentRoles: "展示三个执行线程的角色边界和 roles.json 只读诊断规则。",
     audit: "展示审计索引和报告快照。这里不写处理结果。",
-    execute: "展示执行状态快照。这里不继续执行，不清理锁。",
-    initialization: "展示基础发布初始化摘要。这里不重跑初始化，不删除示例数据。",
-    input: "展示需求和任务状态快照。普通页面只展示人能读懂的摘要。",
-    output: "展示证据、交付和审计输出摘要。",
+    initialization: "展示项目初始化摘要。这里不重跑初始化，不写旧示例数据。",
     panel: "展示项目现场读取结果和上下文包摘要。",
     settings: "展示本地设置、文件阅读器和工作台数据源状态。",
+    spec: "展示公开需求拆出的本地任务合同。普通页面只展示人能读懂的摘要。",
     state: "展示全局派生状态、门禁、阻断和下一步动作。",
+    tasks: "展示任务状态流和项目任务集合投影。",
   };
   return summaries[categoryId] ?? "这里展示开发者调试信息。普通页面不显示原始 JSON。";
 }
@@ -6951,30 +6926,20 @@ function advancedFilesForCategory(
       { name: "evidence-map.json", description: "证据链映射" },
       { name: "traceability.json", description: "规格、任务和交付追溯" },
     ],
-    execute: [
-      { name: "runs/index.json", description: "执行运行列表" },
-      { name: "leases/*.json", description: "本地执行锁状态" },
-      { name: "commands/*.json", description: "命令记录" },
-    ],
     initialization: [
       { name: "base-release-initialization.json", description: "基础发布初始化摘要" },
       { name: "recent-project-context.json", description: "现有项目最近提交上下文" },
       { name: "git-context.json", description: "本地 Git 上下文索引" },
     ],
-    input: [
-      { name: "index.json", description: "规格、项目和任务索引" },
-      { name: "issues/*.json", description: "任务合约来源" },
-      { name: "specs/approved/*", description: "已确认规格" },
-    ],
-    output: [
-      { name: "index.json", description: "证据、交付和审计输出索引" },
-      { name: "evidence/*.json", description: "验证证据" },
-      { name: "release/*/delivery.json", description: "交付包记录" },
-    ],
     panel: [
       { name: "manifest.json", description: "项目现场摘要" },
       { name: "context-packs/*.json", description: "上下文包" },
       { name: "diagnostics.json", description: "诊断快照" },
+    ],
+    spec: [
+      { name: "index.json", description: "规格、项目和任务索引" },
+      { name: "issues/*.json", description: "任务合同来源" },
+      { name: "projects/*.json", description: "项目任务集合" },
     ],
     settings: [
       { name: "locale.json", description: "Agent 语言设置" },
@@ -6988,6 +6953,11 @@ function advancedFilesForCategory(
       { name: "locks.json", description: "本地锁状态" },
       { name: "sessions.json", description: "智能体会话记录" },
       { name: "next-actions.json", description: "下一步候选动作" },
+    ],
+    tasks: [
+      { name: "issue-status.json", description: "任务状态索引" },
+      { name: "projections/tasks/*.json", description: "单任务状态流投影" },
+      { name: "projections/projects/*.json", description: "项目任务集合投影" },
     ],
   };
   const categoryFiles = files[categoryId] ?? files.state;

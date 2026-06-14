@@ -64,11 +64,7 @@ mod tests {
             .path()
             .join(".agentflow/define/audit/AUDIT.md")
             .is_file());
-        assert!(dir.path().join(".agentflow/input/intake").is_dir());
-        assert!(dir.path().join(".agentflow/input/specs/drafts").is_dir());
-        assert!(dir.path().join(".agentflow/input/specs/approved").is_dir());
-        assert!(dir.path().join(".agentflow/input/projects").is_dir());
-        assert!(dir.path().join(".agentflow/input/issues").is_dir());
+        assert!(!dir.path().join(".agentflow/input").exists());
         assert!(dir.path().join(".agentflow/spec/projects").is_dir());
         assert!(dir.path().join(".agentflow/spec/issues").is_dir());
         assert!(dir.path().join(".agentflow/events").is_dir());
@@ -77,9 +73,9 @@ mod tests {
         assert!(dir.path().join(".agentflow/tasks").is_dir());
         assert!(!dir.path().join(".agentflow/goal-tree").exists());
         assert!(dir.path().join(".agentflow/panel/context-packs").is_dir());
-        assert!(dir.path().join(".agentflow/execute/commands").is_dir());
+        assert!(!dir.path().join(".agentflow/execute").exists());
         assert!(dir.path().join(".agentflow/output/audit").is_dir());
-        assert!(dir.path().join(".agentflow/output/release").is_dir());
+        assert!(!dir.path().join(".agentflow/output/release").exists());
         assert!(dir.path().join(".agentflow/state/health").is_dir());
         assert!(dir
             .path()

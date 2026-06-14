@@ -28,6 +28,8 @@ mod tests {
     fn desktop_commands_read_e2e_workflow_state_and_audit_outputs() {
         let ready = agentflow_workflow_acceptance::prepare_delivery_ready_fixture().unwrap();
         let project_root = ready.fixture.root().display().to_string();
+        agentflow_spec::prepare_spec_workspace(&project_root).unwrap();
+        agentflow_projection::prepare_projection_workspace(&project_root).unwrap();
 
         let status = state::load_state_status(project_root.clone()).unwrap();
         assert_eq!(status.current_stage, WorkflowStage::DeliveryReady);

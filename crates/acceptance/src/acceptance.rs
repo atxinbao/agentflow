@@ -216,6 +216,8 @@ fn prepare_all_layers(root: &Path) -> Result<()> {
         ),
         "panel layer is not ready or degraded"
     );
+    agentflow_spec::prepare_spec_workspace(root)?;
+    agentflow_projection::prepare_projection_workspace(root)?;
     let input = agentflow_input::prepare_input_workspace(root)?;
     anyhow::ensure!(input.ready, "input layer is not ready");
     let execute = agentflow_execute::prepare_execute_workspace(root)?;

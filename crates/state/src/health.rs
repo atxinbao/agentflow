@@ -3,21 +3,19 @@ use crate::{
     storage::unix_timestamp_seconds,
 };
 use agentflow_agent_manual::model::{AgentEnvironmentState, WorkspaceOwnershipState};
-use agentflow_execute::model::ExecuteWorkspaceStatus;
-use agentflow_input::model::InputWorkspaceStatus;
-use agentflow_output::model::OutputWorkspaceStatus;
 use agentflow_panel::PanelStatus;
 use anyhow::Result;
-use std::path::Path;
+use std::{fs, path::Path};
 
 pub(crate) fn collect_health(root: &Path) -> Vec<WorkflowHealthSnapshot> {
     vec![
         workspace_health(root),
         define_health(root),
         panel_health(root),
-        input_health(root),
-        execute_health(root),
-        output_health(root),
+        spec_health(root),
+        projection_health(root),
+        tasks_health(root),
+        events_health(root),
         audit_health(root),
     ]
 }
@@ -73,89 +71,56 @@ fn panel_health(root: &Path) -> WorkflowHealthSnapshot {
     }
 }
 
-fn input_health(root: &Path) -> WorkflowHealthSnapshot {
-    match agentflow_input::load_input_status(root) {
-        Ok(status) => {
-            let status_label = if !root.join(".agentflow/input/manifest.json").is_file()
-                || (!status.errors.is_empty()
-                    && status.errors.iter().all(|error| is_missing_error(error)))
-            {
-                "missing".to_string()
-            } else {
-                input_status_label(&status.status).to_string()
-            };
-            WorkflowHealthSnapshot {
-                version: STATE_HEALTH_VERSION.to_string(),
-                module: "input".to_string(),
-                status: status_label,
-                ready: status.ready,
-                source_path: ".agentflow/input/manifest.json".to_string(),
-                checked_at: unix_timestamp_seconds(),
-                warnings: status.warnings,
-                errors: status.errors,
-            }
-        }
-        Err(error) => {
-            missing_or_failed_health(root, "input", ".agentflow/input/manifest.json", error)
-        }
-    }
+fn spec_health(root: &Path) -> WorkflowHealthSnapshot {
+    directory_health(
+        root,
+        "spec",
+        ".agentflow/spec/manifest.json",
+        &[
+            ".agentflow/spec",
+            ".agentflow/spec/projects",
+            ".agentflow/spec/issues",
+        ],
+        &[
+            ".agentflow/spec/manifest.json",
+            ".agentflow/spec/index.json",
+        ],
+    )
 }
 
-fn execute_health(root: &Path) -> WorkflowHealthSnapshot {
-    match agentflow_execute::load_execute_status(root) {
-        Ok(status) => {
-            let status_label = if !root.join(".agentflow/execute/manifest.json").is_file()
-                || (!status.errors.is_empty()
-                    && status.errors.iter().all(|error| is_missing_error(error)))
-            {
-                "missing".to_string()
-            } else if status.summary.active_runs > 0 {
-                "working".to_string()
-            } else {
-                execute_status_label(&status.status).to_string()
-            };
-            WorkflowHealthSnapshot {
-                version: STATE_HEALTH_VERSION.to_string(),
-                module: "execute".to_string(),
-                status: status_label,
-                ready: status.ready,
-                source_path: ".agentflow/execute/manifest.json".to_string(),
-                checked_at: unix_timestamp_seconds(),
-                warnings: status.warnings,
-                errors: status.errors,
-            }
-        }
-        Err(error) => {
-            missing_or_failed_health(root, "execute", ".agentflow/execute/manifest.json", error)
-        }
-    }
+fn projection_health(root: &Path) -> WorkflowHealthSnapshot {
+    directory_health(
+        root,
+        "projection",
+        ".agentflow/projections/tasks",
+        &[
+            ".agentflow/projections",
+            ".agentflow/projections/tasks",
+            ".agentflow/projections/projects",
+            ".agentflow/indexes",
+        ],
+        &[],
+    )
 }
 
-fn output_health(root: &Path) -> WorkflowHealthSnapshot {
-    match agentflow_output::load_output_status(root) {
-        Ok(status) => {
-            let status_label = if status.summary.incomplete_evidence > 0
-                || status.summary.incomplete_deliveries > 0
-            {
-                "degraded".to_string()
-            } else {
-                output_status_label(&status.status).to_string()
-            };
-            WorkflowHealthSnapshot {
-                version: STATE_HEALTH_VERSION.to_string(),
-                module: "output".to_string(),
-                status: status_label,
-                ready: status.ready,
-                source_path: ".agentflow/output/manifest.json".to_string(),
-                checked_at: unix_timestamp_seconds(),
-                warnings: status.warnings,
-                errors: status.errors,
-            }
-        }
-        Err(error) => {
-            missing_or_failed_health(root, "output", ".agentflow/output/manifest.json", error)
-        }
-    }
+fn tasks_health(root: &Path) -> WorkflowHealthSnapshot {
+    directory_health(
+        root,
+        "tasks",
+        ".agentflow/tasks",
+        &[".agentflow/tasks"],
+        &[],
+    )
+}
+
+fn events_health(root: &Path) -> WorkflowHealthSnapshot {
+    directory_health(
+        root,
+        "events",
+        ".agentflow/events",
+        &[".agentflow/events"],
+        &[],
+    )
 }
 
 fn audit_health(root: &Path) -> WorkflowHealthSnapshot {
@@ -231,11 +196,43 @@ fn missing_or_failed_health(
     }
 }
 
-fn is_missing_error(message: &str) -> bool {
-    message.contains("missing")
-        || message.contains("No such file")
-        || message.contains("os error 2")
-        || message.contains("not found")
+fn directory_health(
+    root: &Path,
+    module: &str,
+    source_path: &str,
+    directories: &[&str],
+    files: &[&str],
+) -> WorkflowHealthSnapshot {
+    let mut errors = Vec::new();
+    for directory in directories {
+        let path = root.join(directory);
+        if !path.is_dir() {
+            errors.push(format!("missing directory: {directory}"));
+        }
+    }
+    for file in files {
+        let path = root.join(file);
+        if !path.is_file() {
+            errors.push(format!("missing file: {file}"));
+        } else if let Err(error) = fs::read_to_string(&path) {
+            errors.push(format!("read {file}: {error}"));
+        }
+    }
+    WorkflowHealthSnapshot {
+        version: STATE_HEALTH_VERSION.to_string(),
+        module: module.to_string(),
+        status: if errors.is_empty() {
+            "ready"
+        } else {
+            "missing"
+        }
+        .to_string(),
+        ready: errors.is_empty(),
+        source_path: source_path.to_string(),
+        checked_at: unix_timestamp_seconds(),
+        warnings: Vec::new(),
+        errors,
+    }
 }
 
 fn ownership_status_label(status: &WorkspaceOwnershipState) -> &'static str {
@@ -266,36 +263,6 @@ fn panel_status_label(status: &PanelStatus) -> &'static str {
         PanelStatus::Missing => "missing",
         PanelStatus::Failed => "failed",
         PanelStatus::Indexing => "working",
-    }
-}
-
-fn input_status_label(status: &InputWorkspaceStatus) -> &'static str {
-    match status {
-        InputWorkspaceStatus::Ready => "ready",
-        InputWorkspaceStatus::Degraded => "degraded",
-        InputWorkspaceStatus::Missing => "missing",
-        InputWorkspaceStatus::Failed => "failed",
-        InputWorkspaceStatus::Blocked => "blocked",
-    }
-}
-
-fn execute_status_label(status: &ExecuteWorkspaceStatus) -> &'static str {
-    match status {
-        ExecuteWorkspaceStatus::Ready => "ready",
-        ExecuteWorkspaceStatus::Degraded => "degraded",
-        ExecuteWorkspaceStatus::Missing => "missing",
-        ExecuteWorkspaceStatus::Failed => "failed",
-        ExecuteWorkspaceStatus::Blocked => "blocked",
-    }
-}
-
-fn output_status_label(status: &OutputWorkspaceStatus) -> &'static str {
-    match status {
-        OutputWorkspaceStatus::Ready => "ready",
-        OutputWorkspaceStatus::Degraded => "degraded",
-        OutputWorkspaceStatus::Missing => "missing",
-        OutputWorkspaceStatus::Failed => "failed",
-        OutputWorkspaceStatus::Blocked => "blocked",
     }
 }
 

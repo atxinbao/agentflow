@@ -9,6 +9,8 @@ use crate::{
 };
 use agentflow_execute::{ExecutePreflight, ExecuteRun, ExecuteRunStatus};
 use agentflow_input::issue::{validate_agent_claim, AgentClaim, InputIssue, InputIssueStatus};
+use agentflow_projection::IssueStatusIndex;
+use agentflow_spec::{SpecIssue, SpecIssueStatus};
 use anyhow::Result;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -20,6 +22,8 @@ pub(crate) fn build_gate_snapshot(
     let input = agentflow_input::load_input_snapshot(root).ok();
     let execute = agentflow_execute::load_execute_snapshot(root).ok();
     let output = agentflow_output::load_output_snapshot(root).ok();
+    let spec_issues = agentflow_spec::list_spec_issues(root).unwrap_or_default();
+    let projection_index = agentflow_projection::load_issue_status_index(root).ok();
     let audit_index = agentflow_output::load_audit_index(root).ok();
     let audit_status = derive_audit_status(audit_index.as_ref());
     let active_run = execute.as_ref().and_then(|snapshot| {
@@ -65,13 +69,16 @@ pub(crate) fn build_gate_snapshot(
     let active_issue_id = active_run
         .map(|run| run.issue_id.clone())
         .or_else(|| active_ready_issue_id(input.as_ref(), &blockers))
-        .or_else(|| first_ready_issue_id(input.as_ref()));
+        .or_else(|| first_ready_issue_id(input.as_ref()))
+        .or_else(|| active_spec_issue_id(&spec_issues, projection_index.as_ref()));
     let has_execution_blockers = blockers_force_execute_blocked(input.as_ref(), &blockers);
     let current_stage = derive_stage(
         health,
         input.as_ref(),
         execute.as_ref(),
         output.as_ref(),
+        &spec_issues,
+        projection_index.as_ref(),
         &audit_status,
         has_execution_blockers,
     );
@@ -115,6 +122,39 @@ fn first_ready_issue_id(input: Option<&agentflow_input::InputSnapshot>) -> Optio
             .find(|issue| matches!(issue.status, InputIssueStatus::Todo))
             .map(|issue| issue.issue_id.clone())
     })
+}
+
+fn active_spec_issue_id(
+    issues: &[SpecIssue],
+    projection_index: Option<&IssueStatusIndex>,
+) -> Option<String> {
+    projection_index
+        .and_then(|index| {
+            index
+                .issues
+                .iter()
+                .find(|issue| {
+                    matches!(
+                        issue.current_state.as_str(),
+                        "todo" | "in_progress" | "in_review"
+                    )
+                })
+                .map(|issue| issue.issue_id.clone())
+        })
+        .or_else(|| {
+            issues
+                .iter()
+                .find(|issue| {
+                    matches!(
+                        issue.status,
+                        SpecIssueStatus::Todo
+                            | SpecIssueStatus::InProgress
+                            | SpecIssueStatus::InReview
+                            | SpecIssueStatus::Backlog
+                    )
+                })
+                .map(|issue| issue.issue_id.clone())
+        })
 }
 
 fn blockers_force_execute_blocked(
@@ -211,6 +251,8 @@ fn derive_stage(
     input: Option<&agentflow_input::InputSnapshot>,
     execute: Option<&agentflow_execute::ExecuteSnapshot>,
     output: Option<&agentflow_output::OutputSnapshot>,
+    spec_issues: &[SpecIssue],
+    projection_index: Option<&IssueStatusIndex>,
     audit_status: &WorkflowAuditStatus,
     has_blockers: bool,
 ) -> WorkflowStage {
@@ -265,6 +307,30 @@ fn derive_stage(
     }) {
         return WorkflowStage::ExecuteCompleted;
     }
+    if projection_index.as_ref().is_some_and(|index| {
+        index
+            .issues
+            .iter()
+            .any(|issue| issue.current_state == "done")
+    }) {
+        return WorkflowStage::DeliveryReady;
+    }
+    if projection_index.as_ref().is_some_and(|index| {
+        index
+            .issues
+            .iter()
+            .any(|issue| issue.current_state == "in_review")
+    }) {
+        return WorkflowStage::ExecuteCompleted;
+    }
+    if projection_index.as_ref().is_some_and(|index| {
+        index
+            .issues
+            .iter()
+            .any(|issue| issue.current_state == "in_progress")
+    }) {
+        return WorkflowStage::ExecuteRunning;
+    }
     if execute.as_ref().is_some_and(|snapshot| {
         snapshot
             .index
@@ -293,6 +359,17 @@ fn derive_stage(
     }) {
         return WorkflowStage::ExecuteReady;
     }
+    if projection_index.as_ref().is_some_and(|index| {
+        index
+            .issues
+            .iter()
+            .any(|issue| issue.current_state == "todo")
+    }) || spec_issues
+        .iter()
+        .any(|issue| matches!(issue.status, SpecIssueStatus::Todo))
+    {
+        return WorkflowStage::ExecuteReady;
+    }
     if input.as_ref().is_some_and(|snapshot| {
         snapshot.issues.iter().any(|issue| {
             matches!(issue.status, agentflow_input::issue::InputIssueStatus::Todo)
@@ -304,6 +381,13 @@ fn derive_stage(
     if input
         .as_ref()
         .is_some_and(|snapshot| !snapshot.issues.is_empty())
+    {
+        return WorkflowStage::IssueReady;
+    }
+    if !spec_issues.is_empty()
+        || projection_index
+            .as_ref()
+            .is_some_and(|index| !index.issues.is_empty())
     {
         return WorkflowStage::IssueReady;
     }

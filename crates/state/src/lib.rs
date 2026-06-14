@@ -71,6 +71,8 @@ mod tests {
         agentflow_agent_manual::prepare_agent_working_manual(root).unwrap();
         agentflow_panel::prepare_project_panel(root, agentflow_panel::PanelPrepareMode::Blocking)
             .unwrap();
+        agentflow_spec::prepare_spec_workspace(root).unwrap();
+        agentflow_projection::prepare_projection_workspace(root).unwrap();
         agentflow_input::prepare_input_workspace(root).unwrap();
         agentflow_execute::prepare_execute_workspace(root).unwrap();
     }
@@ -304,16 +306,17 @@ mod tests {
             status.health.get("panel").map(String::as_str),
             Some("ready")
         );
+        assert_eq!(status.health.get("spec").map(String::as_str), Some("ready"));
         assert_eq!(
-            status.health.get("input").map(String::as_str),
+            status.health.get("projection").map(String::as_str),
             Some("ready")
         );
         assert_eq!(
-            status.health.get("execute").map(String::as_str),
+            status.health.get("tasks").map(String::as_str),
             Some("ready")
         );
         assert_eq!(
-            status.health.get("output").map(String::as_str),
+            status.health.get("events").map(String::as_str),
             Some("ready")
         );
         assert_eq!(status.health.get("audit").map(String::as_str), Some("idle"));

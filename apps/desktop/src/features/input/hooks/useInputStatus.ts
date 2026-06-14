@@ -30,25 +30,6 @@ const initialInputStatusState: InputStatusState = {
   source: "idle",
 };
 
-function inputErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-async function loadInputStatusWithRepair(projectRoot: string) {
-  try {
-    return await invoke<InputStatusSnapshot>("load_input_status", { projectRoot });
-  } catch (loadError) {
-    try {
-      const snapshot = await invoke<InputSnapshot>("prepare_input_workspace", { projectRoot });
-      return snapshot.status;
-    } catch (repairError) {
-      throw new Error(
-        `load input status failed: ${inputErrorMessage(loadError)}; repair failed: ${inputErrorMessage(repairError)}`,
-      );
-    }
-  }
-}
-
 export function useInputStatus(projectRoot: string | null, refreshToken = 0) {
   const [inputStatusState, setInputStatusState] = useState<InputStatusState>(initialInputStatusState);
 
@@ -72,7 +53,7 @@ export function useInputStatus(projectRoot: string | null, refreshToken = 0) {
     setInputStatusState((current) =>
       current.status ? { ...current, error: null } : { ...current, error: null, source: "loading" },
     );
-    void loadInputStatusWithRepair(projectRoot)
+    void invoke<InputStatusSnapshot>("load_input_status", { projectRoot })
       .then((status) => {
         if (!cancelled) {
           setInputStatusState({ status, error: null, source: "tauri" });
