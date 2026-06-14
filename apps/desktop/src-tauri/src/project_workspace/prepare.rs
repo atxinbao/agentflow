@@ -86,8 +86,12 @@ pub(crate) fn prepare_local_project_workspace_at(
         });
     }
 
+    agentflow_spec::prepare_spec_workspace(&root)
+        .map_err(|error| format!("prepare spec workspace: {error}"))?;
+    agentflow_projection::prepare_projection_workspace(&root)
+        .map_err(|error| format!("prepare projection workspace: {error}"))?;
     agentflow_input::prepare_input_workspace(&root)
-        .map_err(|error| format!("prepare input workspace: {error}"))?;
+        .map_err(|error| format!("prepare input compatibility workspace: {error}"))?;
     agentflow_execute::prepare_execute_workspace(&root)
         .map_err(|error| format!("prepare execute workspace: {error}"))?;
 
@@ -201,7 +205,7 @@ fn workspace_yaml(name: &str, root: &Path) -> String {
 }
 
 fn config_yaml() -> String {
-    "version: config.v1\nmode: local\nagentflowDir: .agentflow\nworkflow:\n  define: define\n  panel: panel\n  input: input\n  execute: execute\n  output: output\n  state: state\nlegacy:\n  spec: spec\n  goalTree: goal-tree\n".to_string()
+    "version: config.v1\nmode: local\nagentflowDir: .agentflow\nworkflow:\n  define: define\n  panel: panel\n  spec: spec\n  events: events\n  projections: projections\n  tasks: tasks\n  state: state\nlegacy:\n  input: input\n  execute: execute\n  output: output\n  goalTree: goal-tree\n".to_string()
 }
 
 fn yaml_quote(value: &str) -> String {
@@ -281,7 +285,14 @@ mod tests {
             .input_status
             .as_ref()
             .is_some_and(|status| status.ready));
-        assert!(!dir.path().join(".agentflow/spec").exists());
+        assert!(dir.path().join(".agentflow/spec/manifest.json").is_file());
+        assert!(dir.path().join(".agentflow/spec/index.json").is_file());
+        assert!(dir.path().join(".agentflow/spec/projects").is_dir());
+        assert!(dir.path().join(".agentflow/spec/issues").is_dir());
+        assert!(dir.path().join(".agentflow/projections/tasks").is_dir());
+        assert!(dir.path().join(".agentflow/projections/projects").is_dir());
+        assert!(dir.path().join(".agentflow/indexes").is_dir());
+        assert!(dir.path().join(".agentflow/tasks").is_dir());
         assert!(!dir.path().join(".agentflow/goal-tree").exists());
         assert!(dir.path().join(".agentflow/panel/context-packs").is_dir());
         assert!(dir.path().join(".agentflow/execute/leases").is_dir());
