@@ -6,6 +6,7 @@ pub mod issue_loop;
 pub mod model;
 pub mod project_executor;
 pub mod project_loop;
+mod review_state;
 pub mod storage;
 
 pub use audit_gate::ProjectAuditGate;
@@ -34,6 +35,7 @@ mod tests {
         project::{InputProject, InputProjectStatus},
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
+    use agentflow_projection::{ProjectionPublicDelivery, TaskProjection, TASK_PROJECTION_VERSION};
     use std::{fs, path::Path, process::Command};
     use tempfile::tempdir;
 
@@ -247,6 +249,31 @@ mod tests {
         let mut snapshot = ProjectLoop::new("proj-001").snapshot(100);
         snapshot.status = ProjectLoopStatus::Active;
         storage::write_project_loop_snapshot(root, &snapshot).unwrap();
+    }
+
+    fn write_task_projection_with_evidence(root: &Path, issue_id: &str, project_id: Option<&str>) {
+        let evidence_path = format!(".agentflow/tasks/{issue_id}/evidence/evidence.json");
+        let evidence_file = root.join(&evidence_path);
+        fs::create_dir_all(evidence_file.parent().unwrap()).unwrap();
+        fs::write(&evidence_file, "{}\n").unwrap();
+        let projection = TaskProjection {
+            version: TASK_PROJECTION_VERSION.to_string(),
+            issue_id: issue_id.to_string(),
+            project_id: project_id.map(str::to_string),
+            workflow_ref: "build-agent.issue-loop@v1".to_string(),
+            current_state: "in_review".to_string(),
+            display_status: "in_review".to_string(),
+            current_transition: Some("issue.validation.passed".to_string()),
+            latest_run_id: Some("run-001".to_string()),
+            branch_name: Some(format!("agentflow/test/{issue_id}")),
+            timeline: Vec::new(),
+            public_delivery: ProjectionPublicDelivery {
+                evidence_path: Some(evidence_path),
+                ..ProjectionPublicDelivery::default()
+            },
+            updated_at: 123,
+        };
+        agentflow_projection::storage::write_task_projection(root, &projection).unwrap();
     }
 
     fn schedule_issue(root: &Path) {
@@ -484,6 +511,29 @@ mod tests {
     }
 
     #[test]
+    fn project_scheduler_derives_review_substate_from_task_evidence_projection() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        write_project_issue(dir.path(), InputIssueStatus::InReview);
+        write_task_projection_with_evidence(dir.path(), "AF-001", Some("proj-001"));
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+        mark_project_preflight_ready(dir.path());
+
+        let snapshot = ProjectLoop::new("proj-001")
+            .schedule_ready_issues(dir.path())
+            .unwrap();
+
+        assert_eq!(snapshot.active_issue_ids, vec!["AF-001"]);
+        let projection = storage::read_issue_loop_projection(dir.path(), "AF-001").unwrap();
+        assert_eq!(projection.stage, IssueLoopStage::InReview);
+        assert_eq!(
+            projection.review_substate.as_deref(),
+            Some("evidence-prepared")
+        );
+    }
+
+    #[test]
     fn direct_issue_loop_moves_backlog_issue_to_todo() {
         let dir = tempdir().unwrap();
         prepare_root(dir.path());
@@ -585,6 +635,47 @@ mod tests {
             Some("agentflow/direct/AF-DIRECT-001")
         );
         assert_eq!(projection.review_substate.as_deref(), Some("merged"));
+    }
+
+    #[test]
+    fn direct_issue_loop_derives_review_substate_from_task_evidence_projection() {
+        let dir = tempdir().unwrap();
+        prepare_root(dir.path());
+        write_approved_spec(dir.path());
+        let mut issue = InputIssue {
+            issue_id: "AF-DIRECT-001".to_string(),
+            issue_model: InputIssueModel::Direct,
+            issue_category: IssueCategory::Spec,
+            required_agent_role: AgentRole::BuildAgent,
+            source_spec_id: "spec-001".to_string(),
+            project_id: None,
+            title: "Direct Issue Loop fixture".to_string(),
+            summary: "Review one direct issue.".to_string(),
+            status: InputIssueStatus::InReview,
+            execution_risk: InputRiskLevel::Low,
+            scope: vec!["src/lib.rs".to_string()],
+            validation_hints: vec!["printf ok".to_string()],
+            ..InputIssue::default()
+        };
+        issue.normalize_execution_metadata();
+        fs::write(
+            dir.path()
+                .join(".agentflow/input/issues/AF-DIRECT-001.json"),
+            serde_json::to_string_pretty(&issue).unwrap(),
+        )
+        .unwrap();
+        write_task_projection_with_evidence(dir.path(), "AF-DIRECT-001", None);
+        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
+
+        let summary = DirectIssueLoop::schedule_ready_issues(dir.path()).unwrap();
+
+        assert_eq!(summary.active_issue_ids, vec!["AF-DIRECT-001"]);
+        let projection = storage::read_issue_loop_projection(dir.path(), "AF-DIRECT-001").unwrap();
+        assert_eq!(projection.stage, IssueLoopStage::InReview);
+        assert_eq!(
+            projection.review_substate.as_deref(),
+            Some("evidence-prepared")
+        );
     }
 
     #[test]
