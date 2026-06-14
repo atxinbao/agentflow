@@ -4,8 +4,9 @@ import {
   createBrowserPreviewIssueStatusIndex,
   createBrowserPreviewMcpSessions,
   createBrowserPreviewOutputIndex,
+  createBrowserPreviewTaskProjection,
 } from "../browserPreviewData";
-import type { AuditIndexEntry, IssueDisplayStatus, McpSessionSnapshot, OutputIndexEntry, V1Issue } from "../types";
+import type { AuditIndexEntry, IssueDisplayStatus, McpSessionSnapshot, OutputIndexEntry, TaskProjection, V1Issue } from "../types";
 import {
   buildTaskDeliveryProjection,
   buildTaskCurrentStageSections,
@@ -93,9 +94,8 @@ function workflowTask(status: WorkflowStatus): V1Issue {
               : "completed",
     expectedOutputs: {
       evidencePath: `.agentflow/tasks/issue-${status}/evidence/evidence.json`,
-      executeRunDir: `.agentflow/execute/runs/run-${status}`,
-      releaseDeliveryDir: `.agentflow/output/release/run-${status}`,
-      releaseNotePath: `.agentflow/output/release/run-${status}/release-note.md`,
+      executeRunDir: `.agentflow/tasks/issue-${status}/runs/run-${status}`,
+      publicDeliveryRecord: "required-when-release-visible",
     },
     executionPipeline: null,
     executionRisk: "medium",
@@ -119,11 +119,38 @@ function workflowTask(status: WorkflowStatus): V1Issue {
 function outputEntry(runId: string, issueId: string, status: string): OutputIndexEntry {
   return {
     issueId,
-    path: `.agentflow/output/release/${runId}/delivery.json`,
+    path: `.agentflow/tasks/${issueId}/evidence/evidence.json`,
     runId,
     sourceSpecId: "spec-workflow-regression",
     status,
     updatedAt: 1780291200,
+  };
+}
+
+function projection(status: WorkflowStatus): TaskProjection | null {
+  if (status === "backlog" || status === "todo" || status === "blocked" || status === "cancel") {
+    return null;
+  }
+  const issueId = `issue-${status}`;
+  return {
+    branchName: `agentflow/workflow/${status}`,
+    currentState: status,
+    currentTransition: status === "done" ? "issue.completed" : status === "in_review" ? "issue.validation.passed" : "agent.launch.requested",
+    displayStatus: status,
+    issueId,
+    latestRunId: `run-${status}`,
+    projectId: null,
+    publicDelivery: {
+      changelogPath: status === "in_review" || status === "done" ? "CHANGELOG.md" : null,
+      evidencePath: `.agentflow/tasks/${issueId}/evidence/evidence.json`,
+      mergeCommit: status === "done" ? "merge-workflow-regression" : null,
+      prUrl: status === "in_review" || status === "done" ? `https://example.invalid/pr/${status}` : null,
+      releaseNotesUrl: null,
+    },
+    timeline: [],
+    updatedAt: 1780291200,
+    version: "task-projection.workflow-regression",
+    workflowRef: "build-agent.issue-loop@v1",
   };
 }
 
@@ -279,11 +306,13 @@ function assertDeliveryProjection() {
     audit: null,
     delivery: null,
     evidence: null,
+    projection: projection("todo"),
     session: null,
     task: workflowTask("todo"),
   });
   assertEqual(todoProjection.missingItems.length, 0, "todo delivery missing items");
-  assertIncludes(todoProjection.summaryItems, "交付包：未到生成阶段", "todo delivery state");
+  assertIncludes(todoProjection.summaryItems, "验证证据：未到生成阶段", "todo evidence state");
+  assertIncludes(todoProjection.summaryItems, "公开交付：未记录", "todo public delivery state");
 
   const reviewTask = workflowTask("in_review");
   const reviewDelivery = outputEntry("run-in_review", reviewTask.id, "drafted");
@@ -291,12 +320,16 @@ function assertDeliveryProjection() {
     audit: null,
     delivery: reviewDelivery,
     evidence: outputEntry("run-in_review", reviewTask.id, "complete"),
+    projection: projection("in_review"),
     session: session("in_review"),
     task: reviewTask,
   });
   assertEqual(reviewProjection.missingItems.length, 0, "in_review delivery missing items");
-  assertIncludes(reviewProjection.summaryItems, "交付包：run-in_review · 已生成草稿", "in_review delivery status");
-  assertIncludes(reviewProjection.packageItems, "交付说明：.agentflow/output/release/run-in_review/release-note.md", "in_review release note path");
+  assertIncludes(reviewProjection.summaryItems, "公开交付：已定位", "in_review public delivery status");
+  assertIncludes(reviewProjection.summaryItems, "PR/MR：已记录", "in_review review url status");
+  assertIncludes(reviewProjection.summaryItems, "验证证据：已记录", "in_review evidence status");
+  assertIncludes(reviewProjection.packageItems, "公开交付：CHANGELOG.md", "in_review public delivery path");
+  assertIncludes(reviewProjection.packageItems, "验证证据：已完成 · .agentflow/tasks/issue-in_review/evidence/evidence.json", "in_review evidence path");
   assertIncludes(reviewProjection.summaryItems, "审计提示：交付后的独立入口。", "in_review audit independence");
 
   const doneTask = workflowTask("done");
@@ -304,13 +337,15 @@ function assertDeliveryProjection() {
     audit: auditForDone(),
     delivery: outputEntry("run-done", doneTask.id, "delivered"),
     evidence: outputEntry("run-done", doneTask.id, "complete"),
+    projection: projection("done"),
     session: session("done"),
     task: doneTask,
   });
   assertEqual(doneProjection.deliveryRunId, "run-done", "done delivery run");
   assertEqual(doneProjection.missingItems.length, 0, "done delivery missing items");
-  assertIncludes(doneProjection.summaryItems, "交付包：run-done · 已交付", "done delivery status");
-  assertIncludes(doneProjection.packageItems, "交付说明：.agentflow/output/release/run-done/release-note.md", "done release note path");
+  assertIncludes(doneProjection.summaryItems, "公开交付：已定位", "done public delivery status");
+  assertIncludes(doneProjection.packageItems, "公开交付：CHANGELOG.md", "done public delivery path");
+  assertIncludes(doneProjection.packageItems, "合并提交：merge-workflow-regression", "done merge proof");
   assertIncludes(doneProjection.packageItems, "后续审计：通过，有警告", "done audit remains projection only");
 }
 
@@ -351,6 +386,7 @@ function assertWorkflowYamlProjection() {
       audit: null,
       delivery: null,
       evidence: null,
+      projection: projection("in_progress"),
       session: session("in_progress"),
       task: progressTask,
     }),
@@ -381,6 +417,7 @@ function assertWorkflowYamlProjection() {
       audit: auditForDone(),
       delivery: outputEntry("run-done", doneTask.id, "delivered"),
       evidence: outputEntry("run-done", doneTask.id, "complete"),
+      projection: projection("done"),
       session: session("done"),
       task: doneTask,
     }),
@@ -456,6 +493,7 @@ function assertBrowserPreviewTaskWorkspaceSmoke() {
       ? audit.audits.find((item) => item.sourceIssueId === issueId || item.sourceRunId === delivery.runId) ?? null
       : null;
     const contract = buildTaskStatusContract(task);
+    const projection = createBrowserPreviewTaskProjection(issueId);
     const executionProjection = buildTaskExecutionProjection({
       executeWorkspaceStatus: "ready",
       mcpSessionsSource: "preview",
@@ -466,6 +504,7 @@ function assertBrowserPreviewTaskWorkspaceSmoke() {
       audit: linkedAudit,
       delivery,
       evidence,
+      projection,
       session,
       task,
     });

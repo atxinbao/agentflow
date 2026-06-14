@@ -597,9 +597,9 @@ export function createBrowserPreviewTaskProjection(
     timeline: browserPreviewTimelineForIssue(issue),
     publicDelivery: {
       evidencePath: runId ? `.agentflow/tasks/${issueId}/evidence/evidence.json` : null,
-      prUrl: currentState === "done" ? "https://github.com/example/agentflow/pull/100" : null,
+      prUrl: currentState === "in_review" || currentState === "done" ? "https://github.com/example/agentflow/pull/100" : null,
       mergeCommit: currentState === "done" ? "426b217f" : null,
-      changelogPath: currentState === "done" ? "CHANGELOG.md" : null,
+      changelogPath: currentState === "in_review" || currentState === "done" ? "CHANGELOG.md" : null,
       releaseNotesUrl: null,
     },
     updatedAt: previewTimestamp + 360,

@@ -76,7 +76,6 @@ export type TaskDeliveryProjection = {
   deliveryRunId: string | null;
   deliveryPath: string | null;
   evidencePath: string | null;
-  releaseDeliveryDir: string | null;
   prUrl: string | null;
   mergeState: string | null;
   releaseNotePath: string | null;
@@ -1152,7 +1151,6 @@ export function buildTaskExecutionProjection({
 
 export function buildTaskDeliveryProjection({
   audit,
-  delivery,
   evidence,
   projection,
   session,
@@ -1167,16 +1165,13 @@ export function buildTaskDeliveryProjection({
 }): TaskDeliveryProjection {
   const status = task.displayStatus ?? "backlog";
   const publicDelivery = projection?.publicDelivery ?? null;
-  const releaseDeliveryDir = delivery?.path ? parentDirectory(delivery.path) : null;
-  const releaseNotePath =
-    publicDelivery?.changelogPath ??
-    publicDelivery?.releaseNotesUrl ??
-    (releaseDeliveryDir ? `${releaseDeliveryDir}/release-note.md` : null);
+  const publicRecordPath = publicDelivery?.changelogPath ?? publicDelivery?.releaseNotesUrl ?? null;
+  const releaseNotePath = publicRecordPath;
   const deliveryRequired = status === "in_review" || status === "done";
-  const deliveryPath = delivery?.path ?? (releaseDeliveryDir ? `${releaseDeliveryDir}/delivery.json` : null);
+  const deliveryPath = publicRecordPath;
   const evidencePath =
     publicDelivery?.evidencePath ??
-    evidence?.path ??
+    taskEvidenceEntryPath(evidence) ??
     stringExpectedOutput(task.expectedOutputs, "evidencePath");
   const prUrl = publicDelivery?.prUrl ?? session?.prUrl ?? null;
   const mergeState = publicDelivery?.mergeCommit
@@ -1190,7 +1185,7 @@ export function buildTaskDeliveryProjection({
 
   return {
     deliveryPath,
-    deliveryRunId: delivery?.runId ?? projection?.latestRunId ?? task.latestRunId ?? null,
+    deliveryRunId: projection?.latestRunId ?? task.latestRunId ?? session?.runId ?? null,
     evidencePath,
     mergeState,
     missingItems,
@@ -1205,7 +1200,6 @@ export function buildTaskDeliveryProjection({
       audit ? `后续审计：${artifactProjectionStatusLabel(audit.status)}` : "后续审计：独立入口，未并入任务主链路。",
     ],
     prUrl,
-    releaseDeliveryDir,
     releaseNotePath,
     status,
     summaryItems: [
@@ -1429,9 +1423,11 @@ function taskStatusYamlOutputs(items: string[]) {
   return items.length ? items : ["未记录"];
 }
 
-function parentDirectory(path: string) {
-  const index = path.lastIndexOf("/");
-  return index > 0 ? path.slice(0, index) : path;
+function taskEvidenceEntryPath(entry: OutputIndexEntry | null) {
+  if (!entry?.path.startsWith(".agentflow/tasks/") || !entry.path.includes("/evidence/")) {
+    return null;
+  }
+  return entry.path;
 }
 
 export function buildAuditInteractionState(audits: AuditIndexEntry[], selectedAuditId: string | null): AuditInteractionState {
