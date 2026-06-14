@@ -14,10 +14,11 @@ agentflow-panel = { path = "../../../crates/panel" }
 agentflow-input = { path = "../../../crates/input" }
 agentflow-mcp = { path = "../../../crates/mcp" }
 agentflow-execute = { path = "../../../crates/execute" }
-agentflow-loop = { path = "../../../crates/loop" }
 agentflow-output = { path = "../../../crates/output" }
 agentflow-projection = { path = "../../../crates/projection" }
+agentflow-spec = { path = "../../../crates/spec" }
 agentflow-state = { path = "../../../crates/state" }
+agentflow-task-loop = { path = "../../../crates/task-loop" }
 agentflow-workflow-events = { path = "../../../crates/workflow-events" }
 anyhow.workspace = true
 base64 = "0.22"

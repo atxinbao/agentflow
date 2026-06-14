@@ -13,6 +13,7 @@ pub use model::{
     SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, DEFAULT_WORKFLOW_REF,
 };
 pub use storage::{
-    issue_from_requirement, prepare_spec_workspace, project_from_requirement, read_spec_issue,
-    read_spec_project, write_spec_issue, write_spec_project, SpecWorkspaceSummary,
+    issue_from_requirement, list_spec_issues, list_spec_projects, prepare_spec_workspace,
+    project_from_requirement, read_spec_issue, read_spec_project, write_spec_issue,
+    write_spec_project, SpecWorkspaceSummary,
 };

@@ -1,10 +1,13 @@
-use agentflow_loop::{DirectIssueLoopSummary, LoopBlocker, ProjectExecutionTick, ProjectExecutor};
+use agentflow_projection::{load_project_projection, load_task_projection};
+use agentflow_spec::{list_spec_issues, list_spec_projects, SpecIssue};
+use agentflow_task_loop::TaskLoop;
 use serde::Serialize;
 use std::path::Path;
 use tauri::{AppHandle, Emitter};
 
-const PROJECT_LOOP_RUN_VERSION: &str = "desktop-project-loop-run.v1";
+const PROJECT_LOOP_RUN_VERSION: &str = "desktop-project-loop-run.v2";
 const AGENTFLOW_PROJECT_LOOP_TICKED_EVENT: &str = "agentflow-project-loop-ticked";
+const DEFAULT_AGENT_PROVIDER: &str = "codex";
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +37,14 @@ pub(crate) struct ProjectLoopProjectSummary {
     runtime_stage: Option<String>,
     runtime_launch_request_path: Option<String>,
     blockers: Vec<LoopBlocker>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LoopBlocker {
+    code: String,
+    reason: String,
+    issue_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -82,113 +93,169 @@ pub(crate) fn run_project_loop_inner(
     project_root: impl AsRef<Path>,
 ) -> anyhow::Result<ProjectLoopRunSummary> {
     let root = project_root.as_ref().canonicalize()?;
-    let snapshot = agentflow_input::prepare_input_workspace(&root)?;
+    agentflow_spec::prepare_spec_workspace(&root)?;
+
+    let projects = list_spec_projects(&root)?;
+    let issues = list_spec_issues(&root)?;
+    let mut ticks = Vec::new();
+    let mut errors = Vec::new();
+
+    for project in &projects {
+        match TaskLoop::new(project.project_id.clone()).tick(&root, DEFAULT_AGENT_PROVIDER) {
+            Ok(Some(tick)) => ticks.push(tick),
+            Ok(None) => {}
+            Err(error) => errors.push(format!("{}: {error}", project.project_id)),
+        }
+    }
+
+    let _ = agentflow_projection::rebuild_projections(&root)?;
+
     let mut summary = ProjectLoopRunSummary {
         version: PROJECT_LOOP_RUN_VERSION.to_string(),
         project_root: root.display().to_string(),
-        project_count: snapshot.projects.len(),
-        direct_issue_count: 0,
-        runtime_launch_count: 0,
+        project_count: projects.len(),
+        direct_issue_count: issues
+            .iter()
+            .filter(|issue| issue.project_id.is_none())
+            .count(),
+        runtime_launch_count: ticks.len(),
         active_issue_count: 0,
         blocked_issue_count: 0,
         done_issue_count: 0,
         projects: Vec::new(),
-        errors: Vec::new(),
+        errors,
     };
 
-    match agentflow_loop::DirectIssueLoop::schedule_ready_issues(&root) {
-        Ok(direct_summary) => push_direct_summary(&mut summary, direct_summary),
-        Err(error) => summary.errors.push(format!("direct issues: {error}")),
-    }
-
-    for project in snapshot.projects {
-        let project_id = project.project_id;
-        match ProjectExecutor::new(project_id.clone()).tick(&root) {
-            Ok(execution_tick) => push_project_summary(&mut summary, execution_tick),
-            Err(error) => summary.errors.push(format!("{project_id}: {error}")),
+    for issue in issues.iter().filter(|issue| issue.project_id.is_none()) {
+        match projected_issue_state(&root, issue) {
+            "blocked" => summary.blocked_issue_count += 1,
+            "done" | "cancel" => summary.done_issue_count += 1,
+            "todo" | "in_progress" | "in_review" => summary.active_issue_count += 1,
+            _ => {}
         }
     }
 
-    let _ = agentflow_state::refresh_state(&root);
+    for project in projects {
+        let tick = ticks
+            .iter()
+            .find(|tick| tick.launch.project_id.as_deref() == Some(project.project_id.as_str()));
+        let mut active_issue_ids = Vec::new();
+        let mut blocked_issue_ids = Vec::new();
+        let mut done_issue_ids = Vec::new();
+
+        for issue_id in &project.issue_ids {
+            let issue = issues.iter().find(|issue| &issue.issue_id == issue_id);
+            let state = issue
+                .map(|issue| projected_issue_state(&root, issue))
+                .unwrap_or("backlog");
+            match state {
+                "blocked" => blocked_issue_ids.push(issue_id.clone()),
+                "done" | "cancel" => done_issue_ids.push(issue_id.clone()),
+                "todo" | "in_progress" | "in_review" => active_issue_ids.push(issue_id.clone()),
+                _ => {}
+            }
+        }
+
+        summary.active_issue_count += active_issue_ids.len();
+        summary.blocked_issue_count += blocked_issue_ids.len();
+        summary.done_issue_count += done_issue_ids.len();
+
+        let projection = load_project_projection(&root, &project.project_id).ok();
+        let runtime_issue_id = tick.map(|tick| tick.launch.issue_id.clone()).or_else(|| {
+            projection
+                .as_ref()
+                .and_then(|value| value.current_issue_id.clone())
+        });
+        let runtime_stage = runtime_issue_id
+            .as_ref()
+            .and_then(|issue_id| load_task_projection(&root, issue_id).ok())
+            .map(|projection| projection.current_state);
+
+        summary.projects.push(ProjectLoopProjectSummary {
+            project_id: project.project_id.clone(),
+            status: projection
+                .as_ref()
+                .map(|value| value.status.clone())
+                .unwrap_or_else(|| "planned".to_string()),
+            active_issue_ids,
+            blocked_issue_ids,
+            done_issue_ids,
+            runtime_issue_id,
+            runtime_run_id: tick.map(|tick| tick.launch.run_id.clone()),
+            runtime_stage,
+            runtime_launch_request_path: tick.map(|tick| tick.launch.launch_request_path.clone()),
+            blockers: Vec::new(),
+        });
+    }
+
     Ok(summary)
 }
 
-fn push_direct_summary(summary: &mut ProjectLoopRunSummary, snapshot: DirectIssueLoopSummary) {
-    summary.direct_issue_count += snapshot.active_issue_ids.len()
-        + snapshot.blocked_issue_ids.len()
-        + snapshot.done_issue_ids.len();
-    summary.active_issue_count += snapshot.active_issue_ids.len();
-    summary.blocked_issue_count += snapshot.blocked_issue_ids.len();
-    summary.done_issue_count += snapshot.done_issue_ids.len();
-    if !snapshot.blockers.is_empty() {
-        summary.errors.extend(
-            snapshot
-                .blockers
-                .into_iter()
-                .map(|blocker| format!("{}: {}", blocker.code, blocker.reason)),
-        );
+fn projected_issue_state<'a>(root: &Path, issue: &'a SpecIssue) -> &'a str {
+    if let Ok(projection) = load_task_projection(root, &issue.issue_id) {
+        match projection.current_state.as_str() {
+            "backlog" => "backlog",
+            "todo" => "todo",
+            "in_progress" => "in_progress",
+            "in_review" => "in_review",
+            "done" => "done",
+            "blocked" => "blocked",
+            "cancel" => "cancel",
+            _ => issue.status.as_str(),
+        }
+    } else {
+        issue.status.as_str()
     }
-}
-
-fn push_project_summary(summary: &mut ProjectLoopRunSummary, tick: ProjectExecutionTick) {
-    let ProjectExecutionTick { snapshot, launch } = tick;
-    summary.active_issue_count += snapshot.active_issue_ids.len();
-    summary.blocked_issue_count += snapshot.blocked_issue_ids.len();
-    summary.done_issue_count += snapshot.done_issue_ids.len();
-    if launch.is_some() {
-        summary.runtime_launch_count += 1;
-    }
-    summary.projects.push(ProjectLoopProjectSummary {
-        project_id: snapshot.project_id,
-        status: snapshot.status.as_str().to_string(),
-        active_issue_ids: snapshot.active_issue_ids,
-        blocked_issue_ids: snapshot.blocked_issue_ids,
-        done_issue_ids: snapshot.done_issue_ids,
-        runtime_issue_id: launch
-            .as_ref()
-            .map(|item| item.issue_id.clone())
-            .or(snapshot.runtime_issue_id.clone()),
-        runtime_run_id: launch
-            .as_ref()
-            .map(|item| item.run_id.clone())
-            .or(snapshot.runtime_run_id.clone()),
-        runtime_stage: launch
-            .as_ref()
-            .map(|item| item.stage.as_str().to_string())
-            .or(snapshot
-                .runtime_stage
-                .as_ref()
-                .map(|stage| stage.as_str().to_string())),
-        runtime_launch_request_path: launch
-            .as_ref()
-            .map(|item| item.launch_request_path.clone())
-            .or(snapshot.runtime_launch_request_path.clone()),
-        blockers: snapshot.blockers,
-    });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentflow_input::{
-        issue::{
-            AgentRole, DisplayStatus, InputIssue, InputIssueKind, InputIssueModel,
-            InputIssueStatus, InputPriority, InputRiskLevel, InputSystemRecord, IssueCategory,
-        },
-        project::{InputProject, InputProjectStatus},
-        spec_gate::{InputIssueGenerationMode, InputSpecApproval},
+    use agentflow_spec::{
+        issue_from_requirement, project_from_requirement, read_spec_issue, write_spec_issue,
+        write_spec_project, SpecIssueDraft, SpecIssueStatus, SpecProjectDraft,
     };
-    use agentflow_panel::PanelPrepareMode;
     use std::fs;
     use tempfile::tempdir;
 
+    fn write_requirement(root: &Path) -> std::path::PathBuf {
+        let path = root.join("docs/requirements/034-desktop-loop-test.md");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            "# Desktop Project Loop\n\n验证桌面按钮走 task-loop。\n",
+        )
+        .unwrap();
+        path
+    }
+
+    fn write_project_with_backlog_issue(root: &Path) {
+        let requirement = write_requirement(root);
+        let mut issue = SpecIssueDraft::new("AF-LOOP-001");
+        issue.project_id = Some("project-loop".to_string());
+        issue.allowed_paths = vec!["apps/desktop/src/**".to_string()];
+        issue.validation_commands = vec!["npm --prefix apps/desktop run build".to_string()];
+        let issue = issue_from_requirement(root, &requirement, issue).unwrap();
+        write_spec_issue(root, &issue).unwrap();
+
+        let mut project = SpecProjectDraft::new("project-loop");
+        project.issue_ids = vec!["AF-LOOP-001".to_string()];
+        let project = project_from_requirement(root, &requirement, project).unwrap();
+        write_spec_project(root, &project).unwrap();
+    }
+
+    fn write_direct_backlog_issue(root: &Path) {
+        let requirement = write_requirement(root);
+        let mut issue = SpecIssueDraft::new("AF-DIRECT-001");
+        issue.allowed_paths = vec!["apps/desktop/src/**".to_string()];
+        let issue = issue_from_requirement(root, &requirement, issue).unwrap();
+        write_spec_issue(root, &issue).unwrap();
+    }
+
     #[test]
-    fn run_project_loop_schedules_backlog_issue_from_desktop_entrypoint() {
+    fn run_project_loop_launches_spec_project_issue_from_desktop_entrypoint() {
         let dir = tempdir().unwrap();
-        prepare_fixture_project(dir.path());
-        write_approved_spec(dir.path());
         write_project_with_backlog_issue(dir.path());
-        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
 
         let summary = run_project_loop_inner(dir.path()).unwrap();
 
@@ -198,7 +265,8 @@ mod tests {
         assert_eq!(summary.active_issue_count, 1);
         assert_eq!(summary.blocked_issue_count, 0);
         assert!(summary.errors.is_empty());
-        assert_eq!(summary.projects[0].status, "executing");
+        assert_eq!(summary.projects[0].project_id, "project-loop");
+        assert_eq!(summary.projects[0].status, "active");
         assert_eq!(summary.projects[0].active_issue_ids, vec!["AF-LOOP-001"]);
         assert_eq!(
             summary.projects[0].runtime_issue_id.as_deref(),
@@ -208,195 +276,39 @@ mod tests {
             summary.projects[0].runtime_stage.as_deref(),
             Some("in_progress")
         );
-
-        let issue = agentflow_input::load_input_issue(dir.path(), "AF-LOOP-001").unwrap();
-        assert_eq!(issue.status, InputIssueStatus::InProgress);
-        assert_eq!(issue.display_status, DisplayStatus::InProgress);
-        assert!(dir
-            .path()
-            .join(".agentflow/panel/context-packs/AF-LOOP-001.json")
-            .is_file());
-        assert!(issue.latest_run_id.is_some());
-        let expected_launch_request_path = issue.latest_run_id.as_deref().map(|run_id| {
-            format!(".agentflow/execute/runs/{run_id}/launcher/build-agent-request.json")
-        });
         assert_eq!(
             summary.projects[0].runtime_launch_request_path.as_deref(),
-            expected_launch_request_path.as_deref()
+            Some(".agentflow/tasks/AF-LOOP-001/runs/run-001/launch/agent-request.json")
         );
-        let launch_request_path = dir.path().join(
-            summary.projects[0]
-                .runtime_launch_request_path
-                .as_deref()
-                .unwrap(),
-        );
-        assert!(launch_request_path.is_file());
         assert!(dir
             .path()
-            .join(".agentflow/state/loops/projects/proj-loop.json")
+            .join(".agentflow/tasks/AF-LOOP-001/runs/run-001/launch/agent-request.json")
             .is_file());
-        assert!(dir
-            .path()
-            .join(".agentflow/state/loops/issues/AF-LOOP-001.json")
-            .is_file());
+        assert!(!dir.path().join(".agentflow/execute").exists());
+
+        let issue = read_spec_issue(dir.path(), "AF-LOOP-001").unwrap();
+        assert_eq!(issue.status, SpecIssueStatus::Backlog);
+        let projection = load_task_projection(dir.path(), "AF-LOOP-001").unwrap();
+        assert_eq!(projection.current_state, "in_progress");
+        assert_eq!(projection.latest_run_id.as_deref(), Some("run-001"));
     }
 
     #[test]
-    fn run_project_loop_schedules_direct_backlog_issue_from_desktop_entrypoint() {
+    fn run_project_loop_keeps_direct_issues_out_of_project_scheduler() {
         let dir = tempdir().unwrap();
-        prepare_fixture_project(dir.path());
-        write_approved_spec_with_mode(dir.path(), InputIssueGenerationMode::Direct);
         write_direct_backlog_issue(dir.path());
-        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
 
         let summary = run_project_loop_inner(dir.path()).unwrap();
 
         assert_eq!(summary.project_count, 0);
         assert_eq!(summary.direct_issue_count, 1);
         assert_eq!(summary.runtime_launch_count, 0);
-        assert_eq!(summary.active_issue_count, 1);
+        assert_eq!(summary.active_issue_count, 0);
         assert_eq!(summary.blocked_issue_count, 0);
+        assert_eq!(summary.done_issue_count, 0);
         assert!(summary.errors.is_empty());
 
-        let issue = agentflow_input::load_input_issue(dir.path(), "AF-DIRECT-001").unwrap();
-        assert_eq!(issue.status, InputIssueStatus::Todo);
-        assert_eq!(issue.display_status, DisplayStatus::Todo);
-        assert!(dir
-            .path()
-            .join(".agentflow/panel/context-packs/AF-DIRECT-001.json")
-            .is_file());
-        assert!(dir
-            .path()
-            .join(".agentflow/state/loops/issues/AF-DIRECT-001.json")
-            .is_file());
-    }
-
-    fn prepare_fixture_project(root: &Path) {
-        fs::create_dir_all(root.join("apps/desktop/src")).unwrap();
-        fs::write(root.join("README.md"), "# AgentFlow fixture\n").unwrap();
-        fs::write(
-            root.join("apps/desktop/src/App.tsx"),
-            "export function App() { return null; }\n",
-        )
-        .unwrap();
-        agentflow_agent_manual::prepare_agent_working_manual(root).unwrap();
-        agentflow_panel::prepare_project_panel(root, PanelPrepareMode::Blocking).unwrap();
-        agentflow_input::prepare_input_workspace(root).unwrap();
-    }
-
-    fn write_approved_spec(root: &Path) {
-        write_approved_spec_with_mode(root, InputIssueGenerationMode::Project);
-    }
-
-    fn write_approved_spec_with_mode(root: &Path, issue_generation_mode: InputIssueGenerationMode) {
-        let spec_dir = root.join(".agentflow/input/specs/approved/spec-loop");
-        fs::create_dir_all(&spec_dir).unwrap();
-        fs::write(spec_dir.join("product.md"), "# Product\n").unwrap();
-        fs::write(spec_dir.join("tech.md"), "# Tech\n").unwrap();
-        fs::write(spec_dir.join("spec.json"), "{}\n").unwrap();
-        fs::write(
-            spec_dir.join("approval.json"),
-            serde_json::to_string_pretty(&InputSpecApproval {
-                spec_id: "spec-loop".to_string(),
-                issue_generation_mode,
-                ..InputSpecApproval::default()
-            })
-            .unwrap(),
-        )
-        .unwrap();
-    }
-
-    fn write_direct_backlog_issue(root: &Path) {
-        let mut issue = InputIssue {
-            issue_id: "AF-DIRECT-001".to_string(),
-            issue_model: InputIssueModel::Direct,
-            issue_category: IssueCategory::Spec,
-            required_agent_role: AgentRole::BuildAgent,
-            source_spec_id: "spec-loop".to_string(),
-            project_id: None,
-            title: "验证 Direct Issue Loop 调度".to_string(),
-            summary: "把 direct backlog 任务推进到 todo，并生成上下文包。".to_string(),
-            kind: InputIssueKind::Validation,
-            priority: InputPriority::P2,
-            status: InputIssueStatus::Backlog,
-            display_status: DisplayStatus::Backlog,
-            execution_risk: InputRiskLevel::Low,
-            scope: vec!["apps/desktop/src/**".to_string()],
-            acceptance_criteria: vec!["任务状态变成 todo".to_string()],
-            validation_hints: vec!["npm --prefix apps/desktop run build".to_string()],
-            system: InputSystemRecord {
-                created_by: "test".to_string(),
-                created_at: 1,
-                updated_at: 1,
-                path: ".agentflow/input/issues/AF-DIRECT-001.json".to_string(),
-                revision: 1,
-            },
-            ..InputIssue::default()
-        };
-        issue.normalize_execution_metadata();
-
-        fs::write(
-            root.join(".agentflow/input/issues/AF-DIRECT-001.json"),
-            serde_json::to_string_pretty(&issue).unwrap(),
-        )
-        .unwrap();
-    }
-
-    fn write_project_with_backlog_issue(root: &Path) {
-        let project = InputProject {
-            project_id: "proj-loop".to_string(),
-            source_spec_id: "spec-loop".to_string(),
-            title: "Loop fixture project".to_string(),
-            summary: "验证 Project Loop 可以调度任务。".to_string(),
-            objective: "验证 Project Loop 可以调度任务。".to_string(),
-            issue_ids: vec!["AF-LOOP-001".to_string()],
-            status: InputProjectStatus::Planned,
-            system: InputSystemRecord {
-                created_by: "test".to_string(),
-                created_at: 1,
-                updated_at: 1,
-                path: ".agentflow/input/projects/proj-loop.json".to_string(),
-                revision: 1,
-            },
-            ..InputProject::default()
-        };
-        let mut issue = InputIssue {
-            issue_id: "AF-LOOP-001".to_string(),
-            issue_model: InputIssueModel::Project,
-            issue_category: IssueCategory::Spec,
-            required_agent_role: AgentRole::BuildAgent,
-            source_spec_id: "spec-loop".to_string(),
-            project_id: Some("proj-loop".to_string()),
-            title: "验证 Project Loop 调度".to_string(),
-            summary: "把 backlog 任务推进到 todo，并生成上下文包。".to_string(),
-            kind: InputIssueKind::Validation,
-            priority: InputPriority::P2,
-            status: InputIssueStatus::Backlog,
-            display_status: DisplayStatus::Backlog,
-            execution_risk: InputRiskLevel::Low,
-            scope: vec!["apps/desktop/src/**".to_string()],
-            acceptance_criteria: vec!["任务状态变成 todo".to_string()],
-            validation_hints: vec!["npm --prefix apps/desktop run build".to_string()],
-            system: InputSystemRecord {
-                created_by: "test".to_string(),
-                created_at: 1,
-                updated_at: 1,
-                path: ".agentflow/input/issues/AF-LOOP-001.json".to_string(),
-                revision: 1,
-            },
-            ..InputIssue::default()
-        };
-        issue.normalize_execution_metadata();
-
-        fs::write(
-            root.join(".agentflow/input/projects/proj-loop.json"),
-            serde_json::to_string_pretty(&project).unwrap(),
-        )
-        .unwrap();
-        fs::write(
-            root.join(".agentflow/input/issues/AF-LOOP-001.json"),
-            serde_json::to_string_pretty(&issue).unwrap(),
-        )
-        .unwrap();
+        let projection = load_task_projection(dir.path(), "AF-DIRECT-001").unwrap();
+        assert_eq!(projection.current_state, "backlog");
     }
 }
