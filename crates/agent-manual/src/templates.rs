@@ -36,14 +36,15 @@ Every Agent MUST read and follow:
 - Do not write source code unless AgentFlow rules explicitly allow it.
 - Do not execute project commands unless AgentFlow rules explicitly allow it.
 - Before producing a SPEC Draft Preview, every Agent MUST run the requirement-intake-filter skill.
-- Do not write legacy `.agentflow/spec/**` or `.agentflow/goal-tree/**`.
+- Do not write legacy `.agentflow/input/**` or `.agentflow/goal-tree/**`.
 - Do not write legacy `.agentflow/define/goals/**`, `.agentflow/define/milestones/**`, or `.agentflow/define/issues/**`.
 - Do not bypass SPEC.
-- `.agentflow/input/issues/**` is the only current task fact source.
-- `.agentflow/input/specs/drafts/**` and `.agentflow/input/specs/approved/**` are the only current SPEC fact sources.
-- The current AgentFlow input issue is the only task authority.
-- The handoff package is only a derived transport snapshot of that input issue.
-- `executionPipeline` is part of the input issue contract, not a separate task authority.
+- `docs/requirements/**` is the public requirement record.
+- `.agentflow/spec/issues/**` is the internal task contract source.
+- `.agentflow/spec/projects/**` is the internal project contract source.
+- The current AgentFlow spec issue is the only task authority.
+- The handoff package is only a derived transport snapshot of that spec issue.
+- `executionPipeline` is part of the spec issue contract, not a separate task authority.
 - Do not treat any external issue, task, plan, queue, thread, or tool state as AgentFlow task authority.
 - Do not use external planning state to create, select, split, reorder, or advance AgentFlow work.
 - GitHub/GitLab tools are allowed only for the PR/MR stages explicitly listed in the current AgentFlow executionPipeline.
@@ -83,8 +84,8 @@ Conversation with human
 → Requirement intake filter
 → SPEC Draft Preview
 → Human confirmation
-→ Approved SPEC
-→ Input issue generation
+→ Public requirement record
+→ Spec issue generation
 → Build Agent execution pipeline
 → Issue preflight
 → Test design
@@ -133,23 +134,26 @@ Do not mix these roles in one Codex thread. Each thread must keep one role for t
 - Project Workspace is local-first.
 - `.agentflow/` is the local Agent workflow control plane.
 - `define/` contains Agent manuals, templates, and skill definitions only.
-- `input/` is the canonical requirement fact source.
-- `.agentflow/input/issues/**` is the only current task fact source.
-- `.agentflow/input/specs/drafts/**` and `.agentflow/input/specs/approved/**` are the only current SPEC fact sources.
-- The current AgentFlow input issue is the only task authority.
-- The handoff package is only a derived transport snapshot of that input issue.
-- `executionPipeline` is part of the input issue contract, not a separate task authority.
+- `docs/requirements/**` is the public requirement record.
+- `spec/` is the internal task contract source.
+- `.agentflow/spec/issues/**` is the only current task fact source.
+- `.agentflow/spec/projects/**` is the internal project contract source.
+- The current AgentFlow spec issue is the only task authority.
+- The handoff package is only a derived transport snapshot of that spec issue.
+- `executionPipeline` is part of the spec issue contract, not a separate task authority.
 - External issue, task, plan, queue, thread, or tool state must not create, select, split, reorder, or advance AgentFlow work.
 - `AGENTS.md` is the canonical root Agent entry.
 - `AGENT.MD` is legacy compatibility only.
-- Legacy `.agentflow/spec/` and `.agentflow/goal-tree/` are not new write paths.
-- SPEC Gate uses `product.md`, `tech.md`, and `approval.json` under `.agentflow/input/specs/`.
-- Input issues are derived from Approved SPEC.
+- Legacy `.agentflow/input/` and `.agentflow/goal-tree/` are not new write paths.
+- SPEC Gate writes public requirement records under `docs/requirements/**`.
+- Spec issues are derived from public requirement records.
 - Panel canonical path is `.agentflow/panel/`.
-- Output canonical paths are `.agentflow/output/evidence/`, `.agentflow/output/release/`, and `.agentflow/output/audit/`.
+- Task runtime artifacts live under `.agentflow/tasks/<issue-id>/runs/**`.
+- Task evidence lives under `.agentflow/tasks/<issue-id>/evidence/**`.
+- Public delivery lives in PR/MR body, CHANGELOG entries, or release notes.
 - Task completion and audit are separate flows.
 - A Build Agent Done writeback must not create an audit request.
-- Audit starts only from an independent Audit Issue under `.agentflow/input/issues/audit-<release-id>.json` or explicit human audit request.
+- Audit starts only from an independent Audit Issue under `.agentflow/spec/issues/audit-<release-id>.json` or explicit human audit request.
 - `audit-request.json` is compatibility metadata only. Audit Issue is the Audit Agent execution entry.
 - `human-via-agent` may be created only when the human asks an Agent in conversation, not from an ordinary App button.
 - The App only displays audit state, reports, findings, evidence maps, traceability, and trigger source.
@@ -159,21 +163,21 @@ Do not mix these roles in one Codex thread. Each thread must keep one role for t
 - Read project files.
 - Read Panel status.
 - Read Project File Reader metadata.
-- Read Input status.
-- Read existing input SPEC drafts / approvals when they exist.
+- Read Spec status.
+- Read existing public requirement records and spec task contracts when they exist.
 - Ask human clarification questions.
 - Produce Requirement Intake Results before SPEC Draft previews.
 - Produce SPEC Draft previews in conversation.
-- After human approval, write Approved SPEC and direct issues or project issues under `.agentflow/input/**`.
+- After human approval, write public requirement records under `docs/requirements/**` and spec project / issue contracts under `.agentflow/spec/**`.
 
 ## Forbidden Actions
 
 - Do not write user source code.
 - Do not execute project commands.
 - Do not run tests.
-- Do not write legacy `.agentflow/spec/**`.
+- Do not write legacy `.agentflow/input/**`.
 - Do not write legacy `.agentflow/goal-tree/**`.
-- Do not write Approved SPEC without human confirmation.
+- Do not write public requirement records or spec issue contracts without human confirmation.
 - Do not start AgentRun.
 - Do not create PRs/MRs or remote issues unless the current role handoff explicitly authorizes that stage.
 - Do not use legacy workflow paths.
@@ -185,8 +189,8 @@ Conversation
 → Requirement intake filter
 → SPEC Draft Preview
 → Human confirmation
-→ Approved SPEC
-→ Input issue generation
+→ Public requirement record
+→ Spec issue generation
 → Build Agent execution pipeline
 → Issue preflight
 → Test design
@@ -200,7 +204,7 @@ Conversation
 
 ## SPEC First Rule
 
-Feature, refactor, cleanup, and unclear change requests must go through SPEC Draft Preview before any input issue generation.
+Feature, refactor, cleanup, and unclear change requests must go through SPEC Draft Preview before any spec issue generation.
 
 Before SPEC Gate authoring, the Agent must produce a Requirement Intake Result.
 
@@ -208,9 +212,9 @@ Only `ready-for-spec` may proceed to SPEC Draft Preview.
 
 Requirement Intake Result and SPEC Draft Preview are human-facing conversation outputs. They must be structured prose in `agentLocale`, not raw JSON dumps. JSON is for internal records, persisted fact files, tests, or advanced-detail views.
 
-## Input Rule
+## Spec Rule
 
-Input is the canonical requirement fact source under `.agentflow/input/`. All official issues must come from Approved SPEC. Simple requirements generate direct issues; complex requirements generate a project with issues. Desktop human UI is read-only and cannot directly edit input facts.
+Public requirement records live under `docs/requirements/**`. Internal task contracts live under `.agentflow/spec/**`. All official issues must come from a confirmed requirement record. Simple requirements may generate direct issues; complex requirements generate a project with issues. Desktop human UI is read-only and cannot directly edit spec facts.
 
 ## Locale Policy
 
@@ -224,7 +228,7 @@ This includes:
 - clarification questions
 - Requirement Intake Result explanations
 - SPEC Draft Preview prose
-- Input Project titles, summaries, objectives, scope, non-goals, and success criteria
+- Spec Project titles, summaries, objectives, scope, non-goals, and success criteria
 - Issue titles and summaries
 - acceptance criteria prose
 - TDD plans
@@ -284,21 +288,21 @@ Codex usage rule: humans should create three separate Codex threads named `Agent
 
 ### 1. Spec Agent
 
-Status: enabled for Input Model V1.
+Status: enabled for Spec Contract V1.
 
-Owns requirement intake, SPEC Gate, Approved SPEC, direct issues, and project issues under `.agentflow/input/**`.
+Owns requirement intake, SPEC Gate, public requirement records under `docs/requirements/**`, and spec project / issue contracts under `.agentflow/spec/**`.
 
 Raw human requirements are received in conversation by Spec Agent. Humans do not need to hand-write a raw directory.
 
 Before confirmation, it only produces Requirement Intake Result and SPEC Draft Preview in conversation.
 
-After confirmation, it may write Approved SPEC files only under `.agentflow/input/specs/approved/<spec-id>/` and generate direct issues or project issues under `.agentflow/input/issues/**` / `.agentflow/input/projects/**`.
+After confirmation, it may write public requirement records under `docs/requirements/**` and generate direct issues or project issues under `.agentflow/spec/issues/**` / `.agentflow/spec/projects/**`.
 
 Issue IDs are system-assigned and must use `<prefix>-<number>` format, for example `AF-001` or `AF-TASK-HIER-001`. Do not invent free-form slug IDs.
 
-It does not execute issues. Generated spec issues must use `issueCategory=spec`, `requiredAgentRole=build-agent`, `status=backlog` by default, and only move to `status=todo` when the issue is ready to enter the Build Agent pipeline. Issue status values are limited to `backlog`, `todo`, `in_progress`, `in_review`, `done`, `blocked`, and `cancel`; newly written input must not use legacy status names. Generated spec issues must include `sourceSpecId`, `sourceSpecPath`, `issuePath`, `handoffId`, explicit `contextPackPath`, allowed / forbidden paths, forbidden actions, validation commands, and `expectedOutputs.executeRunDir`, `expectedOutputs.evidencePath`, `expectedOutputs.releaseDeliveryDir`.
+It does not execute issues. Generated spec issues must use `issueCategory=spec`, `requiredAgentRole=build-agent`, `status=backlog` by default, and only move to `status=todo` when the issue is ready to enter the Build Agent pipeline. Issue status values are limited to `backlog`, `todo`, `in_progress`, `in_review`, `done`, `blocked`, and `cancel`; newly written spec issues must not use legacy status names. Generated spec issues must include `sourceRequirementId`, `sourceRequirementPath`, `sourceSpecId`, `workflowRef`, allowed / forbidden paths, validation commands, and expected outputs for task run, task evidence, and public delivery.
 
-When Spec Agent writes an initial input package, relation files are part of the package. `.agentflow/input/relations/issue-relations.json` and `.agentflow/input/relations/dependency-graph.json` must use canonical camelCase relation edges with `fromIssueId`, `toIssueId`, and `type`. Do not write legacy `from` / `to` relation fields.
+When Spec Agent writes an initial spec package, issue dependencies belong in each spec issue contract through `blockedBy`. Do not create legacy relation files or legacy `from` / `to` relation fields.
 
 It cannot execute issues, write source code, run commands, write execute facts, write output evidence, write release delivery, create PRs/MRs, merge, deploy, or audit.
 
@@ -306,11 +310,11 @@ It cannot execute issues, write source code, run commands, write execute facts, 
 
 Status: enabled for Execute + Release Delivery V1.
 
-Owns controlled development delivery from `.agentflow/input/issues/<issue-id>.json` into `.agentflow/execute/runs/<run-id>/`, `.agentflow/output/evidence/<run-id>.json`, and `.agentflow/output/release/<run-id>/`.
+Owns controlled development delivery from `.agentflow/spec/issues/<issue-id>.json` into `.agentflow/tasks/<issue-id>/runs/<run-id>/`, `.agentflow/tasks/<issue-id>/evidence/**`, and public delivery records in PR/MR body, CHANGELOG, or release notes.
 
 It may execute only `issueCategory=spec` issues with `requiredAgentRole=build-agent`. Its handoff must include source SPEC target metadata and build expected outputs. Its writeback must include `agent-claim.json` with `claimedAgentRole=build-agent`.
 
-Build Agent must use the current AgentFlow input issue as the only task authority. The handoff package is only a derived snapshot for transport, and `executionPipeline` is only one field inside the input issue contract, not a separate task source. It must not treat any external issue, task, plan, queue, thread, or tool state as task authority. GitHub/GitLab commands are allowed only for the PR/MR stages explicitly listed in the AgentFlow executionPipeline. `Do not handwrite .agentflow/**` means Build Agent must not directly edit AgentFlow facts by hand; it does not forbid calling official AgentFlow runtime entrypoints for run creation, Context Pack preparation, or loop writeback.
+Build Agent must use the current AgentFlow spec issue as the only task authority. The handoff package is only a derived snapshot for transport, and `executionPipeline` is only one field inside the spec issue contract, not a separate task source. It must not treat any external issue, task, plan, queue, thread, or tool state as task authority. GitHub/GitLab commands are allowed only for the PR/MR stages explicitly listed in the AgentFlow executionPipeline. `Do not handwrite .agentflow/**` means Build Agent must not directly edit AgentFlow facts by hand; it does not forbid calling official AgentFlow runtime entrypoints for run creation, Context Pack preparation, or loop writeback.
 
 It performs the Build Agent execution pipeline:
 
@@ -322,7 +326,7 @@ It performs the Build Agent execution pipeline:
 6. Merge PR/MR
 7. Write back Done
 
-The issue preflight only trusts the current AgentFlow input issue. It confirms the issue is still `backlog`, every `blockedBy` dependency issue is Done, the issue contract is complete, the Panel Context Pack is readable or can be generated, and the working tree is clean. Runtime preflight must then create the current run through the official AgentFlow run loop before any source code change starts. After preflight passes, AgentFlow moves the issue to `todo` and prepares it to enter `in_progress`. GitHub/GitLab checks are not part of this loop stage; CLI, auth, branch, PR/MR creation, and merge capability are recorded only in the create PR/MR and merge PR/MR stages.
+The issue preflight only trusts the current AgentFlow spec issue. It confirms the issue is still `backlog`, every `blockedBy` dependency issue is Done, the issue contract is complete, the Panel Context Pack is readable or can be generated, and the working tree is clean. Runtime preflight must then create the current run through the official AgentFlow run loop before any source code change starts. After preflight passes, AgentFlow moves the issue to `todo` and prepares it to enter `in_progress`. GitHub/GitLab checks are not part of this loop stage; CLI, auth, branch, PR/MR creation, and merge capability are recorded only in the create PR/MR and merge PR/MR stages.
 
 After runtime preflight confirms the Panel Context Pack is readable or successfully generated and the current run has been created, AgentFlow moves the current run to `planned` and the issue to `in_progress`. The test design stage then derives test points from SPEC and the current issue. If TDD fits the task, Build Agent adds or updates the failing test first. If TDD does not fit the task, Build Agent records the reason and defines the replacement smoke, build, screenshot, or command verification.
 
@@ -336,19 +340,19 @@ In `auto-merge-if-eligible`, the Build Agent must not stop at Draft PR/MR. For G
 
 If the provider rejects auto-merge or the repository is not eligible, the Build Agent must record the reason, mark the PR/MR ready, keep the issue in `in_review`, and wait for a human merge. AgentFlow local detection can then confirm GitHub or GitLab reports the PR/MR as merged and continue to Done writeback.
 
-The writeback stage runs only after PR/MR merge and writes run, evidence, release delivery, and `done` status.
+The writeback stage runs only after PR/MR merge and writes run events, task evidence, public delivery references, and `done` status.
 
-It cannot process `issueCategory=audit`, ask for audit target metadata, modify input issues outside AgentFlow issue status transitions, modify Approved SPEC, bypass issue preflight, bypass sandbox verification, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge outside `mergeMode`, deploy, call models, create audit requests from Done writeback, or write audit reports.
+It cannot process `issueCategory=audit`, ask for audit target metadata, modify spec issues outside AgentFlow issue status transitions, modify public requirement records, bypass issue preflight, bypass sandbox verification, bypass checkpoint, bypass lease, write unauthorized paths, execute dangerous commands, bypass high-risk human confirmation, merge outside `mergeMode`, deploy, call models, create audit requests from Done writeback, or write audit reports.
 
 ### 3. Audit Agent
 
 Status: enabled for Release Audit V1.
 
-Owns audit report completion for Audit Issues under `.agentflow/input/issues/audit-<release-id>.json` and audit artifacts under `.agentflow/output/audit/<audit-id>/`.
+Owns audit report completion for Audit Issues under `.agentflow/spec/issues/audit-<release-id>.json` and audit artifacts under `.agentflow/output/audit/<audit-id>/`.
 
 It may execute only `issueCategory=audit` issues with `requiredAgentRole=audit-agent`. Its handoff must include `auditId`, `sourceReleaseId`, `sourceDeliveryPath`, `auditOutputDir`, and audit expected outputs. Its writeback must include `agent-claim.json` with `claimedAgentRole=audit-agent`.
 
-It reviews Approved SPEC, input issue, execute run, patch diff, validation result, output evidence, and release delivery artifacts against AgentFlow boundaries.
+It reviews public requirement records, spec issue, task run, patch diff, validation result, task evidence, and public delivery records against AgentFlow boundaries.
 
 It writes only audit artifacts for the selected audit request:
 
@@ -361,7 +365,7 @@ It writes only audit artifacts for the selected audit request:
 
 It must not create duplicate audit artifacts for the same audit request.
 
-It cannot process `issueCategory=spec`, modify source code, modify input facts, modify execute patches, modify release delivery, generate release, execute commands, create PRs/MRs, merge, or deploy.
+It cannot process `issueCategory=spec`, modify source code, modify spec facts, modify task patches, modify public delivery, generate release, execute commands, create PRs/MRs, merge, or deploy.
 
 ## Audit Trigger Rule
 
@@ -410,9 +414,9 @@ pub fn skill_templates() -> [AgentSkillTemplate; 7] {
             content: SPEC_GATE_AUTHORING_SKILL,
         },
         AgentSkillTemplate {
-            name: "input-issue-generation",
-            relative_path: ".agentflow/define/agent/skills/input-issue-generation/SKILL.md",
-            content: INPUT_ISSUE_GENERATION_SKILL,
+            name: "spec-issue-generation",
+            relative_path: ".agentflow/define/agent/skills/spec-issue-generation/SKILL.md",
+            content: SPEC_ISSUE_GENERATION_SKILL,
         },
         AgentSkillTemplate {
             name: "boundary-check",
@@ -491,8 +495,8 @@ Prefer project context before asking questions:
 - Current Project Workspace state
 - Panel status
 - Project File Reader metadata
-- Existing input issue snapshot
-- Existing input SPEC drafts or approvals
+- Existing spec issue snapshot
+- Existing public requirement records and spec issue contracts
 - Agentflow.md
 - skills-lock.json
 - request-triage result
@@ -573,10 +577,10 @@ Check whether the request asks the Agent to:
 
 - Write user source code.
 - Execute commands.
-- Write legacy `.agentflow/spec/**`.
+- Write legacy `.agentflow/input/**`.
 - Write legacy `.agentflow/goal-tree/**`.
-- Write input facts before human confirmation.
-- Skip Approved SPEC.
+- Write spec facts before human confirmation.
+- Skip public requirement record confirmation.
 - Start AgentRun.
 - Create remote PRs, issues, or external objects.
 - Touch retired runtime paths.
@@ -628,8 +632,8 @@ Result:
 - Do not optimize prompts.
 - Do not output SPEC files.
 - Do not make raw JSON the main human-facing output.
-- Do not write `.agentflow/input/**` before human confirmation.
-- Do not write legacy `.agentflow/spec/**`.
+- Do not write `docs/requirements/**` or `.agentflow/spec/**` before human confirmation.
+- Do not write legacy `.agentflow/input/**`.
 - Do not write legacy `.agentflow/goal-tree/**`.
 - Do not start AgentRun.
 - Do not execute commands.
@@ -663,99 +667,58 @@ Use this structure unless the human asks for another format:
 - Open questions
 - Files to write after confirmation
 
-## Approved SPEC Artifact Content
+## Public Requirement Record Content
 
-After human confirmation, Approved SPEC writes structured artifacts:
+After human confirmation, Spec Agent writes one public requirement record:
 
-- `product.md`: human-readable requirement and acceptance document with background, goals, user behavior, scope, non-goals, and acceptance criteria.
-- `tech.md`: implementation boundaries, data paths, role rules, validation commands, forbidden actions, and risk notes.
-- `spec.json`: metadata, identifiers, source references, and artifact index only. It is not the primary human-facing SPEC document.
-- `approval.json`: approval metadata, approver, approval time, and source confirmation.
+- `docs/requirements/<requirement-id>.md`: human-readable requirement, acceptance, scope, non-goals, validation, and implementation boundaries.
 
-Raw JSON belongs in `spec.json`, `approval.json`, issue files, or advanced details. It must not replace the conversation preview.
+Raw JSON belongs in spec issue files or advanced details. It must not replace the conversation preview.
 
 ## Hard Rules
 
 - Do not run before Requirement Intake Result status is `ready-for-spec`.
-- Without human confirmation, do not write `.agentflow/input/**`.
-- After human confirmation, Approved SPEC writes only:
-  - `.agentflow/input/specs/approved/<spec-id>/product.md`
-  - `.agentflow/input/specs/approved/<spec-id>/tech.md`
-  - `.agentflow/input/specs/approved/<spec-id>/spec.json`
-  - `.agentflow/input/specs/approved/<spec-id>/approval.json`
-- Do not write legacy `.agentflow/spec/**`.
+- Without human confirmation, do not write `docs/requirements/**` or `.agentflow/spec/**`.
+- After human confirmation, public requirement records write only to `docs/requirements/**`.
+- Spec project / issue contracts write only to `.agentflow/spec/projects/**` and `.agentflow/spec/issues/**`.
+- Do not write legacy `.agentflow/input/**`.
 - Do not write legacy `.agentflow/goal-tree/**`.
-- SPEC Gate is `product.md` + `tech.md` + `approval.json`.
+- SPEC Gate is the confirmed public requirement record plus generated spec project / issue contracts.
 "#;
 
-const INPUT_ISSUE_GENERATION_SKILL: &str = r#"# input-issue-generation
+const SPEC_ISSUE_GENERATION_SKILL: &str = r#"# spec-issue-generation
 
 Version: v1
 
 ## Purpose
 
-Convert Approved SPEC into AgentFlow input issues.
+Convert a confirmed public requirement record into AgentFlow spec project / issue contracts.
 
 ## Hard Rules
 
 - Do not generate issues from chat directly.
-- Generate only from Approved SPEC with `product.md`, `tech.md`, and `approval.json`.
-- Write issue files only to `.agentflow/input/issues/<issue-id>.json`.
-- When generating a project issue package, update `.agentflow/input/projects/**`, `.agentflow/input/index.json`, `.agentflow/input/manifest.json`, and `.agentflow/input/relations/**` with the same canonical issue IDs.
+- Generate only from `docs/requirements/<requirement-id>.md`.
+- Write issue files only to `.agentflow/spec/issues/<issue-id>.json`.
+- When generating a project issue package, update `.agentflow/spec/projects/**` with the same canonical issue IDs.
 - Do not write `.agentflow/define/issues/**`, `.agentflow/define/goals/**`, or `.agentflow/define/milestones/**`.
-- Do not write legacy `.agentflow/spec/**`.
+- Do not write legacy `.agentflow/input/**`.
 - Do not write legacy `.agentflow/goal-tree/**`.
 - Do not execute issues.
 - Do not start AgentRun.
-- Every generated Spec Issue must include `issueCategory=spec`, `requiredAgentRole=build-agent`, `sourceSpecId`, `sourceSpecPath`, `issuePath`, `handoffId`, explicit `contextPackPath`, `allowedPaths`, `forbiddenPaths`, `forbiddenActions`, `validationCommands`, and build `expectedOutputs`.
+- Every generated Spec Issue must include `issueCategory=spec`, `requiredAgentRole=build-agent`, `sourceRequirementId`, `sourceRequirementPath`, `sourceSpecId`, `workflowRef`, `allowedPaths`, `forbiddenPaths`, `validationCommands`, and `expectedOutputs`.
 - Project and Issue human-facing natural-language fields MUST follow the current `agentLocale`. This includes Project `title`, `summary`, `objective`, `scope`, `nonGoals`, and `successCriteria`, plus Issue `title`, `summary`, `scope`, `nonGoals`, `acceptanceCriteria`, and `validationHints`.
-- Relation files are part of the initial input package. `.agentflow/input/relations/issue-relations.json` and `.agentflow/input/relations/dependency-graph.json` must use `fromIssueId` and `toIssueId`. Do not write legacy `from` / `to` fields.
+- Dependencies belong in each spec issue contract through `blockedBy`. Do not generate legacy relation files.
 
 ## Mapping
 
-- Simple Approved SPEC -> direct issues
-- Complex Approved SPEC -> project with issues
-- SPEC objective -> Project.objective or Issue.summary
-- SPEC scope / non-goals -> Project.scope / Issue.scope / Issue.nonGoals
-- SPEC tasks -> Issue.title / Issue.summary
-- SPEC acceptance criteria -> Issue.acceptanceCriteria
-- SPEC validation plan -> Issue.validationHints
-- SPEC dependencies -> Issue.relations
+- Simple requirement record -> direct issues
+- Complex requirement record -> project with issues
+- Requirement objective -> Project.objective or Issue.summary
+- Requirement scope / non-goals -> Project.scope / Issue.allowedPaths / Issue.forbiddenPaths
+- Requirement tasks -> Issue.title / Issue.summary
+- Requirement acceptance criteria -> Issue.validationCommands and issue summary
+- Requirement dependencies -> Issue.blockedBy
 - Spec Agent scheduling judgment -> Issue.priority (`p0` / `p1` / `p2` / `p3`)
-- Spec Agent execution-safety judgment -> Issue.executionRisk (`low` / `medium` / `high`)
-
-## Relation File Schema
-
-Use this schema for `.agentflow/input/relations/issue-relations.json`:
-
-```json
-{
-  "version": "input-issue-relations.v1",
-  "relations": [
-    {
-      "fromIssueId": "AF-002",
-      "toIssueId": "AF-001",
-      "type": "blocked-by"
-    }
-  ]
-}
-```
-
-Use this schema for `.agentflow/input/relations/dependency-graph.json`:
-
-```json
-{
-  "version": "input-dependency-graph.v1",
-  "nodes": ["AF-001", "AF-002"],
-  "edges": [
-    {
-      "fromIssueId": "AF-002",
-      "toIssueId": "AF-001",
-      "type": "blocked-by"
-    }
-  ]
-}
-```
 
 Allowed relation `type` values are `blocked-by`, `blocks`, `related`, and `duplicate-of`.
 
@@ -765,7 +728,7 @@ Invalid legacy shape:
 { "from": "AF-002", "to": "AF-001", "type": "blocked-by" }
 ```
 
-If a relation points at a missing issue ID, stop and fix the initial input package before reporting completion.
+If a dependency points at a missing issue ID, stop and fix the initial spec package before reporting completion.
 "#;
 
 const BOUNDARY_CHECK_SKILL: &str = r#"# boundary-check
@@ -780,10 +743,10 @@ Check every Agent action before it proceeds.
 
 - Is the Agent about to write user source code?
 - Is the Agent about to execute a command?
-- Is the Agent about to write input facts?
+- Is the Agent about to write public requirement records or spec facts?
 - Has human confirmation been captured?
-- Is the Agent about to write legacy `.agentflow/spec/**` or `.agentflow/goal-tree/**`?
-- Does Approved SPEC exist?
+- Is the Agent about to write legacy `.agentflow/input/**` or `.agentflow/goal-tree/**`?
+- Does the public requirement record exist?
 - Is the Agent about to start AgentRun?
 - Is the Agent about to create a remote object?
 - Does the action touch retired runtime paths?

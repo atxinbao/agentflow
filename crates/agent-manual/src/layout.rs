@@ -38,6 +38,17 @@ const LAYOUT_DIRECTORIES: &[&str] = &[
     ".agentflow/define/audit",
     ".agentflow/define/audit/skills",
     ".agentflow/define/audit/templates",
+    ".agentflow/spec",
+    ".agentflow/spec/projects",
+    ".agentflow/spec/issues",
+    ".agentflow/spec/archive",
+    ".agentflow/spec/requirements",
+    ".agentflow/events",
+    ".agentflow/projections",
+    ".agentflow/projections/tasks",
+    ".agentflow/projections/projects",
+    ".agentflow/indexes",
+    ".agentflow/tasks",
     ".agentflow/input",
     ".agentflow/input/intake",
     ".agentflow/input/specs",
@@ -96,13 +107,12 @@ const AGENT_ROLES_JSON: &str = r#"{
       "label": "需求助手",
       "allowedIssueCategories": [],
       "allowedWrites": [
-        ".agentflow/input/intake/**",
-        ".agentflow/input/specs/**",
-        ".agentflow/input/issues/**"
+        "docs/requirements/**",
+        ".agentflow/spec/projects/**",
+        ".agentflow/spec/issues/**"
       ],
       "forbiddenWrites": [
-        ".agentflow/execute/**",
-        ".agentflow/output/release/**",
+        ".agentflow/tasks/**",
         ".agentflow/output/audit/**"
       ]
     },
@@ -111,10 +121,9 @@ const AGENT_ROLES_JSON: &str = r#"{
       "label": "执行助手",
       "allowedIssueCategories": ["spec"],
       "allowedWrites": [
-        ".agentflow/execute/**",
-        ".agentflow/output/evidence/**",
-        ".agentflow/output/release/**",
-        ".agentflow/state/events/**"
+        ".agentflow/tasks/<issue-id>/runs/**",
+        ".agentflow/tasks/<issue-id>/evidence/**",
+        ".agentflow/events/**"
       ],
       "forbiddenWrites": [
         ".agentflow/output/audit/**"
@@ -126,12 +135,10 @@ const AGENT_ROLES_JSON: &str = r#"{
       "allowedIssueCategories": ["audit"],
       "allowedWrites": [
         ".agentflow/output/audit/**",
-        ".agentflow/state/events/**"
+        ".agentflow/events/**"
       ],
       "forbiddenWrites": [
-        ".agentflow/execute/**",
-        ".agentflow/output/evidence/**",
-        ".agentflow/output/release/**"
+        ".agentflow/tasks/**"
       ]
     }
   ]
@@ -339,7 +346,10 @@ pub(crate) fn expected_workspace_manifest(
             "workspace".to_string(),
             "agent-manual".to_string(),
             "panel".to_string(),
-            "input".to_string(),
+            "spec".to_string(),
+            "events".to_string(),
+            "projections".to_string(),
+            "tasks".to_string(),
             "project-file-reader".to_string(),
             "requirement-intake".to_string(),
         ],
@@ -369,39 +379,29 @@ pub(crate) fn expected_workspace_manifest(
                 "defineAudit".to_string(),
                 ".agentflow/define/audit".to_string(),
             ),
-            ("input".to_string(), ".agentflow/input".to_string()),
+            ("spec".to_string(), ".agentflow/spec".to_string()),
             (
-                "inputManifest".to_string(),
-                ".agentflow/input/manifest.json".to_string(),
+                "specProjects".to_string(),
+                ".agentflow/spec/projects".to_string(),
             ),
             (
-                "inputIndex".to_string(),
-                ".agentflow/input/index.json".to_string(),
+                "specIssues".to_string(),
+                ".agentflow/spec/issues".to_string(),
+            ),
+            ("events".to_string(), ".agentflow/events".to_string()),
+            (
+                "projections".to_string(),
+                ".agentflow/projections".to_string(),
             ),
             (
-                "inputIntake".to_string(),
-                ".agentflow/input/intake".to_string(),
+                "taskProjections".to_string(),
+                ".agentflow/projections/tasks".to_string(),
             ),
             (
-                "inputSpecs".to_string(),
-                ".agentflow/input/specs".to_string(),
+                "projectProjections".to_string(),
+                ".agentflow/projections/projects".to_string(),
             ),
-            (
-                "inputProjects".to_string(),
-                ".agentflow/input/projects".to_string(),
-            ),
-            (
-                "inputIssues".to_string(),
-                ".agentflow/input/issues".to_string(),
-            ),
-            (
-                "inputRelations".to_string(),
-                ".agentflow/input/relations".to_string(),
-            ),
-            (
-                "inputViews".to_string(),
-                ".agentflow/input/views".to_string(),
-            ),
+            ("tasks".to_string(), ".agentflow/tasks".to_string()),
             ("panel".to_string(), ".agentflow/panel".to_string()),
             (
                 "panelManifest".to_string(),
@@ -451,8 +451,6 @@ pub(crate) fn expected_workspace_manifest(
                 "panelIndex".to_string(),
                 ".agentflow/panel/index".to_string(),
             ),
-            ("execute".to_string(), ".agentflow/execute".to_string()),
-            ("output".to_string(), ".agentflow/output".to_string()),
             ("state".to_string(), ".agentflow/state".to_string()),
         ]),
         compat: BTreeMap::from([
@@ -460,7 +458,12 @@ pub(crate) fn expected_workspace_manifest(
                 "legacyGoalTreeDefine".to_string(),
                 ".agentflow/define".to_string(),
             ),
-            ("legacySpec".to_string(), ".agentflow/spec".to_string()),
+            ("legacyInput".to_string(), ".agentflow/input".to_string()),
+            (
+                "legacyExecute".to_string(),
+                ".agentflow/execute".to_string(),
+            ),
+            ("legacyOutput".to_string(), ".agentflow/output".to_string()),
             (
                 "legacyGoalTree".to_string(),
                 ".agentflow/goal-tree".to_string(),
@@ -550,24 +553,22 @@ SPEC is the requirement and acceptance manual for AgentFlow.
 - Requirement Intake Result is the prerequisite for SPEC work.
 - Only `ready-for-spec` may proceed to SPEC Draft Preview.
 - Before human confirmation, Agents may discuss a draft preview but must not write SPEC fact sources.
-- Approved SPEC is required before input issue generation.
-- Real SPEC artifacts live under `.agentflow/input/specs/`, not under `define/`.
+- Public requirement records are required before spec issue generation.
+- Requirement records live under `docs/requirements/**`; internal contracts live under `.agentflow/spec/**`, not under `define/`.
 
 ## Human-facing Output
 
 - Requirement Intake Result must be structured prose in the user's `agentLocale`.
 - SPEC Draft Preview must be structured prose in the user's `agentLocale`.
-- Approved SPEC product / tech prose must follow the user's `agentLocale`.
-- Input Project and Issue human-facing fields must follow the user's `agentLocale`.
+- Public requirement prose must follow the user's `agentLocale`.
+- Spec Project and Issue human-facing fields must follow the user's `agentLocale`.
 - Do not show raw JSON as the default conversation output.
 - Raw JSON is allowed only for internal records, persisted fact files, tests, or advanced details.
 
-## Approved SPEC Artifacts
+## Public Requirement Artifacts
 
-- `product.md` is the primary human-readable requirement and acceptance document.
-- `tech.md` records implementation boundaries, data paths, validation, and forbidden actions.
-- `spec.json` records metadata, identifiers, source references, and artifact indexes.
-- `approval.json` records human approval metadata.
+- `docs/requirements/<requirement-id>.md` is the primary human-readable requirement and acceptance document.
+- `.agentflow/spec/projects/**` and `.agentflow/spec/issues/**` store internal task contracts.
 
 ## V1 Boundary
 
@@ -585,7 +586,7 @@ TDD is the test-first discipline used by the Build Agent execution pipeline.
 - Quality standards come from SPEC acceptance criteria.
 - TDD does not redefine requirement quality.
 - Build Agent is authorized only inside a complete Build Agent execution pipeline handoff.
-- The test design stage must derive tests from SPEC and input issue context before code changes.
+- The test design stage must derive tests from the public requirement record and spec issue context before code changes.
 - If TDD fits the task, Build Agent records the failing test before implementation.
 - If TDD does not fit the task, Build Agent records why and defines the replacement smoke, build, screenshot, or command verification.
 - Sandbox verification evidence must be recorded before PR/MR creation and Done writeback.
@@ -611,11 +612,11 @@ There is no standalone Release Agent in V1.
 
 ## Purpose
 
-RELEASE.md tells Build Agent how to prepare development delivery artifacts after execute result and evidence are available.
+RELEASE.md tells Build Agent how to prepare public delivery records after task run and evidence are available.
 
 ## Build Agent Release Delivery
 
-After a successful execute run, Build Agent may prepare:
+After a successful task run, Build Agent may prepare:
 
 - PR draft
 - PR metadata
@@ -624,9 +625,7 @@ After a successful execute run, Build Agent may prepare:
 - Release note
 - Delivery record
 
-These artifacts are written under:
-
-`.agentflow/output/release/<run-id>/`
+These artifacts are written to the PR/MR body, CHANGELOG entry, or release notes. `.agentflow/tasks/<issue-id>/evidence/**` keeps local verification evidence only.
 
 Task completion and audit are separate flows.
 
@@ -634,7 +633,7 @@ After Release Delivery exists, AgentFlow must not automatically create an audit 
 
 Audit starts only when an independent audit issue exists under:
 
-`.agentflow/input/issues/audit-<release-id>.json`
+`.agentflow/spec/issues/audit-<release-id>.json`
 
 or when a human explicitly requests audit through an Agent conversation.
 
@@ -653,18 +652,18 @@ Build Agent must not:
 - release to production
 - run dangerous commands
 - bypass high-risk confirmation
-- modify Approved SPEC
-- modify input issue facts
+- modify public requirement records
+- modify spec issue facts
 - write audit reports
 - execute audit issues
 - create audit requests from task Done writeback
 
 ## Required Inputs
 
-- input issue
-- Approved SPEC
-- execute result
-- output evidence
+- spec issue
+- public requirement record
+- task run result
+- task evidence
 - changed-files summary
 - validation result
 
@@ -678,14 +677,13 @@ Audit Agent starts only from an independent audit issue or explicit human audit 
 
 The ordinary App UI only displays audit state and report material. It must not create audits.
 
-## Required Outputs
+## Public Delivery Content
 
-- delivery.json
-- pr-or-mr-draft.md
-- pr-or-mr-metadata.json
-- review-checklist.md
-- changelog.md
-- release-note.md
+- PR/MR body
+- PR/MR metadata
+- review checklist
+- CHANGELOG entry
+- release note
 "#;
 
 const AUDIT_MANUAL: &str = r#"# AUDIT.md
@@ -714,5 +712,5 @@ Audit is the code review and risk review working manual for future Audit Agent e
 
 ## V1 Boundary
 
-Audit Agent writes only audit artifacts for the selected audit request. It must not modify source code, input facts, execute artifacts, release delivery, remote objects, or project commands.
+Audit Agent writes only audit artifacts for the selected audit request. It must not modify source code, spec facts, task artifacts, public delivery records, remote objects, or project commands.
 "#;

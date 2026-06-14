@@ -69,7 +69,12 @@ mod tests {
         assert!(dir.path().join(".agentflow/input/specs/approved").is_dir());
         assert!(dir.path().join(".agentflow/input/projects").is_dir());
         assert!(dir.path().join(".agentflow/input/issues").is_dir());
-        assert!(!dir.path().join(".agentflow/spec").exists());
+        assert!(dir.path().join(".agentflow/spec/projects").is_dir());
+        assert!(dir.path().join(".agentflow/spec/issues").is_dir());
+        assert!(dir.path().join(".agentflow/events").is_dir());
+        assert!(dir.path().join(".agentflow/projections/tasks").is_dir());
+        assert!(dir.path().join(".agentflow/projections/projects").is_dir());
+        assert!(dir.path().join(".agentflow/tasks").is_dir());
         assert!(!dir.path().join(".agentflow/goal-tree").exists());
         assert!(dir.path().join(".agentflow/panel/context-packs").is_dir());
         assert!(dir.path().join(".agentflow/execute/commands").is_dir());
@@ -91,6 +96,10 @@ mod tests {
         assert!(dir
             .path()
             .join(".agentflow/define/agent/skills/requirement-intake-filter/SKILL.md")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/define/agent/skills/spec-issue-generation/SKILL.md")
             .is_file());
         assert!(dir
             .path()
@@ -135,9 +144,12 @@ mod tests {
             fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md")).unwrap();
         assert!(agentflow_manual.contains("Test design"));
         assert!(agentflow_manual.contains("keep the issue in `in_review`"));
-        assert!(agentflow_manual.contains("fromIssueId"));
-        assert!(agentflow_manual.contains("toIssueId"));
-        assert!(agentflow_manual.contains("Do not write legacy `from` / `to` relation fields."));
+        assert!(agentflow_manual.contains(
+            "issue dependencies belong in each spec issue contract through `blockedBy`."
+        ));
+        assert!(agentflow_manual.contains(
+            "Do not create legacy relation files or legacy `from` / `to` relation fields."
+        ));
         assert!(
             fs::read_to_string(dir.path().join(".agentflow/define/audit/AUDIT.md"))
                 .unwrap()
@@ -158,13 +170,15 @@ mod tests {
             .is_file());
         let spec_manual =
             fs::read_to_string(dir.path().join(".agentflow/define/spec/SPEC.md")).unwrap();
-        assert!(spec_manual.contains("`.agentflow/input/specs/`"));
+        assert!(spec_manual.contains("`docs/requirements/**`"));
+        assert!(spec_manual.contains("`.agentflow/spec/projects/**`"));
+        assert!(spec_manual.contains("`.agentflow/spec/issues/**`"));
         assert!(spec_manual.contains("Do not show raw JSON as the default conversation output."));
-        assert!(spec_manual.contains("`product.md` is the primary human-readable requirement"));
+        assert!(spec_manual.contains("`docs/requirements/<requirement-id>.md`"));
         assert!(spec_manual.contains(
-            "Input Project and Issue human-facing fields must follow the user's `agentLocale`."
+            "Spec Project and Issue human-facing fields must follow the user's `agentLocale`."
         ));
-        assert!(!spec_manual.contains("`.agentflow/spec/`"));
+        assert!(!spec_manual.contains("`.agentflow/input/specs/`"));
         let intake_skill = fs::read_to_string(
             dir.path()
                 .join(".agentflow/define/agent/skills/requirement-intake-filter/SKILL.md"),
@@ -178,18 +192,22 @@ mod tests {
         )
         .unwrap();
         assert!(spec_authoring_skill.contains("SPEC Draft Preview must be human-readable"));
-        assert!(spec_authoring_skill.contains("`spec.json`: metadata"));
-        let input_issue_generation_skill = fs::read_to_string(
+        assert!(spec_authoring_skill.contains("`docs/requirements/<requirement-id>.md`"));
+        assert!(spec_authoring_skill.contains(
+            "Spec project / issue contracts write only to `.agentflow/spec/projects/**`"
+        ));
+        let spec_issue_generation_skill = fs::read_to_string(
             dir.path()
-                .join(".agentflow/define/agent/skills/input-issue-generation/SKILL.md"),
+                .join(".agentflow/define/agent/skills/spec-issue-generation/SKILL.md"),
         )
         .unwrap();
-        assert!(input_issue_generation_skill.contains("## Relation File Schema"));
-        assert!(input_issue_generation_skill.contains("fromIssueId"));
-        assert!(input_issue_generation_skill.contains("toIssueId"));
-        assert!(input_issue_generation_skill.contains("Invalid legacy shape"));
-        assert!(input_issue_generation_skill.contains("\"from\": \"AF-002\""));
-        assert!(input_issue_generation_skill.contains(
+        assert!(spec_issue_generation_skill.contains("# spec-issue-generation"));
+        assert!(spec_issue_generation_skill
+            .contains("Generate only from `docs/requirements/<requirement-id>.md`."));
+        assert!(spec_issue_generation_skill.contains("`.agentflow/spec/issues/<issue-id>.json`"));
+        assert!(spec_issue_generation_skill
+            .contains("Dependencies belong in each spec issue contract through `blockedBy`."));
+        assert!(spec_issue_generation_skill.contains(
             "Project and Issue human-facing natural-language fields MUST follow the current `agentLocale`."
         ));
     }
@@ -290,15 +308,16 @@ mod tests {
     }
 
     #[test]
-    fn spec_agent_status_allows_input_facts_after_confirmation() {
+    fn spec_agent_status_allows_spec_facts_after_confirmation() {
         let manual = crate::templates::agentflow_manual_template();
 
-        assert!(manual.contains("Status: enabled for Input Model V1."));
+        assert!(manual.contains("Status: enabled for Spec Contract V1."));
         assert!(manual.contains(
-            "After confirmation, it may write Approved SPEC files only under `.agentflow/input/specs/approved/<spec-id>/`"
+            "After confirmation, it may write public requirement records under `docs/requirements/**`"
         ));
+        assert!(manual.contains("spec project / issue contracts under `.agentflow/spec/**`"));
         assert!(manual.contains("Generated spec issues must use `issueCategory=spec`"));
-        assert!(manual.contains("Do not write legacy `.agentflow/spec/**`."));
+        assert!(manual.contains("Do not write legacy `.agentflow/input/**`."));
         assert!(manual.contains("Do not write legacy `.agentflow/goal-tree/**`."));
         assert!(!manual.contains("Status: enabled.\n\nCombines requirement intake"));
     }
@@ -317,19 +336,21 @@ mod tests {
         assert!(!manual.contains("### 3. Release Agent"));
         assert!(!manual.contains("### 4. Audit Agent"));
         assert!(manual.contains("Status: enabled for Execute + Release Delivery V1."));
-        assert!(manual.contains(".agentflow/output/release/<run-id>/"));
+        assert!(manual.contains(".agentflow/tasks/<issue-id>/runs/<run-id>/"));
+        assert!(manual.contains(".agentflow/tasks/<issue-id>/evidence/**"));
+        assert!(
+            manual.contains("public delivery records in PR/MR body, CHANGELOG, or release notes")
+        );
         assert!(manual.contains(
-            "The writeback stage runs only after PR/MR merge and writes run, evidence, release delivery, and `done` status."
+            "The writeback stage runs only after PR/MR merge and writes run events, task evidence, public delivery references, and `done` status."
         ));
-        assert!(manual.contains("The current AgentFlow input issue is the only task authority."));
+        assert!(manual.contains("The current AgentFlow spec issue is the only task authority."));
+        assert!(manual.contains("The handoff package is only a derived snapshot for transport"));
+        assert!(
+            manual.contains("`executionPipeline` is only one field inside the spec issue contract")
+        );
         assert!(manual.contains(
-            "The handoff package is only a derived transport snapshot of that input issue."
-        ));
-        assert!(manual.contains(
-            "`executionPipeline` is part of the input issue contract, not a separate task authority."
-        ));
-        assert!(manual.contains(
-            "Build Agent must use the current AgentFlow input issue as the only task authority."
+            "Build Agent must use the current AgentFlow spec issue as the only task authority."
         ));
         assert!(manual.contains(
             "It must not treat any external issue, task, plan, queue, thread, or tool state as task authority."
@@ -362,8 +383,8 @@ mod tests {
 
         assert!(release_manual.contains("Release delivery is owned by Build Agent in V1."));
         assert!(release_manual.contains("There is no standalone Release Agent in V1."));
-        assert!(release_manual.contains(".agentflow/output/release/<run-id>/"));
-        assert!(release_manual.contains("delivery.json"));
+        assert!(release_manual.contains(".agentflow/tasks/<issue-id>/evidence/**"));
+        assert!(release_manual.contains("PR/MR body, CHANGELOG entry, or release notes"));
         assert!(release_manual.contains("must not automatically create an audit request"));
         assert!(!release_manual.contains("future Release Agent execution"));
         assert!(!release_manual.contains("Release Agent is currently not authorized yet"));
