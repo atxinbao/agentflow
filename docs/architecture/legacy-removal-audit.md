@@ -9,7 +9,7 @@ This audit implements `005 - Legacy and Degraded Code Removal` and records the
 follow-up 006 CLI retirement delta.
 
 The goal is not to delete every archived implementation from
-`crates/agentflow-core/src/legacy/archive_2026_05.rs`. The goal is to remove
+`crates/core/src/legacy/archive_2026_05.rs`. The goal is to remove
 legacy code that is safely unreachable, narrow the public export surface, and
 record which compatibility paths still exist because CLI or tests use
 them.
@@ -17,7 +17,7 @@ them.
 ## Audit Commands
 
 ```bash
-rg "pub struct|pub enum|pub fn|pub const|pub type" crates/agentflow-core/src/legacy
+rg "pub struct|pub enum|pub fn|pub const|pub type" crates/core/src/legacy
 rg "pub use archive_2026_05::\*|pub use legacy::\*|use agentflow_core::legacy::\*|use agentflow_core::\*" crates apps
 rg "legacy::evidence|AepIssueProtocol|IndexedRun|IndexedUpdate" crates apps docs --glob '!docs/archive/**' --glob '!apps/desktop/dist/**'
 cargo test -p agentflow-core
@@ -50,14 +50,14 @@ legacy submodule explicitly re-exports them.
 | Category | Meaning | Action |
 | --- | --- | --- |
 | `active-read-model` | Temporary read-only CLI inspection still needs this path through `active/`. | Keep through `agentflow_core::active` until the CLI compatibility surface is retired. |
-| `cli-retired` | Old CLI command still parses but must not execute archived writes. | Route through `agentflow-cli/src/retirement.rs`. |
+| `cli-retired` | Old CLI command still parses but must not execute archived writes. | Route through `cli/src/retirement.rs`. |
 | `test-only` | Used by archived unit tests or internal helpers but not by active/CLI import paths. | Keep in private archive unless a later test-retirement requirement removes it. |
 | `unused` | No active/CLI/Desktop/test compatibility import. | Delete or hide public compatibility export. |
 | `uncertain` | Public DTO appears in nested return fields or serde shapes and should not be removed without deeper replacement. | Keep private or explicitly re-export only where needed. |
 
 ## Active Read Model Symbols
 
-These remain available through `crates/agentflow-core/src/active/` and are not
+These remain available through `crates/core/src/active/` and are not
 legacy product authorization:
 
 | Symbol | Kind | Source compatibility module | Used by | Category | Action |
@@ -73,7 +73,7 @@ legacy product authorization:
 ## 006 CLI Retirement Delta
 
 CLI legacy dispatch now imports only `agentflow_core::active` read models.
-`agentflow-cli/src/retirement.rs` classifies commands and disables old write
+`cli/src/retirement.rs` classifies commands and disables old write
 flows before they can reach archived functions.
 
 | Command group | Category | Action |
@@ -109,7 +109,7 @@ The following legacy public exposure was removed in this slice:
 
 | Removed item | Previous behavior | Reason |
 | --- | --- | --- |
-| `pub use legacy::*` in `agentflow-core/src/lib.rs` | Old code appeared at the crate root. | Too broad; new requirements must not see old workflow as product core. |
+| `pub use legacy::*` in `core/src/lib.rs` | Old code appeared at the crate root. | Too broad; new requirements must not see old workflow as product core. |
 | `pub mod archive_2026_05` in `legacy/mod.rs` | Entire archived implementation was directly importable. | Too broad; callers must use named compatibility modules. |
 | `pub use archive_2026_05::*` in `legacy/mod.rs` | Every archived symbol was visible as `agentflow_core::legacy::*`. | Too broad; prevents meaningful deletion/audit. |
 | `legacy/evidence.rs` module | Re-exported `AepIssueProtocol`, `IndexedRun`, `IndexedUpdate`. | No active/CLI/Desktop import outside the private archive. |
@@ -147,14 +147,14 @@ or internally needed by archived functions:
 | Graph native watcher | `crates/graph/src/watcher/native.rs` | current graph capability | keep |
 | Project File Reader fallback states | `apps/desktop/src/features/project-files/**` and `apps/desktop/src-tauri/src/project_files/**` | browser preview / unsupported file / large text fallback | keep |
 | Browser preview mock data | Desktop frontend runtime mock path | required for browser verification without Tauri | keep |
-| CLI active transitional read model | `crates/agentflow-core/src/active/local_metrics.rs`, `local_project_model.rs`, `local_search.rs` | temporary CLI read-only compatibility | keep temporarily |
+| CLI active transitional read model | `crates/core/src/active/local_metrics.rs`, `local_project_model.rs`, `local_search.rs` | temporary CLI read-only compatibility | keep temporarily |
 | Legacy root exports | `pub use legacy::*`, `pub use archive_2026_05::*` | obsolete exposure | delete |
 | Legacy evidence compatibility module | `legacy/evidence.rs` | unused public compatibility export | delete |
 | Legacy GoalLoop / eligibility / lease / closure writers | private archive only | cli-retired / test-only | no public re-export; not authorized for new product flows |
 
 ## CLI Boundary Result
 
-`crates/agentflow-cli/src/legacy.rs` now imports only active read models:
+`crates/cli/src/legacy.rs` now imports only active read models:
 
 ```rust
 use agentflow_core::active::{read_local_metrics_snapshot, read_local_project_model_snapshot, read_local_search_snapshot};
@@ -163,7 +163,7 @@ use agentflow_core::active::{read_local_metrics_snapshot, read_local_project_mod
 Retired commands are classified and gated by:
 
 ```rust
-crates/agentflow-cli/src/retirement.rs
+crates/cli/src/retirement.rs
 ```
 
 It no longer calls old writer symbols through named legacy compatibility modules.

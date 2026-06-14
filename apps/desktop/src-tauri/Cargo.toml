@@ -8,7 +8,7 @@ version.workspace = true
 tauri-build = { version = "=2.4.0", features = [] }
 
 [dependencies]
-agentflow-core = { path = "../../../crates/agentflow-core" }
+agentflow-core = { path = "../../../crates/core" }
 agentflow-agent-manual = { path = "../../../crates/agent-manual" }
 agentflow-panel = { path = "../../../crates/panel" }
 agentflow-input = { path = "../../../crates/input" }
@@ -27,5 +27,5 @@ serde_json.workspace = true
 tauri = { version = "=2.8.4", features = [] }
 
 [dev-dependencies]
-agentflow-workflow-acceptance = { path = "../../../crates/workflow-acceptance" }
+agentflow-workflow-acceptance = { path = "../../../crates/acceptance" }
 tempfile.workspace = true

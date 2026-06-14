@@ -9,7 +9,7 @@ name = "agentflow"
 path = "src/main.rs"
 
 [dependencies]
-agentflow-core = { path = "../agentflow-core" }
+agentflow-core = { path = "../core" }
 agentflow-execute = { path = "../execute" }
 agentflow-input = { path = "../input" }
 agentflow-loop = { path = "../loop" }
