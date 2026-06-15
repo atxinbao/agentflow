@@ -48,6 +48,10 @@
 - [028-agentflow-codex-role-usage-guide-v1.md](028-agentflow-codex-role-usage-guide-v1.md)
 - [029-agentflow-dogfood-cutover-cleanup-and-start-v1.md](029-agentflow-dogfood-cutover-cleanup-and-start-v1.md) = dogfood cutover baseline
 - [031-agentflow-initialization-rules-and-issue-metadata-hardening-v1.md](031-agentflow-initialization-rules-and-issue-metadata-hardening-v1.md) = initialization and issue metadata hardening baseline
+- [032-agentflow-build-agent-execution-loop-v1.md](032-agentflow-build-agent-execution-loop-v1.md) = Build Agent execution loop baseline
+- [033-agentflow-v0.2.0-project-loop-issue-loop-mvp-v1.md](033-agentflow-v0.2.0-project-loop-issue-loop-mvp-v1.md) = project loop / issue loop MVP baseline
+- [034-agentflow-task-workflow-yaml-runtime-v1.md](034-agentflow-task-workflow-yaml-runtime-v1.md) = task workflow YAML runtime architecture baseline
+- [035-agentflow-output-release-retirement-v1.md](035-agentflow-output-release-retirement-v1.md) = output release retirement and public delivery boundary
 
 后续新需求继续写入本文件或新增 `00N-*.md`。
 
