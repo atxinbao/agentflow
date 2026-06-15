@@ -441,7 +441,7 @@ impl InputIssue {
                 if self.issue_path.trim().is_empty() {
                     errors.push(format!("issue {} is missing issuePath", self.issue_id));
                 }
-                for key in ["executeRunDir", "evidencePath", "releaseDeliveryDir"] {
+                for key in ["executeRunDir", "evidencePath", "publicDeliveryRecord"] {
                     if self
                         .expected_outputs
                         .get(key)
@@ -596,8 +596,8 @@ impl InputIssue {
                     format!(".agentflow/tasks/{}/evidence/evidence.json", self.issue_id),
                 ),
                 (
-                    "releaseDeliveryDir".to_string(),
-                    format!(".agentflow/output/release/{}", self.issue_id),
+                    "publicDeliveryRecord".to_string(),
+                    "PR/MR body; CHANGELOG.md or release notes when release-visible".to_string(),
                 ),
             ]);
         }
@@ -615,8 +615,8 @@ impl InputIssue {
         if self.allowed_paths.is_empty() {
             self.allowed_paths = vec![
                 ".agentflow/audit/**".to_string(),
-                ".agentflow/output/release/**".to_string(),
                 ".agentflow/tasks/**/evidence/**".to_string(),
+                ".agentflow/projections/tasks/**".to_string(),
                 ".agentflow/input/issues/**".to_string(),
                 ".agentflow/input/specs/approved/**".to_string(),
             ];
@@ -624,7 +624,6 @@ impl InputIssue {
         if self.forbidden_paths.is_empty() {
             self.forbidden_paths = vec![
                 ".agentflow/execute/**".to_string(),
-                ".agentflow/output/release/**".to_string(),
                 ".agentflow/tasks/**".to_string(),
                 ".agentflow/spec/**".to_string(),
                 ".agentflow/goal-tree/**".to_string(),
@@ -635,7 +634,7 @@ impl InputIssue {
                 "process-spec-issue".to_string(),
                 "write-source-code".to_string(),
                 "execute-project-commands".to_string(),
-                "generate-release-delivery".to_string(),
+                "write-public-delivery-record".to_string(),
                 "write-legacy-agentflow-spec-or-goal-tree".to_string(),
             ];
         }
@@ -651,7 +650,7 @@ impl InputIssue {
                 && !audit.source_release_id.trim().is_empty()
             {
                 audit.source_delivery_path = format!(
-                    ".agentflow/output/release/{}/delivery.json",
+                    ".agentflow/projections/tasks/{}.json",
                     audit.source_release_id
                 );
             }
@@ -896,7 +895,6 @@ impl Default for AgentRolesDocument {
                         ".agentflow/execute/**".to_string(),
                         ".agentflow/tasks/<issue-id>/runs/**".to_string(),
                         ".agentflow/tasks/<issue-id>/evidence/**".to_string(),
-                        ".agentflow/output/release/**".to_string(),
                         ".agentflow/events/**".to_string(),
                     ],
                     forbidden_writes: vec![".agentflow/audit/**".to_string()],

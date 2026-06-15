@@ -503,9 +503,9 @@ mod tests {
         assert_eq!(
             issue
                 .expected_outputs
-                .get("releaseDeliveryDir")
+                .get("publicDeliveryRecord")
                 .map(String::as_str),
-            Some(".agentflow/output/release/iss-001")
+            Some("PR/MR body; CHANGELOG.md or release notes when release-visible")
         );
         let pipeline = issue.execution_pipeline.as_ref().unwrap();
         assert_eq!(pipeline.version, BUILD_AGENT_EXECUTION_PIPELINE_VERSION);
@@ -786,9 +786,9 @@ mod tests {
                 "acceptanceCriteria": ["客户端能读取任务。"],
                 "validationHints": ["npm --prefix apps/desktop run build"],
                 "expectedOutputs": {
-                    "executeRunDir": ".agentflow/execute/runs/AF-0201",
-                    "evidencePath": ".agentflow/output/evidence/AF-0201.json",
-                    "releaseDeliveryDir": ".agentflow/output/release/AF-0201"
+                    "executeRunDir": ".agentflow/tasks/AF-0201/runs",
+                    "evidencePath": ".agentflow/tasks/AF-0201/evidence/evidence.json",
+                    "publicDeliveryRecord": "PR/MR body; CHANGELOG.md or release notes when release-visible"
                 },
                 "executionPipeline": {
                     "version": "build-agent-execution-pipeline.v1",
@@ -875,7 +875,7 @@ mod tests {
                 "trigger": "release-auto",
                 "sourceReleaseId": "release-v0.1.0",
                 "sourceRunId": "release-v0.1.0",
-                "sourceDeliveryPath": ".agentflow/output/release/release-v0.1.0/delivery.json",
+                "sourceDeliveryPath": ".agentflow/projections/tasks/release-v0.1.0.json",
                 "auditOutputDir": ".agentflow/audit/audit-001",
                 "expectedOutputs": [
                     "audit.json",
