@@ -50,7 +50,6 @@ name = "agentflow-cli"
 version = "0.1.0"
 dependencies = [
  "agentflow-agent-bridge",
- "agentflow-core",
  "agentflow-event-store",
  "agentflow-mcp",
  "agentflow-projection",
@@ -84,7 +83,6 @@ dependencies = [
  "agentflow-agent-bridge",
  "agentflow-agent-manual",
  "agentflow-audit",
- "agentflow-core",
  "agentflow-event-store",
  "agentflow-input",
  "agentflow-mcp",
