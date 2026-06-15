@@ -1461,7 +1461,7 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
       setState({
         auditIndex: createBrowserPreviewAuditIndex(),
         auditReport: createBrowserPreviewHumanAuditReport(),
-        deliveryArtifacts: createBrowserPreviewDeliveryArtifacts(outputIndex),
+        deliveryArtifacts: createBrowserPreviewDeliveryArtifacts(),
         error: null,
         outputIndex,
         source: "preview",
@@ -1521,37 +1521,39 @@ function useOutputBundle(projectRoot: string | null, refreshToken: number): Outp
   return state;
 }
 
-function createBrowserPreviewDeliveryArtifacts(outputIndex: OutputIndex): Record<string, DeliveryArtifactState> {
-  const delivery = outputIndex.releaseDeliveries[0];
-  if (!delivery) {
-    return {};
-  }
-  const merged = delivery.status === "delivered" || delivery.status === "done";
-  return {
-    [delivery.runId]: {
-      mergeProof: {
-        mergeMode: merged ? "auto-merge-if-eligible" : "manual-merge",
-        merged,
-        provider: "github",
-        remoteUrl: `https://github.com/atxinbao/agentflow/pull/${merged ? 101 : 102}`,
+function createBrowserPreviewDeliveryArtifacts(): Record<string, DeliveryArtifactState> {
+  const previewArtifacts: Array<{ issueId: string; merged: boolean; runId: string }> = [
+    { issueId: "iss-review", merged: false, runId: "run-browser-preview-002" },
+    { issueId: "iss-done", merged: true, runId: "run-browser-preview-003" },
+  ];
+  return Object.fromEntries(
+    previewArtifacts.map(({ issueId, merged, runId }) => [
+      runId,
+      {
+        mergeProof: {
+          mergeMode: merged ? "auto-merge-if-eligible" : "manual-merge",
+          merged,
+          provider: "github",
+          remoteUrl: `https://github.com/atxinbao/agentflow/pull/${merged ? 101 : 102}`,
+        },
+        prMetadata: {
+          branchName: `agentflow/browser-preview/${issueId}`,
+          createdRemotePr: true,
+          mergeMode: merged ? "auto-merge-if-eligible" : "manual-merge",
+          merged,
+          provider: "github",
+          remotePrUrl: `https://github.com/atxinbao/agentflow/pull/${merged ? 101 : 102}`,
+          status: merged ? "merged" : "open",
+          title: `Preview ${issueId}`,
+        },
+        releaseNote: {
+          summaryLines: ["公开交付记录已准备完成。", "这里只展示浏览器预览用的模拟交付摘要。"],
+          title: "公开交付记录",
+        },
+        runId,
       },
-      prMetadata: {
-        branchName: `agentflow/browser-preview/${delivery.issueId}`,
-        createdRemotePr: true,
-        mergeMode: merged ? "auto-merge-if-eligible" : "manual-merge",
-        merged,
-        provider: "github",
-        remotePrUrl: `https://github.com/atxinbao/agentflow/pull/${merged ? 101 : 102}`,
-        status: merged ? "merged" : "open",
-        title: `Preview ${delivery.issueId}`,
-      },
-      releaseNote: {
-        summaryLines: ["交付已准备完成。", "这里只展示浏览器预览用的模拟 release note。"],
-        title: "Release Note",
-      },
-      runId: delivery.runId,
-    },
-  };
+    ]),
+  );
 }
 
 function useProjectInitializationStatus(
@@ -3770,7 +3772,7 @@ function DeliveryPage({
   selectedTask: V1Issue | null;
   tasks: V1Issue[];
 }) {
-  const deliveries = sortOutputEntriesByLatest(outputBundle.outputIndex?.releaseDeliveries ?? []);
+  const deliveries = taskPublicDeliveryEntries(tasks);
   const evidence = sortOutputEntriesByLatest(outputBundle.outputIndex?.evidence ?? []);
   const deliveryInteractionState = buildDeliveryInteractionState(deliveries, selectedDeliveryRunId);
   const selectedDelivery = deliveryInteractionState.selectedDelivery ?? findDeliveryEntryForTask(deliveries, selectedTask);
@@ -5143,7 +5145,7 @@ function defaultForbiddenPaths(issueCategory?: string | null) {
 
 function defaultForbiddenActions(issueCategory?: string | null) {
   if (issueCategory === "audit") {
-    return ["process-spec-issue", "write-source-code", "execute-project-commands", "generate-release-delivery"];
+    return ["process-spec-issue", "write-source-code", "execute-project-commands", "generate-public-delivery-record"];
   }
   return ["process-audit-issue", "write-audit-report", "write-audit-findings"];
 }
@@ -5456,6 +5458,24 @@ function taskOutputItems(task: V1Issue) {
     return ["未提供输出位置。"];
   }
   return entries.map(([key, value]) => `${key}: ${value}`);
+}
+
+function taskPublicDeliveryEntries(tasks: V1Issue[]): OutputIndexEntry[] {
+  return sortOutputEntriesByLatest(
+    tasks
+      .filter((task) => task.displayStatus === "in_review" || task.displayStatus === "done")
+      .map((task) => {
+        const runId = task.latestRunId ?? `task-${task.id}`;
+        return {
+          issueId: task.id,
+          path: task.displayStatus === "done" ? "CHANGELOG.md" : "PR/MR body",
+          runId,
+          sourceSpecId: task.sourceSpecId ?? "",
+          status: task.displayStatus === "done" ? "delivered" : "drafted",
+          updatedAt: task.updatedAt ?? task.createdAt ?? 0,
+        };
+      }),
+  );
 }
 
 function findDeliveryEntryForTask(deliveries: OutputIndexEntry[], task: V1Issue | null) {
@@ -6644,7 +6664,7 @@ function humanizeKey(key: string) {
     delivery: "交付",
     evidence: "证据",
     issue: "任务",
-    releaseDelivery: "交付记录",
+    publicDelivery: "公开交付",
     run: "执行",
     spec: "规格",
     traceability: "追溯",

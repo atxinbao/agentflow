@@ -315,10 +315,9 @@ function assertDeliveryProjection() {
   assertIncludes(todoProjection.summaryItems, "公开交付：未记录", "todo public delivery state");
 
   const reviewTask = workflowTask("in_review");
-  const reviewDelivery = outputEntry("run-in_review", reviewTask.id, "drafted");
   const reviewProjection = buildTaskDeliveryProjection({
     audit: null,
-    delivery: reviewDelivery,
+    delivery: null,
     evidence: outputEntry("run-in_review", reviewTask.id, "complete"),
     projection: projection("in_review"),
     session: session("in_review"),
@@ -335,7 +334,7 @@ function assertDeliveryProjection() {
   const doneTask = workflowTask("done");
   const doneProjection = buildTaskDeliveryProjection({
     audit: auditForDone(),
-    delivery: outputEntry("run-done", doneTask.id, "delivered"),
+    delivery: null,
     evidence: outputEntry("run-done", doneTask.id, "complete"),
     projection: projection("done"),
     session: session("done"),
@@ -453,8 +452,8 @@ function assertBrowserPreviewWorkflowData() {
   assertEqual(statusByIssue.get("iss-review")?.auditStatus, "not-requested", "preview review audit stays independent");
   assert(sessions.some((item) => item.issueId === "iss-review" && item.status === "in-review"), "preview review session");
   assert(sessions.some((item) => item.issueId === "iss-done" && item.mergeState === "merged"), "preview done session");
-  assert(output.releaseDeliveries.some((item) => item.issueId === "iss-review" && item.runId === "run-browser-preview-002"), "preview review delivery");
-  assert(output.releaseDeliveries.some((item) => item.issueId === "iss-done" && item.runId === "run-browser-preview-003"), "preview done delivery");
+  assert(output.evidence.some((item) => item.issueId === "iss-review" && item.runId === "run-browser-preview-002"), "preview review evidence");
+  assert(output.evidence.some((item) => item.issueId === "iss-done" && item.runId === "run-browser-preview-003"), "preview done evidence");
   assert(audit.audits.every((item) => item.trigger === "human-via-agent"), "preview audit trigger stays independent");
   assert(audit.audits.every((item) => item.sourceIssueId === "iss-done"), "preview audit stays after delivery");
   assert(issues.get("iss-progress")?.validationCommands?.includes("npm --prefix apps/desktop run build"), "preview build validation command");
@@ -487,13 +486,11 @@ function assertBrowserPreviewTaskWorkspaceSmoke() {
     assert(node, `${issueId} node`);
     const task = taskFromPreviewNode(node);
     const session = sessions.find((item) => item.issueId === issueId) ?? null;
-    const delivery = output.releaseDeliveries.find((item) => item.issueId === issueId) ?? null;
     const evidence = output.evidence.find((item) => item.issueId === issueId) ?? null;
-    const linkedAudit = delivery
-      ? audit.audits.find((item) => item.sourceIssueId === issueId || item.sourceRunId === delivery.runId) ?? null
-      : null;
     const contract = buildTaskStatusContract(task);
     const projection = createBrowserPreviewTaskProjection(issueId);
+    const linkedAudit =
+      audit.audits.find((item) => item.sourceIssueId === issueId || item.sourceRunId === projection?.latestRunId) ?? null;
     const executionProjection = buildTaskExecutionProjection({
       executeWorkspaceStatus: "ready",
       mcpSessionsSource: "preview",
@@ -502,7 +499,7 @@ function assertBrowserPreviewTaskWorkspaceSmoke() {
     });
     const deliveryProjection = buildTaskDeliveryProjection({
       audit: linkedAudit,
-      delivery,
+      delivery: null,
       evidence,
       projection,
       session,

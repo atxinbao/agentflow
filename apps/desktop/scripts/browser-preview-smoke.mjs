@@ -55,10 +55,6 @@ try {
     legacyProjectRoot: "/Users/mac/Documents/legacy-project",
     projectNameFromRoot: () => "legacy-project",
   });
-  const outputPanel = readFileSync(
-    path.join(desktopRoot, "src/features/output/OutputAuditPanel.tsx"),
-    "utf8",
-  );
   const appEntry = readFileSync(path.join(desktopRoot, "src/App.tsx"), "utf8");
   const appShellCss = readFileSync(path.join(desktopRoot, "src/AppShell.css"), "utf8");
   const stateStatusHook = readFileSync(
@@ -85,15 +81,12 @@ try {
     ["copyable-code-block", "src/components/CopyableCodeBlock.tsx"],
     ["advanced-details-drawer", "src/components/AdvancedDetailsDrawer.tsx"],
   ];
-  const previewBranchIndex = outputPanel.indexOf("if (isBrowserPreviewRuntime()) {");
-  const requestAuditInvokeIndex = outputPanel.indexOf('invoke<HumanAuditReport>("request_human_audit"');
-
   assert.equal(outputStatus.ready, true);
-  assert.equal(outputStatus.summary.evidence, 1);
-  assert.equal(outputStatus.summary.releaseDeliveries, 1);
+  assert.equal(outputStatus.summary.evidence, 2);
+  assert.equal(outputStatus.summary.publicDeliveries, 2);
   assert.equal(outputStatus.summary.audits, 1);
   assert.equal(outputStatus.summary.incompleteEvidence, 0);
-  assert.equal(outputStatus.summary.incompleteDeliveries, 0);
+  assert.equal(outputStatus.summary.incompletePublicDeliveries, 0);
   assert.equal(inputSnapshot.issues.length, 7);
   assert.deepEqual(
     inputSnapshot.issues.map((issue) => issue.displayStatus),
@@ -109,8 +102,9 @@ try {
     issueStatusIndex.issues.map((issue) => issue.displayStatus),
     ["backlog", "todo", "in_progress", "in_review", "todo", "done", "cancel"],
   );
-  assert.equal(outputIndex.releaseDeliveries.length, 1);
-  assert.equal(outputIndex.releaseDeliveries[0].runId, "run-browser-preview-001");
+  assert.equal(outputIndex.evidence.length, 2);
+  assert.equal(outputIndex.evidence[0].path, ".agentflow/tasks/iss-review/evidence/evidence.json");
+  assert.equal(outputIndex.evidence[1].path, ".agentflow/tasks/iss-done/evidence/evidence.json");
   assert.equal(auditIndex.audits.length, 1);
   assert.equal(auditIndex.audits[0].auditId, "audit-browser-preview-001");
   assert.ok(auditReport.reportMarkdown.includes("Human Audit Browser Preview"));
@@ -153,13 +147,6 @@ try {
   assert.equal(storage.get(projectRegistryModule.projectRegistryStorageKeys.activePageByProject), "{}");
   assert.deepEqual(restoredEmptyRegistry.projects, []);
   assert.equal(restoredEmptyRegistry.activeProjectRoot, null);
-  assert.ok(previewBranchIndex >= 0);
-  assert.ok(outputPanel.includes("setReport(createBrowserPreviewHumanAuditReport())"));
-  assert.ok(outputPanel.includes('setSource("preview")'));
-  assert.equal(requestAuditInvokeIndex, -1);
-  assert.ok(outputPanel.includes("刷新审计状态"));
-  assert.ok(outputPanel.includes("交付关联审计"));
-  assert.ok(outputPanel.includes("App 只展示审计状态，不创建审计。"));
   assert.ok(appEntry.includes("createBrowserPreviewProjectRegistry"));
   assert.ok(appEntry.includes("readProjectRegistry"));
   assert.ok(appEntry.includes("persistProjectRegistry"));
@@ -206,7 +193,8 @@ try {
   assert.equal(appEntry.includes("请求人工审计"), false);
   assert.ok(appEntry.includes("等待 Agent 审计"));
   assert.ok(appEntry.includes("displayStatusColumns"));
-  assert.ok(stateStatusHook.includes("load_issue_status_index"));
+  assert.ok(stateStatusHook.includes("rebuild_task_projections"));
+  assert.ok(stateStatusHook.includes("load_projection_issue_status_index"));
   assert.ok(appEntry.includes("交付摘要"));
   assert.ok(appEntry.includes("证据链"));
   assert.ok(appEntry.includes("追溯关系"));
