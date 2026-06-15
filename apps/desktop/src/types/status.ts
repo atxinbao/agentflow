@@ -360,31 +360,6 @@ export type ExecuteStatusSnapshot = {
   errors: string[];
 };
 
-export type OutputWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";
-
-export type OutputSummary = {
-  evidence: number;
-  publicDeliveries: number;
-  audits: number;
-  logs: number;
-  backups: number;
-  incompleteEvidence: number;
-  incompletePublicDeliveries: number;
-};
-
-export type OutputStatusSnapshot = {
-  version: string;
-  projectRoot: string;
-  status: OutputWorkspaceStatus;
-  ready: boolean;
-  manifestExists: boolean;
-  indexExists: boolean;
-  summary: OutputSummary;
-  missingPaths: string[];
-  warnings: string[];
-  errors: string[];
-};
-
 export type OutputIndexEntry = {
   runId: string;
   issueId: string;

@@ -19,7 +19,6 @@ import type {
   McpSessionSnapshot,
   IssueStatusIndex,
   ExecuteStatusSnapshot,
-  OutputStatusSnapshot,
   OutputIndex,
   OutputIndexEntry,
   AuditIndex,
@@ -784,29 +783,6 @@ export function createBrowserPreviewMcpSessions(
       } satisfies McpSessionSnapshot;
     })
     .sort((left, right) => right.updatedAt - left.updatedAt || right.sessionId.localeCompare(left.sessionId));
-}
-
-export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_PROJECT_ROOT): OutputStatusSnapshot {
-  return {
-    version: "output-status.browser-preview",
-    projectRoot,
-    status: "ready",
-    ready: true,
-    manifestExists: true,
-    indexExists: true,
-    summary: {
-      evidence: 2,
-      publicDeliveries: 2,
-      audits: 1,
-      logs: 0,
-      backups: 0,
-      incompleteEvidence: 0,
-      incompletePublicDeliveries: 0,
-    },
-    missingPaths: [],
-    warnings: ["浏览器预览只展示模拟的交付与审计状态；任务主链路不会自动进入审计。"],
-    errors: [],
-  };
 }
 
 export function createBrowserPreviewOutputIndex(): OutputIndex {

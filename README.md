@@ -42,10 +42,10 @@ docs/requirements/
 - Task Artifacts V1 将本地运行产物收敛到 `.agentflow/tasks/<issue-id>/runs/**`，验证证据收敛到 `.agentflow/tasks/<issue-id>/evidence/**`。公开交付记录进入 PR/MR body、CHANGELOG 或 release notes，不再写本地 `.agentflow/tasks/<issue-id>/delivery/**`。
 - Agent Role Consolidation V2 将顶层 Agent 角色收敛为 Spec / Build / Audit；Release Agent 不再独立存在，公开交付记录由 Build Agent 在 PR/MR 和发布记录中完成。
 - Human-triggered Audit Report V1 将审计定义为独立流程。任务 Done 不会自动触发审计；审计只从独立 audit issue 或明确的人类审计请求开始。
-- Desktop Human Audit Entry Polish 在 Desktop 里提供人工审计入口：人类选择 release delivery 并填写 reason 后才会请求 audit；浏览器预览不会写 `.agentflow/output/audit`。
+- Desktop Human Audit Entry Polish 在 Desktop 里提供人工审计入口：人类选择任务公开交付记录并填写 reason 后才会请求 audit；浏览器预览不会写 `.agentflow/audit`。
 - Projection V1 从 `.agentflow/spec/**` 和 `.agentflow/events/**` 重建任务页、项目状态和 issue-status index。Desktop 展示读取 projection，不把旧 input/execute/output 当成任务权威。
-- Browser Preview Verification Polish 为 Desktop 浏览器预览补齐只读 release delivery 和 audit report mock，使人工审计入口可以完成可视核对；它不写 `.agentflow/output/audit`。
-- Browser Preview Smoke Script 新增 `npm --prefix apps/desktop run preview:smoke`，用可复跑本地断言验证 Browser Preview mock、人工审计禁用边界和 `.agentflow/output/audit` 禁写。
+- Browser Preview Verification Polish 为 Desktop 浏览器预览补齐只读任务交付摘要和 audit report mock，使人工审计入口可以完成可视核对；它不写 `.agentflow/audit`。
+- Browser Preview Smoke Script 新增 `npm --prefix apps/desktop run preview:smoke`，用可复跑本地断言验证 Browser Preview mock、人工审计禁用边界和 `.agentflow/audit` 禁写。
 - AgentFlow End-to-End Workflow Acceptance V1 新增系统级验收：用临时 fixture 项目证明 define / panel / input / execute / output / state / human audit 闭环可达，并验证用户源码 hash 不变。
 - Agent Locale and Voice Style Policy V1 固定 AgentFlow managed manuals 为英文，记录 `agentLocale`，新增 `plain-work-style` 默认表达规则，并要求 Agent 新写代码注释跟随 `agentLocale`。
 - Project Panel canonical path 为 `.agentflow/panel/`；不再保留旧代码地图兼容路径。

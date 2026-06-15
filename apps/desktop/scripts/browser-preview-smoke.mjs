@@ -19,7 +19,6 @@ const server = await createServer({
 try {
   const preview = await server.ssrLoadModule("/src/browserPreviewData.ts");
   const projectRegistryModule = await server.ssrLoadModule("/src/projectRegistry.ts");
-  const outputStatus = preview.createBrowserPreviewOutputStatus(smokeRoot);
   const inputSnapshot = preview.createBrowserPreviewInputSnapshot(smokeRoot);
   const issueStatusIndex = preview.createBrowserPreviewIssueStatusIndex(smokeRoot);
   const outputIndex = preview.createBrowserPreviewOutputIndex();
@@ -81,12 +80,6 @@ try {
     ["copyable-code-block", "src/components/CopyableCodeBlock.tsx"],
     ["advanced-details-drawer", "src/components/AdvancedDetailsDrawer.tsx"],
   ];
-  assert.equal(outputStatus.ready, true);
-  assert.equal(outputStatus.summary.evidence, 2);
-  assert.equal(outputStatus.summary.publicDeliveries, 2);
-  assert.equal(outputStatus.summary.audits, 1);
-  assert.equal(outputStatus.summary.incompleteEvidence, 0);
-  assert.equal(outputStatus.summary.incompletePublicDeliveries, 0);
   assert.equal(inputSnapshot.issues.length, 7);
   assert.deepEqual(
     inputSnapshot.issues.map((issue) => issue.displayStatus),
@@ -96,6 +89,9 @@ try {
     inputSnapshot.issues.map((issue) => issue.priority),
     ["p3", "p1", "p0", "p2", "p2", "p2", "p2"],
   );
+  const taskProjections = inputSnapshot.issues
+    .map((issue) => preview.createBrowserPreviewTaskProjection(issue.issueId, smokeRoot, "default"))
+    .filter(Boolean);
   assert.equal(inputSnapshot.issues.some((issue) => "riskLevel" in issue), false);
   assert.equal(inputSnapshot.issues.every((issue) => "executionRisk" in issue), true);
   assert.deepEqual(
@@ -105,6 +101,15 @@ try {
   assert.equal(outputIndex.evidence.length, 2);
   assert.equal(outputIndex.evidence[0].path, ".agentflow/tasks/iss-review/evidence/evidence.json");
   assert.equal(outputIndex.evidence[1].path, ".agentflow/tasks/iss-done/evidence/evidence.json");
+  assert.equal(taskProjections.length, 7);
+  assert.equal(
+    taskProjections.some((task) => task.publicDelivery?.prUrl?.includes("/pull/100")),
+    true,
+  );
+  assert.equal(
+    taskProjections.every((task) => !JSON.stringify(task.publicDelivery).includes(".agentflow/output/release")),
+    true,
+  );
   assert.equal(auditIndex.audits.length, 1);
   assert.equal(auditIndex.audits[0].auditId, "audit-browser-preview-001");
   assert.ok(auditReport.reportMarkdown.includes("Human Audit Browser Preview"));
@@ -214,9 +219,9 @@ try {
       `Missing design system marker: ${marker}`,
     );
   }
-  assert.equal(existsSync(path.join(smokeRoot, ".agentflow/output/audit")), false);
+  assert.equal(existsSync(path.join(smokeRoot, ".agentflow/audit")), false);
 
-  console.log("Browser Preview smoke passed: workflow state, human audit, design system, and V16 shell are read-only.");
+  console.log("Browser Preview smoke passed: workflow state, task delivery projection, human audit, design system, and V16 shell are read-only.");
 } finally {
   await server.close();
 }
