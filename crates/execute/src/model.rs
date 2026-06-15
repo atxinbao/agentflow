@@ -428,7 +428,25 @@ pub struct BuildAgentCompletionRequest {
 pub struct BuildAgentCompletion {
     pub run: ExecuteRun,
     pub result: ExecuteResult,
-    pub delivery: agentflow_output::OutputReleaseDelivery,
+    pub public_delivery: BuildAgentPublicDelivery,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildAgentPublicDelivery {
+    pub version: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub status: String,
+    pub evidence_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changelog_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_notes_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

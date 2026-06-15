@@ -1,7 +1,6 @@
 pub mod checkpoint;
 pub mod command;
 pub mod completion;
-pub mod delivery;
 pub mod evidence;
 pub mod launcher;
 pub mod lease;
@@ -14,14 +13,10 @@ pub mod result;
 pub mod storage;
 pub mod validation;
 
-pub use agentflow_output::{
-    load_release_delivery, OutputEvidence, OutputReleaseDelivery, OutputReleaseDeliveryArtifacts,
-    OUTPUT_EVIDENCE_VERSION, OUTPUT_RELEASE_DELIVERY_VERSION,
-};
+pub use agentflow_output::{OutputEvidence, OUTPUT_EVIDENCE_VERSION};
 pub use checkpoint::create_execute_checkpoint;
 pub use command::run_execute_command;
 pub use completion::{complete_build_agent_issue, prepare_build_agent_review};
-pub use delivery::prepare_release_delivery;
 pub use evidence::write_execute_evidence;
 pub use launcher::{
     claim_build_agent_launch, ensure_build_agent_launch_state, load_build_agent_launch_state,
@@ -133,27 +128,6 @@ mod tests {
         run
     }
 
-    fn completed_low_risk_run(root: &Path, issue_id: &str) -> ExecuteRun {
-        let run = ready_low_risk_run(root, issue_id);
-        let patch = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,3 @@\n pub fn value() -> u8 {\n-    1\n+    2\n }\n";
-        apply_execute_patch(root, run.run_id.clone(), patch.to_string()).unwrap();
-        run_execute_command(
-            root,
-            run.run_id.clone(),
-            ExecuteCommandRequest {
-                label: "printf ok".to_string(),
-                program: "printf".to_string(),
-                args: vec!["ok".to_string()],
-                source: Some("runPlan.allowedCommands".to_string()),
-            },
-        )
-        .unwrap();
-        let result = validate_execute_run(root, run.run_id.clone()).unwrap();
-        assert_eq!(result.status, ExecuteRunStatus::Completed);
-        assert!(result.next.ready_for_delivery);
-        run
-    }
-
     fn init_clean_git_repo(root: &Path) {
         fs::write(root.join(".gitignore"), ".agentflow/\nAGENTS.md\n").unwrap();
         Command::new("git")
@@ -188,7 +162,7 @@ mod tests {
     }
 
     #[test]
-    fn build_agent_completion_creates_run_evidence_and_delivery() {
+    fn build_agent_completion_creates_run_evidence_and_public_delivery() {
         let dir = tempdir().unwrap();
         prepare_root(dir.path());
         write_approved_spec(dir.path(), "spec-001");
@@ -239,7 +213,15 @@ mod tests {
         assert_eq!(completion.result.status, ExecuteRunStatus::Completed);
         assert!(completion.result.validation.passed);
         assert!(!completion.result.next.needs_audit);
-        assert_eq!(completion.delivery.status, "drafted");
+        assert_eq!(completion.public_delivery.status, "delivered");
+        assert_eq!(
+            completion.public_delivery.evidence_path,
+            ".agentflow/tasks/iss-001/evidence/evidence.json"
+        );
+        assert_eq!(
+            completion.public_delivery.pr_url.as_deref(),
+            Some("https://github.com/atxinbao/agentflow/pull/1")
+        );
         let issue_after: InputIssue =
             crate::storage::read_json(&dir.path().join(".agentflow/input/issues/iss-001.json"))
                 .unwrap();
@@ -257,33 +239,7 @@ mod tests {
         let execute_index = load_execute_index(dir.path()).unwrap();
         assert_eq!(execute_index.runs.len(), 1);
         assert_eq!(execute_index.runs[0].status, ExecuteRunStatus::Completed);
-
-        let output_index = agentflow_output::load_output_index(dir.path()).unwrap();
-        assert_eq!(output_index.evidence.len(), 0);
-        assert_eq!(output_index.release_deliveries.len(), 1);
-        let pr_metadata: agentflow_output::OutputPrMetadata = crate::storage::read_json(
-            &dir.path()
-                .join(".agentflow/output/release")
-                .join(&completion.run.run_id)
-                .join("pr-metadata.json"),
-        )
-        .unwrap();
-        assert_eq!(
-            pr_metadata.branch_name.as_deref(),
-            Some("agentflow/direct/iss-001")
-        );
-        assert_eq!(
-            pr_metadata.remote_pr_url.as_deref(),
-            Some("https://github.com/atxinbao/agentflow/pull/1")
-        );
-        assert_eq!(pr_metadata.status, "merged");
-        assert_eq!(pr_metadata.provider.as_deref(), Some("github"));
-        assert_eq!(
-            pr_metadata.merge_mode.as_deref(),
-            Some("auto-merge-if-eligible")
-        );
-        assert!(pr_metadata.created_remote_pr);
-        assert!(pr_metadata.merged);
+        assert!(!dir.path().join(".agentflow/output/release").exists());
         let loop_projection: serde_json::Value = crate::storage::read_json(
             &dir.path()
                 .join(".agentflow/state/loops/issues/iss-001.json"),
@@ -331,7 +287,11 @@ mod tests {
 
         assert_eq!(prepared.run.status, ExecuteRunStatus::Completed);
         assert_eq!(prepared.result.status, ExecuteRunStatus::Completed);
-        assert_eq!(prepared.delivery.status, "drafted");
+        assert_eq!(prepared.public_delivery.status, "drafted");
+        assert_eq!(
+            prepared.public_delivery.evidence_path,
+            ".agentflow/tasks/iss-001/evidence/evidence.json"
+        );
         let issue_after: InputIssue =
             crate::storage::read_json(&dir.path().join(".agentflow/input/issues/iss-001.json"))
                 .unwrap();
@@ -351,7 +311,7 @@ mod tests {
         .unwrap();
         assert_eq!(loop_projection["stage"], "in_review");
         assert_eq!(loop_projection["displayStatus"], "in_review");
-        assert_eq!(loop_projection["reviewSubstate"], "delivery-prepared");
+        assert_eq!(loop_projection["reviewSubstate"], "public-delivery-ready");
     }
 
     #[test]
@@ -383,41 +343,6 @@ mod tests {
         assert_eq!(loop_projection["displayStatus"], "todo");
         assert_eq!(loop_projection["runId"], run.run_id);
         assert_eq!(loop_projection["branchName"], "agentflow/direct/iss-001");
-    }
-
-    #[test]
-    fn delivery_stage_moves_issue_and_projection_to_in_review() {
-        let dir = tempdir().unwrap();
-        let run = ready_low_risk_run(dir.path(), "iss-001");
-        let patch = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,3 @@\n pub fn value() -> u8 {\n-    1\n+    2\n }\n";
-        apply_execute_patch(dir.path(), run.run_id.clone(), patch.to_string()).unwrap();
-        run_execute_command(
-            dir.path(),
-            run.run_id.clone(),
-            ExecuteCommandRequest {
-                label: "printf ok".to_string(),
-                program: "printf".to_string(),
-                args: vec!["ok".to_string()],
-                source: Some("test".to_string()),
-            },
-        )
-        .unwrap();
-        validate_execute_run(dir.path(), run.run_id.clone()).unwrap();
-        prepare_release_delivery(dir.path(), run.run_id.clone()).unwrap();
-
-        let issue_after: InputIssue =
-            crate::storage::read_json(&dir.path().join(".agentflow/input/issues/iss-001.json"))
-                .unwrap();
-        let loop_projection: serde_json::Value = crate::storage::read_json(
-            &dir.path()
-                .join(".agentflow/state/loops/issues/iss-001.json"),
-        )
-        .unwrap();
-
-        assert_eq!(issue_after.status, InputIssueStatus::InReview);
-        assert_eq!(loop_projection["stage"], "in_review");
-        assert_eq!(loop_projection["displayStatus"], "in_review");
-        assert_eq!(loop_projection["reviewSubstate"], "delivery-prepared");
     }
 
     #[test]
@@ -698,70 +623,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(lease.status, ExecuteLeaseStatus::Released);
-    }
-
-    #[test]
-    fn release_delivery_requires_completed_run() {
-        let dir = tempdir().unwrap();
-        let run = ready_low_risk_run(dir.path(), "iss-001");
-
-        let error = prepare_release_delivery(dir.path(), run.run_id).unwrap_err();
-
-        assert!(error.to_string().contains("completed execute run"));
-    }
-
-    #[test]
-    fn release_delivery_requires_evidence() {
-        let dir = tempdir().unwrap();
-        let run = completed_low_risk_run(dir.path(), "iss-001");
-        fs::remove_file(
-            dir.path()
-                .join(".agentflow/tasks/iss-001/evidence/evidence.json"),
-        )
-        .unwrap();
-
-        let error = prepare_release_delivery(dir.path(), run.run_id).unwrap_err();
-
-        assert!(error
-            .to_string()
-            .contains(".agentflow/tasks/iss-001/evidence"));
-    }
-
-    #[test]
-    fn release_delivery_writes_build_agent_artifacts() {
-        let dir = tempdir().unwrap();
-        let run = completed_low_risk_run(dir.path(), "iss-001");
-
-        let delivery = prepare_release_delivery(dir.path(), run.run_id.clone()).unwrap();
-        let loaded = load_release_delivery(dir.path(), run.run_id.clone()).unwrap();
-
-        assert_eq!(delivery.version, OUTPUT_RELEASE_DELIVERY_VERSION);
-        assert_eq!(delivery.created_by, "Build Agent");
-        assert_eq!(delivery.status, "drafted");
-        assert_eq!(
-            delivery.evidence_path,
-            ".agentflow/tasks/iss-001/evidence/evidence.json"
-        );
-        assert_eq!(loaded.run_id, run.run_id);
-        for artifact in [
-            "delivery.json",
-            "pr-draft.md",
-            "pr-metadata.json",
-            "review-checklist.md",
-            "changelog.md",
-            "release-note.md",
-        ] {
-            assert!(dir
-                .path()
-                .join(".agentflow/output/release")
-                .join(&loaded.run_id)
-                .join(artifact)
-                .is_file());
-        }
-        assert_eq!(
-            delivery.artifacts.pr_draft,
-            format!(".agentflow/output/release/{}/pr-draft.md", loaded.run_id)
-        );
     }
 
     #[test]

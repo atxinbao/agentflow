@@ -4,9 +4,9 @@ use crate::{
 };
 use agentflow_execute::{
     acquire_execute_lease, create_execute_checkpoint, create_execute_run, execute_run_preflight,
-    prepare_release_delivery, run_execute_command, validate_execute_run, write_execute_plan,
-    ExecuteChangedFiles, ExecuteCommandRequest, ExecuteLease, ExecuteLeaseStatus, ExecutePlanDraft,
-    ExecutePlanStep, ExecutePlanStepKind,
+    run_execute_command, validate_execute_run, write_execute_plan, ExecuteChangedFiles,
+    ExecuteCommandRequest, ExecuteLease, ExecuteLeaseStatus, ExecutePlanDraft, ExecutePlanStep,
+    ExecutePlanStepKind,
 };
 use agentflow_input::{
     issue::{InputIssue, InputIssueModel, InputIssueStatus, InputRiskLevel},
@@ -19,19 +19,19 @@ use agentflow_state::{
 use anyhow::Result;
 use std::{fs, path::Path};
 
-pub struct DeliveryReadyFixture {
+pub struct ExecutionCompletedFixture {
     pub fixture: WorkflowFixture,
     pub run_id: String,
-    pub delivery_state: StateStatusSnapshot,
+    pub execution_state: StateStatusSnapshot,
 }
 
-impl DeliveryReadyFixture {
+impl ExecutionCompletedFixture {
     pub fn request_human_audit(&self) -> Result<HumanAuditReport> {
         request_human_audit_for_run(self.fixture.root(), &self.run_id)
     }
 }
 
-pub fn prepare_delivery_ready_fixture() -> Result<DeliveryReadyFixture> {
+pub fn prepare_execution_completed_fixture() -> Result<ExecutionCompletedFixture> {
     let fixture = create_fixture_project()?;
     let root = fixture.root();
     prepare_all_layers(root)?;
@@ -78,24 +78,22 @@ pub fn prepare_delivery_ready_fixture() -> Result<DeliveryReadyFixture> {
         result.changed_files.is_empty(),
         "fixture must not change user files"
     );
-    prepare_release_delivery(root, run.run_id.clone())?;
-
-    let delivery_state = agentflow_state::refresh_state(root)?;
+    let execution_state = agentflow_state::refresh_state(root)?;
     anyhow::ensure!(
-        delivery_state.current_stage == WorkflowStage::DeliveryReady,
-        "expected delivery-ready, got {:?}",
-        delivery_state.current_stage
+        execution_state.current_stage == WorkflowStage::ExecuteCompleted,
+        "expected execute-completed, got {:?}",
+        execution_state.current_stage
     );
     anyhow::ensure!(
-        delivery_state.audit_status == WorkflowAuditStatus::NotRequested,
-        "release delivery must not register audit request automatically"
+        execution_state.audit_status == WorkflowAuditStatus::NotRequested,
+        "execute completed state must not register audit request automatically"
     );
 
     fixture.assert_user_files_unchanged()?;
-    Ok(DeliveryReadyFixture {
+    Ok(ExecutionCompletedFixture {
         fixture,
         run_id: run.run_id,
-        delivery_state,
+        execution_state,
     })
 }
 
@@ -173,9 +171,9 @@ pub fn human_audit_draft(run_id: &str) -> HumanAuditRequestDraft {
                     path: ".agentflow/tasks/iss-001/evidence/evidence.json".to_string(),
                 },
                 AuditScopeRef {
-                    kind: "release-delivery".to_string(),
-                    id: run_id.to_string(),
-                    path: format!(".agentflow/output/release/{run_id}/delivery.json"),
+                    kind: "public-delivery".to_string(),
+                    id: "CHANGELOG.md".to_string(),
+                    path: "CHANGELOG.md".to_string(),
                 },
             ],
         },

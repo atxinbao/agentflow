@@ -5,8 +5,8 @@ pub mod browser_preview;
 pub mod fixture;
 
 pub use acceptance::{
-    create_high_risk_blocker_fixture, create_stale_lease_fixture, prepare_delivery_ready_fixture,
-    DeliveryReadyFixture,
+    create_high_risk_blocker_fixture, create_stale_lease_fixture,
+    prepare_execution_completed_fixture, ExecutionCompletedFixture,
 };
 pub use fixture::{create_fixture_project, WorkflowFixture};
 
@@ -17,19 +17,19 @@ mod tests {
     use agentflow_state::{WorkflowAuditStatus, WorkflowStage};
 
     #[test]
-    fn full_workflow_keeps_delivery_ready_without_auto_audit_request() -> anyhow::Result<()> {
-        let ready = prepare_delivery_ready_fixture()?;
+    fn full_workflow_keeps_execute_completed_without_auto_audit_request() -> anyhow::Result<()> {
+        let ready = prepare_execution_completed_fixture()?;
 
         assert_eq!(
-            ready.delivery_state.current_stage,
-            WorkflowStage::DeliveryReady
+            ready.execution_state.current_stage,
+            WorkflowStage::ExecuteCompleted
         );
         assert_eq!(
-            ready.delivery_state.audit_status,
+            ready.execution_state.audit_status,
             WorkflowAuditStatus::NotRequested
         );
         assert!(!ready
-            .delivery_state
+            .execution_state
             .next_actions
             .contains(&"request-human-audit".to_string()));
         let audit_index =
@@ -42,7 +42,7 @@ mod tests {
 
     #[test]
     fn human_audit_request_updates_state() -> anyhow::Result<()> {
-        let ready = prepare_delivery_ready_fixture()?;
+        let ready = prepare_execution_completed_fixture()?;
         let report = ready.request_human_audit()?;
 
         assert_eq!(
@@ -79,7 +79,7 @@ mod tests {
 
     #[test]
     fn write_boundary_keeps_user_source_unchanged() -> anyhow::Result<()> {
-        let ready = prepare_delivery_ready_fixture()?;
+        let ready = prepare_execution_completed_fixture()?;
         ready.request_human_audit()?;
 
         ready.fixture.assert_user_files_unchanged()?;
