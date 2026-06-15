@@ -40,6 +40,7 @@ pub fn state_paths() -> std::collections::BTreeMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agentflow_audit::{request_human_audit, AuditScope, AuditScopeRef, HumanAuditRequestDraft};
     use agentflow_execute::{
         acquire_execute_lease, create_execute_checkpoint, create_execute_run,
         execute_run_preflight, release_execute_lease, run_execute_command, validate_execute_run,
@@ -53,11 +54,6 @@ mod tests {
         },
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
-    use agentflow_output::{
-        request_human_audit, AuditScope, AuditScopeRef, HumanAuditRequestDraft,
-        OutputReleaseDelivery, OutputReleaseDeliveryArtifacts, OUTPUT_RELEASE_DELIVERY_VERSION,
-    };
-    use serde_json::json;
     use std::{fs, path::Path};
     use tempfile::tempdir;
 
@@ -72,6 +68,7 @@ mod tests {
         agentflow_projection::prepare_projection_workspace(root).unwrap();
         agentflow_input::prepare_input_workspace(root).unwrap();
         agentflow_execute::prepare_execute_workspace(root).unwrap();
+        agentflow_audit::prepare_audit_workspace(root).unwrap();
     }
 
     fn write_spec(root: &Path) {
@@ -150,67 +147,13 @@ mod tests {
         agentflow_execute::load_execute_run(root, run.run_id).unwrap()
     }
 
-    fn write_evidence_and_delivery(root: &Path, run: &ExecuteRun) {
-        let run_id = &run.run_id;
+    fn assert_task_evidence(root: &Path, run: &ExecuteRun) {
         assert!(root
             .join(format!(
                 ".agentflow/tasks/{}/evidence/evidence.json",
                 run.issue_id
             ))
             .is_file());
-        let release_dir = root.join(".agentflow/output/release").join(run_id);
-        fs::create_dir_all(&release_dir).unwrap();
-        let delivery = OutputReleaseDelivery {
-            version: OUTPUT_RELEASE_DELIVERY_VERSION.to_string(),
-            run_id: run_id.clone(),
-            issue_id: run.issue_id.clone(),
-            source_spec_id: run.source_spec_id.clone(),
-            risk_level: run.risk_level.clone(),
-            status: "drafted".to_string(),
-            created_by: "Build Agent".to_string(),
-            created_at: 1,
-            evidence_path: format!(".agentflow/tasks/{}/evidence/evidence.json", run.issue_id),
-            execute_result_path: format!(".agentflow/execute/runs/{run_id}/result.json"),
-            diff_summary_path: Some(format!(
-                ".agentflow/execute/runs/{run_id}/review/diff-summary.json"
-            )),
-            artifacts: OutputReleaseDeliveryArtifacts {
-                pr_draft: format!(".agentflow/output/release/{run_id}/pr-draft.md"),
-                pr_metadata: format!(".agentflow/output/release/{run_id}/pr-metadata.json"),
-                review_checklist: format!(".agentflow/output/release/{run_id}/review-checklist.md"),
-                changelog: format!(".agentflow/output/release/{run_id}/changelog.md"),
-                release_note: format!(".agentflow/output/release/{run_id}/release-note.md"),
-            },
-        };
-        fs::write(
-            release_dir.join("delivery.json"),
-            serde_json::to_string_pretty(&delivery).unwrap(),
-        )
-        .unwrap();
-        for file in [
-            "pr-draft.md",
-            "review-checklist.md",
-            "changelog.md",
-            "release-note.md",
-        ] {
-            fs::write(release_dir.join(file), "# fixture\n").unwrap();
-        }
-        fs::write(
-            release_dir.join("pr-metadata.json"),
-            serde_json::to_string_pretty(&json!({
-                "version": "output-pr-metadata.v1",
-                "runId": run_id,
-                "issueId": run.issue_id,
-                "sourceSpecId": run.source_spec_id,
-                "title": "Fixture PR",
-                "branchName": null,
-                "remotePrUrl": null,
-                "status": "draft-only",
-                "createdRemotePr": false
-            }))
-            .unwrap(),
-        )
-        .unwrap();
     }
 
     #[test]
@@ -279,34 +222,31 @@ mod tests {
     }
 
     #[test]
-    fn workflow_gate_keeps_delivery_ready_without_auto_audit_after_delivery() {
+    fn workflow_gate_keeps_execute_completed_without_auto_audit_after_validation() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());
         let run = complete_run(dir.path());
-        write_evidence_and_delivery(dir.path(), &run);
-        agentflow_output::prepare_output_workspace(dir.path()).unwrap();
+        assert_task_evidence(dir.path(), &run);
         let status = refresh_state(dir.path()).unwrap();
-        assert_eq!(status.current_stage, WorkflowStage::DeliveryReady);
+        assert_eq!(status.current_stage, WorkflowStage::ExecuteCompleted);
         assert_eq!(status.audit_status, WorkflowAuditStatus::NotRequested);
         assert!(!status
             .next_actions
             .contains(&"request-human-audit".to_string()));
-        agentflow_output::prepare_audit_workspace(dir.path()).unwrap();
-        let audit_index = agentflow_output::load_audit_index(dir.path()).unwrap();
+        let audit_index = agentflow_audit::load_audit_index(dir.path()).unwrap();
         assert_eq!(audit_index.audits.len(), 0);
     }
 
     #[test]
-    fn workflow_gate_does_not_block_when_delivery_has_no_audit_request() {
+    fn workflow_gate_does_not_block_when_completed_run_has_no_audit_request() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());
         let run = complete_run(dir.path());
-        write_evidence_and_delivery(dir.path(), &run);
-        agentflow_output::prepare_output_workspace(dir.path()).unwrap();
+        assert_task_evidence(dir.path(), &run);
 
         let status = refresh_state(dir.path()).unwrap();
 
-        assert_eq!(status.current_stage, WorkflowStage::DeliveryReady);
+        assert_eq!(status.current_stage, WorkflowStage::ExecuteCompleted);
         assert_eq!(status.audit_status, WorkflowAuditStatus::NotRequested);
         assert!(status.blockers.is_empty());
     }
@@ -533,12 +473,11 @@ mod tests {
     }
 
     #[test]
-    fn issue_status_index_aggregates_issue_run_output_and_audit_status() {
+    fn issue_status_index_aggregates_issue_run_task_evidence_and_audit_status() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());
         let run = complete_run(dir.path());
-        write_evidence_and_delivery(dir.path(), &run);
-        agentflow_output::prepare_output_workspace(dir.path()).unwrap();
+        assert_task_evidence(dir.path(), &run);
         request_human_audit(
             dir.path(),
             HumanAuditRequestDraft {
@@ -557,9 +496,19 @@ mod tests {
                             path: ".agentflow/input/issues/iss-001.json".to_string(),
                         },
                         AuditScopeRef {
-                            kind: "execute-run".to_string(),
+                            kind: "task-run".to_string(),
                             id: run.run_id.clone(),
-                            path: format!(".agentflow/execute/runs/{}", run.run_id),
+                            path: format!(".agentflow/tasks/iss-001/runs/{}/run.json", run.run_id),
+                        },
+                        AuditScopeRef {
+                            kind: "evidence".to_string(),
+                            id: run.run_id.clone(),
+                            path: ".agentflow/tasks/iss-001/evidence/evidence.json".to_string(),
+                        },
+                        AuditScopeRef {
+                            kind: "public-delivery".to_string(),
+                            id: "CHANGELOG.md".to_string(),
+                            path: "CHANGELOG.md".to_string(),
                         },
                     ],
                 },
@@ -580,7 +529,7 @@ mod tests {
             .unwrap();
         assert_eq!(issue.latest_run_id.as_deref(), Some(run.run_id.as_str()));
         assert_eq!(issue.display_status, DisplayStatus::InReview);
-        assert_eq!(issue.delivery_status, "drafted");
+        assert_eq!(issue.delivery_status, "missing");
         assert_eq!(issue.audit_status, WorkflowAuditStatus::Failed);
     }
 }

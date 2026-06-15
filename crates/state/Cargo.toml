@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 agentflow-agent-manual = { path = "../agent-manual" }
+agentflow-audit = { path = "../audit" }
 agentflow-execute = { path = "../execute" }
 agentflow-input = { path = "../input" }
-agentflow-output = { path = "../output" }
 agentflow-panel = { path = "../panel" }
 agentflow-projection = { path = "../projection" }
 agentflow-spec = { path = "../spec" }

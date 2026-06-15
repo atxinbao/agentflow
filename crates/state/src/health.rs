@@ -124,7 +124,7 @@ fn events_health(root: &Path) -> WorkflowHealthSnapshot {
 }
 
 fn audit_health(root: &Path) -> WorkflowHealthSnapshot {
-    match agentflow_output::load_audit_status(root) {
+    match agentflow_audit::load_audit_status(root) {
         Ok(status) => WorkflowHealthSnapshot {
             version: STATE_HEALTH_VERSION.to_string(),
             module: "audit".to_string(),

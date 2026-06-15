@@ -5,9 +5,9 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
+agentflow-audit = { path = "../audit" }
 agentflow-input = { path = "../input" }
 agentflow-execute = { path = "../execute" }
-agentflow-output = { path = "../output" }
 agentflow-panel = { path = "../panel" }
 agentflow-projection = { path = "../projection" }
 agentflow-task-artifacts = { path = "../task-artifacts" }

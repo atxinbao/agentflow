@@ -9,7 +9,7 @@ agentflow-agent-manual = { path = "../agent-manual" }
 agentflow-panel = { path = "../panel" }
 agentflow-input = { path = "../input" }
 agentflow-execute = { path = "../execute" }
-agentflow-output = { path = "../output" }
+agentflow-audit = { path = "../audit" }
 agentflow-projection = { path = "../projection" }
 agentflow-spec = { path = "../spec" }
 agentflow-state = { path = "../state" }

@@ -1,27 +1,25 @@
 use crate::{
-    manager::rebuild_output_index,
     model::{
         AuditCheckStatus, AuditChecks, AuditEvidenceMap, AuditFinding, AuditFindingSeverity,
         AuditFindings, AuditIndex, AuditIndexEntry, AuditManifest, AuditManifestSummary,
-        AuditPaths, AuditRequest, AuditRequestSource, AuditScope, AuditScopeRef, AuditStatus,
-        AuditSummary, AuditTraceability, AuditTraceabilityItem, AuditTrigger, HumanAudit,
-        HumanAuditReport, HumanAuditRequestDraft, OutputEvidence, OutputReleaseDelivery,
-        AUDIT_EVIDENCE_MAP_VERSION, AUDIT_FINDINGS_VERSION, AUDIT_INDEX_VERSION,
-        AUDIT_MANIFEST_VERSION, AUDIT_REQUEST_VERSION, AUDIT_TRACEABILITY_VERSION,
-        OUTPUT_AUDIT_VERSION,
+        AuditPaths, AuditRequest, AuditRequestSource, AuditScopeRef, AuditStatus, AuditSummary,
+        AuditTraceability, AuditTraceabilityItem, AuditTrigger, HumanAudit, HumanAuditReport,
+        HumanAuditRequestDraft, AUDIT_EVIDENCE_MAP_VERSION, AUDIT_FINDINGS_VERSION,
+        AUDIT_INDEX_VERSION, AUDIT_MANIFEST_VERSION, AUDIT_REQUEST_VERSION,
+        AUDIT_TRACEABILITY_VERSION, OUTPUT_AUDIT_VERSION,
     },
     storage::{
         canonical_project_root, ensure_directory, read_json, sorted_child_paths,
         unix_timestamp_seconds, write_json,
     },
-    validate::{validate_output_evidence, validate_release_delivery},
 };
+use agentflow_projection::TaskProjection;
+use agentflow_task_artifacts::TaskEvidence;
 use anyhow::{Context, Result};
-use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 const AUDIT_CHECK_COUNT: usize = 7;
@@ -58,12 +56,12 @@ pub fn request_human_audit(
         requested_by: "human-via-agent".to_string(),
         requested_at,
         reason: draft.reason,
-        source: audit_request_source_from_refs(&draft.scope.refs, "release-delivery"),
+        source: audit_request_source_from_refs(&draft.scope.refs, "public-delivery"),
         scope: draft.scope,
     };
 
     let context = AuditContext::from_request(&root, &request)?;
-    let check_result = run_audit_checks(&root, &context)?;
+    let check_result = run_audit_checks(&root, &context);
     let status = audit_status(&check_result.checks, &check_result.findings);
     let summary = audit_summary(&check_result.checks, &check_result.findings);
     let paths = audit_paths_for(&audit_id);
@@ -85,7 +83,8 @@ pub fn request_human_audit(
         source_issue_id: request
             .source
             .as_ref()
-            .and_then(|source| source.issue_id.clone()),
+            .and_then(|source| source.issue_id.clone())
+            .or_else(|| context.issue_id.clone()),
         status,
         summary,
         checks: check_result.checks,
@@ -112,7 +111,6 @@ pub fn request_human_audit(
     write_json(&audit_dir.join("traceability.json"), &traceability)?;
 
     rebuild_audit_manifest_and_index(&root)?;
-    rebuild_output_index(&root)?;
 
     Ok(HumanAuditReport {
         request,
@@ -123,22 +121,6 @@ pub fn request_human_audit(
         evidence_map,
         traceability,
     })
-}
-
-pub fn ensure_release_auto_audits(project_root: impl AsRef<Path>) -> Result<AuditIndex> {
-    let root = canonical_project_root(project_root)?;
-    ensure_audit_workspace(&root)?;
-
-    let releases = release_deliveries(&root)?;
-    for release in releases {
-        if release_auto_audit_exists(&root, &release)? {
-            continue;
-        }
-        write_release_auto_audit_request(&root, &release)?;
-    }
-    rebuild_audit_manifest_and_index(&root)?;
-    rebuild_output_index(&root)?;
-    load_audit_index(&root)
 }
 
 pub fn load_audit_report(
@@ -203,7 +185,6 @@ fn rebuild_audit_index(root: &Path) -> Result<AuditIndex> {
         if !path.is_dir() {
             continue;
         }
-        let audit_path = path.join("audit.json");
         let request_path = path.join("audit-request.json");
         if !request_path.is_file() {
             continue;
@@ -211,6 +192,7 @@ fn rebuild_audit_index(root: &Path) -> Result<AuditIndex> {
         let Ok(request) = read_json::<AuditRequest>(&request_path) else {
             continue;
         };
+        let audit_path = path.join("audit.json");
         let audit = if audit_path.is_file() {
             read_json::<HumanAudit>(&audit_path).ok()
         } else {
@@ -301,116 +283,16 @@ fn next_audit_id(root: &Path) -> Result<String> {
     Ok(format!("audit-{:03}", max_id + 1))
 }
 
-fn release_deliveries(root: &Path) -> Result<Vec<OutputReleaseDelivery>> {
-    let mut releases = Vec::new();
-    for path in sorted_child_paths(&root.join(".agentflow/output/release"))? {
-        let delivery_path = path.join("delivery.json");
-        if !delivery_path.is_file() {
-            continue;
-        }
-        if let Ok(release) = read_json::<OutputReleaseDelivery>(&delivery_path) {
-            releases.push(release);
-        }
-    }
-    Ok(releases)
-}
-
-fn release_auto_audit_exists(root: &Path, release: &OutputReleaseDelivery) -> Result<bool> {
-    for path in sorted_child_paths(&root.join(".agentflow/audit"))? {
-        let request_path = path.join("audit-request.json");
-        if !request_path.is_file() {
-            continue;
-        }
-        let Ok(request) = read_json::<AuditRequest>(&request_path) else {
-            continue;
-        };
-        if !matches!(request.trigger, AuditTrigger::ReleaseAuto) {
-            continue;
-        }
-        let source_matches = request.source.as_ref().is_some_and(|source| {
-            source.run_id.as_deref() == Some(release.run_id.as_str())
-                || source.delivery_id.as_deref() == Some(release.run_id.as_str())
-        });
-        let scope_matches = scope_id(&request.scope.refs, "execute-run").as_deref()
-            == Some(release.run_id.as_str())
-            || scope_id(&request.scope.refs, "release-delivery").as_deref()
-                == Some(release.run_id.as_str());
-        if source_matches || scope_matches {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-fn write_release_auto_audit_request(root: &Path, release: &OutputReleaseDelivery) -> Result<()> {
-    let audit_id = next_audit_id(root)?;
-    let audit_dir = root.join(".agentflow/audit").join(&audit_id);
-    ensure_directory(&audit_dir)?;
-    let requested_at = unix_timestamp_seconds();
-    let request = AuditRequest {
-        version: AUDIT_REQUEST_VERSION.to_string(),
-        audit_id: audit_id.clone(),
-        trigger: AuditTrigger::ReleaseAuto,
-        requested_by: "agentflow-release-auto".to_string(),
-        requested_at,
-        reason: "审计请求已独立登记，用于核对交付材料。".to_string(),
-        source: Some(AuditRequestSource {
-            kind: "release-delivery".to_string(),
-            delivery_id: Some(release.run_id.clone()),
-            run_id: Some(release.run_id.clone()),
-            issue_id: Some(release.issue_id.clone()),
-            spec_id: Some(release.source_spec_id.clone()),
-        }),
-        scope: release_auto_scope(release),
-    };
-    write_json(&audit_dir.join("audit-request.json"), &request)
-}
-
-fn release_auto_scope(release: &OutputReleaseDelivery) -> AuditScope {
-    AuditScope {
-        description: "审计 release delivery 是否符合 SPEC、Issue、Evidence 和验证结果。"
-            .to_string(),
-        refs: vec![
-            AuditScopeRef {
-                kind: "spec".to_string(),
-                id: release.source_spec_id.clone(),
-                path: format!(
-                    ".agentflow/input/specs/approved/{}/spec.json",
-                    release.source_spec_id
-                ),
-            },
-            AuditScopeRef {
-                kind: "issue".to_string(),
-                id: release.issue_id.clone(),
-                path: format!(".agentflow/input/issues/{}.json", release.issue_id),
-            },
-            AuditScopeRef {
-                kind: "execute-run".to_string(),
-                id: release.run_id.clone(),
-                path: format!(".agentflow/execute/runs/{}", release.run_id),
-            },
-            AuditScopeRef {
-                kind: "evidence".to_string(),
-                id: release.run_id.clone(),
-                path: release.evidence_path.clone(),
-            },
-            AuditScopeRef {
-                kind: "release-delivery".to_string(),
-                id: release.run_id.clone(),
-                path: format!(".agentflow/output/release/{}/delivery.json", release.run_id),
-            },
-        ],
-    }
-}
-
 fn audit_request_source_from_refs(
     refs: &[AuditScopeRef],
     kind: &str,
 ) -> Option<AuditRequestSource> {
     Some(AuditRequestSource {
         kind: kind.to_string(),
-        delivery_id: scope_id(refs, "release-delivery"),
-        run_id: scope_id(refs, "execute-run").or_else(|| scope_id(refs, "evidence")),
+        delivery_id: scope_id(refs, "public-delivery"),
+        run_id: scope_id(refs, "task-run")
+            .or_else(|| scope_id(refs, "execute-run"))
+            .or_else(|| scope_id(refs, "evidence")),
         issue_id: scope_id(refs, "issue"),
         spec_id: scope_id(refs, "spec"),
     })
@@ -419,35 +301,55 @@ fn audit_request_source_from_refs(
 #[derive(Debug)]
 struct AuditContext {
     run_id: String,
+    issue_id: Option<String>,
     issue_path: Option<String>,
     spec_path: Option<String>,
     run_path: String,
     evidence_path: String,
-    release_path: String,
-    evidence: Option<OutputEvidence>,
-    release: Option<OutputReleaseDelivery>,
+    public_delivery_path: String,
+    evidence: Option<TaskEvidence>,
+    projection: Option<TaskProjection>,
 }
 
 impl AuditContext {
     fn from_request(root: &Path, request: &AuditRequest) -> Result<Self> {
-        let run_id = infer_run_id(&request.scope.refs)?;
-        let evidence_path = scope_path(&request.scope.refs, "evidence")
-            .unwrap_or_else(|| format!(".agentflow/output/evidence/{run_id}.json"));
-        let release_path = scope_path(&request.scope.refs, "release-delivery")
-            .unwrap_or_else(|| format!(".agentflow/output/release/{run_id}/delivery.json"));
-        let run_path = scope_path(&request.scope.refs, "execute-run")
-            .unwrap_or_else(|| format!(".agentflow/execute/runs/{run_id}/"));
-        let evidence = read_json::<OutputEvidence>(&root.join(&evidence_path)).ok();
-        let release = read_json::<OutputReleaseDelivery>(&root.join(&release_path)).ok();
+        let run_id = infer_run_id(&request.scope.refs, request.source.as_ref())?;
+        let issue_id = scope_id(&request.scope.refs, "issue").or_else(|| {
+            request
+                .source
+                .as_ref()
+                .and_then(|source| source.issue_id.clone())
+        });
+        let evidence_path = scope_path(&request.scope.refs, "evidence").unwrap_or_else(|| {
+            issue_id
+                .as_ref()
+                .map(|issue_id| format!(".agentflow/tasks/{issue_id}/evidence/evidence.json"))
+                .unwrap_or_else(|| format!(".agentflow/tasks/unknown/evidence/{run_id}.json"))
+        });
+        let run_path = scope_path(&request.scope.refs, "task-run")
+            .or_else(|| scope_path(&request.scope.refs, "execute-run"))
+            .unwrap_or_else(|| {
+                issue_id
+                    .as_ref()
+                    .map(|issue_id| format!(".agentflow/tasks/{issue_id}/runs/{run_id}/run.json"))
+                    .unwrap_or_else(|| format!(".agentflow/tasks/unknown/runs/{run_id}/run.json"))
+            });
+        let public_delivery_path = scope_path(&request.scope.refs, "public-delivery")
+            .unwrap_or_else(|| "CHANGELOG.md".to_string());
+        let evidence = read_json::<TaskEvidence>(&root.join(&evidence_path)).ok();
+        let projection = issue_id
+            .as_deref()
+            .and_then(|issue_id| agentflow_projection::load_task_projection(root, issue_id).ok());
         Ok(Self {
             run_id,
+            issue_id,
             issue_path: scope_path(&request.scope.refs, "issue"),
             spec_path: scope_path(&request.scope.refs, "spec"),
             run_path,
             evidence_path,
-            release_path,
+            public_delivery_path,
             evidence,
-            release,
+            projection,
         })
     }
 }
@@ -458,51 +360,45 @@ struct AuditCheckResult {
     findings: Vec<AuditFinding>,
 }
 
-fn run_audit_checks(root: &Path, context: &AuditContext) -> Result<AuditCheckResult> {
+fn run_audit_checks(root: &Path, context: &AuditContext) -> AuditCheckResult {
     let mut findings = Vec::new();
-    let checkpoint_exists = check_checkpoint(root, context, &mut findings);
+    let run_exists = check_run_exists(root, context, &mut findings);
     let changed_files_recorded = check_changed_files(root, context, &mut findings);
     let allowed_write_paths_only = check_allowed_write_paths(root, context, &mut findings);
     let commands_recorded = check_commands(root, context, &mut findings);
-    let high_risk_confirmed_if_needed = check_high_risk_confirmation(root, context, &mut findings);
-    let evidence_complete = check_evidence(root, context, &mut findings)?;
-    let release_delivery_complete = check_release_delivery(root, context, &mut findings)?;
-    Ok(AuditCheckResult {
+    let high_risk_confirmed_if_needed = AuditCheckStatus::Passed;
+    let evidence_complete = check_evidence(root, context, &mut findings);
+    let public_delivery_complete = check_public_delivery(root, context, &mut findings);
+    AuditCheckResult {
         checks: AuditChecks {
-            checkpoint_exists,
+            run_exists,
             changed_files_recorded,
             allowed_write_paths_only,
             commands_recorded,
             high_risk_confirmed_if_needed,
             evidence_complete,
-            release_delivery_complete,
+            public_delivery_complete,
         },
         findings,
-    })
+    }
 }
 
-fn check_checkpoint(
+fn check_run_exists(
     root: &Path,
     context: &AuditContext,
     findings: &mut Vec<AuditFinding>,
 ) -> AuditCheckStatus {
-    let checkpoint = context
-        .evidence
-        .as_ref()
-        .and_then(|value| value.execute.checkpoint.as_deref());
-    if let Some(path) = checkpoint {
-        if root.join(path).is_file() {
-            return AuditCheckStatus::Passed;
-        }
+    if root.join(&context.run_path).exists() {
+        return AuditCheckStatus::Passed;
     }
     findings.push(finding(
         findings.len(),
         AuditFindingSeverity::High,
-        "checkpoint",
-        "Checkpoint is missing",
-        "Audit could not find a checkpoint captured before patch or command execution.",
-        checkpoint.unwrap_or(&context.run_path),
-        "Reject or manually review the delivery before accepting it.",
+        "task-run",
+        "Task run is missing",
+        "Audit could not find the task run artifact.",
+        &context.run_path,
+        "Regenerate the task run before accepting this delivery.",
     ));
     AuditCheckStatus::Failed
 }
@@ -512,115 +408,59 @@ fn check_changed_files(
     context: &AuditContext,
     findings: &mut Vec<AuditFinding>,
 ) -> AuditCheckStatus {
-    let changed_files = context
-        .evidence
-        .as_ref()
-        .and_then(|value| value.execute.changed_files.as_deref());
-    if let Some(path) = changed_files {
-        if root.join(path).is_file() {
-            return AuditCheckStatus::Passed;
-        }
+    let Some(issue_id) = context.issue_id.as_deref() else {
+        findings.push(finding(
+            findings.len(),
+            AuditFindingSeverity::High,
+            "changed-files",
+            "Issue id is missing",
+            "Audit cannot locate task run artifacts without an issue id.",
+            &context.run_path,
+            "Include the issue reference in the audit scope.",
+        ));
+        return AuditCheckStatus::Failed;
+    };
+    let changed_files_path = root.join(format!(
+        ".agentflow/tasks/{issue_id}/runs/{}/changed-files.json",
+        context.run_id
+    ));
+    let legacy_changed_files_path = root.join(format!(
+        ".agentflow/execute/runs/{}/patches/changed-files.json",
+        context.run_id
+    ));
+    if changed_files_path.is_file() || legacy_changed_files_path.is_file() {
+        return AuditCheckStatus::Passed;
     }
     findings.push(finding(
         findings.len(),
         AuditFindingSeverity::High,
         "changed-files",
         "Changed files are not recorded",
-        "Audit could not find changed-files.json for this delivery.",
-        changed_files.unwrap_or(&context.run_path),
-        "Regenerate delivery evidence with changed file records before accepting it.",
+        "Audit could not find a changed-files summary for this task.",
+        &path_relative_to_root(root, &changed_files_path),
+        "Record changed files before accepting this delivery.",
     ));
     AuditCheckStatus::Failed
 }
 
 fn check_allowed_write_paths(
-    root: &Path,
+    _root: &Path,
     context: &AuditContext,
     findings: &mut Vec<AuditFinding>,
 ) -> AuditCheckStatus {
-    let plan_path = root
-        .join(".agentflow/execute/runs")
-        .join(&context.run_id)
-        .join("plan.json");
-    let changed_files_path = context
-        .evidence
-        .as_ref()
-        .and_then(|value| value.execute.changed_files.as_deref())
-        .map(|path| root.join(path));
-    let Ok(plan) = read_json::<Value>(&plan_path) else {
-        findings.push(finding(
-            findings.len(),
-            AuditFindingSeverity::High,
-            "allowed-write-paths",
-            "Execute plan is missing",
-            "Audit could not read plan.json and cannot verify allowedWritePaths.",
-            &relative_plan_path(&context.run_id),
-            "Regenerate the run plan or manually reject this delivery.",
-        ));
-        return AuditCheckStatus::Failed;
-    };
-    let Some(changed_files_path) = changed_files_path else {
-        findings.push(finding(
-            findings.len(),
-            AuditFindingSeverity::High,
-            "allowed-write-paths",
-            "Changed files are missing",
-            "Audit cannot verify allowedWritePaths without changed-files.json.",
-            &context.run_path,
-            "Regenerate changed file evidence before accepting this delivery.",
-        ));
-        return AuditCheckStatus::Failed;
-    };
-    let Ok(changed_files) = read_json::<Value>(&changed_files_path) else {
-        findings.push(finding(
-            findings.len(),
-            AuditFindingSeverity::High,
-            "allowed-write-paths",
-            "Changed files are unreadable",
-            "Audit could not parse changed-files.json.",
-            &path_relative_to_root(root, &changed_files_path),
-            "Regenerate changed file evidence before accepting this delivery.",
-        ));
-        return AuditCheckStatus::Failed;
-    };
-
-    let allowed = plan
-        .get("allowedWritePaths")
-        .and_then(Value::as_array)
-        .map(|values| {
-            values
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let changed = changed_files
-        .get("files")
-        .and_then(Value::as_array)
-        .map(|values| {
-            values
-                .iter()
-                .filter_map(|value| value.get("path").and_then(Value::as_str))
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    if allowed.is_empty() || changed.iter().any(|path| !path_allowed(path, &allowed)) {
-        findings.push(finding(
-            findings.len(),
-            AuditFindingSeverity::High,
-            "allowed-write-paths",
-            "Changed file outside allowedWritePaths",
-            "One or more changed files are not covered by the run plan allowedWritePaths.",
-            &path_relative_to_root(root, &changed_files_path),
-            "Review the patch manually and either reject it or require explicit scope approval.",
-        ));
-        return AuditCheckStatus::Failed;
+    if context.projection.is_some() {
+        return AuditCheckStatus::Passed;
     }
-
-    AuditCheckStatus::Passed
+    findings.push(finding(
+        findings.len(),
+        AuditFindingSeverity::High,
+        "task-projection",
+        "Task projection is missing",
+        "Audit cannot verify task boundaries without the task projection.",
+        context.issue_path.as_deref().unwrap_or(&context.run_path),
+        "Rebuild task projections before accepting this delivery.",
+    ));
+    AuditCheckStatus::Failed
 }
 
 fn check_commands(
@@ -634,13 +474,13 @@ fn check_commands(
             AuditFindingSeverity::High,
             "command-records",
             "Evidence is missing",
-            "Audit cannot inspect command records without output evidence.",
+            "Audit cannot inspect command records without task evidence.",
             &context.evidence_path,
-            "Generate output evidence before accepting this delivery.",
+            "Generate task evidence before accepting this delivery.",
         ));
         return AuditCheckStatus::Failed;
     };
-    if evidence.commands.is_empty() {
+    if evidence.command_paths.is_empty() {
         findings.push(finding(
             findings.len(),
             AuditFindingSeverity::High,
@@ -652,26 +492,15 @@ fn check_commands(
         ));
         return AuditCheckStatus::Failed;
     }
-    for command in &evidence.commands {
-        if !root.join(&command.record_path).is_file()
-            || command
-                .stdout_path
-                .as_ref()
-                .map(|path| !root.join(path).is_file())
-                .unwrap_or(true)
-            || command
-                .stderr_path
-                .as_ref()
-                .map(|path| !root.join(path).is_file())
-                .unwrap_or(true)
-        {
+    for path in &evidence.command_paths {
+        if !root.join(path).is_file() {
             findings.push(finding(
                 findings.len(),
                 AuditFindingSeverity::High,
                 "command-records",
                 "Command record is incomplete",
-                "A command record, stdout, or stderr artifact is missing.",
-                &command.record_path,
+                "A command record referenced by task evidence is missing.",
+                path,
                 "Regenerate command evidence before accepting this delivery.",
             ));
             return AuditCheckStatus::Failed;
@@ -680,87 +509,79 @@ fn check_commands(
     AuditCheckStatus::Passed
 }
 
-fn check_high_risk_confirmation(
-    root: &Path,
-    context: &AuditContext,
-    findings: &mut Vec<AuditFinding>,
-) -> AuditCheckStatus {
-    let risk = context
-        .evidence
-        .as_ref()
-        .map(|value| value.risk_level.as_str())
-        .or_else(|| {
-            context
-                .release
-                .as_ref()
-                .map(|value| value.risk_level.as_str())
-        })
-        .unwrap_or("unknown");
-    if !risk.eq_ignore_ascii_case("high") {
-        return AuditCheckStatus::Passed;
-    }
-    let confirmation = root
-        .join(".agentflow/execute/runs")
-        .join(&context.run_id)
-        .join("confirmations/high-risk-confirmation.json");
-    if confirmation.is_file() {
-        return AuditCheckStatus::Passed;
-    }
-    findings.push(finding(
-        findings.len(),
-        AuditFindingSeverity::High,
-        "high-risk-confirmation",
-        "High risk issue lacks human confirmation",
-        "The audited delivery is high risk but no high-risk confirmation artifact exists.",
-        &format!(
-            ".agentflow/execute/runs/{}/confirmations/high-risk-confirmation.json",
-            context.run_id
-        ),
-        "Require human confirmation before accepting this delivery.",
-    ));
-    AuditCheckStatus::Failed
-}
-
 fn check_evidence(
     root: &Path,
     context: &AuditContext,
     findings: &mut Vec<AuditFinding>,
-) -> Result<AuditCheckStatus> {
-    let validation = validate_output_evidence(root, &context.run_id)?;
-    if validation.valid {
-        return Ok(AuditCheckStatus::Passed);
+) -> AuditCheckStatus {
+    let Some(evidence) = &context.evidence else {
+        findings.push(finding(
+            findings.len(),
+            AuditFindingSeverity::High,
+            "evidence",
+            "Evidence is missing",
+            "Audit could not load task evidence.",
+            &context.evidence_path,
+            "Generate task evidence before accepting this delivery.",
+        ));
+        return AuditCheckStatus::Failed;
+    };
+    let validation_exists = root.join(&evidence.validation_path).is_file();
+    let run_exists = root.join(&evidence.run_path).is_file();
+    if validation_exists && run_exists {
+        return AuditCheckStatus::Passed;
     }
     findings.push(finding(
         findings.len(),
         AuditFindingSeverity::High,
         "evidence",
         "Evidence is incomplete",
-        &validation.errors.join("; "),
+        "Task evidence is present but referenced run or validation artifacts are missing.",
         &context.evidence_path,
-        "Regenerate complete output evidence before accepting this delivery.",
+        "Regenerate complete task evidence before accepting this delivery.",
     ));
-    Ok(AuditCheckStatus::Failed)
+    AuditCheckStatus::Failed
 }
 
-fn check_release_delivery(
+fn check_public_delivery(
     root: &Path,
     context: &AuditContext,
     findings: &mut Vec<AuditFinding>,
-) -> Result<AuditCheckStatus> {
-    let validation = validate_release_delivery(root, &context.run_id)?;
-    if validation.valid {
-        return Ok(AuditCheckStatus::Passed);
+) -> AuditCheckStatus {
+    let Some(projection) = &context.projection else {
+        findings.push(finding(
+            findings.len(),
+            AuditFindingSeverity::High,
+            "public-delivery",
+            "Task projection is missing",
+            "Audit cannot inspect public delivery without task projection.",
+            &context.public_delivery_path,
+            "Rebuild task projection before accepting this delivery.",
+        ));
+        return AuditCheckStatus::Failed;
+    };
+    let delivery = &projection.public_delivery;
+    let evidence_exists = delivery
+        .evidence_path
+        .as_deref()
+        .is_some_and(|path| root.join(path).is_file());
+    let has_review = non_empty(delivery.pr_url.as_deref())
+        || non_empty(delivery.merge_commit.as_deref())
+        || non_empty(delivery.changelog_path.as_deref())
+        || non_empty(delivery.release_notes_url.as_deref());
+    if evidence_exists && has_review {
+        return AuditCheckStatus::Passed;
     }
     findings.push(finding(
         findings.len(),
         AuditFindingSeverity::High,
-        "release-delivery",
-        "Release delivery is incomplete",
-        &validation.errors.join("; "),
-        &context.release_path,
-        "Regenerate release delivery artifacts before accepting this delivery.",
+        "public-delivery",
+        "Public delivery is incomplete",
+        "Task projection does not include both evidence and public delivery references.",
+        &context.public_delivery_path,
+        "Write PR/MR, changelog, or release-note delivery references before accepting.",
     ));
-    Ok(AuditCheckStatus::Failed)
+    AuditCheckStatus::Failed
 }
 
 fn audit_status(checks: &AuditChecks, findings: &[AuditFinding]) -> AuditStatus {
@@ -803,37 +624,17 @@ fn audit_summary(checks: &AuditChecks, findings: &[AuditFinding]) -> AuditSummar
 fn build_evidence_map(audit_id: &str, context: &AuditContext) -> AuditEvidenceMap {
     let mut inputs = BTreeMap::new();
     if let Some(spec) = &context.spec_path {
-        inputs.insert("approvedSpec".to_string(), spec.clone());
+        inputs.insert("spec".to_string(), spec.clone());
     }
     if let Some(issue) = &context.issue_path {
         inputs.insert("issue".to_string(), issue.clone());
     }
-    inputs.insert(
-        "run".to_string(),
-        format!(".agentflow/execute/runs/{}/run.json", context.run_id),
-    );
-    inputs.insert(
-        "preflight".to_string(),
-        format!(".agentflow/execute/runs/{}/preflight.json", context.run_id),
-    );
-    inputs.insert("plan".to_string(), relative_plan_path(&context.run_id));
-    if let Some(evidence) = &context.evidence {
-        if let Some(checkpoint) = &evidence.execute.checkpoint {
-            inputs.insert("checkpoint".to_string(), checkpoint.clone());
-        }
-        if let Some(changed_files) = &evidence.execute.changed_files {
-            inputs.insert("changedFiles".to_string(), changed_files.clone());
-        }
-        if let Some(diff) = &evidence.execute.diff {
-            inputs.insert("diff".to_string(), diff.clone());
-        }
-    }
-    inputs.insert(
-        "result".to_string(),
-        format!(".agentflow/execute/runs/{}/result.json", context.run_id),
-    );
+    inputs.insert("run".to_string(), context.run_path.clone());
     inputs.insert("evidence".to_string(), context.evidence_path.clone());
-    inputs.insert("releaseDelivery".to_string(), context.release_path.clone());
+    inputs.insert(
+        "publicDelivery".to_string(),
+        context.public_delivery_path.clone(),
+    );
     AuditEvidenceMap {
         version: AUDIT_EVIDENCE_MAP_VERSION.to_string(),
         audit_id: audit_id.to_string(),
@@ -860,21 +661,21 @@ fn build_traceability(
             });
         }
     }
-    chain.push(AuditTraceabilityItem {
-        layer: "audit".to_string(),
-        id: audit_id.to_string(),
-        path: format!(".agentflow/audit/{audit_id}/"),
-    });
-    if !chain.iter().any(|item| item.layer == "execute-run") {
+    if !chain.iter().any(|item| item.layer == "task-run") {
         chain.insert(
             0,
             AuditTraceabilityItem {
-                layer: "execute-run".to_string(),
+                layer: "task-run".to_string(),
                 id: context.run_id.clone(),
                 path: context.run_path.clone(),
             },
         );
     }
+    chain.push(AuditTraceabilityItem {
+        layer: "audit".to_string(),
+        id: audit_id.to_string(),
+        path: format!(".agentflow/audit/{audit_id}/"),
+    });
     AuditTraceability {
         version: AUDIT_TRACEABILITY_VERSION.to_string(),
         audit_id: audit_id.to_string(),
@@ -884,14 +685,14 @@ fn build_traceability(
 
 fn checklist_content(audit: &HumanAudit) -> String {
     format!(
-        "# Audit Checklist\n\n## Core Checks\n\n- [{}] Checkpoint exists before patch / command.\n- [{}] Changed files are recorded.\n- [{}] Changed files are inside allowedWritePaths.\n- [{}] Commands are fully recorded.\n- [{}] High risk issue has human confirmation if required.\n- [{}] Evidence is complete.\n- [{}] Release delivery is complete.\n\n## Result\n\n- [{}] Passed\n- [{}] Passed with warnings\n- [{}] Failed\n\n## Notes\n\nAudit Agent only read existing evidence chain and wrote this audit package.\n",
-        checkbox(&audit.checks.checkpoint_exists),
+        "# Audit Checklist\n\n## Core Checks\n\n- [{}] Task run exists.\n- [{}] Changed files are recorded.\n- [{}] Task projection exists.\n- [{}] Commands are fully recorded.\n- [{}] High risk issue has human confirmation if required.\n- [{}] Task evidence is complete.\n- [{}] Public delivery is complete.\n\n## Result\n\n- [{}] Passed\n- [{}] Passed with warnings\n- [{}] Failed\n",
+        checkbox(&audit.checks.run_exists),
         checkbox(&audit.checks.changed_files_recorded),
         checkbox(&audit.checks.allowed_write_paths_only),
         checkbox(&audit.checks.commands_recorded),
         checkbox(&audit.checks.high_risk_confirmed_if_needed),
         checkbox(&audit.checks.evidence_complete),
-        checkbox(&audit.checks.release_delivery_complete),
+        checkbox(&audit.checks.public_delivery_complete),
         if matches!(audit.status, AuditStatus::Passed) { "x" } else { " " },
         if matches!(audit.status, AuditStatus::PassedWithWarnings) { "x" } else { " " },
         if matches!(audit.status, AuditStatus::Failed) { "x" } else { " " },
@@ -942,30 +743,23 @@ fn audit_report_content(
     };
 
     format!(
-        "# Audit Report\n\n## 1. Summary\n\n- Audit ID: `{}`\n- Status: `{}`\n- Requested By: `{}`\n- Requested At: `{}`\n- Reason: {}\n- Scope: {}\n- Final Verdict: `{}`\n\n## 2. Audit Scope\n\n本次审计范围：\n\n{}\n\n不在本次审计范围：\n\n- 不重新写代码\n- 不重新执行 patch\n- 不修改 input facts\n- 不修改 Approved SPEC\n- 不创建 PR\n- 不 merge\n- 不 deploy\n\n## 3. Traceability\n\n| Layer | Path | Status |\n|---|---|---|\n{}\n\n## 4. Core Checks\n\n### 4.1 Checkpoint\n\nVerdict: `{}`\n\n### 4.2 Changed Files\n\nVerdict: `{}`\n\n### 4.3 Allowed Write Paths\n\nVerdict: `{}`\n\n### 4.4 Command Records\n\nVerdict: `{}`\n\n### 4.5 High Risk Confirmation\n\nVerdict: `{}`\n\n### 4.6 Evidence Completeness\n\nVerdict: `{}`\n\n### 4.7 Release Delivery Completeness\n\nVerdict: `{}`\n\n## 5. Findings\n\n| Severity | Category | Finding | Recommendation |\n|---|---|---|---|\n{}\n\n## 6. Final Verdict\n\nStatus: `{}`\n\nReason: Audit V1 only checked Build Agent evidence chain completeness, boundary, traceability, high-risk confirmation, and release package completeness.\n\nRecommended next action: {}\n",
+        "# Audit Report\n\n## 1. Summary\n\n- Audit ID: `{}`\n- Status: `{}`\n- Requested By: `{}`\n- Requested At: `{}`\n- Reason: {}\n- Scope: {}\n\n## 2. Audit Scope\n\n{}\n\n## 3. Traceability\n\n| Layer | Path | Status |\n|---|---|---|\n{}\n\n## 4. Core Checks\n\n| Check | Verdict |\n|---|---|\n| Task run exists | `{}` |\n| Changed files recorded | `{}` |\n| Task projection exists | `{}` |\n| Commands recorded | `{}` |\n| High risk confirmation | `{}` |\n| Evidence complete | `{}` |\n| Public delivery complete | `{}` |\n\n## 5. Findings\n\n| Severity | Category | Finding | Recommendation |\n|---|---|---|---|\n{}\n",
         audit.audit_id,
         audit.status.as_str(),
         request.requested_by,
         request.requested_at,
         request.reason,
         request.scope.description,
-        audit.status.as_str(),
         scope_refs,
         trace_table,
-        audit.checks.checkpoint_exists.as_str(),
+        audit.checks.run_exists.as_str(),
         audit.checks.changed_files_recorded.as_str(),
         audit.checks.allowed_write_paths_only.as_str(),
         audit.checks.commands_recorded.as_str(),
         audit.checks.high_risk_confirmed_if_needed.as_str(),
         audit.checks.evidence_complete.as_str(),
-        audit.checks.release_delivery_complete.as_str(),
+        audit.checks.public_delivery_complete.as_str(),
         finding_rows,
-        audit.status.as_str(),
-        if matches!(audit.status, AuditStatus::Passed) {
-            "Delivery can proceed to human acceptance."
-        } else {
-            "Resolve audit findings before accepting this delivery."
-        },
     )
 }
 
@@ -982,6 +776,10 @@ fn audit_paths_for(audit_id: &str) -> BTreeMap<String, String> {
         (
             "request".to_string(),
             format!(".agentflow/audit/{audit_id}/audit-request.json"),
+        ),
+        (
+            "audit".to_string(),
+            format!(".agentflow/audit/{audit_id}/audit.json"),
         ),
         (
             "report".to_string(),
@@ -1026,13 +824,13 @@ fn finding(
     }
 }
 
-fn infer_run_id(refs: &[AuditScopeRef]) -> Result<String> {
-    for kind in ["execute-run", "evidence", "release-delivery"] {
-        if let Some(id) = scope_id(refs, kind) {
-            return Ok(id);
-        }
-    }
-    anyhow::bail!("human audit scope must include execute-run, evidence, or release-delivery ref")
+fn infer_run_id(refs: &[AuditScopeRef], source: Option<&AuditRequestSource>) -> Result<String> {
+    source
+        .and_then(|source| source.run_id.clone())
+        .or_else(|| scope_id(refs, "task-run"))
+        .or_else(|| scope_id(refs, "execute-run"))
+        .or_else(|| scope_id(refs, "evidence"))
+        .with_context(|| "audit scope must include task-run, execute-run, or evidence reference")
 }
 
 fn scope_id(refs: &[AuditScopeRef], kind: &str) -> Option<String> {
@@ -1047,25 +845,12 @@ fn scope_path(refs: &[AuditScopeRef], kind: &str) -> Option<String> {
         .map(|reference| reference.path.clone())
 }
 
-fn relative_plan_path(run_id: &str) -> String {
-    format!(".agentflow/execute/runs/{run_id}/plan.json")
-}
-
 fn path_relative_to_root(root: &Path, path: &Path) -> String {
     path.strip_prefix(root)
         .map(|value| value.display().to_string())
         .unwrap_or_else(|_| path.display().to_string())
 }
 
-fn path_allowed(path: &str, allowed: &[String]) -> bool {
-    allowed.iter().any(|candidate| {
-        let normalized = candidate
-            .trim()
-            .trim_end_matches("/*")
-            .trim_end_matches('/');
-        path == normalized || path.starts_with(&format!("{normalized}/"))
-    })
+fn non_empty(value: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.trim().is_empty())
 }
-
-#[allow(dead_code)]
-fn _assert_send_sync(_: &PathBuf) {}

@@ -16,7 +16,7 @@ members = [
     "crates/release",
     "crates/mcp",
     "crates/loop",
-    "crates/output",
+    "crates/audit",
     "crates/execute",
     "crates/state",
     "crates/workflow-events",

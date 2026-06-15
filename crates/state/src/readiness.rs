@@ -4,7 +4,6 @@ use agentflow_input::{
     relations::InputIssueRelationKind,
     InputSnapshot,
 };
-use agentflow_output::OutputSnapshot;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
@@ -22,7 +21,6 @@ pub(crate) fn issue_readiness_blockers(
     _root: &Path,
     input: Option<&InputSnapshot>,
     execute: Option<&agentflow_execute::ExecuteSnapshot>,
-    output: Option<&OutputSnapshot>,
 ) -> Vec<IssueReadinessBlocker> {
     let Some(input) = input else {
         return Vec::new();
@@ -30,7 +28,7 @@ pub(crate) fn issue_readiness_blockers(
 
     let latest_runs = latest_runs_by_issue(execute);
     let blocked_by = blocked_by_map(input);
-    dependency_blockers(input, output, &latest_runs, &blocked_by)
+    dependency_blockers(input, &latest_runs, &blocked_by)
 }
 
 pub(crate) fn issue_has_readiness_blocker(
@@ -49,7 +47,6 @@ pub(crate) fn issue_has_readiness_blocker(
 
 fn dependency_blockers(
     input: &InputSnapshot,
-    output: Option<&OutputSnapshot>,
     latest_runs: &BTreeMap<String, ExecuteRunIndexEntry>,
     blocked_by: &BTreeMap<String, BTreeSet<String>>,
 ) -> Vec<IssueReadinessBlocker> {
@@ -61,7 +58,7 @@ fn dependency_blockers(
     let mut blockers = Vec::new();
 
     for issue in &input.issues {
-        if issue_terminal(issue, latest_runs.get(&issue.issue_id), output) {
+        if issue_terminal(issue, latest_runs.get(&issue.issue_id)) {
             continue;
         }
         let Some(dependencies) = blocked_by.get(&issue.issue_id) else {
@@ -83,7 +80,7 @@ fn dependency_blockers(
             };
 
             let dependency_status =
-                issue_display_status(dependency, latest_runs.get(dependency_id), output);
+                issue_display_status(dependency, latest_runs.get(dependency_id));
             if dependency_status != DisplayStatus::Done {
                 blockers.push(IssueReadinessBlocker {
                     issue_id: issue.issue_id.clone(),
@@ -165,7 +162,6 @@ fn latest_runs_by_issue(
 pub(crate) fn issue_display_status(
     issue: &InputIssue,
     _latest_run: Option<&ExecuteRunIndexEntry>,
-    _output: Option<&OutputSnapshot>,
 ) -> DisplayStatus {
     if matches!(issue.status, InputIssueStatus::Cancel) {
         return DisplayStatus::Cancel;
@@ -176,13 +172,9 @@ pub(crate) fn issue_display_status(
     DisplayStatus::from_input_status(&issue.status)
 }
 
-fn issue_terminal(
-    issue: &InputIssue,
-    latest_run: Option<&ExecuteRunIndexEntry>,
-    output: Option<&OutputSnapshot>,
-) -> bool {
+fn issue_terminal(issue: &InputIssue, latest_run: Option<&ExecuteRunIndexEntry>) -> bool {
     matches!(
-        issue_display_status(issue, latest_run, output),
+        issue_display_status(issue, latest_run),
         DisplayStatus::Done | DisplayStatus::Cancel
     )
 }
@@ -201,10 +193,6 @@ mod tests {
         },
         model::{InputIndex, InputManifest, InputStatusSnapshot, InputWorkspaceStatus},
         relations::InputIssueRelationsFile,
-    };
-    use agentflow_output::{
-        OutputIndex, OutputIndexEntry, OutputManifest, OutputStatusSnapshot, OutputSummary,
-        OutputWorkspaceStatus,
     };
 
     fn snapshot(issues: Vec<InputIssue>, relations: InputIssueRelationsFile) -> InputSnapshot {
@@ -259,7 +247,7 @@ mod tests {
             InputIssueRelationsFile::default(),
         );
 
-        let blockers = issue_readiness_blockers(Path::new("/tmp"), Some(&input), None, None);
+        let blockers = issue_readiness_blockers(Path::new("/tmp"), Some(&input), None);
 
         assert!(blockers.iter().any(|blocker| {
             blocker.issue_id == "AF-002" && blocker.action == "dependency-ready"
@@ -275,7 +263,7 @@ mod tests {
             InputIssueRelationsFile::default(),
         );
 
-        let blockers = issue_readiness_blockers(Path::new("/tmp"), Some(&input), None, None);
+        let blockers = issue_readiness_blockers(Path::new("/tmp"), Some(&input), None);
 
         assert!(blockers.is_empty());
     }
@@ -287,7 +275,7 @@ mod tests {
         let input = snapshot(vec![issue], InputIssueRelationsFile::default());
 
         let blockers =
-            issue_readiness_blockers(Path::new("/tmp/not-a-git-repo"), Some(&input), None, None);
+            issue_readiness_blockers(Path::new("/tmp/not-a-git-repo"), Some(&input), None);
 
         assert!(blockers.is_empty());
     }
@@ -300,44 +288,8 @@ mod tests {
             issue_id: "AF-001".to_string(),
             ..ExecuteRunIndexEntry::default()
         };
-        let output = OutputSnapshot {
-            version: agentflow_output::OUTPUT_SNAPSHOT_VERSION.to_string(),
-            project_root: "/tmp/agentflow-test".to_string(),
-            ready: true,
-            status: OutputStatusSnapshot {
-                version: agentflow_output::OUTPUT_STATUS_VERSION.to_string(),
-                project_root: "/tmp/agentflow-test".to_string(),
-                status: OutputWorkspaceStatus::Ready,
-                ready: true,
-                manifest_exists: true,
-                index_exists: true,
-                summary: OutputSummary::default(),
-                missing_paths: Vec::new(),
-                warnings: Vec::new(),
-                errors: Vec::new(),
-            },
-            manifest: OutputManifest {
-                version: agentflow_output::OUTPUT_MANIFEST_VERSION.to_string(),
-                project_root: "/tmp/agentflow-test".to_string(),
-                status: OutputWorkspaceStatus::Ready,
-                paths: std::collections::BTreeMap::new(),
-                summary: OutputSummary::default(),
-                updated_at: 1,
-            },
-            index: agentflow_output::OutputIndex {
-                evidence: vec![OutputIndexEntry {
-                    run_id: "run-001".to_string(),
-                    issue_id: "AF-001".to_string(),
-                    status: "ready".to_string(),
-                    updated_at: 1,
-                    ..OutputIndexEntry::default()
-                }],
-                ..OutputIndex::default()
-            },
-        };
-
         assert_eq!(
-            issue_display_status(&issue, Some(&run), Some(&output)),
+            issue_display_status(&issue, Some(&run)),
             DisplayStatus::Todo
         );
     }
