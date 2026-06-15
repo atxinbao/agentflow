@@ -10,6 +10,7 @@ agentflow-execute = { path = "../execute" }
 agentflow-output = { path = "../output" }
 agentflow-panel = { path = "../panel" }
 agentflow-projection = { path = "../projection" }
+agentflow-task-artifacts = { path = "../task-artifacts" }
 agentflow-workflow-events = { path = "../workflow-events" }
 anyhow.workspace = true
 serde.workspace = true

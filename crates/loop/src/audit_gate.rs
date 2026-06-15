@@ -87,7 +87,7 @@ impl ProjectAuditGate {
             reason: "Project Loop generated delivery audit report after issue completion."
                 .to_string(),
             source: Some(AuditRequestSource {
-                kind: "release-delivery".to_string(),
+                kind: "public-delivery".to_string(),
                 delivery_id: Some(run_id.clone()),
                 run_id: Some(run_id.clone()),
                 issue_id: Some(issue_id.clone()),
@@ -95,7 +95,7 @@ impl ProjectAuditGate {
             }),
             scope: AuditScope {
                 description: "Delivery audit for completed Build Agent issue.".to_string(),
-                refs: delivery_scope_refs(&issue_id, &run_id),
+                refs: delivery_scope_refs(&root, &issue_id, &run_id),
             },
         };
         let audit = HumanAudit {
@@ -194,25 +194,27 @@ impl ProjectAuditGate {
             anyhow::bail!("project final audit requires all project issues done");
         }
 
-        let execute_index = agentflow_execute::load_execute_index(&root)?;
         for issue_id in &project.issue_ids {
-            let run = execute_index
-                .runs
-                .iter()
-                .filter(|run| run.issue_id == *issue_id)
-                .max_by_key(|run| run.updated_at)
-                .with_context(|| format!("project issue {issue_id} has no execute run"))?;
+            let projection = agentflow_projection::load_task_projection(&root, issue_id)
+                .with_context(|| format!("load task projection for project issue {issue_id}"))?;
+            if projection.current_state != "done" {
+                anyhow::bail!("project issue {issue_id} projection is not done");
+            }
+            let run_id = projection
+                .latest_run_id
+                .as_deref()
+                .with_context(|| format!("project issue {issue_id} has no task run"))?;
             let audit_path = root
                 .join(".agentflow/audit")
-                .join(format!("delivery-{}", run.run_id))
+                .join(format!("delivery-{run_id}"))
                 .join("audit.json");
             let audit: HumanAudit = read_json(&audit_path)
-                .with_context(|| format!("load delivery audit for {}", run.run_id))?;
+                .with_context(|| format!("load delivery audit for {run_id}"))?;
             if !matches!(
                 audit.status,
                 AuditStatus::Passed | AuditStatus::PassedWithWarnings
             ) {
-                anyhow::bail!("delivery audit for {} is not passed", run.run_id);
+                anyhow::bail!("delivery audit for {run_id} is not passed");
             }
         }
 
@@ -320,35 +322,36 @@ impl ProjectAuditGate {
 }
 
 fn delivery_checks(root: &Path, issue_id: &str, run_id: &str) -> AuditChecks {
+    let task_run_dir = agentflow_task_artifacts::task_run_dir(root, issue_id, run_id);
     AuditChecks {
-        checkpoint_exists: status_for(
-            root.join(format!(".agentflow/execute/runs/{run_id}/checkpoints")),
-        ),
-        changed_files_recorded: status_for(root.join(format!(
-            ".agentflow/execute/runs/{run_id}/patches/changed-files.json"
-        ))),
+        checkpoint_exists: status_for(task_run_dir.join("run.json")),
+        changed_files_recorded: status_for(task_run_dir.join("validation.json")),
         allowed_write_paths_only: status_for(
-            root.join(format!(".agentflow/execute/runs/{run_id}/plan.json")),
+            root.join(format!(".agentflow/projections/tasks/{issue_id}.json")),
         ),
-        commands_recorded: status_for(
-            root.join(format!(".agentflow/execute/runs/{run_id}/commands")),
-        ),
+        commands_recorded: status_for(task_run_dir.join("commands")),
         high_risk_confirmed_if_needed: AuditCheckStatus::Passed,
         evidence_complete: status_for(root.join(format!(
             ".agentflow/tasks/{issue_id}/evidence/evidence.json"
         ))),
-        release_delivery_complete: release_delivery_check(root, run_id),
+        release_delivery_complete: public_delivery_check(root, issue_id),
     }
 }
 
-fn release_delivery_check(root: &Path, run_id: &str) -> AuditCheckStatus {
-    let required = [
-        format!(".agentflow/output/release/{run_id}/delivery.json"),
-        format!(".agentflow/execute/runs/{run_id}/result.json"),
-        format!(".agentflow/execute/runs/{run_id}/branch.json"),
-        format!(".agentflow/execute/runs/{run_id}/review/merge-proof.json"),
-    ];
-    if required.iter().all(|path| root.join(path).is_file()) {
+fn public_delivery_check(root: &Path, issue_id: &str) -> AuditCheckStatus {
+    let Ok(projection) = agentflow_projection::load_task_projection(root, issue_id) else {
+        return AuditCheckStatus::Failed;
+    };
+    let delivery = projection.public_delivery;
+    let evidence_exists = delivery
+        .evidence_path
+        .as_deref()
+        .is_some_and(|path| root.join(path).is_file());
+    let has_review =
+        non_empty(delivery.pr_url.as_deref()) || non_empty(delivery.merge_commit.as_deref());
+    let has_public_record = non_empty(delivery.changelog_path.as_deref())
+        || non_empty(delivery.release_notes_url.as_deref());
+    if projection.current_state == "done" && evidence_exists && has_review && has_public_record {
         AuditCheckStatus::Passed
     } else {
         AuditCheckStatus::Failed
@@ -407,17 +410,26 @@ fn audit_summary_from_checks(checks: &AuditChecks) -> AuditSummary {
     }
 }
 
-fn delivery_scope_refs(issue_id: &str, run_id: &str) -> Vec<AuditScopeRef> {
+fn delivery_scope_refs(root: &Path, issue_id: &str, run_id: &str) -> Vec<AuditScopeRef> {
+    let public_delivery_path = agentflow_projection::load_task_projection(root, issue_id)
+        .ok()
+        .and_then(|projection| {
+            projection
+                .public_delivery
+                .changelog_path
+                .or(projection.public_delivery.release_notes_url)
+        })
+        .unwrap_or_else(|| "CHANGELOG.md".to_string());
     vec![
         AuditScopeRef {
             kind: "issue".to_string(),
             id: issue_id.to_string(),
-            path: format!(".agentflow/input/issues/{issue_id}.json"),
+            path: format!(".agentflow/spec/issues/{issue_id}.json"),
         },
         AuditScopeRef {
-            kind: "execute-run".to_string(),
+            kind: "task-run".to_string(),
             id: run_id.to_string(),
-            path: format!(".agentflow/execute/runs/{run_id}"),
+            path: format!(".agentflow/tasks/{issue_id}/runs/{run_id}/run.json"),
         },
         AuditScopeRef {
             kind: "evidence".to_string(),
@@ -425,11 +437,15 @@ fn delivery_scope_refs(issue_id: &str, run_id: &str) -> Vec<AuditScopeRef> {
             path: format!(".agentflow/tasks/{issue_id}/evidence/evidence.json"),
         },
         AuditScopeRef {
-            kind: "release-delivery".to_string(),
+            kind: "public-delivery".to_string(),
             id: run_id.to_string(),
-            path: format!(".agentflow/output/release/{run_id}/delivery.json"),
+            path: public_delivery_path,
         },
     ]
+}
+
+fn non_empty(value: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.trim().is_empty())
 }
 
 fn delivery_report_markdown(
