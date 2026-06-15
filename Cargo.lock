@@ -34,6 +34,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-audit"
+version = "0.1.0"
+dependencies = [
+ "agentflow-projection",
+ "agentflow-task-artifacts",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-cli"
 version = "0.1.0"
 dependencies = [
@@ -71,11 +83,11 @@ version = "0.1.0"
 dependencies = [
  "agentflow-agent-bridge",
  "agentflow-agent-manual",
+ "agentflow-audit",
  "agentflow-core",
  "agentflow-event-store",
  "agentflow-input",
  "agentflow-mcp",
- "agentflow-output",
  "agentflow-panel",
  "agentflow-projection",
  "agentflow-spec",
@@ -110,7 +122,6 @@ version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
  "agentflow-input",
- "agentflow-output",
  "agentflow-panel",
  "agentflow-task-artifacts",
  "anyhow",
@@ -137,9 +148,9 @@ name = "agentflow-loop"
 version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
+ "agentflow-audit",
  "agentflow-execute",
  "agentflow-input",
- "agentflow-output",
  "agentflow-panel",
  "agentflow-projection",
  "agentflow-task-artifacts",
@@ -156,17 +167,6 @@ version = "0.1.0"
 dependencies = [
  "agentflow-event-store",
  "agentflow-projection",
- "anyhow",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "agentflow-output"
-version = "0.1.0"
-dependencies = [
- "agentflow-input",
  "anyhow",
  "serde",
  "serde_json",
@@ -238,9 +238,9 @@ name = "agentflow-state"
 version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
+ "agentflow-audit",
  "agentflow-execute",
  "agentflow-input",
- "agentflow-output",
  "agentflow-panel",
  "agentflow-projection",
  "agentflow-spec",
@@ -278,9 +278,9 @@ name = "agentflow-workflow-acceptance"
 version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
+ "agentflow-audit",
  "agentflow-execute",
  "agentflow-input",
- "agentflow-output",
  "agentflow-panel",
  "agentflow-projection",
  "agentflow-spec",

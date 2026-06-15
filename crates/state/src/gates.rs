@@ -21,10 +21,9 @@ pub(crate) fn build_gate_snapshot(
 ) -> Result<WorkflowGateSnapshot> {
     let input = agentflow_input::load_input_snapshot(root).ok();
     let execute = agentflow_execute::load_execute_snapshot(root).ok();
-    let output = agentflow_output::load_output_snapshot(root).ok();
     let spec_issues = agentflow_spec::list_spec_issues(root).unwrap_or_default();
     let projection_index = agentflow_projection::load_issue_status_index(root).ok();
-    let audit_index = agentflow_output::load_audit_index(root).ok();
+    let audit_index = agentflow_audit::load_audit_index(root).ok();
     let audit_status = derive_audit_status(audit_index.as_ref());
     let active_run = execute.as_ref().and_then(|snapshot| {
         snapshot
@@ -34,26 +33,37 @@ pub(crate) fn build_gate_snapshot(
             .find(|run| run_is_active(&run.status))
     });
     let active_run_id = active_run.map(|run| run.run_id.clone());
-    let latest_evidence = output
-        .as_ref()
-        .and_then(|snapshot| snapshot.index.evidence.last())
-        .map(|entry| entry.path.clone());
-    let latest_delivery = output
-        .as_ref()
-        .and_then(|snapshot| snapshot.index.release_deliveries.last())
-        .map(|entry| entry.path.clone());
-    let mut blockers =
-        issue_readiness_blockers(root, input.as_ref(), execute.as_ref(), output.as_ref())
-            .into_iter()
-            .map(|blocker| {
-                let _issue_id = blocker.issue_id;
-                WorkflowBlockedAction {
-                    action: blocker.action,
-                    reason: blocker.reason,
-                    source_path: blocker.source_path,
-                }
+    let latest_projection = projection_index.as_ref().and_then(|index| {
+        index
+            .issues
+            .iter()
+            .max_by_key(|issue| (issue.updated_at, issue.issue_id.as_str()))
+            .and_then(|issue| {
+                agentflow_projection::load_task_projection(root, &issue.issue_id).ok()
             })
-            .collect::<Vec<_>>();
+    });
+    let latest_evidence = latest_projection
+        .as_ref()
+        .and_then(|projection| projection.public_delivery.evidence_path.clone());
+    let latest_delivery = latest_projection.as_ref().and_then(|projection| {
+        projection
+            .public_delivery
+            .changelog_path
+            .clone()
+            .or(projection.public_delivery.release_notes_url.clone())
+            .or(projection.public_delivery.pr_url.clone())
+    });
+    let mut blockers = issue_readiness_blockers(root, input.as_ref(), execute.as_ref())
+        .into_iter()
+        .map(|blocker| {
+            let _issue_id = blocker.issue_id;
+            WorkflowBlockedAction {
+                action: blocker.action,
+                reason: blocker.reason,
+                source_path: blocker.source_path,
+            }
+        })
+        .collect::<Vec<_>>();
     blockers.extend(collect_blockers(root)?);
     if let Some(input) = input.as_ref() {
         for issue in &input.issues {
@@ -76,7 +86,6 @@ pub(crate) fn build_gate_snapshot(
         health,
         input.as_ref(),
         execute.as_ref(),
-        output.as_ref(),
         &spec_issues,
         projection_index.as_ref(),
         &audit_status,
@@ -250,7 +259,6 @@ fn derive_stage(
     health: &[WorkflowHealthSnapshot],
     input: Option<&agentflow_input::InputSnapshot>,
     execute: Option<&agentflow_execute::ExecuteSnapshot>,
-    output: Option<&agentflow_output::OutputSnapshot>,
     spec_issues: &[SpecIssue],
     projection_index: Option<&IssueStatusIndex>,
     audit_status: &WorkflowAuditStatus,
@@ -285,18 +293,6 @@ fn derive_stage(
     }
     if matches!(audit_status, WorkflowAuditStatus::Running) {
         return WorkflowStage::AuditRunning;
-    }
-    if output
-        .as_ref()
-        .is_some_and(|snapshot| !snapshot.index.release_deliveries.is_empty())
-    {
-        return WorkflowStage::DeliveryReady;
-    }
-    if output
-        .as_ref()
-        .is_some_and(|snapshot| !snapshot.index.evidence.is_empty())
-    {
-        return WorkflowStage::EvidenceReady;
     }
     if execute.as_ref().is_some_and(|snapshot| {
         snapshot
@@ -416,7 +412,7 @@ fn derive_stage(
     }
 }
 
-fn derive_audit_status(index: Option<&agentflow_output::AuditIndex>) -> WorkflowAuditStatus {
+fn derive_audit_status(index: Option<&agentflow_audit::AuditIndex>) -> WorkflowAuditStatus {
     let Some(index) = index else {
         return WorkflowAuditStatus::NotRequested;
     };
@@ -424,14 +420,12 @@ fn derive_audit_status(index: Option<&agentflow_output::AuditIndex>) -> Workflow
         return WorkflowAuditStatus::NotRequested;
     };
     match latest.status {
-        agentflow_output::AuditStatus::Requested => WorkflowAuditStatus::Requested,
-        agentflow_output::AuditStatus::Running => WorkflowAuditStatus::Running,
-        agentflow_output::AuditStatus::Passed => WorkflowAuditStatus::Passed,
-        agentflow_output::AuditStatus::PassedWithWarnings => {
-            WorkflowAuditStatus::PassedWithWarnings
-        }
-        agentflow_output::AuditStatus::Failed => WorkflowAuditStatus::Failed,
-        agentflow_output::AuditStatus::Cancelled => WorkflowAuditStatus::Cancelled,
+        agentflow_audit::AuditStatus::Requested => WorkflowAuditStatus::Requested,
+        agentflow_audit::AuditStatus::Running => WorkflowAuditStatus::Running,
+        agentflow_audit::AuditStatus::Passed => WorkflowAuditStatus::Passed,
+        agentflow_audit::AuditStatus::PassedWithWarnings => WorkflowAuditStatus::PassedWithWarnings,
+        agentflow_audit::AuditStatus::Failed => WorkflowAuditStatus::Failed,
+        agentflow_audit::AuditStatus::Cancelled => WorkflowAuditStatus::Cancelled,
     }
 }
 

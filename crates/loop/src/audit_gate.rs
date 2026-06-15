@@ -1,11 +1,11 @@
 use crate::model::{AuditGateKind, AuditGateStatus, LOOP_AUDIT_GATE_VERSION};
-use agentflow_input::{issue::InputIssueStatus, project::InputProjectStatus};
-use agentflow_output::{
+use agentflow_audit::{
     storage::{ensure_directory, read_json, write_json},
     AuditCheckStatus, AuditChecks, AuditRequest, AuditRequestSource, AuditScope, AuditScopeRef,
     AuditStatus, AuditSummary, AuditTrigger, HumanAudit, AUDIT_REQUEST_VERSION,
     OUTPUT_AUDIT_VERSION,
 };
+use agentflow_input::{issue::InputIssueStatus, project::InputProjectStatus};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -161,7 +161,7 @@ impl ProjectAuditGate {
             "# Delivery Audit Checklist\n",
         )
         .with_context(|| format!("write {}/checklist.md", audit_dir.display()))?;
-        agentflow_output::prepare_output_workspace(&root)?;
+        agentflow_audit::prepare_audit_workspace(&root)?;
 
         let mut gate = Self::delivery(project_id, issue_id, run_id, now());
         gate.status = match audit.status {
@@ -313,7 +313,7 @@ impl ProjectAuditGate {
         )
         .with_context(|| format!("write {}/checklist.md", audit_dir.display()))?;
         agentflow_input::update_input_project_status(&root, &project_id, InputProjectStatus::Done)?;
-        agentflow_output::prepare_output_workspace(&root)?;
+        agentflow_audit::prepare_audit_workspace(&root)?;
 
         let mut gate = Self::project_final(project_id, now());
         gate.status = AuditGateStatus::Passed;
@@ -324,7 +324,7 @@ impl ProjectAuditGate {
 fn delivery_checks(root: &Path, issue_id: &str, run_id: &str) -> AuditChecks {
     let task_run_dir = agentflow_task_artifacts::task_run_dir(root, issue_id, run_id);
     AuditChecks {
-        checkpoint_exists: status_for(task_run_dir.join("run.json")),
+        run_exists: status_for(task_run_dir.join("run.json")),
         changed_files_recorded: status_for(task_run_dir.join("validation.json")),
         allowed_write_paths_only: status_for(
             root.join(format!(".agentflow/projections/tasks/{issue_id}.json")),
@@ -334,7 +334,7 @@ fn delivery_checks(root: &Path, issue_id: &str, run_id: &str) -> AuditChecks {
         evidence_complete: status_for(root.join(format!(
             ".agentflow/tasks/{issue_id}/evidence/evidence.json"
         ))),
-        release_delivery_complete: public_delivery_check(root, issue_id),
+        public_delivery_complete: public_delivery_check(root, issue_id),
     }
 }
 
@@ -360,13 +360,13 @@ fn public_delivery_check(root: &Path, issue_id: &str) -> AuditCheckStatus {
 
 fn passed_checks() -> AuditChecks {
     AuditChecks {
-        checkpoint_exists: AuditCheckStatus::Passed,
+        run_exists: AuditCheckStatus::Passed,
         changed_files_recorded: AuditCheckStatus::Passed,
         allowed_write_paths_only: AuditCheckStatus::Passed,
         commands_recorded: AuditCheckStatus::Passed,
         high_risk_confirmed_if_needed: AuditCheckStatus::Passed,
         evidence_complete: AuditCheckStatus::Passed,
-        release_delivery_complete: AuditCheckStatus::Passed,
+        public_delivery_complete: AuditCheckStatus::Passed,
     }
 }
 

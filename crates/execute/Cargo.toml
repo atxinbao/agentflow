@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 agentflow-agent-manual = { path = "../agent-manual" }
 agentflow-input = { path = "../input" }
-agentflow-output = { path = "../output" }
 agentflow-panel = { path = "../panel" }
 agentflow-task-artifacts = { path = "../task-artifacts" }
 anyhow = { workspace = true }

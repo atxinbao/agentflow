@@ -15,7 +15,7 @@ agentflow-event-store = { path = "../../../crates/event-store" }
 agentflow-panel = { path = "../../../crates/panel" }
 agentflow-input = { path = "../../../crates/input" }
 agentflow-mcp = { path = "../../../crates/mcp" }
-agentflow-output = { path = "../../../crates/output" }
+agentflow-audit = { path = "../../../crates/audit" }
 agentflow-projection = { path = "../../../crates/projection" }
 agentflow-spec = { path = "../../../crates/spec" }
 agentflow-state = { path = "../../../crates/state" }

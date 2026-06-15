@@ -1,10 +1,11 @@
 [package]
-name = "agentflow-output"
+name = "agentflow-audit"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-agentflow-input = { path = "../input" }
+agentflow-projection = { path = "../projection" }
+agentflow-task-artifacts = { path = "../task-artifacts" }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

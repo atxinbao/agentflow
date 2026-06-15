@@ -2,6 +2,7 @@ use crate::{
     assertions::{assert_path_exists, write_json},
     fixture::{create_fixture_project, WorkflowFixture},
 };
+use agentflow_audit::{AuditScope, AuditScopeRef, HumanAuditReport, HumanAuditRequestDraft};
 use agentflow_execute::{
     acquire_execute_lease, create_execute_checkpoint, create_execute_run, execute_run_preflight,
     run_execute_command, validate_execute_run, write_execute_plan, ExecuteChangedFiles,
@@ -12,7 +13,6 @@ use agentflow_input::{
     issue::{InputIssue, InputIssueModel, InputIssueStatus, InputRiskLevel},
     spec_gate::{InputIssueGenerationMode, InputSpecApproval},
 };
-use agentflow_output::{AuditScope, AuditScopeRef, HumanAuditReport, HumanAuditRequestDraft};
 use agentflow_state::{
     StateStatusSnapshot, StateWorkspaceStatus, WorkflowAuditStatus, WorkflowStage,
 };
@@ -181,7 +181,7 @@ pub fn human_audit_draft(run_id: &str) -> HumanAuditRequestDraft {
 }
 
 fn request_human_audit_for_run(root: &Path, run_id: &str) -> Result<HumanAuditReport> {
-    let report = agentflow_output::request_human_audit(root, human_audit_draft(run_id))?;
+    let report = agentflow_audit::request_human_audit(root, human_audit_draft(run_id))?;
     for artifact in [
         "audit-request.json",
         "audit.json",
@@ -217,8 +217,8 @@ fn prepare_all_layers(root: &Path) -> Result<()> {
     anyhow::ensure!(input.ready, "input layer is not ready");
     let execute = agentflow_execute::prepare_execute_workspace(root)?;
     anyhow::ensure!(execute.ready, "execute layer is not ready");
-    let output = agentflow_output::prepare_output_workspace(root)?;
-    anyhow::ensure!(output.ready, "output layer is not ready");
+    let audit = agentflow_audit::prepare_audit_workspace(root)?;
+    anyhow::ensure!(audit.status == "ready", "audit layer is not ready");
     let state = agentflow_state::prepare_state_workspace(root)?;
     anyhow::ensure!(
         state.status == StateWorkspaceStatus::Ready,
@@ -237,7 +237,7 @@ fn prepare_all_layers(root: &Path) -> Result<()> {
         ".agentflow/panel/manifest.json",
         ".agentflow/input/manifest.json",
         ".agentflow/execute/manifest.json",
-        ".agentflow/output/manifest.json",
+        ".agentflow/audit/manifest.json",
         ".agentflow/state/manifest.json",
         ".agentflow/state/gates/workflow.json",
     ] {

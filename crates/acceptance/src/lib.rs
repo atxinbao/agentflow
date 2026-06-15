@@ -13,7 +13,7 @@ pub use fixture::{create_fixture_project, WorkflowFixture};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentflow_output::AuditStatus;
+    use agentflow_audit::AuditStatus;
     use agentflow_state::{WorkflowAuditStatus, WorkflowStage};
 
     #[test]
@@ -33,7 +33,7 @@ mod tests {
             .next_actions
             .contains(&"request-human-audit".to_string()));
         let audit_index =
-            agentflow_output::load_audit_index(ready.fixture.root()).unwrap_or_default();
+            agentflow_audit::load_audit_index(ready.fixture.root()).unwrap_or_default();
         assert_eq!(audit_index.audits.len(), 0);
         ready.fixture.assert_user_files_unchanged()?;
         boundaries::assert_write_boundary(ready.fixture.root())?;
@@ -59,7 +59,7 @@ mod tests {
                 | AuditStatus::Cancelled
         ));
 
-        let loaded = agentflow_output::load_audit_report(
+        let loaded = agentflow_audit::load_audit_report(
             ready.fixture.root(),
             report.audit.audit_id.clone(),
         )?;

@@ -1109,8 +1109,8 @@ mod tests {
             .path()
             .join(format!(".agentflow/output/release/{run_id}/delivery.json"))
             .is_file());
-        let request: agentflow_output::AuditRequest =
-            agentflow_output::storage::read_json(&dir.path().join(format!(
+        let request: agentflow_audit::AuditRequest =
+            agentflow_audit::storage::read_json(&dir.path().join(format!(
                 ".agentflow/audit/delivery-{run_id}/audit-request.json"
             )))
             .unwrap();
