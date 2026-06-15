@@ -25,8 +25,8 @@ mod tests {
     use super::*;
     use agentflow_execute::{
         acquire_execute_lease, apply_execute_patch, create_execute_checkpoint, load_execute_run,
-        prepare_release_delivery, run_execute_command, validate_execute_run, write_execute_plan,
-        ExecuteCommandRequest, ExecutePlanDraft, ExecuteRunStatus,
+        run_execute_command, validate_execute_run, write_execute_plan, ExecuteCommandRequest,
+        ExecutePlanDraft, ExecuteRunStatus,
     };
     use agentflow_input::{
         issue::{
@@ -36,6 +36,10 @@ mod tests {
         spec_gate::{InputIssueGenerationMode, InputSpecApproval},
     };
     use agentflow_projection::{ProjectionPublicDelivery, TaskProjection, TASK_PROJECTION_VERSION};
+    use agentflow_task_artifacts::{
+        create_task_run, update_task_run_status, write_task_command_record, write_task_evidence,
+        write_task_validation, TaskCommandInput, TaskRunStatus,
+    };
     use std::{fs, path::Path, process::Command};
     use tempfile::tempdir;
 
@@ -274,6 +278,66 @@ mod tests {
             updated_at: 123,
         };
         agentflow_projection::storage::write_task_projection(root, &projection).unwrap();
+    }
+
+    fn write_done_task_delivery_projection(
+        root: &Path,
+        issue_id: &str,
+        project_id: Option<&str>,
+        run_id: &str,
+    ) {
+        let evidence_path = format!(".agentflow/tasks/{issue_id}/evidence/evidence.json");
+        let projection = TaskProjection {
+            version: TASK_PROJECTION_VERSION.to_string(),
+            issue_id: issue_id.to_string(),
+            project_id: project_id.map(str::to_string),
+            workflow_ref: "build-agent.issue-loop@v1".to_string(),
+            current_state: "done".to_string(),
+            display_status: "done".to_string(),
+            current_transition: Some("issue.completed".to_string()),
+            latest_run_id: Some(run_id.to_string()),
+            branch_name: Some(format!("agentflow/test/{issue_id}")),
+            timeline: Vec::new(),
+            public_delivery: ProjectionPublicDelivery {
+                evidence_path: Some(evidence_path),
+                pr_url: Some("https://github.com/atxinbao/agentflow/pull/1".to_string()),
+                merge_commit: Some("merge-test".to_string()),
+                changelog_path: Some("CHANGELOG.md".to_string()),
+                release_notes_url: Some(
+                    "docs/release-notes/agentflow-release-notes.md".to_string(),
+                ),
+            },
+            updated_at: 124,
+        };
+        agentflow_projection::storage::write_task_projection(root, &projection).unwrap();
+    }
+
+    fn write_task_delivery_artifacts(root: &Path, issue_id: &str, run_id: &str) {
+        create_task_run(
+            root,
+            issue_id,
+            run_id,
+            "build-agent.issue-loop@v1",
+            Some(format!("agentflow/test/{issue_id}")),
+        )
+        .unwrap();
+        write_task_command_record(
+            root,
+            issue_id,
+            run_id,
+            TaskCommandInput {
+                label: "printf ok".to_string(),
+                program: "printf".to_string(),
+                args: vec!["ok".to_string()],
+                exit_code: Some(0),
+                stdout: "ok".to_string(),
+                stderr: String::new(),
+            },
+        )
+        .unwrap();
+        write_task_validation(root, issue_id, run_id).unwrap();
+        write_task_evidence(root, issue_id, run_id, "验证通过。").unwrap();
+        update_task_run_status(root, issue_id, run_id, TaskRunStatus::Completed).unwrap();
     }
 
     fn schedule_issue(root: &Path) {
@@ -1016,7 +1080,6 @@ mod tests {
         )
         .unwrap();
         validate_execute_run(dir.path(), run_id.clone()).unwrap();
-        prepare_release_delivery(dir.path(), run_id.clone()).unwrap();
         loop_issue
             .write_merge_proof(
                 dir.path(),
@@ -1029,6 +1092,8 @@ mod tests {
             .unwrap();
         agentflow_input::update_input_issue_status(dir.path(), "AF-001", InputIssueStatus::Done)
             .unwrap();
+        write_task_delivery_artifacts(dir.path(), "AF-001", &run_id);
+        write_done_task_delivery_projection(dir.path(), "AF-001", Some("proj-001"), &run_id);
 
         let delivery_gate =
             ProjectAuditGate::generate_delivery_audit(dir.path(), "proj-001", "AF-001", &run_id)
@@ -1040,6 +1105,19 @@ mod tests {
                 ".agentflow/audit/delivery-{run_id}/audit-report.md"
             ))
             .is_file());
+        assert!(!dir
+            .path()
+            .join(format!(".agentflow/output/release/{run_id}/delivery.json"))
+            .is_file());
+        let request: agentflow_output::AuditRequest =
+            agentflow_output::storage::read_json(&dir.path().join(format!(
+                ".agentflow/audit/delivery-{run_id}/audit-request.json"
+            )))
+            .unwrap();
+        assert!(request.scope.refs.iter().all(|reference| {
+            !reference.path.contains(".agentflow/output/release")
+                && !reference.path.contains(".agentflow/execute/runs")
+        }));
         assert!(!dir
             .path()
             .join(format!(".agentflow/input/issues/audit-{run_id}.json"))

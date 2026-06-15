@@ -142,6 +142,7 @@ dependencies = [
  "agentflow-output",
  "agentflow-panel",
  "agentflow-projection",
+ "agentflow-task-artifacts",
  "agentflow-workflow-events",
  "anyhow",
  "serde",
