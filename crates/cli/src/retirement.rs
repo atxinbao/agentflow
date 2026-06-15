@@ -43,18 +43,18 @@ pub(crate) fn legacy_command_status(command: &Command) -> LegacyCommandStatus {
     match command {
         Command::Metrics => LegacyCommandStatus {
             command_name: "metrics",
-            disposition: LegacyCommandDisposition::KeepTemporary,
-            reason: "temporary read-only compatibility command",
+            disposition: LegacyCommandDisposition::DisableWithMessage,
+            reason: "old local metrics read model is no longer an active task source",
         },
         Command::Projects => LegacyCommandStatus {
             command_name: "projects",
-            disposition: LegacyCommandDisposition::KeepTemporary,
-            reason: "temporary read-only compatibility command",
+            disposition: LegacyCommandDisposition::DisableWithMessage,
+            reason: "old project/milestone/issue read model is no longer an active task source",
         },
         Command::Search { .. } => LegacyCommandStatus {
             command_name: "search",
-            disposition: LegacyCommandDisposition::KeepTemporary,
-            reason: "temporary read-only compatibility command",
+            disposition: LegacyCommandDisposition::DisableWithMessage,
+            reason: "old archive search is no longer an active task source",
         },
         Command::Init { .. } => LegacyCommandStatus {
             command_name: "init",
@@ -174,9 +174,7 @@ pub(crate) fn print_legacy_retirement_message(status: &LegacyCommandStatus) {
     println!("reason: {}", status.reason);
     println!("This command belongs to the archived 2026-05 AgentFlow workflow.");
     println!("It is disabled in the new requirements track.");
-    println!(
-        "Use the current Project Workspace, Input, Execute, Output, and State workflow instead."
-    );
+    println!("Use the current spec, task-loop, projection, release, and audit workflow instead.");
     println!("No files were written and no command was executed.");
 }
 
@@ -186,22 +184,31 @@ mod tests {
     use crate::args::Command;
 
     #[test]
-    fn read_only_commands_remain_temporarily_available() {
+    fn archived_read_only_commands_are_disabled() {
         assert_eq!(
             legacy_command_status(&Command::Metrics).disposition,
-            LegacyCommandDisposition::KeepTemporary
+            LegacyCommandDisposition::DisableWithMessage
         );
         assert_eq!(
             legacy_command_status(&Command::Projects).disposition,
-            LegacyCommandDisposition::KeepTemporary
+            LegacyCommandDisposition::DisableWithMessage
         );
         assert_eq!(
             legacy_command_status(&Command::Search {
                 query: vec!["AgentFlow".to_string()]
             })
             .disposition,
-            LegacyCommandDisposition::KeepTemporary
+            LegacyCommandDisposition::DisableWithMessage
         );
+        assert!(should_disable_legacy_command(&Command::Metrics));
+        assert!(should_disable_legacy_command(&Command::Projects));
+        assert!(should_disable_legacy_command(&Command::Search {
+            query: vec!["AgentFlow".to_string()]
+        }));
+    }
+
+    #[test]
+    fn build_agent_command_remains_available() {
         assert_eq!(
             legacy_command_status(&Command::BuildAgent {
                 command: crate::args::BuildAgentCommand::Complete {
