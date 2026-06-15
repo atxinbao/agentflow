@@ -120,7 +120,7 @@ const previewInputIssues: InputIssue[] = [
       auditId: previewAuditId,
       auditOutputDir: `.agentflow/audit/${previewAuditId}`,
       expectedOutputs: previewAuditExpectedOutputs(previewAuditId),
-      sourceDeliveryPath: `.agentflow/output/release/${previewDeliveryRunId}/delivery.json`,
+      sourceDeliveryPath: "CHANGELOG.md",
       sourceReleaseId: previewDeliveryRunId,
       trigger: "human-via-agent",
     },
@@ -204,8 +204,8 @@ function browserPreviewInputIssue(
 function previewBuildExpectedOutputs(issueId: string) {
   return {
     evidencePath: `.agentflow/tasks/${issueId}/evidence/evidence.json`,
-    executeRunDir: `.agentflow/execute/runs/${issueId}`,
-    releaseDeliveryDir: `.agentflow/output/release/${issueId}`,
+    executeRunDir: `.agentflow/tasks/${issueId}/runs/${issueId}`,
+    publicDeliveryRecord: "PR/MR body or CHANGELOG.md",
   };
 }
 
@@ -428,8 +428,6 @@ export function createBrowserPreviewAgentEnvironmentStatus(
         ".agentflow/input/index.json",
         ".agentflow/panel",
         ".agentflow/execute",
-        ".agentflow/output",
-        ".agentflow/output/release",
         ".agentflow/state",
       ],
       missingPaths: [],
@@ -798,12 +796,12 @@ export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_P
     indexExists: true,
     summary: {
       evidence: 2,
-      releaseDeliveries: 2,
+      publicDeliveries: 2,
       audits: 1,
       logs: 0,
       backups: 0,
       incompleteEvidence: 0,
-      incompleteDeliveries: 0,
+      incompletePublicDeliveries: 0,
     },
     missingPaths: [],
     warnings: ["浏览器预览只展示模拟的交付与审计状态；任务主链路不会自动进入审计。"],
@@ -812,20 +810,6 @@ export function createBrowserPreviewOutputStatus(projectRoot = BROWSER_PREVIEW_P
 }
 
 export function createBrowserPreviewOutputIndex(): OutputIndex {
-  const reviewDelivery = browserPreviewOutputEntry(
-    previewReviewRunId,
-    "iss-review",
-    previewSpecId,
-    `.agentflow/output/release/${previewReviewRunId}/delivery.json`,
-    "drafted",
-  );
-  const doneDelivery = browserPreviewOutputEntry(
-    previewDoneRunId,
-    previewDoneIssueId,
-    previewSpecId,
-    `.agentflow/output/release/${previewDoneRunId}/delivery.json`,
-    "delivered",
-  );
   return {
     version: "output-index.browser-preview",
     updatedAt: previewTimestamp,
@@ -845,7 +829,6 @@ export function createBrowserPreviewOutputIndex(): OutputIndex {
         "complete",
       ),
     ],
-    releaseDeliveries: [reviewDelivery, doneDelivery],
     audits: [
       browserPreviewOutputEntry(
         previewDoneRunId,
@@ -886,8 +869,8 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
       trigger: "human-via-agent",
       reason: "审计请求已独立登记，用于核对交付材料。",
       source: {
-        kind: "release-delivery",
-        deliveryId: previewDeliveryRunId,
+        kind: "public-delivery",
+        deliveryId: "CHANGELOG.md",
         runId: previewDeliveryRunId,
         issueId: previewDoneIssueId,
         specId: previewSpecId,
@@ -916,9 +899,9 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
             path: `.agentflow/tasks/${previewDoneIssueId}/evidence/evidence.json`,
           },
           {
-            kind: "release-delivery",
-            id: previewDeliveryRunId,
-            path: `.agentflow/output/release/${previewDeliveryRunId}/delivery.json`,
+            kind: "public-delivery",
+            id: "CHANGELOG.md",
+            path: "CHANGELOG.md",
           },
         ],
       },
@@ -948,7 +931,7 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
     reportMarkdown:
       "# Human Audit Browser Preview\n\n" +
       "状态：通过，有警告。\n\n" +
-      "- 已核对 release delivery、execute run、evidence 和 issue scope refs。\n" +
+      "- 已核对公开交付记录、execute run、evidence 和 issue scope refs。\n" +
       "- 浏览器预览只展示 mock 审计报告，不写 `.agentflow/audit`。\n",
     findings: [
       {
@@ -963,7 +946,7 @@ export function createBrowserPreviewHumanAuditReport(): HumanAuditReport | null 
       "- [x] audit-report.md 可只读展示\n",
     evidenceMap: {
       evidence: [`.agentflow/tasks/${previewDoneIssueId}/evidence/evidence.json`],
-      releaseDelivery: [`.agentflow/output/release/${previewDeliveryRunId}/delivery.json`],
+      publicDelivery: ["CHANGELOG.md"],
     },
     traceability: {
       sourceSpecId: previewSpecId,

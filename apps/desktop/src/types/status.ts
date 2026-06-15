@@ -364,12 +364,12 @@ export type OutputWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" 
 
 export type OutputSummary = {
   evidence: number;
-  releaseDeliveries: number;
+  publicDeliveries: number;
   audits: number;
   logs: number;
   backups: number;
   incompleteEvidence: number;
-  incompleteDeliveries: number;
+  incompletePublicDeliveries: number;
 };
 
 export type OutputStatusSnapshot = {
@@ -398,7 +398,6 @@ export type OutputIndex = {
   version: string;
   updatedAt: number;
   evidence: OutputIndexEntry[];
-  releaseDeliveries: OutputIndexEntry[];
   audits: OutputIndexEntry[];
 };
 
