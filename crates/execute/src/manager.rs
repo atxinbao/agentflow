@@ -477,7 +477,6 @@ pub(crate) fn assert_build_agent_run(root: &Path, run: &ExecuteRun) -> Result<In
             format!(".agentflow/execute/runs/{}", run.run_id),
             format!(".agentflow/tasks/{}/runs/{}", run.issue_id, run.run_id),
             format!(".agentflow/tasks/{}/evidence/**", run.issue_id),
-            format!(".agentflow/output/release/{}", run.run_id),
         ],
         &AgentRolesDocument::default(),
     )?;

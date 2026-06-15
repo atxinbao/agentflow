@@ -1,15 +1,14 @@
 use crate::{
     checkpoint::create_execute_checkpoint,
-    delivery::prepare_release_delivery,
     lease::{acquire_execute_lease, has_active_lease_for_run},
     manager::{
         assert_build_agent_run, load_issue_for_run, sync_issue_loop_projection,
         update_input_issue_status,
     },
     model::{
-        BuildAgentCompletion, BuildAgentCompletionRequest, BuildAgentValidationCommand,
-        ExecuteChangedFiles, ExecuteCommandRecord, ExecutePlanDraft, ExecutePreflight, ExecuteRun,
-        ExecuteRunStatus,
+        BuildAgentCompletion, BuildAgentCompletionRequest, BuildAgentPublicDelivery,
+        BuildAgentValidationCommand, ExecuteChangedFiles, ExecuteCommandRecord, ExecutePlanDraft,
+        ExecutePreflight, ExecuteRun, ExecuteRunStatus,
     },
     plan::write_execute_plan,
     storage::{
@@ -19,6 +18,7 @@ use crate::{
     validation::validate_execute_run,
 };
 use agentflow_input::issue::InputIssueStatus;
+use agentflow_task_artifacts::TaskEvidence;
 use anyhow::{Context, Result};
 use std::{fs, path::Path};
 
@@ -56,7 +56,7 @@ pub fn complete_build_agent_issue(
     let prepared = prepare_build_agent_review(&root, request)?;
     let run = prepared.run;
     let result = prepared.result;
-    let delivery = prepared.delivery;
+    let public_delivery = prepared.public_delivery;
     update_input_issue_status(&root, &run.issue_id, InputIssueStatus::Done)?;
     sync_issue_loop_projection(
         &root,
@@ -71,7 +71,7 @@ pub fn complete_build_agent_issue(
     Ok(BuildAgentCompletion {
         run,
         result,
-        delivery,
+        public_delivery,
     })
 }
 
@@ -112,10 +112,6 @@ pub fn prepare_build_agent_review(
     let run = read_run(&root, &run.run_id)?;
     let issue = load_issue_for_run(&root, &run)?;
     let result_path = run_dir(&root, &run.run_id).join("result.json");
-    let delivery_path = root
-        .join(".agentflow/output/release")
-        .join(&run.run_id)
-        .join("delivery.json");
     let result = if result_path.is_file() {
         read_json(&result_path)?
     } else {
@@ -143,18 +139,71 @@ pub fn prepare_build_agent_review(
         update_run_status(&root, &run.run_id, ExecuteRunStatus::Running)?;
         validate_execute_run(&root, run.run_id.clone())?
     };
-    let delivery = if delivery_path.is_file() {
-        agentflow_output::load_release_delivery(&root, run.run_id.clone())?
-    } else {
-        prepare_release_delivery(&root, run.run_id.clone())?
-    };
     let run = read_run(&root, &run.run_id)?;
+    let public_delivery = prepare_public_delivery(&root, &run)?;
     rebuild_index(&root)?;
 
     Ok(BuildAgentCompletion {
         run,
         result,
-        delivery,
+        public_delivery,
+    })
+}
+
+fn prepare_public_delivery(root: &Path, run: &ExecuteRun) -> Result<BuildAgentPublicDelivery> {
+    if !matches!(run.status, ExecuteRunStatus::Completed) {
+        anyhow::bail!("public delivery requires a completed execute run");
+    }
+
+    let evidence_relative_path =
+        format!(".agentflow/tasks/{}/evidence/evidence.json", run.issue_id);
+    let evidence_path = root.join(&evidence_relative_path);
+    let _evidence: TaskEvidence = read_json(&evidence_path)
+        .with_context(|| format!("load task evidence for {}", run.issue_id))?;
+
+    let changed_files_path = run_dir(root, &run.run_id).join("patches/changed-files.json");
+    if !changed_files_path.is_file() {
+        anyhow::bail!("public delivery requires changed-files summary");
+    }
+
+    let proof =
+        read_json::<serde_json::Value>(&run_dir(root, &run.run_id).join("review/merge-proof.json"))
+            .ok();
+    let pr_url = proof
+        .as_ref()
+        .and_then(|value| value.get("prUrl").or_else(|| value.get("remoteUrl")))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let merge_commit = proof
+        .as_ref()
+        .and_then(|value| value.get("mergeCommit"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let merged = proof
+        .as_ref()
+        .and_then(|value| value.get("merged"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+
+    update_input_issue_status(root, &run.issue_id, InputIssueStatus::InReview)?;
+    sync_issue_loop_projection(
+        root,
+        run,
+        InputIssueStatus::InReview,
+        Some("public-delivery-ready".to_string()),
+        Vec::new(),
+    )?;
+
+    Ok(BuildAgentPublicDelivery {
+        version: "build-agent-public-delivery.v1".to_string(),
+        issue_id: run.issue_id.clone(),
+        run_id: run.run_id.clone(),
+        status: if merged { "delivered" } else { "drafted" }.to_string(),
+        evidence_path: evidence_relative_path,
+        pr_url,
+        merge_commit,
+        changelog_path: None,
+        release_notes_url: None,
     })
 }
 
