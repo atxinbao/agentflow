@@ -1,22 +1,18 @@
 use crate::{
-    assertions::{assert_path_exists, write_json},
+    assertions::assert_path_exists,
     fixture::{create_fixture_project, WorkflowFixture},
 };
 use agentflow_audit::{AuditScope, AuditScopeRef, HumanAuditReport, HumanAuditRequestDraft};
-use agentflow_execute::{
-    acquire_execute_lease, create_execute_checkpoint, create_execute_run, execute_run_preflight,
-    run_execute_command, validate_execute_run, write_execute_plan, ExecuteChangedFiles,
-    ExecuteCommandRequest, ExecuteLease, ExecuteLeaseStatus, ExecutePlanDraft, ExecutePlanStep,
-    ExecutePlanStepKind,
+use agentflow_event_store::{
+    append_task_event_once, EventActor, EventStateTransition, TaskEventDraft,
 };
-use agentflow_input::{
-    issue::{InputIssue, InputIssueModel, InputIssueStatus, InputRiskLevel},
-    spec_gate::{InputIssueGenerationMode, InputSpecApproval},
-};
+use agentflow_spec::{SpecIssue, SpecIssueDraft, SpecIssueStatus};
 use agentflow_state::{
     StateStatusSnapshot, StateWorkspaceStatus, WorkflowAuditStatus, WorkflowStage,
 };
+use agentflow_task_artifacts::TaskCommandInput;
 use anyhow::Result;
+use serde_json::json;
 use std::{fs, path::Path};
 
 pub struct ExecutionCompletedFixture {
@@ -35,49 +31,45 @@ pub fn prepare_execution_completed_fixture() -> Result<ExecutionCompletedFixture
     let fixture = create_fixture_project()?;
     let root = fixture.root();
     prepare_all_layers(root)?;
-    write_approved_spec(root, "spec-001")?;
-    write_issue(root, "iss-001", "spec-001", InputRiskLevel::Low)?;
-
-    let run = create_execute_run(root, "iss-001".to_string())?;
-    let preflight = execute_run_preflight(root, run.run_id.clone())?;
-    anyhow::ensure!(preflight.status == "ready", "expected ready preflight");
-    acquire_execute_lease(root, run.run_id.clone())?;
-    write_execute_plan(
+    let issue = write_issue(root, "iss-001", SpecIssueStatus::Todo, Vec::new())?;
+    let run_id = "run-001".to_string();
+    agentflow_task_artifacts::create_task_run(
         root,
-        run.run_id.clone(),
-        ExecutePlanDraft {
-            steps: vec![ExecutePlanStep {
-                step_id: "step-001".to_string(),
-                kind: ExecutePlanStepKind::Validate,
-                target: None,
-                command: Some("printf ok".to_string()),
-                summary: "Record deterministic fixture validation command.".to_string(),
-            }],
-            allowed_write_paths: vec!["src/lib.rs".to_string()],
-            allowed_commands: vec!["printf ok".to_string()],
-        },
+        &issue.issue_id,
+        &run_id,
+        &issue.workflow_ref,
+        None,
     )?;
-    create_execute_checkpoint(root, run.run_id.clone())?;
-    write_empty_changed_files(root, &run.run_id)?;
-    run_execute_command(
+    append_issue_event(
         root,
-        run.run_id.clone(),
-        ExecuteCommandRequest {
+        &issue,
+        "agent.launch.requested",
+        "in_progress",
+        &run_id,
+    )?;
+    agentflow_task_artifacts::write_task_command_record(
+        root,
+        &issue.issue_id,
+        &run_id,
+        TaskCommandInput {
             label: "printf ok".to_string(),
             program: "printf".to_string(),
             args: vec!["ok".to_string()],
-            source: Some("014.workflow-acceptance".to_string()),
+            exit_code: Some(0),
+            stdout: "ok".to_string(),
+            stderr: String::new(),
         },
     )?;
-    let result = validate_execute_run(root, run.run_id.clone())?;
-    anyhow::ensure!(
-        result.validation.passed,
-        "fixture validation command failed"
-    );
-    anyhow::ensure!(
-        result.changed_files.is_empty(),
-        "fixture must not change user files"
-    );
+    agentflow_task_artifacts::write_task_validation(root, &issue.issue_id, &run_id)?;
+    agentflow_task_artifacts::write_task_evidence(
+        root,
+        &issue.issue_id,
+        &run_id,
+        "Fixture validation evidence.",
+    )?;
+    append_issue_event(root, &issue, "issue.review.requested", "in_review", &run_id)?;
+    agentflow_projection::rebuild_projections(root)?;
+
     let execution_state = agentflow_state::refresh_state(root)?;
     anyhow::ensure!(
         execution_state.current_stage == WorkflowStage::ExecuteCompleted,
@@ -92,7 +84,7 @@ pub fn prepare_execution_completed_fixture() -> Result<ExecutionCompletedFixture
     fixture.assert_user_files_unchanged()?;
     Ok(ExecutionCompletedFixture {
         fixture,
-        run_id: run.run_id,
+        run_id,
         execution_state,
     })
 }
@@ -101,21 +93,22 @@ pub fn create_high_risk_blocker_fixture() -> Result<WorkflowFixture> {
     let fixture = create_fixture_project()?;
     let root = fixture.root();
     prepare_all_layers(root)?;
-    write_approved_spec(root, "spec-001")?;
-    write_issue(root, "iss-001", "spec-001", InputRiskLevel::High)?;
-    let run = create_execute_run(root, "iss-001".to_string())?;
-    let preflight = execute_run_preflight(root, run.run_id)?;
-    anyhow::ensure!(
-        preflight.status == "blocked",
-        "high risk preflight must block"
-    );
+    let dependency = write_issue(root, "iss-001", SpecIssueStatus::Todo, Vec::new())?;
+    let blocked = write_issue(
+        root,
+        "iss-002",
+        SpecIssueStatus::Todo,
+        vec![dependency.issue_id.clone()],
+    )?;
+    append_issue_event(root, &blocked, "issue.scheduled", "todo", "run-002")?;
+    agentflow_projection::rebuild_projections(root)?;
     let state = agentflow_state::refresh_state(root)?;
     anyhow::ensure!(
         state
             .blockers
             .iter()
-            .any(|blocker| blocker.reason.contains("High risk issue requires")),
-        "high risk blocker was not surfaced in state"
+            .any(|blocker| blocker.reason.contains("前置依赖")),
+        "dependency blocker was not surfaced in state"
     );
     fixture.assert_user_files_unchanged()?;
     Ok(fixture)
@@ -125,20 +118,6 @@ pub fn create_stale_lease_fixture() -> Result<WorkflowFixture> {
     let fixture = create_fixture_project()?;
     let root = fixture.root();
     prepare_all_layers(root)?;
-    let stale_lease = ExecuteLease {
-        version: "execute-lease.v1".to_string(),
-        issue_id: "iss-stale".to_string(),
-        run_id: "run-stale".to_string(),
-        status: ExecuteLeaseStatus::Active,
-        created_at: 1,
-        released_at: None,
-        expires_at: None,
-        locked_files: Vec::new(),
-    };
-    write_json(
-        &root.join(".agentflow/execute/leases/iss-stale.json"),
-        &stale_lease,
-    )?;
     agentflow_state::refresh_state(root)?;
     fixture.assert_user_files_unchanged()?;
     Ok(fixture)
@@ -151,19 +130,14 @@ pub fn human_audit_draft(run_id: &str) -> HumanAuditRequestDraft {
             description: "Verify accepted delivery evidence chain.".to_string(),
             refs: vec![
                 AuditScopeRef {
-                    kind: "spec".to_string(),
-                    id: "spec-001".to_string(),
-                    path: ".agentflow/input/specs/approved/spec-001/".to_string(),
-                },
-                AuditScopeRef {
                     kind: "issue".to_string(),
                     id: "iss-001".to_string(),
-                    path: ".agentflow/input/issues/iss-001.json".to_string(),
+                    path: ".agentflow/spec/issues/iss-001.json".to_string(),
                 },
                 AuditScopeRef {
-                    kind: "execute-run".to_string(),
+                    kind: "task-run".to_string(),
                     id: run_id.to_string(),
-                    path: format!(".agentflow/execute/runs/{run_id}/"),
+                    path: format!(".agentflow/tasks/iss-001/runs/{run_id}/run.json"),
                 },
                 AuditScopeRef {
                     kind: "evidence".to_string(),
@@ -213,12 +187,8 @@ fn prepare_all_layers(root: &Path) -> Result<()> {
     );
     agentflow_spec::prepare_spec_workspace(root)?;
     agentflow_projection::prepare_projection_workspace(root)?;
-    let input = agentflow_input::prepare_input_workspace(root)?;
-    anyhow::ensure!(input.ready, "input layer is not ready");
-    let execute = agentflow_execute::prepare_execute_workspace(root)?;
-    anyhow::ensure!(execute.ready, "execute layer is not ready");
-    let audit = agentflow_audit::prepare_audit_workspace(root)?;
-    anyhow::ensure!(audit.status == "ready", "audit layer is not ready");
+    agentflow_event_store::prepare_event_store(root)?;
+    agentflow_audit::prepare_audit_workspace(root)?;
     let state = agentflow_state::prepare_state_workspace(root)?;
     anyhow::ensure!(
         state.status == StateWorkspaceStatus::Ready,
@@ -235,8 +205,7 @@ fn prepare_all_layers(root: &Path) -> Result<()> {
         ".agentflow/define/release/RELEASE.md",
         ".agentflow/define/audit/AUDIT.md",
         ".agentflow/panel/manifest.json",
-        ".agentflow/input/manifest.json",
-        ".agentflow/execute/manifest.json",
+        ".agentflow/spec/manifest.json",
         ".agentflow/audit/manifest.json",
         ".agentflow/state/manifest.json",
         ".agentflow/state/gates/workflow.json",
@@ -246,68 +215,60 @@ fn prepare_all_layers(root: &Path) -> Result<()> {
     Ok(())
 }
 
-fn write_approved_spec(root: &Path, spec_id: &str) -> Result<()> {
-    let spec_dir = root.join(".agentflow/input/specs/approved").join(spec_id);
-    fs::create_dir_all(&spec_dir)?;
-    fs::write(
-        spec_dir.join("product.md"),
-        "# Product\n\nFixture product acceptance.\n",
-    )?;
-    fs::write(
-        spec_dir.join("tech.md"),
-        "# Tech\n\nFixture tech acceptance.\n",
-    )?;
-    fs::write(spec_dir.join("spec.json"), "{}\n")?;
-    write_json(
-        &spec_dir.join("approval.json"),
-        &InputSpecApproval {
-            spec_id: spec_id.to_string(),
-            issue_generation_mode: InputIssueGenerationMode::Direct,
-            ..InputSpecApproval::default()
-        },
-    )
-}
-
 fn write_issue(
     root: &Path,
     issue_id: &str,
-    spec_id: &str,
-    risk_level: InputRiskLevel,
-) -> Result<()> {
-    let issue = InputIssue {
-        issue_id: issue_id.to_string(),
-        issue_model: InputIssueModel::Direct,
-        source_spec_id: spec_id.to_string(),
-        project_id: None,
-        title: "End-to-end workflow acceptance issue".to_string(),
-        summary: "Validate AgentFlow end-to-end workflow without modifying user source."
-            .to_string(),
-        status: InputIssueStatus::Todo,
-        execution_risk: risk_level,
-        scope: vec!["src/lib.rs".to_string()],
-        non_goals: vec!["Do not modify fixture source.".to_string()],
-        acceptance_criteria: vec!["Workflow reaches delivery-ready.".to_string()],
-        validation_hints: vec!["printf ok".to_string()],
-        ..InputIssue::default()
-    };
-    write_json(
-        &root
-            .join(".agentflow/input/issues")
-            .join(format!("{issue_id}.json")),
-        &issue,
-    )
+    status: SpecIssueStatus,
+    blocked_by: Vec<String>,
+) -> Result<SpecIssue> {
+    let requirement = root.join(format!("docs/requirements/{issue_id}.md"));
+    fs::create_dir_all(requirement.parent().unwrap())?;
+    fs::write(
+        &requirement,
+        format!("# {issue_id}\n\nFixture requirement.\n"),
+    )?;
+    let mut draft = SpecIssueDraft::new(issue_id);
+    draft.title = Some("End-to-end workflow acceptance issue".to_string());
+    draft.summary =
+        Some("Validate AgentFlow end-to-end workflow without modifying user source.".to_string());
+    draft.allowed_paths = vec!["src/lib.rs".to_string()];
+    draft.validation_commands = vec!["printf ok".to_string()];
+    draft.blocked_by = blocked_by;
+    let mut issue = agentflow_spec::issue_from_requirement(root, &requirement, draft)?;
+    issue.status = status;
+    agentflow_spec::write_spec_issue(root, &issue)?;
+    Ok(issue)
 }
 
-fn write_empty_changed_files(root: &Path, run_id: &str) -> Result<()> {
-    write_json(
-        &root
-            .join(".agentflow/execute/runs")
-            .join(run_id)
-            .join("patches/changed-files.json"),
-        &ExecuteChangedFiles {
-            version: "execute-changed-files.v1".to_string(),
-            run_id: run_id.to_string(),
-            files: Vec::new(),
+fn append_issue_event(
+    root: &Path,
+    issue: &SpecIssue,
+    event_type: &str,
+    state: &str,
+    run_id: &str,
+) -> Result<()> {
+    append_task_event_once(
+        root,
+        TaskEventDraft {
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            event_type: event_type.to_string(),
+            actor: EventActor {
+                role: "acceptance".to_string(),
+                kind: "system".to_string(),
+            },
+            state: Some(EventStateTransition {
+                from_state: issue.status.as_str().to_string(),
+                to_state: state.to_string(),
+            }),
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: json!({"runId": run_id}),
+            artifact_refs: vec![issue.system.path.clone()],
+            idempotency_key: Some(format!("{event_type}:{}", issue.issue_id)),
         },
-    )
+    )?;
+    Ok(())
 }

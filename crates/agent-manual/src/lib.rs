@@ -39,7 +39,6 @@ mod tests {
         assert!(status.ready);
         assert_eq!(status.status, AgentEnvironmentState::Repaired);
         assert!(dir.path().join("AGENTS.md").is_file());
-        assert!(!dir.path().join("AGENT.MD").exists());
         assert!(dir
             .path()
             .join(".agentflow/workspace-manifest.json")
@@ -144,7 +143,7 @@ mod tests {
             "issue dependencies belong in each spec issue contract through `blockedBy`."
         ));
         assert!(agentflow_manual.contains(
-            "Do not create legacy relation files or legacy `from` / `to` relation fields."
+            "Do not create retired relation files or retired `from` / `to` relation fields."
         ));
         assert!(
             fs::read_to_string(dir.path().join(".agentflow/define/audit/AUDIT.md"))
@@ -231,30 +230,6 @@ mod tests {
     }
 
     #[test]
-    fn prepare_removes_legacy_define_directories() {
-        let dir = tempdir().unwrap();
-        fs::create_dir_all(dir.path().join(".agentflow/define/goals")).unwrap();
-        fs::create_dir_all(dir.path().join(".agentflow/define/milestones")).unwrap();
-        fs::create_dir_all(dir.path().join(".agentflow/define/issues")).unwrap();
-        fs::write(
-            dir.path().join(".agentflow/define/goals/old-goal.md"),
-            "legacy\n",
-        )
-        .unwrap();
-
-        let status = prepare_agent_working_manual(dir.path()).unwrap();
-
-        assert!(status.ready);
-        assert!(!dir.path().join(".agentflow/define/goals").exists());
-        assert!(!dir.path().join(".agentflow/define/milestones").exists());
-        assert!(!dir.path().join(".agentflow/define/issues").exists());
-        assert!(status
-            .repairs
-            .iter()
-            .any(|repair| repair.contains("Removed legacy define directory")));
-    }
-
-    #[test]
     fn skills_lock_records_agent_locale_and_style_policy() {
         let dir = tempdir().unwrap();
 
@@ -313,8 +288,8 @@ mod tests {
         ));
         assert!(manual.contains("spec project / issue contracts under `.agentflow/spec/**`"));
         assert!(manual.contains("Generated spec issues must use `issueCategory=spec`"));
-        assert!(manual.contains("Do not write legacy `.agentflow/input/**`."));
-        assert!(manual.contains("Do not write legacy `.agentflow/goal-tree/**`."));
+        assert!(manual.contains("Do not write retired `.agentflow/input/**`, `.agentflow/execute/**`, or `.agentflow/output/**`."));
+        assert!(manual.contains("Do not write retired `.agentflow/goal-tree/**`."));
         assert!(!manual.contains("Status: enabled.\n\nCombines requirement intake"));
     }
 
@@ -402,7 +377,7 @@ mod tests {
             "# Existing\n"
         );
         assert_eq!(
-            fs::read_dir(dir.path().join(".agentflow/output/backup/agent-md"))
+            fs::read_dir(dir.path().join(".agentflow/define/agent/backup/agent-md"))
                 .unwrap()
                 .count(),
             0
@@ -415,23 +390,6 @@ mod tests {
             .repairs
             .iter()
             .any(|repair| repair.contains("Kept existing local AGENTS.md")));
-    }
-
-    #[test]
-    fn existing_legacy_agent_md_is_compatibility_only() {
-        let dir = tempdir().unwrap();
-        fs::write(dir.path().join("AGENT.MD"), "# Legacy\n").unwrap();
-
-        let status = prepare_agent_working_manual(dir.path()).unwrap();
-
-        assert!(status.ready);
-        assert!(dir.path().join("AGENTS.md").is_file());
-        assert_eq!(
-            fs::read_to_string(dir.path().join("AGENT.MD")).unwrap(),
-            "# Legacy\n"
-        );
-        assert!(status.legacy_agent_entry.exists);
-        assert_eq!(status.legacy_agent_entry.path, "AGENT.MD");
     }
 
     #[test]
@@ -637,59 +595,6 @@ mod tests {
     }
 
     #[test]
-    fn ownership_legacy_markers_are_repaired_to_current() {
-        let dir = tempdir().unwrap();
-        fs::create_dir_all(dir.path().join(".agentflow/define/agent")).unwrap();
-        fs::write(
-            dir.path().join(".agentflow/define/agent/Agentflow.md"),
-            "# Legacy AgentFlow manual\n",
-        )
-        .unwrap();
-
-        let before = check_agentflow_workspace_ownership(dir.path()).unwrap();
-        assert_eq!(before.status, WorkspaceOwnershipState::ManagedLegacy);
-
-        let status = prepare_agent_working_manual(dir.path()).unwrap();
-
-        assert!(status.ready);
-        assert_eq!(
-            status.ownership.status,
-            WorkspaceOwnershipState::ManagedCurrent
-        );
-    }
-
-    #[test]
-    fn ownership_legacy_project_workspace_files_are_repaired_to_current() {
-        let dir = tempdir().unwrap();
-        fs::create_dir_all(dir.path().join(".agentflow")).unwrap();
-        fs::write(
-            dir.path().join(".agentflow/workspace.yaml"),
-            "version: workspace.v0\ncreatedBy: \"AgentFlow Desktop\"\n",
-        )
-        .unwrap();
-        fs::write(
-            dir.path().join(".agentflow/config.yaml"),
-            "version: config.v1\nagentflowDir: .agentflow\n",
-        )
-        .unwrap();
-
-        let before = check_agentflow_workspace_ownership(dir.path()).unwrap();
-        assert_eq!(before.status, WorkspaceOwnershipState::ManagedLegacy);
-
-        let status = prepare_agent_working_manual(dir.path()).unwrap();
-
-        assert!(status.ready);
-        assert_eq!(
-            status.ownership.status,
-            WorkspaceOwnershipState::ManagedCurrent
-        );
-        assert_eq!(
-            fs::read_to_string(dir.path().join(".agentflow/workspace.yaml")).unwrap(),
-            "version: workspace.v0\ncreatedBy: \"AgentFlow Desktop\"\n"
-        );
-    }
-
-    #[test]
     fn ownership_corrupted_agentflow_manifest_can_be_repaired_when_marker_exists() {
         let dir = tempdir().unwrap();
         fs::create_dir_all(dir.path().join(".agentflow")).unwrap();
@@ -736,10 +641,7 @@ mod tests {
 
         let ownership = take_over_agentflow_workspace(dir.path()).unwrap();
 
-        assert!(matches!(
-            ownership.status,
-            WorkspaceOwnershipState::ManagedCurrent | WorkspaceOwnershipState::ManagedLegacy
-        ));
+        assert_eq!(ownership.status, WorkspaceOwnershipState::ManagedCurrent);
         assert!(dir
             .path()
             .join(".agentflow/workspace-manifest.json")

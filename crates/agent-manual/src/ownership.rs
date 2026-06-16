@@ -8,8 +8,7 @@ use crate::{
     },
     style::expected_style_state,
     templates::{
-        AGENT_MANUAL_RELATIVE_PATH, LEGACY_AGENT_ENTRY_RELATIVE_PATH, SKILLS_LOCK_RELATIVE_PATH,
-        WORKSPACE_MANIFEST_RELATIVE_PATH,
+        AGENT_MANUAL_RELATIVE_PATH, SKILLS_LOCK_RELATIVE_PATH, WORKSPACE_MANIFEST_RELATIVE_PATH,
     },
     validate::canonical_project_root,
 };
@@ -188,8 +187,7 @@ pub(crate) fn check_agentflow_workspace_ownership_at(root: &Path) -> WorkspaceOw
     let manifest = inspect_manifest(&manifest_path);
     let agent_manual_exists = root.join(AGENT_MANUAL_RELATIVE_PATH).is_file();
     let skills_lock_exists = root.join(SKILLS_LOCK_RELATIVE_PATH).is_file();
-    let managed_entry_exists = contains_managed_marker(&root.join("AGENTS.md"))
-        || contains_managed_marker(&root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH));
+    let managed_entry_exists = contains_managed_marker(&root.join("AGENTS.md"));
 
     if manifest.exists {
         detected_files.push(WORKSPACE_MANIFEST_RELATIVE_PATH.to_string());
@@ -201,7 +199,7 @@ pub(crate) fn check_agentflow_workspace_ownership_at(root: &Path) -> WorkspaceOw
         detected_files.push(SKILLS_LOCK_RELATIVE_PATH.to_string());
     }
     if managed_entry_exists {
-        detected_files.push("AGENTS.md or AGENT.MD managed marker".to_string());
+        detected_files.push("AGENTS.md managed marker".to_string());
     }
 
     let ownership_marker = marker(
@@ -272,18 +270,17 @@ pub(crate) fn check_agentflow_workspace_ownership_at(root: &Path) -> WorkspaceOw
         || agent_manual_exists
         || skills_lock_exists
         || managed_entry_exists
-        || legacy_layout_exists(root)
     {
-        warnings.push("Legacy AgentFlow workspace markers were found.".to_string());
+        errors.push("Non-current AgentFlow workspace markers were found.".to_string());
         return status(
             root,
             &agentflow_path,
-            WorkspaceOwnershipState::ManagedLegacy,
+            WorkspaceOwnershipState::Blocked,
             ownership_marker,
             detected_files,
             warnings,
             errors,
-            WorkspaceOwnershipAction::MigrateRepair,
+            WorkspaceOwnershipAction::Stop,
         );
     }
 
@@ -359,27 +356,6 @@ fn contains_managed_marker(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn legacy_layout_exists(root: &Path) -> bool {
-    [
-        ".agentflow/define/goals",
-        ".agentflow/output/graph",
-        ".agentflow/graph",
-    ]
-    .iter()
-    .any(|relative| root.join(relative).exists())
-        || file_contains(&root.join(".agentflow/workspace.yaml"), "AgentFlow Desktop")
-        || file_contains(
-            &root.join(".agentflow/config.yaml"),
-            "agentflowDir: .agentflow",
-        )
-}
-
-fn file_contains(path: &Path, marker: &str) -> bool {
-    fs::read_to_string(path)
-        .map(|content| content.contains(marker))
-        .unwrap_or(false)
-}
-
 fn resolve_symlink(root: &Path, path: &Path) -> Result<PathBuf> {
     let target = fs::read_link(path)?;
     let resolved = if target.is_absolute() {
@@ -424,7 +400,6 @@ fn status(
         state,
         WorkspaceOwnershipState::None
             | WorkspaceOwnershipState::ManagedCurrent
-            | WorkspaceOwnershipState::ManagedLegacy
             | WorkspaceOwnershipState::Corrupted
     );
     WorkspaceOwnershipStatus {

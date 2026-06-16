@@ -37,7 +37,7 @@ docs/requirements/
 - Project Workspace Manager 会准备 `.agentflow/` 三段式本地工作区。
 - Agent Manual Bootstrap 会接管根目录 `AGENTS.md` 作为 canonical Agent entry，保留 `AGENT.MD` 为 legacy compatibility，并写入 `.agentflow/define/agent/**` 工作手册、skills 和 lock。
 - Workflow Directory Blueprint V1 会准备 `.agentflow/workspace-manifest.json`，并把 `define/` 收敛为 `agent/spec/tdd/release/audit` 工作手册区。
-- Spec Contract V1 将公开需求记录放在 `docs/requirements/**`，将内部 project / issue 合同放在 `.agentflow/spec/projects/**` 和 `.agentflow/spec/issues/**`。旧 `.agentflow/input/` 只作为迁移兼容层，不再作为新的任务事实源。
+- Spec Contract V1 将公开需求记录放在 `docs/requirements/**`，将内部 project / issue 合同放在 `.agentflow/spec/projects/**` 和 `.agentflow/spec/issues/**`。旧 `.agentflow/input/` 已退休，不再作为任务事实源或兼容读取路径。
 - Task Workflow Runtime V1 使用 YAML workflow、事件日志和投影驱动任务状态。运行期事实写入 `.agentflow/events/**`、`.agentflow/projections/**` 和 `.agentflow/tasks/<issue-id>/**`。
 - Task Artifacts V1 将本地运行产物收敛到 `.agentflow/tasks/<issue-id>/runs/**`，验证证据收敛到 `.agentflow/tasks/<issue-id>/evidence/**`。公开交付记录进入 PR/MR body、CHANGELOG 或 release notes，不再写本地 `.agentflow/tasks/<issue-id>/delivery/**`。
 - Agent Role Consolidation V2 将顶层 Agent 角色收敛为 Spec / Build / Audit；Release Agent 不再独立存在，公开交付记录由 Build Agent 在 PR/MR 和发布记录中完成。
@@ -85,9 +85,6 @@ cargo test -p agentflow-task-artifacts
 cargo test -p agentflow-projection
 cargo test -p agentflow-agent-bridge
 cargo test -p agentflow-mcp
-cargo test -p agentflow-input
-cargo test -p agentflow-output
-cargo test -p agentflow-execute
 cargo test -p agentflow-state
 cargo test -p agentflow-workflow-acceptance
 cargo test -p agentflow-panel

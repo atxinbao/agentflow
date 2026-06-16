@@ -1,9 +1,0 @@
-pub const PROJECT_PREFLIGHT_CHECKED: &str = "project.preflight.checked";
-pub const PROJECT_ISSUE_SCHEDULED: &str = "project.issue.scheduled";
-pub const ISSUE_LOOP_STARTED: &str = "issue.loop.started";
-pub const ISSUE_STATUS_CHANGED: &str = "issue.status.changed";
-pub const ISSUE_REVIEW_WAITING: &str = "issue.review.waiting";
-pub const ISSUE_DONE: &str = "issue.done";
-pub const DELIVERY_AUDIT_GENERATED: &str = "delivery.audit.generated";
-pub const PROJECT_AUDIT_GENERATED: &str = "project.audit.generated";
-pub const PROJECT_DONE: &str = "project.done";

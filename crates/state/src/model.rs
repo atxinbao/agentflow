@@ -321,7 +321,7 @@ pub struct WorkspaceStatusIndex {
 #[serde(rename_all = "camelCase")]
 pub struct IssueStatusIndexEntry {
     pub issue_id: String,
-    pub display_status: agentflow_input::issue::DisplayStatus,
+    pub display_status: String,
     #[serde(default = "default_issue_priority")]
     pub priority: String,
     #[serde(default, alias = "riskLevel")]

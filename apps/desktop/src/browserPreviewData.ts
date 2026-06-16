@@ -450,11 +450,6 @@ export function createBrowserPreviewAgentEnvironmentStatus(
       checkedAt: previewTimestamp,
       warnings: [],
     },
-    legacyAgentEntry: {
-      exists: false,
-      path: "AGENT.MD",
-      managed: false,
-    },
     shadowGuard: {
       checked: [
         ".rules",

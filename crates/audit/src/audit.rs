@@ -424,11 +424,7 @@ fn check_changed_files(
         ".agentflow/tasks/{issue_id}/runs/{}/changed-files.json",
         context.run_id
     ));
-    let legacy_changed_files_path = root.join(format!(
-        ".agentflow/execute/runs/{}/patches/changed-files.json",
-        context.run_id
-    ));
-    if changed_files_path.is_file() || legacy_changed_files_path.is_file() {
+    if changed_files_path.is_file() {
         return AuditCheckStatus::Passed;
     }
     findings.push(finding(

@@ -5,15 +5,14 @@ use crate::{
     locale::expected_locale_state,
     lock::expected_skills_lock,
     model::{
-        AgentEnvironmentState, AgentEnvironmentStatus, LegacyAgentEntryStatus,
-        RootAgentEntryShadowGuardStatus, STATUS_VERSION,
+        AgentEnvironmentState, AgentEnvironmentStatus, RootAgentEntryShadowGuardStatus,
+        STATUS_VERSION,
     },
     ownership::check_agentflow_workspace_ownership_at,
     style::expected_style_state,
     templates::{
         agent_entry_template, agentflow_manual_template, skill_templates,
-        AGENT_ENTRY_RELATIVE_PATH, AGENT_MANUAL_RELATIVE_PATH, LEGACY_AGENT_ENTRY_RELATIVE_PATH,
-        SKILLS_LOCK_RELATIVE_PATH,
+        AGENT_ENTRY_RELATIVE_PATH, AGENT_MANUAL_RELATIVE_PATH, SKILLS_LOCK_RELATIVE_PATH,
     },
     validate::{
         canonical_project_root, external_symlink_error, unix_timestamp_seconds,
@@ -174,13 +173,6 @@ fn blocked_status(root: &Path, error: String, checked_at: u64) -> AgentEnvironme
         layout,
         locale: crate::locale::expected_locale_state(root, None, checked_at),
         style: crate::style::expected_style_state(checked_at),
-        legacy_agent_entry: LegacyAgentEntryStatus {
-            exists: root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH).exists(),
-            path: LEGACY_AGENT_ENTRY_RELATIVE_PATH.to_string(),
-            managed: fs::read_to_string(root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH))
-                .map(|content| content.contains("AGENTFLOW:MANAGED"))
-                .unwrap_or(false),
-        },
         shadow_guard: RootAgentEntryShadowGuardStatus {
             checked: Vec::new(),
             detected: Vec::new(),
@@ -239,13 +231,6 @@ fn ownership_blocked_status(
         },
         locale: crate::locale::expected_locale_state(root, None, checked_at),
         style: crate::style::expected_style_state(checked_at),
-        legacy_agent_entry: LegacyAgentEntryStatus {
-            exists: root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH).exists(),
-            path: LEGACY_AGENT_ENTRY_RELATIVE_PATH.to_string(),
-            managed: fs::read_to_string(root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH))
-                .map(|content| content.contains("AGENTFLOW:MANAGED"))
-                .unwrap_or(false),
-        },
         shadow_guard: RootAgentEntryShadowGuardStatus {
             checked: Vec::new(),
             detected: Vec::new(),

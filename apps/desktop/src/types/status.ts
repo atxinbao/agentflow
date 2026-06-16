@@ -83,11 +83,6 @@ export type AgentEnvironmentStatus = {
     checkedAt: number;
     warnings: string[];
   };
-  legacyAgentEntry: {
-    exists: boolean;
-    path: string;
-    managed: boolean;
-  };
   shadowGuard: {
     checked: string[];
     detected: string[];
@@ -97,7 +92,6 @@ export type AgentEnvironmentStatus = {
 export type WorkspaceOwnershipState =
   | "none"
   | "managed-current"
-  | "managed-legacy"
   | "foreign"
   | "corrupted"
   | "blocked";

@@ -214,7 +214,7 @@ mod tests {
         );
         plan.args = vec!["exec".to_string()];
         plan.stdin_path =
-            Some(".agentflow/execute/runs/run-001/launcher/build-agent-request.json".to_string());
+            Some(".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json".to_string());
         write_launch_plan(dir.path(), &plan).unwrap();
 
         let session = McpSessionSnapshot {
@@ -226,8 +226,8 @@ mod tests {
             session_id: "codex-run-001".to_string(),
             status: McpSessionStatus::Queued,
             launch_mode: McpLaunchMode::CliExecStdin,
-            launch_request_path:
-                ".agentflow/execute/runs/run-001/launcher/build-agent-request.json".to_string(),
+            launch_request_path: ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json"
+                .to_string(),
             plan_path: ".agentflow/state/mcp/plans/codex-run-001.json".to_string(),
             log_path: Some(
                 ".agentflow/state/mcp/sessions/codex-run-001-last-message.txt".to_string(),
