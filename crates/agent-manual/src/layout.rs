@@ -579,7 +579,7 @@ AgentFlow may keep `audit-request.json` as compatibility metadata only when an a
 
 ## V1 Boundary
 
-Build Agent may prepare release delivery artifacts.
+Build Agent may prepare public delivery records.
 
 Build Agent must not:
 

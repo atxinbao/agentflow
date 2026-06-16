@@ -163,7 +163,7 @@ function session(status: WorkflowStatus): McpSessionSnapshot | null {
     createdAt: 1780291000,
     issueId: `issue-${status}`,
     launchMode: "cli-exec-stdin",
-    launchRequestPath: `.agentflow/execute/runs/run-${status}/launcher/build-agent-request.json`,
+    launchRequestPath: `.agentflow/tasks/issue-${status}/runs/run-${status}/launch/agent-request.json`,
     logPath: `.agentflow/state/mcp/sessions/codex-run-${status}.jsonl`,
     mergeState: status === "done" ? "merged" : status === "in_review" ? "open" : null,
     note: null,

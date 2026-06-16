@@ -34,8 +34,8 @@ docs/requirements/
 
 - AgentFlow 是本地优先的桌面工作台。
 - Desktop 当前只读取和展示本地项目内容。
-- Project Workspace Manager 会准备 `.agentflow/` 三段式本地工作区。
-- Agent Manual Bootstrap 会接管根目录 `AGENTS.md` 作为 canonical Agent entry，保留 `AGENT.MD` 为 legacy compatibility，并写入 `.agentflow/define/agent/**` 工作手册、skills 和 lock。
+- Project Workspace Manager 会准备以 spec / tasks / events / projections 为核心的 `.agentflow/` 本地工作区。
+- Agent Manual Bootstrap 会接管根目录 `AGENTS.md` 作为 canonical Agent entry，并写入 `.agentflow/define/agent/**` 工作手册、skills 和 lock。
 - Workflow Directory Blueprint V1 会准备 `.agentflow/workspace-manifest.json`，并把 `define/` 收敛为 `agent/spec/tdd/release/audit` 工作手册区。
 - Spec Contract V1 将公开需求记录放在 `docs/requirements/**`，将内部 project / issue 合同放在 `.agentflow/spec/projects/**` 和 `.agentflow/spec/issues/**`。旧 `.agentflow/input/` 已退休，不再作为任务事实源或兼容读取路径。
 - Task Workflow Runtime V1 使用 YAML workflow、事件日志和投影驱动任务状态。运行期事实写入 `.agentflow/events/**`、`.agentflow/projections/**` 和 `.agentflow/tasks/<issue-id>/**`。
