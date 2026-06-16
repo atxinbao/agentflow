@@ -183,6 +183,7 @@ export type McpSessionStatus =
   | "claimed"
   | "starting"
   | "running"
+  | "interrupted"
   | "in-review"
   | "done"
   | "failed"
@@ -493,11 +494,21 @@ export type IssueStatusIndex = {
 
 export type ProjectionPhase = "past" | "current" | "future" | "exception";
 
+export type TaskTimelineEvent = {
+  eventId: string;
+  eventType: string;
+  timestamp: number;
+  actorRole: string;
+  actorKind: string;
+  summary: string;
+  artifactRefs: string[];
+};
+
 export type TaskTimelineItem = {
   state: IssueDisplayStatus;
   phase: ProjectionPhase;
   enteredAt?: number | null;
-  events: string[];
+  events: TaskTimelineEvent[];
   summary: string;
   liveRefs: string[];
 };

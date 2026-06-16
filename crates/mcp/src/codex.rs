@@ -299,7 +299,9 @@ impl McpAgentProvider for CodexProvider {
         if let Ok(existing) = read_session_snapshot(project_root, &plan.session_id) {
             if !matches!(
                 existing.status,
-                McpSessionStatus::Failed | McpSessionStatus::Cancelled
+                McpSessionStatus::Failed
+                    | McpSessionStatus::Cancelled
+                    | McpSessionStatus::Interrupted
             ) {
                 return Ok(existing);
             }
@@ -400,6 +402,7 @@ impl McpAgentProvider for CodexProvider {
                 McpSessionStatus::InReview
                     | McpSessionStatus::Done
                     | McpSessionStatus::Failed
+                    | McpSessionStatus::Interrupted
                     | McpSessionStatus::Cancelled
             )
         {
@@ -533,7 +536,7 @@ fn derive_session_status(
         current,
         McpSessionStatus::Claimed | McpSessionStatus::Starting | McpSessionStatus::Running
     ) {
-        McpSessionStatus::Failed
+        McpSessionStatus::Interrupted
     } else {
         current
     }
@@ -547,8 +550,8 @@ fn derive_session_error(
 ) -> Option<String> {
     match issue_state {
         Some("blocked") => Some("任务已阻断。".to_string()),
-        _ if !process_alive && matches!(status, McpSessionStatus::Failed) => {
-            Some("外部执行会话已退出，但任务没有进入审核或完成状态。".to_string())
+        _ if !process_alive && matches!(status, McpSessionStatus::Interrupted) => {
+            Some("外部执行会话已中断，任务还没有进入评审或完成状态。".to_string())
         }
         _ if matches!(status, McpSessionStatus::Done | McpSessionStatus::InReview) => None,
         _ => previous,
@@ -717,24 +720,24 @@ trust_level = "trusted"
     }
 
     #[test]
-    fn claimed_launch_without_live_process_fails_session() {
+    fn claimed_launch_without_live_process_interrupts_session() {
         let status = super::derive_session_status(
             crate::model::McpSessionStatus::Running,
             Some("in_progress"),
             false,
             None,
         );
-        assert_eq!(status, crate::model::McpSessionStatus::Failed);
+        assert_eq!(status, crate::model::McpSessionStatus::Interrupted);
     }
 
     #[test]
-    fn queued_launch_without_live_process_fails_started_session() {
+    fn queued_launch_without_live_process_interrupts_started_session() {
         let status = super::derive_session_status(
             crate::model::McpSessionStatus::Starting,
             Some("todo"),
             false,
             None,
         );
-        assert_eq!(status, crate::model::McpSessionStatus::Failed);
+        assert_eq!(status, crate::model::McpSessionStatus::Interrupted);
     }
 }

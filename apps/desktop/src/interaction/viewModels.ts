@@ -1307,10 +1307,10 @@ function taskExecutionConsistencyLabel(
   };
   const allowedSessionStatuses: Record<IssueDisplayStatus, Array<string | null>> = {
     backlog: [null],
-    blocked: [null, "failed", "cancelled"],
+    blocked: [null, "failed", "cancelled", "interrupted"],
     cancel: [null, "cancelled"],
     done: ["done"],
-    in_progress: ["queued", "claimed", "starting", "running"],
+    in_progress: ["queued", "claimed", "starting", "running", "interrupted"],
     in_review: ["in-review", "done"],
     todo: [null, "queued", "claimed", "starting"],
   };
@@ -1364,6 +1364,7 @@ function mcpSessionStatusLabel(status?: string | null) {
     done: "已完成",
     failed: "失败",
     "in-review": "评审中",
+    interrupted: "已中断，待恢复",
     queued: "排队中",
     running: "运行中",
     starting: "启动中",

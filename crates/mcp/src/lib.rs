@@ -107,10 +107,11 @@ fn observe_session_transition(
 
     if matches!(
         updated.status,
-        McpSessionStatus::Running | McpSessionStatus::Failed
+        McpSessionStatus::Running | McpSessionStatus::Interrupted | McpSessionStatus::Failed
     ) {
         let event_type = match updated.status {
             McpSessionStatus::Running => "agent.session.running",
+            McpSessionStatus::Interrupted => "agent.session.interrupted",
             McpSessionStatus::Failed => "agent.session.failed",
             _ => unreachable!("session status was checked above"),
         };
@@ -140,7 +141,10 @@ fn observe_session_transition(
                     "status": updated.status.as_str(),
                 }),
                 artifact_refs: updated.log_path.clone().into_iter().collect(),
-                idempotency_key: Some(format!("{event_type}:{}", updated.run_id)),
+                idempotency_key: Some(format!(
+                    "{event_type}:{}:{}",
+                    updated.issue_id, updated.run_id
+                )),
             },
         )?;
     }

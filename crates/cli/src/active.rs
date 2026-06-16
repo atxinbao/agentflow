@@ -137,6 +137,7 @@ pub(crate) fn complete_build_agent_issue_from_request(
         );
     }
     let issue = read_spec_issue(root, &review.issue_id)?;
+    let completed_project_id = issue.project_id.clone();
     let evidence = load_task_evidence(root, &review.issue_id)?;
     let proof_path = merge_proof_path(root, &review.issue_id, &review.run_id);
     let public_delivery_target = PublicReleaseDocumentTarget::default();
@@ -180,11 +181,24 @@ pub(crate) fn complete_build_agent_issue_from_request(
                     .display()
                     .to_string(),
             ],
-            idempotency_key: Some(format!("issue.completed:{}", review.run_id)),
+            idempotency_key: Some(format!(
+                "issue.completed:{}:{}",
+                issue.issue_id, review.run_id
+            )),
         },
     )?;
     let _ = agentflow_projection::rebuild_projections(root)?;
     let public_delivery_paths = write_public_delivery_documents(root, &public_delivery_target)?;
+    let next_launch = if let Some(project_id) = completed_project_id.as_deref() {
+        TaskLoop::new(project_id)
+            .tick(root, "codex")?
+            .map(|tick| tick.launch)
+    } else {
+        None
+    };
+    if next_launch.is_some() {
+        let _ = agentflow_projection::rebuild_projections(root)?;
+    }
     agentflow_state::refresh_state(root)?;
     Ok(BuildAgentCompletionOutcome {
         issue_id: review.issue_id,
@@ -194,7 +208,7 @@ pub(crate) fn complete_build_agent_issue_from_request(
         evidence_path: evidence_path(root, &evidence),
         changelog_path: root.join(public_delivery_paths.changelog_path),
         release_notes_path: root.join(public_delivery_paths.release_notes_path),
-        next_launch: None,
+        next_launch,
     })
 }
 
@@ -342,7 +356,7 @@ pub(crate) fn write_build_agent_merge_proof(
                 "merged": merged,
             }),
             artifact_refs: vec![relative_path(root, &proof_path)],
-            idempotency_key: Some(format!("issue.merge-proof.recorded:{run_id}")),
+            idempotency_key: Some(format!("issue.merge-proof.recorded:{issue_id}:{run_id}")),
         },
     )?;
     let _ = agentflow_projection::rebuild_projections(root)?;
@@ -492,7 +506,10 @@ fn ensure_review_prepared(
                 "evidencePath": task_evidence_path(issue_id),
             }),
             artifact_refs: vec![task_evidence_path(issue_id)],
-            idempotency_key: Some(format!("issue.validation.passed:{run_id}")),
+            idempotency_key: Some(format!(
+                "issue.validation.passed:{}:{}",
+                issue.issue_id, run_id
+            )),
         },
     )?;
     let _ = agentflow_projection::rebuild_projections(root)?;
@@ -539,7 +556,10 @@ fn append_validation_failed_event(
                 "summary": evidence.summary,
             }),
             artifact_refs: vec![task_evidence_path(&issue.issue_id)],
-            idempotency_key: Some(format!("issue.validation.failed:{run_id}")),
+            idempotency_key: Some(format!(
+                "issue.validation.failed:{}:{}",
+                issue.issue_id, run_id
+            )),
         },
     )?;
     Ok(())
@@ -944,6 +964,36 @@ mod tests {
         assert!(!dir.path().join(".agentflow/input").exists());
     }
 
+    #[test]
+    fn build_agent_complete_launches_next_project_issue() {
+        let dir = tempdir().unwrap();
+        write_two_issue_project_fixture(dir.path(), "proj-chain", "AF-CHAIN-001", "AF-CHAIN-002");
+        let started = start_build_agent_issue(dir.path(), "AF-CHAIN-001").unwrap();
+        let request_path = write_completion_request(dir.path(), "AF-CHAIN-001", &started.run_id);
+        prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
+        write_build_agent_merge_proof(
+            dir.path(),
+            "AF-CHAIN-001",
+            &started.run_id,
+            "github",
+            "auto-merge-if-eligible",
+            Some("https://github.com/atxinbao/agentflow/pull/2".to_string()),
+            true,
+        )
+        .unwrap();
+
+        let outcome = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap();
+
+        let next_launch = outcome.next_launch.expect("next issue launch");
+        assert_eq!(next_launch.issue_id, "AF-CHAIN-002");
+        assert_eq!(next_launch.run_id, "run-001");
+        let next_projection =
+            agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-002").unwrap();
+        assert_eq!(next_projection.current_state, "in_progress");
+        assert_eq!(next_projection.latest_run_id.as_deref(), Some("run-001"));
+        assert!(dir.path().join(next_launch.launch_request_path).is_file());
+    }
+
     fn write_spec_project_fixture(root: &Path, project_id: &str, issue_id: &str) {
         let requirement = root.join("docs/requirements/034-complete-test.md");
         fs::create_dir_all(requirement.parent().unwrap()).unwrap();
@@ -958,6 +1008,37 @@ mod tests {
         agentflow_spec::write_spec_issue(root, &issue).unwrap();
         let mut project = agentflow_spec::SpecProjectDraft::new(project_id);
         project.issue_ids = vec![issue_id.to_string()];
+        let project =
+            agentflow_spec::project_from_requirement(root, &requirement, project).unwrap();
+        agentflow_spec::write_spec_project(root, &project).unwrap();
+    }
+
+    fn write_two_issue_project_fixture(
+        root: &Path,
+        project_id: &str,
+        first_id: &str,
+        second_id: &str,
+    ) {
+        let requirement = root.join("docs/requirements/034-complete-chain-test.md");
+        fs::create_dir_all(requirement.parent().unwrap()).unwrap();
+        fs::write(
+            &requirement,
+            "# Complete Chain Test\n\n验证 Done 后自动推进下一条任务。\n",
+        )
+        .unwrap();
+        let mut first = agentflow_spec::SpecIssueDraft::new(first_id);
+        first.project_id = Some(project_id.to_string());
+        let first = agentflow_spec::issue_from_requirement(root, &requirement, first).unwrap();
+        agentflow_spec::write_spec_issue(root, &first).unwrap();
+
+        let mut second = agentflow_spec::SpecIssueDraft::new(second_id);
+        second.project_id = Some(project_id.to_string());
+        second.blocked_by = vec![first_id.to_string()];
+        let second = agentflow_spec::issue_from_requirement(root, &requirement, second).unwrap();
+        agentflow_spec::write_spec_issue(root, &second).unwrap();
+
+        let mut project = agentflow_spec::SpecProjectDraft::new(project_id);
+        project.issue_ids = vec![first_id.to_string(), second_id.to_string()];
         let project =
             agentflow_spec::project_from_requirement(root, &requirement, project).unwrap();
         agentflow_spec::write_spec_project(root, &project).unwrap();
