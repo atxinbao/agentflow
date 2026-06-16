@@ -143,7 +143,7 @@ mod tests {
             "issue dependencies belong in each spec issue contract through `blockedBy`."
         ));
         assert!(agentflow_manual.contains(
-            "Do not create retired relation files or retired `from` / `to` relation fields."
+            "Do not create extra relation files, and do not use old `from` / `to` relation fields."
         ));
         assert!(
             fs::read_to_string(dir.path().join(".agentflow/define/audit/AUDIT.md"))
@@ -288,8 +288,7 @@ mod tests {
         ));
         assert!(manual.contains("spec project / issue contracts under `.agentflow/spec/**`"));
         assert!(manual.contains("Generated spec issues must use `issueCategory=spec`"));
-        assert!(manual.contains("Do not write retired `.agentflow/input/**`, `.agentflow/execute/**`, or `.agentflow/output/**`."));
-        assert!(manual.contains("Do not write retired `.agentflow/goal-tree/**`."));
+        assert!(manual.contains("Do not write AgentFlow facts outside the current role boundary."));
         assert!(!manual.contains("Status: enabled.\n\nCombines requirement intake"));
     }
 

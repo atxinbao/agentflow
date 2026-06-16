@@ -101,7 +101,7 @@
 
 当前外部执行链路，统一收口为：
 
-1. `input.issue.ready`
+1. `spec.issue.ready`
 2. `panel.context-pack.requested`
 3. `panel.context-pack.ready`
 4. `build-agent.launch.requested`
@@ -189,7 +189,7 @@ Provider session 事实写在：
 - `agentflow build-agent complete` 写 Done。
 
 这样 `.agentflow/events`、`launcher/worker-state.json`、`state/mcp/sessions/*.json` 和
-input issue / execute / output 的事实会同步收口到同一条链路：
+spec issue / task events / task artifacts 的事实会同步收口到同一条链路：
 
 ```text
 queued
@@ -203,8 +203,8 @@ queued
 
 仍然不做：
 
-- 代替 `execute` 写回 run / delivery / done；
-- 代替 `loop` 决定哪条 issue 可以启动；
+- 代替 `task-artifacts` 写回本地 run / evidence；
+- 代替 `task-loop` 决定哪条 issue 可以启动；
 - 解析所有 Codex 内部细粒度事件并把它们升级成 AgentFlow 状态 authority。
 
 ## Claude / 其他 provider 如何进来
@@ -219,6 +219,6 @@ queued
 
 这样能保证：
 
-- 任务 authority 始终是 `.agentflow/input/issues/**`
-- 状态 authority 始终是 `loop + execute`
+- 任务 authority 始终是 `.agentflow/spec/issues/**`
+- 状态 authority 始终是 `task-loop + workflow-runtime + projection`
 - 外部 Agent 只是执行承载，不反向决定 AgentFlow 工作流
