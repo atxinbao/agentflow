@@ -1347,7 +1347,6 @@ function executeStatusLabel(status?: string | null) {
 function executeWorkspaceStatusLabel(status: string) {
   const labels: Record<string, string> = {
     blocked: "已阻断",
-    degraded: "需注意",
     failed: "异常",
     missing: "未初始化",
     ready: "已就绪",

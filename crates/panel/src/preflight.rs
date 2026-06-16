@@ -22,7 +22,7 @@ pub fn panel_preflight(
             prepare_project_panel(project_root, PanelPrepareMode::Blocking)?
         }
         PanelStatus::Indexing => wait_for_indexing(project_root)?,
-        PanelStatus::Ready | PanelStatus::Degraded | PanelStatus::Failed => initial,
+        PanelStatus::Ready | PanelStatus::Failed => initial,
     };
 
     if status.status == PanelStatus::Failed {
@@ -31,7 +31,7 @@ pub fn panel_preflight(
             project_root: project_root.display().to_string(),
             target_type: target_type.to_string(),
             target_id: target_id.map(str::to_string),
-            status: "degraded".to_string(),
+            status: "failed".to_string(),
             ready: false,
             reason: status
                 .last_error
@@ -82,12 +82,8 @@ pub fn panel_preflight(
         target_type: target_type.to_string(),
         target_id: target_id.map(str::to_string),
         status: "ready".to_string(),
-        ready: status.status == PanelStatus::Ready || status.status == PanelStatus::Degraded,
-        reason: if status.status == PanelStatus::Degraded {
-            "Panel 可用但存在降级原因，AgentRun 需要记录原因。".to_string()
-        } else {
-            "Panel 已就绪，Context Pack 已生成。".to_string()
-        },
+        ready: status.status == PanelStatus::Ready,
+        reason: "Panel 已就绪，Context Pack 已生成。".to_string(),
         panel_status: status.status,
         context_pack_path,
         recommended_files: pack.recommended_files,
@@ -139,7 +135,7 @@ mod tests {
     }
 
     #[test]
-    fn preflight_reports_degraded_when_protection_warns() {
+    fn preflight_keeps_ready_when_protection_warns() {
         let dir = tempdir().unwrap();
         fs::create_dir_all(dir.path().join(".git/info")).unwrap();
         fs::write(dir.path().join(".git/info/exclude"), "*.log\n").unwrap();
@@ -149,17 +145,17 @@ mod tests {
         let snapshot = panel_preflight(
             dir.path(),
             "issue",
-            Some("issue-degraded"),
+            Some("issue-warning"),
             "Lease",
-            "准备降级状态上下文",
+            "准备警告态上下文",
             &[],
         )
         .unwrap();
 
         assert!(snapshot.ready);
-        assert_eq!(snapshot.panel_status, PanelStatus::Degraded);
+        assert_eq!(snapshot.panel_status, PanelStatus::Ready);
         assert_eq!(snapshot.status, "ready");
-        assert!(snapshot.reason.contains("降级"));
+        assert!(snapshot.reason.contains("已就绪"));
     }
 
     #[test]
@@ -206,7 +202,6 @@ mod tests {
     "status": "not_started",
     "backend": "none"
   },
-  "degradedReasons": [],
   "warnings": [],
   "errors": ["fixture failure"]
 }"#,
@@ -224,7 +219,7 @@ mod tests {
         .unwrap();
 
         assert!(!snapshot.ready);
-        assert_eq!(snapshot.status, "degraded");
+        assert_eq!(snapshot.status, "failed");
         assert_eq!(snapshot.panel_status, PanelStatus::Failed);
         assert_eq!(snapshot.reason, "fixture failure");
     }

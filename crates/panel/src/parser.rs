@@ -27,7 +27,7 @@ pub(crate) fn extract_file_details(
     let mut active_symbols: Vec<(String, usize)> = Vec::new();
     let mut pending_test = false;
     let mut pending_component = false;
-    let parser_source = "structured-fallback";
+    let parser_source = "structured-parser";
 
     for (index, line) in lines.iter().enumerate() {
         let line_number = index + 1;
@@ -149,7 +149,7 @@ fn build_from_tree_sitter(
     Vec<PanelChunkRecord>,
 ) {
     let parser_source = if parsed.has_error {
-        "tree-sitter-degraded"
+        "tree-sitter-partial"
     } else {
         "tree-sitter"
     };

@@ -179,11 +179,8 @@ fn prepare_all_layers(root: &Path) -> Result<()> {
     let panel =
         agentflow_panel::prepare_project_panel(root, agentflow_panel::PanelPrepareMode::Blocking)?;
     anyhow::ensure!(
-        matches!(
-            panel.status,
-            agentflow_panel::PanelStatus::Ready | agentflow_panel::PanelStatus::Degraded
-        ),
-        "panel layer is not ready or degraded"
+        matches!(panel.status, agentflow_panel::PanelStatus::Ready),
+        "panel layer is not ready"
     );
     agentflow_spec::prepare_spec_workspace(root)?;
     agentflow_projection::prepare_projection_workspace(root)?;

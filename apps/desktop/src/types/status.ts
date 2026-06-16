@@ -10,7 +10,6 @@ export type AgentEnvironmentState =
   | "repairing"
   | "ready"
   | "repaired"
-  | "degraded"
   | "failed"
   | "blocked";
 
@@ -125,7 +124,7 @@ export type WorkspaceOwnershipStatus = {
   recommendedAction: WorkspaceOwnershipAction;
 };
 
-export type InputWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";
+export type InputWorkspaceStatus = "missing" | "ready" | "failed" | "blocked";
 
 export type IssueDisplayStatus = "backlog" | "blocked" | "todo" | "in_progress" | "in_review" | "done" | "cancel";
 
@@ -331,7 +330,7 @@ export type InputSnapshot = {
   relations: InputIssueRelations;
 };
 
-export type ExecuteWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";
+export type ExecuteWorkspaceStatus = "missing" | "ready" | "failed" | "blocked";
 
 export type ExecuteSummary = {
   runs: number;
@@ -425,7 +424,7 @@ export type HumanAuditReport = {
   traceability: unknown;
 };
 
-export type StateWorkspaceStatus = "missing" | "ready" | "degraded" | "failed" | "blocked";
+export type StateWorkspaceStatus = "missing" | "ready" | "failed" | "blocked";
 
 export type WorkflowStage =
   | "workspace-missing"

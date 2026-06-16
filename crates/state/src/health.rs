@@ -59,10 +59,10 @@ fn panel_health(root: &Path) -> WorkflowHealthSnapshot {
             version: STATE_HEALTH_VERSION.to_string(),
             module: "panel".to_string(),
             status: panel_status_label(&status.status).to_string(),
-            ready: matches!(status.status, PanelStatus::Ready | PanelStatus::Degraded),
+            ready: matches!(status.status, PanelStatus::Ready),
             source_path: ".agentflow/panel/manifest.json".to_string(),
             checked_at: unix_timestamp_seconds(),
-            warnings: status.degraded_reasons,
+            warnings: status.warnings,
             errors: status.last_error.into_iter().collect(),
         },
         Err(error) => {
@@ -247,7 +247,6 @@ fn ownership_status_label(status: &WorkspaceOwnershipState) -> &'static str {
 fn agent_status_label(status: AgentEnvironmentState) -> &'static str {
     match status {
         AgentEnvironmentState::Ready | AgentEnvironmentState::Repaired => "ready",
-        AgentEnvironmentState::Degraded => "degraded",
         AgentEnvironmentState::Missing => "missing",
         AgentEnvironmentState::Blocked => "blocked",
         AgentEnvironmentState::Failed => "failed",
@@ -258,7 +257,7 @@ fn agent_status_label(status: AgentEnvironmentState) -> &'static str {
 fn panel_status_label(status: &PanelStatus) -> &'static str {
     match status {
         PanelStatus::Ready => "ready",
-        PanelStatus::Degraded | PanelStatus::Stale => "degraded",
+        PanelStatus::Stale => "stale",
         PanelStatus::Missing => "missing",
         PanelStatus::Failed => "failed",
         PanelStatus::Indexing => "working",
@@ -269,7 +268,7 @@ pub(crate) fn health_ready(health: &[WorkflowHealthSnapshot]) -> bool {
     health
         .iter()
         .filter(|item| item.module != "audit")
-        .all(|item| item.ready || item.status == "degraded")
+        .all(|item| item.ready)
 }
 
 pub(crate) fn health_status_map(

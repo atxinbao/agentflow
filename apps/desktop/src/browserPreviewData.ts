@@ -330,7 +330,7 @@ export function createBrowserPreviewPanelStatus(projectRoot = BROWSER_PREVIEW_PR
     watcherBackend: "browser-preview",
     preflightStatus: "ready",
     protectionStatus: "ready",
-    degradedReasons: [],
+    warnings: [],
   };
 }
 

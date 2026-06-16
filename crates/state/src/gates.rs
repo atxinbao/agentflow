@@ -279,7 +279,7 @@ fn derive_stage(
     }
     if health
         .iter()
-        .any(|item| item.module == "panel" && (item.status == "ready" || item.status == "degraded"))
+        .any(|item| item.module == "panel" && item.status == "ready")
     {
         return WorkflowStage::PanelReady;
     }

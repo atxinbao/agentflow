@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use std::{path::Path, path::PathBuf, thread};
 
 mod debounce;
-mod fallback;
 mod filter;
 mod native;
 mod state;
@@ -50,19 +49,8 @@ pub(crate) fn watcher_detail(project_root: impl AsRef<Path>) -> Option<PanelWatc
 
 fn run_watcher(root: PathBuf) {
     let root_key = root.display().to_string();
-    if fallback::forced_fallback() {
-        let reason = "用户或测试显式启用 fingerprint fallback。".to_string();
-        state::record_fallback(&root_key, reason);
-        fallback::run_fingerprint_watcher(root);
-        return;
-    }
-
     if let Err(error) = native::run_native_watcher(root.clone()) {
-        state::record_fallback(
-            &root_key,
-            format!("OS native watcher 不可用，已降级到 fingerprint fallback：{error}"),
-        );
-        fallback::run_fingerprint_watcher(root);
+        state::record_failure(&root_key, format!("OS native watcher 不可用：{error}"));
     }
 }
 

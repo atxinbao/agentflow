@@ -6726,7 +6726,6 @@ function executeWorkspaceStatusLabel(status: string | undefined, source: Execute
 
   const labels: Record<string, string> = {
     blocked: "已阻断",
-    degraded: "需注意",
     failed: "异常",
     missing: "未初始化",
     ready: "已就绪",
@@ -6741,7 +6740,6 @@ function executeWorkspaceStatusTone(status: string | undefined, error: string | 
 
   const tones: Record<string, StatusChipStatus> = {
     blocked: "blocked",
-    degraded: "warning",
     failed: "failed",
     missing: "idle",
     ready: "ready",

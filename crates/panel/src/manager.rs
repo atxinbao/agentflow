@@ -40,8 +40,7 @@ struct PanelMeta {
     worktree: PanelWorktree,
     watcher: PanelManifestWatcher,
     #[serde(default)]
-    degraded_reasons: Vec<String>,
-    #[serde(default)]
+    #[serde(alias = "degradedReasons")]
     warnings: Vec<String>,
     #[serde(default)]
     errors: Vec<String>,
@@ -154,7 +153,7 @@ pub fn prepare_project_panel(
         watcher_detail: None,
         preflight_status: Some(preflight_status_label(&PanelStatus::Missing)),
         protection_status: None,
-        degraded_reasons: Vec::new(),
+        warnings: Vec::new(),
     });
 
     if existing.status == PanelStatus::Ready && !is_stale(&paths)? {
@@ -164,14 +163,7 @@ pub fn prepare_project_panel(
         return Ok(existing);
     }
 
-    write_manifest(
-        &paths,
-        PanelStatus::Indexing,
-        None,
-        None,
-        Vec::new(),
-        Vec::new(),
-    )?;
+    write_manifest(&paths, PanelStatus::Indexing, None, None, Vec::new())?;
     if mode == PanelPrepareMode::Background {
         let root = paths.root.clone();
         std::thread::spawn(move || {
@@ -202,28 +194,21 @@ pub fn index_project_panel(project_root: impl AsRef<Path>) -> Result<PanelStatus
     match scan_project(&paths.root) {
         Ok(index) => {
             db::replace_index(&mut connection, &index)?;
-            let exports = write_exports(&paths, &index)?;
+            let mut exports = write_exports(&paths, &index)?;
             let finished_at = unix_timestamp_seconds();
             let protection = check_panel_git_protection(&paths.root).ok();
-            let degraded_reasons = protection
-                .as_ref()
-                .filter(|snapshot| snapshot.status == "warning")
-                .map(|snapshot| vec![snapshot.reason.clone()])
-                .unwrap_or_default();
-            let panel_status = if degraded_reasons.is_empty() {
-                PanelStatus::Ready
-            } else {
-                PanelStatus::Degraded
-            };
+            if let Some(protection) = &protection {
+                if protection.status == "warning" && !exports.warnings.contains(&protection.reason)
+                {
+                    exports.warnings.push(protection.reason.clone());
+                }
+            }
+            let panel_status = PanelStatus::Ready;
             db::finish_index_run(
                 &connection,
                 &run_id,
                 finished_at,
-                match panel_status {
-                    PanelStatus::Ready => "ready",
-                    PanelStatus::Degraded => "degraded",
-                    _ => "ready",
-                },
+                "ready",
                 Some(&index),
                 None,
             )?;
@@ -232,7 +217,6 @@ pub fn index_project_panel(project_root: impl AsRef<Path>) -> Result<PanelStatus
                 panel_status.clone(),
                 Some((&run_id, &index, git_head.as_deref())),
                 None,
-                degraded_reasons,
                 exports.warnings,
             )?;
             let mut status =
@@ -258,7 +242,6 @@ pub fn index_project_panel(project_root: impl AsRef<Path>) -> Result<PanelStatus
                 None,
                 Some(&message),
                 Vec::new(),
-                Vec::new(),
             )?;
             Ok(PanelStatusSnapshot {
                 version: "panel-status.v1".to_string(),
@@ -276,7 +259,7 @@ pub fn index_project_panel(project_root: impl AsRef<Path>) -> Result<PanelStatus
                 protection_status: check_panel_git_protection(&paths.root)
                     .ok()
                     .map(|snapshot| snapshot.status),
-                degraded_reasons: Vec::new(),
+                warnings: Vec::new(),
             })
         }
     }
@@ -323,23 +306,20 @@ pub fn load_project_panel_status(project_root: impl AsRef<Path>) -> Result<Panel
             protection_status: check_panel_git_protection(&paths.root)
                 .ok()
                 .map(|snapshot| snapshot.status),
-            degraded_reasons: Vec::new(),
+            warnings: Vec::new(),
         });
     }
     let meta: PanelMeta = serde_json::from_str(&fs::read_to_string(&paths.meta)?)?;
-    let mut status = if meta.status == PanelStatus::Ready && is_stale(&paths)? {
+    let status = if meta.status == PanelStatus::Ready && is_stale(&paths)? {
         PanelStatus::Stale
     } else {
         meta.status
     };
-    let mut degraded_reasons = meta.degraded_reasons;
+    let mut warnings = meta.warnings;
     let protection_status = check_panel_git_protection(&paths.root).ok();
-    if matches!(status, PanelStatus::Ready) {
-        if let Some(protection) = &protection_status {
-            if protection.status == "warning" {
-                status = PanelStatus::Degraded;
-                degraded_reasons.push(protection.reason.clone());
-            }
+    if let Some(protection) = &protection_status {
+        if protection.status == "warning" && !warnings.contains(&protection.reason) {
+            warnings.push(protection.reason.clone());
         }
     }
     Ok(PanelStatusSnapshot {
@@ -356,7 +336,7 @@ pub fn load_project_panel_status(project_root: impl AsRef<Path>) -> Result<Panel
         watcher_detail: watcher::watcher_detail(&paths.root),
         preflight_status: Some(preflight_status_label(&status)),
         protection_status: protection_status.map(|snapshot| snapshot.status),
-        degraded_reasons,
+        warnings,
     })
 }
 
@@ -445,7 +425,6 @@ fn write_manifest(
     status: PanelStatus,
     success: Option<(&str, &PanelIndex, Option<&str>)>,
     last_error: Option<&str>,
-    degraded_reasons: Vec<String>,
     warnings: Vec<String>,
 ) -> Result<()> {
     let git = read_git_status(&paths.root);
@@ -506,7 +485,6 @@ fn write_manifest(
                 .unwrap_or_else(|| "not_started".to_string()),
             backend: watcher::watcher_backend(&paths.root).unwrap_or_else(|| "unknown".to_string()),
         },
-        degraded_reasons,
         warnings,
         errors: last_error
             .map(|error| vec![error.to_string()])
@@ -1223,18 +1201,16 @@ fn enrich_status_with_runtime(
         .ok()
         .map(|snapshot| snapshot.status);
     status.preflight_status = Some(preflight_status_label(&status.status));
-    if status.watcher_status.as_deref() == Some("fallback") {
-        let reason = status
-            .watcher_detail
-            .as_ref()
-            .and_then(|detail| detail.last_error.clone())
-            .unwrap_or_else(|| "Panel watcher 使用降级 fallback。".to_string());
-        if !status.degraded_reasons.contains(&reason) {
-            status.degraded_reasons.push(reason);
-        }
-        if status.status == PanelStatus::Ready {
-            status.status = PanelStatus::Degraded;
+    if status.watcher_status.as_deref() == Some("failed") {
+        if matches!(status.status, PanelStatus::Ready | PanelStatus::Stale) {
+            status.status = PanelStatus::Failed;
             status.preflight_status = Some(preflight_status_label(&status.status));
+        }
+        if status.last_error.is_none() {
+            status.last_error = status
+                .watcher_detail
+                .as_ref()
+                .and_then(|detail| detail.last_error.clone());
         }
     }
     status
@@ -1242,7 +1218,7 @@ fn enrich_status_with_runtime(
 
 fn preflight_status_label(status: &PanelStatus) -> String {
     match status {
-        PanelStatus::Ready | PanelStatus::Degraded => "ready",
+        PanelStatus::Ready => "ready",
         PanelStatus::Indexing => "pending",
         PanelStatus::Missing | PanelStatus::Stale => "needs_prepare",
         PanelStatus::Failed => "blocked",

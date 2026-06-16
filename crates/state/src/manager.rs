@@ -163,9 +163,6 @@ fn state_status(
     if health.iter().any(|item| item.status == "missing") {
         return StateWorkspaceStatus::Missing;
     }
-    if health.iter().any(|item| item.status == "degraded") {
-        return StateWorkspaceStatus::Degraded;
-    }
     StateWorkspaceStatus::Ready
 }
 

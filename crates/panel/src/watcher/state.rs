@@ -53,21 +53,13 @@ pub(crate) fn refresh_panel(root_key: &str, root: &Path, backend: &str, event_ki
     match index_project_panel(root) {
         Ok(_) => {
             update_state(root_key, |state| {
-                state.status = if backend == "fingerprint" {
-                    "fallback".to_string()
-                } else {
-                    "native".to_string()
-                };
-                state.backend = if backend == "fingerprint" {
-                    "fingerprint".to_string()
-                } else {
+                state.status = "native".to_string();
+                state.backend = if backend == "native" {
                     native_backend_name().to_string()
-                };
-                state.last_error = if backend == "fingerprint" {
-                    state.last_error.clone()
                 } else {
-                    None
+                    backend.to_string()
                 };
+                state.last_error = None;
             });
         }
         Err(error) => {
@@ -80,10 +72,9 @@ pub(crate) fn refresh_panel(root_key: &str, root: &Path, backend: &str, event_ki
     }
 }
 
-pub(crate) fn record_fallback(root_key: &str, reason: String) {
+pub(crate) fn record_failure(root_key: &str, reason: String) {
     update_state(root_key, |state| {
-        state.status = "fallback".to_string();
-        state.backend = "fingerprint".to_string();
+        state.status = "failed".to_string();
         state.recursive = true;
         state.last_error = Some(reason);
     });

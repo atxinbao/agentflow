@@ -1,4 +1,4 @@
-export type PanelStatus = "missing" | "indexing" | "ready" | "stale" | "failed" | "degraded";
+export type PanelStatus = "missing" | "indexing" | "ready" | "stale" | "failed";
 
 export type PanelStatusSnapshot = {
   version: string;
@@ -13,7 +13,7 @@ export type PanelStatusSnapshot = {
   watcherBackend?: string | null;
   preflightStatus?: string | null;
   protectionStatus?: string | null;
-  degradedReasons?: string[];
+  warnings?: string[];
 };
 
 export type PanelManifestSnapshot = {

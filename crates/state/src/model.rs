@@ -21,7 +21,6 @@ pub const STATE_OUTPUT_STATUS_INDEX_VERSION: &str = "state-output-status-index.v
 pub enum StateWorkspaceStatus {
     Missing,
     Ready,
-    Degraded,
     Failed,
     Blocked,
 }
@@ -31,7 +30,6 @@ impl StateWorkspaceStatus {
         match self {
             Self::Missing => "missing",
             Self::Ready => "ready",
-            Self::Degraded => "degraded",
             Self::Failed => "failed",
             Self::Blocked => "blocked",
         }

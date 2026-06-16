@@ -8,21 +8,6 @@ use std::{fs, thread, time::Duration};
 use tempfile::tempdir;
 
 #[test]
-fn fingerprint_ignores_agentflow_and_target_runtime_files() {
-    let dir = tempdir().unwrap();
-    fs::write(dir.path().join("src.rs"), "fn a() {}\n").unwrap();
-    fs::create_dir_all(dir.path().join(".agentflow/panel")).unwrap();
-    fs::create_dir_all(dir.path().join("target")).unwrap();
-
-    let before = fallback::project_fingerprint(dir.path()).unwrap();
-    fs::write(dir.path().join(".agentflow/panel/manifest.json"), "{}").unwrap();
-    fs::write(dir.path().join("target/generated.rs"), "ignored").unwrap();
-    let after = fallback::project_fingerprint(dir.path()).unwrap();
-
-    assert_eq!(before, after);
-}
-
-#[test]
 fn panel_event_filter_ignores_runtime_and_build_paths() {
     let dir = tempdir().unwrap();
     for ignored in [
@@ -104,36 +89,4 @@ fn watcher_native_event_refreshes_panel() {
             | Some("inotify")
             | Some("recommended_native")
     ));
-}
-
-#[test]
-fn fallback_snapshot_is_marked_degraded() {
-    let dir = tempdir().unwrap();
-    fs::write(dir.path().join("a.rs"), "pub struct A {}\n").unwrap();
-    let root_key = dir.path().canonicalize().unwrap().display().to_string();
-
-    state::record_fallback(&root_key, "forced fallback".to_string());
-    let snapshot = ensure_panel_watcher(dir.path()).unwrap();
-
-    assert_eq!(snapshot.status, "fallback");
-    assert_eq!(snapshot.backend, "fingerprint");
-    assert_eq!(snapshot.last_error.as_deref(), Some("forced fallback"));
-}
-
-#[test]
-fn fallback_watcher_marks_panel_status_degraded() {
-    let dir = tempdir().unwrap();
-    fs::write(dir.path().join("a.rs"), "pub struct A {}\n").unwrap();
-    let root_key = dir.path().canonicalize().unwrap().display().to_string();
-    state::record_fallback(&root_key, "forced fallback".to_string());
-
-    let status = index_project_panel(dir.path()).unwrap();
-
-    assert_eq!(status.status, crate::model::PanelStatus::Degraded);
-    assert_eq!(status.watcher_status.as_deref(), Some("fallback"));
-    assert_eq!(status.watcher_backend.as_deref(), Some("fingerprint"));
-    assert!(status
-        .degraded_reasons
-        .iter()
-        .any(|reason| reason.contains("forced fallback")));
 }
