@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.0 - 2026-06-17
+
+执行者：Codex
+
+AgentFlow 0.2.0 将工作流主线从旧 `input / execute / output` 分层收口到任务驱动架构。
+
+### Included
+
+- 新增 `spec / task-loop / task-artifacts / event-store / projection / release / agent-dispatcher / mcp` 等底层模块边界。
+- 清理旧 `input / execute / output / core legacy / workflow-events / degraded fallback` 活跃依赖。
+- 任务页成为主工作台，右侧展示状态时间线、事件流、实时会话信息和最终交付摘要。
+- Build Agent loop 支持 `start / claim-launch / prepare-review / write-merge-proof / complete` 官方命令链路。
+- Build Agent session 支持 `interrupted / resumed` 生命周期，并通过事件流写回投影。
+- Project Loop 支持手动触发、按依赖顺序推进 issue，并在当前 issue Done 后尝试拉起下一条 issue。
+- 公开交付记录写入 PR/MR、CHANGELOG 或 release notes，不再依赖旧 `.agentflow/output/**`。
+- Browser Preview mock 和 smoke 覆盖任务状态流、公开交付和投影读取。
+
+### Architecture
+
+- `docs/requirements/**` 是公开需求记录。
+- `.agentflow/spec/**` 是本地项目和 issue 合同事实源。
+- `.agentflow/events/**` 是任务状态事件流。
+- `.agentflow/tasks/<issue-id>/**` 是本地 run 与验证证据事实源。
+- `.agentflow/projections/**` 和 `.agentflow/indexes/**` 是 Desktop 只读展示投影。
+
+### Validation
+
+- `npm --prefix apps/desktop run build`
+- `cargo test --workspace`
+- `git diff --check`
+
 ## 0.1.0 - 2026-06-07
 
 执行者：Codex

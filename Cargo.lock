@@ -10,7 +10,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agentflow-agent-dispatcher"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-event-store",
  "agentflow-mcp",
@@ -24,7 +24,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-agent-manual"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -35,7 +35,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-audit"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-projection",
  "agentflow-task-artifacts",
@@ -47,7 +47,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-agent-dispatcher",
  "agentflow-event-store",
@@ -67,7 +67,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-desktop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-agent-dispatcher",
  "agentflow-agent-manual",
@@ -93,7 +93,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-event-store"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-mcp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-event-store",
  "agentflow-projection",
@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-panel"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-agent-manual",
  "anyhow",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-projection"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-event-store",
  "agentflow-spec",
@@ -153,7 +153,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-release"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-projection",
  "agentflow-spec",
@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-spec"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -175,7 +175,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-agent-manual",
  "agentflow-audit",
@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-task-artifacts"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -202,7 +202,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-task-loop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-event-store",
  "agentflow-spec",
@@ -215,7 +215,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-workflow-acceptance"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-agent-manual",
  "agentflow-audit",
@@ -234,7 +234,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-workflow-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "agentflow-workflow-runtime"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agentflow-event-store",
  "agentflow-workflow-core",
