@@ -1,416 +1,421 @@
 # Current Module Boundaries
 
-创建日期：2026-06-02  
-最后更新：2026-06-14
+创建日期：2026-06-02
+最后更新：2026-06-16
 执行者：Codex
 
-## Purpose
+## 结论
 
-This document records the active module boundaries for AgentFlow.
+AgentFlow 当前底层已经收口到一套任务中心架构。
 
-The current architecture is moving from the older `input / execute / output /
-state` directory pipeline to a task-centered runtime:
+公开需求先写到 `docs/requirements/**`。
+内部任务合同写到 `.agentflow/spec/**`。
+运行事实写到 `.agentflow/events/**`、`.agentflow/projections/**`、`.agentflow/tasks/**` 和 `.agentflow/audit/**`。
+
+当前事实流：
 
 ```text
-docs/requirements
-  -> .agentflow/spec
-  -> .agentflow/workflows
-  -> .agentflow/events
-  -> .agentflow/projections
-  -> .agentflow/tasks
+docs/requirements/**
+  -> .agentflow/spec/**
+  -> .agentflow/events/task-events.jsonl
+  -> .agentflow/projections/**
+  -> .agentflow/tasks/<issue-id>/**
+  -> PR/MR / CHANGELOG / release notes
 ```
 
-The implementation baseline is
-`docs/requirements/034-agentflow-task-workflow-yaml-runtime-v1.md`.
+下面这些目录和模块已经退出活跃架构：
 
-## Project Workspace Manager
+- `.agentflow/input/**`
+- `.agentflow/execute/**`
+- `.agentflow/output/**`
+- `.agentflow/goal-tree/**`
+- 旧 `core` 兼容层
+- 旧 `workflow-events` crate
 
-Scope:
+## Workspace and Desktop Entry
 
-- prepare local project workspace metadata;
-- create or reuse `.agentflow/`;
-- create or reuse workspace config files;
-- protect `.agentflow/` through local Git exclude handling;
-- deduplicate local projects by canonical path / Git root / workspace identity.
+### Project Workspace Manager
 
-Non-goals:
+负责：
 
-- no command execution;
-- no model invocation;
-- no remote object creation;
-- no deletion of source projects.
+- 准备本地项目工作区
+- 创建或复用 `.agentflow/`
+- 处理项目去重、移除、本地模式元数据
+- 维护 `.git/info/exclude` 中的本地保护
 
-Implemented backend modules:
+不负责：
+
+- 执行任务
+- 调用模型
+- 创建远端对象
+- 删除用户源码
+
+实现位置：
 
 - `apps/desktop/src-tauri/src/project_workspace/commands.rs`
-- `apps/desktop/src-tauri/src/project_workspace/model.rs`
 - `apps/desktop/src-tauri/src/project_workspace/prepare.rs`
 - `apps/desktop/src-tauri/src/project_workspace/dedupe.rs`
+- `apps/desktop/src-tauri/src/project_workspace/remove.rs`
 - `apps/desktop/src-tauri/src/project_workspace/git.rs`
 - `apps/desktop/src-tauri/src/project_workspace/ignore.rs`
-- `apps/desktop/src-tauri/src/project_workspace/remove.rs`
 
-Notes:
+### CLI
 
-- `commands.rs` is the Tauri command wrapper.
-- `prepare.rs`, `git.rs`, `ignore.rs`, and `model.rs` contain current behavior.
-- `dedupe.rs` and `remove.rs` are explicit boundaries for future requirements and do not add behavior in 004.
+负责：
 
-## Graph
+- 暴露当前 AgentFlow 官方命令入口
+- 调用 `spec`、`task-loop`、`workflow-runtime`、`task-artifacts`、`release`、`audit` 等模块
+- 提供 Build Agent / 审计 / 运行时写回入口
 
-Scope:
+不负责：
 
-- project file / symbol / relation index;
-- graph status and manifest;
-- context pack;
-- preflight;
-- weak impact and test recommendation;
-- OS native watcher.
+- 保存独立业务状态
+- 保留旧 CLI 兼容壳
 
-Non-goals:
+实现位置：
 
-- no Agent execution;
-- no test execution;
-- no model calls;
-- no writes outside `.agentflow/output/graph/`.
+- `crates/cli/src/**`
 
-Implemented watcher modules:
+## Requirement and Task Contract Layer
 
-- `crates/graph/src/watcher/mod.rs`
-- `crates/graph/src/watcher/native.rs`
-- `crates/graph/src/watcher/filter.rs`
-- `crates/graph/src/watcher/state.rs`
-- `crates/graph/src/watcher/debounce.rs`
+### Spec
 
-## Project File Reader
+负责：
 
-Scope:
+- 读取 `docs/requirements/<requirement-id>.md`
+- 管理 `.agentflow/spec/projects/**`
+- 管理 `.agentflow/spec/issues/**`
+- 校验 issue/project 合同、依赖、优先级、workflowRef、allowedPaths、expectedOutputs
 
-- read-only local file browser;
-- file and directory content preview;
-- directory pagination;
-- search and quick open;
-- text range loading;
-- renderer selection for code, Markdown, config, media, PDF, DOCX, and fallback states.
+不负责：
 
-Non-goals:
+- 推进运行状态
+- 写事件流
+- 执行任务
+- 启动外部 Agent
 
-- no file writes;
-- no command execution;
-- no source edits;
-- no model calls.
-
-Implemented backend modules:
-
-- `apps/desktop/src-tauri/src/project_files/commands.rs`
-- `apps/desktop/src-tauri/src/project_files/model.rs`
-- `apps/desktop/src-tauri/src/project_files/path_guard.rs`
-- `apps/desktop/src-tauri/src/project_files/directory.rs`
-- `apps/desktop/src-tauri/src/project_files/content.rs`
-- `apps/desktop/src-tauri/src/project_files/search.rs`
-- `apps/desktop/src-tauri/src/project_files/range.rs`
-- `apps/desktop/src-tauri/src/project_files/mime.rs`
-
-Implemented frontend modules:
-
-- `apps/desktop/src/features/project-files/browser/`
-- `apps/desktop/src/features/project-files/reader/`
-- `apps/desktop/src/features/project-files/hooks/`
-- `apps/desktop/src/features/project-files/model/`
-
-Hook boundaries:
-
-- `hooks/useProjectFiles.ts` remains the coordinator and preserves the public UI API.
-- `hooks/useProjectDirectoryPages.ts` owns directory pagination loading.
-- `hooks/useProjectFileSearch.ts` owns search state and search command dispatch.
-- `hooks/useProjectFileTextRange.ts` owns large text range loading.
-- `hooks/projectFileRuntime.ts` owns browser-preview detection and readable error text.
-
-## MCP Provider Adapter
-
-Scope:
-
-- external provider health and capability discovery;
-- provider launch plan generation;
-- provider session snapshot persistence;
-- provider session polling and log tail;
-- provider-specific command mapping for GitHub, GitLab, Codex, Browser Preview, and future external coding agents.
-
-Non-goals:
-
-- no ownership of Project Loop or Issue Loop state transitions;
-- no ownership of task artifacts, validation evidence, or public delivery records;
-- no external provider authority over AgentFlow task ordering.
-
-Implemented backend modules:
-
-- `crates/mcp/src/model.rs`
-- `crates/mcp/src/provider.rs`
-- `crates/mcp/src/registry.rs`
-- `crates/mcp/src/storage.rs`
-- `crates/mcp/src/github.rs`
-- `crates/mcp/src/gitlab.rs`
-- `crates/mcp/src/codex.rs`
-- `crates/mcp/src/browser.rs`
-- `crates/mcp/src/events.rs`
-- `crates/mcp/src/health.rs`
-- `crates/mcp/src/error.rs`
-
-Notes:
-
-- `crates/mcp` is the provider adapter layer for the current codebase.
-- `task-loop` decides whether an issue can launch; `mcp` defines how a provider is probed and how a provider session is represented.
-- `mcp` reads task/session state from `projection` and appends provider lifecycle facts to `event-store`.
-- `mcp` no longer depends on the legacy `input`, `execute`, or `workflow-events` crates.
-- `mcp` can append provider lifecycle facts such as `agent.session.running` and `agent.session.failed`, but it still does not own issue status transitions.
-- Desktop reads provider sessions through `apps/desktop/src-tauri/src/commands/mcp.rs`, including snapshot polling and session log chunks.
-
-## Spec
-
-Scope:
-
-- read public requirement records from `docs/requirements/<requirement-id>.md`;
-- manage internal task contracts under `.agentflow/spec/projects/**` and `.agentflow/spec/issues/**`;
-- validate issue fields, priority, dependency links, workflow references, allowed paths, forbidden paths, and expected outputs.
-
-Non-goals:
-
-- no runtime status transitions;
-- no event log writes;
-- no task execution;
-- no provider launch;
-- no UI projection generation.
-
-Implemented backend modules:
+实现位置：
 
 - `crates/spec/src/model.rs`
 - `crates/spec/src/storage.rs`
 - `crates/spec/src/lib.rs`
 
-Notes:
+### Agent Manual
 
-- `spec` is the replacement target for the old `input` task fact source.
-- `spec` owns task contracts only. Runtime facts must be written as task events.
+负责：
 
-## Workflow Core
+- 生成 `AGENTS.md`
+- 生成 `.agentflow/define/agent/**`
+- 固化角色边界、语言策略、plain-work-style、技能锁
 
-Scope:
+不负责：
 
-- parse and validate task workflow YAML;
-- define workflow states, transitions, guards, actions, and terminal states;
-- keep workflow definitions independent from any project or issue instance.
+- 代替 Spec 写任务合同
+- 代替 Task Loop 调度任务
+- 保留旧目录写法
 
-Non-goals:
+实现位置：
 
-- no issue loading;
-- no event store writes;
-- no action execution;
-- no Desktop-facing projection.
+- `crates/agent-manual/src/**`
 
-Implemented backend modules:
+## Project Context Layer
 
-- `crates/workflow-core/src/model.rs`
-- `crates/workflow-core/src/parser.rs`
-- `crates/workflow-core/src/validation.rs`
-- `crates/workflow-core/src/lib.rs`
+### Panel
 
-Notes:
+负责：
 
-- Workflow YAML describes allowed transitions. It does not run shell commands and does not become a CI system.
+- 项目文件、符号、关系索引
+- Context Pack
+- Panel preflight
+- 原生 watcher 事件刷新
+- 影响范围和测试建议
 
-## Event Store
+不负责：
 
-Scope:
+- 执行任务
+- 运行测试
+- 调用模型
+- 推进任务状态机
 
-- append task events to `.agentflow/events/task-events.jsonl`;
-- provide deterministic event IDs, idempotency keys, correlation IDs, and replay;
-- import old workflow events only when explicitly requested by migration code.
+实现位置：
 
-Non-goals:
+- `crates/panel/src/**`
 
-- no UI projection generation;
-- no status decision logic;
-- no task execution;
-- no provider calls.
+说明：
 
-Implemented backend modules:
+- Panel 只写 `.agentflow/panel/**`
+- watcher 只保留 OS native 路径，不再自动降级到 fallback watcher
 
-- `crates/event-store/src/model.rs`
-- `crates/event-store/src/storage.rs`
-- `crates/event-store/src/lib.rs`
+### Project File Reader
 
-Notes:
+负责：
 
-- Event log is the runtime fact source.
-- Projection can be rebuilt from this log.
+- 只读文件浏览
+- 目录分页
+- 搜索与 quick open
+- 文本范围读取
+- 代码、Markdown、配置、媒体、PDF、DOCX 等只读渲染
 
-## Workflow Runtime
+不负责：
 
-Scope:
+- 文件写入
+- 命令执行
+- 源码修改
 
-- read workflow definition and current projection;
-- match incoming events to allowed transitions;
-- run registered guards and actions;
-- append state transition events;
-- reject illegal state jumps.
+实现位置：
 
-Non-goals:
+- `apps/desktop/src-tauri/src/project_files/**`
+- `apps/desktop/src/features/project-files/**`
 
-- no arbitrary shell execution from YAML;
-- no public release writing;
-- no provider implementation;
-- no Desktop-specific rendering.
+## Runtime and Event Layer
 
-Implemented backend modules:
+### Workflow Core
 
-- `crates/workflow-runtime/src/runtime.rs`
-- `crates/workflow-runtime/src/lib.rs`
+负责：
 
-Notes:
+- 解析 YAML workflow
+- 校验状态、迁移、guard、action、terminal state
+- 提供任务工作流定义
 
-- Runtime owns state-machine correctness. Build Agent, Desktop, and external providers must not mutate issue status directly.
+不负责：
 
-## Task Artifacts
+- 读取具体 issue 实例
+- 写事件
+- 执行动作
 
-Scope:
+实现位置：
 
-- manage `.agentflow/tasks/<issue-id>/runs/<run-id>/**`;
-- manage `.agentflow/tasks/<issue-id>/evidence/**`;
-- record command output, validation output, checkpoints, plans, and local evidence.
+- `crates/workflow-core/src/**`
 
-Non-goals:
+### Event Store
 
-- no `.agentflow/tasks/<issue-id>/delivery/**`;
-- no PR/MR body writes;
-- no CHANGELOG or release notes writes;
-- no issue scheduling.
+负责：
 
-Implemented backend modules:
+- 追加 `.agentflow/events/task-events.jsonl`
+- 提供 event id、idempotency key、correlation id、replay
 
-- `crates/task-artifacts/src/model.rs`
-- `crates/task-artifacts/src/storage.rs`
-- `crates/task-artifacts/src/lib.rs`
+不负责：
 
-Notes:
+- 投影 UI
+- 决定状态
+- 执行任务
 
-- Local `.agentflow` runtime artifacts end at evidence. Public delivery records live in PR/MR bodies and later release notes.
+实现位置：
 
-## Task Loop
+- `crates/event-store/src/**`
 
-Scope:
+### Workflow Runtime
 
-- read spec projects and issues;
-- sort issues by dependencies, priority, and issue number;
-- schedule the next eligible issue by appending task events;
-- emit launch requests for Agent Dispatcher.
+负责：
 
-Non-goals:
+- 读取 workflow 定义和当前 projection
+- 执行 guard / action
+- 追加状态迁移事件
+- 阻止非法状态跳转
 
-- no code execution;
-- no provider-specific launch mechanics;
-- no direct Desktop rendering;
-- no public release writing.
+不负责：
 
-Implemented backend modules:
+- 任意 shell 执行
+- 公共交付写入
+- provider 启动
 
-- `crates/task-loop/src/model.rs`
-- `crates/task-loop/src/scheduler.rs`
-- `crates/task-loop/src/launcher.rs`
-- `crates/task-loop/src/loop_runtime.rs`
-- `crates/task-loop/src/lib.rs`
+实现位置：
 
-Notes:
+- `crates/workflow-runtime/src/**`
 
-- Project Loop is a scheduler, not an executor.
-- User-triggered project loop buttons should call this layer instead of the old `loop` crate.
+### Task Artifacts
 
-## Agent Dispatcher
+负责：
 
-Scope:
+- 管理 `.agentflow/tasks/<issue-id>/runs/<run-id>/**`
+- 管理 `.agentflow/tasks/<issue-id>/evidence/**`
+- 保存本地命令输出、校验结果、checkpoint、plan、验证证据
 
-- consume `agent.launch.requested` events;
-- create external agent sessions through `mcp` provider adapters;
-- translate session creation and launch-time status into task events;
-- coordinate with `mcp` provider adapters.
+不负责：
 
-Non-goals:
+- 写 `.agentflow/tasks/<issue-id>/delivery/**`
+- 写 PR/MR body
+- 写 CHANGELOG 或 release notes
+- 任务调度
 
-- no task ordering;
-- no issue status mutation outside workflow events;
-- no direct code editing;
-- no release note generation.
+实现位置：
 
-Implemented backend modules:
+- `crates/task-artifacts/src/**`
 
-- `crates/agent-dispatcher/src/lib.rs`
+说明：
 
-Notes:
+- 本地 `.agentflow` 运行产物在 evidence 结束
+- 对外公开交付记录属于 PR/MR、CHANGELOG、release notes
 
-- Agent Dispatcher is the session orchestrator. It does not decide what task should run next.
+## Scheduling and Session Dispatch Layer
 
-## Projection
+### Task Loop
 
-Scope:
+负责：
 
-- rebuild task projections from task events;
-- rebuild project projections from task events and spec contracts;
-- generate issue-status indexes for the task page;
-- provide Desktop read models.
+- 读取 spec project / issue
+- 按依赖、优先级、编号排序
+- 选择下一条可执行 issue
+- 追加调度事件
+- 发出 launch request
 
-Non-goals:
+不负责：
 
-- no spec issue writes;
-- no event writes except explicit rebuild markers when needed;
-- no provider calls;
-- no local command execution.
+- 直接调用外部 Agent CLI
+- 管理 provider session
+- 渲染 Desktop 页面
 
-Implemented backend modules:
+实现位置：
 
-- `crates/projection/src/model.rs`
-- `crates/projection/src/projector.rs`
-- `crates/projection/src/storage.rs`
-- `crates/projection/src/lib.rs`
+- `crates/task-loop/src/**`
 
-Notes:
+### Agent Dispatcher
 
-- Desktop should read projection and indexes instead of reading old `input`, `execute`, `output`, or `state` files directly.
+负责：
 
-## Release
+- 消费 `agent.launch.requested`
+- 领取待启动 run
+- 调用 `mcp` 创建 provider session
+- 回写 `agent.session.*` 事件
 
-Scope:
+不负责：
 
-- collect public delivery records from completed task projections and PR/MR metadata;
-- generate CHANGELOG and release notes for version-level delivery;
-- write public release documents when explicitly invoked.
+- 任务排序
+- 直接决定 issue 状态
+- 写源码
 
-Non-goals:
+实现位置：
 
-- no single-task status transitions;
-- no Build Agent loop execution;
-- no local `.agentflow/output/**` replacement;
-- no audit decision making.
+- `crates/agent-dispatcher/src/**`
 
-Implemented backend modules:
+### MCP
 
-- `crates/release/src/model.rs`
-- `crates/release/src/summary.rs`
-- `crates/release/src/writer.rs`
-- `crates/release/src/lib.rs`
+负责：
 
-Notes:
+- provider health / capability
+- launch plan 生成
+- provider session snapshot
+- poll / cancel / logs
+- GitHub、GitLab、Codex、Browser Preview 等 provider 适配
 
-- Release is a batch public-record layer, not the owner of task delivery.
+不负责：
 
-## Retired Compatibility Layer
+- 决定哪条任务先跑
+- 替代 workflow runtime
+- 持有任务 authority
 
-The old `core` compatibility layer and the legacy CLI retirement surface are no
-longer active architecture modules.
+实现位置：
 
-Current rule:
+- `crates/mcp/src/**`
 
-- new product logic must not depend on archived `core` read models;
-- task/runtime flows must use `spec`, `task-loop`, `workflow-runtime`,
-  `task-artifacts`, `event-store`, `agent-dispatcher`, `mcp`, `release`, and
-  `audit`;
-- the current CLI belongs to `crates/cli` only and must not route through a
-  legacy compatibility layer.
+## Projection and Read Model Layer
+
+### Projection
+
+负责：
+
+- 从 task events 重建 task projection
+- 从 task events + spec contracts 重建 project projection
+- 生成任务页和项目页索引
+- 提供 Desktop 只读模型
+
+不负责：
+
+- 写 spec 合同
+- 调用 provider
+- 执行本地命令
+
+实现位置：
+
+- `crates/projection/src/**`
+
+说明：
+
+- Desktop 读 projection，不直接读旧 input / execute / output 文件
+
+### State
+
+负责：
+
+- 聚合健康状态
+- 生成 workflow gates / blockers / indexes
+- 提供跨模块只读状态摘要
+
+不负责：
+
+- 拥有独立业务真相源
+- 放宽执行链路门禁
+
+实现位置：
+
+- `crates/state/src/**`
+
+说明：
+
+- `state` 是聚合层，不是事实源
+- 事实源仍然是 `spec`、`event-store`、`task-artifacts`、`audit`
+
+## Delivery and Audit Layer
+
+### Release
+
+负责：
+
+- 从完成态 task projection 和 PR/MR 元数据汇总公开交付记录
+- 生成 CHANGELOG / release notes
+- 在显式触发时写公共交付文档
+
+不负责：
+
+- 单条任务状态推进
+- Build Agent 执行
+- 本地 runtime 证据存储
+
+实现位置：
+
+- `crates/release/src/**`
+
+### Audit
+
+负责：
+
+- 管理 `.agentflow/audit/<audit-id>/**`
+- 保存 audit report、findings、checklist、evidence map、traceability
+- 支撑独立 audit issue 和 human-via-agent 审计请求
+
+不负责：
+
+- 修改源码
+- 修改 spec/task 运行产物
+- 创建任务
+
+实现位置：
+
+- `crates/audit/src/**`
+
+## Acceptance
+
+### Acceptance
+
+负责：
+
+- 端到端 acceptance harness
+- 迁移后工作流回归验证
+- Browser Preview smoke contract 注册
+
+不负责：
+
+- 业务运行时事实写入
+
+实现位置：
+
+- `crates/acceptance/src/**`
+
+## Current Rules
+
+1. 公开需求记录只写 `docs/requirements/**`
+2. 内部任务合同只写 `.agentflow/spec/**`
+3. 运行时事实只写 `.agentflow/events/**`、`.agentflow/projections/**`、`.agentflow/tasks/**`、`.agentflow/audit/**`
+4. 本地证据留在 `.agentflow/tasks/<issue-id>/evidence/**`
+5. 对外交付留在 PR/MR、CHANGELOG、release notes
+6. 新产品逻辑不得依赖已退役目录或旧兼容模块

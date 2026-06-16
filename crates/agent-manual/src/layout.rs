@@ -632,7 +632,7 @@ Audit is the code review and risk review working manual for future Audit Agent e
 
 - Audit Agent is enabled for Release Audit V1.
 - Audit Agent completes existing `audit` issues and `human-via-agent` audit requests.
-- Audit checks SPEC alignment, boundary compliance, architecture impact, permission / path / data-write risk, test coverage, retired-path reintroduction, unauthorized execution, unauthorized writes, model calls, and evidence completeness.
+- Audit checks SPEC alignment, boundary compliance, architecture impact, permission / path / data-write risk, test coverage, unauthorized execution, unauthorized writes, model calls, and evidence completeness.
 - Audit output belongs under `.agentflow/audit/`.
 - The same Release Delivery must not have duplicate audit requests.
 - Human conversation can ask an Agent for `human-via-agent` audit. The ordinary App UI must not create audits.

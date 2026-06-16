@@ -35,8 +35,8 @@ Every Agent MUST read and follow:
 - Do not write source code unless AgentFlow rules explicitly allow it.
 - Do not execute project commands unless AgentFlow rules explicitly allow it.
 - Before producing a SPEC Draft Preview, every Agent MUST run the requirement-intake-filter skill.
-- Do not write retired `.agentflow/input/**`, `.agentflow/execute/**`, `.agentflow/output/**`, or `.agentflow/goal-tree/**`.
-- Do not write retired `.agentflow/define/goals/**`, `.agentflow/define/milestones/**`, or `.agentflow/define/issues/**`.
+- Write AgentFlow facts only to the current paths allowed by the active role and stage: `docs/requirements/**`, `.agentflow/spec/**`, `.agentflow/events/**`, `.agentflow/projections/**`, `.agentflow/tasks/**`, and `.agentflow/audit/**`.
+- Do not create or revive any other AgentFlow fact path.
 - Do not bypass SPEC.
 - `docs/requirements/**` is the public requirement record.
 - `.agentflow/spec/issues/**` is the internal task contract source.
@@ -142,7 +142,7 @@ Do not mix these roles in one Codex thread. Each thread must keep one role for t
 - `executionPipeline` is part of the spec issue contract, not a separate task authority.
 - External issue, task, plan, queue, thread, or tool state must not create, select, split, reorder, or advance AgentFlow work.
 - `AGENTS.md` is the canonical root Agent entry.
-- Retired `.agentflow/input/`, `.agentflow/execute/`, `.agentflow/output/`, and `.agentflow/goal-tree/` are not write or read paths.
+- Only the current AgentFlow fact paths are valid: `docs/requirements/**`, `.agentflow/spec/**`, `.agentflow/events/**`, `.agentflow/projections/**`, `.agentflow/tasks/**`, and `.agentflow/audit/**`.
 - SPEC Gate writes public requirement records under `docs/requirements/**`.
 - Spec issues are derived from public requirement records.
 - Panel canonical path is `.agentflow/panel/`.
@@ -173,12 +173,11 @@ Do not mix these roles in one Codex thread. Each thread must keep one role for t
 - Do not write user source code.
 - Do not execute project commands.
 - Do not run tests.
-- Do not write retired `.agentflow/input/**`, `.agentflow/execute/**`, or `.agentflow/output/**`.
-- Do not write retired `.agentflow/goal-tree/**`.
+- Do not write AgentFlow facts outside the current role boundary.
 - Do not write public requirement records or spec issue contracts without human confirmation.
 - Do not start AgentRun.
 - Do not create PRs/MRs or remote issues unless the current role handoff explicitly authorizes that stage.
-- Do not use retired workflow paths.
+- Do not create or use non-current workflow fact paths.
 
 ## Required Workflow
 
@@ -298,9 +297,9 @@ After confirmation, it may write public requirement records under `docs/requirem
 
 Issue IDs are system-assigned and must use `<prefix>-<number>` format, for example `AF-001` or `AF-TASK-HIER-001`. Do not invent free-form slug IDs.
 
-It does not execute issues. Generated spec issues must use `issueCategory=spec`, `requiredAgentRole=build-agent`, `status=backlog` by default, and only move to `status=todo` when the issue is ready to enter the Build Agent pipeline. Issue status values are limited to `backlog`, `todo`, `in_progress`, `in_review`, `done`, `blocked`, and `cancel`; newly written spec issues must not use retired status names. Generated spec issues must include `sourceRequirementId`, `sourceRequirementPath`, `sourceSpecId`, `workflowRef`, allowed / forbidden paths, validation commands, and expected outputs for task run, task evidence, and public delivery.
+It does not execute issues. Generated spec issues must use `issueCategory=spec`, `requiredAgentRole=build-agent`, `status=backlog` by default, and only move to `status=todo` when the issue is ready to enter the Build Agent pipeline. Issue status values are limited to `backlog`, `todo`, `in_progress`, `in_review`, `done`, `blocked`, and `cancel`. Generated spec issues must include `sourceRequirementId`, `sourceRequirementPath`, `sourceSpecId`, `workflowRef`, allowed / forbidden paths, validation commands, and expected outputs for task run, task evidence, and public delivery.
 
-When Spec Agent writes an initial spec package, issue dependencies belong in each spec issue contract through `blockedBy`. Do not create retired relation files or retired `from` / `to` relation fields.
+When Spec Agent writes an initial spec package, issue dependencies belong in each spec issue contract through `blockedBy`. Do not create extra relation files, and do not use old `from` / `to` relation fields.
 
 It cannot execute issues, write source code, run commands, write execute facts, write output evidence, write release delivery, create PRs/MRs, merge, deploy, or audit.
 
@@ -575,13 +574,12 @@ Check whether the request asks the Agent to:
 
 - Write user source code.
 - Execute commands.
-- Write retired `.agentflow/input/**`, `.agentflow/execute/**`, or `.agentflow/output/**`.
-- Write retired `.agentflow/goal-tree/**`.
+- Write AgentFlow facts outside the current stage-authorized paths.
 - Write spec facts before human confirmation.
 - Skip public requirement record confirmation.
 - Start AgentRun.
 - Create remote PRs, issues, or external objects.
-- Touch retired runtime paths.
+- Touch non-current runtime fact paths.
 - Bypass AGENTS.md, Agentflow.md, or skills-lock.json.
 
 If out of bounds, return `blocked-by-boundary` and explain the allowed replacement flow.
@@ -631,8 +629,7 @@ Result:
 - Do not output SPEC files.
 - Do not make raw JSON the main human-facing output.
 - Do not write `docs/requirements/**` or `.agentflow/spec/**` before human confirmation.
-- Do not write retired `.agentflow/input/**`, `.agentflow/execute/**`, or `.agentflow/output/**`.
-- Do not write retired `.agentflow/goal-tree/**`.
+- Do not write AgentFlow facts outside the current stage-authorized paths.
 - Do not start AgentRun.
 - Do not execute commands.
 - Do not write user source code.
@@ -679,8 +676,7 @@ Raw JSON belongs in spec issue files or advanced details. It must not replace th
 - Without human confirmation, do not write `docs/requirements/**` or `.agentflow/spec/**`.
 - After human confirmation, public requirement records write only to `docs/requirements/**`.
 - Spec project / issue contracts write only to `.agentflow/spec/projects/**` and `.agentflow/spec/issues/**`.
-- Do not write retired `.agentflow/input/**`, `.agentflow/execute/**`, or `.agentflow/output/**`.
-- Do not write retired `.agentflow/goal-tree/**`.
+- Do not write AgentFlow facts outside the current stage-authorized paths.
 - SPEC Gate is the confirmed public requirement record plus generated spec project / issue contracts.
 "#;
 
@@ -699,13 +695,12 @@ Convert a confirmed public requirement record into AgentFlow spec project / issu
 - Write issue files only to `.agentflow/spec/issues/<issue-id>.json`.
 - When generating a project issue package, update `.agentflow/spec/projects/**` with the same canonical issue IDs.
 - Do not write `.agentflow/define/issues/**`, `.agentflow/define/goals/**`, or `.agentflow/define/milestones/**`.
-- Do not write retired `.agentflow/input/**`, `.agentflow/execute/**`, or `.agentflow/output/**`.
-- Do not write retired `.agentflow/goal-tree/**`.
+- Do not write AgentFlow facts outside the current stage-authorized paths.
 - Do not execute issues.
 - Do not start AgentRun.
 - Every generated Spec Issue must include `issueCategory=spec`, `requiredAgentRole=build-agent`, `sourceRequirementId`, `sourceRequirementPath`, `sourceSpecId`, `workflowRef`, `allowedPaths`, `forbiddenPaths`, `validationCommands`, and `expectedOutputs`.
 - Project and Issue human-facing natural-language fields MUST follow the current `agentLocale`. This includes Project `title`, `summary`, `objective`, `scope`, `nonGoals`, and `successCriteria`, plus Issue `title`, `summary`, `scope`, `nonGoals`, `acceptanceCriteria`, and `validationHints`.
-- Dependencies belong in each spec issue contract through `blockedBy`. Do not generate retired relation files.
+- Dependencies belong in each spec issue contract through `blockedBy`. Do not generate extra relation files.
 
 ## Mapping
 
@@ -720,7 +715,7 @@ Convert a confirmed public requirement record into AgentFlow spec project / issu
 
 Allowed relation `type` values are `blocked-by`, `blocks`, `related`, and `duplicate-of`.
 
-Invalid retired shape:
+Invalid relation shape:
 
 ```json
 { "from": "AF-002", "to": "AF-001", "type": "blocked-by" }
@@ -743,11 +738,11 @@ Check every Agent action before it proceeds.
 - Is the Agent about to execute a command?
 - Is the Agent about to write public requirement records or spec facts?
 - Has human confirmation been captured?
-- Is the Agent about to write retired `.agentflow/input/**`, `.agentflow/execute/**`, `.agentflow/output/**`, or `.agentflow/goal-tree/**`?
+- Is the Agent about to write AgentFlow facts outside the current stage-authorized paths?
 - Does the public requirement record exist?
 - Is the Agent about to start AgentRun?
 - Is the Agent about to create a remote object?
-- Does the action touch retired runtime paths?
+- Does the action touch non-current runtime fact paths?
 
 ## If Out Of Bounds
 
@@ -768,7 +763,7 @@ Self-check before any Agent output or future write.
 - Was Agentflow.md read?
 - Was skills-lock.json read?
 - Is SPEC-first preserved?
-- Did the Agent avoid erroneous retired SPEC / Goal Tree writes?
+- Did the Agent avoid erroneous writes outside the current spec / task runtime paths?
 - Did the Agent avoid unauthorized command execution?
 - Are there unresolved confirmation questions?
 - Should the Agent stop?
