@@ -853,10 +853,10 @@ mod tests {
             .path()
             .join(".agentflow/tasks/AF-START-001/runs/run-001/launch/agent-request.json")
             .is_file());
-        assert!(!dir
+        assert!(dir
             .path()
-            .join(".agentflow/input/issues/AF-START-001.json")
-            .exists());
+            .join(".agentflow/spec/issues/AF-START-001.json")
+            .is_file());
     }
 
     #[test]
