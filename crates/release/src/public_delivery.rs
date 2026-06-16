@@ -164,8 +164,8 @@ fn unix_timestamp_seconds() -> u64 {
 mod tests {
     use super::*;
     use agentflow_projection::{
-        ProjectionPhase, ProjectionPublicDelivery, TaskProjection, TaskTimelineItem,
-        TASK_PROJECTION_VERSION,
+        ProjectionPhase, ProjectionPublicDelivery, TaskProjection, TaskTimelineEvent,
+        TaskTimelineItem, TASK_PROJECTION_VERSION,
     };
     use agentflow_spec::{issue_from_requirement, write_spec_issue, SpecIssueDraft};
     use tempfile::tempdir;
@@ -200,7 +200,15 @@ mod tests {
                 state: state.to_string(),
                 phase: ProjectionPhase::Past,
                 entered_at: Some(updated_at),
-                events: vec!["issue.completed".to_string()],
+                events: vec![TaskTimelineEvent {
+                    event_id: format!("evt-{issue_id}"),
+                    event_type: "issue.completed".to_string(),
+                    timestamp: updated_at,
+                    actor_role: "build-agent".to_string(),
+                    actor_kind: "system".to_string(),
+                    summary: "任务 Done 写回完成。".to_string(),
+                    artifact_refs: Vec::new(),
+                }],
                 summary: "任务已完成。".to_string(),
                 live_refs: Vec::new(),
             }],

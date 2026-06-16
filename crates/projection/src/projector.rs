@@ -1,8 +1,9 @@
 use crate::{
     model::{
         IssueStatusIndex, IssueStatusIndexEntry, ProjectProjection, ProjectionPhase,
-        ProjectionPublicDelivery, ProjectionSummary, TaskProjection, TaskTimelineItem,
-        ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
+        ProjectionPublicDelivery, ProjectionSummary, TaskProjection, TaskTimelineEvent,
+        TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION,
+        TASK_PROJECTION_VERSION,
     },
     storage::{write_issue_status_index, write_project_projection, write_task_projection},
 };
@@ -227,7 +228,15 @@ fn build_timeline(
                 entered_at: matching_events.first().map(|event| event.timestamp),
                 events: matching_events
                     .iter()
-                    .map(|event| event.event_type.clone())
+                    .map(|event| TaskTimelineEvent {
+                        event_id: event.event_id.clone(),
+                        event_type: event.event_type.clone(),
+                        timestamp: event.timestamp,
+                        actor_role: event.actor.role.clone(),
+                        actor_kind: event.actor.kind.clone(),
+                        summary: event_summary(event),
+                        artifact_refs: event.artifact_refs.clone(),
+                    })
                     .collect(),
                 summary: state_summary(&state, issue),
                 live_refs: matching_events
@@ -247,18 +256,45 @@ fn event_to_state(event: &TaskEvent) -> Option<String> {
     }
     match event.event_type.as_str() {
         "issue.scheduled" => Some("todo".to_string()),
-        "agent.launch.requested" | "agent.session.created" | "agent.session.running" => {
-            Some("in_progress".to_string())
-        }
-        "issue.validation.passed" | "issue.review.requested" | "issue.pr.created" => {
-            Some("in_review".to_string())
-        }
+        "agent.launch.requested"
+        | "agent.session.created"
+        | "agent.session.resumed"
+        | "agent.session.running"
+        | "agent.session.interrupted" => Some("in_progress".to_string()),
+        "agent.session.in_review"
+        | "issue.validation.passed"
+        | "issue.review.requested"
+        | "issue.pr.created"
+        | "issue.merge.proof.recorded" => Some("in_review".to_string()),
         "issue.pr.merged" | "issue.completed" | "agent.session.completed" => {
             Some("done".to_string())
         }
         "issue.blocked" | "agent.session.failed" => Some("blocked".to_string()),
         "issue.cancelled" => Some("cancel".to_string()),
         _ => None,
+    }
+}
+
+fn event_summary(event: &TaskEvent) -> String {
+    match event.event_type.as_str() {
+        "issue.scheduled" => "任务进入待执行队列。".to_string(),
+        "agent.launch.requested" => "已生成 Build Agent 启动请求。".to_string(),
+        "agent.session.created" => "外部执行会话已创建。".to_string(),
+        "agent.session.resumed" => "外部执行会话已恢复。".to_string(),
+        "agent.session.running" => "外部执行会话正在运行。".to_string(),
+        "agent.session.interrupted" => "外部执行会话已中断，等待恢复。".to_string(),
+        "agent.session.in_review" => "外部执行会话已进入评审。".to_string(),
+        "agent.session.completed" => "外部执行会话已完成。".to_string(),
+        "agent.session.failed" => "外部执行会话失败。".to_string(),
+        "issue.validation.passed" => "本地沙箱验证已通过。".to_string(),
+        "issue.review.requested" => "任务已请求评审。".to_string(),
+        "issue.pr.created" => "PR/MR 已创建。".to_string(),
+        "issue.merge.proof.recorded" => "合并证明已写入。".to_string(),
+        "issue.pr.merged" => "PR/MR 已合并。".to_string(),
+        "issue.completed" => "任务 Done 写回完成。".to_string(),
+        "issue.blocked" => "任务进入阻断状态。".to_string(),
+        "issue.cancelled" => "任务已取消。".to_string(),
+        other => format!("记录事件：{other}。"),
     }
 }
 

@@ -1,6 +1,7 @@
 use crate::model::{
     AgentDispatcherClaim, AGENT_SESSION_CREATED, AGENT_SESSION_DONE, AGENT_SESSION_FAILED,
-    AGENT_SESSION_IN_REVIEW, AGENT_SESSION_RUNNING,
+    AGENT_SESSION_INTERRUPTED, AGENT_SESSION_IN_REVIEW, AGENT_SESSION_RESUMED,
+    AGENT_SESSION_RUNNING,
 };
 use agentflow_event_store::{
     append_task_event_once, load_task_events, EventActor, TaskEvent, TaskEventDraft,
@@ -12,7 +13,7 @@ use agentflow_mcp::{
 use agentflow_task_loop::{AgentLaunchPayload, AGENT_LAUNCH_REQUESTED};
 use anyhow::{Context, Result};
 use serde_json::json;
-use std::{collections::BTreeSet, path::Path};
+use std::{collections::BTreeMap, path::Path};
 
 pub struct AgentDispatcher {
     providers: McpProviderBridge,
@@ -33,14 +34,14 @@ impl AgentDispatcher {
     ) -> Result<Option<AgentDispatcherClaim>> {
         let root = project_root.as_ref();
         let events = load_task_events(root)?;
-        let claimed_runs = claimed_run_ids(&events);
+        let unavailable_runs = unavailable_run_ids(&events);
         let Some(event) = events.into_iter().find(|event| {
             event.event_type == AGENT_LAUNCH_REQUESTED
                 && event
                     .payload
                     .get("runId")
                     .and_then(serde_json::Value::as_str)
-                    .is_some_and(|run_id| !claimed_runs.contains(run_id))
+                    .is_some_and(|run_id| !unavailable_runs.get(run_id).copied().unwrap_or(false))
         }) else {
             return Ok(None);
         };
@@ -53,7 +54,16 @@ impl AgentDispatcher {
             .provider(&payload.provider)
             .ok_or_else(|| anyhow::anyhow!("provider {} is not registered", payload.provider))?;
         let session = provider.create_session(root, &request)?;
-        let created_event = append_session_event(root, &payload, &session, AGENT_SESSION_CREATED)?;
+        let created_event = append_session_event(
+            root,
+            &payload,
+            &session,
+            if had_prior_session_event(root, &payload.run_id)? {
+                AGENT_SESSION_RESUMED
+            } else {
+                AGENT_SESSION_CREATED
+            },
+        )?;
         append_status_event(root, &payload, &session)?;
 
         Ok(Some(AgentDispatcherClaim {
@@ -67,18 +77,51 @@ impl AgentDispatcher {
     }
 }
 
-fn claimed_run_ids(events: &[TaskEvent]) -> BTreeSet<String> {
-    events
-        .iter()
-        .filter(|event| event.event_type == AGENT_SESSION_CREATED)
-        .filter_map(|event| {
-            event
-                .payload
-                .get("runId")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_string)
-        })
-        .collect()
+fn unavailable_run_ids(events: &[TaskEvent]) -> BTreeMap<String, bool> {
+    let mut state = BTreeMap::new();
+    for event in events {
+        let Some(run_id) = event
+            .payload
+            .get("runId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        match event.event_type.as_str() {
+            AGENT_SESSION_CREATED
+            | AGENT_SESSION_RESUMED
+            | AGENT_SESSION_RUNNING
+            | AGENT_SESSION_IN_REVIEW
+            | AGENT_SESSION_DONE => {
+                state.insert(run_id, true);
+            }
+            AGENT_SESSION_INTERRUPTED | AGENT_SESSION_FAILED => {
+                state.insert(run_id, false);
+            }
+            _ => {}
+        }
+    }
+    state
+}
+
+fn had_prior_session_event(root: &Path, run_id: &str) -> Result<bool> {
+    Ok(load_task_events(root)?.iter().any(|event| {
+        matches!(
+            event.event_type.as_str(),
+            AGENT_SESSION_CREATED
+                | AGENT_SESSION_RESUMED
+                | AGENT_SESSION_RUNNING
+                | AGENT_SESSION_INTERRUPTED
+                | AGENT_SESSION_IN_REVIEW
+                | AGENT_SESSION_DONE
+                | AGENT_SESSION_FAILED
+        ) && event
+            .payload
+            .get("runId")
+            .and_then(serde_json::Value::as_str)
+            == Some(run_id)
+    }))
 }
 
 fn launch_payload_to_mcp_request(payload: &AgentLaunchPayload) -> McpLaunchRequest {
@@ -107,6 +150,7 @@ fn append_status_event(
         McpSessionStatus::Running | McpSessionStatus::Starting | McpSessionStatus::Claimed => {
             AGENT_SESSION_RUNNING
         }
+        McpSessionStatus::Interrupted => AGENT_SESSION_INTERRUPTED,
         McpSessionStatus::InReview => AGENT_SESSION_IN_REVIEW,
         McpSessionStatus::Done => AGENT_SESSION_DONE,
         McpSessionStatus::Failed | McpSessionStatus::Cancelled => AGENT_SESSION_FAILED,
@@ -149,7 +193,10 @@ fn append_session_event(
                 "logPath": session.log_path,
             }),
             artifact_refs: session_artifact_refs(session),
-            idempotency_key: Some(format!("{event_type}:{}", session.run_id)),
+            idempotency_key: Some(format!(
+                "{event_type}:{}:{}",
+                session.issue_id, session.run_id
+            )),
         },
     )
 }
@@ -274,5 +321,61 @@ mod tests {
 
         assert!(dispatcher.claim_next_launch(dir.path()).unwrap().is_some());
         assert!(dispatcher.claim_next_launch(dir.path()).unwrap().is_none());
+    }
+
+    #[test]
+    fn dispatcher_reclaims_interrupted_run_as_resumed() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        let loop_driver = TaskLoop::new("project-dispatcher");
+        loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+        loop_driver
+            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "fake")
+            .unwrap();
+        let mut providers = McpProviderBridge::new();
+        providers.register(Box::new(FakeProvider));
+        let dispatcher = AgentDispatcher::new(providers);
+
+        let first_claim = dispatcher.claim_next_launch(dir.path()).unwrap().unwrap();
+        append_task_event_once(
+            dir.path(),
+            TaskEventDraft {
+                aggregate_type: "issue".to_string(),
+                aggregate_id: "AF-DISPATCH-001".to_string(),
+                project_id: Some("project-dispatcher".to_string()),
+                issue_id: Some("AF-DISPATCH-001".to_string()),
+                event_type: AGENT_SESSION_INTERRUPTED.to_string(),
+                actor: EventActor {
+                    role: "agent-dispatcher".to_string(),
+                    kind: "system".to_string(),
+                },
+                state: None,
+                correlation_id: Some("corr-AF-DISPATCH-001".to_string()),
+                causation_id: None,
+                payload: json!({
+                    "runId": first_claim.run_id,
+                    "issueId": first_claim.issue_id,
+                    "sessionId": first_claim.session_id,
+                    "sessionStatus": "interrupted",
+                }),
+                artifact_refs: Vec::new(),
+                idempotency_key: Some(format!(
+                    "agent.session.interrupted:{}:{}",
+                    first_claim.issue_id, first_claim.run_id
+                )),
+            },
+        )
+        .unwrap();
+
+        let resumed_claim = dispatcher.claim_next_launch(dir.path()).unwrap().unwrap();
+
+        assert_eq!(resumed_claim.run_id, first_claim.run_id);
+        let events = load_task_events(dir.path()).unwrap();
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == AGENT_SESSION_RESUMED));
     }
 }

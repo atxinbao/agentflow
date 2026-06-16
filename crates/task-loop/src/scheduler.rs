@@ -261,7 +261,10 @@ fn request_issue_launch_inner(
                     issue.issue_id, run.run_id
                 ),
             ],
-            idempotency_key: Some(format!("agent.launch.requested:{}", run.run_id)),
+            idempotency_key: Some(format!(
+                "agent.launch.requested:{}:{}",
+                issue.issue_id, run.run_id
+            )),
         },
     )?;
 

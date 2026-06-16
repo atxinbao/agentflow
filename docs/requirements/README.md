@@ -68,6 +68,8 @@
 - [033-agentflow-v0.2.0-project-loop-issue-loop-mvp-v1.md](033-agentflow-v0.2.0-project-loop-issue-loop-mvp-v1.md) = project loop / issue loop MVP baseline
 - [034-agentflow-task-workflow-yaml-runtime-v1.md](034-agentflow-task-workflow-yaml-runtime-v1.md) = task workflow YAML runtime architecture baseline
 - [035-agentflow-output-release-retirement-v1.md](035-agentflow-output-release-retirement-v1.md) = output release retirement and public delivery boundary
+- [036-agentflow-bottom-module-retirement-v1.md](036-agentflow-bottom-module-retirement-v1.md) = bottom module retirement and legacy crate cleanup
+- [037-agentflow-task-center-build-loop-roadmap-v1.md](037-agentflow-task-center-build-loop-roadmap-v1.md) = task center, build loop, project loop, delivery and audit roadmap
 - [next-requirements.md](next-requirements.md)
 
 ## Dogfood Cutover 基线

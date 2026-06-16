@@ -615,7 +615,7 @@ function browserPreviewTimelineForIssue(issue: InputIssue): TaskTimelineItem[] {
             : index === currentIndex
               ? "current"
               : "future";
-    const events = phase === "future" ? [] : browserPreviewEventsForState(state);
+    const events = phase === "future" ? [] : browserPreviewEventsForState(state, index, issue);
     return {
       state,
       phase,
@@ -627,8 +627,8 @@ function browserPreviewTimelineForIssue(issue: InputIssue): TaskTimelineItem[] {
   });
 }
 
-function browserPreviewEventsForState(state: TaskTimelineItem["state"]) {
-  const events: Record<TaskTimelineItem["state"], string[]> = {
+function browserPreviewEventsForState(state: TaskTimelineItem["state"], index: number, issue: InputIssue) {
+  const eventTypes: Record<TaskTimelineItem["state"], string[]> = {
     backlog: ["issue.created"],
     blocked: ["issue.blocked"],
     cancel: ["issue.cancelled"],
@@ -637,7 +637,34 @@ function browserPreviewEventsForState(state: TaskTimelineItem["state"]) {
     in_review: ["issue.validation.passed", "issue.pr.created"],
     todo: ["issue.scheduled", "context-pack.ready", "workspace.clean"],
   };
-  return events[state] ?? [];
+  return (eventTypes[state] ?? []).map((eventType, eventIndex) => ({
+    actorKind: eventType.startsWith("agent.") ? "agent" : "system",
+    actorRole: eventType.startsWith("agent.") ? "build-agent" : "agentflow-loop",
+    artifactRefs: eventIndex === 0 ? browserPreviewLiveRefsForState(state, issue).slice(0, 1) : [],
+    eventId: `browser-${issue.issueId}-${state}-${eventIndex + 1}`,
+    eventType,
+    summary: browserPreviewEventSummary(eventType),
+    timestamp: previewTimestamp + index * 60 + eventIndex * 12,
+  }));
+}
+
+function browserPreviewEventSummary(eventType: string) {
+  const summaries: Record<string, string> = {
+    "agent.launch.requested": "已生成 Build Agent 启动请求。",
+    "agent.session.running": "外部执行会话正在运行。",
+    "context-pack.ready": "Context Pack 已就绪。",
+    "issue.blocked": "任务进入阻断状态。",
+    "issue.cancelled": "任务已取消。",
+    "issue.completed": "任务 Done 写回完成。",
+    "issue.created": "任务已生成。",
+    "issue.pr.created": "PR/MR 已创建。",
+    "issue.pr.merged": "PR/MR 已合并。",
+    "issue.scheduled": "任务进入待执行队列。",
+    "issue.validation.passed": "本地沙箱验证已通过。",
+    "issue.validation.running": "正在运行本地沙箱验证。",
+    "workspace.clean": "工作区已确认干净。",
+  };
+  return summaries[eventType] ?? `记录事件：${eventType}。`;
 }
 
 function browserPreviewLiveRefsForState(state: TaskTimelineItem["state"], issue: InputIssue) {

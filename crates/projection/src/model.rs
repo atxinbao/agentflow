@@ -26,11 +26,23 @@ impl ProjectionPhase {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TaskTimelineEvent {
+    pub event_id: String,
+    pub event_type: String,
+    pub timestamp: u64,
+    pub actor_role: String,
+    pub actor_kind: String,
+    pub summary: String,
+    pub artifact_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskTimelineItem {
     pub state: String,
     pub phase: ProjectionPhase,
     pub entered_at: Option<u64>,
-    pub events: Vec<String>,
+    pub events: Vec<TaskTimelineEvent>,
     pub summary: String,
     pub live_refs: Vec<String>,
 }

@@ -3053,6 +3053,11 @@ function TaskDetailReader({
     () => buildTaskDeliveryProjection({ audit, delivery, evidence, projection: taskProjection, session, task: effectiveTask }),
     [audit, delivery, effectiveTask, evidence, session, taskProjection],
   );
+  const finalDeliveryArtifact = useMemo(
+    () => outputBundle.deliveryArtifacts[deliveryProjection.deliveryRunId ?? effectiveTask.latestRunId ?? ""]
+      ?? null,
+    [deliveryProjection.deliveryRunId, effectiveTask.latestRunId, outputBundle.deliveryArtifacts],
+  );
   const workflowYaml = useMemo(
     () =>
       buildTaskWorkflowYamlModel({
@@ -3123,6 +3128,11 @@ function TaskDetailReader({
           reviewItems={deliveryReviewItems(task, null, session, taskProjection)}
           stageItems={stageOutputItems}
           status={effectiveDisplayStatus}
+        />
+        <TaskFinalDeliveryCard
+          artifact={finalDeliveryArtifact}
+          deliveryProjection={deliveryProjection}
+          task={effectiveTask}
         />
         <div ref={deliveryFocusRef} className="v16-task-delivery-focus-region" />
         <details className="v16-task-package">
@@ -3418,6 +3428,12 @@ function projectionPhaseLabel(phase: ProjectionPhase) {
   return labels[phase];
 }
 
+function taskTimelineEventLine(event: TaskTimelineItem["events"][number]) {
+  const time = event.timestamp ? formatTimestamp(event.timestamp) : "未记录时间";
+  const actor = event.actorRole || event.actorKind || "system";
+  return `${time} · ${actor} · ${event.summary || event.eventType}`;
+}
+
 function enhanceTaskStatusStepDetailWithProjection({
   detail,
   projection,
@@ -3432,12 +3448,17 @@ function enhanceTaskStatusStepDetailWithProjection({
   }
 
   const eventItems = projectionItem.events.length
-    ? projectionItem.events.map((eventType) => `事件：${eventType}`)
+    ? projectionItem.events.map((event) => taskTimelineEventLine(event))
     : projectionItem.phase === "future"
       ? ["这个阶段还没有事件。"]
       : ["这个阶段没有记录到事件。"];
-  const artifactItems = projectionItem.liveRefs.length
-    ? projectionItem.liveRefs.map((ref) => `产物：${ref}`)
+  const artifactItems = [
+    ...projectionItem.liveRefs,
+    ...projectionItem.events.flatMap((event) => event.artifactRefs),
+  ];
+  const uniqueArtifactItems = Array.from(new Set(artifactItems));
+  const artifactLines = uniqueArtifactItems.length
+    ? uniqueArtifactItems.map((ref) => `产物：${ref}`)
     : projectionItem.phase === "future"
       ? ["这个阶段还没有产物。"]
       : ["这个阶段没有记录到产物。"];
@@ -3463,7 +3484,7 @@ function enhanceTaskStatusStepDetailWithProjection({
       },
       {
         title: "事件产物",
-        items: artifactItems,
+        items: artifactLines,
       },
       ...(publicDeliveryItems.length
         ? [
@@ -6622,6 +6643,7 @@ function mcpSessionStatusLabelZh(status?: McpSessionSnapshot["status"] | null) {
     done: "已完成",
     failed: "失败",
     "in-review": "正在评审",
+    interrupted: "已中断",
     queued: "等待启动",
     running: "正在做",
     starting: "启动中",
@@ -6636,6 +6658,7 @@ function mcpSessionStatusTone(status?: McpSessionSnapshot["status"] | null): Sta
     done: "done",
     failed: "failed",
     "in-review": "warning",
+    interrupted: "warning",
     queued: "idle",
     running: "working",
     starting: "ready",
