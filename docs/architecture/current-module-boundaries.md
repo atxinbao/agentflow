@@ -65,7 +65,7 @@ Scope:
 - context pack;
 - preflight;
 - weak impact and test recommendation;
-- OS native watcher with fallback and degraded status.
+- OS native watcher.
 
 Non-goals:
 
@@ -78,7 +78,6 @@ Implemented watcher modules:
 
 - `crates/graph/src/watcher/mod.rs`
 - `crates/graph/src/watcher/native.rs`
-- `crates/graph/src/watcher/fallback.rs`
 - `crates/graph/src/watcher/filter.rs`
 - `crates/graph/src/watcher/state.rs`
 - `crates/graph/src/watcher/debounce.rs`
@@ -402,81 +401,16 @@ Notes:
 
 - Release is a batch public-record layer, not the owner of task delivery.
 
-## Legacy CLI Read Model
+## Retired Compatibility Layer
 
-Scope:
+The old `core` compatibility layer and the legacy CLI retirement surface are no
+longer active architecture modules.
 
-- keep temporary CLI read-only inspection commands working while current product flows move to input / panel / execute / output / state modules;
-- expose transitional snapshots only through explicit compatibility wrappers.
+Current rule:
 
-Non-goals:
-
-- no new write flows;
-- no new Goal / Milestone / Issue execution model;
-- no new AgentRun semantics.
-
-Implemented modules:
-
-- `crates/core/src/active/`
-- `crates/core/src/legacy/`
-- `crates/core/src/shared/`
-
-Active read-model wrappers:
-
-- `active/local_metrics.rs`
-- `active/local_project_model.rs`
-- `active/local_search.rs`
-- `active/boundary.rs`
-
-Legacy compatibility areas:
-
-- `legacy/archive_2026_05.rs` keeps the archived implementation for compatibility and is private to `legacy`.
-- `legacy/team_project_milestone_issue.rs`
-- `legacy/workflow_control.rs`
-
-005 boundary tightening:
-
-- `agentflow-core` no longer exposes `pub use legacy::*` at the crate root.
-- `legacy/mod.rs` no longer exposes `pub use archive_2026_05::*`.
-- `legacy/evidence.rs` was removed because it had no active/CLI/Desktop import.
-- CLI legacy dispatch no longer imports old writer compatibility modules.
-- Desktop no longer registers legacy read-model Tauri commands; tasks come from spec contracts and task projections.
-
-Shared neutral boundaries:
-
-- `shared/fs_paths.rs`
-- `shared/json_io.rs`
-- `shared/markdown.rs`
-- `shared/ids.rs`
-- `shared/time.rs`
-
-## Legacy CLI
-
-Scope:
-
-- preserve old command names only as migration-visible parse targets;
-- disable archived 2026-05 write/automation commands with a clear retirement message;
-- keep only temporary read-only inspection commands: `metrics`, `projects`, `search`;
-- keep argument definitions separate from command retirement policy and dispatch.
-
-Non-goals:
-
-- no Goal Tree command surface in 006;
-- no AgentRun command surface in 006;
-- no old workflow writes through CLI;
-- no `.agentflow/` runtime writes through retired commands.
-
-Implemented modules:
-
-- `crates/cli/src/args.rs`
-- `crates/cli/src/retirement.rs`
-- `crates/cli/src/legacy.rs`
-- `crates/cli/src/active.rs`
-- `crates/cli/src/print.rs`
-
-006 boundary tightening:
-
-- `legacy.rs` imports only `agentflow_core::active` read-only snapshots.
-- Retired old writer commands print a message and return success without writing files.
-- Named legacy core modules no longer publicly re-export old writer entrypoints unless active read models need DTOs.
-- `docs/architecture/legacy-cli-retirement-plan.md` records per-command disposition.
+- new product logic must not depend on archived `core` read models;
+- task/runtime flows must use `spec`, `task-loop`, `workflow-runtime`,
+  `task-artifacts`, `event-store`, `agent-dispatcher`, `mcp`, `release`, and
+  `audit`;
+- the current CLI belongs to `crates/cli` only and must not route through a
+  legacy compatibility layer.

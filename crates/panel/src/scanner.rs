@@ -831,10 +831,7 @@ mod tests {
             .any(|chunk| chunk.text.contains("Overview")));
 
         let status = index_project_panel(dir.path()).unwrap();
-        assert!(
-            status.status == crate::model::PanelStatus::Ready
-                || status.status == crate::model::PanelStatus::Degraded
-        );
+        assert_eq!(status.status, crate::model::PanelStatus::Ready);
         let heading = search_project_panel(dir.path(), "Overview", Some(20)).unwrap();
         assert!(heading.results.iter().any(|item| item.path == "README.md"));
         let plist = search_project_panel(dir.path(), "CFBundleIdentifier", Some(20)).unwrap();
@@ -859,7 +856,7 @@ mod tests {
         assert!(index
             .relations
             .iter()
-            .any(|relation| relation.source.contains("structured-fallback")));
+            .any(|relation| relation.source.contains("structured-parser")));
         assert!(index
             .symbols
             .iter()

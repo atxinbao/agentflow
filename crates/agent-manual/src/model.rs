@@ -23,7 +23,6 @@ pub enum AgentEnvironmentState {
     Repairing,
     Ready,
     Repaired,
-    Degraded,
     Failed,
     Blocked,
 }

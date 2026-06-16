@@ -8,7 +8,6 @@ pub enum PanelStatus {
     Ready,
     Stale,
     Failed,
-    Degraded,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,7 +26,7 @@ pub struct PanelStatusSnapshot {
     pub watcher_detail: Option<PanelWatcherDetail>,
     pub preflight_status: Option<String>,
     pub protection_status: Option<String>,
-    pub degraded_reasons: Vec<String>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

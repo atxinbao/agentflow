@@ -205,7 +205,7 @@ fn dispatch_workflow_events_inner(
 
 fn panel_ready_for_context_pack(root: &Path) -> bool {
     agentflow_panel::load_project_panel_status(root)
-        .map(|status| matches!(status.status, PanelStatus::Ready | PanelStatus::Degraded))
+        .map(|status| matches!(status.status, PanelStatus::Ready))
         .unwrap_or(false)
 }
 

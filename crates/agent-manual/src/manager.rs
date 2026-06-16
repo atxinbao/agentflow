@@ -30,9 +30,7 @@ pub fn prepare_agent_working_manual_with_locale(
     )?;
     if matches!(
         status.status,
-        AgentEnvironmentState::Ready
-            | AgentEnvironmentState::Repaired
-            | AgentEnvironmentState::Degraded
+        AgentEnvironmentState::Ready | AgentEnvironmentState::Repaired
     ) {
         return Ok(status);
     }

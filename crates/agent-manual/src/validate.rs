@@ -300,16 +300,12 @@ pub(crate) fn validate_agent_working_manual_with_context(
         }
     } else if repaired_at.is_some() {
         AgentEnvironmentState::Repaired
-    } else if !warnings.is_empty() {
-        AgentEnvironmentState::Degraded
     } else {
         AgentEnvironmentState::Ready
     };
     let ready = matches!(
         state,
-        AgentEnvironmentState::Ready
-            | AgentEnvironmentState::Repaired
-            | AgentEnvironmentState::Degraded
+        AgentEnvironmentState::Ready | AgentEnvironmentState::Repaired
     );
 
     let status = AgentEnvironmentStatus {
