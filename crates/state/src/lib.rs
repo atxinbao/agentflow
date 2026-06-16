@@ -41,19 +41,9 @@ pub fn state_paths() -> std::collections::BTreeMap<String, String> {
 mod tests {
     use super::*;
     use agentflow_audit::{request_human_audit, AuditScope, AuditScopeRef, HumanAuditRequestDraft};
-    use agentflow_execute::{
-        acquire_execute_lease, create_execute_checkpoint, create_execute_run,
-        execute_run_preflight, release_execute_lease, run_execute_command, validate_execute_run,
-        write_execute_plan, ExecuteCommandRequest, ExecuteLease, ExecuteLeaseStatus,
-        ExecutePlanDraft, ExecuteRun,
-    };
-    use agentflow_input::{
-        issue::{
-            AgentClaim, AgentRole, DisplayStatus, InputIssue, InputIssueModel, InputIssueStatus,
-            InputRiskLevel, IssueCategory, AGENT_CLAIM_VERSION,
-        },
-        spec_gate::{InputIssueGenerationMode, InputSpecApproval},
-    };
+    use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
+    use agentflow_spec::{SpecIssueDraft, SpecIssueStatus};
+    use serde_json::json;
     use std::{fs, path::Path};
     use tempfile::tempdir;
 
@@ -66,94 +56,47 @@ mod tests {
             .unwrap();
         agentflow_spec::prepare_spec_workspace(root).unwrap();
         agentflow_projection::prepare_projection_workspace(root).unwrap();
-        agentflow_input::prepare_input_workspace(root).unwrap();
-        agentflow_execute::prepare_execute_workspace(root).unwrap();
         agentflow_audit::prepare_audit_workspace(root).unwrap();
     }
 
-    fn write_spec(root: &Path) {
-        let spec_dir = root.join(".agentflow/input/specs/approved/spec-001");
-        fs::create_dir_all(&spec_dir).unwrap();
-        fs::write(spec_dir.join("product.md"), "# Product\n").unwrap();
-        fs::write(spec_dir.join("tech.md"), "# Tech\n").unwrap();
-        fs::write(spec_dir.join("spec.json"), "{}\n").unwrap();
-        fs::write(
-            spec_dir.join("approval.json"),
-            serde_json::to_string_pretty(&InputSpecApproval {
-                spec_id: "spec-001".to_string(),
-                issue_generation_mode: InputIssueGenerationMode::Direct,
-                ..InputSpecApproval::default()
-            })
-            .unwrap(),
-        )
-        .unwrap();
+    fn write_issue(root: &Path, status: SpecIssueStatus) -> agentflow_spec::SpecIssue {
+        let requirement = root.join("docs/requirements/spec-001.md");
+        fs::create_dir_all(requirement.parent().unwrap()).unwrap();
+        fs::write(&requirement, "# Fixture\n\nFixture requirement.\n").unwrap();
+        let mut draft = SpecIssueDraft::new("iss-001");
+        draft.title = Some("Fixture issue".to_string());
+        draft.validation_commands = vec!["printf ok".to_string()];
+        let mut issue = agentflow_spec::issue_from_requirement(root, &requirement, draft).unwrap();
+        issue.status = status;
+        agentflow_spec::write_spec_issue(root, &issue).unwrap();
+        issue
     }
 
-    fn write_issue(root: &Path, risk_level: InputRiskLevel) {
-        let issue = InputIssue {
-            issue_id: "iss-001".to_string(),
-            issue_model: InputIssueModel::Direct,
-            source_spec_id: "spec-001".to_string(),
-            project_id: None,
-            title: "Fixture issue".to_string(),
-            summary: "Fixture issue".to_string(),
-            status: InputIssueStatus::Todo,
-            execution_risk: risk_level,
-            validation_hints: vec!["printf ok".to_string()],
-            scope: vec!["src/lib.rs".to_string()],
-            ..InputIssue::default()
-        };
-        fs::write(
-            root.join(".agentflow/input/issues/iss-001.json"),
-            serde_json::to_string_pretty(&issue).unwrap(),
-        )
-        .unwrap();
-    }
-
-    fn write_plan_and_checkpoint(root: &Path, run: &ExecuteRun) {
-        acquire_execute_lease(root, run.run_id.clone()).unwrap();
-        write_execute_plan(
+    fn append_issue_event(root: &Path, event_type: &str, state: Option<&str>) {
+        append_task_event_once(
             root,
-            run.run_id.clone(),
-            ExecutePlanDraft {
-                steps: Vec::new(),
-                allowed_write_paths: vec!["src/lib.rs".to_string()],
-                allowed_commands: vec!["printf ok".to_string()],
+            TaskEventDraft {
+                aggregate_type: "issue".to_string(),
+                aggregate_id: "iss-001".to_string(),
+                project_id: None,
+                issue_id: Some("iss-001".to_string()),
+                event_type: event_type.to_string(),
+                actor: EventActor {
+                    role: "test".to_string(),
+                    kind: "system".to_string(),
+                },
+                state: state.map(|to_state| agentflow_event_store::EventStateTransition {
+                    from_state: "todo".to_string(),
+                    to_state: to_state.to_string(),
+                }),
+                correlation_id: Some("corr-iss-001".to_string()),
+                causation_id: None,
+                payload: json!({"runId": "run-001"}),
+                artifact_refs: Vec::new(),
+                idempotency_key: Some(format!("{event_type}:iss-001")),
             },
         )
         .unwrap();
-        create_execute_checkpoint(root, run.run_id.clone()).unwrap();
-    }
-
-    fn complete_run(root: &Path) -> ExecuteRun {
-        write_spec(root);
-        write_issue(root, InputRiskLevel::Low);
-        let run = create_execute_run(root, "iss-001".to_string()).unwrap();
-        let preflight = execute_run_preflight(root, run.run_id.clone()).unwrap();
-        assert_eq!(preflight.status, "ready");
-        write_plan_and_checkpoint(root, &run);
-        run_execute_command(
-            root,
-            run.run_id.clone(),
-            ExecuteCommandRequest {
-                label: "printf ok".to_string(),
-                program: "printf".to_string(),
-                args: vec!["ok".to_string()],
-                source: Some("test".to_string()),
-            },
-        )
-        .unwrap();
-        validate_execute_run(root, run.run_id.clone()).unwrap();
-        agentflow_execute::load_execute_run(root, run.run_id).unwrap()
-    }
-
-    fn assert_task_evidence(root: &Path, run: &ExecuteRun) {
-        assert!(root
-            .join(format!(
-                ".agentflow/tasks/{}/evidence/evidence.json",
-                run.issue_id
-            ))
-            .is_file());
     }
 
     #[test]
@@ -174,20 +117,21 @@ mod tests {
     }
 
     #[test]
-    fn state_prepare_does_not_write_other_layers() {
+    fn state_prepare_does_not_write_retired_layers() {
         let dir = tempdir().unwrap();
         prepare_state_workspace(dir.path()).unwrap();
         assert!(!dir.path().join(".agentflow/input/manifest.json").exists());
-        assert!(!dir.path().join(".agentflow/panel/manifest.json").exists());
         assert!(!dir.path().join(".agentflow/execute/manifest.json").exists());
         assert!(!dir.path().join(".agentflow/output/manifest.json").exists());
     }
 
     #[test]
-    fn health_aggregation_reads_layer_statuses() {
+    fn health_aggregation_reads_new_layer_statuses() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());
+        agentflow_event_store::prepare_event_store(dir.path()).unwrap();
         let status = prepare_state_workspace(dir.path()).unwrap();
+
         assert_eq!(
             status.health.get("define").map(String::as_str),
             Some("ready")
@@ -202,10 +146,6 @@ mod tests {
             Some("ready")
         );
         assert_eq!(
-            status.health.get("tasks").map(String::as_str),
-            Some("ready")
-        );
-        assert_eq!(
             status.health.get("events").map(String::as_str),
             Some("ready")
         );
@@ -213,194 +153,103 @@ mod tests {
     }
 
     #[test]
-    fn workflow_gate_returns_workspace_ready_when_core_layers_are_ready() {
-        let dir = tempdir().unwrap();
-        fs::write(dir.path().join("README.md"), "# fixture\n").unwrap();
-        agentflow_agent_manual::prepare_agent_working_manual(dir.path()).unwrap();
-        let status = prepare_state_workspace(dir.path()).unwrap();
-        assert_eq!(status.current_stage, WorkflowStage::WorkspaceReady);
-    }
-
-    #[test]
-    fn workflow_gate_keeps_execute_completed_without_auto_audit_after_validation() {
+    fn workflow_gate_uses_projection_task_state() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());
-        let run = complete_run(dir.path());
-        assert_task_evidence(dir.path(), &run);
-        let status = refresh_state(dir.path()).unwrap();
-        assert_eq!(status.current_stage, WorkflowStage::ExecuteCompleted);
-        assert_eq!(status.audit_status, WorkflowAuditStatus::NotRequested);
-        assert!(!status
-            .next_actions
-            .contains(&"request-human-audit".to_string()));
-        let audit_index = agentflow_audit::load_audit_index(dir.path()).unwrap();
-        assert_eq!(audit_index.audits.len(), 0);
-    }
-
-    #[test]
-    fn workflow_gate_does_not_block_when_completed_run_has_no_audit_request() {
-        let dir = tempdir().unwrap();
-        prepare_layers(dir.path());
-        let run = complete_run(dir.path());
-        assert_task_evidence(dir.path(), &run);
+        write_issue(dir.path(), SpecIssueStatus::Todo);
+        append_issue_event(dir.path(), "agent.launch.requested", Some("in_progress"));
+        agentflow_projection::rebuild_projections(dir.path()).unwrap();
 
         let status = refresh_state(dir.path()).unwrap();
 
-        assert_eq!(status.current_stage, WorkflowStage::ExecuteCompleted);
-        assert_eq!(status.audit_status, WorkflowAuditStatus::NotRequested);
-        assert!(status.blockers.is_empty());
+        assert_eq!(status.current_stage, WorkflowStage::ExecuteRunning);
+        assert_eq!(status.active_issue_id.as_deref(), Some("iss-001"));
+        assert_eq!(status.active_run_id.as_deref(), Some("run-001"));
     }
 
     #[test]
-    fn high_risk_blocked_preflight_appears_in_blockers() {
+    fn issue_status_index_reads_projection_and_task_evidence() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());
-        write_spec(dir.path());
-        write_issue(dir.path(), InputRiskLevel::High);
-        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
-        execute_run_preflight(dir.path(), run.run_id).unwrap();
-        let status = refresh_state(dir.path()).unwrap();
-        assert!(status
-            .blockers
-            .iter()
-            .any(|blocker| blocker.reason.contains("High risk issue requires")));
-    }
-
-    #[test]
-    fn stale_blocked_preflight_is_ignored_after_newer_completed_run_for_same_issue() {
-        let dir = tempdir().unwrap();
-        prepare_layers(dir.path());
-        write_spec(dir.path());
-        write_issue(dir.path(), InputRiskLevel::High);
-        let blocked_run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
-        let blocked_preflight = execute_run_preflight(dir.path(), blocked_run.run_id).unwrap();
-        assert_eq!(blocked_preflight.status, "blocked");
-
-        let completed_run = complete_run(dir.path());
-        assert_eq!(
-            completed_run.status,
-            agentflow_execute::ExecuteRunStatus::Completed
-        );
-
-        let status = refresh_state(dir.path()).unwrap();
-
-        assert!(!status.blockers.iter().any(|blocker| {
-            blocker.action == "execute-issue"
-                && blocker.source_path.as_deref()
-                    == Some(".agentflow/execute/runs/run-001/preflight.json")
-        }));
-        assert!(status.blockers.is_empty());
-    }
-
-    #[test]
-    fn runtime_preflight_refresh_aligns_issue_and_run_indexes() {
-        let dir = tempdir().unwrap();
-        prepare_layers(dir.path());
-        write_spec(dir.path());
-        write_issue(dir.path(), InputRiskLevel::Low);
-        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
-
-        let preflight = execute_run_preflight(dir.path(), run.run_id.clone()).unwrap();
-        assert_eq!(preflight.status, "ready");
-
-        refresh_state(dir.path()).unwrap();
-
-        let issue_index: IssueStatusIndex = crate::storage::read_json(
-            &dir.path()
-                .join(".agentflow/state/indexes/issue-status.json"),
+        write_issue(dir.path(), SpecIssueStatus::Todo);
+        append_issue_event(dir.path(), "agent.launch.requested", Some("in_progress"));
+        let run = agentflow_task_artifacts::create_task_run(
+            dir.path(),
+            "iss-001",
+            "run-001",
+            "build-agent.issue-loop@v1",
+            None,
         )
         .unwrap();
+        agentflow_task_artifacts::write_task_command_record(
+            dir.path(),
+            "iss-001",
+            &run.run_id,
+            agentflow_task_artifacts::TaskCommandInput {
+                label: "printf ok".to_string(),
+                program: "printf".to_string(),
+                args: vec!["ok".to_string()],
+                exit_code: Some(0),
+                stdout: "ok".to_string(),
+                stderr: String::new(),
+            },
+        )
+        .unwrap();
+        agentflow_task_artifacts::write_task_validation(dir.path(), "iss-001", &run.run_id)
+            .unwrap();
+        agentflow_task_artifacts::write_task_evidence(
+            dir.path(),
+            "iss-001",
+            &run.run_id,
+            "Fixture evidence.",
+        )
+        .unwrap();
+        append_issue_event(dir.path(), "issue.review.requested", Some("in_review"));
+        agentflow_projection::rebuild_projections(dir.path()).unwrap();
+
+        refresh_state(dir.path()).unwrap();
+        let issue_index = load_issue_status_index(dir.path()).unwrap();
         let issue = issue_index
             .issues
             .iter()
             .find(|item| item.issue_id == "iss-001")
             .unwrap();
-        assert_eq!(issue.display_status, DisplayStatus::InProgress);
-        assert_eq!(issue.execute_status.as_deref(), Some("planned"));
-        assert_eq!(issue.latest_run_id.as_deref(), Some(run.run_id.as_str()));
-
-        let run_index: RunStatusIndex =
-            crate::storage::read_json(&dir.path().join(".agentflow/state/indexes/run-status.json"))
-                .unwrap();
-        let run_entry = run_index
-            .runs
-            .iter()
-            .find(|item| item.run_id == run.run_id)
-            .unwrap();
-        assert_eq!(run_entry.execute_status, "planned");
+        assert_eq!(issue.display_status, "in_review");
+        assert_eq!(issue.latest_run_id.as_deref(), Some("run-001"));
+        assert_eq!(issue.evidence_status, "ready");
     }
 
     #[test]
-    fn missing_issue_target_metadata_blocks_handoff_copy() {
+    fn human_audit_request_updates_state() {
         let dir = tempdir().unwrap();
         prepare_layers(dir.path());
-        let issue = InputIssue {
-            issue_id: "iss-missing-target".to_string(),
-            issue_model: InputIssueModel::Direct,
-            source_spec_id: String::new(),
-            project_id: None,
-            title: "Missing target".to_string(),
-            summary: "Missing target metadata".to_string(),
-            status: InputIssueStatus::Todo,
-            execution_risk: InputRiskLevel::Low,
-            ..InputIssue::default()
-        };
-        fs::write(
-            dir.path()
-                .join(".agentflow/input/issues/iss-missing-target.json"),
-            serde_json::to_string_pretty(&issue).unwrap(),
+        write_issue(dir.path(), SpecIssueStatus::Done);
+        request_human_audit(
+            dir.path(),
+            HumanAuditRequestDraft {
+                reason: "Human requested audit.".to_string(),
+                scope: AuditScope {
+                    description: "Audit delivery chain.".to_string(),
+                    refs: vec![
+                        AuditScopeRef {
+                            kind: "issue".to_string(),
+                            id: "iss-001".to_string(),
+                            path: ".agentflow/spec/issues/iss-001.json".to_string(),
+                        },
+                        AuditScopeRef {
+                            kind: "evidence".to_string(),
+                            id: "run-001".to_string(),
+                            path: ".agentflow/tasks/iss-001/evidence/evidence.json".to_string(),
+                        },
+                    ],
+                },
+            },
         )
         .unwrap();
 
-        let status = refresh_state(dir.path()).unwrap();
-
-        assert!(status.blockers.iter().any(|blocker| {
-            blocker.action == "copy-handoff" && blocker.reason == "任务缺少执行目标，不能生成任务包"
-        }));
-    }
-
-    #[test]
-    fn active_released_and_stale_locks_are_classified() {
-        let dir = tempdir().unwrap();
-        prepare_layers(dir.path());
-        write_spec(dir.path());
-        write_issue(dir.path(), InputRiskLevel::Low);
-        let active_run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
-        execute_run_preflight(dir.path(), active_run.run_id.clone()).unwrap();
-        acquire_execute_lease(dir.path(), active_run.run_id.clone()).unwrap();
-        refresh_state(dir.path()).unwrap();
-        let active: StateLockSnapshot =
-            crate::storage::read_json(&dir.path().join(".agentflow/state/locks/active.json"))
-                .unwrap();
-        assert_eq!(active.active.len(), 1);
-
-        release_execute_lease(dir.path(), active_run.run_id.clone()).unwrap();
-        refresh_state(dir.path()).unwrap();
-        let active_after_release: StateLockSnapshot =
-            crate::storage::read_json(&dir.path().join(".agentflow/state/locks/active.json"))
-                .unwrap();
-        assert!(active_after_release.active.is_empty());
-
-        let stale_lease = ExecuteLease {
-            version: "execute-lease.v1".to_string(),
-            issue_id: "iss-stale".to_string(),
-            run_id: "run-stale".to_string(),
-            status: ExecuteLeaseStatus::Active,
-            created_at: 1,
-            released_at: None,
-            expires_at: None,
-            locked_files: Vec::new(),
-        };
-        fs::write(
-            dir.path().join(".agentflow/execute/leases/iss-stale.json"),
-            serde_json::to_string_pretty(&stale_lease).unwrap(),
-        )
-        .unwrap();
-        refresh_state(dir.path()).unwrap();
-        let stale: StateLockSnapshot =
-            crate::storage::read_json(&dir.path().join(".agentflow/state/locks/stale.json"))
-                .unwrap();
-        assert_eq!(stale.stale.len(), 1);
+        let state = refresh_state(dir.path()).unwrap();
+        assert_eq!(state.current_stage, WorkflowStage::AuditCompleted);
+        assert_ne!(state.audit_status, WorkflowAuditStatus::NotRequested);
     }
 
     #[test]
@@ -425,7 +274,7 @@ mod tests {
                 active_run_id: Some("run-001".to_string()),
                 status: Some("waiting-human-confirmation".to_string()),
                 waiting_for_human: Some(true),
-                last_action: Some("execute.preflight.blocked".to_string()),
+                last_action: Some("task.preflight.blocked".to_string()),
             },
         )
         .unwrap();
@@ -434,102 +283,5 @@ mod tests {
             .path()
             .join(".agentflow/state/sessions/session-001.json")
             .is_file());
-    }
-
-    #[test]
-    fn role_mismatch_writes_blocker_and_timeline_event() {
-        let dir = tempdir().unwrap();
-        prepare_layers(dir.path());
-        write_spec(dir.path());
-        write_issue(dir.path(), InputRiskLevel::Low);
-        let run = create_execute_run(dir.path(), "iss-001".to_string()).unwrap();
-        fs::write(
-            dir.path().join(format!(
-                ".agentflow/execute/runs/{}/agent-claim.json",
-                run.run_id
-            )),
-            serde_json::to_string_pretty(&AgentClaim {
-                version: AGENT_CLAIM_VERSION.to_string(),
-                issue_id: "iss-001".to_string(),
-                issue_category: IssueCategory::Spec,
-                claimed_agent_role: AgentRole::AuditAgent,
-                handoff_id: "handoff-iss-001".to_string(),
-                created_by: "audit-agent".to_string(),
-            })
-            .unwrap(),
-        )
-        .unwrap();
-
-        let status = refresh_state(dir.path()).unwrap();
-
-        assert!(status
-            .blockers
-            .iter()
-            .any(|blocker| blocker.action == "agent-role-mismatch"));
-        assert!(load_state_timeline(dir.path())
-            .unwrap()
-            .iter()
-            .any(|event| event.event == "agent.role_mismatch"));
-    }
-
-    #[test]
-    fn issue_status_index_aggregates_issue_run_task_evidence_and_audit_status() {
-        let dir = tempdir().unwrap();
-        prepare_layers(dir.path());
-        let run = complete_run(dir.path());
-        assert_task_evidence(dir.path(), &run);
-        request_human_audit(
-            dir.path(),
-            HumanAuditRequestDraft {
-                reason: "Human requested audit.".to_string(),
-                scope: AuditScope {
-                    description: "Audit delivery chain.".to_string(),
-                    refs: vec![
-                        AuditScopeRef {
-                            kind: "spec".to_string(),
-                            id: "spec-001".to_string(),
-                            path: ".agentflow/input/specs/approved/spec-001".to_string(),
-                        },
-                        AuditScopeRef {
-                            kind: "issue".to_string(),
-                            id: "iss-001".to_string(),
-                            path: ".agentflow/input/issues/iss-001.json".to_string(),
-                        },
-                        AuditScopeRef {
-                            kind: "task-run".to_string(),
-                            id: run.run_id.clone(),
-                            path: format!(".agentflow/tasks/iss-001/runs/{}/run.json", run.run_id),
-                        },
-                        AuditScopeRef {
-                            kind: "evidence".to_string(),
-                            id: run.run_id.clone(),
-                            path: ".agentflow/tasks/iss-001/evidence/evidence.json".to_string(),
-                        },
-                        AuditScopeRef {
-                            kind: "public-delivery".to_string(),
-                            id: "CHANGELOG.md".to_string(),
-                            path: "CHANGELOG.md".to_string(),
-                        },
-                    ],
-                },
-            },
-        )
-        .unwrap();
-        let status = refresh_state(dir.path()).unwrap();
-        assert_eq!(status.audit_status, WorkflowAuditStatus::Failed);
-        let issue_index: IssueStatusIndex = crate::storage::read_json(
-            &dir.path()
-                .join(".agentflow/state/indexes/issue-status.json"),
-        )
-        .unwrap();
-        let issue = issue_index
-            .issues
-            .iter()
-            .find(|item| item.issue_id == "iss-001")
-            .unwrap();
-        assert_eq!(issue.latest_run_id.as_deref(), Some(run.run_id.as_str()));
-        assert_eq!(issue.display_status, DisplayStatus::InReview);
-        assert_eq!(issue.delivery_status, "missing");
-        assert_eq!(issue.audit_status, WorkflowAuditStatus::Failed);
     }
 }

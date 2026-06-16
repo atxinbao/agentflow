@@ -13,8 +13,8 @@ use crate::{
     style::expected_style_state,
     templates::{
         skill_templates, AGENT_ENTRY_RELATIVE_PATH, AGENT_MANUAL_RELATIVE_PATH,
-        BOOTSTRAP_RELATIVE_PATH, LEGACY_AGENT_ENTRY_RELATIVE_PATH, LOCALE_RELATIVE_PATH,
-        SKILLS_LOCK_RELATIVE_PATH, STYLE_RELATIVE_PATH, VALIDATION_RELATIVE_PATH,
+        BOOTSTRAP_RELATIVE_PATH, LOCALE_RELATIVE_PATH, SKILLS_LOCK_RELATIVE_PATH,
+        STYLE_RELATIVE_PATH, VALIDATION_RELATIVE_PATH,
     },
 };
 use anyhow::{anyhow, Result};
@@ -353,13 +353,6 @@ pub(crate) fn validate_agent_working_manual_with_context(
         layout,
         locale: locale_status,
         style: style_status,
-        legacy_agent_entry: crate::model::LegacyAgentEntryStatus {
-            exists: root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH).exists(),
-            path: LEGACY_AGENT_ENTRY_RELATIVE_PATH.to_string(),
-            managed: fs::read_to_string(root.join(LEGACY_AGENT_ENTRY_RELATIVE_PATH))
-                .map(|content| content.contains("AGENTFLOW:MANAGED"))
-                .unwrap_or(false),
-        },
         shadow_guard,
     };
 

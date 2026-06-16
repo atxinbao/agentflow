@@ -66,17 +66,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "agentflow-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "agentflow-desktop"
 version = "0.1.0"
 dependencies = [
@@ -84,7 +73,6 @@ dependencies = [
  "agentflow-agent-manual",
  "agentflow-audit",
  "agentflow-event-store",
- "agentflow-input",
  "agentflow-mcp",
  "agentflow-panel",
  "agentflow-projection",
@@ -92,7 +80,6 @@ dependencies = [
  "agentflow-state",
  "agentflow-task-loop",
  "agentflow-workflow-acceptance",
- "agentflow-workflow-events",
  "anyhow",
  "base64 0.22.1",
  "notify",
@@ -108,51 +95,6 @@ dependencies = [
 name = "agentflow-event-store"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "agentflow-execute"
-version = "0.1.0"
-dependencies = [
- "agentflow-agent-manual",
- "agentflow-input",
- "agentflow-panel",
- "agentflow-task-artifacts",
- "anyhow",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
-]
-
-[[package]]
-name = "agentflow-input"
-version = "0.1.0"
-dependencies = [
- "agentflow-agent-manual",
- "agentflow-workflow-events",
- "anyhow",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "agentflow-loop"
-version = "0.1.0"
-dependencies = [
- "agentflow-agent-manual",
- "agentflow-audit",
- "agentflow-execute",
- "agentflow-input",
- "agentflow-panel",
- "agentflow-projection",
- "agentflow-task-artifacts",
- "agentflow-workflow-events",
  "anyhow",
  "serde",
  "serde_json",
@@ -237,11 +179,11 @@ version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
  "agentflow-audit",
- "agentflow-execute",
- "agentflow-input",
+ "agentflow-event-store",
  "agentflow-panel",
  "agentflow-projection",
  "agentflow-spec",
+ "agentflow-task-artifacts",
  "anyhow",
  "serde",
  "serde_json",
@@ -277,12 +219,12 @@ version = "0.1.0"
 dependencies = [
  "agentflow-agent-manual",
  "agentflow-audit",
- "agentflow-execute",
- "agentflow-input",
+ "agentflow-event-store",
  "agentflow-panel",
  "agentflow-projection",
  "agentflow-spec",
  "agentflow-state",
+ "agentflow-task-artifacts",
  "anyhow",
  "serde",
  "serde_json",
@@ -297,16 +239,6 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_yaml",
- "tempfile",
-]
-
-[[package]]
-name = "agentflow-workflow-events"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "serde",
- "serde_json",
  "tempfile",
 ]
 

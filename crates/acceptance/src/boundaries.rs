@@ -12,7 +12,7 @@ pub fn assert_write_boundary(root: &Path) -> Result<()> {
         anyhow::ensure!(
             matches!(
                 entry.as_str(),
-                ".agentflow" | "AGENTS.md" | "Cargo.toml" | "README.md" | "src"
+                ".agentflow" | "AGENTS.md" | "Cargo.toml" | "README.md" | "docs" | "src"
             ),
             "unexpected top-level write in fixture: {entry}"
         );

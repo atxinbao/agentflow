@@ -239,7 +239,6 @@ fn ownership_status_label(status: &WorkspaceOwnershipState) -> &'static str {
     match status {
         WorkspaceOwnershipState::None => "missing",
         WorkspaceOwnershipState::ManagedCurrent => "ready",
-        WorkspaceOwnershipState::ManagedLegacy => "degraded",
         WorkspaceOwnershipState::Foreign | WorkspaceOwnershipState::Corrupted => "blocked",
         WorkspaceOwnershipState::Blocked => "blocked",
     }

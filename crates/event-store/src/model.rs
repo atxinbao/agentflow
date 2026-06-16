@@ -4,6 +4,15 @@ use serde_json::Value;
 pub const TASK_EVENT_VERSION: &str = "task-event.v1";
 pub const TASK_EVENT_MANIFEST_VERSION: &str = "task-event-store-manifest.v1";
 pub const TASK_EVENT_STREAM_PATH: &str = ".agentflow/events/task-events.jsonl";
+pub const TASK_EVENT_CONSUMER_VERSION: &str = "task-event-consumer.v1";
+pub const TASK_EVENT_DEAD_LETTER_VERSION: &str = "task-event-dead-letter.v1";
+
+pub const EVENT_TYPE_SPEC_ISSUE_READY: &str = "spec.issue.ready";
+pub const EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED: &str = "panel.context-pack.requested";
+pub const EVENT_TYPE_PANEL_CONTEXT_PACK_READY: &str = "panel.context-pack.ready";
+pub const EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED: &str = "panel.context-pack.failed";
+
+pub const CONSUMER_PANEL: &str = "panel";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,7 +97,29 @@ pub struct TaskEventManifest {
 #[serde(rename_all = "camelCase")]
 pub struct TaskEventSummary {
     pub events: usize,
-    pub imported_legacy_events: usize,
+    pub consumers: usize,
+    pub dead_letters: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskEventConsumerState {
+    pub version: String,
+    pub consumer_id: String,
+    pub consumed_event_ids: Vec<String>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskEventDeadLetter {
+    pub version: String,
+    pub consumer_id: String,
+    pub event_id: String,
+    pub event_type: String,
+    pub subject_id: String,
+    pub error: String,
+    pub created_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -116,4 +147,40 @@ impl ReplayFilter {
             ..Self::default()
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueReadyPayload {
+    pub issue_id: String,
+    pub issue_path: String,
+    pub issue_category: String,
+    pub required_agent_role: String,
+    pub display_status: String,
+    pub title: String,
+    pub objective: String,
+    pub acceptance_criteria: Vec<String>,
+    pub context_pack_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextPackRequestedPayload {
+    pub issue_id: String,
+    pub context_pack_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextPackReadyPayload {
+    pub issue_id: String,
+    pub context_pack_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextPackFailedPayload {
+    pub issue_id: String,
+    pub context_pack_path: Option<String>,
+    pub error: String,
 }

@@ -5,14 +5,11 @@ use crate::{
         STATE_ISSUE_STATUS_INDEX_VERSION, STATE_OUTPUT_STATUS_INDEX_VERSION,
         STATE_RUN_STATUS_INDEX_VERSION, STATE_WORKSPACE_STATUS_INDEX_VERSION,
     },
-    readiness::issue_has_readiness_blocker,
     storage::{unix_timestamp_seconds, write_json},
 };
-use agentflow_execute::{ExecuteRunIndexEntry, ExecuteRunStatus};
-use agentflow_input::issue::{DisplayStatus, InputIssue, InputIssueStatus};
 use agentflow_projection::TaskProjection;
 use anyhow::Result;
-use std::{collections::BTreeMap, path::Path};
+use std::path::Path;
 
 pub(crate) fn write_indexes(
     root: &Path,
@@ -20,10 +17,11 @@ pub(crate) fn write_indexes(
     gate: &WorkflowGateSnapshot,
 ) -> Result<()> {
     let now = unix_timestamp_seconds();
-    let input = agentflow_input::load_input_snapshot(root).ok();
-    let execute = agentflow_execute::load_execute_snapshot(root).ok();
     let audit_index = agentflow_audit::load_audit_index(root).ok();
     let audit_status = gate.audit_status.clone();
+    let projection_index = agentflow_projection::rebuild_projections(root)
+        .and_then(|_| agentflow_projection::load_issue_status_index(root))
+        .ok();
 
     write_json(
         &root.join(".agentflow/state/indexes/workspace-status.json"),
@@ -36,41 +34,46 @@ pub(crate) fn write_indexes(
         },
     )?;
 
-    let issues = input
+    let projections = projection_index
         .as_ref()
-        .map(|snapshot| {
-            let runs_by_issue = runs_by_issue(execute.as_ref());
-            snapshot
+        .map(|index| {
+            index
                 .issues
                 .iter()
-                .map(|issue| {
-                    let latest_run = authoritative_run_for_issue(
-                        issue,
-                        runs_by_issue.get(&issue.issue_id).map(Vec::as_slice),
-                        load_task_projection(root, &issue.issue_id).as_ref(),
-                    );
-                    let latest_run_id = latest_run.map(|run| run.run_id.clone());
-                    let projection = load_task_projection(root, &issue.issue_id);
-                    IssueStatusIndexEntry {
-                        issue_id: issue.issue_id.clone(),
-                        display_status: display_status(
-                            issue,
-                            audit_index.as_ref(),
-                            issue_has_readiness_blocker(issue, &gate.blocked_actions),
-                        ),
-                        priority: issue.priority.as_str().to_string(),
-                        execution_risk: format!("{:?}", issue.execution_risk).to_lowercase(),
-                        latest_run_id: latest_run_id.clone(),
-                        execute_status: latest_run
-                            .map(|run| format!("{:?}", run.status).to_lowercase()),
-                        evidence_status: evidence_status(root, projection.as_ref()),
-                        delivery_status: delivery_status(projection.as_ref()),
-                        audit_status: audit_status.clone(),
-                    }
+                .filter_map(|entry| {
+                    agentflow_projection::load_task_projection(root, &entry.issue_id).ok()
                 })
-                .collect()
+                .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+
+    let issues = projections
+        .iter()
+        .map(|projection| {
+            let issue = agentflow_spec::read_spec_issue(root, &projection.issue_id).ok();
+            IssueStatusIndexEntry {
+                issue_id: projection.issue_id.clone(),
+                display_status: display_status(
+                    projection,
+                    audit_index.as_ref(),
+                    &projection.issue_id,
+                ),
+                priority: issue
+                    .as_ref()
+                    .map(|issue| format!("{:?}", issue.priority).to_lowercase())
+                    .unwrap_or_else(|| "p2".to_string()),
+                execution_risk: "normal".to_string(),
+                latest_run_id: projection.latest_run_id.clone(),
+                execute_status: projection
+                    .latest_run_id
+                    .as_ref()
+                    .map(|_| run_status_from_task_state(&projection.current_state).to_string()),
+                evidence_status: evidence_status(root, projection),
+                delivery_status: delivery_status(projection),
+                audit_status: audit_status.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
     write_json(
         &root.join(".agentflow/state/indexes/issue-status.json"),
         &IssueStatusIndex {
@@ -80,29 +83,23 @@ pub(crate) fn write_indexes(
         },
     )?;
 
-    let runs = execute
-        .as_ref()
-        .map(|snapshot| {
-            snapshot
-                .index
-                .runs
-                .iter()
-                .map(|run| RunStatusIndexEntry {
-                    run_id: run.run_id.clone(),
-                    issue_id: run.issue_id.clone(),
-                    execute_status: format!("{:?}", run.status).to_lowercase(),
-                    evidence_status: evidence_status(
-                        root,
-                        load_task_projection(root, &run.issue_id).as_ref(),
-                    ),
-                    delivery_status: delivery_status(
-                        load_task_projection(root, &run.issue_id).as_ref(),
-                    ),
+    let runs = projections
+        .iter()
+        .filter_map(|projection| {
+            projection
+                .latest_run_id
+                .as_ref()
+                .map(|run_id| RunStatusIndexEntry {
+                    run_id: run_id.clone(),
+                    issue_id: projection.issue_id.clone(),
+                    execute_status: run_status_from_task_state(&projection.current_state)
+                        .to_string(),
+                    evidence_status: evidence_status(root, projection),
+                    delivery_status: delivery_status(projection),
                     audit_status: audit_status.clone(),
                 })
-                .collect()
         })
-        .unwrap_or_default();
+        .collect::<Vec<_>>();
     write_json(
         &root.join(".agentflow/state/indexes/run-status.json"),
         &RunStatusIndex {
@@ -112,23 +109,13 @@ pub(crate) fn write_indexes(
         },
     )?;
 
-    let projections = input
-        .as_ref()
-        .map(|snapshot| {
-            snapshot
-                .issues
-                .iter()
-                .filter_map(|issue| load_task_projection(root, &issue.issue_id))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
     let evidence = projections
         .iter()
-        .filter(|projection| projection.public_delivery.evidence_path.is_some())
+        .filter(|projection| evidence_status(root, projection) == "ready")
         .count();
     let release_deliveries = projections
         .iter()
-        .filter(|projection| delivery_status(Some(projection)) != "missing")
+        .filter(|projection| delivery_status(projection) != "missing")
         .count();
     let audits = audit_index
         .as_ref()
@@ -148,144 +135,53 @@ pub(crate) fn write_indexes(
 }
 
 fn display_status(
-    issue: &InputIssue,
+    projection: &TaskProjection,
     audit_index: Option<&agentflow_audit::AuditIndex>,
-    _blocked_by_gate: bool,
-) -> DisplayStatus {
-    if matches!(issue.status, InputIssueStatus::Cancel) {
-        return DisplayStatus::Cancel;
+    issue_id: &str,
+) -> String {
+    if matches!(projection.current_state.as_str(), "cancel" | "done") {
+        return projection.current_state.clone();
     }
-    if matches!(issue.status, InputIssueStatus::Done) {
-        return DisplayStatus::Done;
-    }
-
-    if let Some(status) = audit_display_status(audit_index, &issue.issue_id) {
+    if let Some(status) = audit_display_status(audit_index, issue_id) {
         return status;
     }
-
-    DisplayStatus::from_input_status(&issue.status)
-}
-
-fn runs_by_issue(
-    execute: Option<&agentflow_execute::ExecuteSnapshot>,
-) -> BTreeMap<String, Vec<ExecuteRunIndexEntry>> {
-    let mut grouped = BTreeMap::<String, Vec<ExecuteRunIndexEntry>>::new();
-    let Some(execute) = execute else {
-        return grouped;
-    };
-    for run in &execute.index.runs {
-        grouped
-            .entry(run.issue_id.clone())
-            .or_default()
-            .push(run.clone());
-    }
-    for runs in grouped.values_mut() {
-        runs.sort_by(|left, right| {
-            (right.updated_at, right.run_id.as_str()).cmp(&(left.updated_at, left.run_id.as_str()))
-        });
-    }
-    grouped
-}
-
-fn authoritative_run_for_issue<'a>(
-    issue: &InputIssue,
-    runs: Option<&'a [ExecuteRunIndexEntry]>,
-    projection: Option<&TaskProjection>,
-) -> Option<&'a ExecuteRunIndexEntry> {
-    let runs = runs?;
-    let delivery_run_id = issue
-        .latest_run_id
-        .as_deref()
-        .or_else(|| projection.and_then(|projection| projection.latest_run_id.as_deref()));
-    match issue.status {
-        InputIssueStatus::Done | InputIssueStatus::InReview => delivery_run_id
-            .and_then(|run_id| runs.iter().find(|run| run.run_id == run_id))
-            .or_else(|| {
-                runs.iter().find(|run| {
-                    matches!(
-                        run.status,
-                        ExecuteRunStatus::Completed | ExecuteRunStatus::Failed
-                    )
-                })
-            })
-            .or_else(|| runs.first()),
-        InputIssueStatus::InProgress => runs
-            .iter()
-            .find(|run| {
-                matches!(
-                    run.status,
-                    ExecuteRunStatus::Queued
-                        | ExecuteRunStatus::Preflight
-                        | ExecuteRunStatus::Planned
-                        | ExecuteRunStatus::Checkpointed
-                        | ExecuteRunStatus::Patching
-                        | ExecuteRunStatus::Running
-                        | ExecuteRunStatus::Validating
-                )
-            })
-            .or_else(|| {
-                runs.iter()
-                    .find(|run| run.status == ExecuteRunStatus::Completed)
-            })
-            .or_else(|| runs.first()),
-        InputIssueStatus::Blocked => runs
-            .iter()
-            .find(|run| run.status == ExecuteRunStatus::Blocked)
-            .or_else(|| runs.first()),
-        InputIssueStatus::Todo | InputIssueStatus::Backlog => runs
-            .iter()
-            .find(|run| {
-                matches!(
-                    run.status,
-                    ExecuteRunStatus::Queued
-                        | ExecuteRunStatus::Preflight
-                        | ExecuteRunStatus::Planned
-                        | ExecuteRunStatus::Checkpointed
-                        | ExecuteRunStatus::Patching
-                        | ExecuteRunStatus::Running
-                        | ExecuteRunStatus::Validating
-                )
-            })
-            .or_else(|| runs.first()),
-        InputIssueStatus::Cancel => runs
-            .iter()
-            .find(|run| run.status == ExecuteRunStatus::Cancelled)
-            .or_else(|| runs.first()),
-    }
+    projection.display_status.clone()
 }
 
 fn audit_display_status(
     audit_index: Option<&agentflow_audit::AuditIndex>,
     issue_id: &str,
-) -> Option<DisplayStatus> {
+) -> Option<String> {
     audit_index.and_then(|index| {
         index
             .audits
             .iter()
             .rev()
             .find(|entry| entry.source_issue_id.as_deref() == Some(issue_id))
-            .and_then(|entry| match entry.status.as_str() {
-                "passed" | "passed-with-warnings" => Some(DisplayStatus::Done),
-                "failed" => Some(DisplayStatus::InReview),
-                "cancelled" => Some(DisplayStatus::Cancel),
-                "requested" | "running" => None,
-                _ => None,
+            .and_then(|entry| match entry.status {
+                agentflow_audit::AuditStatus::Passed
+                | agentflow_audit::AuditStatus::PassedWithWarnings => Some("done".to_string()),
+                agentflow_audit::AuditStatus::Failed => Some("in_review".to_string()),
+                agentflow_audit::AuditStatus::Cancelled => Some("cancel".to_string()),
+                agentflow_audit::AuditStatus::Requested | agentflow_audit::AuditStatus::Running => {
+                    None
+                }
             })
     })
 }
 
-fn evidence_status(root: &Path, projection: Option<&TaskProjection>) -> String {
+fn evidence_status(root: &Path, projection: &TaskProjection) -> String {
     projection
-        .and_then(|projection| projection.public_delivery.evidence_path.as_deref())
+        .public_delivery
+        .evidence_path
+        .as_deref()
         .filter(|path| root.join(path).is_file())
         .map(|_| "ready".to_string())
         .unwrap_or_else(|| "missing".to_string())
 }
 
-fn delivery_status(projection: Option<&TaskProjection>) -> String {
-    let Some(delivery) = projection.map(|projection| &projection.public_delivery) else {
-        return "missing".to_string();
-    };
+fn delivery_status(projection: &TaskProjection) -> String {
+    let delivery = &projection.public_delivery;
     if delivery.changelog_path.is_some() || delivery.release_notes_url.is_some() {
         "published".to_string()
     } else if delivery.pr_url.is_some() || delivery.merge_commit.is_some() {
@@ -295,130 +191,56 @@ fn delivery_status(projection: Option<&TaskProjection>) -> String {
     }
 }
 
-fn load_task_projection(root: &Path, issue_id: &str) -> Option<TaskProjection> {
-    agentflow_projection::load_task_projection(root, issue_id).ok()
+fn run_status_from_task_state(state: &str) -> &'static str {
+    match state {
+        "todo" | "in_progress" => "running",
+        "in_review" | "done" => "completed",
+        "blocked" => "blocked",
+        "cancel" => "cancelled",
+        _ => "queued",
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentflow_execute::ExecuteRunStatus;
+    use agentflow_projection::ProjectionPublicDelivery;
 
-    fn issue(status: InputIssueStatus) -> InputIssue {
-        InputIssue {
+    fn projection(state: &str) -> TaskProjection {
+        TaskProjection {
+            version: "task-projection.v1".to_string(),
             issue_id: "iss-001".to_string(),
-            status,
-            ..InputIssue::default()
-        }
-    }
-
-    fn run_with_id(
-        run_id: &str,
-        status: ExecuteRunStatus,
-        updated_at: u64,
-    ) -> ExecuteRunIndexEntry {
-        ExecuteRunIndexEntry {
-            run_id: run_id.to_string(),
-            issue_id: "iss-001".to_string(),
-            status,
-            updated_at,
-            ..ExecuteRunIndexEntry::default()
+            project_id: None,
+            workflow_ref: "build-agent.issue-loop@v1".to_string(),
+            current_state: state.to_string(),
+            display_status: state.to_string(),
+            current_transition: None,
+            latest_run_id: Some("run-001".to_string()),
+            branch_name: None,
+            timeline: Vec::new(),
+            public_delivery: ProjectionPublicDelivery::default(),
+            updated_at: 1,
         }
     }
 
     #[test]
-    fn display_status_mapping_covers_input_execute_and_audit_states() {
-        assert_eq!(
-            display_status(&issue(InputIssueStatus::Backlog), None, false),
-            DisplayStatus::Backlog
-        );
-        assert_eq!(
-            display_status(&issue(InputIssueStatus::Todo), None, false),
-            DisplayStatus::Todo
-        );
-        assert_eq!(
-            display_status(&issue(InputIssueStatus::InProgress), None, false,),
-            DisplayStatus::InProgress
-        );
-        assert_eq!(
-            display_status(&issue(InputIssueStatus::Todo), None, false),
-            DisplayStatus::Todo
-        );
-        assert_eq!(
-            display_status(&issue(InputIssueStatus::InReview), None, false),
-            DisplayStatus::InReview
-        );
-        assert_eq!(
-            display_status(&issue(InputIssueStatus::Done), None, false),
-            DisplayStatus::Done
-        );
-        assert_eq!(
-            display_status(&issue(InputIssueStatus::Todo), None, true),
-            DisplayStatus::Todo
-        );
-        assert_eq!(
-            display_status(&issue(InputIssueStatus::Blocked), None, false,),
-            DisplayStatus::Blocked
-        );
-        assert_eq!(
-            audit_display_status(Some(&audit_index("requested")), "iss-001"),
-            None
-        );
-        assert_eq!(
-            audit_display_status(Some(&audit_index("passed")), "iss-001"),
-            Some(DisplayStatus::Done)
-        );
-        assert_eq!(
-            display_status(&issue(InputIssueStatus::Cancel), None, false),
-            DisplayStatus::Cancel
-        );
+    fn run_status_maps_from_task_state() {
+        assert_eq!(run_status_from_task_state("backlog"), "queued");
+        assert_eq!(run_status_from_task_state("todo"), "running");
+        assert_eq!(run_status_from_task_state("in_progress"), "running");
+        assert_eq!(run_status_from_task_state("in_review"), "completed");
+        assert_eq!(run_status_from_task_state("done"), "completed");
+        assert_eq!(run_status_from_task_state("blocked"), "blocked");
+        assert_eq!(run_status_from_task_state("cancel"), "cancelled");
     }
 
     #[test]
-    fn authoritative_run_prefers_completed_delivery_run_over_newer_blocked_run_after_review() {
-        let mut issue = issue(InputIssueStatus::InReview);
-        issue.latest_run_id = Some("run-001".to_string());
-        let runs = vec![
-            run_with_id("run-002", ExecuteRunStatus::Blocked, 2),
-            run_with_id("run-001", ExecuteRunStatus::Completed, 1),
-        ];
-        let selected = authoritative_run_for_issue(&issue, Some(&runs), None).unwrap();
-        assert_eq!(selected.run_id, "run-001");
-    }
-
-    #[test]
-    fn authoritative_run_prefers_active_run_during_in_progress() {
-        let issue = issue(InputIssueStatus::InProgress);
-        let runs = vec![
-            run_with_id("run-002", ExecuteRunStatus::Blocked, 2),
-            run_with_id("run-001", ExecuteRunStatus::Running, 1),
-        ];
-        let selected = authoritative_run_for_issue(&issue, Some(&runs), None).unwrap();
-        assert_eq!(selected.run_id, "run-001");
-    }
-
-    fn audit_index(status: &str) -> agentflow_audit::AuditIndex {
-        let audit_status = match status {
-            "passed" => agentflow_audit::AuditStatus::Passed,
-            "failed" => agentflow_audit::AuditStatus::Failed,
-            "cancelled" => agentflow_audit::AuditStatus::Cancelled,
-            _ => agentflow_audit::AuditStatus::Requested,
-        };
-        agentflow_audit::AuditIndex {
-            audits: vec![agentflow_audit::AuditIndexEntry {
-                audit_id: "audit-001".to_string(),
-                status: audit_status,
-                trigger: agentflow_audit::AuditTrigger::HumanViaAgent,
-                requested_by: "test".to_string(),
-                requested_at: 1,
-                source_delivery_id: None,
-                source_run_id: Some("run-001".to_string()),
-                source_issue_id: Some("iss-001".to_string()),
-                source_spec_id: None,
-                report_path: ".agentflow/audit/audit-001/audit-report.md".to_string(),
-                audit_path: ".agentflow/audit/audit-001/audit.json".to_string(),
-            }],
-            ..agentflow_audit::AuditIndex::default()
-        }
+    fn display_status_uses_projection_without_legacy_input() {
+        assert_eq!(display_status(&projection("todo"), None, "iss-001"), "todo");
+        assert_eq!(
+            display_status(&projection("in_progress"), None, "iss-001"),
+            "in_progress"
+        );
+        assert_eq!(display_status(&projection("done"), None, "iss-001"), "done");
     }
 }

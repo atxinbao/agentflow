@@ -250,7 +250,7 @@ mod tests {
         assert!(!dir.path().join(".agentflow/input").exists());
         assert!(!dir
             .path()
-            .join(".agentflow/input/issues/AF-DEMO-001.json")
+            .join(".agentflow/spec/issues/AF-DEMO-001.json")
             .exists());
         assert!(!dir
             .path()
@@ -342,17 +342,10 @@ mod tests {
             .path()
             .join(".agentflow/state/indexes/recent-project-context.json")
             .exists());
+        assert!(!dir.path().join(".agentflow/input").exists());
         assert!(!dir
             .path()
-            .join(".agentflow/input/intake/git-context.json")
-            .exists());
-        assert!(!dir
-            .path()
-            .join(".agentflow/input/projects/context-prs.json")
-            .exists());
-        assert!(!dir
-            .path()
-            .join(".agentflow/input/issues/AF-DEMO-001.json")
+            .join(".agentflow/spec/issues/AF-DEMO-001.json")
             .exists());
     }
 
@@ -369,18 +362,14 @@ mod tests {
         assert_eq!(initialization_status.project_kind, "existing");
         assert!(!initialization_status.demo_data_created);
         assert_eq!(initialization_status.demo_issue_count, 0);
+        assert!(!dir.path().join(".agentflow/input").exists());
         assert!(!dir
             .path()
-            .join(".agentflow/input/specs/approved/dogfood-cutover-v1/spec.json")
+            .join(".agentflow/spec/issues/AF-DOGFOOD-001.json")
             .exists());
         assert!(!dir
             .path()
-            .join(".agentflow/input/issues/AF-DOGFOOD-001.json")
-            .exists());
-        assert!(!dir.path().join(".agentflow/input/issues").exists());
-        assert!(!dir
-            .path()
-            .join(".agentflow/input/issues/AF-DEMO-001.json")
+            .join(".agentflow/spec/issues/AF-DEMO-001.json")
             .exists());
     }
 

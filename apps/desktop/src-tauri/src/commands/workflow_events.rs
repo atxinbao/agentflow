@@ -1,22 +1,21 @@
 use agentflow_agent_bridge::{AgentBridge, AGENT_SESSION_CREATED};
-use agentflow_event_store::load_task_events;
-use agentflow_input::issue::DisplayStatus;
+use agentflow_event_store::{
+    append_task_dead_letter, append_task_event_once, load_pending_task_events, load_task_events,
+    mark_task_event_consumed, prepare_event_store, ContextPackFailedPayload,
+    ContextPackReadyPayload, ContextPackRequestedPayload, EventActor, IssueReadyPayload,
+    TaskEventDraft, CONSUMER_PANEL, EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED,
+    EVENT_TYPE_PANEL_CONTEXT_PACK_READY, EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED,
+    EVENT_TYPE_SPEC_ISSUE_READY,
+};
 use agentflow_panel::PanelStatus;
 use agentflow_task_loop::AGENT_LAUNCH_REQUESTED;
-use agentflow_workflow_events::{
-    append_dead_letter, append_event_once, load_pending_events, mark_event_consumed,
-    prepare_events_workspace, ContextPackFailedPayload, ContextPackReadyPayload,
-    ContextPackRequestedPayload, IssueReadyPayload, WorkflowEventDraft, CONSUMER_PANEL,
-    EVENT_TYPE_INPUT_ISSUE_READY, EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED,
-    EVENT_TYPE_PANEL_CONTEXT_PACK_READY, EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED,
-};
 use serde::Serialize;
 use std::path::Path;
 use tauri::{AppHandle, Emitter};
 
 const WORKFLOW_EVENT_DISPATCH_VERSION: &str = "workflow-event-dispatch.v1";
 pub(crate) const AGENTFLOW_WORKFLOW_EVENTS_DISPATCHED_EVENT: &str =
-    "agentflow-workflow-events-dispatched";
+    "agentflow-task-events-dispatched";
 
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,7 +76,7 @@ fn dispatch_workflow_events_inner(
         .as_ref()
         .canonicalize()
         .map_err(|error| format!("canonicalize {}: {error}", project_root.as_ref().display()))?;
-    prepare_events_workspace(&root).map_err(|error| error.to_string())?;
+    prepare_event_store(&root).map_err(|error| error.to_string())?;
 
     let mut summary = WorkflowEventDispatchSummary {
         version: WORKFLOW_EVENT_DISPATCH_VERSION.to_string(),
@@ -85,7 +84,7 @@ fn dispatch_workflow_events_inner(
     };
 
     let issue_status_index = agentflow_state::load_issue_status_index(&root).ok();
-    let pending = load_pending_events(&root, CONSUMER_PANEL, &[EVENT_TYPE_INPUT_ISSUE_READY])
+    let pending = load_pending_task_events(&root, CONSUMER_PANEL, &[EVENT_TYPE_SPEC_ISSUE_READY])
         .map_err(|error| error.to_string())?;
     summary.pending_panel_events = pending.len();
     if panel_ready_for_context_pack(&root) {
@@ -94,15 +93,15 @@ fn dispatch_workflow_events_inner(
                 Ok(payload) => payload,
                 Err(error) => {
                     let message = format!("parse issue ready payload: {error}");
-                    let _ = append_dead_letter(&root, CONSUMER_PANEL, &event, message.clone());
-                    let _ = mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id);
+                    let _ = append_task_dead_letter(&root, CONSUMER_PANEL, &event, message.clone());
+                    let _ = mark_task_event_consumed(&root, CONSUMER_PANEL, &event.event_id);
                     summary.errors.push(message);
                     summary.context_pack_failed += 1;
                     continue;
                 }
             };
             if !event_ready_for_panel(&payload, issue_status_index.as_ref()) {
-                mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
+                mark_task_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
                     .map_err(|error| error.to_string())?;
                 continue;
             }
@@ -147,7 +146,7 @@ fn dispatch_workflow_events_inner(
                         ready,
                     )
                     .map_err(|error| error.to_string())?;
-                    mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
+                    mark_task_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
                         .map_err(|error| error.to_string())?;
                     summary.context_pack_ready += 1;
                 }
@@ -170,8 +169,8 @@ fn dispatch_workflow_events_inner(
                         ),
                         failed,
                     );
-                    let _ = append_dead_letter(&root, CONSUMER_PANEL, &event, message.clone());
-                    mark_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
+                    let _ = append_task_dead_letter(&root, CONSUMER_PANEL, &event, message.clone());
+                    mark_task_event_consumed(&root, CONSUMER_PANEL, &event.event_id)
                         .map_err(|error| error.to_string())?;
                     summary.errors.push(message);
                     summary.context_pack_failed += 1;
@@ -184,7 +183,7 @@ fn dispatch_workflow_events_inner(
         summary.errors.push(error.to_string());
     }
 
-    let _ = prepare_events_workspace(&root);
+    let _ = prepare_event_store(&root);
     if summary.should_refresh_ui() {
         if let Some(app) = app {
             let payload = WorkflowEventsDispatchedEvent {
@@ -223,8 +222,8 @@ fn event_ready_for_panel(
         })
         .map(|entry| {
             matches!(
-                entry.display_status,
-                DisplayStatus::Backlog | DisplayStatus::Todo | DisplayStatus::Blocked
+                entry.display_status.as_str(),
+                "backlog" | "todo" | "blocked"
             )
         })
         .unwrap_or(true)
@@ -264,15 +263,24 @@ fn append_context_pack_event<T: Serialize>(
     dedupe_key: String,
     payload: T,
 ) -> anyhow::Result<()> {
-    append_event_once(
+    append_task_event_once(
         root,
-        WorkflowEventDraft {
+        TaskEventDraft {
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue_id.to_string(),
+            project_id: None,
+            issue_id: Some(issue_id.to_string()),
             event_type: event_type.to_string(),
-            source: source.to_string(),
-            subject_id: issue_id.to_string(),
-            subject_path,
-            dedupe_key,
+            actor: EventActor {
+                role: source.to_string(),
+                kind: "system".to_string(),
+            },
+            state: None,
+            correlation_id: Some(format!("corr-{issue_id}")),
+            causation_id: None,
             payload: serde_json::to_value(payload)?,
+            artifact_refs: subject_path.into_iter().collect(),
+            idempotency_key: Some(dedupe_key),
         },
     )?;
     Ok(())
@@ -335,52 +343,25 @@ fn pending_agent_launch_count(root: &Path) -> anyhow::Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentflow_input::{
-        issue::{
-            AgentRole, InputIssue, InputIssueKind, InputIssueModel, InputIssueStatus,
-            InputPriority, InputRiskLevel, InputSystemRecord, IssueCategory,
-        },
-        project::{InputProject, InputProjectStatus},
-        spec_gate::{InputIssueGenerationMode, InputSpecApproval},
-    };
-    use agentflow_panel::PanelPrepareMode;
+    use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
     use agentflow_state::{IssueStatusIndex, IssueStatusIndexEntry, WorkflowAuditStatus};
+    use serde_json::json;
     use std::fs;
     use tempfile::tempdir;
 
     #[test]
     fn issue_ready_filter_uses_state_display_status() {
-        let mut issue = InputIssue {
-            issue_id: "iss-done".to_string(),
-            issue_category: IssueCategory::Spec,
-            required_agent_role: AgentRole::BuildAgent,
-            status: InputIssueStatus::Todo,
-            display_status: DisplayStatus::Todo,
-            context_pack_path: ".agentflow/panel/context-packs/iss-done.json".to_string(),
-            ..InputIssue::default()
-        };
-        issue.normalize_execution_metadata();
-        let payload = IssueReadyPayload {
-            issue_id: issue.issue_id.clone(),
-            issue_path: issue.issue_path.clone(),
-            issue_category: issue.issue_category.as_str().to_string(),
-            required_agent_role: issue.required_agent_role.as_str().to_string(),
-            display_status: issue.display_status.as_str().to_string(),
-            title: issue.title.clone(),
-            objective: issue.summary.clone(),
-            acceptance_criteria: issue.acceptance_criteria.clone(),
-            context_pack_path: Some(issue.context_pack_path.clone()),
-        };
+        let payload = issue_ready_payload("iss-done", "todo");
         assert!(event_ready_for_panel(&payload, None));
 
         let issue_status_index = IssueStatusIndex {
             version: "state-issue-status-index.v1".to_string(),
             updated_at: 1,
             issues: vec![IssueStatusIndexEntry {
-                issue_id: issue.issue_id.clone(),
-                display_status: DisplayStatus::Done,
+                issue_id: payload.issue_id.clone(),
+                display_status: "done".to_string(),
                 priority: "p2".to_string(),
-                execution_risk: "low".to_string(),
+                execution_risk: "normal".to_string(),
                 latest_run_id: Some("run-001".to_string()),
                 execute_status: Some("completed".to_string()),
                 evidence_status: "ready".to_string(),
@@ -394,10 +375,10 @@ mod tests {
             version: "state-issue-status-index.v1".to_string(),
             updated_at: 1,
             issues: vec![IssueStatusIndexEntry {
-                issue_id: issue.issue_id.clone(),
-                display_status: DisplayStatus::Blocked,
+                issue_id: payload.issue_id.clone(),
+                display_status: "blocked".to_string(),
                 priority: "p2".to_string(),
-                execution_risk: "low".to_string(),
+                execution_risk: "normal".to_string(),
                 latest_run_id: None,
                 execute_status: None,
                 evidence_status: "missing".to_string(),
@@ -412,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_generates_context_pack_for_ready_spec_issue() {
+    fn dispatch_generates_context_pack_for_ready_spec_issue_event() {
         let dir = tempdir().unwrap();
         fs::create_dir_all(dir.path().join("apps/desktop/src")).unwrap();
         fs::write(
@@ -420,40 +401,32 @@ mod tests {
             "export function App() { return null; }\n",
         )
         .unwrap();
-
-        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
-        let mut issue = InputIssue {
-            issue_id: "iss-context".to_string(),
-            issue_category: IssueCategory::Spec,
-            required_agent_role: AgentRole::BuildAgent,
-            source_spec_id: "spec-context".to_string(),
-            title: "准备上下文包".to_string(),
-            summary: "为任务生成 Panel Context Pack。".to_string(),
-            kind: InputIssueKind::Validation,
-            priority: InputPriority::P1,
-            status: InputIssueStatus::Todo,
-            display_status: DisplayStatus::Todo,
-            execution_risk: InputRiskLevel::Medium,
-            scope: vec!["apps/desktop/src/**".to_string()],
-            acceptance_criteria: vec!["context pack exists".to_string()],
-            validation_hints: vec!["npm --prefix apps/desktop run build".to_string()],
-            system: InputSystemRecord {
-                created_by: "test".to_string(),
-                created_at: 1,
-                updated_at: 1,
-                path: ".agentflow/input/issues/iss-context.json".to_string(),
-                revision: 1,
-            },
-            ..InputIssue::default()
-        };
-        issue.normalize_execution_metadata();
-        fs::write(
-            dir.path().join(".agentflow/input/issues/iss-context.json"),
-            serde_json::to_string_pretty(&issue).unwrap(),
+        agentflow_panel::prepare_project_panel(
+            dir.path(),
+            agentflow_panel::PanelPrepareMode::Blocking,
         )
         .unwrap();
-        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
-        agentflow_panel::prepare_project_panel(dir.path(), PanelPrepareMode::Blocking).unwrap();
+        append_task_event_once(
+            dir.path(),
+            TaskEventDraft {
+                aggregate_type: "issue".to_string(),
+                aggregate_id: "iss-context".to_string(),
+                project_id: None,
+                issue_id: Some("iss-context".to_string()),
+                event_type: EVENT_TYPE_SPEC_ISSUE_READY.to_string(),
+                actor: EventActor {
+                    role: "spec".to_string(),
+                    kind: "system".to_string(),
+                },
+                state: None,
+                correlation_id: Some("corr-iss-context".to_string()),
+                causation_id: None,
+                payload: serde_json::to_value(issue_ready_payload("iss-context", "todo")).unwrap(),
+                artifact_refs: vec![".agentflow/spec/issues/iss-context.json".to_string()],
+                idempotency_key: Some("issue-ready:iss-context".to_string()),
+            },
+        )
+        .unwrap();
 
         let summary = dispatch_workflow_events_inner(dir.path(), None).unwrap();
 
@@ -462,54 +435,18 @@ mod tests {
             .path()
             .join(".agentflow/panel/context-packs/iss-context.json")
             .is_file());
-        let events = agentflow_workflow_events::load_events(dir.path()).unwrap();
+        let events = agentflow_event_store::load_task_events(dir.path()).unwrap();
         assert!(events
             .iter()
-            .any(|event| event.event_type == EVENT_TYPE_INPUT_ISSUE_READY));
+            .any(|event| event.event_type == EVENT_TYPE_SPEC_ISSUE_READY));
         assert!(events
             .iter()
             .any(|event| event.event_type == EVENT_TYPE_PANEL_CONTEXT_PACK_READY));
     }
 
     #[test]
-    fn dispatch_does_not_run_project_loop_for_backlog_project_issue_after_context_pack_ready() {
-        let dir = tempdir().unwrap();
-        fs::create_dir_all(dir.path().join("apps/desktop/src")).unwrap();
-        fs::write(
-            dir.path().join("apps/desktop/src/App.tsx"),
-            "export function App() { return null; }\n",
-        )
-        .unwrap();
-
-        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
-        write_approved_spec(dir.path());
-        write_project_issue(dir.path());
-        agentflow_input::prepare_input_workspace(dir.path()).unwrap();
-        agentflow_panel::prepare_project_panel(dir.path(), PanelPrepareMode::Blocking).unwrap();
-
-        let summary = dispatch_workflow_events_inner(dir.path(), None).unwrap();
-
-        assert_eq!(summary.context_pack_ready, 1);
-        let issue = agentflow_input::load_input_issue(dir.path(), "AF-EVENT-001").unwrap();
-        assert_eq!(issue.status, InputIssueStatus::Backlog);
-        assert!(dir
-            .path()
-            .join(".agentflow/panel/context-packs/AF-EVENT-001.json")
-            .is_file());
-        assert!(!dir
-            .path()
-            .join(".agentflow/state/loops/projects/proj-event.json")
-            .is_file());
-        assert!(!dir
-            .path()
-            .join(".agentflow/state/loops/issues/AF-EVENT-001.json")
-            .is_file());
-    }
-
-    #[test]
     fn pending_agent_launch_count_ignores_already_claimed_runs() {
         use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
-        use serde_json::json;
 
         let dir = tempdir().unwrap();
         for run_id in ["run-001", "run-002"] {
@@ -560,79 +497,17 @@ mod tests {
         assert_eq!(pending_agent_launch_count(dir.path()).unwrap(), 1);
     }
 
-    fn write_approved_spec(root: &std::path::Path) {
-        let spec_dir = root.join(".agentflow/input/specs/approved/spec-event");
-        fs::create_dir_all(&spec_dir).unwrap();
-        fs::write(spec_dir.join("product.md"), "# Product\n").unwrap();
-        fs::write(spec_dir.join("tech.md"), "# Tech\n").unwrap();
-        fs::write(spec_dir.join("spec.json"), "{}\n").unwrap();
-        fs::write(
-            spec_dir.join("approval.json"),
-            serde_json::to_string_pretty(&InputSpecApproval {
-                spec_id: "spec-event".to_string(),
-                issue_generation_mode: InputIssueGenerationMode::Project,
-                ..InputSpecApproval::default()
-            })
-            .unwrap(),
-        )
-        .unwrap();
-    }
-
-    fn write_project_issue(root: &std::path::Path) {
-        let project = InputProject {
-            project_id: "proj-event".to_string(),
-            source_spec_id: "spec-event".to_string(),
-            title: "事件驱动 Project Loop".to_string(),
-            summary: "通过事件生成上下文包后推进任务。".to_string(),
-            objective: "通过事件生成上下文包后推进任务。".to_string(),
-            issue_ids: vec!["AF-EVENT-001".to_string()],
-            status: InputProjectStatus::Planned,
-            system: InputSystemRecord {
-                created_by: "test".to_string(),
-                created_at: 1,
-                updated_at: 1,
-                path: ".agentflow/input/projects/proj-event.json".to_string(),
-                revision: 1,
-            },
-            ..InputProject::default()
-        };
-        let mut issue = InputIssue {
-            issue_id: "AF-EVENT-001".to_string(),
-            issue_model: InputIssueModel::Project,
-            issue_category: IssueCategory::Spec,
-            required_agent_role: AgentRole::BuildAgent,
-            source_spec_id: "spec-event".to_string(),
-            project_id: Some("proj-event".to_string()),
-            title: "事件驱动任务".to_string(),
-            summary: "验证 backlog 任务可以由事件链路推进到 todo。".to_string(),
-            kind: InputIssueKind::Validation,
-            priority: InputPriority::P2,
-            status: InputIssueStatus::Backlog,
-            display_status: DisplayStatus::Backlog,
-            execution_risk: InputRiskLevel::Low,
-            scope: vec!["apps/desktop/src/**".to_string()],
+    fn issue_ready_payload(issue_id: &str, display_status: &str) -> IssueReadyPayload {
+        IssueReadyPayload {
+            issue_id: issue_id.to_string(),
+            issue_path: format!(".agentflow/spec/issues/{issue_id}.json"),
+            issue_category: "spec".to_string(),
+            required_agent_role: "build-agent".to_string(),
+            display_status: display_status.to_string(),
+            title: "准备上下文包".to_string(),
+            objective: "为任务生成 Panel Context Pack。".to_string(),
             acceptance_criteria: vec!["context pack exists".to_string()],
-            validation_hints: vec!["npm --prefix apps/desktop run build".to_string()],
-            system: InputSystemRecord {
-                created_by: "test".to_string(),
-                created_at: 1,
-                updated_at: 1,
-                path: ".agentflow/input/issues/AF-EVENT-001.json".to_string(),
-                revision: 1,
-            },
-            ..InputIssue::default()
-        };
-        issue.normalize_execution_metadata();
-
-        fs::write(
-            root.join(".agentflow/input/projects/proj-event.json"),
-            serde_json::to_string_pretty(&project).unwrap(),
-        )
-        .unwrap();
-        fs::write(
-            root.join(".agentflow/input/issues/AF-EVENT-001.json"),
-            serde_json::to_string_pretty(&issue).unwrap(),
-        )
-        .unwrap();
+            context_pack_path: Some(format!(".agentflow/panel/context-packs/{issue_id}.json")),
+        }
     }
 }

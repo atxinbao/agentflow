@@ -12,14 +12,12 @@ agentflow-agent-bridge = { path = "../../../crates/agent-bridge" }
 agentflow-agent-manual = { path = "../../../crates/agent-manual" }
 agentflow-event-store = { path = "../../../crates/event-store" }
 agentflow-panel = { path = "../../../crates/panel" }
-agentflow-input = { path = "../../../crates/input" }
 agentflow-mcp = { path = "../../../crates/mcp" }
 agentflow-audit = { path = "../../../crates/audit" }
 agentflow-projection = { path = "../../../crates/projection" }
 agentflow-spec = { path = "../../../crates/spec" }
 agentflow-state = { path = "../../../crates/state" }
 agentflow-task-loop = { path = "../../../crates/task-loop" }
-agentflow-workflow-events = { path = "../../../crates/workflow-events" }
 anyhow.workspace = true
 base64 = "0.22"
 notify = "8"

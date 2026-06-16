@@ -255,7 +255,7 @@ type ProjectLoopTickedEvent = {
 };
 
 const AGENTFLOW_WORKSPACE_CHANGED_EVENT = "agentflow-workspace-changed";
-const AGENTFLOW_WORKFLOW_EVENTS_DISPATCHED_EVENT = "agentflow-workflow-events-dispatched";
+const AGENTFLOW_WORKFLOW_EVENTS_DISPATCHED_EVENT = "agentflow-task-events-dispatched";
 const AGENTFLOW_PROJECT_LOOP_TICKED_EVENT = "agentflow-project-loop-ticked";
 const AGENTFLOW_WATCHER_REFRESH_DELAY_MS = 500;
 const AGENTFLOW_WATCHER_REFRESH_COOLDOWN_MS = 1200;

@@ -6,11 +6,11 @@ edition = "2021"
 [dependencies]
 agentflow-agent-manual = { path = "../agent-manual" }
 agentflow-audit = { path = "../audit" }
-agentflow-execute = { path = "../execute" }
-agentflow-input = { path = "../input" }
+agentflow-event-store = { path = "../event-store" }
 agentflow-panel = { path = "../panel" }
 agentflow-projection = { path = "../projection" }
 agentflow-spec = { path = "../spec" }
+agentflow-task-artifacts = { path = "../task-artifacts" }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

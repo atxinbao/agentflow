@@ -1,9 +1,11 @@
 use crate::model::{
-    EventActor, ReplayFilter, TaskEvent, TaskEventDraft, TaskEventManifest, TaskEventSummary,
-    TASK_EVENT_MANIFEST_VERSION, TASK_EVENT_STREAM_PATH, TASK_EVENT_VERSION,
+    ReplayFilter, TaskEvent, TaskEventConsumerState, TaskEventDeadLetter, TaskEventDraft,
+    TaskEventManifest, TaskEventSummary, TASK_EVENT_CONSUMER_VERSION,
+    TASK_EVENT_DEAD_LETTER_VERSION, TASK_EVENT_MANIFEST_VERSION, TASK_EVENT_STREAM_PATH,
+    TASK_EVENT_VERSION,
 };
 use anyhow::{Context, Result};
-use serde_json::{json, Value};
+use std::collections::BTreeSet;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -11,11 +13,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-const LEGACY_WORKFLOW_STREAM_PATH: &str = ".agentflow/events/stream.jsonl";
-
 pub fn prepare_event_store(project_root: impl AsRef<Path>) -> Result<TaskEventManifest> {
     let root = canonical_project_root(project_root)?;
     ensure_directory(&root.join(".agentflow/events"))?;
+    ensure_directory(&root.join(".agentflow/events/consumers"))?;
+    ensure_directory(&root.join(".agentflow/events/dead-letter"))?;
     let stream_path = root.join(TASK_EVENT_STREAM_PATH);
     if !stream_path.exists() {
         fs::write(&stream_path, "")?;
@@ -27,10 +29,8 @@ pub fn prepare_event_store(project_root: impl AsRef<Path>) -> Result<TaskEventMa
         stream_path: TASK_EVENT_STREAM_PATH.to_string(),
         summary: TaskEventSummary {
             events: events.len(),
-            imported_legacy_events: events
-                .iter()
-                .filter(|event| event.payload.get("legacyWorkflowEventId").is_some())
-                .count(),
+            consumers: count_json_files(&root.join(".agentflow/events/consumers"))?,
+            dead_letters: count_json_files(&root.join(".agentflow/events/dead-letter"))?,
         },
     };
     write_json(
@@ -129,71 +129,89 @@ pub fn replay_task_events(
     Ok(replayed)
 }
 
-pub fn import_legacy_workflow_events(project_root: impl AsRef<Path>) -> Result<Vec<TaskEvent>> {
+pub fn load_pending_task_events(
+    project_root: impl AsRef<Path>,
+    consumer_id: &str,
+    event_types: &[&str],
+) -> Result<Vec<TaskEvent>> {
     let root = canonical_project_root(project_root)?;
     prepare_event_store(&root)?;
-    let legacy_path = root.join(LEGACY_WORKFLOW_STREAM_PATH);
-    if !legacy_path.is_file() {
-        return Ok(Vec::new());
+    let consumer = load_consumer_state(&root, consumer_id)?;
+    let consumed = consumer
+        .consumed_event_ids
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let allowed_types = event_types.iter().copied().collect::<BTreeSet<_>>();
+    Ok(load_task_events(&root)?
+        .into_iter()
+        .filter(|event| allowed_types.contains(event.event_type.as_str()))
+        .filter(|event| !consumed.contains(&event.event_id))
+        .collect())
+}
+
+pub fn mark_task_event_consumed(
+    project_root: impl AsRef<Path>,
+    consumer_id: &str,
+    event_id: &str,
+) -> Result<TaskEventConsumerState> {
+    let root = canonical_project_root(project_root)?;
+    prepare_event_store(&root)?;
+    let mut consumer = load_consumer_state(&root, consumer_id)?;
+    if !consumer
+        .consumed_event_ids
+        .iter()
+        .any(|consumed_id| consumed_id == event_id)
+    {
+        consumer.consumed_event_ids.push(event_id.to_string());
     }
-    let existing = load_task_events(&root)?;
-    let raw = fs::read_to_string(&legacy_path)
-        .with_context(|| format!("read {}", legacy_path.display()))?;
-    let mut imported = Vec::new();
-    for (index, line) in raw.lines().enumerate() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let legacy: Value = serde_json::from_str(line)
-            .with_context(|| format!("parse legacy workflow event line {}", index + 1))?;
-        let legacy_event_id = legacy
-            .get("eventId")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown");
-        let idempotency_key = format!("legacy-workflow-event:{legacy_event_id}");
-        if existing
-            .iter()
-            .chain(imported.iter())
-            .any(|event| event.idempotency_key.as_deref() == Some(idempotency_key.as_str()))
-        {
-            continue;
-        }
-        let subject_id = legacy
-            .get("subjectId")
-            .and_then(Value::as_str)
-            .unwrap_or(legacy_event_id);
-        let event_type = legacy
-            .get("eventType")
-            .and_then(Value::as_str)
-            .unwrap_or("legacy.workflow-event.imported");
-        let source = legacy
-            .get("source")
-            .and_then(Value::as_str)
-            .unwrap_or("workflow-events");
-        let draft = TaskEventDraft {
-            aggregate_type: "legacy-workflow-event".to_string(),
-            aggregate_id: subject_id.to_string(),
-            project_id: None,
-            issue_id: Some(subject_id.to_string()),
-            event_type: event_type.to_string(),
-            actor: EventActor {
-                role: source.to_string(),
-                kind: "legacy".to_string(),
-            },
-            state: None,
-            correlation_id: Some(format!("corr-{subject_id}")),
-            causation_id: None,
-            payload: json!({
-                "legacyWorkflowEventId": legacy_event_id,
-                "legacyWorkflowEvent": legacy,
-            }),
-            artifact_refs: Vec::new(),
-            idempotency_key: Some(idempotency_key),
-        };
-        imported.push(append_task_event_once(&root, draft)?);
-    }
+    consumer.updated_at = unix_timestamp_seconds();
+    write_json(&consumer_path(&root, consumer_id), &consumer)?;
+    Ok(consumer)
+}
+
+pub fn append_task_dead_letter(
+    project_root: impl AsRef<Path>,
+    consumer_id: &str,
+    event: &TaskEvent,
+    error: impl Into<String>,
+) -> Result<TaskEventDeadLetter> {
+    let root = canonical_project_root(project_root)?;
+    prepare_event_store(&root)?;
+    let dead_letter = TaskEventDeadLetter {
+        version: TASK_EVENT_DEAD_LETTER_VERSION.to_string(),
+        consumer_id: consumer_id.to_string(),
+        event_id: event.event_id.clone(),
+        event_type: event.event_type.clone(),
+        subject_id: event.aggregate_id.clone(),
+        error: error.into(),
+        created_at: unix_timestamp_seconds(),
+    };
+    write_json(
+        &root
+            .join(".agentflow/events/dead-letter")
+            .join(format!("{consumer_id}-{}.json", event.event_id)),
+        &dead_letter,
+    )?;
     let _ = prepare_event_store(&root);
-    Ok(imported)
+    Ok(dead_letter)
+}
+
+fn load_consumer_state(root: &Path, consumer_id: &str) -> Result<TaskEventConsumerState> {
+    let path = consumer_path(root, consumer_id);
+    if !path.is_file() {
+        return Ok(TaskEventConsumerState {
+            version: TASK_EVENT_CONSUMER_VERSION.to_string(),
+            consumer_id: consumer_id.to_string(),
+            consumed_event_ids: Vec::new(),
+            updated_at: unix_timestamp_seconds(),
+        });
+    }
+    read_json(&path)
+}
+
+fn consumer_path(root: &Path, consumer_id: &str) -> PathBuf {
+    root.join(".agentflow/events/consumers")
+        .join(format!("{consumer_id}.json"))
 }
 
 fn materialize_event(root: &Path, draft: TaskEventDraft) -> Result<TaskEvent> {
@@ -277,6 +295,21 @@ fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
         .with_context(|| format!("write {}", path.display()))
 }
 
+fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
+    let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    serde_json::from_str(&raw).with_context(|| format!("parse {}", path.display()))
+}
+
+fn count_json_files(path: &Path) -> Result<usize> {
+    if !path.exists() {
+        return Ok(0);
+    }
+    Ok(fs::read_dir(path)?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().extension().and_then(|value| value.to_str()) == Some("json"))
+        .count())
+}
+
 fn unix_timestamp_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -287,7 +320,8 @@ fn unix_timestamp_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::EventStateTransition;
+    use crate::model::{EventActor, EventStateTransition, EVENT_TYPE_SPEC_ISSUE_READY};
+    use serde_json::json;
     use tempfile::tempdir;
 
     fn issue_scheduled_draft(issue_id: &str) -> TaskEventDraft {
@@ -359,22 +393,39 @@ mod tests {
     }
 
     #[test]
-    fn imports_legacy_workflow_event_stream() {
+    fn consumer_reads_pending_events_and_marks_consumed() {
         let dir = tempdir().unwrap();
-        fs::create_dir_all(dir.path().join(".agentflow/events")).unwrap();
-        fs::write(
-            dir.path().join(LEGACY_WORKFLOW_STREAM_PATH),
-            r#"{"eventId":"evt-old-0001","eventType":"input.issue.ready","source":"input","subjectId":"AF-TASK-001","payload":{"title":"Old"}}"#,
-        )
-        .unwrap();
+        let mut draft = issue_scheduled_draft("AF-TASK-001");
+        draft.event_type = EVENT_TYPE_SPEC_ISSUE_READY.to_string();
+        let event = append_task_event_once(dir.path(), draft).unwrap();
 
-        let imported = import_legacy_workflow_events(dir.path()).unwrap();
-        let second_import = import_legacy_workflow_events(dir.path()).unwrap();
+        let pending =
+            load_pending_task_events(dir.path(), "panel", &[EVENT_TYPE_SPEC_ISSUE_READY]).unwrap();
+        assert_eq!(pending.len(), 1);
 
-        assert_eq!(imported.len(), 1);
-        assert!(second_import.is_empty());
-        assert_eq!(imported[0].aggregate_type, "legacy-workflow-event");
-        assert_eq!(imported[0].issue_id.as_deref(), Some("AF-TASK-001"));
+        mark_task_event_consumed(dir.path(), "panel", &event.event_id).unwrap();
+        assert!(
+            load_pending_task_events(dir.path(), "panel", &[EVENT_TYPE_SPEC_ISSUE_READY])
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn dead_letter_is_recorded() {
+        let dir = tempdir().unwrap();
+        let event =
+            append_task_event_once(dir.path(), issue_scheduled_draft("AF-TASK-001")).unwrap();
+
+        append_task_dead_letter(dir.path(), "panel", &event, "failed").unwrap();
+
+        assert_eq!(
+            prepare_event_store(dir.path())
+                .unwrap()
+                .summary
+                .dead_letters,
+            1
+        );
     }
 
     #[test]

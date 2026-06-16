@@ -49,7 +49,6 @@ pub struct AgentEnvironmentStatus {
     pub layout: WorkspaceLayoutStatus,
     pub locale: AgentLocaleState,
     pub style: AgentStyleState,
-    pub legacy_agent_entry: LegacyAgentEntryStatus,
     pub shadow_guard: RootAgentEntryShadowGuardStatus,
 }
 
@@ -62,14 +61,6 @@ pub struct AgentMdStatus {
     pub hash: Option<String>,
     pub backed_up: bool,
     pub tracked_by_git: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyAgentEntryStatus {
-    pub exists: bool,
-    pub path: String,
-    pub managed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,7 +104,6 @@ pub struct WorkspaceManifestStatus {
 pub enum WorkspaceOwnershipState {
     None,
     ManagedCurrent,
-    ManagedLegacy,
     Foreign,
     Corrupted,
     Blocked,
@@ -288,7 +278,6 @@ pub struct WorkspaceManifestOwnership {
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceManifestRootEntries {
     pub canonical_agent_entry: String,
-    pub legacy_agent_entry: String,
     pub shadow_checked: Vec<String>,
 }
 

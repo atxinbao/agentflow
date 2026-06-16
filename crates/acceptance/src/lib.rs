@@ -49,7 +49,7 @@ mod tests {
             report.request.reason,
             "Human requested end-to-end acceptance audit."
         );
-        assert_eq!(report.request.scope.refs.len(), 5);
+        assert_eq!(report.request.scope.refs.len(), 4);
         assert!(!report.report_markdown.trim().is_empty());
         assert!(matches!(
             report.audit.status,
@@ -89,25 +89,26 @@ mod tests {
     }
 
     #[test]
-    fn high_risk_issue_creates_blocker() -> anyhow::Result<()> {
+    fn dependency_issue_creates_blocker() -> anyhow::Result<()> {
         let fixture = create_high_risk_blocker_fixture()?;
         let blockers = agentflow_state::load_blockers(fixture.root())?;
 
         assert!(blockers
             .blockers
             .iter()
-            .any(|blocker| blocker.reason.contains("High risk issue requires")));
+            .any(|blocker| blocker.reason.contains("前置依赖")));
         fixture.assert_user_files_unchanged()?;
         Ok(())
     }
 
     #[test]
-    fn stale_lease_is_reported() -> anyhow::Result<()> {
+    fn retired_execute_lease_layer_keeps_locks_empty() -> anyhow::Result<()> {
         let fixture = create_stale_lease_fixture()?;
         let locks = agentflow_state::load_state_locks(fixture.root())?;
 
-        assert_eq!(locks.stale.len(), 1);
-        assert_eq!(locks.stale[0].run_id.as_deref(), Some("run-stale"));
+        assert!(locks.active.is_empty());
+        assert!(locks.stale.is_empty());
+        assert!(locks.cleanup_candidates.is_empty());
         fixture.assert_user_files_unchanged()?;
         Ok(())
     }

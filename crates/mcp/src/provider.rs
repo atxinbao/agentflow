@@ -173,7 +173,7 @@ mod tests {
             "run-001",
             "build-agent",
             dir.path().display().to_string(),
-            ".agentflow/execute/runs/run-001/launcher/build-agent-request.json",
+            ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json",
         );
         let session = provider.create_session(dir.path(), &request).unwrap();
         assert_eq!(session.status, McpSessionStatus::Queued);

@@ -54,21 +54,14 @@ const LAYOUT_DIRECTORIES: &[&str] = &[
     ".agentflow/panel/search",
     ".agentflow/panel/snapshots",
     ".agentflow/panel/index",
-    ".agentflow/output",
     ".agentflow/audit",
-    ".agentflow/output/backup",
-    ".agentflow/output/backup/agent-md",
+    ".agentflow/define/agent/backup",
+    ".agentflow/define/agent/backup/agent-md",
     ".agentflow/state",
     ".agentflow/state/health",
     ".agentflow/state/locks",
     ".agentflow/state/sessions",
     ".agentflow/state/indexes",
-];
-
-const LEGACY_DEFINE_DIRECTORIES: &[&str] = &[
-    ".agentflow/define/goals",
-    ".agentflow/define/milestones",
-    ".agentflow/define/issues",
 ];
 
 const LAYOUT_FILES: [(&str, &str); 5] = [
@@ -166,8 +159,6 @@ pub(crate) fn prepare_workspace_layout(
         &mut reused_paths,
         repairs,
     )?;
-    cleanup_legacy_define_directories(root, repairs)?;
-
     repairs.extend(
         created_paths
             .iter()
@@ -181,24 +172,6 @@ pub(crate) fn prepare_workspace_layout(
         reused_paths,
         missing_paths: Vec::new(),
     })
-}
-
-fn cleanup_legacy_define_directories(root: &Path, repairs: &mut Vec<String>) -> Result<()> {
-    for relative_path in LEGACY_DEFINE_DIRECTORIES {
-        let path = root.join(relative_path);
-        if !path.exists() {
-            continue;
-        }
-        if !path.is_dir() {
-            repairs.push(format!(
-                "Retained legacy define path {relative_path} because it is not a directory"
-            ));
-            continue;
-        }
-        fs::remove_dir_all(&path).with_context(|| format!("remove legacy {relative_path}"))?;
-        repairs.push(format!("Removed legacy define directory {relative_path}"));
-    }
-    Ok(())
 }
 
 pub(crate) fn validate_workspace_layout(
@@ -304,7 +277,6 @@ pub(crate) fn expected_workspace_manifest(
         },
         root_entries: WorkspaceManifestRootEntries {
             canonical_agent_entry: "AGENTS.md".to_string(),
-            legacy_agent_entry: "AGENT.MD".to_string(),
             shadow_checked: SHADOW_CANDIDATES.into_iter().map(str::to_string).collect(),
         },
         locale: WorkspaceManifestLocale {
@@ -341,7 +313,6 @@ pub(crate) fn expected_workspace_manifest(
         ],
         paths: BTreeMap::from([
             ("agentEntry".to_string(), "AGENTS.md".to_string()),
-            ("legacyAgentEntry".to_string(), "AGENT.MD".to_string()),
             (
                 "defineAgent".to_string(),
                 ".agentflow/define/agent".to_string(),
@@ -661,7 +632,7 @@ Audit is the code review and risk review working manual for future Audit Agent e
 
 - Audit Agent is enabled for Release Audit V1.
 - Audit Agent completes existing `audit` issues and `human-via-agent` audit requests.
-- Audit checks SPEC alignment, boundary compliance, architecture impact, permission / path / data-write risk, test coverage, legacy reintroduction, unauthorized execution, unauthorized writes, model calls, and evidence completeness.
+- Audit checks SPEC alignment, boundary compliance, architecture impact, permission / path / data-write risk, test coverage, retired-path reintroduction, unauthorized execution, unauthorized writes, model calls, and evidence completeness.
 - Audit output belongs under `.agentflow/audit/`.
 - The same Release Delivery must not have duplicate audit requests.
 - Human conversation can ask an Agent for `human-via-agent` audit. The ordinary App UI must not create audits.

@@ -251,7 +251,7 @@ mod tests {
         WorkflowBlockedAction {
             action: "dependency-ready".to_string(),
             reason: "blocked".to_string(),
-            source_path: Some(".agentflow/input/issues/AF-002.json".to_string()),
+            source_path: Some(".agentflow/spec/issues/AF-002.json".to_string()),
         }
     }
 
