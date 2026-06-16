@@ -1,11 +1,11 @@
-## Agent Provider Bridge
+## MCP Provider Adapter
 
 创建日期：2026-06-13  
 执行者：Codex
 
 ## 结论
 
-`crates/mcp` 现在承担 AgentFlow 的外部 Agent Provider Bridge。
+`crates/mcp` 现在承担 AgentFlow 的外部 provider adapter。
 
 它不是任务编排层，也不是状态机本身。它只负责：
 
@@ -14,33 +14,41 @@
 - 统一 launch / session / poll / cancel / logs 的抽象；
 - 把 provider 侧会话状态投影回 AgentFlow 可读事实。
 
-`loop` 负责决定哪条任务该跑。  
-`execute` 负责 run、preflight、delivery、writeback。  
-`mcp` 负责“找谁跑、怎么接、怎么记外部会话”。
+`task-loop` 负责决定哪条任务该跑。
+`agent-dispatcher` 负责消费 launch event，并把任务启动请求派发给 provider adapter。
+`mcp` 负责“provider 怎么接、怎么启动、怎么轮询、怎么读取日志”。
 
-## 为什么不单独再起一个 agent-bridge crate
+## 为什么保留 agent-dispatcher
 
-当前仓库已经有 `crates/mcp`，而且 `033-agentflow-v0.2.0-project-loop-issue-loop-mvp-v1.md`
-已经把它定义成：
+`agent-dispatcher` 和 `mcp` 不承担同一层职责。
+
+`agent-dispatcher` 是 AgentFlow 内部事件消费层：
+
+- 只消费 `agent.launch.requested`；
+- 把 `task-loop` 生成的 launch payload 转成 `McpLaunchRequest`；
+- 调用 `mcp` provider 创建 session；
+- 写 `agent.session.*` 事件。
+
+`mcp` 是外部 provider 适配层：
 
 - GitHub
 - GitLab
 - Codex
 - Browser Preview
 
-等外部 provider 的统一适配层。
+等外部 provider 的统一抽象和存储。
 
-继续新建第二个 bridge crate，只会把边界拆散。
+两者分开后，`mcp` 不需要理解 Project Loop / Issue Loop，`agent-dispatcher` 也不需要知道每个 provider 的具体命令和日志格式。
 
-所以本轮选择：
+## 命名规则
 
-- 保留 crate 名称：`agentflow-mcp`
-- 明确业务角色：`Agent Provider Bridge`
-- 后续把外部 coding agent 也并入这一层
+- `crates/agent-dispatcher`：AgentFlow launch event dispatcher。
+- `crates/mcp`：provider adapter / session abstraction。
+- `McpProviderBridge`：`mcp` 内部 provider registry，不代表 AgentFlow 任务调度层。
 
 ## 模块边界
 
-### crates/loop
+### crates/task-loop
 
 负责：
 
@@ -56,23 +64,21 @@
 - 管理 provider session
 - 解释 provider 的日志格式
 
-### crates/execute
+### crates/agent-dispatcher
 
 负责：
 
-- create run
-- runtime preflight
-- lease
-- checkpoint
-- validation
-- evidence
-- release delivery
-- done writeback
+- 消费 `agent.launch.requested`
+- 领取尚未 claim 的 run
+- 调用 `mcp` provider 创建 session
+- 写 `agent.session.created` / `agent.session.running` 等事件
 
 不负责：
 
 - 选择 Codex / Claude / 其他 provider
-- 管理 provider 会话生命周期
+- provider 健康检查
+- provider 命令格式
+- issue 状态调度
 
 ### crates/mcp
 
@@ -176,11 +182,11 @@ Provider session 事实写在：
 
 这轮再补了一层生命周期收口：
 
-- provider bridge 创建会话成功后，正式 claim 当前 launch，并写 `build-agent.launch.claimed`；
-- session 轮询第一次观察到运行态时，写 `build-agent.session.running`；
-- `agentflow build-agent prepare-review` 写 `build-agent.session.review-ready`；
-- `agentflow build-agent write-merge-proof --merged` 写 `build-agent.merge.confirmed`；
-- `agentflow build-agent complete` 写 `build-agent.writeback.completed`。
+- `agent-dispatcher` 创建会话成功后，写 `agent.session.created`；
+- session 轮询第一次观察到运行态时，写 `agent.session.running`；
+- `agentflow build-agent prepare-review` 推进 issue 到 review；
+- `agentflow build-agent write-merge-proof --merged` 写合并证明；
+- `agentflow build-agent complete` 写 Done。
 
 这样 `.agentflow/events`、`launcher/worker-state.json`、`state/mcp/sessions/*.json` 和
 input issue / execute / output 的事实会同步收口到同一条链路：

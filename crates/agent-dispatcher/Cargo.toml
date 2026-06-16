@@ -1,5 +1,5 @@
 [package]
-name = "agentflow-agent-bridge"
+name = "agentflow-agent-dispatcher"
 edition.workspace = true
 license.workspace = true
 version.workspace = true

@@ -9,7 +9,7 @@ name = "agentflow"
 path = "src/main.rs"
 
 [dependencies]
-agentflow-agent-bridge = { path = "../agent-bridge" }
+agentflow-agent-dispatcher = { path = "../agent-dispatcher" }
 agentflow-event-store = { path = "../event-store" }
 agentflow-projection = { path = "../projection" }
 agentflow-release = { path = "../release" }

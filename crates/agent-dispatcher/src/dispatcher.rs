@@ -1,5 +1,5 @@
 use crate::model::{
-    AgentBridgeClaim, AGENT_SESSION_CREATED, AGENT_SESSION_DONE, AGENT_SESSION_FAILED,
+    AgentDispatcherClaim, AGENT_SESSION_CREATED, AGENT_SESSION_DONE, AGENT_SESSION_FAILED,
     AGENT_SESSION_IN_REVIEW, AGENT_SESSION_RUNNING,
 };
 use agentflow_event_store::{
@@ -14,11 +14,11 @@ use anyhow::{Context, Result};
 use serde_json::json;
 use std::{collections::BTreeSet, path::Path};
 
-pub struct AgentBridge {
+pub struct AgentDispatcher {
     providers: McpProviderBridge,
 }
 
-impl AgentBridge {
+impl AgentDispatcher {
     pub fn new(providers: McpProviderBridge) -> Self {
         Self { providers }
     }
@@ -30,7 +30,7 @@ impl AgentBridge {
     pub fn claim_next_launch(
         &self,
         project_root: impl AsRef<Path>,
-    ) -> Result<Option<AgentBridgeClaim>> {
+    ) -> Result<Option<AgentDispatcherClaim>> {
         let root = project_root.as_ref();
         let events = load_task_events(root)?;
         let claimed_runs = claimed_run_ids(&events);
@@ -56,7 +56,7 @@ impl AgentBridge {
         let created_event = append_session_event(root, &payload, &session, AGENT_SESSION_CREATED)?;
         append_status_event(root, &payload, &session)?;
 
-        Ok(Some(AgentBridgeClaim {
+        Ok(Some(AgentDispatcherClaim {
             issue_id: payload.issue_id,
             run_id: payload.run_id,
             provider: session.provider,
@@ -130,7 +130,7 @@ fn append_session_event(
             issue_id: Some(payload.issue_id.clone()),
             event_type: event_type.to_string(),
             actor: EventActor {
-                role: "agent-bridge".to_string(),
+                role: "agent-dispatcher".to_string(),
                 kind: "system".to_string(),
             },
             state: None,
@@ -213,41 +213,41 @@ mod tests {
     fn write_fixture(root: &Path) {
         let requirement = root.join("docs/requirements/034-test.md");
         fs::create_dir_all(requirement.parent().unwrap()).unwrap();
-        fs::write(&requirement, "# 测试需求\n\n用于 agent-bridge 测试。\n").unwrap();
+        fs::write(&requirement, "# 测试需求\n\n用于 agent-dispatcher 测试。\n").unwrap();
 
-        let mut issue = agentflow_spec::SpecIssueDraft::new("AF-BRIDGE-001");
-        issue.project_id = Some("project-bridge".to_string());
+        let mut issue = agentflow_spec::SpecIssueDraft::new("AF-DISPATCH-001");
+        issue.project_id = Some("project-dispatcher".to_string());
         let issue = agentflow_spec::issue_from_requirement(root, &requirement, issue).unwrap();
         agentflow_spec::write_spec_issue(root, &issue).unwrap();
 
-        let mut project = agentflow_spec::SpecProjectDraft::new("project-bridge");
-        project.issue_ids = vec!["AF-BRIDGE-001".to_string()];
+        let mut project = agentflow_spec::SpecProjectDraft::new("project-dispatcher");
+        project.issue_ids = vec!["AF-DISPATCH-001".to_string()];
         let project =
             agentflow_spec::project_from_requirement(root, &requirement, project).unwrap();
         agentflow_spec::write_spec_project(root, &project).unwrap();
     }
 
     #[test]
-    fn bridge_claims_launch_and_writes_session_event() {
+    fn dispatcher_claims_launch_and_writes_session_event() {
         let dir = tempdir().unwrap();
         write_fixture(dir.path());
-        let loop_driver = TaskLoop::new("project-bridge");
+        let loop_driver = TaskLoop::new("project-dispatcher");
         loop_driver
             .schedule_next_issue(dir.path())
             .unwrap()
             .unwrap();
         loop_driver
-            .request_agent_launch(dir.path(), "AF-BRIDGE-001", "fake")
+            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "fake")
             .unwrap();
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(FakeProvider));
 
-        let claim = AgentBridge::new(providers)
+        let claim = AgentDispatcher::new(providers)
             .claim_next_launch(dir.path())
             .unwrap()
             .unwrap();
 
-        assert_eq!(claim.issue_id, "AF-BRIDGE-001");
+        assert_eq!(claim.issue_id, "AF-DISPATCH-001");
         assert_eq!(claim.provider, "fake");
         assert_eq!(claim.session_id, "fake-run-001");
         let events = load_task_events(dir.path()).unwrap();
@@ -257,22 +257,22 @@ mod tests {
     }
 
     #[test]
-    fn bridge_does_not_claim_same_run_twice() {
+    fn dispatcher_does_not_claim_same_run_twice() {
         let dir = tempdir().unwrap();
         write_fixture(dir.path());
-        let loop_driver = TaskLoop::new("project-bridge");
+        let loop_driver = TaskLoop::new("project-dispatcher");
         loop_driver
             .schedule_next_issue(dir.path())
             .unwrap()
             .unwrap();
         loop_driver
-            .request_agent_launch(dir.path(), "AF-BRIDGE-001", "fake")
+            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "fake")
             .unwrap();
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(FakeProvider));
-        let bridge = AgentBridge::new(providers);
+        let dispatcher = AgentDispatcher::new(providers);
 
-        assert!(bridge.claim_next_launch(dir.path()).unwrap().is_some());
-        assert!(bridge.claim_next_launch(dir.path()).unwrap().is_none());
+        assert!(dispatcher.claim_next_launch(dir.path()).unwrap().is_some());
+        assert!(dispatcher.claim_next_launch(dir.path()).unwrap().is_none());
     }
 }

@@ -1,4 +1,4 @@
-//! MCP / provider bridge read commands.
+//! MCP / provider adapter read commands.
 //!
 //! Desktop keeps this boundary read-only. Session creation is driven by
 //! workflow-event consumers, not by direct human UI mutation.

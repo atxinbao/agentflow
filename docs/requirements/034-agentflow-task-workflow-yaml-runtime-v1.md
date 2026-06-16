@@ -185,7 +185,7 @@ crates/task-artifacts
   管理 .agentflow/tasks/<issue-id>/evidence/**。
   不生成 delivery 目录。
 
-crates/agent-bridge
+crates/agent-dispatcher
   Agent 会话编排层。
   消费 agent.launch.requested。
   创建 / 恢复 / 轮询外部 Agent session。
@@ -283,7 +283,7 @@ event-store
 workflow-runtime
   ↓
 task-loop
-agent-bridge
+agent-dispatcher
 projection
 task-artifacts
 mcp
@@ -871,7 +871,7 @@ Build Agent 只能在 `todo` 状态接管任务。
 
 ```text
 1. task-loop 发出 agent.launch.requested。
-2. agent-bridge 创建 provider session。
+2. agent-dispatcher 创建 provider session。
 3. workflow-runtime 写 issue.started。
 4. issue 进入 in_progress。
 5. Build Agent 执行实现和验证。
@@ -1109,12 +1109,12 @@ output
 4. 不生成 delivery 目录。
 ```
 
-### PR 8：task-loop / agent-bridge / mcp
+### PR 8：task-loop / agent-dispatcher / mcp
 
 ```text
 1. task-loop 按 project dependency 调度 issue。
 2. task-loop 发 agent.launch.requested。
-3. agent-bridge 拉起 provider session。
+3. agent-dispatcher 拉起 provider session。
 4. mcp 只负责 provider 调用。
 5. session 事件写回 task events。
 ```

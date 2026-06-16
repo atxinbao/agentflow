@@ -21,9 +21,9 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: TaskLoopCommand,
     },
-    AgentBridge {
+    AgentDispatcher {
         #[command(subcommand)]
-        command: AgentBridgeCommand,
+        command: AgentDispatcherCommand,
     },
     Projection {
         #[command(subcommand)]
@@ -89,7 +89,7 @@ pub(crate) enum TaskLoopCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum AgentBridgeCommand {
+pub(crate) enum AgentDispatcherCommand {
     ClaimNext,
 }
 

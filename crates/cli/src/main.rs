@@ -7,7 +7,7 @@ use active::{
     write_build_agent_merge_proof,
 };
 use args::{
-    AgentBridgeCommand, BuildAgentCommand, Cli, Command, ProjectionCommand, ReleaseCommand,
+    AgentDispatcherCommand, BuildAgentCommand, Cli, Command, ProjectionCommand, ReleaseCommand,
     TaskLoopCommand,
 };
 use clap::Parser;
@@ -151,12 +151,12 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         },
-        Command::AgentBridge { command } => match command {
-            AgentBridgeCommand::ClaimNext => {
-                let claim = agentflow_agent_bridge::AgentBridge::with_default_providers()
+        Command::AgentDispatcher { command } => match command {
+            AgentDispatcherCommand::ClaimNext => {
+                let claim = agentflow_agent_dispatcher::AgentDispatcher::with_default_providers()
                     .claim_next_launch(&cwd)?;
                 if let Some(claim) = claim {
-                    println!("agent bridge claim: created");
+                    println!("agent dispatcher claim: created");
                     println!("issue: {}", claim.issue_id);
                     println!("run: {}", claim.run_id);
                     println!("provider: {}", claim.provider);
@@ -164,7 +164,7 @@ fn main() -> anyhow::Result<()> {
                     println!("status: {}", claim.session_status);
                     println!("event: {}", claim.created_event_id);
                 } else {
-                    println!("agent bridge claim: none");
+                    println!("agent dispatcher claim: none");
                 }
             }
         },

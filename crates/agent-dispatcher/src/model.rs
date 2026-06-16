@@ -8,7 +8,7 @@ pub const AGENT_SESSION_FAILED: &str = "agent.session.failed";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AgentBridgeClaim {
+pub struct AgentDispatcherClaim {
     pub issue_id: String,
     pub run_id: String,
     pub provider: String,
