@@ -34,7 +34,7 @@ const CLI_FRESHNESS_PATHS: [&str; 11] = [
     "crates/state/src",
     "crates/task-artifacts/src",
     "crates/task-loop/src",
-    "crates/agent-bridge/src",
+    "crates/agent-dispatcher/src",
 ];
 
 #[derive(Debug, Clone)]
@@ -235,17 +235,17 @@ pub(crate) fn start_build_agent_issue(root: &Path, issue_id: &str) -> Result<Bui
 
 pub(crate) fn claim_next_build_agent_launch(root: &Path) -> Result<Option<BuildAgentLaunchClaim>> {
     assert_current_cli_is_fresh(root)?;
-    claim_next_build_agent_launch_with_bridge(
+    claim_next_build_agent_launch_with_dispatcher(
         root,
-        &agentflow_agent_bridge::AgentBridge::with_default_providers(),
+        &agentflow_agent_dispatcher::AgentDispatcher::with_default_providers(),
     )
 }
 
-fn claim_next_build_agent_launch_with_bridge(
+fn claim_next_build_agent_launch_with_dispatcher(
     root: &Path,
-    bridge: &agentflow_agent_bridge::AgentBridge,
+    dispatcher: &agentflow_agent_dispatcher::AgentDispatcher,
 ) -> Result<Option<BuildAgentLaunchClaim>> {
-    let Some(claim) = bridge.claim_next_launch(root)? else {
+    let Some(claim) = dispatcher.claim_next_launch(root)? else {
         return Ok(None);
     };
     let payload = load_agent_launch_payload(root, &claim.run_id)?;
@@ -672,7 +672,7 @@ fn binary_is_stale(binary_modified: SystemTime, newest_source_modified: SystemTi
 #[cfg(test)]
 mod tests {
     use super::{
-        binary_is_stale, claim_next_build_agent_launch_with_bridge,
+        binary_is_stale, claim_next_build_agent_launch_with_dispatcher,
         complete_build_agent_issue_from_request, is_local_target_binary,
         prepare_build_agent_review_from_request, rebuild_hint, start_build_agent_issue,
         write_build_agent_merge_proof,
@@ -769,7 +769,7 @@ mod tests {
         fs::create_dir_all(requirement.parent().unwrap()).unwrap();
         fs::write(
             &requirement,
-            "# Claim Test\n\n验证 CLI claim 走 AgentBridge。\n",
+            "# Claim Test\n\n验证 CLI claim 走 AgentDispatcher。\n",
         )
         .unwrap();
         let mut issue = agentflow_spec::SpecIssueDraft::new("AF-001");
@@ -792,9 +792,9 @@ mod tests {
             .unwrap();
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(FakeProvider));
-        let bridge = agentflow_agent_bridge::AgentBridge::new(providers);
+        let dispatcher = agentflow_agent_dispatcher::AgentDispatcher::new(providers);
 
-        let claim = claim_next_build_agent_launch_with_bridge(dir.path(), &bridge)
+        let claim = claim_next_build_agent_launch_with_dispatcher(dir.path(), &dispatcher)
             .unwrap()
             .expect("expected launch claim");
         assert_eq!(claim.issue_id, "AF-001");
@@ -810,9 +810,9 @@ mod tests {
         let events = agentflow_event_store::load_task_events(dir.path()).unwrap();
         assert!(events
             .iter()
-            .any(|event| event.event_type == agentflow_agent_bridge::AGENT_SESSION_CREATED));
+            .any(|event| event.event_type == agentflow_agent_dispatcher::AGENT_SESSION_CREATED));
         assert!(
-            claim_next_build_agent_launch_with_bridge(dir.path(), &bridge)
+            claim_next_build_agent_launch_with_dispatcher(dir.path(), &dispatcher)
                 .unwrap()
                 .is_none()
         );

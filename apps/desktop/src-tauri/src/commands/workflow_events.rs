@@ -1,4 +1,4 @@
-use agentflow_agent_bridge::{AgentBridge, AGENT_SESSION_CREATED};
+use agentflow_agent_dispatcher::{AgentDispatcher, AGENT_SESSION_CREATED};
 use agentflow_event_store::{
     append_task_dead_letter, append_task_event_once, load_pending_task_events, load_task_events,
     mark_task_event_consumed, prepare_event_store, ContextPackFailedPayload,
@@ -295,9 +295,9 @@ fn dispatch_build_agent_launch_events(
         return Ok(());
     }
 
-    let bridge = AgentBridge::with_default_providers();
+    let dispatcher = AgentDispatcher::with_default_providers();
     loop {
-        match bridge.claim_next_launch(root) {
+        match dispatcher.claim_next_launch(root) {
             Ok(Some(_claim)) => {
                 summary.build_agent_launch_sessions_created += 1;
             }

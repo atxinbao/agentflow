@@ -9,7 +9,7 @@ members = [
     "crates/workflow-runtime",
     "crates/task-artifacts",
     "crates/task-loop",
-    "crates/agent-bridge",
+    "crates/agent-dispatcher",
     "crates/projection",
     "crates/release",
     "crates/mcp",

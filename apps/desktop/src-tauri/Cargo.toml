@@ -8,7 +8,7 @@ version.workspace = true
 tauri-build = { version = "=2.4.0", features = [] }
 
 [dependencies]
-agentflow-agent-bridge = { path = "../../../crates/agent-bridge" }
+agentflow-agent-dispatcher = { path = "../../../crates/agent-dispatcher" }
 agentflow-agent-manual = { path = "../../../crates/agent-manual" }
 agentflow-event-store = { path = "../../../crates/event-store" }
 agentflow-panel = { path = "../../../crates/panel" }

@@ -127,7 +127,7 @@ Hook boundaries:
 - `hooks/useProjectFileTextRange.ts` owns large text range loading.
 - `hooks/projectFileRuntime.ts` owns browser-preview detection and readable error text.
 
-## MCP Provider Bridge
+## MCP Provider Adapter
 
 Scope:
 
@@ -159,7 +159,7 @@ Implemented backend modules:
 
 Notes:
 
-- `crates/mcp` is the Agent Provider Bridge for the current codebase.
+- `crates/mcp` is the provider adapter layer for the current codebase.
 - `task-loop` decides whether an issue can launch; `mcp` defines how a provider is probed and how a provider session is represented.
 - `mcp` reads task/session state from `projection` and appends provider lifecycle facts to `event-store`.
 - `mcp` no longer depends on the legacy `input`, `execute`, or `workflow-events` crates.
@@ -303,7 +303,7 @@ Scope:
 - read spec projects and issues;
 - sort issues by dependencies, priority, and issue number;
 - schedule the next eligible issue by appending task events;
-- emit launch requests for Agent Bridge.
+- emit launch requests for Agent Dispatcher.
 
 Non-goals:
 
@@ -325,13 +325,13 @@ Notes:
 - Project Loop is a scheduler, not an executor.
 - User-triggered project loop buttons should call this layer instead of the old `loop` crate.
 
-## Agent Bridge
+## Agent Dispatcher
 
 Scope:
 
 - consume `agent.launch.requested` events;
-- create, resume, cancel, and poll external agent sessions;
-- translate provider session changes into task events;
+- create external agent sessions through `mcp` provider adapters;
+- translate session creation and launch-time status into task events;
 - coordinate with `mcp` provider adapters.
 
 Non-goals:
@@ -343,11 +343,11 @@ Non-goals:
 
 Implemented backend modules:
 
-- `crates/agent-bridge/src/lib.rs`
+- `crates/agent-dispatcher/src/lib.rs`
 
 Notes:
 
-- Agent Bridge is the session orchestrator. It does not decide what task should run next.
+- Agent Dispatcher is the session orchestrator. It does not decide what task should run next.
 
 ## Projection
 

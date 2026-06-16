@@ -50,7 +50,7 @@ docs/requirements/
 - Agent Locale and Voice Style Policy V1 固定 AgentFlow managed manuals 为英文，记录 `agentLocale`，新增 `plain-work-style` 默认表达规则，并要求 Agent 新写代码注释跟随 `agentLocale`。
 - Project Panel canonical path 为 `.agentflow/panel/`；不再保留旧代码地图兼容路径。
 - Desktop human UI 不执行命令。
-- Build Agent 只能从当前 `.agentflow/spec/issues/<issue-id>.json` 启动，并通过 workflow runtime、task loop、agent bridge 和 task artifacts 完成 preflight、运行、验证、PR/MR、合并和 Done 写回。
+- Build Agent 只能从当前 `.agentflow/spec/issues/<issue-id>.json` 启动，并通过 workflow runtime、task loop、agent dispatcher 和 task artifacts 完成 preflight、运行、验证、PR/MR、合并和 Done 写回。
 - 未经 execute 流水线授权不写用户业务源码。
 - 不写旧 `.agentflow/issues`、`runs`、`evidence`、`reviews`、`updates`、`views` 路径。
 - 不调用模型。
@@ -83,7 +83,7 @@ cargo test -p agentflow-workflow-runtime
 cargo test -p agentflow-task-loop
 cargo test -p agentflow-task-artifacts
 cargo test -p agentflow-projection
-cargo test -p agentflow-agent-bridge
+cargo test -p agentflow-agent-dispatcher
 cargo test -p agentflow-mcp
 cargo test -p agentflow-state
 cargo test -p agentflow-workflow-acceptance

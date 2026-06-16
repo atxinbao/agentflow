@@ -9,7 +9,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
-name = "agentflow-agent-bridge"
+name = "agentflow-agent-dispatcher"
 version = "0.1.0"
 dependencies = [
  "agentflow-event-store",
@@ -49,7 +49,7 @@ dependencies = [
 name = "agentflow-cli"
 version = "0.1.0"
 dependencies = [
- "agentflow-agent-bridge",
+ "agentflow-agent-dispatcher",
  "agentflow-event-store",
  "agentflow-mcp",
  "agentflow-projection",
@@ -69,7 +69,7 @@ dependencies = [
 name = "agentflow-desktop"
 version = "0.1.0"
 dependencies = [
- "agentflow-agent-bridge",
+ "agentflow-agent-dispatcher",
  "agentflow-agent-manual",
  "agentflow-audit",
  "agentflow-event-store",
