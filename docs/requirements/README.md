@@ -1,7 +1,7 @@
 # Requirements
 
 创建日期：2026-06-01
-更新日期：2026-06-07
+更新日期：2026-06-18
 执行者：Codex
 
 ## 目的
@@ -70,6 +70,26 @@
 - [035-agentflow-output-release-retirement-v1.md](035-agentflow-output-release-retirement-v1.md) = output release retirement and public delivery boundary
 - [036-agentflow-bottom-module-retirement-v1.md](036-agentflow-bottom-module-retirement-v1.md) = bottom module retirement and legacy crate cleanup
 - [037-agentflow-task-center-build-loop-roadmap-v1.md](037-agentflow-task-center-build-loop-roadmap-v1.md) = task center, build loop, project loop, delivery and audit roadmap
+- [038-agentflow-project-operating-system-runtime-foundation-v1.md](038-agentflow-project-operating-system-runtime-foundation-v1.md) = project operating system runtime foundation baseline
+- [038-1-agentflow-project-operating-system-runtime-foundation-project-and-issues-v1.md](038-1-agentflow-project-operating-system-runtime-foundation-project-and-issues-v1.md) = project + issues preview split for runtime foundation
+- [039-055-agentflow-post-foundation-roadmap-v1.md](039-055-agentflow-post-foundation-roadmap-v1.md) = post-foundation roadmap covering 039-055 issues
+- [039-project-brain-runtime-entry-v1.md](039-project-brain-runtime-entry-v1.md) = project brain runtime entry
+- [040-requirement-to-goal-plan-preview-runtime-v1.md](040-requirement-to-goal-plan-preview-runtime-v1.md) = requirement to goal / plan preview runtime
+- [041-goal-recheck-and-completion-decision-runtime-v1.md](041-goal-recheck-and-completion-decision-runtime-v1.md) = goal recheck and completion decision runtime
+- [042-task-page-productization-v1.md](042-task-page-productization-v1.md) = task page productization
+- [043-project-page-productization-v1.md](043-project-page-productization-v1.md) = project page productization
+- [044-task-tree-and-sequence-ux-v1.md](044-task-tree-and-sequence-ux-v1.md) = task tree and sequence UX
+- [045-work-loop-hardening-v1.md](045-work-loop-hardening-v1.md) = work loop hardening
+- [046-audit-flow-productization-v1.md](046-audit-flow-productization-v1.md) = audit flow productization
+- [047-delivery-flow-productization-v1.md](047-delivery-flow-productization-v1.md) = delivery flow productization
+- [048-project-completion-runtime-v1.md](048-project-completion-runtime-v1.md) = project completion runtime
+- [049-codex-provider-hardening-v1.md](049-codex-provider-hardening-v1.md) = Codex provider hardening
+- [050-claude-code-provider-v1.md](050-claude-code-provider-v1.md) = Claude Code provider
+- [051-provider-capability-matrix-v1.md](051-provider-capability-matrix-v1.md) = provider capability matrix
+- [052-agent-session-governance-v1.md](052-agent-session-governance-v1.md) = agent session governance
+- [053-public-delivery-standardization-v1.md](053-public-delivery-standardization-v1.md) = public delivery standardization
+- [054-release-runtime-v1.md](054-release-runtime-v1.md) = release runtime
+- [055-external-audit-and-review-surface-v1.md](055-external-audit-and-review-surface-v1.md) = external audit and review surface
 - [next-requirements.md](next-requirements.md)
 
 ## Dogfood Cutover 基线
