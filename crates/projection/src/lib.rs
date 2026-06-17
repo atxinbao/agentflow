@@ -9,9 +9,9 @@ pub mod projector;
 pub mod storage;
 
 pub use model::{
-    IssueStatusIndex, IssueStatusIndexEntry, ProjectProjection, ProjectionPhase,
-    ProjectionPublicDelivery, ProjectionSummary, TaskProjection, TaskTimelineEvent,
-    TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION,
+    IssueStatusIndex, IssueStatusIndexEntry, ProjectBrainProjection, ProjectProjection,
+    ProjectionPhase, ProjectionPublicDelivery, ProjectionSummary, TaskProjection,
+    TaskTimelineEvent, TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION,
     TASK_PROJECTION_VERSION,
 };
 pub use projector::rebuild_projections;

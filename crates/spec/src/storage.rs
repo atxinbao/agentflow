@@ -1,8 +1,9 @@
 use crate::model::{
+    ProjectBrainDocumentSet, ProjectBrainDocumentStatus, ProjectBrainSnapshot, ProjectBrainStatus,
     RequirementDocument, SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft,
     SpecIssueStatus, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
-    SpecSystemRecord, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION,
-    SPEC_PROJECT_VERSION,
+    SpecSystemRecord, PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
+    SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
 };
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -195,6 +196,148 @@ pub fn read_spec_issue(project_root: impl AsRef<Path>, issue_id: &str) -> Result
 pub fn read_spec_project(project_root: impl AsRef<Path>, project_id: &str) -> Result<SpecProject> {
     let root = canonical_project_root(project_root)?;
     read_json(&root.join(format!(".agentflow/spec/projects/{project_id}.json")))
+}
+
+pub fn read_project_brain_document_set(
+    project_root: impl AsRef<Path>,
+    project_id: &str,
+) -> Result<ProjectBrainDocumentSet> {
+    let root = canonical_project_root(project_root)?;
+    let project_path = project_brain_root(project_id);
+    let goal_path = format!("{project_path}/GOAL.md");
+    let plan_path = format!("{project_path}/PLAN.md");
+    let decisions_path = format!("{project_path}/DECISIONS.md");
+
+    let goal = read_document_probe(&root, &goal_path)?;
+    let plan = read_document_probe(&root, &plan_path)?;
+    let decisions = read_document_probe(&root, &decisions_path)?;
+    let mut missing_documents = Vec::new();
+    if !goal.exists {
+        missing_documents.push("GOAL.md".to_string());
+    }
+    if !plan.exists {
+        missing_documents.push("PLAN.md".to_string());
+    }
+    if !decisions.exists {
+        missing_documents.push("DECISIONS.md".to_string());
+    }
+
+    Ok(ProjectBrainDocumentSet {
+        version: PROJECT_BRAIN_DOCUMENT_SET_VERSION.to_string(),
+        project_id: project_id.to_string(),
+        root_path: project_path,
+        goal_path,
+        plan_path,
+        decisions_path,
+        goal_exists: goal.exists,
+        plan_exists: plan.exists,
+        decisions_exists: decisions.exists,
+        goal_updated_at: goal.updated_at,
+        plan_updated_at: plan.updated_at,
+        decisions_updated_at: decisions.updated_at,
+        missing_documents,
+        readonly: true,
+    })
+}
+
+pub fn read_project_brain_snapshot(
+    project_root: impl AsRef<Path>,
+    project_id: &str,
+    project_title: &str,
+) -> Result<ProjectBrainSnapshot> {
+    let root = canonical_project_root(project_root)?;
+    let document_set = read_project_brain_document_set(&root, project_id)?;
+    let goal_probe = read_document_probe(&root, &document_set.goal_path)?;
+    let plan_probe = read_document_probe(&root, &document_set.plan_path)?;
+    let decisions_probe = read_document_probe(&root, &document_set.decisions_path)?;
+
+    let goal_status = classify_project_brain_document(&goal_probe);
+    let plan_status = classify_project_brain_document(&plan_probe);
+    let decision_status = classify_project_brain_document(&decisions_probe);
+    let missing_documents = document_set.missing_documents.clone();
+
+    let brain_status = if missing_documents.len() == 3 {
+        ProjectBrainStatus::NotInitialized
+    } else if !goal_probe.exists {
+        ProjectBrainStatus::NeedsGoal
+    } else if !plan_probe.exists {
+        ProjectBrainStatus::NeedsPlan
+    } else if !decisions_probe.exists
+        || matches!(
+            goal_status,
+            ProjectBrainDocumentStatus::Draft | ProjectBrainDocumentStatus::NeedsConfirmation
+        )
+        || matches!(
+            plan_status,
+            ProjectBrainDocumentStatus::Draft | ProjectBrainDocumentStatus::NeedsConfirmation
+        )
+        || matches!(
+            decision_status,
+            ProjectBrainDocumentStatus::Draft | ProjectBrainDocumentStatus::NeedsConfirmation
+        )
+    {
+        ProjectBrainStatus::NeedsConfirmation
+    } else if matches!(
+        goal_status,
+        ProjectBrainDocumentStatus::Blocked | ProjectBrainDocumentStatus::Stale
+    ) || matches!(
+        plan_status,
+        ProjectBrainDocumentStatus::Blocked | ProjectBrainDocumentStatus::Stale
+    ) || matches!(
+        decision_status,
+        ProjectBrainDocumentStatus::Blocked | ProjectBrainDocumentStatus::Stale
+    ) {
+        ProjectBrainStatus::Blocked
+    } else {
+        ProjectBrainStatus::ReadyForProjectLoop
+    };
+
+    let mut open_questions = Vec::new();
+    if !goal_probe.exists {
+        open_questions.push("项目目标文档缺失，需要先确认 GOAL.md。".to_string());
+    }
+    if !plan_probe.exists {
+        open_questions.push("项目计划文档缺失，需要先确认 PLAN.md。".to_string());
+    }
+    if !decisions_probe.exists {
+        open_questions.push("项目决策记录缺失，需要补齐 DECISIONS.md。".to_string());
+    }
+    if matches!(goal_status, ProjectBrainDocumentStatus::NeedsConfirmation) {
+        open_questions.push("GOAL.md 仍处于待确认状态。".to_string());
+    }
+    if matches!(plan_status, ProjectBrainDocumentStatus::NeedsConfirmation) {
+        open_questions.push("PLAN.md 仍处于待确认状态。".to_string());
+    }
+
+    let next_recommended_action = match brain_status {
+        ProjectBrainStatus::NotInitialized | ProjectBrainStatus::NeedsGoal => {
+            "create-goal-draft-preview"
+        }
+        ProjectBrainStatus::NeedsPlan => "create-plan-draft-preview",
+        ProjectBrainStatus::NeedsConfirmation => "confirm-project-brain",
+        ProjectBrainStatus::ReadyForProjectLoop => "start-project-loop",
+        ProjectBrainStatus::NeedsRecheck => "run-goal-recheck",
+        ProjectBrainStatus::Blocked => "resolve-project-brain-blocker",
+    }
+    .to_string();
+
+    Ok(ProjectBrainSnapshot {
+        version: PROJECT_BRAIN_SNAPSHOT_VERSION.to_string(),
+        project_id: project_id.to_string(),
+        project_title: project_title.to_string(),
+        project_path: document_set.root_path,
+        goal_document: document_set.goal_path,
+        plan_document: document_set.plan_path,
+        decisions_document: document_set.decisions_path,
+        goal_status,
+        plan_status,
+        decision_status,
+        brain_status,
+        missing_documents,
+        open_questions,
+        next_recommended_action,
+        readonly: true,
+    })
 }
 
 pub fn list_spec_issues(project_root: impl AsRef<Path>) -> Result<Vec<SpecIssue>> {
@@ -409,6 +552,57 @@ fn normalize_relative_path(root: &Path, path: impl AsRef<Path>) -> Result<String
         .join("/"))
 }
 
+#[derive(Debug, Clone, Default)]
+struct DocumentProbe {
+    exists: bool,
+    updated_at: Option<u64>,
+    raw: Option<String>,
+}
+
+fn project_brain_root(project_id: &str) -> String {
+    format!("docs/projects/{project_id}")
+}
+
+fn read_document_probe(root: &Path, relative_path: &str) -> Result<DocumentProbe> {
+    let path = root.join(relative_path);
+    if !path.exists() {
+        return Ok(DocumentProbe::default());
+    }
+    let metadata = fs::metadata(&path).with_context(|| format!("metadata {}", path.display()))?;
+    let updated_at = metadata
+        .modified()
+        .ok()
+        .and_then(|timestamp| timestamp.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs());
+    let raw = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    Ok(DocumentProbe {
+        exists: true,
+        updated_at,
+        raw: Some(raw),
+    })
+}
+
+fn classify_project_brain_document(probe: &DocumentProbe) -> ProjectBrainDocumentStatus {
+    if !probe.exists {
+        return ProjectBrainDocumentStatus::Missing;
+    }
+    let raw = probe
+        .raw
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if raw.contains("needs-confirmation") || raw.contains("待确认") {
+        return ProjectBrainDocumentStatus::NeedsConfirmation;
+    }
+    if raw.contains("blocked") || raw.contains("阻断") {
+        return ProjectBrainDocumentStatus::Blocked;
+    }
+    if raw.contains("draft") || raw.contains("草稿") {
+        return ProjectBrainDocumentStatus::Draft;
+    }
+    ProjectBrainDocumentStatus::Confirmed
+}
+
 fn extract_title(raw: &str) -> Option<String> {
     raw.lines()
         .find_map(|line| line.trim().strip_prefix("# ").map(str::trim))
@@ -577,6 +771,41 @@ mod tests {
         assert_eq!(stored.issue_ids, vec!["AF-SPEC-001"]);
         let index: Value = read_json(&dir.path().join(".agentflow/spec/index.json")).unwrap();
         assert_eq!(index["projects"][0]["projectId"], "project-spec-test");
+    }
+
+    #[test]
+    fn project_brain_snapshot_reports_missing_documents_until_confirmed() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+        let draft = SpecProjectDraft::new("project-spec-test");
+        let project = project_from_requirement(dir.path(), &requirement, draft).unwrap();
+        write_spec_project(dir.path(), &project).unwrap();
+
+        let missing =
+            read_project_brain_snapshot(dir.path(), "project-spec-test", &project.title).unwrap();
+        assert_eq!(missing.brain_status, ProjectBrainStatus::NotInitialized);
+        assert_eq!(
+            missing.missing_documents,
+            vec!["GOAL.md", "PLAN.md", "DECISIONS.md"]
+        );
+        assert_eq!(missing.next_recommended_action, "create-goal-draft-preview");
+
+        let project_docs = dir.path().join("docs/projects/project-spec-test");
+        fs::create_dir_all(&project_docs).unwrap();
+        fs::write(project_docs.join("GOAL.md"), "# Goal\n\n已确认目标。\n").unwrap();
+        fs::write(project_docs.join("PLAN.md"), "# Plan\n\n已确认计划。\n").unwrap();
+        fs::write(
+            project_docs.join("DECISIONS.md"),
+            "# Decisions\n\n## Decision Log\n\n### 2026-06-18 - Goal confirmation\n",
+        )
+        .unwrap();
+
+        let ready =
+            read_project_brain_snapshot(dir.path(), "project-spec-test", &project.title).unwrap();
+        assert_eq!(ready.brain_status, ProjectBrainStatus::ReadyForProjectLoop);
+        assert!(ready.missing_documents.is_empty());
+        assert_eq!(ready.goal_status, ProjectBrainDocumentStatus::Confirmed);
+        assert_eq!(ready.next_recommended_action, "start-project-loop");
     }
 
     #[test]

@@ -4,6 +4,8 @@ pub const SPEC_MANIFEST_VERSION: &str = "agentflow-spec-manifest.v1";
 pub const SPEC_INDEX_VERSION: &str = "agentflow-spec-index.v1";
 pub const SPEC_ISSUE_VERSION: &str = "agentflow-spec-issue.v1";
 pub const SPEC_PROJECT_VERSION: &str = "agentflow-spec-project.v1";
+pub const PROJECT_BRAIN_DOCUMENT_SET_VERSION: &str = "agentflow-project-brain-document-set.v1";
+pub const PROJECT_BRAIN_SNAPSHOT_VERSION: &str = "agentflow-project-brain-snapshot.v1";
 pub const DEFAULT_WORKFLOW_REF: &str = "build-agent.issue-loop@v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +104,107 @@ impl Default for SpecProjectStatus {
     fn default() -> Self {
         Self::Planned
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProjectBrainDocumentStatus {
+    Missing,
+    Draft,
+    NeedsConfirmation,
+    Confirmed,
+    Stale,
+    Blocked,
+}
+
+impl Default for ProjectBrainDocumentStatus {
+    fn default() -> Self {
+        Self::Missing
+    }
+}
+
+impl ProjectBrainDocumentStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Missing => "missing",
+            Self::Draft => "draft",
+            Self::NeedsConfirmation => "needs-confirmation",
+            Self::Confirmed => "confirmed",
+            Self::Stale => "stale",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProjectBrainStatus {
+    NotInitialized,
+    NeedsGoal,
+    NeedsPlan,
+    NeedsConfirmation,
+    ReadyForProjectLoop,
+    NeedsRecheck,
+    Blocked,
+}
+
+impl Default for ProjectBrainStatus {
+    fn default() -> Self {
+        Self::NotInitialized
+    }
+}
+
+impl ProjectBrainStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::NotInitialized => "not-initialized",
+            Self::NeedsGoal => "needs-goal",
+            Self::NeedsPlan => "needs-plan",
+            Self::NeedsConfirmation => "needs-confirmation",
+            Self::ReadyForProjectLoop => "ready-for-project-loop",
+            Self::NeedsRecheck => "needs-recheck",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectBrainDocumentSet {
+    pub version: String,
+    pub project_id: String,
+    pub root_path: String,
+    pub goal_path: String,
+    pub plan_path: String,
+    pub decisions_path: String,
+    pub goal_exists: bool,
+    pub plan_exists: bool,
+    pub decisions_exists: bool,
+    pub goal_updated_at: Option<u64>,
+    pub plan_updated_at: Option<u64>,
+    pub decisions_updated_at: Option<u64>,
+    pub missing_documents: Vec<String>,
+    pub readonly: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectBrainSnapshot {
+    pub version: String,
+    pub project_id: String,
+    pub project_title: String,
+    pub project_path: String,
+    pub goal_document: String,
+    pub plan_document: String,
+    pub decisions_document: String,
+    pub goal_status: ProjectBrainDocumentStatus,
+    pub plan_status: ProjectBrainDocumentStatus,
+    pub decision_status: ProjectBrainDocumentStatus,
+    pub brain_status: ProjectBrainStatus,
+    pub missing_documents: Vec<String>,
+    pub open_questions: Vec<String>,
+    pub next_recommended_action: String,
+    pub readonly: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

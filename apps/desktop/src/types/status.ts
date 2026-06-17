@@ -540,11 +540,26 @@ export type ProjectProjection = {
   version: string;
   projectId: string;
   title: string;
+  objective: string;
   status: string;
   issueIds: string[];
   currentIssueId?: string | null;
   issueCount: number;
   completedIssueCount: number;
+  projectBrain: {
+    projectPath: string;
+    goalPath: string;
+    planPath: string;
+    decisionsPath: string;
+    brainStatus: string;
+    goalStatus: string;
+    planStatus: string;
+    decisionStatus: string;
+    missingDocuments: string[];
+    openQuestions: string[];
+    nextRecommendedAction: string;
+    readonly: boolean;
+  };
   updatedAt: number;
 };
 

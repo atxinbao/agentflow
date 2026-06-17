@@ -1,14 +1,16 @@
 use crate::{
     model::{
-        IssueStatusIndex, IssueStatusIndexEntry, ProjectProjection, ProjectionPhase,
-        ProjectionPublicDelivery, ProjectionSummary, TaskProjection, TaskTimelineEvent,
-        TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION,
-        TASK_PROJECTION_VERSION,
+        IssueStatusIndex, IssueStatusIndexEntry, ProjectBrainProjection, ProjectProjection,
+        ProjectionPhase, ProjectionPublicDelivery, ProjectionSummary, TaskProjection,
+        TaskTimelineEvent, TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION,
+        PROJECT_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
     },
     storage::{write_issue_status_index, write_project_projection, write_task_projection},
 };
 use agentflow_event_store::{load_task_events, EventStateTransition, TaskEvent};
-use agentflow_spec::{prepare_spec_workspace, SpecIssue, SpecProject, SpecProjectStatus};
+use agentflow_spec::{
+    prepare_spec_workspace, read_project_brain_snapshot, SpecIssue, SpecProject, SpecProjectStatus,
+};
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::{
@@ -35,7 +37,7 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
     }
 
     for project in &projects {
-        let projection = project_project(project, &task_projections);
+        let projection = project_project(&root, project, &task_projections)?;
         write_project_projection(&root, &projection)?;
     }
 
@@ -140,9 +142,10 @@ fn project_issue(issue: &SpecIssue, events: Option<&Vec<TaskEvent>>) -> TaskProj
 }
 
 fn project_project(
+    root: &Path,
     project: &SpecProject,
     tasks: &BTreeMap<String, TaskProjection>,
-) -> ProjectProjection {
+) -> Result<ProjectProjection> {
     let mut current_issue_id = None;
     let mut completed = 0;
     let mut updated_at = project.system.updated_at;
@@ -164,17 +167,33 @@ fn project_project(
     } else {
         project_status_as_str(&project.status)
     };
-    ProjectProjection {
+    let brain = read_project_brain_snapshot(root, &project.project_id, &project.title)?;
+    Ok(ProjectProjection {
         version: PROJECT_PROJECTION_VERSION.to_string(),
         project_id: project.project_id.clone(),
         title: project.title.clone(),
+        objective: project.objective.clone(),
         status: status.to_string(),
         issue_ids: project.issue_ids.clone(),
         current_issue_id,
         issue_count: project.issue_ids.len(),
         completed_issue_count: completed,
+        project_brain: ProjectBrainProjection {
+            project_path: brain.project_path,
+            goal_path: brain.goal_document,
+            plan_path: brain.plan_document,
+            decisions_path: brain.decisions_document,
+            brain_status: brain.brain_status.as_str().to_string(),
+            goal_status: brain.goal_status.as_str().to_string(),
+            plan_status: brain.plan_status.as_str().to_string(),
+            decision_status: brain.decision_status.as_str().to_string(),
+            missing_documents: brain.missing_documents,
+            open_questions: brain.open_questions,
+            next_recommended_action: brain.next_recommended_action,
+            readonly: brain.readonly,
+        },
         updated_at,
-    }
+    })
 }
 
 fn project_status_as_str(status: &SpecProjectStatus) -> &'static str {
@@ -368,6 +387,15 @@ mod tests {
         let requirement = root.join("docs/requirements/034-test.md");
         fs::create_dir_all(requirement.parent().unwrap()).unwrap();
         fs::write(&requirement, "# 测试需求\n\n用于 projection 测试。\n").unwrap();
+        let project_docs = root.join("docs/projects/project-projection");
+        fs::create_dir_all(&project_docs).unwrap();
+        fs::write(project_docs.join("GOAL.md"), "# Goal\n\n确认目标。\n").unwrap();
+        fs::write(project_docs.join("PLAN.md"), "# Plan\n\n确认计划。\n").unwrap();
+        fs::write(
+            project_docs.join("DECISIONS.md"),
+            "# Decisions\n\n## Decision Log\n\n### 2026-06-18 - Goal confirmation\n",
+        )
+        .unwrap();
 
         let mut issue = SpecIssueDraft::new("AF-PROJ-001");
         issue.project_id = Some("project-projection".to_string());
@@ -484,5 +512,11 @@ mod tests {
         );
         assert_eq!(project.completed_issue_count, 1);
         assert_eq!(project.status, "done");
+        assert_eq!(project.objective, "用于 projection 测试。");
+        assert_eq!(project.project_brain.brain_status, "ready-for-project-loop");
+        assert_eq!(
+            project.project_brain.project_path,
+            "docs/projects/project-projection"
+        );
     }
 }
