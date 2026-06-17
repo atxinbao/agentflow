@@ -216,6 +216,7 @@ docs/requirements/**
 - 校验 role change 必须显式 handoff
 - 区分 `ownership-transfer` 和 `bounded-capability-call`
 - 提供任务工作流定义
+- 提供 canonical `project / work / audit / delivery` workflow 定义和状态语义辅助函数
 
 不负责：
 

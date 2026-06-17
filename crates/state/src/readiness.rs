@@ -1,5 +1,6 @@
 use agentflow_projection::IssueStatusIndex;
 use agentflow_spec::SpecIssue;
+use agentflow_workflow_core::{work_state_is_cancel, work_state_is_done};
 use std::{collections::BTreeMap, path::Path};
 
 #[derive(Debug, Clone)]
@@ -46,7 +47,9 @@ fn dependency_blockers(
     let mut blockers = Vec::new();
 
     for issue in issues {
-        if matches!(projected_status(issue, projection_index), "done" | "cancel") {
+        if work_state_is_done(projected_status(issue, projection_index))
+            || work_state_is_cancel(projected_status(issue, projection_index))
+        {
             continue;
         }
         for dependency_id in &issue.blocked_by {

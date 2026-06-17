@@ -8,6 +8,10 @@ use crate::{
     storage::{unix_timestamp_seconds, write_json},
 };
 use agentflow_projection::TaskProjection;
+use agentflow_workflow_core::{
+    work_state_is_blocked, work_state_is_cancel, work_state_is_done, work_state_is_in_progress,
+    work_state_is_in_review, work_state_is_ready_for_execution,
+};
 use anyhow::Result;
 use std::path::Path;
 
@@ -139,7 +143,9 @@ fn display_status(
     audit_index: Option<&agentflow_audit::AuditIndex>,
     issue_id: &str,
 ) -> String {
-    if matches!(projection.current_state.as_str(), "cancel" | "done") {
+    if work_state_is_cancel(&projection.current_state)
+        || work_state_is_done(&projection.current_state)
+    {
         return projection.current_state.clone();
     }
     if let Some(status) = audit_display_status(audit_index, issue_id) {
@@ -192,12 +198,16 @@ fn delivery_status(projection: &TaskProjection) -> String {
 }
 
 fn run_status_from_task_state(state: &str) -> &'static str {
-    match state {
-        "todo" | "in_progress" => "running",
-        "in_review" | "done" => "completed",
-        "blocked" => "blocked",
-        "cancel" => "cancelled",
-        _ => "queued",
+    if work_state_is_ready_for_execution(state) || work_state_is_in_progress(state) {
+        "running"
+    } else if work_state_is_in_review(state) || work_state_is_done(state) {
+        "completed"
+    } else if work_state_is_blocked(state) {
+        "blocked"
+    } else if work_state_is_cancel(state) {
+        "cancelled"
+    } else {
+        "queued"
     }
 }
 

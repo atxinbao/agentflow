@@ -67,6 +67,7 @@ fn validate_shape(workflow: &WorkflowDefinition) -> Result<()> {
     validate_required("metadata.name", &workflow.metadata.name)?;
     validate_required("metadata.version", &workflow.metadata.version)?;
     validate_required("metadata.title", &workflow.metadata.title)?;
+    validate_registry_name("flowType", workflow.flow_type.as_str())?;
     validate_required("spec.initialState", &workflow.spec.initial_state)?;
     if workflow.spec.states.is_empty() {
         anyhow::bail!("workflow must define at least one state");
@@ -323,6 +324,7 @@ mod tests {
         r#"
 apiVersion: agentflow.dev/v1
 kind: TaskWorkflow
+flowType: work
 metadata:
   name: build-agent.issue-loop
   version: v1

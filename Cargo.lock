@@ -185,6 +185,7 @@ dependencies = [
  "agentflow-projection",
  "agentflow-spec",
  "agentflow-task-artifacts",
+ "agentflow-workflow-core",
  "anyhow",
  "serde",
  "serde_json",
