@@ -9,6 +9,10 @@ use crate::{
 };
 use agentflow_projection::IssueStatusIndex;
 use agentflow_spec::{SpecIssue, SpecIssueStatus};
+use agentflow_workflow_core::{
+    work_state_is_active, work_state_is_done, work_state_is_in_progress, work_state_is_in_review,
+    work_state_is_ready_for_execution,
+};
 use anyhow::Result;
 use std::path::Path;
 
@@ -98,12 +102,7 @@ fn active_spec_issue_id(
             index
                 .issues
                 .iter()
-                .find(|issue| {
-                    matches!(
-                        issue.current_state.as_str(),
-                        "todo" | "in_progress" | "in_review"
-                    )
-                })
+                .find(|issue| work_state_is_active(&issue.current_state))
                 .map(|issue| issue.issue_id.clone())
         })
         .or_else(|| {
@@ -132,7 +131,9 @@ fn blockers_force_task_blocked(
     }
     let ready_issues = issues
         .iter()
-        .filter(|issue| projected_status(issue, projection_index) == "todo")
+        .filter(|issue| {
+            work_state_is_ready_for_execution(projected_status(issue, projection_index))
+        })
         .collect::<Vec<_>>();
     if ready_issues.is_empty() {
         return blockers
@@ -149,7 +150,8 @@ fn issue_is_unblocked_ready_for_task(
     projection_index: Option<&IssueStatusIndex>,
     blockers: &[WorkflowBlockedAction],
 ) -> bool {
-    projected_status(issue, projection_index) == "todo" && !issue_has_gate_blocker(issue, blockers)
+    work_state_is_ready_for_execution(projected_status(issue, projection_index))
+        && !issue_has_gate_blocker(issue, blockers)
 }
 
 fn issue_has_gate_blocker(issue: &SpecIssue, blockers: &[WorkflowBlockedAction]) -> bool {
@@ -236,7 +238,7 @@ fn derive_stage(
         index
             .issues
             .iter()
-            .any(|issue| issue.current_state == "done")
+            .any(|issue| work_state_is_done(&issue.current_state))
     }) {
         return WorkflowStage::DeliveryReady;
     }
@@ -244,7 +246,7 @@ fn derive_stage(
         index
             .issues
             .iter()
-            .any(|issue| issue.current_state == "in_review")
+            .any(|issue| work_state_is_in_review(&issue.current_state))
     }) {
         return WorkflowStage::ExecuteCompleted;
     }
@@ -252,7 +254,7 @@ fn derive_stage(
         index
             .issues
             .iter()
-            .any(|issue| issue.current_state == "in_progress")
+            .any(|issue| work_state_is_in_progress(&issue.current_state))
     }) {
         return WorkflowStage::ExecuteRunning;
     }
@@ -263,7 +265,7 @@ fn derive_stage(
         index
             .issues
             .iter()
-            .any(|issue| issue.current_state == "todo")
+            .any(|issue| work_state_is_ready_for_execution(&issue.current_state))
     }) || spec_issues
         .iter()
         .any(|issue| matches!(issue.status, SpecIssueStatus::Todo))

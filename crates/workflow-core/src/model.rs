@@ -9,6 +9,7 @@ pub const TASK_WORKFLOW_KIND: &str = "TaskWorkflow";
 pub struct WorkflowDefinition {
     pub api_version: String,
     pub kind: String,
+    pub flow_type: WorkflowFlowType,
     pub metadata: WorkflowMetadata,
     pub spec: WorkflowSpec,
 }
@@ -25,6 +26,26 @@ pub struct WorkflowMetadata {
     pub name: String,
     pub version: String,
     pub title: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkflowFlowType {
+    Project,
+    Work,
+    Audit,
+    Delivery,
+}
+
+impl WorkflowFlowType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Project => "project",
+            Self::Work => "work",
+            Self::Audit => "audit",
+            Self::Delivery => "delivery",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,7 +68,7 @@ pub struct StateDefinition {
     pub skill_pack: Option<WorkflowSkillPack>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum WorkflowStatePhase {
     Future,

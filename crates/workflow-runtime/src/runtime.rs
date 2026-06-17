@@ -257,6 +257,7 @@ mod tests {
         let raw = r#"
 apiVersion: agentflow.dev/v1
 kind: TaskWorkflow
+flowType: work
 metadata:
   name: build-agent.issue-loop
   version: v1
