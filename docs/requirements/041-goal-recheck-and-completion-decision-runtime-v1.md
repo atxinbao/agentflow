@@ -91,7 +91,6 @@ Completion 必须成为正式 runtime 决策，而不是 issue 计数器。
 
 - [039-project-brain-runtime-entry-v1.md](/Users/mac/Documents/AgentFlow/docs/requirements/039-project-brain-runtime-entry-v1.md)
 - [040-requirement-to-goal-plan-preview-runtime-v1.md](/Users/mac/Documents/AgentFlow/docs/requirements/040-requirement-to-goal-plan-preview-runtime-v1.md)
-- [048-project-completion-runtime-v1.md](/Users/mac/Documents/AgentFlow/docs/requirements/048-project-completion-runtime-v1.md)
 
 ---
 
