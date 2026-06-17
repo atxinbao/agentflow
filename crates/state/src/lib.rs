@@ -76,11 +76,14 @@ mod tests {
         append_task_event_once(
             root,
             TaskEventDraft {
+                flow_type: agentflow_workflow_core::WorkflowFlowType::Work,
                 aggregate_type: "issue".to_string(),
                 aggregate_id: "iss-001".to_string(),
                 project_id: None,
                 issue_id: Some("iss-001".to_string()),
+                run_id: Some("run-001".to_string()),
                 event_type: event_type.to_string(),
+                authority_role: Some(agentflow_workflow_core::WorkflowAgentRole::WorkAgent),
                 actor: EventActor {
                     role: "test".to_string(),
                     kind: "system".to_string(),

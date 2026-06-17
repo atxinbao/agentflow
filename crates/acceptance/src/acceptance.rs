@@ -11,6 +11,7 @@ use agentflow_state::{
     StateStatusSnapshot, StateWorkspaceStatus, WorkflowAuditStatus, WorkflowStage,
 };
 use agentflow_task_artifacts::TaskCommandInput;
+use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::Result;
 use serde_json::json;
 use std::{fs, path::Path};
@@ -247,11 +248,17 @@ fn append_issue_event(
     append_task_event_once(
         root,
         TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
             aggregate_id: issue.issue_id.clone(),
             project_id: issue.project_id.clone(),
             issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(run_id.to_string()),
             event_type: event_type.to_string(),
+            authority_role: Some(match state {
+                "done" | "cancel" => WorkflowAgentRole::System,
+                _ => WorkflowAgentRole::WorkAgent,
+            }),
             actor: EventActor {
                 role: "acceptance".to_string(),
                 kind: "system".to_string(),

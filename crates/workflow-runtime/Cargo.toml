@@ -6,6 +6,7 @@ version.workspace = true
 
 [dependencies]
 agentflow-event-store = { path = "../event-store" }
+agentflow-task-artifacts = { path = "../task-artifacts" }
 agentflow-workflow-core = { path = "../workflow-core" }
 anyhow.workspace = true
 serde.workspace = true

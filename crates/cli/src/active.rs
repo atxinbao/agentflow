@@ -14,6 +14,7 @@ use agentflow_task_artifacts::{
     TaskEvidence, TaskRun, TaskRunStatus,
 };
 use agentflow_task_loop::{AgentLaunchPayload, TaskLoop, TaskLoopLaunch, AGENT_LAUNCH_REQUESTED};
+use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::json;
@@ -144,11 +145,14 @@ pub(crate) fn complete_build_agent_issue_from_request(
     append_task_event_once(
         root,
         TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
             aggregate_id: issue.issue_id.clone(),
             project_id: issue.project_id.clone(),
             issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(review.run_id.clone()),
             event_type: "issue.completed".to_string(),
+            authority_role: Some(WorkflowAgentRole::System),
             actor: EventActor {
                 role: "build-agent".to_string(),
                 kind: "system".to_string(),
@@ -283,12 +287,7 @@ fn load_agent_launch_payload(root: &Path, run_id: &str) -> Result<AgentLaunchPay
     let event = agentflow_event_store::load_task_events(root)?
         .into_iter()
         .find(|event| {
-            event.event_type == AGENT_LAUNCH_REQUESTED
-                && event
-                    .payload
-                    .get("runId")
-                    .and_then(serde_json::Value::as_str)
-                    == Some(run_id)
+            event.event_type == AGENT_LAUNCH_REQUESTED && event.run_id.as_deref() == Some(run_id)
         })
         .ok_or_else(|| anyhow::anyhow!("missing agent launch request for run {run_id}"))?;
     serde_json::from_value(event.payload)
@@ -333,11 +332,14 @@ pub(crate) fn write_build_agent_merge_proof(
     append_task_event_once(
         root,
         TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
             aggregate_id: issue_id.to_string(),
             project_id: issue.project_id.clone(),
             issue_id: Some(issue_id.to_string()),
+            run_id: Some(run_id.to_string()),
             event_type: "issue.merge.proof.recorded".to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
             actor: EventActor {
                 role: "build-agent".to_string(),
                 kind: "system".to_string(),
@@ -466,11 +468,14 @@ fn ensure_review_prepared(
     append_task_event_once(
         root,
         TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
             aggregate_id: issue.issue_id.clone(),
             project_id: issue.project_id.clone(),
             issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(run_id.to_string()),
             event_type: "issue.validation.passed".to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
             actor: EventActor {
                 role: "build-agent".to_string(),
                 kind: "system".to_string(),
@@ -533,11 +538,14 @@ fn append_validation_failed_event(
     append_task_event_once(
         root,
         TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
             aggregate_id: issue.issue_id.clone(),
             project_id: issue.project_id.clone(),
             issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(run_id.to_string()),
             event_type: "issue.validation.failed".to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
             actor: EventActor {
                 role: "build-agent".to_string(),
                 kind: "system".to_string(),

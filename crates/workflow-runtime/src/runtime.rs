@@ -3,6 +3,7 @@ use crate::model::{
     RuntimeTransition, RuntimeTransitionResult,
 };
 use agentflow_event_store::{append_task_event, EventStateTransition, TaskEventDraft};
+use agentflow_task_artifacts::write_task_run_checkpoint;
 use agentflow_workflow_core::{TransitionDefinition, WorkflowDefinition};
 use anyhow::Result;
 use serde_json::json;
@@ -156,6 +157,7 @@ pub fn apply_workflow_event(
     guards: &impl GuardRegistry,
     actions: &impl ActionRegistry,
 ) -> Result<RuntimeTransitionResult> {
+    let root = project_root.as_ref().to_path_buf();
     let transition = find_transition(workflow, current_state, incoming_event_type)?;
     let current_binding = resolve_state_binding(workflow, current_state)?;
     let next_binding = resolve_state_binding(workflow, &transition.to)?;
@@ -199,14 +201,19 @@ pub fn apply_workflow_event(
         action_outcomes.push(outcome);
     }
 
+    let checkpoint_issue_id = context.issue_id.clone();
+    let checkpoint_run_id = context.run_id.clone();
     let event = append_task_event(
-        project_root,
+        &root,
         TaskEventDraft {
+            flow_type: workflow.flow_type,
             aggregate_type: context.aggregate_type,
             aggregate_id: context.aggregate_id,
             project_id: context.project_id,
             issue_id: context.issue_id,
+            run_id: context.run_id.clone(),
             event_type: incoming_event_type.to_string(),
+            authority_role: Some(next_binding.role),
             actor: context.actor,
             state: Some(EventStateTransition {
                 from_state: current_state.to_string(),
@@ -233,6 +240,24 @@ pub fn apply_workflow_event(
         },
     )?;
 
+    if let (Some(issue_id), Some(run_id)) =
+        (checkpoint_issue_id.as_deref(), checkpoint_run_id.as_deref())
+    {
+        let _ = write_task_run_checkpoint(
+            &root,
+            issue_id,
+            run_id,
+            workflow.flow_type,
+            &transition.to,
+            &event.event_id,
+            Some(event.correlation_id.clone()),
+            format!(
+                "状态从 {} 进入 {}，触发事件 {}。",
+                current_state, transition.to, incoming_event_type
+            ),
+        )?;
+    }
+
     Ok(RuntimeTransitionResult {
         applied: true,
         transition: Some(runtime_transition),
@@ -250,6 +275,7 @@ pub fn apply_workflow_event(
 mod tests {
     use super::*;
     use agentflow_event_store::{load_task_events, EventActor};
+    use agentflow_task_artifacts::latest_task_run_checkpoint;
     use agentflow_workflow_core::{parse_workflow_yaml, validate_workflow};
     use tempfile::tempdir;
 
@@ -356,6 +382,48 @@ spec:
         assert_eq!(events[0].state.as_ref().unwrap().from_state, "backlog");
         assert_eq!(events[0].state.as_ref().unwrap().to_state, "todo");
         assert_eq!(events[0].payload["transitionId"], "schedule");
+        assert_eq!(events[0].flow_type.as_str(), "work");
+        assert_eq!(
+            events[0].authority_role.as_ref().map(|role| role.as_str()),
+            Some("work-agent")
+        );
+    }
+
+    #[test]
+    fn applied_transition_writes_run_checkpoint_when_run_context_exists() {
+        let dir = tempdir().unwrap();
+        agentflow_task_artifacts::create_task_run(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            "build-agent.issue-loop@v1",
+            Some("agentflow/direct/AF-TASK-001".to_string()),
+        )
+        .unwrap();
+        let guards = StaticGuardRegistry::all_pass(["issue.contract.complete"]);
+        let actions = StaticActionRegistry::all_complete(["task.todo.write"]);
+        let mut context = context();
+        context.run_id = Some("run-001".to_string());
+
+        let result = apply_workflow_event(
+            dir.path(),
+            &workflow(),
+            "backlog",
+            "issue.scheduled",
+            context,
+            &guards,
+            &actions,
+        )
+        .unwrap();
+
+        let checkpoint = latest_task_run_checkpoint(dir.path(), "AF-TASK-001", "run-001")
+            .unwrap()
+            .unwrap();
+
+        assert!(result.applied);
+        assert_eq!(checkpoint.state, "todo");
+        assert_eq!(checkpoint.flow_type.as_str(), "work");
+        assert_eq!(checkpoint.event_id, result.event_id.unwrap());
     }
 
     #[test]

@@ -233,7 +233,8 @@ docs/requirements/**
 负责：
 
 - 追加 `.agentflow/events/task-events.jsonl`
-- 提供 event id、idempotency key、correlation id、replay
+- 统一 event envelope：`flowType / runId / authorityRole / correlationId / causationId / idempotencyKey`
+- 提供 event taxonomy、event id、replay filter、replay cursor
 
 不负责：
 
@@ -252,6 +253,7 @@ docs/requirements/**
 - 读取 workflow 定义和当前 projection
 - 执行 guard / action
 - 追加状态迁移事件
+- 在有 `issueId + runId` 的前提下写入 checkpoint 事实
 - 阻止非法状态跳转
 - 解析当前 state authority role 和 next state authority role
 - 把 handoff 边界作为 runtime 一等事实返回
@@ -292,6 +294,7 @@ docs/requirements/**
 - 管理 `.agentflow/tasks/<issue-id>/runs/<run-id>/**`
 - 管理 `.agentflow/tasks/<issue-id>/evidence/**`
 - 保存本地命令输出、校验结果、checkpoint、plan、验证证据
+- 提供 run checkpoint 和 replay cursor 恢复锚点
 
 不负责：
 

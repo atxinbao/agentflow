@@ -411,11 +411,17 @@ mod tests {
 
     fn event(issue_id: &str, event_type: &str, payload: serde_json::Value) -> TaskEventDraft {
         TaskEventDraft {
+            flow_type: agentflow_workflow_core::WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
             aggregate_id: issue_id.to_string(),
             project_id: Some("project-projection".to_string()),
             issue_id: Some(issue_id.to_string()),
+            run_id: payload
+                .get("runId")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string),
             event_type: event_type.to_string(),
+            authority_role: Some(agentflow_workflow_core::WorkflowAgentRole::WorkAgent),
             actor: EventActor {
                 role: "test".to_string(),
                 kind: "system".to_string(),

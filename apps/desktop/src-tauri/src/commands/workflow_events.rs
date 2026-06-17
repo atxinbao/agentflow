@@ -9,6 +9,7 @@ use agentflow_event_store::{
 };
 use agentflow_panel::PanelStatus;
 use agentflow_task_loop::AGENT_LAUNCH_REQUESTED;
+use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use serde::Serialize;
 use std::path::Path;
 use tauri::{AppHandle, Emitter};
@@ -266,11 +267,14 @@ fn append_context_pack_event<T: Serialize>(
     append_task_event_once(
         root,
         TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
             aggregate_id: issue_id.to_string(),
             project_id: None,
             issue_id: Some(issue_id.to_string()),
+            run_id: None,
             event_type: event_type.to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
             actor: EventActor {
                 role: source.to_string(),
                 kind: "system".to_string(),
@@ -319,22 +323,15 @@ fn pending_agent_launch_count(root: &Path) -> anyhow::Result<usize> {
     let claimed_runs = events
         .iter()
         .filter(|event| event.event_type == AGENT_SESSION_CREATED)
-        .filter_map(|event| {
-            event
-                .payload
-                .get("runId")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_string)
-        })
+        .filter_map(|event| event.run_id.clone())
         .collect::<std::collections::BTreeSet<_>>();
     Ok(events
         .iter()
         .filter(|event| event.event_type == AGENT_LAUNCH_REQUESTED)
         .filter(|event| {
             event
-                .payload
-                .get("runId")
-                .and_then(serde_json::Value::as_str)
+                .run_id
+                .as_deref()
                 .is_some_and(|run_id| !claimed_runs.contains(run_id))
         })
         .count())
@@ -409,11 +406,14 @@ mod tests {
         append_task_event_once(
             dir.path(),
             TaskEventDraft {
+                flow_type: WorkflowFlowType::Work,
                 aggregate_type: "issue".to_string(),
                 aggregate_id: "iss-context".to_string(),
                 project_id: None,
                 issue_id: Some("iss-context".to_string()),
+                run_id: None,
                 event_type: EVENT_TYPE_SPEC_ISSUE_READY.to_string(),
+                authority_role: Some(WorkflowAgentRole::WorkAgent),
                 actor: EventActor {
                     role: "spec".to_string(),
                     kind: "system".to_string(),
@@ -453,11 +453,14 @@ mod tests {
             append_task_event_once(
                 dir.path(),
                 TaskEventDraft {
+                    flow_type: WorkflowFlowType::Work,
                     aggregate_type: "issue".to_string(),
                     aggregate_id: format!("AF-{run_id}"),
                     project_id: Some("project-events".to_string()),
                     issue_id: Some(format!("AF-{run_id}")),
+                    run_id: Some(run_id.to_string()),
                     event_type: AGENT_LAUNCH_REQUESTED.to_string(),
+                    authority_role: Some(WorkflowAgentRole::WorkAgent),
                     actor: EventActor {
                         role: "test".to_string(),
                         kind: "system".to_string(),
@@ -475,11 +478,14 @@ mod tests {
         append_task_event_once(
             dir.path(),
             TaskEventDraft {
+                flow_type: WorkflowFlowType::Work,
                 aggregate_type: "issue".to_string(),
                 aggregate_id: "AF-run-001".to_string(),
                 project_id: Some("project-events".to_string()),
                 issue_id: Some("AF-run-001".to_string()),
+                run_id: Some("run-001".to_string()),
                 event_type: AGENT_SESSION_CREATED.to_string(),
+                authority_role: Some(WorkflowAgentRole::WorkAgent),
                 actor: EventActor {
                     role: "test".to_string(),
                     kind: "system".to_string(),
