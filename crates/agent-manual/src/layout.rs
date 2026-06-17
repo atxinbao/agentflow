@@ -76,8 +76,26 @@ const AGENT_ROLES_JSON: &str = r#"{
   "version": "agent-roles.v1",
   "roles": [
     {
+      "agentRole": "goal-agent",
+      "label": "目标助手",
+      "runtimeRole": "goal-agent",
+      "skillPack": "brain-skills",
+      "allowedIssueCategories": [],
+      "allowedWrites": [
+        "docs/projects/**",
+        ".agentflow/spec/projects/**",
+        ".agentflow/projections/projects/**"
+      ],
+      "forbiddenWrites": [
+        ".agentflow/tasks/**",
+        ".agentflow/audit/**"
+      ]
+    },
+    {
       "agentRole": "spec-agent",
       "label": "需求助手",
+      "runtimeRole": "spec-agent",
+      "skillPack": "contract-skills",
       "allowedIssueCategories": [],
       "allowedWrites": [
         "docs/requirements/**",
@@ -90,8 +108,27 @@ const AGENT_ROLES_JSON: &str = r#"{
       ]
     },
     {
+      "agentRole": "work-agent",
+      "label": "工作助手",
+      "runtimeRole": "work-agent",
+      "providerRoleAliases": ["build-agent"],
+      "skillPack": "execution-skills",
+      "allowedIssueCategories": ["spec"],
+      "allowedWrites": [
+        ".agentflow/tasks/<issue-id>/runs/**",
+        ".agentflow/tasks/<issue-id>/evidence/**",
+        ".agentflow/events/**"
+      ],
+      "forbiddenWrites": [
+        ".agentflow/audit/**"
+      ]
+    },
+    {
       "agentRole": "build-agent",
       "label": "执行助手",
+      "runtimeRole": "work-agent",
+      "providerRoleAliases": ["work-agent"],
+      "skillPack": "execution-skills",
       "allowedIssueCategories": ["spec"],
       "allowedWrites": [
         ".agentflow/tasks/<issue-id>/runs/**",
@@ -105,6 +142,8 @@ const AGENT_ROLES_JSON: &str = r#"{
     {
       "agentRole": "audit-agent",
       "label": "审计助手",
+      "runtimeRole": "audit-agent",
+      "skillPack": "judgment-skills",
       "allowedIssueCategories": ["audit"],
       "allowedWrites": [
         ".agentflow/audit/**",
@@ -112,6 +151,34 @@ const AGENT_ROLES_JSON: &str = r#"{
       ],
       "forbiddenWrites": [
         ".agentflow/tasks/**"
+      ]
+    },
+    {
+      "agentRole": "delivery-agent",
+      "label": "交付助手",
+      "runtimeRole": "delivery-agent",
+      "skillPack": "delivery-skills",
+      "allowedIssueCategories": ["delivery"],
+      "allowedWrites": [
+        "CHANGELOG.md",
+        "docs/releases/**",
+        ".agentflow/events/**"
+      ],
+      "forbiddenWrites": [
+        ".agentflow/audit/**"
+      ]
+    },
+    {
+      "agentRole": "specialist",
+      "label": "专项助手",
+      "runtimeRole": "specialist",
+      "skillPack": "specialist-skills",
+      "allowedIssueCategories": [],
+      "allowedWrites": [],
+      "forbiddenWrites": [
+        ".agentflow/spec/**",
+        ".agentflow/tasks/**",
+        ".agentflow/audit/**"
       ]
     }
   ]

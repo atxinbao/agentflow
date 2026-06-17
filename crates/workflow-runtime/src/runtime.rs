@@ -1,5 +1,6 @@
 use crate::model::{
-    ActionOutcome, GuardOutcome, RuntimeContext, RuntimeTransition, RuntimeTransitionResult,
+    ActionOutcome, GuardOutcome, RuntimeContext, RuntimeHandoffBinding, RuntimeStateBinding,
+    RuntimeTransition, RuntimeTransitionResult,
 };
 use agentflow_event_store::{append_task_event, EventStateTransition, TaskEventDraft};
 use agentflow_workflow_core::{TransitionDefinition, WorkflowDefinition};
@@ -107,6 +108,45 @@ pub fn find_transition<'a>(
     }
 }
 
+pub fn resolve_state_binding(
+    workflow: &WorkflowDefinition,
+    state_id: &str,
+) -> Result<RuntimeStateBinding> {
+    let state = workflow
+        .spec
+        .states
+        .get(state_id)
+        .ok_or_else(|| anyhow::anyhow!("state {state_id} is not defined"))?;
+    let role = state
+        .role
+        .ok_or_else(|| anyhow::anyhow!("state {state_id} is missing role binding"))?;
+    Ok(RuntimeStateBinding {
+        state_id: state_id.to_string(),
+        role,
+        skill_pack: state.skill_pack,
+    })
+}
+
+pub fn resolve_transition_handoff(
+    workflow: &WorkflowDefinition,
+    transition: &TransitionDefinition,
+) -> Result<Option<RuntimeHandoffBinding>> {
+    let Some(handoff) = &transition.handoff else {
+        return Ok(None);
+    };
+    if !workflow.spec.states.contains_key(&transition.to) {
+        anyhow::bail!("handoff target state {} is not defined", transition.to);
+    }
+    Ok(Some(RuntimeHandoffBinding {
+        transition_id: transition.id.clone(),
+        from_role: handoff.from_role,
+        to_role: handoff.to_role,
+        mode: handoff.mode,
+        payload_ref: handoff.payload_ref.clone(),
+        expected_state: handoff.expected_state.clone(),
+    }))
+}
+
 pub fn apply_workflow_event(
     project_root: impl AsRef<Path>,
     workflow: &WorkflowDefinition,
@@ -117,6 +157,9 @@ pub fn apply_workflow_event(
     actions: &impl ActionRegistry,
 ) -> Result<RuntimeTransitionResult> {
     let transition = find_transition(workflow, current_state, incoming_event_type)?;
+    let current_binding = resolve_state_binding(workflow, current_state)?;
+    let next_binding = resolve_state_binding(workflow, &transition.to)?;
+    let handoff = resolve_transition_handoff(workflow, transition)?;
     let runtime_transition = RuntimeTransition {
         transition_id: transition.id.clone(),
         from_state: current_state.to_string(),
@@ -136,6 +179,9 @@ pub fn apply_workflow_event(
             return Ok(RuntimeTransitionResult {
                 applied: false,
                 transition: Some(runtime_transition),
+                current_binding: Some(current_binding),
+                next_binding: Some(next_binding),
+                handoff,
                 guard_outcomes,
                 action_outcomes: Vec::new(),
                 event_id: None,
@@ -190,6 +236,9 @@ pub fn apply_workflow_event(
     Ok(RuntimeTransitionResult {
         applied: true,
         transition: Some(runtime_transition),
+        current_binding: Some(current_binding),
+        next_binding: Some(next_binding),
+        handoff,
         guard_outcomes,
         action_outcomes,
         event_id: Some(event.event_id),
@@ -220,12 +269,17 @@ spec:
     backlog:
       label: 待处理
       phase: future
+      role: work-agent
+      skillPack: execution-skills
     todo:
       label: 准备开工
       phase: current
+      role: work-agent
+      skillPack: execution-skills
     done:
       label: 已完成
       phase: past
+      role: system
   transitions:
     - id: schedule
       from: backlog
@@ -239,6 +293,12 @@ spec:
       from: todo
       to: done
       on: issue.completed
+      handoff:
+        fromRole: work-agent
+        toRole: system
+        mode: ownership-transfer
+        payloadRef: mergeProofRef
+        expectedState: done
       actions:
         - event.emit.task_completed
 "#;
@@ -276,6 +336,20 @@ spec:
         let events = load_task_events(dir.path()).unwrap();
 
         assert!(result.applied);
+        assert_eq!(
+            result
+                .current_binding
+                .as_ref()
+                .map(|binding| binding.role.as_str()),
+            Some("work-agent")
+        );
+        assert_eq!(
+            result
+                .next_binding
+                .as_ref()
+                .map(|binding| binding.role.as_str()),
+            Some("work-agent")
+        );
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event_type, "issue.scheduled");
         assert_eq!(events[0].state.as_ref().unwrap().from_state, "backlog");
@@ -304,6 +378,13 @@ spec:
         .unwrap();
 
         assert!(!result.applied);
+        assert_eq!(
+            result
+                .current_binding
+                .as_ref()
+                .map(|binding| binding.role.as_str()),
+            Some("work-agent")
+        );
         assert_eq!(result.blocked_reason.as_deref(), Some("missing field"));
         assert!(load_task_events(dir.path()).unwrap().is_empty());
     }
@@ -315,5 +396,18 @@ spec:
             .to_string();
 
         assert!(err.contains("no transition"));
+    }
+
+    #[test]
+    fn resolves_handoff_on_role_transfer_transition() {
+        let workflow = workflow();
+        let transition = find_transition(&workflow, "todo", "issue.completed").unwrap();
+        let handoff = resolve_transition_handoff(&workflow, transition)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(handoff.mode.as_str(), "ownership-transfer");
+        assert_eq!(handoff.from_role.as_str(), "work-agent");
+        assert_eq!(handoff.to_role.as_str(), "system");
     }
 }

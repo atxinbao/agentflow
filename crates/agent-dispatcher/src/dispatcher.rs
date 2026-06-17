@@ -1,7 +1,7 @@
 use crate::model::{
-    AgentDispatcherClaim, AGENT_SESSION_CREATED, AGENT_SESSION_DONE, AGENT_SESSION_FAILED,
-    AGENT_SESSION_INTERRUPTED, AGENT_SESSION_IN_REVIEW, AGENT_SESSION_RESUMED,
-    AGENT_SESSION_RUNNING,
+    AgentDispatchRoleBinding, AgentDispatcherClaim, AGENT_SESSION_CREATED, AGENT_SESSION_DONE,
+    AGENT_SESSION_FAILED, AGENT_SESSION_INTERRUPTED, AGENT_SESSION_IN_REVIEW,
+    AGENT_SESSION_RESUMED, AGENT_SESSION_RUNNING,
 };
 use agentflow_event_store::{
     append_task_event_once, load_task_events, EventActor, TaskEvent, TaskEventDraft,
@@ -48,7 +48,8 @@ impl AgentDispatcher {
 
         let payload: AgentLaunchPayload = serde_json::from_value(event.payload.clone())
             .with_context(|| format!("parse launch payload {}", event.event_id))?;
-        let request = launch_payload_to_mcp_request(&payload);
+        let role_binding = AgentDispatchRoleBinding::resolve(payload.agent_role.clone())?;
+        let request = launch_payload_to_mcp_request(&payload, &role_binding);
         let provider = self
             .providers
             .provider(&payload.provider)
@@ -57,6 +58,7 @@ impl AgentDispatcher {
         let created_event = append_session_event(
             root,
             &payload,
+            &role_binding,
             &session,
             if had_prior_session_event(root, &payload.run_id)? {
                 AGENT_SESSION_RESUMED
@@ -72,6 +74,8 @@ impl AgentDispatcher {
             provider: session.provider,
             session_id: session.session_id,
             session_status: session.status.as_str().to_string(),
+            runtime_role: role_binding.runtime_role,
+            skill_pack: role_binding.skill_pack,
             created_event_id: created_event.event_id,
         }))
     }
@@ -124,12 +128,15 @@ fn had_prior_session_event(root: &Path, run_id: &str) -> Result<bool> {
     }))
 }
 
-fn launch_payload_to_mcp_request(payload: &AgentLaunchPayload) -> McpLaunchRequest {
+fn launch_payload_to_mcp_request(
+    payload: &AgentLaunchPayload,
+    role_binding: &AgentDispatchRoleBinding,
+) -> McpLaunchRequest {
     let mut request = McpLaunchRequest::new(
         payload.provider.clone(),
         payload.issue_id.clone(),
         payload.run_id.clone(),
-        payload.agent_role.clone(),
+        role_binding.provider_role.clone(),
         payload.working_directory.clone(),
         payload.launch_request_path.clone(),
     );
@@ -156,12 +163,14 @@ fn append_status_event(
         McpSessionStatus::Failed | McpSessionStatus::Cancelled => AGENT_SESSION_FAILED,
         McpSessionStatus::Queued => return Ok(None),
     };
-    append_session_event(root, payload, session, event_type).map(Some)
+    let role_binding = AgentDispatchRoleBinding::resolve(payload.agent_role.clone())?;
+    append_session_event(root, payload, &role_binding, session, event_type).map(Some)
 }
 
 fn append_session_event(
     root: &Path,
     payload: &AgentLaunchPayload,
+    role_binding: &AgentDispatchRoleBinding,
     session: &McpSessionSnapshot,
     event_type: &str,
 ) -> Result<TaskEvent> {
@@ -182,6 +191,9 @@ fn append_session_event(
             causation_id: None,
             payload: json!({
                 "provider": session.provider,
+                "requestedRole": role_binding.requested_role,
+                "runtimeRole": role_binding.runtime_role.as_str(),
+                "skillPack": role_binding.skill_pack.map(|value| value.as_str()),
                 "sessionId": session.session_id,
                 "sessionStatus": session.status.as_str(),
                 "issueId": session.issue_id,
@@ -297,10 +309,24 @@ mod tests {
         assert_eq!(claim.issue_id, "AF-DISPATCH-001");
         assert_eq!(claim.provider, "fake");
         assert_eq!(claim.session_id, "fake-run-001");
+        assert_eq!(claim.runtime_role.as_str(), "work-agent");
+        assert_eq!(
+            claim
+                .skill_pack
+                .as_ref()
+                .map(|skill_pack| skill_pack.as_str()),
+            Some("execution-skills")
+        );
         let events = load_task_events(dir.path()).unwrap();
         assert!(events
             .iter()
             .any(|event| event.event_type == AGENT_SESSION_CREATED));
+        let created = events
+            .iter()
+            .find(|event| event.event_type == AGENT_SESSION_CREATED)
+            .unwrap();
+        assert_eq!(created.payload["requestedRole"], "build-agent");
+        assert_eq!(created.payload["runtimeRole"], "work-agent");
     }
 
     #[test]
@@ -373,9 +399,25 @@ mod tests {
         let resumed_claim = dispatcher.claim_next_launch(dir.path()).unwrap().unwrap();
 
         assert_eq!(resumed_claim.run_id, first_claim.run_id);
+        assert_eq!(resumed_claim.runtime_role.as_str(), "work-agent");
         let events = load_task_events(dir.path()).unwrap();
         assert!(events
             .iter()
             .any(|event| event.event_type == AGENT_SESSION_RESUMED));
+    }
+
+    #[test]
+    fn dispatcher_role_binding_maps_build_agent_to_work_agent() {
+        let binding = AgentDispatchRoleBinding::resolve("build-agent").unwrap();
+
+        assert_eq!(binding.runtime_role.as_str(), "work-agent");
+        assert_eq!(binding.provider_role, "build-agent");
+        assert_eq!(
+            binding
+                .skill_pack
+                .as_ref()
+                .map(|skill_pack| skill_pack.as_str()),
+            Some("execution-skills")
+        );
     }
 }

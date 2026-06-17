@@ -135,6 +135,11 @@ mod tests {
                 .unwrap()
                 .contains("Build Agent execution pipeline")
         );
+        assert!(
+            fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md"))
+                .unwrap()
+                .contains("build-agent` is the execution alias for runtime role `work-agent`")
+        );
         let agentflow_manual =
             fs::read_to_string(dir.path().join(".agentflow/define/agent/Agentflow.md")).unwrap();
         assert!(agentflow_manual.contains("Test design"));
@@ -152,9 +157,13 @@ mod tests {
         );
         let roles =
             fs::read_to_string(dir.path().join(".agentflow/define/agent/roles.json")).unwrap();
+        assert!(roles.contains("\"agentRole\": \"goal-agent\""));
         assert!(roles.contains("\"agentRole\": \"spec-agent\""));
+        assert!(roles.contains("\"agentRole\": \"work-agent\""));
         assert!(roles.contains("\"agentRole\": \"build-agent\""));
         assert!(roles.contains("\"agentRole\": \"audit-agent\""));
+        assert!(roles.contains("\"agentRole\": \"delivery-agent\""));
+        assert!(roles.contains("\"agentRole\": \"specialist\""));
         assert!(dir
             .path()
             .join(".agentflow/define/agent/state/bootstrap.json")

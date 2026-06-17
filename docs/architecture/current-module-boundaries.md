@@ -142,6 +142,8 @@ docs/requirements/**
 - 生成 `AGENTS.md`
 - 生成 `.agentflow/define/agent/**`
 - 固化角色边界、语言策略、plain-work-style、技能锁
+- 固化运行时角色事实：`goal-agent / spec-agent / work-agent / audit-agent / delivery-agent / specialist / system`
+- 保留 `build-agent -> work-agent` 的 provider-facing 兼容别名说明
 
 不负责：
 
@@ -210,6 +212,9 @@ docs/requirements/**
 
 - 解析 YAML workflow
 - 校验状态、迁移、guard、action、terminal state
+- 校验 `state -> role -> skillPack` 绑定
+- 校验 role change 必须显式 handoff
+- 区分 `ownership-transfer` 和 `bounded-capability-call`
 - 提供任务工作流定义
 
 不负责：
@@ -247,6 +252,8 @@ docs/requirements/**
 - 执行 guard / action
 - 追加状态迁移事件
 - 阻止非法状态跳转
+- 解析当前 state authority role 和 next state authority role
+- 把 handoff 边界作为 runtime 一等事实返回
 
 不负责：
 
@@ -257,6 +264,25 @@ docs/requirements/**
 实现位置：
 
 - `crates/workflow-runtime/src/**`
+
+### Agent Dispatcher
+
+负责：
+
+- 消费 `agent.launch.requested`
+- 把运行时 authority role 映射成 provider-facing session role
+- 保留 `build-agent -> work-agent` 的执行兼容
+- 只负责 session claim / launch / lifecycle 事实
+
+不负责：
+
+- 决定 workflow authority
+- 决定下一条 task
+- 让 provider 覆盖 workflow role 绑定
+
+实现位置：
+
+- `crates/agent-dispatcher/src/**`
 
 ### Task Artifacts
 

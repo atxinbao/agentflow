@@ -41,6 +41,10 @@ pub struct WorkflowSpec {
 pub struct StateDefinition {
     pub label: String,
     pub phase: WorkflowStatePhase,
+    #[serde(default)]
+    pub role: Option<WorkflowAgentRole>,
+    #[serde(default)]
+    pub skill_pack: Option<WorkflowSkillPack>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +53,106 @@ pub enum WorkflowStatePhase {
     Future,
     Current,
     Past,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkflowAgentRole {
+    GoalAgent,
+    SpecAgent,
+    WorkAgent,
+    AuditAgent,
+    DeliveryAgent,
+    Specialist,
+    System,
+}
+
+impl WorkflowAgentRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::GoalAgent => "goal-agent",
+            Self::SpecAgent => "spec-agent",
+            Self::WorkAgent => "work-agent",
+            Self::AuditAgent => "audit-agent",
+            Self::DeliveryAgent => "delivery-agent",
+            Self::Specialist => "specialist",
+            Self::System => "system",
+        }
+    }
+
+    pub fn parse_alias(value: &str) -> Option<Self> {
+        match value.trim() {
+            "goal-agent" => Some(Self::GoalAgent),
+            "spec-agent" => Some(Self::SpecAgent),
+            "work-agent" | "build-agent" => Some(Self::WorkAgent),
+            "audit-agent" => Some(Self::AuditAgent),
+            "delivery-agent" => Some(Self::DeliveryAgent),
+            "specialist" => Some(Self::Specialist),
+            "system" => Some(Self::System),
+            _ => None,
+        }
+    }
+
+    pub fn default_skill_pack(&self) -> Option<WorkflowSkillPack> {
+        match self {
+            Self::GoalAgent => Some(WorkflowSkillPack::BrainSkills),
+            Self::SpecAgent => Some(WorkflowSkillPack::ContractSkills),
+            Self::WorkAgent => Some(WorkflowSkillPack::ExecutionSkills),
+            Self::AuditAgent => Some(WorkflowSkillPack::JudgmentSkills),
+            Self::DeliveryAgent => Some(WorkflowSkillPack::DeliverySkills),
+            Self::Specialist => Some(WorkflowSkillPack::SpecialistSkills),
+            Self::System => None,
+        }
+    }
+
+    pub fn provider_role_alias(&self) -> Option<&'static str> {
+        match self {
+            Self::WorkAgent => Some("build-agent"),
+            Self::AuditAgent => Some("audit-agent"),
+            Self::SpecAgent => Some("spec-agent"),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkflowSkillPack {
+    BrainSkills,
+    ContractSkills,
+    ExecutionSkills,
+    JudgmentSkills,
+    DeliverySkills,
+    SpecialistSkills,
+}
+
+impl WorkflowSkillPack {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::BrainSkills => "brain-skills",
+            Self::ContractSkills => "contract-skills",
+            Self::ExecutionSkills => "execution-skills",
+            Self::JudgmentSkills => "judgment-skills",
+            Self::DeliverySkills => "delivery-skills",
+            Self::SpecialistSkills => "specialist-skills",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkflowHandoffMode {
+    OwnershipTransfer,
+    BoundedCapabilityCall,
+}
+
+impl WorkflowHandoffMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::OwnershipTransfer => "ownership-transfer",
+            Self::BoundedCapabilityCall => "bounded-capability-call",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,6 +167,19 @@ pub struct TransitionDefinition {
     pub guards: Vec<GuardDefinition>,
     #[serde(default)]
     pub actions: Vec<ActionDefinition>,
+    #[serde(default)]
+    pub handoff: Option<HandoffDefinition>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffDefinition {
+    pub from_role: WorkflowAgentRole,
+    pub to_role: WorkflowAgentRole,
+    pub mode: WorkflowHandoffMode,
+    pub payload_ref: String,
+    #[serde(default)]
+    pub expected_state: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

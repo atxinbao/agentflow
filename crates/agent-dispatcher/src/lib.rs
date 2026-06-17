@@ -8,6 +8,6 @@ pub mod model;
 
 pub use dispatcher::AgentDispatcher;
 pub use model::{
-    AgentDispatcherClaim, AGENT_SESSION_CREATED, AGENT_SESSION_DONE, AGENT_SESSION_FAILED,
-    AGENT_SESSION_IN_REVIEW, AGENT_SESSION_RUNNING,
+    AgentDispatchRoleBinding, AgentDispatcherClaim, AGENT_SESSION_CREATED, AGENT_SESSION_DONE,
+    AGENT_SESSION_FAILED, AGENT_SESSION_IN_REVIEW, AGENT_SESSION_RUNNING,
 };

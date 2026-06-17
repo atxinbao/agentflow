@@ -1,4 +1,5 @@
 use agentflow_event_store::EventActor;
+use agentflow_workflow_core::{WorkflowAgentRole, WorkflowHandoffMode, WorkflowSkillPack};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -96,11 +97,33 @@ pub struct RuntimeTransition {
     pub event_type: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeStateBinding {
+    pub state_id: String,
+    pub role: WorkflowAgentRole,
+    pub skill_pack: Option<WorkflowSkillPack>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeHandoffBinding {
+    pub transition_id: String,
+    pub from_role: WorkflowAgentRole,
+    pub to_role: WorkflowAgentRole,
+    pub mode: WorkflowHandoffMode,
+    pub payload_ref: String,
+    pub expected_state: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeTransitionResult {
     pub applied: bool,
     pub transition: Option<RuntimeTransition>,
+    pub current_binding: Option<RuntimeStateBinding>,
+    pub next_binding: Option<RuntimeStateBinding>,
+    pub handoff: Option<RuntimeHandoffBinding>,
     pub guard_outcomes: Vec<GuardOutcome>,
     pub action_outcomes: Vec<ActionOutcome>,
     pub event_id: Option<String>,

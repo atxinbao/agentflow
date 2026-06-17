@@ -8,10 +8,10 @@ pub mod model;
 pub mod runtime;
 
 pub use model::{
-    ActionExecution, ActionOutcome, GuardCheck, GuardOutcome, RuntimeContext, RuntimeTransition,
-    RuntimeTransitionResult,
+    ActionExecution, ActionOutcome, GuardCheck, GuardOutcome, RuntimeContext,
+    RuntimeHandoffBinding, RuntimeStateBinding, RuntimeTransition, RuntimeTransitionResult,
 };
 pub use runtime::{
-    apply_workflow_event, find_transition, ActionRegistry, GuardRegistry, StaticActionRegistry,
-    StaticGuardRegistry,
+    apply_workflow_event, find_transition, resolve_state_binding, resolve_transition_handoff,
+    ActionRegistry, GuardRegistry, StaticActionRegistry, StaticGuardRegistry,
 };

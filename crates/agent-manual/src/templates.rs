@@ -53,6 +53,8 @@ Every Agent MUST read and follow:
 - Task completion and audit are separate flows. A Build Agent Done writeback must not create an audit request.
 - Audit starts only from an independent Audit Issue or explicit human audit request. `audit-request.json` is compatibility metadata, not the Agent execution entry.
 - Do not ask the human to click an App button to create audit. The App only displays audit state, reports, findings, evidence maps, traceability, and trigger source.
+- AgentFlow runtime roles are `goal-agent`, `spec-agent`, `work-agent`, `audit-agent`, `delivery-agent`, `specialist`, and `system`.
+- `build-agent` is the current provider-facing execution alias for runtime role `work-agent`.
 - AgentFlow does not create or control Codex threads. Humans must keep separate Codex threads for Spec Agent, Build Agent, and Audit Agent.
 - Do not mix roles in one Codex thread. A thread that writes code must not also audit the same delivery.
 - Use the role startup instruction and handoff package from AgentFlow before acting.
@@ -120,6 +122,23 @@ AgentFlow does not directly control Codex. Humans use AgentFlow with three separ
 3. `AgentFlow / Audit Agent`
 
 Do not mix these roles in one Codex thread. Each thread must keep one role for the whole task.
+
+## Runtime Role Taxonomy
+
+AgentFlow runtime authority uses these roles:
+
+- `goal-agent`
+- `spec-agent`
+- `work-agent`
+- `audit-agent`
+- `delivery-agent`
+- `specialist`
+- `system`
+
+Current provider-facing execution compatibility:
+
+- `build-agent` is the execution alias for runtime role `work-agent`.
+- runtime handoff chooses the authority role first, then maps to a provider-facing role only when execution starts.
 
 ## Required Reading Order
 
