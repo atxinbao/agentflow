@@ -1,21 +1,23 @@
 # Current Module Boundaries
 
 创建日期：2026-06-02
-最后更新：2026-06-16
+最后更新：2026-06-18
 执行者：Codex
 
 ## 结论
 
-AgentFlow 当前底层已经收口到一套任务中心架构。
+AgentFlow 当前底层已经开始收口到一套 Project Operating System 架构。
 
 公开需求先写到 `docs/requirements/**`。
-内部任务合同写到 `.agentflow/spec/**`。
+项目大脑文档写到 `docs/projects/**`。
+内部执行合同写到 `.agentflow/spec/**`。
 运行事实写到 `.agentflow/events/**`、`.agentflow/projections/**`、`.agentflow/tasks/**` 和 `.agentflow/audit/**`。
 
 当前事实流：
 
 ```text
 docs/requirements/**
+  -> docs/projects/**
   -> .agentflow/spec/**
   -> .agentflow/events/task-events.jsonl
   -> .agentflow/projections/**
@@ -78,17 +80,50 @@ docs/requirements/**
 
 ## Requirement and Task Contract Layer
 
+### Project Brain / Constitution
+
+负责：
+
+- 管理 `docs/projects/<project-id>/**`
+- 固化 `GOAL.md / PLAN.md / DECISIONS.md` 的只读 authority
+- 作为 Project 的上游方向层
+- 给后续 `SpecProject / SpecIssue` 提供目标、路径和确认记录
+
+不负责：
+
+- 推进 issue 状态
+- 写运行时事件
+- 持有 run / session / lease / checkpoint 事实
+- 直接启动外部 Agent
+
+实现位置：
+
+- `docs/product/**`
+- `docs/foundation/**`
+- `crates/spec/src/model.rs`
+- `crates/spec/src/storage.rs`
+
+说明：
+
+- Project 是最高聚合根。
+- Issue / Run / Session 不是顶层 authority。
+- Project Brain 只负责项目方向、计划和确认，不负责执行状态。
+- Completion 只能来自 Project 级判断，不能由 issue done、run 完成或 session 结束直接替代。
+
 ### Spec
 
 负责：
 
 - 读取 `docs/requirements/<requirement-id>.md`
+- 读取 `docs/projects/<project-id>/**`
 - 管理 `.agentflow/spec/projects/**`
 - 管理 `.agentflow/spec/issues/**`
 - 校验 issue/project 合同、依赖、优先级、workflowRef、allowedPaths、expectedOutputs
+- 把 Project Brain 下游 materialize 为执行合同
 
 不负责：
 
+- 持有项目方向 authority
 - 推进运行状态
 - 写事件流
 - 执行任务

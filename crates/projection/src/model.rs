@@ -59,6 +59,23 @@ pub struct ProjectionPublicDelivery {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectBrainProjection {
+    pub project_path: String,
+    pub goal_path: String,
+    pub plan_path: String,
+    pub decisions_path: String,
+    pub brain_status: String,
+    pub goal_status: String,
+    pub plan_status: String,
+    pub decision_status: String,
+    pub missing_documents: Vec<String>,
+    pub open_questions: Vec<String>,
+    pub next_recommended_action: String,
+    pub readonly: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskProjection {
     pub version: String,
     pub issue_id: String,
@@ -80,11 +97,13 @@ pub struct ProjectProjection {
     pub version: String,
     pub project_id: String,
     pub title: String,
+    pub objective: String,
     pub status: String,
     pub issue_ids: Vec<String>,
     pub current_issue_id: Option<String>,
     pub issue_count: usize,
     pub completed_issue_count: usize,
+    pub project_brain: ProjectBrainProjection,
     pub updated_at: u64,
 }
 
