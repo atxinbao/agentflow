@@ -24,19 +24,32 @@
 {
   "eventId": "evt-000001",
   "eventType": "work.run.started",
+  "eventVersion": "task-event.v2",
   "flowType": "work",
-  "flowId": "issue-AF-123",
+  "aggregateType": "issue",
+  "aggregateId": "AF-123",
   "projectId": "project-001",
   "issueId": "AF-123",
   "runId": "run-001",
-  "role": "work-agent",
-  "actor": "system|agent|human|provider",
+  "authorityRole": "work-agent",
+  "actor": {
+    "role": "build-agent",
+    "kind": "system"
+  },
   "timestamp": "2026-06-18T10:00:00Z",
   "correlationId": "corr-001",
   "causationId": "evt-000000",
+  "artifactRefs": [],
   "payload": {}
 }
 ```
+
+补充约束：
+
+- `flowType` 是 runtime authority 所属流程，不允许页面自己猜；
+- `runId` 进入执行阶段后必须成为 event envelope 一等字段，不只藏在 payload；
+- `authorityRole` 表示当前事件写入后对应的 runtime role；
+- `actor.role` 表示实际写事件的组件或 agent 身份，和 authority role 不是一回事。
 
 ## Event 分类
 
@@ -196,6 +209,17 @@ Projection 必须支持：
 - 从全量 events 重建
 - 从 checkpoint + events 重建
 - 按 project / issue 局部重建
+
+当前事实层建议固定两类恢复锚点：
+
+1. `TaskReplayCursor`
+   - 用于从某个 `afterEventId` 继续 replay；
+   - 绑定 `flowType / aggregateType / aggregateId / issueId / runId`。
+
+2. `TaskRunCheckpoint`
+   - 写在 `.agentflow/tasks/<issue-id>/runs/<run-id>/checkpoints/**`
+   - 记录 `state / eventId / correlationId / summary`
+   - 供 runtime resume / replay 起点使用
 
 规则：
 

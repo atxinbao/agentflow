@@ -59,6 +59,7 @@ dependencies = [
  "agentflow-state",
  "agentflow-task-artifacts",
  "agentflow-task-loop",
+ "agentflow-workflow-core",
  "anyhow",
  "clap",
  "serde",
@@ -81,6 +82,7 @@ dependencies = [
  "agentflow-state",
  "agentflow-task-loop",
  "agentflow-workflow-acceptance",
+ "agentflow-workflow-core",
  "anyhow",
  "base64 0.22.1",
  "notify",
@@ -96,6 +98,7 @@ dependencies = [
 name = "agentflow-event-store"
 version = "0.2.0"
 dependencies = [
+ "agentflow-workflow-core",
  "anyhow",
  "serde",
  "serde_json",
@@ -108,6 +111,7 @@ version = "0.2.0"
 dependencies = [
  "agentflow-event-store",
  "agentflow-projection",
+ "agentflow-workflow-core",
  "anyhow",
  "serde",
  "serde_json",
@@ -146,6 +150,7 @@ version = "0.2.0"
 dependencies = [
  "agentflow-event-store",
  "agentflow-spec",
+ "agentflow-workflow-core",
  "anyhow",
  "serde",
  "serde_json",
@@ -196,6 +201,8 @@ dependencies = [
 name = "agentflow-task-artifacts"
 version = "0.2.0"
 dependencies = [
+ "agentflow-event-store",
+ "agentflow-workflow-core",
  "anyhow",
  "serde",
  "serde_json",
@@ -209,6 +216,7 @@ dependencies = [
  "agentflow-event-store",
  "agentflow-spec",
  "agentflow-task-artifacts",
+ "agentflow-workflow-core",
  "anyhow",
  "serde",
  "serde_json",
@@ -227,6 +235,7 @@ dependencies = [
  "agentflow-spec",
  "agentflow-state",
  "agentflow-task-artifacts",
+ "agentflow-workflow-core",
  "anyhow",
  "serde",
  "serde_json",
@@ -249,6 +258,7 @@ name = "agentflow-workflow-runtime"
 version = "0.2.0"
 dependencies = [
  "agentflow-event-store",
+ "agentflow-task-artifacts",
  "agentflow-workflow-core",
  "anyhow",
  "serde",

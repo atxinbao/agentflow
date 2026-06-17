@@ -13,6 +13,7 @@ agentflow-projection = { path = "../projection" }
 agentflow-spec = { path = "../spec" }
 agentflow-state = { path = "../state" }
 agentflow-task-artifacts = { path = "../task-artifacts" }
+agentflow-workflow-core = { path = "../workflow-core" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

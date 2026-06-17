@@ -1,8 +1,8 @@
 use crate::model::{
-    ReplayFilter, TaskEvent, TaskEventConsumerState, TaskEventDeadLetter, TaskEventDraft,
-    TaskEventManifest, TaskEventSummary, TASK_EVENT_CONSUMER_VERSION,
-    TASK_EVENT_DEAD_LETTER_VERSION, TASK_EVENT_MANIFEST_VERSION, TASK_EVENT_STREAM_PATH,
-    TASK_EVENT_VERSION,
+    classify_task_event, ReplayFilter, TaskEvent, TaskEventConsumerState, TaskEventDeadLetter,
+    TaskEventDraft, TaskEventManifest, TaskEventSummary, TaskReplayCursor,
+    TASK_EVENT_CONSUMER_VERSION, TASK_EVENT_DEAD_LETTER_VERSION, TASK_EVENT_MANIFEST_VERSION,
+    TASK_EVENT_STREAM_PATH, TASK_EVENT_VERSION,
 };
 use anyhow::{Context, Result};
 use std::collections::BTreeSet;
@@ -106,6 +106,11 @@ pub fn replay_task_events(
                 continue;
             }
         }
+        if let Some(expected) = filter.flow_type.as_ref() {
+            if &event.flow_type != expected {
+                continue;
+            }
+        }
         if let Some(expected) = filter.aggregate_id.as_ref() {
             if &event.aggregate_id != expected {
                 continue;
@@ -121,12 +126,36 @@ pub fn replay_task_events(
                 continue;
             }
         }
+        if let Some(expected) = filter.run_id.as_ref() {
+            if event.run_id.as_ref() != Some(expected) {
+                continue;
+            }
+        }
         if !allowed_types.is_empty() && !allowed_types.contains(&event.event_type) {
             continue;
         }
         replayed.push(event);
     }
     Ok(replayed)
+}
+
+pub fn replay_task_events_from_cursor(
+    project_root: impl AsRef<Path>,
+    cursor: &TaskReplayCursor,
+) -> Result<Vec<TaskEvent>> {
+    replay_task_events(
+        project_root,
+        ReplayFilter {
+            flow_type: Some(cursor.flow_type),
+            aggregate_type: Some(cursor.aggregate_type.clone()),
+            aggregate_id: Some(cursor.aggregate_id.clone()),
+            issue_id: cursor.issue_id.clone(),
+            project_id: cursor.project_id.clone(),
+            run_id: cursor.run_id.clone(),
+            event_types: Vec::new(),
+            after_event_id: Some(cursor.after_event_id.clone()),
+        },
+    )
 }
 
 pub fn load_pending_task_events(
@@ -220,12 +249,15 @@ fn materialize_event(root: &Path, draft: TaskEventDraft) -> Result<TaskEvent> {
     Ok(TaskEvent {
         event_id,
         event_version: TASK_EVENT_VERSION.to_string(),
+        flow_type: draft.flow_type,
         aggregate_type: draft.aggregate_type,
         aggregate_id: draft.aggregate_id.clone(),
         project_id: draft.project_id,
         issue_id: draft.issue_id,
+        run_id: draft.run_id,
         event_type: draft.event_type,
         timestamp,
+        authority_role: draft.authority_role,
         actor: draft.actor,
         state: draft.state,
         correlation_id: draft
@@ -253,6 +285,12 @@ fn validate_draft(draft: &TaskEventDraft) -> Result<()> {
     validate_required("aggregateType", &draft.aggregate_type)?;
     validate_required("aggregateId", &draft.aggregate_id)?;
     validate_required("type", &draft.event_type)?;
+    if classify_task_event(&draft.event_type).as_str() == "unknown" {
+        anyhow::bail!(
+            "task event type {} is not in the runtime taxonomy",
+            draft.event_type
+        );
+    }
     validate_required("actor.role", &draft.actor.role)?;
     validate_required("actor.kind", &draft.actor.kind)?;
     if draft.project_id.is_none() && draft.issue_id.is_none() {
@@ -320,17 +358,23 @@ fn unix_timestamp_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{EventActor, EventStateTransition, EVENT_TYPE_SPEC_ISSUE_READY};
+    use crate::model::{
+        EventActor, EventStateTransition, TaskReplayCursor, EVENT_TYPE_SPEC_ISSUE_READY,
+    };
+    use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
     use serde_json::json;
     use tempfile::tempdir;
 
     fn issue_scheduled_draft(issue_id: &str) -> TaskEventDraft {
         TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
             aggregate_id: issue_id.to_string(),
             project_id: Some("project-task-workflow-v1".to_string()),
             issue_id: Some(issue_id.to_string()),
+            run_id: None,
             event_type: "issue.scheduled".to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
             actor: EventActor {
                 role: "task-loop".to_string(),
                 kind: "system".to_string(),
@@ -358,6 +402,7 @@ mod tests {
         assert_eq!(events[0], event);
         assert!(event.event_id.starts_with("evt-"));
         assert_eq!(event.event_version, TASK_EVENT_VERSION);
+        assert_eq!(event.flow_type, WorkflowFlowType::Work);
         assert_eq!(event.correlation_id, "corr-AF-TASK-001");
         assert!(dir.path().join(TASK_EVENT_STREAM_PATH).is_file());
     }
@@ -380,8 +425,9 @@ mod tests {
         let first = append_task_event(dir.path(), issue_scheduled_draft("AF-TASK-001")).unwrap();
         append_task_event(dir.path(), issue_scheduled_draft("AF-TASK-002")).unwrap();
         let mut third = issue_scheduled_draft("AF-TASK-001");
-        third.event_type = "issue.started".to_string();
+        third.event_type = "run.created".to_string();
         third.causation_id = Some(first.event_id.clone());
+        third.run_id = Some("run-001".to_string());
         append_task_event(dir.path(), third).unwrap();
 
         let mut filter = ReplayFilter::issue("AF-TASK-001");
@@ -389,7 +435,42 @@ mod tests {
         let events = replay_task_events(dir.path(), filter).unwrap();
 
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].event_type, "issue.started");
+        assert_eq!(events[0].event_type, "run.created");
+    }
+
+    #[test]
+    fn replay_filters_by_run_and_cursor() {
+        let dir = tempdir().unwrap();
+        let first = append_task_event(dir.path(), issue_scheduled_draft("AF-TASK-001")).unwrap();
+        let mut second = issue_scheduled_draft("AF-TASK-001");
+        second.event_type = "run.created".to_string();
+        second.run_id = Some("run-001".to_string());
+        second.authority_role = Some(WorkflowAgentRole::WorkAgent);
+        let second = append_task_event(dir.path(), second).unwrap();
+
+        let mut third = issue_scheduled_draft("AF-TASK-001");
+        third.event_type = "checkpoint.created".to_string();
+        third.run_id = Some("run-001".to_string());
+        third.causation_id = Some(second.event_id.clone());
+        append_task_event(dir.path(), third).unwrap();
+
+        let by_run =
+            replay_task_events(dir.path(), ReplayFilter::run("AF-TASK-001", "run-001")).unwrap();
+        assert_eq!(by_run.len(), 2);
+
+        let cursor = TaskReplayCursor {
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: "AF-TASK-001".to_string(),
+            project_id: Some("project-task-workflow-v1".to_string()),
+            issue_id: Some("AF-TASK-001".to_string()),
+            run_id: Some("run-001".to_string()),
+            after_event_id: second.event_id,
+        };
+        let replayed = replay_task_events_from_cursor(dir.path(), &cursor).unwrap();
+        assert_eq!(replayed.len(), 1);
+        assert_eq!(replayed[0].event_type, "checkpoint.created");
+        assert_eq!(first.event_type, "issue.scheduled");
     }
 
     #[test]
@@ -440,5 +521,16 @@ mod tests {
             .to_string();
 
         assert!(err.contains("projectId or issueId"));
+    }
+
+    #[test]
+    fn rejects_unknown_event_type_taxonomy() {
+        let dir = tempdir().unwrap();
+        let mut draft = issue_scheduled_draft("AF-TASK-001");
+        draft.event_type = "mystery.event".to_string();
+        let err = append_task_event(dir.path(), draft)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("runtime taxonomy"));
     }
 }

@@ -11,6 +11,7 @@ use agentflow_mcp::{
     McpSessionStatus,
 };
 use agentflow_task_loop::{AgentLaunchPayload, AGENT_LAUNCH_REQUESTED};
+use agentflow_workflow_core::WorkflowFlowType;
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::{collections::BTreeMap, path::Path};
@@ -38,9 +39,8 @@ impl AgentDispatcher {
         let Some(event) = events.into_iter().find(|event| {
             event.event_type == AGENT_LAUNCH_REQUESTED
                 && event
-                    .payload
-                    .get("runId")
-                    .and_then(serde_json::Value::as_str)
+                    .run_id
+                    .as_deref()
                     .is_some_and(|run_id| !unavailable_runs.get(run_id).copied().unwrap_or(false))
         }) else {
             return Ok(None);
@@ -84,12 +84,7 @@ impl AgentDispatcher {
 fn unavailable_run_ids(events: &[TaskEvent]) -> BTreeMap<String, bool> {
     let mut state = BTreeMap::new();
     for event in events {
-        let Some(run_id) = event
-            .payload
-            .get("runId")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_string)
-        else {
+        let Some(run_id) = event.run_id.clone() else {
             continue;
         };
         match event.event_type.as_str() {
@@ -120,11 +115,7 @@ fn had_prior_session_event(root: &Path, run_id: &str) -> Result<bool> {
                 | AGENT_SESSION_IN_REVIEW
                 | AGENT_SESSION_DONE
                 | AGENT_SESSION_FAILED
-        ) && event
-            .payload
-            .get("runId")
-            .and_then(serde_json::Value::as_str)
-            == Some(run_id)
+        ) && event.run_id.as_deref() == Some(run_id)
     }))
 }
 
@@ -177,11 +168,14 @@ fn append_session_event(
     append_task_event_once(
         root,
         TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
             aggregate_id: payload.issue_id.clone(),
             project_id: payload.project_id.clone(),
             issue_id: Some(payload.issue_id.clone()),
+            run_id: Some(session.run_id.clone()),
             event_type: event_type.to_string(),
+            authority_role: Some(role_binding.runtime_role),
             actor: EventActor {
                 role: "agent-dispatcher".to_string(),
                 kind: "system".to_string(),
@@ -369,11 +363,18 @@ mod tests {
         append_task_event_once(
             dir.path(),
             TaskEventDraft {
+                flow_type: WorkflowFlowType::Work,
                 aggregate_type: "issue".to_string(),
                 aggregate_id: "AF-DISPATCH-001".to_string(),
                 project_id: Some("project-dispatcher".to_string()),
                 issue_id: Some("AF-DISPATCH-001".to_string()),
+                run_id: Some(first_claim.run_id.clone()),
                 event_type: AGENT_SESSION_INTERRUPTED.to_string(),
+                authority_role: Some(
+                    AgentDispatchRoleBinding::resolve("build-agent")
+                        .unwrap()
+                        .runtime_role,
+                ),
                 actor: EventActor {
                     role: "agent-dispatcher".to_string(),
                     kind: "system".to_string(),

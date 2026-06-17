@@ -17,6 +17,7 @@ agentflow-spec = { path = "../spec" }
 agentflow-state = { path = "../state" }
 agentflow-task-artifacts = { path = "../task-artifacts" }
 agentflow-task-loop = { path = "../task-loop" }
+agentflow-workflow-core = { path = "../workflow-core" }
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true

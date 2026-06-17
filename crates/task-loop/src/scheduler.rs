@@ -10,6 +10,7 @@ use agentflow_spec::{
     SpecProject,
 };
 use agentflow_task_artifacts::create_task_run;
+use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::{
@@ -49,11 +50,14 @@ impl TaskLoop {
         let event = append_task_event_once(
             &root,
             TaskEventDraft {
+                flow_type: WorkflowFlowType::Work,
                 aggregate_type: "issue".to_string(),
                 aggregate_id: issue.issue_id.clone(),
                 project_id: issue.project_id.clone(),
                 issue_id: Some(issue.issue_id.clone()),
+                run_id: None,
                 event_type: ISSUE_SCHEDULED.to_string(),
+                authority_role: Some(WorkflowAgentRole::WorkAgent),
                 actor: EventActor {
                     role: "task-loop".to_string(),
                     kind: "system".to_string(),
@@ -238,11 +242,14 @@ fn request_issue_launch_inner(
     let event = append_task_event_once(
         root,
         TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
             aggregate_id: issue.issue_id.clone(),
             project_id: issue.project_id.clone(),
             issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(run.run_id.clone()),
             event_type: AGENT_LAUNCH_REQUESTED.to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
             actor: EventActor {
                 role: "task-loop".to_string(),
                 kind: "system".to_string(),
@@ -319,11 +326,14 @@ fn append_issue_scheduled_event(root: &Path, issue: &SpecIssue) -> Result<TaskLo
     let event = append_task_event_once(
         root,
         TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
             aggregate_id: issue.issue_id.clone(),
             project_id: issue.project_id.clone(),
             issue_id: Some(issue.issue_id.clone()),
+            run_id: None,
             event_type: ISSUE_SCHEDULED.to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
             actor: EventActor {
                 role: "task-loop".to_string(),
                 kind: "system".to_string(),

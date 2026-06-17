@@ -1,8 +1,10 @@
 use crate::model::{
-    TaskCommandInput, TaskCommandRecord, TaskEvidence, TaskRun, TaskRunStatus,
-    TaskValidationRecord, TASK_COMMAND_VERSION, TASK_EVIDENCE_VERSION, TASK_RUN_VERSION,
-    TASK_VALIDATION_VERSION,
+    TaskCommandInput, TaskCommandRecord, TaskEvidence, TaskRun, TaskRunCheckpoint, TaskRunStatus,
+    TaskValidationRecord, TASK_COMMAND_VERSION, TASK_EVIDENCE_VERSION, TASK_RUN_CHECKPOINT_VERSION,
+    TASK_RUN_VERSION, TASK_VALIDATION_VERSION,
 };
+use agentflow_event_store::TaskReplayCursor;
+use agentflow_workflow_core::WorkflowFlowType;
 use anyhow::{Context, Result};
 use std::{
     fs,
@@ -205,6 +207,89 @@ pub fn write_task_evidence(
     Ok(evidence)
 }
 
+pub fn write_task_run_checkpoint(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+    flow_type: WorkflowFlowType,
+    state: &str,
+    event_id: &str,
+    correlation_id: Option<String>,
+    summary: impl Into<String>,
+) -> Result<TaskRunCheckpoint> {
+    let root = canonical_project_root(project_root)?;
+    validate_id("issueId", issue_id)?;
+    validate_id("runId", run_id)?;
+    validate_required("state", state)?;
+    validate_required("eventId", event_id)?;
+    let checkpoint_dir = task_run_dir(&root, issue_id, run_id).join("checkpoints");
+    ensure_directory(&checkpoint_dir)?;
+    let checkpoint_id = next_named_id(&checkpoint_dir, "checkpoint-")?;
+    let checkpoint = TaskRunCheckpoint {
+        version: TASK_RUN_CHECKPOINT_VERSION.to_string(),
+        issue_id: issue_id.to_string(),
+        run_id: run_id.to_string(),
+        checkpoint_id: checkpoint_id.clone(),
+        flow_type,
+        state: state.to_string(),
+        event_id: event_id.to_string(),
+        correlation_id,
+        summary: summary.into(),
+        created_at: unix_timestamp_seconds(),
+    };
+    write_json(
+        &checkpoint_dir.join(format!("{checkpoint_id}.json")),
+        &checkpoint,
+    )?;
+    Ok(checkpoint)
+}
+
+pub fn load_task_run_checkpoints(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<Vec<TaskRunCheckpoint>> {
+    let root = canonical_project_root(project_root)?;
+    validate_id("issueId", issue_id)?;
+    validate_id("runId", run_id)?;
+    let checkpoint_dir = task_run_dir(&root, issue_id, run_id).join("checkpoints");
+    if !checkpoint_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut paths = fs::read_dir(&checkpoint_dir)
+        .with_context(|| format!("read {}", checkpoint_dir.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .with_context(|| format!("collect {}", checkpoint_dir.display()))?
+        .into_iter()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("json"))
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.into_iter().map(read_json).collect()
+}
+
+pub fn latest_task_run_checkpoint(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<Option<TaskRunCheckpoint>> {
+    Ok(load_task_run_checkpoints(project_root, issue_id, run_id)?
+        .into_iter()
+        .last())
+}
+
+pub fn checkpoint_replay_cursor(checkpoint: &TaskRunCheckpoint) -> TaskReplayCursor {
+    TaskReplayCursor {
+        flow_type: checkpoint.flow_type,
+        aggregate_type: "issue".to_string(),
+        aggregate_id: checkpoint.issue_id.clone(),
+        project_id: None,
+        issue_id: Some(checkpoint.issue_id.clone()),
+        run_id: Some(checkpoint.run_id.clone()),
+        after_event_id: checkpoint.event_id.clone(),
+    }
+}
+
 pub fn load_task_evidence(project_root: impl AsRef<Path>, issue_id: &str) -> Result<TaskEvidence> {
     let root = canonical_project_root(project_root)?;
     validate_id("issueId", issue_id)?;
@@ -301,6 +386,7 @@ fn unix_timestamp_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agentflow_workflow_core::WorkflowFlowType;
     use tempfile::tempdir;
 
     fn command(exit_code: i32) -> TaskCommandInput {
@@ -410,6 +496,42 @@ mod tests {
             .join(".agentflow/tasks/AF-TASK-001/delivery")
             .exists());
         assert!(!dir.path().join(".agentflow/output/release").exists());
+    }
+
+    #[test]
+    fn writes_checkpoints_and_builds_replay_cursor() {
+        let dir = tempdir().unwrap();
+        create_task_run(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            "build-agent.issue-loop@v1",
+            Some("agentflow/direct/AF-TASK-001".to_string()),
+        )
+        .unwrap();
+
+        let checkpoint = write_task_run_checkpoint(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            WorkflowFlowType::Work,
+            "in_progress",
+            "evt-000001",
+            Some("corr-AF-TASK-001".to_string()),
+            "已进入执行阶段",
+        )
+        .unwrap();
+
+        let latest = latest_task_run_checkpoint(dir.path(), "AF-TASK-001", "run-001")
+            .unwrap()
+            .unwrap();
+        let cursor = checkpoint_replay_cursor(&latest);
+
+        assert_eq!(checkpoint.checkpoint_id, "checkpoint-001");
+        assert_eq!(latest.state, "in_progress");
+        assert_eq!(cursor.flow_type, WorkflowFlowType::Work);
+        assert_eq!(cursor.run_id.as_deref(), Some("run-001"));
+        assert_eq!(cursor.after_event_id, "evt-000001");
     }
 
     #[test]

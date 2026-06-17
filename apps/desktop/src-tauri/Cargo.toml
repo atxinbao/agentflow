@@ -18,6 +18,7 @@ agentflow-projection = { path = "../../../crates/projection" }
 agentflow-spec = { path = "../../../crates/spec" }
 agentflow-state = { path = "../../../crates/state" }
 agentflow-task-loop = { path = "../../../crates/task-loop" }
+agentflow-workflow-core = { path = "../../../crates/workflow-core" }
 anyhow.workspace = true
 base64 = "0.22"
 notify = "8"

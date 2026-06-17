@@ -11,6 +11,7 @@ pub mod registry;
 pub mod storage;
 
 use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
+use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::Result;
 use serde_json::json;
 use std::path::Path;
@@ -118,11 +119,14 @@ fn observe_session_transition(
         append_task_event_once(
             project_root,
             TaskEventDraft {
+                flow_type: WorkflowFlowType::Work,
                 aggregate_type: "issue".to_string(),
                 aggregate_id: updated.issue_id.clone(),
                 project_id: updated.project_id.clone(),
                 issue_id: Some(updated.issue_id.clone()),
+                run_id: Some(updated.run_id.clone()),
                 event_type: event_type.to_string(),
+                authority_role: Some(WorkflowAgentRole::WorkAgent),
                 actor: EventActor {
                     role: "mcp".to_string(),
                     kind: "system".to_string(),
