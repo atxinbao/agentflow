@@ -110,12 +110,16 @@ terminalStates:
 states:
   backlog:
     role: work-agent
+    skillPack: execution-skills
   todo:
     role: work-agent
+    skillPack: execution-skills
   in_progress:
     role: work-agent
+    skillPack: execution-skills
   in_review:
     role: work-agent
+    skillPack: execution-skills
   done:
     role: system
 transitions:
@@ -135,6 +139,12 @@ transitions:
     to: done
     guard: merge_confirmed
     action: complete_issue
+    handoff:
+      fromRole: work-agent
+      toRole: system
+      mode: ownership-transfer
+      payloadRef: mergeProofRef
+      expectedState: done
 ```
 
 ## Guard 类型
@@ -212,6 +222,13 @@ handoff 必须成为 schema 显式能力，而不是 prompt 附属概念。
 - `mode`
 - `payloadRef`
 - `expectedState`
+
+补充规则：
+
+- 只要 transition 会改变 authority role，就必须显式声明 handoff。
+- `ownership-transfer` 表示 authority 从一个主角色交给另一个角色。
+- `bounded-capability-call` 表示 authority 不变，只允许调用 `specialist`。
+- `bounded-capability-call` 不能把 target state 的 authority 改成 `specialist`。
 
 ## Project Flow 与 Work Flow 的分界
 

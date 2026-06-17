@@ -1,7 +1,7 @@
 use crate::{
     model::{
-        ActionDefinition, GuardDefinition, WorkflowDefinition, AGENTFLOW_WORKFLOW_API_VERSION,
-        TASK_WORKFLOW_KIND,
+        ActionDefinition, GuardDefinition, WorkflowAgentRole, WorkflowDefinition,
+        WorkflowHandoffMode, AGENTFLOW_WORKFLOW_API_VERSION, TASK_WORKFLOW_KIND,
     },
     registry::WorkflowRegistry,
 };
@@ -92,6 +92,31 @@ fn validate_shape(workflow: &WorkflowDefinition) -> Result<()> {
     for (state_id, state) in &workflow.spec.states {
         validate_registry_name("state", state_id)?;
         validate_required("state.label", &state.label)?;
+        let role = state
+            .role
+            .ok_or_else(|| anyhow::anyhow!("state {state_id} must declare role"))?;
+        match (role.default_skill_pack(), state.skill_pack) {
+            (None, None) => {}
+            (None, Some(_)) => {
+                anyhow::bail!("state {state_id} uses system role and cannot declare skillPack");
+            }
+            (Some(expected), Some(actual)) if expected == actual => {}
+            (Some(expected), Some(actual)) => {
+                anyhow::bail!(
+                    "state {state_id} must use skillPack {} for role {}, found {}",
+                    expected.as_str(),
+                    role.as_str(),
+                    actual.as_str()
+                );
+            }
+            (Some(expected), None) => {
+                anyhow::bail!(
+                    "state {state_id} must declare skillPack {} for role {}",
+                    expected.as_str(),
+                    role.as_str()
+                );
+            }
+        }
     }
     for terminal in &workflow.spec.terminal_states {
         validate_registry_name("terminalState", terminal)?;
@@ -130,6 +155,7 @@ fn validate_shape(workflow: &WorkflowDefinition) -> Result<()> {
         for action in &transition.actions {
             validate_action(action)?;
         }
+        validate_handoff(workflow, transition)?;
     }
     Ok(())
 }
@@ -141,6 +167,117 @@ fn validate_guard(guard: &GuardDefinition) -> Result<()> {
 
 fn validate_action(action: &ActionDefinition) -> Result<()> {
     validate_registry_name("action", action.name())?;
+    Ok(())
+}
+
+fn validate_handoff(
+    workflow: &WorkflowDefinition,
+    transition: &crate::model::TransitionDefinition,
+) -> Result<()> {
+    let Some(handoff) = &transition.handoff else {
+        let source_roles = transition
+            .from_states
+            .iter()
+            .filter_map(|state_id| workflow.spec.states.get(state_id))
+            .filter_map(|state| state.role)
+            .collect::<BTreeSet<_>>();
+        let target_role = workflow
+            .spec
+            .states
+            .get(&transition.to)
+            .and_then(|state| state.role)
+            .ok_or_else(|| anyhow::anyhow!("target state {} is missing role", transition.to))?;
+        if source_roles.iter().any(|role| *role != target_role) {
+            anyhow::bail!(
+                "transition {} changes role boundary and must declare handoff",
+                transition.id
+            );
+        }
+        return Ok(());
+    };
+
+    validate_required("handoff.payloadRef", &handoff.payload_ref)?;
+    if let Some(expected_state) = handoff.expected_state.as_deref() {
+        validate_registry_name("handoff.expectedState", expected_state)?;
+        if expected_state != transition.to {
+            anyhow::bail!(
+                "transition {} handoff expectedState must equal target state {}",
+                transition.id,
+                transition.to
+            );
+        }
+    }
+
+    let source_roles = transition
+        .from_states
+        .iter()
+        .map(|state_id| {
+            workflow
+                .spec
+                .states
+                .get(state_id)
+                .and_then(|state| state.role)
+                .ok_or_else(|| anyhow::anyhow!("state {state_id} is missing role"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let distinct_source_roles = source_roles.iter().copied().collect::<BTreeSet<_>>();
+    if distinct_source_roles.len() != 1 {
+        anyhow::bail!(
+            "transition {} handoff cannot span multiple source roles",
+            transition.id
+        );
+    }
+    let source_role = *distinct_source_roles.iter().next().unwrap();
+    if source_role != handoff.from_role {
+        anyhow::bail!(
+            "transition {} handoff fromRole {} does not match source state role {}",
+            transition.id,
+            handoff.from_role.as_str(),
+            source_role.as_str()
+        );
+    }
+
+    let target_role = workflow
+        .spec
+        .states
+        .get(&transition.to)
+        .and_then(|state| state.role)
+        .ok_or_else(|| anyhow::anyhow!("state {} is missing role", transition.to))?;
+
+    match handoff.mode {
+        WorkflowHandoffMode::OwnershipTransfer => {
+            if handoff.from_role == handoff.to_role {
+                anyhow::bail!(
+                    "transition {} ownership-transfer must change role",
+                    transition.id
+                );
+            }
+            if target_role != handoff.to_role {
+                anyhow::bail!(
+                    "transition {} ownership-transfer target role {} does not match state role {}",
+                    transition.id,
+                    handoff.to_role.as_str(),
+                    target_role.as_str()
+                );
+            }
+        }
+        WorkflowHandoffMode::BoundedCapabilityCall => {
+            if handoff.to_role != WorkflowAgentRole::Specialist {
+                anyhow::bail!(
+                    "transition {} bounded-capability-call must target specialist role",
+                    transition.id
+                );
+            }
+            if target_role != handoff.from_role {
+                anyhow::bail!(
+                    "transition {} bounded-capability-call must keep authority on role {}",
+                    transition.id,
+                    handoff.from_role.as_str()
+                );
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -199,24 +336,36 @@ spec:
     backlog:
       label: 待处理
       phase: future
+      role: work-agent
+      skillPack: execution-skills
     todo:
       label: 准备开工
       phase: current
+      role: work-agent
+      skillPack: execution-skills
     in_progress:
       label: 正在做
       phase: current
+      role: work-agent
+      skillPack: execution-skills
     in_review:
       label: 正在评审
       phase: current
+      role: work-agent
+      skillPack: execution-skills
     done:
       label: 已完成
       phase: past
+      role: system
     blocked:
       label: 已阻断
       phase: current
+      role: work-agent
+      skillPack: execution-skills
     cancel:
       label: 已取消
       phase: past
+      role: system
   transitions:
     - id: schedule
       from: backlog
@@ -258,6 +407,12 @@ spec:
       from: in_review
       to: done
       on: pr_or_mr.merged
+      handoff:
+        fromRole: work-agent
+        toRole: system
+        mode: ownership-transfer
+        payloadRef: mergeProofRef
+        expectedState: done
       guards:
         - merge.proof.present
         - public_record.pr_body_ready
@@ -285,6 +440,12 @@ spec:
         - blocked
       to: cancel
       on: task.cancelled
+      handoff:
+        fromRole: work-agent
+        toRole: system
+        mode: ownership-transfer
+        payloadRef: cancellationRef
+        expectedState: cancel
       actions:
         - task.cancel.write
         - event.emit.task_cancelled
@@ -333,5 +494,36 @@ spec:
                 .to_string();
 
         assert!(err.contains("unregistered guard"));
+    }
+
+    #[test]
+    fn rejects_missing_skill_pack_for_work_role() {
+        let raw = sample_workflow().replace("      skillPack: execution-skills\n", "");
+        let workflow = parse_workflow_yaml(&raw).unwrap();
+        let err = validate_workflow(&workflow).unwrap_err().to_string();
+
+        assert!(err.contains("must declare skillPack"));
+    }
+
+    #[test]
+    fn rejects_role_change_without_handoff() {
+        let raw = sample_workflow().replace(
+            "      handoff:\n        fromRole: work-agent\n        toRole: system\n        mode: ownership-transfer\n        payloadRef: mergeProofRef\n        expectedState: done\n",
+            "",
+        );
+        let workflow = parse_workflow_yaml(&raw).unwrap();
+        let err = validate_workflow(&workflow).unwrap_err().to_string();
+
+        assert!(err.contains("must declare handoff"));
+    }
+
+    #[test]
+    fn rejects_bounded_call_without_specialist_target() {
+        let raw =
+            sample_workflow().replace("mode: ownership-transfer", "mode: bounded-capability-call");
+        let workflow = parse_workflow_yaml(&raw).unwrap();
+        let err = validate_workflow(&workflow).unwrap_err().to_string();
+
+        assert!(err.contains("must target specialist role"));
     }
 }

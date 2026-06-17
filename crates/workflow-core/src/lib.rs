@@ -10,8 +10,9 @@ pub mod registry;
 pub mod validation;
 
 pub use model::{
-    ActionDefinition, GuardDefinition, StateDefinition, TransitionDefinition, WorkflowDefinition,
-    WorkflowMetadata, WorkflowSpec, WorkflowStatePhase, AGENTFLOW_WORKFLOW_API_VERSION,
+    ActionDefinition, GuardDefinition, HandoffDefinition, StateDefinition, TransitionDefinition,
+    WorkflowAgentRole, WorkflowDefinition, WorkflowHandoffMode, WorkflowMetadata,
+    WorkflowSkillPack, WorkflowSpec, WorkflowStatePhase, AGENTFLOW_WORKFLOW_API_VERSION,
     TASK_WORKFLOW_KIND,
 };
 pub use parser::{

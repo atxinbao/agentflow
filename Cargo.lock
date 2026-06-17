@@ -16,6 +16,7 @@ dependencies = [
  "agentflow-mcp",
  "agentflow-spec",
  "agentflow-task-loop",
+ "agentflow-workflow-core",
  "anyhow",
  "serde",
  "serde_json",

@@ -44,6 +44,29 @@
 | Delivery Agent | 交付整理、对外摘要、变更汇总 | Goal / Plan、Completed Issues、Audit Result、Evidence Index | Delivery Summary、CHANGELOG Draft、Release Notes Draft、Next Recommendation | 不决定项目方向、不替代 Audit 做通过判断 |
 | Specialist | 提供前端、后端、测试、设计、文档等局部能力 | 上层角色 handoff 的局部任务 | 局部执行结果 | 不独立驱动 Project，不拥有阶段 authority |
 
+## Runtime 兼容说明
+
+运行时 authority 使用：
+
+- `goal-agent`
+- `spec-agent`
+- `work-agent`
+- `audit-agent`
+- `delivery-agent`
+- `specialist`
+- `system`
+
+当前 provider-facing 执行兼容别名：
+
+- `build-agent` = `work-agent`
+
+规则：
+
+- Workflow / Runtime / Projection 必须使用运行时角色名；
+- provider session 可以继续使用 `build-agent` 作为执行入口；
+- dispatcher 必须把 `build-agent` 解析成运行时角色 `work-agent`；
+- provider 名称不能反向定义 workflow authority。
+
 ## Skill Taxonomy
 
 ### Brain Skills
