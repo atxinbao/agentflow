@@ -429,10 +429,13 @@ docs/requirements/**
 - completion 之后的项目级 release gate
 - 推进 canonical delivery workflow 的 release 状态
 - 写 `.agentflow/release/projects/<project-id>.json`
+- 写 `.agentflow/release/reviews/<project-id>.json`
 - 写 `.agentflow/indexes/releases.json`
+- 写 `.agentflow/indexes/external-reviews.json`
 - 从完成态 task projection 和 PR/MR 元数据汇总公开交付记录
 - 统一任务级 PR/MR body 模板
 - 生成 CHANGELOG / release notes
+- 生成 `docs/reviews/<project-id>.md` 外部 review handoff package
 - 在显式触发时写公共交付文档
 
 不负责：
@@ -453,6 +456,7 @@ docs/requirements/**
 
 - 管理 `.agentflow/audit/<audit-id>/**`
 - 保存 audit report、findings、checklist、evidence map、traceability
+- 输出项目级 audit review summary surface
 - 支撑独立 audit issue 和 human-via-agent 审计请求
 
 不负责：

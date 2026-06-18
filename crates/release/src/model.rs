@@ -9,6 +9,8 @@ pub const CHANGELOG_TEMPLATE_VERSION: &str = "changelog-template.v1";
 pub const RELEASE_NOTES_TEMPLATE_VERSION: &str = "release-notes-template.v1";
 pub const PROJECT_RELEASE_FACTS_VERSION: &str = "project-release-facts.v1";
 pub const PROJECT_RELEASE_INDEX_VERSION: &str = "project-release-index.v1";
+pub const PROJECT_EXTERNAL_REVIEW_SURFACE_VERSION: &str = "project-external-review-surface.v1";
+pub const PROJECT_EXTERNAL_REVIEW_INDEX_VERSION: &str = "project-external-review-index.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -147,4 +149,75 @@ pub struct ProjectReleaseIndex {
     pub version: String,
     pub updated_at: u64,
     pub releases: Vec<ProjectReleaseIndexEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalReviewEvidenceEntry {
+    pub issue_id: String,
+    pub title: String,
+    pub summary: String,
+    pub evidence_status: String,
+    pub evidence_path: Option<String>,
+    pub validation_command_count: usize,
+    pub public_record_targets: Vec<String>,
+    pub pr_url: Option<String>,
+    pub merge_commit: Option<String>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalReviewAuditSummary {
+    pub latest_audit_id: Option<String>,
+    pub latest_status: Option<String>,
+    pub latest_report_path: Option<String>,
+    pub total_count: usize,
+    pub findings_count: usize,
+    pub summary_line: String,
+    #[serde(default)]
+    pub findings: Vec<String>,
+    #[serde(default)]
+    pub evidence_gaps: Vec<String>,
+    #[serde(default)]
+    pub repair_recommendations: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectExternalReviewSurface {
+    pub version: String,
+    pub project_id: String,
+    pub project_title: String,
+    pub source_requirement_id: String,
+    pub source_requirement_path: String,
+    pub objective: String,
+    pub review_status: String,
+    pub release_state: String,
+    pub release_summary_line: String,
+    pub handoff_path: String,
+    pub total_entries: usize,
+    pub evidence_entries: Vec<ExternalReviewEvidenceEntry>,
+    pub audit_summary: Option<ExternalReviewAuditSummary>,
+    #[serde(default)]
+    pub risk_items: Vec<String>,
+    pub summary_line: String,
+    pub generated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectExternalReviewIndexEntry {
+    pub project_id: String,
+    pub review_status: String,
+    pub handoff_path: String,
+    pub generated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectExternalReviewIndex {
+    pub version: String,
+    pub updated_at: u64,
+    pub reviews: Vec<ProjectExternalReviewIndexEntry>,
 }

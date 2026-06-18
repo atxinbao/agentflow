@@ -5,6 +5,7 @@ use crate::model::{
 use crate::public_delivery::{
     collect_public_release_summary_for_project, write_public_release_documents,
 };
+use crate::review_surface::sync_project_external_review_surface;
 use agentflow_event_store::EventActor;
 use agentflow_workflow_runtime::{
     apply_canonical_workflow_event, RuntimeContext, StaticActionRegistry, StaticGuardRegistry,
@@ -117,6 +118,7 @@ pub fn sync_project_release(
         };
         write_project_release_facts(&root, &facts)?;
         write_project_release_index(&root)?;
+        sync_project_external_review_surface(&root, &facts)?;
         return Ok(facts);
     }
 
@@ -233,6 +235,7 @@ pub fn sync_project_release(
     };
     write_project_release_facts(&root, &facts)?;
     write_project_release_index(&root)?;
+    sync_project_external_review_surface(&root, &facts)?;
     Ok(facts)
 }
 
@@ -618,6 +621,19 @@ mod tests {
             .path()
             .join("docs/release-notes/project-release-runtime.md")
             .is_file());
+        assert!(dir
+            .path()
+            .join("docs/reviews/project-release-runtime.md")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/release/reviews/project-release-runtime.json")
+            .is_file());
+        let review =
+            crate::review_surface::load_project_external_review_surface(dir.path(), &project_id)
+                .unwrap();
+        assert_eq!(review.review_status, "ready");
+        assert_eq!(review.total_entries, 1);
         let index = load_project_release_index(dir.path()).unwrap();
         assert_eq!(index.releases.len(), 1);
     }

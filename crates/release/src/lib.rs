@@ -6,17 +6,24 @@
 
 pub mod model;
 pub mod public_delivery;
+pub mod review_surface;
 pub mod runtime;
 
 pub use model::{
-    DeliverySummary, ProjectDeliverySummary, ProjectReleaseFacts, ProjectReleaseIndex,
+    DeliverySummary, ExternalReviewAuditSummary, ExternalReviewEvidenceEntry,
+    ProjectDeliverySummary, ProjectExternalReviewIndex, ProjectExternalReviewIndexEntry,
+    ProjectExternalReviewSurface, ProjectReleaseFacts, ProjectReleaseIndex,
     ProjectReleaseIndexEntry, PublicReleaseDocumentPaths, PublicReleaseDocumentTarget,
     PublicReleaseEntry, PublicReleaseSummary, DELIVERY_SUMMARY_VERSION,
-    PROJECT_DELIVERY_SUMMARY_VERSION, PROJECT_RELEASE_FACTS_VERSION, PROJECT_RELEASE_INDEX_VERSION,
-    PUBLIC_RELEASE_SUMMARY_VERSION,
+    PROJECT_DELIVERY_SUMMARY_VERSION, PROJECT_EXTERNAL_REVIEW_INDEX_VERSION,
+    PROJECT_EXTERNAL_REVIEW_SURFACE_VERSION, PROJECT_RELEASE_FACTS_VERSION,
+    PROJECT_RELEASE_INDEX_VERSION, PUBLIC_RELEASE_SUMMARY_VERSION,
 };
 pub use public_delivery::{
     collect_public_release_summary, collect_public_release_summary_for_project,
     load_delivery_summary, load_project_delivery_summary, write_public_release_documents,
+};
+pub use review_surface::{
+    load_project_external_review_surface, sync_project_external_review_surface,
 };
 pub use runtime::{load_project_release_facts, load_project_release_index, sync_project_release};

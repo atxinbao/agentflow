@@ -2,12 +2,12 @@ use crate::{
     model::{
         CompletionDecisionIndex, CompletionDecisionIndexEntry, CompletionDecisionProjection,
         IssueStatusIndex, IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
-        ProjectCompletionProjection, ProjectIssueLanes, ProjectProjection,
-        ProjectReleaseProjection, ProjectionAuditSummary, ProjectionDeliverySummary,
-        ProjectionPhase, ProjectionPublicDelivery, ProjectionRuntimeSummary,
-        ProjectionSessionSummary, ProjectionSummary, RequirementPreviewIndex,
-        RequirementPreviewIndexEntry, RequirementPreviewProjection, TaskProjection,
-        TaskTimelineEvent, TaskTimelineItem, COMPLETION_DECISION_INDEX_VERSION,
+        ProjectCompletionProjection, ProjectExternalReviewProjection, ProjectIssueLanes,
+        ProjectProjection, ProjectReleaseProjection, ProjectionAuditSummary,
+        ProjectionDeliverySummary, ProjectionPhase, ProjectionPublicDelivery,
+        ProjectionRuntimeSummary, ProjectionSessionSummary, ProjectionSummary,
+        RequirementPreviewIndex, RequirementPreviewIndexEntry, RequirementPreviewProjection,
+        TaskProjection, TaskTimelineEvent, TaskTimelineItem, COMPLETION_DECISION_INDEX_VERSION,
         COMPLETION_DECISION_PROJECTION_VERSION, ISSUE_STATUS_INDEX_VERSION,
         PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
         REQUIREMENT_PREVIEW_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
@@ -21,7 +21,8 @@ use crate::{
 use agentflow_audit::load_audit_result_summary;
 use agentflow_event_store::{load_task_events, EventStateTransition, TaskEvent};
 use agentflow_release::{
-    load_delivery_summary, load_project_delivery_summary, load_project_release_facts,
+    load_delivery_summary, load_project_delivery_summary, load_project_external_review_surface,
+    load_project_release_facts,
 };
 use agentflow_spec::{
     list_completion_decision_runtimes, list_requirement_preview_runtimes, prepare_spec_workspace,
@@ -434,6 +435,8 @@ fn project_project(
     let completion_projection = completion.map(project_completion_decision);
     let project_delivery = build_project_delivery_summary(root, project, tasks);
     let project_release = load_project_release_facts(root, &project.project_id).ok();
+    let project_external_review =
+        load_project_external_review_surface(root, &project.project_id).ok();
     let project_audit = build_project_audit_summary(project, tasks);
     let status = if all_finished {
         match completion_projection
@@ -706,6 +709,23 @@ fn project_project(
             summary_line: release.summary_line,
             published_at: release.published_at,
             updated_at: release.updated_at,
+        }),
+        external_review: project_external_review.map(|review| ProjectExternalReviewProjection {
+            review_status: review.review_status,
+            handoff_path: review.handoff_path,
+            total_entries: review.total_entries,
+            summary_line: review.summary_line,
+            latest_audit_status: review
+                .audit_summary
+                .as_ref()
+                .and_then(|summary| summary.latest_status.clone()),
+            findings_count: review
+                .audit_summary
+                .as_ref()
+                .map(|summary| summary.findings_count)
+                .unwrap_or(0),
+            risk_items: review.risk_items,
+            generated_at: review.generated_at,
         }),
         delivery: project_delivery,
         audit: project_audit,

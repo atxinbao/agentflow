@@ -612,6 +612,7 @@ mod tests {
                     updated_at: 1,
                 }),
                 release: None,
+                external_review: None,
                 delivery: None,
                 audit: None,
                 issue_count: 1,

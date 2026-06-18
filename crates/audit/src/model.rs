@@ -9,6 +9,7 @@ pub const AUDIT_FINDINGS_VERSION: &str = "audit-findings.v1";
 pub const AUDIT_EVIDENCE_MAP_VERSION: &str = "audit-evidence-map.v1";
 pub const AUDIT_TRACEABILITY_VERSION: &str = "audit-traceability.v1";
 pub const AUDIT_RESULT_SUMMARY_VERSION: &str = "audit-result-summary.v1";
+pub const PROJECT_AUDIT_REVIEW_SUMMARY_VERSION: &str = "project-audit-review-summary.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -337,4 +338,44 @@ pub struct AuditResultSummary {
     pub evidence_gaps: Vec<String>,
     #[serde(default)]
     pub repair_recommendations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAuditReviewEntry {
+    pub audit_id: String,
+    pub status: String,
+    pub requested_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_issue_id: Option<String>,
+    pub report_path: String,
+    pub summary_line: String,
+    pub findings_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAuditReviewSummary {
+    pub version: String,
+    pub project_id: String,
+    pub total_count: usize,
+    pub passed_count: usize,
+    pub passed_with_warnings_count: usize,
+    pub failed_count: usize,
+    pub active_count: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_audit_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_report_path: Option<String>,
+    pub findings_count: usize,
+    pub summary_line: String,
+    #[serde(default)]
+    pub findings: Vec<String>,
+    #[serde(default)]
+    pub evidence_gaps: Vec<String>,
+    #[serde(default)]
+    pub repair_recommendations: Vec<String>,
+    pub entries: Vec<ProjectAuditReviewEntry>,
 }
