@@ -9,18 +9,22 @@ use agentflow_event_store::{
 use agentflow_release::{PublicReleaseDocumentPaths, PublicReleaseDocumentTarget};
 use agentflow_spec::read_spec_issue;
 use agentflow_task_artifacts::{
-    load_task_evidence, load_task_run, task_evidence_dir, task_run_dir, update_task_run_status,
-    write_task_command_record, write_task_evidence, write_task_validation, TaskCommandInput,
-    TaskEvidence, TaskRun, TaskRunStatus,
+    load_task_changed_files, load_task_evidence, load_task_run, task_changed_files_path,
+    task_evidence_dir, task_run_dir, update_task_run_status, write_task_changed_files,
+    write_task_command_record, write_task_evidence, write_task_validation_with_assessment,
+    TaskChangedFile, TaskCommandInput, TaskEvidence, TaskRun, TaskRunStatus,
 };
 use agentflow_task_loop::{AgentLaunchPayload, TaskLoop, TaskLoopLaunch, AGENT_LAUNCH_REQUESTED};
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::{Context, Result};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::Deserialize;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     path::{Path, PathBuf},
+    process::Command,
     time::SystemTime,
 };
 
@@ -92,31 +96,14 @@ struct BuildAgentCompletionRequest {
     issue_id: String,
     #[serde(default)]
     run_id: Option<String>,
-    #[serde(default)]
-    changed_files: Vec<BuildAgentChangedFile>,
-    #[serde(default)]
-    validation_commands: Vec<BuildAgentValidationCommand>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BuildAgentChangedFile {
-    path: String,
-    change_type: String,
-    insertions: usize,
-    deletions: usize,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BuildAgentValidationCommand {
-    label: String,
-    program: String,
-    args: Vec<String>,
-    exit_code: Option<i32>,
-    stdout: Option<String>,
-    stderr: Option<String>,
-    source: Option<String>,
+#[derive(Debug, Clone)]
+struct TrustedChangedFilesSnapshot {
+    files: Vec<TaskChangedFile>,
+    base_commit: Option<String>,
+    head_commit: Option<String>,
+    working_tree_hash: String,
 }
 
 pub(crate) fn complete_build_agent_issue_from_request(
@@ -134,7 +121,8 @@ pub(crate) fn complete_build_agent_issue_from_request(
     let public_delivery_target = PublicReleaseDocumentTarget::default();
     let public_delivery_paths = write_public_delivery_documents(root, &public_delivery_target)?;
     proof["publicDeliveryWritten"] = serde_json::Value::Bool(true);
-    proof["changelogPath"] = serde_json::Value::String(public_delivery_paths.changelog_path.clone());
+    proof["changelogPath"] =
+        serde_json::Value::String(public_delivery_paths.changelog_path.clone());
     proof["releaseNotesPath"] =
         serde_json::Value::String(public_delivery_paths.release_notes_path.clone());
     proof["releaseNotesUrl"] =
@@ -412,12 +400,12 @@ fn ensure_review_prepared(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| anyhow::anyhow!("build agent review preparation requires runId"))?;
-    if request.validation_commands.is_empty() {
-        anyhow::bail!("build agent review preparation requires validation command results");
-    }
 
     let issue =
         read_spec_issue(root, issue_id).with_context(|| format!("load spec issue {issue_id}"))?;
+    if issue.validation_commands.is_empty() {
+        anyhow::bail!("spec issue {issue_id} is missing validation commands");
+    }
     let run = load_task_run(root, issue_id, run_id)?;
     if run.issue_id != issue.issue_id {
         anyhow::bail!(
@@ -427,52 +415,58 @@ fn ensure_review_prepared(
         );
     }
 
-    let existing_evidence = task_evidence_dir(root, issue_id).join("evidence.json");
-    let evidence = if existing_evidence.is_file() {
-        load_task_evidence(root, issue_id)?
-    } else {
-        update_task_run_status(root, issue_id, run_id, TaskRunStatus::Validating)?;
-        for command in &request.validation_commands {
-            write_task_command_record(
-                root,
-                issue_id,
-                run_id,
-                TaskCommandInput {
-                    label: command.label.clone(),
-                    program: command.program.clone(),
-                    args: command.args.clone(),
-                    exit_code: command.exit_code,
-                    stdout: command.stdout.clone().unwrap_or_default(),
-                    stderr: command.stderr.clone().unwrap_or_default(),
-                },
-            )?;
-        }
-        let validation = write_task_validation(root, issue_id, run_id)?;
-        let evidence = write_task_evidence(
+    reset_review_artifacts(root, issue_id, run_id)?;
+    update_task_run_status(root, issue_id, run_id, TaskRunStatus::Validating)?;
+    for (index, command) in issue.validation_commands.iter().enumerate() {
+        let result = run_validation_command(root, command)?;
+        write_task_command_record(
             root,
             issue_id,
             run_id,
-            format!(
-                "验证命令 {} 条，{}。",
-                validation.command_ids.len(),
-                if validation.passed {
-                    "全部通过"
-                } else {
-                    "存在失败"
-                }
-            ),
+            TaskCommandInput {
+                label: format!("validation-{:03}", index + 1),
+                program: "sh".to_string(),
+                args: vec!["-lc".to_string(), command.clone()],
+                exit_code: Some(result.exit_code),
+                stdout: result.stdout,
+                stderr: result.stderr,
+            },
         )?;
-        if validation.passed {
-            update_task_run_status(root, issue_id, run_id, TaskRunStatus::Completed)?;
-        } else {
-            update_task_run_status(root, issue_id, run_id, TaskRunStatus::Failed)?;
-            append_validation_failed_event(root, &issue, run_id, &evidence)?;
-            let _ = agentflow_projection::rebuild_projections(root)?;
-            agentflow_state::refresh_state(root)?;
-            anyhow::bail!("build agent review preparation validation failed for {issue_id}");
-        }
-        evidence
-    };
+    }
+    let changed_files = collect_trusted_changed_files(root)?;
+    write_task_changed_files(
+        root,
+        issue_id,
+        run_id,
+        changed_files.files.clone(),
+        changed_files.base_commit.clone(),
+        changed_files.head_commit.clone(),
+        changed_files.working_tree_hash.clone(),
+    )?;
+    let boundary_failures = validate_changed_file_boundaries(&issue, &changed_files.files)?;
+    let validation =
+        write_task_validation_with_assessment(root, issue_id, run_id, boundary_failures.clone())?;
+    let evidence = write_task_evidence(
+        root,
+        issue_id,
+        run_id,
+        format_validation_summary(&validation),
+    )?;
+    if validation.passed {
+        update_task_run_status(root, issue_id, run_id, TaskRunStatus::Completed)?;
+    } else {
+        update_task_run_status(root, issue_id, run_id, TaskRunStatus::Failed)?;
+        append_validation_failed_event(root, &issue, run_id, &evidence)?;
+        let _ = agentflow_projection::rebuild_projections(root)?;
+        agentflow_state::refresh_state(root)?;
+        anyhow::bail!(
+            "build agent review preparation validation failed for {issue_id}: failedCommands={}, boundaryFailures={:?}",
+            validation.failed_command_ids.len(),
+            validation.boundary_failures
+        );
+    }
+
+    let changed_files_record = load_task_changed_files(root, issue_id, run_id)?;
 
     append_task_event_once(
         root,
@@ -499,7 +493,7 @@ fn ensure_review_prepared(
                 "issueId": issue.issue_id,
                 "projectId": issue.project_id,
                 "runId": run_id,
-                "changedFiles": request.changed_files.iter().map(|file| {
+                "changedFiles": changed_files_record.files.iter().map(|file| {
                     json!({
                         "path": file.path.as_str(),
                         "changeType": file.change_type.as_str(),
@@ -507,19 +501,18 @@ fn ensure_review_prepared(
                         "deletions": file.deletions,
                     })
                 }).collect::<Vec<_>>(),
-                "validationCommands": request.validation_commands.iter().map(|command| {
-                    json!({
-                        "label": command.label.as_str(),
-                        "program": command.program.as_str(),
-                        "args": &command.args,
-                        "exitCode": command.exit_code,
-                        "source": command.source.as_deref(),
-                    })
-                }).collect::<Vec<_>>(),
-                "validationCommandCount": request.validation_commands.len(),
+                "validationCommandCount": validation.command_ids.len(),
+                "boundaryFailures": validation.boundary_failures,
+                "changedFilesPath": relative_path(root, &task_changed_files_path(root, issue_id, run_id)),
+                "commandHash": validation.command_hash,
+                "changedFileHash": validation.changed_file_hash,
+                "validationResultHash": validation.validation_result_hash,
                 "evidencePath": task_evidence_path(issue_id),
             }),
-            artifact_refs: vec![task_evidence_path(issue_id)],
+            artifact_refs: vec![
+                task_evidence_path(issue_id),
+                relative_path(root, &task_changed_files_path(root, issue_id, run_id)),
+            ],
             idempotency_key: Some(format!(
                 "issue.validation.passed:{}:{}",
                 issue.issue_id, run_id
@@ -536,6 +529,233 @@ fn ensure_review_prepared(
         validation_passed: evidence.status == "passed",
         evidence_path: evidence_path(root, &evidence),
     })
+}
+
+fn reset_review_artifacts(root: &Path, issue_id: &str, run_id: &str) -> Result<()> {
+    let commands_dir = task_run_dir(root, issue_id, run_id).join("commands");
+    if commands_dir.exists() {
+        fs::remove_dir_all(&commands_dir)
+            .with_context(|| format!("remove {}", commands_dir.display()))?;
+    }
+    for path in [
+        task_run_dir(root, issue_id, run_id).join("validation.json"),
+        task_changed_files_path(root, issue_id, run_id),
+        task_evidence_dir(root, issue_id).join("evidence.json"),
+    ] {
+        if path.exists() {
+            fs::remove_file(&path).with_context(|| format!("remove {}", path.display()))?;
+        }
+    }
+    Ok(())
+}
+
+fn run_validation_command(root: &Path, command: &str) -> Result<CommandResult> {
+    let output = Command::new("sh")
+        .arg("-lc")
+        .arg(command)
+        .current_dir(root)
+        .output()
+        .with_context(|| format!("run validation command `{command}`"))?;
+    Ok(CommandResult {
+        exit_code: output.status.code().unwrap_or(1),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
+fn collect_trusted_changed_files(root: &Path) -> Result<TrustedChangedFilesSnapshot> {
+    let status_output = git_stdout(root, &["status", "--porcelain=v1", "--untracked-files=all"])?;
+    let diff_stats = collect_diff_stats(root)?;
+    let files = status_output
+        .lines()
+        .filter_map(parse_status_line)
+        .filter(|file| !file.path.starts_with(".agentflow/"))
+        .map(|mut file| {
+            if let Some((insertions, deletions)) = diff_stats.get(&file.path) {
+                file.insertions = *insertions;
+                file.deletions = *deletions;
+            }
+            file
+        })
+        .collect::<Vec<_>>();
+    let head_commit = Some(git_stdout(root, &["rev-parse", "HEAD"])?);
+    let base_commit = resolve_base_commit(root)
+        .ok()
+        .or_else(|| head_commit.clone());
+    let working_tree_hash = git_stdout(
+        root,
+        &["status", "--porcelain=v1", "--untracked-files=all", "-z"],
+    )
+    .map(|raw| sha256_hex(raw.as_bytes()))?;
+    Ok(TrustedChangedFilesSnapshot {
+        files,
+        base_commit,
+        head_commit,
+        working_tree_hash,
+    })
+}
+
+fn collect_diff_stats(root: &Path) -> Result<std::collections::HashMap<String, (usize, usize)>> {
+    let raw = git_stdout(root, &["diff", "--numstat", "HEAD", "--"])?;
+    let mut stats = std::collections::HashMap::new();
+    for line in raw.lines() {
+        let mut parts = line.splitn(3, '\t');
+        let insertions = parts.next().unwrap_or_default();
+        let deletions = parts.next().unwrap_or_default();
+        let path = parts.next().unwrap_or_default();
+        if path.is_empty() {
+            continue;
+        }
+        let normalized = normalize_status_path(path);
+        stats.insert(
+            normalized,
+            (
+                insertions.parse::<usize>().unwrap_or_default(),
+                deletions.parse::<usize>().unwrap_or_default(),
+            ),
+        );
+    }
+    Ok(stats)
+}
+
+fn parse_status_line(line: &str) -> Option<TaskChangedFile> {
+    if line.len() < 4 {
+        return None;
+    }
+    let status = &line[..2];
+    let raw_path = line[3..].trim();
+    if raw_path.is_empty() {
+        return None;
+    }
+    Some(TaskChangedFile {
+        path: normalize_status_path(raw_path),
+        change_type: status_to_change_type(status),
+        insertions: 0,
+        deletions: 0,
+    })
+}
+
+fn normalize_status_path(path: &str) -> String {
+    path.rsplit(" -> ")
+        .next()
+        .unwrap_or(path)
+        .trim()
+        .replace('\\', "/")
+}
+
+fn status_to_change_type(status: &str) -> String {
+    let normalized = status.trim();
+    if normalized.contains('R') {
+        "renamed".to_string()
+    } else if normalized.contains('D') {
+        "deleted".to_string()
+    } else if normalized.contains('A') || normalized == "??" {
+        "added".to_string()
+    } else {
+        "modified".to_string()
+    }
+}
+
+fn validate_changed_file_boundaries(
+    issue: &agentflow_spec::SpecIssue,
+    files: &[TaskChangedFile],
+) -> Result<Vec<String>> {
+    let allowed = build_globset(&issue.allowed_paths)?;
+    let forbidden = build_globset(&issue.forbidden_paths)?;
+    let mut failures = Vec::new();
+    for file in files {
+        if forbidden
+            .as_ref()
+            .is_some_and(|set| set.is_match(&file.path))
+        {
+            failures.push(format!("禁止路径变更：{}", file.path));
+        }
+        if let Some(allowed) = &allowed {
+            if !allowed.is_match(&file.path) {
+                failures.push(format!("超出允许路径：{}", file.path));
+            }
+        }
+    }
+    Ok(failures)
+}
+
+fn build_globset(patterns: &[String]) -> Result<Option<GlobSet>> {
+    let active = patterns
+        .iter()
+        .map(|pattern| pattern.trim())
+        .filter(|pattern| !pattern.is_empty())
+        .collect::<Vec<_>>();
+    if active.is_empty() {
+        return Ok(None);
+    }
+    let mut builder = GlobSetBuilder::new();
+    for pattern in active {
+        builder
+            .add(Glob::new(pattern).with_context(|| format!("invalid glob pattern `{pattern}`"))?);
+    }
+    Ok(Some(builder.build()?))
+}
+
+fn resolve_base_commit(root: &Path) -> Result<String> {
+    for candidate in [
+        vec!["merge-base", "HEAD", "@{upstream}"],
+        vec!["merge-base", "HEAD", "origin/main"],
+        vec!["merge-base", "HEAD", "main"],
+    ] {
+        if let Ok(commit) = git_stdout(root, &candidate) {
+            return Ok(commit);
+        }
+    }
+    anyhow::bail!("unable to resolve base commit")
+}
+
+fn git_stdout(root: &Path, args: &[&str]) -> Result<String> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .with_context(|| format!("run git {}", args.join(" ")))?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .trim_end()
+        .to_string())
+}
+
+fn format_validation_summary(
+    validation: &agentflow_task_artifacts::TaskValidationRecord,
+) -> String {
+    if validation.passed {
+        format!("验证命令 {} 条，全部通过。", validation.command_ids.len())
+    } else if !validation.boundary_failures.is_empty() {
+        format!(
+            "验证未通过，{} 条命令已执行，边界校验失败 {} 项。",
+            validation.command_ids.len(),
+            validation.boundary_failures.len()
+        )
+    } else {
+        format!(
+            "验证未通过，{} 条命令中有 {} 条失败。",
+            validation.command_ids.len(),
+            validation.failed_command_ids.len()
+        )
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+#[derive(Debug, Clone)]
+struct CommandResult {
+    exit_code: i32,
+    stdout: String,
+    stderr: String,
 }
 
 fn append_validation_failed_event(
@@ -744,10 +964,12 @@ mod tests {
         McpAgentProvider, McpLaunchMode, McpLaunchPlan, McpLaunchRequest, McpProviderBridge,
         McpProviderKind, McpProviderStatus, McpProviderStatusCode,
     };
+    use agentflow_task_artifacts::{load_task_changed_files, load_task_evidence};
     use anyhow::Result;
     use std::{
         fs,
         path::{Path, PathBuf},
+        process::Command,
         time::{Duration, UNIX_EPOCH},
     };
     use tempfile::tempdir;
@@ -931,7 +1153,16 @@ mod tests {
     fn build_agent_review_merge_and_complete_use_task_events() {
         let dir = tempdir().unwrap();
         write_spec_project_fixture(dir.path(), "proj-001", "AF-001");
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"before\" }\n",
+        );
+        init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"after\" }\n",
+        );
 
         let request_path = write_completion_request(dir.path(), "AF-001", &started.run_id);
         let prepared = prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
@@ -939,6 +1170,13 @@ mod tests {
         assert_eq!(prepared.run_status, "completed");
         assert!(prepared.validation_passed);
         assert!(prepared.evidence_path.is_file());
+        let changed_files = load_task_changed_files(dir.path(), "AF-001", &started.run_id).unwrap();
+        assert_eq!(changed_files.files.len(), 1);
+        assert_eq!(changed_files.files[0].path, "src/lib.rs");
+        let evidence = load_task_evidence(dir.path(), "AF-001").unwrap();
+        assert!(evidence.command_hash.is_some());
+        assert!(evidence.changed_file_hash.is_some());
+        assert!(evidence.validation_result_hash.is_some());
         let in_review_projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-001").unwrap();
         assert_eq!(in_review_projection.current_state, "in_review");
@@ -991,10 +1229,7 @@ mod tests {
         );
         let proof = load_closeout_proof(dir.path(), "AF-001", &started.run_id).unwrap();
         assert!(proof["publicDeliveryWritten"].as_bool().unwrap_or(false));
-        assert_eq!(
-            proof["changelogPath"].as_str(),
-            Some("CHANGELOG.md")
-        );
+        assert_eq!(proof["changelogPath"].as_str(), Some("CHANGELOG.md"));
         assert_eq!(
             proof["releaseNotesPath"].as_str(),
             Some("docs/release-notes/agentflow-release-notes.md")
@@ -1022,7 +1257,16 @@ mod tests {
     fn build_agent_complete_launches_next_project_issue() {
         let dir = tempdir().unwrap();
         write_two_issue_project_fixture(dir.path(), "proj-chain", "AF-CHAIN-001", "AF-CHAIN-002");
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn chain() -> &'static str { \"before\" }\n",
+        );
+        init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-CHAIN-001").unwrap();
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn chain() -> &'static str { \"after\" }\n",
+        );
         let request_path = write_completion_request(dir.path(), "AF-CHAIN-001", &started.run_id);
         prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
         write_build_agent_closeout_proof(
@@ -1054,7 +1298,16 @@ mod tests {
     fn build_agent_complete_stays_in_review_until_issue_is_closed() {
         let dir = tempdir().unwrap();
         write_two_issue_project_fixture(dir.path(), "proj-chain", "AF-CHAIN-001", "AF-CHAIN-002");
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn chain() -> &'static str { \"before\" }\n",
+        );
+        init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-CHAIN-001").unwrap();
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn chain() -> &'static str { \"after\" }\n",
+        );
         let request_path = write_completion_request(dir.path(), "AF-CHAIN-001", &started.run_id);
         prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
         write_build_agent_closeout_proof(
@@ -1073,12 +1326,30 @@ mod tests {
         let err = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap_err();
 
         assert!(err.to_string().contains("closed issue proof"));
-        let projection = agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-001")
-            .unwrap();
+        let projection =
+            agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-001").unwrap();
         assert_eq!(projection.current_state, "in_review");
-        let next_projection = agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-002")
-            .unwrap();
+        let next_projection =
+            agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-002").unwrap();
         assert_eq!(next_projection.current_state, "backlog");
+    }
+
+    #[test]
+    fn build_agent_review_fails_when_changed_files_escape_allowed_paths() {
+        let dir = tempdir().unwrap();
+        write_out_of_scope_fixture(dir.path(), "proj-scope", "AF-SCOPE-001");
+        write_file(dir.path().join("README.md"), "before\n");
+        init_git_repo(dir.path());
+        let started = start_build_agent_issue(dir.path(), "AF-SCOPE-001").unwrap();
+        write_file(dir.path().join("README.md"), "after\n");
+        let request_path = write_completion_request(dir.path(), "AF-SCOPE-001", &started.run_id);
+
+        let err = prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap_err();
+
+        assert!(err.to_string().contains("超出允许路径：README.md"));
+        let projection =
+            agentflow_projection::load_task_projection(dir.path(), "AF-SCOPE-001").unwrap();
+        assert_eq!(projection.current_state, "blocked");
     }
 
     fn write_spec_project_fixture(root: &Path, project_id: &str, issue_id: &str) {
@@ -1091,6 +1362,8 @@ mod tests {
         .unwrap();
         let mut issue = agentflow_spec::SpecIssueDraft::new(issue_id);
         issue.project_id = Some(project_id.to_string());
+        issue.allowed_paths = vec!["src/**".to_string()];
+        issue.validation_commands = vec!["test -f src/lib.rs".to_string()];
         let issue = agentflow_spec::issue_from_requirement(root, &requirement, issue).unwrap();
         agentflow_spec::write_spec_issue(root, &issue).unwrap();
         let mut project = agentflow_spec::SpecProjectDraft::new(project_id);
@@ -1115,12 +1388,16 @@ mod tests {
         .unwrap();
         let mut first = agentflow_spec::SpecIssueDraft::new(first_id);
         first.project_id = Some(project_id.to_string());
+        first.allowed_paths = vec!["src/**".to_string()];
+        first.validation_commands = vec!["test -f src/lib.rs".to_string()];
         let first = agentflow_spec::issue_from_requirement(root, &requirement, first).unwrap();
         agentflow_spec::write_spec_issue(root, &first).unwrap();
 
         let mut second = agentflow_spec::SpecIssueDraft::new(second_id);
         second.project_id = Some(project_id.to_string());
         second.blocked_by = vec![first_id.to_string()];
+        second.allowed_paths = vec!["src/**".to_string()];
+        second.validation_commands = vec!["test -f src/lib.rs".to_string()];
         let second = agentflow_spec::issue_from_requirement(root, &requirement, second).unwrap();
         agentflow_spec::write_spec_issue(root, &second).unwrap();
 
@@ -1140,26 +1417,53 @@ mod tests {
             &path,
             serde_json::to_string_pretty(&serde_json::json!({
                 "issueId": issue_id,
-                "runId": run_id,
-                "changedFiles": [{
-                    "path": "src/lib.rs",
-                    "changeType": "modified",
-                    "insertions": 1,
-                    "deletions": 1
-                }],
-                "validationCommands": [{
-                    "label": "printf ok",
-                    "program": "printf",
-                    "args": ["ok"],
-                    "exitCode": 0,
-                    "stdout": "ok",
-                    "stderr": "",
-                    "source": "test"
-                }]
+                "runId": run_id
             }))
             .unwrap(),
         )
         .unwrap();
         path
+    }
+
+    fn write_out_of_scope_fixture(root: &Path, project_id: &str, issue_id: &str) {
+        let requirement = root.join("docs/requirements/034-scope-test.md");
+        fs::create_dir_all(requirement.parent().unwrap()).unwrap();
+        fs::write(&requirement, "# Scope Test\n\n验证路径边界阻断。\n").unwrap();
+        let mut issue = agentflow_spec::SpecIssueDraft::new(issue_id);
+        issue.project_id = Some(project_id.to_string());
+        issue.allowed_paths = vec!["src/**".to_string()];
+        issue.validation_commands = vec!["test -f README.md".to_string()];
+        let issue = agentflow_spec::issue_from_requirement(root, &requirement, issue).unwrap();
+        agentflow_spec::write_spec_issue(root, &issue).unwrap();
+        let mut project = agentflow_spec::SpecProjectDraft::new(project_id);
+        project.issue_ids = vec![issue_id.to_string()];
+        let project =
+            agentflow_spec::project_from_requirement(root, &requirement, project).unwrap();
+        agentflow_spec::write_spec_project(root, &project).unwrap();
+    }
+
+    fn write_file(path: PathBuf, content: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, content).unwrap();
+    }
+
+    fn init_git_repo(root: &Path) {
+        write_file(root.join(".gitignore"), ".agentflow/\n");
+        run_git(root, &["init"]);
+        run_git(root, &["config", "user.email", "codex@example.com"]);
+        run_git(root, &["config", "user.name", "Codex"]);
+        run_git(root, &["add", "."]);
+        run_git(root, &["commit", "-m", "initial fixture"]);
+    }
+
+    fn run_git(root: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {:?} failed", args);
     }
 }

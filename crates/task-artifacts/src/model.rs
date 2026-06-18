@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 pub const TASK_RUN_VERSION: &str = "task-run.v1";
 pub const TASK_COMMAND_VERSION: &str = "task-command.v1";
+pub const TASK_CHANGED_FILES_VERSION: &str = "task-changed-files.v1";
 pub const TASK_VALIDATION_VERSION: &str = "task-validation.v1";
 pub const TASK_EVIDENCE_VERSION: &str = "task-evidence.v1";
 pub const TASK_RUN_CHECKPOINT_VERSION: &str = "task-run-checkpoint.v1";
@@ -60,6 +61,31 @@ pub struct TaskCommandRecord {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TaskChangedFile {
+    pub path: String,
+    pub change_type: String,
+    pub insertions: usize,
+    pub deletions: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskChangedFilesRecord {
+    pub version: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub files: Vec<TaskChangedFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_commit: Option<String>,
+    pub working_tree_hash: String,
+    pub changed_file_hash: String,
+    pub collected_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskValidationRecord {
     pub version: String,
     pub issue_id: String,
@@ -67,6 +93,22 @@ pub struct TaskValidationRecord {
     pub passed: bool,
     pub command_ids: Vec<String>,
     pub failed_command_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub boundary_failures: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changed_files_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changed_file_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_result_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_tree_hash: Option<String>,
     pub checked_at: u64,
 }
 
@@ -81,6 +123,22 @@ pub struct TaskEvidence {
     pub run_path: String,
     pub command_paths: Vec<String>,
     pub validation_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changed_files_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changed_file_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_result_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_tree_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generated_at: Option<u64>,
     pub created_at: u64,
 }
 

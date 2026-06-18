@@ -1,11 +1,13 @@
 use crate::model::{
-    TaskCommandInput, TaskCommandRecord, TaskEvidence, TaskRun, TaskRunCheckpoint, TaskRunStatus,
-    TaskValidationRecord, TASK_COMMAND_VERSION, TASK_EVIDENCE_VERSION, TASK_RUN_CHECKPOINT_VERSION,
-    TASK_RUN_VERSION, TASK_VALIDATION_VERSION,
+    TaskChangedFile, TaskChangedFilesRecord, TaskCommandInput, TaskCommandRecord, TaskEvidence,
+    TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord, TASK_CHANGED_FILES_VERSION,
+    TASK_COMMAND_VERSION, TASK_EVIDENCE_VERSION, TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION,
+    TASK_VALIDATION_VERSION,
 };
 use agentflow_event_store::TaskReplayCursor;
 use agentflow_workflow_core::WorkflowFlowType;
 use anyhow::{Context, Result};
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -33,6 +35,14 @@ pub fn task_evidence_dir(project_root: impl AsRef<Path>, issue_id: &str) -> Path
     project_root
         .as_ref()
         .join(format!(".agentflow/tasks/{issue_id}/evidence"))
+}
+
+pub fn task_changed_files_path(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> PathBuf {
+    task_run_dir(project_root, issue_id, run_id).join("changed-files.json")
 }
 
 pub fn create_task_run(
@@ -128,10 +138,51 @@ pub fn write_task_command_record(
     Ok(record)
 }
 
+pub fn write_task_changed_files(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+    files: Vec<TaskChangedFile>,
+    base_commit: Option<String>,
+    head_commit: Option<String>,
+    working_tree_hash: impl Into<String>,
+) -> Result<TaskChangedFilesRecord> {
+    let root = canonical_project_root(project_root)?;
+    validate_id("issueId", issue_id)?;
+    validate_id("runId", run_id)?;
+    let changed_file_hash = sha256_hex(&serde_json::to_vec(&serde_json::json!({
+        "files": &files,
+        "baseCommit": &base_commit,
+        "headCommit": &head_commit,
+    }))?);
+    let record = TaskChangedFilesRecord {
+        version: TASK_CHANGED_FILES_VERSION.to_string(),
+        issue_id: issue_id.to_string(),
+        run_id: run_id.to_string(),
+        files,
+        base_commit,
+        head_commit,
+        working_tree_hash: working_tree_hash.into(),
+        changed_file_hash,
+        collected_at: unix_timestamp_seconds(),
+    };
+    write_json(&task_changed_files_path(&root, issue_id, run_id), &record)?;
+    Ok(record)
+}
+
 pub fn write_task_validation(
     project_root: impl AsRef<Path>,
     issue_id: &str,
     run_id: &str,
+) -> Result<TaskValidationRecord> {
+    write_task_validation_with_assessment(project_root, issue_id, run_id, Vec::new())
+}
+
+pub fn write_task_validation_with_assessment(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+    boundary_failures: Vec<String>,
 ) -> Result<TaskValidationRecord> {
     let root = canonical_project_root(project_root)?;
     validate_id("issueId", issue_id)?;
@@ -145,16 +196,67 @@ pub fn write_task_validation(
         .filter(|record| record.exit_code != Some(0))
         .map(|record| record.command_id.clone())
         .collect::<Vec<_>>();
+    let changed_files = load_task_changed_files(&root, issue_id, run_id).ok();
+    let command_hash = sha256_hex(&serde_json::to_vec(
+        &command_records
+            .iter()
+            .map(|record| {
+                serde_json::json!({
+                    "label": record.label,
+                    "program": record.program,
+                    "args": record.args,
+                })
+            })
+            .collect::<Vec<_>>(),
+    )?);
+    let passed = failed_command_ids.is_empty() && boundary_failures.is_empty();
+    let changed_files_path = changed_files
+        .as_ref()
+        .map(|_| format!(".agentflow/tasks/{issue_id}/runs/{run_id}/changed-files.json"));
+    let changed_file_hash = changed_files
+        .as_ref()
+        .map(|record| record.changed_file_hash.clone());
+    let base_commit = changed_files
+        .as_ref()
+        .and_then(|record| record.base_commit.clone());
+    let head_commit = changed_files
+        .as_ref()
+        .and_then(|record| record.head_commit.clone());
+    let working_tree_hash = changed_files
+        .as_ref()
+        .map(|record| record.working_tree_hash.clone());
+    let validation_result_hash = sha256_hex(&serde_json::to_vec(&serde_json::json!({
+        "passed": passed,
+        "commandHash": &command_hash,
+        "commandIds": command_records
+            .iter()
+            .map(|record| record.command_id.as_str())
+            .collect::<Vec<_>>(),
+        "failedCommandIds": &failed_command_ids,
+        "boundaryFailures": &boundary_failures,
+        "changedFileHash": &changed_file_hash,
+        "baseCommit": &base_commit,
+        "headCommit": &head_commit,
+        "workingTreeHash": &working_tree_hash,
+    }))?);
     let validation = TaskValidationRecord {
         version: TASK_VALIDATION_VERSION.to_string(),
         issue_id: issue_id.to_string(),
         run_id: run_id.to_string(),
-        passed: failed_command_ids.is_empty(),
+        passed,
         command_ids: command_records
             .iter()
             .map(|record| record.command_id.clone())
             .collect(),
         failed_command_ids,
+        boundary_failures,
+        changed_files_path,
+        command_hash: Some(command_hash),
+        changed_file_hash,
+        validation_result_hash: Some(validation_result_hash),
+        base_commit,
+        head_commit,
+        working_tree_hash,
         checked_at: unix_timestamp_seconds(),
     };
     write_json(
@@ -176,6 +278,7 @@ pub fn write_task_evidence(
     let validation_path = task_run_dir(&root, issue_id, run_id).join("validation.json");
     let validation: TaskValidationRecord = read_json(&validation_path)?;
     let command_records = load_command_records(&root, issue_id, run_id)?;
+    let generated_at = unix_timestamp_seconds();
     let evidence = TaskEvidence {
         version: TASK_EVIDENCE_VERSION.to_string(),
         issue_id: issue_id.to_string(),
@@ -198,7 +301,15 @@ pub fn write_task_evidence(
             })
             .collect(),
         validation_path: format!(".agentflow/tasks/{issue_id}/runs/{run_id}/validation.json"),
-        created_at: unix_timestamp_seconds(),
+        changed_files_path: validation.changed_files_path.clone(),
+        command_hash: validation.command_hash.clone(),
+        changed_file_hash: validation.changed_file_hash.clone(),
+        validation_result_hash: validation.validation_result_hash.clone(),
+        base_commit: validation.base_commit.clone(),
+        head_commit: validation.head_commit.clone(),
+        working_tree_hash: validation.working_tree_hash.clone(),
+        generated_at: Some(generated_at),
+        created_at: generated_at,
     };
     write_json(
         &task_evidence_dir(&root, issue_id).join("evidence.json"),
@@ -296,6 +407,17 @@ pub fn load_task_evidence(project_root: impl AsRef<Path>, issue_id: &str) -> Res
     read_json(&task_evidence_dir(&root, issue_id).join("evidence.json"))
 }
 
+pub fn load_task_changed_files(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<TaskChangedFilesRecord> {
+    let root = canonical_project_root(project_root)?;
+    validate_id("issueId", issue_id)?;
+    validate_id("runId", run_id)?;
+    read_json(&task_changed_files_path(&root, issue_id, run_id))
+}
+
 fn load_command_records(
     root: &Path,
     issue_id: &str,
@@ -374,6 +496,10 @@ fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
     }
     fs::write(path, serde_json::to_string_pretty(value)? + "\n")
         .with_context(|| format!("write {}", path.display()))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
 }
 
 fn unix_timestamp_seconds() -> u64 {
@@ -496,6 +622,70 @@ mod tests {
             .join(".agentflow/tasks/AF-TASK-001/delivery")
             .exists());
         assert!(!dir.path().join(".agentflow/output/release").exists());
+    }
+
+    #[test]
+    fn binds_trusted_validation_hashes_into_evidence() {
+        let dir = tempdir().unwrap();
+        create_task_run(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            "build-agent.issue-loop@v1",
+            None,
+        )
+        .unwrap();
+        write_task_command_record(dir.path(), "AF-TASK-001", "run-001", command(0)).unwrap();
+        write_task_changed_files(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            vec![TaskChangedFile {
+                path: "src/lib.rs".to_string(),
+                change_type: "modified".to_string(),
+                insertions: 1,
+                deletions: 0,
+            }],
+            Some("base-001".to_string()),
+            Some("head-001".to_string()),
+            "worktree-hash-001",
+        )
+        .unwrap();
+
+        let validation =
+            write_task_validation_with_assessment(dir.path(), "AF-TASK-001", "run-001", Vec::new())
+                .unwrap();
+        let evidence =
+            write_task_evidence(dir.path(), "AF-TASK-001", "run-001", "Trusted validation")
+                .unwrap();
+
+        assert!(validation.changed_files_path.is_some());
+        assert!(validation.command_hash.is_some());
+        assert!(validation.changed_file_hash.is_some());
+        assert!(validation.validation_result_hash.is_some());
+        assert_eq!(
+            evidence.changed_files_path.as_deref(),
+            validation.changed_files_path.as_deref()
+        );
+        assert_eq!(
+            evidence.command_hash.as_deref(),
+            validation.command_hash.as_deref()
+        );
+        assert_eq!(
+            evidence.changed_file_hash.as_deref(),
+            validation.changed_file_hash.as_deref()
+        );
+        assert_eq!(
+            evidence.validation_result_hash.as_deref(),
+            validation.validation_result_hash.as_deref()
+        );
+        assert_eq!(evidence.base_commit.as_deref(), Some("base-001"));
+        assert_eq!(evidence.head_commit.as_deref(), Some("head-001"));
+        assert_eq!(
+            evidence.working_tree_hash.as_deref(),
+            Some("worktree-hash-001")
+        );
+        assert!(evidence.generated_at.is_some());
     }
 
     #[test]
