@@ -2623,6 +2623,7 @@ function TaskProjectGroupRow({
     : "0/0";
   const workflowStatus = projectMenuWorkflowStatus(group);
   const timelineSections = taskProjectTimelineSections(group.issues);
+  const structureSummary = taskTimelineSectionSummary(group.issues);
   const selected = group.id === selectedProjectId;
 
   return (
@@ -2641,6 +2642,7 @@ function TaskProjectGroupRow({
         <StatusDot status={statusChipForDisplayStatus(workflowStatus)} />
         <span className="v16-task-project-main">
           <span className="v16-task-project-title">{group.title}</span>
+          <small className="v16-task-project-summary">{structureSummary}</small>
         </span>
         <span className="v16-task-project-meta">
           <span>{progress}</span>
@@ -2681,6 +2683,10 @@ function TaskProjectTimelineSection({
 }) {
   return (
     <section className={`v16-task-timeline-section v16-task-timeline-section-${section.id}`} aria-label={section.id}>
+      <div className="v16-task-timeline-section-header">
+        <span>{taskTimelineSectionLabel(section.id)}</span>
+        <span>{section.issues.length} 项</span>
+      </div>
       <div className="v16-task-timeline-items">
         {section.issues.map((issue) => (
           <TaskIssueNodeRow
@@ -2705,21 +2711,24 @@ function UngroupedIssueSection({
   onSelectTask: (taskId: string) => void;
   selectedTaskId: string | null;
 }) {
+  const timelineSections = taskProjectTimelineSections(issues);
+
   return (
     <section className="v16-task-project-group v16-task-ungrouped-section" aria-label="单项任务">
       <div className="v16-task-project-row v16-task-ungrouped-row">
         <span className="v16-task-project-main">
           <span className="v16-task-project-title">单项任务</span>
+          <small className="v16-task-project-summary">{taskTimelineSectionSummary(issues)}</small>
         </span>
         <span className="v16-task-project-meta">{issues.length} 项</span>
       </div>
       <div className="v16-task-project-children v16-task-ungrouped-children">
-        {issues.map((issue) => (
-          <TaskIssueNodeRow
-            issue={issue}
-            key={issue.id}
+        {timelineSections.map((section) => (
+          <TaskProjectTimelineSection
+            key={section.id}
             onSelectTask={onSelectTask}
-            selected={issue.id === selectedTaskId}
+            section={section}
+            selectedTaskId={selectedTaskId}
           />
         ))}
       </div>
@@ -5616,11 +5625,17 @@ function taskMenuStatusSummary(task: {
   deliveryStatus?: string | null;
 }) {
   const status = task.displayStatus ?? "backlog";
-  const blockerCount = task.blockedBy?.length ?? task.dependencies?.length ?? 0;
+  const dependencies = task.blockedBy?.length ? task.blockedBy : (task.dependencies ?? []);
+  const blockerCount = dependencies.length;
+  const dependencySummary = blockerCount
+    ? blockerCount <= 2
+      ? `等待 ${dependencies.join("、")} 完成`
+      : `等待 ${dependencies.slice(0, 2).join("、")} 等 ${blockerCount} 项完成`
+    : null;
 
   const summaries: Record<IssueDisplayStatus, string> = {
-    backlog: "还没有进入执行",
-    blocked: blockerCount ? `等待 ${blockerCount} 个阻断项解除` : "等待解除阻断",
+    backlog: dependencySummary ?? "还没有进入执行",
+    blocked: dependencySummary ?? "等待解除阻断",
     cancel: "",
     done: "",
     in_progress: "正在实现并做本地验证",
@@ -5668,15 +5683,12 @@ function taskProjectTimelineSections(issues: TaskIssueNode[]) {
   const current = issues.filter((issue) =>
     ["todo", "in_progress", "in_review", "blocked"].includes(issue.displayStatus),
   );
-  const futurePool = issues.filter((issue) => issue.displayStatus === "backlog");
-
-  const currentIssues = current.length ? current : futurePool.slice(0, 1);
-  const futureIssues = current.length ? futurePool : futurePool.slice(1);
+  const future = issues.filter((issue) => issue.displayStatus === "backlog");
 
   return [
     {
       id: "current" as const,
-      issues: currentIssues,
+      issues: current,
     },
     {
       id: "past" as const,
@@ -5684,9 +5696,25 @@ function taskProjectTimelineSections(issues: TaskIssueNode[]) {
     },
     {
       id: "future" as const,
-      issues: futureIssues,
+      issues: future,
     },
   ].filter((section) => section.issues.length);
+}
+
+function taskTimelineSectionLabel(sectionId: "current" | "past" | "future") {
+  const labels = {
+    current: "当前",
+    past: "已结束",
+    future: "后续",
+  } as const;
+  return labels[sectionId];
+}
+
+function taskTimelineSectionSummary(issues: TaskIssueNode[]) {
+  const current = issues.filter((issue) => ["todo", "in_progress", "in_review", "blocked"].includes(issue.displayStatus)).length;
+  const past = issues.filter((issue) => ["done", "cancel"].includes(issue.displayStatus)).length;
+  const future = issues.filter((issue) => issue.displayStatus === "backlog").length;
+  return `当前 ${current} · 已结束 ${past} · 后续 ${future}`;
 }
 
 type TaskTimelineTone = "current" | "future" | "done" | "cancel";

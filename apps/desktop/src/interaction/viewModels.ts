@@ -873,9 +873,9 @@ function compareExecutionCandidate<T extends ExecutionOrderedTask>(
     return dependencyDiff;
   }
 
-  const positionDiff = left.position - right.position;
-  if (positionDiff) {
-    return positionDiff;
+  const statusDiff = executionStatusRank(left.issue.displayStatus) - executionStatusRank(right.issue.displayStatus);
+  if (statusDiff) {
+    return statusDiff;
   }
 
   const priorityDiff = priorityRank(left.issue.priority) - priorityRank(right.issue.priority);
@@ -883,14 +883,14 @@ function compareExecutionCandidate<T extends ExecutionOrderedTask>(
     return priorityDiff;
   }
 
-  const statusDiff = executionStatusRank(left.issue.displayStatus) - executionStatusRank(right.issue.displayStatus);
-  if (statusDiff) {
-    return statusDiff;
-  }
-
   const timeDiff = executionSortTime(right.issue) - executionSortTime(left.issue);
   if (timeDiff) {
     return timeDiff;
+  }
+
+  const positionDiff = left.position - right.position;
+  if (positionDiff) {
+    return positionDiff;
   }
 
   return left.id.localeCompare(right.id);
@@ -914,12 +914,43 @@ function executionSortTime(issue: ExecutionOrderedTask) {
 }
 
 function compareTaskProjectGroupByLatest(left: TaskProjectGroup, right: TaskProjectGroup) {
+  const statusDiff = projectGroupStatusRank(left) - projectGroupStatusRank(right);
+  if (statusDiff) {
+    return statusDiff;
+  }
   const leftTime = left.project.system?.updatedAt ?? left.project.system?.createdAt ?? 0;
   const rightTime = right.project.system?.updatedAt ?? right.project.system?.createdAt ?? 0;
   if (leftTime !== rightTime) {
     return rightTime - leftTime;
   }
   return left.title.localeCompare(right.title, "zh-CN");
+}
+
+function projectGroupStatusRank(group: TaskProjectGroup) {
+  if (!group.issues.length) {
+    return 4;
+  }
+
+  const statuses = group.issues.map((issue) => issue.displayStatus);
+  if (statuses.some((status) => status === "in_progress")) {
+    return 0;
+  }
+  if (statuses.some((status) => status === "in_review")) {
+    return 1;
+  }
+  if (statuses.some((status) => status === "todo")) {
+    return 2;
+  }
+  if (statuses.some((status) => status === "blocked")) {
+    return 3;
+  }
+  if (statuses.some((status) => status === "backlog")) {
+    return 4;
+  }
+  if (statuses.every((status) => status === "cancel")) {
+    return 6;
+  }
+  return 5;
 }
 
 function priorityRank(priority?: string | null) {
