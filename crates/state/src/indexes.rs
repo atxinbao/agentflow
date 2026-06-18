@@ -185,8 +185,10 @@ fn delivery_status(projection: &TaskProjection) -> String {
 }
 
 fn run_status_from_task_state(state: &str) -> &'static str {
-    if work_state_is_ready_for_execution(state) || work_state_is_in_progress(state) {
-        "running"
+    if work_state_is_ready_for_execution(state) {
+        "queued"
+    } else if work_state_is_in_progress(state) {
+        "in_progress"
     } else if work_state_is_in_review(state) || work_state_is_done(state) {
         "completed"
     } else if work_state_is_blocked(state) {
@@ -250,8 +252,8 @@ mod tests {
     #[test]
     fn run_status_maps_from_task_state() {
         assert_eq!(run_status_from_task_state("backlog"), "queued");
-        assert_eq!(run_status_from_task_state("todo"), "running");
-        assert_eq!(run_status_from_task_state("in_progress"), "running");
+        assert_eq!(run_status_from_task_state("todo"), "queued");
+        assert_eq!(run_status_from_task_state("in_progress"), "in_progress");
         assert_eq!(run_status_from_task_state("in_review"), "completed");
         assert_eq!(run_status_from_task_state("done"), "completed");
         assert_eq!(run_status_from_task_state("blocked"), "blocked");

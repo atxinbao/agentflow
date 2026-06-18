@@ -3,7 +3,8 @@ use crate::model::{
     ISSUE_SCHEDULED, TASK_LOOP_LAUNCH_REQUEST_VERSION,
 };
 use agentflow_event_store::{
-    append_task_event_once, load_task_events, EventActor, EventStateTransition, TaskEventDraft,
+    append_task_event_once, load_task_events, EventActor, EventStateTransition, TaskEvent,
+    TaskEventDraft,
 };
 use agentflow_spec::{
     list_spec_issues, read_spec_issue, read_spec_project, SpecIssue, SpecIssueStatus, SpecPriority,
@@ -119,9 +120,21 @@ impl TaskLoop {
         let schedule = match state {
             SpecIssueStatus::Backlog => Some(schedule_specific_issue(&root, &issue)?),
             SpecIssueStatus::Todo => None,
+            SpecIssueStatus::InProgress => {
+                if let Some(launch) = recoverable_launch_for_issue(&root, &issue)? {
+                    return Ok(TaskLoopTick {
+                        schedule: None,
+                        launch,
+                    });
+                }
+                anyhow::bail!(
+                    "issue {} is already in progress without a recoverable launch request",
+                    issue.issue_id
+                );
+            }
             _ => {
                 anyhow::bail!(
-                    "issue {} must be backlog or todo before agent launch, found {}",
+                    "issue {} must be backlog, todo, or recoverable in_progress before agent launch, found {}",
                     issue.issue_id,
                     state.as_str()
                 );
@@ -176,6 +189,12 @@ impl TaskLoop {
         let project = read_spec_project(&root, &self.project_id)?;
         let issues = load_project_issues(&root, &project)?;
         let states = current_issue_states(&root, &issues)?;
+        if let Some(launch) = recoverable_launch_for_project(&root, &issues, &states)? {
+            return Ok(Some(TaskLoopTick {
+                schedule: None,
+                launch,
+            }));
+        }
         let launched = launch_requested_issue_ids(&root)?;
 
         if let Some(issue) = next_launchable_issue(&issues, &states, &launched) {
@@ -434,6 +453,94 @@ fn launch_requested_issue_ids(root: &Path) -> Result<BTreeSet<String>> {
         .filter(|event| event.event_type == AGENT_LAUNCH_REQUESTED)
         .filter_map(|event| event.issue_id)
         .collect())
+}
+
+fn recoverable_launch_for_project(
+    root: &Path,
+    issues: &[SpecIssue],
+    states: &BTreeMap<String, SpecIssueStatus>,
+) -> Result<Option<TaskLoopLaunch>> {
+    let events = load_task_events(root)?;
+    let recoverable_run_ids = recoverable_launch_run_ids(&events);
+    let mut candidates = issues
+        .iter()
+        .filter(|issue| states.get(&issue.issue_id) == Some(&SpecIssueStatus::InProgress))
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        priority_rank(&left.priority)
+            .cmp(&priority_rank(&right.priority))
+            .then_with(|| issue_number(&left.issue_id).cmp(&issue_number(&right.issue_id)))
+            .then_with(|| left.issue_id.cmp(&right.issue_id))
+    });
+    for issue in candidates {
+        if let Some(launch) =
+            recoverable_launch_from_events(issue, &events, &recoverable_run_ids)?
+        {
+            return Ok(Some(launch));
+        }
+    }
+    Ok(None)
+}
+
+fn recoverable_launch_for_issue(root: &Path, issue: &SpecIssue) -> Result<Option<TaskLoopLaunch>> {
+    let events = load_task_events(root)?;
+    let recoverable_run_ids = recoverable_launch_run_ids(&events);
+    recoverable_launch_from_events(issue, &events, &recoverable_run_ids)
+}
+
+fn recoverable_launch_run_ids(events: &[TaskEvent]) -> BTreeSet<String> {
+    let mut claimable = BTreeMap::new();
+    for event in events {
+        let Some(run_id) = event.run_id.clone() else {
+            continue;
+        };
+        match event.event_type.as_str() {
+            AGENT_LAUNCH_REQUESTED => {
+                claimable.entry(run_id).or_insert(true);
+            }
+            "agent.launch.claimed"
+            | "agent.session.created"
+            | "agent.session.running"
+            | "agent.session.in_review"
+            | "agent.session.completed" => {
+                claimable.insert(run_id, false);
+            }
+            "agent.session.interrupted" | "agent.session.failed" => {
+                claimable.insert(run_id, true);
+            }
+            _ => {}
+        }
+    }
+    claimable
+        .into_iter()
+        .filter_map(|(run_id, allowed)| allowed.then_some(run_id))
+        .collect()
+}
+
+fn recoverable_launch_from_events(
+    issue: &SpecIssue,
+    events: &[TaskEvent],
+    recoverable_run_ids: &BTreeSet<String>,
+) -> Result<Option<TaskLoopLaunch>> {
+    let Some(event) = events.iter().rev().find(|event| {
+        event.event_type == AGENT_LAUNCH_REQUESTED
+            && event.issue_id.as_deref() == Some(issue.issue_id.as_str())
+            && event
+                .run_id
+                .as_deref()
+                .is_some_and(|run_id| recoverable_run_ids.contains(run_id))
+    }) else {
+        return Ok(None);
+    };
+    let payload: AgentLaunchPayload = serde_json::from_value(event.payload.clone())?;
+    Ok(Some(TaskLoopLaunch {
+        project_id: payload.project_id,
+        issue_id: payload.issue_id,
+        run_id: payload.run_id,
+        branch_name: payload.branch_name,
+        launch_request_path: payload.launch_request_path,
+        event_id: event.event_id.clone(),
+    }))
 }
 
 fn current_issue_states(
@@ -742,10 +849,12 @@ mod tests {
         write_project_with_issues(dir.path());
         let loop_driver = TaskLoop::new("project-task-loop");
 
-        assert!(loop_driver.tick(dir.path(), "codex").unwrap().is_some());
-        let second_tick = loop_driver.tick(dir.path(), "codex").unwrap();
+        let first_tick = loop_driver.tick(dir.path(), "codex").unwrap().unwrap();
+        let second_tick = loop_driver.tick(dir.path(), "codex").unwrap().unwrap();
 
-        assert!(second_tick.is_none());
+        assert_eq!(first_tick.launch.issue_id, "AF-TASK-001");
+        assert_eq!(second_tick.launch.issue_id, "AF-TASK-001");
+        assert!(second_tick.schedule.is_none());
         let events = replay_task_events(dir.path(), ReplayFilter::issue("AF-TASK-001")).unwrap();
         assert_eq!(
             events
@@ -754,6 +863,51 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn tick_reuses_interrupted_in_progress_launch_before_new_schedule() {
+        let dir = tempdir().unwrap();
+        write_project_with_issues(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+        let first_tick = loop_driver.tick(dir.path(), "codex").unwrap().unwrap();
+
+        append_task_event_once(
+            dir.path(),
+            TaskEventDraft {
+                flow_type: WorkflowFlowType::Work,
+                aggregate_type: "issue".to_string(),
+                aggregate_id: "AF-TASK-001".to_string(),
+                project_id: Some("project-task-loop".to_string()),
+                issue_id: Some("AF-TASK-001".to_string()),
+                run_id: Some(first_tick.launch.run_id.clone()),
+                event_type: "agent.session.interrupted".to_string(),
+                authority_role: Some(WorkflowAgentRole::WorkAgent),
+                actor: EventActor {
+                    role: "agent-dispatcher".to_string(),
+                    kind: "system".to_string(),
+                },
+                state: None,
+                correlation_id: Some("corr-AF-TASK-001".to_string()),
+                causation_id: None,
+                payload: json!({
+                    "issueId": "AF-TASK-001",
+                    "projectId": "project-task-loop",
+                    "runId": first_tick.launch.run_id,
+                    "sessionId": "codex-run-001",
+                    "sessionStatus": "interrupted",
+                }),
+                artifact_refs: Vec::new(),
+                idempotency_key: Some("agent.session.interrupted:AF-TASK-001:run-001".to_string()),
+            },
+        )
+        .unwrap();
+
+        let resumed_tick = loop_driver.tick(dir.path(), "codex").unwrap().unwrap();
+
+        assert!(resumed_tick.schedule.is_none());
+        assert_eq!(resumed_tick.launch.issue_id, "AF-TASK-001");
+        assert_eq!(resumed_tick.launch.run_id, "run-001");
     }
 
     #[test]
