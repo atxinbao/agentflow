@@ -13,6 +13,14 @@ pub(crate) struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    Project {
+        #[command(subcommand)]
+        command: ProjectCommand,
+    },
+    Completion {
+        #[command(subcommand)]
+        command: CompletionCommand,
+    },
     BuildAgent {
         #[command(subcommand)]
         command: BuildAgentCommand,
@@ -32,6 +40,56 @@ pub(crate) enum Command {
     Release {
         #[command(subcommand)]
         command: ReleaseCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum ProjectCommand {
+    Intake {
+        #[arg(long = "requirement-path")]
+        requirement_path: PathBuf,
+        #[arg(long = "project-id")]
+        project_id: Option<String>,
+    },
+    PreviewGoal {
+        #[arg(long = "requirement-id")]
+        requirement_id: String,
+    },
+    ConfirmGoal {
+        #[arg(long = "requirement-id")]
+        requirement_id: String,
+        #[arg(long, default_value = "goal-agent")]
+        actor: String,
+    },
+    ConfirmPlan {
+        #[arg(long = "requirement-id")]
+        requirement_id: String,
+        #[arg(long, default_value = "goal-agent")]
+        actor: String,
+    },
+    Materialize {
+        #[arg(long = "requirement-id")]
+        requirement_id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum CompletionCommand {
+    Inspect {
+        #[arg(long = "project-id")]
+        project_id: String,
+    },
+    Decide {
+        #[arg(long = "project-id")]
+        project_id: String,
+        #[arg(long)]
+        outcome: String,
+        #[arg(long, default_value = "goal-agent")]
+        actor: String,
+        #[arg(long)]
+        summary: String,
+        #[arg(long = "rationale")]
+        rationale: Vec<String>,
     },
 }
 
@@ -112,6 +170,18 @@ pub(crate) enum ProjectionCommand {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum ReleaseCommand {
+    Prepare {
+        #[arg(long = "project-id")]
+        project_id: String,
+    },
+    Confirm {
+        #[arg(long = "project-id")]
+        project_id: String,
+    },
+    Publish {
+        #[arg(long = "project-id")]
+        project_id: String,
+    },
     Summary,
     WriteDocs {
         #[arg(long = "changelog-path", default_value = "CHANGELOG.md")]

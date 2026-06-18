@@ -59,185 +59,251 @@ struct ReleaseGate {
     delivery_status: String,
 }
 
+#[derive(Debug, Clone)]
+struct ReleaseRuntimeContext {
+    root: PathBuf,
+    project_id: String,
+    projection: ProjectProjectionSnapshot,
+    target: PublicReleaseDocumentTarget,
+    gate: ReleaseGate,
+    existing: Option<ProjectReleaseFacts>,
+}
+
+pub fn prepare_project_release(
+    project_root: impl AsRef<Path>,
+    project_id: impl AsRef<str>,
+) -> Result<ProjectReleaseFacts> {
+    let context = build_release_runtime_context(project_root, project_id)?;
+    let now = unix_timestamp_seconds();
+
+    if context
+        .existing
+        .as_ref()
+        .is_some_and(|facts| facts.current_state == "published")
+    {
+        return refresh_published_release(&context, now);
+    }
+
+    if context.gate.gate_status != "ready" {
+        return write_release_gate_state(
+            &context,
+            context.gate.current_state.clone(),
+            context.gate.gate_status.clone(),
+            context.gate.gate_reason.clone(),
+            0,
+            context
+                .existing
+                .as_ref()
+                .and_then(|facts| facts.latest_event_id.clone()),
+            context
+                .existing
+                .as_ref()
+                .and_then(|facts| facts.published_at),
+            now,
+        );
+    }
+
+    let summary = collect_public_release_summary_for_project(
+        &context.root,
+        Some(context.project_id.as_str()),
+    )?;
+    if summary.entries.is_empty() {
+        return write_release_gate_state(
+            &context,
+            "blocked".to_string(),
+            "blocked".to_string(),
+            "项目已进入 release 阶段，但当前还没有可汇总的已完成任务交付。".to_string(),
+            0,
+            context
+                .existing
+                .as_ref()
+                .and_then(|facts| facts.latest_event_id.clone()),
+            context
+                .existing
+                .as_ref()
+                .and_then(|facts| facts.published_at),
+            now,
+        );
+    }
+
+    let existing_state = context
+        .existing
+        .as_ref()
+        .map(|facts| facts.current_state.as_str())
+        .unwrap_or("pending");
+    let current_state = match existing_state {
+        "in_progress" => "in_progress",
+        "ready" => "ready",
+        "published" => "published",
+        _ => "pending",
+    };
+    let mut latest_event_id = context
+        .existing
+        .as_ref()
+        .and_then(|facts| facts.latest_event_id.clone());
+    if current_state == "pending" {
+        latest_event_id = transition_release_state(
+            &context.root,
+            &context.project_id,
+            "pending",
+            "delivery.ready",
+            &context.target,
+            summary.entries.len(),
+            &context.gate,
+        )?
+        .or(latest_event_id);
+    }
+
+    let persisted_state = if current_state == "in_progress" {
+        "in_progress"
+    } else {
+        "ready"
+    };
+    let persisted_reason = if persisted_state == "in_progress" {
+        "Release 说明已确认，正在等待正式发布。"
+    } else {
+        "Release 已就绪，下一步可以确认并生成公开说明。"
+    };
+
+    write_release_gate_state(
+        &context,
+        persisted_state.to_string(),
+        "ready".to_string(),
+        persisted_reason.to_string(),
+        summary.entries.len(),
+        latest_event_id,
+        context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.published_at),
+        now,
+    )
+}
+
+pub fn confirm_project_release(
+    project_root: impl AsRef<Path>,
+    project_id: impl AsRef<str>,
+) -> Result<ProjectReleaseFacts> {
+    let context = build_release_runtime_context(project_root, project_id)?;
+    let now = unix_timestamp_seconds();
+
+    if context
+        .existing
+        .as_ref()
+        .is_some_and(|facts| facts.current_state == "published")
+    {
+        return refresh_published_release(&context, now);
+    }
+
+    let prepared = prepare_project_release(&context.root, &context.project_id)?;
+    if prepared.current_state != "ready" && prepared.current_state != "in_progress" {
+        anyhow::bail!(
+            "release confirm requires ready state, found {}",
+            prepared.current_state
+        );
+    }
+    if prepared.current_state == "in_progress" {
+        return Ok(prepared);
+    }
+
+    let summary = collect_public_release_summary_for_project(
+        &context.root,
+        Some(context.project_id.as_str()),
+    )?;
+    let paths = write_public_release_documents(&context.root, &summary, &context.target)?;
+    let latest_event_id = transition_release_state(
+        &context.root,
+        &context.project_id,
+        "ready",
+        "delivery.started",
+        &PublicReleaseDocumentTarget {
+            changelog_path: PathBuf::from(paths.changelog_path.clone()),
+            release_notes_path: PathBuf::from(paths.release_notes_path.clone()),
+        },
+        summary.entries.len(),
+        &context.gate,
+    )?
+    .or(prepared.latest_event_id.clone());
+
+    write_release_gate_state(
+        &context,
+        "in_progress".to_string(),
+        "ready".to_string(),
+        "Release 说明已确认，公开记录已生成，下一步可以正式发布。".to_string(),
+        summary.entries.len(),
+        latest_event_id,
+        prepared.published_at,
+        now,
+    )
+}
+
+pub fn publish_project_release(
+    project_root: impl AsRef<Path>,
+    project_id: impl AsRef<str>,
+) -> Result<ProjectReleaseFacts> {
+    let context = build_release_runtime_context(project_root, project_id)?;
+    let now = unix_timestamp_seconds();
+
+    if context
+        .existing
+        .as_ref()
+        .is_some_and(|facts| facts.current_state == "published")
+    {
+        return refresh_published_release(&context, now);
+    }
+
+    let confirmed = confirm_project_release(&context.root, &context.project_id)?;
+    if confirmed.current_state != "in_progress" {
+        anyhow::bail!(
+            "release publish requires in_progress state, found {}",
+            confirmed.current_state
+        );
+    }
+
+    let summary = collect_public_release_summary_for_project(
+        &context.root,
+        Some(context.project_id.as_str()),
+    )?;
+    let paths = write_public_release_documents(&context.root, &summary, &context.target)?;
+    let latest_event_id = transition_release_state(
+        &context.root,
+        &context.project_id,
+        "in_progress",
+        "delivery.published",
+        &PublicReleaseDocumentTarget {
+            changelog_path: PathBuf::from(paths.changelog_path.clone()),
+            release_notes_path: PathBuf::from(paths.release_notes_path.clone()),
+        },
+        summary.entries.len(),
+        &context.gate,
+    )?
+    .or(confirmed.latest_event_id.clone());
+
+    write_release_gate_state(
+        &context,
+        "published".to_string(),
+        "ready".to_string(),
+        "Release 已发布。".to_string(),
+        summary.entries.len(),
+        latest_event_id,
+        Some(now),
+        now,
+    )
+}
+
 pub fn sync_project_release(
     project_root: impl AsRef<Path>,
     project_id: impl AsRef<str>,
 ) -> Result<ProjectReleaseFacts> {
-    let root = canonicalize_project_root(project_root)?;
-    let project_id = ProjectId::parse(project_id.as_ref())?;
-    let projection = load_project_projection_snapshot(&root, project_id.as_str())?;
-    let target = default_project_release_target(project_id.as_str())?;
-    let existing = load_project_release_facts(&root, project_id.as_str()).ok();
-    let gate = evaluate_release_gate(&projection);
-
-    let now = unix_timestamp_seconds();
-    let mut current_state = existing
-        .as_ref()
-        .map(|facts| facts.current_state.clone())
-        .unwrap_or_else(|| {
-            if gate.gate_status == "ready" {
-                "pending".to_string()
-            } else {
-                gate.current_state.clone()
-            }
-        });
-    let mut latest_event_id = existing
-        .as_ref()
-        .and_then(|facts| facts.latest_event_id.clone());
-    let mut published_at = existing.as_ref().and_then(|facts| facts.published_at);
-    let mut entry_count = existing
-        .as_ref()
-        .map(|facts| facts.entry_count)
-        .unwrap_or(0);
-
-    if current_state == "published" {
-        let summary = collect_public_release_summary_for_project(&root, Some(project_id.as_str()))?;
-        let paths = write_public_release_documents(&root, &summary, &target)?;
-        entry_count = summary.entries.len();
-        published_at = published_at.or(Some(now));
-        let facts = ProjectReleaseFacts {
-            version: PROJECT_RELEASE_FACTS_VERSION.to_string(),
-            project_id: projection.project_id,
-            project_title: projection.title,
-            current_state,
-            gate_status: "ready".to_string(),
-            gate_reason: "Release 已经发布。".to_string(),
-            completion_state: gate.completion_state,
-            completion_outcome: gate.completion_outcome,
-            delivery_status: gate.delivery_status,
-            changelog_path: paths.changelog_path,
-            release_notes_path: paths.release_notes_path,
-            entry_count,
-            summary_line: format!(
-                "Release 已发布，公开记录写入 {} 和 {}。",
-                target.changelog_path.display(),
-                target.release_notes_path.display()
-            ),
-            latest_event_id,
-            published_at,
-            updated_at: now,
-        };
-        write_project_release_facts(&root, &facts)?;
-        write_project_release_index(&root)?;
-        sync_project_external_review_surface(&root, &facts)?;
-        return Ok(facts);
+    let prepared = prepare_project_release(&project_root, project_id.as_ref())?;
+    if prepared.current_state != "ready" {
+        return Ok(prepared);
     }
-
-    if gate.gate_status == "ready" {
-        let summary = collect_public_release_summary_for_project(&root, Some(project_id.as_str()))?;
-        if summary.entries.is_empty() {
-            current_state = "blocked".to_string();
-            let facts = ProjectReleaseFacts {
-                version: PROJECT_RELEASE_FACTS_VERSION.to_string(),
-                project_id: projection.project_id,
-                project_title: projection.title,
-                current_state,
-                gate_status: "blocked".to_string(),
-                gate_reason: "项目已进入 release 阶段，但当前还没有可汇总的已完成任务交付。"
-                    .to_string(),
-                completion_state: gate.completion_state,
-                completion_outcome: gate.completion_outcome,
-                delivery_status: gate.delivery_status,
-                changelog_path: target.changelog_path.display().to_string(),
-                release_notes_path: target.release_notes_path.display().to_string(),
-                entry_count: 0,
-                summary_line: "Release 已阻断，原因是没有可发布的任务交付。".to_string(),
-                latest_event_id,
-                published_at,
-                updated_at: now,
-            };
-            write_project_release_facts(&root, &facts)?;
-            write_project_release_index(&root)?;
-            return Ok(facts);
-        }
-
-        if current_state == "blocked" {
-            current_state = "pending".to_string();
-        }
-        if current_state == "pending" {
-            latest_event_id = transition_release_state(
-                &root,
-                project_id.as_str(),
-                "pending",
-                "delivery.ready",
-                &target,
-                summary.entries.len(),
-                &gate,
-            )?
-            .or(latest_event_id);
-            current_state = "ready".to_string();
-        }
-        if current_state == "ready" {
-            latest_event_id = transition_release_state(
-                &root,
-                project_id.as_str(),
-                "ready",
-                "delivery.started",
-                &target,
-                summary.entries.len(),
-                &gate,
-            )?
-            .or(latest_event_id);
-            current_state = "in_progress".to_string();
-        }
-
-        let paths = write_public_release_documents(&root, &summary, &target)?;
-        entry_count = summary.entries.len();
-        if current_state == "in_progress" {
-            latest_event_id = transition_release_state(
-                &root,
-                project_id.as_str(),
-                "in_progress",
-                "delivery.published",
-                &PublicReleaseDocumentTarget {
-                    changelog_path: PathBuf::from(paths.changelog_path.clone()),
-                    release_notes_path: PathBuf::from(paths.release_notes_path.clone()),
-                },
-                entry_count,
-                &gate,
-            )?
-            .or(latest_event_id);
-            current_state = "published".to_string();
-            published_at = Some(now);
-        }
-    } else if current_state != "published" {
-        current_state = gate.current_state.clone();
+    let confirmed = confirm_project_release(&project_root, project_id.as_ref())?;
+    if confirmed.current_state != "in_progress" {
+        return Ok(confirmed);
     }
-
-    let summary_line = match current_state.as_str() {
-        "published" => format!(
-            "Release 已发布，公开记录写入 {} 和 {}。",
-            target.changelog_path.display(),
-            target.release_notes_path.display()
-        ),
-        "in_progress" => "Release 正在整理公开说明。".to_string(),
-        "ready" => "Release 已就绪，下一步将生成公开说明。".to_string(),
-        "blocked" => format!("Release 已阻断：{}。", gate.gate_reason),
-        _ => gate.gate_reason.clone(),
-    };
-
-    let facts = ProjectReleaseFacts {
-        version: PROJECT_RELEASE_FACTS_VERSION.to_string(),
-        project_id: projection.project_id,
-        project_title: projection.title,
-        current_state,
-        gate_status: gate.gate_status,
-        gate_reason: gate.gate_reason,
-        completion_state: gate.completion_state,
-        completion_outcome: gate.completion_outcome,
-        delivery_status: gate.delivery_status,
-        changelog_path: target.changelog_path.display().to_string(),
-        release_notes_path: target.release_notes_path.display().to_string(),
-        entry_count,
-        summary_line,
-        latest_event_id,
-        published_at,
-        updated_at: now,
-    };
-    write_project_release_facts(&root, &facts)?;
-    write_project_release_index(&root)?;
-    sync_project_external_review_surface(&root, &facts)?;
-    Ok(facts)
+    publish_project_release(project_root, project_id)
 }
 
 pub fn load_project_release_facts(
@@ -251,6 +317,105 @@ pub fn load_project_release_facts(
 pub fn load_project_release_index(project_root: impl AsRef<Path>) -> Result<ProjectReleaseIndex> {
     let root = canonicalize_project_root(project_root)?;
     read_json(&root.join(".agentflow/indexes/releases.json"))
+}
+
+fn build_release_runtime_context(
+    project_root: impl AsRef<Path>,
+    project_id: impl AsRef<str>,
+) -> Result<ReleaseRuntimeContext> {
+    let root = canonicalize_project_root(project_root)?;
+    let project_id = ProjectId::parse(project_id.as_ref())?;
+    let projection = load_project_projection_snapshot(&root, project_id.as_str())?;
+    let target = default_project_release_target(project_id.as_str())?;
+    let existing = load_project_release_facts(&root, project_id.as_str()).ok();
+    let gate = evaluate_release_gate(&projection);
+    Ok(ReleaseRuntimeContext {
+        root,
+        project_id: project_id.as_str().to_string(),
+        projection,
+        target,
+        gate,
+        existing,
+    })
+}
+
+fn refresh_published_release(
+    context: &ReleaseRuntimeContext,
+    now: u64,
+) -> Result<ProjectReleaseFacts> {
+    let summary = collect_public_release_summary_for_project(
+        &context.root,
+        Some(context.project_id.as_str()),
+    )?;
+    let paths = write_public_release_documents(&context.root, &summary, &context.target)?;
+    write_release_gate_state(
+        context,
+        "published".to_string(),
+        "ready".to_string(),
+        "Release 已经发布。".to_string(),
+        summary.entries.len(),
+        context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.latest_event_id.clone()),
+        context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.published_at)
+            .or(Some(now)),
+        now,
+    )
+    .map(|mut facts| {
+        facts.changelog_path = paths.changelog_path;
+        facts.release_notes_path = paths.release_notes_path;
+        facts
+    })
+}
+
+fn write_release_gate_state(
+    context: &ReleaseRuntimeContext,
+    current_state: String,
+    gate_status: String,
+    gate_reason: String,
+    entry_count: usize,
+    latest_event_id: Option<String>,
+    published_at: Option<u64>,
+    now: u64,
+) -> Result<ProjectReleaseFacts> {
+    let summary_line = match current_state.as_str() {
+        "published" => format!(
+            "Release 已发布，公开记录写入 {} 和 {}。",
+            context.target.changelog_path.display(),
+            context.target.release_notes_path.display()
+        ),
+        "in_progress" => "Release 已确认，正在等待正式发布。".to_string(),
+        "ready" => "Release 已准备好，等待确认发布内容。".to_string(),
+        "blocked" => format!("Release 已阻断：{}。", gate_reason),
+        _ => gate_reason.clone(),
+    };
+
+    let facts = ProjectReleaseFacts {
+        version: PROJECT_RELEASE_FACTS_VERSION.to_string(),
+        project_id: context.projection.project_id.clone(),
+        project_title: context.projection.title.clone(),
+        current_state,
+        gate_status,
+        gate_reason,
+        completion_state: context.gate.completion_state.clone(),
+        completion_outcome: context.gate.completion_outcome.clone(),
+        delivery_status: context.gate.delivery_status.clone(),
+        changelog_path: context.target.changelog_path.display().to_string(),
+        release_notes_path: context.target.release_notes_path.display().to_string(),
+        entry_count,
+        summary_line,
+        latest_event_id,
+        published_at,
+        updated_at: now,
+    };
+    write_project_release_facts(&context.root, &facts)?;
+    write_project_release_index(&context.root)?;
+    sync_project_external_review_surface(&context.root, &facts)?;
+    Ok(facts)
 }
 
 fn transition_release_state(

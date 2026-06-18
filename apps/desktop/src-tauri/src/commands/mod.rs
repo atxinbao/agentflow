@@ -11,6 +11,7 @@ pub(crate) mod mcp;
 pub(crate) mod panel;
 pub(crate) mod project_files;
 pub(crate) mod project_loop;
+pub(crate) mod project_runtime;
 pub(crate) mod project_workspace;
 pub(crate) mod projection;
 pub(crate) mod spec;
