@@ -170,6 +170,19 @@ function projection(status: WorkflowStatus): TaskProjection | null {
       latestCheckpointState: status,
       latestCheckpointSummary: status === "in_progress" ? "当前处在执行中。" : "验证通过并完成写回。",
     },
+    session: {
+      provider: "codex",
+      sessionId: `codex-run-${status}`,
+      status: status === "done" ? "done" : status === "in_review" ? "in-review" : "running",
+      launchRequestedAt: 1780291000,
+      claimedAt: 1780291010,
+      createdAt: 1780291020,
+      updatedAt: 1780291200,
+      launchRequestPath: `.agentflow/tasks/${issueId}/runs/run-${status}/launch/agent-request.json`,
+      planPath: `.agentflow/tasks/${issueId}/runs/run-${status}/plan.md`,
+      logPath: `.agentflow/tasks/${issueId}/evidence/verify.log`,
+      branchName: `agentflow/workflow/${status}`,
+    },
     timeline: [],
     updatedAt: 1780291200,
     version: "task-projection.workflow-regression",
@@ -376,6 +389,7 @@ function assertExecutionProjection() {
   const progressProjection = buildTaskExecutionProjection({
     executeWorkspaceStatus: "ready",
     mcpSessionsSource: "tauri",
+    projection: projection("in_progress"),
     session: session("in_progress"),
     task: progressTask,
   });
@@ -388,6 +402,7 @@ function assertExecutionProjection() {
   const missingProjection = buildTaskExecutionProjection({
     executeWorkspaceStatus: "ready",
     mcpSessionsSource: "tauri",
+    projection: null,
     session: null,
     task: {
       ...progressTask,
@@ -396,7 +411,7 @@ function assertExecutionProjection() {
     },
   });
   assertIncludes(missingProjection.missingItems, "Run：当前状态需要 run，但任务索引未记录。", "missing run");
-  assertIncludes(missingProjection.missingItems, "Session：当前状态通常应有会话记录，当前未读取到。", "missing session");
+  assertIncludes(missingProjection.missingItems, "Session：当前状态通常应有会话记录，但状态投影还没有对应事实。", "missing session");
   assertIncludes(missingProjection.missingItems, "Validation：未登记验证命令。", "missing validation");
 }
 
@@ -415,6 +430,7 @@ function assertWorkflowYamlProjection() {
     executionProjection: buildTaskExecutionProjection({
       executeWorkspaceStatus: "ready",
       mcpSessionsSource: "tauri",
+      projection: projection("in_progress"),
       session: session("in_progress"),
       task: progressTask,
     }),
@@ -427,7 +443,7 @@ function assertWorkflowYamlProjection() {
   assert(progressYaml.content.includes("delivery:"), "yaml delivery root");
   assert(progressYaml.content.includes("result:"), "yaml result root");
   assert(progressYaml.content.includes('  id: "issue-in_progress"'), "yaml task id");
-  assert(progressYaml.content.includes('  executeStatus: "running"'), "yaml execute status");
+  assert(progressYaml.content.includes('  executeStatus: "in_progress"'), "yaml execute status");
   assert(progressYaml.content.includes('  evidenceStatus: "missing"'), "yaml evidence status");
   assert(progressYaml.content.includes('  deliveryStatus: "missing"'), "yaml delivery status");
   assert(progressYaml.content.includes('  finalState: "not_final"'), "yaml result final state");
@@ -446,6 +462,7 @@ function assertWorkflowYamlProjection() {
     executionProjection: buildTaskExecutionProjection({
       executeWorkspaceStatus: "ready",
       mcpSessionsSource: "tauri",
+      projection: projection("done"),
       session: session("done"),
       task: doneTask,
     }),
@@ -517,6 +534,7 @@ function assertBrowserPreviewTaskWorkspaceSmoke() {
     const executionProjection = buildTaskExecutionProjection({
       executeWorkspaceStatus: "ready",
       mcpSessionsSource: "preview",
+      projection,
       session,
       task,
     });

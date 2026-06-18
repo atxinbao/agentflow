@@ -13,6 +13,7 @@ import type {
   IssueStatusIndexEntry,
   McpSessionSnapshot,
   OutputIndexEntry,
+  ProjectionSessionSummary,
   TaskProjection,
   V1Issue,
   WorkflowAuditStatus,
@@ -1090,15 +1091,20 @@ export function buildTaskExecutionProjection({
   task,
 }: TaskExecutionProjectionInput): TaskExecutionProjection {
   const status = task.displayStatus ?? "backlog";
+  const projectionSession = projection?.session ?? null;
   const runId = projection?.runtime.runId ?? task.latestRunId ?? session?.runId ?? null;
   const executeStatus = projection?.runtime.runStatus ?? task.executeStatus ?? null;
-  const sessionStatus = session?.status ?? null;
+  const sessionStatus = projectionSession?.status ?? session?.status ?? null;
   const executionExpected = status === "in_progress" || status === "in_review" || status === "done";
   const validationExpected = status === "in_progress" || status === "in_review" || status === "done";
+  const sessionRecorded = hasProjectionSession(projectionSession) || Boolean(session);
+  const sessionBranchName =
+    projectionSession?.branchName ?? projection?.runtime.branchName ?? session?.branchName ?? null;
+  const sessionId = projectionSession?.sessionId ?? session?.sessionId ?? null;
   const missingItems = [
     ...(executionExpected && !runId ? ["Run：当前状态需要 run，但任务索引未记录。"] : []),
     ...(executionExpected && !executeStatus ? ["Execute status：当前状态需要执行状态，但任务索引未记录。"] : []),
-    ...(executionExpected && !session ? ["Session：当前状态通常应有会话记录，当前未读取到。"] : []),
+    ...(executionExpected && !sessionRecorded ? ["Session：当前状态通常应有会话记录，但状态投影还没有对应事实。"] : []),
     ...(validationExpected && !task.validationCommands.length ? ["Validation：未登记验证命令。"] : []),
   ];
   const consistency = taskExecutionConsistencyLabel(status, executeStatus, sessionStatus);
@@ -1111,13 +1117,15 @@ export function buildTaskExecutionProjection({
         : executeStatusSource === "loading"
           ? "执行工作区：正在读取。"
           : "执行工作区：没有额外告警。";
-  const sessionItems = session
+  const sessionItems = sessionRecorded
     ? [
-        `Session：${mcpSessionStatusLabel(session.status)}`,
-        `Session ID：${session.sessionId}`,
-        `Run：${session.runId}`,
-        `分支：${session.branchName ?? "未记录"}`,
-        `PR/MR：${session.prUrl ?? "未记录"}`,
+        `Session：${mcpSessionStatusLabel(sessionStatus)}`,
+        `Session ID：${sessionId ?? "未记录"}`,
+        `Run：${runId ?? "未记录"}`,
+        `分支：${sessionBranchName ?? "未记录"}`,
+        projectionSession?.launchRequestPath ? `启动请求：${projectionSession.launchRequestPath}` : "启动请求：未记录",
+        projectionSession?.planPath ? `执行计划：${projectionSession.planPath}` : "执行计划：未记录",
+        projectionSession?.logPath ? `日志：${projectionSession.logPath}` : "日志：未记录",
       ]
     : mcpSessionsSource === "loading"
       ? ["Session：正在读取。"]
@@ -1146,7 +1154,7 @@ export function buildTaskExecutionProjection({
     summaryItems: [
       runId ? `Run：${runId}` : "Run：还没有创建。",
       `Execute status：${executeStatusLabel(executeStatus)}`,
-      session ? `Session：${mcpSessionStatusLabel(session.status)}` : "Session：当前没有会话记录。",
+      sessionRecorded ? `Session：${mcpSessionStatusLabel(sessionStatus)}` : "Session：当前没有会话记录。",
       validationItems[0],
       consistency,
       ...(checkpointItem ? [checkpointItem] : []),
@@ -1180,17 +1188,23 @@ export function buildTaskDeliveryProjection({
   const releaseNotePath = publicRecordPath;
   const deliveryRequired = status === "in_review" || status === "done";
   const deliveryPath = publicRecordPath;
-  const evidencePath =
+  const recordedEvidencePath =
     projectedDelivery?.evidencePath ??
     publicDelivery?.evidencePath ??
     taskEvidenceEntryPath(evidence) ??
-    stringExpectedOutput(task.expectedOutputs, "evidencePath");
+    null;
+  const plannedEvidencePath = stringExpectedOutput(task.expectedOutputs, "evidencePath");
+  const evidencePath = recordedEvidencePath ?? plannedEvidencePath;
+  const evidenceRecorded =
+    projectedDelivery?.evidenceStatus === "ready" ||
+    Boolean(recordedEvidencePath) ||
+    Boolean(evidence);
   const prUrl = projectedDelivery?.prUrl ?? publicDelivery?.prUrl ?? session?.prUrl ?? null;
   const mergeState = projectedDelivery?.mergeCommit || publicDelivery?.mergeCommit
     ? "merged"
     : session?.mergeState ?? null;
   const missingItems = [
-    ...(deliveryRequired && !evidencePath ? ["验证证据：当前状态需要证据，但状态投影还没有对应记录。"] : []),
+    ...(deliveryRequired && !evidenceRecorded ? ["验证证据：当前状态需要证据，但状态投影还没有对应记录。"] : []),
     ...(deliveryRequired && !prUrl ? ["评审信息：未记录 PR/MR 链接。"] : []),
     ...(deliveryRequired && !releaseNotePath ? ["公开交付：未记录 CHANGELOG 或 release notes。"] : []),
   ];
@@ -1205,7 +1219,13 @@ export function buildTaskDeliveryProjection({
       projection?.latestRunId ? `Run：${projection.latestRunId}` : task.latestRunId ? `Run：${task.latestRunId}` : "Run：未记录",
       evidence
         ? `验证证据：${artifactProjectionStatusLabel(evidence.status)} · ${evidence.path}`
-        : evidencePath ? `验证证据：${evidencePath}` : "验证证据：未记录",
+        : recordedEvidencePath
+          ? `验证证据：${recordedEvidencePath}`
+          : plannedEvidencePath
+            ? deliveryRequired
+              ? `验证证据：等待写回 · ${plannedEvidencePath}`
+              : `验证证据：预期写入 · ${plannedEvidencePath}`
+            : "验证证据：未记录",
       prUrl ? `PR/MR：${prUrl}` : "PR/MR：未记录",
       projectedDelivery?.mergeCommit ?? publicDelivery?.mergeCommit
         ? `合并提交：${projectedDelivery?.mergeCommit ?? publicDelivery?.mergeCommit}`
@@ -1222,7 +1242,7 @@ export function buildTaskDeliveryProjection({
     status,
     summaryItems: [
       `任务状态：${displayStatusLabelZh(status)}`,
-      projectedDelivery?.evidenceStatus === "ready" || evidencePath
+      evidenceRecorded
         ? "验证证据：已记录"
         : deliveryRequired
           ? "验证证据：缺失"
@@ -1327,7 +1347,7 @@ function taskExecutionConsistencyLabel(
     blocked: [null, "blocked", "failed"],
     cancel: [null, "cancelled"],
     done: ["completed"],
-    in_progress: ["checkpointed", "patching", "preflight", "running", "validating"],
+    in_progress: ["checkpointed", "in_progress", "patching", "preflight", "running", "validating"],
     in_review: ["completed", "validating"],
     todo: [null, "planned", "preflight", "queued"],
   };
@@ -1336,9 +1356,9 @@ function taskExecutionConsistencyLabel(
     blocked: [null, "failed", "cancelled", "interrupted"],
     cancel: [null, "cancelled"],
     done: ["done"],
-    in_progress: ["queued", "claimed", "starting", "running", "interrupted"],
+    in_progress: ["queued", "claimed", "starting", "running", "interrupted", "requested"],
     in_review: ["in-review", "done"],
-    todo: [null, "queued", "claimed", "starting"],
+    todo: [null, "queued", "claimed", "starting", "requested"],
   };
   const executeMatches = allowedExecuteStatuses[status].includes(executeStatus);
   const sessionMatches = allowedSessionStatuses[status].includes(sessionStatus);
@@ -1393,10 +1413,22 @@ function mcpSessionStatusLabel(status?: string | null) {
     "in-review": "评审中",
     interrupted: "已中断，待恢复",
     queued: "排队中",
+    requested: "已发起启动请求",
     running: "运行中",
     starting: "启动中",
   };
   return labels[status] ?? status;
+}
+
+function hasProjectionSession(session?: ProjectionSessionSummary | null) {
+  return Boolean(
+    session?.status ||
+      session?.sessionId ||
+      session?.launchRequestPath ||
+      session?.planPath ||
+      session?.logPath ||
+      session?.branchName,
+  );
 }
 
 function artifactProjectionStatusLabel(status?: string | null) {

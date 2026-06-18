@@ -621,6 +621,26 @@ export function createBrowserPreviewTaskProjection(
               ? "当前处在执行中。"
               : null,
     },
+    session: {
+      provider: runId ? "codex" : null,
+      sessionId: runId ? `codex-${runId}` : null,
+      status:
+        currentState === "done"
+          ? "done"
+          : currentState === "in_review"
+            ? "in-review"
+            : currentState === "in_progress"
+              ? "running"
+              : null,
+      launchRequestedAt: runId ? previewTimestamp + 120 : null,
+      claimedAt: runId ? previewTimestamp + 150 : null,
+      createdAt: runId ? previewTimestamp + 180 : null,
+      updatedAt: runId ? previewTimestamp + 360 : null,
+      launchRequestPath: runId ? `.agentflow/tasks/${issueId}/runs/${runId}/launch/agent-request.json` : null,
+      planPath: runId ? `.agentflow/tasks/${issueId}/runs/${runId}/plan.md` : null,
+      logPath: runId ? `.agentflow/tasks/${issueId}/evidence/verify.log` : null,
+      branchName: runId ? `agentflow/browser-preview/${issueId}` : null,
+    },
     delivery: {
       status: currentState === "done" ? "published" : currentState === "in_review" ? "ready" : "missing",
       evidenceStatus: runId ? "ready" : "missing",

@@ -531,6 +531,20 @@ export type ProjectionRuntimeSummary = {
   latestCheckpointSummary?: string | null;
 };
 
+export type ProjectionSessionSummary = {
+  provider?: string | null;
+  sessionId?: string | null;
+  status?: string | null;
+  launchRequestedAt?: number | null;
+  claimedAt?: number | null;
+  createdAt?: number | null;
+  updatedAt?: number | null;
+  launchRequestPath?: string | null;
+  planPath?: string | null;
+  logPath?: string | null;
+  branchName?: string | null;
+};
+
 export type ProjectionDeliverySummary = {
   status: string;
   evidenceStatus: string;
@@ -560,6 +574,7 @@ export type TaskProjection = {
   timeline: TaskTimelineItem[];
   publicDelivery: ProjectionPublicDelivery;
   runtime: ProjectionRuntimeSummary;
+  session: ProjectionSessionSummary;
   delivery: ProjectionDeliverySummary;
   audit: ProjectionAuditSummary;
   updatedAt: number;
