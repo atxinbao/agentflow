@@ -7,8 +7,7 @@ use agentflow_event_store::{
     TaskEventDraft,
 };
 use agentflow_spec::{
-    list_spec_issues, read_spec_issue, read_spec_project, SpecIssue, SpecIssueStatus, SpecPriority,
-    SpecProject,
+    read_spec_issue, read_spec_project, SpecIssue, SpecIssueStatus, SpecPriority, SpecProject,
 };
 use agentflow_task_artifacts::create_task_run;
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
@@ -19,6 +18,11 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+
+const ISSUE_CONTRACT_COMPLETE_GUARD: &str = "issue.contract.complete";
+const DEPENDENCIES_DONE_GUARD: &str = "dependencies.done";
+const PROJECT_PREDECESSORS_DONE_GUARD: &str = "project.sequence.predecessors.done";
+const PROJECT_SERIAL_SLOT_FREE_GUARD: &str = "project.serial_slot.free";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskLoop {
@@ -44,50 +48,11 @@ impl TaskLoop {
         let project = read_spec_project(&root, &self.project_id)?;
         let issues = load_project_issues(&root, &project)?;
         let states = current_issue_states(&root, &issues)?;
-        let Some(issue) = next_schedulable_issue(&issues, &states) else {
+        let Some(issue) = next_schedulable_issue(&issues, &project, &states) else {
             return Ok(None);
         };
-
-        let event = append_task_event_once(
-            &root,
-            TaskEventDraft {
-                flow_type: WorkflowFlowType::Work,
-                aggregate_type: "issue".to_string(),
-                aggregate_id: issue.issue_id.clone(),
-                project_id: issue.project_id.clone(),
-                issue_id: Some(issue.issue_id.clone()),
-                run_id: None,
-                event_type: ISSUE_SCHEDULED.to_string(),
-                authority_role: Some(WorkflowAgentRole::WorkAgent),
-                actor: EventActor {
-                    role: "task-loop".to_string(),
-                    kind: "system".to_string(),
-                },
-                state: Some(EventStateTransition {
-                    from_state: SpecIssueStatus::Backlog.as_str().to_string(),
-                    to_state: SpecIssueStatus::Todo.as_str().to_string(),
-                }),
-                correlation_id: Some(format!("corr-{}", issue.issue_id)),
-                causation_id: None,
-                payload: json!({
-                    "workflowRef": issue.workflow_ref,
-                    "transitionId": "schedule",
-                    "guardsPassed": [
-                        "issue.contract.complete",
-                        "dependencies.done"
-                    ]
-                }),
-                artifact_refs: vec![issue.system.path.clone()],
-                idempotency_key: Some(format!("issue.scheduled:{}", issue.issue_id)),
-            },
-        )?;
-
-        Ok(Some(TaskLoopSchedule {
-            project_id: self.project_id.clone(),
-            issue_id: issue.issue_id.clone(),
-            workflow_ref: issue.workflow_ref.clone(),
-            event_id: event.event_id,
-        }))
+        let guards = validate_schedule_guards(issue, Some(&project), &states)?;
+        Ok(Some(append_issue_scheduled_event(&root, issue, &guards)?))
     }
 
     pub fn request_agent_launch(
@@ -116,7 +81,12 @@ impl TaskLoop {
         let root = canonical_project_root(project_root)?;
         let issue = read_spec_issue(&root, issue_id)?;
         validate_issue_scope(&root, &issue)?;
-        let state = current_issue_state(&root, &issue)?;
+        let context = load_issue_runtime_context(&root, &issue)?;
+        let state = context
+            .states
+            .get(&issue.issue_id)
+            .cloned()
+            .unwrap_or_else(|| issue.status.clone());
         let schedule = match state {
             SpecIssueStatus::Backlog => Some(schedule_specific_issue(&root, &issue)?),
             SpecIssueStatus::Todo => None,
@@ -197,7 +167,7 @@ impl TaskLoop {
         }
         let launched = launch_requested_issue_ids(&root)?;
 
-        if let Some(issue) = next_launchable_issue(&issues, &states, &launched) {
+        if let Some(issue) = next_launchable_issue(&issues, &project, &states, &launched) {
             let launch = self.request_agent_launch(&root, &issue.issue_id, provider)?;
             return Ok(Some(TaskLoopTick {
                 schedule: None,
@@ -232,6 +202,8 @@ fn request_issue_launch_inner(
             state.as_str()
         );
     }
+    let context = load_issue_runtime_context(root, &issue)?;
+    validate_launch_guards(&issue, context.project.as_ref(), &context.states)?;
     let run_id = next_run_id(root, &issue.issue_id)?;
     let branch_name = branch_name(&issue);
     let run = create_task_run(
@@ -323,25 +295,16 @@ fn validate_issue_scope(root: &Path, issue: &SpecIssue) -> Result<()> {
 }
 
 fn schedule_specific_issue(root: &Path, issue: &SpecIssue) -> Result<TaskLoopSchedule> {
-    let all_issues = list_spec_issues(root)?;
-    let states = current_issue_states(root, &all_issues)?;
-    let done = states
-        .iter()
-        .filter_map(|(issue_id, state)| {
-            matches!(state, SpecIssueStatus::Done).then_some(issue_id.clone())
-        })
-        .collect::<BTreeSet<_>>();
-    if !issue
-        .blocked_by
-        .iter()
-        .all(|dependency| done.contains(dependency))
-    {
-        anyhow::bail!("issue {} has unfinished dependencies", issue.issue_id);
-    }
-    append_issue_scheduled_event(root, issue)
+    let context = load_issue_runtime_context(root, issue)?;
+    let guards = validate_schedule_guards(issue, context.project.as_ref(), &context.states)?;
+    append_issue_scheduled_event(root, issue, &guards)
 }
 
-fn append_issue_scheduled_event(root: &Path, issue: &SpecIssue) -> Result<TaskLoopSchedule> {
+fn append_issue_scheduled_event(
+    root: &Path,
+    issue: &SpecIssue,
+    guards_passed: &[&str],
+) -> Result<TaskLoopSchedule> {
     let event = append_task_event_once(
         root,
         TaskEventDraft {
@@ -366,10 +329,7 @@ fn append_issue_scheduled_event(root: &Path, issue: &SpecIssue) -> Result<TaskLo
             payload: json!({
                 "workflowRef": issue.workflow_ref,
                 "transitionId": "schedule",
-                "guardsPassed": [
-                    "issue.contract.complete",
-                    "dependencies.done"
-                ]
+                "guardsPassed": guards_passed
             }),
             artifact_refs: vec![issue.system.path.clone()],
             idempotency_key: Some(format!("issue.scheduled:{}", issue.issue_id)),
@@ -397,54 +357,26 @@ fn load_project_issues(root: &Path, project: &SpecProject) -> Result<Vec<SpecIss
 
 fn next_schedulable_issue<'a>(
     issues: &'a [SpecIssue],
+    project: &SpecProject,
     states: &BTreeMap<String, SpecIssueStatus>,
 ) -> Option<&'a SpecIssue> {
-    let done = states
-        .iter()
-        .filter_map(|(issue_id, state)| {
-            matches!(state, SpecIssueStatus::Done).then_some(issue_id.clone())
-        })
-        .collect::<BTreeSet<_>>();
-    let mut candidates = issues
-        .iter()
-        .filter(|issue| {
-            states.get(&issue.issue_id) == Some(&SpecIssueStatus::Backlog)
-                && issue
-                    .blocked_by
-                    .iter()
-                    .all(|dependency| done.contains(dependency))
-        })
-        .collect::<Vec<_>>();
-    candidates.sort_by(|left, right| {
-        left.blocked_by
-            .len()
-            .cmp(&right.blocked_by.len())
-            .then_with(|| priority_rank(&left.priority).cmp(&priority_rank(&right.priority)))
-            .then_with(|| issue_number(&left.issue_id).cmp(&issue_number(&right.issue_id)))
-            .then_with(|| left.issue_id.cmp(&right.issue_id))
-    });
-    candidates.into_iter().next()
+    issues.iter().find(|issue| {
+        states.get(&issue.issue_id) == Some(&SpecIssueStatus::Backlog)
+            && validate_schedule_guards(issue, Some(project), states).is_ok()
+    })
 }
 
 fn next_launchable_issue<'a>(
     issues: &'a [SpecIssue],
+    project: &SpecProject,
     states: &BTreeMap<String, SpecIssueStatus>,
     launched: &BTreeSet<String>,
 ) -> Option<&'a SpecIssue> {
-    let mut candidates = issues
-        .iter()
-        .filter(|issue| {
-            states.get(&issue.issue_id) == Some(&SpecIssueStatus::Todo)
-                && !launched.contains(&issue.issue_id)
-        })
-        .collect::<Vec<_>>();
-    candidates.sort_by(|left, right| {
-        priority_rank(&left.priority)
-            .cmp(&priority_rank(&right.priority))
-            .then_with(|| issue_number(&left.issue_id).cmp(&issue_number(&right.issue_id)))
-            .then_with(|| left.issue_id.cmp(&right.issue_id))
-    });
-    candidates.into_iter().next()
+    issues.iter().find(|issue| {
+        states.get(&issue.issue_id) == Some(&SpecIssueStatus::Todo)
+            && !launched.contains(&issue.issue_id)
+            && validate_launch_guards(issue, Some(project), states).is_ok()
+    })
 }
 
 fn launch_requested_issue_ids(root: &Path) -> Result<BTreeSet<String>> {
@@ -570,6 +502,152 @@ fn current_issue_state(root: &Path, issue: &SpecIssue) -> Result<SpecIssueStatus
         .unwrap_or_else(|| issue.status.clone()))
 }
 
+struct IssueRuntimeContext {
+    project: Option<SpecProject>,
+    states: BTreeMap<String, SpecIssueStatus>,
+}
+
+fn load_issue_runtime_context(root: &Path, issue: &SpecIssue) -> Result<IssueRuntimeContext> {
+    if let Some(project_id) = issue.project_id.as_deref() {
+        let project = read_spec_project(root, project_id)?;
+        let issues = load_project_issues(root, &project)?;
+        let states = current_issue_states(root, &issues)?;
+        Ok(IssueRuntimeContext {
+            project: Some(project),
+            states,
+        })
+    } else {
+        Ok(IssueRuntimeContext {
+            project: None,
+            states: current_issue_states(root, std::slice::from_ref(issue))?,
+        })
+    }
+}
+
+fn validate_schedule_guards(
+    issue: &SpecIssue,
+    project: Option<&SpecProject>,
+    states: &BTreeMap<String, SpecIssueStatus>,
+) -> Result<Vec<&'static str>> {
+    let mut passed = vec![ISSUE_CONTRACT_COMPLETE_GUARD, DEPENDENCIES_DONE_GUARD];
+    ensure_issue_contract_complete(issue)?;
+    ensure_dependencies_done(issue, states)?;
+    if let Some(project) = project {
+        ensure_project_predecessors_done(project, issue, states)?;
+        ensure_project_serial_slot_free(project, &issue.issue_id, states, false)?;
+        passed.push(PROJECT_PREDECESSORS_DONE_GUARD);
+        passed.push(PROJECT_SERIAL_SLOT_FREE_GUARD);
+    }
+    Ok(passed)
+}
+
+fn validate_launch_guards(
+    issue: &SpecIssue,
+    project: Option<&SpecProject>,
+    states: &BTreeMap<String, SpecIssueStatus>,
+) -> Result<Vec<&'static str>> {
+    let mut passed = vec![ISSUE_CONTRACT_COMPLETE_GUARD, DEPENDENCIES_DONE_GUARD];
+    ensure_issue_contract_complete(issue)?;
+    ensure_dependencies_done(issue, states)?;
+    if let Some(project) = project {
+        ensure_project_predecessors_done(project, issue, states)?;
+        ensure_project_serial_slot_free(project, &issue.issue_id, states, true)?;
+        passed.push(PROJECT_PREDECESSORS_DONE_GUARD);
+        passed.push(PROJECT_SERIAL_SLOT_FREE_GUARD);
+    }
+    Ok(passed)
+}
+
+fn ensure_issue_contract_complete(issue: &SpecIssue) -> Result<()> {
+    if issue.issue_id.trim().is_empty()
+        || issue.workflow_ref.trim().is_empty()
+        || issue.source_spec_id.trim().is_empty()
+        || issue.system.path.trim().is_empty()
+    {
+        anyhow::bail!("issue {} contract incomplete", issue.issue_id);
+    }
+    Ok(())
+}
+
+fn ensure_dependencies_done(
+    issue: &SpecIssue,
+    states: &BTreeMap<String, SpecIssueStatus>,
+) -> Result<()> {
+    let unfinished = issue
+        .blocked_by
+        .iter()
+        .filter(|dependency| !matches!(states.get(*dependency), Some(SpecIssueStatus::Done)))
+        .cloned()
+        .collect::<Vec<_>>();
+    if unfinished.is_empty() {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "issue {} has unfinished dependencies: {}",
+        issue.issue_id,
+        unfinished.join(", ")
+    );
+}
+
+fn ensure_project_predecessors_done(
+    project: &SpecProject,
+    issue: &SpecIssue,
+    states: &BTreeMap<String, SpecIssueStatus>,
+) -> Result<()> {
+    let Some(issue_index) = project.issue_ids.iter().position(|value| value == &issue.issue_id) else {
+        anyhow::bail!(
+            "project {} does not reference issue {}",
+            project.project_id,
+            issue.issue_id
+        );
+    };
+    let unfinished = project.issue_ids[..issue_index]
+        .iter()
+        .filter(|predecessor| {
+            !matches!(
+                states.get(*predecessor),
+                Some(SpecIssueStatus::Done | SpecIssueStatus::Cancel)
+            )
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if unfinished.is_empty() {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "issue {} has unfinished project predecessors: {}",
+        issue.issue_id,
+        unfinished.join(", ")
+    );
+}
+
+fn ensure_project_serial_slot_free(
+    project: &SpecProject,
+    issue_id: &str,
+    states: &BTreeMap<String, SpecIssueStatus>,
+    allow_self_active: bool,
+) -> Result<()> {
+    let active = project
+        .issue_ids
+        .iter()
+        .filter(|candidate| {
+            matches!(
+                states.get(*candidate),
+                Some(SpecIssueStatus::Todo | SpecIssueStatus::InProgress | SpecIssueStatus::InReview)
+            ) && (!allow_self_active || candidate.as_str() != issue_id)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if active.is_empty() {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "project {} already has active issue(s): {}",
+        project.project_id,
+        active.join(", ")
+    );
+}
+
 fn parse_issue_status(value: &str) -> Option<SpecIssueStatus> {
     match value {
         "backlog" => Some(SpecIssueStatus::Backlog),
@@ -679,7 +757,33 @@ mod tests {
         write_spec_issue(root, &second).unwrap();
 
         let mut project = SpecProjectDraft::new("project-task-loop");
-        project.issue_ids = vec!["AF-TASK-002".to_string(), "AF-TASK-001".to_string()];
+        project.issue_ids = vec!["AF-TASK-001".to_string(), "AF-TASK-002".to_string()];
+        let project =
+            agentflow_spec::project_from_requirement(root, &requirement, project).unwrap();
+        write_spec_project(root, &project).unwrap();
+    }
+
+    fn write_ordered_project_without_dependencies(root: &Path) {
+        write_requirement(root);
+        let requirement = root.join("docs/requirements/034-test.md");
+        for issue_id in ["AF-TASK-001", "AF-TASK-002", "AF-TASK-003"] {
+            let mut draft = SpecIssueDraft::new(issue_id);
+            draft.project_id = Some("project-task-loop".to_string());
+            draft.priority = if issue_id == "AF-TASK-003" {
+                SpecPriority::P0
+            } else {
+                SpecPriority::P1
+            };
+            let issue = agentflow_spec::issue_from_requirement(root, &requirement, draft).unwrap();
+            write_spec_issue(root, &issue).unwrap();
+        }
+
+        let mut project = SpecProjectDraft::new("project-task-loop");
+        project.issue_ids = vec![
+            "AF-TASK-001".to_string(),
+            "AF-TASK-002".to_string(),
+            "AF-TASK-003".to_string(),
+        ];
         let project =
             agentflow_spec::project_from_requirement(root, &requirement, project).unwrap();
         write_spec_project(root, &project).unwrap();
@@ -820,6 +924,59 @@ mod tests {
     }
 
     #[test]
+    fn schedule_next_issue_respects_project_issue_order_over_priority() {
+        let dir = tempdir().unwrap();
+        write_ordered_project_without_dependencies(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+
+        let scheduled = loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(scheduled.issue_id, "AF-TASK-001");
+    }
+
+    #[test]
+    fn start_issue_rejects_unfinished_project_predecessor() {
+        let dir = tempdir().unwrap();
+        write_ordered_project_without_dependencies(dir.path());
+
+        let err = TaskLoop::start_issue(dir.path(), "AF-TASK-002", "codex").unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("unfinished project predecessors"));
+    }
+
+    #[test]
+    fn start_issue_rejects_second_active_issue_in_same_project() {
+        let dir = tempdir().unwrap();
+        write_ordered_project_without_dependencies(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+        loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+        let issue = read_spec_issue(dir.path(), "AF-TASK-002").unwrap();
+        append_issue_scheduled_event(
+            dir.path(),
+            &issue,
+            &[
+                ISSUE_CONTRACT_COMPLETE_GUARD,
+                DEPENDENCIES_DONE_GUARD,
+                PROJECT_PREDECESSORS_DONE_GUARD,
+                PROJECT_SERIAL_SLOT_FREE_GUARD,
+            ],
+        )
+        .unwrap();
+
+        let err = TaskLoop::start_issue(dir.path(), "AF-TASK-001", "codex").unwrap_err();
+
+        assert!(err.to_string().contains("active issue"));
+    }
+
+    #[test]
     fn tick_launches_existing_todo_without_rescheduling() {
         let dir = tempdir().unwrap();
         write_project_with_issues(dir.path());
@@ -942,5 +1099,49 @@ mod tests {
         let scheduled_again = loop_driver.schedule_next_issue(dir.path()).unwrap();
 
         assert!(scheduled_again.is_none());
+    }
+
+    #[test]
+    fn tick_does_not_schedule_second_issue_while_project_has_in_review_issue() {
+        let dir = tempdir().unwrap();
+        write_ordered_project_without_dependencies(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+        let first_tick = loop_driver.tick(dir.path(), "codex").unwrap().unwrap();
+
+        append_task_event_once(
+            dir.path(),
+            TaskEventDraft {
+                flow_type: WorkflowFlowType::Work,
+                aggregate_type: "issue".to_string(),
+                aggregate_id: "AF-TASK-001".to_string(),
+                project_id: Some("project-task-loop".to_string()),
+                issue_id: Some("AF-TASK-001".to_string()),
+                run_id: Some(first_tick.launch.run_id),
+                event_type: "agent.session.in_review".to_string(),
+                authority_role: Some(WorkflowAgentRole::WorkAgent),
+                actor: EventActor {
+                    role: "build-agent".to_string(),
+                    kind: "agent".to_string(),
+                },
+                state: Some(EventStateTransition {
+                    from_state: SpecIssueStatus::InProgress.as_str().to_string(),
+                    to_state: SpecIssueStatus::InReview.as_str().to_string(),
+                }),
+                correlation_id: Some("corr-AF-TASK-001".to_string()),
+                causation_id: None,
+                payload: json!({
+                    "issueId": "AF-TASK-001",
+                    "projectId": "project-task-loop",
+                    "runId": "run-001",
+                }),
+                artifact_refs: Vec::new(),
+                idempotency_key: Some("agent.session.in_review:AF-TASK-001:run-001".to_string()),
+            },
+        )
+        .unwrap();
+
+        let tick = loop_driver.tick(dir.path(), "codex").unwrap();
+
+        assert!(tick.is_none());
     }
 }
