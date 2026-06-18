@@ -248,11 +248,6 @@ fn delivery_summary_from_snapshot(
         if pr_url.is_none() {
             missing_public_records.push("PR/MR body".to_string());
         }
-        if snapshot.public_delivery.changelog_path.is_none()
-            && snapshot.public_delivery.release_notes_url.is_none()
-        {
-            missing_public_records.push("CHANGELOG.md 或 release notes".to_string());
-        }
     }
 
     let status = if !snapshot.delivery.status.trim().is_empty() {
@@ -504,7 +499,7 @@ fn build_public_record_targets(
         }
     }
     if items.len() == 1 && matches!(current_state, "in_review" | "done" | "published") {
-        items.push("CHANGELOG.md 或 release notes".to_string());
+        items.push("项目级发布记录".to_string());
     }
     items
 }
@@ -525,7 +520,8 @@ fn build_delivery_summary_line(
         return format!("公开交付已统一写入 {}。", public_record_items.join("、"));
     }
     if status == "ready" || has_local_delivery_facts {
-        return "公开交付准备已完成，下一步应整理 PR/MR body，并在需要时汇总到 CHANGELOG.md 或 release notes。".to_string();
+        return "公开交付准备已完成，当前已具备 PR/MR 事实，项目级发布记录由独立流程处理。"
+            .to_string();
     }
     "当前还没有公开交付记录。".to_string()
 }
