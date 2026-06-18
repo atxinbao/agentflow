@@ -7,11 +7,13 @@
 pub mod model;
 pub mod runtime;
 
+pub use agentflow_workflow_core::WorkflowFlowType;
 pub use model::{
     ActionExecution, ActionOutcome, GuardCheck, GuardOutcome, RuntimeContext,
     RuntimeHandoffBinding, RuntimeStateBinding, RuntimeTransition, RuntimeTransitionResult,
 };
 pub use runtime::{
-    apply_workflow_event, find_transition, resolve_state_binding, resolve_transition_handoff,
-    ActionRegistry, GuardRegistry, StaticActionRegistry, StaticGuardRegistry,
+    apply_canonical_workflow_event, apply_workflow_event, find_transition, resolve_state_binding,
+    resolve_transition_handoff, ActionRegistry, GuardRegistry, StaticActionRegistry,
+    StaticGuardRegistry,
 };

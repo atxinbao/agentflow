@@ -24,8 +24,7 @@ pub(crate) fn build_gate_snapshot(
     let spec_issues = agentflow_spec::list_spec_issues(root).unwrap_or_default();
     let spec_projects = list_spec_projects(root).unwrap_or_default();
     let projection_index = agentflow_projection::load_issue_status_index(root).ok();
-    let requirement_preview_index =
-        agentflow_projection::load_requirement_preview_index(root).ok();
+    let requirement_preview_index = agentflow_projection::load_requirement_preview_index(root).ok();
     let audit_index = agentflow_audit::load_audit_index(root).ok();
     let audit_status = derive_audit_status(audit_index.as_ref());
     let latest_projection = projection_index.as_ref().and_then(|index| {
@@ -475,37 +474,23 @@ fn allowed_reason(action: &str, gate: &WorkflowGateSnapshot) -> String {
         "enter-completion-decision" => {
             "当前任务已经全部完成，下一步由 Goal Agent 做正式完成判断。".to_string()
         }
-        "start-project-loop" => {
-            "Project Brain 已确认，可以进入项目循环。".to_string()
-        }
+        "start-project-loop" => "Project Brain 已确认，可以进入项目循环。".to_string(),
         "create-goal-draft-preview" => {
             "当前还没有确认 Goal 文档，先生成 Goal 草稿预览。".to_string()
         }
-        "create-plan-draft-preview" => {
-            "当前已有 Goal，但还缺 Plan 文档。".to_string()
-        }
+        "create-plan-draft-preview" => "当前已有 Goal，但还缺 Plan 文档。".to_string(),
         "confirm-goal-draft-preview" => {
             "Requirement 已被整理成 Goal 草稿，等待用户确认。".to_string()
         }
-        "confirm-plan-draft-preview" => {
-            "Goal 已确认，当前等待确认 Plan 草稿。".to_string()
-        }
-        "confirm-project-brain" => {
-            "Project Brain 文档已存在，但还没有全部确认。".to_string()
-        }
+        "confirm-plan-draft-preview" => "Goal 已确认，当前等待确认 Plan 草稿。".to_string(),
+        "confirm-project-brain" => "Project Brain 文档已存在，但还没有全部确认。".to_string(),
         "materialize-spec-project-and-issues" => {
             "Goal / Plan 预览都已确认，可以物化成 SpecProject / SpecIssue。".to_string()
         }
-        "run-goal-recheck" => {
-            "Project Health 提示目标或计划需要重新检查。".to_string()
-        }
-        "resolve-project-brain-blocker" => {
-            "Project Brain 存在阻断，先修复再继续。".to_string()
-        }
+        "run-goal-recheck" => "Project Health 提示目标或计划需要重新检查。".to_string(),
+        "resolve-project-brain-blocker" => "Project Brain 存在阻断，先修复再继续。".to_string(),
         "start-new-requirement" => "当前工作流可以接受下一条需求。".to_string(),
-        "prepare-public-delivery" => {
-            "任务证据已就绪，可以整理公开交付记录。".to_string()
-        }
+        "prepare-public-delivery" => "任务证据已就绪，可以整理公开交付记录。".to_string(),
         "execute-issue" => gate
             .active_issue_id
             .as_ref()
@@ -626,6 +611,7 @@ mod tests {
                     rationale: vec!["当前任务已经全部完成。".to_string()],
                     updated_at: 1,
                 }),
+                release: None,
                 delivery: None,
                 audit: None,
                 issue_count: 1,

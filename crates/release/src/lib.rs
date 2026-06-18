@@ -6,14 +6,17 @@
 
 pub mod model;
 pub mod public_delivery;
+pub mod runtime;
 
 pub use model::{
-    DeliverySummary, ProjectDeliverySummary, DELIVERY_SUMMARY_VERSION,
-    PROJECT_DELIVERY_SUMMARY_VERSION,
-    PublicReleaseDocumentPaths, PublicReleaseDocumentTarget, PublicReleaseEntry,
-    PublicReleaseSummary, PUBLIC_RELEASE_SUMMARY_VERSION,
+    DeliverySummary, ProjectDeliverySummary, ProjectReleaseFacts, ProjectReleaseIndex,
+    ProjectReleaseIndexEntry, PublicReleaseDocumentPaths, PublicReleaseDocumentTarget,
+    PublicReleaseEntry, PublicReleaseSummary, DELIVERY_SUMMARY_VERSION,
+    PROJECT_DELIVERY_SUMMARY_VERSION, PROJECT_RELEASE_FACTS_VERSION, PROJECT_RELEASE_INDEX_VERSION,
+    PUBLIC_RELEASE_SUMMARY_VERSION,
 };
 pub use public_delivery::{
-    collect_public_release_summary, load_delivery_summary, load_project_delivery_summary,
-    write_public_release_documents,
+    collect_public_release_summary, collect_public_release_summary_for_project,
+    load_delivery_summary, load_project_delivery_summary, write_public_release_documents,
 };
+pub use runtime::{load_project_release_facts, load_project_release_index, sync_project_release};

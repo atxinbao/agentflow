@@ -7,6 +7,8 @@ pub const PROJECT_DELIVERY_SUMMARY_VERSION: &str = "project-delivery-summary.v1"
 pub const TASK_PUBLIC_RECORD_TEMPLATE_VERSION: &str = "task-public-record-template.v1";
 pub const CHANGELOG_TEMPLATE_VERSION: &str = "changelog-template.v1";
 pub const RELEASE_NOTES_TEMPLATE_VERSION: &str = "release-notes-template.v1";
+pub const PROJECT_RELEASE_FACTS_VERSION: &str = "project-release-facts.v1";
+pub const PROJECT_RELEASE_INDEX_VERSION: &str = "project-release-index.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,4 +106,45 @@ impl Default for PublicReleaseDocumentTarget {
 pub struct PublicReleaseDocumentPaths {
     pub changelog_path: String,
     pub release_notes_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectReleaseFacts {
+    pub version: String,
+    pub project_id: String,
+    pub project_title: String,
+    pub current_state: String,
+    pub gate_status: String,
+    pub gate_reason: String,
+    pub completion_state: String,
+    pub completion_outcome: Option<String>,
+    pub delivery_status: String,
+    pub changelog_path: String,
+    pub release_notes_path: String,
+    pub entry_count: usize,
+    pub summary_line: String,
+    pub latest_event_id: Option<String>,
+    pub published_at: Option<u64>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectReleaseIndexEntry {
+    pub project_id: String,
+    pub current_state: String,
+    pub gate_status: String,
+    pub changelog_path: String,
+    pub release_notes_path: String,
+    pub published_at: Option<u64>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectReleaseIndex {
+    pub version: String,
+    pub updated_at: u64,
+    pub releases: Vec<ProjectReleaseIndexEntry>,
 }
