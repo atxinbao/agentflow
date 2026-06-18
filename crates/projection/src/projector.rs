@@ -3,15 +3,21 @@ use crate::{
         IssueStatusIndex, IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
         ProjectIssueLanes, ProjectProjection, ProjectionAuditSummary, ProjectionDeliverySummary,
         ProjectionPhase, ProjectionPublicDelivery, ProjectionRuntimeSummary,
-        ProjectionSessionSummary, ProjectionSummary, TaskProjection, TaskTimelineEvent,
-        TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION,
-        TASK_PROJECTION_VERSION,
+        ProjectionSessionSummary, ProjectionSummary, RequirementPreviewIndex,
+        RequirementPreviewIndexEntry, RequirementPreviewProjection, TaskProjection,
+        TaskTimelineEvent, TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION,
+        PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
+        REQUIREMENT_PREVIEW_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
     },
-    storage::{write_issue_status_index, write_project_projection, write_task_projection},
+    storage::{
+        write_issue_status_index, write_project_projection, write_requirement_preview_index,
+        write_requirement_preview_projection, write_task_projection,
+    },
 };
 use agentflow_event_store::{load_task_events, EventStateTransition, TaskEvent};
 use agentflow_spec::{
-    prepare_spec_workspace, read_project_brain_snapshot, SpecIssue, SpecProject, SpecProjectStatus,
+    list_requirement_preview_runtimes, prepare_spec_workspace, read_project_brain_snapshot,
+    RequirementPreviewRuntime, SpecIssue, SpecProject, SpecProjectStatus,
 };
 use anyhow::{Context, Result};
 use serde::Deserialize;
@@ -48,6 +54,7 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
     prepare_spec_workspace(&root)?;
     let issues = read_json_files::<SpecIssue>(&root.join(".agentflow/spec/issues"))?;
     let projects = read_json_files::<SpecProject>(&root.join(".agentflow/spec/projects"))?;
+    let requirement_previews = list_requirement_preview_runtimes(&root).unwrap_or_default();
     let events = load_task_events(&root)?;
     let audit_index = load_projection_audit_index(&root).unwrap_or_default();
     let events_by_issue = group_events_by_issue(events);
@@ -72,6 +79,36 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
         let projection = project_project(&root, project, &issues_by_id, &task_projections)?;
         write_project_projection(&root, &projection)?;
     }
+
+    let mut requirement_preview_entries = Vec::new();
+    for preview in &requirement_previews {
+        let projection = project_requirement_preview(preview);
+        let projection_path =
+            write_requirement_preview_projection(&root, &projection)?.display().to_string();
+        requirement_preview_entries.push(RequirementPreviewIndexEntry {
+            requirement_id: preview.requirement_id.clone(),
+            project_id: preview.project_id.clone(),
+            current_state: projection.current_state.clone(),
+            lifecycle: projection.lifecycle.clone(),
+            next_recommended_action: projection.next_recommended_action.clone(),
+            projection_path: relative_projection_path(&root, &projection_path),
+            updated_at: projection.updated_at,
+        });
+    }
+    requirement_preview_entries
+        .sort_by(|left, right| left.requirement_id.cmp(&right.requirement_id));
+    write_requirement_preview_index(
+        &root,
+        &RequirementPreviewIndex {
+            version: REQUIREMENT_PREVIEW_INDEX_VERSION.to_string(),
+            updated_at: requirement_preview_entries
+                .iter()
+                .map(|entry| entry.updated_at)
+                .max()
+                .unwrap_or_default(),
+            previews: requirement_preview_entries,
+        },
+    )?;
 
     let mut index_entries = issues
         .iter()
@@ -108,6 +145,36 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
         project_count: projects.len(),
         index_path: ".agentflow/indexes/issue-status.json".to_string(),
     })
+}
+
+fn project_requirement_preview(
+    preview: &RequirementPreviewRuntime,
+) -> RequirementPreviewProjection {
+    RequirementPreviewProjection {
+        version: REQUIREMENT_PREVIEW_PROJECTION_VERSION.to_string(),
+        requirement_id: preview.requirement_id.clone(),
+        requirement_path: preview.requirement_path.clone(),
+        project_id: preview.project_id.clone(),
+        project_title: preview.project_title.clone(),
+        lifecycle: preview.lifecycle.as_str().to_string(),
+        current_state: preview.current_state.clone(),
+        goal_status: preview.goal_draft.status.as_str().to_string(),
+        plan_status: preview
+            .plan_draft
+            .as_ref()
+            .map(|draft| draft.status.as_str().to_string()),
+        next_recommended_action: preview.next_recommended_action.clone(),
+        next_recommended_action_label: preview.next_recommended_action_label.clone(),
+        next_recommended_action_reason: preview.next_recommended_action_reason.clone(),
+        issue_contract_draft_count: preview
+            .plan_draft
+            .as_ref()
+            .map(|draft| draft.issue_contract_drafts.len())
+            .unwrap_or_default(),
+        materialized_project_id: preview.materialized_project_id.clone(),
+        materialized_issue_ids: preview.materialized_issue_ids.clone(),
+        updated_at: preview.updated_at,
+    }
 }
 
 fn project_issue(
@@ -689,6 +756,14 @@ fn latest_update(tasks: &BTreeMap<String, TaskProjection>) -> u64 {
         .unwrap_or(0)
 }
 
+fn relative_projection_path(root: &Path, absolute_path: &str) -> String {
+    let path = Path::new(absolute_path);
+    path.strip_prefix(root)
+        .ok()
+        .map(|relative| relative.display().to_string())
+        .unwrap_or_else(|| absolute_path.to_string())
+}
+
 fn read_json_files<T: serde::de::DeserializeOwned>(directory: &Path) -> Result<Vec<T>> {
     if !directory.exists() {
         return Ok(Vec::new());
@@ -720,7 +795,9 @@ fn canonical_project_root(project_root: impl AsRef<Path>) -> Result<PathBuf> {
 mod tests {
     use super::*;
     use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
-    use agentflow_spec::{SpecIssueDraft, SpecProjectDraft};
+    use agentflow_spec::{
+        requirement_preview_from_requirement, SpecIssueDraft, SpecProjectDraft,
+    };
     use serde_json::json;
     use tempfile::tempdir;
 
@@ -931,5 +1008,29 @@ mod tests {
             .events
             .iter()
             .any(|event| event.event_type == "agent.session.completed"));
+    }
+
+    #[test]
+    fn rebuilds_requirement_preview_projection_before_spec_materialization() {
+        let dir = tempdir().unwrap();
+        let requirement = dir.path().join("docs/requirements/040-preview.md");
+        std::fs::create_dir_all(requirement.parent().unwrap()).unwrap();
+        std::fs::write(&requirement, "# 预览\n\n先做 Goal / Plan Preview。\n").unwrap();
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+        rebuild_projections(dir.path()).unwrap();
+
+        let projection =
+            crate::storage::load_requirement_preview_projection(dir.path(), "040-preview")
+                .unwrap();
+        let index = crate::storage::load_requirement_preview_index(dir.path()).unwrap();
+
+        assert_eq!(projection.current_state, "goal_draft");
+        assert_eq!(projection.lifecycle, "active");
+        assert_eq!(projection.next_recommended_action, "confirm-goal-draft-preview");
+        assert_eq!(projection.issue_contract_draft_count, 0);
+        assert_eq!(index.previews.len(), 1);
+        assert_eq!(index.previews[0].project_id, "project-preview");
     }
 }

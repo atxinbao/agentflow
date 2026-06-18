@@ -4,6 +4,7 @@ pub const SPEC_MANIFEST_VERSION: &str = "agentflow-spec-manifest.v1";
 pub const SPEC_INDEX_VERSION: &str = "agentflow-spec-index.v1";
 pub const SPEC_ISSUE_VERSION: &str = "agentflow-spec-issue.v1";
 pub const SPEC_PROJECT_VERSION: &str = "agentflow-spec-project.v1";
+pub const REQUIREMENT_PREVIEW_VERSION: &str = "agentflow-requirement-preview.v1";
 pub const PROJECT_BRAIN_DOCUMENT_SET_VERSION: &str = "agentflow-project-brain-document-set.v1";
 pub const PROJECT_BRAIN_SNAPSHOT_VERSION: &str = "agentflow-project-brain-snapshot.v1";
 pub const DEFAULT_WORKFLOW_REF: &str = "build-agent.issue-loop@v1";
@@ -103,6 +104,122 @@ pub enum SpecProjectStatus {
 impl Default for SpecProjectStatus {
     fn default() -> Self {
         Self::Planned
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RequirementIntentType {
+    Product,
+    Design,
+    Technical,
+    Repair,
+    Audit,
+    Understanding,
+    Mixed,
+    Unknown,
+}
+
+impl Default for RequirementIntentType {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+impl RequirementIntentType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Product => "product",
+            Self::Design => "design",
+            Self::Technical => "technical",
+            Self::Repair => "repair",
+            Self::Audit => "audit",
+            Self::Understanding => "understanding",
+            Self::Mixed => "mixed",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GoalDraftStatus {
+    NeedsClarification,
+    ReadyForReview,
+    Confirmed,
+    Rejected,
+    SplitRequired,
+}
+
+impl Default for GoalDraftStatus {
+    fn default() -> Self {
+        Self::ReadyForReview
+    }
+}
+
+impl GoalDraftStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::NeedsClarification => "needs-clarification",
+            Self::ReadyForReview => "ready-for-review",
+            Self::Confirmed => "confirmed",
+            Self::Rejected => "rejected",
+            Self::SplitRequired => "split-required",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PlanDraftStatus {
+    Draft,
+    ReadyForReview,
+    Confirmed,
+    Rejected,
+    NeedsRevision,
+    Blocked,
+}
+
+impl Default for PlanDraftStatus {
+    fn default() -> Self {
+        Self::Draft
+    }
+}
+
+impl PlanDraftStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::ReadyForReview => "ready-for-review",
+            Self::Confirmed => "confirmed",
+            Self::Rejected => "rejected",
+            Self::NeedsRevision => "needs-revision",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RequirementPreviewLifecycle {
+    Active,
+    Cancelled,
+    Materialized,
+}
+
+impl Default for RequirementPreviewLifecycle {
+    fn default() -> Self {
+        Self::Active
+    }
+}
+
+impl RequirementPreviewLifecycle {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Cancelled => "cancelled",
+            Self::Materialized => "materialized",
+        }
     }
 }
 
@@ -228,6 +345,129 @@ impl Default for PublicDeliveryRecord {
             changelog_or_release_notes: "required-when-release-visible".to_string(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementIntakeResult {
+    pub requirement_id: String,
+    pub project_id: String,
+    pub raw_text: String,
+    pub detected_intent: RequirementIntentType,
+    pub detected_scope: Vec<String>,
+    pub detected_non_goals: Vec<String>,
+    pub detected_deliverables: Vec<String>,
+    pub detected_constraints: Vec<String>,
+    pub missing_information: Vec<String>,
+    pub clarification_questions: Vec<String>,
+    pub confidence: u8,
+    pub next_action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalDraftPreview {
+    pub goal_draft_id: String,
+    pub project_id: String,
+    pub source_requirement_id: String,
+    pub title: String,
+    pub intent_type: RequirementIntentType,
+    pub outcome: String,
+    pub target_user: String,
+    pub expected_deliverables: Vec<String>,
+    pub scope: Vec<String>,
+    pub non_goals: Vec<String>,
+    pub success_criteria: Vec<String>,
+    pub constraints: Vec<String>,
+    pub open_questions: Vec<String>,
+    pub risk_hints: Vec<String>,
+    pub confidence: u8,
+    pub status: GoalDraftStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MilestoneDraftPreview {
+    pub milestone_id: String,
+    pub title: String,
+    pub goal: String,
+    pub depends_on: Vec<String>,
+    pub expected_outputs: Vec<String>,
+    pub validation_need: String,
+    pub evidence_need: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueContractDraftPreview {
+    pub issue_draft_id: String,
+    pub title: String,
+    pub goal: String,
+    pub scope: Vec<String>,
+    pub non_goals: Vec<String>,
+    pub dependencies: Vec<String>,
+    pub acceptance_criteria: Vec<String>,
+    pub validation_commands: Vec<String>,
+    pub evidence_requirements: Vec<String>,
+    pub boundary: Vec<String>,
+    pub priority: SpecPriority,
+    pub suggested_agent_role: SpecRequiredAgentRole,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanDraftPreview {
+    pub plan_draft_id: String,
+    pub project_id: String,
+    pub source_goal_id: String,
+    pub plan_type: RequirementIntentType,
+    pub stage_plan: Vec<String>,
+    pub milestone_drafts: Vec<MilestoneDraftPreview>,
+    pub issue_contract_drafts: Vec<IssueContractDraftPreview>,
+    pub validation_strategy: Vec<String>,
+    pub evidence_strategy: Vec<String>,
+    pub human_confirmation_points: Vec<String>,
+    pub risk_list: Vec<String>,
+    pub blockers: Vec<String>,
+    pub next_recommended_action: String,
+    pub status: PlanDraftStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewConfirmationRecord {
+    pub timestamp: u64,
+    pub actor: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub summary: String,
+    pub decision: String,
+    pub impact: String,
+    pub next_action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementPreviewRuntime {
+    pub version: String,
+    pub requirement_id: String,
+    pub requirement_path: String,
+    pub project_id: String,
+    pub project_title: String,
+    pub revision: u32,
+    pub lifecycle: RequirementPreviewLifecycle,
+    pub current_state: String,
+    pub intake: RequirementIntakeResult,
+    pub goal_draft: GoalDraftPreview,
+    pub plan_draft: Option<PlanDraftPreview>,
+    pub confirmation_records: Vec<PreviewConfirmationRecord>,
+    pub materialized_project_id: Option<String>,
+    pub materialized_issue_ids: Vec<String>,
+    pub next_recommended_action: String,
+    pub next_recommended_action_label: String,
+    pub next_recommended_action_reason: String,
+    pub readonly: bool,
+    pub updated_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

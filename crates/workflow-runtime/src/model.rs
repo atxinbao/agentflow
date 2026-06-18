@@ -34,6 +34,22 @@ impl RuntimeContext {
             payload: Value::Null,
         }
     }
+
+    pub fn project(project_id: impl Into<String>, actor: EventActor) -> Self {
+        let project_id = project_id.into();
+        Self {
+            aggregate_type: "project".to_string(),
+            aggregate_id: project_id.clone(),
+            issue_id: None,
+            project_id: Some(project_id),
+            run_id: None,
+            actor,
+            correlation_id: None,
+            causation_id: None,
+            artifact_refs: Vec::new(),
+            payload: Value::Null,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

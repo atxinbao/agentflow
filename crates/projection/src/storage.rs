@@ -1,5 +1,6 @@
 use crate::model::{
-    IssueStatusIndex, ProjectProjection, TaskProjection, PROJECT_PROJECTION_VERSION,
+    IssueStatusIndex, ProjectProjection, RequirementPreviewIndex,
+    RequirementPreviewProjection, TaskProjection, PROJECT_PROJECTION_VERSION,
 };
 use anyhow::{Context, Result};
 use std::{
@@ -11,6 +12,7 @@ pub fn prepare_projection_workspace(project_root: impl AsRef<Path>) -> Result<()
     let root = canonical_project_root(project_root)?;
     ensure_directory(&root.join(".agentflow/projections/tasks"))?;
     ensure_directory(&root.join(".agentflow/projections/projects"))?;
+    ensure_directory(&root.join(".agentflow/projections/requirements"))?;
     ensure_directory(&root.join(".agentflow/indexes"))?;
     Ok(())
 }
@@ -48,6 +50,28 @@ pub fn write_issue_status_index(
     Ok(path)
 }
 
+pub fn write_requirement_preview_projection(
+    project_root: impl AsRef<Path>,
+    projection: &RequirementPreviewProjection,
+) -> Result<PathBuf> {
+    let root = canonical_project_root(project_root)?;
+    prepare_projection_workspace(&root)?;
+    let path = requirement_preview_projection_path(&root, &projection.requirement_id);
+    write_json(&path, projection)?;
+    Ok(path)
+}
+
+pub fn write_requirement_preview_index(
+    project_root: impl AsRef<Path>,
+    index: &RequirementPreviewIndex,
+) -> Result<PathBuf> {
+    let root = canonical_project_root(project_root)?;
+    prepare_projection_workspace(&root)?;
+    let path = root.join(".agentflow/indexes/requirement-previews.json");
+    write_json(&path, index)?;
+    Ok(path)
+}
+
 pub fn load_task_projection(
     project_root: impl AsRef<Path>,
     issue_id: &str,
@@ -69,6 +93,21 @@ pub fn load_issue_status_index(project_root: impl AsRef<Path>) -> Result<IssueSt
     read_json(&root.join(".agentflow/indexes/issue-status.json"))
 }
 
+pub fn load_requirement_preview_projection(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+) -> Result<RequirementPreviewProjection> {
+    let root = canonical_project_root(project_root)?;
+    read_json(&requirement_preview_projection_path(&root, requirement_id))
+}
+
+pub fn load_requirement_preview_index(
+    project_root: impl AsRef<Path>,
+) -> Result<RequirementPreviewIndex> {
+    let root = canonical_project_root(project_root)?;
+    read_json(&root.join(".agentflow/indexes/requirement-previews.json"))
+}
+
 fn task_projection_path(root: &Path, issue_id: &str) -> PathBuf {
     root.join(".agentflow/projections/tasks")
         .join(format!("{}.json", sanitize_id(issue_id)))
@@ -77,6 +116,11 @@ fn task_projection_path(root: &Path, issue_id: &str) -> PathBuf {
 fn project_projection_path(root: &Path, project_id: &str) -> PathBuf {
     root.join(".agentflow/projections/projects")
         .join(format!("{}.json", sanitize_id(project_id)))
+}
+
+fn requirement_preview_projection_path(root: &Path, requirement_id: &str) -> PathBuf {
+    root.join(".agentflow/projections/requirements")
+        .join(format!("{}.json", sanitize_id(requirement_id)))
 }
 
 fn sanitize_id(id: &str) -> String {

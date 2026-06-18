@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 pub const TASK_PROJECTION_VERSION: &str = "task-projection.v2";
 pub const PROJECT_PROJECTION_VERSION: &str = "project-projection.v2";
 pub const ISSUE_STATUS_INDEX_VERSION: &str = "issue-status-index.v3";
+pub const REQUIREMENT_PREVIEW_PROJECTION_VERSION: &str = "requirement-preview-projection.v1";
+pub const REQUIREMENT_PREVIEW_INDEX_VERSION: &str = "requirement-preview-index.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -235,4 +237,45 @@ pub struct ProjectionSummary {
     pub task_count: usize,
     pub project_count: usize,
     pub index_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementPreviewProjection {
+    pub version: String,
+    pub requirement_id: String,
+    pub requirement_path: String,
+    pub project_id: String,
+    pub project_title: String,
+    pub lifecycle: String,
+    pub current_state: String,
+    pub goal_status: String,
+    pub plan_status: Option<String>,
+    pub next_recommended_action: String,
+    pub next_recommended_action_label: String,
+    pub next_recommended_action_reason: String,
+    pub issue_contract_draft_count: usize,
+    pub materialized_project_id: Option<String>,
+    pub materialized_issue_ids: Vec<String>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementPreviewIndexEntry {
+    pub requirement_id: String,
+    pub project_id: String,
+    pub current_state: String,
+    pub lifecycle: String,
+    pub next_recommended_action: String,
+    pub projection_path: String,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementPreviewIndex {
+    pub version: String,
+    pub updated_at: u64,
+    pub previews: Vec<RequirementPreviewIndexEntry>,
 }

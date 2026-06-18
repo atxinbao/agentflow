@@ -1,9 +1,14 @@
 use crate::model::{
-    ProjectBrainDocumentSet, ProjectBrainDocumentStatus, ProjectBrainSnapshot, ProjectBrainStatus,
-    RequirementDocument, SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft,
-    SpecIssueStatus, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
-    SpecSystemRecord, PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
-    SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
+    GoalDraftPreview, GoalDraftStatus, IssueContractDraftPreview, MilestoneDraftPreview,
+    PlanDraftPreview, PlanDraftStatus, PreviewConfirmationRecord, ProjectBrainDocumentSet,
+    ProjectBrainDocumentStatus, ProjectBrainSnapshot, ProjectBrainStatus,
+    RequirementDocument, RequirementIntakeResult, RequirementIntentType,
+    RequirementPreviewLifecycle, RequirementPreviewRuntime, SpecExpectedOutputs, SpecIssue,
+    SpecIssueCategory, SpecIssueDraft, SpecIssueStatus, SpecPriority, SpecProject,
+    SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord,
+    PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
+    REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION,
+    SPEC_PROJECT_VERSION,
 };
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -196,6 +201,318 @@ pub fn read_spec_issue(project_root: impl AsRef<Path>, issue_id: &str) -> Result
 pub fn read_spec_project(project_root: impl AsRef<Path>, project_id: &str) -> Result<SpecProject> {
     let root = canonical_project_root(project_root)?;
     read_json(&root.join(format!(".agentflow/spec/projects/{project_id}.json")))
+}
+
+pub fn requirement_preview_from_requirement(
+    project_root: impl AsRef<Path>,
+    requirement_path: impl AsRef<Path>,
+    project_id: Option<&str>,
+) -> Result<RequirementPreviewRuntime> {
+    let root = canonical_project_root(project_root)?;
+    prepare_spec_workspace(&root)?;
+    let requirement = read_requirement_document(&root, requirement_path)?;
+    let existing = read_requirement_preview_runtime(&root, &requirement.requirement_id).ok();
+    if existing.as_ref().is_some_and(|preview| {
+        preview.lifecycle == RequirementPreviewLifecycle::Materialized
+    }) {
+        anyhow::bail!(
+            "requirement {} already materialized; reset is not allowed in preview runtime",
+            requirement.requirement_id
+        );
+    }
+
+    let now = unix_timestamp_seconds();
+    let project_id = project_id
+        .map(str::to_string)
+        .or_else(|| existing.as_ref().map(|preview| preview.project_id.clone()))
+        .unwrap_or_else(|| default_preview_project_id(&requirement.requirement_id));
+    let revision = existing
+        .as_ref()
+        .map(|preview| preview.revision.saturating_add(1))
+        .unwrap_or(1);
+    let intake = build_requirement_intake(&requirement, &project_id);
+    let goal_draft = build_goal_draft_preview(&requirement, &project_id, &intake, revision);
+
+    let preview = RequirementPreviewRuntime {
+        version: REQUIREMENT_PREVIEW_VERSION.to_string(),
+        requirement_id: requirement.requirement_id.clone(),
+        requirement_path: requirement.path.clone(),
+        project_id: project_id.clone(),
+        project_title: requirement.title.clone(),
+        revision,
+        lifecycle: RequirementPreviewLifecycle::Active,
+        current_state: "goal_draft".to_string(),
+        intake,
+        goal_draft,
+        plan_draft: None,
+        confirmation_records: Vec::new(),
+        materialized_project_id: None,
+        materialized_issue_ids: Vec::new(),
+        next_recommended_action: "confirm-goal-draft-preview".to_string(),
+        next_recommended_action_label: "确认 Goal 草稿预览".to_string(),
+        next_recommended_action_reason:
+            "原始需求已经整理成 Goal 草稿，先确认目标是否成立，再进入 Plan 草稿。"
+                .to_string(),
+        readonly: true,
+        updated_at: now,
+    };
+
+    emit_project_preview_transition(
+        &root,
+        &project_id,
+        "intake",
+        "project.intake.accepted",
+        "spec-agent",
+        serde_json::json!({
+            "requirementId": preview.requirement_id,
+            "requirementPath": preview.requirement_path,
+            "revision": preview.revision,
+            "goalDraftId": preview.goal_draft.goal_draft_id,
+        }),
+        &["goal.contract.ready"],
+        &["project.goal.capture"],
+    )?;
+    write_requirement_preview_runtime(&root, &preview)?;
+    Ok(preview)
+}
+
+pub fn confirm_goal_draft_preview(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+    actor: &str,
+) -> Result<RequirementPreviewRuntime> {
+    let root = canonical_project_root(project_root)?;
+    let mut preview = read_requirement_preview_runtime(&root, requirement_id)?;
+    ensure_active_preview(&preview)?;
+    if preview.current_state != "goal_draft" {
+        anyhow::bail!(
+            "goal draft confirmation requires goal_draft state, found {}",
+            preview.current_state
+        );
+    }
+
+    preview.goal_draft.status = GoalDraftStatus::Confirmed;
+    preview.plan_draft = Some(build_plan_draft_preview(&preview.goal_draft, preview.revision));
+    preview.confirmation_records.push(PreviewConfirmationRecord {
+        timestamp: unix_timestamp_seconds(),
+        actor: actor.to_string(),
+        target_type: "goal-draft".to_string(),
+        target_id: preview.goal_draft.goal_draft_id.clone(),
+        summary: "确认 Goal 草稿，允许进入 Plan Draft Preview。".to_string(),
+        decision: "confirmed".to_string(),
+        impact: "GOAL.md 成为已确认项目目标，下一步进入 Plan Draft Preview。".to_string(),
+        next_action: "confirm-plan-draft-preview".to_string(),
+    });
+    write_confirmed_goal_document(&root, &preview)?;
+    append_decision_entry(
+        &root,
+        &preview.project_id,
+        preview.confirmation_records.last().expect("goal confirmation record exists"),
+    )?;
+    emit_project_preview_transition(
+        &root,
+        &preview.project_id,
+        "goal_draft",
+        "goal.draft.confirmed",
+        actor,
+        serde_json::json!({
+            "requirementId": preview.requirement_id,
+            "goalDraftId": preview.goal_draft.goal_draft_id,
+            "planDraftId": preview.plan_draft.as_ref().map(|draft| draft.plan_draft_id.clone()),
+            "revision": preview.revision,
+        }),
+        &["plan.contract.ready"],
+        &["project.plan.capture"],
+    )?;
+    preview.current_state = "plan_draft".to_string();
+    preview.next_recommended_action = "confirm-plan-draft-preview".to_string();
+    preview.next_recommended_action_label = "确认 Plan 草稿预览".to_string();
+    preview.next_recommended_action_reason =
+        "Goal 已确认，当前需要确认阶段计划和候选执行合同。".to_string();
+    preview.updated_at = unix_timestamp_seconds();
+    write_requirement_preview_runtime(&root, &preview)?;
+    Ok(preview)
+}
+
+pub fn confirm_plan_draft_preview(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+    actor: &str,
+) -> Result<RequirementPreviewRuntime> {
+    let root = canonical_project_root(project_root)?;
+    let mut preview = read_requirement_preview_runtime(&root, requirement_id)?;
+    ensure_active_preview(&preview)?;
+    if preview.current_state != "plan_draft" {
+        anyhow::bail!(
+            "plan draft confirmation requires plan_draft state, found {}",
+            preview.current_state
+        );
+    }
+    let plan_draft_id = {
+        let plan_draft = preview
+            .plan_draft
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("plan draft is missing"))?;
+        plan_draft.status = PlanDraftStatus::Confirmed;
+        plan_draft.plan_draft_id.clone()
+    };
+    preview.confirmation_records.push(PreviewConfirmationRecord {
+        timestamp: unix_timestamp_seconds(),
+        actor: actor.to_string(),
+        target_type: "plan-draft".to_string(),
+        target_id: plan_draft_id.clone(),
+        summary: "确认 Plan 草稿，允许物化 SpecProject / SpecIssue。".to_string(),
+        decision: "confirmed".to_string(),
+        impact: "PLAN.md 成为已确认项目计划，下一步可以正式物化任务合同。".to_string(),
+        next_action: "materialize-spec-project-and-issues".to_string(),
+    });
+    let requirement_id = preview.requirement_id.clone();
+    let revision = preview.revision;
+    write_confirmed_plan_document(&root, &preview)?;
+    append_decision_entry(
+        &root,
+        &preview.project_id,
+        preview.confirmation_records.last().expect("plan confirmation record exists"),
+    )?;
+    emit_project_preview_transition(
+        &root,
+        &preview.project_id,
+        "plan_draft",
+        "plan.draft.confirmed",
+        actor,
+        serde_json::json!({
+            "requirementId": requirement_id,
+            "planDraftId": plan_draft_id,
+            "revision": revision,
+        }),
+        &["project.confirmed"],
+        &["project.confirm.write"],
+    )?;
+    preview.current_state = "confirmed".to_string();
+    preview.next_recommended_action = "materialize-spec-project-and-issues".to_string();
+    preview.next_recommended_action_label = "物化 SpecProject / SpecIssue".to_string();
+    preview.next_recommended_action_reason =
+        "Goal 和 Plan 都已确认，可以把预览草稿物化成项目循环可读取的结构化合同。"
+            .to_string();
+    preview.updated_at = unix_timestamp_seconds();
+    write_requirement_preview_runtime(&root, &preview)?;
+    Ok(preview)
+}
+
+pub fn cancel_requirement_preview(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+    reason: &str,
+) -> Result<RequirementPreviewRuntime> {
+    let root = canonical_project_root(project_root)?;
+    let mut preview = read_requirement_preview_runtime(&root, requirement_id)?;
+    preview.lifecycle = RequirementPreviewLifecycle::Cancelled;
+    preview.next_recommended_action = "start-new-requirement".to_string();
+    preview.next_recommended_action_label = "开始新需求".to_string();
+    preview.next_recommended_action_reason =
+        format!("当前预览已取消：{reason}。旧预览不会继续进入项目循环。");
+    preview.updated_at = unix_timestamp_seconds();
+    write_requirement_preview_runtime(&root, &preview)?;
+    Ok(preview)
+}
+
+pub fn materialize_spec_from_requirement_preview(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+) -> Result<(SpecProject, Vec<SpecIssue>)> {
+    let root = canonical_project_root(project_root)?;
+    let mut preview = read_requirement_preview_runtime(&root, requirement_id)?;
+    ensure_active_preview(&preview)?;
+    if preview.current_state != "confirmed" {
+        anyhow::bail!(
+            "preview must be confirmed before materialization, found {}",
+            preview.current_state
+        );
+    }
+    let plan_draft = preview
+        .plan_draft
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("plan draft is missing"))?;
+    if plan_draft.status != PlanDraftStatus::Confirmed {
+        anyhow::bail!("plan draft must be confirmed before materialization");
+    }
+
+    let issue_ids = plan_draft
+        .issue_contract_drafts
+        .iter()
+        .map(|draft| draft.issue_draft_id.clone())
+        .collect::<Vec<_>>();
+
+    let mut project_draft = SpecProjectDraft::new(preview.project_id.clone());
+    project_draft.title = Some(preview.project_title.clone());
+    project_draft.summary = Some(preview.goal_draft.outcome.clone());
+    project_draft.objective = Some(preview.goal_draft.outcome.clone());
+    project_draft.issue_ids = issue_ids.clone();
+    let project = project_from_requirement(
+        &root,
+        root.join(&preview.requirement_path),
+        project_draft,
+    )?;
+    write_spec_project(&root, &project)?;
+
+    let issues = plan_draft
+        .issue_contract_drafts
+        .iter()
+        .map(|draft| {
+            let mut issue_draft = SpecIssueDraft::new(draft.issue_draft_id.clone());
+            issue_draft.title = Some(draft.title.clone());
+            issue_draft.summary = Some(draft.goal.clone());
+            issue_draft.source_spec_id = Some(plan_draft.plan_draft_id.clone());
+            issue_draft.project_id = Some(preview.project_id.clone());
+            issue_draft.priority = draft.priority.clone();
+            issue_draft.allowed_paths = draft.boundary.clone();
+            issue_draft.validation_commands = draft.validation_commands.clone();
+            issue_from_requirement(&root, root.join(&preview.requirement_path), issue_draft)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    for issue in &issues {
+        write_spec_issue(&root, issue)?;
+    }
+
+    preview.lifecycle = RequirementPreviewLifecycle::Materialized;
+    preview.materialized_project_id = Some(project.project_id.clone());
+    preview.materialized_issue_ids = issue_ids;
+    preview.next_recommended_action = "start-project-loop".to_string();
+    preview.next_recommended_action_label = "进入项目循环".to_string();
+    preview.next_recommended_action_reason =
+        "SpecProject / SpecIssue 已生成，后续由项目循环继续调度。".to_string();
+    preview.updated_at = unix_timestamp_seconds();
+    write_requirement_preview_runtime(&root, &preview)?;
+    Ok((project, issues))
+}
+
+pub fn write_requirement_preview_runtime(
+    project_root: impl AsRef<Path>,
+    preview: &RequirementPreviewRuntime,
+) -> Result<PathBuf> {
+    let root = canonical_project_root(project_root)?;
+    prepare_spec_workspace(&root)?;
+    let path = requirement_preview_path(&root, &preview.requirement_id);
+    write_json(&path, preview)?;
+    Ok(path)
+}
+
+pub fn read_requirement_preview_runtime(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+) -> Result<RequirementPreviewRuntime> {
+    let root = canonical_project_root(project_root)?;
+    read_json(&requirement_preview_path(&root, requirement_id))
+}
+
+pub fn list_requirement_preview_runtimes(
+    project_root: impl AsRef<Path>,
+) -> Result<Vec<RequirementPreviewRuntime>> {
+    let root = canonical_project_root(project_root)?;
+    let mut previews: Vec<RequirementPreviewRuntime> =
+        read_json_files(&root.join(".agentflow/spec/requirements"))?;
+    previews.sort_by(|left, right| left.requirement_id.cmp(&right.requirement_id));
+    Ok(previews)
 }
 
 pub fn read_project_brain_document_set(
@@ -533,6 +850,364 @@ fn read_requirement_document(
     })
 }
 
+fn build_requirement_intake(
+    requirement: &RequirementDocument,
+    project_id: &str,
+) -> RequirementIntakeResult {
+    let intent = detect_requirement_intent(requirement);
+    let detected_scope = vec![requirement.summary.clone()];
+    let detected_deliverables = default_deliverables(&intent);
+    let detected_constraints = vec!["确认前不生成执行合同。".to_string()];
+    let clarification_questions = if requirement.summary.chars().count() < 16 {
+        vec!["这个需求最终要交付什么？".to_string()]
+    } else {
+        Vec::new()
+    };
+    let missing_information = if clarification_questions.is_empty() {
+        Vec::new()
+    } else {
+        vec!["最终交付物仍不够明确。".to_string()]
+    };
+    let confidence = if clarification_questions.is_empty() { 82 } else { 64 };
+    RequirementIntakeResult {
+        requirement_id: requirement.requirement_id.clone(),
+        project_id: project_id.to_string(),
+        raw_text: requirement.summary.clone(),
+        detected_intent: intent,
+        detected_scope,
+        detected_non_goals: Vec::new(),
+        detected_deliverables,
+        detected_constraints,
+        missing_information,
+        clarification_questions,
+        confidence,
+        next_action: "confirm-goal-draft-preview".to_string(),
+    }
+}
+
+fn build_goal_draft_preview(
+    requirement: &RequirementDocument,
+    project_id: &str,
+    intake: &RequirementIntakeResult,
+    revision: u32,
+) -> GoalDraftPreview {
+    GoalDraftPreview {
+        goal_draft_id: format!("goal-{}-r{}", requirement.requirement_id, revision),
+        project_id: project_id.to_string(),
+        source_requirement_id: requirement.requirement_id.clone(),
+        title: requirement.title.clone(),
+        intent_type: intake.detected_intent.clone(),
+        outcome: requirement.summary.clone(),
+        target_user: "当前项目使用者".to_string(),
+        expected_deliverables: intake.detected_deliverables.clone(),
+        scope: intake.detected_scope.clone(),
+        non_goals: intake.detected_non_goals.clone(),
+        success_criteria: vec!["目标、范围和约束都能被用户确认。".to_string()],
+        constraints: intake.detected_constraints.clone(),
+        open_questions: intake.clarification_questions.clone(),
+        risk_hints: vec!["需求仍可能在计划确认前发生调整。".to_string()],
+        confidence: intake.confidence,
+        status: if intake.clarification_questions.is_empty() {
+            GoalDraftStatus::ReadyForReview
+        } else {
+            GoalDraftStatus::NeedsClarification
+        },
+    }
+}
+
+fn build_plan_draft_preview(goal: &GoalDraftPreview, revision: u32) -> PlanDraftPreview {
+    let stage_plan = vec![
+        "Goal confirmation".to_string(),
+        "Plan confirmation".to_string(),
+        "Task materialization".to_string(),
+        "Work / Delivery handoff".to_string(),
+    ];
+    let issue_prefix = default_issue_prefix(&goal.project_id);
+    let issue_contract_drafts = vec![
+        IssueContractDraftPreview {
+            issue_draft_id: format!("{issue_prefix}-001"),
+            title: format!("{}任务拆解与结构化合同", goal.title),
+            goal: "把已确认的 Goal / Plan 转成结构化任务合同。".to_string(),
+            scope: goal.scope.clone(),
+            non_goals: goal.non_goals.clone(),
+            dependencies: Vec::new(),
+            acceptance_criteria: vec!["任务合同结构完整且可投影。".to_string()],
+            validation_commands: vec!["cargo test --workspace".to_string()],
+            evidence_requirements: vec!["本地验证结果".to_string()],
+            boundary: vec!["crates/spec/**".to_string(), "crates/projection/**".to_string()],
+            priority: SpecPriority::P1,
+            suggested_agent_role: SpecRequiredAgentRole::BuildAgent,
+        },
+        IssueContractDraftPreview {
+            issue_draft_id: format!("{issue_prefix}-002"),
+            title: format!("{}交付与验证收口", goal.title),
+            goal: "把物化后的项目循环入口与交付边界整理清楚。".to_string(),
+            scope: vec!["任务投影".to_string(), "公开交付记录".to_string()],
+            non_goals: vec!["不直接执行 Work Loop。".to_string()],
+            dependencies: vec![format!("{issue_prefix}-001")],
+            acceptance_criteria: vec!["验证和交付边界明确。".to_string()],
+            validation_commands: vec!["npm --prefix apps/desktop run build".to_string()],
+            evidence_requirements: vec!["构建结果".to_string()],
+            boundary: vec!["apps/desktop/src/**".to_string()],
+            priority: SpecPriority::P1,
+            suggested_agent_role: SpecRequiredAgentRole::BuildAgent,
+        },
+    ];
+    PlanDraftPreview {
+        plan_draft_id: format!("plan-{}-r{}", goal.source_requirement_id, revision),
+        project_id: goal.project_id.clone(),
+        source_goal_id: goal.goal_draft_id.clone(),
+        plan_type: goal.intent_type.clone(),
+        stage_plan,
+        milestone_drafts: vec![
+            MilestoneDraftPreview {
+                milestone_id: format!("milestone-{}-01", goal.project_id),
+                title: "确认 Goal / Plan".to_string(),
+                goal: "把目标和计划变成可确认事实。".to_string(),
+                depends_on: Vec::new(),
+                expected_outputs: vec!["GOAL.md".to_string(), "PLAN.md".to_string()],
+                validation_need: "确认文档结构完整。".to_string(),
+                evidence_need: "Decision entry".to_string(),
+            },
+            MilestoneDraftPreview {
+                milestone_id: format!("milestone-{}-02", goal.project_id),
+                title: "生成任务合同".to_string(),
+                goal: "输出 SpecProject / SpecIssue 物化结果。".to_string(),
+                depends_on: vec![format!("milestone-{}-01", goal.project_id)],
+                expected_outputs: vec!["SpecProject".to_string(), "SpecIssue".to_string()],
+                validation_need: "确认任务合同可读取。".to_string(),
+                evidence_need: "materialization record".to_string(),
+            },
+        ],
+        issue_contract_drafts,
+        validation_strategy: vec!["先确认 Goal，再确认 Plan。".to_string()],
+        evidence_strategy: vec!["记录 Goal confirmation 和 Plan confirmation。".to_string()],
+        human_confirmation_points: vec![
+            "scope change".to_string(),
+            "high-risk issue".to_string(),
+            "plan structure change".to_string(),
+        ],
+        risk_list: vec!["未确认前不得直接生成执行合同。".to_string()],
+        blockers: Vec::new(),
+        next_recommended_action: "confirm-plan-draft-preview".to_string(),
+        status: PlanDraftStatus::ReadyForReview,
+    }
+}
+
+fn write_confirmed_goal_document(root: &Path, preview: &RequirementPreviewRuntime) -> Result<()> {
+    let path = root.join(project_brain_root(&preview.project_id)).join("GOAL.md");
+    let content = format!(
+        "# {}\n\n## Outcome\n{}\n\n## Expected Deliverables\n{}\n\n## Scope\n{}\n\n## Non-goals\n{}\n\n## Success Criteria\n{}\n",
+        preview.goal_draft.title,
+        preview.goal_draft.outcome,
+        markdown_list(&preview.goal_draft.expected_deliverables),
+        markdown_list(&preview.goal_draft.scope),
+        markdown_list(&preview.goal_draft.non_goals),
+        markdown_list(&preview.goal_draft.success_criteria),
+    );
+    write_text(&path, &content)
+}
+
+fn write_confirmed_plan_document(root: &Path, preview: &RequirementPreviewRuntime) -> Result<()> {
+    let Some(plan) = preview.plan_draft.as_ref() else {
+        anyhow::bail!("plan draft is missing");
+    };
+    let path = root.join(project_brain_root(&preview.project_id)).join("PLAN.md");
+    let content = format!(
+        "# {}\n\n## Stage Plan\n{}\n\n## Milestones\n{}\n\n## Human Confirmation Points\n{}\n",
+        preview.project_title,
+        markdown_list(&plan.stage_plan),
+        markdown_list(
+            &plan
+                .milestone_drafts
+                .iter()
+                .map(|draft| format!("{}：{}", draft.title, draft.goal))
+                .collect::<Vec<_>>()
+        ),
+        markdown_list(&plan.human_confirmation_points),
+    );
+    write_text(&path, &content)
+}
+
+fn append_decision_entry(
+    root: &Path,
+    project_id: &str,
+    record: &PreviewConfirmationRecord,
+) -> Result<()> {
+    let path = root.join(project_brain_root(project_id)).join("DECISIONS.md");
+    let entry = format!(
+        "## {}\n\n- actor: {}\n- target: {} / {}\n- decision: {}\n- impact: {}\n- nextAction: {}\n\n{}\n\n",
+        record.timestamp,
+        record.actor,
+        record.target_type,
+        record.target_id,
+        record.decision,
+        record.impact,
+        record.next_action,
+        record.summary,
+    );
+    let next_content = if path.exists() {
+        format!("{}{}", fs::read_to_string(&path)?, entry)
+    } else {
+        format!("# Decisions\n\n{entry}")
+    };
+    write_text(&path, &next_content)
+}
+
+fn emit_project_preview_transition(
+    root: &Path,
+    project_id: &str,
+    current_state: &str,
+    event_type: &str,
+    actor_role: &str,
+    payload: serde_json::Value,
+    passed_guards: &[&str],
+    completed_actions: &[&str],
+) -> Result<()> {
+    let workflow =
+        agentflow_workflow_core::canonical_workflow(agentflow_workflow_core::WorkflowFlowType::Project);
+    let context = agentflow_workflow_runtime::RuntimeContext {
+        aggregate_type: "project".to_string(),
+        aggregate_id: project_id.to_string(),
+        issue_id: None,
+        project_id: Some(project_id.to_string()),
+        run_id: None,
+        actor: agentflow_event_store::EventActor {
+            role: actor_role.to_string(),
+            kind: "runtime".to_string(),
+        },
+        correlation_id: Some(format!("corr-project-{project_id}")),
+        causation_id: None,
+        artifact_refs: Vec::new(),
+        payload,
+    };
+    let guards =
+        agentflow_workflow_runtime::StaticGuardRegistry::all_pass(passed_guards.iter().copied());
+    let actions = agentflow_workflow_runtime::StaticActionRegistry::all_complete(
+        completed_actions.iter().copied(),
+    );
+    let result = agentflow_workflow_runtime::apply_workflow_event(
+        root,
+        &workflow,
+        current_state,
+        event_type,
+        context,
+        &guards,
+        &actions,
+    )?;
+    if !result.applied {
+        anyhow::bail!(
+            "project preview transition {} from {} was blocked: {}",
+            event_type,
+            current_state,
+            result
+                .blocked_reason
+                .unwrap_or_else(|| "unknown reason".to_string())
+        );
+    }
+    Ok(())
+}
+
+fn ensure_active_preview(preview: &RequirementPreviewRuntime) -> Result<()> {
+    if preview.lifecycle != RequirementPreviewLifecycle::Active {
+        anyhow::bail!(
+            "requirement preview {} is not active: {}",
+            preview.requirement_id,
+            preview.lifecycle.as_str()
+        );
+    }
+    Ok(())
+}
+
+fn requirement_preview_path(root: &Path, requirement_id: &str) -> PathBuf {
+    root.join(".agentflow/spec/requirements")
+        .join(format!("{}.json", sanitize_id(requirement_id)))
+}
+
+fn sanitize_id(id: &str) -> String {
+    id.chars()
+        .map(|ch| match ch {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            _ => ch,
+        })
+        .collect()
+}
+
+fn default_preview_project_id(requirement_id: &str) -> String {
+    let slug = requirement_id
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { '-' })
+        .collect::<String>();
+    format!("project-{}", slug.trim_matches('-'))
+}
+
+fn default_issue_prefix(project_id: &str) -> String {
+    project_id
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' => ch.to_ascii_uppercase(),
+            'A'..='Z' | '0'..='9' | '-' => ch,
+            _ => '-',
+        })
+        .collect()
+}
+
+fn detect_requirement_intent(requirement: &RequirementDocument) -> RequirementIntentType {
+    let raw = format!("{} {}", requirement.title, requirement.summary).to_ascii_lowercase();
+    if raw.contains("audit") || raw.contains("审计") {
+        RequirementIntentType::Audit
+    } else if raw.contains("repair")
+        || raw.contains("bug")
+        || raw.contains("修复")
+        || raw.contains("fix")
+    {
+        RequirementIntentType::Repair
+    } else if raw.contains("design") || raw.contains("设计") {
+        RequirementIntentType::Design
+    } else if raw.contains("understand") || raw.contains("理解") {
+        RequirementIntentType::Understanding
+    } else if raw.contains("technical")
+        || raw.contains("runtime")
+        || raw.contains("workflow")
+        || raw.contains("技术")
+    {
+        RequirementIntentType::Technical
+    } else if raw.contains("product") || raw.contains("产品") {
+        RequirementIntentType::Product
+    } else {
+        RequirementIntentType::Mixed
+    }
+}
+
+fn default_deliverables(intent: &RequirementIntentType) -> Vec<String> {
+    match intent {
+        RequirementIntentType::Audit => vec!["审计结论".to_string(), "审计建议".to_string()],
+        RequirementIntentType::Design => vec!["设计方案".to_string(), "交互说明".to_string()],
+        RequirementIntentType::Understanding => {
+            vec!["项目说明".to_string(), "结构化结论".to_string()]
+        }
+        _ => vec!["项目计划".to_string(), "结构化任务合同".to_string()],
+    }
+}
+
+fn markdown_list(items: &[String]) -> String {
+    if items.is_empty() {
+        "- 无\n".to_string()
+    } else {
+        items
+            .iter()
+            .map(|item| format!("- {item}\n"))
+            .collect::<String>()
+    }
+}
+
+fn write_text(path: &Path, content: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        ensure_directory(parent)?;
+    }
+    fs::write(path, content).with_context(|| format!("write {}", path.display()))
+}
+
 fn validate_issue_contract(issue: &SpecIssue) -> Result<()> {
     validate_issue_id(&issue.issue_id)?;
     if issue.workflow_ref.trim().is_empty() {
@@ -775,6 +1450,7 @@ fn unix_timestamp_seconds() -> u64 {
 mod tests {
     use super::*;
     use crate::model::{SpecPriority, DEFAULT_WORKFLOW_REF};
+    use agentflow_event_store::load_task_events;
     use serde_json::Value;
     use tempfile::tempdir;
 
@@ -958,5 +1634,105 @@ mod tests {
                 .unwrap_err()
                 .to_string();
         assert!(err.contains("numeric suffix"));
+    }
+
+    #[test]
+    fn requirement_preview_runtime_starts_from_goal_preview_and_writes_project_event() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+
+        let preview =
+            requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+                .unwrap();
+
+        assert_eq!(preview.current_state, "goal_draft");
+        assert_eq!(preview.lifecycle, RequirementPreviewLifecycle::Active);
+        assert_eq!(preview.goal_draft.status, GoalDraftStatus::NeedsClarification);
+        assert!(!preview.goal_draft.open_questions.is_empty());
+        assert_eq!(
+            preview.next_recommended_action,
+            "confirm-goal-draft-preview"
+        );
+
+        let events = load_task_events(dir.path()).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "project.intake.accepted");
+        assert_eq!(events[0].project_id.as_deref(), Some("project-preview"));
+    }
+
+    #[test]
+    fn confirming_goal_and_plan_writes_project_brain_documents() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+        let goal_confirmed =
+            confirm_goal_draft_preview(dir.path(), "999-task-workflow-test", "goal-agent")
+                .unwrap();
+        assert_eq!(goal_confirmed.current_state, "plan_draft");
+        assert_eq!(goal_confirmed.goal_draft.status, GoalDraftStatus::Confirmed);
+        assert!(goal_confirmed.plan_draft.is_some());
+        assert!(
+            dir.path()
+                .join("docs/projects/project-preview/GOAL.md")
+                .is_file()
+        );
+
+        let plan_confirmed =
+            confirm_plan_draft_preview(dir.path(), "999-task-workflow-test", "spec-agent")
+                .unwrap();
+        assert_eq!(plan_confirmed.current_state, "confirmed");
+        assert_eq!(
+            plan_confirmed.plan_draft.as_ref().unwrap().status,
+            PlanDraftStatus::Confirmed
+        );
+        assert!(
+            dir.path()
+                .join("docs/projects/project-preview/PLAN.md")
+                .is_file()
+        );
+        let decisions = fs::read_to_string(
+            dir.path()
+                .join("docs/projects/project-preview/DECISIONS.md"),
+        )
+        .unwrap();
+        assert!(decisions.contains("goal-draft"));
+        assert!(decisions.contains("plan-draft"));
+    }
+
+    #[test]
+    fn confirmed_preview_materializes_spec_project_and_issues() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+        confirm_goal_draft_preview(dir.path(), "999-task-workflow-test", "goal-agent").unwrap();
+        confirm_plan_draft_preview(dir.path(), "999-task-workflow-test", "spec-agent").unwrap();
+
+        let (project, issues) =
+            materialize_spec_from_requirement_preview(dir.path(), "999-task-workflow-test")
+                .unwrap();
+
+        assert_eq!(project.project_id, "project-preview");
+        assert_eq!(issues.len(), 2);
+        assert!(dir
+            .path()
+            .join(".agentflow/spec/projects/project-preview.json")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(format!(".agentflow/spec/issues/{}.json", issues[0].issue_id))
+            .is_file());
+        let preview = read_requirement_preview_runtime(dir.path(), "999-task-workflow-test")
+            .unwrap();
+        assert_eq!(preview.lifecycle, RequirementPreviewLifecycle::Materialized);
+        assert_eq!(
+            preview.next_recommended_action,
+            "start-project-loop"
+        );
+        assert_eq!(preview.materialized_project_id.as_deref(), Some("project-preview"));
+        assert_eq!(preview.materialized_issue_ids.len(), 2);
     }
 }
