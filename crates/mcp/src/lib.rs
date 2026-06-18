@@ -1,4 +1,5 @@
 pub mod browser;
+pub mod claude;
 pub mod codex;
 pub mod error;
 pub mod events;
@@ -17,6 +18,7 @@ use serde_json::json;
 use std::path::Path;
 
 pub use browser::browser_preview_status;
+pub use claude::{check_claude_provider, ClaudeCodeProvider};
 pub use codex::{check_codex_provider, CodexProvider};
 pub use github::check_github_provider;
 pub use gitlab::check_gitlab_provider;
@@ -37,6 +39,7 @@ pub use storage::{
 
 pub fn default_provider_bridge() -> McpProviderBridge {
     let mut bridge = McpProviderBridge::new();
+    bridge.register(Box::new(ClaudeCodeProvider::new()));
     bridge.register(Box::new(CodexProvider::new()));
     bridge
 }
