@@ -697,6 +697,7 @@ export function createBrowserPreviewProjectProjection(
   const past = issues.filter((issue) => ["done", "cancel"].includes(issue.displayStatus)).map((issue) => issue.issueId);
   const future = issues.filter((issue) => issue.displayStatus === "backlog").map((issue) => issue.issueId);
   const blocked = issues.filter((issue) => issue.displayStatus === "blocked").map((issue) => issue.issueId);
+  const activeIssueId = browserPreviewActiveProjectIssueId(issues);
   const completedIssueCount = past.filter((issueId) => {
     const issue = issues.find((entry) => entry.issueId === issueId);
     return issue?.displayStatus === "done";
@@ -709,23 +710,23 @@ export function createBrowserPreviewProjectProjection(
     status: current.length ? "active" : future.length ? "planned" : "done",
     stageKey: current.length ? "active" : future.length ? "ready-to-start" : "completion-ready",
     stageLabel: current.length ? "正在推进" : future.length ? "准备开工" : "等待完成判断",
-    stageSummary: current.length
-      ? `当前项目围绕 ${current[0]} 推进。`
+    stageSummary: activeIssueId
+      ? `当前项目围绕 ${activeIssueId} 推进。`
       : future.length
         ? `当前还没有活跃任务，下一条待启动任务是 ${future[0]}。`
         : "全部任务已完成，下一步进入完成判断。",
     issueIds: issues.map((issue) => issue.issueId),
-    currentIssueId: current.at(0) ?? null,
+    currentIssueId: activeIssueId,
     lanes: {
       current,
       past,
       future,
       blocked,
     },
-    nextAction: current.length ? `继续推进 ${current[0]}。` : future.length ? `启动 ${future[0]}。` : "进入完成判断",
-    nextActionLabel: current.length ? "继续当前任务" : future.length ? "启动下一条任务" : "进入完成判断",
-    nextActionReason: current.length
-      ? `当前活跃任务是 ${current[0]}，项目下一步仍然围绕它推进。`
+    nextAction: activeIssueId ? `继续推进 ${activeIssueId}。` : future.length ? `启动 ${future[0]}。` : "进入完成判断",
+    nextActionLabel: activeIssueId ? "继续当前任务" : future.length ? "启动下一条任务" : "进入完成判断",
+    nextActionReason: activeIssueId
+      ? `当前活跃任务是 ${activeIssueId}，项目下一步仍然围绕它推进。`
       : future.length
         ? `${future[0]} 当前是项目下一条最直接的推进入口。`
         : "任务已全部完成，等待完成判断收口。",
@@ -749,7 +750,7 @@ export function createBrowserPreviewProjectProjection(
             : "当前项目还没有公开交付记录。",
       publicRecordItems: completedIssueCount ? ["PR/MR body", "CHANGELOG.md"] : [],
       missingPublicRecords: current.length ? ["CHANGELOG.md 或 release notes"] : [],
-      currentIssueId: current.at(0) ?? null,
+      currentIssueId: activeIssueId,
       publishedCount: completedIssueCount,
       readyCount: current.length,
       missingCount: future.length,
@@ -788,6 +789,22 @@ export function createBrowserPreviewProjectProjection(
     },
     updatedAt: previewTimestamp + 420,
   };
+}
+
+function browserPreviewActiveProjectIssueId(issues: InputIssue[]) {
+  const priority: Record<string, number> = {
+    in_progress: 0,
+    in_review: 1,
+    todo: 2,
+    blocked: 3,
+  };
+  return issues
+    .filter((issue) => Object.hasOwn(priority, issue.displayStatus))
+    .sort((left, right) => {
+      const leftRank = priority[left.displayStatus] ?? Number.MAX_SAFE_INTEGER;
+      const rightRank = priority[right.displayStatus] ?? Number.MAX_SAFE_INTEGER;
+      return leftRank - rightRank;
+    })[0]?.issueId ?? null;
 }
 
 function browserPreviewTimelineForIssue(issue: InputIssue): TaskTimelineItem[] {

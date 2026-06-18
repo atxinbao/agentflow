@@ -379,6 +379,7 @@ fn project_project(
 ) -> Result<ProjectProjection> {
     let mut current_issue_id = None;
     let mut current_issue_state = None;
+    let mut current_issue_priority = None;
     let mut completed = 0;
     let mut updated_at = project.system.updated_at;
     let mut current_lane = Vec::new();
@@ -414,9 +415,14 @@ fn project_project(
                 });
             }
             _ => {
-                if current_issue_id.is_none() {
+                let issue_priority = active_project_issue_priority(task.current_state.as_str());
+                if current_issue_priority
+                    .map(|priority| issue_priority < priority)
+                    .unwrap_or(true)
+                {
                     current_issue_id = Some(issue_id.clone());
                     current_issue_state = Some(task.current_state.clone());
+                    current_issue_priority = Some(issue_priority);
                 }
                 current_lane.push(issue_id.clone());
             }
@@ -1041,6 +1047,16 @@ fn append_delivery_hint(base: String, delivery: Option<&ProjectionDeliverySummar
     format!("{base} 最近交付：{}", delivery.summary_line)
 }
 
+fn active_project_issue_priority(state: &str) -> u8 {
+    match state {
+        "in_progress" => 0,
+        "in_review" => 1,
+        "todo" => 2,
+        "blocked" => 3,
+        _ => 4,
+    }
+}
+
 fn load_projection_audit_index(root: &Path) -> Result<ProjectionAuditIndexFile> {
     let path = root.join(".agentflow/audit/index.json");
     if !path.is_file() {
@@ -1274,7 +1290,8 @@ mod tests {
     use super::*;
     use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
     use agentflow_spec::{
-        read_spec_issue, requirement_preview_from_requirement, write_spec_issue,
+        read_spec_issue, read_spec_project, requirement_preview_from_requirement, write_spec_issue,
+        write_spec_project,
         CompletionDecisionOutcome, SpecIssueDraft, SpecIssueStatus, SpecProjectDraft,
     };
     use serde_json::json;
@@ -1568,6 +1585,48 @@ mod tests {
             project.project_brain.next_recommended_action_label,
             "进入项目循环"
         );
+    }
+
+    #[test]
+    fn project_projection_prefers_running_issue_over_todo_for_current_issue() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        let requirement = dir.path().join("docs/requirements/034-test.md");
+
+        let mut second_issue = SpecIssueDraft::new("AF-PROJ-002");
+        second_issue.project_id = Some("project-projection".to_string());
+        let second_issue =
+            agentflow_spec::issue_from_requirement(dir.path(), &requirement, second_issue).unwrap();
+        write_spec_issue(dir.path(), &second_issue).unwrap();
+
+        let mut project = read_spec_project(dir.path(), "project-projection").unwrap();
+        project.issue_ids = vec!["AF-PROJ-001".to_string(), "AF-PROJ-002".to_string()];
+        write_spec_project(dir.path(), &project).unwrap();
+
+        append_task_event_once(dir.path(), event("AF-PROJ-001", "issue.scheduled", json!({})))
+            .unwrap();
+        append_task_event_once(dir.path(), event("AF-PROJ-002", "issue.scheduled", json!({})))
+            .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-002",
+                "agent.launch.requested",
+                json!({
+                    "runId": "run-002",
+                    "branchName": "agentflow/project-projection/AF-PROJ-002"
+                }),
+            ),
+        )
+        .unwrap();
+
+        rebuild_projections(dir.path()).unwrap();
+        let project =
+            crate::storage::load_project_projection(dir.path(), "project-projection").unwrap();
+
+        assert_eq!(project.current_issue_id.as_deref(), Some("AF-PROJ-002"));
+        assert_eq!(project.stage_label, "正在推进");
+        assert_eq!(project.next_action_label, "继续当前任务");
     }
 
     #[test]
