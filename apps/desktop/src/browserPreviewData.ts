@@ -702,6 +702,55 @@ export function createBrowserPreviewProjectProjection(
     const issue = issues.find((entry) => entry.issueId === issueId);
     return issue?.displayStatus === "done";
   }).length;
+  const canceledIssueCount = past.filter((issueId) => {
+    const issue = issues.find((entry) => entry.issueId === issueId);
+    return issue?.displayStatus === "cancel";
+  }).length;
+  const remainingIssueCount = Math.max(issues.length - completedIssueCount - canceledIssueCount, 0);
+  const completion =
+    completedIssueCount === issues.length && issues.length
+      ? {
+          currentState: "goal-recheck",
+          latestOutcome: null,
+          nextRecommendedAction: "enter-completion-decision",
+          nextRecommendedActionLabel: "进入完成判断",
+          nextRecommendedActionReason: "当前任务已经收口，下一步由 Goal Agent 明确给出项目完成决策。",
+          totalIssueCount: issues.length,
+          completedIssueCount,
+          canceledIssueCount,
+          remainingIssueCount,
+          blockedIssueCount: blocked.length,
+          openQuestions: [
+            "当前交付是否真正满足 GOAL.md 和 PLAN.md？",
+            "项目应该接受、继续、调整、暂停，还是进入下一阶段？",
+          ],
+          rationale: [
+            "任务执行已经收口，但交付是否满足 Goal / Plan 还需要重新判断。",
+            "Project 完成必须由 Goal Agent 显式给出 completion decision。",
+          ],
+          updatedAt: previewTimestamp + 420,
+        }
+      : {
+          currentState: "continue",
+          latestOutcome: "continue",
+          nextRecommendedAction: "start-project-loop",
+          nextRecommendedActionLabel: "继续项目循环",
+          nextRecommendedActionReason: `当前还有 ${remainingIssueCount} 条任务未完成，先继续推进任务循环。`,
+          totalIssueCount: issues.length,
+          completedIssueCount,
+          canceledIssueCount,
+          remainingIssueCount,
+          blockedIssueCount: blocked.length,
+          openQuestions: [],
+          rationale: [`当前还有 ${remainingIssueCount} 条任务未完成，Completion Decision 暂时不能收口项目。`],
+          updatedAt: previewTimestamp + 420,
+        };
+  const deliverySummaryLine =
+    completedIssueCount === issues.length && issues.length
+      ? "项目公开交付已汇总到 PR/MR body、CHANGELOG.md。"
+      : current.length
+        ? `项目公开交付仍在围绕 ${activeIssueId ?? current[0]} 整理。`
+        : "当前项目还没有公开交付记录。";
   return {
     version: "project-projection.v3.browser-preview",
     projectId,
@@ -731,10 +780,8 @@ export function createBrowserPreviewProjectProjection(
         ? `${future[0]} 当前是项目下一条最直接的推进入口。`
         : "任务已全部完成，等待完成判断收口。",
     blockers: blocked.map((issueId) => ({ issueId, reason: "等待阻断条件解除。" })),
-    completionHint:
-      completedIssueCount === issues.length && issues.length
-        ? "全部任务已完成，下一步进入完成判断。"
-        : `当前已完成 ${completedIssueCount}/${issues.length} 条任务。`,
+    completionHint: `${completion.nextRecommendedActionReason} 最近交付：${deliverySummaryLine}`,
+    completion,
     delivery: {
       status: completedIssueCount === issues.length && issues.length ? "published" : current.length ? "ready" : "missing",
       evidenceStatus: "ready",
@@ -742,12 +789,7 @@ export function createBrowserPreviewProjectProjection(
       prUrl: null,
       mergeCommit: null,
       publicRecordPath: completedIssueCount ? "CHANGELOG.md" : null,
-      summaryLine:
-        completedIssueCount === issues.length && issues.length
-          ? "项目公开交付已汇总到 PR/MR body、CHANGELOG.md。"
-          : current.length
-            ? `项目公开交付仍在围绕 ${current[0]} 整理。`
-            : "当前项目还没有公开交付记录。",
+      summaryLine: deliverySummaryLine,
       publicRecordItems: completedIssueCount ? ["PR/MR body", "CHANGELOG.md"] : [],
       missingPublicRecords: current.length ? ["CHANGELOG.md 或 release notes"] : [],
       currentIssueId: activeIssueId,
