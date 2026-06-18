@@ -63,12 +63,29 @@ impl CodexProvider {
         format!("codex-{}", sanitize_id(&request.run_id))
     }
 
-    fn session_log_path(&self, session_id: &str) -> String {
-        format!(".agentflow/state/mcp/sessions/{session_id}.jsonl")
+    fn session_log_path(&self, session_id: &str, attempt_count: u32) -> String {
+        if attempt_count <= 1 {
+            format!(".agentflow/state/mcp/sessions/{session_id}.jsonl")
+        } else {
+            format!(".agentflow/state/mcp/sessions/{session_id}-attempt-{attempt_count}.jsonl")
+        }
     }
 
-    fn session_last_message_path(&self, session_id: &str) -> String {
-        format!(".agentflow/state/mcp/sessions/{session_id}-last-message.txt")
+    fn session_last_message_path(&self, session_id: &str, attempt_count: u32) -> String {
+        if attempt_count <= 1 {
+            format!(".agentflow/state/mcp/sessions/{session_id}-last-message.txt")
+        } else {
+            format!(
+                ".agentflow/state/mcp/sessions/{session_id}-attempt-{attempt_count}-last-message.txt"
+            )
+        }
+    }
+
+    fn launch_artifact_paths(&self, session_id: &str, attempt_count: u32) -> (String, String) {
+        (
+            self.session_log_path(session_id, attempt_count),
+            self.session_last_message_path(session_id, attempt_count),
+        )
     }
 }
 
@@ -249,8 +266,7 @@ impl McpAgentProvider for CodexProvider {
         request: &McpLaunchRequest,
     ) -> Result<McpLaunchPlan> {
         let session_id = self.session_id(request);
-        let log_path = self.session_log_path(&session_id);
-        let last_message_path = self.session_last_message_path(&session_id);
+        let (log_path, last_message_path) = self.launch_artifact_paths(&session_id, 1);
         let stdin_path = request
             .prompt_path
             .clone()
@@ -295,7 +311,9 @@ impl McpAgentProvider for CodexProvider {
         project_root: &Path,
         request: &McpLaunchRequest,
     ) -> Result<McpSessionSnapshot> {
-        let plan = self.build_launch_plan(project_root, request)?;
+        let mut plan = self.build_launch_plan(project_root, request)?;
+        let mut attempt_count = 1;
+        let mut recovery_reason = None;
         if let Ok(existing) = read_session_snapshot(project_root, &plan.session_id) {
             if !matches!(
                 existing.status,
@@ -305,7 +323,15 @@ impl McpAgentProvider for CodexProvider {
             ) {
                 return Ok(existing);
             }
+            attempt_count = existing.attempt_count.max(1).saturating_add(1);
+            recovery_reason = Some(format!("retry after {} session", existing.status.as_str()));
         }
+        let (log_path, last_message_path) =
+            self.launch_artifact_paths(&plan.session_id, attempt_count);
+        plan.output_path = Some(log_path.clone());
+        plan.note = Some(format!(
+            "attempt {attempt_count}; last message path: {last_message_path}"
+        ));
 
         write_launch_plan(project_root, &plan)?;
         let stdin_path = absolute_project_path(
@@ -320,7 +346,9 @@ impl McpAgentProvider for CodexProvider {
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("codex launch plan is missing outputPath"))?,
         );
+        let last_message_path = absolute_project_path(project_root, &last_message_path);
         ensure_parent_directory(&log_path)?;
+        ensure_parent_directory(&last_message_path)?;
 
         let stdin = File::open(&stdin_path)
             .with_context(|| format!("open codex prompt {}", stdin_path.display()))?;
@@ -356,6 +384,14 @@ impl McpAgentProvider for CodexProvider {
         session.status = McpSessionStatus::Starting;
         session.pid = Some(pid);
         session.log_path = plan.output_path.clone();
+        session.last_message_path = Some(relative_project_path(project_root, &last_message_path));
+        session.attempt_count = attempt_count;
+        session.recovery_reason = recovery_reason;
+        session.merge_proof_path = None;
+        session.merge_state = None;
+        session.writeback_state = None;
+        session.last_error = None;
+        session.note = plan.note.clone();
         session.updated_at = now;
         write_session_snapshot(project_root, &session)?;
         Ok(session)
@@ -369,29 +405,36 @@ impl McpAgentProvider for CodexProvider {
             .flatten();
         let pid_alive = session.pid.map(is_pid_alive).transpose()?;
         let process_alive = pid_alive.unwrap_or(false);
+        let issue_state = projection
+            .as_ref()
+            .map(|value| value.current_state.as_str());
 
         if let Some(proof) = merge_proof.as_ref() {
-            session.pr_url = proof.remote_url.clone();
+            session.pr_url = proof.pr_url.clone();
+            session.merge_proof_path = Some(format!(
+                ".agentflow/tasks/{}/runs/{}/review/merge-proof.json",
+                session.issue_id, session.run_id
+            ));
             session.merge_state = Some(if proof.merged {
                 "merged".to_string()
             } else {
                 "awaiting-merge".to_string()
             });
+        } else {
+            session.merge_proof_path = None;
+            session.merge_state = None;
         }
+        session.writeback_state = derive_writeback_state(issue_state, merge_proof.as_ref());
 
         session.status = derive_session_status(
             session.status.clone(),
-            projection
-                .as_ref()
-                .map(|value| value.current_state.as_str()),
+            issue_state,
             process_alive,
             merge_proof.as_ref(),
         );
 
         session.last_error = derive_session_error(
-            projection
-                .as_ref()
-                .map(|value| value.current_state.as_str()),
+            issue_state,
             process_alive,
             &session.status,
             session.last_error.clone(),
@@ -458,7 +501,7 @@ impl McpAgentProvider for CodexProvider {
 
 #[derive(Debug, Clone)]
 struct MergeProofSummary {
-    remote_url: Option<String>,
+    pr_url: Option<String>,
     merged: bool,
 }
 
@@ -478,6 +521,13 @@ fn ensure_parent_directory(path: &Path) -> Result<()> {
     Ok(())
 }
 
+fn relative_project_path(project_root: &Path, path: &Path) -> String {
+    path.strip_prefix(project_root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
 fn load_merge_proof(
     project_root: &Path,
     issue_id: &str,
@@ -494,15 +544,31 @@ fn load_merge_proof(
     )
     .with_context(|| format!("parse {}", path.display()))?;
     Ok(Some(MergeProofSummary {
-        remote_url: proof
-            .get("remoteUrl")
+        pr_url: proof
+            .get("prUrl")
             .and_then(Value::as_str)
+            .or_else(|| proof.get("remoteUrl").and_then(Value::as_str))
             .map(str::to_string),
         merged: proof
             .get("merged")
             .and_then(Value::as_bool)
             .unwrap_or(false),
     }))
+}
+
+fn derive_writeback_state(
+    issue_state: Option<&str>,
+    merge_proof: Option<&MergeProofSummary>,
+) -> Option<String> {
+    match issue_state {
+        Some("done") => Some("completed".to_string()),
+        Some("in_review") if merge_proof.is_some_and(|proof| proof.merged) => {
+            Some("awaiting-complete".to_string())
+        }
+        Some("blocked") => Some("failed".to_string()),
+        Some("cancel") => Some("cancelled".to_string()),
+        _ => None,
+    }
 }
 
 fn derive_session_status(
@@ -638,8 +704,13 @@ mod tests {
         agentflow_cli_candidates, configured_codex_model_from_content, is_local_target_binary,
         CodexProvider, DEFAULT_CODEX_MODEL,
     };
-    use crate::{model::McpLaunchRequest, provider::McpAgentProvider};
-    use std::path::Path;
+    use crate::{
+        model::{McpLaunchRequest, McpSessionStatus},
+        provider::McpAgentProvider,
+        storage::write_session_snapshot,
+    };
+    use std::{fs, path::Path};
+    use tempfile::tempdir;
 
     #[test]
     fn prefers_debug_agentflow_before_release_binary() {
@@ -739,5 +810,54 @@ trust_level = "trusted"
             None,
         );
         assert_eq!(status, crate::model::McpSessionStatus::Interrupted);
+    }
+
+    #[test]
+    fn recreate_failed_session_increments_attempt_and_uses_new_log_paths() {
+        let dir = tempdir().unwrap();
+        let request_path = dir
+            .path()
+            .join(".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json");
+        fs::create_dir_all(request_path.parent().unwrap()).unwrap();
+        fs::write(&request_path, "{\"task\":\"retry\"}\n").unwrap();
+
+        let provider = CodexProvider {
+            program: "/bin/sh".to_string(),
+            sandbox: "workspace-write".to_string(),
+            approval_policy: "never".to_string(),
+            model: Some(DEFAULT_CODEX_MODEL.to_string()),
+        };
+        let request = McpLaunchRequest::new(
+            "codex",
+            "AF-001",
+            "run-001",
+            "build-agent",
+            dir.path().display().to_string(),
+            ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json",
+        );
+
+        let first = provider.create_session(dir.path(), &request).unwrap();
+        let mut failed = first.clone();
+        failed.status = McpSessionStatus::Failed;
+        failed.pid = None;
+        failed.last_error = Some("first attempt failed".to_string());
+        write_session_snapshot(dir.path(), &failed).unwrap();
+
+        let retried = provider.create_session(dir.path(), &request).unwrap();
+
+        assert_eq!(retried.session_id, "codex-run-001");
+        assert_eq!(retried.attempt_count, 2);
+        assert_eq!(
+            retried.recovery_reason.as_deref(),
+            Some("retry after failed session")
+        );
+        assert_eq!(
+            retried.log_path.as_deref(),
+            Some(".agentflow/state/mcp/sessions/codex-run-001-attempt-2.jsonl")
+        );
+        assert_eq!(
+            retried.last_message_path.as_deref(),
+            Some(".agentflow/state/mcp/sessions/codex-run-001-attempt-2-last-message.txt")
+        );
     }
 }

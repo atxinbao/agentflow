@@ -7,6 +7,10 @@ pub const MCP_LAUNCH_PLAN_VERSION: &str = "agentflow-mcp-launch-plan.v1";
 pub const MCP_SESSION_SNAPSHOT_VERSION: &str = "agentflow-mcp-session.v1";
 pub const MCP_LOG_CHUNK_VERSION: &str = "agentflow-mcp-log-chunk.v1";
 
+fn default_attempt_count() -> u32 {
+    1
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum McpProviderKind {
@@ -312,13 +316,31 @@ pub struct McpSessionSnapshot {
     pub launch_mode: McpLaunchMode,
     pub launch_request_path: String,
     pub plan_path: String,
+    #[serde(default)]
     pub log_path: Option<String>,
+    #[serde(default)]
     pub branch_name: Option<String>,
+    #[serde(default = "default_attempt_count")]
+    pub attempt_count: u32,
+    #[serde(default)]
     pub pid: Option<u32>,
+    #[serde(default)]
     pub remote_session_id: Option<String>,
+    #[serde(default)]
     pub pr_url: Option<String>,
+    #[serde(default)]
+    pub last_message_path: Option<String>,
+    #[serde(default)]
+    pub merge_proof_path: Option<String>,
+    #[serde(default)]
     pub merge_state: Option<String>,
+    #[serde(default)]
+    pub writeback_state: Option<String>,
+    #[serde(default)]
+    pub recovery_reason: Option<String>,
+    #[serde(default)]
     pub note: Option<String>,
+    #[serde(default)]
     pub last_error: Option<String>,
     pub created_at: u64,
     pub updated_at: u64,
@@ -339,10 +361,15 @@ impl McpSessionSnapshot {
             plan_path: format!(".agentflow/state/mcp/plans/{}.json", plan.session_id),
             log_path: plan.output_path.clone(),
             branch_name: request.branch_name.clone(),
+            attempt_count: 1,
             pid: None,
             remote_session_id: None,
             pr_url: None,
+            last_message_path: None,
+            merge_proof_path: None,
             merge_state: None,
+            writeback_state: None,
+            recovery_reason: None,
             note: plan.note.clone(),
             last_error: None,
             created_at,

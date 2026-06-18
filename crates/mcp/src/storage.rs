@@ -229,14 +229,19 @@ mod tests {
             launch_request_path: ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json"
                 .to_string(),
             plan_path: ".agentflow/state/mcp/plans/codex-run-001.json".to_string(),
-            log_path: Some(
-                ".agentflow/state/mcp/sessions/codex-run-001-last-message.txt".to_string(),
-            ),
+            log_path: Some(".agentflow/state/mcp/sessions/codex-run-001.jsonl".to_string()),
             branch_name: Some("agentflow/proj-001/AF-001".to_string()),
+            attempt_count: 1,
             pid: None,
             remote_session_id: None,
             pr_url: None,
+            last_message_path: Some(
+                ".agentflow/state/mcp/sessions/codex-run-001-last-message.txt".to_string(),
+            ),
+            merge_proof_path: None,
             merge_state: None,
+            writeback_state: None,
+            recovery_reason: None,
             note: Some("test".to_string()),
             last_error: None,
             created_at: 1,

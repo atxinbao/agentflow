@@ -202,10 +202,15 @@ export type McpSessionSnapshot = {
   planPath: string;
   logPath?: string | null;
   branchName?: string | null;
+  attemptCount?: number;
   pid?: number | null;
   remoteSessionId?: string | null;
   prUrl?: string | null;
+  lastMessagePath?: string | null;
+  mergeProofPath?: string | null;
   mergeState?: string | null;
+  writebackState?: string | null;
+  recoveryReason?: string | null;
   note?: string | null;
   lastError?: string | null;
   createdAt: number;
@@ -536,6 +541,7 @@ export type ProjectionSessionSummary = {
   provider?: string | null;
   sessionId?: string | null;
   status?: string | null;
+  attemptCount?: number | null;
   launchRequestedAt?: number | null;
   claimedAt?: number | null;
   createdAt?: number | null;
@@ -543,6 +549,12 @@ export type ProjectionSessionSummary = {
   launchRequestPath?: string | null;
   planPath?: string | null;
   logPath?: string | null;
+  lastMessagePath?: string | null;
+  mergeProofPath?: string | null;
+  mergeState?: string | null;
+  writebackState?: string | null;
+  recoveryReason?: string | null;
+  lastError?: string | null;
   branchName?: string | null;
 };
 

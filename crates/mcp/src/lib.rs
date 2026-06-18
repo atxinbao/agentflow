@@ -117,6 +117,7 @@ fn observe_session_transition(
     };
 
     if let Some(event_type) = event_type {
+        let attempt_count = updated.attempt_count.max(1);
         append_task_event_once(
             project_root,
             TaskEventDraft {
@@ -142,12 +143,20 @@ fn observe_session_transition(
                     "sessionId": updated.session_id,
                     "provider": updated.provider,
                     "branchName": updated.branch_name,
+                    "attemptCount": attempt_count,
                     "logPath": updated.log_path,
+                    "lastMessagePath": updated.last_message_path,
+                    "mergeProofPath": updated.merge_proof_path,
+                    "mergeState": updated.merge_state,
+                    "writebackState": updated.writeback_state,
+                    "recoveryReason": updated.recovery_reason,
+                    "lastError": updated.last_error,
+                    "sessionStatus": updated.status.as_str(),
                     "status": updated.status.as_str(),
                 }),
-                artifact_refs: updated.log_path.clone().into_iter().collect(),
+                artifact_refs: session_artifact_refs(updated),
                 idempotency_key: Some(format!(
-                    "{event_type}:{}:{}",
+                    "{event_type}:{}:{}:attempt-{attempt_count}",
                     updated.issue_id, updated.run_id
                 )),
             },
@@ -155,6 +164,20 @@ fn observe_session_transition(
     }
 
     Ok(())
+}
+
+fn session_artifact_refs(session: &McpSessionSnapshot) -> Vec<String> {
+    let mut refs = Vec::new();
+    if let Some(log_path) = session.log_path.clone() {
+        refs.push(log_path);
+    }
+    if let Some(last_message_path) = session.last_message_path.clone() {
+        refs.push(last_message_path);
+    }
+    if let Some(merge_proof_path) = session.merge_proof_path.clone() {
+        refs.push(merge_proof_path);
+    }
+    refs
 }
 
 #[cfg(test)]
@@ -179,10 +202,17 @@ mod tests {
             plan_path: ".agentflow/state/mcp/plans/codex-run-001.json".to_string(),
             log_path: Some(".agentflow/state/mcp/sessions/codex-run-001.jsonl".to_string()),
             branch_name: Some("agentflow/proj-001/AF-001".to_string()),
+            attempt_count: 1,
             pid: Some(1),
             remote_session_id: None,
             pr_url: None,
+            last_message_path: Some(
+                ".agentflow/state/mcp/sessions/codex-run-001-last-message.txt".to_string(),
+            ),
+            merge_proof_path: None,
             merge_state: None,
+            writeback_state: None,
+            recovery_reason: None,
             note: None,
             last_error: None,
             created_at: 1,

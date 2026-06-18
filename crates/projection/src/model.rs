@@ -93,6 +93,8 @@ pub struct ProjectionSessionSummary {
     pub provider: Option<String>,
     pub session_id: Option<String>,
     pub status: Option<String>,
+    #[serde(default)]
+    pub attempt_count: u32,
     pub launch_requested_at: Option<u64>,
     pub claimed_at: Option<u64>,
     pub created_at: Option<u64>,
@@ -100,6 +102,12 @@ pub struct ProjectionSessionSummary {
     pub launch_request_path: Option<String>,
     pub plan_path: Option<String>,
     pub log_path: Option<String>,
+    pub last_message_path: Option<String>,
+    pub merge_proof_path: Option<String>,
+    pub merge_state: Option<String>,
+    pub writeback_state: Option<String>,
+    pub recovery_reason: Option<String>,
+    pub last_error: Option<String>,
     pub branch_name: Option<String>,
 }
 
