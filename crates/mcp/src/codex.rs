@@ -447,11 +447,15 @@ impl McpAgentProvider for CodexProvider {
         if let Some(proof) = merge_proof.as_ref() {
             session.pr_url = proof.pr_url.clone();
             session.merge_proof_path = Some(format!(
-                ".agentflow/tasks/{}/runs/{}/review/merge-proof.json",
+                ".agentflow/tasks/{}/runs/{}/review/closeout-proof.json",
                 session.issue_id, session.run_id
             ));
             session.merge_state = Some(if proof.merged {
-                "merged".to_string()
+                if proof.issue_closed {
+                    "awaiting-public-delivery".to_string()
+                } else {
+                    "awaiting-closeout".to_string()
+                }
             } else {
                 "awaiting-merge".to_string()
             });
@@ -564,6 +568,8 @@ impl McpAgentProvider for CodexProvider {
 struct MergeProofSummary {
     pr_url: Option<String>,
     merged: bool,
+    issue_closed: bool,
+    public_delivery_written: bool,
 }
 
 fn absolute_project_path(project_root: &Path, value: &str) -> PathBuf {
@@ -595,7 +601,7 @@ fn load_merge_proof(
     run_id: &str,
 ) -> Result<Option<MergeProofSummary>> {
     let path = project_root.join(format!(
-        ".agentflow/tasks/{issue_id}/runs/{run_id}/review/merge-proof.json"
+        ".agentflow/tasks/{issue_id}/runs/{run_id}/review/closeout-proof.json"
     ));
     if !path.is_file() {
         return Ok(None);
@@ -614,6 +620,14 @@ fn load_merge_proof(
             .get("merged")
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        issue_closed: proof
+            .get("issueClosed")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        public_delivery_written: proof
+            .get("publicDeliveryWritten")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
     }))
 }
 
@@ -623,7 +637,9 @@ fn derive_writeback_state(
 ) -> Option<String> {
     match issue_state {
         Some("done") => Some("completed".to_string()),
-        Some("in_review") if merge_proof.is_some_and(|proof| proof.merged) => {
+        Some("in_review")
+            if merge_proof.is_some_and(|proof| proof.merged && proof.issue_closed) =>
+        {
             Some("awaiting-complete".to_string())
         }
         Some("blocked") => Some("failed".to_string()),
@@ -639,7 +655,7 @@ fn derive_session_status(
     merge_proof: Option<&MergeProofSummary>,
 ) -> McpSessionStatus {
     if let Some(proof) = merge_proof {
-        if proof.merged {
+        if proof.merged && proof.issue_closed && proof.public_delivery_written {
             return McpSessionStatus::Done;
         }
         return McpSessionStatus::InReview;
@@ -871,6 +887,22 @@ trust_level = "trusted"
             None,
         );
         assert_eq!(status, crate::model::McpSessionStatus::Interrupted);
+    }
+
+    #[test]
+    fn merged_without_issue_close_stays_in_review() {
+        let status = super::derive_session_status(
+            crate::model::McpSessionStatus::InReview,
+            Some("in_review"),
+            false,
+            Some(&super::MergeProofSummary {
+                pr_url: Some("https://example.test/pr/1".to_string()),
+                merged: true,
+                issue_closed: false,
+                public_delivery_written: false,
+            }),
+        );
+        assert_eq!(status, crate::model::McpSessionStatus::InReview);
     }
 
     #[test]

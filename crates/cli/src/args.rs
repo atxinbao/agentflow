@@ -46,7 +46,7 @@ pub(crate) enum BuildAgentCommand {
         #[arg(long)]
         request: PathBuf,
     },
-    WriteMergeProof {
+    WriteCloseoutProof {
         #[arg(long = "issue-id")]
         issue_id: String,
         #[arg(long = "run-id")]
@@ -59,6 +59,10 @@ pub(crate) enum BuildAgentCommand {
         remote_url: Option<String>,
         #[arg(long)]
         merged: bool,
+        #[arg(long = "issue-closed")]
+        issue_closed: bool,
+        #[arg(long = "closed-at")]
+        closed_at: Option<u64>,
     },
     Complete {
         #[arg(long)]

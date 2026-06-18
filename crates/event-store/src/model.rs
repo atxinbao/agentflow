@@ -240,7 +240,7 @@ pub fn classify_task_event(event_type: &str) -> TaskEventCategory {
                 || value.starts_with("issue.validation.")
                 || value.starts_with("issue.review.")
                 || value.starts_with("issue.pr.")
-                || value == "issue.merge.proof.recorded" =>
+                || value == "issue.closeout.proof.recorded" =>
         {
             TaskEventCategory::ReviewDelivery
         }

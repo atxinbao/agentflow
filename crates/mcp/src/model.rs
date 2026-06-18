@@ -183,6 +183,8 @@ pub fn provider_capability_profile(provider: &str) -> Option<McpProviderCapabili
                 "pull_request.ready".to_string(),
                 "pull_request.auto_merge".to_string(),
                 "pull_request.merged_query".to_string(),
+                "issue.close".to_string(),
+                "issue.closed_query".to_string(),
             ],
         },
         McpProviderKind::Gitlab => McpProviderCapabilityProfile {
@@ -199,6 +201,8 @@ pub fn provider_capability_profile(provider: &str) -> Option<McpProviderCapabili
                 "merge_request.ready".to_string(),
                 "merge_request.auto_merge".to_string(),
                 "merge_request.merged_query".to_string(),
+                "issue.close".to_string(),
+                "issue.closed_query".to_string(),
             ],
         },
         McpProviderKind::Codex => McpProviderCapabilityProfile {
@@ -648,6 +652,12 @@ mod tests {
         assert!(github.supports_role(WorkflowAgentRole::DeliveryAgent));
         assert!(github.supports_skill_pack(WorkflowSkillPack::DeliverySkills));
         assert!(!github.supports_role(WorkflowAgentRole::WorkAgent));
+        assert!(github
+            .degraded_capabilities
+            .contains(&"issue.close".to_string()));
+        assert!(github
+            .degraded_capabilities
+            .contains(&"issue.closed_query".to_string()));
 
         let claude = provider_capability_profile("claude").unwrap();
         assert!(claude.supports_role(WorkflowAgentRole::WorkAgent));

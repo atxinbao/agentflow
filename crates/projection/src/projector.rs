@@ -1541,7 +1541,7 @@ fn authoritative_state_from_event(event: &TaskEvent) -> Option<String> {
         "issue.validation.passed"
         | "issue.review.requested"
         | "issue.pr.created"
-        | "issue.merge.proof.recorded"
+        | "issue.closeout.proof.recorded"
         | "issue.pr.merged" => Some("in_review".to_string()),
         "issue.completed" => Some("done".to_string()),
         "issue.blocked" | "issue.validation.failed" => Some("blocked".to_string()),
@@ -1600,7 +1600,7 @@ fn event_summary(event: &TaskEvent) -> String {
         "issue.validation.passed" => "本地沙箱验证已通过。".to_string(),
         "issue.review.requested" => "任务已请求评审。".to_string(),
         "issue.pr.created" => "PR/MR 已创建。".to_string(),
-        "issue.merge.proof.recorded" => "合并证明已写入。".to_string(),
+        "issue.closeout.proof.recorded" => "收口证明已写入。".to_string(),
         "issue.pr.merged" => "PR/MR 已合并。".to_string(),
         "issue.completed" => "任务 Done 写回完成。".to_string(),
         "issue.blocked" => "任务进入阻断状态。".to_string(),
@@ -2221,8 +2221,8 @@ mod tests {
                     "sessionStatus": "in-review",
                     "attemptCount": 2,
                     "logPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2.jsonl",
-                    "mergeProofPath": ".agentflow/tasks/AF-PROJ-001/runs/run-001/review/merge-proof.json",
-                    "mergeState": "merged",
+                    "mergeProofPath": ".agentflow/tasks/AF-PROJ-001/runs/run-001/review/closeout-proof.json",
+                    "mergeState": "awaiting-closeout",
                     "writebackState": "awaiting-complete",
                     "retryable": true,
                     "lastError": null
@@ -2272,9 +2272,12 @@ mod tests {
         );
         assert_eq!(
             projection.session.merge_proof_path.as_deref(),
-            Some(".agentflow/tasks/AF-PROJ-001/runs/run-001/review/merge-proof.json")
+            Some(".agentflow/tasks/AF-PROJ-001/runs/run-001/review/closeout-proof.json")
         );
-        assert_eq!(projection.session.merge_state.as_deref(), Some("merged"));
+        assert_eq!(
+            projection.session.merge_state.as_deref(),
+            Some("awaiting-closeout")
+        );
         assert_eq!(
             projection.session.writeback_state.as_deref(),
             Some("awaiting-complete")

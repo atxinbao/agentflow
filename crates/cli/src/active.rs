@@ -48,10 +48,11 @@ pub(crate) struct BuildAgentStart {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct BuildAgentMergeProof {
+pub(crate) struct BuildAgentCloseoutProof {
     pub issue_id: String,
     pub run_id: String,
     pub merged: bool,
+    pub issue_closed: bool,
     pub proof_path: PathBuf,
 }
 
@@ -125,23 +126,24 @@ pub(crate) fn complete_build_agent_issue_from_request(
     assert_current_cli_is_fresh(root)?;
     let request = read_completion_request(request_path, "completion")?;
     let review = ensure_review_prepared(root, request.clone())?;
-    let proof = load_merge_proof(root, &review.issue_id, &review.run_id)?;
-    if !proof
-        .get("merged")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
-    {
-        anyhow::bail!(
-            "build agent completion requires merged PR/MR proof for {} {}",
-            review.issue_id,
-            review.run_id
-        );
-    }
+    let mut proof = load_closeout_proof(root, &review.issue_id, &review.run_id)?;
+    ensure_closeout_ready(&review.issue_id, &review.run_id, &proof)?;
     let issue = read_spec_issue(root, &review.issue_id)?;
     let completed_project_id = issue.project_id.clone();
     let evidence = load_task_evidence(root, &review.issue_id)?;
-    let proof_path = merge_proof_path(root, &review.issue_id, &review.run_id);
     let public_delivery_target = PublicReleaseDocumentTarget::default();
+    let public_delivery_paths = write_public_delivery_documents(root, &public_delivery_target)?;
+    proof["publicDeliveryWritten"] = serde_json::Value::Bool(true);
+    proof["changelogPath"] = serde_json::Value::String(public_delivery_paths.changelog_path.clone());
+    proof["releaseNotesPath"] =
+        serde_json::Value::String(public_delivery_paths.release_notes_path.clone());
+    proof["releaseNotesUrl"] =
+        serde_json::Value::String(public_delivery_paths.release_notes_path.clone());
+    write_json(
+        &closeout_proof_path(root, &review.issue_id, &review.run_id),
+        &proof,
+    )?;
+    let proof_path = closeout_proof_path(root, &review.issue_id, &review.run_id);
     append_task_event_once(
         root,
         TaskEventDraft {
@@ -168,22 +170,21 @@ pub(crate) fn complete_build_agent_issue_from_request(
                 "projectId": issue.project_id,
                 "runId": review.run_id,
                 "evidencePath": task_evidence_path(&review.issue_id),
-                "mergeProofPath": relative_path(root, &proof_path),
+                "closeoutProofPath": relative_path(root, &proof_path),
                 "provider": proof.get("provider").cloned().unwrap_or(serde_json::Value::Null),
                 "mergeMode": proof.get("mergeMode").cloned().unwrap_or(serde_json::Value::Null),
                 "remoteUrl": proof.get("remoteUrl").cloned().unwrap_or(serde_json::Value::Null),
-                "prUrl": proof.get("remoteUrl").cloned().unwrap_or(serde_json::Value::Null),
-                "changelogPath": public_delivery_target.changelog_path.display().to_string(),
-                "releaseNotesUrl": public_delivery_target.release_notes_path.display().to_string(),
+                "prUrl": proof.get("prUrl").cloned().unwrap_or(serde_json::Value::Null),
+                "issueClosed": proof.get("issueClosed").cloned().unwrap_or(serde_json::Value::Null),
+                "closedAt": proof.get("closedAt").cloned().unwrap_or(serde_json::Value::Null),
+                "changelogPath": public_delivery_paths.changelog_path,
+                "releaseNotesUrl": public_delivery_paths.release_notes_path,
             }),
             artifact_refs: vec![
                 task_evidence_path(&review.issue_id),
                 relative_path(root, &proof_path),
-                public_delivery_target.changelog_path.display().to_string(),
-                public_delivery_target
-                    .release_notes_path
-                    .display()
-                    .to_string(),
+                public_delivery_paths.changelog_path.clone(),
+                public_delivery_paths.release_notes_path.clone(),
             ],
             idempotency_key: Some(format!(
                 "issue.completed:{}:{}",
@@ -192,7 +193,6 @@ pub(crate) fn complete_build_agent_issue_from_request(
         },
     )?;
     let _ = agentflow_projection::rebuild_projections(root)?;
-    let public_delivery_paths = write_public_delivery_documents(root, &public_delivery_target)?;
     let next_launch = if let Some(project_id) = completed_project_id.as_deref() {
         TaskLoop::new(project_id)
             .tick(root, "codex")?
@@ -294,7 +294,7 @@ fn load_agent_launch_payload(root: &Path, run_id: &str) -> Result<AgentLaunchPay
         .with_context(|| format!("parse agent launch payload {}", event.event_id))
 }
 
-pub(crate) fn write_build_agent_merge_proof(
+pub(crate) fn write_build_agent_closeout_proof(
     root: &Path,
     issue_id: &str,
     run_id: &str,
@@ -302,23 +302,25 @@ pub(crate) fn write_build_agent_merge_proof(
     merge_mode: &str,
     remote_url: Option<String>,
     merged: bool,
-) -> Result<BuildAgentMergeProof> {
+    issue_closed: bool,
+    closed_at: Option<u64>,
+) -> Result<BuildAgentCloseoutProof> {
     assert_current_cli_is_fresh(root)?;
     let issue =
         read_spec_issue(root, issue_id).with_context(|| format!("load spec issue {issue_id}"))?;
     let run = load_task_run(root, &issue.issue_id, run_id)?;
     if run.issue_id != issue.issue_id {
         anyhow::bail!(
-            "merge proof issueId mismatch: request {}, run {}",
+            "closeout proof issueId mismatch: request {}, run {}",
             issue.issue_id,
             run.issue_id
         );
     }
-    let proof_path = merge_proof_path(root, &issue.issue_id, run_id);
+    let proof_path = closeout_proof_path(root, &issue.issue_id, run_id);
     write_json(
         &proof_path,
         &json!({
-            "version": "task-merge-proof.v1",
+            "version": "task-closeout-proof.v1",
             "issueId": issue.issue_id,
             "projectId": issue.project_id,
             "runId": run_id,
@@ -327,6 +329,9 @@ pub(crate) fn write_build_agent_merge_proof(
             "remoteUrl": remote_url,
             "prUrl": remote_url,
             "merged": merged,
+            "issueClosed": issue_closed,
+            "closedAt": closed_at,
+            "publicDeliveryWritten": false,
         }),
     )?;
     append_task_event_once(
@@ -338,7 +343,7 @@ pub(crate) fn write_build_agent_merge_proof(
             project_id: issue.project_id.clone(),
             issue_id: Some(issue_id.to_string()),
             run_id: Some(run_id.to_string()),
-            event_type: "issue.merge.proof.recorded".to_string(),
+            event_type: "issue.closeout.proof.recorded".to_string(),
             authority_role: Some(WorkflowAgentRole::WorkAgent),
             actor: EventActor {
                 role: "build-agent".to_string(),
@@ -356,17 +361,21 @@ pub(crate) fn write_build_agent_merge_proof(
                 "remoteUrl": remote_url,
                 "prUrl": remote_url,
                 "merged": merged,
+                "issueClosed": issue_closed,
+                "closedAt": closed_at,
+                "publicDeliveryWritten": false,
             }),
             artifact_refs: vec![relative_path(root, &proof_path)],
-            idempotency_key: Some(format!("issue.merge-proof.recorded:{issue_id}:{run_id}")),
+            idempotency_key: Some(format!("issue.closeout-proof.recorded:{issue_id}:{run_id}")),
         },
     )?;
     let _ = agentflow_projection::rebuild_projections(root)?;
     agentflow_state::refresh_state(root)?;
-    Ok(BuildAgentMergeProof {
+    Ok(BuildAgentCloseoutProof {
         issue_id: issue_id.to_string(),
         run_id: run_id.to_string(),
         merged,
+        issue_closed,
         proof_path,
     })
 }
@@ -573,14 +582,40 @@ fn append_validation_failed_event(
     Ok(())
 }
 
-fn load_merge_proof(root: &Path, issue_id: &str, run_id: &str) -> Result<serde_json::Value> {
-    let path = merge_proof_path(root, issue_id, run_id);
+fn load_closeout_proof(root: &Path, issue_id: &str, run_id: &str) -> Result<serde_json::Value> {
+    let path = closeout_proof_path(root, issue_id, run_id);
     let raw = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     serde_json::from_str(&raw).with_context(|| format!("parse {}", path.display()))
 }
 
-fn merge_proof_path(root: &Path, issue_id: &str, run_id: &str) -> PathBuf {
-    task_run_dir(root, issue_id, run_id).join("review/merge-proof.json")
+fn ensure_closeout_ready(issue_id: &str, run_id: &str, proof: &serde_json::Value) -> Result<()> {
+    if !proof
+        .get("merged")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        anyhow::bail!(
+            "build agent completion requires merged PR/MR proof for {} {}",
+            issue_id,
+            run_id
+        );
+    }
+    if !proof
+        .get("issueClosed")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        anyhow::bail!(
+            "build agent completion requires closed issue proof for {} {}",
+            issue_id,
+            run_id
+        );
+    }
+    Ok(())
+}
+
+fn closeout_proof_path(root: &Path, issue_id: &str, run_id: &str) -> PathBuf {
+    task_run_dir(root, issue_id, run_id).join("review/closeout-proof.json")
 }
 
 fn task_evidence_path(issue_id: &str) -> String {
@@ -701,9 +736,9 @@ fn binary_is_stale(binary_modified: SystemTime, newest_source_modified: SystemTi
 mod tests {
     use super::{
         binary_is_stale, claim_next_build_agent_launch_with_dispatcher,
-        complete_build_agent_issue_from_request, is_local_target_binary,
+        complete_build_agent_issue_from_request, is_local_target_binary, load_closeout_proof,
         prepare_build_agent_review_from_request, rebuild_hint, start_build_agent_issue,
-        write_build_agent_merge_proof,
+        write_build_agent_closeout_proof,
     };
     use agentflow_mcp::{
         McpAgentProvider, McpLaunchMode, McpLaunchPlan, McpLaunchRequest, McpProviderBridge,
@@ -911,7 +946,7 @@ mod tests {
         assert!(!dir.path().join(".agentflow/execute").exists());
         assert!(!dir.path().join(".agentflow/input").exists());
 
-        write_build_agent_merge_proof(
+        write_build_agent_closeout_proof(
             dir.path(),
             "AF-001",
             &started.run_id,
@@ -919,6 +954,8 @@ mod tests {
             "auto-merge-if-eligible",
             Some("https://github.com/atxinbao/agentflow/pull/1".to_string()),
             true,
+            true,
+            Some(1_718_000_001),
         )
         .unwrap();
         let still_review_projection =
@@ -952,12 +989,16 @@ mod tests {
             done_projection.public_delivery.release_notes_url.as_deref(),
             Some("docs/release-notes/agentflow-release-notes.md")
         );
-        assert!(fs::read_to_string(&outcome.changelog_path)
-            .unwrap()
-            .contains("AF-001"));
-        assert!(fs::read_to_string(&outcome.release_notes_path)
-            .unwrap()
-            .contains("AF-001"));
+        let proof = load_closeout_proof(dir.path(), "AF-001", &started.run_id).unwrap();
+        assert!(proof["publicDeliveryWritten"].as_bool().unwrap_or(false));
+        assert_eq!(
+            proof["changelogPath"].as_str(),
+            Some("CHANGELOG.md")
+        );
+        assert_eq!(
+            proof["releaseNotesPath"].as_str(),
+            Some("docs/release-notes/agentflow-release-notes.md")
+        );
         let events = agentflow_event_store::replay_task_events(
             dir.path(),
             agentflow_event_store::ReplayFilter::issue("AF-001"),
@@ -968,7 +1009,7 @@ mod tests {
             .any(|event| event.event_type == "issue.validation.passed"));
         assert!(events
             .iter()
-            .any(|event| event.event_type == "issue.merge.proof.recorded"));
+            .any(|event| event.event_type == "issue.closeout.proof.recorded"));
         assert!(events
             .iter()
             .any(|event| event.event_type == "issue.completed"));
@@ -984,7 +1025,7 @@ mod tests {
         let started = start_build_agent_issue(dir.path(), "AF-CHAIN-001").unwrap();
         let request_path = write_completion_request(dir.path(), "AF-CHAIN-001", &started.run_id);
         prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
-        write_build_agent_merge_proof(
+        write_build_agent_closeout_proof(
             dir.path(),
             "AF-CHAIN-001",
             &started.run_id,
@@ -992,6 +1033,8 @@ mod tests {
             "auto-merge-if-eligible",
             Some("https://github.com/atxinbao/agentflow/pull/2".to_string()),
             true,
+            true,
+            Some(1_718_000_002),
         )
         .unwrap();
 
@@ -1005,6 +1048,37 @@ mod tests {
         assert_eq!(next_projection.current_state, "in_progress");
         assert_eq!(next_projection.latest_run_id.as_deref(), Some("run-001"));
         assert!(dir.path().join(next_launch.launch_request_path).is_file());
+    }
+
+    #[test]
+    fn build_agent_complete_stays_in_review_until_issue_is_closed() {
+        let dir = tempdir().unwrap();
+        write_two_issue_project_fixture(dir.path(), "proj-chain", "AF-CHAIN-001", "AF-CHAIN-002");
+        let started = start_build_agent_issue(dir.path(), "AF-CHAIN-001").unwrap();
+        let request_path = write_completion_request(dir.path(), "AF-CHAIN-001", &started.run_id);
+        prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
+        write_build_agent_closeout_proof(
+            dir.path(),
+            "AF-CHAIN-001",
+            &started.run_id,
+            "github",
+            "auto-merge-if-eligible",
+            Some("https://github.com/atxinbao/agentflow/pull/3".to_string()),
+            true,
+            false,
+            None,
+        )
+        .unwrap();
+
+        let err = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap_err();
+
+        assert!(err.to_string().contains("closed issue proof"));
+        let projection = agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-001")
+            .unwrap();
+        assert_eq!(projection.current_state, "in_review");
+        let next_projection = agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-002")
+            .unwrap();
+        assert_eq!(next_projection.current_state, "backlog");
     }
 
     fn write_spec_project_fixture(root: &Path, project_id: &str, issue_id: &str) {
