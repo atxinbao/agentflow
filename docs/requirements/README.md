@@ -90,6 +90,7 @@
 - [053-public-delivery-standardization-v1.md](053-public-delivery-standardization-v1.md) = public delivery standardization
 - [054-release-runtime-v1.md](054-release-runtime-v1.md) = release runtime
 - [055-external-audit-and-review-surface-v1.md](055-external-audit-and-review-surface-v1.md) = external audit and review surface
+- [056-work-loop-sequencing-and-closeout-gates-v1.md](056-work-loop-sequencing-and-closeout-gates-v1.md) = strict sequencing and closeout gates after v0.3.0 audit
 - [next-requirements.md](next-requirements.md)
 
 ## Dogfood Cutover 基线
