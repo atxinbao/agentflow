@@ -276,7 +276,9 @@ mod tests {
     use super::*;
     use agentflow_event_store::{load_task_events, EventActor};
     use agentflow_task_artifacts::latest_task_run_checkpoint;
-    use agentflow_workflow_core::{parse_workflow_yaml, validate_workflow};
+    use agentflow_workflow_core::{
+        canonical_workflow, parse_workflow_yaml, validate_workflow, WorkflowFlowType,
+    };
     use tempfile::tempdir;
 
     fn workflow() -> WorkflowDefinition {
@@ -339,6 +341,16 @@ spec:
             "AF-TASK-001",
             EventActor {
                 role: "task-loop".to_string(),
+                kind: "system".to_string(),
+            },
+        )
+    }
+
+    fn audit_context() -> RuntimeContext {
+        RuntimeContext::issue(
+            "AF-AUDIT-001",
+            EventActor {
+                role: "audit-loop".to_string(),
                 kind: "system".to_string(),
             },
         )
@@ -478,5 +490,110 @@ spec:
         assert_eq!(handoff.mode.as_str(), "ownership-transfer");
         assert_eq!(handoff.from_role.as_str(), "work-agent");
         assert_eq!(handoff.to_role.as_str(), "system");
+    }
+
+    #[test]
+    fn audit_runtime_enters_ready_and_in_progress() {
+        let dir = tempdir().unwrap();
+        let workflow = canonical_workflow(WorkflowFlowType::Audit);
+        let guards = StaticGuardRegistry::all_pass(["audit.request.present", "audit.scope.ready"]);
+        let actions = StaticActionRegistry::all_complete(["audit.request.write", "audit.run.start"]);
+
+        let requested = apply_workflow_event(
+            dir.path(),
+            &workflow,
+            "pending",
+            "audit.requested",
+            audit_context(),
+            &guards,
+            &actions,
+        )
+        .unwrap();
+
+        assert!(requested.applied);
+        assert_eq!(
+            requested
+                .next_binding
+                .as_ref()
+                .map(|binding| binding.state_id.as_str()),
+            Some("ready")
+        );
+
+        let started = apply_workflow_event(
+            dir.path(),
+            &workflow,
+            "ready",
+            "audit.started",
+            audit_context(),
+            &guards,
+            &actions,
+        )
+        .unwrap();
+
+        assert!(started.applied);
+        assert_eq!(
+            started
+                .next_binding
+                .as_ref()
+                .map(|binding| binding.state_id.as_str()),
+            Some("in_progress")
+        );
+    }
+
+    #[test]
+    fn audit_runtime_records_pass_and_repair_paths() {
+        let dir = tempdir().unwrap();
+        let workflow = canonical_workflow(WorkflowFlowType::Audit);
+
+        let pass_guards = StaticGuardRegistry::all_pass(["audit.findings.recorded"]);
+        let pass_actions = StaticActionRegistry::all_complete(["audit.result.pass"]);
+        let passed = apply_workflow_event(
+            dir.path(),
+            &workflow,
+            "in_progress",
+            "audit.passed",
+            audit_context(),
+            &pass_guards,
+            &pass_actions,
+        )
+        .unwrap();
+
+        assert!(passed.applied);
+        assert_eq!(
+            passed
+                .next_binding
+                .as_ref()
+                .map(|binding| binding.state_id.as_str()),
+            Some("passed")
+        );
+        assert_eq!(
+            passed
+                .handoff
+                .as_ref()
+                .map(|handoff| handoff.to_role.as_str()),
+            Some("system")
+        );
+
+        let repair_guards = StaticGuardRegistry::all_pass(["repair.required"]);
+        let repair_actions = StaticActionRegistry::all_complete(["audit.result.repair"]);
+        let repair = apply_workflow_event(
+            dir.path(),
+            &workflow,
+            "in_progress",
+            "audit.needs_repair",
+            audit_context(),
+            &repair_guards,
+            &repair_actions,
+        )
+        .unwrap();
+
+        assert!(repair.applied);
+        assert_eq!(
+            repair
+                .next_binding
+                .as_ref()
+                .map(|binding| binding.state_id.as_str()),
+            Some("needs_repair")
+        );
     }
 }

@@ -18,6 +18,7 @@ use crate::{
         write_requirement_preview_projection, write_task_projection,
     },
 };
+use agentflow_audit::load_audit_result_summary;
 use agentflow_event_store::{load_task_events, EventStateTransition, TaskEvent};
 use agentflow_spec::{
     list_completion_decision_runtimes, list_requirement_preview_runtimes, prepare_spec_workspace,
@@ -341,7 +342,7 @@ fn project_issue(
         &session,
     );
     let delivery = build_delivery_summary(root, issue, &public_delivery);
-    let audit = build_audit_summary(issue, latest_run_id.as_deref(), audit_index);
+    let audit = build_audit_summary(root, issue, latest_run_id.as_deref(), audit_index);
     branch_name = branch_name
         .or_else(|| runtime.branch_name.clone())
         .or_else(|| session.branch_name.clone());
@@ -422,6 +423,7 @@ fn project_project(
     }
     let all_finished = completed == project.issue_ids.len() && !project.issue_ids.is_empty();
     let completion_projection = completion.map(project_completion_decision);
+    let project_audit = build_project_audit_summary(project, tasks);
     let status = if completion_projection
         .as_ref()
         .is_some_and(|projection| projection.current_state == "accepted")
@@ -530,13 +532,23 @@ fn project_project(
         )
     };
     let completion_hint = if let Some(completion) = completion_projection.as_ref() {
-        completion.next_recommended_action_reason.clone()
+        append_audit_hint(
+            completion.next_recommended_action_reason.clone(),
+            project_audit.as_ref(),
+        )
     } else if all_finished {
-        "全部任务已完成，下一步由 Goal / Completion Runtime 重新判断项目是否真正结束。".to_string()
+        append_audit_hint(
+            "全部任务已完成，下一步由 Goal / Completion Runtime 重新判断项目是否真正结束。"
+                .to_string(),
+            project_audit.as_ref(),
+        )
     } else {
-        format!(
+        append_audit_hint(
+            format!(
             "当前已完成 {completed}/{} 条任务，继续按状态流推进。",
             project.issue_ids.len()
+            ),
+            project_audit.as_ref(),
         )
     };
     Ok(ProjectProjection {
@@ -576,6 +588,7 @@ fn project_project(
             rationale: projection.rationale,
             updated_at: projection.updated_at,
         }),
+        audit: project_audit,
         issue_count: project.issue_ids.len(),
         completed_issue_count: completed,
         project_brain: ProjectBrainProjection {
@@ -791,6 +804,7 @@ fn build_delivery_summary(
 }
 
 fn build_audit_summary(
+    root: &Path,
     issue: &SpecIssue,
     run_id: Option<&str>,
     audit_index: &ProjectionAuditIndexFile,
@@ -800,14 +814,75 @@ fn build_audit_summary(
             || run_id.is_some_and(|run_id| entry.source_run_id.as_deref() == Some(run_id))
     });
 
+    let audit_result = audit.and_then(|entry| load_audit_result_summary(root, entry.audit_id.clone()).ok());
+
     ProjectionAuditSummary {
         status: audit
             .map(|entry| entry.status.clone())
             .unwrap_or_else(|| "not-requested".to_string()),
         latest_audit_id: audit.map(|entry| entry.audit_id.clone()),
-        report_path: audit.map(|entry| entry.report_path.clone()),
-        requested_at: audit.map(|entry| entry.requested_at),
+        source_issue_id: audit
+            .and_then(|entry| entry.source_issue_id.clone())
+            .or_else(|| audit_result.as_ref().and_then(|summary| summary.source_issue_id.clone())),
+        report_path: audit
+            .map(|entry| entry.report_path.clone())
+            .or_else(|| audit_result.as_ref().map(|summary| summary.report_path.clone())),
+        requested_at: audit
+            .map(|entry| entry.requested_at)
+            .or_else(|| audit_result.as_ref().map(|summary| summary.requested_at)),
+        summary_line: audit_result
+            .as_ref()
+            .map(|summary| summary.summary_line.clone())
+            .unwrap_or_else(|| {
+                audit
+                    .map(|entry| format!("审计状态：{}。", entry.status))
+                    .unwrap_or_else(|| "当前没有审计请求。".to_string())
+            }),
+        findings_count: audit_result
+            .as_ref()
+            .map(|summary| summary.findings_count)
+            .unwrap_or(0),
+        findings: audit_result
+            .as_ref()
+            .map(|summary| summary.findings.clone())
+            .unwrap_or_default(),
+        evidence_gaps: audit_result
+            .as_ref()
+            .map(|summary| summary.evidence_gaps.clone())
+            .unwrap_or_default(),
+        repair_recommendations: audit_result
+            .as_ref()
+            .map(|summary| summary.repair_recommendations.clone())
+            .unwrap_or_default(),
     }
+}
+
+fn build_project_audit_summary(
+    project: &SpecProject,
+    tasks: &BTreeMap<String, TaskProjection>,
+) -> Option<ProjectionAuditSummary> {
+    project
+        .issue_ids
+        .iter()
+        .filter_map(|issue_id| tasks.get(issue_id).map(|task| &task.audit))
+        .filter(|audit| audit.status != "not-requested")
+        .max_by(|left, right| {
+            left.requested_at
+                .unwrap_or_default()
+                .cmp(&right.requested_at.unwrap_or_default())
+                .then_with(|| left.latest_audit_id.cmp(&right.latest_audit_id))
+        })
+        .cloned()
+}
+
+fn append_audit_hint(base: String, audit: Option<&ProjectionAuditSummary>) -> String {
+    let Some(audit) = audit else {
+        return base;
+    };
+    if audit.status == "not-requested" || audit.summary_line.trim().is_empty() {
+        return base;
+    }
+    format!("{base} 最近审计：{}", audit.summary_line)
 }
 
 fn load_projection_audit_index(root: &Path) -> Result<ProjectionAuditIndexFile> {
@@ -1075,6 +1150,134 @@ mod tests {
         agentflow_spec::write_spec_project(root, &project).unwrap();
     }
 
+    fn write_audit_fixture(root: &Path, issue_id: &str, run_id: &str, audit_id: &str) {
+        let audit_dir = root.join(".agentflow/audit").join(audit_id);
+        fs::create_dir_all(&audit_dir).unwrap();
+        fs::create_dir_all(root.join(".agentflow/audit")).unwrap();
+        fs::write(
+            root.join(".agentflow/audit/index.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": "audit-index.v1",
+                "updatedAt": 300,
+                "audits": [
+                    {
+                        "auditId": audit_id,
+                        "status": "failed",
+                        "trigger": "human-via-agent",
+                        "requestedBy": "human-via-agent",
+                        "requestedAt": 300,
+                        "sourceDeliveryId": null,
+                        "sourceRunId": run_id,
+                        "sourceIssueId": issue_id,
+                        "sourceSpecId": "spec-projection",
+                        "reportPath": format!(".agentflow/audit/{audit_id}/audit-report.md"),
+                        "auditPath": format!(".agentflow/audit/{audit_id}/audit.json")
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            audit_dir.join("audit-request.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": "audit-request.v1",
+                "auditId": audit_id,
+                "trigger": "human-via-agent",
+                "requestedBy": "human-via-agent",
+                "requestedAt": 300,
+                "reason": "检查交付完整性",
+                "scope": {
+                    "description": "检查交付链路",
+                    "refs": [
+                        {"kind": "issue", "id": issue_id, "path": format!(".agentflow/spec/issues/{issue_id}.json")},
+                        {"kind": "task-run", "id": run_id, "path": format!(".agentflow/tasks/{issue_id}/runs/{run_id}/run.json")}
+                    ]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            audit_dir.join("audit.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": "output-audit.v1",
+                "auditId": audit_id,
+                "trigger": "human-via-agent",
+                "requestedBy": "human-via-agent",
+                "requestedAt": 300,
+                "sourceRunId": run_id,
+                "sourceIssueId": issue_id,
+                "status": "failed",
+                "summary": {
+                    "checks": 7,
+                    "passed": 4,
+                    "warnings": 1,
+                    "failed": 2,
+                    "findings": 1
+                },
+                "checks": {
+                    "runExists": "passed",
+                    "changedFilesRecorded": "warning",
+                    "allowedWritePathsOnly": "passed",
+                    "commandsRecorded": "passed",
+                    "highRiskConfirmedIfNeeded": "passed",
+                    "evidenceComplete": "failed",
+                    "publicDeliveryComplete": "failed"
+                },
+                "paths": {
+                    "report": format!(".agentflow/audit/{audit_id}/audit-report.md")
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            audit_dir.join("findings.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": "audit-findings.v1",
+                "auditId": audit_id,
+                "findings": [
+                    {
+                        "findingId": "finding-001",
+                        "severity": "high",
+                        "category": "evidence",
+                        "title": "验证证据缺失",
+                        "detail": "缺少本地验证记录",
+                        "evidencePath": format!(".agentflow/tasks/{issue_id}/evidence/evidence.json"),
+                        "recommendation": "补齐本地验证证据。"
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(audit_dir.join("audit-report.md"), "# Audit Report\n").unwrap();
+        fs::write(
+            audit_dir.join("evidence-map.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": "audit-evidence-map.v1",
+                "auditId": audit_id,
+                "inputs": {
+                    "issue": format!(".agentflow/spec/issues/{issue_id}.json")
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            audit_dir.join("traceability.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": "audit-traceability.v1",
+                "auditId": audit_id,
+                "chain": []
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(audit_dir.join("checklist.md"), "# Checklist\n").unwrap();
+    }
+
     fn event(issue_id: &str, event_type: &str, payload: serde_json::Value) -> TaskEventDraft {
         TaskEventDraft {
             flow_type: agentflow_workflow_core::WorkflowFlowType::Work,
@@ -1266,6 +1469,52 @@ mod tests {
             .events
             .iter()
             .any(|event| event.event_type == "agent.session.completed"));
+    }
+
+    #[test]
+    fn rebuilds_audit_summary_into_task_and_project_projection() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.completed",
+                json!({
+                    "runId": "run-001",
+                    "mergeCommit": "abc123"
+                }),
+            ),
+        )
+        .unwrap();
+        write_audit_fixture(dir.path(), "AF-PROJ-001", "run-001", "audit-001");
+
+        rebuild_projections(dir.path()).unwrap();
+        let task = crate::storage::load_task_projection(dir.path(), "AF-PROJ-001").unwrap();
+        let project =
+            crate::storage::load_project_projection(dir.path(), "project-projection").unwrap();
+
+        assert_eq!(task.audit.status, "failed");
+        assert_eq!(task.audit.latest_audit_id.as_deref(), Some("audit-001"));
+        assert!(task.audit.summary_line.contains("审计未通过"));
+        assert!(task
+            .audit
+            .evidence_gaps
+            .iter()
+            .any(|line| line.contains("验证证据不完整")));
+        assert!(task
+            .audit
+            .repair_recommendations
+            .iter()
+            .any(|line| line.contains("补齐本地验证证据")));
+        assert_eq!(
+            project
+                .audit
+                .as_ref()
+                .and_then(|audit| audit.latest_audit_id.as_deref()),
+            Some("audit-001")
+        );
+        assert!(project.completion_hint.contains("最近审计"));
     }
 
     #[test]

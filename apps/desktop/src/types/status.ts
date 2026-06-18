@@ -558,8 +558,14 @@ export type ProjectionDeliverySummary = {
 export type ProjectionAuditSummary = {
   status: string;
   latestAuditId?: string | null;
+  sourceIssueId?: string | null;
   reportPath?: string | null;
   requestedAt?: number | null;
+  summaryLine: string;
+  findingsCount: number;
+  findings: string[];
+  evidenceGaps: string[];
+  repairRecommendations: string[];
 };
 
 export type TaskProjection = {
@@ -625,6 +631,7 @@ export type ProjectProjection = {
     rationale: string[];
     updatedAt: number;
   } | null;
+  audit?: ProjectionAuditSummary | null;
   issueCount: number;
   completedIssueCount: number;
   projectBrain: {

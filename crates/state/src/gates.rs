@@ -626,6 +626,7 @@ mod tests {
                     rationale: vec!["当前任务已经全部完成。".to_string()],
                     updated_at: 1,
                 }),
+                audit: None,
                 issue_count: 1,
                 completed_issue_count: 1,
                 project_brain: ProjectBrainProjection {

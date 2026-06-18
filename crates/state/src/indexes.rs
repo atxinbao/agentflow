@@ -242,8 +242,7 @@ mod tests {
             audit: ProjectionAuditSummary {
                 status: "not-requested".to_string(),
                 latest_audit_id: None,
-                report_path: None,
-                requested_at: None,
+                ..ProjectionAuditSummary::default()
             },
             updated_at: 1,
         }

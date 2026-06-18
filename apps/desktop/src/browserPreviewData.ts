@@ -652,8 +652,14 @@ export function createBrowserPreviewTaskProjection(
     audit: {
       status: currentState === "done" ? "not-requested" : "not-requested",
       latestAuditId: null,
+      sourceIssueId: null,
       reportPath: null,
       requestedAt: null,
+      summaryLine: "当前没有审计请求。",
+      findingsCount: 0,
+      findings: [],
+      evidenceGaps: [],
+      repairRecommendations: [],
     },
     updatedAt: previewTimestamp + 360,
   };

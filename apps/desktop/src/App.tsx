@@ -2955,6 +2955,7 @@ function ProjectSummaryReader({
       : brainActionReason;
   const brainOpenQuestions =
     projectBrain?.openQuestions.length ? projectBrain.openQuestions : ["当前没有待补充的开放问题。"];
+  const projectAuditItems = projectAuditSummaryItems(projection);
   const blockerItems = projection?.blockers.length
     ? projection.blockers.map((blocker) => `${blocker.issueId}：${blocker.reason}`)
     : null;
@@ -3139,6 +3140,24 @@ function ProjectSummaryReader({
             <SectionList
               title="未来"
               items={projectFutureLaneItems(group, projection)}
+            />
+          </div>
+        </section>
+        <section className="v16-task-stage-panel" aria-label="项目审计摘要">
+          <div className="v16-task-stage-panel-header">
+            <span>审计摘要</span>
+            <strong>{projection?.audit?.status && projection.audit.status !== "not-requested" ? artifactStatusLabel(projection.audit.status) : "未请求"}</strong>
+          </div>
+          <div className="v16-task-stage-grid">
+            <SectionList title="项目审计" items={projectAuditItems} />
+            <SectionList
+              title="对完成判断的影响"
+              items={[
+                completionHint || "当前还没有完成判断提示。",
+                projection?.audit?.repairRecommendations?.length
+                  ? `待处理建议：${projection.audit.repairRecommendations[0]}`
+                  : "当前没有额外审计修复建议。",
+              ]}
             />
           </div>
         </section>
@@ -3817,11 +3836,66 @@ function projectionAuditItems(projection: TaskProjection) {
   if (!audit || audit.status === "not-requested") {
     return ["审计仍是独立流程，当前没有审计请求。"];
   }
-  return [
+  return auditSummaryDetailItems(audit, {
+    includeIssue: false,
+    includeRequestedAt: true,
+  });
+}
+
+type AuditSummaryLike = {
+  status: string;
+  latestAuditId?: string | null;
+  sourceIssueId?: string | null;
+  reportPath?: string | null;
+  requestedAt?: number | null;
+  summaryLine?: string;
+  findingsCount?: number;
+  findings?: string[];
+  evidenceGaps?: string[];
+  repairRecommendations?: string[];
+} | null | undefined;
+
+function auditSummaryDetailItems(
+  audit: AuditSummaryLike,
+  options?: {
+    includeIssue?: boolean;
+    includeRequestedAt?: boolean;
+  },
+) {
+  if (!audit || audit.status === "not-requested") {
+    return ["审计仍是独立流程，当前没有审计请求。"];
+  }
+  const items = [
     `审计状态：${artifactStatusLabel(audit.status)}`,
+    audit.summaryLine || "当前还没有审计摘要。",
     audit.latestAuditId ? `审计编号：${audit.latestAuditId}` : "审计编号：未记录",
-    audit.reportPath ? `审计报告：${audit.reportPath}` : "审计报告：未记录",
   ];
+  if (options?.includeIssue) {
+    items.push(audit.sourceIssueId ? `关联任务：${audit.sourceIssueId}` : "关联任务：未记录");
+  }
+  if (options?.includeRequestedAt) {
+    items.push(
+      audit.requestedAt ? `请求时间：${formatTimestamp(audit.requestedAt)}` : "请求时间：未记录",
+    );
+  }
+  if (audit.reportPath) {
+    items.push(`审计报告：${audit.reportPath}`);
+  }
+  if (audit.findingsCount) {
+    items.push(`发现项：${audit.findingsCount} 条`);
+  }
+  if (audit.findings?.length) {
+    items.push(...audit.findings.slice(0, 3));
+  }
+  if (audit.evidenceGaps?.length) {
+    items.push(...audit.evidenceGaps.slice(0, 3).map((gap) => `证据缺口：${gap}`));
+  }
+  if (audit.repairRecommendations?.length) {
+    items.push(
+      ...audit.repairRecommendations.slice(0, 3).map((line) => `修复建议：${line}`),
+    );
+  }
+  return items;
 }
 
 function projectionRuntimeSessionItems(
@@ -3980,15 +4054,17 @@ function taskAuditSummaryItems(task: V1Issue, projection?: TaskProjection | null
   }
 
   const audit = projection?.audit ?? null;
-  if (!audit || audit.status === "not-requested") {
-    return ["审计仍是独立流程，当前没有审计请求。"];
-  }
+  return auditSummaryDetailItems(audit, {
+    includeIssue: false,
+    includeRequestedAt: true,
+  });
+}
 
-  return [
-    `状态：${artifactStatusLabel(audit.status)}`,
-    audit.latestAuditId ? `审计编号：${audit.latestAuditId}` : "审计编号：未记录",
-    audit.reportPath ? `审计报告：${audit.reportPath}` : "审计报告：未记录",
-  ];
+function projectAuditSummaryItems(projection: ProjectProjection | null) {
+  return auditSummaryDetailItems(projection?.audit, {
+    includeIssue: true,
+    includeRequestedAt: true,
+  });
 }
 
 function isFutureTaskStatus(viewedStatus: IssueDisplayStatus, currentStatus: IssueDisplayStatus) {
@@ -6111,7 +6187,7 @@ function taskCurrentStageOutputItems(
         projectedPublicRecord ? `公开交付：${projectedPublicRecord}` : "公开交付：未找到记录。",
         sessionBranchName ? `工作分支：${sessionBranchName}` : null,
         projectedAudit?.status && projectedAudit.status !== "not-requested"
-          ? `后续审计：${artifactStatusLabel(projectedAudit.status)}`
+          ? `后续审计：${projectedAudit.summaryLine || artifactStatusLabel(projectedAudit.status)}`
           : audit
             ? `后续审计：${artifactStatusLabel(audit.status)}`
             : "后续审计：独立流程，按需触发。",
