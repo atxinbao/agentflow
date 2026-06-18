@@ -26,4 +26,7 @@ pub use public_delivery::{
 pub use review_surface::{
     load_project_external_review_surface, sync_project_external_review_surface,
 };
-pub use runtime::{load_project_release_facts, load_project_release_index, sync_project_release};
+pub use runtime::{
+    confirm_project_release, load_project_release_facts, load_project_release_index,
+    prepare_project_release, publish_project_release, sync_project_release,
+};

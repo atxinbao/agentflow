@@ -1,5 +1,6 @@
 mod active;
 mod args;
+mod formal;
 
 use active::{
     claim_next_build_agent_launch, complete_build_agent_issue_from_request,
@@ -7,16 +8,69 @@ use active::{
     write_build_agent_closeout_proof,
 };
 use args::{
-    AgentDispatcherCommand, BuildAgentCommand, Cli, Command, ProjectionCommand, ReleaseCommand,
-    TaskLoopCommand,
+    AgentDispatcherCommand, BuildAgentCommand, Cli, Command, CompletionCommand, ProjectCommand,
+    ProjectionCommand, ReleaseCommand, TaskLoopCommand,
 };
 use clap::Parser;
+use formal::{
+    completion_decide, completion_inspect, project_confirm_goal, project_confirm_plan,
+    project_intake, project_materialize, project_preview_goal, release_confirm, release_prepare,
+    release_publish,
+};
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let cwd = std::env::current_dir()?;
 
     match cli.command {
+        Command::Project { command } => match command {
+            ProjectCommand::Intake {
+                requirement_path,
+                project_id,
+            } => {
+                let preview = project_intake(&cwd, &requirement_path, project_id.as_deref())?;
+                println!("{}", serde_json::to_string_pretty(&preview)?);
+            }
+            ProjectCommand::PreviewGoal { requirement_id } => {
+                let preview = project_preview_goal(&cwd, &requirement_id)?;
+                println!("{}", serde_json::to_string_pretty(&preview)?);
+            }
+            ProjectCommand::ConfirmGoal {
+                requirement_id,
+                actor,
+            } => {
+                let preview = project_confirm_goal(&cwd, &requirement_id, &actor)?;
+                println!("{}", serde_json::to_string_pretty(&preview)?);
+            }
+            ProjectCommand::ConfirmPlan {
+                requirement_id,
+                actor,
+            } => {
+                let preview = project_confirm_plan(&cwd, &requirement_id, &actor)?;
+                println!("{}", serde_json::to_string_pretty(&preview)?);
+            }
+            ProjectCommand::Materialize { requirement_id } => {
+                let result = project_materialize(&cwd, &requirement_id)?;
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
+        },
+        Command::Completion { command } => match command {
+            CompletionCommand::Inspect { project_id } => {
+                let runtime = completion_inspect(&cwd, &project_id)?;
+                println!("{}", serde_json::to_string_pretty(&runtime)?);
+            }
+            CompletionCommand::Decide {
+                project_id,
+                outcome,
+                actor,
+                summary,
+                rationale,
+            } => {
+                let runtime =
+                    completion_decide(&cwd, &project_id, &outcome, &actor, &summary, rationale)?;
+                println!("{}", serde_json::to_string_pretty(&runtime)?);
+            }
+        },
         Command::BuildAgent { command } => match command {
             BuildAgentCommand::Start { issue_id } => {
                 let start = start_build_agent_issue(&cwd, &issue_id)?;
@@ -191,6 +245,18 @@ fn main() -> anyhow::Result<()> {
             }
         },
         Command::Release { command } => match command {
+            ReleaseCommand::Prepare { project_id } => {
+                let facts = release_prepare(&cwd, &project_id)?;
+                println!("{}", serde_json::to_string_pretty(&facts)?);
+            }
+            ReleaseCommand::Confirm { project_id } => {
+                let facts = release_confirm(&cwd, &project_id)?;
+                println!("{}", serde_json::to_string_pretty(&facts)?);
+            }
+            ReleaseCommand::Publish { project_id } => {
+                let facts = release_publish(&cwd, &project_id)?;
+                println!("{}", serde_json::to_string_pretty(&facts)?);
+            }
             ReleaseCommand::Summary => {
                 let summary = agentflow_release::collect_public_release_summary(&cwd)?;
                 println!("release summary: generated");

@@ -650,6 +650,20 @@ export type ProjectProjection = {
     rationale: string[];
     updatedAt: number;
   } | null;
+  release?: {
+    currentState: string;
+    gateStatus: string;
+    gateReason: string;
+    completionState: string;
+    completionOutcome?: string | null;
+    deliveryStatus: string;
+    changelogPath: string;
+    releaseNotesPath: string;
+    entryCount: number;
+    summaryLine: string;
+    publishedAt?: number | null;
+    updatedAt: number;
+  } | null;
   delivery?: ProjectionDeliverySummary | null;
   audit?: ProjectionAuditSummary | null;
   issueCount: number;

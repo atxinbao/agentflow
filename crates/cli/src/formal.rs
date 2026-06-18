@@ -1,0 +1,127 @@
+use agentflow_release::{
+    confirm_project_release, prepare_project_release, publish_project_release,
+};
+use agentflow_spec::{
+    confirm_goal_draft_preview, confirm_plan_draft_preview,
+    materialize_spec_from_requirement_preview, read_completion_decision_runtime,
+    read_requirement_preview_runtime, record_completion_decision,
+    requirement_preview_from_requirement, sync_completion_decision_runtimes,
+    CompletionDecisionOutcome, CompletionDecisionRuntime, RequirementPreviewRuntime, SpecIssue,
+    SpecProject,
+};
+use anyhow::{bail, Result};
+use serde::Serialize;
+use std::path::Path;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectMaterializationResult {
+    pub project: SpecProject,
+    pub issues: Vec<SpecIssue>,
+}
+
+pub(crate) fn project_intake(
+    root: &Path,
+    requirement_path: &Path,
+    project_id: Option<&str>,
+) -> Result<RequirementPreviewRuntime> {
+    let preview = requirement_preview_from_requirement(root, requirement_path, project_id)?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
+    Ok(preview)
+}
+
+pub(crate) fn project_preview_goal(
+    root: &Path,
+    requirement_id: &str,
+) -> Result<RequirementPreviewRuntime> {
+    read_requirement_preview_runtime(root, requirement_id)
+}
+
+pub(crate) fn project_confirm_goal(
+    root: &Path,
+    requirement_id: &str,
+    actor: &str,
+) -> Result<RequirementPreviewRuntime> {
+    let preview = confirm_goal_draft_preview(root, requirement_id, actor)?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
+    Ok(preview)
+}
+
+pub(crate) fn project_confirm_plan(
+    root: &Path,
+    requirement_id: &str,
+    actor: &str,
+) -> Result<RequirementPreviewRuntime> {
+    let preview = confirm_plan_draft_preview(root, requirement_id, actor)?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
+    Ok(preview)
+}
+
+pub(crate) fn project_materialize(
+    root: &Path,
+    requirement_id: &str,
+) -> Result<ProjectMaterializationResult> {
+    let (project, issues) = materialize_spec_from_requirement_preview(root, requirement_id)?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
+    Ok(ProjectMaterializationResult { project, issues })
+}
+
+pub(crate) fn completion_inspect(
+    root: &Path,
+    project_id: &str,
+) -> Result<CompletionDecisionRuntime> {
+    let _ = sync_completion_decision_runtimes(root)?;
+    read_completion_decision_runtime(root, project_id)
+}
+
+pub(crate) fn completion_decide(
+    root: &Path,
+    project_id: &str,
+    outcome: &str,
+    actor: &str,
+    summary: &str,
+    rationale: Vec<String>,
+) -> Result<CompletionDecisionRuntime> {
+    let outcome = parse_completion_outcome(outcome)?;
+    let runtime = record_completion_decision(root, project_id, outcome, actor, summary, rationale)?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
+    Ok(runtime)
+}
+
+pub(crate) fn release_prepare(
+    root: &Path,
+    project_id: &str,
+) -> Result<agentflow_release::ProjectReleaseFacts> {
+    let facts = prepare_project_release(root, project_id)?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
+    Ok(facts)
+}
+
+pub(crate) fn release_confirm(
+    root: &Path,
+    project_id: &str,
+) -> Result<agentflow_release::ProjectReleaseFacts> {
+    let facts = confirm_project_release(root, project_id)?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
+    Ok(facts)
+}
+
+pub(crate) fn release_publish(
+    root: &Path,
+    project_id: &str,
+) -> Result<agentflow_release::ProjectReleaseFacts> {
+    let facts = publish_project_release(root, project_id)?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
+    Ok(facts)
+}
+
+pub(crate) fn parse_completion_outcome(raw: &str) -> Result<CompletionDecisionOutcome> {
+    match raw.trim() {
+        "continue" => Ok(CompletionDecisionOutcome::Continue),
+        "adjust" => Ok(CompletionDecisionOutcome::Adjust),
+        "pause" => Ok(CompletionDecisionOutcome::Pause),
+        "accept" => Ok(CompletionDecisionOutcome::Accept),
+        "next-stage" => Ok(CompletionDecisionOutcome::NextStage),
+        other => bail!("unsupported completion outcome: {other}"),
+    }
+}

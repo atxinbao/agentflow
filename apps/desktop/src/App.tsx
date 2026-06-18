@@ -220,6 +220,16 @@ type ProjectWorkspaceSummary = {
   initializationStatus?: ProjectInitializationStatus | null;
 };
 
+type ProjectRuntimeAction =
+  | "completion-accept"
+  | "completion-continue"
+  | "completion-adjust"
+  | "completion-pause"
+  | "completion-next-stage"
+  | "release-prepare"
+  | "release-confirm"
+  | "release-publish";
+
 type AgentflowWorkspaceChangedEvent = {
   agentflowPath: string;
   changedAreas: string[];
@@ -507,6 +517,8 @@ function App() {
   const [taskCopyState, setTaskCopyState] = useState<ButtonInteractionState>("enabled");
   const [projectLoopState, setProjectLoopState] = useState<ButtonInteractionState>("enabled");
   const [projectLoopFeedback, setProjectLoopFeedback] = useState<string | null>(null);
+  const [projectRuntimeState, setProjectRuntimeState] = useState<ButtonInteractionState>("enabled");
+  const [projectRuntimeFeedback, setProjectRuntimeFeedback] = useState<string | null>(null);
   const [handedOffIssues, setHandedOffIssues] = useState<Set<string>>(() => readStoredIssueSet());
   const preparedProjectRoots = useRef(new Set<string>());
   const { activePageByProject, activeProjectRoot, expandedProjectRoots, projects } = projectRegistry;
@@ -1203,6 +1215,71 @@ function App() {
     }
   }
 
+  async function handleProjectRuntimeAction(
+    action: ProjectRuntimeAction,
+    group: TaskProjectGroup,
+    projection: ProjectProjection | null,
+  ) {
+    if (!projectRoot || isBrowserPreviewRuntime()) {
+      return;
+    }
+
+    setProjectRuntimeState("loading");
+    setProjectRuntimeFeedback(null);
+    try {
+      if (action === "release-prepare") {
+        await invoke("release_prepare", { projectRoot, projectId: group.id });
+      } else if (action === "release-confirm") {
+        await invoke("release_confirm", { projectRoot, projectId: group.id });
+      } else if (action === "release-publish") {
+        await invoke("release_publish", { projectRoot, projectId: group.id });
+      } else {
+        const outcome =
+          action === "completion-accept"
+            ? "accept"
+            : action === "completion-adjust"
+              ? "adjust"
+              : action === "completion-pause"
+                ? "pause"
+                : action === "completion-next-stage"
+                  ? "next-stage"
+                  : "continue";
+        const summary =
+          action === "completion-accept"
+            ? "Goal Agent 接受当前项目交付。"
+            : action === "completion-adjust"
+              ? "Goal Agent 要求先调整 Goal / Plan。"
+              : action === "completion-pause"
+                ? "Goal Agent 暂停当前项目。"
+                : action === "completion-next-stage"
+                  ? "Goal Agent 决定进入下一阶段。"
+                  : "Goal Agent 决定继续当前项目循环。";
+        const rationale = [
+          projection?.completionHint ?? projection?.stageSummary ?? "当前依据项目投影状态做出完成判断。",
+          `项目：${group.id}`,
+        ];
+        await invoke("completion_decide", {
+          actor: "goal-agent",
+          outcome,
+          projectId: group.id,
+          projectRoot,
+          rationale,
+          summary,
+        });
+      }
+
+      refreshProjectPage("tasks", projectRoot, { triggerProjectLoop: false });
+      setProjectRuntimeState("success");
+      setProjectRuntimeFeedback(projectRuntimeActionSuccessMessage(action));
+      window.setTimeout(() => setProjectRuntimeState("enabled"), 1200);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setProjectRuntimeState("error");
+      setProjectRuntimeFeedback(`执行失败：${message}`);
+      window.setTimeout(() => setProjectRuntimeState("enabled"), 1600);
+    }
+  }
+
   async function handleTaskAction(action: TaskInteractionAction, task: V1Issue) {
     setTaskActionFeedback(null);
     if (action === "copy-handoff") {
@@ -1358,12 +1435,16 @@ function App() {
             executeStatusState={executeStatusState}
             mcpSessionsState={mcpSessionsState}
             onDetailFocusHandled={() => setTaskDetailFocus(null)}
+            onProjectRuntimeAction={(action, group, projection) =>
+              void handleProjectRuntimeAction(action, group, projection)}
             onRunProjectLoop={() => void handleRunProjectLoop()}
             onTaskAction={(action, task) => void handleTaskAction(action, task)}
             onSelectProjectGroup={handleSelectTaskProject}
             onSelectTask={handleSelectTask}
             outputBundle={outputBundle}
             projectRoot={projectRoot}
+            projectRuntimeFeedback={projectRuntimeFeedback}
+            projectRuntimeState={projectRuntimeState}
             projectLoopFeedback={projectLoopFeedback}
             projectLoopState={projectLoopState}
             selectedProjectGroup={selectedProjectGroup}
@@ -2308,11 +2389,14 @@ function TasksPage({
   executeStatusState,
   mcpSessionsState,
   onDetailFocusHandled,
+  onProjectRuntimeAction,
   onRunProjectLoop,
   onSelectProjectGroup,
   onTaskAction,
   onSelectTask,
   outputBundle,
+  projectRuntimeFeedback,
+  projectRuntimeState,
   projectLoopFeedback,
   projectLoopState,
   selectedProjectGroup,
@@ -2332,12 +2416,19 @@ function TasksPage({
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
+  onProjectRuntimeAction: (
+    action: ProjectRuntimeAction,
+    group: TaskProjectGroup,
+    projection: ProjectProjection | null,
+  ) => void;
   onRunProjectLoop: () => void;
   onSelectProjectGroup: (projectId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   onSelectTask: (taskId: string) => void;
   outputBundle: OutputBundleState;
   projectRoot: string | null;
+  projectRuntimeFeedback: string | null;
+  projectRuntimeState: ButtonInteractionState;
   projectLoopFeedback: string | null;
   projectLoopState: ButtonInteractionState;
   selectedProjectGroup: TaskProjectGroup | null;
@@ -2359,12 +2450,15 @@ function TasksPage({
         executeStatusState={executeStatusState}
         mcpSessionsState={mcpSessionsState}
         onDetailFocusHandled={onDetailFocusHandled}
+        onProjectRuntimeAction={onProjectRuntimeAction}
         onRunProjectLoop={onRunProjectLoop}
         onSelectProjectGroup={onSelectProjectGroup}
         onSelectTask={onSelectTask}
         onTaskAction={onTaskAction}
         outputBundle={outputBundle}
         projectRoot={projectRoot}
+        projectRuntimeFeedback={projectRuntimeFeedback}
+        projectRuntimeState={projectRuntimeState}
         projectLoopFeedback={projectLoopFeedback}
         projectLoopState={projectLoopState}
         selectedProjectGroup={selectedProjectGroup}
@@ -2388,12 +2482,15 @@ function TaskList({
   executeStatusState,
   mcpSessionsState,
   onDetailFocusHandled,
+  onProjectRuntimeAction,
   onRunProjectLoop,
   onSelectProjectGroup,
   onSelectTask,
   onTaskAction,
   outputBundle,
   projectRoot,
+  projectRuntimeFeedback,
+  projectRuntimeState,
   projectLoopFeedback,
   projectLoopState,
   selectedProjectGroup,
@@ -2412,12 +2509,19 @@ function TaskList({
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
+  onProjectRuntimeAction: (
+    action: ProjectRuntimeAction,
+    group: TaskProjectGroup,
+    projection: ProjectProjection | null,
+  ) => void;
   onRunProjectLoop: () => void;
   onSelectProjectGroup: (projectId: string) => void;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
   projectRoot: string | null;
+  projectRuntimeFeedback: string | null;
+  projectRuntimeState: ButtonInteractionState;
   projectLoopFeedback: string | null;
   projectLoopState: ButtonInteractionState;
   selectedProjectGroup: TaskProjectGroup | null;
@@ -2585,10 +2689,13 @@ function TaskList({
         executeStatusState={executeStatusState}
         mcpSessionsState={mcpSessionsState}
         onDetailFocusHandled={onDetailFocusHandled}
+        onProjectRuntimeAction={onProjectRuntimeAction}
         onRunProjectLoop={onRunProjectLoop}
         onTaskAction={onTaskAction}
         onSelectTask={onSelectTask}
         outputBundle={outputBundle}
+        projectRuntimeFeedback={projectRuntimeFeedback}
+        projectRuntimeState={projectRuntimeState}
         projectLoopFeedback={projectLoopFeedback}
         projectLoopState={projectLoopState}
         selectedProjectGroup={selectedProjectGroup}
@@ -2784,10 +2891,13 @@ function TaskDetail({
   executeStatusState,
   mcpSessionsState,
   onDetailFocusHandled,
+  onProjectRuntimeAction,
   onRunProjectLoop,
   onSelectTask,
   onTaskAction,
   outputBundle,
+  projectRuntimeFeedback,
+  projectRuntimeState,
   projectLoopFeedback,
   projectLoopState,
   selectedProjectGroup,
@@ -2805,10 +2915,17 @@ function TaskDetail({
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
+  onProjectRuntimeAction: (
+    action: ProjectRuntimeAction,
+    group: TaskProjectGroup,
+    projection: ProjectProjection | null,
+  ) => void;
   onRunProjectLoop: () => void;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
+  projectRuntimeFeedback: string | null;
+  projectRuntimeState: ButtonInteractionState;
   projectLoopFeedback: string | null;
   projectLoopState: ButtonInteractionState;
   selectedProjectGroup: TaskProjectGroup | null;
@@ -2822,8 +2939,11 @@ function TaskDetail({
     return (
       <ProjectSummaryReader
         group={selectedProjectGroup}
+        onProjectRuntimeAction={onProjectRuntimeAction}
         onRunProjectLoop={onRunProjectLoop}
         onSelectTask={onSelectTask}
+        projectRuntimeFeedback={projectRuntimeFeedback}
+        projectRuntimeState={projectRuntimeState}
         projectLoopFeedback={projectLoopFeedback}
         projectLoopState={projectLoopState}
         projection={selectedProjectProjection}
@@ -2887,16 +3007,26 @@ function TaskDetail({
 
 function ProjectSummaryReader({
   group,
+  onProjectRuntimeAction,
   onRunProjectLoop,
   onSelectTask,
+  projectRuntimeFeedback,
+  projectRuntimeState,
   projectLoopFeedback,
   projectLoopState,
   projection,
   treeSelection,
 }: {
   group: TaskProjectGroup;
+  onProjectRuntimeAction: (
+    action: ProjectRuntimeAction,
+    group: TaskProjectGroup,
+    projection: ProjectProjection | null,
+  ) => void;
   onRunProjectLoop: () => void;
   onSelectTask: (taskId: string) => void;
+  projectRuntimeFeedback: string | null;
+  projectRuntimeState: ButtonInteractionState;
   projectLoopFeedback: string | null;
   projectLoopState: ButtonInteractionState;
   projection: ProjectProjection | null;
@@ -2963,6 +3093,33 @@ function ProjectSummaryReader({
     : null;
   const nextActionLabel = projection?.nextActionLabel ?? brainActionLabel;
   const nextActionReason = projection?.nextActionReason ?? projectLoopReason;
+  const release = projection?.release ?? null;
+  const projectRuntimeActions: ProjectRuntimeAction[] = [];
+  if (completion && completion.currentState !== "accepted") {
+    projectRuntimeActions.push("completion-accept");
+    if (completion.currentState === "goal-recheck" || completion.currentState === "continue") {
+      projectRuntimeActions.push("completion-continue");
+    }
+    if (completion.currentState === "goal-recheck" || completion.currentState === "adjust") {
+      projectRuntimeActions.push("completion-adjust");
+    }
+    if (completion.currentState === "goal-recheck" || completion.currentState === "pause") {
+      projectRuntimeActions.push("completion-pause");
+    }
+    if (completion.currentState === "goal-recheck" || completion.currentState === "next-stage") {
+      projectRuntimeActions.push("completion-next-stage");
+    }
+  }
+  if (completion?.currentState === "accepted" || release) {
+    if (release?.currentState === "in_progress") {
+      projectRuntimeActions.push("release-publish");
+    } else if (release?.currentState === "ready") {
+      projectRuntimeActions.push("release-confirm");
+    } else if (release?.currentState !== "published") {
+      projectRuntimeActions.push("release-prepare");
+    }
+  }
+  const runtimeFeedback = projectRuntimeFeedback ?? projectLoopFeedback;
 
   return (
     <aside className="v16-detail-pane" aria-label="项目调度视图">
@@ -3236,8 +3393,19 @@ function ProjectSummaryReader({
         >
           查看当前任务
         </ActionButton>
+        {projectRuntimeActions.map((action) => (
+          <ActionButton
+            disabled={projectRuntimeState === "loading"}
+            key={action}
+            loading={projectRuntimeState === "loading"}
+            onClick={() => onProjectRuntimeAction(action, group, projection)}
+            variant="secondary"
+          >
+            {projectRuntimeActionLabelZh(action)}
+          </ActionButton>
+        ))}
       </ActionBar>
-      {projectLoopFeedback ? <p className="v16-feedback">{projectLoopFeedback}</p> : null}
+      {runtimeFeedback ? <p className="v16-feedback">{runtimeFeedback}</p> : null}
     </aside>
   );
 }
@@ -5981,6 +6149,34 @@ function projectBrainActionLabelZh(action?: string | null, fallbackLabel?: strin
     "start-project-loop": "进入项目循环",
   };
   return labels[action ?? ""] ?? "等待下一步";
+}
+
+function projectRuntimeActionSuccessMessage(action: ProjectRuntimeAction) {
+  const labels: Record<ProjectRuntimeAction, string> = {
+    "completion-accept": "已写入完成接受判断。",
+    "completion-continue": "已写入继续推进判断。",
+    "completion-adjust": "已写入调整判断。",
+    "completion-pause": "已写入暂停判断。",
+    "completion-next-stage": "已写入进入下一阶段判断。",
+    "release-prepare": "已准备 Release 公开记录。",
+    "release-confirm": "已确认 Release 公开记录。",
+    "release-publish": "已发布 Release 公开记录。",
+  };
+  return labels[action];
+}
+
+function projectRuntimeActionLabelZh(action: ProjectRuntimeAction) {
+  const labels: Record<ProjectRuntimeAction, string> = {
+    "completion-accept": "接受当前交付",
+    "completion-continue": "继续项目循环",
+    "completion-adjust": "要求调整目标",
+    "completion-pause": "暂停当前项目",
+    "completion-next-stage": "进入下一阶段",
+    "release-prepare": "准备 Release",
+    "release-confirm": "确认 Release",
+    "release-publish": "发布 Release",
+  };
+  return labels[action];
 }
 
 function projectCompletionStateLabelZh(state?: string | null, outcome?: string | null) {
