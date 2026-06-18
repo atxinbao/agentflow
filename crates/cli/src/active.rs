@@ -6,6 +6,9 @@
 use agentflow_event_store::{
     append_task_event_once, EventActor, EventStateTransition, TaskEventDraft,
 };
+use agentflow_mcp::{
+    query_closeout_attestation, McpCloseoutAttestation, McpCloseoutIssueAttestation,
+};
 use agentflow_release::{PublicReleaseDocumentPaths, PublicReleaseDocumentTarget};
 use agentflow_spec::read_spec_issue;
 use agentflow_task_artifacts::{
@@ -289,9 +292,7 @@ pub(crate) fn write_build_agent_closeout_proof(
     provider: &str,
     merge_mode: &str,
     remote_url: Option<String>,
-    merged: bool,
-    issue_closed: bool,
-    closed_at: Option<u64>,
+    provider_issue_refs: Vec<String>,
 ) -> Result<BuildAgentCloseoutProof> {
     assert_current_cli_is_fresh(root)?;
     let issue =
@@ -304,21 +305,49 @@ pub(crate) fn write_build_agent_closeout_proof(
             run.issue_id
         );
     }
+    let review_ref = remote_url.clone().ok_or_else(|| {
+        anyhow::anyhow!("closeout proof requires provider review ref / remote-url")
+    })?;
+    let attestation =
+        query_closeout_attestation(root, provider, &review_ref, &provider_issue_refs)?;
+    write_build_agent_closeout_proof_from_attestation(root, &issue, run_id, merge_mode, attestation)
+}
+
+fn write_build_agent_closeout_proof_from_attestation(
+    root: &Path,
+    issue: &agentflow_spec::SpecIssue,
+    run_id: &str,
+    merge_mode: &str,
+    attestation: McpCloseoutAttestation,
+) -> Result<BuildAgentCloseoutProof> {
     let proof_path = closeout_proof_path(root, &issue.issue_id, run_id);
+    let provider_name = attestation.provider.clone();
+    let review_ref = attestation.review_ref.clone();
+    let review_url = attestation.review_url.clone();
+    let merged = attestation.merged;
+    let merged_at = attestation.merged_at.clone();
+    let issue_closed = attestation.issue_closed;
+    let issues = attestation.issues.clone();
+    let queried_at = attestation.queried_at;
+    let closed_at = latest_closed_at(&issues);
     write_json(
         &proof_path,
         &json!({
-            "version": "task-closeout-proof.v1",
+            "version": "task-closeout-proof.v2",
             "issueId": issue.issue_id,
             "projectId": issue.project_id,
             "runId": run_id,
-            "provider": provider,
+            "provider": &provider_name,
             "mergeMode": merge_mode,
-            "remoteUrl": remote_url,
-            "prUrl": remote_url,
+            "reviewRef": &review_ref,
+            "remoteUrl": &review_url,
+            "prUrl": &review_url,
             "merged": merged,
+            "mergedAt": &merged_at,
             "issueClosed": issue_closed,
-            "closedAt": closed_at,
+            "closedAt": &closed_at,
+            "issues": &issues,
+            "queriedAt": queried_at,
             "publicDeliveryWritten": false,
         }),
     )?;
@@ -327,9 +356,9 @@ pub(crate) fn write_build_agent_closeout_proof(
         TaskEventDraft {
             flow_type: WorkflowFlowType::Work,
             aggregate_type: "issue".to_string(),
-            aggregate_id: issue_id.to_string(),
+            aggregate_id: issue.issue_id.clone(),
             project_id: issue.project_id.clone(),
-            issue_id: Some(issue_id.to_string()),
+            issue_id: Some(issue.issue_id.clone()),
             run_id: Some(run_id.to_string()),
             event_type: "issue.closeout.proof.recorded".to_string(),
             authority_role: Some(WorkflowAgentRole::WorkAgent),
@@ -338,29 +367,36 @@ pub(crate) fn write_build_agent_closeout_proof(
                 kind: "system".to_string(),
             },
             state: None,
-            correlation_id: Some(format!("corr-{issue_id}")),
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
             causation_id: None,
             payload: json!({
-                "issueId": issue_id,
+                "issueId": issue.issue_id,
                 "projectId": issue.project_id,
                 "runId": run_id,
-                "provider": provider,
+                "provider": &provider_name,
                 "mergeMode": merge_mode,
-                "remoteUrl": remote_url,
-                "prUrl": remote_url,
+                "reviewRef": &review_ref,
+                "remoteUrl": &review_url,
+                "prUrl": &review_url,
                 "merged": merged,
+                "mergedAt": &merged_at,
                 "issueClosed": issue_closed,
-                "closedAt": closed_at,
+                "closedAt": &closed_at,
+                "issues": &issues,
+                "queriedAt": queried_at,
                 "publicDeliveryWritten": false,
             }),
             artifact_refs: vec![relative_path(root, &proof_path)],
-            idempotency_key: Some(format!("issue.closeout-proof.recorded:{issue_id}:{run_id}")),
+            idempotency_key: Some(format!(
+                "issue.closeout-proof.recorded:{}:{run_id}",
+                issue.issue_id
+            )),
         },
     )?;
     let _ = agentflow_projection::rebuild_projections(root)?;
     agentflow_state::refresh_state(root)?;
     Ok(BuildAgentCloseoutProof {
-        issue_id: issue_id.to_string(),
+        issue_id: issue.issue_id.clone(),
         run_id: run_id.to_string(),
         merged,
         issue_closed,
@@ -840,6 +876,13 @@ fn closeout_proof_path(root: &Path, issue_id: &str, run_id: &str) -> PathBuf {
         .join("review/closeout-proof.json")
 }
 
+fn latest_closed_at(issues: &[McpCloseoutIssueAttestation]) -> Option<String> {
+    issues
+        .iter()
+        .filter_map(|issue| issue.closed_at.clone())
+        .max()
+}
+
 fn task_evidence_path(issue_id: &str) -> String {
     format!(".agentflow/tasks/{issue_id}/evidence/evidence.json")
 }
@@ -962,11 +1005,12 @@ mod tests {
         binary_is_stale, claim_next_build_agent_launch_with_dispatcher,
         complete_build_agent_issue_from_request, is_local_target_binary, load_closeout_proof,
         prepare_build_agent_review_from_request, rebuild_hint, start_build_agent_issue,
-        write_build_agent_closeout_proof,
+        write_build_agent_closeout_proof_from_attestation,
     };
     use agentflow_mcp::{
-        McpAgentProvider, McpLaunchMode, McpLaunchPlan, McpLaunchRequest, McpProviderBridge,
-        McpProviderKind, McpProviderStatus, McpProviderStatusCode,
+        McpAgentProvider, McpCloseoutAttestation, McpCloseoutIssueAttestation, McpLaunchMode,
+        McpLaunchPlan, McpLaunchRequest, McpProviderBridge, McpProviderKind, McpProviderStatus,
+        McpProviderStatusCode, MCP_CLOSEOUT_ATTESTATION_VERSION,
     };
     use agentflow_task_artifacts::{load_task_changed_files, load_task_evidence};
     use anyhow::Result;
@@ -1191,16 +1235,20 @@ mod tests {
         assert!(!dir.path().join(".agentflow/execute").exists());
         assert!(!dir.path().join(".agentflow/input").exists());
 
-        write_build_agent_closeout_proof(
+        let issue = agentflow_spec::read_spec_issue(dir.path(), "AF-001").unwrap();
+        write_build_agent_closeout_proof_from_attestation(
             dir.path(),
-            "AF-001",
+            &issue,
             &started.run_id,
-            "github",
             "auto-merge-if-eligible",
-            Some("https://github.com/atxinbao/agentflow/pull/1".to_string()),
-            true,
-            true,
-            Some(1_718_000_001),
+            trusted_closeout(
+                "github",
+                "https://github.com/atxinbao/agentflow/pull/1",
+                true,
+                "1",
+                true,
+                Some("2026-06-19T11:20:01Z"),
+            ),
         )
         .unwrap();
         let still_review_projection =
@@ -1276,16 +1324,20 @@ mod tests {
         );
         let request_path = write_completion_request(dir.path(), "AF-CHAIN-001", &started.run_id);
         prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
-        write_build_agent_closeout_proof(
+        let issue = agentflow_spec::read_spec_issue(dir.path(), "AF-CHAIN-001").unwrap();
+        write_build_agent_closeout_proof_from_attestation(
             dir.path(),
-            "AF-CHAIN-001",
+            &issue,
             &started.run_id,
-            "github",
             "auto-merge-if-eligible",
-            Some("https://github.com/atxinbao/agentflow/pull/2".to_string()),
-            true,
-            true,
-            Some(1_718_000_002),
+            trusted_closeout(
+                "github",
+                "https://github.com/atxinbao/agentflow/pull/2",
+                true,
+                "2",
+                true,
+                Some("2026-06-19T11:20:02Z"),
+            ),
         )
         .unwrap();
 
@@ -1317,16 +1369,20 @@ mod tests {
         );
         let request_path = write_completion_request(dir.path(), "AF-CHAIN-001", &started.run_id);
         prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
-        write_build_agent_closeout_proof(
+        let issue = agentflow_spec::read_spec_issue(dir.path(), "AF-CHAIN-001").unwrap();
+        write_build_agent_closeout_proof_from_attestation(
             dir.path(),
-            "AF-CHAIN-001",
+            &issue,
             &started.run_id,
-            "github",
             "auto-merge-if-eligible",
-            Some("https://github.com/atxinbao/agentflow/pull/3".to_string()),
-            true,
-            false,
-            None,
+            trusted_closeout(
+                "github",
+                "https://github.com/atxinbao/agentflow/pull/3",
+                true,
+                "3",
+                false,
+                None,
+            ),
         )
         .unwrap();
 
@@ -1447,6 +1503,32 @@ mod tests {
         let project =
             agentflow_spec::project_from_requirement(root, &requirement, project).unwrap();
         agentflow_spec::write_spec_project(root, &project).unwrap();
+    }
+
+    fn trusted_closeout(
+        provider: &str,
+        review_url: &str,
+        merged: bool,
+        issue_ref: &str,
+        issue_closed: bool,
+        closed_at: Option<&str>,
+    ) -> McpCloseoutAttestation {
+        McpCloseoutAttestation {
+            version: MCP_CLOSEOUT_ATTESTATION_VERSION.to_string(),
+            provider: provider.to_string(),
+            review_ref: review_url.to_string(),
+            review_url: Some(review_url.to_string()),
+            merged,
+            merged_at: merged.then(|| "2026-06-19T11:19:59Z".to_string()),
+            issue_closed,
+            issues: vec![McpCloseoutIssueAttestation {
+                issue_ref: issue_ref.to_string(),
+                issue_url: Some(issue_ref.to_string()),
+                closed: issue_closed,
+                closed_at: closed_at.map(ToString::to_string),
+            }],
+            queried_at: 1_718_000_000,
+        }
     }
 
     fn write_file(path: PathBuf, content: &str) {

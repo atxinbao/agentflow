@@ -115,12 +115,8 @@ pub(crate) enum BuildAgentCommand {
         merge_mode: String,
         #[arg(long = "remote-url")]
         remote_url: Option<String>,
-        #[arg(long)]
-        merged: bool,
-        #[arg(long = "issue-closed")]
-        issue_closed: bool,
-        #[arg(long = "closed-at")]
-        closed_at: Option<u64>,
+        #[arg(long = "provider-issue-ref")]
+        provider_issue_refs: Vec<String>,
     },
     Complete {
         #[arg(long)]

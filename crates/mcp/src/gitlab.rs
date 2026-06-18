@@ -1,8 +1,13 @@
 use crate::{
     health::unix_timestamp_seconds,
-    model::{McpCapability, McpProviderKind, McpProviderStatus, McpProviderStatusCode},
+    model::{
+        McpCapability, McpCloseoutAttestation, McpCloseoutIssueAttestation, McpProviderKind,
+        McpProviderStatus, McpProviderStatusCode, MCP_CLOSEOUT_ATTESTATION_VERSION,
+    },
     provider::run_command,
 };
+use anyhow::{Context, Result};
+use serde_json::Value;
 use std::path::Path;
 
 pub fn check_gitlab_provider(project_root: impl AsRef<Path>) -> McpProviderStatus {
@@ -91,4 +96,130 @@ fn gitlab_capabilities(available: bool) -> Vec<McpCapability> {
     .into_iter()
     .map(|name| McpCapability::new(name, available))
     .collect()
+}
+
+pub fn query_gitlab_closeout_attestation(
+    project_root: impl AsRef<Path>,
+    review_ref: &str,
+    issue_refs: &[String],
+) -> Result<McpCloseoutAttestation> {
+    if issue_refs.is_empty() {
+        anyhow::bail!("gitlab closeout query requires explicit issue refs");
+    }
+    let mr = run_command(
+        &project_root,
+        "glab",
+        &["mr", "view", review_ref, "--output", "json"],
+    )?;
+    if !mr.status_success {
+        anyhow::bail!("glab mr view failed: {}", mr.combined_output().trim());
+    }
+    let mr_value: Value = serde_json::from_str(&mr.stdout).context("parse glab mr view json")?;
+    let review_url = mr_value
+        .get("web_url")
+        .or_else(|| mr_value.get("webUrl"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let merged_at = mr_value
+        .get("merged_at")
+        .or_else(|| mr_value.get("mergedAt"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let merged = merged_at.is_some()
+        || mr_value
+            .get("state")
+            .and_then(Value::as_str)
+            .map(|state| state.eq_ignore_ascii_case("merged"))
+            .unwrap_or(false);
+    let issues = issue_refs
+        .iter()
+        .map(|issue_ref| query_gitlab_issue_status(&project_root, issue_ref))
+        .collect::<Result<Vec<_>>>()?;
+    let issue_closed = !issues.is_empty() && issues.iter().all(|issue| issue.closed);
+    Ok(McpCloseoutAttestation {
+        version: MCP_CLOSEOUT_ATTESTATION_VERSION.to_string(),
+        provider: McpProviderKind::Gitlab.as_str().to_string(),
+        review_ref: review_ref.to_string(),
+        review_url,
+        merged,
+        merged_at,
+        issue_closed,
+        issues,
+        queried_at: unix_timestamp_seconds(),
+    })
+}
+
+fn query_gitlab_issue_status(
+    project_root: impl AsRef<Path>,
+    issue_ref: &str,
+) -> Result<McpCloseoutIssueAttestation> {
+    let issue = run_command(
+        &project_root,
+        "glab",
+        &["issue", "view", issue_ref, "--output", "json"],
+    )?;
+    if !issue.status_success {
+        anyhow::bail!(
+            "glab issue view {} failed: {}",
+            issue_ref,
+            issue.combined_output().trim()
+        );
+    }
+    parse_gitlab_issue_status(issue_ref, &issue.stdout)
+}
+
+fn parse_gitlab_issue_status(
+    issue_ref: &str,
+    issue_stdout: &str,
+) -> Result<McpCloseoutIssueAttestation> {
+    let issue: Value = serde_json::from_str(issue_stdout).context("parse glab issue view json")?;
+    let closed = issue
+        .get("closed")
+        .and_then(Value::as_bool)
+        .or_else(|| {
+            issue
+                .get("state")
+                .and_then(Value::as_str)
+                .map(|state| state.eq_ignore_ascii_case("closed"))
+        })
+        .unwrap_or(false);
+    Ok(McpCloseoutIssueAttestation {
+        issue_ref: issue_ref.to_string(),
+        issue_url: issue
+            .get("web_url")
+            .or_else(|| issue.get("webUrl"))
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+        closed,
+        closed_at: issue
+            .get("closed_at")
+            .or_else(|| issue.get("closedAt"))
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_gitlab_issue_status;
+
+    #[test]
+    fn parses_gitlab_issue_status_payload() {
+        let issue = parse_gitlab_issue_status(
+            "58",
+            r#"{
+              "state": "closed",
+              "closed_at": "2026-06-19T12:00:00Z",
+              "web_url": "https://gitlab.example.com/acme/repo/-/issues/58"
+            }"#,
+        )
+        .unwrap();
+        assert!(issue.closed);
+        assert_eq!(issue.issue_ref, "58");
+        assert_eq!(
+            issue.issue_url.as_deref(),
+            Some("https://gitlab.example.com/acme/repo/-/issues/58")
+        );
+        assert_eq!(issue.closed_at.as_deref(), Some("2026-06-19T12:00:00Z"));
+    }
 }

@@ -10,6 +10,7 @@ pub const MCP_SESSION_EXIT_PROOF_VERSION: &str = "agentflow-mcp-exit-proof.v1";
 pub const MCP_LOG_CHUNK_VERSION: &str = "agentflow-mcp-log-chunk.v1";
 pub const MCP_PROVIDER_CAPABILITY_PROFILE_VERSION: &str = "agentflow-mcp-capability-profile.v1";
 pub const MCP_SESSION_GOVERNANCE_POLICY_VERSION: &str = "agentflow-mcp-session-policy.v1";
+pub const MCP_CLOSEOUT_ATTESTATION_VERSION: &str = "agentflow-mcp-closeout-attestation.v1";
 pub const MCP_DEFAULT_SESSION_TIMEOUT_SECONDS: u64 = 60 * 60;
 pub const MCP_DEFAULT_MAX_ATTEMPTS: u32 = 3;
 
@@ -146,6 +147,29 @@ pub struct McpCapability {
     pub name: String,
     pub available: bool,
     pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpCloseoutIssueAttestation {
+    pub issue_ref: String,
+    pub issue_url: Option<String>,
+    pub closed: bool,
+    pub closed_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpCloseoutAttestation {
+    pub version: String,
+    pub provider: String,
+    pub review_ref: String,
+    pub review_url: Option<String>,
+    pub merged: bool,
+    pub merged_at: Option<String>,
+    pub issue_closed: bool,
+    pub issues: Vec<McpCloseoutIssueAttestation>,
+    pub queried_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
