@@ -1357,11 +1357,14 @@ function App() {
             executeStatusState={executeStatusState}
             mcpSessionsState={mcpSessionsState}
             onDetailFocusHandled={() => setTaskDetailFocus(null)}
+            onRunProjectLoop={() => void handleRunProjectLoop()}
             onTaskAction={(action, task) => void handleTaskAction(action, task)}
             onSelectProjectGroup={handleSelectTaskProject}
             onSelectTask={handleSelectTask}
             outputBundle={outputBundle}
             projectRoot={projectRoot}
+            projectLoopFeedback={projectLoopFeedback}
+            projectLoopState={projectLoopState}
             selectedProjectGroup={selectedProjectGroup}
             selectedProjectProjection={selectedProjectProjection}
             selectedTask={selectedTask}
@@ -2304,10 +2307,13 @@ function TasksPage({
   executeStatusState,
   mcpSessionsState,
   onDetailFocusHandled,
+  onRunProjectLoop,
   onSelectProjectGroup,
   onTaskAction,
   onSelectTask,
   outputBundle,
+  projectLoopFeedback,
+  projectLoopState,
   selectedProjectGroup,
   selectedProjectProjection,
   selectedTask,
@@ -2325,11 +2331,14 @@ function TasksPage({
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
+  onRunProjectLoop: () => void;
   onSelectProjectGroup: (projectId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   onSelectTask: (taskId: string) => void;
   outputBundle: OutputBundleState;
   projectRoot: string | null;
+  projectLoopFeedback: string | null;
+  projectLoopState: ButtonInteractionState;
   selectedProjectGroup: TaskProjectGroup | null;
   selectedProjectProjection: ProjectProjection | null;
   selectedTask: V1Issue | null;
@@ -2349,11 +2358,14 @@ function TasksPage({
         executeStatusState={executeStatusState}
         mcpSessionsState={mcpSessionsState}
         onDetailFocusHandled={onDetailFocusHandled}
+        onRunProjectLoop={onRunProjectLoop}
         onSelectProjectGroup={onSelectProjectGroup}
         onSelectTask={onSelectTask}
         onTaskAction={onTaskAction}
         outputBundle={outputBundle}
         projectRoot={projectRoot}
+        projectLoopFeedback={projectLoopFeedback}
+        projectLoopState={projectLoopState}
         selectedProjectGroup={selectedProjectGroup}
         selectedProjectProjection={selectedProjectProjection}
         selectedTask={selectedTask}
@@ -2375,11 +2387,14 @@ function TaskList({
   executeStatusState,
   mcpSessionsState,
   onDetailFocusHandled,
+  onRunProjectLoop,
   onSelectProjectGroup,
   onSelectTask,
   onTaskAction,
   outputBundle,
   projectRoot,
+  projectLoopFeedback,
+  projectLoopState,
   selectedProjectGroup,
   selectedProjectProjection,
   selectedTask,
@@ -2396,11 +2411,14 @@ function TaskList({
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
+  onRunProjectLoop: () => void;
   onSelectProjectGroup: (projectId: string) => void;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
   projectRoot: string | null;
+  projectLoopFeedback: string | null;
+  projectLoopState: ButtonInteractionState;
   selectedProjectGroup: TaskProjectGroup | null;
   selectedProjectProjection: ProjectProjection | null;
   selectedTask: V1Issue | null;
@@ -2566,9 +2584,12 @@ function TaskList({
         executeStatusState={executeStatusState}
         mcpSessionsState={mcpSessionsState}
         onDetailFocusHandled={onDetailFocusHandled}
+        onRunProjectLoop={onRunProjectLoop}
         onTaskAction={onTaskAction}
         onSelectTask={onSelectTask}
         outputBundle={outputBundle}
+        projectLoopFeedback={projectLoopFeedback}
+        projectLoopState={projectLoopState}
         selectedProjectGroup={selectedProjectGroup}
         selectedProjectProjection={selectedProjectProjection}
         suggestions={showContextSuggestions ? suggestions : []}
@@ -2753,9 +2774,12 @@ function TaskDetail({
   executeStatusState,
   mcpSessionsState,
   onDetailFocusHandled,
+  onRunProjectLoop,
   onSelectTask,
   onTaskAction,
   outputBundle,
+  projectLoopFeedback,
+  projectLoopState,
   selectedProjectGroup,
   selectedProjectProjection,
   suggestions,
@@ -2771,9 +2795,12 @@ function TaskDetail({
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
+  onRunProjectLoop: () => void;
   onSelectTask: (taskId: string) => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
+  projectLoopFeedback: string | null;
+  projectLoopState: ButtonInteractionState;
   selectedProjectGroup: TaskProjectGroup | null;
   selectedProjectProjection: ProjectProjection | null;
   suggestions: ProjectInitializationContext[];
@@ -2785,7 +2812,10 @@ function TaskDetail({
     return (
       <ProjectSummaryReader
         group={selectedProjectGroup}
+        onRunProjectLoop={onRunProjectLoop}
         onSelectTask={onSelectTask}
+        projectLoopFeedback={projectLoopFeedback}
+        projectLoopState={projectLoopState}
         projection={selectedProjectProjection}
         treeSelection={taskTreeSelection}
       />
@@ -2847,16 +2877,21 @@ function TaskDetail({
 
 function ProjectSummaryReader({
   group,
+  onRunProjectLoop,
   onSelectTask,
+  projectLoopFeedback,
+  projectLoopState,
   projection,
   treeSelection,
 }: {
   group: TaskProjectGroup;
+  onRunProjectLoop: () => void;
   onSelectTask: (taskId: string) => void;
+  projectLoopFeedback: string | null;
+  projectLoopState: ButtonInteractionState;
   projection: ProjectProjection | null;
   treeSelection: TaskProjectTreeViewModel["selection"] | null;
 }) {
-  const priority = groupHighestPriority(group.issues);
   const projectStatus = normalizeProjectDisplayStatus(projection?.status ?? projectDisplayStatusForGroup(group));
   const currentIssue = projection?.currentIssueId
     ? group.issues.find((issue) => issue.id === projection.currentIssueId) ?? null
@@ -2892,6 +2927,13 @@ function ProjectSummaryReader({
     completion?.currentState,
     completion?.latestOutcome,
   );
+  const stageLabel = projection?.stageLabel ?? projectDisplayStatusLabelZh(projectStatus);
+  const stageSummary = projection?.stageSummary
+    ?? (currentIssue
+      ? `${currentIssue.id} 当前处于 ${displayStatusLabelZh(currentIssue.displayStatus)}。`
+      : nextIssue
+        ? `当前还没有活跃任务，下一条待启动任务是 ${nextIssue.id}。`
+        : "当前还没有进入稳定任务循环。");
   const projectBrain = projection?.projectBrain ?? null;
   const brainActionLabel = projectBrainActionLabelZh(
     projectBrain?.nextRecommendedAction,
@@ -2907,6 +2949,8 @@ function ProjectSummaryReader({
   const blockerItems = projection?.blockers.length
     ? projection.blockers.map((blocker) => `${blocker.issueId}：${blocker.reason}`)
     : null;
+  const nextActionLabel = projection?.nextActionLabel ?? brainActionLabel;
+  const nextActionReason = projection?.nextActionReason ?? projectLoopReason;
 
   return (
     <aside className="v16-detail-pane" aria-label="项目调度视图">
@@ -2915,34 +2959,69 @@ function ProjectSummaryReader({
         <p>{group.summary || group.objective || "查看这个项目当前推进到哪一步，以及下一条应该接哪项任务。"}</p>
         <div className="v16-detail-meta-strip">
           <span className="v16-detail-meta-item">
-            <span className="v16-detail-meta-label">状态</span>
-            <StatusBadge status={statusChipForProjectStatus(projectStatus)}>{projectDisplayStatusLabelZh(projectStatus)}</StatusBadge>
+            <span className="v16-detail-meta-label">阶段</span>
+            <StatusBadge status={statusChipForProjectStatus(projectStatus)}>{stageLabel}</StatusBadge>
           </span>
           <span className="v16-detail-meta-item">
-            <span className="v16-detail-meta-label">Project Brain</span>
-            <strong className="v16-role-text">{projectBrainStatusLabelZh(projectBrain?.brainStatus)}</strong>
+            <span className="v16-detail-meta-label">当前任务</span>
+            <strong className="v16-role-text">{currentIssue?.id ?? "等待首条任务"}</strong>
           </span>
           <span className="v16-detail-meta-item">
-            <span className="v16-detail-meta-label">任务进度</span>
-            <strong className="v16-role-text">{group.counts.doneIssueCount}/{group.counts.issueCount || 0}</strong>
+            <span className="v16-detail-meta-label">下一步</span>
+            <strong className="v16-role-text">{nextActionLabel}</strong>
           </span>
           <span className="v16-detail-meta-item">
-            <span className="v16-detail-meta-label">最高优先级</span>
-            <strong className={`v16-priority-text ${priorityTextClass(priority)}`}>{displayPriority(priority)}</strong>
+            <span className="v16-detail-meta-label">完成判断</span>
+            <strong className="v16-role-text">{completionLabel}</strong>
           </span>
         </div>
       </header>
       <div className="v16-detail-document">
         <div className="v16-summary-grid">
-          <MetricCard detail={`${group.counts.issueCount} 条任务`} label="项目状态" value={projectDisplayStatusLabelZh(projectStatus)} />
-          <MetricCard detail={projectLoopReason} label="Brain 状态" value={projectBrainStatusLabelZh(projectBrain?.brainStatus)} />
-          <MetricCard detail={`${reviewIssueCount} 条正在评审`} label="当前队列" value={currentLaneCount} />
-          <MetricCard
-            detail={completion?.nextRecommendedActionReason ?? completionHint ?? "当前还没有进入完成判断。"}
-            label="完成判断"
-            value={completionLabel}
-          />
+          <MetricCard detail={stageSummary} label="当前阶段" value={stageLabel} />
+          <MetricCard detail={nextActionReason} label="下一步" value={nextActionLabel} />
+          <MetricCard detail={`${currentLaneCount} 条当前，${futureLaneCount} 条未来`} label="任务进度" value={`${group.counts.doneIssueCount}/${group.counts.issueCount || 0}`} />
+          <MetricCard detail={completion?.nextRecommendedActionReason ?? completionHint ?? "当前还没有进入完成判断。"} label="完成判断" value={completionLabel} />
         </div>
+        <section className="v16-task-stage-panel" aria-label="项目阶段摘要">
+          <div className="v16-task-stage-panel-header">
+            <span>项目阶段</span>
+            <strong>{stageLabel}</strong>
+          </div>
+          <div className="v16-task-stage-grid">
+            <SectionList
+              title="当前阶段"
+              items={[
+                stageSummary,
+                `项目状态：${projectDisplayStatusLabelZh(projectStatus)}`,
+                `Project Brain：${projectBrainStatusLabelZh(projectBrain?.brainStatus)}`,
+              ]}
+            />
+            <SectionList
+              title="下一步"
+              items={[
+                `建议动作：${nextActionLabel}`,
+                `项目动作：${projection?.nextAction ?? nextActionLabel}`,
+                nextActionReason,
+              ]}
+            />
+            <SectionList
+              title="为什么停在这里"
+              items={[
+                blockerItems?.length ? `阻断：${blockerItems[0]}` : "当前没有项目级阻断。",
+                currentIssue
+                  ? `当前任务：${currentIssue.id} · ${displayStatusLabelZh(currentIssue.displayStatus)}`
+                  : nextIssue
+                    ? `待启动任务：${nextIssue.id}`
+                    : "当前没有活跃任务。",
+                projectLoopReason,
+                ...(projectBrain?.missingDocuments.length
+                  ? [`缺失文档：${projectBrain.missingDocuments.join("、")}`]
+                  : []),
+              ]}
+            />
+          </div>
+        </section>
         <section className="v16-task-stage-panel" aria-label="Project Brain 概览">
           <div className="v16-task-stage-panel-header">
             <span>Project Brain</span>
@@ -2969,18 +3048,17 @@ function ProjectSummaryReader({
               title="下一步原因"
               items={[
                 `Project Brain 建议：${brainActionLabel}`,
-                `项目当前动作：${nextAction ?? "还没有进入任务循环。"}`,
-                projectLoopReason,
+                `Project Brain 原因：${brainActionReason}`,
                 ...(projectBrain?.missingDocuments.length
                   ? [`缺失文档：${projectBrain.missingDocuments.join("、")}`]
-                  : []),
+                  : ["Project Brain 文档当前已齐全。"]),
               ]}
             />
           </div>
         </section>
         <section className="v16-task-stage-panel" aria-label="项目调度概览">
           <div className="v16-task-stage-panel-header">
-            <span>项目调度</span>
+            <span>项目推进</span>
             <strong>{currentIssue ? currentIssue.id : "等待首条任务"}</strong>
           </div>
           <div className="v16-task-stage-grid">
@@ -3005,8 +3083,12 @@ function ProjectSummaryReader({
                       nextIssue.blockedBy.length ? `前置依赖：${nextIssue.blockedBy.join("、")}` : "当前没有前置依赖。",
                       `优先级：${displayPriority(nextIssue.priority)}`,
                     ]
-                  : [`下一步：${brainActionLabel}`, projectLoopReason]
+                  : [`下一步：${nextActionLabel}`, nextActionReason]
               }
+            />
+            <SectionList
+              title="阻断项"
+              items={blockerItems?.length ? blockerItems : ["当前没有阻断项。"]}
             />
             <SectionList
               title="完成判断"
@@ -3014,7 +3096,7 @@ function ProjectSummaryReader({
                 `状态：${completionLabel}`,
                 completion?.nextRecommendedActionLabel
                   ? `下一步：${completion.nextRecommendedActionLabel}`
-                  : `下一步：${nextAction ?? "等待项目继续推进。"}`,
+                  : `下一步：${projection?.nextAction ?? "等待项目继续推进。"}`,
                 completion?.nextRecommendedActionReason
                   ?? completionHint
                   ?? "当前还没有完成判断记录。",
@@ -3022,9 +3104,10 @@ function ProjectSummaryReader({
                   ? completion.rationale
                   : [
                       `当前队列：${currentLaneCount} 条`,
+                      `评审队列：${reviewIssueCount} 条`,
                       `未来队列：${futureLaneCount} 条`,
                       blockedLaneCount ? `阻断：${blockedLaneCount} 条` : "当前没有阻断任务。",
-                      canceledLaneCount ? `取消：${canceledLaneCount} 条` : "当前没有取消任务。",
+                      canceledLaneCount ? `取消：${canceledLaneCount} 条` : `完成：${completedLaneCount} 条`,
                     ]),
               ]}
             />
@@ -3088,17 +3171,25 @@ function ProjectSummaryReader({
       </div>
       <ActionBar sticky>
         <ActionButton
+          loading={projectLoopState === "loading"}
+          onClick={onRunProjectLoop}
+          variant="primary"
+        >
+          运行 Project Loop
+        </ActionButton>
+        <ActionButton
           disabled={!currentIssue}
           onClick={() => {
             if (currentIssue) {
               onSelectTask(currentIssue.id);
             }
           }}
-          variant="primary"
+          variant="secondary"
         >
           查看当前任务
         </ActionButton>
       </ActionBar>
+      {projectLoopFeedback ? <p className="v16-feedback">{projectLoopFeedback}</p> : null}
     </aside>
   );
 }

@@ -599,10 +599,15 @@ export type ProjectProjection = {
   title: string;
   objective: string;
   status: string;
+  stageKey: string;
+  stageLabel: string;
+  stageSummary: string;
   issueIds: string[];
   currentIssueId?: string | null;
   lanes: ProjectIssueLanes;
   nextAction: string;
+  nextActionLabel: string;
+  nextActionReason: string;
   blockers: ProjectBlockerSummary[];
   completionHint: string;
   completion?: {

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const TASK_PROJECTION_VERSION: &str = "task-projection.v2";
-pub const PROJECT_PROJECTION_VERSION: &str = "project-projection.v2";
+pub const PROJECT_PROJECTION_VERSION: &str = "project-projection.v3";
 pub const ISSUE_STATUS_INDEX_VERSION: &str = "issue-status-index.v3";
 pub const REQUIREMENT_PREVIEW_PROJECTION_VERSION: &str = "requirement-preview-projection.v1";
 pub const REQUIREMENT_PREVIEW_INDEX_VERSION: &str = "requirement-preview-index.v1";
@@ -214,12 +214,22 @@ pub struct ProjectProjection {
     pub title: String,
     pub objective: String,
     pub status: String,
+    #[serde(default)]
+    pub stage_key: String,
+    #[serde(default)]
+    pub stage_label: String,
+    #[serde(default)]
+    pub stage_summary: String,
     pub issue_ids: Vec<String>,
     pub current_issue_id: Option<String>,
     #[serde(default)]
     pub lanes: ProjectIssueLanes,
     #[serde(default)]
     pub next_action: String,
+    #[serde(default)]
+    pub next_action_label: String,
+    #[serde(default)]
+    pub next_action_reason: String,
     #[serde(default)]
     pub blockers: Vec<ProjectBlockerSummary>,
     #[serde(default)]

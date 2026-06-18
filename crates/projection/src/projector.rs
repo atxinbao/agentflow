@@ -353,6 +353,7 @@ fn project_project(
     completion: Option<&CompletionDecisionRuntime>,
 ) -> Result<ProjectProjection> {
     let mut current_issue_id = None;
+    let mut current_issue_state = None;
     let mut completed = 0;
     let mut updated_at = project.system.updated_at;
     let mut current_lane = Vec::new();
@@ -390,6 +391,7 @@ fn project_project(
             _ => {
                 if current_issue_id.is_none() {
                     current_issue_id = Some(issue_id.clone());
+                    current_issue_state = Some(task.current_state.clone());
                 }
                 current_lane.push(issue_id.clone());
             }
@@ -414,18 +416,95 @@ fn project_project(
         project_status_as_str(&project.status)
     };
     let brain = read_project_brain_snapshot(root, &project.project_id, &project.title)?;
-    let next_action = if let Some(issue_id) = current_issue_id.clone() {
-        format!("继续推进 {issue_id}。")
-    } else if let Some(completion) = completion_projection.as_ref() {
-        completion.next_recommended_action_label.clone()
-    } else if let Some(issue_id) = future_lane.first() {
-        format!("启动 {issue_id}。")
-    } else if !blocked_lane.is_empty() {
-        "先解除阻断项，再继续推进项目。".to_string()
+    let (stage_key, stage_label, stage_summary) = if completion_projection
+        .as_ref()
+        .is_some_and(|projection| projection.current_state == "accepted")
+        && all_finished
+    {
+        (
+            "done".to_string(),
+            "项目已完成".to_string(),
+            "全部任务已完成，完成判断已经接受。".to_string(),
+        )
     } else if all_finished {
-        "进入完成判断".to_string()
+        (
+            "completion-ready".to_string(),
+            "等待完成判断".to_string(),
+            "任务已全部完成，正在等待 Goal Recheck / Completion Runtime 做最后判断。".to_string(),
+        )
+    } else if let Some(issue_id) = current_issue_id.as_ref() {
+        let label = match current_issue_state.as_deref() {
+            Some("todo") => "准备开工",
+            Some("in_review") => "正在评审",
+            Some("blocked") => "已阻断",
+            Some("in_progress") => "正在推进",
+            _ => "正在推进",
+        };
+        let summary = match current_issue_state.as_deref() {
+            Some("todo") => format!("{issue_id} 已进入待处理阶段，正在等待执行线程正式开工。"),
+            Some("in_review") => format!("{issue_id} 已完成本地验证，当前正在等待评审收口。"),
+            Some("blocked") => format!("{issue_id} 当前被阻断，项目节奏停在阻断处理。"),
+            _ => format!("{issue_id} 正在推进，项目当前主节奏围绕这条任务展开。"),
+        };
+        ("active".to_string(), label.to_string(), summary)
+    } else if let Some(issue_id) = future_lane.first() {
+        (
+            "ready-to-start".to_string(),
+            "准备开工".to_string(),
+            format!("当前还没有活跃任务，下一条待启动任务是 {issue_id}。"),
+        )
+    } else if !blocked_lane.is_empty() {
+        (
+            "blocked".to_string(),
+            "已阻断".to_string(),
+            "当前没有可继续推进的任务，项目停在阻断处理阶段。".to_string(),
+        )
     } else {
-        brain.next_recommended_action.clone()
+        (
+            "project-brain".to_string(),
+            "等待项目判断".to_string(),
+            "项目仍停留在 Project Brain / 调度判断阶段，尚未进入稳定任务循环。".to_string(),
+        )
+    };
+    let (next_action, next_action_label, next_action_reason) = if let Some(issue_id) = current_issue_id.clone() {
+        (
+            format!("继续推进 {issue_id}。"),
+            "继续当前任务".to_string(),
+            stage_summary.clone(),
+        )
+    } else if let Some(completion) = completion_projection.as_ref() {
+        (
+            completion.next_recommended_action.clone(),
+            completion.next_recommended_action_label.clone(),
+            completion.next_recommended_action_reason.clone(),
+        )
+    } else if let Some(issue_id) = future_lane.first() {
+        (
+            format!("启动 {issue_id}。"),
+            "启动下一条任务".to_string(),
+            format!("{issue_id} 当前是项目下一条最直接的推进入口。"),
+        )
+    } else if !blocked_lane.is_empty() {
+        (
+            "先解除阻断项，再继续推进项目。".to_string(),
+            "处理阻断项".to_string(),
+            blockers
+                .first()
+                .map(|blocker| blocker.reason.clone())
+                .unwrap_or_else(|| "当前存在阻断项，解除后才能继续推进项目。".to_string()),
+        )
+    } else if all_finished {
+        (
+            "进入完成判断".to_string(),
+            "进入完成判断".to_string(),
+            "任务已经全部完成，下一步需要判断项目是否真正结束。".to_string(),
+        )
+    } else {
+        (
+            brain.next_recommended_action.clone(),
+            brain.next_recommended_action_label.clone(),
+            brain.next_recommended_action_reason.clone(),
+        )
     };
     let completion_hint = if let Some(completion) = completion_projection.as_ref() {
         completion.next_recommended_action_reason.clone()
@@ -443,6 +522,9 @@ fn project_project(
         title: project.title.clone(),
         objective: project.objective.clone(),
         status: status.to_string(),
+        stage_key,
+        stage_label,
+        stage_summary,
         issue_ids: project.issue_ids.clone(),
         current_issue_id,
         lanes: ProjectIssueLanes {
@@ -452,6 +534,8 @@ fn project_project(
             blocked: blocked_lane,
         },
         next_action,
+        next_action_label,
+        next_action_reason,
         blockers,
         completion_hint,
         completion: completion_projection.map(|projection| ProjectCompletionProjection {
@@ -1046,7 +1130,8 @@ mod tests {
         );
         assert_eq!(project.completed_issue_count, 1);
         assert_eq!(project.status, "active");
-        assert_eq!(project.next_action, "进入完成判断");
+        assert_eq!(project.next_action, "enter-completion-decision");
+        assert_eq!(project.next_action_label, "进入完成判断");
         assert_eq!(
             project.completion.as_ref().map(|completion| completion.current_state.as_str()),
             Some("goal-recheck")

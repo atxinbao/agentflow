@@ -678,11 +678,18 @@ export function createBrowserPreviewProjectProjection(
     return issue?.displayStatus === "done";
   }).length;
   return {
-    version: "project-projection.browser-preview",
+    version: "project-projection.v3.browser-preview",
     projectId,
     title: "任务中心工作台优化重构",
     objective: "让任务页按状态流统一展示执行、交付和审计摘要。",
     status: current.length ? "active" : future.length ? "planned" : "done",
+    stageKey: current.length ? "active" : future.length ? "ready-to-start" : "completion-ready",
+    stageLabel: current.length ? "正在推进" : future.length ? "准备开工" : "等待完成判断",
+    stageSummary: current.length
+      ? `当前项目围绕 ${current[0]} 推进。`
+      : future.length
+        ? `当前还没有活跃任务，下一条待启动任务是 ${future[0]}。`
+        : "全部任务已完成，下一步进入完成判断。",
     issueIds: issues.map((issue) => issue.issueId),
     currentIssueId: current.at(0) ?? null,
     lanes: {
@@ -692,6 +699,12 @@ export function createBrowserPreviewProjectProjection(
       blocked,
     },
     nextAction: current.length ? `继续推进 ${current[0]}。` : future.length ? `启动 ${future[0]}。` : "进入完成判断",
+    nextActionLabel: current.length ? "继续当前任务" : future.length ? "启动下一条任务" : "进入完成判断",
+    nextActionReason: current.length
+      ? `当前活跃任务是 ${current[0]}，项目下一步仍然围绕它推进。`
+      : future.length
+        ? `${future[0]} 当前是项目下一条最直接的推进入口。`
+        : "任务已全部完成，等待完成判断收口。",
     blockers: blocked.map((issueId) => ({ issueId, reason: "等待阻断条件解除。" })),
     completionHint:
       completedIssueCount === issues.length && issues.length
