@@ -7,6 +7,7 @@ use crate::model::{
 use crate::public_delivery::collect_public_release_summary_for_project;
 use agentflow_audit::load_project_audit_review_summary;
 use agentflow_spec::{read_spec_project, SpecProject};
+use agentflow_workflow_core::{canonicalize_project_root, join_relative_path, ProjectId};
 use anyhow::{Context, Result};
 use std::{
     fs,
@@ -18,13 +19,13 @@ pub fn sync_project_external_review_surface(
     project_root: impl AsRef<Path>,
     release_facts: &ProjectReleaseFacts,
 ) -> Result<ProjectExternalReviewSurface> {
-    let root = canonical_project_root(project_root)?;
+    let root = canonicalize_project_root(project_root)?;
     let project = read_spec_project(&root, &release_facts.project_id)?;
     let public_summary =
         collect_public_release_summary_for_project(&root, Some(&release_facts.project_id))?;
     let audit_summary =
         load_project_audit_review_summary(&root, &project.project_id, &project.issue_ids)?;
-    let handoff_path = project_review_handoff_path(&project.project_id);
+    let handoff_path = project_review_handoff_path(&project.project_id)?;
     let evidence_entries = public_summary
         .entries
         .iter()
@@ -88,8 +89,8 @@ pub fn load_project_external_review_surface(
     project_root: impl AsRef<Path>,
     project_id: &str,
 ) -> Result<ProjectExternalReviewSurface> {
-    let root = canonical_project_root(project_root)?;
-    read_json(&project_external_review_surface_path(&root, project_id))
+    let root = canonicalize_project_root(project_root)?;
+    read_json(&project_external_review_surface_path(&root, project_id)?)
 }
 
 fn write_project_external_review_surface(
@@ -98,7 +99,7 @@ fn write_project_external_review_surface(
 ) -> Result<()> {
     ensure_directory(&root.join(".agentflow/release/reviews"))?;
     write_json(
-        &project_external_review_surface_path(root, &surface.project_id),
+        &project_external_review_surface_path(root, &surface.project_id)?,
         surface,
     )
 }
@@ -139,7 +140,7 @@ fn write_review_handoff_markdown(
     surface: &ProjectExternalReviewSurface,
     public_summary: &PublicReleaseSummary,
 ) -> Result<()> {
-    let path = root.join(project_review_handoff_path(&project.project_id));
+    let path = root.join(project_review_handoff_path(&project.project_id)?);
     if let Some(parent) = path.parent() {
         ensure_directory(parent)?;
     }
@@ -335,32 +336,23 @@ fn build_risk_items(
     risk_items
 }
 
-fn project_review_handoff_path(project_id: &str) -> PathBuf {
-    PathBuf::from(format!("docs/reviews/{}.md", sanitize_id(project_id)))
+fn project_review_handoff_path(project_id: &str) -> Result<PathBuf> {
+    let project_id = ProjectId::parse(project_id)?;
+    Ok(PathBuf::from(format!(
+        "docs/reviews/{}.md",
+        project_id.as_str()
+    )))
 }
 
-fn project_external_review_surface_path(root: &Path, project_id: &str) -> PathBuf {
-    root.join(".agentflow/release/reviews")
-        .join(format!("{}.json", sanitize_id(project_id)))
-}
-
-fn sanitize_id(id: &str) -> String {
-    id.chars()
-        .map(|ch| match ch {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-            _ => ch,
-        })
-        .collect()
-}
-
-fn canonical_project_root(project_root: impl AsRef<Path>) -> Result<PathBuf> {
-    let root = project_root.as_ref();
-    if root.exists() {
-        return root
-            .canonicalize()
-            .with_context(|| format!("canonicalize {}", root.display()));
-    }
-    Ok(root.to_path_buf())
+fn project_external_review_surface_path(root: &Path, project_id: &str) -> Result<PathBuf> {
+    let project_id = ProjectId::parse(project_id)?;
+    join_relative_path(
+        root,
+        PathBuf::from(".agentflow")
+            .join("release")
+            .join("reviews")
+            .join(format!("{}.json", project_id.as_str())),
+    )
 }
 
 fn ensure_directory(path: &Path) -> Result<()> {

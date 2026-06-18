@@ -6,6 +6,7 @@ use crate::model::{
     TASK_PUBLIC_RECORD_TEMPLATE_VERSION,
 };
 use agentflow_spec::{read_spec_issue, SpecIssue};
+use agentflow_workflow_core::{canonicalize_project_root, join_relative_path, IssueId, ProjectId};
 use anyhow::{Context, Result};
 use std::{
     fs,
@@ -57,7 +58,7 @@ pub fn collect_public_release_summary_for_project(
     project_root: impl AsRef<Path>,
     project_id: Option<&str>,
 ) -> Result<PublicReleaseSummary> {
-    let root = canonical_project_root(project_root)?;
+    let root = canonicalize_project_root(project_root)?;
     let mut entries = load_done_task_entries(&root, project_id)?;
     entries.sort_by(|left, right| {
         right
@@ -83,7 +84,7 @@ pub fn load_delivery_summary(
     project_root: impl AsRef<Path>,
     issue_id: impl AsRef<str>,
 ) -> Result<DeliverySummary> {
-    let root = canonical_project_root(project_root)?;
+    let root = canonicalize_project_root(project_root)?;
     let projection = load_task_projection_snapshot(&root, issue_id.as_ref())?;
     let issue = read_spec_issue(&root, issue_id.as_ref())?;
     Ok(delivery_summary_from_snapshot(&projection, &issue))
@@ -93,11 +94,11 @@ pub fn load_project_delivery_summary(
     project_root: impl AsRef<Path>,
     project_id: impl AsRef<str>,
 ) -> Result<Option<ProjectDeliverySummary>> {
-    let root = canonical_project_root(project_root)?;
-    let project_id = project_id.as_ref();
+    let root = canonicalize_project_root(project_root)?;
+    let project_id = ProjectId::parse(project_id.as_ref())?;
     let mut snapshots = load_task_projection_snapshots(&root)?
         .into_iter()
-        .filter(|projection| projection.project_id.as_deref() == Some(project_id))
+        .filter(|projection| projection.project_id.as_deref() == Some(project_id.as_str()))
         .collect::<Vec<_>>();
     if snapshots.is_empty() {
         return Ok(None);
@@ -109,7 +110,9 @@ pub fn load_project_delivery_summary(
             .then_with(|| left.issue_id.cmp(&right.issue_id))
     });
     Ok(Some(project_delivery_summary_from_snapshots(
-        &root, project_id, &snapshots,
+        &root,
+        project_id.as_str(),
+        &snapshots,
     )))
 }
 
@@ -118,9 +121,9 @@ pub fn write_public_release_documents(
     summary: &PublicReleaseSummary,
     target: &PublicReleaseDocumentTarget,
 ) -> Result<PublicReleaseDocumentPaths> {
-    let root = canonical_project_root(project_root)?;
-    let changelog_path = root.join(&target.changelog_path);
-    let release_notes_path = root.join(&target.release_notes_path);
+    let root = canonicalize_project_root(project_root)?;
+    let changelog_path = join_relative_path(&root, &target.changelog_path)?;
+    let release_notes_path = join_relative_path(&root, &target.release_notes_path)?;
     write_text(&changelog_path, &summary.changelog_markdown)?;
     write_text(&release_notes_path, &summary.release_notes_markdown)?;
     Ok(PublicReleaseDocumentPaths {
@@ -167,7 +170,7 @@ fn load_done_task_entries(
 }
 
 fn load_task_projection_snapshot(root: &Path, issue_id: &str) -> Result<TaskProjectionSnapshot> {
-    let path = task_projection_path(root, issue_id);
+    let path = task_projection_path(root, issue_id)?;
     read_json(&path)
 }
 
@@ -189,9 +192,15 @@ fn load_task_projection_snapshots(root: &Path) -> Result<Vec<TaskProjectionSnaps
     Ok(snapshots)
 }
 
-fn task_projection_path(root: &Path, issue_id: &str) -> PathBuf {
-    root.join(".agentflow/projections/tasks")
-        .join(format!("{issue_id}.json"))
+fn task_projection_path(root: &Path, issue_id: &str) -> Result<PathBuf> {
+    let issue_id = IssueId::parse(issue_id)?;
+    join_relative_path(
+        root,
+        PathBuf::from(".agentflow")
+            .join("projections")
+            .join("tasks")
+            .join(format!("{}.json", issue_id.as_str())),
+    )
 }
 
 fn delivery_summary_from_snapshot(
@@ -597,16 +606,6 @@ fn write_text(path: &Path, content: &str) -> Result<()> {
     fs::write(path, content).with_context(|| format!("write {}", path.display()))
 }
 
-fn canonical_project_root(project_root: impl AsRef<Path>) -> Result<PathBuf> {
-    let root = project_root.as_ref();
-    if root.exists() {
-        return root
-            .canonicalize()
-            .with_context(|| format!("canonicalize {}", root.display()));
-    }
-    Ok(root.to_path_buf())
-}
-
 fn unix_timestamp_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -757,5 +756,14 @@ mod tests {
         assert_eq!(paths.changelog_path, "CHANGELOG.generated.md");
         assert!(dir.path().join("CHANGELOG.generated.md").is_file());
         assert!(dir.path().join("docs/release-notes/generated.md").is_file());
+    }
+
+    #[test]
+    fn rejects_path_like_issue_ids_when_loading_delivery_summary() {
+        let dir = tempdir().unwrap();
+        let err = load_delivery_summary(dir.path(), "../bad")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("safe local id"));
     }
 }

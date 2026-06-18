@@ -5,7 +5,10 @@ use crate::model::{
     TASK_VALIDATION_VERSION,
 };
 use agentflow_event_store::TaskReplayCursor;
-use agentflow_workflow_core::WorkflowFlowType;
+use agentflow_workflow_core::{
+    canonicalize_project_root, join_relative_path, normalize_relative_path_string,
+    validate_safe_local_id, IssueId, RunId, WorkflowFlowType,
+};
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::{
@@ -18,31 +21,32 @@ pub fn prepare_task_artifact_workspace(
     project_root: impl AsRef<Path>,
     issue_id: &str,
 ) -> Result<()> {
-    let root = canonical_project_root(project_root)?;
-    validate_id("issueId", issue_id)?;
-    ensure_directory(&root.join(format!(".agentflow/tasks/{issue_id}/runs")))?;
-    ensure_directory(&root.join(format!(".agentflow/tasks/{issue_id}/evidence")))?;
+    let root = canonicalize_project_root(project_root)?;
+    ensure_directory(&task_issue_runs_dir(&root, issue_id)?)?;
+    ensure_directory(&task_evidence_dir_under_root(&root, issue_id)?)?;
     Ok(())
 }
 
-pub fn task_run_dir(project_root: impl AsRef<Path>, issue_id: &str, run_id: &str) -> PathBuf {
-    project_root
-        .as_ref()
-        .join(format!(".agentflow/tasks/{issue_id}/runs/{run_id}"))
+pub fn task_run_dir(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<PathBuf> {
+    let root = canonicalize_project_root(project_root)?;
+    task_run_dir_under_root(&root, issue_id, run_id)
 }
 
-pub fn task_evidence_dir(project_root: impl AsRef<Path>, issue_id: &str) -> PathBuf {
-    project_root
-        .as_ref()
-        .join(format!(".agentflow/tasks/{issue_id}/evidence"))
+pub fn task_evidence_dir(project_root: impl AsRef<Path>, issue_id: &str) -> Result<PathBuf> {
+    let root = canonicalize_project_root(project_root)?;
+    task_evidence_dir_under_root(&root, issue_id)
 }
 
 pub fn task_changed_files_path(
     project_root: impl AsRef<Path>,
     issue_id: &str,
     run_id: &str,
-) -> PathBuf {
-    task_run_dir(project_root, issue_id, run_id).join("changed-files.json")
+) -> Result<PathBuf> {
+    Ok(task_run_dir(project_root, issue_id, run_id)?.join("changed-files.json"))
 }
 
 pub fn create_task_run(
@@ -52,23 +56,23 @@ pub fn create_task_run(
     workflow_ref: &str,
     branch_name: Option<String>,
 ) -> Result<TaskRun> {
-    let root = canonical_project_root(project_root)?;
-    validate_id("issueId", issue_id)?;
-    validate_id("runId", run_id)?;
+    let root = canonicalize_project_root(project_root)?;
+    let issue_id = IssueId::parse(issue_id)?;
+    let run_id = RunId::parse(run_id)?;
     validate_required("workflowRef", workflow_ref)?;
-    prepare_task_artifact_workspace(&root, issue_id)?;
+    prepare_task_artifact_workspace(&root, issue_id.as_str())?;
     let now = unix_timestamp_seconds();
     let run = TaskRun {
         version: TASK_RUN_VERSION.to_string(),
-        issue_id: issue_id.to_string(),
-        run_id: run_id.to_string(),
+        issue_id: issue_id.as_str().to_string(),
+        run_id: run_id.as_str().to_string(),
         workflow_ref: workflow_ref.to_string(),
         status: TaskRunStatus::Queued,
         branch_name,
         created_at: now,
         updated_at: now,
     };
-    let run_directory = task_run_dir(&root, issue_id, run_id);
+    let run_directory = task_run_dir_under_root(&root, issue_id.as_str(), run_id.as_str())?;
     ensure_directory(&run_directory)?;
     write_json(&run_directory.join("run.json"), &run)?;
     Ok(run)
@@ -79,10 +83,8 @@ pub fn load_task_run(
     issue_id: &str,
     run_id: &str,
 ) -> Result<TaskRun> {
-    let root = canonical_project_root(project_root)?;
-    validate_id("issueId", issue_id)?;
-    validate_id("runId", run_id)?;
-    read_json(&task_run_dir(&root, issue_id, run_id).join("run.json"))
+    let root = canonicalize_project_root(project_root)?;
+    read_json(&task_run_dir_under_root(&root, issue_id, run_id)?.join("run.json"))
 }
 
 pub fn update_task_run_status(
@@ -91,10 +93,8 @@ pub fn update_task_run_status(
     run_id: &str,
     status: TaskRunStatus,
 ) -> Result<TaskRun> {
-    let root = canonical_project_root(project_root)?;
-    validate_id("issueId", issue_id)?;
-    validate_id("runId", run_id)?;
-    let path = task_run_dir(&root, issue_id, run_id).join("run.json");
+    let root = canonicalize_project_root(project_root)?;
+    let path = task_run_dir_under_root(&root, issue_id, run_id)?.join("run.json");
     let mut run: TaskRun = read_json(&path)?;
     run.status = status;
     run.updated_at = unix_timestamp_seconds();
@@ -108,11 +108,11 @@ pub fn write_task_command_record(
     run_id: &str,
     input: TaskCommandInput,
 ) -> Result<TaskCommandRecord> {
-    let root = canonical_project_root(project_root)?;
+    let root = canonicalize_project_root(project_root)?;
     let run = load_task_run(&root, issue_id, run_id)?;
     validate_required("label", &input.label)?;
     validate_required("program", &input.program)?;
-    let command_dir = task_run_dir(&root, issue_id, run_id).join("commands");
+    let command_dir = task_run_dir_under_root(&root, issue_id, run_id)?.join("commands");
     ensure_directory(&command_dir)?;
     let command_id = next_named_id(&command_dir, "cmd-")?;
     let stdout_path = command_dir.join(format!("{command_id}.stdout.txt"));
@@ -130,8 +130,8 @@ pub fn write_task_command_record(
         program: input.program,
         args: input.args,
         exit_code: input.exit_code,
-        stdout_path: relative_command_path(issue_id, run_id, &command_id, "stdout.txt"),
-        stderr_path: relative_command_path(issue_id, run_id, &command_id, "stderr.txt"),
+        stdout_path: relative_command_path(issue_id, run_id, &command_id, "stdout.txt")?,
+        stderr_path: relative_command_path(issue_id, run_id, &command_id, "stderr.txt")?,
         recorded_at: unix_timestamp_seconds(),
     };
     write_json(&command_dir.join(format!("{command_id}.json")), &record)?;
@@ -147,9 +147,9 @@ pub fn write_task_changed_files(
     head_commit: Option<String>,
     working_tree_hash: impl Into<String>,
 ) -> Result<TaskChangedFilesRecord> {
-    let root = canonical_project_root(project_root)?;
-    validate_id("issueId", issue_id)?;
-    validate_id("runId", run_id)?;
+    let root = canonicalize_project_root(project_root)?;
+    let issue_id = IssueId::parse(issue_id)?;
+    let run_id = RunId::parse(run_id)?;
     let changed_file_hash = sha256_hex(&serde_json::to_vec(&serde_json::json!({
         "files": &files,
         "baseCommit": &base_commit,
@@ -157,8 +157,8 @@ pub fn write_task_changed_files(
     }))?);
     let record = TaskChangedFilesRecord {
         version: TASK_CHANGED_FILES_VERSION.to_string(),
-        issue_id: issue_id.to_string(),
-        run_id: run_id.to_string(),
+        issue_id: issue_id.as_str().to_string(),
+        run_id: run_id.as_str().to_string(),
         files,
         base_commit,
         head_commit,
@@ -166,7 +166,10 @@ pub fn write_task_changed_files(
         changed_file_hash,
         collected_at: unix_timestamp_seconds(),
     };
-    write_json(&task_changed_files_path(&root, issue_id, run_id), &record)?;
+    write_json(
+        &task_changed_files_path(&root, issue_id.as_str(), run_id.as_str())?,
+        &record,
+    )?;
     Ok(record)
 }
 
@@ -184,9 +187,7 @@ pub fn write_task_validation_with_assessment(
     run_id: &str,
     boundary_failures: Vec<String>,
 ) -> Result<TaskValidationRecord> {
-    let root = canonical_project_root(project_root)?;
-    validate_id("issueId", issue_id)?;
-    validate_id("runId", run_id)?;
+    let root = canonicalize_project_root(project_root)?;
     let command_records = load_command_records(&root, issue_id, run_id)?;
     if command_records.is_empty() {
         anyhow::bail!("task validation requires at least one command record");
@@ -212,7 +213,17 @@ pub fn write_task_validation_with_assessment(
     let passed = failed_command_ids.is_empty() && boundary_failures.is_empty();
     let changed_files_path = changed_files
         .as_ref()
-        .map(|_| format!(".agentflow/tasks/{issue_id}/runs/{run_id}/changed-files.json"));
+        .map(|_| {
+            normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("tasks")
+                    .join(IssueId::parse(issue_id)?.as_str())
+                    .join("runs")
+                    .join(RunId::parse(run_id)?.as_str())
+                    .join("changed-files.json"),
+            )
+        })
+        .transpose()?;
     let changed_file_hash = changed_files
         .as_ref()
         .map(|record| record.changed_file_hash.clone());
@@ -260,7 +271,7 @@ pub fn write_task_validation_with_assessment(
         checked_at: unix_timestamp_seconds(),
     };
     write_json(
-        &task_run_dir(&root, issue_id, run_id).join("validation.json"),
+        &task_run_dir_under_root(&root, issue_id, run_id)?.join("validation.json"),
         &validation,
     )?;
     Ok(validation)
@@ -272,10 +283,8 @@ pub fn write_task_evidence(
     run_id: &str,
     summary: impl Into<String>,
 ) -> Result<TaskEvidence> {
-    let root = canonical_project_root(project_root)?;
-    validate_id("issueId", issue_id)?;
-    validate_id("runId", run_id)?;
-    let validation_path = task_run_dir(&root, issue_id, run_id).join("validation.json");
+    let root = canonicalize_project_root(project_root)?;
+    let validation_path = task_run_dir_under_root(&root, issue_id, run_id)?.join("validation.json");
     let validation: TaskValidationRecord = read_json(&validation_path)?;
     let command_records = load_command_records(&root, issue_id, run_id)?;
     let generated_at = unix_timestamp_seconds();
@@ -290,17 +299,36 @@ pub fn write_task_evidence(
         }
         .to_string(),
         summary: summary.into(),
-        run_path: format!(".agentflow/tasks/{issue_id}/runs/{run_id}/run.json"),
+        run_path: normalize_relative_path_string(
+            PathBuf::from(".agentflow")
+                .join("tasks")
+                .join(IssueId::parse(issue_id)?.as_str())
+                .join("runs")
+                .join(RunId::parse(run_id)?.as_str())
+                .join("run.json"),
+        )?,
         command_paths: command_records
             .iter()
             .map(|record| {
-                format!(
-                    ".agentflow/tasks/{issue_id}/runs/{run_id}/commands/{}.json",
-                    record.command_id
+                normalize_relative_path_string(
+                    PathBuf::from(".agentflow")
+                        .join("tasks")
+                        .join(IssueId::parse(issue_id)?.as_str())
+                        .join("runs")
+                        .join(RunId::parse(run_id)?.as_str())
+                        .join("commands")
+                        .join(format!("{}.json", record.command_id)),
                 )
             })
-            .collect(),
-        validation_path: format!(".agentflow/tasks/{issue_id}/runs/{run_id}/validation.json"),
+            .collect::<Result<Vec<_>>>()?,
+        validation_path: normalize_relative_path_string(
+            PathBuf::from(".agentflow")
+                .join("tasks")
+                .join(IssueId::parse(issue_id)?.as_str())
+                .join("runs")
+                .join(RunId::parse(run_id)?.as_str())
+                .join("validation.json"),
+        )?,
         changed_files_path: validation.changed_files_path.clone(),
         command_hash: validation.command_hash.clone(),
         changed_file_hash: validation.changed_file_hash.clone(),
@@ -312,7 +340,7 @@ pub fn write_task_evidence(
         created_at: generated_at,
     };
     write_json(
-        &task_evidence_dir(&root, issue_id).join("evidence.json"),
+        &task_evidence_dir_under_root(&root, issue_id)?.join("evidence.json"),
         &evidence,
     )?;
     Ok(evidence)
@@ -328,12 +356,10 @@ pub fn write_task_run_checkpoint(
     correlation_id: Option<String>,
     summary: impl Into<String>,
 ) -> Result<TaskRunCheckpoint> {
-    let root = canonical_project_root(project_root)?;
-    validate_id("issueId", issue_id)?;
-    validate_id("runId", run_id)?;
+    let root = canonicalize_project_root(project_root)?;
     validate_required("state", state)?;
     validate_required("eventId", event_id)?;
-    let checkpoint_dir = task_run_dir(&root, issue_id, run_id).join("checkpoints");
+    let checkpoint_dir = task_run_dir_under_root(&root, issue_id, run_id)?.join("checkpoints");
     ensure_directory(&checkpoint_dir)?;
     let checkpoint_id = next_named_id(&checkpoint_dir, "checkpoint-")?;
     let checkpoint = TaskRunCheckpoint {
@@ -360,10 +386,8 @@ pub fn load_task_run_checkpoints(
     issue_id: &str,
     run_id: &str,
 ) -> Result<Vec<TaskRunCheckpoint>> {
-    let root = canonical_project_root(project_root)?;
-    validate_id("issueId", issue_id)?;
-    validate_id("runId", run_id)?;
-    let checkpoint_dir = task_run_dir(&root, issue_id, run_id).join("checkpoints");
+    let root = canonicalize_project_root(project_root)?;
+    let checkpoint_dir = task_run_dir_under_root(&root, issue_id, run_id)?.join("checkpoints");
     if !checkpoint_dir.exists() {
         return Ok(Vec::new());
     }
@@ -402,9 +426,8 @@ pub fn checkpoint_replay_cursor(checkpoint: &TaskRunCheckpoint) -> TaskReplayCur
 }
 
 pub fn load_task_evidence(project_root: impl AsRef<Path>, issue_id: &str) -> Result<TaskEvidence> {
-    let root = canonical_project_root(project_root)?;
-    validate_id("issueId", issue_id)?;
-    read_json(&task_evidence_dir(&root, issue_id).join("evidence.json"))
+    let root = canonicalize_project_root(project_root)?;
+    read_json(&task_evidence_dir_under_root(&root, issue_id)?.join("evidence.json"))
 }
 
 pub fn load_task_changed_files(
@@ -412,10 +435,8 @@ pub fn load_task_changed_files(
     issue_id: &str,
     run_id: &str,
 ) -> Result<TaskChangedFilesRecord> {
-    let root = canonical_project_root(project_root)?;
-    validate_id("issueId", issue_id)?;
-    validate_id("runId", run_id)?;
-    read_json(&task_changed_files_path(&root, issue_id, run_id))
+    let root = canonicalize_project_root(project_root)?;
+    read_json(&task_changed_files_path(&root, issue_id, run_id)?)
 }
 
 fn load_command_records(
@@ -423,7 +444,7 @@ fn load_command_records(
     issue_id: &str,
     run_id: &str,
 ) -> Result<Vec<TaskCommandRecord>> {
-    let command_dir = task_run_dir(root, issue_id, run_id).join("commands");
+    let command_dir = task_run_dir_under_root(root, issue_id, run_id)?.join("commands");
     if !command_dir.exists() {
         return Ok(Vec::new());
     }
@@ -439,8 +460,45 @@ fn load_command_records(
     paths.into_iter().map(read_json).collect()
 }
 
-fn relative_command_path(issue_id: &str, run_id: &str, command_id: &str, suffix: &str) -> String {
-    format!(".agentflow/tasks/{issue_id}/runs/{run_id}/commands/{command_id}.{suffix}")
+fn task_issue_dir(root: &Path, issue_id: &str) -> Result<PathBuf> {
+    let issue_id = IssueId::parse(issue_id)?;
+    join_relative_path(
+        root,
+        PathBuf::from(".agentflow")
+            .join("tasks")
+            .join(issue_id.as_str()),
+    )
+}
+
+fn task_issue_runs_dir(root: &Path, issue_id: &str) -> Result<PathBuf> {
+    Ok(task_issue_dir(root, issue_id)?.join("runs"))
+}
+
+fn task_run_dir_under_root(root: &Path, issue_id: &str, run_id: &str) -> Result<PathBuf> {
+    let run_id = RunId::parse(run_id)?;
+    Ok(task_issue_runs_dir(root, issue_id)?.join(run_id.as_str()))
+}
+
+fn task_evidence_dir_under_root(root: &Path, issue_id: &str) -> Result<PathBuf> {
+    Ok(task_issue_dir(root, issue_id)?.join("evidence"))
+}
+
+fn relative_command_path(
+    issue_id: &str,
+    run_id: &str,
+    command_id: &str,
+    suffix: &str,
+) -> Result<String> {
+    validate_safe_local_id("commandId", command_id)?;
+    normalize_relative_path_string(
+        PathBuf::from(".agentflow")
+            .join("tasks")
+            .join(IssueId::parse(issue_id)?.as_str())
+            .join("runs")
+            .join(RunId::parse(run_id)?.as_str())
+            .join("commands")
+            .join(format!("{command_id}.{suffix}")),
+    )
 }
 
 fn next_named_id(directory: &Path, prefix: &str) -> Result<String> {
@@ -458,26 +516,11 @@ fn next_named_id(directory: &Path, prefix: &str) -> Result<String> {
     Ok(format!("{prefix}{:03}", count + 1))
 }
 
-fn validate_id(field: &str, value: &str) -> Result<()> {
-    validate_required(field, value)?;
-    if value.contains('/') || value.contains('\\') || value.contains("..") {
-        anyhow::bail!("{field} must be a local id, found {value}");
-    }
-    Ok(())
-}
-
 fn validate_required(field: &str, value: &str) -> Result<()> {
     if value.trim().is_empty() {
         anyhow::bail!("{field} is required");
     }
     Ok(())
-}
-
-fn canonical_project_root(project_root: impl AsRef<Path>) -> Result<PathBuf> {
-    project_root
-        .as_ref()
-        .canonicalize()
-        .with_context(|| format!("canonicalize {}", project_root.as_ref().display()))
 }
 
 fn ensure_directory(path: &Path) -> Result<()> {

@@ -4,11 +4,17 @@
 //! contracts, write runtime events, execute actions, or serve Desktop read
 //! models.
 
+pub mod identity;
 pub mod model;
 pub mod parser;
 pub mod registry;
 pub mod validation;
 
+pub use identity::{
+    canonicalize_project_root, join_relative_path, normalize_relative_path,
+    normalize_relative_path_string, normalize_relative_to_root, validate_safe_local_id, IssueId,
+    ProjectId, ReleaseId, RunId,
+};
 pub use model::{
     ActionDefinition, GuardDefinition, HandoffDefinition, StateDefinition, TransitionDefinition,
     WorkflowAgentRole, WorkflowDefinition, WorkflowFlowType, WorkflowHandoffMode, WorkflowMetadata,
