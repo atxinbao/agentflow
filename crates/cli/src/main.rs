@@ -108,9 +108,7 @@ fn main() -> anyhow::Result<()> {
                 provider,
                 merge_mode,
                 remote_url,
-                merged,
-                issue_closed,
-                closed_at,
+                provider_issue_refs,
             } => {
                 let proof = write_build_agent_closeout_proof(
                     &cwd,
@@ -119,9 +117,7 @@ fn main() -> anyhow::Result<()> {
                     &provider,
                     &merge_mode,
                     remote_url,
-                    merged,
-                    issue_closed,
-                    closed_at,
+                    provider_issue_refs,
                 )?;
                 println!("build agent closeout proof: recorded");
                 println!("issue: {}", proof.issue_id);
