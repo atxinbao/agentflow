@@ -837,6 +837,12 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                 summary.status = Some("requested".to_string());
                 summary.launch_requested_at = Some(event.timestamp);
                 summary.updated_at = Some(event.timestamp);
+                summary.working_directory = event
+                    .payload
+                    .get("workingDirectory")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| summary.working_directory.clone());
                 summary.launch_request_path = event
                     .payload
                     .get("launchRequestPath")
@@ -899,6 +905,27 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                     .map(|value| value as u32)
                     .unwrap_or(summary.attempt_count);
                 summary.updated_at = Some(event.timestamp);
+                if event.payload.get("workingDirectory").is_some() {
+                    summary.working_directory = event
+                        .payload
+                        .get("workingDirectory")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("workspaceRoot").is_some() {
+                    summary.workspace_root = event
+                        .payload
+                        .get("workspaceRoot")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("worktreeRoot").is_some() {
+                    summary.worktree_root = event
+                        .payload
+                        .get("worktreeRoot")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
                 summary.launch_request_path = event
                     .payload
                     .get("launchRequestPath")
@@ -921,6 +948,13 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                     summary.last_message_path = event
                         .payload
                         .get("lastMessagePath")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("exitProofPath").is_some() {
+                    summary.exit_proof_path = event
+                        .payload
+                        .get("exitProofPath")
                         .and_then(Value::as_str)
                         .map(str::to_string);
                 }
@@ -1024,6 +1058,34 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                         .and_then(Value::as_str)
                         .map(str::to_string);
                 }
+                if event.payload.get("permissionMode").is_some() {
+                    summary.permission_mode = event
+                        .payload
+                        .get("permissionMode")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("approvalPolicy").is_some() {
+                    summary.approval_policy = event
+                        .payload
+                        .get("approvalPolicy")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("sandboxMode").is_some() {
+                    summary.sandbox_mode = event
+                        .payload
+                        .get("sandboxMode")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("supervisionMode").is_some() {
+                    summary.supervision_mode = event
+                        .payload
+                        .get("supervisionMode")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
                 if event.payload.get("governancePolicyVersion").is_some() {
                     summary.governance_policy_version = event
                         .payload
@@ -1115,6 +1177,16 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                 }
                 if event.payload.get("retryable").is_some() {
                     summary.retryable = event.payload.get("retryable").and_then(Value::as_bool);
+                }
+                if event.payload.get("exitedAt").is_some() {
+                    summary.exited_at = event.payload.get("exitedAt").and_then(Value::as_u64);
+                }
+                if event.payload.get("exitCode").is_some() {
+                    summary.exit_code = event
+                        .payload
+                        .get("exitCode")
+                        .and_then(Value::as_i64)
+                        .map(|value| value as i32);
                 }
                 summary.branch_name = event
                     .payload
@@ -2240,17 +2312,25 @@ mod tests {
                     "sessionId": "codex-run-001",
                     "sessionStatus": "failed",
                     "attemptCount": 1,
-                    "selectionStatus": "degraded",
-                    "selectionReason": "provider codex supports work-agent with degraded capabilities",
-                    "degradationReason": "missing degraded capabilities: build_agent.complete",
+                    "workingDirectory": "/repo",
+                    "workspaceRoot": "/repo",
+                    "worktreeRoot": "/repo",
+                    "selectionStatus": "ready",
+                    "selectionReason": "provider codex supports runtime role work-agent and required capabilities are ready",
+                    "degradationReason": null,
                     "supportedRoles": ["spec-agent", "work-agent", "audit-agent"],
                     "supportedSkillPacks": ["contract-skills", "execution-skills", "judgment-skills"],
-                    "requiredCapabilities": ["launch", "codex.exec"],
-                    "degradedCapabilities": ["build_agent.complete"],
+                    "requiredCapabilities": ["launch", "codex.exec", "session.poll", "session.logs", "session.cancel", "build_agent.complete"],
+                    "degradedCapabilities": [],
                     "missingRequiredCapabilities": [],
-                    "missingDegradedCapabilities": ["build_agent.complete"],
+                    "missingDegradedCapabilities": [],
                     "logPath": ".agentflow/state/mcp/sessions/codex-run-001.jsonl",
                     "lastMessagePath": ".agentflow/state/mcp/sessions/codex-run-001-last-message.txt",
+                    "exitProofPath": ".agentflow/state/mcp/sessions/codex-run-001-exit.json",
+                    "permissionMode": "never",
+                    "approvalPolicy": "never",
+                    "sandboxMode": "workspace-write",
+                    "supervisionMode": "local-process-watch",
                     "governancePolicyVersion": "agentflow-mcp-session-policy.v1",
                     "claimPolicy": "single-active-session-per-run",
                     "timeoutPolicy": "interrupt-and-recover",
@@ -2277,8 +2357,12 @@ mod tests {
                     "sessionId": "codex-run-001",
                     "sessionStatus": "running",
                     "attemptCount": 2,
+                    "workingDirectory": "/repo",
+                    "workspaceRoot": "/repo",
+                    "worktreeRoot": "/repo",
                     "logPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2.jsonl",
                     "lastMessagePath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2-last-message.txt",
+                    "exitProofPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2-exit.json",
                     "recoveryReason": "retry after failed session",
                     "resumedFromAttempt": 1,
                     "takeoverSessionId": "codex-run-001",
@@ -2298,10 +2382,18 @@ mod tests {
                     "sessionId": "codex-run-001",
                     "sessionStatus": "in-review",
                     "attemptCount": 2,
+                    "workingDirectory": "/repo",
+                    "workspaceRoot": "/repo",
+                    "worktreeRoot": "/repo",
                     "logPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2.jsonl",
+                    "exitProofPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2-exit.json",
                     "mergeProofPath": ".agentflow/tasks/AF-PROJ-001/runs/run-001/review/closeout-proof.json",
                     "mergeState": "awaiting-closeout",
                     "writebackState": "awaiting-complete",
+                    "permissionMode": "never",
+                    "approvalPolicy": "never",
+                    "sandboxMode": "workspace-write",
+                    "supervisionMode": "local-process-watch",
                     "retryable": true,
                     "lastError": null
                 }),
@@ -2318,24 +2410,31 @@ mod tests {
         assert_eq!(projection.session.attempt_count, 2);
         assert_eq!(
             projection.session.selection_status.as_deref(),
-            Some("degraded")
+            Some("ready")
         );
         assert_eq!(
             projection.session.selection_reason.as_deref(),
-            Some("provider codex supports work-agent with degraded capabilities")
+            Some("provider codex supports runtime role work-agent and required capabilities are ready")
         );
-        assert_eq!(
-            projection.session.degradation_reason.as_deref(),
-            Some("missing degraded capabilities: build_agent.complete")
-        );
+        assert_eq!(projection.session.degradation_reason, None);
         assert_eq!(
             projection.session.required_capabilities,
-            vec!["launch".to_string(), "codex.exec".to_string()]
+            vec![
+                "launch".to_string(),
+                "codex.exec".to_string(),
+                "session.poll".to_string(),
+                "session.logs".to_string(),
+                "session.cancel".to_string(),
+                "build_agent.complete".to_string(),
+            ]
         );
+        assert!(projection.session.missing_degraded_capabilities.is_empty());
         assert_eq!(
-            projection.session.missing_degraded_capabilities,
-            vec!["build_agent.complete".to_string()]
+            projection.session.working_directory.as_deref(),
+            Some("/repo")
         );
+        assert_eq!(projection.session.workspace_root.as_deref(), Some("/repo"));
+        assert_eq!(projection.session.worktree_root.as_deref(), Some("/repo"));
         assert_eq!(
             projection.session.recovery_reason.as_deref(),
             Some("retry after failed session")
@@ -2347,6 +2446,10 @@ mod tests {
         assert_eq!(
             projection.session.last_message_path.as_deref(),
             Some(".agentflow/state/mcp/sessions/codex-run-001-attempt-2-last-message.txt")
+        );
+        assert_eq!(
+            projection.session.exit_proof_path.as_deref(),
+            Some(".agentflow/state/mcp/sessions/codex-run-001-attempt-2-exit.json")
         );
         assert_eq!(
             projection.session.merge_proof_path.as_deref(),
@@ -2386,6 +2489,16 @@ mod tests {
         assert_eq!(
             projection.session.cancel_policy.as_deref(),
             Some("terminal-for-current-run")
+        );
+        assert_eq!(projection.session.permission_mode.as_deref(), Some("never"));
+        assert_eq!(projection.session.approval_policy.as_deref(), Some("never"));
+        assert_eq!(
+            projection.session.sandbox_mode.as_deref(),
+            Some("workspace-write")
+        );
+        assert_eq!(
+            projection.session.supervision_mode.as_deref(),
+            Some("local-process-watch")
         );
         assert_eq!(projection.session.resumed_from_attempt, Some(1));
         assert_eq!(

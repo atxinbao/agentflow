@@ -4,7 +4,10 @@ use crate::{
         McpCapability, McpLaunchMode, McpLaunchPlan, McpLaunchRequest, McpProviderKind,
         McpProviderStatus, McpProviderStatusCode, McpSessionSnapshot, McpSessionStatus,
     },
-    provider::{run_command, McpAgentProvider},
+    provider::{
+        ensure_parent_directory, relative_project_path, resolve_launch_isolation_boundary,
+        run_command, spawn_exit_watcher, write_exit_proof, McpAgentProvider,
+    },
     storage::{read_session_snapshot, write_launch_plan, write_session_snapshot},
 };
 use agentflow_projection::load_task_projection;
@@ -157,6 +160,21 @@ pub fn check_codex_provider(project_root: impl AsRef<Path>) -> McpProviderStatus
                 true,
                 "codex exec is available",
             ));
+            status.capabilities.push(McpCapability::with_detail(
+                "session.poll",
+                true,
+                "agentflow supervises codex sessions locally",
+            ));
+            status.capabilities.push(McpCapability::with_detail(
+                "session.logs",
+                true,
+                "agentflow stores codex session logs locally",
+            ));
+            status.capabilities.push(McpCapability::with_detail(
+                "session.cancel",
+                true,
+                "agentflow can terminate codex sessions locally",
+            ));
         }
         Ok(help) => {
             status.warnings.push(format!(
@@ -173,6 +191,21 @@ pub fn check_codex_provider(project_root: impl AsRef<Path>) -> McpProviderStatus
                 false,
                 "codex exec is unavailable",
             ));
+            status.capabilities.push(McpCapability::with_detail(
+                "session.poll",
+                false,
+                "codex launch support is unavailable",
+            ));
+            status.capabilities.push(McpCapability::with_detail(
+                "session.logs",
+                false,
+                "codex launch support is unavailable",
+            ));
+            status.capabilities.push(McpCapability::with_detail(
+                "session.cancel",
+                false,
+                "codex launch support is unavailable",
+            ));
         }
         Err(error) => {
             status.warnings.push(format!("{CODEX_PROGRAM}: {error}"));
@@ -185,6 +218,21 @@ pub fn check_codex_provider(project_root: impl AsRef<Path>) -> McpProviderStatus
                 "codex.exec",
                 false,
                 "codex exec is unavailable",
+            ));
+            status.capabilities.push(McpCapability::with_detail(
+                "session.poll",
+                false,
+                "codex launch support is unavailable",
+            ));
+            status.capabilities.push(McpCapability::with_detail(
+                "session.logs",
+                false,
+                "codex launch support is unavailable",
+            ));
+            status.capabilities.push(McpCapability::with_detail(
+                "session.cancel",
+                false,
+                "codex launch support is unavailable",
             ));
         }
     }
@@ -302,6 +350,10 @@ impl McpAgentProvider for CodexProvider {
         plan.args.push("-".to_string());
         plan.stdin_path = Some(stdin_path);
         plan.output_path = Some(log_path.clone());
+        plan.approval_policy = Some(self.approval_policy.clone());
+        plan.sandbox_mode = Some(self.sandbox.clone());
+        plan.permission_mode = Some(self.approval_policy.clone());
+        plan.supervision_mode = Some("local-process-watch".to_string());
         plan.note = Some(format!("last message path: {last_message_path}"));
         Ok(plan)
     }
@@ -315,6 +367,14 @@ impl McpAgentProvider for CodexProvider {
         let mut attempt_count = 1;
         let mut recovery_reason = None;
         if let Ok(existing) = read_session_snapshot(project_root, &plan.session_id) {
+            if matches!(existing.status, McpSessionStatus::Cancelled)
+                || matches!(
+                    existing.status,
+                    McpSessionStatus::Failed | McpSessionStatus::Interrupted
+                ) && !existing.governance_facts.retryable
+            {
+                return Ok(existing);
+            }
             if !matches!(
                 existing.status,
                 McpSessionStatus::Failed | McpSessionStatus::Interrupted
@@ -334,24 +394,30 @@ impl McpAgentProvider for CodexProvider {
         let (log_path, last_message_path) =
             self.launch_artifact_paths(&plan.session_id, attempt_count);
         plan.output_path = Some(log_path.clone());
+        let isolation = resolve_launch_isolation_boundary(
+            project_root,
+            request,
+            &plan.session_id,
+            attempt_count,
+        )?;
+        plan.workspace_root = Some(isolation.workspace_root.display().to_string());
+        plan.worktree_root = Some(isolation.worktree_root.display().to_string());
+        plan.exit_proof_path = Some(relative_project_path(
+            &isolation.workspace_root,
+            &isolation.exit_proof_path,
+        ));
         plan.note = Some(format!(
             "attempt {attempt_count}; last message path: {last_message_path}"
         ));
 
         write_launch_plan(project_root, &plan)?;
-        let stdin_path = absolute_project_path(
-            project_root,
-            plan.stdin_path
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("codex launch plan is missing stdinPath"))?,
-        );
-        let log_path = absolute_project_path(
-            project_root,
+        let stdin_path = isolation.prompt_path.clone();
+        let log_path = isolation.workspace_root.join(
             plan.output_path
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("codex launch plan is missing outputPath"))?,
         );
-        let last_message_path = absolute_project_path(project_root, &last_message_path);
+        let last_message_path = isolation.workspace_root.join(&last_message_path);
         ensure_parent_directory(&log_path)?;
         ensure_parent_directory(&last_message_path)?;
 
@@ -369,33 +435,32 @@ impl McpAgentProvider for CodexProvider {
         let mut command = Command::new(&plan.program);
         command
             .args(&plan.args)
-            .current_dir(project_root)
+            .current_dir(&isolation.worktree_root)
             .stdin(Stdio::from(stdin))
             .stdout(Stdio::from(stdout))
             .stderr(Stdio::from(stderr));
-        let mut child = command.spawn().with_context(|| {
-            format!(
-                "spawn codex session for issue {} run {}",
-                request.issue_id, request.run_id
-            )
-        })?;
-        let pid = child.id();
-        std::thread::spawn(move || {
-            let _ = child.wait();
-        });
-
         let now = unix_timestamp_seconds();
         let mut session = McpSessionSnapshot::queued(request, &plan, now);
         session.status = McpSessionStatus::Starting;
-        session.pid = Some(pid);
+        session.working_directory = isolation.worktree_root.display().to_string();
+        session.workspace_root = Some(isolation.workspace_root.display().to_string());
+        session.worktree_root = Some(isolation.worktree_root.display().to_string());
         session.log_path = plan.output_path.clone();
-        session.last_message_path = Some(relative_project_path(project_root, &last_message_path));
+        session.last_message_path = Some(relative_project_path(
+            &isolation.workspace_root,
+            &last_message_path,
+        ));
         session.attempt_count = attempt_count;
         session.recovery_reason = recovery_reason;
+        session.exit_proof_path = plan.exit_proof_path.clone();
         session.merge_proof_path = None;
         session.merge_state = None;
         session.writeback_state = None;
         session.last_error = None;
+        session.permission_mode = Some(self.approval_policy.clone());
+        session.approval_policy = Some(self.approval_policy.clone());
+        session.sandbox_mode = Some(self.sandbox.clone());
+        session.supervision_mode = Some("local-process-watch".to_string());
         session.governance_facts.timeout_at = Some(now + session.governance_policy.timeout_seconds);
         session.governance_facts.resumed_from_attempt =
             (attempt_count > 1).then_some(attempt_count.saturating_sub(1));
@@ -409,7 +474,42 @@ impl McpAgentProvider for CodexProvider {
         session.governance_facts.cancelled_at = None;
         session.note = plan.note.clone();
         session.updated_at = now;
+        let child = match command.spawn().with_context(|| {
+            format!(
+                "spawn codex session for issue {} run {}",
+                request.issue_id, request.run_id
+            )
+        }) {
+            Ok(child) => child,
+            Err(error) => {
+                session.status = McpSessionStatus::Failed;
+                session.pid = None;
+                session.last_error = Some(error.to_string());
+                session.governance_facts.retryable = false;
+                session.governance_facts.terminal_reason = Some("launch-failed".to_string());
+                session.exited_at = Some(now);
+                write_session_snapshot(project_root, &session)?;
+                if let Some(exit_proof_path) = session.exit_proof_path.clone() {
+                    let absolute_exit_proof = isolation.workspace_root.join(exit_proof_path);
+                    write_exit_proof(
+                        &absolute_exit_proof,
+                        &session,
+                        "launch-failed",
+                        None,
+                        now,
+                        session.last_error.as_deref(),
+                    )?;
+                }
+                return Ok(session);
+            }
+        };
+        let pid = child.id();
+        session.pid = Some(pid);
         write_session_snapshot(project_root, &session)?;
+        if let Some(exit_proof_path) = session.exit_proof_path.clone() {
+            let absolute_exit_proof = isolation.workspace_root.join(exit_proof_path);
+            spawn_exit_watcher(child, absolute_exit_proof, session.clone());
+        }
         Ok(session)
     }
 
@@ -442,6 +542,33 @@ impl McpAgentProvider for CodexProvider {
             session.governance_facts.timed_out_at = Some(now);
             session.governance_facts.terminal_reason = Some("timeout".to_string());
             session.recovery_reason = Some("retry after timeout".to_string());
+        }
+        if let Some(exit_proof_path) = session.exit_proof_path.clone() {
+            let absolute_exit_proof = absolute_project_path(project_root, &exit_proof_path);
+            if absolute_exit_proof.is_file() {
+                let proof: Value = serde_json::from_str(
+                    &fs::read_to_string(&absolute_exit_proof)
+                        .with_context(|| format!("read {}", absolute_exit_proof.display()))?,
+                )
+                .with_context(|| format!("parse {}", absolute_exit_proof.display()))?;
+                session.exited_at = proof.get("exitedAt").and_then(Value::as_u64);
+                session.exit_code = proof
+                    .get("exitCode")
+                    .and_then(Value::as_i64)
+                    .map(|value| value as i32);
+                if session.governance_facts.terminal_reason.is_none() {
+                    session.governance_facts.terminal_reason = proof
+                        .get("status")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if session.last_error.is_none() {
+                    session.last_error = proof
+                        .get("lastError")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+            }
         }
 
         if let Some(proof) = merge_proof.as_ref() {
@@ -555,10 +682,15 @@ impl McpAgentProvider for CodexProvider {
         session.pid = None;
         session.updated_at = now;
         session.last_error = None;
+        session.exited_at = Some(now);
         session.governance_facts.cancel_requested_at = Some(now);
         session.governance_facts.cancelled_at = Some(now);
         session.governance_facts.retryable = false;
         session.governance_facts.terminal_reason = Some("cancelled".to_string());
+        if let Some(exit_proof_path) = session.exit_proof_path.clone() {
+            let absolute_exit_proof = absolute_project_path(project_root, &exit_proof_path);
+            write_exit_proof(&absolute_exit_proof, &session, "cancelled", None, now, None)?;
+        }
         write_session_snapshot(project_root, &session)?;
         Ok(session)
     }
@@ -579,20 +711,6 @@ fn absolute_project_path(project_root: &Path, value: &str) -> PathBuf {
     } else {
         project_root.join(path)
     }
-}
-
-fn ensure_parent_directory(path: &Path) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-    }
-    Ok(())
-}
-
-fn relative_project_path(project_root: &Path, path: &Path) -> String {
-    path.strip_prefix(project_root)
-        .unwrap_or(path)
-        .display()
-        .to_string()
 }
 
 fn load_merge_proof(
@@ -842,6 +960,13 @@ mod tests {
             plan.output_path.as_deref(),
             Some(".agentflow/state/mcp/sessions/codex-run-001.jsonl")
         );
+        assert_eq!(plan.approval_policy.as_deref(), Some("never"));
+        assert_eq!(plan.permission_mode.as_deref(), Some("never"));
+        assert_eq!(plan.sandbox_mode.as_deref(), Some("workspace-write"));
+        assert_eq!(
+            plan.supervision_mode.as_deref(),
+            Some("local-process-watch")
+        );
     }
 
     #[test]
@@ -952,6 +1077,10 @@ trust_level = "trusted"
             retried.last_message_path.as_deref(),
             Some(".agentflow/state/mcp/sessions/codex-run-001-attempt-2-last-message.txt")
         );
+        assert_eq!(
+            retried.exit_proof_path.as_deref(),
+            Some(".agentflow/state/mcp/sessions/codex-run-001-attempt-2-exit.json")
+        );
     }
 
     #[test]
@@ -1045,6 +1174,11 @@ trust_level = "trusted"
         assert_eq!(
             polled.recovery_reason.as_deref(),
             Some("retry after timeout")
+        );
+        assert!(polled.exited_at.is_some());
+        assert_eq!(
+            polled.exit_proof_path.as_deref(),
+            Some(".agentflow/state/mcp/sessions/codex-run-001-exit.json")
         );
     }
 }
