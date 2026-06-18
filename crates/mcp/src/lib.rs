@@ -21,10 +21,12 @@ pub use codex::{check_codex_provider, CodexProvider};
 pub use github::check_github_provider;
 pub use gitlab::check_gitlab_provider;
 pub use model::{
-    McpCapability, McpLaunchMode, McpLaunchPlan, McpLaunchRequest, McpLogChunk, McpProviderKind,
-    McpProviderStatus, McpProviderStatusCode, McpRegistry, McpRegistryEntry, McpSessionSnapshot,
-    McpSessionStatus, MCP_LAUNCH_PLAN_VERSION, MCP_LAUNCH_REQUEST_VERSION, MCP_LOG_CHUNK_VERSION,
-    MCP_PROVIDER_STATUS_VERSION, MCP_REGISTRY_VERSION, MCP_SESSION_SNAPSHOT_VERSION,
+    provider_capability_profile, McpCapability, McpLaunchMode, McpLaunchPlan, McpLaunchRequest,
+    McpLogChunk, McpProviderCapabilityProfile, McpProviderKind, McpProviderStatus,
+    McpProviderStatusCode, McpRegistry, McpRegistryEntry, McpSessionSnapshot, McpSessionStatus,
+    MCP_LAUNCH_PLAN_VERSION, MCP_LAUNCH_REQUEST_VERSION, MCP_LOG_CHUNK_VERSION,
+    MCP_PROVIDER_CAPABILITY_PROFILE_VERSION, MCP_PROVIDER_STATUS_VERSION, MCP_REGISTRY_VERSION,
+    MCP_SESSION_SNAPSHOT_VERSION,
 };
 pub use provider::{run_command, CommandProbe, McpAgentProvider, McpProviderBridge};
 pub use storage::{

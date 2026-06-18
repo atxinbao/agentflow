@@ -1,3 +1,4 @@
+use agentflow_workflow_core::{WorkflowAgentRole, WorkflowSkillPack};
 use serde::{Deserialize, Serialize};
 
 pub const MCP_PROVIDER_STATUS_VERSION: &str = "agentflow-mcp-provider.v1";
@@ -6,6 +7,7 @@ pub const MCP_LAUNCH_REQUEST_VERSION: &str = "agentflow-mcp-launch-request.v1";
 pub const MCP_LAUNCH_PLAN_VERSION: &str = "agentflow-mcp-launch-plan.v1";
 pub const MCP_SESSION_SNAPSHOT_VERSION: &str = "agentflow-mcp-session.v1";
 pub const MCP_LOG_CHUNK_VERSION: &str = "agentflow-mcp-log-chunk.v1";
+pub const MCP_PROVIDER_CAPABILITY_PROFILE_VERSION: &str = "agentflow-mcp-capability-profile.v1";
 
 fn default_attempt_count() -> u32 {
     1
@@ -27,6 +29,16 @@ impl McpProviderKind {
             Self::Gitlab => "gitlab",
             Self::Codex => "codex",
             Self::BrowserPreview => "browser-preview",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim() {
+            "github" => Some(Self::Github),
+            "gitlab" => Some(Self::Gitlab),
+            "codex" => Some(Self::Codex),
+            "browser-preview" => Some(Self::BrowserPreview),
+            _ => None,
         }
     }
 }
@@ -61,6 +73,93 @@ pub struct McpCapability {
     pub name: String,
     pub available: bool,
     pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpProviderCapabilityProfile {
+    pub version: String,
+    pub provider: String,
+    pub kind: McpProviderKind,
+    pub supported_roles: Vec<WorkflowAgentRole>,
+    pub supported_skill_packs: Vec<WorkflowSkillPack>,
+    pub required_capabilities: Vec<String>,
+    pub degraded_capabilities: Vec<String>,
+}
+
+impl McpProviderCapabilityProfile {
+    pub fn supports_role(&self, role: WorkflowAgentRole) -> bool {
+        self.supported_roles.contains(&role)
+    }
+
+    pub fn supports_skill_pack(&self, skill_pack: WorkflowSkillPack) -> bool {
+        self.supported_skill_packs.contains(&skill_pack)
+    }
+}
+
+pub fn provider_capability_profile(provider: &str) -> Option<McpProviderCapabilityProfile> {
+    let kind = McpProviderKind::parse(provider)?;
+    Some(match kind {
+        McpProviderKind::Github => McpProviderCapabilityProfile {
+            version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
+            provider: provider.to_string(),
+            kind,
+            supported_roles: vec![WorkflowAgentRole::DeliveryAgent],
+            supported_skill_packs: vec![WorkflowSkillPack::DeliverySkills],
+            required_capabilities: vec!["repo.read".to_string(), "pull_request.create".to_string()],
+            degraded_capabilities: vec![
+                "pull_request.ready".to_string(),
+                "pull_request.auto_merge".to_string(),
+                "pull_request.merged_query".to_string(),
+            ],
+        },
+        McpProviderKind::Gitlab => McpProviderCapabilityProfile {
+            version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
+            provider: provider.to_string(),
+            kind,
+            supported_roles: vec![WorkflowAgentRole::DeliveryAgent],
+            supported_skill_packs: vec![WorkflowSkillPack::DeliverySkills],
+            required_capabilities: vec![
+                "repo.read".to_string(),
+                "merge_request.create".to_string(),
+            ],
+            degraded_capabilities: vec![
+                "merge_request.ready".to_string(),
+                "merge_request.auto_merge".to_string(),
+                "merge_request.merged_query".to_string(),
+            ],
+        },
+        McpProviderKind::Codex => McpProviderCapabilityProfile {
+            version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
+            provider: provider.to_string(),
+            kind,
+            supported_roles: vec![
+                WorkflowAgentRole::SpecAgent,
+                WorkflowAgentRole::WorkAgent,
+                WorkflowAgentRole::AuditAgent,
+            ],
+            supported_skill_packs: vec![
+                WorkflowSkillPack::ContractSkills,
+                WorkflowSkillPack::ExecutionSkills,
+                WorkflowSkillPack::JudgmentSkills,
+            ],
+            required_capabilities: vec!["launch".to_string(), "codex.exec".to_string()],
+            degraded_capabilities: vec!["build_agent.complete".to_string()],
+        },
+        McpProviderKind::BrowserPreview => McpProviderCapabilityProfile {
+            version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
+            provider: provider.to_string(),
+            kind,
+            supported_roles: vec![WorkflowAgentRole::Specialist],
+            supported_skill_packs: vec![WorkflowSkillPack::SpecialistSkills],
+            required_capabilities: vec!["browser_preview.smoke".to_string()],
+            degraded_capabilities: vec![
+                "browser_preview.dom_snapshot".to_string(),
+                "browser_preview.console_logs".to_string(),
+                "browser_preview.screenshot".to_string(),
+            ],
+        },
+    })
 }
 
 impl McpCapability {
@@ -136,6 +235,10 @@ impl McpProviderStatus {
         self.capability(name)
             .map(|capability| capability.available)
             .unwrap_or(false)
+    }
+
+    pub fn capability_profile(&self) -> Option<McpProviderCapabilityProfile> {
+        provider_capability_profile(&self.provider)
     }
 }
 
@@ -402,7 +505,8 @@ impl McpLogChunk {
 
 #[cfg(test)]
 mod tests {
-    use super::{McpCapability, McpProviderKind, McpProviderStatus};
+    use super::{provider_capability_profile, McpCapability, McpProviderKind, McpProviderStatus};
+    use agentflow_workflow_core::{WorkflowAgentRole, WorkflowSkillPack};
 
     #[test]
     fn provider_status_checks_capabilities_by_name() {
@@ -415,5 +519,25 @@ mod tests {
         assert!(status.capability_available("launch"));
         assert!(!status.capability_available("build_agent.complete"));
         assert!(!status.capability_available("missing"));
+    }
+
+    #[test]
+    fn provider_capability_profile_maps_known_provider_roles_and_skills() {
+        let codex = provider_capability_profile("codex").unwrap();
+        assert!(codex.supports_role(WorkflowAgentRole::WorkAgent));
+        assert!(codex.supports_skill_pack(WorkflowSkillPack::ExecutionSkills));
+        assert_eq!(
+            codex.required_capabilities,
+            vec!["launch".to_string(), "codex.exec".to_string()]
+        );
+        assert_eq!(
+            codex.degraded_capabilities,
+            vec!["build_agent.complete".to_string()]
+        );
+
+        let github = provider_capability_profile("github").unwrap();
+        assert!(github.supports_role(WorkflowAgentRole::DeliveryAgent));
+        assert!(github.supports_skill_pack(WorkflowSkillPack::DeliverySkills));
+        assert!(!github.supports_role(WorkflowAgentRole::WorkAgent));
     }
 }

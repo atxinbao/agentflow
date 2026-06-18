@@ -1,7 +1,8 @@
 use crate::model::{
-    AgentDispatchRoleBinding, AgentDispatcherClaim, AGENT_LAUNCH_CLAIMED, AGENT_SESSION_CREATED,
-    AGENT_SESSION_DONE, AGENT_SESSION_FAILED, AGENT_SESSION_INTERRUPTED, AGENT_SESSION_IN_REVIEW,
-    AGENT_SESSION_RESUMED, AGENT_SESSION_RUNNING,
+    AgentDispatchProviderSelection, AgentDispatchRoleBinding, AgentDispatcherClaim,
+    AGENT_LAUNCH_CLAIMED, AGENT_SESSION_CREATED, AGENT_SESSION_DONE, AGENT_SESSION_FAILED,
+    AGENT_SESSION_INTERRUPTED, AGENT_SESSION_IN_REVIEW, AGENT_SESSION_RESUMED,
+    AGENT_SESSION_RUNNING,
 };
 use agentflow_event_store::{
     append_task_event_once, load_task_events, EventActor, TaskEvent, TaskEventDraft,
@@ -49,17 +50,26 @@ impl AgentDispatcher {
         let payload: AgentLaunchPayload = serde_json::from_value(event.payload.clone())
             .with_context(|| format!("parse launch payload {}", event.event_id))?;
         let role_binding = AgentDispatchRoleBinding::resolve(payload.agent_role.clone())?;
+        let provider = self.providers.provider(&payload.provider);
+        let provider_status = provider.map(|provider| provider.check_health(root));
+        let selection = AgentDispatchProviderSelection::evaluate(
+            &payload.provider,
+            provider_status.as_ref(),
+            &role_binding,
+        );
+        selection.ensure_runnable()?;
         let request = launch_payload_to_mcp_request(&payload, &role_binding);
         let provider = self
             .providers
             .provider(&payload.provider)
-            .ok_or_else(|| anyhow::anyhow!("provider {} is not registered", payload.provider))?;
+            .ok_or_else(|| anyhow::anyhow!("{}", selection.selection_reason))?;
         let session = provider.create_session(root, &request)?;
-        append_launch_claimed_event(root, &payload, &role_binding, &session)?;
+        append_launch_claimed_event(root, &payload, &role_binding, &selection, &session)?;
         let created_event = append_session_event(
             root,
             &payload,
             &role_binding,
+            &selection,
             &session,
             if had_prior_session_event(root, &payload.run_id)? {
                 AGENT_SESSION_RESUMED
@@ -67,7 +77,7 @@ impl AgentDispatcher {
                 AGENT_SESSION_CREATED
             },
         )?;
-        append_status_event(root, &payload, &session)?;
+        append_status_event(root, &payload, &selection, &session)?;
 
         Ok(Some(AgentDispatcherClaim {
             issue_id: payload.issue_id,
@@ -77,6 +87,7 @@ impl AgentDispatcher {
             session_status: session.status.as_str().to_string(),
             runtime_role: role_binding.runtime_role,
             skill_pack: role_binding.skill_pack,
+            selection,
             created_event_id: created_event.event_id,
         }))
     }
@@ -143,6 +154,7 @@ fn launch_payload_to_mcp_request(
 fn append_status_event(
     root: &Path,
     payload: &AgentLaunchPayload,
+    selection: &AgentDispatchProviderSelection,
     session: &McpSessionSnapshot,
 ) -> Result<Option<TaskEvent>> {
     let event_type = match session.status {
@@ -156,13 +168,14 @@ fn append_status_event(
         McpSessionStatus::Queued => return Ok(None),
     };
     let role_binding = AgentDispatchRoleBinding::resolve(payload.agent_role.clone())?;
-    append_session_event(root, payload, &role_binding, session, event_type).map(Some)
+    append_session_event(root, payload, &role_binding, selection, session, event_type).map(Some)
 }
 
 fn append_session_event(
     root: &Path,
     payload: &AgentLaunchPayload,
     role_binding: &AgentDispatchRoleBinding,
+    selection: &AgentDispatchProviderSelection,
     session: &McpSessionSnapshot,
     event_type: &str,
 ) -> Result<TaskEvent> {
@@ -187,9 +200,20 @@ fn append_session_event(
             causation_id: None,
             payload: json!({
                 "provider": session.provider,
+                "providerKind": selection.provider_kind,
+                "providerStatus": selection.provider_status,
                 "requestedRole": role_binding.requested_role,
                 "runtimeRole": role_binding.runtime_role.as_str(),
                 "skillPack": role_binding.skill_pack.map(|value| value.as_str()),
+                "supportedRoles": selection.supported_roles,
+                "supportedSkillPacks": selection.supported_skill_packs,
+                "selectionStatus": selection.status.as_str(),
+                "selectionReason": selection.selection_reason,
+                "degradationReason": selection.degradation_reason,
+                "requiredCapabilities": selection.required_capabilities,
+                "degradedCapabilities": selection.degraded_capabilities,
+                "missingRequiredCapabilities": selection.missing_required_capabilities,
+                "missingDegradedCapabilities": selection.missing_degraded_capabilities,
                 "sessionId": session.session_id,
                 "sessionStatus": session.status.as_str(),
                 "attemptCount": attempt_count,
@@ -220,6 +244,7 @@ fn append_launch_claimed_event(
     root: &Path,
     payload: &AgentLaunchPayload,
     role_binding: &AgentDispatchRoleBinding,
+    selection: &AgentDispatchProviderSelection,
     session: &McpSessionSnapshot,
 ) -> Result<TaskEvent> {
     let attempt_count = session.attempt_count.max(1);
@@ -243,9 +268,20 @@ fn append_launch_claimed_event(
             causation_id: None,
             payload: json!({
                 "provider": session.provider,
+                "providerKind": selection.provider_kind,
+                "providerStatus": selection.provider_status,
                 "requestedRole": role_binding.requested_role,
                 "runtimeRole": role_binding.runtime_role.as_str(),
                 "skillPack": role_binding.skill_pack.map(|value| value.as_str()),
+                "supportedRoles": selection.supported_roles,
+                "supportedSkillPacks": selection.supported_skill_packs,
+                "selectionStatus": selection.status.as_str(),
+                "selectionReason": selection.selection_reason,
+                "degradationReason": selection.degradation_reason,
+                "requiredCapabilities": selection.required_capabilities,
+                "degradedCapabilities": selection.degraded_capabilities,
+                "missingRequiredCapabilities": selection.missing_required_capabilities,
+                "missingDegradedCapabilities": selection.missing_degraded_capabilities,
                 "sessionId": session.session_id,
                 "sessionStatus": session.status.as_str(),
                 "attemptCount": attempt_count,
@@ -301,7 +337,7 @@ mod tests {
 
     impl McpAgentProvider for FakeProvider {
         fn provider_id(&self) -> &'static str {
-            "fake"
+            "codex"
         }
 
         fn kind(&self) -> McpProviderKind {
@@ -310,8 +346,13 @@ mod tests {
 
         fn check_health(&self, _project_root: &Path) -> McpProviderStatus {
             let mut status = McpProviderStatus::new(McpProviderKind::Codex, 1);
-            status.provider = "fake".to_string();
+            status.provider = "codex".to_string();
             status.status = McpProviderStatusCode::Ready;
+            status.capabilities = vec![
+                agentflow_mcp::McpCapability::new("launch", true),
+                agentflow_mcp::McpCapability::new("codex.exec", true),
+                agentflow_mcp::McpCapability::new("build_agent.complete", false),
+            ];
             status
         }
 
@@ -321,7 +362,7 @@ mod tests {
             request: &McpLaunchRequest,
         ) -> Result<McpLaunchPlan> {
             let mut plan = McpLaunchPlan::new(
-                "fake",
+                "codex",
                 format!("fake-{}", request.run_id),
                 request.issue_id.clone(),
                 request.run_id.clone(),
@@ -361,7 +402,7 @@ mod tests {
             .unwrap()
             .unwrap();
         loop_driver
-            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "fake")
+            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
             .unwrap();
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(FakeProvider));
@@ -372,9 +413,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(claim.issue_id, "AF-DISPATCH-001");
-        assert_eq!(claim.provider, "fake");
+        assert_eq!(claim.provider, "codex");
         assert_eq!(claim.session_id, "fake-run-001");
         assert_eq!(claim.runtime_role.as_str(), "work-agent");
+        assert_eq!(claim.selection.status.as_str(), "degraded");
         assert_eq!(
             claim
                 .skill_pack
@@ -395,12 +437,14 @@ mod tests {
             .unwrap();
         assert_eq!(claimed.payload["requestedRole"], "build-agent");
         assert_eq!(claimed.payload["runtimeRole"], "work-agent");
+        assert_eq!(claimed.payload["selectionStatus"], "degraded");
         let created = events
             .iter()
             .find(|event| event.event_type == AGENT_SESSION_CREATED)
             .unwrap();
         assert_eq!(created.payload["requestedRole"], "build-agent");
         assert_eq!(created.payload["runtimeRole"], "work-agent");
+        assert_eq!(created.payload["selectionStatus"], "degraded");
     }
 
     #[test]
@@ -413,7 +457,7 @@ mod tests {
             .unwrap()
             .unwrap();
         loop_driver
-            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "fake")
+            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
             .unwrap();
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(FakeProvider));
@@ -433,7 +477,7 @@ mod tests {
             .unwrap()
             .unwrap();
         loop_driver
-            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "fake")
+            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
             .unwrap();
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(FakeProvider));

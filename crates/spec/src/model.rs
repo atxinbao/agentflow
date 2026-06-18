@@ -1,3 +1,4 @@
+use agentflow_workflow_core::{WorkflowAgentRole, WorkflowSkillPack};
 use serde::{Deserialize, Serialize};
 
 pub const SPEC_MANIFEST_VERSION: &str = "agentflow-spec-manifest.v1";
@@ -33,6 +34,29 @@ pub enum SpecRequiredAgentRole {
 impl Default for SpecRequiredAgentRole {
     fn default() -> Self {
         Self::BuildAgent
+    }
+}
+
+impl SpecRequiredAgentRole {
+    pub fn runtime_role(&self) -> WorkflowAgentRole {
+        match self {
+            Self::BuildAgent => WorkflowAgentRole::WorkAgent,
+            Self::AuditAgent => WorkflowAgentRole::AuditAgent,
+        }
+    }
+
+    pub fn default_skill_pack(&self) -> WorkflowSkillPack {
+        match self {
+            Self::BuildAgent => WorkflowSkillPack::ExecutionSkills,
+            Self::AuditAgent => WorkflowSkillPack::JudgmentSkills,
+        }
+    }
+
+    pub fn provider_role_alias(&self) -> &'static str {
+        match self {
+            Self::BuildAgent => "build-agent",
+            Self::AuditAgent => "audit-agent",
+        }
     }
 }
 
