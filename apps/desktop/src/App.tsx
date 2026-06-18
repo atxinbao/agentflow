@@ -3569,7 +3569,7 @@ function TaskFlowSidebar({
           <li>{deliveryProjection.missingItems.length ? `待补齐：${deliveryProjection.missingItems.length} 项` : "交付摘要已和当前状态对齐。"}</li>
         </ul>
       </section>
-      <SectionList title="审计摘要" items={auditItems} />
+      <SectionList ariaLabel="审计摘要" title="审计摘要" items={auditItems} />
     </div>
   );
 }
@@ -5389,9 +5389,19 @@ function DescriptionList({ items }: { items: Array<[string, string]> }) {
   );
 }
 
-function SectionList({ id, items, title }: { id?: string; items: string[]; title: string }) {
+function SectionList({
+  ariaLabel,
+  id,
+  items,
+  title,
+}: {
+  ariaLabel?: string;
+  id?: string;
+  items: string[];
+  title: string;
+}) {
   return (
-    <Section className="v16-section-list" id={id} title={title}>
+    <Section aria-label={ariaLabel} className="v16-section-list" id={id} title={title}>
       <ul>
         {(items.length ? items : ["暂无记录。"]).map((item) => (
           <li key={item}>{item}</li>

@@ -18,6 +18,7 @@ const server = await createServer({
 
 try {
   const preview = await server.ssrLoadModule("/src/browserPreviewData.ts");
+  const viewModels = await server.ssrLoadModule("/src/interaction/viewModels.ts");
   const projectRegistryModule = await server.ssrLoadModule("/src/projectRegistry.ts");
   const inputSnapshot = preview.createBrowserPreviewInputSnapshot(smokeRoot);
   const issueStatusIndex = preview.createBrowserPreviewIssueStatusIndex(smokeRoot);
@@ -92,6 +93,17 @@ try {
   const taskProjections = inputSnapshot.issues
     .map((issue) => preview.createBrowserPreviewTaskProjection(issue.issueId, smokeRoot, "default"))
     .filter(Boolean);
+  const todoProjection = preview.createBrowserPreviewTaskProjection("iss-ready", smokeRoot, "default");
+  const progressProjection = preview.createBrowserPreviewTaskProjection("iss-progress", smokeRoot, "default");
+  const reviewProjection = preview.createBrowserPreviewTaskProjection("iss-review", smokeRoot, "default");
+  const doneProjection = preview.createBrowserPreviewTaskProjection("iss-done", smokeRoot, "default");
+  const taskTree = viewModels.buildTaskProjectTreeViewModel({
+    activeIssueId: "iss-progress",
+    issues: inputSnapshot.issues,
+    issueStatusIndex,
+    projects: inputSnapshot.projects,
+    relations: inputSnapshot.relations,
+  });
   assert.equal(inputSnapshot.issues.some((issue) => "riskLevel" in issue), false);
   assert.equal(inputSnapshot.issues.every((issue) => "executionRisk" in issue), true);
   assert.deepEqual(
@@ -102,6 +114,26 @@ try {
   assert.equal(outputIndex.evidence[0].path, ".agentflow/tasks/iss-review/evidence/evidence.json");
   assert.equal(outputIndex.evidence[1].path, ".agentflow/tasks/iss-done/evidence/evidence.json");
   assert.equal(taskProjections.length, 7);
+  assert.equal(taskTree.groups.length, 1);
+  assert.equal(taskTree.groups[0].title, "浏览器预览任务项目");
+  assert.equal(taskTree.groups[0].issues.length, 6);
+  assert.equal(taskTree.ungroupedIssues.length, 1);
+  assert.equal(taskTree.ungroupedIssues[0].id, "iss-backlog");
+  assert.equal(taskTree.selection?.kind, "issue");
+  assert.equal(taskTree.selection?.issueId, "iss-progress");
+  assert.equal(todoProjection?.timeline.find((item) => item.state === "todo")?.phase, "current");
+  assert.equal(todoProjection?.timeline.find((item) => item.state === "in_progress")?.phase, "future");
+  assert.equal(todoProjection?.timeline.find((item) => item.state === "in_progress")?.events.length, 0);
+  assert.equal(progressProjection?.timeline.find((item) => item.state === "in_progress")?.phase, "current");
+  assert.equal(progressProjection?.timeline.find((item) => item.state === "in_progress")?.events.length, 3);
+  assert.equal(progressProjection?.timeline.find((item) => item.state === "in_review")?.phase, "future");
+  assert.equal(progressProjection?.timeline.find((item) => item.state === "in_review")?.events.length, 0);
+  assert.equal(reviewProjection?.timeline.find((item) => item.state === "in_review")?.phase, "current");
+  assert.equal(reviewProjection?.timeline.find((item) => item.state === "done")?.phase, "future");
+  assert.equal(reviewProjection?.timeline.find((item) => item.state === "done")?.events.length, 0);
+  assert.equal(doneProjection?.timeline.find((item) => item.state === "done")?.phase, "current");
+  assert.equal(doneProjection?.timeline.find((item) => item.state === "done")?.events.length, 2);
+  assert.equal(doneProjection?.timeline.find((item) => item.state === "in_review")?.phase, "past");
   assert.equal(
     taskProjections.some((task) => task.publicDelivery?.prUrl?.includes("/pull/100")),
     true,
@@ -200,6 +232,13 @@ try {
   assert.ok(appEntry.includes("displayStatusColumns"));
   assert.ok(stateStatusHook.includes("rebuild_task_projections"));
   assert.ok(stateStatusHook.includes("load_projection_issue_status_index"));
+  assert.ok(appEntry.includes('aria-label="任务工作流"'));
+  assert.ok(appEntry.includes('aria-label="任务状态流转"'));
+  assert.ok(appEntry.includes('aria-label="当前阶段摘要"'));
+  assert.ok(appEntry.includes('aria-label="交付摘要"'));
+  assert.ok(appEntry.includes('ariaLabel="审计摘要"'));
+  assert.ok(appEntry.includes("状态流 / 事件流"));
+  assert.ok(appEntry.includes("当前还没有进入最终交付阶段"));
   assert.ok(appEntry.includes("交付摘要"));
   assert.ok(appEntry.includes("证据链"));
   assert.ok(appEntry.includes("追溯关系"));
@@ -221,7 +260,7 @@ try {
   }
   assert.equal(existsSync(path.join(smokeRoot, ".agentflow/audit")), false);
 
-  console.log("Browser Preview smoke passed: workflow state, task delivery projection, human audit, design system, and V16 shell are read-only.");
+  console.log("Browser Preview smoke passed: task page workflow hub, current/past/future timeline boundaries, delivery summary, human audit, design system, and V16 shell are read-only.");
 } finally {
   await server.close();
 }
