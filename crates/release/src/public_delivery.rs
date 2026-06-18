@@ -230,6 +230,23 @@ mod tests {
                 latest_checkpoint_state: Some(state.to_string()),
                 latest_checkpoint_summary: Some("交付回放测试。".to_string()),
             },
+            session: agentflow_projection::ProjectionSessionSummary {
+                provider: Some("codex".to_string()),
+                session_id: Some(format!("codex-{issue_id}")),
+                status: Some("done".to_string()),
+                launch_requested_at: Some(updated_at.saturating_sub(10)),
+                claimed_at: Some(updated_at.saturating_sub(9)),
+                created_at: Some(updated_at.saturating_sub(8)),
+                updated_at: Some(updated_at),
+                launch_request_path: Some(format!(
+                    ".agentflow/tasks/{issue_id}/runs/run-001/launch/agent-request.json"
+                )),
+                plan_path: Some(format!(".agentflow/state/mcp/plans/codex-{issue_id}.json")),
+                log_path: Some(format!(
+                    ".agentflow/state/mcp/sessions/codex-{issue_id}.jsonl"
+                )),
+                branch_name: Some(format!("agentflow/project-release/{issue_id}")),
+            },
             delivery: agentflow_projection::ProjectionDeliverySummary {
                 status: "published".to_string(),
                 evidence_status: "ready".to_string(),

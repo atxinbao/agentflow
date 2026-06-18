@@ -2,9 +2,10 @@ use crate::{
     model::{
         IssueStatusIndex, IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
         ProjectIssueLanes, ProjectProjection, ProjectionAuditSummary, ProjectionDeliverySummary,
-        ProjectionPhase, ProjectionPublicDelivery, ProjectionRuntimeSummary, ProjectionSummary,
-        TaskProjection, TaskTimelineEvent, TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION,
-        PROJECT_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
+        ProjectionPhase, ProjectionPublicDelivery, ProjectionRuntimeSummary,
+        ProjectionSessionSummary, ProjectionSummary, TaskProjection, TaskTimelineEvent,
+        TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION,
+        TASK_PROJECTION_VERSION,
     },
     storage::{write_issue_status_index, write_project_projection, write_task_projection},
 };
@@ -22,6 +23,7 @@ use std::{
 };
 
 const STATE_ORDER: [&str; 5] = ["backlog", "todo", "in_progress", "in_review", "done"];
+const AGENT_LAUNCH_CLAIMED_EVENT: &str = "agent.launch.claimed";
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -156,7 +158,7 @@ fn project_issue(
         {
             public_delivery.release_notes_url = Some(release_notes_url.to_string());
         }
-        if let Some(next_state) = event_to_state(&event) {
+        if let Some(next_state) = authoritative_state_from_event(&event) {
             current_state = next_state;
         }
         state_events.push((current_state.clone(), event));
@@ -168,9 +170,12 @@ fn project_issue(
         latest_run_id.as_deref(),
         branch_name.as_deref(),
     );
+    let session = build_session_summary(&state_events);
     let delivery = build_delivery_summary(root, issue, &public_delivery);
     let audit = build_audit_summary(issue, latest_run_id.as_deref(), audit_index);
-    branch_name = branch_name.or_else(|| runtime.branch_name.clone());
+    branch_name = branch_name
+        .or_else(|| runtime.branch_name.clone())
+        .or_else(|| session.branch_name.clone());
 
     TaskProjection {
         version: TASK_PROJECTION_VERSION.to_string(),
@@ -187,6 +192,7 @@ fn project_issue(
         timeline: build_timeline(issue, &current_state, &state_events),
         public_delivery,
         runtime,
+        session,
         delivery,
         audit,
         updated_at,
@@ -353,6 +359,103 @@ fn build_runtime_summary(
     }
 }
 
+fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSessionSummary {
+    let mut summary = ProjectionSessionSummary::default();
+    for (_, event) in state_events {
+        match event.event_type.as_str() {
+            "agent.launch.requested" => {
+                summary.provider = event
+                    .payload
+                    .get("provider")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| summary.provider.clone());
+                summary.status = Some("requested".to_string());
+                summary.launch_requested_at = Some(event.timestamp);
+                summary.updated_at = Some(event.timestamp);
+                summary.launch_request_path = event
+                    .payload
+                    .get("launchRequestPath")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| summary.launch_request_path.clone());
+                summary.branch_name = event
+                    .payload
+                    .get("branchName")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| summary.branch_name.clone());
+            }
+            AGENT_LAUNCH_CLAIMED_EVENT
+            | "agent.session.created"
+            | "agent.session.resumed"
+            | "agent.session.running"
+            | "agent.session.interrupted"
+            | "agent.session.in_review"
+            | "agent.session.completed"
+            | "agent.session.failed"
+            | "agent.session.cancelled" => {
+                summary.provider = event
+                    .payload
+                    .get("provider")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| summary.provider.clone());
+                summary.session_id = event
+                    .payload
+                    .get("sessionId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| summary.session_id.clone());
+                summary.status = event
+                    .payload
+                    .get("sessionStatus")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| summary.status.clone())
+                    .or_else(|| fallback_session_status(event.event_type.as_str()));
+                summary.updated_at = Some(event.timestamp);
+                summary.launch_request_path = event
+                    .payload
+                    .get("launchRequestPath")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| summary.launch_request_path.clone());
+                summary.plan_path = event
+                    .payload
+                    .get("planPath")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| summary.plan_path.clone());
+                summary.log_path = event
+                    .payload
+                    .get("logPath")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| summary.log_path.clone());
+                summary.branch_name = event
+                    .payload
+                    .get("branchName")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| summary.branch_name.clone());
+                if event.event_type == AGENT_LAUNCH_CLAIMED_EVENT {
+                    summary.claimed_at = Some(event.timestamp);
+                }
+                if matches!(
+                    event.event_type.as_str(),
+                    "agent.session.created" | "agent.session.resumed"
+                ) && summary.created_at.is_none()
+                {
+                    summary.created_at = Some(event.timestamp);
+                }
+            }
+            _ => {}
+        }
+    }
+    summary
+}
+
 fn build_delivery_summary(
     root: &Path,
     issue: &SpecIssue,
@@ -493,27 +596,36 @@ fn build_timeline(
         .collect()
 }
 
-fn event_to_state(event: &TaskEvent) -> Option<String> {
+fn authoritative_state_from_event(event: &TaskEvent) -> Option<String> {
     if let Some(EventStateTransition { to_state, .. }) = event.state.as_ref() {
         return Some(to_state.clone());
     }
     match event.event_type.as_str() {
         "issue.scheduled" => Some("todo".to_string()),
-        "agent.launch.requested"
-        | "agent.session.created"
-        | "agent.session.resumed"
-        | "agent.session.running"
-        | "agent.session.interrupted" => Some("in_progress".to_string()),
-        "agent.session.in_review"
-        | "issue.validation.passed"
+        "agent.launch.requested" => Some("in_progress".to_string()),
+        "issue.validation.passed"
         | "issue.review.requested"
         | "issue.pr.created"
-        | "issue.merge.proof.recorded" => Some("in_review".to_string()),
-        "issue.pr.merged" | "issue.completed" | "agent.session.completed" => {
-            Some("done".to_string())
-        }
-        "issue.blocked" | "agent.session.failed" => Some("blocked".to_string()),
+        | "issue.merge.proof.recorded"
+        | "issue.pr.merged" => Some("in_review".to_string()),
+        "issue.completed" => Some("done".to_string()),
+        "issue.blocked" | "issue.validation.failed" => Some("blocked".to_string()),
         "issue.cancelled" => Some("cancel".to_string()),
+        _ => None,
+    }
+}
+
+fn fallback_session_status(event_type: &str) -> Option<String> {
+    match event_type {
+        AGENT_LAUNCH_CLAIMED_EVENT => Some("claimed".to_string()),
+        "agent.session.created" => Some("queued".to_string()),
+        "agent.session.resumed" => Some("running".to_string()),
+        "agent.session.running" => Some("running".to_string()),
+        "agent.session.interrupted" => Some("interrupted".to_string()),
+        "agent.session.in_review" => Some("in-review".to_string()),
+        "agent.session.completed" => Some("done".to_string()),
+        "agent.session.failed" => Some("failed".to_string()),
+        "agent.session.cancelled" => Some("cancelled".to_string()),
         _ => None,
     }
 }
@@ -687,6 +799,7 @@ mod tests {
         assert_eq!(summary.task_count, 1);
         assert_eq!(projection.current_state, "in_progress");
         assert_eq!(projection.latest_run_id.as_deref(), Some("run-001"));
+        assert_eq!(projection.session.status.as_deref(), Some("requested"));
         assert_eq!(
             projection
                 .timeline
@@ -748,5 +861,61 @@ mod tests {
             project.project_brain.project_path,
             "docs/projects/project-projection"
         );
+    }
+
+    #[test]
+    fn provider_session_events_do_not_override_authoritative_issue_state() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.launch.requested",
+                json!({
+                    "provider": "codex",
+                    "runId": "run-001",
+                    "branchName": "agentflow/project-projection/AF-PROJ-001",
+                    "launchRequestPath": ".agentflow/tasks/AF-PROJ-001/runs/run-001/launch/agent-request.json"
+                }),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.session.completed",
+                json!({
+                    "provider": "codex",
+                    "runId": "run-001",
+                    "sessionId": "codex-run-001",
+                    "sessionStatus": "done",
+                    "logPath": ".agentflow/state/mcp/sessions/codex-run-001.jsonl"
+                }),
+            ),
+        )
+        .unwrap();
+
+        rebuild_projections(dir.path()).unwrap();
+        let projection = crate::storage::load_task_projection(dir.path(), "AF-PROJ-001").unwrap();
+
+        assert_eq!(projection.current_state, "in_progress");
+        assert_eq!(projection.display_status, "in_progress");
+        assert_eq!(projection.session.status.as_deref(), Some("done"));
+        let in_progress = projection
+            .timeline
+            .iter()
+            .find(|item| item.state == "in_progress")
+            .unwrap();
+        assert!(in_progress
+            .events
+            .iter()
+            .any(|event| event.event_type == "agent.session.completed"));
     }
 }

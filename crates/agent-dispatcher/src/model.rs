@@ -2,6 +2,7 @@ use agentflow_workflow_core::{WorkflowAgentRole, WorkflowSkillPack};
 use serde::{Deserialize, Serialize};
 
 pub const AGENT_SESSION_CREATED: &str = "agent.session.created";
+pub const AGENT_LAUNCH_CLAIMED: &str = "agent.launch.claimed";
 pub const AGENT_SESSION_RUNNING: &str = "agent.session.running";
 pub const AGENT_SESSION_INTERRUPTED: &str = "agent.session.interrupted";
 pub const AGENT_SESSION_RESUMED: &str = "agent.session.resumed";

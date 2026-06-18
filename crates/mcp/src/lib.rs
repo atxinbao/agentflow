@@ -106,16 +106,17 @@ fn observe_session_transition(
         return Ok(());
     }
 
-    if matches!(
-        updated.status,
-        McpSessionStatus::Running | McpSessionStatus::Interrupted | McpSessionStatus::Failed
-    ) {
-        let event_type = match updated.status {
-            McpSessionStatus::Running => "agent.session.running",
-            McpSessionStatus::Interrupted => "agent.session.interrupted",
-            McpSessionStatus::Failed => "agent.session.failed",
-            _ => unreachable!("session status was checked above"),
-        };
+    let event_type = match updated.status {
+        McpSessionStatus::Running => Some("agent.session.running"),
+        McpSessionStatus::Interrupted => Some("agent.session.interrupted"),
+        McpSessionStatus::InReview => Some("agent.session.in_review"),
+        McpSessionStatus::Done => Some("agent.session.completed"),
+        McpSessionStatus::Failed => Some("agent.session.failed"),
+        McpSessionStatus::Cancelled => Some("agent.session.cancelled"),
+        McpSessionStatus::Queued | McpSessionStatus::Claimed | McpSessionStatus::Starting => None,
+    };
+
+    if let Some(event_type) = event_type {
         append_task_event_once(
             project_root,
             TaskEventDraft {
@@ -212,5 +213,24 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(running_events.len(), 1);
         assert_eq!(running_events[0].issue_id.as_deref(), Some("AF-001"));
+    }
+
+    #[test]
+    fn completed_transition_appends_session_completed_event() {
+        let dir = tempdir().unwrap();
+        observe_session_transition(
+            dir.path(),
+            Some(&session(McpSessionStatus::Running)),
+            &session(McpSessionStatus::Done),
+        )
+        .unwrap();
+
+        let events = load_task_events(dir.path()).unwrap();
+        let completed = events
+            .into_iter()
+            .find(|event| event.event_type == "agent.session.completed")
+            .expect("expected completed event");
+        assert_eq!(completed.issue_id.as_deref(), Some("AF-001"));
+        assert_eq!(completed.payload["status"], "done");
     }
 }

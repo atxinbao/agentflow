@@ -85,6 +85,22 @@ pub struct ProjectionRuntimeSummary {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectionSessionSummary {
+    pub provider: Option<String>,
+    pub session_id: Option<String>,
+    pub status: Option<String>,
+    pub launch_requested_at: Option<u64>,
+    pub claimed_at: Option<u64>,
+    pub created_at: Option<u64>,
+    pub updated_at: Option<u64>,
+    pub launch_request_path: Option<String>,
+    pub plan_path: Option<String>,
+    pub log_path: Option<String>,
+    pub branch_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectionDeliverySummary {
     #[serde(default = "default_projection_delivery_status")]
     pub status: String,
@@ -139,6 +155,8 @@ pub struct TaskProjection {
     pub public_delivery: ProjectionPublicDelivery,
     #[serde(default)]
     pub runtime: ProjectionRuntimeSummary,
+    #[serde(default)]
+    pub session: ProjectionSessionSummary,
     #[serde(default)]
     pub delivery: ProjectionDeliverySummary,
     #[serde(default)]
