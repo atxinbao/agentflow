@@ -921,6 +921,98 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                         .and_then(Value::as_str)
                         .map(str::to_string);
                 }
+                if event.payload.get("governancePolicyVersion").is_some() {
+                    summary.governance_policy_version = event
+                        .payload
+                        .get("governancePolicyVersion")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("claimPolicy").is_some() {
+                    summary.claim_policy = event
+                        .payload
+                        .get("claimPolicy")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("timeoutPolicy").is_some() {
+                    summary.timeout_policy = event
+                        .payload
+                        .get("timeoutPolicy")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("timeoutSeconds").is_some() {
+                    summary.timeout_seconds =
+                        event.payload.get("timeoutSeconds").and_then(Value::as_u64);
+                }
+                if event.payload.get("timeoutAt").is_some() {
+                    summary.timeout_at = event.payload.get("timeoutAt").and_then(Value::as_u64);
+                }
+                if event.payload.get("timedOutAt").is_some() {
+                    summary.timed_out_at = event.payload.get("timedOutAt").and_then(Value::as_u64);
+                }
+                if event.payload.get("takeoverPolicy").is_some() {
+                    summary.takeover_policy = event
+                        .payload
+                        .get("takeoverPolicy")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("retryPolicy").is_some() {
+                    summary.retry_policy = event
+                        .payload
+                        .get("retryPolicy")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("maxAttempts").is_some() {
+                    summary.max_attempts = event
+                        .payload
+                        .get("maxAttempts")
+                        .and_then(Value::as_u64)
+                        .map(|value| value as u32);
+                }
+                if event.payload.get("cancelPolicy").is_some() {
+                    summary.cancel_policy = event
+                        .payload
+                        .get("cancelPolicy")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("cancelRequestedAt").is_some() {
+                    summary.cancel_requested_at = event
+                        .payload
+                        .get("cancelRequestedAt")
+                        .and_then(Value::as_u64);
+                }
+                if event.payload.get("cancelledAt").is_some() {
+                    summary.cancelled_at = event.payload.get("cancelledAt").and_then(Value::as_u64);
+                }
+                if event.payload.get("resumedFromAttempt").is_some() {
+                    summary.resumed_from_attempt = event
+                        .payload
+                        .get("resumedFromAttempt")
+                        .and_then(Value::as_u64)
+                        .map(|value| value as u32);
+                }
+                if event.payload.get("takeoverSessionId").is_some() {
+                    summary.takeover_session_id = event
+                        .payload
+                        .get("takeoverSessionId")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("terminalReason").is_some() {
+                    summary.terminal_reason = event
+                        .payload
+                        .get("terminalReason")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("retryable").is_some() {
+                    summary.retryable = event.payload.get("retryable").and_then(Value::as_bool);
+                }
                 summary.branch_name = event
                     .payload
                     .get("branchName")
@@ -1373,6 +1465,7 @@ fn event_summary(event: &TaskEvent) -> String {
         "agent.session.in_review" => "外部执行会话已进入评审。".to_string(),
         "agent.session.completed" => "外部执行会话已完成。".to_string(),
         "agent.session.failed" => "外部执行会话失败。".to_string(),
+        "agent.session.cancelled" => "外部执行会话已取消。".to_string(),
         "issue.validation.passed" => "本地沙箱验证已通过。".to_string(),
         "issue.review.requested" => "任务已请求评审。".to_string(),
         "issue.pr.created" => "PR/MR 已创建。".to_string(),
@@ -1949,6 +2042,16 @@ mod tests {
                     "missingDegradedCapabilities": ["build_agent.complete"],
                     "logPath": ".agentflow/state/mcp/sessions/codex-run-001.jsonl",
                     "lastMessagePath": ".agentflow/state/mcp/sessions/codex-run-001-last-message.txt",
+                    "governancePolicyVersion": "agentflow-mcp-session-policy.v1",
+                    "claimPolicy": "single-active-session-per-run",
+                    "timeoutPolicy": "interrupt-and-recover",
+                    "timeoutSeconds": 3600,
+                    "timeoutAt": 100,
+                    "takeoverPolicy": "resume-interrupted-or-failed-attempt",
+                    "retryPolicy": "bounded-retry",
+                    "maxAttempts": 3,
+                    "cancelPolicy": "terminal-for-current-run",
+                    "retryable": true,
                     "lastError": "first attempt failed"
                 }),
             ),
@@ -1967,7 +2070,10 @@ mod tests {
                     "attemptCount": 2,
                     "logPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2.jsonl",
                     "lastMessagePath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2-last-message.txt",
-                    "recoveryReason": "retry after failed session"
+                    "recoveryReason": "retry after failed session",
+                    "resumedFromAttempt": 1,
+                    "takeoverSessionId": "codex-run-001",
+                    "retryable": true
                 }),
             ),
         )
@@ -1987,6 +2093,7 @@ mod tests {
                     "mergeProofPath": ".agentflow/tasks/AF-PROJ-001/runs/run-001/review/merge-proof.json",
                     "mergeState": "merged",
                     "writebackState": "awaiting-complete",
+                    "retryable": true,
                     "lastError": null
                 }),
             ),
@@ -2041,6 +2148,39 @@ mod tests {
             projection.session.writeback_state.as_deref(),
             Some("awaiting-complete")
         );
+        assert_eq!(
+            projection.session.governance_policy_version.as_deref(),
+            Some("agentflow-mcp-session-policy.v1")
+        );
+        assert_eq!(
+            projection.session.claim_policy.as_deref(),
+            Some("single-active-session-per-run")
+        );
+        assert_eq!(
+            projection.session.timeout_policy.as_deref(),
+            Some("interrupt-and-recover")
+        );
+        assert_eq!(projection.session.timeout_seconds, Some(3600));
+        assert_eq!(projection.session.timeout_at, Some(100));
+        assert_eq!(
+            projection.session.takeover_policy.as_deref(),
+            Some("resume-interrupted-or-failed-attempt")
+        );
+        assert_eq!(
+            projection.session.retry_policy.as_deref(),
+            Some("bounded-retry")
+        );
+        assert_eq!(projection.session.max_attempts, Some(3));
+        assert_eq!(
+            projection.session.cancel_policy.as_deref(),
+            Some("terminal-for-current-run")
+        );
+        assert_eq!(projection.session.resumed_from_attempt, Some(1));
+        assert_eq!(
+            projection.session.takeover_session_id.as_deref(),
+            Some("codex-run-001")
+        );
+        assert_eq!(projection.session.retryable, Some(true));
         assert_eq!(projection.session.last_error, None);
     }
 

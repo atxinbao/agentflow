@@ -11,6 +11,7 @@ pub const AGENT_SESSION_RESUMED: &str = "agent.session.resumed";
 pub const AGENT_SESSION_IN_REVIEW: &str = "agent.session.in_review";
 pub const AGENT_SESSION_DONE: &str = "agent.session.completed";
 pub const AGENT_SESSION_FAILED: &str = "agent.session.failed";
+pub const AGENT_SESSION_CANCELLED: &str = "agent.session.cancelled";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

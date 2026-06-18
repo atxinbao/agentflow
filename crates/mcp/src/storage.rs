@@ -170,7 +170,8 @@ mod tests {
     use super::*;
     use crate::model::{
         McpLaunchMode, McpLaunchPlan, McpProviderKind, McpProviderStatus, McpProviderStatusCode,
-        McpSessionSnapshot, McpSessionStatus,
+        McpSessionGovernanceFacts, McpSessionGovernancePolicy, McpSessionSnapshot,
+        McpSessionStatus,
     };
     use tempfile::tempdir;
 
@@ -244,6 +245,8 @@ mod tests {
             recovery_reason: None,
             note: Some("test".to_string()),
             last_error: None,
+            governance_policy: McpSessionGovernancePolicy::default(),
+            governance_facts: McpSessionGovernanceFacts::default(),
             created_at: 1,
             updated_at: 1,
         };

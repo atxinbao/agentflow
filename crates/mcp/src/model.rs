@@ -8,9 +8,78 @@ pub const MCP_LAUNCH_PLAN_VERSION: &str = "agentflow-mcp-launch-plan.v1";
 pub const MCP_SESSION_SNAPSHOT_VERSION: &str = "agentflow-mcp-session.v1";
 pub const MCP_LOG_CHUNK_VERSION: &str = "agentflow-mcp-log-chunk.v1";
 pub const MCP_PROVIDER_CAPABILITY_PROFILE_VERSION: &str = "agentflow-mcp-capability-profile.v1";
+pub const MCP_SESSION_GOVERNANCE_POLICY_VERSION: &str = "agentflow-mcp-session-policy.v1";
+pub const MCP_DEFAULT_SESSION_TIMEOUT_SECONDS: u64 = 60 * 60;
+pub const MCP_DEFAULT_MAX_ATTEMPTS: u32 = 3;
 
 fn default_attempt_count() -> u32 {
     1
+}
+
+fn default_session_timeout_seconds() -> u64 {
+    MCP_DEFAULT_SESSION_TIMEOUT_SECONDS
+}
+
+fn default_max_attempts() -> u32 {
+    MCP_DEFAULT_MAX_ATTEMPTS
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpSessionGovernancePolicy {
+    pub version: String,
+    pub claim_policy: String,
+    pub timeout_policy: String,
+    #[serde(default = "default_session_timeout_seconds")]
+    pub timeout_seconds: u64,
+    pub takeover_policy: String,
+    pub retry_policy: String,
+    #[serde(default = "default_max_attempts")]
+    pub max_attempts: u32,
+    pub cancel_policy: String,
+}
+
+impl Default for McpSessionGovernancePolicy {
+    fn default() -> Self {
+        Self {
+            version: MCP_SESSION_GOVERNANCE_POLICY_VERSION.to_string(),
+            claim_policy: "single-active-session-per-run".to_string(),
+            timeout_policy: "interrupt-and-recover".to_string(),
+            timeout_seconds: MCP_DEFAULT_SESSION_TIMEOUT_SECONDS,
+            takeover_policy: "resume-interrupted-or-failed-attempt".to_string(),
+            retry_policy: "bounded-retry".to_string(),
+            max_attempts: MCP_DEFAULT_MAX_ATTEMPTS,
+            cancel_policy: "terminal-for-current-run".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpSessionGovernanceFacts {
+    pub timeout_at: Option<u64>,
+    pub timed_out_at: Option<u64>,
+    pub cancel_requested_at: Option<u64>,
+    pub cancelled_at: Option<u64>,
+    pub resumed_from_attempt: Option<u32>,
+    pub takeover_session_id: Option<String>,
+    pub terminal_reason: Option<String>,
+    pub retryable: bool,
+}
+
+impl Default for McpSessionGovernanceFacts {
+    fn default() -> Self {
+        Self {
+            timeout_at: None,
+            timed_out_at: None,
+            cancel_requested_at: None,
+            cancelled_at: None,
+            resumed_from_attempt: None,
+            takeover_session_id: None,
+            terminal_reason: None,
+            retryable: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -473,12 +542,22 @@ pub struct McpSessionSnapshot {
     pub note: Option<String>,
     #[serde(default)]
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub governance_policy: McpSessionGovernancePolicy,
+    #[serde(default)]
+    pub governance_facts: McpSessionGovernanceFacts,
     pub created_at: u64,
     pub updated_at: u64,
 }
 
 impl McpSessionSnapshot {
     pub fn queued(request: &McpLaunchRequest, plan: &McpLaunchPlan, created_at: u64) -> Self {
+        let governance_policy = McpSessionGovernancePolicy::default();
+        let governance_facts = McpSessionGovernanceFacts {
+            timeout_at: Some(created_at + governance_policy.timeout_seconds),
+            retryable: true,
+            ..Default::default()
+        };
         Self {
             version: MCP_SESSION_SNAPSHOT_VERSION.to_string(),
             provider: request.provider.clone(),
@@ -503,6 +582,8 @@ impl McpSessionSnapshot {
             recovery_reason: None,
             note: plan.note.clone(),
             last_error: None,
+            governance_policy,
+            governance_facts,
             created_at,
             updated_at: created_at,
         }
