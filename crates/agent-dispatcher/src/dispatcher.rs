@@ -166,6 +166,7 @@ fn append_session_event(
     session: &McpSessionSnapshot,
     event_type: &str,
 ) -> Result<TaskEvent> {
+    let attempt_count = session.attempt_count.max(1);
     append_task_event_once(
         root,
         TaskEventDraft {
@@ -191,6 +192,7 @@ fn append_session_event(
                 "skillPack": role_binding.skill_pack.map(|value| value.as_str()),
                 "sessionId": session.session_id,
                 "sessionStatus": session.status.as_str(),
+                "attemptCount": attempt_count,
                 "issueId": session.issue_id,
                 "projectId": session.project_id,
                 "runId": session.run_id,
@@ -198,10 +200,16 @@ fn append_session_event(
                 "launchRequestPath": session.launch_request_path,
                 "planPath": session.plan_path,
                 "logPath": session.log_path,
+                "lastMessagePath": session.last_message_path,
+                "mergeProofPath": session.merge_proof_path,
+                "mergeState": session.merge_state,
+                "writebackState": session.writeback_state,
+                "recoveryReason": session.recovery_reason,
+                "lastError": session.last_error,
             }),
             artifact_refs: session_artifact_refs(session),
             idempotency_key: Some(format!(
-                "{event_type}:{}:{}",
+                "{event_type}:{}:{}:attempt-{attempt_count}",
                 session.issue_id, session.run_id
             )),
         },
@@ -214,6 +222,7 @@ fn append_launch_claimed_event(
     role_binding: &AgentDispatchRoleBinding,
     session: &McpSessionSnapshot,
 ) -> Result<TaskEvent> {
+    let attempt_count = session.attempt_count.max(1);
     append_task_event_once(
         root,
         TaskEventDraft {
@@ -239,6 +248,7 @@ fn append_launch_claimed_event(
                 "skillPack": role_binding.skill_pack.map(|value| value.as_str()),
                 "sessionId": session.session_id,
                 "sessionStatus": session.status.as_str(),
+                "attemptCount": attempt_count,
                 "issueId": session.issue_id,
                 "projectId": session.project_id,
                 "runId": session.run_id,
@@ -246,10 +256,16 @@ fn append_launch_claimed_event(
                 "launchRequestPath": session.launch_request_path,
                 "planPath": session.plan_path,
                 "logPath": session.log_path,
+                "lastMessagePath": session.last_message_path,
+                "mergeProofPath": session.merge_proof_path,
+                "mergeState": session.merge_state,
+                "writebackState": session.writeback_state,
+                "recoveryReason": session.recovery_reason,
+                "lastError": session.last_error,
             }),
             artifact_refs: session_artifact_refs(session),
             idempotency_key: Some(format!(
-                "{AGENT_LAUNCH_CLAIMED}:{}:{}",
+                "{AGENT_LAUNCH_CLAIMED}:{}:{}:attempt-{attempt_count}",
                 session.issue_id, session.run_id
             )),
         },
@@ -260,6 +276,12 @@ fn session_artifact_refs(session: &McpSessionSnapshot) -> Vec<String> {
     let mut refs = vec![session.plan_path.clone()];
     if let Some(log_path) = session.log_path.clone() {
         refs.push(log_path);
+    }
+    if let Some(last_message_path) = session.last_message_path.clone() {
+        refs.push(last_message_path);
+    }
+    if let Some(merge_proof_path) = session.merge_proof_path.clone() {
+        refs.push(merge_proof_path);
     }
     refs
 }

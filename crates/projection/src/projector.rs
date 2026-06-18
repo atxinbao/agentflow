@@ -2,15 +2,14 @@ use crate::{
     model::{
         CompletionDecisionIndex, CompletionDecisionIndexEntry, CompletionDecisionProjection,
         IssueStatusIndex, IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
-        ProjectCompletionProjection, ProjectIssueLanes, ProjectProjection,
-        ProjectionAuditSummary, ProjectionDeliverySummary, ProjectionPhase,
-        ProjectionPublicDelivery, ProjectionRuntimeSummary, ProjectionSessionSummary,
-        ProjectionSummary, RequirementPreviewIndex, RequirementPreviewIndexEntry,
-        RequirementPreviewProjection, TaskProjection, TaskTimelineEvent, TaskTimelineItem,
-        COMPLETION_DECISION_INDEX_VERSION, COMPLETION_DECISION_PROJECTION_VERSION,
-        ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION,
-        REQUIREMENT_PREVIEW_INDEX_VERSION, REQUIREMENT_PREVIEW_PROJECTION_VERSION,
-        TASK_PROJECTION_VERSION,
+        ProjectCompletionProjection, ProjectIssueLanes, ProjectProjection, ProjectionAuditSummary,
+        ProjectionDeliverySummary, ProjectionPhase, ProjectionPublicDelivery,
+        ProjectionRuntimeSummary, ProjectionSessionSummary, ProjectionSummary,
+        RequirementPreviewIndex, RequirementPreviewIndexEntry, RequirementPreviewProjection,
+        TaskProjection, TaskTimelineEvent, TaskTimelineItem, COMPLETION_DECISION_INDEX_VERSION,
+        COMPLETION_DECISION_PROJECTION_VERSION, ISSUE_STATUS_INDEX_VERSION,
+        PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
+        REQUIREMENT_PREVIEW_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
     },
     storage::{
         write_completion_decision_index, write_completion_decision_projection,
@@ -106,8 +105,9 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
     let mut requirement_preview_entries = Vec::new();
     for preview in &requirement_previews {
         let projection = project_requirement_preview(preview);
-        let projection_path =
-            write_requirement_preview_projection(&root, &projection)?.display().to_string();
+        let projection_path = write_requirement_preview_projection(&root, &projection)?
+            .display()
+            .to_string();
         requirement_preview_entries.push(RequirementPreviewIndexEntry {
             requirement_id: preview.requirement_id.clone(),
             project_id: preview.project_id.clone(),
@@ -136,8 +136,9 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
     let mut completion_entries = Vec::new();
     for runtime in &completion_runtimes {
         let projection = project_completion_decision(runtime);
-        let projection_path =
-            write_completion_decision_projection(&root, &projection)?.display().to_string();
+        let projection_path = write_completion_decision_projection(&root, &projection)?
+            .display()
+            .to_string();
         completion_entries.push(CompletionDecisionIndexEntry {
             project_id: runtime.project_id.clone(),
             current_state: projection.current_state.clone(),
@@ -330,9 +331,7 @@ fn project_issue(
         }
         state_events.push((current_state.clone(), event));
     }
-    let latest_run_id = authoritative_run_id
-        .or(active_run_id)
-        .or(latest_run_id);
+    let latest_run_id = authoritative_run_id.or(active_run_id).or(latest_run_id);
 
     let session = build_session_summary(&state_events);
     let runtime = build_runtime_summary(
@@ -482,7 +481,8 @@ fn project_project(
             _ => (
                 "completion-ready".to_string(),
                 "等待完成判断".to_string(),
-                "任务已全部完成，正在等待 Goal Recheck / Completion Runtime 做最后判断。".to_string(),
+                "任务已全部完成，正在等待 Goal Recheck / Completion Runtime 做最后判断。"
+                    .to_string(),
             ),
         }
     } else if let Some(issue_id) = current_issue_id.as_ref() {
@@ -519,46 +519,47 @@ fn project_project(
             "项目仍停留在 Project Brain / 调度判断阶段，尚未进入稳定任务循环。".to_string(),
         )
     };
-    let (next_action, next_action_label, next_action_reason) = if let Some(issue_id) = current_issue_id.clone() {
-        (
-            format!("继续推进 {issue_id}。"),
-            "继续当前任务".to_string(),
-            stage_summary.clone(),
-        )
-    } else if let Some(completion) = completion_projection.as_ref() {
-        (
-            completion.next_recommended_action.clone(),
-            completion.next_recommended_action_label.clone(),
-            completion.next_recommended_action_reason.clone(),
-        )
-    } else if let Some(issue_id) = future_lane.first() {
-        (
-            format!("启动 {issue_id}。"),
-            "启动下一条任务".to_string(),
-            format!("{issue_id} 当前是项目下一条最直接的推进入口。"),
-        )
-    } else if !blocked_lane.is_empty() {
-        (
-            "先解除阻断项，再继续推进项目。".to_string(),
-            "处理阻断项".to_string(),
-            blockers
-                .first()
-                .map(|blocker| blocker.reason.clone())
-                .unwrap_or_else(|| "当前存在阻断项，解除后才能继续推进项目。".to_string()),
-        )
-    } else if all_finished {
-        (
-            "进入完成判断".to_string(),
-            "进入完成判断".to_string(),
-            "任务已经全部完成，下一步需要判断项目是否真正结束。".to_string(),
-        )
-    } else {
-        (
-            brain.next_recommended_action.clone(),
-            brain.next_recommended_action_label.clone(),
-            brain.next_recommended_action_reason.clone(),
-        )
-    };
+    let (next_action, next_action_label, next_action_reason) =
+        if let Some(issue_id) = current_issue_id.clone() {
+            (
+                format!("继续推进 {issue_id}。"),
+                "继续当前任务".to_string(),
+                stage_summary.clone(),
+            )
+        } else if let Some(completion) = completion_projection.as_ref() {
+            (
+                completion.next_recommended_action.clone(),
+                completion.next_recommended_action_label.clone(),
+                completion.next_recommended_action_reason.clone(),
+            )
+        } else if let Some(issue_id) = future_lane.first() {
+            (
+                format!("启动 {issue_id}。"),
+                "启动下一条任务".to_string(),
+                format!("{issue_id} 当前是项目下一条最直接的推进入口。"),
+            )
+        } else if !blocked_lane.is_empty() {
+            (
+                "先解除阻断项，再继续推进项目。".to_string(),
+                "处理阻断项".to_string(),
+                blockers
+                    .first()
+                    .map(|blocker| blocker.reason.clone())
+                    .unwrap_or_else(|| "当前存在阻断项，解除后才能继续推进项目。".to_string()),
+            )
+        } else if all_finished {
+            (
+                "进入完成判断".to_string(),
+                "进入完成判断".to_string(),
+                "任务已经全部完成，下一步需要判断项目是否真正结束。".to_string(),
+            )
+        } else {
+            (
+                brain.next_recommended_action.clone(),
+                brain.next_recommended_action_label.clone(),
+                brain.next_recommended_action_reason.clone(),
+            )
+        };
     let completion_hint = if let Some(completion) = completion_projection.as_ref() {
         append_audit_hint(
             append_delivery_hint(
@@ -694,10 +695,7 @@ fn build_runtime_summary(
     }
 }
 
-fn normalize_runtime_run_status(
-    run_status: Option<&str>,
-    session_status: Option<&str>,
-) -> String {
+fn normalize_runtime_run_status(run_status: Option<&str>, session_status: Option<&str>) -> String {
     match session_status {
         Some("requested" | "queued" | "claimed" | "starting") => "queued".to_string(),
         Some("running" | "interrupted") => "in_progress".to_string(),
@@ -763,6 +761,12 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                     .map(str::to_string)
                     .or_else(|| summary.status.clone())
                     .or_else(|| fallback_session_status(event.event_type.as_str()));
+                summary.attempt_count = event
+                    .payload
+                    .get("attemptCount")
+                    .and_then(Value::as_u64)
+                    .map(|value| value as u32)
+                    .unwrap_or(summary.attempt_count);
                 summary.updated_at = Some(event.timestamp);
                 summary.launch_request_path = event
                     .payload
@@ -782,6 +786,48 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                     .and_then(Value::as_str)
                     .map(str::to_string)
                     .or_else(|| summary.log_path.clone());
+                if event.payload.get("lastMessagePath").is_some() {
+                    summary.last_message_path = event
+                        .payload
+                        .get("lastMessagePath")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("mergeProofPath").is_some() {
+                    summary.merge_proof_path = event
+                        .payload
+                        .get("mergeProofPath")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("mergeState").is_some() {
+                    summary.merge_state = event
+                        .payload
+                        .get("mergeState")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("writebackState").is_some() {
+                    summary.writeback_state = event
+                        .payload
+                        .get("writebackState")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("recoveryReason").is_some() {
+                    summary.recovery_reason = event
+                        .payload
+                        .get("recoveryReason")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("lastError").is_some() {
+                    summary.last_error = event
+                        .payload
+                        .get("lastError")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
                 summary.branch_name = event
                     .payload
                     .get("branchName")
@@ -986,7 +1032,8 @@ fn build_audit_summary(
             || run_id.is_some_and(|run_id| entry.source_run_id.as_deref() == Some(run_id))
     });
 
-    let audit_result = audit.and_then(|entry| load_audit_result_summary(root, entry.audit_id.clone()).ok());
+    let audit_result =
+        audit.and_then(|entry| load_audit_result_summary(root, entry.audit_id.clone()).ok());
 
     ProjectionAuditSummary {
         status: audit
@@ -995,10 +1042,16 @@ fn build_audit_summary(
         latest_audit_id: audit.map(|entry| entry.audit_id.clone()),
         source_issue_id: audit
             .and_then(|entry| entry.source_issue_id.clone())
-            .or_else(|| audit_result.as_ref().and_then(|summary| summary.source_issue_id.clone())),
-        report_path: audit
-            .map(|entry| entry.report_path.clone())
-            .or_else(|| audit_result.as_ref().map(|summary| summary.report_path.clone())),
+            .or_else(|| {
+                audit_result
+                    .as_ref()
+                    .and_then(|summary| summary.source_issue_id.clone())
+            }),
+        report_path: audit.map(|entry| entry.report_path.clone()).or_else(|| {
+            audit_result
+                .as_ref()
+                .map(|summary| summary.report_path.clone())
+        }),
         requested_at: audit
             .map(|entry| entry.requested_at)
             .or_else(|| audit_result.as_ref().map(|summary| summary.requested_at)),
@@ -1311,8 +1364,8 @@ mod tests {
     use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
     use agentflow_spec::{
         read_spec_issue, read_spec_project, requirement_preview_from_requirement, write_spec_issue,
-        write_spec_project,
-        CompletionDecisionOutcome, SpecIssueDraft, SpecIssueStatus, SpecProjectDraft,
+        write_spec_project, CompletionDecisionOutcome, SpecIssueDraft, SpecIssueStatus,
+        SpecProjectDraft,
     };
     use serde_json::json;
     use tempfile::tempdir;
@@ -1587,7 +1640,10 @@ mod tests {
         assert_eq!(project.next_action, "enter-completion-decision");
         assert_eq!(project.next_action_label, "进入完成判断");
         assert_eq!(
-            project.completion.as_ref().map(|completion| completion.current_state.as_str()),
+            project
+                .completion
+                .as_ref()
+                .map(|completion| completion.current_state.as_str()),
             Some("goal-recheck")
         );
         assert_eq!(project.objective, "用于 projection 测试。");
@@ -1630,10 +1686,16 @@ mod tests {
         project.issue_ids = vec!["AF-PROJ-001".to_string(), "AF-PROJ-002".to_string()];
         write_spec_project(dir.path(), &project).unwrap();
 
-        append_task_event_once(dir.path(), event("AF-PROJ-001", "issue.scheduled", json!({})))
-            .unwrap();
-        append_task_event_once(dir.path(), event("AF-PROJ-002", "issue.scheduled", json!({})))
-            .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-002", "issue.scheduled", json!({})),
+        )
+        .unwrap();
         append_task_event_once(
             dir.path(),
             event(
@@ -1748,6 +1810,115 @@ mod tests {
     }
 
     #[test]
+    fn projection_tracks_retry_and_writeback_fields_from_session_events() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.launch.requested",
+                json!({
+                    "provider": "codex",
+                    "runId": "run-001",
+                    "branchName": "agentflow/project-projection/AF-PROJ-001",
+                    "launchRequestPath": ".agentflow/tasks/AF-PROJ-001/runs/run-001/launch/agent-request.json"
+                }),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.session.failed",
+                json!({
+                    "provider": "codex",
+                    "runId": "run-001",
+                    "sessionId": "codex-run-001",
+                    "sessionStatus": "failed",
+                    "attemptCount": 1,
+                    "logPath": ".agentflow/state/mcp/sessions/codex-run-001.jsonl",
+                    "lastMessagePath": ".agentflow/state/mcp/sessions/codex-run-001-last-message.txt",
+                    "lastError": "first attempt failed"
+                }),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.session.resumed",
+                json!({
+                    "provider": "codex",
+                    "runId": "run-001",
+                    "sessionId": "codex-run-001",
+                    "sessionStatus": "running",
+                    "attemptCount": 2,
+                    "logPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2.jsonl",
+                    "lastMessagePath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2-last-message.txt",
+                    "recoveryReason": "retry after failed session"
+                }),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.session.in_review",
+                json!({
+                    "provider": "codex",
+                    "runId": "run-001",
+                    "sessionId": "codex-run-001",
+                    "sessionStatus": "in-review",
+                    "attemptCount": 2,
+                    "logPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2.jsonl",
+                    "mergeProofPath": ".agentflow/tasks/AF-PROJ-001/runs/run-001/review/merge-proof.json",
+                    "mergeState": "merged",
+                    "writebackState": "awaiting-complete",
+                    "lastError": null
+                }),
+            ),
+        )
+        .unwrap();
+
+        rebuild_projections(dir.path()).unwrap();
+        let projection = crate::storage::load_task_projection(dir.path(), "AF-PROJ-001").unwrap();
+
+        assert_eq!(projection.session.status.as_deref(), Some("in-review"));
+        assert_eq!(projection.session.attempt_count, 2);
+        assert_eq!(
+            projection.session.recovery_reason.as_deref(),
+            Some("retry after failed session")
+        );
+        assert_eq!(
+            projection.session.log_path.as_deref(),
+            Some(".agentflow/state/mcp/sessions/codex-run-001-attempt-2.jsonl")
+        );
+        assert_eq!(
+            projection.session.last_message_path.as_deref(),
+            Some(".agentflow/state/mcp/sessions/codex-run-001-attempt-2-last-message.txt")
+        );
+        assert_eq!(
+            projection.session.merge_proof_path.as_deref(),
+            Some(".agentflow/tasks/AF-PROJ-001/runs/run-001/review/merge-proof.json")
+        );
+        assert_eq!(projection.session.merge_state.as_deref(), Some("merged"));
+        assert_eq!(
+            projection.session.writeback_state.as_deref(),
+            Some("awaiting-complete")
+        );
+        assert_eq!(projection.session.last_error, None);
+    }
+
+    #[test]
     fn rebuilds_audit_summary_into_task_and_project_projection() {
         let dir = tempdir().unwrap();
         write_fixture(dir.path());
@@ -1859,13 +2030,15 @@ mod tests {
         rebuild_projections(dir.path()).unwrap();
 
         let projection =
-            crate::storage::load_requirement_preview_projection(dir.path(), "040-preview")
-                .unwrap();
+            crate::storage::load_requirement_preview_projection(dir.path(), "040-preview").unwrap();
         let index = crate::storage::load_requirement_preview_index(dir.path()).unwrap();
 
         assert_eq!(projection.current_state, "goal_draft");
         assert_eq!(projection.lifecycle, "active");
-        assert_eq!(projection.next_recommended_action, "confirm-goal-draft-preview");
+        assert_eq!(
+            projection.next_recommended_action,
+            "confirm-goal-draft-preview"
+        );
         assert_eq!(projection.issue_contract_draft_count, 0);
         assert_eq!(index.previews.len(), 1);
         assert_eq!(index.previews[0].project_id, "project-preview");
