@@ -2888,6 +2888,18 @@ function ProjectSummaryReader({
     : group.issues.filter((issue) => issue.displayStatus === "in_review").length;
   const nextAction = projection?.nextAction ?? null;
   const completionHint = projection?.completionHint ?? null;
+  const projectBrain = projection?.projectBrain ?? null;
+  const brainActionLabel = projectBrainActionLabelZh(
+    projectBrain?.nextRecommendedAction,
+    projectBrain?.nextRecommendedActionLabel,
+  );
+  const brainActionReason = projectBrain?.nextRecommendedActionReason ?? "当前还没有 Project Brain 下一步说明。";
+  const projectLoopReason =
+    currentIssue || nextIssue
+      ? "Project Brain 已确认上游目标和计划，项目已经进入任务循环。当前下一步由项目调度决定。"
+      : brainActionReason;
+  const brainOpenQuestions =
+    projectBrain?.openQuestions.length ? projectBrain.openQuestions : ["当前没有待补充的开放问题。"];
   const blockerItems = projection?.blockers.length
     ? projection.blockers.map((blocker) => `${blocker.issueId}：${blocker.reason}`)
     : null;
@@ -2903,6 +2915,10 @@ function ProjectSummaryReader({
             <StatusBadge status={statusChipForProjectStatus(projectStatus)}>{projectDisplayStatusLabelZh(projectStatus)}</StatusBadge>
           </span>
           <span className="v16-detail-meta-item">
+            <span className="v16-detail-meta-label">Project Brain</span>
+            <strong className="v16-role-text">{projectBrainStatusLabelZh(projectBrain?.brainStatus)}</strong>
+          </span>
+          <span className="v16-detail-meta-item">
             <span className="v16-detail-meta-label">任务进度</span>
             <strong className="v16-role-text">{group.counts.doneIssueCount}/{group.counts.issueCount || 0}</strong>
           </span>
@@ -2915,10 +2931,45 @@ function ProjectSummaryReader({
       <div className="v16-detail-document">
         <div className="v16-summary-grid">
           <MetricCard detail={`${group.counts.issueCount} 条任务`} label="项目状态" value={projectDisplayStatusLabelZh(projectStatus)} />
+          <MetricCard detail={projectLoopReason} label="Brain 状态" value={projectBrainStatusLabelZh(projectBrain?.brainStatus)} />
           <MetricCard detail={`${reviewIssueCount} 条正在评审`} label="当前队列" value={currentLaneCount} />
           <MetricCard detail={`${group.counts.doneIssueCount} 已完成`} label="未来队列" value={futureLaneCount} />
-          <MetricCard detail={canceledLaneCount ? `${canceledLaneCount} 已取消` : "无取消任务"} label="已结束" value={completedLaneCount} />
         </div>
+        <section className="v16-task-stage-panel" aria-label="Project Brain 概览">
+          <div className="v16-task-stage-panel-header">
+            <span>Project Brain</span>
+            <strong>{projectBrainStatusLabelZh(projectBrain?.brainStatus)}</strong>
+          </div>
+          <div className="v16-task-stage-grid">
+            <SectionList
+              title="当前目标"
+              items={[
+                group.objective || group.summary || group.title,
+                `Goal：${projectBrainDocumentStatusLabelZh(projectBrain?.goalStatus)}`,
+                `Project Brain：${projectBrainStatusLabelZh(projectBrain?.brainStatus)}`,
+              ]}
+            />
+            <SectionList
+              title="当前计划"
+              items={[
+                `Plan：${projectBrainDocumentStatusLabelZh(projectBrain?.planStatus)}`,
+                `Decisions：${projectBrainDocumentStatusLabelZh(projectBrain?.decisionStatus)}`,
+                `Project Health：${projectBrainDocumentStatusLabelZh(projectBrain?.healthStatus)}`,
+              ]}
+            />
+            <SectionList
+              title="下一步原因"
+              items={[
+                `Project Brain 建议：${brainActionLabel}`,
+                `项目当前动作：${nextAction ?? "还没有进入任务循环。"}`,
+                projectLoopReason,
+                ...(projectBrain?.missingDocuments.length
+                  ? [`缺失文档：${projectBrain.missingDocuments.join("、")}`]
+                  : []),
+              ]}
+            />
+          </div>
+        </section>
         <section className="v16-task-stage-panel" aria-label="项目调度概览">
           <div className="v16-task-stage-panel-header">
             <span>项目调度</span>
@@ -2934,7 +2985,7 @@ function ProjectSummaryReader({
                       `状态：${displayStatusLabelZh(currentIssue.displayStatus)}`,
                       `角色：${agentRoleLabelZh(currentIssue.requiredAgentRole)}`,
                     ]
-                  : ["当前没有正在推进的任务。"]
+                  : [nextAction ?? "当前没有正在推进的任务。"]
               }
             />
             <SectionList
@@ -2946,7 +2997,7 @@ function ProjectSummaryReader({
                       nextIssue.blockedBy.length ? `前置依赖：${nextIssue.blockedBy.join("、")}` : "当前没有前置依赖。",
                       `优先级：${displayPriority(nextIssue.priority)}`,
                     ]
-                  : [nextAction ?? "当前没有下一条待调度任务。"]
+                  : [`下一步：${brainActionLabel}`, projectLoopReason]
               }
             />
             <SectionList
@@ -2955,6 +3006,7 @@ function ProjectSummaryReader({
                 `当前队列：${currentLaneCount} 条`,
                 `未来队列：${futureLaneCount} 条`,
                 blockedLaneCount ? `阻断：${blockedLaneCount} 条` : "当前没有阻断任务。",
+                canceledLaneCount ? `取消：${canceledLaneCount} 条` : "当前没有取消任务。",
                 ...(completionHint ? [completionHint] : []),
               ]}
             />
@@ -2989,6 +3041,7 @@ function ProjectSummaryReader({
             <SectionList title="依赖摘要" items={projectDependencySummaryItems(group)} />
             <SectionList title="优先级摘要" items={projectPrioritySummaryItems(group)} />
             <SectionList title="任务进度" items={projectProgressItems(group)} />
+            <SectionList title="Project Brain 开放问题" items={brainOpenQuestions} />
             {blockerItems?.length ? <SectionList title="阻断摘要" items={blockerItems} /> : null}
             <SectionList
               title="项目信息"
@@ -2998,6 +3051,17 @@ function ProjectSummaryReader({
                 `任务数量：${group.counts.issueCount}`,
               ]}
             />
+            {projectBrain ? (
+              <SectionList
+                title="Project Brain 文档"
+                items={[
+                  `GOAL.md：${projectBrain.goalPath}`,
+                  `PLAN.md：${projectBrain.planPath}`,
+                  `DECISIONS.md：${projectBrain.decisionsPath}`,
+                  `PROJECT_HEALTH.md：${projectBrain.healthPath}`,
+                ]}
+              />
+            ) : null}
             {group.warnings.length || group.missingIssueIds.length ? (
               <SectionList title="缺失引用" items={projectWarningItems(group)} />
             ) : null}
@@ -5430,6 +5494,14 @@ function taskTimelineToneForIssue(issue: { displayStatus?: IssueDisplayStatus })
 }
 
 type ProjectDisplayStatus = "planned" | "active" | "blocked" | "done" | "canceled";
+type ProjectBrainDisplayStatus =
+  | "not-initialized"
+  | "needs-goal"
+  | "needs-plan"
+  | "needs-confirmation"
+  | "ready-for-project-loop"
+  | "needs-recheck"
+  | "blocked";
 
 function projectDisplayStatusForGroup(group: TaskProjectGroup): ProjectDisplayStatus {
   if (!group.issues.length) {
@@ -5486,6 +5558,46 @@ function projectDisplayStatusLabelZh(status: ProjectDisplayStatus) {
     planned: "已计划",
   };
   return labels[status];
+}
+
+function projectBrainStatusLabelZh(status?: string | null) {
+  const labels: Record<ProjectBrainDisplayStatus, string> = {
+    "blocked": "有阻断",
+    "needs-confirmation": "待确认",
+    "needs-goal": "缺目标",
+    "needs-plan": "缺计划",
+    "needs-recheck": "待复查",
+    "not-initialized": "未初始化",
+    "ready-for-project-loop": "可进入项目循环",
+  };
+  return labels[(status ?? "not-initialized") as ProjectBrainDisplayStatus] ?? "未初始化";
+}
+
+function projectBrainDocumentStatusLabelZh(status?: string | null) {
+  const labels: Record<string, string> = {
+    blocked: "有阻断",
+    confirmed: "已确认",
+    draft: "草稿",
+    missing: "缺失",
+    "needs-confirmation": "待确认",
+    stale: "已过期",
+  };
+  return labels[(status ?? "missing").toLowerCase()] ?? "缺失";
+}
+
+function projectBrainActionLabelZh(action?: string | null, fallbackLabel?: string | null) {
+  if (fallbackLabel?.trim()) {
+    return fallbackLabel.trim();
+  }
+  const labels: Record<string, string> = {
+    "confirm-project-brain": "确认 Project Brain",
+    "create-goal-draft-preview": "生成 Goal 草稿预览",
+    "create-plan-draft-preview": "生成 Plan 草稿预览",
+    "resolve-project-brain-blocker": "处理 Project Brain 阻断",
+    "run-goal-recheck": "重新检查项目目标",
+    "start-project-loop": "进入项目循环",
+  };
+  return labels[action ?? ""] ?? "等待下一步";
 }
 
 function projectStatusLabel(status: AgentFlowProjectStatus) {
@@ -6749,9 +6861,15 @@ function agentRoleRulesDocument() {
 
 function buildNextActionLabel(action: string) {
   const labels: Record<string, string> = {
+    "confirm-project-brain": "确认 Project Brain",
+    "create-goal-draft-preview": "生成 Goal 草稿预览",
+    "create-plan-draft-preview": "生成 Plan 草稿预览",
     "enter-completion-decision": "进入完成判断",
     "execute-issue": "执行任务",
     "prepare-public-delivery": "生成公开交付记录",
+    "resolve-project-brain-blocker": "处理 Project Brain 阻断",
+    "run-goal-recheck": "重新检查项目目标",
+    "start-project-loop": "进入项目循环",
     "start-new-requirement": "开始新需求",
     "start-new-input": "告诉 Agent 你想做什么",
   };
