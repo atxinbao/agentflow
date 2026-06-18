@@ -3,8 +3,8 @@ use crate::model::{
     ISSUE_SCHEDULED, TASK_LOOP_LAUNCH_REQUEST_VERSION,
 };
 use agentflow_event_store::{
-    append_task_event_once, load_task_events, EventActor, EventStateTransition, TaskEvent,
-    TaskEventDraft,
+    allocate_task_sequence, append_task_event_once, load_task_events, EventActor,
+    EventStateTransition, TaskEvent, TaskEventDraft,
 };
 use agentflow_spec::{
     read_spec_issue, read_spec_project, SpecIssue, SpecIssueStatus, SpecPriority, SpecProject,
@@ -405,8 +405,7 @@ fn recoverable_launch_for_project(
             .then_with(|| left.issue_id.cmp(&right.issue_id))
     });
     for issue in candidates {
-        if let Some(launch) =
-            recoverable_launch_from_events(issue, &events, &recoverable_run_ids)?
+        if let Some(launch) = recoverable_launch_from_events(issue, &events, &recoverable_run_ids)?
         {
             return Ok(Some(launch));
         }
@@ -594,7 +593,11 @@ fn ensure_project_predecessors_done(
     issue: &SpecIssue,
     states: &BTreeMap<String, SpecIssueStatus>,
 ) -> Result<()> {
-    let Some(issue_index) = project.issue_ids.iter().position(|value| value == &issue.issue_id) else {
+    let Some(issue_index) = project
+        .issue_ids
+        .iter()
+        .position(|value| value == &issue.issue_id)
+    else {
         anyhow::bail!(
             "project {} does not reference issue {}",
             project.project_id,
@@ -633,7 +636,9 @@ fn ensure_project_serial_slot_free(
         .filter(|candidate| {
             matches!(
                 states.get(*candidate),
-                Some(SpecIssueStatus::Todo | SpecIssueStatus::InProgress | SpecIssueStatus::InReview)
+                Some(
+                    SpecIssueStatus::Todo | SpecIssueStatus::InProgress | SpecIssueStatus::InReview
+                )
             ) && (!allow_self_active || candidate.as_str() != issue_id)
         })
         .cloned()
@@ -678,24 +683,10 @@ fn issue_number(issue_id: &str) -> u64 {
 }
 
 fn next_run_id(root: &Path, issue_id: &str) -> Result<String> {
-    let runs_dir = root.join(format!(".agentflow/tasks/{issue_id}/runs"));
-    if !runs_dir.exists() {
-        return Ok("run-001".to_string());
-    }
-    let mut max_seen = 0_u64;
-    for entry in fs::read_dir(&runs_dir).with_context(|| format!("read {}", runs_dir.display()))? {
-        let entry = entry?;
-        let Some(name) = entry.file_name().to_str().map(str::to_string) else {
-            continue;
-        };
-        if let Some(number) = name
-            .strip_prefix("run-")
-            .and_then(|number| number.parse::<u64>().ok())
-        {
-            max_seen = max_seen.max(number);
-        }
-    }
-    Ok(format!("run-{:03}", max_seen + 1))
+    Ok(format!(
+        "run-{:03}",
+        allocate_task_sequence(root, &format!("run-id:{issue_id}"))?
+    ))
 }
 
 fn branch_name(issue: &SpecIssue) -> String {
@@ -944,9 +935,7 @@ mod tests {
 
         let err = TaskLoop::start_issue(dir.path(), "AF-TASK-002", "codex").unwrap_err();
 
-        assert!(err
-            .to_string()
-            .contains("unfinished project predecessors"));
+        assert!(err.to_string().contains("unfinished project predecessors"));
     }
 
     #[test]

@@ -18,7 +18,7 @@ pub use model::{
     TASK_EVENT_STREAM_PATH, TASK_EVENT_VERSION,
 };
 pub use storage::{
-    append_task_dead_letter, append_task_event, append_task_event_once, load_pending_task_events,
-    load_task_events, mark_task_event_consumed, prepare_event_store, replay_task_events,
-    replay_task_events_from_cursor,
+    allocate_task_sequence, append_task_dead_letter, append_task_event, append_task_event_once,
+    claim_task_event, load_pending_task_events, load_task_events, mark_task_event_consumed,
+    prepare_event_store, replay_task_events, replay_task_events_from_cursor,
 };
