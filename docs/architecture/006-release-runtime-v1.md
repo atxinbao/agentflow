@@ -1,6 +1,6 @@
 # 006 Release Runtime V1
 
-创建日期：2026-06-18  
+创建日期：2026-06-18
 执行者：Codex
 
 ## 目的
@@ -173,6 +173,19 @@ project stage 在所有任务完成后，优先显示 release 状态，而不是
 
 - `cargo test --workspace`
 - `git diff --check`
+- `bash scripts/verify_release_gate.sh --artifact-dir artifacts/release-gate-e2e`
+
+正式 GitHub gate：
+
+- `.github/workflows/release-gate.yml`
+
+其中 release gate E2E 会输出：
+
+- `CHANGELOG.md`
+- `docs/release-notes/<project-id>.md`
+- `docs/reviews/<project-id>.md`
+- `.agentflow/release/projects/<project-id>.json`
+- `.agentflow/release/reviews/<project-id>.json`
 
 其中至少要覆盖：
 
