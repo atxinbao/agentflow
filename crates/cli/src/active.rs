@@ -996,6 +996,9 @@ mod tests {
             status.capabilities = vec![
                 agentflow_mcp::McpCapability::new("launch", true),
                 agentflow_mcp::McpCapability::new("codex.exec", true),
+                agentflow_mcp::McpCapability::new("session.poll", true),
+                agentflow_mcp::McpCapability::new("session.logs", true),
+                agentflow_mcp::McpCapability::new("session.cancel", true),
                 agentflow_mcp::McpCapability::new("build_agent.complete", true),
             ];
             status

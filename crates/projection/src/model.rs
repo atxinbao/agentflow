@@ -97,6 +97,9 @@ pub struct ProjectionSessionSummary {
     pub status: Option<String>,
     #[serde(default)]
     pub attempt_count: u32,
+    pub working_directory: Option<String>,
+    pub workspace_root: Option<String>,
+    pub worktree_root: Option<String>,
     pub launch_requested_at: Option<u64>,
     pub claimed_at: Option<u64>,
     pub created_at: Option<u64>,
@@ -105,6 +108,7 @@ pub struct ProjectionSessionSummary {
     pub plan_path: Option<String>,
     pub log_path: Option<String>,
     pub last_message_path: Option<String>,
+    pub exit_proof_path: Option<String>,
     pub merge_proof_path: Option<String>,
     pub merge_state: Option<String>,
     pub writeback_state: Option<String>,
@@ -126,6 +130,10 @@ pub struct ProjectionSessionSummary {
     pub recovery_reason: Option<String>,
     pub last_error: Option<String>,
     pub branch_name: Option<String>,
+    pub permission_mode: Option<String>,
+    pub approval_policy: Option<String>,
+    pub sandbox_mode: Option<String>,
+    pub supervision_mode: Option<String>,
     pub governance_policy_version: Option<String>,
     pub claim_policy: Option<String>,
     pub timeout_policy: Option<String>,
@@ -142,6 +150,8 @@ pub struct ProjectionSessionSummary {
     pub takeover_session_id: Option<String>,
     pub terminal_reason: Option<String>,
     pub retryable: Option<bool>,
+    pub exited_at: Option<u64>,
+    pub exit_code: Option<i32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

@@ -6,6 +6,7 @@ pub const MCP_REGISTRY_VERSION: &str = "agentflow-mcp-registry.v1";
 pub const MCP_LAUNCH_REQUEST_VERSION: &str = "agentflow-mcp-launch-request.v1";
 pub const MCP_LAUNCH_PLAN_VERSION: &str = "agentflow-mcp-launch-plan.v1";
 pub const MCP_SESSION_SNAPSHOT_VERSION: &str = "agentflow-mcp-session.v1";
+pub const MCP_SESSION_EXIT_PROOF_VERSION: &str = "agentflow-mcp-exit-proof.v1";
 pub const MCP_LOG_CHUNK_VERSION: &str = "agentflow-mcp-log-chunk.v1";
 pub const MCP_PROVIDER_CAPABILITY_PROFILE_VERSION: &str = "agentflow-mcp-capability-profile.v1";
 pub const MCP_SESSION_GOVERNANCE_POLICY_VERSION: &str = "agentflow-mcp-session-policy.v1";
@@ -219,8 +220,15 @@ pub fn provider_capability_profile(provider: &str) -> Option<McpProviderCapabili
                 WorkflowSkillPack::ExecutionSkills,
                 WorkflowSkillPack::JudgmentSkills,
             ],
-            required_capabilities: vec!["launch".to_string(), "codex.exec".to_string()],
-            degraded_capabilities: vec!["build_agent.complete".to_string()],
+            required_capabilities: vec![
+                "launch".to_string(),
+                "codex.exec".to_string(),
+                "session.poll".to_string(),
+                "session.logs".to_string(),
+                "session.cancel".to_string(),
+                "build_agent.complete".to_string(),
+            ],
+            degraded_capabilities: Vec::new(),
         },
         McpProviderKind::ClaudeCode => McpProviderCapabilityProfile {
             version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
@@ -240,12 +248,11 @@ pub fn provider_capability_profile(provider: &str) -> Option<McpProviderCapabili
                 "launch".to_string(),
                 "claude.print".to_string(),
                 "session.poll".to_string(),
-            ],
-            degraded_capabilities: vec![
                 "session.logs".to_string(),
                 "session.cancel".to_string(),
                 "build_agent.complete".to_string(),
             ],
+            degraded_capabilities: Vec::new(),
         },
         McpProviderKind::BrowserPreview => McpProviderCapabilityProfile {
             version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
@@ -473,10 +480,24 @@ pub struct McpLaunchPlan {
     pub run_id: String,
     pub launch_mode: McpLaunchMode,
     pub working_directory: String,
+    #[serde(default)]
+    pub workspace_root: Option<String>,
+    #[serde(default)]
+    pub worktree_root: Option<String>,
     pub program: String,
     pub args: Vec<String>,
     pub stdin_path: Option<String>,
     pub output_path: Option<String>,
+    #[serde(default)]
+    pub permission_mode: Option<String>,
+    #[serde(default)]
+    pub approval_policy: Option<String>,
+    #[serde(default)]
+    pub sandbox_mode: Option<String>,
+    #[serde(default)]
+    pub supervision_mode: Option<String>,
+    #[serde(default)]
+    pub exit_proof_path: Option<String>,
     pub note: Option<String>,
 }
 
@@ -498,10 +519,17 @@ impl McpLaunchPlan {
             run_id: run_id.into(),
             launch_mode,
             working_directory: working_directory.into(),
+            workspace_root: None,
+            worktree_root: None,
             program: program.into(),
             args: Vec::new(),
             stdin_path: None,
             output_path: None,
+            permission_mode: None,
+            approval_policy: None,
+            sandbox_mode: None,
+            supervision_mode: None,
+            exit_proof_path: None,
             note: None,
         }
     }
@@ -518,6 +546,11 @@ pub struct McpSessionSnapshot {
     pub session_id: String,
     pub status: McpSessionStatus,
     pub launch_mode: McpLaunchMode,
+    pub working_directory: String,
+    #[serde(default)]
+    pub workspace_root: Option<String>,
+    #[serde(default)]
+    pub worktree_root: Option<String>,
     pub launch_request_path: String,
     pub plan_path: String,
     #[serde(default)]
@@ -535,6 +568,8 @@ pub struct McpSessionSnapshot {
     #[serde(default)]
     pub last_message_path: Option<String>,
     #[serde(default)]
+    pub exit_proof_path: Option<String>,
+    #[serde(default)]
     pub merge_proof_path: Option<String>,
     #[serde(default)]
     pub merge_state: Option<String>,
@@ -546,6 +581,18 @@ pub struct McpSessionSnapshot {
     pub note: Option<String>,
     #[serde(default)]
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub permission_mode: Option<String>,
+    #[serde(default)]
+    pub approval_policy: Option<String>,
+    #[serde(default)]
+    pub sandbox_mode: Option<String>,
+    #[serde(default)]
+    pub supervision_mode: Option<String>,
+    #[serde(default)]
+    pub exited_at: Option<u64>,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
     #[serde(default)]
     pub governance_policy: McpSessionGovernancePolicy,
     #[serde(default)]
@@ -571,6 +618,9 @@ impl McpSessionSnapshot {
             session_id: plan.session_id.clone(),
             status: McpSessionStatus::Queued,
             launch_mode: plan.launch_mode.clone(),
+            working_directory: plan.working_directory.clone(),
+            workspace_root: plan.workspace_root.clone(),
+            worktree_root: plan.worktree_root.clone(),
             launch_request_path: request.launch_request_path.clone(),
             plan_path: format!(".agentflow/state/mcp/plans/{}.json", plan.session_id),
             log_path: plan.output_path.clone(),
@@ -580,12 +630,19 @@ impl McpSessionSnapshot {
             remote_session_id: None,
             pr_url: None,
             last_message_path: None,
+            exit_proof_path: plan.exit_proof_path.clone(),
             merge_proof_path: None,
             merge_state: None,
             writeback_state: None,
             recovery_reason: None,
             note: plan.note.clone(),
             last_error: None,
+            permission_mode: plan.permission_mode.clone(),
+            approval_policy: plan.approval_policy.clone(),
+            sandbox_mode: plan.sandbox_mode.clone(),
+            supervision_mode: plan.supervision_mode.clone(),
+            exited_at: None,
+            exit_code: None,
             governance_policy,
             governance_facts,
             created_at,
@@ -641,12 +698,16 @@ mod tests {
         assert!(codex.supports_skill_pack(WorkflowSkillPack::ExecutionSkills));
         assert_eq!(
             codex.required_capabilities,
-            vec!["launch".to_string(), "codex.exec".to_string()]
+            vec![
+                "launch".to_string(),
+                "codex.exec".to_string(),
+                "session.poll".to_string(),
+                "session.logs".to_string(),
+                "session.cancel".to_string(),
+                "build_agent.complete".to_string(),
+            ]
         );
-        assert_eq!(
-            codex.degraded_capabilities,
-            vec!["build_agent.complete".to_string()]
-        );
+        assert!(codex.degraded_capabilities.is_empty());
 
         let github = provider_capability_profile("github").unwrap();
         assert!(github.supports_role(WorkflowAgentRole::DeliveryAgent));
@@ -667,7 +728,10 @@ mod tests {
             vec![
                 "launch".to_string(),
                 "claude.print".to_string(),
-                "session.poll".to_string()
+                "session.poll".to_string(),
+                "session.logs".to_string(),
+                "session.cancel".to_string(),
+                "build_agent.complete".to_string(),
             ]
         );
     }

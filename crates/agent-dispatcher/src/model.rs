@@ -245,7 +245,7 @@ impl AgentDispatchProviderSelection {
     }
 
     pub fn ensure_runnable(&self) -> Result<()> {
-        if matches!(self.status, AgentDispatchSelectionStatus::Unsupported) {
+        if !matches!(self.status, AgentDispatchSelectionStatus::Ready) {
             anyhow::bail!("{}", self.selection_reason);
         }
         Ok(())
@@ -260,20 +260,23 @@ mod tests {
     use agentflow_mcp::{McpCapability, McpProviderKind, McpProviderStatus, McpProviderStatusCode};
 
     #[test]
-    fn selection_marks_codex_without_complete_as_degraded() {
+    fn selection_marks_codex_without_runtime_closeout_as_unsupported() {
         let binding = AgentDispatchRoleBinding::resolve("build-agent").unwrap();
         let mut status = McpProviderStatus::new(McpProviderKind::Codex, 1);
         status.status = McpProviderStatusCode::Ready;
         status.capabilities = vec![
             McpCapability::new("launch", true),
             McpCapability::new("codex.exec", true),
+            McpCapability::new("session.poll", true),
+            McpCapability::new("session.logs", true),
+            McpCapability::new("session.cancel", true),
             McpCapability::new("build_agent.complete", false),
         ];
         let selection = AgentDispatchProviderSelection::evaluate("codex", Some(&status), &binding);
 
-        assert_eq!(selection.status, AgentDispatchSelectionStatus::Degraded);
+        assert_eq!(selection.status, AgentDispatchSelectionStatus::Unsupported);
         assert_eq!(
-            selection.missing_degraded_capabilities,
+            selection.missing_required_capabilities,
             vec!["build_agent.complete".to_string()]
         );
     }

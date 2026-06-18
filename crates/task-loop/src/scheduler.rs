@@ -437,7 +437,12 @@ fn recoverable_launch_run_ids(events: &[TaskEvent]) -> BTreeSet<String> {
                 claimable.insert(run_id, false);
             }
             "agent.session.interrupted" | "agent.session.failed" => {
-                claimable.insert(run_id, true);
+                let retryable = event
+                    .payload
+                    .get("retryable")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(true);
+                claimable.insert(run_id, retryable);
             }
             _ => {}
         }

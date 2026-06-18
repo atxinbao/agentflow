@@ -163,6 +163,9 @@ fn session_artifact_refs(session: &McpSessionSnapshot) -> Vec<String> {
     if let Some(last_message_path) = session.last_message_path.clone() {
         refs.push(last_message_path);
     }
+    if let Some(exit_proof_path) = session.exit_proof_path.clone() {
+        refs.push(exit_proof_path);
+    }
     if let Some(merge_proof_path) = session.merge_proof_path.clone() {
         refs.push(merge_proof_path);
     }
@@ -178,11 +181,18 @@ fn session_transition_payload(updated: &McpSessionSnapshot, attempt_count: u32) 
     payload.insert("provider".to_string(), json!(updated.provider));
     payload.insert("branchName".to_string(), json!(updated.branch_name));
     payload.insert("attemptCount".to_string(), json!(attempt_count));
+    payload.insert(
+        "workingDirectory".to_string(),
+        json!(updated.working_directory),
+    );
+    payload.insert("workspaceRoot".to_string(), json!(updated.workspace_root));
+    payload.insert("worktreeRoot".to_string(), json!(updated.worktree_root));
     payload.insert("logPath".to_string(), json!(updated.log_path));
     payload.insert(
         "lastMessagePath".to_string(),
         json!(updated.last_message_path),
     );
+    payload.insert("exitProofPath".to_string(), json!(updated.exit_proof_path));
     payload.insert(
         "mergeProofPath".to_string(),
         json!(updated.merge_proof_path),
@@ -191,6 +201,13 @@ fn session_transition_payload(updated: &McpSessionSnapshot, attempt_count: u32) 
     payload.insert("writebackState".to_string(), json!(updated.writeback_state));
     payload.insert("recoveryReason".to_string(), json!(updated.recovery_reason));
     payload.insert("lastError".to_string(), json!(updated.last_error));
+    payload.insert("permissionMode".to_string(), json!(updated.permission_mode));
+    payload.insert("approvalPolicy".to_string(), json!(updated.approval_policy));
+    payload.insert("sandboxMode".to_string(), json!(updated.sandbox_mode));
+    payload.insert(
+        "supervisionMode".to_string(),
+        json!(updated.supervision_mode),
+    );
     payload.insert(
         "governancePolicyVersion".to_string(),
         json!(updated.governance_policy.version),
@@ -255,6 +272,8 @@ fn session_transition_payload(updated: &McpSessionSnapshot, attempt_count: u32) 
         "retryable".to_string(),
         json!(updated.governance_facts.retryable),
     );
+    payload.insert("exitedAt".to_string(), json!(updated.exited_at));
+    payload.insert("exitCode".to_string(), json!(updated.exit_code));
     payload.insert("sessionStatus".to_string(), json!(updated.status.as_str()));
     payload.insert("status".to_string(), json!(updated.status.as_str()));
     Value::Object(payload)
@@ -280,6 +299,9 @@ mod tests {
             session_id: "codex-run-001".to_string(),
             status,
             launch_mode: McpLaunchMode::CliExecStdin,
+            working_directory: "/repo".to_string(),
+            workspace_root: Some("/repo".to_string()),
+            worktree_root: Some("/repo".to_string()),
             launch_request_path: ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json"
                 .to_string(),
             plan_path: ".agentflow/state/mcp/plans/codex-run-001.json".to_string(),
@@ -292,12 +314,21 @@ mod tests {
             last_message_path: Some(
                 ".agentflow/state/mcp/sessions/codex-run-001-last-message.txt".to_string(),
             ),
+            exit_proof_path: Some(
+                ".agentflow/state/mcp/sessions/codex-run-001-exit.json".to_string(),
+            ),
             merge_proof_path: None,
             merge_state: None,
             writeback_state: None,
             recovery_reason: None,
             note: None,
             last_error: None,
+            permission_mode: Some("never".to_string()),
+            approval_policy: Some("never".to_string()),
+            sandbox_mode: Some("workspace-write".to_string()),
+            supervision_mode: Some("local-process-watch".to_string()),
+            exited_at: None,
+            exit_code: None,
             governance_policy: McpSessionGovernancePolicy::default(),
             governance_facts: McpSessionGovernanceFacts::default(),
             created_at: 1,

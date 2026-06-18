@@ -4,7 +4,10 @@ use crate::{
         McpCapability, McpLaunchMode, McpLaunchPlan, McpLaunchRequest, McpProviderKind,
         McpProviderStatus, McpProviderStatusCode, McpSessionSnapshot, McpSessionStatus,
     },
-    provider::{run_command, McpAgentProvider},
+    provider::{
+        ensure_parent_directory, relative_project_path, resolve_launch_isolation_boundary,
+        run_command, spawn_exit_watcher, write_exit_proof, McpAgentProvider,
+    },
     storage::{read_session_snapshot, write_launch_plan, write_session_snapshot},
 };
 use agentflow_projection::load_task_projection;
@@ -154,9 +157,28 @@ pub fn check_claude_provider(project_root: impl AsRef<Path>) -> McpProviderStatu
     };
 
     let supports_print = help.contains("claude -p") || help.contains("--print");
-    let supports_logs = help.contains("claude logs <id>") || help.contains("claude logs ");
-    let supports_cancel = help.contains("claude stop <id>") || help.contains("claude stop ");
-    let supports_poll = help.contains("claude agents --json") || help.contains("claude agents ");
+    let cli_supports_logs = help.contains("claude logs <id>") || help.contains("claude logs ");
+    let cli_supports_cancel = help.contains("claude stop <id>") || help.contains("claude stop ");
+    let cli_supports_poll =
+        help.contains("claude agents --json") || help.contains("claude agents ");
+    let supports_logs = true;
+    let supports_cancel = true;
+    let supports_poll = true;
+    if !cli_supports_logs {
+        status.warnings.push(
+            "claude CLI native log export is unavailable; using local runtime logs".to_string(),
+        );
+    }
+    if !cli_supports_cancel {
+        status.warnings.push(
+            "claude CLI native cancel is unavailable; using local process termination".to_string(),
+        );
+    }
+    if !cli_supports_poll {
+        status.warnings.push(
+            "claude CLI native polling is unavailable; using local runtime supervision".to_string(),
+        );
+    }
     status.capabilities = claude_capabilities(
         supports_print,
         supports_poll,
@@ -216,11 +238,6 @@ pub fn check_claude_provider(project_root: impl AsRef<Path>) -> McpProviderStatu
         status
             .errors
             .push("claude CLI is missing print-mode support".to_string());
-    }
-    if !supports_poll {
-        status.warnings.push(
-            "claude CLI agent listing is unavailable; session polling may degrade".to_string(),
-        );
     }
     status
 }
@@ -294,6 +311,8 @@ impl McpAgentProvider for ClaudeCodeProvider {
         }
         plan.stdin_path = Some(stdin_path);
         plan.output_path = Some(log_path);
+        plan.permission_mode = Some(self.permission_mode.clone());
+        plan.supervision_mode = Some("local-process-watch".to_string());
         plan.note = Some("prompt via stdin".to_string());
         Ok(plan)
     }
@@ -307,6 +326,14 @@ impl McpAgentProvider for ClaudeCodeProvider {
         let mut attempt_count = 1;
         let mut recovery_reason = None;
         if let Ok(existing) = read_session_snapshot(project_root, &plan.session_id) {
+            if matches!(existing.status, McpSessionStatus::Cancelled)
+                || matches!(
+                    existing.status,
+                    McpSessionStatus::Failed | McpSessionStatus::Interrupted
+                ) && !existing.governance_facts.retryable
+            {
+                return Ok(existing);
+            }
             if !matches!(
                 existing.status,
                 McpSessionStatus::Failed | McpSessionStatus::Interrupted
@@ -325,17 +352,23 @@ impl McpAgentProvider for ClaudeCodeProvider {
         }
         let log_path = self.session_log_path(&plan.session_id, attempt_count);
         plan.output_path = Some(log_path.clone());
+        let isolation = resolve_launch_isolation_boundary(
+            project_root,
+            request,
+            &plan.session_id,
+            attempt_count,
+        )?;
+        plan.workspace_root = Some(isolation.workspace_root.display().to_string());
+        plan.worktree_root = Some(isolation.worktree_root.display().to_string());
+        plan.exit_proof_path = Some(relative_project_path(
+            &isolation.workspace_root,
+            &isolation.exit_proof_path,
+        ));
         plan.note = Some(format!("attempt {attempt_count}; prompt via stdin"));
 
         write_launch_plan(project_root, &plan)?;
-        let stdin_path = absolute_project_path(
-            project_root,
-            plan.stdin_path
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("claude launch plan is missing stdinPath"))?,
-        );
-        let log_path = absolute_project_path(
-            project_root,
+        let stdin_path = isolation.prompt_path.clone();
+        let log_path = isolation.workspace_root.join(
             plan.output_path
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("claude launch plan is missing outputPath"))?,
@@ -356,32 +389,27 @@ impl McpAgentProvider for ClaudeCodeProvider {
         let mut command = Command::new(&plan.program);
         command
             .args(&plan.args)
-            .current_dir(project_root)
+            .current_dir(&isolation.worktree_root)
             .stdin(Stdio::from(stdin))
             .stdout(Stdio::from(stdout))
             .stderr(Stdio::from(stderr));
-        let mut child = command.spawn().with_context(|| {
-            format!(
-                "spawn claude session for issue {} run {}",
-                request.issue_id, request.run_id
-            )
-        })?;
-        let pid = child.id();
-        std::thread::spawn(move || {
-            let _ = child.wait();
-        });
 
         let now = unix_timestamp_seconds();
         let mut session = McpSessionSnapshot::queued(request, &plan, now);
         session.status = McpSessionStatus::Starting;
-        session.pid = Some(pid);
+        session.working_directory = isolation.worktree_root.display().to_string();
+        session.workspace_root = Some(isolation.workspace_root.display().to_string());
+        session.worktree_root = Some(isolation.worktree_root.display().to_string());
         session.log_path = plan.output_path.clone();
         session.attempt_count = attempt_count;
         session.recovery_reason = recovery_reason;
+        session.exit_proof_path = plan.exit_proof_path.clone();
         session.merge_proof_path = None;
         session.merge_state = None;
         session.writeback_state = None;
         session.last_error = None;
+        session.permission_mode = Some(self.permission_mode.clone());
+        session.supervision_mode = Some("local-process-watch".to_string());
         session.governance_facts.timeout_at = Some(now + session.governance_policy.timeout_seconds);
         session.governance_facts.resumed_from_attempt =
             (attempt_count > 1).then_some(attempt_count.saturating_sub(1));
@@ -395,7 +423,42 @@ impl McpAgentProvider for ClaudeCodeProvider {
         session.governance_facts.cancelled_at = None;
         session.note = plan.note.clone();
         session.updated_at = now;
+        let child = match command.spawn().with_context(|| {
+            format!(
+                "spawn claude session for issue {} run {}",
+                request.issue_id, request.run_id
+            )
+        }) {
+            Ok(child) => child,
+            Err(error) => {
+                session.status = McpSessionStatus::Failed;
+                session.pid = None;
+                session.last_error = Some(error.to_string());
+                session.governance_facts.retryable = false;
+                session.governance_facts.terminal_reason = Some("launch-failed".to_string());
+                session.exited_at = Some(now);
+                write_session_snapshot(project_root, &session)?;
+                if let Some(exit_proof_path) = session.exit_proof_path.clone() {
+                    let absolute_exit_proof = isolation.workspace_root.join(exit_proof_path);
+                    write_exit_proof(
+                        &absolute_exit_proof,
+                        &session,
+                        "launch-failed",
+                        None,
+                        now,
+                        session.last_error.as_deref(),
+                    )?;
+                }
+                return Ok(session);
+            }
+        };
+        let pid = child.id();
+        session.pid = Some(pid);
         write_session_snapshot(project_root, &session)?;
+        if let Some(exit_proof_path) = session.exit_proof_path.clone() {
+            let absolute_exit_proof = isolation.workspace_root.join(exit_proof_path);
+            spawn_exit_watcher(child, absolute_exit_proof, session.clone());
+        }
         Ok(session)
     }
 
@@ -428,6 +491,33 @@ impl McpAgentProvider for ClaudeCodeProvider {
             session.governance_facts.timed_out_at = Some(now);
             session.governance_facts.terminal_reason = Some("timeout".to_string());
             session.recovery_reason = Some("retry after timeout".to_string());
+        }
+        if let Some(exit_proof_path) = session.exit_proof_path.clone() {
+            let absolute_exit_proof = absolute_project_path(project_root, &exit_proof_path);
+            if absolute_exit_proof.is_file() {
+                let proof: Value = serde_json::from_str(
+                    &fs::read_to_string(&absolute_exit_proof)
+                        .with_context(|| format!("read {}", absolute_exit_proof.display()))?,
+                )
+                .with_context(|| format!("parse {}", absolute_exit_proof.display()))?;
+                session.exited_at = proof.get("exitedAt").and_then(Value::as_u64);
+                session.exit_code = proof
+                    .get("exitCode")
+                    .and_then(Value::as_i64)
+                    .map(|value| value as i32);
+                if session.governance_facts.terminal_reason.is_none() {
+                    session.governance_facts.terminal_reason = proof
+                        .get("status")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if session.last_error.is_none() {
+                    session.last_error = proof
+                        .get("lastError")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+            }
         }
 
         if let Some(proof) = merge_proof.as_ref() {
@@ -539,10 +629,15 @@ impl McpAgentProvider for ClaudeCodeProvider {
         session.pid = None;
         session.updated_at = now;
         session.last_error = None;
+        session.exited_at = Some(now);
         session.governance_facts.cancel_requested_at = Some(now);
         session.governance_facts.cancelled_at = Some(now);
         session.governance_facts.retryable = false;
         session.governance_facts.terminal_reason = Some("cancelled".to_string());
+        if let Some(exit_proof_path) = session.exit_proof_path.clone() {
+            let absolute_exit_proof = absolute_project_path(project_root, &exit_proof_path);
+            write_exit_proof(&absolute_exit_proof, &session, "cancelled", None, now, None)?;
+        }
         write_session_snapshot(project_root, &session)?;
         Ok(session)
     }
@@ -563,13 +658,6 @@ fn absolute_project_path(project_root: &Path, value: &str) -> PathBuf {
     } else {
         project_root.join(path)
     }
-}
-
-fn ensure_parent_directory(path: &Path) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-    }
-    Ok(())
 }
 
 fn load_merge_proof(

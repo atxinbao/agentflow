@@ -48,6 +48,10 @@ impl AgentDispatcher {
             .with_context(|| format!("parse launch payload {}", event.event_id))?;
         let role_binding = AgentDispatchRoleBinding::resolve(payload.agent_role.clone())?;
         let selection = self.evaluate_provider_selection(root, &payload, &role_binding)?;
+        if let Err(error) = selection.ensure_runnable() {
+            append_launch_failed_event(root, &payload, &role_binding, &selection, &error, false)?;
+            return Err(error);
+        }
         let request = launch_payload_to_mcp_request(&payload, &role_binding);
         let provider = self
             .providers
@@ -56,7 +60,14 @@ impl AgentDispatcher {
         let session = match provider.create_session(root, &request) {
             Ok(session) => session,
             Err(error) => {
-                append_launch_failed_event(root, &payload, &role_binding, &selection, &error)?;
+                append_launch_failed_event(
+                    root,
+                    &payload,
+                    &role_binding,
+                    &selection,
+                    &error,
+                    true,
+                )?;
                 return Err(error);
             }
         };
@@ -100,7 +111,6 @@ impl AgentDispatcher {
             provider_status.as_ref(),
             role_binding,
         );
-        selection.ensure_runnable()?;
         Ok(selection)
     }
 
@@ -156,7 +166,12 @@ fn unavailable_run_ids(events: &[TaskEvent]) -> BTreeMap<String, bool> {
                 state.insert(run_id, true);
             }
             AGENT_SESSION_INTERRUPTED | AGENT_SESSION_FAILED => {
-                state.insert(run_id, false);
+                let retryable = event
+                    .payload
+                    .get("retryable")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true);
+                state.insert(run_id, !retryable);
             }
             _ => {}
         }
@@ -271,6 +286,10 @@ fn launch_claim_payload(
     body.insert("runId".to_string(), json!(payload.run_id.clone()));
     body.insert("branchName".to_string(), json!(payload.branch_name.clone()));
     body.insert(
+        "workingDirectory".to_string(),
+        json!(payload.working_directory.clone()),
+    );
+    body.insert(
         "launchRequestPath".to_string(),
         json!(payload.launch_request_path.clone()),
     );
@@ -342,11 +361,21 @@ fn append_launch_failed_event(
     role_binding: &AgentDispatchRoleBinding,
     selection: &AgentDispatchProviderSelection,
     error: &anyhow::Error,
+    retryable: bool,
 ) -> Result<TaskEvent> {
     let mut failure_payload = launch_claim_payload(payload, role_binding, selection);
     if let Value::Object(ref mut body) = failure_payload {
         body.insert("sessionStatus".to_string(), json!("failed"));
         body.insert("lastError".to_string(), json!(error.to_string()));
+        body.insert("retryable".to_string(), json!(retryable));
+        body.insert(
+            "terminalReason".to_string(),
+            json!(if retryable {
+                "provider-launch-failed"
+            } else {
+                "provider-not-runnable"
+            }),
+        );
     }
     append_task_event_once(
         root,
@@ -383,6 +412,9 @@ fn session_artifact_refs(session: &McpSessionSnapshot) -> Vec<String> {
     }
     if let Some(last_message_path) = session.last_message_path.clone() {
         refs.push(last_message_path);
+    }
+    if let Some(exit_proof_path) = session.exit_proof_path.clone() {
+        refs.push(exit_proof_path);
     }
     if let Some(merge_proof_path) = session.merge_proof_path.clone() {
         refs.push(merge_proof_path);
@@ -459,6 +491,12 @@ fn session_event_payload(
     payload.insert("runId".to_string(), json!(session.run_id));
     payload.insert("branchName".to_string(), json!(session.branch_name));
     payload.insert(
+        "workingDirectory".to_string(),
+        json!(session.working_directory),
+    );
+    payload.insert("workspaceRoot".to_string(), json!(session.workspace_root));
+    payload.insert("worktreeRoot".to_string(), json!(session.worktree_root));
+    payload.insert(
         "launchRequestPath".to_string(),
         json!(session.launch_request_path),
     );
@@ -468,6 +506,7 @@ fn session_event_payload(
         "lastMessagePath".to_string(),
         json!(session.last_message_path),
     );
+    payload.insert("exitProofPath".to_string(), json!(session.exit_proof_path));
     payload.insert(
         "mergeProofPath".to_string(),
         json!(session.merge_proof_path),
@@ -476,6 +515,13 @@ fn session_event_payload(
     payload.insert("writebackState".to_string(), json!(session.writeback_state));
     payload.insert("recoveryReason".to_string(), json!(session.recovery_reason));
     payload.insert("lastError".to_string(), json!(session.last_error));
+    payload.insert("permissionMode".to_string(), json!(session.permission_mode));
+    payload.insert("approvalPolicy".to_string(), json!(session.approval_policy));
+    payload.insert("sandboxMode".to_string(), json!(session.sandbox_mode));
+    payload.insert(
+        "supervisionMode".to_string(),
+        json!(session.supervision_mode),
+    );
     payload.insert(
         "governancePolicyVersion".to_string(),
         json!(session.governance_policy.version),
@@ -540,6 +586,8 @@ fn session_event_payload(
         "retryable".to_string(),
         json!(session.governance_facts.retryable),
     );
+    payload.insert("exitedAt".to_string(), json!(session.exited_at));
+    payload.insert("exitCode".to_string(), json!(session.exit_code));
     Value::Object(payload)
 }
 
@@ -564,6 +612,8 @@ mod tests {
         attempts: Arc<AtomicUsize>,
     }
 
+    struct LimitedProvider;
+
     impl McpAgentProvider for FakeProvider {
         fn provider_id(&self) -> &'static str {
             "codex"
@@ -580,7 +630,10 @@ mod tests {
             status.capabilities = vec![
                 agentflow_mcp::McpCapability::new("launch", true),
                 agentflow_mcp::McpCapability::new("codex.exec", true),
-                agentflow_mcp::McpCapability::new("build_agent.complete", false),
+                agentflow_mcp::McpCapability::new("session.poll", true),
+                agentflow_mcp::McpCapability::new("session.logs", true),
+                agentflow_mcp::McpCapability::new("session.cancel", true),
+                agentflow_mcp::McpCapability::new("build_agent.complete", true),
             ];
             status
         }
@@ -620,7 +673,10 @@ mod tests {
             status.capabilities = vec![
                 agentflow_mcp::McpCapability::new("launch", true),
                 agentflow_mcp::McpCapability::new("codex.exec", true),
-                agentflow_mcp::McpCapability::new("build_agent.complete", false),
+                agentflow_mcp::McpCapability::new("session.poll", true),
+                agentflow_mcp::McpCapability::new("session.logs", true),
+                agentflow_mcp::McpCapability::new("session.cancel", true),
+                agentflow_mcp::McpCapability::new("build_agent.complete", true),
             ];
             status
         }
@@ -656,6 +712,49 @@ mod tests {
             write_launch_plan(project_root, &plan)?;
             write_session_snapshot(project_root, &session)?;
             Ok(session)
+        }
+    }
+
+    impl McpAgentProvider for LimitedProvider {
+        fn provider_id(&self) -> &'static str {
+            "codex"
+        }
+
+        fn kind(&self) -> McpProviderKind {
+            McpProviderKind::Codex
+        }
+
+        fn check_health(&self, _project_root: &Path) -> McpProviderStatus {
+            let mut status = McpProviderStatus::new(McpProviderKind::Codex, 1);
+            status.provider = "codex".to_string();
+            status.status = McpProviderStatusCode::Ready;
+            status.capabilities = vec![
+                agentflow_mcp::McpCapability::new("launch", true),
+                agentflow_mcp::McpCapability::new("codex.exec", true),
+                agentflow_mcp::McpCapability::new("session.poll", true),
+                agentflow_mcp::McpCapability::new("session.logs", true),
+                agentflow_mcp::McpCapability::new("session.cancel", true),
+                agentflow_mcp::McpCapability::new("build_agent.complete", false),
+            ];
+            status
+        }
+
+        fn build_launch_plan(
+            &self,
+            _project_root: &Path,
+            request: &McpLaunchRequest,
+        ) -> Result<McpLaunchPlan> {
+            let mut plan = McpLaunchPlan::new(
+                "codex",
+                format!("limited-{}", request.run_id),
+                request.issue_id.clone(),
+                request.run_id.clone(),
+                McpLaunchMode::CliExecPromptFile,
+                request.working_directory.clone(),
+                "fake-agent",
+            );
+            plan.stdin_path = Some(request.launch_request_path.clone());
+            Ok(plan)
         }
     }
 
@@ -700,7 +799,7 @@ mod tests {
         assert_eq!(claim.provider, "codex");
         assert_eq!(claim.session_id, "fake-run-001");
         assert_eq!(claim.runtime_role.as_str(), "work-agent");
-        assert_eq!(claim.selection.status.as_str(), "degraded");
+        assert_eq!(claim.selection.status.as_str(), "ready");
         assert_eq!(
             claim
                 .skill_pack
@@ -721,14 +820,14 @@ mod tests {
             .unwrap();
         assert_eq!(claimed.payload["requestedRole"], "build-agent");
         assert_eq!(claimed.payload["runtimeRole"], "work-agent");
-        assert_eq!(claimed.payload["selectionStatus"], "degraded");
+        assert_eq!(claimed.payload["selectionStatus"], "ready");
         let created = events
             .iter()
             .find(|event| event.event_type == AGENT_SESSION_CREATED)
             .unwrap();
         assert_eq!(created.payload["requestedRole"], "build-agent");
         assert_eq!(created.payload["runtimeRole"], "work-agent");
-        assert_eq!(created.payload["selectionStatus"], "degraded");
+        assert_eq!(created.payload["selectionStatus"], "ready");
         let claimed_index = events
             .iter()
             .position(|event| event.event_type == AGENT_LAUNCH_CLAIMED)
@@ -976,5 +1075,35 @@ mod tests {
                 .map(|skill_pack| skill_pack.as_str()),
             Some("execution-skills")
         );
+    }
+
+    #[test]
+    fn dispatcher_records_non_runnable_provider_failure_as_authoritative_event() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        let loop_driver = TaskLoop::new("project-dispatcher");
+        loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+        loop_driver
+            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
+            .unwrap();
+
+        let mut providers = McpProviderBridge::new();
+        providers.register(Box::new(LimitedProvider));
+        let error = AgentDispatcher::new(providers)
+            .claim_next_launch(dir.path())
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("build_agent.complete"));
+        let events = load_task_events(dir.path()).unwrap();
+        let failed = events
+            .iter()
+            .find(|event| event.event_type == AGENT_SESSION_FAILED)
+            .expect("expected failed session event");
+        assert_eq!(failed.payload["retryable"], false);
+        assert_eq!(failed.payload["terminalReason"], "provider-not-runnable");
     }
 }
