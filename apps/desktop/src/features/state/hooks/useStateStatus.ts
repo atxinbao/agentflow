@@ -3,11 +3,12 @@ import { useEffect, useState } from "react";
 import {
   BROWSER_PREVIEW_PROJECT_ROOT,
   createBrowserPreviewIssueStatusIndex,
+  createBrowserPreviewProjectProjection,
   createBrowserPreviewStateStatus,
   createBrowserPreviewTaskProjection,
   currentBrowserPreviewTaskHierarchyScenario,
 } from "../../../browserPreviewData";
-import type { IssueStatusIndex, StateStatusSnapshot, TaskProjection } from "../../../types";
+import type { IssueStatusIndex, ProjectProjection, StateStatusSnapshot, TaskProjection } from "../../../types";
 import { isBrowserPreviewRuntime } from "../../project-files";
 
 export type StateStatusState = {
@@ -203,4 +204,74 @@ export function useTaskProjection(projectRoot: string | null, issueId: string | 
   }, [issueId, projectRoot, refreshToken]);
 
   return taskProjectionState;
+}
+
+export type ProjectProjectionState = {
+  projection: ProjectProjection | null;
+  error: string | null;
+  source: "idle" | "loading" | "tauri" | "preview" | "unavailable";
+};
+
+const initialProjectProjectionState: ProjectProjectionState = {
+  projection: null,
+  error: null,
+  source: "idle",
+};
+
+export function useProjectProjection(projectRoot: string | null, projectId: string | null, refreshToken = 0) {
+  const [projectProjectionState, setProjectProjectionState] =
+    useState<ProjectProjectionState>(initialProjectProjectionState);
+
+  useEffect(() => {
+    if (!projectRoot || !projectId) {
+      setProjectProjectionState(initialProjectProjectionState);
+      return;
+    }
+
+    if (isBrowserPreviewRuntime()) {
+      setProjectProjectionState({
+        projection: createBrowserPreviewProjectProjection(
+          projectId,
+          projectRoot,
+          currentBrowserPreviewTaskHierarchyScenario(),
+        ),
+        error: null,
+        source: "preview",
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setProjectProjectionState((current) =>
+      current.projection ? { ...current, error: null } : { ...current, error: null, source: "loading" },
+    );
+
+    void invoke("rebuild_task_projections", { projectRoot })
+      .then(() => invoke<ProjectProjection>("load_project_projection", { projectRoot, projectId }))
+      .then((projection) => {
+        if (!cancelled) {
+          setProjectProjectionState({ projection, error: null, source: "tauri" });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          setProjectProjectionState((current) =>
+            current.projection
+              ? { ...current, error: message }
+              : {
+                  projection: null,
+                  error: message,
+                  source: "unavailable",
+                },
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, projectRoot, refreshToken]);
+
+  return projectProjectionState;
 }

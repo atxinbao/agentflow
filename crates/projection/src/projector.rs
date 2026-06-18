@@ -1,8 +1,9 @@
 use crate::{
     model::{
-        IssueStatusIndex, IssueStatusIndexEntry, ProjectBrainProjection, ProjectProjection,
-        ProjectionPhase, ProjectionPublicDelivery, ProjectionSummary, TaskProjection,
-        TaskTimelineEvent, TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION,
+        IssueStatusIndex, IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
+        ProjectIssueLanes, ProjectProjection, ProjectionAuditSummary, ProjectionDeliverySummary,
+        ProjectionPhase, ProjectionPublicDelivery, ProjectionRuntimeSummary, ProjectionSummary,
+        TaskProjection, TaskTimelineEvent, TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION,
         PROJECT_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
     },
     storage::{write_issue_status_index, write_project_projection, write_task_projection},
@@ -12,14 +13,33 @@ use agentflow_spec::{
     prepare_spec_workspace, read_project_brain_snapshot, SpecIssue, SpecProject, SpecProjectStatus,
 };
 use anyhow::{Context, Result};
+use serde::Deserialize;
 use serde_json::Value;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs,
     path::{Path, PathBuf},
 };
 
 const STATE_ORDER: [&str; 5] = ["backlog", "todo", "in_progress", "in_review", "done"];
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectionAuditIndexFile {
+    #[serde(default)]
+    audits: Vec<ProjectionAuditIndexEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectionAuditIndexEntry {
+    audit_id: String,
+    status: String,
+    requested_at: u64,
+    source_run_id: Option<String>,
+    source_issue_id: Option<String>,
+    report_path: String,
+}
 
 pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionSummary> {
     let root = canonical_project_root(project_root)?;
@@ -27,17 +47,27 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
     let issues = read_json_files::<SpecIssue>(&root.join(".agentflow/spec/issues"))?;
     let projects = read_json_files::<SpecProject>(&root.join(".agentflow/spec/projects"))?;
     let events = load_task_events(&root)?;
+    let audit_index = load_projection_audit_index(&root).unwrap_or_default();
     let events_by_issue = group_events_by_issue(events);
+    let issues_by_id = issues
+        .iter()
+        .map(|issue| (issue.issue_id.clone(), issue))
+        .collect::<HashMap<_, _>>();
     let mut task_projections = BTreeMap::new();
 
     for issue in &issues {
-        let projection = project_issue(issue, events_by_issue.get(&issue.issue_id));
+        let projection = project_issue(
+            &root,
+            issue,
+            events_by_issue.get(&issue.issue_id),
+            &audit_index,
+        );
         write_task_projection(&root, &projection)?;
         task_projections.insert(issue.issue_id.clone(), projection);
     }
 
     for project in &projects {
-        let projection = project_project(&root, project, &task_projections)?;
+        let projection = project_project(&root, project, &issues_by_id, &task_projections)?;
         write_project_projection(&root, &projection)?;
     }
 
@@ -78,7 +108,12 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
     })
 }
 
-fn project_issue(issue: &SpecIssue, events: Option<&Vec<TaskEvent>>) -> TaskProjection {
+fn project_issue(
+    root: &Path,
+    issue: &SpecIssue,
+    events: Option<&Vec<TaskEvent>>,
+    audit_index: &ProjectionAuditIndexFile,
+) -> TaskProjection {
     let events = events.cloned().unwrap_or_default();
     let mut current_state = issue.status.as_str().to_string();
     let mut updated_at = issue.system.updated_at;
@@ -92,7 +127,11 @@ fn project_issue(issue: &SpecIssue, events: Option<&Vec<TaskEvent>>) -> TaskProj
 
     for event in events {
         updated_at = updated_at.max(event.timestamp);
-        if let Some(run_id) = event.payload.get("runId").and_then(Value::as_str) {
+        if let Some(run_id) = event
+            .run_id
+            .as_deref()
+            .or_else(|| event.payload.get("runId").and_then(Value::as_str))
+        {
             latest_run_id = Some(run_id.to_string());
         }
         if let Some(branch) = event.payload.get("branchName").and_then(Value::as_str) {
@@ -123,6 +162,16 @@ fn project_issue(issue: &SpecIssue, events: Option<&Vec<TaskEvent>>) -> TaskProj
         state_events.push((current_state.clone(), event));
     }
 
+    let runtime = build_runtime_summary(
+        root,
+        issue,
+        latest_run_id.as_deref(),
+        branch_name.as_deref(),
+    );
+    let delivery = build_delivery_summary(root, issue, &public_delivery);
+    let audit = build_audit_summary(issue, latest_run_id.as_deref(), audit_index);
+    branch_name = branch_name.or_else(|| runtime.branch_name.clone());
+
     TaskProjection {
         version: TASK_PROJECTION_VERSION.to_string(),
         issue_id: issue.issue_id.clone(),
@@ -137,6 +186,9 @@ fn project_issue(issue: &SpecIssue, events: Option<&Vec<TaskEvent>>) -> TaskProj
         branch_name,
         timeline: build_timeline(issue, &current_state, &state_events),
         public_delivery,
+        runtime,
+        delivery,
+        audit,
         updated_at,
     }
 }
@@ -144,30 +196,84 @@ fn project_issue(issue: &SpecIssue, events: Option<&Vec<TaskEvent>>) -> TaskProj
 fn project_project(
     root: &Path,
     project: &SpecProject,
+    issues_by_id: &HashMap<String, &SpecIssue>,
     tasks: &BTreeMap<String, TaskProjection>,
 ) -> Result<ProjectProjection> {
     let mut current_issue_id = None;
     let mut completed = 0;
     let mut updated_at = project.system.updated_at;
+    let mut current_lane = Vec::new();
+    let mut past_lane = Vec::new();
+    let mut future_lane = Vec::new();
+    let mut blocked_lane = Vec::new();
+    let mut blockers = Vec::new();
     for issue_id in &project.issue_ids {
         let Some(task) = tasks.get(issue_id) else {
             continue;
         };
         updated_at = updated_at.max(task.updated_at);
-        if task.current_state == "done" || task.current_state == "cancel" {
-            completed += 1;
-        } else if current_issue_id.is_none() {
-            current_issue_id = Some(issue_id.clone());
+        match task.current_state.as_str() {
+            "done" | "cancel" => {
+                completed += 1;
+                past_lane.push(issue_id.clone());
+            }
+            "backlog" => future_lane.push(issue_id.clone()),
+            "blocked" => {
+                current_lane.push(issue_id.clone());
+                blocked_lane.push(issue_id.clone());
+                let blocked_by = issues_by_id
+                    .get(issue_id)
+                    .map(|issue| issue.blocked_by.clone())
+                    .unwrap_or_default();
+                blockers.push(ProjectBlockerSummary {
+                    issue_id: issue_id.clone(),
+                    reason: if blocked_by.is_empty() {
+                        "任务被阻断，等待补充阻断原因。".to_string()
+                    } else {
+                        format!("等待依赖 {} 完成。", blocked_by.join("、"))
+                    },
+                });
+            }
+            _ => {
+                if current_issue_id.is_none() {
+                    current_issue_id = Some(issue_id.clone());
+                }
+                current_lane.push(issue_id.clone());
+            }
         }
     }
     let status = if completed == project.issue_ids.len() && !project.issue_ids.is_empty() {
         "done"
+    } else if !blocked_lane.is_empty()
+        && current_lane.len() == blocked_lane.len()
+        && future_lane.is_empty()
+    {
+        "blocked"
     } else if current_issue_id.is_some() {
         "active"
     } else {
         project_status_as_str(&project.status)
     };
     let brain = read_project_brain_snapshot(root, &project.project_id, &project.title)?;
+    let next_action = if let Some(issue_id) = current_issue_id.clone() {
+        format!("继续推进 {issue_id}。")
+    } else if let Some(issue_id) = future_lane.first() {
+        format!("启动 {issue_id}。")
+    } else if !blocked_lane.is_empty() {
+        "先解除阻断项，再继续推进项目。".to_string()
+    } else if !project.issue_ids.is_empty() && completed == project.issue_ids.len() {
+        "进入 Completion Decision。".to_string()
+    } else {
+        brain.next_recommended_action.clone()
+    };
+    let completion_hint = if !project.issue_ids.is_empty() && completed == project.issue_ids.len() {
+        "全部任务已完成，下一步由 Goal / Completion Runtime 重新判断项目是否真正结束。".to_string()
+    } else {
+        format!(
+            "当前已完成 {completed}/{} 条任务，继续按状态流推进。",
+            project.issue_ids.len()
+        )
+    };
     Ok(ProjectProjection {
         version: PROJECT_PROJECTION_VERSION.to_string(),
         project_id: project.project_id.clone(),
@@ -176,6 +282,15 @@ fn project_project(
         status: status.to_string(),
         issue_ids: project.issue_ids.clone(),
         current_issue_id,
+        lanes: ProjectIssueLanes {
+            current: current_lane,
+            past: past_lane,
+            future: future_lane,
+            blocked: blocked_lane,
+        },
+        next_action,
+        blockers,
+        completion_hint,
         issue_count: project.issue_ids.len(),
         completed_issue_count: completed,
         project_brain: ProjectBrainProjection {
@@ -203,6 +318,115 @@ fn project_status_as_str(status: &SpecProjectStatus) -> &'static str {
         SpecProjectStatus::Done => "done",
         SpecProjectStatus::Blocked => "blocked",
         SpecProjectStatus::Cancel => "cancel",
+    }
+}
+
+fn build_runtime_summary(
+    root: &Path,
+    issue: &SpecIssue,
+    run_id: Option<&str>,
+    branch_name: Option<&str>,
+) -> ProjectionRuntimeSummary {
+    let Some(run_id) = run_id else {
+        return ProjectionRuntimeSummary::default();
+    };
+
+    let run = agentflow_task_artifacts::load_task_run(root, &issue.issue_id, run_id).ok();
+    let checkpoints =
+        agentflow_task_artifacts::load_task_run_checkpoints(root, &issue.issue_id, run_id)
+            .unwrap_or_default();
+    let latest_checkpoint = checkpoints.last();
+
+    ProjectionRuntimeSummary {
+        run_id: Some(run_id.to_string()),
+        run_status: run
+            .as_ref()
+            .map(|run| task_run_status_as_str(&run.status).to_string())
+            .unwrap_or_else(|| "missing".to_string()),
+        branch_name: branch_name
+            .map(str::to_string)
+            .or_else(|| run.as_ref().and_then(|run| run.branch_name.clone())),
+        checkpoint_count: checkpoints.len(),
+        latest_checkpoint_id: latest_checkpoint.map(|checkpoint| checkpoint.checkpoint_id.clone()),
+        latest_checkpoint_state: latest_checkpoint.map(|checkpoint| checkpoint.state.clone()),
+        latest_checkpoint_summary: latest_checkpoint.map(|checkpoint| checkpoint.summary.clone()),
+    }
+}
+
+fn build_delivery_summary(
+    root: &Path,
+    issue: &SpecIssue,
+    public_delivery: &ProjectionPublicDelivery,
+) -> ProjectionDeliverySummary {
+    let evidence = agentflow_task_artifacts::load_task_evidence(root, &issue.issue_id).ok();
+    let public_record_path = public_delivery
+        .changelog_path
+        .clone()
+        .or_else(|| public_delivery.release_notes_url.clone());
+    let evidence_status = if evidence.is_some() {
+        "ready".to_string()
+    } else {
+        "missing".to_string()
+    };
+    let status = if public_record_path.is_some() {
+        "published".to_string()
+    } else if public_delivery.pr_url.is_some() || public_delivery.merge_commit.is_some() {
+        "ready".to_string()
+    } else {
+        "missing".to_string()
+    };
+
+    ProjectionDeliverySummary {
+        status,
+        evidence_status,
+        evidence_path: evidence
+            .as_ref()
+            .map(|_| issue.expected_outputs.evidence_path.clone()),
+        pr_url: public_delivery.pr_url.clone(),
+        merge_commit: public_delivery.merge_commit.clone(),
+        public_record_path,
+    }
+}
+
+fn build_audit_summary(
+    issue: &SpecIssue,
+    run_id: Option<&str>,
+    audit_index: &ProjectionAuditIndexFile,
+) -> ProjectionAuditSummary {
+    let audit = audit_index.audits.iter().rev().find(|entry| {
+        entry.source_issue_id.as_deref() == Some(issue.issue_id.as_str())
+            || run_id.is_some_and(|run_id| entry.source_run_id.as_deref() == Some(run_id))
+    });
+
+    ProjectionAuditSummary {
+        status: audit
+            .map(|entry| entry.status.clone())
+            .unwrap_or_else(|| "not-requested".to_string()),
+        latest_audit_id: audit.map(|entry| entry.audit_id.clone()),
+        report_path: audit.map(|entry| entry.report_path.clone()),
+        requested_at: audit.map(|entry| entry.requested_at),
+    }
+}
+
+fn load_projection_audit_index(root: &Path) -> Result<ProjectionAuditIndexFile> {
+    let path = root.join(".agentflow/audit/index.json");
+    if !path.is_file() {
+        return Ok(ProjectionAuditIndexFile::default());
+    }
+    let raw = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read audit index {}", path.display()))?;
+    serde_json::from_str(&raw)
+        .with_context(|| format!("failed to parse audit index {}", path.display()))
+}
+
+fn task_run_status_as_str(status: &agentflow_task_artifacts::TaskRunStatus) -> &'static str {
+    match status {
+        agentflow_task_artifacts::TaskRunStatus::Queued => "queued",
+        agentflow_task_artifacts::TaskRunStatus::InProgress => "in_progress",
+        agentflow_task_artifacts::TaskRunStatus::Validating => "validating",
+        agentflow_task_artifacts::TaskRunStatus::Completed => "completed",
+        agentflow_task_artifacts::TaskRunStatus::Failed => "failed",
+        agentflow_task_artifacts::TaskRunStatus::Cancelled => "cancelled",
     }
 }
 

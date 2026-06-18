@@ -521,6 +521,32 @@ export type ProjectionPublicDelivery = {
   releaseNotesUrl?: string | null;
 };
 
+export type ProjectionRuntimeSummary = {
+  runId?: string | null;
+  runStatus: string;
+  branchName?: string | null;
+  checkpointCount: number;
+  latestCheckpointId?: string | null;
+  latestCheckpointState?: string | null;
+  latestCheckpointSummary?: string | null;
+};
+
+export type ProjectionDeliverySummary = {
+  status: string;
+  evidenceStatus: string;
+  evidencePath?: string | null;
+  prUrl?: string | null;
+  mergeCommit?: string | null;
+  publicRecordPath?: string | null;
+};
+
+export type ProjectionAuditSummary = {
+  status: string;
+  latestAuditId?: string | null;
+  reportPath?: string | null;
+  requestedAt?: number | null;
+};
+
 export type TaskProjection = {
   version: string;
   issueId: string;
@@ -533,7 +559,22 @@ export type TaskProjection = {
   branchName?: string | null;
   timeline: TaskTimelineItem[];
   publicDelivery: ProjectionPublicDelivery;
+  runtime: ProjectionRuntimeSummary;
+  delivery: ProjectionDeliverySummary;
+  audit: ProjectionAuditSummary;
   updatedAt: number;
+};
+
+export type ProjectIssueLanes = {
+  current: string[];
+  past: string[];
+  future: string[];
+  blocked: string[];
+};
+
+export type ProjectBlockerSummary = {
+  issueId: string;
+  reason: string;
 };
 
 export type ProjectProjection = {
@@ -544,6 +585,10 @@ export type ProjectProjection = {
   status: string;
   issueIds: string[];
   currentIssueId?: string | null;
+  lanes: ProjectIssueLanes;
+  nextAction: string;
+  blockers: ProjectBlockerSummary[];
+  completionHint: string;
   issueCount: number;
   completedIssueCount: number;
   projectBrain: {

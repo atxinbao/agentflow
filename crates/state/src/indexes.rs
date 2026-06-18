@@ -7,7 +7,7 @@ use crate::{
     },
     storage::{unix_timestamp_seconds, write_json},
 };
-use agentflow_projection::TaskProjection;
+use agentflow_projection::{ProjectionAuditSummary, TaskProjection};
 use agentflow_workflow_core::{
     work_state_is_blocked, work_state_is_cancel, work_state_is_done, work_state_is_in_progress,
     work_state_is_in_review, work_state_is_ready_for_execution,
@@ -21,7 +21,6 @@ pub(crate) fn write_indexes(
     gate: &WorkflowGateSnapshot,
 ) -> Result<()> {
     let now = unix_timestamp_seconds();
-    let audit_index = agentflow_audit::load_audit_index(root).ok();
     let audit_status = gate.audit_status.clone();
     let projection_index = agentflow_projection::rebuild_projections(root)
         .and_then(|_| agentflow_projection::load_issue_status_index(root))
@@ -57,11 +56,7 @@ pub(crate) fn write_indexes(
             let issue = agentflow_spec::read_spec_issue(root, &projection.issue_id).ok();
             IssueStatusIndexEntry {
                 issue_id: projection.issue_id.clone(),
-                display_status: display_status(
-                    projection,
-                    audit_index.as_ref(),
-                    &projection.issue_id,
-                ),
+                display_status: display_status(projection, &projection.audit),
                 priority: issue
                     .as_ref()
                     .map(|issue| format!("{:?}", issue.priority).to_lowercase())
@@ -69,12 +64,19 @@ pub(crate) fn write_indexes(
                 execution_risk: "normal".to_string(),
                 latest_run_id: projection.latest_run_id.clone(),
                 execute_status: projection
-                    .latest_run_id
+                    .runtime
+                    .run_id
                     .as_ref()
-                    .map(|_| run_status_from_task_state(&projection.current_state).to_string()),
-                evidence_status: evidence_status(root, projection),
+                    .map(|_| projection.runtime.run_status.clone())
+                    .or_else(|| {
+                        projection.latest_run_id.as_ref().map(|_| {
+                            run_status_from_task_state(&projection.current_state).to_string()
+                        })
+                    }),
+                evidence_status: evidence_status(projection),
                 delivery_status: delivery_status(projection),
-                audit_status: audit_status.clone(),
+                audit_status: projection_audit_status(&projection.audit)
+                    .unwrap_or_else(|| audit_status.clone()),
             }
         })
         .collect::<Vec<_>>();
@@ -96,11 +98,11 @@ pub(crate) fn write_indexes(
                 .map(|run_id| RunStatusIndexEntry {
                     run_id: run_id.clone(),
                     issue_id: projection.issue_id.clone(),
-                    execute_status: run_status_from_task_state(&projection.current_state)
-                        .to_string(),
-                    evidence_status: evidence_status(root, projection),
+                    execute_status: projection.runtime.run_status.clone(),
+                    evidence_status: evidence_status(projection),
                     delivery_status: delivery_status(projection),
-                    audit_status: audit_status.clone(),
+                    audit_status: projection_audit_status(&projection.audit)
+                        .unwrap_or_else(|| audit_status.clone()),
                 })
         })
         .collect::<Vec<_>>();
@@ -115,16 +117,16 @@ pub(crate) fn write_indexes(
 
     let evidence = projections
         .iter()
-        .filter(|projection| evidence_status(root, projection) == "ready")
+        .filter(|projection| evidence_status(projection) == "ready")
         .count();
     let release_deliveries = projections
         .iter()
         .filter(|projection| delivery_status(projection) != "missing")
         .count();
-    let audits = audit_index
-        .as_ref()
-        .map(|index| index.audits.len())
-        .unwrap_or_default();
+    let audits = projections
+        .iter()
+        .filter(|projection| projection.audit.status != "not-requested")
+        .count();
     write_json(
         &root.join(".agentflow/state/indexes/output-status.json"),
         &OutputStatusIndex {
@@ -138,63 +140,48 @@ pub(crate) fn write_indexes(
     )
 }
 
-fn display_status(
-    projection: &TaskProjection,
-    audit_index: Option<&agentflow_audit::AuditIndex>,
-    issue_id: &str,
-) -> String {
+fn display_status(projection: &TaskProjection, audit: &ProjectionAuditSummary) -> String {
     if work_state_is_cancel(&projection.current_state)
         || work_state_is_done(&projection.current_state)
     {
         return projection.current_state.clone();
     }
-    if let Some(status) = audit_display_status(audit_index, issue_id) {
+    if let Some(status) = audit_display_status(audit) {
         return status;
     }
     projection.display_status.clone()
 }
 
-fn audit_display_status(
-    audit_index: Option<&agentflow_audit::AuditIndex>,
-    issue_id: &str,
-) -> Option<String> {
-    audit_index.and_then(|index| {
-        index
-            .audits
-            .iter()
-            .rev()
-            .find(|entry| entry.source_issue_id.as_deref() == Some(issue_id))
-            .and_then(|entry| match entry.status {
-                agentflow_audit::AuditStatus::Passed
-                | agentflow_audit::AuditStatus::PassedWithWarnings => Some("done".to_string()),
-                agentflow_audit::AuditStatus::Failed => Some("in_review".to_string()),
-                agentflow_audit::AuditStatus::Cancelled => Some("cancel".to_string()),
-                agentflow_audit::AuditStatus::Requested | agentflow_audit::AuditStatus::Running => {
-                    None
-                }
-            })
+fn audit_display_status(audit: &ProjectionAuditSummary) -> Option<String> {
+    match audit.status.as_str() {
+        "passed" | "passed-with-warnings" => Some("done".to_string()),
+        "failed" => Some("in_review".to_string()),
+        "cancelled" => Some("cancel".to_string()),
+        _ => None,
+    }
+}
+
+fn projection_audit_status(
+    audit: &ProjectionAuditSummary,
+) -> Option<crate::model::WorkflowAuditStatus> {
+    Some(match audit.status.as_str() {
+        "requested" => crate::model::WorkflowAuditStatus::Requested,
+        "running" => crate::model::WorkflowAuditStatus::Running,
+        "passed" => crate::model::WorkflowAuditStatus::Passed,
+        "passed-with-warnings" => crate::model::WorkflowAuditStatus::PassedWithWarnings,
+        "failed" => crate::model::WorkflowAuditStatus::Failed,
+        "cancelled" => crate::model::WorkflowAuditStatus::Cancelled,
+        "not-requested" => crate::model::WorkflowAuditStatus::NotRequested,
+        _ => return None,
     })
 }
 
-fn evidence_status(root: &Path, projection: &TaskProjection) -> String {
-    projection
-        .public_delivery
-        .evidence_path
-        .as_deref()
-        .filter(|path| root.join(path).is_file())
-        .map(|_| "ready".to_string())
-        .unwrap_or_else(|| "missing".to_string())
+fn evidence_status(projection: &TaskProjection) -> String {
+    projection.delivery.evidence_status.clone()
 }
 
 fn delivery_status(projection: &TaskProjection) -> String {
-    let delivery = &projection.public_delivery;
-    if delivery.changelog_path.is_some() || delivery.release_notes_url.is_some() {
-        "published".to_string()
-    } else if delivery.pr_url.is_some() || delivery.merge_commit.is_some() {
-        "ready".to_string()
-    } else {
-        "missing".to_string()
-    }
+    projection.delivery.status.clone()
 }
 
 fn run_status_from_task_state(state: &str) -> &'static str {
@@ -214,11 +201,14 @@ fn run_status_from_task_state(state: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentflow_projection::ProjectionPublicDelivery;
+    use agentflow_projection::{
+        ProjectionAuditSummary, ProjectionDeliverySummary, ProjectionPublicDelivery,
+        ProjectionRuntimeSummary,
+    };
 
     fn projection(state: &str) -> TaskProjection {
         TaskProjection {
-            version: "task-projection.v1".to_string(),
+            version: "task-projection.v2".to_string(),
             issue_id: "iss-001".to_string(),
             project_id: None,
             workflow_ref: "build-agent.issue-loop@v1".to_string(),
@@ -229,6 +219,29 @@ mod tests {
             branch_name: None,
             timeline: Vec::new(),
             public_delivery: ProjectionPublicDelivery::default(),
+            runtime: ProjectionRuntimeSummary {
+                run_id: Some("run-001".to_string()),
+                run_status: run_status_from_task_state(state).to_string(),
+                branch_name: None,
+                checkpoint_count: 0,
+                latest_checkpoint_id: None,
+                latest_checkpoint_state: None,
+                latest_checkpoint_summary: None,
+            },
+            delivery: ProjectionDeliverySummary {
+                status: "missing".to_string(),
+                evidence_status: "missing".to_string(),
+                evidence_path: None,
+                pr_url: None,
+                merge_commit: None,
+                public_record_path: None,
+            },
+            audit: ProjectionAuditSummary {
+                status: "not-requested".to_string(),
+                latest_audit_id: None,
+                report_path: None,
+                requested_at: None,
+            },
             updated_at: 1,
         }
     }
@@ -246,11 +259,20 @@ mod tests {
 
     #[test]
     fn display_status_uses_projection_without_legacy_input() {
-        assert_eq!(display_status(&projection("todo"), None, "iss-001"), "todo");
         assert_eq!(
-            display_status(&projection("in_progress"), None, "iss-001"),
+            display_status(&projection("todo"), &ProjectionAuditSummary::default()),
+            "todo"
+        );
+        assert_eq!(
+            display_status(
+                &projection("in_progress"),
+                &ProjectionAuditSummary::default()
+            ),
             "in_progress"
         );
-        assert_eq!(display_status(&projection("done"), None, "iss-001"), "done");
+        assert_eq!(
+            display_status(&projection("done"), &ProjectionAuditSummary::default()),
+            "done"
+        );
     }
 }

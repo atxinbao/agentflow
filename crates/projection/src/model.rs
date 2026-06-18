@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-pub const TASK_PROJECTION_VERSION: &str = "task-projection.v1";
-pub const PROJECT_PROJECTION_VERSION: &str = "project-projection.v1";
-pub const ISSUE_STATUS_INDEX_VERSION: &str = "issue-status-index.v2";
+pub const TASK_PROJECTION_VERSION: &str = "task-projection.v2";
+pub const PROJECT_PROJECTION_VERSION: &str = "project-projection.v2";
+pub const ISSUE_STATUS_INDEX_VERSION: &str = "issue-status-index.v3";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -57,6 +57,55 @@ pub struct ProjectionPublicDelivery {
     pub release_notes_url: Option<String>,
 }
 
+fn default_projection_runtime_status() -> String {
+    "missing".to_string()
+}
+
+fn default_projection_delivery_status() -> String {
+    "missing".to_string()
+}
+
+fn default_projection_audit_status() -> String {
+    "not-requested".to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionRuntimeSummary {
+    pub run_id: Option<String>,
+    #[serde(default = "default_projection_runtime_status")]
+    pub run_status: String,
+    pub branch_name: Option<String>,
+    #[serde(default)]
+    pub checkpoint_count: usize,
+    pub latest_checkpoint_id: Option<String>,
+    pub latest_checkpoint_state: Option<String>,
+    pub latest_checkpoint_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionDeliverySummary {
+    #[serde(default = "default_projection_delivery_status")]
+    pub status: String,
+    #[serde(default = "default_projection_delivery_status")]
+    pub evidence_status: String,
+    pub evidence_path: Option<String>,
+    pub pr_url: Option<String>,
+    pub merge_commit: Option<String>,
+    pub public_record_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionAuditSummary {
+    #[serde(default = "default_projection_audit_status")]
+    pub status: String,
+    pub latest_audit_id: Option<String>,
+    pub report_path: Option<String>,
+    pub requested_at: Option<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectBrainProjection {
@@ -88,7 +137,29 @@ pub struct TaskProjection {
     pub branch_name: Option<String>,
     pub timeline: Vec<TaskTimelineItem>,
     pub public_delivery: ProjectionPublicDelivery,
+    #[serde(default)]
+    pub runtime: ProjectionRuntimeSummary,
+    #[serde(default)]
+    pub delivery: ProjectionDeliverySummary,
+    #[serde(default)]
+    pub audit: ProjectionAuditSummary,
     pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectIssueLanes {
+    pub current: Vec<String>,
+    pub past: Vec<String>,
+    pub future: Vec<String>,
+    pub blocked: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectBlockerSummary {
+    pub issue_id: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,6 +172,14 @@ pub struct ProjectProjection {
     pub status: String,
     pub issue_ids: Vec<String>,
     pub current_issue_id: Option<String>,
+    #[serde(default)]
+    pub lanes: ProjectIssueLanes,
+    #[serde(default)]
+    pub next_action: String,
+    #[serde(default)]
+    pub blockers: Vec<ProjectBlockerSummary>,
+    #[serde(default)]
+    pub completion_hint: String,
     pub issue_count: usize,
     pub completed_issue_count: usize,
     pub project_brain: ProjectBrainProjection,

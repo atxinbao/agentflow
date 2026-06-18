@@ -23,6 +23,7 @@ import type {
   OutputIndexEntry,
   AuditIndex,
   HumanAuditReport,
+  ProjectProjection,
   StateStatusSnapshot,
   TaskProjection,
   TaskTimelineItem,
@@ -594,7 +595,105 @@ export function createBrowserPreviewTaskProjection(
       changelogPath: currentState === "in_review" || currentState === "done" ? "CHANGELOG.md" : null,
       releaseNotesUrl: null,
     },
+    runtime: {
+      runId,
+      runStatus:
+        currentState === "done"
+          ? "completed"
+          : currentState === "in_review"
+            ? "completed"
+            : currentState === "in_progress"
+              ? "in_progress"
+              : currentState === "todo"
+                ? "queued"
+                : "missing",
+      branchName: runId ? `agentflow/browser-preview/${issueId}` : null,
+      checkpointCount: currentState === "in_progress" ? 2 : currentState === "in_review" || currentState === "done" ? 3 : 0,
+      latestCheckpointId: currentState === "in_progress" || currentState === "in_review" || currentState === "done" ? "checkpoint-003" : null,
+      latestCheckpointState:
+        currentState === "done" ? "done" : currentState === "in_review" ? "in_review" : currentState === "in_progress" ? "in_progress" : null,
+      latestCheckpointSummary:
+        currentState === "done"
+          ? "验证通过并完成写回。"
+          : currentState === "in_review"
+            ? "本地验证通过，等待 PR/MR 合并。"
+            : currentState === "in_progress"
+              ? "当前处在执行中。"
+              : null,
+    },
+    delivery: {
+      status: currentState === "done" ? "published" : currentState === "in_review" ? "ready" : "missing",
+      evidenceStatus: runId ? "ready" : "missing",
+      evidencePath: runId ? `.agentflow/tasks/${issueId}/evidence/evidence.json` : null,
+      prUrl: currentState === "in_review" || currentState === "done" ? "https://github.com/example/agentflow/pull/100" : null,
+      mergeCommit: currentState === "done" ? "426b217f" : null,
+      publicRecordPath: currentState === "in_review" || currentState === "done" ? "CHANGELOG.md" : null,
+    },
+    audit: {
+      status: currentState === "done" ? "not-requested" : "not-requested",
+      latestAuditId: null,
+      reportPath: null,
+      requestedAt: null,
+    },
     updatedAt: previewTimestamp + 360,
+  };
+}
+
+export function createBrowserPreviewProjectProjection(
+  projectId: string,
+  projectRoot = BROWSER_PREVIEW_PROJECT_ROOT,
+  scenario = currentBrowserPreviewTaskHierarchyScenario(),
+): ProjectProjection | null {
+  void projectRoot;
+  if (projectId !== previewProjectId) {
+    return null;
+  }
+  const issues = browserPreviewIssuesForScenario(scenario).filter((issue) => issue.projectId === projectId);
+  const current = issues.filter((issue) => ["todo", "in_progress", "in_review", "blocked"].includes(issue.displayStatus)).map((issue) => issue.issueId);
+  const past = issues.filter((issue) => ["done", "cancel"].includes(issue.displayStatus)).map((issue) => issue.issueId);
+  const future = issues.filter((issue) => issue.displayStatus === "backlog").map((issue) => issue.issueId);
+  const blocked = issues.filter((issue) => issue.displayStatus === "blocked").map((issue) => issue.issueId);
+  const completedIssueCount = past.filter((issueId) => {
+    const issue = issues.find((entry) => entry.issueId === issueId);
+    return issue?.displayStatus === "done";
+  }).length;
+  return {
+    version: "project-projection.browser-preview",
+    projectId,
+    title: "任务中心工作台优化重构",
+    objective: "让任务页按状态流统一展示执行、交付和审计摘要。",
+    status: current.length ? "active" : future.length ? "planned" : "done",
+    issueIds: issues.map((issue) => issue.issueId),
+    currentIssueId: current.at(0) ?? null,
+    lanes: {
+      current,
+      past,
+      future,
+      blocked,
+    },
+    nextAction: current.length ? `继续推进 ${current[0]}。` : future.length ? `启动 ${future[0]}。` : "进入 Completion Decision。",
+    blockers: blocked.map((issueId) => ({ issueId, reason: "等待阻断条件解除。" })),
+    completionHint:
+      completedIssueCount === issues.length && issues.length
+        ? "全部任务已完成，下一步进入 Completion Decision。"
+        : `当前已完成 ${completedIssueCount}/${issues.length} 条任务。`,
+    issueCount: issues.length,
+    completedIssueCount,
+    projectBrain: {
+      projectPath: "docs/projects/project-browser-preview",
+      goalPath: "docs/projects/project-browser-preview/GOAL.md",
+      planPath: "docs/projects/project-browser-preview/PLAN.md",
+      decisionsPath: "docs/projects/project-browser-preview/DECISIONS.md",
+      brainStatus: "ready-for-project-loop",
+      goalStatus: "confirmed",
+      planStatus: "confirmed",
+      decisionStatus: "confirmed",
+      missingDocuments: [],
+      openQuestions: [],
+      nextRecommendedAction: "继续推进当前任务。",
+      readonly: true,
+    },
+    updatedAt: previewTimestamp + 420,
   };
 }
 

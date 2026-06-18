@@ -97,6 +97,7 @@ export type TaskExecutionProjection = {
 };
 
 export type TaskExecutionProjectionInput = {
+  projection?: TaskProjection | null;
   task: V1Issue;
   session: McpSessionSnapshot | null;
   executeStatusError?: string | null;
@@ -1084,12 +1085,13 @@ export function buildTaskExecutionProjection({
   executeWorkspaceWarnings = [],
   mcpSessionsError,
   mcpSessionsSource,
+  projection,
   session,
   task,
 }: TaskExecutionProjectionInput): TaskExecutionProjection {
   const status = task.displayStatus ?? "backlog";
-  const runId = task.latestRunId ?? session?.runId ?? null;
-  const executeStatus = task.executeStatus ?? null;
+  const runId = projection?.runtime.runId ?? task.latestRunId ?? session?.runId ?? null;
+  const executeStatus = projection?.runtime.runStatus ?? task.executeStatus ?? null;
   const sessionStatus = session?.status ?? null;
   const executionExpected = status === "in_progress" || status === "in_review" || status === "done";
   const validationExpected = status === "in_progress" || status === "in_review" || status === "done";
@@ -1128,6 +1130,11 @@ export function buildTaskExecutionProjection({
         ...task.validationCommands.slice(0, 3).map((command) => `命令：${command}`),
       ]
     : ["Validation：未登记验证命令。"];
+  const checkpointItem = projection?.runtime.latestCheckpointSummary
+    ? `最新检查点：${projection.runtime.latestCheckpointSummary}`
+    : projection?.runtime.latestCheckpointState
+      ? `最新检查点状态：${projection.runtime.latestCheckpointState}`
+      : null;
 
   return {
     executeStatus,
@@ -1142,6 +1149,7 @@ export function buildTaskExecutionProjection({
       session ? `Session：${mcpSessionStatusLabel(session.status)}` : "Session：当前没有会话记录。",
       validationItems[0],
       consistency,
+      ...(checkpointItem ? [checkpointItem] : []),
       workspaceItem,
     ],
     taskId: task.id,
@@ -1165,16 +1173,20 @@ export function buildTaskDeliveryProjection({
 }): TaskDeliveryProjection {
   const status = task.displayStatus ?? "backlog";
   const publicDelivery = projection?.publicDelivery ?? null;
-  const publicRecordPath = publicDelivery?.changelogPath ?? publicDelivery?.releaseNotesUrl ?? null;
+  const projectedDelivery = projection?.delivery ?? null;
+  const projectedAudit = projection?.audit ?? null;
+  const publicRecordPath =
+    projectedDelivery?.publicRecordPath ?? publicDelivery?.changelogPath ?? publicDelivery?.releaseNotesUrl ?? null;
   const releaseNotePath = publicRecordPath;
   const deliveryRequired = status === "in_review" || status === "done";
   const deliveryPath = publicRecordPath;
   const evidencePath =
+    projectedDelivery?.evidencePath ??
     publicDelivery?.evidencePath ??
     taskEvidenceEntryPath(evidence) ??
     stringExpectedOutput(task.expectedOutputs, "evidencePath");
-  const prUrl = publicDelivery?.prUrl ?? session?.prUrl ?? null;
-  const mergeState = publicDelivery?.mergeCommit
+  const prUrl = projectedDelivery?.prUrl ?? publicDelivery?.prUrl ?? session?.prUrl ?? null;
+  const mergeState = projectedDelivery?.mergeCommit || publicDelivery?.mergeCommit
     ? "merged"
     : session?.mergeState ?? null;
   const missingItems = [
@@ -1195,20 +1207,34 @@ export function buildTaskDeliveryProjection({
         ? `验证证据：${artifactProjectionStatusLabel(evidence.status)} · ${evidence.path}`
         : evidencePath ? `验证证据：${evidencePath}` : "验证证据：未记录",
       prUrl ? `PR/MR：${prUrl}` : "PR/MR：未记录",
-      publicDelivery?.mergeCommit ? `合并提交：${publicDelivery.mergeCommit}` : "合并提交：未记录",
+      projectedDelivery?.mergeCommit ?? publicDelivery?.mergeCommit
+        ? `合并提交：${projectedDelivery?.mergeCommit ?? publicDelivery?.mergeCommit}`
+        : "合并提交：未记录",
       releaseNotePath ? `公开交付：${releaseNotePath}` : "公开交付：未记录",
-      audit ? `后续审计：${artifactProjectionStatusLabel(audit.status)}` : "后续审计：独立入口，未并入任务主链路。",
+      projectedAudit?.status && projectedAudit.status !== "not-requested"
+        ? `后续审计：${artifactProjectionStatusLabel(projectedAudit.status)}`
+        : audit
+          ? `后续审计：${artifactProjectionStatusLabel(audit.status)}`
+          : "后续审计：独立入口，未并入任务主链路。",
     ],
     prUrl,
     releaseNotePath,
     status,
     summaryItems: [
       `任务状态：${displayStatusLabelZh(status)}`,
-      evidencePath ? "验证证据：已记录" : deliveryRequired ? "验证证据：缺失" : "验证证据：未到生成阶段",
+      projectedDelivery?.evidenceStatus === "ready" || evidencePath
+        ? "验证证据：已记录"
+        : deliveryRequired
+          ? "验证证据：缺失"
+          : "验证证据：未到生成阶段",
       prUrl ? "PR/MR：已记录" : "PR/MR：未记录",
-      publicDelivery?.mergeCommit ? "合并证明：已记录" : "合并证明：未记录",
+      projectedDelivery?.mergeCommit ?? publicDelivery?.mergeCommit ? "合并证明：已记录" : "合并证明：未记录",
       releaseNotePath ? "公开交付：已定位" : "公开交付：未记录",
-      audit ? `审计提示：${artifactProjectionStatusLabel(audit.status)}` : "审计提示：交付后的独立入口。",
+      projectedAudit?.status && projectedAudit.status !== "not-requested"
+        ? `审计提示：${artifactProjectionStatusLabel(projectedAudit.status)}`
+        : audit
+          ? `审计提示：${artifactProjectionStatusLabel(audit.status)}`
+          : "审计提示：交付后的独立入口。",
     ],
     taskId: task.id,
   };
@@ -1334,6 +1360,7 @@ function executeStatusLabel(status?: string | null) {
     checkpointed: "已记录检查点",
     completed: "执行已完成",
     failed: "执行失败",
+    in_progress: "正在执行",
     patching: "正在应用改动",
     planned: "前置检测完成",
     preflight: "正在做前置检测",
