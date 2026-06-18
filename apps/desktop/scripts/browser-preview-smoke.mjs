@@ -138,7 +138,13 @@ try {
   assert.equal(projectProjection?.currentIssueId, "iss-progress");
   assert.equal(projectProjection?.stageLabel, "正在推进");
   assert.equal(projectProjection?.nextActionLabel, "继续当前任务");
-  assert.equal(projectProjection?.completionHint, "当前已完成 1/6 条任务。");
+  assert.equal(projectProjection?.completion?.currentState, "continue");
+  assert.equal(projectProjection?.completion?.latestOutcome, "continue");
+  assert.equal(projectProjection?.completion?.nextRecommendedActionLabel, "继续项目循环");
+  assert.equal(
+    projectProjection?.completionHint,
+    "当前还有 4 条任务未完成，先继续推进任务循环。 最近交付：项目公开交付仍在围绕 iss-progress 整理。",
+  );
   assert.equal(projectProjection?.blockers.length, 0);
   assert.equal(projectProjection?.projectBrain.nextRecommendedActionLabel, "进入项目循环");
   assert.equal(projectProjection?.delivery?.currentIssueId, "iss-progress");

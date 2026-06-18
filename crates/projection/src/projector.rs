@@ -432,12 +432,15 @@ fn project_project(
     let completion_projection = completion.map(project_completion_decision);
     let project_delivery = build_project_delivery_summary(root, project, tasks);
     let project_audit = build_project_audit_summary(project, tasks);
-    let status = if completion_projection
-        .as_ref()
-        .is_some_and(|projection| projection.current_state == "accepted")
-        && all_finished
-    {
-        "done"
+    let status = if all_finished {
+        match completion_projection
+            .as_ref()
+            .map(|projection| projection.current_state.as_str())
+        {
+            Some("accepted") => "done",
+            Some("pause") => "blocked",
+            _ => "active",
+        }
     } else if !blocked_lane.is_empty()
         && current_lane.len() == blocked_lane.len()
         && future_lane.is_empty()
@@ -449,22 +452,39 @@ fn project_project(
         project_status_as_str(&project.status)
     };
     let brain = read_project_brain_snapshot(root, &project.project_id, &project.title)?;
-    let (stage_key, stage_label, stage_summary) = if completion_projection
-        .as_ref()
-        .is_some_and(|projection| projection.current_state == "accepted")
-        && all_finished
-    {
-        (
-            "done".to_string(),
-            "项目已完成".to_string(),
-            "全部任务已完成，完成判断已经接受。".to_string(),
-        )
-    } else if all_finished {
-        (
-            "completion-ready".to_string(),
-            "等待完成判断".to_string(),
-            "任务已全部完成，正在等待 Goal Recheck / Completion Runtime 做最后判断。".to_string(),
-        )
+    let (stage_key, stage_label, stage_summary) = if all_finished {
+        match completion_projection.as_ref() {
+            Some(projection) if projection.current_state == "accepted" => (
+                "done".to_string(),
+                "项目已完成".to_string(),
+                "全部任务已完成，完成判断已经接受。".to_string(),
+            ),
+            Some(projection) if projection.current_state == "continue" => (
+                "continue".to_string(),
+                "继续推进".to_string(),
+                projection.next_recommended_action_reason.clone(),
+            ),
+            Some(projection) if projection.current_state == "adjust" => (
+                "adjust".to_string(),
+                "需要调整".to_string(),
+                projection.next_recommended_action_reason.clone(),
+            ),
+            Some(projection) if projection.current_state == "pause" => (
+                "pause".to_string(),
+                "已暂停".to_string(),
+                projection.next_recommended_action_reason.clone(),
+            ),
+            Some(projection) if projection.current_state == "next-stage" => (
+                "next-stage".to_string(),
+                "进入下一阶段".to_string(),
+                projection.next_recommended_action_reason.clone(),
+            ),
+            _ => (
+                "completion-ready".to_string(),
+                "等待完成判断".to_string(),
+                "任务已全部完成，正在等待 Goal Recheck / Completion Runtime 做最后判断。".to_string(),
+            ),
+        }
     } else if let Some(issue_id) = current_issue_id.as_ref() {
         let label = match current_issue_state.as_deref() {
             Some("todo") => "准备开工",
@@ -1585,6 +1605,13 @@ mod tests {
             project.project_brain.next_recommended_action_label,
             "进入项目循环"
         );
+        assert_eq!(
+            project
+                .completion
+                .as_ref()
+                .map(|completion| completion.current_state.as_str()),
+            Some("goal-recheck")
+        );
     }
 
     #[test]
@@ -1627,6 +1654,40 @@ mod tests {
         assert_eq!(project.current_issue_id.as_deref(), Some("AF-PROJ-002"));
         assert_eq!(project.stage_label, "正在推进");
         assert_eq!(project.next_action_label, "继续当前任务");
+    }
+
+    #[test]
+    fn pause_completion_decision_blocks_finished_project() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        let mut issue = read_spec_issue(dir.path(), "AF-PROJ-001").unwrap();
+        issue.status = SpecIssueStatus::Done;
+        write_spec_issue(dir.path(), &issue).unwrap();
+        agentflow_spec::sync_completion_decision_runtimes(dir.path()).unwrap();
+        agentflow_spec::record_completion_decision(
+            dir.path(),
+            "project-projection",
+            CompletionDecisionOutcome::Pause,
+            "goal-agent",
+            "项目先暂停，等待后续人工决定。",
+            vec!["当前交付已经完成，但暂不进入接受态。".to_string()],
+        )
+        .unwrap();
+
+        rebuild_projections(dir.path()).unwrap();
+        let project =
+            crate::storage::load_project_projection(dir.path(), "project-projection").unwrap();
+
+        assert_eq!(project.status, "blocked");
+        assert_eq!(project.stage_label, "已暂停");
+        assert_eq!(project.next_action_label, "暂停项目");
+        assert_eq!(
+            project
+                .completion
+                .as_ref()
+                .and_then(|completion| completion.latest_outcome.as_deref()),
+            Some("pause")
+        );
     }
 
     #[test]
