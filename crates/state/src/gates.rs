@@ -334,9 +334,13 @@ fn has_completion_candidate(root: &Path) -> bool {
             serde_json::from_str::<agentflow_projection::ProjectProjection>(&raw).ok()
         })
         .any(|projection| {
-            projection.issue_count > 0
-                && projection.completed_issue_count == projection.issue_count
-                && projection.status == "done"
+            projection
+                .completion
+                .as_ref()
+                .is_some_and(|completion| completion.current_state == "goal-recheck")
+                || (projection.issue_count > 0
+                    && projection.completed_issue_count == projection.issue_count
+                    && projection.status != "done")
         })
 }
 
@@ -448,19 +452,19 @@ fn build_next_actions(gate: &WorkflowGateSnapshot) -> Vec<WorkflowNextAction> {
 
 fn action_label(action: &str) -> String {
     match action {
-        "enter-completion-decision" => "Enter completion decision",
-        "start-project-loop" => "Start project loop",
-        "create-goal-draft-preview" => "Create goal draft preview",
-        "create-plan-draft-preview" => "Create plan draft preview",
-        "confirm-goal-draft-preview" => "Confirm goal draft preview",
-        "confirm-plan-draft-preview" => "Confirm plan draft preview",
-        "confirm-project-brain" => "Confirm project brain",
-        "materialize-spec-project-and-issues" => "Materialize spec project and issues",
-        "run-goal-recheck" => "Run goal recheck",
-        "resolve-project-brain-blocker" => "Resolve project brain blocker",
-        "start-new-requirement" => "Start new requirement",
-        "prepare-public-delivery" => "Prepare public delivery",
-        "execute-issue" => "Execute issue",
+        "enter-completion-decision" => "进入完成判断",
+        "start-project-loop" => "进入项目循环",
+        "create-goal-draft-preview" => "生成 Goal 草稿预览",
+        "create-plan-draft-preview" => "生成 Plan 草稿预览",
+        "confirm-goal-draft-preview" => "确认 Goal 草稿预览",
+        "confirm-plan-draft-preview" => "确认 Plan 草稿预览",
+        "confirm-project-brain" => "确认 Project Brain",
+        "materialize-spec-project-and-issues" => "物化 SpecProject / SpecIssue",
+        "run-goal-recheck" => "重新检查项目目标",
+        "resolve-project-brain-blocker" => "处理 Project Brain 阻断",
+        "start-new-requirement" => "开始新需求",
+        "prepare-public-delivery" => "准备公开交付记录",
+        "execute-issue" => "执行任务",
         _ => action,
     }
     .to_string()
@@ -469,17 +473,16 @@ fn action_label(action: &str) -> String {
 fn allowed_reason(action: &str, gate: &WorkflowGateSnapshot) -> String {
     match action {
         "enter-completion-decision" => {
-            "All project tasks are done and public delivery is ready for completion review."
-                .to_string()
+            "当前任务已经全部完成，下一步由 Goal Agent 做正式完成判断。".to_string()
         }
         "start-project-loop" => {
-            "Project Brain is ready and can enter the project loop.".to_string()
+            "Project Brain 已确认，可以进入项目循环。".to_string()
         }
         "create-goal-draft-preview" => {
-            "Project Brain is missing a confirmed goal document.".to_string()
+            "当前还没有确认 Goal 文档，先生成 Goal 草稿预览。".to_string()
         }
         "create-plan-draft-preview" => {
-            "Project Brain has a goal but still needs a plan document.".to_string()
+            "当前已有 Goal，但还缺 Plan 文档。".to_string()
         }
         "confirm-goal-draft-preview" => {
             "Requirement 已被整理成 Goal 草稿，等待用户确认。".to_string()
@@ -488,28 +491,27 @@ fn allowed_reason(action: &str, gate: &WorkflowGateSnapshot) -> String {
             "Goal 已确认，当前等待确认 Plan 草稿。".to_string()
         }
         "confirm-project-brain" => {
-            "Project Brain documents exist but are not fully confirmed yet.".to_string()
+            "Project Brain 文档已存在，但还没有全部确认。".to_string()
         }
         "materialize-spec-project-and-issues" => {
             "Goal / Plan 预览都已确认，可以物化成 SpecProject / SpecIssue。".to_string()
         }
         "run-goal-recheck" => {
-            "Project Health indicates the project goal or plan should be rechecked.".to_string()
+            "Project Health 提示目标或计划需要重新检查。".to_string()
         }
         "resolve-project-brain-blocker" => {
-            "Project Brain is blocked and must be repaired before the project loop continues."
-                .to_string()
+            "Project Brain 存在阻断，先修复再继续。".to_string()
         }
-        "start-new-requirement" => "Workflow can accept the next requirement.".to_string(),
+        "start-new-requirement" => "当前工作流可以接受下一条需求。".to_string(),
         "prepare-public-delivery" => {
-            "Task evidence is ready for public delivery record.".to_string()
+            "任务证据已就绪，可以整理公开交付记录。".to_string()
         }
         "execute-issue" => gate
             .active_issue_id
             .as_ref()
-            .map(|issue_id| format!("Issue {issue_id} is ready for task loop."))
-            .unwrap_or_else(|| "An issue is ready for task loop.".to_string()),
-        _ => "Action is allowed by workflow gate.".to_string(),
+            .map(|issue_id| format!("任务 {issue_id} 已准备好进入执行循环。"))
+            .unwrap_or_else(|| "当前有任务可以进入执行循环。".to_string()),
+        _ => "当前动作已被工作流门禁允许。".to_string(),
     }
 }
 
@@ -532,8 +534,8 @@ fn projected_status<'a>(
 mod tests {
     use super::*;
     use agentflow_projection::{
-        storage::write_project_projection, ProjectBrainProjection, ProjectIssueLanes,
-        ProjectProjection, PROJECT_PROJECTION_VERSION,
+        storage::write_project_projection, ProjectBrainProjection, ProjectCompletionProjection,
+        ProjectIssueLanes, ProjectProjection, PROJECT_PROJECTION_VERSION,
     };
     use agentflow_spec::{
         requirement_preview_from_requirement, write_spec_project, SpecIssueDraft, SpecIssueStatus,
@@ -597,13 +599,28 @@ mod tests {
                 project_id: "project-001".to_string(),
                 title: "Project".to_string(),
                 objective: "Objective".to_string(),
-                status: "done".to_string(),
+                status: "active".to_string(),
                 issue_ids: vec!["AF-001".to_string()],
                 current_issue_id: None,
                 lanes: ProjectIssueLanes::default(),
-                next_action: "进入 Completion Decision。".to_string(),
+                next_action: "进入完成判断".to_string(),
                 blockers: Vec::new(),
                 completion_hint: "全部任务已完成。".to_string(),
+                completion: Some(ProjectCompletionProjection {
+                    current_state: "goal-recheck".to_string(),
+                    latest_outcome: None,
+                    next_recommended_action: "enter-completion-decision".to_string(),
+                    next_recommended_action_label: "进入完成判断".to_string(),
+                    next_recommended_action_reason: "所有任务已经完成。".to_string(),
+                    total_issue_count: 1,
+                    completed_issue_count: 1,
+                    canceled_issue_count: 0,
+                    remaining_issue_count: 0,
+                    blocked_issue_count: 0,
+                    open_questions: vec!["是否接受当前交付？".to_string()],
+                    rationale: vec!["当前任务已经全部完成。".to_string()],
+                    updated_at: 1,
+                }),
                 issue_count: 1,
                 completed_issue_count: 1,
                 project_brain: ProjectBrainProjection {
@@ -619,8 +636,8 @@ mod tests {
                     health_status: "missing".to_string(),
                     missing_documents: Vec::new(),
                     open_questions: Vec::new(),
-                    next_recommended_action: "进入 Completion Decision。".to_string(),
-                    next_recommended_action_label: "进入 Completion Decision".to_string(),
+                    next_recommended_action: "进入完成判断".to_string(),
+                    next_recommended_action_label: "进入完成判断".to_string(),
                     next_recommended_action_reason: "所有任务已经完成。".to_string(),
                     readonly: true,
                 },

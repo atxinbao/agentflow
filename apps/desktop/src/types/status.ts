@@ -605,6 +605,21 @@ export type ProjectProjection = {
   nextAction: string;
   blockers: ProjectBlockerSummary[];
   completionHint: string;
+  completion?: {
+    currentState: string;
+    latestOutcome?: string | null;
+    nextRecommendedAction: string;
+    nextRecommendedActionLabel: string;
+    nextRecommendedActionReason: string;
+    totalIssueCount: number;
+    completedIssueCount: number;
+    canceledIssueCount: number;
+    remainingIssueCount: number;
+    blockedIssueCount: number;
+    openQuestions: string[];
+    rationale: string[];
+    updatedAt: number;
+  } | null;
   issueCount: number;
   completedIssueCount: number;
   projectBrain: {

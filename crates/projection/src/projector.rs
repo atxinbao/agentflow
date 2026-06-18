@@ -1,22 +1,27 @@
 use crate::{
     model::{
+        CompletionDecisionIndex, CompletionDecisionIndexEntry, CompletionDecisionProjection,
         IssueStatusIndex, IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
-        ProjectIssueLanes, ProjectProjection, ProjectionAuditSummary, ProjectionDeliverySummary,
-        ProjectionPhase, ProjectionPublicDelivery, ProjectionRuntimeSummary,
-        ProjectionSessionSummary, ProjectionSummary, RequirementPreviewIndex,
-        RequirementPreviewIndexEntry, RequirementPreviewProjection, TaskProjection,
-        TaskTimelineEvent, TaskTimelineItem, ISSUE_STATUS_INDEX_VERSION,
-        PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
-        REQUIREMENT_PREVIEW_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
+        ProjectCompletionProjection, ProjectIssueLanes, ProjectProjection,
+        ProjectionAuditSummary, ProjectionDeliverySummary, ProjectionPhase,
+        ProjectionPublicDelivery, ProjectionRuntimeSummary, ProjectionSessionSummary,
+        ProjectionSummary, RequirementPreviewIndex, RequirementPreviewIndexEntry,
+        RequirementPreviewProjection, TaskProjection, TaskTimelineEvent, TaskTimelineItem,
+        COMPLETION_DECISION_INDEX_VERSION, COMPLETION_DECISION_PROJECTION_VERSION,
+        ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION,
+        REQUIREMENT_PREVIEW_INDEX_VERSION, REQUIREMENT_PREVIEW_PROJECTION_VERSION,
+        TASK_PROJECTION_VERSION,
     },
     storage::{
+        write_completion_decision_index, write_completion_decision_projection,
         write_issue_status_index, write_project_projection, write_requirement_preview_index,
         write_requirement_preview_projection, write_task_projection,
     },
 };
 use agentflow_event_store::{load_task_events, EventStateTransition, TaskEvent};
 use agentflow_spec::{
-    list_requirement_preview_runtimes, prepare_spec_workspace, read_project_brain_snapshot,
+    list_completion_decision_runtimes, list_requirement_preview_runtimes, prepare_spec_workspace,
+    read_project_brain_snapshot, sync_completion_decision_runtimes, CompletionDecisionRuntime,
     RequirementPreviewRuntime, SpecIssue, SpecProject, SpecProjectStatus,
 };
 use anyhow::{Context, Result};
@@ -52,9 +57,19 @@ struct ProjectionAuditIndexEntry {
 pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionSummary> {
     let root = canonical_project_root(project_root)?;
     prepare_spec_workspace(&root)?;
+    let completion_runtimes = sync_completion_decision_runtimes(&root).unwrap_or_default();
     let issues = read_json_files::<SpecIssue>(&root.join(".agentflow/spec/issues"))?;
     let projects = read_json_files::<SpecProject>(&root.join(".agentflow/spec/projects"))?;
     let requirement_previews = list_requirement_preview_runtimes(&root).unwrap_or_default();
+    let completion_runtimes = if completion_runtimes.is_empty() {
+        list_completion_decision_runtimes(&root).unwrap_or_default()
+    } else {
+        completion_runtimes
+    };
+    let completion_by_project = completion_runtimes
+        .iter()
+        .map(|runtime| (runtime.project_id.clone(), runtime))
+        .collect::<HashMap<_, _>>();
     let events = load_task_events(&root)?;
     let audit_index = load_projection_audit_index(&root).unwrap_or_default();
     let events_by_issue = group_events_by_issue(events);
@@ -76,7 +91,13 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
     }
 
     for project in &projects {
-        let projection = project_project(&root, project, &issues_by_id, &task_projections)?;
+        let projection = project_project(
+            &root,
+            project,
+            &issues_by_id,
+            &task_projections,
+            completion_by_project.get(&project.project_id).copied(),
+        )?;
         write_project_projection(&root, &projection)?;
     }
 
@@ -107,6 +128,34 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
                 .max()
                 .unwrap_or_default(),
             previews: requirement_preview_entries,
+        },
+    )?;
+
+    let mut completion_entries = Vec::new();
+    for runtime in &completion_runtimes {
+        let projection = project_completion_decision(runtime);
+        let projection_path =
+            write_completion_decision_projection(&root, &projection)?.display().to_string();
+        completion_entries.push(CompletionDecisionIndexEntry {
+            project_id: runtime.project_id.clone(),
+            current_state: projection.current_state.clone(),
+            latest_outcome: projection.latest_outcome.clone(),
+            next_recommended_action: projection.next_recommended_action.clone(),
+            projection_path: relative_projection_path(&root, &projection_path),
+            updated_at: projection.updated_at,
+        });
+    }
+    completion_entries.sort_by(|left, right| left.project_id.cmp(&right.project_id));
+    write_completion_decision_index(
+        &root,
+        &CompletionDecisionIndex {
+            version: COMPLETION_DECISION_INDEX_VERSION.to_string(),
+            updated_at: completion_entries
+                .iter()
+                .map(|entry| entry.updated_at)
+                .max()
+                .unwrap_or_default(),
+            decisions: completion_entries,
         },
     )?;
 
@@ -174,6 +223,36 @@ fn project_requirement_preview(
         materialized_project_id: preview.materialized_project_id.clone(),
         materialized_issue_ids: preview.materialized_issue_ids.clone(),
         updated_at: preview.updated_at,
+    }
+}
+
+fn project_completion_decision(
+    runtime: &CompletionDecisionRuntime,
+) -> CompletionDecisionProjection {
+    CompletionDecisionProjection {
+        version: COMPLETION_DECISION_PROJECTION_VERSION.to_string(),
+        project_id: runtime.project_id.clone(),
+        project_title: runtime.project_title.clone(),
+        current_state: runtime.current_state.as_str().to_string(),
+        latest_outcome: runtime
+            .latest_outcome
+            .as_ref()
+            .map(|outcome| outcome.as_str().to_string()),
+        next_recommended_action: runtime.next_recommended_action.clone(),
+        next_recommended_action_label: runtime.next_recommended_action_label.clone(),
+        next_recommended_action_reason: runtime.next_recommended_action_reason.clone(),
+        total_issue_count: runtime.facts.total_issue_count,
+        completed_issue_count: runtime.facts.completed_issue_count,
+        canceled_issue_count: runtime.facts.canceled_issue_count,
+        remaining_issue_count: runtime.facts.remaining_issue_count,
+        blocked_issue_count: runtime.facts.blocked_issue_count,
+        open_questions: runtime.open_questions.clone(),
+        rationale: runtime.rationale.clone(),
+        projection_path: format!(
+            ".agentflow/projections/completions/{}.json",
+            runtime.project_id
+        ),
+        updated_at: runtime.updated_at,
     }
 }
 
@@ -271,6 +350,7 @@ fn project_project(
     project: &SpecProject,
     issues_by_id: &HashMap<String, &SpecIssue>,
     tasks: &BTreeMap<String, TaskProjection>,
+    completion: Option<&CompletionDecisionRuntime>,
 ) -> Result<ProjectProjection> {
     let mut current_issue_id = None;
     let mut completed = 0;
@@ -315,14 +395,20 @@ fn project_project(
             }
         }
     }
-    let status = if completed == project.issue_ids.len() && !project.issue_ids.is_empty() {
+    let all_finished = completed == project.issue_ids.len() && !project.issue_ids.is_empty();
+    let completion_projection = completion.map(project_completion_decision);
+    let status = if completion_projection
+        .as_ref()
+        .is_some_and(|projection| projection.current_state == "accepted")
+        && all_finished
+    {
         "done"
     } else if !blocked_lane.is_empty()
         && current_lane.len() == blocked_lane.len()
         && future_lane.is_empty()
     {
         "blocked"
-    } else if current_issue_id.is_some() {
+    } else if current_issue_id.is_some() || all_finished {
         "active"
     } else {
         project_status_as_str(&project.status)
@@ -330,16 +416,20 @@ fn project_project(
     let brain = read_project_brain_snapshot(root, &project.project_id, &project.title)?;
     let next_action = if let Some(issue_id) = current_issue_id.clone() {
         format!("继续推进 {issue_id}。")
+    } else if let Some(completion) = completion_projection.as_ref() {
+        completion.next_recommended_action_label.clone()
     } else if let Some(issue_id) = future_lane.first() {
         format!("启动 {issue_id}。")
     } else if !blocked_lane.is_empty() {
         "先解除阻断项，再继续推进项目。".to_string()
-    } else if !project.issue_ids.is_empty() && completed == project.issue_ids.len() {
-        "进入 Completion Decision。".to_string()
+    } else if all_finished {
+        "进入完成判断".to_string()
     } else {
         brain.next_recommended_action.clone()
     };
-    let completion_hint = if !project.issue_ids.is_empty() && completed == project.issue_ids.len() {
+    let completion_hint = if let Some(completion) = completion_projection.as_ref() {
+        completion.next_recommended_action_reason.clone()
+    } else if all_finished {
         "全部任务已完成，下一步由 Goal / Completion Runtime 重新判断项目是否真正结束。".to_string()
     } else {
         format!(
@@ -364,6 +454,21 @@ fn project_project(
         next_action,
         blockers,
         completion_hint,
+        completion: completion_projection.map(|projection| ProjectCompletionProjection {
+            current_state: projection.current_state,
+            latest_outcome: projection.latest_outcome,
+            next_recommended_action: projection.next_recommended_action,
+            next_recommended_action_label: projection.next_recommended_action_label,
+            next_recommended_action_reason: projection.next_recommended_action_reason,
+            total_issue_count: projection.total_issue_count,
+            completed_issue_count: projection.completed_issue_count,
+            canceled_issue_count: projection.canceled_issue_count,
+            remaining_issue_count: projection.remaining_issue_count,
+            blocked_issue_count: projection.blocked_issue_count,
+            open_questions: projection.open_questions,
+            rationale: projection.rationale,
+            updated_at: projection.updated_at,
+        }),
         issue_count: project.issue_ids.len(),
         completed_issue_count: completed,
         project_brain: ProjectBrainProjection {
@@ -796,7 +901,8 @@ mod tests {
     use super::*;
     use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
     use agentflow_spec::{
-        requirement_preview_from_requirement, SpecIssueDraft, SpecProjectDraft,
+        read_spec_issue, requirement_preview_from_requirement, write_spec_issue,
+        CompletionDecisionOutcome, SpecIssueDraft, SpecIssueStatus, SpecProjectDraft,
     };
     use serde_json::json;
     use tempfile::tempdir;
@@ -901,6 +1007,9 @@ mod tests {
     fn project_projection_counts_completed_issues() {
         let dir = tempdir().unwrap();
         write_fixture(dir.path());
+        let mut issue = read_spec_issue(dir.path(), "AF-PROJ-001").unwrap();
+        issue.status = SpecIssueStatus::Done;
+        write_spec_issue(dir.path(), &issue).unwrap();
         append_task_event_once(
             dir.path(),
             event(
@@ -936,7 +1045,12 @@ mod tests {
             Some("docs/release-notes/agentflow-release-notes.md")
         );
         assert_eq!(project.completed_issue_count, 1);
-        assert_eq!(project.status, "done");
+        assert_eq!(project.status, "active");
+        assert_eq!(project.next_action, "进入完成判断");
+        assert_eq!(
+            project.completion.as_ref().map(|completion| completion.current_state.as_str()),
+            Some("goal-recheck")
+        );
         assert_eq!(project.objective, "用于 projection 测试。");
         assert_eq!(project.project_brain.brain_status, "ready-for-project-loop");
         assert_eq!(
@@ -1032,5 +1146,36 @@ mod tests {
         assert_eq!(projection.issue_contract_draft_count, 0);
         assert_eq!(index.previews.len(), 1);
         assert_eq!(index.previews[0].project_id, "project-preview");
+    }
+
+    #[test]
+    fn accepted_completion_decision_marks_project_done() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        let mut issue = read_spec_issue(dir.path(), "AF-PROJ-001").unwrap();
+        issue.status = SpecIssueStatus::Done;
+        write_spec_issue(dir.path(), &issue).unwrap();
+        agentflow_spec::sync_completion_decision_runtimes(dir.path()).unwrap();
+        agentflow_spec::record_completion_decision(
+            dir.path(),
+            "project-projection",
+            CompletionDecisionOutcome::Accept,
+            "goal-agent",
+            "当前项目已经完成。",
+            vec!["所有任务与交付都满足当前项目目标。".to_string()],
+        )
+        .unwrap();
+
+        rebuild_projections(dir.path()).unwrap();
+        let project =
+            crate::storage::load_project_projection(dir.path(), "project-projection").unwrap();
+        assert_eq!(project.status, "done");
+        assert_eq!(
+            project
+                .completion
+                .as_ref()
+                .and_then(|completion| completion.latest_outcome.as_deref()),
+            Some("accept")
+        );
     }
 }
