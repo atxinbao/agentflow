@@ -10,14 +10,20 @@ use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
+    thread,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+const EVENT_STORE_LOCK_RETRY_LIMIT: usize = 200;
+const EVENT_STORE_LOCK_RETRY_DELAY_MS: u64 = 10;
 
 pub fn prepare_event_store(project_root: impl AsRef<Path>) -> Result<TaskEventManifest> {
     let root = canonical_project_root(project_root)?;
     ensure_directory(&root.join(".agentflow/events"))?;
     ensure_directory(&root.join(".agentflow/events/consumers"))?;
     ensure_directory(&root.join(".agentflow/events/dead-letter"))?;
+    ensure_directory(&root.join(".agentflow/events/locks"))?;
+    ensure_directory(&root.join(".agentflow/events/sequences"))?;
     let stream_path = root.join(TASK_EVENT_STREAM_PATH);
     if !stream_path.exists() {
         fs::write(&stream_path, "")?;
@@ -46,9 +52,7 @@ pub fn append_task_event(
 ) -> Result<TaskEvent> {
     let root = canonical_project_root(project_root)?;
     prepare_event_store(&root)?;
-    validate_draft(&draft)?;
-    let event = materialize_event(&root, draft)?;
-    append_event_line(&root, &event)?;
+    let event = append_task_event_locked(&root, draft, false)?;
     let _ = prepare_event_store(&root);
     Ok(event)
 }
@@ -59,15 +63,45 @@ pub fn append_task_event_once(
 ) -> Result<TaskEvent> {
     let root = canonical_project_root(project_root)?;
     prepare_event_store(&root)?;
-    if let Some(key) = draft.idempotency_key.as_ref() {
-        if let Some(existing) = load_task_events(&root)?
-            .into_iter()
-            .find(|event| event.idempotency_key.as_ref() == Some(key))
-        {
-            return Ok(existing);
-        }
-    }
-    append_task_event(root, draft)
+    let event = append_task_event_locked(&root, draft, true)?;
+    let _ = prepare_event_store(&root);
+    Ok(event)
+}
+
+pub fn allocate_task_sequence(project_root: impl AsRef<Path>, namespace: &str) -> Result<u64> {
+    let root = canonical_project_root(project_root)?;
+    prepare_event_store(&root)?;
+    with_event_store_lock(&root, "sequence", |root| {
+        next_sequence_value_unlocked(root, namespace)
+    })
+}
+
+pub fn claim_task_event<F, G>(
+    project_root: impl AsRef<Path>,
+    selector: F,
+    draft_builder: G,
+) -> Result<Option<(TaskEvent, TaskEvent)>>
+where
+    F: Fn(&TaskEvent, &[TaskEvent]) -> bool,
+    G: Fn(&TaskEvent, &[TaskEvent]) -> Result<TaskEventDraft>,
+{
+    let root = canonical_project_root(project_root)?;
+    prepare_event_store(&root)?;
+    let claimed = with_event_store_lock(&root, "claim", |root| {
+        let events = load_task_events(root)?;
+        let Some(requested) = events
+            .iter()
+            .find(|event| selector(event, &events))
+            .cloned()
+        else {
+            return Ok(None);
+        };
+        let draft = draft_builder(&requested, &events)?;
+        let claimed = append_task_event_once_unlocked(root, draft)?;
+        Ok(Some((requested, claimed)))
+    })?;
+    let _ = prepare_event_store(&root);
+    Ok(claimed)
 }
 
 pub fn load_task_events(project_root: impl AsRef<Path>) -> Result<Vec<TaskEvent>> {
@@ -243,9 +277,48 @@ fn consumer_path(root: &Path, consumer_id: &str) -> PathBuf {
         .join(format!("{consumer_id}.json"))
 }
 
-fn materialize_event(root: &Path, draft: TaskEventDraft) -> Result<TaskEvent> {
+fn append_task_event_locked(
+    root: &Path,
+    draft: TaskEventDraft,
+    enforce_idempotency: bool,
+) -> Result<TaskEvent> {
+    validate_draft(&draft)?;
+    with_event_store_lock(root, "append", move |root| {
+        if enforce_idempotency {
+            if let Some(existing) =
+                find_existing_idempotent_event(root, draft.idempotency_key.as_ref())?
+            {
+                return Ok(existing);
+            }
+        }
+        let event = materialize_event_unlocked(root, draft)?;
+        append_event_line(root, &event)?;
+        Ok(event)
+    })
+}
+
+fn append_task_event_once_unlocked(root: &Path, draft: TaskEventDraft) -> Result<TaskEvent> {
+    validate_draft(&draft)?;
+    if let Some(existing) = find_existing_idempotent_event(root, draft.idempotency_key.as_ref())? {
+        return Ok(existing);
+    }
+    let event = materialize_event_unlocked(root, draft)?;
+    append_event_line(root, &event)?;
+    Ok(event)
+}
+
+fn find_existing_idempotent_event(root: &Path, key: Option<&String>) -> Result<Option<TaskEvent>> {
+    let Some(key) = key else {
+        return Ok(None);
+    };
+    Ok(load_task_events(root)?
+        .into_iter()
+        .find(|event| event.idempotency_key.as_ref() == Some(key)))
+}
+
+fn materialize_event_unlocked(root: &Path, draft: TaskEventDraft) -> Result<TaskEvent> {
     let timestamp = unix_timestamp_seconds();
-    let event_id = next_event_id(root, timestamp)?;
+    let event_id = next_event_id_unlocked(root)?;
     Ok(TaskEvent {
         event_id,
         event_version: TASK_EVENT_VERSION.to_string(),
@@ -306,11 +379,10 @@ fn validate_required(field: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-fn next_event_id(root: &Path, timestamp: u64) -> Result<String> {
+fn next_event_id_unlocked(root: &Path) -> Result<String> {
     Ok(format!(
-        "evt-{}-{:06}",
-        timestamp,
-        load_task_events(root)?.len() + 1
+        "evt-{:06}",
+        next_sequence_value_unlocked(root, "event-id")?
     ))
 }
 
@@ -323,6 +395,77 @@ fn canonical_project_root(project_root: impl AsRef<Path>) -> Result<PathBuf> {
 
 fn ensure_directory(path: &Path) -> Result<()> {
     fs::create_dir_all(path).with_context(|| format!("create {}", path.display()))
+}
+
+fn with_event_store_lock<T, F>(root: &Path, scope: &str, action: F) -> Result<T>
+where
+    F: FnOnce(&Path) -> Result<T>,
+{
+    let lock_path = event_store_lock_path(root, scope);
+    ensure_directory(lock_path.parent().expect("lock path should have parent"))?;
+    for _ in 0..EVENT_STORE_LOCK_RETRY_LIMIT {
+        match fs::create_dir(&lock_path) {
+            Ok(()) => {
+                let result = action(root);
+                let cleanup = fs::remove_dir(&lock_path)
+                    .with_context(|| format!("remove {}", lock_path.display()));
+                return match (result, cleanup) {
+                    (Ok(value), Ok(())) => Ok(value),
+                    (Err(error), Ok(())) => Err(error),
+                    (Ok(_), Err(error)) => Err(error),
+                    (Err(error), Err(_)) => Err(error),
+                };
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                thread::sleep(std::time::Duration::from_millis(
+                    EVENT_STORE_LOCK_RETRY_DELAY_MS,
+                ));
+            }
+            Err(error) => {
+                return Err(error).with_context(|| format!("create {}", lock_path.display()));
+            }
+        }
+    }
+    anyhow::bail!(
+        "timed out waiting for event store lock {}",
+        lock_path.display()
+    )
+}
+
+fn next_sequence_value_unlocked(root: &Path, namespace: &str) -> Result<u64> {
+    let path = event_store_sequence_path(root, namespace);
+    let current = if path.is_file() {
+        fs::read_to_string(&path)
+            .with_context(|| format!("read {}", path.display()))?
+            .trim()
+            .parse::<u64>()
+            .with_context(|| format!("parse {}", path.display()))?
+    } else {
+        0
+    };
+    let next = current + 1;
+    fs::write(&path, format!("{next}\n")).with_context(|| format!("write {}", path.display()))?;
+    Ok(next)
+}
+
+fn event_store_lock_path(root: &Path, scope: &str) -> PathBuf {
+    root.join(".agentflow/events/locks")
+        .join(sanitize_namespace(scope))
+}
+
+fn event_store_sequence_path(root: &Path, namespace: &str) -> PathBuf {
+    root.join(".agentflow/events/sequences")
+        .join(format!("{}.seq", sanitize_namespace(namespace)))
+}
+
+fn sanitize_namespace(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' => ch,
+            _ => '_',
+        })
+        .collect()
 }
 
 fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
@@ -363,6 +506,8 @@ mod tests {
     };
     use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
     use serde_json::json;
+    use std::sync::Arc;
+    use std::thread;
     use tempfile::tempdir;
 
     fn issue_scheduled_draft(issue_id: &str) -> TaskEventDraft {
@@ -417,6 +562,52 @@ mod tests {
 
         assert_eq!(first.event_id, second.event_id);
         assert_eq!(load_task_events(dir.path()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn append_once_is_atomic_across_threads() {
+        let dir = tempdir().unwrap();
+        let root = Arc::new(dir.path().to_path_buf());
+        let handles = (0..8)
+            .map(|_| {
+                let root = Arc::clone(&root);
+                thread::spawn(move || {
+                    append_task_event_once(root.as_path(), issue_scheduled_draft("AF-TASK-001"))
+                        .unwrap()
+                        .event_id
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let event_ids = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>();
+
+        assert!(event_ids.windows(2).all(|pair| pair[0] == pair[1]));
+        assert_eq!(load_task_events(root.as_path()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn sequence_allocation_is_monotonic_across_threads() {
+        let dir = tempdir().unwrap();
+        let root = Arc::new(dir.path().to_path_buf());
+        let handles = (0..8)
+            .map(|_| {
+                let root = Arc::clone(&root);
+                thread::spawn(move || {
+                    allocate_task_sequence(root.as_path(), "run-id:AF-TASK-001").unwrap()
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let mut values = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>();
+        values.sort_unstable();
+
+        assert_eq!(values, vec![1, 2, 3, 4, 5, 6, 7, 8]);
     }
 
     #[test]
