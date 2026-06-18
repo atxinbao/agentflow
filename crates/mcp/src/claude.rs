@@ -309,11 +309,16 @@ impl McpAgentProvider for ClaudeCodeProvider {
         if let Ok(existing) = read_session_snapshot(project_root, &plan.session_id) {
             if !matches!(
                 existing.status,
-                McpSessionStatus::Failed
-                    | McpSessionStatus::Cancelled
-                    | McpSessionStatus::Interrupted
+                McpSessionStatus::Failed | McpSessionStatus::Interrupted
             ) {
                 return Ok(existing);
+            }
+            if existing.attempt_count >= existing.governance_policy.max_attempts.max(1) {
+                anyhow::bail!(
+                    "session {} exhausted retry policy at attempt {}",
+                    existing.session_id,
+                    existing.attempt_count
+                );
             }
             attempt_count = existing.attempt_count.max(1).saturating_add(1);
             recovery_reason = Some(format!("retry after {} session", existing.status.as_str()));
@@ -377,6 +382,17 @@ impl McpAgentProvider for ClaudeCodeProvider {
         session.merge_state = None;
         session.writeback_state = None;
         session.last_error = None;
+        session.governance_facts.timeout_at = Some(now + session.governance_policy.timeout_seconds);
+        session.governance_facts.resumed_from_attempt =
+            (attempt_count > 1).then_some(attempt_count.saturating_sub(1));
+        session.governance_facts.takeover_session_id =
+            (attempt_count > 1).then_some(session.session_id.clone());
+        session.governance_facts.retryable =
+            attempt_count < session.governance_policy.max_attempts.max(1);
+        session.governance_facts.terminal_reason = None;
+        session.governance_facts.timed_out_at = None;
+        session.governance_facts.cancel_requested_at = None;
+        session.governance_facts.cancelled_at = None;
         session.note = plan.note.clone();
         session.updated_at = now;
         write_session_snapshot(project_root, &session)?;
@@ -390,10 +406,29 @@ impl McpAgentProvider for ClaudeCodeProvider {
             .ok()
             .flatten();
         let pid_alive = session.pid.map(is_pid_alive).transpose()?;
-        let process_alive = pid_alive.unwrap_or(false);
+        let mut process_alive = pid_alive.unwrap_or(false);
         let issue_state = projection
             .as_ref()
             .map(|value| value.current_state.as_str());
+        let now = unix_timestamp_seconds();
+
+        if process_alive
+            && session
+                .governance_facts
+                .timeout_at
+                .is_some_and(|timeout_at| timeout_at <= now)
+            && session.governance_facts.timed_out_at.is_none()
+        {
+            if let Some(pid) = session.pid {
+                let _ = Command::new("kill")
+                    .args(["-TERM", &pid.to_string()])
+                    .output();
+            }
+            process_alive = false;
+            session.governance_facts.timed_out_at = Some(now);
+            session.governance_facts.terminal_reason = Some("timeout".to_string());
+            session.recovery_reason = Some("retry after timeout".to_string());
+        }
 
         if let Some(proof) = merge_proof.as_ref() {
             session.pr_url = proof.pr_url.clone();
@@ -435,7 +470,13 @@ impl McpAgentProvider for ClaudeCodeProvider {
         {
             session.pid = None;
         }
-        session.updated_at = unix_timestamp_seconds();
+        session.governance_facts.retryable = session.attempt_count
+            < session.governance_policy.max_attempts
+            && !matches!(
+                session.status,
+                McpSessionStatus::Cancelled | McpSessionStatus::Done
+            );
+        session.updated_at = now;
         write_session_snapshot(project_root, &session)?;
         Ok(session)
     }
@@ -489,10 +530,15 @@ impl McpAgentProvider for ClaudeCodeProvider {
                 .args(["-TERM", &pid.to_string()])
                 .output();
         }
+        let now = unix_timestamp_seconds();
         session.status = McpSessionStatus::Cancelled;
         session.pid = None;
-        session.updated_at = unix_timestamp_seconds();
+        session.updated_at = now;
         session.last_error = None;
+        session.governance_facts.cancel_requested_at = Some(now);
+        session.governance_facts.cancelled_at = Some(now);
+        session.governance_facts.retryable = false;
+        session.governance_facts.terminal_reason = Some("cancelled".to_string());
         write_session_snapshot(project_root, &session)?;
         Ok(session)
     }

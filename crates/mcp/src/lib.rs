@@ -14,7 +14,7 @@ pub mod storage;
 use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::Result;
-use serde_json::json;
+use serde_json::{json, Map, Value};
 use std::path::Path;
 
 pub use browser::browser_preview_status;
@@ -25,10 +25,11 @@ pub use gitlab::check_gitlab_provider;
 pub use model::{
     provider_capability_profile, McpCapability, McpLaunchMode, McpLaunchPlan, McpLaunchRequest,
     McpLogChunk, McpProviderCapabilityProfile, McpProviderKind, McpProviderStatus,
-    McpProviderStatusCode, McpRegistry, McpRegistryEntry, McpSessionSnapshot, McpSessionStatus,
-    MCP_LAUNCH_PLAN_VERSION, MCP_LAUNCH_REQUEST_VERSION, MCP_LOG_CHUNK_VERSION,
-    MCP_PROVIDER_CAPABILITY_PROFILE_VERSION, MCP_PROVIDER_STATUS_VERSION, MCP_REGISTRY_VERSION,
-    MCP_SESSION_SNAPSHOT_VERSION,
+    McpProviderStatusCode, McpRegistry, McpRegistryEntry, McpSessionGovernanceFacts,
+    McpSessionGovernancePolicy, McpSessionSnapshot, McpSessionStatus, MCP_DEFAULT_MAX_ATTEMPTS,
+    MCP_DEFAULT_SESSION_TIMEOUT_SECONDS, MCP_LAUNCH_PLAN_VERSION, MCP_LAUNCH_REQUEST_VERSION,
+    MCP_LOG_CHUNK_VERSION, MCP_PROVIDER_CAPABILITY_PROFILE_VERSION, MCP_PROVIDER_STATUS_VERSION,
+    MCP_REGISTRY_VERSION, MCP_SESSION_GOVERNANCE_POLICY_VERSION, MCP_SESSION_SNAPSHOT_VERSION,
 };
 pub use provider::{run_command, CommandProbe, McpAgentProvider, McpProviderBridge};
 pub use storage::{
@@ -141,24 +142,7 @@ fn observe_session_transition(
                 state: None,
                 correlation_id: Some(format!("corr-{}", updated.issue_id)),
                 causation_id: None,
-                payload: json!({
-                    "issueId": updated.issue_id,
-                    "projectId": updated.project_id,
-                    "runId": updated.run_id,
-                    "sessionId": updated.session_id,
-                    "provider": updated.provider,
-                    "branchName": updated.branch_name,
-                    "attemptCount": attempt_count,
-                    "logPath": updated.log_path,
-                    "lastMessagePath": updated.last_message_path,
-                    "mergeProofPath": updated.merge_proof_path,
-                    "mergeState": updated.merge_state,
-                    "writebackState": updated.writeback_state,
-                    "recoveryReason": updated.recovery_reason,
-                    "lastError": updated.last_error,
-                    "sessionStatus": updated.status.as_str(),
-                    "status": updated.status.as_str(),
-                }),
+                payload: session_transition_payload(updated, attempt_count),
                 artifact_refs: session_artifact_refs(updated),
                 idempotency_key: Some(format!(
                     "{event_type}:{}:{}:attempt-{attempt_count}",
@@ -185,10 +169,104 @@ fn session_artifact_refs(session: &McpSessionSnapshot) -> Vec<String> {
     refs
 }
 
+fn session_transition_payload(updated: &McpSessionSnapshot, attempt_count: u32) -> Value {
+    let mut payload = Map::new();
+    payload.insert("issueId".to_string(), json!(updated.issue_id));
+    payload.insert("projectId".to_string(), json!(updated.project_id));
+    payload.insert("runId".to_string(), json!(updated.run_id));
+    payload.insert("sessionId".to_string(), json!(updated.session_id));
+    payload.insert("provider".to_string(), json!(updated.provider));
+    payload.insert("branchName".to_string(), json!(updated.branch_name));
+    payload.insert("attemptCount".to_string(), json!(attempt_count));
+    payload.insert("logPath".to_string(), json!(updated.log_path));
+    payload.insert(
+        "lastMessagePath".to_string(),
+        json!(updated.last_message_path),
+    );
+    payload.insert(
+        "mergeProofPath".to_string(),
+        json!(updated.merge_proof_path),
+    );
+    payload.insert("mergeState".to_string(), json!(updated.merge_state));
+    payload.insert("writebackState".to_string(), json!(updated.writeback_state));
+    payload.insert("recoveryReason".to_string(), json!(updated.recovery_reason));
+    payload.insert("lastError".to_string(), json!(updated.last_error));
+    payload.insert(
+        "governancePolicyVersion".to_string(),
+        json!(updated.governance_policy.version),
+    );
+    payload.insert(
+        "claimPolicy".to_string(),
+        json!(updated.governance_policy.claim_policy),
+    );
+    payload.insert(
+        "timeoutPolicy".to_string(),
+        json!(updated.governance_policy.timeout_policy),
+    );
+    payload.insert(
+        "timeoutSeconds".to_string(),
+        json!(updated.governance_policy.timeout_seconds),
+    );
+    payload.insert(
+        "timeoutAt".to_string(),
+        json!(updated.governance_facts.timeout_at),
+    );
+    payload.insert(
+        "timedOutAt".to_string(),
+        json!(updated.governance_facts.timed_out_at),
+    );
+    payload.insert(
+        "takeoverPolicy".to_string(),
+        json!(updated.governance_policy.takeover_policy),
+    );
+    payload.insert(
+        "retryPolicy".to_string(),
+        json!(updated.governance_policy.retry_policy),
+    );
+    payload.insert(
+        "maxAttempts".to_string(),
+        json!(updated.governance_policy.max_attempts),
+    );
+    payload.insert(
+        "cancelPolicy".to_string(),
+        json!(updated.governance_policy.cancel_policy),
+    );
+    payload.insert(
+        "cancelRequestedAt".to_string(),
+        json!(updated.governance_facts.cancel_requested_at),
+    );
+    payload.insert(
+        "cancelledAt".to_string(),
+        json!(updated.governance_facts.cancelled_at),
+    );
+    payload.insert(
+        "resumedFromAttempt".to_string(),
+        json!(updated.governance_facts.resumed_from_attempt),
+    );
+    payload.insert(
+        "takeoverSessionId".to_string(),
+        json!(updated.governance_facts.takeover_session_id),
+    );
+    payload.insert(
+        "terminalReason".to_string(),
+        json!(updated.governance_facts.terminal_reason),
+    );
+    payload.insert(
+        "retryable".to_string(),
+        json!(updated.governance_facts.retryable),
+    );
+    payload.insert("sessionStatus".to_string(), json!(updated.status.as_str()));
+    payload.insert("status".to_string(), json!(updated.status.as_str()));
+    Value::Object(payload)
+}
+
 #[cfg(test)]
 mod tests {
     use super::observe_session_transition;
-    use crate::model::{McpLaunchMode, McpSessionSnapshot, McpSessionStatus};
+    use crate::model::{
+        McpLaunchMode, McpSessionGovernanceFacts, McpSessionGovernancePolicy, McpSessionSnapshot,
+        McpSessionStatus,
+    };
     use agentflow_event_store::load_task_events;
     use tempfile::tempdir;
 
@@ -220,6 +298,8 @@ mod tests {
             recovery_reason: None,
             note: None,
             last_error: None,
+            governance_policy: McpSessionGovernancePolicy::default(),
+            governance_facts: McpSessionGovernanceFacts::default(),
             created_at: 1,
             updated_at: 2,
         }

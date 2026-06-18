@@ -1,8 +1,8 @@
 use crate::model::{
     AgentDispatchProviderSelection, AgentDispatchRoleBinding, AgentDispatcherClaim,
-    AGENT_LAUNCH_CLAIMED, AGENT_SESSION_CREATED, AGENT_SESSION_DONE, AGENT_SESSION_FAILED,
-    AGENT_SESSION_INTERRUPTED, AGENT_SESSION_IN_REVIEW, AGENT_SESSION_RESUMED,
-    AGENT_SESSION_RUNNING,
+    AGENT_LAUNCH_CLAIMED, AGENT_SESSION_CANCELLED, AGENT_SESSION_CREATED, AGENT_SESSION_DONE,
+    AGENT_SESSION_FAILED, AGENT_SESSION_INTERRUPTED, AGENT_SESSION_IN_REVIEW,
+    AGENT_SESSION_RESUMED, AGENT_SESSION_RUNNING,
 };
 use agentflow_event_store::{
     append_task_event_once, load_task_events, EventActor, TaskEvent, TaskEventDraft,
@@ -14,7 +14,7 @@ use agentflow_mcp::{
 use agentflow_task_loop::{AgentLaunchPayload, AGENT_LAUNCH_REQUESTED};
 use agentflow_workflow_core::WorkflowFlowType;
 use anyhow::{Context, Result};
-use serde_json::json;
+use serde_json::{json, Map, Value};
 use std::{collections::BTreeMap, path::Path};
 
 pub struct AgentDispatcher {
@@ -104,7 +104,8 @@ fn unavailable_run_ids(events: &[TaskEvent]) -> BTreeMap<String, bool> {
             | AGENT_SESSION_RESUMED
             | AGENT_SESSION_RUNNING
             | AGENT_SESSION_IN_REVIEW
-            | AGENT_SESSION_DONE => {
+            | AGENT_SESSION_DONE
+            | AGENT_SESSION_CANCELLED => {
                 state.insert(run_id, true);
             }
             AGENT_SESSION_INTERRUPTED | AGENT_SESSION_FAILED => {
@@ -127,6 +128,7 @@ fn had_prior_session_event(root: &Path, run_id: &str) -> Result<bool> {
                 | AGENT_SESSION_IN_REVIEW
                 | AGENT_SESSION_DONE
                 | AGENT_SESSION_FAILED
+                | AGENT_SESSION_CANCELLED
         ) && event.run_id.as_deref() == Some(run_id)
     }))
 }
@@ -164,7 +166,8 @@ fn append_status_event(
         McpSessionStatus::Interrupted => AGENT_SESSION_INTERRUPTED,
         McpSessionStatus::InReview => AGENT_SESSION_IN_REVIEW,
         McpSessionStatus::Done => AGENT_SESSION_DONE,
-        McpSessionStatus::Failed | McpSessionStatus::Cancelled => AGENT_SESSION_FAILED,
+        McpSessionStatus::Failed => AGENT_SESSION_FAILED,
+        McpSessionStatus::Cancelled => AGENT_SESSION_CANCELLED,
         McpSessionStatus::Queued => return Ok(None),
     };
     let role_binding = AgentDispatchRoleBinding::resolve(payload.agent_role.clone())?;
@@ -198,39 +201,7 @@ fn append_session_event(
             state: None,
             correlation_id: Some(format!("corr-{}", payload.issue_id)),
             causation_id: None,
-            payload: json!({
-                "provider": session.provider,
-                "providerKind": selection.provider_kind,
-                "providerStatus": selection.provider_status,
-                "requestedRole": role_binding.requested_role,
-                "runtimeRole": role_binding.runtime_role.as_str(),
-                "skillPack": role_binding.skill_pack.map(|value| value.as_str()),
-                "supportedRoles": selection.supported_roles,
-                "supportedSkillPacks": selection.supported_skill_packs,
-                "selectionStatus": selection.status.as_str(),
-                "selectionReason": selection.selection_reason,
-                "degradationReason": selection.degradation_reason,
-                "requiredCapabilities": selection.required_capabilities,
-                "degradedCapabilities": selection.degraded_capabilities,
-                "missingRequiredCapabilities": selection.missing_required_capabilities,
-                "missingDegradedCapabilities": selection.missing_degraded_capabilities,
-                "sessionId": session.session_id,
-                "sessionStatus": session.status.as_str(),
-                "attemptCount": attempt_count,
-                "issueId": session.issue_id,
-                "projectId": session.project_id,
-                "runId": session.run_id,
-                "branchName": session.branch_name,
-                "launchRequestPath": session.launch_request_path,
-                "planPath": session.plan_path,
-                "logPath": session.log_path,
-                "lastMessagePath": session.last_message_path,
-                "mergeProofPath": session.merge_proof_path,
-                "mergeState": session.merge_state,
-                "writebackState": session.writeback_state,
-                "recoveryReason": session.recovery_reason,
-                "lastError": session.last_error,
-            }),
+            payload: session_event_payload(role_binding, selection, session, attempt_count),
             artifact_refs: session_artifact_refs(session),
             idempotency_key: Some(format!(
                 "{event_type}:{}:{}:attempt-{attempt_count}",
@@ -266,39 +237,7 @@ fn append_launch_claimed_event(
             state: None,
             correlation_id: Some(format!("corr-{}", payload.issue_id)),
             causation_id: None,
-            payload: json!({
-                "provider": session.provider,
-                "providerKind": selection.provider_kind,
-                "providerStatus": selection.provider_status,
-                "requestedRole": role_binding.requested_role,
-                "runtimeRole": role_binding.runtime_role.as_str(),
-                "skillPack": role_binding.skill_pack.map(|value| value.as_str()),
-                "supportedRoles": selection.supported_roles,
-                "supportedSkillPacks": selection.supported_skill_packs,
-                "selectionStatus": selection.status.as_str(),
-                "selectionReason": selection.selection_reason,
-                "degradationReason": selection.degradation_reason,
-                "requiredCapabilities": selection.required_capabilities,
-                "degradedCapabilities": selection.degraded_capabilities,
-                "missingRequiredCapabilities": selection.missing_required_capabilities,
-                "missingDegradedCapabilities": selection.missing_degraded_capabilities,
-                "sessionId": session.session_id,
-                "sessionStatus": session.status.as_str(),
-                "attemptCount": attempt_count,
-                "issueId": session.issue_id,
-                "projectId": session.project_id,
-                "runId": session.run_id,
-                "branchName": session.branch_name,
-                "launchRequestPath": session.launch_request_path,
-                "planPath": session.plan_path,
-                "logPath": session.log_path,
-                "lastMessagePath": session.last_message_path,
-                "mergeProofPath": session.merge_proof_path,
-                "mergeState": session.merge_state,
-                "writebackState": session.writeback_state,
-                "recoveryReason": session.recovery_reason,
-                "lastError": session.last_error,
-            }),
+            payload: session_event_payload(role_binding, selection, session, attempt_count),
             artifact_refs: session_artifact_refs(session),
             idempotency_key: Some(format!(
                 "{AGENT_LAUNCH_CLAIMED}:{}:{}:attempt-{attempt_count}",
@@ -320,6 +259,159 @@ fn session_artifact_refs(session: &McpSessionSnapshot) -> Vec<String> {
         refs.push(merge_proof_path);
     }
     refs
+}
+
+fn session_event_payload(
+    role_binding: &AgentDispatchRoleBinding,
+    selection: &AgentDispatchProviderSelection,
+    session: &McpSessionSnapshot,
+    attempt_count: u32,
+) -> Value {
+    let mut payload = Map::new();
+    payload.insert("provider".to_string(), json!(session.provider));
+    payload.insert("providerKind".to_string(), json!(selection.provider_kind));
+    payload.insert(
+        "providerStatus".to_string(),
+        json!(selection.provider_status),
+    );
+    payload.insert(
+        "requestedRole".to_string(),
+        json!(role_binding.requested_role),
+    );
+    payload.insert(
+        "runtimeRole".to_string(),
+        json!(role_binding.runtime_role.as_str()),
+    );
+    payload.insert(
+        "skillPack".to_string(),
+        json!(role_binding.skill_pack.map(|value| value.as_str())),
+    );
+    payload.insert(
+        "supportedRoles".to_string(),
+        json!(selection.supported_roles),
+    );
+    payload.insert(
+        "supportedSkillPacks".to_string(),
+        json!(selection.supported_skill_packs),
+    );
+    payload.insert(
+        "selectionStatus".to_string(),
+        json!(selection.status.as_str()),
+    );
+    payload.insert(
+        "selectionReason".to_string(),
+        json!(selection.selection_reason),
+    );
+    payload.insert(
+        "degradationReason".to_string(),
+        json!(selection.degradation_reason),
+    );
+    payload.insert(
+        "requiredCapabilities".to_string(),
+        json!(selection.required_capabilities),
+    );
+    payload.insert(
+        "degradedCapabilities".to_string(),
+        json!(selection.degraded_capabilities),
+    );
+    payload.insert(
+        "missingRequiredCapabilities".to_string(),
+        json!(selection.missing_required_capabilities),
+    );
+    payload.insert(
+        "missingDegradedCapabilities".to_string(),
+        json!(selection.missing_degraded_capabilities),
+    );
+    payload.insert("sessionId".to_string(), json!(session.session_id));
+    payload.insert("sessionStatus".to_string(), json!(session.status.as_str()));
+    payload.insert("attemptCount".to_string(), json!(attempt_count));
+    payload.insert("issueId".to_string(), json!(session.issue_id));
+    payload.insert("projectId".to_string(), json!(session.project_id));
+    payload.insert("runId".to_string(), json!(session.run_id));
+    payload.insert("branchName".to_string(), json!(session.branch_name));
+    payload.insert(
+        "launchRequestPath".to_string(),
+        json!(session.launch_request_path),
+    );
+    payload.insert("planPath".to_string(), json!(session.plan_path));
+    payload.insert("logPath".to_string(), json!(session.log_path));
+    payload.insert(
+        "lastMessagePath".to_string(),
+        json!(session.last_message_path),
+    );
+    payload.insert(
+        "mergeProofPath".to_string(),
+        json!(session.merge_proof_path),
+    );
+    payload.insert("mergeState".to_string(), json!(session.merge_state));
+    payload.insert("writebackState".to_string(), json!(session.writeback_state));
+    payload.insert("recoveryReason".to_string(), json!(session.recovery_reason));
+    payload.insert("lastError".to_string(), json!(session.last_error));
+    payload.insert(
+        "governancePolicyVersion".to_string(),
+        json!(session.governance_policy.version),
+    );
+    payload.insert(
+        "claimPolicy".to_string(),
+        json!(session.governance_policy.claim_policy),
+    );
+    payload.insert(
+        "timeoutPolicy".to_string(),
+        json!(session.governance_policy.timeout_policy),
+    );
+    payload.insert(
+        "timeoutSeconds".to_string(),
+        json!(session.governance_policy.timeout_seconds),
+    );
+    payload.insert(
+        "timeoutAt".to_string(),
+        json!(session.governance_facts.timeout_at),
+    );
+    payload.insert(
+        "timedOutAt".to_string(),
+        json!(session.governance_facts.timed_out_at),
+    );
+    payload.insert(
+        "takeoverPolicy".to_string(),
+        json!(session.governance_policy.takeover_policy),
+    );
+    payload.insert(
+        "retryPolicy".to_string(),
+        json!(session.governance_policy.retry_policy),
+    );
+    payload.insert(
+        "maxAttempts".to_string(),
+        json!(session.governance_policy.max_attempts),
+    );
+    payload.insert(
+        "cancelPolicy".to_string(),
+        json!(session.governance_policy.cancel_policy),
+    );
+    payload.insert(
+        "cancelRequestedAt".to_string(),
+        json!(session.governance_facts.cancel_requested_at),
+    );
+    payload.insert(
+        "cancelledAt".to_string(),
+        json!(session.governance_facts.cancelled_at),
+    );
+    payload.insert(
+        "resumedFromAttempt".to_string(),
+        json!(session.governance_facts.resumed_from_attempt),
+    );
+    payload.insert(
+        "takeoverSessionId".to_string(),
+        json!(session.governance_facts.takeover_session_id),
+    );
+    payload.insert(
+        "terminalReason".to_string(),
+        json!(session.governance_facts.terminal_reason),
+    );
+    payload.insert(
+        "retryable".to_string(),
+        json!(session.governance_facts.retryable),
+    );
+    Value::Object(payload)
 }
 
 #[cfg(test)]
@@ -529,6 +621,99 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| event.event_type == AGENT_SESSION_RESUMED));
+    }
+
+    #[test]
+    fn dispatcher_does_not_reclaim_cancelled_run() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        let loop_driver = TaskLoop::new("project-dispatcher");
+        loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+        loop_driver
+            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
+            .unwrap();
+        let mut providers = McpProviderBridge::new();
+        providers.register(Box::new(FakeProvider));
+        let dispatcher = AgentDispatcher::new(providers);
+
+        let first_claim = dispatcher.claim_next_launch(dir.path()).unwrap().unwrap();
+        append_task_event_once(
+            dir.path(),
+            TaskEventDraft {
+                flow_type: WorkflowFlowType::Work,
+                aggregate_type: "issue".to_string(),
+                aggregate_id: "AF-DISPATCH-001".to_string(),
+                project_id: Some("project-dispatcher".to_string()),
+                issue_id: Some("AF-DISPATCH-001".to_string()),
+                run_id: Some(first_claim.run_id.clone()),
+                event_type: AGENT_SESSION_INTERRUPTED.to_string(),
+                authority_role: Some(
+                    AgentDispatchRoleBinding::resolve("build-agent")
+                        .unwrap()
+                        .runtime_role,
+                ),
+                actor: EventActor {
+                    role: "agent-dispatcher".to_string(),
+                    kind: "system".to_string(),
+                },
+                state: None,
+                correlation_id: Some("corr-AF-DISPATCH-001".to_string()),
+                causation_id: None,
+                payload: json!({
+                    "runId": first_claim.run_id,
+                    "issueId": first_claim.issue_id,
+                    "sessionId": first_claim.session_id,
+                    "sessionStatus": "interrupted",
+                }),
+                artifact_refs: Vec::new(),
+                idempotency_key: Some(
+                    "agent.session.interrupted:AF-DISPATCH-001:run-001".to_string(),
+                ),
+            },
+        )
+        .unwrap();
+        assert!(dispatcher.claim_next_launch(dir.path()).unwrap().is_some());
+
+        append_task_event_once(
+            dir.path(),
+            TaskEventDraft {
+                flow_type: WorkflowFlowType::Work,
+                aggregate_type: "issue".to_string(),
+                aggregate_id: "AF-DISPATCH-001".to_string(),
+                project_id: Some("project-dispatcher".to_string()),
+                issue_id: Some("AF-DISPATCH-001".to_string()),
+                run_id: Some("run-001".to_string()),
+                event_type: AGENT_SESSION_CANCELLED.to_string(),
+                authority_role: Some(
+                    AgentDispatchRoleBinding::resolve("build-agent")
+                        .unwrap()
+                        .runtime_role,
+                ),
+                actor: EventActor {
+                    role: "agent-dispatcher".to_string(),
+                    kind: "system".to_string(),
+                },
+                state: None,
+                correlation_id: Some("corr-AF-DISPATCH-001".to_string()),
+                causation_id: None,
+                payload: json!({
+                    "runId": "run-001",
+                    "issueId": "AF-DISPATCH-001",
+                    "sessionId": "fake-run-001",
+                    "sessionStatus": "cancelled",
+                }),
+                artifact_refs: Vec::new(),
+                idempotency_key: Some(
+                    "agent.session.cancelled:AF-DISPATCH-001:run-001".to_string(),
+                ),
+            },
+        )
+        .unwrap();
+
+        assert!(dispatcher.claim_next_launch(dir.path()).unwrap().is_none());
     }
 
     #[test]

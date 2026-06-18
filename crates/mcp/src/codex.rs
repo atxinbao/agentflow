@@ -317,11 +317,16 @@ impl McpAgentProvider for CodexProvider {
         if let Ok(existing) = read_session_snapshot(project_root, &plan.session_id) {
             if !matches!(
                 existing.status,
-                McpSessionStatus::Failed
-                    | McpSessionStatus::Cancelled
-                    | McpSessionStatus::Interrupted
+                McpSessionStatus::Failed | McpSessionStatus::Interrupted
             ) {
                 return Ok(existing);
+            }
+            if existing.attempt_count >= existing.governance_policy.max_attempts.max(1) {
+                anyhow::bail!(
+                    "session {} exhausted retry policy at attempt {}",
+                    existing.session_id,
+                    existing.attempt_count
+                );
             }
             attempt_count = existing.attempt_count.max(1).saturating_add(1);
             recovery_reason = Some(format!("retry after {} session", existing.status.as_str()));
@@ -391,6 +396,17 @@ impl McpAgentProvider for CodexProvider {
         session.merge_state = None;
         session.writeback_state = None;
         session.last_error = None;
+        session.governance_facts.timeout_at = Some(now + session.governance_policy.timeout_seconds);
+        session.governance_facts.resumed_from_attempt =
+            (attempt_count > 1).then_some(attempt_count.saturating_sub(1));
+        session.governance_facts.takeover_session_id =
+            (attempt_count > 1).then_some(session.session_id.clone());
+        session.governance_facts.retryable =
+            attempt_count < session.governance_policy.max_attempts.max(1);
+        session.governance_facts.terminal_reason = None;
+        session.governance_facts.timed_out_at = None;
+        session.governance_facts.cancel_requested_at = None;
+        session.governance_facts.cancelled_at = None;
         session.note = plan.note.clone();
         session.updated_at = now;
         write_session_snapshot(project_root, &session)?;
@@ -404,10 +420,29 @@ impl McpAgentProvider for CodexProvider {
             .ok()
             .flatten();
         let pid_alive = session.pid.map(is_pid_alive).transpose()?;
-        let process_alive = pid_alive.unwrap_or(false);
+        let mut process_alive = pid_alive.unwrap_or(false);
         let issue_state = projection
             .as_ref()
             .map(|value| value.current_state.as_str());
+        let now = unix_timestamp_seconds();
+
+        if process_alive
+            && session
+                .governance_facts
+                .timeout_at
+                .is_some_and(|timeout_at| timeout_at <= now)
+            && session.governance_facts.timed_out_at.is_none()
+        {
+            if let Some(pid) = session.pid {
+                let _ = Command::new("kill")
+                    .args(["-TERM", &pid.to_string()])
+                    .output();
+            }
+            process_alive = false;
+            session.governance_facts.timed_out_at = Some(now);
+            session.governance_facts.terminal_reason = Some("timeout".to_string());
+            session.recovery_reason = Some("retry after timeout".to_string());
+        }
 
         if let Some(proof) = merge_proof.as_ref() {
             session.pr_url = proof.pr_url.clone();
@@ -451,7 +486,13 @@ impl McpAgentProvider for CodexProvider {
         {
             session.pid = None;
         }
-        session.updated_at = unix_timestamp_seconds();
+        session.governance_facts.retryable = session.attempt_count
+            < session.governance_policy.max_attempts
+            && !matches!(
+                session.status,
+                McpSessionStatus::Cancelled | McpSessionStatus::Done
+            );
+        session.updated_at = now;
         write_session_snapshot(project_root, &session)?;
         Ok(session)
     }
@@ -496,6 +537,26 @@ impl McpAgentProvider for CodexProvider {
             cursor: Some(bytes.len().to_string()),
             lines,
         })
+    }
+
+    fn cancel_session(&self, project_root: &Path, session_id: &str) -> Result<McpSessionSnapshot> {
+        let mut session = read_session_snapshot(project_root, session_id)?;
+        if let Some(pid) = session.pid {
+            let _ = Command::new("kill")
+                .args(["-TERM", &pid.to_string()])
+                .output();
+        }
+        let now = unix_timestamp_seconds();
+        session.status = McpSessionStatus::Cancelled;
+        session.pid = None;
+        session.updated_at = now;
+        session.last_error = None;
+        session.governance_facts.cancel_requested_at = Some(now);
+        session.governance_facts.cancelled_at = Some(now);
+        session.governance_facts.retryable = false;
+        session.governance_facts.terminal_reason = Some("cancelled".to_string());
+        write_session_snapshot(project_root, &session)?;
+        Ok(session)
     }
 }
 
@@ -709,7 +770,7 @@ mod tests {
         provider::McpAgentProvider,
         storage::write_session_snapshot,
     };
-    use std::{fs, path::Path};
+    use std::{fs, path::Path, process::Command};
     use tempfile::tempdir;
 
     #[test]
@@ -858,6 +919,100 @@ trust_level = "trusted"
         assert_eq!(
             retried.last_message_path.as_deref(),
             Some(".agentflow/state/mcp/sessions/codex-run-001-attempt-2-last-message.txt")
+        );
+    }
+
+    #[test]
+    fn cancelled_session_remains_terminal_for_current_run() {
+        let dir = tempdir().unwrap();
+        let request_path = dir
+            .path()
+            .join(".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json");
+        fs::create_dir_all(request_path.parent().unwrap()).unwrap();
+        fs::write(&request_path, "{\"task\":\"cancel\"}\n").unwrap();
+
+        let provider = CodexProvider {
+            program: "/bin/sh".to_string(),
+            sandbox: "workspace-write".to_string(),
+            approval_policy: "never".to_string(),
+            model: Some(DEFAULT_CODEX_MODEL.to_string()),
+        };
+        let request = McpLaunchRequest::new(
+            "codex",
+            "AF-001",
+            "run-001",
+            "build-agent",
+            dir.path().display().to_string(),
+            ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json",
+        );
+
+        let first = provider.create_session(dir.path(), &request).unwrap();
+        let mut cancelled = first.clone();
+        cancelled.status = McpSessionStatus::Cancelled;
+        cancelled.pid = None;
+        cancelled.governance_facts.cancel_requested_at = Some(10);
+        cancelled.governance_facts.cancelled_at = Some(10);
+        cancelled.governance_facts.retryable = false;
+        cancelled.governance_facts.terminal_reason = Some("cancelled".to_string());
+        write_session_snapshot(dir.path(), &cancelled).unwrap();
+
+        let retried = provider.create_session(dir.path(), &request).unwrap();
+
+        assert_eq!(retried.status, McpSessionStatus::Cancelled);
+        assert_eq!(retried.attempt_count, 1);
+        assert_eq!(
+            retried.governance_facts.terminal_reason.as_deref(),
+            Some("cancelled")
+        );
+        assert!(!retried.governance_facts.retryable);
+    }
+
+    #[test]
+    fn poll_timeout_marks_session_with_timeout_governance_facts() {
+        let dir = tempdir().unwrap();
+        let request_path = dir
+            .path()
+            .join(".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json");
+        fs::create_dir_all(request_path.parent().unwrap()).unwrap();
+        fs::write(&request_path, "{\"task\":\"timeout\"}\n").unwrap();
+
+        let provider = CodexProvider {
+            program: "/bin/sh".to_string(),
+            sandbox: "workspace-write".to_string(),
+            approval_policy: "never".to_string(),
+            model: Some(DEFAULT_CODEX_MODEL.to_string()),
+        };
+        let request = McpLaunchRequest::new(
+            "codex",
+            "AF-001",
+            "run-001",
+            "build-agent",
+            dir.path().display().to_string(),
+            ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json",
+        );
+
+        let first = provider.create_session(dir.path(), &request).unwrap();
+        let mut running = first.clone();
+        let mut child = Command::new("sleep").arg("30").spawn().unwrap();
+        running.status = McpSessionStatus::Running;
+        running.pid = Some(child.id());
+        running.governance_facts.timeout_at = Some(0);
+        running.governance_facts.timed_out_at = None;
+        write_session_snapshot(dir.path(), &running).unwrap();
+
+        let polled = provider.poll_session(dir.path(), "codex-run-001").unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
+
+        assert_eq!(polled.status, McpSessionStatus::Interrupted);
+        assert!(polled.governance_facts.timed_out_at.is_some());
+        assert_eq!(
+            polled.governance_facts.terminal_reason.as_deref(),
+            Some("timeout")
+        );
+        assert_eq!(
+            polled.recovery_reason.as_deref(),
+            Some("retry after timeout")
         );
     }
 }

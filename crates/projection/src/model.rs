@@ -126,6 +126,22 @@ pub struct ProjectionSessionSummary {
     pub recovery_reason: Option<String>,
     pub last_error: Option<String>,
     pub branch_name: Option<String>,
+    pub governance_policy_version: Option<String>,
+    pub claim_policy: Option<String>,
+    pub timeout_policy: Option<String>,
+    pub timeout_seconds: Option<u64>,
+    pub timeout_at: Option<u64>,
+    pub timed_out_at: Option<u64>,
+    pub takeover_policy: Option<String>,
+    pub retry_policy: Option<String>,
+    pub max_attempts: Option<u32>,
+    pub cancel_policy: Option<String>,
+    pub cancel_requested_at: Option<u64>,
+    pub cancelled_at: Option<u64>,
+    pub resumed_from_attempt: Option<u32>,
+    pub takeover_session_id: Option<String>,
+    pub terminal_reason: Option<String>,
+    pub retryable: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
