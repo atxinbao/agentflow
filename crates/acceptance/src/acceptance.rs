@@ -6,7 +6,9 @@ use agentflow_audit::{AuditScope, AuditScopeRef, HumanAuditReport, HumanAuditReq
 use agentflow_event_store::{
     append_task_event_once, EventActor, EventStateTransition, TaskEventDraft,
 };
-use agentflow_spec::{SpecIssue, SpecIssueDraft, SpecIssueStatus};
+use agentflow_spec::{
+    write_spec_project, SpecIssue, SpecIssueDraft, SpecIssueStatus, SpecProjectDraft,
+};
 use agentflow_state::{
     StateStatusSnapshot, StateWorkspaceStatus, WorkflowAuditStatus, WorkflowStage,
 };
@@ -20,6 +22,13 @@ pub struct ExecutionCompletedFixture {
     pub fixture: WorkflowFixture,
     pub run_id: String,
     pub execution_state: StateStatusSnapshot,
+}
+
+pub struct ProjectLoopCloseoutFixture {
+    pub fixture: WorkflowFixture,
+    pub project_id: String,
+    pub current_issue_id: String,
+    pub next_issue_id: String,
 }
 
 impl ExecutionCompletedFixture {
@@ -124,6 +133,14 @@ pub fn create_stale_lease_fixture() -> Result<WorkflowFixture> {
     Ok(fixture)
 }
 
+pub fn prepare_project_in_review_fixture() -> Result<ProjectLoopCloseoutFixture> {
+    prepare_project_closeout_fixture(false)
+}
+
+pub fn prepare_project_done_fixture() -> Result<ProjectLoopCloseoutFixture> {
+    prepare_project_closeout_fixture(true)
+}
+
 pub fn human_audit_draft(run_id: &str) -> HumanAuditRequestDraft {
     HumanAuditRequestDraft {
         reason: "Human requested end-to-end acceptance audit.".to_string(),
@@ -213,6 +230,122 @@ fn prepare_all_layers(root: &Path) -> Result<()> {
     Ok(())
 }
 
+fn prepare_project_closeout_fixture(mark_done: bool) -> Result<ProjectLoopCloseoutFixture> {
+    let fixture = create_fixture_project()?;
+    let root = fixture.root();
+    prepare_all_layers(root)?;
+
+    let requirement = root.join("docs/requirements/project-closeout-fixture.md");
+    fs::create_dir_all(requirement.parent().unwrap())?;
+    fs::write(
+        &requirement,
+        "# project-closeout-fixture\n\n用于验证 project loop 顺序与收口门禁。\n",
+    )?;
+
+    let project_id = "project-closeout";
+    let current_issue_id = "AF-CLOSE-001";
+    let next_issue_id = "AF-CLOSE-002";
+    let current_issue = write_issue_with_requirement(
+        root,
+        &requirement,
+        current_issue_id,
+        SpecIssueStatus::Backlog,
+        Vec::new(),
+        Some(project_id.to_string()),
+        "验证当前任务收口门禁。",
+    )?;
+    let next_issue = write_issue_with_requirement(
+        root,
+        &requirement,
+        next_issue_id,
+        SpecIssueStatus::Backlog,
+        Vec::new(),
+        Some(project_id.to_string()),
+        "验证下一条任务只能在 Done 后启动。",
+    )?;
+
+    let mut project_draft = SpecProjectDraft::new(project_id);
+    project_draft.title = Some("Project Loop 收口验证".to_string());
+    project_draft.summary =
+        Some("验证 in_review 与 done 的边界，以及 project loop 顺序。".to_string());
+    project_draft.objective = Some("确保当前任务未完成收口时，下一条任务不会被启动。".to_string());
+    project_draft.issue_ids = vec![current_issue.issue_id.clone(), next_issue.issue_id.clone()];
+    let project = agentflow_spec::project_from_requirement(root, &requirement, project_draft)?;
+    write_spec_project(root, &project)?;
+
+    let run_id = "run-001";
+    agentflow_task_artifacts::create_task_run(
+        root,
+        &current_issue.issue_id,
+        run_id,
+        &current_issue.workflow_ref,
+        Some("agentflow/direct/AF-CLOSE-001".to_string()),
+    )?;
+    append_issue_event(root, &current_issue, "issue.scheduled", "todo", run_id)?;
+    append_issue_event(
+        root,
+        &current_issue,
+        "agent.launch.requested",
+        "in_progress",
+        run_id,
+    )?;
+    agentflow_task_artifacts::write_task_command_record(
+        root,
+        &current_issue.issue_id,
+        run_id,
+        TaskCommandInput {
+            label: "printf closeout".to_string(),
+            program: "printf".to_string(),
+            args: vec!["closeout".to_string()],
+            exit_code: Some(0),
+            stdout: "closeout".to_string(),
+            stderr: String::new(),
+        },
+    )?;
+    agentflow_task_artifacts::write_task_validation(root, &current_issue.issue_id, run_id)?;
+    agentflow_task_artifacts::write_task_evidence(
+        root,
+        &current_issue.issue_id,
+        run_id,
+        "Project closeout fixture evidence.",
+    )?;
+    append_issue_event(
+        root,
+        &current_issue,
+        "issue.review.requested",
+        "in_review",
+        run_id,
+    )?;
+    append_issue_event(
+        root,
+        &current_issue,
+        "issue.pr.created",
+        "in_review",
+        run_id,
+    )?;
+    append_issue_event(
+        root,
+        &current_issue,
+        "issue.closeout.proof.recorded",
+        "in_review",
+        run_id,
+    )?;
+    append_issue_event(root, &current_issue, "issue.pr.merged", "in_review", run_id)?;
+    if mark_done {
+        append_issue_event(root, &current_issue, "issue.completed", "done", run_id)?;
+    }
+
+    agentflow_projection::rebuild_projections(root)?;
+    agentflow_state::refresh_state(root)?;
+    fixture.assert_user_files_unchanged()?;
+    Ok(ProjectLoopCloseoutFixture {
+        fixture,
+        project_id: project_id.to_string(),
+        current_issue_id: current_issue.issue_id,
+        next_issue_id: next_issue.issue_id,
+    })
+}
+
 fn write_issue(
     root: &Path,
     issue_id: &str,
@@ -225,14 +358,34 @@ fn write_issue(
         &requirement,
         format!("# {issue_id}\n\nFixture requirement.\n"),
     )?;
+    write_issue_with_requirement(
+        root,
+        &requirement,
+        issue_id,
+        status,
+        blocked_by,
+        None,
+        "Validate AgentFlow end-to-end workflow without modifying user source.",
+    )
+}
+
+fn write_issue_with_requirement(
+    root: &Path,
+    requirement: &Path,
+    issue_id: &str,
+    status: SpecIssueStatus,
+    blocked_by: Vec<String>,
+    project_id: Option<String>,
+    summary: &str,
+) -> Result<SpecIssue> {
     let mut draft = SpecIssueDraft::new(issue_id);
     draft.title = Some("End-to-end workflow acceptance issue".to_string());
-    draft.summary =
-        Some("Validate AgentFlow end-to-end workflow without modifying user source.".to_string());
+    draft.summary = Some(summary.to_string());
     draft.allowed_paths = vec!["src/lib.rs".to_string()];
     draft.validation_commands = vec!["printf ok".to_string()];
     draft.blocked_by = blocked_by;
-    let mut issue = agentflow_spec::issue_from_requirement(root, &requirement, draft)?;
+    draft.project_id = project_id;
+    let mut issue = agentflow_spec::issue_from_requirement(root, requirement, draft)?;
     issue.status = status;
     agentflow_spec::write_spec_issue(root, &issue)?;
     Ok(issue)
