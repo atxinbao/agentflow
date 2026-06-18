@@ -427,6 +427,7 @@ docs/requirements/**
 负责：
 
 - 从完成态 task projection 和 PR/MR 元数据汇总公开交付记录
+- 统一任务级 PR/MR body 模板
 - 生成 CHANGELOG / release notes
 - 在显式触发时写公共交付文档
 
@@ -435,6 +436,7 @@ docs/requirements/**
 - 单条任务状态推进
 - Build Agent 执行
 - 本地 runtime 证据存储
+- 暴露 `.agentflow/tasks/**` 内部路径给外部 reviewer
 
 实现位置：
 
