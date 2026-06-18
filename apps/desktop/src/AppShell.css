@@ -2137,6 +2137,13 @@ button.v16-task-project-row:hover {
   min-width: 0;
 }
 
+.v16-task-workspace-sidebar {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  align-content: start;
+}
+
 .v16-task-workflow-panel-shell {
   display: grid;
   gap: 8px;

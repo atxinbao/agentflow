@@ -3066,10 +3066,10 @@ function TaskDetailReader({
   );
   const detailDescriptionItems = useMemo(
     () => [
-      ...taskAuditDescriptionItems(task),
-      ...(task.auditTrigger ? [["触发来源", auditTriggerLabel(task.auditTrigger)] as [string, string]] : []),
+      ...taskAuditDescriptionItems(effectiveTask),
+      ...(effectiveTask.auditTrigger ? [["触发来源", auditTriggerLabel(effectiveTask.auditTrigger)] as [string, string]] : []),
     ],
-    [task],
+    [effectiveTask],
   );
   const delivery = null;
   const evidence = null;
@@ -3077,10 +3077,6 @@ function TaskDetailReader({
   const stageOutputItems = useMemo(
     () => taskCurrentStageOutputItems(effectiveTask, session, delivery, evidence, audit, taskProjection),
     [audit, delivery, effectiveTask, evidence, session, taskProjection],
-  );
-  const executeSummaryItems = useMemo(
-    () => taskExecuteSummaryItems(effectiveTask, session, mcpSessionsState, executeStatusState),
-    [effectiveTask, executeStatusState, mcpSessionsState, session],
   );
   const executionProjection = useMemo(
     () =>
@@ -3100,6 +3096,21 @@ function TaskDetailReader({
   const deliveryProjection = useMemo(
     () => buildTaskDeliveryProjection({ audit, delivery, evidence, projection: taskProjection, session, task: effectiveTask }),
     [audit, delivery, effectiveTask, evidence, session, taskProjection],
+  );
+  const reviewItems = useMemo(
+    () => deliveryReviewItems(effectiveTask, null, session, taskProjection),
+    [effectiveTask, session, taskProjection],
+  );
+  const currentStageSections = useMemo(
+    () =>
+      buildTaskCurrentStageSections({
+        contract: statusContract,
+        executeItems: executionProjection.summaryItems,
+        reviewItems,
+        stageItems: stageOutputItems,
+        status: effectiveDisplayStatus,
+      }),
+    [effectiveDisplayStatus, executionProjection.summaryItems, reviewItems, stageOutputItems, statusContract],
   );
   const finalDeliveryArtifact = useMemo(
     () => outputBundle.deliveryArtifacts[deliveryProjection.deliveryRunId ?? effectiveTask.latestRunId ?? ""]
@@ -3169,19 +3180,29 @@ function TaskDetailReader({
         </div>
       </header>
       <div className="v16-detail-document">
-        <IssueStatusFlow
-          task={effectiveTask}
-          executeItems={executeSummaryItems}
-          projection={taskProjection}
-          reviewItems={deliveryReviewItems(task, null, session, taskProjection)}
-          stageItems={stageOutputItems}
-          status={effectiveDisplayStatus}
-        />
-        <TaskFinalDeliveryCard
-          artifact={finalDeliveryArtifact}
-          deliveryProjection={deliveryProjection}
-          task={effectiveTask}
-        />
+        <div className="v16-task-workspace-shell">
+          <div className="v16-task-workspace-main">
+            <IssueStatusFlow
+              task={effectiveTask}
+              executeItems={executionProjection.summaryItems}
+              projection={taskProjection}
+              reviewItems={reviewItems}
+              stageItems={stageOutputItems}
+              status={effectiveDisplayStatus}
+            />
+          </div>
+          <aside className="v16-task-workspace-sidebar" aria-label="当前阶段摘要">
+            <TaskCurrentStagePanel
+              sections={currentStageSections}
+              status={effectiveDisplayStatus}
+            />
+            <TaskFinalDeliveryCard
+              artifact={finalDeliveryArtifact}
+              deliveryProjection={deliveryProjection}
+              task={effectiveTask}
+            />
+          </aside>
+        </div>
         <div ref={deliveryFocusRef} className="v16-task-delivery-focus-region" />
         <details className="v16-task-package">
           <summary>高级详情</summary>
@@ -3242,6 +3263,28 @@ function TaskDetailReader({
         </ActionBar>
       ) : null}
     </aside>
+  );
+}
+
+function TaskCurrentStagePanel({
+  sections,
+  status,
+}: {
+  sections: Array<{ title: string; items: string[] }>;
+  status: IssueDisplayStatus;
+}) {
+  return (
+    <section className="v16-task-stage-panel" aria-label="当前阶段摘要">
+      <div className="v16-task-stage-panel-header">
+        <span>当前阶段</span>
+        <strong>{displayStatusLabelZh(status)}</strong>
+      </div>
+      <div className="v16-task-stage-grid">
+        {sections.map((section) => (
+          <SectionList key={section.title} title={section.title} items={section.items} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -3510,6 +3553,7 @@ function enhanceTaskStatusStepDetailWithProjection({
     : projectionItem.phase === "future"
       ? ["这个阶段还没有产物。"]
       : ["这个阶段没有记录到产物。"];
+  const runtimeItems = projectionRuntimeSessionItems(projection, projectionItem);
   const publicDeliveryItems =
     projectionItem.state === "done"
       ? projectionPublicDeliveryItems(projection)
@@ -3534,6 +3578,14 @@ function enhanceTaskStatusStepDetailWithProjection({
         title: "事件产物",
         items: artifactLines,
       },
+      ...(runtimeItems.length
+        ? [
+            {
+              title: projectionItem.phase === "current" ? "当前执行态" : "阶段执行态",
+              items: runtimeItems,
+            },
+          ]
+        : []),
       ...(publicDeliveryItems.length
         ? [
             {
@@ -3556,6 +3608,27 @@ function projectionPublicDeliveryItems(projection: TaskProjection) {
     delivery.changelogPath ? `CHANGELOG：${delivery.changelogPath}` : "CHANGELOG：未记录",
     delivery.releaseNotesUrl ? `Release notes：${delivery.releaseNotesUrl}` : "Release notes：未记录",
   ];
+}
+
+function projectionRuntimeSessionItems(
+  projection: TaskProjection,
+  projectionItem: TaskTimelineItem,
+) {
+  if (projectionItem.phase === "future") {
+    return [];
+  }
+
+  const items = [
+    projection.runtime.runId ? `Run：${projection.runtime.runId}` : null,
+    projection.runtime.runStatus ? `执行状态：${executeProgressLabel(projection.runtime.runStatus)}` : null,
+    projection.session.status ? `会话状态：${mcpSessionStatusLabelZh(projection.session.status)}` : null,
+    projection.session.sessionId ? `会话 ID：${projection.session.sessionId}` : null,
+    projection.session.branchName ? `工作分支：${projection.session.branchName}` : null,
+    projection.session.planPath ? `执行计划：${projection.session.planPath}` : null,
+    projection.session.logPath ? `事件日志：${projection.session.logPath}` : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return Array.from(new Set(items));
 }
 
 function taskStatusTransitionLabel(status: IssueDisplayStatus, nextEntry: string) {
@@ -5614,6 +5687,7 @@ function taskCurrentStageOutputItems(
 ) {
   const publicDelivery = projection?.publicDelivery ?? null;
   const runtime = projection?.runtime ?? null;
+  const projectionSession = projection?.session ?? null;
   const projectedDelivery = projection?.delivery ?? null;
   const projectedAudit = projection?.audit ?? null;
   const projectedEvidencePath = projectedDelivery?.evidencePath ?? publicDelivery?.evidencePath ?? null;
@@ -5621,6 +5695,10 @@ function taskCurrentStageOutputItems(
   const projectedMergeCommit = projectedDelivery?.mergeCommit ?? publicDelivery?.mergeCommit ?? null;
   const projectedPublicRecord =
     projectedDelivery?.publicRecordPath ?? publicDelivery?.changelogPath ?? publicDelivery?.releaseNotesUrl ?? null;
+  const sessionStatus = projectionSession?.status ?? session?.status ?? null;
+  const sessionBranchName = projectionSession?.branchName ?? runtime?.branchName ?? session?.branchName ?? null;
+  const sessionPlanPath = projectionSession?.planPath ?? null;
+  const sessionLogPath = projectionSession?.logPath ?? null;
 
   switch (task.displayStatus ?? "backlog") {
     case "backlog":
@@ -5633,25 +5711,30 @@ function taskCurrentStageOutputItems(
       return [
         runtime?.runId ?? task.latestRunId ? `当前 Run：${runtime?.runId ?? task.latestRunId}` : "当前 Run：等待创建。",
         task.contextPackPath ? "Context Pack 已可用。" : "Context Pack：等待生成。",
+        sessionStatus ? `启动请求：${mcpSessionStatusLabelZh(sessionStatus)}` : null,
         `执行准备：${executeProgressLabel(runtime?.runStatus ?? task.executeStatus)}`,
-      ];
+      ].filter((item): item is string => Boolean(item));
     case "in_progress":
       return [
         runtime?.runId ?? task.latestRunId ? `当前 Run：${runtime?.runId ?? task.latestRunId}` : "当前 Run：未记录。",
         `执行进度：${executeProgressLabel(runtime?.runStatus ?? task.executeStatus)}`,
-        session
-          ? `会话状态：${mcpSessionStatusLabelZh(session.status)}`
+        sessionStatus
+          ? `会话状态：${mcpSessionStatusLabelZh(sessionStatus)}`
           : "会话状态：还没有拉起，或已提前退出。",
+        sessionBranchName ? `工作分支：${sessionBranchName}` : null,
+        sessionPlanPath ? `执行计划：${sessionPlanPath}` : null,
+        sessionLogPath ? `事件日志：${sessionLogPath}` : null,
         ...(runtime?.latestCheckpointSummary ? [`最新检查点：${runtime.latestCheckpointSummary}`] : []),
         ...(session?.lastError ? [`最近错误：${session.lastError}`] : []),
-      ];
+      ].filter((item): item is string => Boolean(item));
     case "in_review":
       return [
         runtime?.runId ?? task.latestRunId ? `当前 Run：${runtime?.runId ?? task.latestRunId}` : "当前 Run：未记录。",
         projectedEvidencePath ? `验证证据：${projectedEvidencePath}` : evidence ? `验证证据：${artifactStatusLabel(evidence.status)}` : "验证证据：等待写回。",
         projectedPrUrl ? "PR/MR：已创建。" : session?.prUrl ? "PR/MR：已创建。" : "PR/MR：等待记录。",
         projectedPublicRecord ? `公开交付：${projectedPublicRecord}` : "公开交付：等待记录。",
-      ];
+        sessionStatus ? `会话状态：${mcpSessionStatusLabelZh(sessionStatus)}` : null,
+      ].filter((item): item is string => Boolean(item));
     case "done":
       return [
         runtime?.runId ?? task.latestRunId ? `最终 Run：${runtime?.runId ?? task.latestRunId}` : "最终 Run：未记录。",
@@ -5659,12 +5742,13 @@ function taskCurrentStageOutputItems(
         projectedPrUrl ? `PR/MR：${projectedPrUrl}` : "PR/MR：未找到记录。",
         projectedMergeCommit ? `合并提交：${projectedMergeCommit}` : "合并提交：未找到记录。",
         projectedPublicRecord ? `公开交付：${projectedPublicRecord}` : "公开交付：未找到记录。",
+        sessionBranchName ? `工作分支：${sessionBranchName}` : null,
         projectedAudit?.status && projectedAudit.status !== "not-requested"
           ? `后续审计：${artifactStatusLabel(projectedAudit.status)}`
           : audit
             ? `后续审计：${artifactStatusLabel(audit.status)}`
             : "后续审计：独立流程，按需触发。",
-      ];
+      ].filter((item): item is string => Boolean(item));
     case "blocked":
       return [
         "当前任务被关键因素阻断。",
@@ -5735,10 +5819,12 @@ function deliveryReviewItems(
   const mergeProof = artifact?.mergeProof;
   const prMetadata = artifact?.prMetadata;
   const publicDelivery = projection?.publicDelivery ?? null;
-  const provider = mergeProof?.provider ?? prMetadata?.provider ?? session?.provider ?? null;
+  const projectionSession = projection?.session ?? null;
+  const provider = mergeProof?.provider ?? prMetadata?.provider ?? projectionSession?.provider ?? session?.provider ?? null;
   const reviewUrl = publicDelivery?.prUrl ?? mergeProof?.remoteUrl ?? prMetadata?.remotePrUrl ?? session?.prUrl ?? null;
   const mergeMode = mergeProof?.mergeMode ?? prMetadata?.mergeMode ?? null;
-  const branchName = projection?.branchName ?? prMetadata?.branchName ?? session?.branchName ?? null;
+  const branchName =
+    projection?.branchName ?? projectionSession?.branchName ?? prMetadata?.branchName ?? session?.branchName ?? null;
   const merged = Boolean(publicDelivery?.mergeCommit) || mergeProof?.merged || prMetadata?.merged || session?.mergeState === "merged";
 
   if (!mergeProof && !prMetadata && !session && !publicDelivery?.prUrl && !publicDelivery?.mergeCommit) {
@@ -5753,7 +5839,7 @@ function deliveryReviewItems(
       ? "评审状态：已创建远端评审请求。"
       : prMetadata?.status === "draft-only"
         ? "评审状态：只有本地草稿，还没有远端评审请求。"
-        : session?.status === "in-review"
+        : projectionSession?.status === "in-review" || session?.status === "in-review"
           ? "评审状态：正在评审。"
           : "评审状态：评审信息已写入。";
 
@@ -6716,8 +6802,8 @@ function mcpProviderLabel(provider?: string | null) {
   return labels[(provider ?? "").toLowerCase()] ?? (provider || "未记录");
 }
 
-function mcpSessionStatusLabelZh(status?: McpSessionSnapshot["status"] | null) {
-  const labels: Record<McpSessionSnapshot["status"], string> = {
+function mcpSessionStatusLabelZh(status?: string | null) {
+  const labels: Record<string, string> = {
     claimed: "已接单",
     cancelled: "已取消",
     done: "已完成",
@@ -6725,14 +6811,15 @@ function mcpSessionStatusLabelZh(status?: McpSessionSnapshot["status"] | null) {
     "in-review": "正在评审",
     interrupted: "已中断",
     queued: "等待启动",
+    requested: "已发起启动请求",
     running: "正在做",
     starting: "启动中",
   };
   return status ? labels[status] ?? status : "未记录";
 }
 
-function mcpSessionStatusTone(status?: McpSessionSnapshot["status"] | null): StatusChipStatus {
-  const tones: Record<McpSessionSnapshot["status"], StatusChipStatus> = {
+function mcpSessionStatusTone(status?: string | null): StatusChipStatus {
+  const tones: Record<string, StatusChipStatus> = {
     claimed: "ready",
     cancelled: "blocked",
     done: "done",
@@ -6740,6 +6827,7 @@ function mcpSessionStatusTone(status?: McpSessionSnapshot["status"] | null): Sta
     "in-review": "warning",
     interrupted: "warning",
     queued: "idle",
+    requested: "ready",
     running: "working",
     starting: "ready",
   };
