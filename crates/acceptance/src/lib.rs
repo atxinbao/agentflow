@@ -148,14 +148,14 @@ mod tests {
             .expect("missing in_review timeline");
         assert!(review_timeline.summary.contains("PR/MR 合并"));
         assert!(review_timeline.summary.contains("Issue 关闭"));
-        assert!(review_timeline.summary.contains("公开交付"));
+        assert!(review_timeline.summary.contains("Done 写回"));
         assert_eq!(
             project.current_issue_id.as_deref(),
             Some(fixture.current_issue_id.as_str())
         );
         assert!(project.stage_summary.contains("PR/MR 合并"));
         assert!(project.stage_summary.contains("Issue 关闭"));
-        assert!(project.stage_summary.contains("公开交付"));
+        assert!(project.stage_summary.contains("Done 写回"));
         assert!(TaskLoop::new(&fixture.project_id)
             .tick(fixture.fixture.root(), "codex")?
             .is_none());

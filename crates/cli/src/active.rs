@@ -9,7 +9,6 @@ use agentflow_event_store::{
 use agentflow_mcp::{
     query_closeout_attestation, McpCloseoutAttestation, McpCloseoutIssueAttestation,
 };
-use agentflow_release::{PublicReleaseDocumentPaths, PublicReleaseDocumentTarget};
 use agentflow_spec::read_spec_issue;
 use agentflow_task_artifacts::{
     load_task_changed_files, load_task_evidence, load_task_run, task_changed_files_path,
@@ -88,8 +87,7 @@ pub(crate) struct BuildAgentCompletionOutcome {
     pub run_status: String,
     pub validation_passed: bool,
     pub evidence_path: PathBuf,
-    pub changelog_path: PathBuf,
-    pub release_notes_path: PathBuf,
+    pub closeout_proof_path: PathBuf,
     pub next_launch: Option<TaskLoopLaunch>,
 }
 
@@ -116,25 +114,13 @@ pub(crate) fn complete_build_agent_issue_from_request(
     assert_current_cli_is_fresh(root)?;
     let request = read_completion_request(request_path, "completion")?;
     let review = ensure_review_prepared(root, request.clone())?;
-    let mut proof = load_closeout_proof(root, &review.issue_id, &review.run_id)?;
+    let proof = load_closeout_proof(root, &review.issue_id, &review.run_id)?;
     ensure_closeout_ready(&review.issue_id, &review.run_id, &proof)?;
     let issue = read_spec_issue(root, &review.issue_id)?;
     let completed_project_id = issue.project_id.clone();
     let evidence = load_task_evidence(root, &review.issue_id)?;
-    let public_delivery_target = PublicReleaseDocumentTarget::default();
-    let public_delivery_paths = write_public_delivery_documents(root, &public_delivery_target)?;
-    proof["publicDeliveryWritten"] = serde_json::Value::Bool(true);
-    proof["changelogPath"] =
-        serde_json::Value::String(public_delivery_paths.changelog_path.clone());
-    proof["releaseNotesPath"] =
-        serde_json::Value::String(public_delivery_paths.release_notes_path.clone());
-    proof["releaseNotesUrl"] =
-        serde_json::Value::String(public_delivery_paths.release_notes_path.clone());
-    write_json(
-        &closeout_proof_path(root, &review.issue_id, &review.run_id),
-        &proof,
-    )?;
     let proof_path = closeout_proof_path(root, &review.issue_id, &review.run_id);
+    write_json(&proof_path, &proof)?;
     append_task_event_once(
         root,
         TaskEventDraft {
@@ -168,14 +154,10 @@ pub(crate) fn complete_build_agent_issue_from_request(
                 "prUrl": proof.get("prUrl").cloned().unwrap_or(serde_json::Value::Null),
                 "issueClosed": proof.get("issueClosed").cloned().unwrap_or(serde_json::Value::Null),
                 "closedAt": proof.get("closedAt").cloned().unwrap_or(serde_json::Value::Null),
-                "changelogPath": public_delivery_paths.changelog_path,
-                "releaseNotesUrl": public_delivery_paths.release_notes_path,
             }),
             artifact_refs: vec![
                 task_evidence_path(&review.issue_id),
                 relative_path(root, &proof_path),
-                public_delivery_paths.changelog_path.clone(),
-                public_delivery_paths.release_notes_path.clone(),
             ],
             idempotency_key: Some(format!(
                 "issue.completed:{}:{}",
@@ -201,8 +183,7 @@ pub(crate) fn complete_build_agent_issue_from_request(
         run_status: review.run_status,
         validation_passed: review.validation_passed,
         evidence_path: evidence_path(root, &evidence),
-        changelog_path: root.join(public_delivery_paths.changelog_path),
-        release_notes_path: root.join(public_delivery_paths.release_notes_path),
+        closeout_proof_path: proof_path,
         next_launch,
     })
 }
@@ -214,14 +195,6 @@ pub(crate) fn prepare_build_agent_review_from_request(
     assert_current_cli_is_fresh(root)?;
     let request = read_completion_request(request_path, "review preparation")?;
     ensure_review_prepared(root, request)
-}
-
-fn write_public_delivery_documents(
-    root: &Path,
-    target: &PublicReleaseDocumentTarget,
-) -> Result<PublicReleaseDocumentPaths> {
-    let summary = agentflow_release::collect_public_release_summary(root)?;
-    agentflow_release::write_public_release_documents(root, &summary, target)
 }
 
 pub(crate) fn start_build_agent_issue(root: &Path, issue_id: &str) -> Result<BuildAgentStart> {
@@ -1259,14 +1232,15 @@ mod tests {
         assert_eq!(outcome.issue_id, "AF-001");
         assert_eq!(outcome.run_status, "completed");
         assert!(outcome.next_launch.is_none());
-        assert_eq!(outcome.changelog_path, dir.path().join("CHANGELOG.md"));
         assert_eq!(
-            outcome.release_notes_path,
-            dir.path()
-                .join("docs/release-notes/agentflow-release-notes.md")
+            std::fs::canonicalize(&outcome.closeout_proof_path).unwrap(),
+            std::fs::canonicalize(
+                dir.path()
+                    .join(".agentflow/tasks/AF-001/runs/run-001/review/closeout-proof.json")
+            )
+            .unwrap()
         );
-        assert!(outcome.changelog_path.is_file());
-        assert!(outcome.release_notes_path.is_file());
+        assert!(outcome.closeout_proof_path.is_file());
         let done_projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-001").unwrap();
         assert_eq!(done_projection.current_state, "done");
@@ -1276,19 +1250,17 @@ mod tests {
         );
         assert_eq!(
             done_projection.public_delivery.changelog_path.as_deref(),
-            Some("CHANGELOG.md")
+            None
         );
         assert_eq!(
             done_projection.public_delivery.release_notes_url.as_deref(),
-            Some("docs/release-notes/agentflow-release-notes.md")
+            None
         );
+        assert_eq!(done_projection.delivery.status, "ready");
         let proof = load_closeout_proof(dir.path(), "AF-001", &started.run_id).unwrap();
-        assert!(proof["publicDeliveryWritten"].as_bool().unwrap_or(false));
-        assert_eq!(proof["changelogPath"].as_str(), Some("CHANGELOG.md"));
-        assert_eq!(
-            proof["releaseNotesPath"].as_str(),
-            Some("docs/release-notes/agentflow-release-notes.md")
-        );
+        assert!(!proof["publicDeliveryWritten"].as_bool().unwrap_or(false));
+        assert_eq!(proof.get("changelogPath"), None);
+        assert_eq!(proof.get("releaseNotesPath"), None);
         let events = agentflow_event_store::replay_task_events(
             dir.path(),
             agentflow_event_store::ReplayFilter::issue("AF-001"),

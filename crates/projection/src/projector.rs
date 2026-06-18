@@ -561,7 +561,7 @@ fn project_project(
         let summary = match current_issue_state.as_deref() {
             Some("todo") => format!("{issue_id} 已进入待处理阶段，正在等待执行线程正式开工。"),
             Some("in_review") => format!(
-                "{issue_id} 已完成本地验证，当前正在等待 PR/MR 合并、Issue 关闭和公开交付收口。"
+                "{issue_id} 已完成本地验证，当前正在等待 PR/MR 合并、Issue 关闭和 Done 写回。"
             ),
             Some("blocked") => format!("{issue_id} 当前被阻断，项目节奏停在阻断处理。"),
             _ => format!("{issue_id} 正在推进，项目当前主节奏围绕这条任务展开。"),
@@ -1217,23 +1217,31 @@ fn build_delivery_summary(
     public_delivery: &ProjectionPublicDelivery,
 ) -> ProjectionDeliverySummary {
     if let Ok(summary) = load_delivery_summary(root, &issue.issue_id) {
-        return ProjectionDeliverySummary {
-            status: summary.status,
-            evidence_status: summary.evidence_status,
-            evidence_path: summary.evidence_path,
-            pr_url: summary.pr_url,
-            merge_commit: summary.merge_commit,
-            public_record_path: summary.public_record_path,
-            public_record_targets: summary.public_record_targets,
-            public_record_markdown: summary.public_record_markdown,
-            summary_line: summary.summary_line,
-            public_record_items: summary.public_record_items,
-            missing_public_records: summary.missing_public_records,
-            current_issue_id: None,
-            published_count: 0,
-            ready_count: 0,
-            missing_count: 0,
-        };
+        let should_prefer_summary = summary.status == "published"
+            || summary.public_record_path.is_some()
+            || summary
+                .public_record_items
+                .iter()
+                .any(|item| item != "PR/MR body" && item != "项目级发布记录");
+        if should_prefer_summary {
+            return ProjectionDeliverySummary {
+                status: summary.status,
+                evidence_status: summary.evidence_status,
+                evidence_path: summary.evidence_path,
+                pr_url: summary.pr_url,
+                merge_commit: summary.merge_commit,
+                public_record_path: summary.public_record_path,
+                public_record_targets: summary.public_record_targets,
+                public_record_markdown: summary.public_record_markdown,
+                summary_line: summary.summary_line,
+                public_record_items: summary.public_record_items,
+                missing_public_records: summary.missing_public_records,
+                current_issue_id: None,
+                published_count: 0,
+                ready_count: 0,
+                missing_count: 0,
+            };
+        }
     }
 
     let evidence = agentflow_task_artifacts::load_task_evidence(root, &issue.issue_id).ok();
@@ -1272,7 +1280,7 @@ fn build_delivery_summary(
         }
     }
     if public_record_targets.len() == 1 && status == "ready" {
-        public_record_targets.push("CHANGELOG.md 或 release notes".to_string());
+        public_record_targets.push("项目级发布记录".to_string());
     }
 
     ProjectionDeliverySummary {
@@ -1302,12 +1310,13 @@ fn build_delivery_summary(
         ),
         summary_line: match status.as_str() {
             "published" => format!("公开交付已统一写入 {}。", public_record_items.join("、")),
-            "ready" => "公开交付准备已完成，下一步应整理 PR/MR body，并在需要时汇总到 CHANGELOG.md 或 release notes。".to_string(),
+            "ready" => "公开交付准备已完成，当前已具备 PR/MR 事实，项目级发布记录由独立流程处理。"
+                .to_string(),
             _ => "当前还没有公开交付记录。".to_string(),
         },
         public_record_items,
         missing_public_records: if status == "ready" {
-            vec!["CHANGELOG.md 或 release notes".to_string()]
+            vec!["项目级发布记录".to_string()]
         } else {
             Vec::new()
         },
@@ -1324,23 +1333,30 @@ fn build_project_delivery_summary(
     tasks: &BTreeMap<String, TaskProjection>,
 ) -> Option<ProjectionDeliverySummary> {
     if let Ok(Some(summary)) = load_project_delivery_summary(root, &project.project_id) {
-        return Some(ProjectionDeliverySummary {
-            status: summary.status,
-            evidence_status: "ready".to_string(),
-            evidence_path: None,
-            pr_url: None,
-            merge_commit: None,
-            public_record_path: summary.public_record_items.first().cloned(),
-            public_record_targets: summary.public_record_items.clone(),
-            public_record_markdown: String::new(),
-            summary_line: summary.summary_line,
-            public_record_items: summary.public_record_items,
-            missing_public_records: summary.missing_public_records,
-            current_issue_id: summary.current_issue_id,
-            published_count: summary.published_count,
-            ready_count: summary.ready_count,
-            missing_count: summary.missing_count,
-        });
+        let should_prefer_summary = summary.status == "published"
+            || summary
+                .public_record_items
+                .iter()
+                .any(|item| item != "PR/MR body" && item != "项目级发布记录");
+        if should_prefer_summary {
+            return Some(ProjectionDeliverySummary {
+                status: summary.status,
+                evidence_status: "ready".to_string(),
+                evidence_path: None,
+                pr_url: None,
+                merge_commit: None,
+                public_record_path: summary.public_record_items.first().cloned(),
+                public_record_targets: summary.public_record_items.clone(),
+                public_record_markdown: String::new(),
+                summary_line: summary.summary_line,
+                public_record_items: summary.public_record_items,
+                missing_public_records: summary.missing_public_records,
+                current_issue_id: summary.current_issue_id,
+                published_count: summary.published_count,
+                ready_count: summary.ready_count,
+                missing_count: summary.missing_count,
+            });
+        }
     }
 
     let issue_ids = project.issue_ids.iter().cloned().collect::<BTreeSet<_>>();
@@ -1392,7 +1408,7 @@ fn build_project_delivery_summary(
         },
         public_record_items,
         missing_public_records: if missing_count > 0 {
-            vec!["CHANGELOG.md 或 release notes".to_string()]
+            vec!["项目级发布记录".to_string()]
         } else {
             Vec::new()
         },
@@ -1674,8 +1690,8 @@ fn event_summary(event: &TaskEvent) -> String {
         "issue.validation.passed" => "本地沙箱验证已通过。".to_string(),
         "issue.review.requested" => "任务已请求评审。".to_string(),
         "issue.pr.created" => "PR/MR 已创建。".to_string(),
-        "issue.closeout.proof.recorded" => "收口证明已写入，等待关单与公开交付完成。".to_string(),
-        "issue.pr.merged" => "PR/MR 已合并，等待关单与公开交付收口。".to_string(),
+        "issue.closeout.proof.recorded" => "收口证明已写入，等待 Done 写回。".to_string(),
+        "issue.pr.merged" => "PR/MR 已合并，等待关单与收口证明。".to_string(),
         "issue.completed" => "任务 Done 写回完成。".to_string(),
         "issue.blocked" => "任务进入阻断状态。".to_string(),
         "issue.cancelled" => "任务已取消。".to_string(),
@@ -1688,8 +1704,8 @@ fn state_summary(state: &str, issue: &SpecIssue) -> String {
         "backlog" => "任务已生成，等待调度。".to_string(),
         "todo" => "依赖满足，等待执行会话接管。".to_string(),
         "in_progress" => "任务正在执行，实时信息来自事件流。".to_string(),
-        "in_review" => "验证已通过，等待 PR/MR 合并、Issue 关闭和公开交付写完。".to_string(),
-        "done" => "任务已完成，公开交付记录应写入 PR/MR 或发布说明。".to_string(),
+        "in_review" => "验证已通过，等待 PR/MR 合并、Issue 关闭和 Done 写回。".to_string(),
+        "done" => "任务已完成，公开交付与发布由独立流程处理。".to_string(),
         "blocked" => format!("任务被阻断：{}", issue.title),
         "cancel" => "任务已取消。".to_string(),
         _ => "等待事件更新。".to_string(),
@@ -2000,9 +2016,7 @@ mod tests {
                 json!({
                     "runId": "run-001",
                     "prUrl": "https://github.com/example/repo/pull/1",
-                    "mergeCommit": "abc123",
-                    "changelogPath": "CHANGELOG.md",
-                    "releaseNotesUrl": "docs/release-notes/agentflow-release-notes.md"
+                    "mergeCommit": "abc123"
                 }),
             ),
         )
@@ -2018,14 +2032,8 @@ mod tests {
             task.public_delivery.pr_url.as_deref(),
             Some("https://github.com/example/repo/pull/1")
         );
-        assert_eq!(
-            task.public_delivery.changelog_path.as_deref(),
-            Some("CHANGELOG.md")
-        );
-        assert_eq!(
-            task.public_delivery.release_notes_url.as_deref(),
-            Some("docs/release-notes/agentflow-release-notes.md")
-        );
+        assert_eq!(task.public_delivery.changelog_path.as_deref(), None);
+        assert_eq!(task.public_delivery.release_notes_url.as_deref(), None);
         assert_eq!(project.completed_issue_count, 1);
         assert_eq!(project.status, "active");
         assert_eq!(project.next_action, "enter-completion-decision");
@@ -2273,7 +2281,7 @@ mod tests {
             .summary
             .contains("Issue 关闭"));
         assert!(project.stage_summary.contains("PR/MR 合并"));
-        assert!(project.stage_summary.contains("公开交付"));
+        assert!(project.stage_summary.contains("Done 写回"));
     }
 
     #[test]
