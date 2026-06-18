@@ -2126,7 +2126,7 @@ button.v16-task-project-row:hover {
 
 .v16-task-workspace-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.68fr) minmax(280px, 0.92fr);
+  grid-template-columns: minmax(0, 1.82fr) minmax(280px, 0.88fr);
   gap: 10px;
   align-items: start;
 }
@@ -2138,6 +2138,13 @@ button.v16-task-project-row:hover {
 }
 
 .v16-task-workspace-sidebar {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  align-content: start;
+}
+
+.v16-task-side-rail {
   display: grid;
   gap: 10px;
   min-width: 0;
@@ -2264,6 +2271,10 @@ button.v16-task-project-row:hover {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.v16-task-stage-grid-compact {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .v16-task-stage-grid .v16-section-list,
