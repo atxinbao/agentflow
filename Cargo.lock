@@ -168,6 +168,7 @@ dependencies = [
  "agentflow-audit",
  "agentflow-event-store",
  "agentflow-spec",
+ "agentflow-workflow-core",
  "agentflow-workflow-runtime",
  "anyhow",
  "serde",

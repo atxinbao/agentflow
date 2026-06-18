@@ -503,7 +503,7 @@ fn ensure_review_prepared(
                 }).collect::<Vec<_>>(),
                 "validationCommandCount": validation.command_ids.len(),
                 "boundaryFailures": validation.boundary_failures,
-                "changedFilesPath": relative_path(root, &task_changed_files_path(root, issue_id, run_id)),
+                "changedFilesPath": relative_path(root, &task_changed_files_path(root, issue_id, run_id)?),
                 "commandHash": validation.command_hash,
                 "changedFileHash": validation.changed_file_hash,
                 "validationResultHash": validation.validation_result_hash,
@@ -511,7 +511,7 @@ fn ensure_review_prepared(
             }),
             artifact_refs: vec![
                 task_evidence_path(issue_id),
-                relative_path(root, &task_changed_files_path(root, issue_id, run_id)),
+                relative_path(root, &task_changed_files_path(root, issue_id, run_id)?),
             ],
             idempotency_key: Some(format!(
                 "issue.validation.passed:{}:{}",
@@ -532,15 +532,15 @@ fn ensure_review_prepared(
 }
 
 fn reset_review_artifacts(root: &Path, issue_id: &str, run_id: &str) -> Result<()> {
-    let commands_dir = task_run_dir(root, issue_id, run_id).join("commands");
+    let commands_dir = task_run_dir(root, issue_id, run_id)?.join("commands");
     if commands_dir.exists() {
         fs::remove_dir_all(&commands_dir)
             .with_context(|| format!("remove {}", commands_dir.display()))?;
     }
     for path in [
-        task_run_dir(root, issue_id, run_id).join("validation.json"),
-        task_changed_files_path(root, issue_id, run_id),
-        task_evidence_dir(root, issue_id).join("evidence.json"),
+        task_run_dir(root, issue_id, run_id)?.join("validation.json"),
+        task_changed_files_path(root, issue_id, run_id)?,
+        task_evidence_dir(root, issue_id)?.join("evidence.json"),
     ] {
         if path.exists() {
             fs::remove_file(&path).with_context(|| format!("remove {}", path.display()))?;
@@ -835,7 +835,9 @@ fn ensure_closeout_ready(issue_id: &str, run_id: &str, proof: &serde_json::Value
 }
 
 fn closeout_proof_path(root: &Path, issue_id: &str, run_id: &str) -> PathBuf {
-    task_run_dir(root, issue_id, run_id).join("review/closeout-proof.json")
+    task_run_dir(root, issue_id, run_id)
+        .expect("validated task run dir")
+        .join("review/closeout-proof.json")
 }
 
 fn task_evidence_path(issue_id: &str) -> String {
@@ -843,7 +845,9 @@ fn task_evidence_path(issue_id: &str) -> String {
 }
 
 fn evidence_path(root: &Path, evidence: &TaskEvidence) -> PathBuf {
-    task_evidence_dir(root, &evidence.issue_id).join("evidence.json")
+    task_evidence_dir(root, &evidence.issue_id)
+        .expect("validated task evidence dir")
+        .join("evidence.json")
 }
 
 fn relative_path(root: &Path, path: &Path) -> String {

@@ -7,6 +7,7 @@ use crate::public_delivery::{
 };
 use crate::review_surface::sync_project_external_review_surface;
 use agentflow_event_store::EventActor;
+use agentflow_workflow_core::{canonicalize_project_root, join_relative_path, ProjectId};
 use agentflow_workflow_runtime::{
     apply_canonical_workflow_event, RuntimeContext, StaticActionRegistry, StaticGuardRegistry,
     WorkflowFlowType,
@@ -62,11 +63,11 @@ pub fn sync_project_release(
     project_root: impl AsRef<Path>,
     project_id: impl AsRef<str>,
 ) -> Result<ProjectReleaseFacts> {
-    let root = canonical_project_root(project_root)?;
-    let project_id = project_id.as_ref();
-    let projection = load_project_projection_snapshot(&root, project_id)?;
-    let target = default_project_release_target(project_id);
-    let existing = load_project_release_facts(&root, project_id).ok();
+    let root = canonicalize_project_root(project_root)?;
+    let project_id = ProjectId::parse(project_id.as_ref())?;
+    let projection = load_project_projection_snapshot(&root, project_id.as_str())?;
+    let target = default_project_release_target(project_id.as_str())?;
+    let existing = load_project_release_facts(&root, project_id.as_str()).ok();
     let gate = evaluate_release_gate(&projection);
 
     let now = unix_timestamp_seconds();
@@ -90,7 +91,7 @@ pub fn sync_project_release(
         .unwrap_or(0);
 
     if current_state == "published" {
-        let summary = collect_public_release_summary_for_project(&root, Some(project_id))?;
+        let summary = collect_public_release_summary_for_project(&root, Some(project_id.as_str()))?;
         let paths = write_public_release_documents(&root, &summary, &target)?;
         entry_count = summary.entries.len();
         published_at = published_at.or(Some(now));
@@ -123,7 +124,7 @@ pub fn sync_project_release(
     }
 
     if gate.gate_status == "ready" {
-        let summary = collect_public_release_summary_for_project(&root, Some(project_id))?;
+        let summary = collect_public_release_summary_for_project(&root, Some(project_id.as_str()))?;
         if summary.entries.is_empty() {
             current_state = "blocked".to_string();
             let facts = ProjectReleaseFacts {
@@ -156,7 +157,7 @@ pub fn sync_project_release(
         if current_state == "pending" {
             latest_event_id = transition_release_state(
                 &root,
-                project_id,
+                project_id.as_str(),
                 "pending",
                 "delivery.ready",
                 &target,
@@ -169,7 +170,7 @@ pub fn sync_project_release(
         if current_state == "ready" {
             latest_event_id = transition_release_state(
                 &root,
-                project_id,
+                project_id.as_str(),
                 "ready",
                 "delivery.started",
                 &target,
@@ -185,7 +186,7 @@ pub fn sync_project_release(
         if current_state == "in_progress" {
             latest_event_id = transition_release_state(
                 &root,
-                project_id,
+                project_id.as_str(),
                 "in_progress",
                 "delivery.published",
                 &PublicReleaseDocumentTarget {
@@ -243,12 +244,12 @@ pub fn load_project_release_facts(
     project_root: impl AsRef<Path>,
     project_id: &str,
 ) -> Result<ProjectReleaseFacts> {
-    let root = canonical_project_root(project_root)?;
-    read_json(&project_release_facts_path(&root, project_id))
+    let root = canonicalize_project_root(project_root)?;
+    read_json(&project_release_facts_path(&root, project_id)?)
 }
 
 pub fn load_project_release_index(project_root: impl AsRef<Path>) -> Result<ProjectReleaseIndex> {
-    let root = canonical_project_root(project_root)?;
+    let root = canonicalize_project_root(project_root)?;
     read_json(&root.join(".agentflow/indexes/releases.json"))
 }
 
@@ -380,16 +381,19 @@ fn load_project_projection_snapshot(
     root: &Path,
     project_id: &str,
 ) -> Result<ProjectProjectionSnapshot> {
-    read_json(
-        &root
-            .join(".agentflow/projections/projects")
-            .join(format!("{}.json", sanitize_id(project_id))),
-    )
+    let project_id = ProjectId::parse(project_id)?;
+    read_json(&join_relative_path(
+        root,
+        PathBuf::from(".agentflow")
+            .join("projections")
+            .join("projects")
+            .join(format!("{}.json", project_id.as_str())),
+    )?)
 }
 
 fn write_project_release_facts(root: &Path, facts: &ProjectReleaseFacts) -> Result<()> {
     ensure_directory(&root.join(".agentflow/release/projects"))?;
-    write_json(&project_release_facts_path(root, &facts.project_id), facts)
+    write_json(&project_release_facts_path(root, &facts.project_id)?, facts)
 }
 
 fn write_project_release_index(root: &Path) -> Result<()> {
@@ -425,38 +429,23 @@ fn write_project_release_index(root: &Path) -> Result<()> {
     )
 }
 
-fn project_release_facts_path(root: &Path, project_id: &str) -> PathBuf {
-    root.join(".agentflow/release/projects")
-        .join(format!("{}.json", sanitize_id(project_id)))
+fn project_release_facts_path(root: &Path, project_id: &str) -> Result<PathBuf> {
+    let project_id = ProjectId::parse(project_id)?;
+    join_relative_path(
+        root,
+        PathBuf::from(".agentflow")
+            .join("release")
+            .join("projects")
+            .join(format!("{}.json", project_id.as_str())),
+    )
 }
 
-fn default_project_release_target(project_id: &str) -> PublicReleaseDocumentTarget {
-    PublicReleaseDocumentTarget {
+fn default_project_release_target(project_id: &str) -> Result<PublicReleaseDocumentTarget> {
+    let project_id = ProjectId::parse(project_id)?;
+    Ok(PublicReleaseDocumentTarget {
         changelog_path: PathBuf::from("CHANGELOG.md"),
-        release_notes_path: PathBuf::from(format!(
-            "docs/release-notes/{}.md",
-            sanitize_id(project_id)
-        )),
-    }
-}
-
-fn sanitize_id(id: &str) -> String {
-    id.chars()
-        .map(|ch| match ch {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-            _ => ch,
-        })
-        .collect()
-}
-
-fn canonical_project_root(project_root: impl AsRef<Path>) -> Result<PathBuf> {
-    let root = project_root.as_ref();
-    if root.exists() {
-        return root
-            .canonicalize()
-            .with_context(|| format!("canonicalize {}", root.display()));
-    }
-    Ok(root.to_path_buf())
+        release_notes_path: PathBuf::from(format!("docs/release-notes/{}.md", project_id.as_str())),
+    })
 }
 
 fn ensure_directory(path: &Path) -> Result<()> {
@@ -678,5 +667,14 @@ mod tests {
         assert_eq!(facts.current_state, "blocked");
         assert_eq!(facts.gate_status, "blocked");
         assert!(facts.gate_reason.contains("公开交付"));
+    }
+
+    #[test]
+    fn sync_project_release_rejects_path_like_project_ids() {
+        let dir = tempdir().unwrap();
+        let err = sync_project_release(dir.path(), "../bad")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("safe local id"));
     }
 }
