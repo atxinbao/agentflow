@@ -6861,11 +6861,14 @@ function agentRoleRulesDocument() {
 
 function buildNextActionLabel(action: string) {
   const labels: Record<string, string> = {
+    "confirm-goal-draft-preview": "确认 Goal 草稿预览",
+    "confirm-plan-draft-preview": "确认 Plan 草稿预览",
     "confirm-project-brain": "确认 Project Brain",
     "create-goal-draft-preview": "生成 Goal 草稿预览",
     "create-plan-draft-preview": "生成 Plan 草稿预览",
     "enter-completion-decision": "进入完成判断",
     "execute-issue": "执行任务",
+    "materialize-spec-project-and-issues": "物化 SpecProject / SpecIssue",
     "prepare-public-delivery": "生成公开交付记录",
     "resolve-project-brain-blocker": "处理 Project Brain 阻断",
     "run-goal-recheck": "重新检查项目目标",

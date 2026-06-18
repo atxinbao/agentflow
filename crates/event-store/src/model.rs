@@ -207,6 +207,10 @@ pub fn classify_task_event(event_type: &str) -> TaskEventCategory {
         value if value.starts_with("spec.") => TaskEventCategory::Contract,
         value
             if value.starts_with("project.state.")
+                || value.starts_with("project.intake.")
+                || value.starts_with("project.loop.")
+                || value.starts_with("goal.draft.")
+                || value.starts_with("plan.draft.")
                 || value.starts_with("work.state.")
                 || value.starts_with("audit.state.")
                 || value.starts_with("delivery.state.")

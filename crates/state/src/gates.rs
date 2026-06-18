@@ -7,7 +7,7 @@ use crate::{
     readiness::{issue_has_readiness_blocker, issue_readiness_blockers},
     storage::{read_json, unix_timestamp_seconds, write_json},
 };
-use agentflow_projection::IssueStatusIndex;
+use agentflow_projection::{IssueStatusIndex, RequirementPreviewIndex};
 use agentflow_spec::{list_spec_projects, read_project_brain_snapshot, SpecIssue, SpecProject};
 use agentflow_workflow_core::{
     work_state_is_active, work_state_is_done, work_state_is_in_progress, work_state_is_in_review,
@@ -24,6 +24,8 @@ pub(crate) fn build_gate_snapshot(
     let spec_issues = agentflow_spec::list_spec_issues(root).unwrap_or_default();
     let spec_projects = list_spec_projects(root).unwrap_or_default();
     let projection_index = agentflow_projection::load_issue_status_index(root).ok();
+    let requirement_preview_index =
+        agentflow_projection::load_requirement_preview_index(root).ok();
     let audit_index = agentflow_audit::load_audit_index(root).ok();
     let audit_status = derive_audit_status(audit_index.as_ref());
     let latest_projection = projection_index.as_ref().and_then(|index| {
@@ -66,12 +68,19 @@ pub(crate) fn build_gate_snapshot(
         &spec_issues,
         &spec_projects,
         projection_index.as_ref(),
+        requirement_preview_index.as_ref(),
         &audit_status,
         has_execution_blockers,
         root,
     );
     let project_brain_action = project_brain_next_action(root, &spec_projects);
-    let allowed_next_actions = allowed_actions(&current_stage, project_brain_action.as_deref());
+    let requirement_preview_action =
+        requirement_preview_next_action(requirement_preview_index.as_ref());
+    let allowed_next_actions = allowed_actions(
+        &current_stage,
+        requirement_preview_action.as_deref(),
+        project_brain_action.as_deref(),
+    );
     Ok(WorkflowGateSnapshot {
         version: STATE_WORKFLOW_GATES_VERSION.to_string(),
         current_stage,
@@ -203,6 +212,7 @@ fn derive_stage(
     spec_issues: &[SpecIssue],
     spec_projects: &[SpecProject],
     projection_index: Option<&IssueStatusIndex>,
+    requirement_preview_index: Option<&RequirementPreviewIndex>,
     audit_status: &WorkflowAuditStatus,
     has_blockers: bool,
     root: &Path,
@@ -278,7 +288,9 @@ fn derive_stage(
     }) {
         return WorkflowStage::DeliveryReady;
     }
-    if has_project_brain_runtime_entry(root, spec_projects) {
+    if has_requirement_preview_runtime_entry(requirement_preview_index)
+        || has_project_brain_runtime_entry(root, spec_projects)
+    {
         return WorkflowStage::InputReady;
     }
     if !spec_issues.is_empty()
@@ -345,7 +357,11 @@ fn derive_audit_status(index: Option<&agentflow_audit::AuditIndex>) -> WorkflowA
     }
 }
 
-fn allowed_actions(stage: &WorkflowStage, project_brain_action: Option<&str>) -> Vec<String> {
+fn allowed_actions(
+    stage: &WorkflowStage,
+    requirement_preview_action: Option<&str>,
+    project_brain_action: Option<&str>,
+) -> Vec<String> {
     let mut actions = Vec::new();
     match stage {
         WorkflowStage::DeliveryReady => actions.push("prepare-public-delivery".to_string()),
@@ -357,7 +373,8 @@ fn allowed_actions(stage: &WorkflowStage, project_brain_action: Option<&str>) ->
             actions.push("execute-issue".to_string());
         }
         WorkflowStage::InputReady => actions.push(
-            project_brain_action
+            requirement_preview_action
+                .or(project_brain_action)
                 .unwrap_or("start-project-loop")
                 .to_string(),
         ),
@@ -371,6 +388,30 @@ fn allowed_actions(stage: &WorkflowStage, project_brain_action: Option<&str>) ->
 
 fn has_project_brain_runtime_entry(root: &Path, spec_projects: &[SpecProject]) -> bool {
     project_brain_next_action(root, spec_projects).is_some()
+}
+
+fn has_requirement_preview_runtime_entry(
+    requirement_preview_index: Option<&RequirementPreviewIndex>,
+) -> bool {
+    requirement_preview_index.is_some_and(|index| {
+        index
+            .previews
+            .iter()
+            .any(|preview| preview.lifecycle == "active")
+    })
+}
+
+fn requirement_preview_next_action(
+    requirement_preview_index: Option<&RequirementPreviewIndex>,
+) -> Option<String> {
+    requirement_preview_index.and_then(|index| {
+        index
+            .previews
+            .iter()
+            .filter(|preview| preview.lifecycle == "active")
+            .max_by_key(|preview| (preview.updated_at, preview.requirement_id.as_str()))
+            .map(|preview| preview.next_recommended_action.clone())
+    })
 }
 
 fn project_brain_next_action(root: &Path, spec_projects: &[SpecProject]) -> Option<String> {
@@ -411,7 +452,10 @@ fn action_label(action: &str) -> String {
         "start-project-loop" => "Start project loop",
         "create-goal-draft-preview" => "Create goal draft preview",
         "create-plan-draft-preview" => "Create plan draft preview",
+        "confirm-goal-draft-preview" => "Confirm goal draft preview",
+        "confirm-plan-draft-preview" => "Confirm plan draft preview",
         "confirm-project-brain" => "Confirm project brain",
+        "materialize-spec-project-and-issues" => "Materialize spec project and issues",
         "run-goal-recheck" => "Run goal recheck",
         "resolve-project-brain-blocker" => "Resolve project brain blocker",
         "start-new-requirement" => "Start new requirement",
@@ -437,8 +481,17 @@ fn allowed_reason(action: &str, gate: &WorkflowGateSnapshot) -> String {
         "create-plan-draft-preview" => {
             "Project Brain has a goal but still needs a plan document.".to_string()
         }
+        "confirm-goal-draft-preview" => {
+            "Requirement 已被整理成 Goal 草稿，等待用户确认。".to_string()
+        }
+        "confirm-plan-draft-preview" => {
+            "Goal 已确认，当前等待确认 Plan 草稿。".to_string()
+        }
         "confirm-project-brain" => {
             "Project Brain documents exist but are not fully confirmed yet.".to_string()
+        }
+        "materialize-spec-project-and-issues" => {
+            "Goal / Plan 预览都已确认，可以物化成 SpecProject / SpecIssue。".to_string()
         }
         "run-goal-recheck" => {
             "Project Health indicates the project goal or plan should be rechecked.".to_string()
@@ -482,7 +535,10 @@ mod tests {
         storage::write_project_projection, ProjectBrainProjection, ProjectIssueLanes,
         ProjectProjection, PROJECT_PROJECTION_VERSION,
     };
-    use agentflow_spec::{write_spec_project, SpecIssueDraft, SpecIssueStatus, SpecProjectDraft};
+    use agentflow_spec::{
+        requirement_preview_from_requirement, write_spec_project, SpecIssueDraft, SpecIssueStatus,
+        SpecProjectDraft,
+    };
     use tempfile::tempdir;
 
     fn issue(root: &Path, issue_id: &str, status: SpecIssueStatus) -> SpecIssue {
@@ -578,6 +634,7 @@ mod tests {
             &[],
             &[],
             None,
+            None,
             &WorkflowAuditStatus::NotRequested,
             false,
             dir.path(),
@@ -621,6 +678,7 @@ mod tests {
             &[],
             &[],
             Some(&index),
+            None,
             &WorkflowAuditStatus::NotRequested,
             false,
             dir.path(),
@@ -659,6 +717,7 @@ mod tests {
             &[],
             &[project],
             None,
+            None,
             &WorkflowAuditStatus::NotRequested,
             false,
             dir.path(),
@@ -668,6 +727,7 @@ mod tests {
         assert_eq!(
             allowed_actions(
                 &stage,
+                None,
                 project_brain_next_action(
                     dir.path(),
                     &agentflow_spec::list_spec_projects(dir.path()).unwrap()
@@ -675,6 +735,40 @@ mod tests {
                 .as_deref()
             ),
             vec!["start-project-loop".to_string()]
+        );
+    }
+
+    #[test]
+    fn active_requirement_preview_enters_input_ready_before_spec_materialization() {
+        let dir = tempdir().unwrap();
+        let requirement = dir.path().join("docs/requirements/040-preview.md");
+        std::fs::create_dir_all(requirement.parent().unwrap()).unwrap();
+        std::fs::write(&requirement, "# 预览\n\n先把需求整理成 Goal 和 Plan。\n").unwrap();
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+        agentflow_projection::rebuild_projections(dir.path()).unwrap();
+        let preview_index = agentflow_projection::load_requirement_preview_index(dir.path()).ok();
+
+        let stage = derive_stage(
+            &[],
+            &[],
+            &[],
+            None,
+            preview_index.as_ref(),
+            &WorkflowAuditStatus::NotRequested,
+            false,
+            dir.path(),
+        );
+
+        assert_eq!(stage, WorkflowStage::InputReady);
+        assert_eq!(
+            allowed_actions(
+                &stage,
+                requirement_preview_next_action(preview_index.as_ref()).as_deref(),
+                None
+            ),
+            vec!["confirm-goal-draft-preview".to_string()]
         );
     }
 }
