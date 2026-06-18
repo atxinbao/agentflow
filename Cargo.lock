@@ -38,7 +38,6 @@ dependencies = [
 name = "agentflow-audit"
 version = "0.2.0"
 dependencies = [
- "agentflow-projection",
  "agentflow-task-artifacts",
  "anyhow",
  "serde",
@@ -148,6 +147,7 @@ dependencies = [
 name = "agentflow-projection"
 version = "0.2.0"
 dependencies = [
+ "agentflow-audit",
  "agentflow-event-store",
  "agentflow-spec",
  "agentflow-task-artifacts",

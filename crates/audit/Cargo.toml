@@ -4,7 +4,6 @@ version = "0.2.0"
 edition = "2021"
 
 [dependencies]
-agentflow-projection = { path = "../projection" }
 agentflow-task-artifacts = { path = "../task-artifacts" }
 anyhow = { workspace = true }
 serde = { workspace = true }

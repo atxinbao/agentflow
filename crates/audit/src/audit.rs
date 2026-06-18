@@ -2,18 +2,18 @@ use crate::{
     model::{
         AuditCheckStatus, AuditChecks, AuditEvidenceMap, AuditFinding, AuditFindingSeverity,
         AuditFindings, AuditIndex, AuditIndexEntry, AuditManifest, AuditManifestSummary,
-        AuditPaths, AuditRequest, AuditRequestSource, AuditScopeRef, AuditStatus, AuditSummary,
-        AuditTraceability, AuditTraceabilityItem, AuditTrigger, HumanAudit, HumanAuditReport,
-        HumanAuditRequestDraft, AUDIT_EVIDENCE_MAP_VERSION, AUDIT_FINDINGS_VERSION,
-        AUDIT_INDEX_VERSION, AUDIT_MANIFEST_VERSION, AUDIT_REQUEST_VERSION,
-        AUDIT_TRACEABILITY_VERSION, OUTPUT_AUDIT_VERSION,
+        AuditPaths, AuditRequest, AuditRequestSource, AuditResultSummary, AuditScopeRef,
+        AuditStatus, AuditSummary, AuditTraceability, AuditTraceabilityItem, AuditTrigger,
+        HumanAudit, HumanAuditReport, HumanAuditRequestDraft, AUDIT_EVIDENCE_MAP_VERSION,
+        AUDIT_FINDINGS_VERSION, AUDIT_INDEX_VERSION, AUDIT_MANIFEST_VERSION,
+        AUDIT_REQUEST_VERSION, AUDIT_RESULT_SUMMARY_VERSION, AUDIT_TRACEABILITY_VERSION,
+        OUTPUT_AUDIT_VERSION,
     },
     storage::{
         canonical_project_root, ensure_directory, read_json, sorted_child_paths,
         unix_timestamp_seconds, write_json,
     },
 };
-use agentflow_projection::TaskProjection;
 use agentflow_task_artifacts::TaskEvidence;
 use anyhow::{Context, Result};
 use std::{
@@ -140,6 +140,14 @@ pub fn load_audit_report(
         evidence_map: read_json(&audit_dir.join("evidence-map.json"))?,
         traceability: read_json(&audit_dir.join("traceability.json"))?,
     })
+}
+
+pub fn load_audit_result_summary(
+    project_root: impl AsRef<Path>,
+    audit_id: String,
+) -> Result<AuditResultSummary> {
+    let report = load_audit_report(project_root, audit_id)?;
+    Ok(project_audit_result_summary(&report))
 }
 
 pub fn load_audit_index(project_root: impl AsRef<Path>) -> Result<AuditIndex> {
@@ -308,7 +316,7 @@ struct AuditContext {
     evidence_path: String,
     public_delivery_path: String,
     evidence: Option<TaskEvidence>,
-    projection: Option<TaskProjection>,
+    projection: Option<AuditTaskProjectionSnapshot>,
 }
 
 impl AuditContext {
@@ -339,7 +347,7 @@ impl AuditContext {
         let evidence = read_json::<TaskEvidence>(&root.join(&evidence_path)).ok();
         let projection = issue_id
             .as_deref()
-            .and_then(|issue_id| agentflow_projection::load_task_projection(root, issue_id).ok());
+            .and_then(|issue_id| load_task_projection_snapshot(root, issue_id).ok());
         Ok(Self {
             run_id,
             issue_id,
@@ -358,6 +366,22 @@ impl AuditContext {
 struct AuditCheckResult {
     checks: AuditChecks,
     findings: Vec<AuditFinding>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditTaskProjectionSnapshot {
+    public_delivery: AuditTaskProjectionPublicDelivery,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AuditTaskProjectionPublicDelivery {
+    evidence_path: Option<String>,
+    pr_url: Option<String>,
+    merge_commit: Option<String>,
+    changelog_path: Option<String>,
+    release_notes_url: Option<String>,
 }
 
 fn run_audit_checks(root: &Path, context: &AuditContext) -> AuditCheckResult {
@@ -584,6 +608,44 @@ fn check_public_delivery(
         "Write merge proof and public delivery records before accepting.",
     ));
     AuditCheckStatus::Failed
+}
+
+pub fn project_audit_result_summary(report: &HumanAuditReport) -> AuditResultSummary {
+    let findings = report
+        .findings
+        .findings
+        .iter()
+        .map(|finding| {
+            format!(
+                "{}：{}；建议：{}",
+                finding.severity.as_str(),
+                finding.title,
+                finding.recommendation
+            )
+        })
+        .collect::<Vec<_>>();
+    let evidence_gaps = audit_evidence_gap_lines(&report.audit.checks);
+    let repair_recommendations = audit_repair_recommendations(report);
+
+    AuditResultSummary {
+        version: AUDIT_RESULT_SUMMARY_VERSION.to_string(),
+        audit_id: report.audit.audit_id.clone(),
+        status: report.audit.status.as_str().to_string(),
+        requested_at: report.audit.requested_at,
+        source_issue_id: report.audit.source_issue_id.clone(),
+        source_run_id: report.audit.source_run_id.clone(),
+        report_path: report
+            .audit
+            .paths
+            .get("report")
+            .cloned()
+            .unwrap_or_else(|| format!(".agentflow/audit/{}/audit-report.md", report.audit.audit_id)),
+        summary_line: audit_summary_line(report),
+        findings_count: report.findings.findings.len(),
+        findings,
+        evidence_gaps,
+        repair_recommendations,
+    }
 }
 
 fn audit_status(checks: &AuditChecks, findings: &[AuditFinding]) -> AuditStatus {
@@ -826,6 +888,112 @@ fn finding(
     }
 }
 
+fn audit_summary_line(report: &HumanAuditReport) -> String {
+    let summary = &report.audit.summary;
+    match report.audit.status {
+        AuditStatus::Requested => "审计已请求，等待进入执行。".to_string(),
+        AuditStatus::Running => "审计正在执行，等待 findings 和结论写回。".to_string(),
+        AuditStatus::Passed => format!(
+            "审计通过：{} 项检查通过，{} 条发现。",
+            summary.passed, summary.findings
+        ),
+        AuditStatus::PassedWithWarnings => format!(
+            "审计通过但有警告：{} 项警告，{} 条发现。",
+            summary.warnings, summary.findings
+        ),
+        AuditStatus::Failed => format!(
+            "审计未通过：{} 项失败检查，{} 条发现。",
+            summary.failed, summary.findings
+        ),
+        AuditStatus::Cancelled => "审计已取消。".to_string(),
+    }
+}
+
+fn audit_evidence_gap_lines(checks: &AuditChecks) -> Vec<String> {
+    let mut gaps = Vec::new();
+    push_audit_gap(
+        &mut gaps,
+        &checks.run_exists,
+        "任务运行记录缺失，需要先补 run 事实。",
+    );
+    push_audit_gap(
+        &mut gaps,
+        &checks.changed_files_recorded,
+        "变更文件记录不完整，需要补 changed-files 记录。",
+    );
+    push_audit_gap(
+        &mut gaps,
+        &checks.allowed_write_paths_only,
+        "任务边界无法确认，需要补 task projection 或 allowed paths 检查。",
+    );
+    push_audit_gap(
+        &mut gaps,
+        &checks.commands_recorded,
+        "验证命令记录不完整，需要补 command evidence。",
+    );
+    push_audit_gap(
+        &mut gaps,
+        &checks.high_risk_confirmed_if_needed,
+        "高风险确认缺失，需要补人工确认记录。",
+    );
+    push_audit_gap(
+        &mut gaps,
+        &checks.evidence_complete,
+        "验证证据不完整，需要补 evidence。",
+    );
+    push_audit_gap(
+        &mut gaps,
+        &checks.public_delivery_complete,
+        "公开交付记录不完整，需要补 PR/MR 或公开记录。",
+    );
+    gaps
+}
+
+fn push_audit_gap(gaps: &mut Vec<String>, status: &AuditCheckStatus, line: &str) {
+    if !matches!(status, AuditCheckStatus::Passed) {
+        gaps.push(line.to_string());
+    }
+}
+
+fn audit_repair_recommendations(report: &HumanAuditReport) -> Vec<String> {
+    let mut recommendations = report
+        .findings
+        .findings
+        .iter()
+        .map(|finding| finding.recommendation.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    for gap in audit_evidence_gap_lines(&report.audit.checks) {
+        recommendations.push(format!("先修复：{gap}"));
+    }
+    if recommendations.is_empty() {
+        recommendations.push("当前没有额外修复建议。".to_string());
+    }
+    recommendations
+}
+
+fn load_task_projection_snapshot(
+    root: &Path,
+    issue_id: &str,
+) -> Result<AuditTaskProjectionSnapshot> {
+    read_json(&task_projection_path(root, issue_id))
+}
+
+fn task_projection_path(root: &Path, issue_id: &str) -> std::path::PathBuf {
+    root.join(".agentflow/projections/tasks")
+        .join(format!("{}.json", sanitize_id(issue_id)))
+}
+
+fn sanitize_id(id: &str) -> String {
+    id.chars()
+        .map(|ch| match ch {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            _ => ch,
+        })
+        .collect()
+}
+
 fn infer_run_id(refs: &[AuditScopeRef], source: Option<&AuditRequestSource>) -> Result<String> {
     source
         .and_then(|source| source.run_id.clone())
@@ -855,4 +1023,110 @@ fn path_relative_to_root(root: &Path, path: &Path) -> String {
 
 fn non_empty(value: Option<&str>) -> bool {
     value.is_some_and(|value| !value.trim().is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::AuditScope;
+
+    #[test]
+    fn projects_failed_audit_into_human_readable_summary() {
+        let report = HumanAuditReport {
+            request: AuditRequest {
+                version: AUDIT_REQUEST_VERSION.to_string(),
+                audit_id: "audit-001".to_string(),
+                trigger: AuditTrigger::HumanViaAgent,
+                requested_by: "human-via-agent".to_string(),
+                requested_at: 100,
+                reason: "检查交付完整性".to_string(),
+                source: None,
+                scope: AuditScope {
+                    description: "检查".to_string(),
+                    refs: Vec::new(),
+                },
+            },
+            audit: HumanAudit {
+                version: OUTPUT_AUDIT_VERSION.to_string(),
+                audit_id: "audit-001".to_string(),
+                trigger: AuditTrigger::HumanViaAgent,
+                requested_by: "human-via-agent".to_string(),
+                requested_at: 100,
+                source_delivery_id: None,
+                source_run_id: Some("run-001".to_string()),
+                source_issue_id: Some("AF-001".to_string()),
+                status: AuditStatus::Failed,
+                summary: AuditSummary {
+                    checks: 7,
+                    passed: 3,
+                    warnings: 1,
+                    failed: 3,
+                    findings: 2,
+                },
+                checks: AuditChecks {
+                    run_exists: AuditCheckStatus::Passed,
+                    changed_files_recorded: AuditCheckStatus::Failed,
+                    allowed_write_paths_only: AuditCheckStatus::Passed,
+                    commands_recorded: AuditCheckStatus::Failed,
+                    high_risk_confirmed_if_needed: AuditCheckStatus::Passed,
+                    evidence_complete: AuditCheckStatus::Failed,
+                    public_delivery_complete: AuditCheckStatus::Warning,
+                },
+                paths: BTreeMap::from([(
+                    "report".to_string(),
+                    ".agentflow/audit/audit-001/audit-report.md".to_string(),
+                )]),
+            },
+            report_markdown: String::new(),
+            findings: AuditFindings {
+                version: AUDIT_FINDINGS_VERSION.to_string(),
+                audit_id: "audit-001".to_string(),
+                findings: vec![
+                    AuditFinding {
+                        finding_id: "finding-001".to_string(),
+                        severity: AuditFindingSeverity::High,
+                        category: "evidence".to_string(),
+                        title: "验证证据缺失".to_string(),
+                        detail: "缺少本地验证记录".to_string(),
+                        evidence_path: ".agentflow/tasks/AF-001/evidence/evidence.json".to_string(),
+                        recommendation: "补齐本地验证证据。".to_string(),
+                    },
+                    AuditFinding {
+                        finding_id: "finding-002".to_string(),
+                        severity: AuditFindingSeverity::Medium,
+                        category: "delivery".to_string(),
+                        title: "公开交付不完整".to_string(),
+                        detail: "没有 changelog".to_string(),
+                        evidence_path: "CHANGELOG.md".to_string(),
+                        recommendation: "补一份公开交付说明。".to_string(),
+                    },
+                ],
+            },
+            checklist_markdown: String::new(),
+            evidence_map: AuditEvidenceMap {
+                version: AUDIT_EVIDENCE_MAP_VERSION.to_string(),
+                audit_id: "audit-001".to_string(),
+                inputs: BTreeMap::new(),
+            },
+            traceability: AuditTraceability {
+                version: AUDIT_TRACEABILITY_VERSION.to_string(),
+                audit_id: "audit-001".to_string(),
+                chain: Vec::new(),
+            },
+        };
+
+        let summary = project_audit_result_summary(&report);
+
+        assert_eq!(summary.status, "failed");
+        assert_eq!(summary.findings_count, 2);
+        assert!(summary.summary_line.contains("审计未通过"));
+        assert!(summary
+            .evidence_gaps
+            .iter()
+            .any(|line| line.contains("变更文件记录不完整")));
+        assert!(summary
+            .repair_recommendations
+            .iter()
+            .any(|line| line.contains("补齐本地验证证据")));
+    }
 }

@@ -8,6 +8,7 @@ pub const AUDIT_REQUEST_VERSION: &str = "audit-request.v1";
 pub const AUDIT_FINDINGS_VERSION: &str = "audit-findings.v1";
 pub const AUDIT_EVIDENCE_MAP_VERSION: &str = "audit-evidence-map.v1";
 pub const AUDIT_TRACEABILITY_VERSION: &str = "audit-traceability.v1";
+pub const AUDIT_RESULT_SUMMARY_VERSION: &str = "audit-result-summary.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -314,4 +315,26 @@ pub struct HumanAuditReport {
     pub checklist_markdown: String,
     pub evidence_map: AuditEvidenceMap,
     pub traceability: AuditTraceability,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditResultSummary {
+    pub version: String,
+    pub audit_id: String,
+    pub status: String,
+    pub requested_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_issue_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_run_id: Option<String>,
+    pub report_path: String,
+    pub summary_line: String,
+    pub findings_count: usize,
+    #[serde(default)]
+    pub findings: Vec<String>,
+    #[serde(default)]
+    pub evidence_gaps: Vec<String>,
+    #[serde(default)]
+    pub repair_recommendations: Vec<String>,
 }

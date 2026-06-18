@@ -11,8 +11,8 @@ pub mod storage;
 pub use model::{
     CompletionDecisionIndex, CompletionDecisionIndexEntry, CompletionDecisionProjection,
     IssueStatusIndex, IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
-    ProjectCompletionProjection, ProjectIssueLanes, ProjectProjection, ProjectionAuditSummary,
-    ProjectionDeliverySummary, ProjectionPhase, ProjectionPublicDelivery,
+    ProjectCompletionProjection, ProjectIssueLanes, ProjectProjection,
+    ProjectionAuditSummary, ProjectionDeliverySummary, ProjectionPhase, ProjectionPublicDelivery,
     ProjectionRuntimeSummary, ProjectionSessionSummary, ProjectionSummary,
     RequirementPreviewIndex, RequirementPreviewIndexEntry, RequirementPreviewProjection,
     TaskProjection, TaskTimelineEvent, TaskTimelineItem, COMPLETION_DECISION_INDEX_VERSION,

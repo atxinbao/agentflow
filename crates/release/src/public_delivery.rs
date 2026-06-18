@@ -260,8 +260,7 @@ mod tests {
             audit: agentflow_projection::ProjectionAuditSummary {
                 status: "not-requested".to_string(),
                 latest_audit_id: None,
-                report_path: None,
-                requested_at: None,
+                ..agentflow_projection::ProjectionAuditSummary::default()
             },
             updated_at,
         };

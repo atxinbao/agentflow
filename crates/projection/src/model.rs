@@ -122,8 +122,20 @@ pub struct ProjectionAuditSummary {
     #[serde(default = "default_projection_audit_status")]
     pub status: String,
     pub latest_audit_id: Option<String>,
+    #[serde(default)]
+    pub source_issue_id: Option<String>,
     pub report_path: Option<String>,
     pub requested_at: Option<u64>,
+    #[serde(default)]
+    pub summary_line: String,
+    #[serde(default)]
+    pub findings_count: usize,
+    #[serde(default)]
+    pub findings: Vec<String>,
+    #[serde(default)]
+    pub evidence_gaps: Vec<String>,
+    #[serde(default)]
+    pub repair_recommendations: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -236,6 +248,8 @@ pub struct ProjectProjection {
     pub completion_hint: String,
     #[serde(default)]
     pub completion: Option<ProjectCompletionProjection>,
+    #[serde(default)]
+    pub audit: Option<ProjectionAuditSummary>,
     pub issue_count: usize,
     pub completed_issue_count: usize,
     pub project_brain: ProjectBrainProjection,
