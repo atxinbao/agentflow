@@ -279,6 +279,7 @@ mod tests {
     use agentflow_workflow_core::{
         canonical_workflow, parse_workflow_yaml, validate_workflow, WorkflowFlowType,
     };
+    use serde_json::json;
     use tempfile::tempdir;
 
     fn workflow() -> WorkflowDefinition {
@@ -362,6 +363,16 @@ spec:
             EventActor {
                 role: "delivery-loop".to_string(),
                 kind: "system".to_string(),
+            },
+        )
+    }
+
+    fn project_context() -> RuntimeContext {
+        RuntimeContext::project(
+            "project-runtime-001",
+            EventActor {
+                role: "goal-agent".to_string(),
+                kind: "agent".to_string(),
             },
         )
     }
@@ -710,6 +721,96 @@ spec:
                 .as_ref()
                 .map(|binding| binding.state_id.as_str()),
             Some("returned")
+        );
+    }
+
+    #[test]
+    fn project_runtime_returns_to_goal_recheck_after_delivery() {
+        let dir = tempdir().unwrap();
+        let workflow = canonical_workflow(WorkflowFlowType::Project);
+        let guards = StaticGuardRegistry::all_pass(["goal.recheck.requested"]);
+        let actions = StaticActionRegistry::all_complete(["project.goal_recheck.open"]);
+        let mut context = project_context();
+        context.payload = json!({
+            "deliverySummaryRef": ".agentflow/tasks/AF-TASK-001/delivery/summary.json"
+        });
+
+        let result = apply_workflow_event(
+            dir.path(),
+            &workflow,
+            "delivering",
+            "delivery.completed",
+            context,
+            &guards,
+            &actions,
+        )
+        .unwrap();
+
+        assert!(result.applied);
+        assert_eq!(
+            result.next_binding.as_ref().map(|binding| binding.state_id.as_str()),
+            Some("goal_recheck")
+        );
+        assert_eq!(
+            result.handoff.as_ref().map(|handoff| handoff.to_role.as_str()),
+            Some("goal-agent")
+        );
+        let events = load_task_events(dir.path()).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "delivery.completed");
+        assert_eq!(events[0].aggregate_type, "project");
+        assert_eq!(events[0].aggregate_id, "project-runtime-001");
+        assert_eq!(
+            events[0].state.as_ref().map(|state| state.to_state.as_str()),
+            Some("goal_recheck")
+        );
+    }
+
+    #[test]
+    fn project_runtime_acceptance_handoff_uses_completion_decision_payload() {
+        let dir = tempdir().unwrap();
+        let workflow = canonical_workflow(WorkflowFlowType::Project);
+        let actions = StaticActionRegistry::all_complete(["project.accept.write"]);
+        let mut context = project_context();
+        context.payload = json!({
+            "completionDecisionRef": ".agentflow/spec/completions/project-runtime-001.json",
+            "outcome": "accept"
+        });
+
+        let result = apply_workflow_event(
+            dir.path(),
+            &workflow,
+            "goal_recheck",
+            "project.accepted",
+            context,
+            &StaticGuardRegistry::default(),
+            &actions,
+        )
+        .unwrap();
+
+        assert!(result.applied);
+        assert_eq!(
+            result.next_binding.as_ref().map(|binding| binding.state_id.as_str()),
+            Some("accepted")
+        );
+        let handoff = result.handoff.as_ref().expect("missing handoff");
+        assert_eq!(handoff.to_role.as_str(), "system");
+        assert_eq!(handoff.payload_ref, "completionDecisionRef");
+
+        let events = load_task_events(dir.path()).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "project.accepted");
+        assert_eq!(
+            events[0].payload["input"]["completionDecisionRef"].as_str(),
+            Some(".agentflow/spec/completions/project-runtime-001.json")
+        );
+        assert_eq!(
+            events[0].state.as_ref().map(|state| state.from_state.as_str()),
+            Some("goal_recheck")
+        );
+        assert_eq!(
+            events[0].state.as_ref().map(|state| state.to_state.as_str()),
+            Some("accepted")
         );
     }
 }

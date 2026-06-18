@@ -592,6 +592,7 @@ pub fn record_completion_decision(
 ) -> Result<CompletionDecisionRuntime> {
     let root = canonical_project_root(project_root)?;
     let mut runtime = read_completion_decision_runtime(&root, project_id)?;
+    let previous_state = runtime.current_state.clone();
     runtime.history.push(CompletionDecisionRecord {
         actor: actor.to_string(),
         outcome: outcome.clone(),
@@ -613,11 +614,11 @@ pub fn record_completion_decision(
     runtime.next_recommended_action_reason = reason;
     runtime.updated_at = unix_timestamp_seconds();
 
-    if outcome == CompletionDecisionOutcome::Accept {
-        emit_completion_acceptance(&root, &runtime, actor)?;
-    }
-
     write_completion_decision_runtime(&root, &runtime)?;
+    match outcome {
+        CompletionDecisionOutcome::Accept => emit_completion_acceptance(&root, &runtime, actor)?,
+        _ => emit_completion_recheck_event(&root, &runtime, actor, &previous_state, summary)?,
+    }
     Ok(runtime)
 }
 
@@ -1474,6 +1475,60 @@ fn emit_completion_acceptance(root: &Path, runtime: &CompletionDecisionRuntime, 
     Ok(())
 }
 
+fn emit_completion_recheck_event(
+    root: &Path,
+    runtime: &CompletionDecisionRuntime,
+    actor: &str,
+    previous_state: &CompletionDecisionState,
+    summary: &str,
+) -> Result<()> {
+    let event_type = match runtime.latest_outcome.as_ref() {
+        Some(CompletionDecisionOutcome::Continue) => "project.goal_recheck.continue",
+        Some(CompletionDecisionOutcome::Adjust) => "project.goal_recheck.adjust",
+        Some(CompletionDecisionOutcome::Pause) => "project.goal_recheck.pause",
+        Some(CompletionDecisionOutcome::NextStage) => "project.goal_recheck.next_stage",
+        Some(CompletionDecisionOutcome::Accept) | None => return Ok(()),
+    };
+
+    agentflow_event_store::append_task_event(
+        root,
+        agentflow_event_store::TaskEventDraft {
+            flow_type: agentflow_workflow_core::WorkflowFlowType::Project,
+            aggregate_type: "project".to_string(),
+            aggregate_id: runtime.project_id.clone(),
+            project_id: Some(runtime.project_id.clone()),
+            issue_id: None,
+            run_id: None,
+            event_type: event_type.to_string(),
+            authority_role: Some(agentflow_workflow_core::WorkflowAgentRole::GoalAgent),
+            actor: agentflow_event_store::EventActor {
+                role: actor.to_string(),
+                kind: "agent".to_string(),
+            },
+            state: Some(agentflow_event_store::EventStateTransition {
+                from_state: previous_state.as_str().to_string(),
+                to_state: runtime.current_state.as_str().to_string(),
+            }),
+            correlation_id: Some(format!("completion-{}", runtime.project_id)),
+            causation_id: None,
+            payload: serde_json::json!({
+                "completionDecisionRef": format!(".agentflow/spec/completions/{}.json", runtime.project_id),
+                "outcome": runtime.latest_outcome.as_ref().map(|outcome| outcome.as_str()),
+                "summary": summary,
+                "nextAction": runtime.next_recommended_action.as_str(),
+                "nextActionLabel": runtime.next_recommended_action_label.as_str(),
+                "nextActionReason": runtime.next_recommended_action_reason.as_str(),
+                "facts": &runtime.facts,
+                "openQuestions": &runtime.open_questions,
+                "rationale": &runtime.rationale,
+            }),
+            artifact_refs: vec![format!(".agentflow/spec/completions/{}.json", runtime.project_id)],
+            idempotency_key: None,
+        },
+    )?;
+    Ok(())
+}
+
 fn detect_requirement_intent(requirement: &RequirementDocument) -> RequirementIntentType {
     let raw = format!("{} {}", requirement.title, requirement.summary).to_ascii_lowercase();
     if raw.contains("audit") || raw.contains("审计") {
@@ -2120,5 +2175,49 @@ mod tests {
 
         let events = load_task_events(dir.path()).unwrap();
         assert!(events.iter().any(|event| event.event_type == "project.accepted"));
+    }
+
+    #[test]
+    fn recording_continue_completion_decision_emits_goal_recheck_event() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+        let mut issue_draft = SpecIssueDraft::new("AF-COMP-003");
+        issue_draft.project_id = Some("project-completion-continue".to_string());
+        let mut issue = issue_from_requirement(dir.path(), &requirement, issue_draft).unwrap();
+        issue.status = SpecIssueStatus::Done;
+        write_spec_issue(dir.path(), &issue).unwrap();
+
+        let mut project_draft = SpecProjectDraft::new("project-completion-continue");
+        project_draft.issue_ids = vec!["AF-COMP-003".to_string()];
+        let project = project_from_requirement(dir.path(), &requirement, project_draft).unwrap();
+        write_spec_project(dir.path(), &project).unwrap();
+        sync_completion_decision_runtimes(dir.path()).unwrap();
+
+        let runtime = record_completion_decision(
+            dir.path(),
+            "project-completion-continue",
+            CompletionDecisionOutcome::Continue,
+            "goal-agent",
+            "当前交付需要继续推进。",
+            vec!["还有后续任务需要继续处理。".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(runtime.current_state, CompletionDecisionState::Continue);
+        assert_eq!(runtime.latest_outcome, Some(CompletionDecisionOutcome::Continue));
+        assert_eq!(runtime.next_recommended_action, "start-project-loop");
+
+        let events = load_task_events(dir.path()).unwrap();
+        let event = events
+            .iter()
+            .find(|event| event.event_type == "project.goal_recheck.continue")
+            .expect("missing continue goal recheck event");
+        assert_eq!(event.project_id.as_deref(), Some("project-completion-continue"));
+        assert_eq!(event.state.as_ref().map(|state| state.from_state.as_str()), Some("goal-recheck"));
+        assert_eq!(event.state.as_ref().map(|state| state.to_state.as_str()), Some("continue"));
+        assert_eq!(
+            event.payload["completionDecisionRef"].as_str(),
+            Some(".agentflow/spec/completions/project-completion-continue.json")
+        );
     }
 }
