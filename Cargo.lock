@@ -242,6 +242,7 @@ dependencies = [
  "agentflow-spec",
  "agentflow-state",
  "agentflow-task-artifacts",
+ "agentflow-task-loop",
  "agentflow-workflow-core",
  "anyhow",
  "serde",

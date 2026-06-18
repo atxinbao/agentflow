@@ -6,7 +6,8 @@ pub mod fixture;
 
 pub use acceptance::{
     create_high_risk_blocker_fixture, create_stale_lease_fixture,
-    prepare_execution_completed_fixture, ExecutionCompletedFixture,
+    prepare_execution_completed_fixture, prepare_project_done_fixture,
+    prepare_project_in_review_fixture, ExecutionCompletedFixture, ProjectLoopCloseoutFixture,
 };
 pub use fixture::{create_fixture_project, WorkflowFixture};
 
@@ -14,7 +15,11 @@ pub use fixture::{create_fixture_project, WorkflowFixture};
 mod tests {
     use super::*;
     use agentflow_audit::AuditStatus;
+    use agentflow_projection::{
+        load_project_projection, load_task_projection, rebuild_projections,
+    };
     use agentflow_state::{WorkflowAuditStatus, WorkflowStage};
+    use agentflow_task_loop::TaskLoop;
 
     #[test]
     fn full_workflow_keeps_execute_completed_without_auto_audit_request() -> anyhow::Result<()> {
@@ -126,6 +131,54 @@ mod tests {
             .desktop_app
             .contains("createBrowserPreviewHumanAuditReport"));
         assert!(!contract.desktop_app.contains("request_human_audit"));
+        Ok(())
+    }
+
+    #[test]
+    fn project_loop_keeps_next_issue_pending_until_closeout_done() -> anyhow::Result<()> {
+        let fixture = prepare_project_in_review_fixture()?;
+        let task = load_task_projection(fixture.fixture.root(), &fixture.current_issue_id)?;
+        let project = load_project_projection(fixture.fixture.root(), &fixture.project_id)?;
+
+        assert_eq!(task.current_state, "in_review");
+        let review_timeline = task
+            .timeline
+            .iter()
+            .find(|item| item.state == "in_review")
+            .expect("missing in_review timeline");
+        assert!(review_timeline.summary.contains("PR/MR 合并"));
+        assert!(review_timeline.summary.contains("Issue 关闭"));
+        assert!(review_timeline.summary.contains("公开交付"));
+        assert_eq!(
+            project.current_issue_id.as_deref(),
+            Some(fixture.current_issue_id.as_str())
+        );
+        assert!(project.stage_summary.contains("PR/MR 合并"));
+        assert!(project.stage_summary.contains("Issue 关闭"));
+        assert!(project.stage_summary.contains("公开交付"));
+        assert!(TaskLoop::new(&fixture.project_id)
+            .tick(fixture.fixture.root(), "codex")?
+            .is_none());
+        fixture.fixture.assert_user_files_unchanged()?;
+        Ok(())
+    }
+
+    #[test]
+    fn project_loop_advances_only_after_done_writeback() -> anyhow::Result<()> {
+        let fixture = prepare_project_done_fixture()?;
+        let task = load_task_projection(fixture.fixture.root(), &fixture.current_issue_id)?;
+
+        assert_eq!(task.current_state, "done");
+        let tick = TaskLoop::new(&fixture.project_id)
+            .tick(fixture.fixture.root(), "codex")?
+            .expect("expected next issue launch after done writeback");
+        assert_eq!(tick.launch.issue_id, fixture.next_issue_id);
+
+        rebuild_projections(fixture.fixture.root())?;
+        let next_issue = load_task_projection(fixture.fixture.root(), &fixture.next_issue_id)?;
+        assert_eq!(next_issue.current_state, "in_progress");
+        assert_eq!(next_issue.latest_run_id.as_deref(), Some("run-001"));
+        fixture.fixture.assert_user_files_unchanged()?;
         Ok(())
     }
 }

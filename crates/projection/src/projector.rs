@@ -560,7 +560,9 @@ fn project_project(
         };
         let summary = match current_issue_state.as_deref() {
             Some("todo") => format!("{issue_id} 已进入待处理阶段，正在等待执行线程正式开工。"),
-            Some("in_review") => format!("{issue_id} 已完成本地验证，当前正在等待评审收口。"),
+            Some("in_review") => format!(
+                "{issue_id} 已完成本地验证，当前正在等待 PR/MR 合并、Issue 关闭和公开交付收口。"
+            ),
             Some("blocked") => format!("{issue_id} 当前被阻断，项目节奏停在阻断处理。"),
             _ => format!("{issue_id} 正在推进，项目当前主节奏围绕这条任务展开。"),
         };
@@ -1600,8 +1602,8 @@ fn event_summary(event: &TaskEvent) -> String {
         "issue.validation.passed" => "本地沙箱验证已通过。".to_string(),
         "issue.review.requested" => "任务已请求评审。".to_string(),
         "issue.pr.created" => "PR/MR 已创建。".to_string(),
-        "issue.closeout.proof.recorded" => "收口证明已写入。".to_string(),
-        "issue.pr.merged" => "PR/MR 已合并。".to_string(),
+        "issue.closeout.proof.recorded" => "收口证明已写入，等待关单与公开交付完成。".to_string(),
+        "issue.pr.merged" => "PR/MR 已合并，等待关单与公开交付收口。".to_string(),
         "issue.completed" => "任务 Done 写回完成。".to_string(),
         "issue.blocked" => "任务进入阻断状态。".to_string(),
         "issue.cancelled" => "任务已取消。".to_string(),
@@ -1614,7 +1616,7 @@ fn state_summary(state: &str, issue: &SpecIssue) -> String {
         "backlog" => "任务已生成，等待调度。".to_string(),
         "todo" => "依赖满足，等待执行会话接管。".to_string(),
         "in_progress" => "任务正在执行，实时信息来自事件流。".to_string(),
-        "in_review" => "验证完成，等待 PR/MR 合并。".to_string(),
+        "in_review" => "验证已通过，等待 PR/MR 合并、Issue 关闭和公开交付写完。".to_string(),
         "done" => "任务已完成，公开交付记录应写入 PR/MR 或发布说明。".to_string(),
         "blocked" => format!("任务被阻断：{}", issue.title),
         "cancel" => "任务已取消。".to_string(),
@@ -2124,6 +2126,82 @@ mod tests {
             .events
             .iter()
             .any(|event| event.event_type == "agent.session.completed"));
+    }
+
+    #[test]
+    fn pr_merged_stays_in_review_until_issue_completed() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.launch.requested",
+                json!({
+                    "runId": "run-001",
+                    "branchName": "agentflow/project-projection/AF-PROJ-001"
+                }),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.review.requested",
+                json!({"runId": "run-001"}),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.pr.created",
+                json!({"runId": "run-001"}),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.closeout.proof.recorded",
+                json!({"runId": "run-001"}),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.pr.merged",
+                json!({"runId": "run-001"}),
+            ),
+        )
+        .unwrap();
+
+        rebuild_projections(dir.path()).unwrap();
+        let task = crate::storage::load_task_projection(dir.path(), "AF-PROJ-001").unwrap();
+        let project =
+            crate::storage::load_project_projection(dir.path(), "project-projection").unwrap();
+
+        assert_eq!(task.current_state, "in_review");
+        assert_eq!(task.display_status, "in_review");
+        assert!(task
+            .timeline
+            .iter()
+            .find(|item| item.state == "in_review")
+            .unwrap()
+            .summary
+            .contains("Issue 关闭"));
+        assert!(project.stage_summary.contains("PR/MR 合并"));
+        assert!(project.stage_summary.contains("公开交付"));
     }
 
     #[test]
