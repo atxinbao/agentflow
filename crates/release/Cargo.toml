@@ -6,6 +6,7 @@ version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+agentflow-audit = { path = "../audit" }
 agentflow-event-store = { path = "../event-store" }
 agentflow-spec = { path = "../spec" }
 agentflow-workflow-runtime = { path = "../workflow-runtime" }

@@ -4,10 +4,11 @@ use crate::{
         AuditFindings, AuditIndex, AuditIndexEntry, AuditManifest, AuditManifestSummary,
         AuditPaths, AuditRequest, AuditRequestSource, AuditResultSummary, AuditScopeRef,
         AuditStatus, AuditSummary, AuditTraceability, AuditTraceabilityItem, AuditTrigger,
-        HumanAudit, HumanAuditReport, HumanAuditRequestDraft, AUDIT_EVIDENCE_MAP_VERSION,
-        AUDIT_FINDINGS_VERSION, AUDIT_INDEX_VERSION, AUDIT_MANIFEST_VERSION,
-        AUDIT_REQUEST_VERSION, AUDIT_RESULT_SUMMARY_VERSION, AUDIT_TRACEABILITY_VERSION,
-        OUTPUT_AUDIT_VERSION,
+        HumanAudit, HumanAuditReport, HumanAuditRequestDraft, ProjectAuditReviewEntry,
+        ProjectAuditReviewSummary, AUDIT_EVIDENCE_MAP_VERSION, AUDIT_FINDINGS_VERSION,
+        AUDIT_INDEX_VERSION, AUDIT_MANIFEST_VERSION, AUDIT_REQUEST_VERSION,
+        AUDIT_RESULT_SUMMARY_VERSION, AUDIT_TRACEABILITY_VERSION, OUTPUT_AUDIT_VERSION,
+        PROJECT_AUDIT_REVIEW_SUMMARY_VERSION,
     },
     storage::{
         canonical_project_root, ensure_directory, read_json, sorted_child_paths,
@@ -148,6 +149,117 @@ pub fn load_audit_result_summary(
 ) -> Result<AuditResultSummary> {
     let report = load_audit_report(project_root, audit_id)?;
     Ok(project_audit_result_summary(&report))
+}
+
+pub fn load_project_audit_review_summary(
+    project_root: impl AsRef<Path>,
+    project_id: impl AsRef<str>,
+    issue_ids: &[String],
+) -> Result<Option<ProjectAuditReviewSummary>> {
+    let root = canonical_project_root(project_root)?;
+    let project_id = project_id.as_ref();
+    if !root.join(".agentflow/audit/index.json").is_file() {
+        return Ok(None);
+    }
+    let issue_ids = issue_ids.iter().cloned().collect::<BTreeSet<_>>();
+    let index = load_audit_index(&root)?;
+    let mut matched = index
+        .audits
+        .into_iter()
+        .filter(|entry| {
+            entry
+                .source_issue_id
+                .as_ref()
+                .is_some_and(|issue_id| issue_ids.contains(issue_id))
+        })
+        .collect::<Vec<_>>();
+    if matched.is_empty() {
+        return Ok(None);
+    }
+    matched.sort_by(|left, right| {
+        right
+            .requested_at
+            .cmp(&left.requested_at)
+            .then_with(|| left.audit_id.cmp(&right.audit_id))
+    });
+
+    let mut entries = Vec::new();
+    let mut passed_count = 0;
+    let mut passed_with_warnings_count = 0;
+    let mut failed_count = 0;
+    let mut active_count = 0;
+    let mut findings_count = 0;
+    let mut findings = Vec::new();
+    let mut evidence_gaps = Vec::new();
+    let mut repair_recommendations = Vec::new();
+
+    for entry in &matched {
+        let summary = load_audit_result_summary(&root, entry.audit_id.clone()).ok();
+        match entry.status {
+            AuditStatus::Passed => passed_count += 1,
+            AuditStatus::PassedWithWarnings => passed_with_warnings_count += 1,
+            AuditStatus::Failed => failed_count += 1,
+            AuditStatus::Requested | AuditStatus::Running => active_count += 1,
+            AuditStatus::Cancelled => {}
+        }
+        if let Some(summary) = summary.as_ref() {
+            findings_count += summary.findings_count;
+            findings.extend(summary.findings.iter().cloned().take(3));
+            evidence_gaps.extend(summary.evidence_gaps.iter().cloned().take(3));
+            repair_recommendations.extend(summary.repair_recommendations.iter().cloned().take(3));
+        }
+        entries.push(ProjectAuditReviewEntry {
+            audit_id: entry.audit_id.clone(),
+            status: entry.status.as_str().to_string(),
+            requested_at: entry.requested_at,
+            source_issue_id: entry.source_issue_id.clone(),
+            report_path: summary
+                .as_ref()
+                .map(|summary| summary.report_path.clone())
+                .unwrap_or_else(|| entry.report_path.clone()),
+            summary_line: summary
+                .as_ref()
+                .map(|summary| summary.summary_line.clone())
+                .unwrap_or_else(|| audit_index_status_line(entry.status.as_str())),
+            findings_count: summary
+                .as_ref()
+                .map(|summary| summary.findings_count)
+                .unwrap_or(0),
+        });
+    }
+
+    let latest = entries.first().cloned();
+    let summary_line = if failed_count > 0 {
+        format!("项目存在 {failed_count} 条失败审计，外部 review 不能直接放行。")
+    } else if passed_with_warnings_count > 0 {
+        format!("项目有 {passed_with_warnings_count} 条带警告审计，需要 reviewer 留意。")
+    } else if active_count > 0 {
+        format!("项目当前还有 {active_count} 条审计进行中。")
+    } else {
+        format!(
+            "项目已有 {} 条审计记录，可直接阅读审计结论。",
+            entries.len()
+        )
+    };
+
+    Ok(Some(ProjectAuditReviewSummary {
+        version: PROJECT_AUDIT_REVIEW_SUMMARY_VERSION.to_string(),
+        project_id: project_id.to_string(),
+        total_count: entries.len(),
+        passed_count,
+        passed_with_warnings_count,
+        failed_count,
+        active_count,
+        latest_audit_id: latest.as_ref().map(|entry| entry.audit_id.clone()),
+        latest_status: latest.as_ref().map(|entry| entry.status.clone()),
+        latest_report_path: latest.as_ref().map(|entry| entry.report_path.clone()),
+        findings_count,
+        summary_line,
+        findings,
+        evidence_gaps,
+        repair_recommendations,
+        entries,
+    }))
 }
 
 pub fn load_audit_index(project_root: impl AsRef<Path>) -> Result<AuditIndex> {
@@ -639,12 +751,26 @@ pub fn project_audit_result_summary(report: &HumanAuditReport) -> AuditResultSum
             .paths
             .get("report")
             .cloned()
-            .unwrap_or_else(|| format!(".agentflow/audit/{}/audit-report.md", report.audit.audit_id)),
+            .unwrap_or_else(|| {
+                format!(".agentflow/audit/{}/audit-report.md", report.audit.audit_id)
+            }),
         summary_line: audit_summary_line(report),
         findings_count: report.findings.findings.len(),
         findings,
         evidence_gaps,
         repair_recommendations,
+    }
+}
+
+fn audit_index_status_line(status: &str) -> String {
+    match status {
+        "requested" => "审计已登记，等待开始。".to_string(),
+        "running" => "审计进行中。".to_string(),
+        "passed" => "审计已通过。".to_string(),
+        "passed-with-warnings" => "审计已通过，但仍有警告。".to_string(),
+        "failed" => "审计失败，需要修复后重新审阅。".to_string(),
+        "cancelled" => "审计已取消。".to_string(),
+        _ => "审计状态未知。".to_string(),
     }
 }
 

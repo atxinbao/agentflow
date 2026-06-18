@@ -163,6 +163,7 @@ dependencies = [
 name = "agentflow-release"
 version = "0.2.0"
 dependencies = [
+ "agentflow-audit",
  "agentflow-event-store",
  "agentflow-spec",
  "agentflow-workflow-runtime",
