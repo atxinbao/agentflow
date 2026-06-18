@@ -5,6 +5,8 @@ pub const PROJECT_PROJECTION_VERSION: &str = "project-projection.v2";
 pub const ISSUE_STATUS_INDEX_VERSION: &str = "issue-status-index.v3";
 pub const REQUIREMENT_PREVIEW_PROJECTION_VERSION: &str = "requirement-preview-projection.v1";
 pub const REQUIREMENT_PREVIEW_INDEX_VERSION: &str = "requirement-preview-index.v1";
+pub const COMPLETION_DECISION_PROJECTION_VERSION: &str = "completion-decision-projection.v1";
+pub const COMPLETION_DECISION_INDEX_VERSION: &str = "completion-decision-index.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -147,6 +149,24 @@ pub struct ProjectBrainProjection {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectCompletionProjection {
+    pub current_state: String,
+    pub latest_outcome: Option<String>,
+    pub next_recommended_action: String,
+    pub next_recommended_action_label: String,
+    pub next_recommended_action_reason: String,
+    pub total_issue_count: usize,
+    pub completed_issue_count: usize,
+    pub canceled_issue_count: usize,
+    pub remaining_issue_count: usize,
+    pub blocked_issue_count: usize,
+    pub open_questions: Vec<String>,
+    pub rationale: Vec<String>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskProjection {
     pub version: String,
     pub issue_id: String,
@@ -204,6 +224,8 @@ pub struct ProjectProjection {
     pub blockers: Vec<ProjectBlockerSummary>,
     #[serde(default)]
     pub completion_hint: String,
+    #[serde(default)]
+    pub completion: Option<ProjectCompletionProjection>,
     pub issue_count: usize,
     pub completed_issue_count: usize,
     pub project_brain: ProjectBrainProjection,
@@ -278,4 +300,45 @@ pub struct RequirementPreviewIndex {
     pub version: String,
     pub updated_at: u64,
     pub previews: Vec<RequirementPreviewIndexEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionDecisionProjection {
+    pub version: String,
+    pub project_id: String,
+    pub project_title: String,
+    pub current_state: String,
+    pub latest_outcome: Option<String>,
+    pub next_recommended_action: String,
+    pub next_recommended_action_label: String,
+    pub next_recommended_action_reason: String,
+    pub total_issue_count: usize,
+    pub completed_issue_count: usize,
+    pub canceled_issue_count: usize,
+    pub remaining_issue_count: usize,
+    pub blocked_issue_count: usize,
+    pub open_questions: Vec<String>,
+    pub rationale: Vec<String>,
+    pub projection_path: String,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionDecisionIndexEntry {
+    pub project_id: String,
+    pub current_state: String,
+    pub latest_outcome: Option<String>,
+    pub next_recommended_action: String,
+    pub projection_path: String,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionDecisionIndex {
+    pub version: String,
+    pub updated_at: u64,
+    pub decisions: Vec<CompletionDecisionIndexEntry>,
 }

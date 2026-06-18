@@ -691,11 +691,11 @@ export function createBrowserPreviewProjectProjection(
       future,
       blocked,
     },
-    nextAction: current.length ? `继续推进 ${current[0]}。` : future.length ? `启动 ${future[0]}。` : "进入 Completion Decision。",
+    nextAction: current.length ? `继续推进 ${current[0]}。` : future.length ? `启动 ${future[0]}。` : "进入完成判断",
     blockers: blocked.map((issueId) => ({ issueId, reason: "等待阻断条件解除。" })),
     completionHint:
       completedIssueCount === issues.length && issues.length
-        ? "全部任务已完成，下一步进入 Completion Decision。"
+        ? "全部任务已完成，下一步进入完成判断。"
         : `当前已完成 ${completedIssueCount}/${issues.length} 条任务。`,
     issueCount: issues.length,
     completedIssueCount,

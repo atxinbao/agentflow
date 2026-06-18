@@ -1,6 +1,7 @@
 use crate::model::{
-    IssueStatusIndex, ProjectProjection, RequirementPreviewIndex,
-    RequirementPreviewProjection, TaskProjection, PROJECT_PROJECTION_VERSION,
+    CompletionDecisionIndex, CompletionDecisionProjection, IssueStatusIndex, ProjectProjection,
+    RequirementPreviewIndex, RequirementPreviewProjection, TaskProjection,
+    PROJECT_PROJECTION_VERSION,
 };
 use anyhow::{Context, Result};
 use std::{
@@ -13,6 +14,7 @@ pub fn prepare_projection_workspace(project_root: impl AsRef<Path>) -> Result<()
     ensure_directory(&root.join(".agentflow/projections/tasks"))?;
     ensure_directory(&root.join(".agentflow/projections/projects"))?;
     ensure_directory(&root.join(".agentflow/projections/requirements"))?;
+    ensure_directory(&root.join(".agentflow/projections/completions"))?;
     ensure_directory(&root.join(".agentflow/indexes"))?;
     Ok(())
 }
@@ -72,6 +74,28 @@ pub fn write_requirement_preview_index(
     Ok(path)
 }
 
+pub fn write_completion_decision_projection(
+    project_root: impl AsRef<Path>,
+    projection: &CompletionDecisionProjection,
+) -> Result<PathBuf> {
+    let root = canonical_project_root(project_root)?;
+    prepare_projection_workspace(&root)?;
+    let path = completion_decision_projection_path(&root, &projection.project_id);
+    write_json(&path, projection)?;
+    Ok(path)
+}
+
+pub fn write_completion_decision_index(
+    project_root: impl AsRef<Path>,
+    index: &CompletionDecisionIndex,
+) -> Result<PathBuf> {
+    let root = canonical_project_root(project_root)?;
+    prepare_projection_workspace(&root)?;
+    let path = root.join(".agentflow/indexes/completion-decisions.json");
+    write_json(&path, index)?;
+    Ok(path)
+}
+
 pub fn load_task_projection(
     project_root: impl AsRef<Path>,
     issue_id: &str,
@@ -108,6 +132,21 @@ pub fn load_requirement_preview_index(
     read_json(&root.join(".agentflow/indexes/requirement-previews.json"))
 }
 
+pub fn load_completion_decision_projection(
+    project_root: impl AsRef<Path>,
+    project_id: &str,
+) -> Result<CompletionDecisionProjection> {
+    let root = canonical_project_root(project_root)?;
+    read_json(&completion_decision_projection_path(&root, project_id))
+}
+
+pub fn load_completion_decision_index(
+    project_root: impl AsRef<Path>,
+) -> Result<CompletionDecisionIndex> {
+    let root = canonical_project_root(project_root)?;
+    read_json(&root.join(".agentflow/indexes/completion-decisions.json"))
+}
+
 fn task_projection_path(root: &Path, issue_id: &str) -> PathBuf {
     root.join(".agentflow/projections/tasks")
         .join(format!("{}.json", sanitize_id(issue_id)))
@@ -121,6 +160,11 @@ fn project_projection_path(root: &Path, project_id: &str) -> PathBuf {
 fn requirement_preview_projection_path(root: &Path, requirement_id: &str) -> PathBuf {
     root.join(".agentflow/projections/requirements")
         .join(format!("{}.json", sanitize_id(requirement_id)))
+}
+
+fn completion_decision_projection_path(root: &Path, project_id: &str) -> PathBuf {
+    root.join(".agentflow/projections/completions")
+        .join(format!("{}.json", sanitize_id(project_id)))
 }
 
 fn sanitize_id(id: &str) -> String {

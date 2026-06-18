@@ -5,6 +5,7 @@ pub const SPEC_INDEX_VERSION: &str = "agentflow-spec-index.v1";
 pub const SPEC_ISSUE_VERSION: &str = "agentflow-spec-issue.v1";
 pub const SPEC_PROJECT_VERSION: &str = "agentflow-spec-project.v1";
 pub const REQUIREMENT_PREVIEW_VERSION: &str = "agentflow-requirement-preview.v1";
+pub const COMPLETION_DECISION_VERSION: &str = "agentflow-completion-decision.v1";
 pub const PROJECT_BRAIN_DOCUMENT_SET_VERSION: &str = "agentflow-project-brain-document-set.v1";
 pub const PROJECT_BRAIN_SNAPSHOT_VERSION: &str = "agentflow-project-brain-snapshot.v1";
 pub const DEFAULT_WORKFLOW_REF: &str = "build-agent.issue-loop@v1";
@@ -463,6 +464,98 @@ pub struct RequirementPreviewRuntime {
     pub confirmation_records: Vec<PreviewConfirmationRecord>,
     pub materialized_project_id: Option<String>,
     pub materialized_issue_ids: Vec<String>,
+    pub next_recommended_action: String,
+    pub next_recommended_action_label: String,
+    pub next_recommended_action_reason: String,
+    pub readonly: bool,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CompletionDecisionState {
+    GoalRecheck,
+    Continue,
+    Adjust,
+    Pause,
+    Accepted,
+    NextStage,
+}
+
+impl Default for CompletionDecisionState {
+    fn default() -> Self {
+        Self::GoalRecheck
+    }
+}
+
+impl CompletionDecisionState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::GoalRecheck => "goal-recheck",
+            Self::Continue => "continue",
+            Self::Adjust => "adjust",
+            Self::Pause => "pause",
+            Self::Accepted => "accepted",
+            Self::NextStage => "next-stage",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CompletionDecisionOutcome {
+    Continue,
+    Adjust,
+    Pause,
+    Accept,
+    NextStage,
+}
+
+impl CompletionDecisionOutcome {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Continue => "continue",
+            Self::Adjust => "adjust",
+            Self::Pause => "pause",
+            Self::Accept => "accept",
+            Self::NextStage => "next-stage",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionDecisionFacts {
+    pub total_issue_count: usize,
+    pub completed_issue_count: usize,
+    pub canceled_issue_count: usize,
+    pub remaining_issue_count: usize,
+    pub blocked_issue_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionDecisionRecord {
+    pub actor: String,
+    pub outcome: CompletionDecisionOutcome,
+    pub summary: String,
+    pub rationale: Vec<String>,
+    pub decided_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionDecisionRuntime {
+    pub version: String,
+    pub project_id: String,
+    pub project_title: String,
+    pub source_requirement_id: String,
+    pub current_state: CompletionDecisionState,
+    pub latest_outcome: Option<CompletionDecisionOutcome>,
+    pub facts: CompletionDecisionFacts,
+    pub open_questions: Vec<String>,
+    pub rationale: Vec<String>,
+    pub history: Vec<CompletionDecisionRecord>,
     pub next_recommended_action: String,
     pub next_recommended_action_label: String,
     pub next_recommended_action_reason: String,

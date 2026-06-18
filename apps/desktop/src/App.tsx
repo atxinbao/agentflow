@@ -2888,6 +2888,11 @@ function ProjectSummaryReader({
     : group.issues.filter((issue) => issue.displayStatus === "in_review").length;
   const nextAction = projection?.nextAction ?? null;
   const completionHint = projection?.completionHint ?? null;
+  const completion = projection?.completion ?? null;
+  const completionLabel = projectCompletionStateLabelZh(
+    completion?.currentState,
+    completion?.latestOutcome,
+  );
   const projectBrain = projection?.projectBrain ?? null;
   const brainActionLabel = projectBrainActionLabelZh(
     projectBrain?.nextRecommendedAction,
@@ -2933,7 +2938,11 @@ function ProjectSummaryReader({
           <MetricCard detail={`${group.counts.issueCount} 条任务`} label="项目状态" value={projectDisplayStatusLabelZh(projectStatus)} />
           <MetricCard detail={projectLoopReason} label="Brain 状态" value={projectBrainStatusLabelZh(projectBrain?.brainStatus)} />
           <MetricCard detail={`${reviewIssueCount} 条正在评审`} label="当前队列" value={currentLaneCount} />
-          <MetricCard detail={`${group.counts.doneIssueCount} 已完成`} label="未来队列" value={futureLaneCount} />
+          <MetricCard
+            detail={completion?.nextRecommendedActionReason ?? completionHint ?? "当前还没有进入完成判断。"}
+            label="完成判断"
+            value={completionLabel}
+          />
         </div>
         <section className="v16-task-stage-panel" aria-label="Project Brain 概览">
           <div className="v16-task-stage-panel-header">
@@ -3001,13 +3010,23 @@ function ProjectSummaryReader({
               }
             />
             <SectionList
-              title="调度状态"
+              title="完成判断"
               items={[
-                `当前队列：${currentLaneCount} 条`,
-                `未来队列：${futureLaneCount} 条`,
-                blockedLaneCount ? `阻断：${blockedLaneCount} 条` : "当前没有阻断任务。",
-                canceledLaneCount ? `取消：${canceledLaneCount} 条` : "当前没有取消任务。",
-                ...(completionHint ? [completionHint] : []),
+                `状态：${completionLabel}`,
+                completion?.nextRecommendedActionLabel
+                  ? `下一步：${completion.nextRecommendedActionLabel}`
+                  : `下一步：${nextAction ?? "等待项目继续推进。"}`,
+                completion?.nextRecommendedActionReason
+                  ?? completionHint
+                  ?? "当前还没有完成判断记录。",
+                ...(completion?.rationale.length
+                  ? completion.rationale
+                  : [
+                      `当前队列：${currentLaneCount} 条`,
+                      `未来队列：${futureLaneCount} 条`,
+                      blockedLaneCount ? `阻断：${blockedLaneCount} 条` : "当前没有阻断任务。",
+                      canceledLaneCount ? `取消：${canceledLaneCount} 条` : "当前没有取消任务。",
+                    ]),
               ]}
             />
           </div>
@@ -5598,6 +5617,22 @@ function projectBrainActionLabelZh(action?: string | null, fallbackLabel?: strin
     "start-project-loop": "进入项目循环",
   };
   return labels[action ?? ""] ?? "等待下一步";
+}
+
+function projectCompletionStateLabelZh(state?: string | null, outcome?: string | null) {
+  const normalizedState = (state ?? "").toLowerCase();
+  const normalizedOutcome = (outcome ?? "").toLowerCase();
+  if (normalizedState === "accepted" || normalizedOutcome === "accept") {
+    return "已接受";
+  }
+  const labels: Record<string, string> = {
+    "goal-recheck": "待完成判断",
+    "continue": "继续推进",
+    "adjust": "需要调整",
+    "pause": "已暂停",
+    "next-stage": "进入下一阶段",
+  };
+  return labels[normalizedState] ?? (state ? state : "未开始");
 }
 
 function projectStatusLabel(status: AgentFlowProjectStatus) {

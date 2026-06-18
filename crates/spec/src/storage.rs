@@ -1,14 +1,15 @@
 use crate::model::{
-    GoalDraftPreview, GoalDraftStatus, IssueContractDraftPreview, MilestoneDraftPreview,
-    PlanDraftPreview, PlanDraftStatus, PreviewConfirmationRecord, ProjectBrainDocumentSet,
-    ProjectBrainDocumentStatus, ProjectBrainSnapshot, ProjectBrainStatus,
-    RequirementDocument, RequirementIntakeResult, RequirementIntentType,
-    RequirementPreviewLifecycle, RequirementPreviewRuntime, SpecExpectedOutputs, SpecIssue,
-    SpecIssueCategory, SpecIssueDraft, SpecIssueStatus, SpecPriority, SpecProject,
-    SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord,
-    PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
-    REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION,
-    SPEC_PROJECT_VERSION,
+    CompletionDecisionFacts, CompletionDecisionOutcome, CompletionDecisionRecord,
+    CompletionDecisionRuntime, CompletionDecisionState, GoalDraftPreview, GoalDraftStatus,
+    IssueContractDraftPreview, MilestoneDraftPreview, PlanDraftPreview, PlanDraftStatus,
+    PreviewConfirmationRecord, ProjectBrainDocumentSet, ProjectBrainDocumentStatus,
+    ProjectBrainSnapshot, ProjectBrainStatus, RequirementDocument, RequirementIntakeResult,
+    RequirementIntentType, RequirementPreviewLifecycle, RequirementPreviewRuntime,
+    SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft, SpecIssueStatus,
+    SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
+    SpecSystemRecord, COMPLETION_DECISION_VERSION, PROJECT_BRAIN_DOCUMENT_SET_VERSION,
+    PROJECT_BRAIN_SNAPSHOT_VERSION, REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION,
+    SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
 };
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -24,6 +25,7 @@ pub const SPEC_DIRECTORIES: &[&str] = &[
     ".agentflow/spec/issues",
     ".agentflow/spec/archive",
     ".agentflow/spec/requirements",
+    ".agentflow/spec/completions",
 ];
 
 pub const SPEC_REQUIRED_FILES: &[&str] = &[
@@ -513,6 +515,110 @@ pub fn list_requirement_preview_runtimes(
         read_json_files(&root.join(".agentflow/spec/requirements"))?;
     previews.sort_by(|left, right| left.requirement_id.cmp(&right.requirement_id));
     Ok(previews)
+}
+
+pub fn write_completion_decision_runtime(
+    project_root: impl AsRef<Path>,
+    runtime: &CompletionDecisionRuntime,
+) -> Result<PathBuf> {
+    let root = canonical_project_root(project_root)?;
+    prepare_spec_workspace(&root)?;
+    let path = completion_decision_path(&root, &runtime.project_id);
+    write_json(&path, runtime)?;
+    Ok(path)
+}
+
+pub fn read_completion_decision_runtime(
+    project_root: impl AsRef<Path>,
+    project_id: &str,
+) -> Result<CompletionDecisionRuntime> {
+    let root = canonical_project_root(project_root)?;
+    read_json(&completion_decision_path(&root, project_id))
+}
+
+pub fn list_completion_decision_runtimes(
+    project_root: impl AsRef<Path>,
+) -> Result<Vec<CompletionDecisionRuntime>> {
+    let root = canonical_project_root(project_root)?;
+    let mut runtimes: Vec<CompletionDecisionRuntime> =
+        read_json_files(&root.join(".agentflow/spec/completions"))?;
+    runtimes.sort_by(|left, right| left.project_id.cmp(&right.project_id));
+    Ok(runtimes)
+}
+
+pub fn sync_completion_decision_runtimes(
+    project_root: impl AsRef<Path>,
+) -> Result<Vec<CompletionDecisionRuntime>> {
+    let root = canonical_project_root(project_root)?;
+    prepare_spec_workspace(&root)?;
+    let projects = list_spec_projects(&root)?;
+    let issues = list_spec_issues(&root)?;
+    let mut runtimes = Vec::new();
+
+    for project in projects {
+        let project_issues = issues
+            .iter()
+            .filter(|issue| issue.project_id.as_deref() == Some(project.project_id.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        if project_issues.is_empty() {
+            continue;
+        }
+
+        let facts = build_completion_facts(&project_issues);
+        let all_finished = facts.remaining_issue_count == 0;
+        let existing = read_completion_decision_runtime(&root, &project.project_id).ok();
+
+        if !all_finished && existing.is_none() {
+            continue;
+        }
+
+        let runtime = sync_completion_runtime_for_project(&project, facts, existing, all_finished)?;
+        write_completion_decision_runtime(&root, &runtime)?;
+        runtimes.push(runtime);
+    }
+
+    runtimes.sort_by(|left, right| left.project_id.cmp(&right.project_id));
+    Ok(runtimes)
+}
+
+pub fn record_completion_decision(
+    project_root: impl AsRef<Path>,
+    project_id: &str,
+    outcome: CompletionDecisionOutcome,
+    actor: &str,
+    summary: &str,
+    rationale: Vec<String>,
+) -> Result<CompletionDecisionRuntime> {
+    let root = canonical_project_root(project_root)?;
+    let mut runtime = read_completion_decision_runtime(&root, project_id)?;
+    runtime.history.push(CompletionDecisionRecord {
+        actor: actor.to_string(),
+        outcome: outcome.clone(),
+        summary: summary.to_string(),
+        rationale: rationale.clone(),
+        decided_at: unix_timestamp_seconds(),
+    });
+    runtime.latest_outcome = Some(outcome.clone());
+    runtime.current_state = completion_state_for_outcome(&outcome);
+    runtime.rationale = rationale;
+    runtime.open_questions = completion_open_questions_for_state(&runtime.current_state);
+    let (action, label, reason) = completion_next_action_bundle(
+        &runtime.current_state,
+        runtime.latest_outcome.as_ref(),
+        &runtime.facts,
+    );
+    runtime.next_recommended_action = action;
+    runtime.next_recommended_action_label = label;
+    runtime.next_recommended_action_reason = reason;
+    runtime.updated_at = unix_timestamp_seconds();
+
+    if outcome == CompletionDecisionOutcome::Accept {
+        emit_completion_acceptance(&root, &runtime, actor)?;
+    }
+
+    write_completion_decision_runtime(&root, &runtime)?;
+    Ok(runtime)
 }
 
 pub fn read_project_brain_document_set(
@@ -1124,6 +1230,11 @@ fn requirement_preview_path(root: &Path, requirement_id: &str) -> PathBuf {
         .join(format!("{}.json", sanitize_id(requirement_id)))
 }
 
+fn completion_decision_path(root: &Path, project_id: &str) -> PathBuf {
+    root.join(".agentflow/spec/completions")
+        .join(format!("{}.json", sanitize_id(project_id)))
+}
+
 fn sanitize_id(id: &str) -> String {
     id.chars()
         .map(|ch| match ch {
@@ -1150,6 +1261,217 @@ fn default_issue_prefix(project_id: &str) -> String {
             _ => '-',
         })
         .collect()
+}
+
+fn build_completion_facts(issues: &[SpecIssue]) -> CompletionDecisionFacts {
+    let total_issue_count = issues.len();
+    let completed_issue_count = issues
+        .iter()
+        .filter(|issue| issue.status == SpecIssueStatus::Done)
+        .count();
+    let canceled_issue_count = issues
+        .iter()
+        .filter(|issue| issue.status == SpecIssueStatus::Cancel)
+        .count();
+    let blocked_issue_count = issues
+        .iter()
+        .filter(|issue| issue.status == SpecIssueStatus::Blocked)
+        .count();
+    let remaining_issue_count = total_issue_count.saturating_sub(completed_issue_count + canceled_issue_count);
+    CompletionDecisionFacts {
+        total_issue_count,
+        completed_issue_count,
+        canceled_issue_count,
+        remaining_issue_count,
+        blocked_issue_count,
+    }
+}
+
+fn sync_completion_runtime_for_project(
+    project: &SpecProject,
+    facts: CompletionDecisionFacts,
+    existing: Option<CompletionDecisionRuntime>,
+    all_finished: bool,
+) -> Result<CompletionDecisionRuntime> {
+    let now = unix_timestamp_seconds();
+    let mut runtime = existing.unwrap_or_else(|| CompletionDecisionRuntime {
+        version: COMPLETION_DECISION_VERSION.to_string(),
+        project_id: project.project_id.clone(),
+        project_title: project.title.clone(),
+        source_requirement_id: project.source_requirement_id.clone(),
+        current_state: CompletionDecisionState::GoalRecheck,
+        latest_outcome: None,
+        facts: facts.clone(),
+        open_questions: completion_open_questions_for_state(&CompletionDecisionState::GoalRecheck),
+        rationale: vec![
+            "当前项目所有任务已经完成，但项目是否真正结束必须回到 Goal Agent 再判断。".to_string(),
+        ],
+        history: Vec::new(),
+        next_recommended_action: "enter-completion-decision".to_string(),
+        next_recommended_action_label: "进入完成判断".to_string(),
+        next_recommended_action_reason:
+            "先回到 Goal Recheck，再决定继续、调整、暂停、接受或进入下一阶段。".to_string(),
+        readonly: false,
+        updated_at: now,
+    });
+
+    runtime.project_title = project.title.clone();
+    runtime.source_requirement_id = project.source_requirement_id.clone();
+    runtime.facts = facts;
+
+    if all_finished {
+        if runtime.latest_outcome.is_none() {
+            runtime.current_state = CompletionDecisionState::GoalRecheck;
+            runtime.open_questions =
+                completion_open_questions_for_state(&CompletionDecisionState::GoalRecheck);
+            runtime.rationale = vec![
+                "任务执行已经收口，但交付是否满足 Goal / Plan 还需要重新判断。".to_string(),
+                "Project 完成必须由 Goal Agent 显式给出 completion decision。".to_string(),
+            ];
+            let (action, label, reason) = completion_next_action_bundle(
+                &runtime.current_state,
+                runtime.latest_outcome.as_ref(),
+                &runtime.facts,
+            );
+            runtime.next_recommended_action = action;
+            runtime.next_recommended_action_label = label;
+            runtime.next_recommended_action_reason = reason;
+        }
+    } else {
+        runtime.current_state = CompletionDecisionState::Continue;
+        runtime.latest_outcome = runtime
+            .latest_outcome
+            .take()
+            .filter(|outcome| *outcome != CompletionDecisionOutcome::Accept);
+        runtime.open_questions = vec!["当前还有未完成任务，先继续推进项目执行。".to_string()];
+        runtime.rationale = vec![
+            format!(
+                "当前还有 {} 条任务未完成，Completion Decision 暂时不能收口项目。",
+                runtime.facts.remaining_issue_count
+            ),
+        ];
+        let (action, label, reason) = completion_next_action_bundle(
+            &runtime.current_state,
+            runtime.latest_outcome.as_ref(),
+            &runtime.facts,
+        );
+        runtime.next_recommended_action = action;
+        runtime.next_recommended_action_label = label;
+        runtime.next_recommended_action_reason = reason;
+    }
+
+    runtime.updated_at = now;
+    Ok(runtime)
+}
+
+fn completion_state_for_outcome(outcome: &CompletionDecisionOutcome) -> CompletionDecisionState {
+    match outcome {
+        CompletionDecisionOutcome::Continue => CompletionDecisionState::Continue,
+        CompletionDecisionOutcome::Adjust => CompletionDecisionState::Adjust,
+        CompletionDecisionOutcome::Pause => CompletionDecisionState::Pause,
+        CompletionDecisionOutcome::Accept => CompletionDecisionState::Accepted,
+        CompletionDecisionOutcome::NextStage => CompletionDecisionState::NextStage,
+    }
+}
+
+fn completion_open_questions_for_state(state: &CompletionDecisionState) -> Vec<String> {
+    match state {
+        CompletionDecisionState::GoalRecheck => vec![
+            "当前交付是否真正满足 GOAL.md 和 PLAN.md？".to_string(),
+            "项目应该接受、继续、调整、暂停，还是进入下一阶段？".to_string(),
+        ],
+        CompletionDecisionState::Continue => Vec::new(),
+        CompletionDecisionState::Adjust => vec!["下一轮需要调整哪些目标、范围或计划？".to_string()],
+        CompletionDecisionState::Pause => vec!["项目暂停后，恢复条件是什么？".to_string()],
+        CompletionDecisionState::Accepted => Vec::new(),
+        CompletionDecisionState::NextStage => vec!["下一阶段要生成新的 Goal / Plan 还是延续当前上下文？".to_string()],
+    }
+}
+
+fn completion_next_action_bundle(
+    state: &CompletionDecisionState,
+    outcome: Option<&CompletionDecisionOutcome>,
+    facts: &CompletionDecisionFacts,
+) -> (String, String, String) {
+    match state {
+        CompletionDecisionState::GoalRecheck => (
+            "enter-completion-decision".to_string(),
+            "进入完成判断".to_string(),
+            "当前任务已经收口，下一步由 Goal Agent 明确给出项目完成决策。".to_string(),
+        ),
+        CompletionDecisionState::Continue => (
+            "start-project-loop".to_string(),
+            "继续项目循环".to_string(),
+            format!(
+                "当前还有 {} 条任务未完成，先继续推进任务循环。",
+                facts.remaining_issue_count
+            ),
+        ),
+        CompletionDecisionState::Adjust => (
+            "run-goal-recheck".to_string(),
+            "重新检查目标与计划".to_string(),
+            "Goal Agent 要求先调整 Goal / Plan，再继续项目循环。".to_string(),
+        ),
+        CompletionDecisionState::Pause => (
+            "pause-project".to_string(),
+            "暂停项目".to_string(),
+            "Goal Agent 已暂停项目，等待后续人工决定。".to_string(),
+        ),
+        CompletionDecisionState::Accepted => (
+            "project-accepted".to_string(),
+            "项目已接受".to_string(),
+            "Goal Agent 已接受当前交付，项目可以视为完成。".to_string(),
+        ),
+        CompletionDecisionState::NextStage => (
+            "start-next-stage".to_string(),
+            "进入下一阶段".to_string(),
+            match outcome {
+                Some(CompletionDecisionOutcome::NextStage) => {
+                    "当前目标已完成，下一步进入下一阶段 Goal / Plan。".to_string()
+                }
+                _ => "Goal Agent 建议进入下一阶段。".to_string(),
+            },
+        ),
+    }
+}
+
+fn emit_completion_acceptance(root: &Path, runtime: &CompletionDecisionRuntime, actor: &str) -> Result<()> {
+    let workflow =
+        agentflow_workflow_core::canonical_workflow(agentflow_workflow_core::WorkflowFlowType::Project);
+    let mut context = agentflow_workflow_runtime::RuntimeContext::project(
+        runtime.project_id.clone(),
+        agentflow_event_store::EventActor {
+            role: actor.to_string(),
+            kind: "agent".to_string(),
+        },
+    );
+    context.correlation_id = Some(format!("completion-{}", runtime.project_id));
+    context.payload = serde_json::json!({
+        "completionDecisionRef": format!(".agentflow/spec/completions/{}.json", runtime.project_id),
+        "outcome": "accept",
+    });
+    let guards = agentflow_workflow_runtime::StaticGuardRegistry::all_pass(Vec::<String>::new());
+    let actions =
+        agentflow_workflow_runtime::StaticActionRegistry::all_complete(["project.accept.write"]);
+    let result = agentflow_workflow_runtime::apply_workflow_event(
+        root,
+        &workflow,
+        "goal_recheck",
+        "project.accepted",
+        context,
+        &guards,
+        &actions,
+    )?;
+    if !result.applied {
+        anyhow::bail!(
+            "project acceptance transition for {} was blocked: {}",
+            runtime.project_id,
+            result
+                .blocked_reason
+                .unwrap_or_else(|| "unknown reason".to_string())
+        );
+    }
+    Ok(())
 }
 
 fn detect_requirement_intent(requirement: &RequirementDocument) -> RequirementIntentType {
@@ -1734,5 +2056,69 @@ mod tests {
         );
         assert_eq!(preview.materialized_project_id.as_deref(), Some("project-preview"));
         assert_eq!(preview.materialized_issue_ids.len(), 2);
+    }
+
+    #[test]
+    fn sync_completion_runtime_enters_goal_recheck_after_all_tasks_done() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+        let mut issue_draft = SpecIssueDraft::new("AF-COMP-001");
+        issue_draft.project_id = Some("project-completion".to_string());
+        let mut issue = issue_from_requirement(dir.path(), &requirement, issue_draft).unwrap();
+        issue.status = SpecIssueStatus::Done;
+        write_spec_issue(dir.path(), &issue).unwrap();
+
+        let mut project_draft = SpecProjectDraft::new("project-completion");
+        project_draft.issue_ids = vec!["AF-COMP-001".to_string()];
+        let project = project_from_requirement(dir.path(), &requirement, project_draft).unwrap();
+        write_spec_project(dir.path(), &project).unwrap();
+
+        let runtimes = sync_completion_decision_runtimes(dir.path()).unwrap();
+        assert_eq!(runtimes.len(), 1);
+        assert_eq!(runtimes[0].project_id, "project-completion");
+        assert_eq!(runtimes[0].current_state, CompletionDecisionState::GoalRecheck);
+        assert_eq!(runtimes[0].latest_outcome, None);
+        assert_eq!(runtimes[0].facts.completed_issue_count, 1);
+        assert_eq!(
+            runtimes[0].next_recommended_action,
+            "enter-completion-decision"
+        );
+    }
+
+    #[test]
+    fn recording_accept_completion_decision_marks_runtime_accepted() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+        let mut issue_draft = SpecIssueDraft::new("AF-COMP-002");
+        issue_draft.project_id = Some("project-completion-accepted".to_string());
+        let mut issue = issue_from_requirement(dir.path(), &requirement, issue_draft).unwrap();
+        issue.status = SpecIssueStatus::Done;
+        write_spec_issue(dir.path(), &issue).unwrap();
+
+        let mut project_draft = SpecProjectDraft::new("project-completion-accepted");
+        project_draft.issue_ids = vec!["AF-COMP-002".to_string()];
+        let project = project_from_requirement(dir.path(), &requirement, project_draft).unwrap();
+        write_spec_project(dir.path(), &project).unwrap();
+        sync_completion_decision_runtimes(dir.path()).unwrap();
+
+        let runtime = record_completion_decision(
+            dir.path(),
+            "project-completion-accepted",
+            CompletionDecisionOutcome::Accept,
+            "goal-agent",
+            "当前交付满足目标。",
+            vec!["任务与交付都已经满足当前项目目标。".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(runtime.current_state, CompletionDecisionState::Accepted);
+        assert_eq!(
+            runtime.latest_outcome,
+            Some(CompletionDecisionOutcome::Accept)
+        );
+        assert_eq!(runtime.next_recommended_action, "project-accepted");
+
+        let events = load_task_events(dir.path()).unwrap();
+        assert!(events.iter().any(|event| event.event_type == "project.accepted"));
     }
 }
