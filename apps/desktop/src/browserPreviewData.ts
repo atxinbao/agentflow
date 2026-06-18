@@ -556,9 +556,9 @@ export function createBrowserPreviewIssueStatusIndex(
       evidenceStatus: issue.displayStatus === "in_review" || issue.displayStatus === "done" ? "complete" : "missing",
       deliveryStatus:
         issue.displayStatus === "done"
-          ? "delivered"
+          ? "published"
           : issue.displayStatus === "in_review"
-            ? "drafted"
+            ? "ready"
             : "missing",
       auditStatus: issue.displayStatus === "done" ? "passed" : "not-requested",
     })),

@@ -440,6 +440,7 @@ export type WorkflowStage =
   | "execute-completed"
   | "evidence-ready"
   | "delivery-ready"
+  | "completion-ready"
   | "audit-requested"
   | "audit-running"
   | "audit-completed"

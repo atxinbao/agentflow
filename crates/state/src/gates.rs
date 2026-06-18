@@ -14,7 +14,7 @@ use agentflow_workflow_core::{
     work_state_is_ready_for_execution,
 };
 use anyhow::Result;
-use std::path::Path;
+use std::{fs, path::Path};
 
 pub(crate) fn build_gate_snapshot(
     root: &Path,
@@ -66,6 +66,7 @@ pub(crate) fn build_gate_snapshot(
         projection_index.as_ref(),
         &audit_status,
         has_execution_blockers,
+        root,
     );
     let allowed_next_actions = allowed_actions(&current_stage);
     Ok(WorkflowGateSnapshot {
@@ -203,6 +204,7 @@ fn derive_stage(
     projection_index: Option<&IssueStatusIndex>,
     audit_status: &WorkflowAuditStatus,
     has_blockers: bool,
+    root: &Path,
 ) -> WorkflowStage {
     if health
         .iter()
@@ -238,22 +240,6 @@ fn derive_stage(
         index
             .issues
             .iter()
-            .any(|issue| work_state_is_done(&issue.current_state))
-    }) {
-        return WorkflowStage::DeliveryReady;
-    }
-    if projection_index.as_ref().is_some_and(|index| {
-        index
-            .issues
-            .iter()
-            .any(|issue| work_state_is_in_review(&issue.current_state))
-    }) {
-        return WorkflowStage::ExecuteCompleted;
-    }
-    if projection_index.as_ref().is_some_and(|index| {
-        index
-            .issues
-            .iter()
             .any(|issue| work_state_is_in_progress(&issue.current_state))
     }) {
         return WorkflowStage::ExecuteRunning;
@@ -271,6 +257,25 @@ fn derive_stage(
         .any(|issue| matches!(issue.status, SpecIssueStatus::Todo))
     {
         return WorkflowStage::ExecuteReady;
+    }
+    if projection_index.as_ref().is_some_and(|index| {
+        index
+            .issues
+            .iter()
+            .any(|issue| work_state_is_in_review(&issue.current_state))
+    }) {
+        return WorkflowStage::ExecuteCompleted;
+    }
+    if has_completion_candidate(root) {
+        return WorkflowStage::CompletionReady;
+    }
+    if projection_index.as_ref().is_some_and(|index| {
+        index
+            .issues
+            .iter()
+            .any(|issue| work_state_is_done(&issue.current_state))
+    }) {
+        return WorkflowStage::DeliveryReady;
     }
     if !spec_issues.is_empty()
         || projection_index
@@ -298,6 +303,27 @@ fn derive_stage(
     }
 }
 
+fn has_completion_candidate(root: &Path) -> bool {
+    let projection_dir = root.join(".agentflow/projections/projects");
+    let Ok(entries) = fs::read_dir(&projection_dir) else {
+        return false;
+    };
+
+    entries
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .filter_map(|path| fs::read_to_string(path).ok())
+        .filter_map(|raw| {
+            serde_json::from_str::<agentflow_projection::ProjectProjection>(&raw).ok()
+        })
+        .any(|projection| {
+            projection.issue_count > 0
+                && projection.completed_issue_count == projection.issue_count
+                && projection.status == "done"
+        })
+}
+
 fn derive_audit_status(index: Option<&agentflow_audit::AuditIndex>) -> WorkflowAuditStatus {
     let Some(index) = index else {
         return WorkflowAuditStatus::NotRequested;
@@ -318,7 +344,8 @@ fn derive_audit_status(index: Option<&agentflow_audit::AuditIndex>) -> WorkflowA
 fn allowed_actions(stage: &WorkflowStage) -> Vec<String> {
     let mut actions = Vec::new();
     match stage {
-        WorkflowStage::DeliveryReady => actions.push("start-new-requirement".to_string()),
+        WorkflowStage::DeliveryReady => actions.push("prepare-public-delivery".to_string()),
+        WorkflowStage::CompletionReady => actions.push("enter-completion-decision".to_string()),
         WorkflowStage::EvidenceReady | WorkflowStage::ExecuteCompleted => {
             actions.push("prepare-public-delivery".to_string());
         }
@@ -359,6 +386,7 @@ fn build_next_actions(gate: &WorkflowGateSnapshot) -> Vec<WorkflowNextAction> {
 
 fn action_label(action: &str) -> String {
     match action {
+        "enter-completion-decision" => "Enter completion decision",
         "start-new-requirement" => "Start new requirement",
         "prepare-public-delivery" => "Prepare public delivery",
         "execute-issue" => "Execute issue",
@@ -369,6 +397,10 @@ fn action_label(action: &str) -> String {
 
 fn allowed_reason(action: &str, gate: &WorkflowGateSnapshot) -> String {
     match action {
+        "enter-completion-decision" => {
+            "All project tasks are done and public delivery is ready for completion review."
+                .to_string()
+        }
         "start-new-requirement" => "Workflow can accept the next requirement.".to_string(),
         "prepare-public-delivery" => {
             "Task evidence is ready for public delivery record.".to_string()
@@ -400,6 +432,10 @@ fn projected_status<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agentflow_projection::{
+        storage::write_project_projection, ProjectBrainProjection, ProjectIssueLanes,
+        ProjectProjection, PROJECT_PROJECTION_VERSION,
+    };
     use agentflow_spec::{SpecIssueDraft, SpecIssueStatus};
     use tempfile::tempdir;
 
@@ -446,5 +482,98 @@ mod tests {
 
         assert!(active_ready_issue_id(&issues, None, &blockers).is_none());
         assert!(blockers_force_task_blocked(&issues, None, &blockers));
+    }
+
+    #[test]
+    fn completion_candidate_promotes_completion_ready_stage() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".agentflow/projections/projects")).unwrap();
+        write_project_projection(
+            dir.path(),
+            &ProjectProjection {
+                version: PROJECT_PROJECTION_VERSION.to_string(),
+                project_id: "project-001".to_string(),
+                title: "Project".to_string(),
+                objective: "Objective".to_string(),
+                status: "done".to_string(),
+                issue_ids: vec!["AF-001".to_string()],
+                current_issue_id: None,
+                lanes: ProjectIssueLanes::default(),
+                next_action: "进入 Completion Decision。".to_string(),
+                blockers: Vec::new(),
+                completion_hint: "全部任务已完成。".to_string(),
+                issue_count: 1,
+                completed_issue_count: 1,
+                project_brain: ProjectBrainProjection {
+                    project_path: "docs/projects/project-001.md".to_string(),
+                    goal_path: "GOAL.md".to_string(),
+                    plan_path: "PLAN.md".to_string(),
+                    decisions_path: "DECISIONS.md".to_string(),
+                    brain_status: "ready".to_string(),
+                    goal_status: "ready".to_string(),
+                    plan_status: "ready".to_string(),
+                    decision_status: "ready".to_string(),
+                    missing_documents: Vec::new(),
+                    open_questions: Vec::new(),
+                    next_recommended_action: "进入 Completion Decision。".to_string(),
+                    readonly: true,
+                },
+                updated_at: 1,
+            },
+        )
+        .unwrap();
+
+        let stage = derive_stage(
+            &[],
+            &[],
+            None,
+            &WorkflowAuditStatus::NotRequested,
+            false,
+            dir.path(),
+        );
+
+        assert_eq!(stage, WorkflowStage::CompletionReady);
+    }
+
+    #[test]
+    fn ready_issue_takes_precedence_over_finished_issue() {
+        let dir = tempdir().unwrap();
+        let index = IssueStatusIndex {
+            version: "issue-status-index.v3".to_string(),
+            updated_at: 1,
+            issues: vec![
+                agentflow_projection::IssueStatusIndexEntry {
+                    issue_id: "AF-001".to_string(),
+                    project_id: Some("project-001".to_string()),
+                    title: "Done".to_string(),
+                    current_state: "done".to_string(),
+                    display_status: "done".to_string(),
+                    workflow_ref: "build-agent.issue-loop@v1".to_string(),
+                    projection_path: ".agentflow/projections/tasks/AF-001.json".to_string(),
+                    updated_at: 1,
+                },
+                agentflow_projection::IssueStatusIndexEntry {
+                    issue_id: "AF-002".to_string(),
+                    project_id: Some("project-001".to_string()),
+                    title: "Todo".to_string(),
+                    current_state: "todo".to_string(),
+                    display_status: "todo".to_string(),
+                    workflow_ref: "build-agent.issue-loop@v1".to_string(),
+                    projection_path: ".agentflow/projections/tasks/AF-002.json".to_string(),
+                    updated_at: 2,
+                },
+            ],
+        };
+
+        let stage = derive_stage(
+            &[],
+            &[],
+            Some(&index),
+            &WorkflowAuditStatus::NotRequested,
+            false,
+            dir.path(),
+        );
+
+        assert_eq!(stage, WorkflowStage::ExecuteReady);
     }
 }

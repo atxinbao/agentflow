@@ -5613,7 +5613,7 @@ function taskPublicDeliveryEntries(tasks: V1Issue[]): OutputIndexEntry[] {
           path: task.displayStatus === "done" ? "CHANGELOG.md" : "PR/MR body",
           runId,
           sourceSpecId: task.sourceSpecId ?? "",
-          status: task.displayStatus === "done" ? "delivered" : "drafted",
+          status: task.displayStatus === "done" ? "published" : "ready",
           updatedAt: task.updatedAt ?? task.createdAt ?? 0,
         };
       }),
@@ -6749,6 +6749,10 @@ function agentRoleRulesDocument() {
 
 function buildNextActionLabel(action: string) {
   const labels: Record<string, string> = {
+    "enter-completion-decision": "进入完成判断",
+    "execute-issue": "执行任务",
+    "prepare-public-delivery": "生成公开交付记录",
+    "start-new-requirement": "开始新需求",
     "start-new-input": "告诉 Agent 你想做什么",
   };
   return labels[action] ?? action;
@@ -6780,6 +6784,7 @@ function artifactStatusLabel(status?: string | null) {
     passed: "通过",
     "passed-with-warnings": "通过，有警告",
     pending: "待处理",
+    published: "已发布",
     ready: "就绪",
     requested: "已请求",
     running: "审计中",
@@ -6977,6 +6982,7 @@ function workflowStageText(stage?: string | null) {
   const labels: Record<string, string> = {
     "audit-completed": "审计完成",
     "audit-requested": "审计已请求",
+    "completion-ready": "等待完成判断",
     "delivery-ready": "交付可审计",
     "execute-ready": "可执行",
     "input-ready": "需求等待确认",
@@ -7022,6 +7028,7 @@ function titlebarStatusText(
   const labels: Record<string, string> = {
     "audit-completed": "audit-completed",
     "audit-requested": "audit-requested",
+    "completion-ready": "needs-completion-decision",
     "delivery-ready": "ready-for-audit",
     "execute-ready": "waiting-for-agent",
     "input-ready": "needs-spec",

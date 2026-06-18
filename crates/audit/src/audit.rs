@@ -561,11 +561,17 @@ fn check_public_delivery(
         .evidence_path
         .as_deref()
         .is_some_and(|path| root.join(path).is_file());
-    let has_review = non_empty(delivery.pr_url.as_deref())
-        || non_empty(delivery.merge_commit.as_deref())
-        || non_empty(delivery.changelog_path.as_deref())
-        || non_empty(delivery.release_notes_url.as_deref());
-    if evidence_exists && has_review {
+    let has_review_proof =
+        non_empty(delivery.pr_url.as_deref()) || non_empty(delivery.merge_commit.as_deref());
+    let has_public_record = delivery
+        .changelog_path
+        .as_deref()
+        .is_some_and(|path| root.join(path).is_file())
+        || delivery
+            .release_notes_url
+            .as_deref()
+            .is_some_and(|path| root.join(path).is_file());
+    if evidence_exists && has_review_proof && has_public_record {
         return AuditCheckStatus::Passed;
     }
     findings.push(finding(
@@ -573,9 +579,9 @@ fn check_public_delivery(
         AuditFindingSeverity::High,
         "public-delivery",
         "Public delivery is incomplete",
-        "Task projection does not include both evidence and public delivery references.",
+        "Task projection does not include complete public delivery facts, review proof, and written public records.",
         &context.public_delivery_path,
-        "Write PR/MR, changelog, or release-note delivery references before accepting.",
+        "Write merge proof and public delivery records before accepting.",
     ));
     AuditCheckStatus::Failed
 }
