@@ -114,6 +114,20 @@ pub struct ProjectionDeliverySummary {
     pub pr_url: Option<String>,
     pub merge_commit: Option<String>,
     pub public_record_path: Option<String>,
+    #[serde(default)]
+    pub summary_line: String,
+    #[serde(default)]
+    pub public_record_items: Vec<String>,
+    #[serde(default)]
+    pub missing_public_records: Vec<String>,
+    #[serde(default)]
+    pub current_issue_id: Option<String>,
+    #[serde(default)]
+    pub published_count: usize,
+    #[serde(default)]
+    pub ready_count: usize,
+    #[serde(default)]
+    pub missing_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -248,6 +262,8 @@ pub struct ProjectProjection {
     pub completion_hint: String,
     #[serde(default)]
     pub completion: Option<ProjectCompletionProjection>,
+    #[serde(default)]
+    pub delivery: Option<ProjectionDeliverySummary>,
     #[serde(default)]
     pub audit: Option<ProjectionAuditSummary>,
     pub issue_count: usize,

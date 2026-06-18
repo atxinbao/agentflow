@@ -238,6 +238,7 @@ mod tests {
                 pr_url: None,
                 merge_commit: None,
                 public_record_path: None,
+                ..ProjectionDeliverySummary::default()
             },
             audit: ProjectionAuditSummary {
                 status: "not-requested".to_string(),

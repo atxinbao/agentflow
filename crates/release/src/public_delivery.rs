@@ -1,8 +1,8 @@
 use crate::model::{
-    PublicReleaseDocumentPaths, PublicReleaseDocumentTarget, PublicReleaseEntry,
-    PublicReleaseSummary, PUBLIC_RELEASE_SUMMARY_VERSION,
+    DeliverySummary, ProjectDeliverySummary, PublicReleaseDocumentPaths,
+    PublicReleaseDocumentTarget, PublicReleaseEntry, PublicReleaseSummary,
+    DELIVERY_SUMMARY_VERSION, PROJECT_DELIVERY_SUMMARY_VERSION, PUBLIC_RELEASE_SUMMARY_VERSION,
 };
-use agentflow_projection::TaskProjection;
 use agentflow_spec::read_spec_issue;
 use anyhow::{Context, Result};
 use std::{
@@ -10,6 +10,40 @@ use std::{
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectionPublicDeliverySnapshot {
+    evidence_path: Option<String>,
+    pr_url: Option<String>,
+    merge_commit: Option<String>,
+    changelog_path: Option<String>,
+    release_notes_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectionDeliverySummarySnapshot {
+    status: String,
+    evidence_status: String,
+    evidence_path: Option<String>,
+    pr_url: Option<String>,
+    merge_commit: Option<String>,
+    public_record_path: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskProjectionSnapshot {
+    issue_id: String,
+    project_id: Option<String>,
+    current_state: String,
+    #[serde(default)]
+    public_delivery: ProjectionPublicDeliverySnapshot,
+    #[serde(default)]
+    delivery: ProjectionDeliverySummarySnapshot,
+    updated_at: u64,
+}
 
 pub fn collect_public_release_summary(
     project_root: impl AsRef<Path>,
@@ -34,6 +68,40 @@ pub fn collect_public_release_summary(
     })
 }
 
+pub fn load_delivery_summary(
+    project_root: impl AsRef<Path>,
+    issue_id: impl AsRef<str>,
+) -> Result<DeliverySummary> {
+    let root = canonical_project_root(project_root)?;
+    let projection = load_task_projection_snapshot(&root, issue_id.as_ref())?;
+    Ok(delivery_summary_from_snapshot(&projection))
+}
+
+pub fn load_project_delivery_summary(
+    project_root: impl AsRef<Path>,
+    project_id: impl AsRef<str>,
+) -> Result<Option<ProjectDeliverySummary>> {
+    let root = canonical_project_root(project_root)?;
+    let project_id = project_id.as_ref();
+    let mut snapshots = load_task_projection_snapshots(&root)?
+        .into_iter()
+        .filter(|projection| projection.project_id.as_deref() == Some(project_id))
+        .collect::<Vec<_>>();
+    if snapshots.is_empty() {
+        return Ok(None);
+    }
+    snapshots.sort_by(|left, right| {
+        right
+            .updated_at
+            .cmp(&left.updated_at)
+            .then_with(|| left.issue_id.cmp(&right.issue_id))
+    });
+    Ok(Some(project_delivery_summary_from_snapshots(
+        project_id,
+        &snapshots,
+    )))
+}
+
 pub fn write_public_release_documents(
     project_root: impl AsRef<Path>,
     summary: &PublicReleaseSummary,
@@ -51,19 +119,8 @@ pub fn write_public_release_documents(
 }
 
 fn load_done_task_entries(root: &Path) -> Result<Vec<PublicReleaseEntry>> {
-    let projection_dir = root.join(".agentflow/projections/tasks");
-    if !projection_dir.exists() {
-        return Ok(Vec::new());
-    }
     let mut entries = Vec::new();
-    for entry in fs::read_dir(&projection_dir)
-        .with_context(|| format!("read {}", projection_dir.display()))?
-    {
-        let entry = entry?;
-        if entry.path().extension().and_then(|ext| ext.to_str()) != Some("json") {
-            continue;
-        }
-        let projection: TaskProjection = read_json(&entry.path())?;
+    for projection in load_task_projection_snapshots(root)? {
         if projection.current_state != "done" {
             continue;
         }
@@ -82,6 +139,223 @@ fn load_done_task_entries(root: &Path) -> Result<Vec<PublicReleaseEntry>> {
         });
     }
     Ok(entries)
+}
+
+fn load_task_projection_snapshot(root: &Path, issue_id: &str) -> Result<TaskProjectionSnapshot> {
+    let path = task_projection_path(root, issue_id);
+    read_json(&path)
+}
+
+fn load_task_projection_snapshots(root: &Path) -> Result<Vec<TaskProjectionSnapshot>> {
+    let projection_dir = root.join(".agentflow/projections/tasks");
+    if !projection_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut snapshots = Vec::new();
+    for entry in fs::read_dir(&projection_dir)
+        .with_context(|| format!("read {}", projection_dir.display()))?
+    {
+        let entry = entry?;
+        if entry.path().extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        snapshots.push(read_json(&entry.path())?);
+    }
+    Ok(snapshots)
+}
+
+fn task_projection_path(root: &Path, issue_id: &str) -> PathBuf {
+    root.join(".agentflow/projections/tasks")
+        .join(format!("{issue_id}.json"))
+}
+
+fn delivery_summary_from_snapshot(snapshot: &TaskProjectionSnapshot) -> DeliverySummary {
+    let evidence_path = snapshot
+        .delivery
+        .evidence_path
+        .clone()
+        .or_else(|| snapshot.public_delivery.evidence_path.clone());
+    let pr_url = snapshot
+        .delivery
+        .pr_url
+        .clone()
+        .or_else(|| snapshot.public_delivery.pr_url.clone());
+    let merge_commit = snapshot
+        .delivery
+        .merge_commit
+        .clone()
+        .or_else(|| snapshot.public_delivery.merge_commit.clone());
+    let public_record_path = snapshot
+        .delivery
+        .public_record_path
+        .clone()
+        .or_else(|| snapshot.public_delivery.changelog_path.clone())
+        .or_else(|| snapshot.public_delivery.release_notes_url.clone());
+    let release_notes_url = snapshot.public_delivery.release_notes_url.clone();
+    let mut public_record_items = Vec::new();
+    if pr_url.is_some() {
+        public_record_items.push("PR/MR body".to_string());
+    }
+    if let Some(path) = snapshot.public_delivery.changelog_path.clone() {
+        public_record_items.push(path);
+    }
+    if let Some(path) = snapshot.public_delivery.release_notes_url.clone() {
+        if !public_record_items.iter().any(|item| item == &path) {
+            public_record_items.push(path);
+        }
+    }
+
+    let mut missing_public_records = Vec::new();
+    if matches!(
+        snapshot.current_state.as_str(),
+        "in_review" | "done" | "published"
+    ) {
+        if pr_url.is_none() {
+            missing_public_records.push("PR/MR body".to_string());
+        }
+        if snapshot.public_delivery.changelog_path.is_none()
+            && snapshot.public_delivery.release_notes_url.is_none()
+        {
+            missing_public_records.push("CHANGELOG.md 或 release notes".to_string());
+        }
+    }
+
+    let status = if !snapshot.delivery.status.trim().is_empty() {
+        snapshot.delivery.status.clone()
+    } else if public_record_path.is_some() {
+        "published".to_string()
+    } else if pr_url.is_some() || merge_commit.is_some() || evidence_path.is_some() {
+        "ready".to_string()
+    } else {
+        "missing".to_string()
+    };
+    let evidence_status = if !snapshot.delivery.evidence_status.trim().is_empty() {
+        snapshot.delivery.evidence_status.clone()
+    } else if evidence_path.is_some() {
+        "ready".to_string()
+    } else {
+        "missing".to_string()
+    };
+    let summary_line = if !missing_public_records.is_empty() {
+        format!(
+            "公开交付正在整理，当前缺少 {}。",
+            missing_public_records.join("、")
+        )
+    } else if !public_record_items.is_empty() {
+        format!(
+            "公开交付已整理到 {}。",
+            public_record_items.join("、")
+        )
+    } else if evidence_path.is_some() || pr_url.is_some() || merge_commit.is_some() {
+        "交付事实已存在，但公开交付记录还没有整理完成。".to_string()
+    } else {
+        "当前还没有公开交付记录。".to_string()
+    };
+
+    DeliverySummary {
+        version: DELIVERY_SUMMARY_VERSION.to_string(),
+        issue_id: snapshot.issue_id.clone(),
+        project_id: snapshot.project_id.clone(),
+        status,
+        evidence_status,
+        evidence_path,
+        pr_url,
+        merge_commit,
+        public_record_path,
+        release_notes_url,
+        summary_line,
+        public_record_items,
+        missing_public_records,
+        updated_at: snapshot.updated_at,
+    }
+}
+
+fn project_delivery_summary_from_snapshots(
+    project_id: &str,
+    snapshots: &[TaskProjectionSnapshot],
+) -> ProjectDeliverySummary {
+    let summaries = snapshots
+        .iter()
+        .map(delivery_summary_from_snapshot)
+        .collect::<Vec<_>>();
+    let published_count = summaries
+        .iter()
+        .filter(|summary| summary.status == "published")
+        .count();
+    let ready_count = summaries
+        .iter()
+        .filter(|summary| summary.status == "ready")
+        .count();
+    let missing_count = summaries
+        .iter()
+        .filter(|summary| summary.status == "missing")
+        .count();
+    let current_issue_id = snapshots
+        .iter()
+        .find(|snapshot| !matches!(snapshot.current_state.as_str(), "done" | "cancel"))
+        .map(|snapshot| snapshot.issue_id.clone());
+    let status = if missing_count == 0 && (published_count > 0 || ready_count > 0) {
+        if ready_count == 0 {
+            "published".to_string()
+        } else {
+            "ready".to_string()
+        }
+    } else if published_count > 0 || ready_count > 0 {
+        "ready".to_string()
+    } else {
+        "missing".to_string()
+    };
+    let updated_at = summaries.iter().map(|summary| summary.updated_at).max().unwrap_or(0);
+    let public_record_items = summaries
+        .iter()
+        .flat_map(|summary| summary.public_record_items.clone())
+        .collect::<Vec<_>>();
+    let mut unique_public_record_items = Vec::new();
+    for item in public_record_items {
+        if !unique_public_record_items.iter().any(|existing| existing == &item) {
+            unique_public_record_items.push(item);
+        }
+    }
+    let missing_public_records = summaries
+        .iter()
+        .flat_map(|summary| summary.missing_public_records.clone())
+        .collect::<Vec<_>>();
+    let mut unique_missing_public_records = Vec::new();
+    for item in missing_public_records {
+        if !unique_missing_public_records
+            .iter()
+            .any(|existing| existing == &item)
+        {
+            unique_missing_public_records.push(item);
+        }
+    }
+    let summary_line = if !unique_missing_public_records.is_empty() {
+        format!(
+            "项目公开交付仍缺少 {}。",
+            unique_missing_public_records.join("、")
+        )
+    } else if !unique_public_record_items.is_empty() {
+        format!(
+            "项目公开交付已汇总到 {}。",
+            unique_public_record_items.join("、")
+        )
+    } else {
+        "当前项目还没有公开交付记录。".to_string()
+    };
+
+    ProjectDeliverySummary {
+        version: PROJECT_DELIVERY_SUMMARY_VERSION.to_string(),
+        project_id: project_id.to_string(),
+        status,
+        current_issue_id,
+        published_count,
+        ready_count,
+        missing_count,
+        summary_line,
+        public_record_items: unique_public_record_items,
+        missing_public_records: unique_missing_public_records,
+        updated_at,
+    }
 }
 
 fn render_changelog(entries: &[PublicReleaseEntry]) -> String {
@@ -163,10 +437,6 @@ fn unix_timestamp_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentflow_projection::{
-        ProjectionPhase, ProjectionPublicDelivery, TaskProjection, TaskTimelineEvent,
-        TaskTimelineItem, TASK_PROJECTION_VERSION,
-    };
     use agentflow_spec::{issue_from_requirement, write_spec_issue, SpecIssueDraft};
     use tempfile::tempdir;
 
@@ -186,84 +456,27 @@ mod tests {
     }
 
     fn write_projection(root: &Path, issue_id: &str, state: &str, updated_at: u64) {
-        let projection = TaskProjection {
-            version: TASK_PROJECTION_VERSION.to_string(),
-            issue_id: issue_id.to_string(),
-            project_id: Some("project-release".to_string()),
-            workflow_ref: "build-agent.issue-loop@v1".to_string(),
-            current_state: state.to_string(),
-            display_status: state.to_string(),
-            current_transition: None,
-            latest_run_id: Some("run-001".to_string()),
-            branch_name: Some(format!("agentflow/project-release/{issue_id}")),
-            timeline: vec![TaskTimelineItem {
-                state: state.to_string(),
-                phase: ProjectionPhase::Past,
-                entered_at: Some(updated_at),
-                events: vec![TaskTimelineEvent {
-                    event_id: format!("evt-{issue_id}"),
-                    event_type: "issue.completed".to_string(),
-                    timestamp: updated_at,
-                    actor_role: "build-agent".to_string(),
-                    actor_kind: "system".to_string(),
-                    summary: "任务 Done 写回完成。".to_string(),
-                    artifact_refs: Vec::new(),
-                }],
-                summary: "任务已完成。".to_string(),
-                live_refs: Vec::new(),
-            }],
-            public_delivery: ProjectionPublicDelivery {
-                evidence_path: Some(format!(
-                    ".agentflow/tasks/{issue_id}/evidence/evidence.json"
-                )),
-                pr_url: Some(format!("https://github.com/acme/repo/pull/{updated_at}")),
-                merge_commit: Some(format!("merge-{updated_at}")),
-                changelog_path: None,
-                release_notes_url: None,
+        let projection = serde_json::json!({
+            "issueId": issue_id.to_string(),
+            "projectId": "project-release",
+            "currentState": state,
+            "publicDelivery": {
+                "evidencePath": format!(".agentflow/tasks/{issue_id}/evidence/evidence.json"),
+                "prUrl": format!("https://github.com/acme/repo/pull/{updated_at}"),
+                "mergeCommit": format!("merge-{updated_at}"),
+                "changelogPath": if state == "done" { Some("CHANGELOG.md") } else { None::<&str> },
+                "releaseNotesUrl": if state == "done" { Some("docs/release-notes/generated.md") } else { None::<&str> },
             },
-            runtime: agentflow_projection::ProjectionRuntimeSummary {
-                run_id: Some("run-001".to_string()),
-                run_status: "completed".to_string(),
-                branch_name: Some(format!("agentflow/project-release/{issue_id}")),
-                checkpoint_count: 1,
-                latest_checkpoint_id: Some("checkpoint-001".to_string()),
-                latest_checkpoint_state: Some(state.to_string()),
-                latest_checkpoint_summary: Some("交付回放测试。".to_string()),
+            "delivery": {
+                "status": if state == "done" { "published" } else { "ready" },
+                "evidenceStatus": "ready",
+                "evidencePath": format!(".agentflow/tasks/{issue_id}/evidence/evidence.json"),
+                "prUrl": format!("https://github.com/acme/repo/pull/{updated_at}"),
+                "mergeCommit": format!("merge-{updated_at}"),
+                "publicRecordPath": if state == "done" { Some("CHANGELOG.md") } else { None::<&str> },
             },
-            session: agentflow_projection::ProjectionSessionSummary {
-                provider: Some("codex".to_string()),
-                session_id: Some(format!("codex-{issue_id}")),
-                status: Some("done".to_string()),
-                launch_requested_at: Some(updated_at.saturating_sub(10)),
-                claimed_at: Some(updated_at.saturating_sub(9)),
-                created_at: Some(updated_at.saturating_sub(8)),
-                updated_at: Some(updated_at),
-                launch_request_path: Some(format!(
-                    ".agentflow/tasks/{issue_id}/runs/run-001/launch/agent-request.json"
-                )),
-                plan_path: Some(format!(".agentflow/state/mcp/plans/codex-{issue_id}.json")),
-                log_path: Some(format!(
-                    ".agentflow/state/mcp/sessions/codex-{issue_id}.jsonl"
-                )),
-                branch_name: Some(format!("agentflow/project-release/{issue_id}")),
-            },
-            delivery: agentflow_projection::ProjectionDeliverySummary {
-                status: "published".to_string(),
-                evidence_status: "ready".to_string(),
-                evidence_path: Some(format!(
-                    ".agentflow/tasks/{issue_id}/evidence/evidence.json"
-                )),
-                pr_url: Some(format!("https://github.com/acme/repo/pull/{updated_at}")),
-                merge_commit: Some(format!("merge-{updated_at}")),
-                public_record_path: None,
-            },
-            audit: agentflow_projection::ProjectionAuditSummary {
-                status: "not-requested".to_string(),
-                latest_audit_id: None,
-                ..agentflow_projection::ProjectionAuditSummary::default()
-            },
-            updated_at,
-        };
+            "updatedAt": updated_at,
+        });
         let dir = root.join(".agentflow/projections/tasks");
         fs::create_dir_all(&dir).unwrap();
         fs::write(
@@ -288,6 +501,41 @@ mod tests {
         assert_eq!(summary.entries[0].issue_id, "AF-REL-001");
         assert!(summary.changelog_markdown.contains("完成公开交付记录"));
         assert!(summary.release_notes_markdown.contains("merge-20"));
+    }
+
+    #[test]
+    fn loads_delivery_summary_with_human_readable_public_records() {
+        let dir = tempdir().unwrap();
+        write_issue(dir.path(), "AF-REL-001", "完成公开交付记录");
+        write_projection(dir.path(), "AF-REL-001", "done", 20);
+
+        let summary = load_delivery_summary(dir.path(), "AF-REL-001").unwrap();
+
+        assert_eq!(summary.version, DELIVERY_SUMMARY_VERSION);
+        assert_eq!(summary.status, "published");
+        assert!(summary.public_record_items.contains(&"PR/MR body".to_string()));
+        assert!(summary.public_record_items.contains(&"CHANGELOG.md".to_string()));
+        assert!(summary.summary_line.contains("公开交付已整理到"));
+    }
+
+    #[test]
+    fn aggregates_project_delivery_summary() {
+        let dir = tempdir().unwrap();
+        write_issue(dir.path(), "AF-REL-001", "完成公开交付记录");
+        write_issue(dir.path(), "AF-REL-002", "整理评审交付");
+        write_projection(dir.path(), "AF-REL-001", "done", 20);
+        write_projection(dir.path(), "AF-REL-002", "in_review", 30);
+
+        let summary = load_project_delivery_summary(dir.path(), "project-release")
+            .unwrap()
+            .expect("project delivery summary");
+
+        assert_eq!(summary.version, PROJECT_DELIVERY_SUMMARY_VERSION);
+        assert_eq!(summary.project_id, "project-release");
+        assert_eq!(summary.current_issue_id.as_deref(), Some("AF-REL-002"));
+        assert_eq!(summary.published_count, 1);
+        assert_eq!(summary.ready_count, 1);
+        assert!(summary.public_record_items.contains(&"PR/MR body".to_string()));
     }
 
     #[test]

@@ -553,6 +553,13 @@ export type ProjectionDeliverySummary = {
   prUrl?: string | null;
   mergeCommit?: string | null;
   publicRecordPath?: string | null;
+  summaryLine: string;
+  publicRecordItems: string[];
+  missingPublicRecords: string[];
+  currentIssueId?: string | null;
+  publishedCount: number;
+  readyCount: number;
+  missingCount: number;
 };
 
 export type ProjectionAuditSummary = {
@@ -631,6 +638,7 @@ export type ProjectProjection = {
     rationale: string[];
     updatedAt: number;
   } | null;
+  delivery?: ProjectionDeliverySummary | null;
   audit?: ProjectionAuditSummary | null;
   issueCount: number;
   completedIssueCount: number;

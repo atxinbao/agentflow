@@ -2,6 +2,43 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub const PUBLIC_RELEASE_SUMMARY_VERSION: &str = "public-release-summary.v1";
+pub const DELIVERY_SUMMARY_VERSION: &str = "delivery-summary.v1";
+pub const PROJECT_DELIVERY_SUMMARY_VERSION: &str = "project-delivery-summary.v1";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeliverySummary {
+    pub version: String,
+    pub issue_id: String,
+    pub project_id: Option<String>,
+    pub status: String,
+    pub evidence_status: String,
+    pub evidence_path: Option<String>,
+    pub pr_url: Option<String>,
+    pub merge_commit: Option<String>,
+    pub public_record_path: Option<String>,
+    pub release_notes_url: Option<String>,
+    pub summary_line: String,
+    pub public_record_items: Vec<String>,
+    pub missing_public_records: Vec<String>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDeliverySummary {
+    pub version: String,
+    pub project_id: String,
+    pub status: String,
+    pub current_issue_id: Option<String>,
+    pub published_count: usize,
+    pub ready_count: usize,
+    pub missing_count: usize,
+    pub summary_line: String,
+    pub public_record_items: Vec<String>,
+    pub missing_public_records: Vec<String>,
+    pub updated_at: u64,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

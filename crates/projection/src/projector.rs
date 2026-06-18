@@ -20,6 +20,7 @@ use crate::{
 };
 use agentflow_audit::load_audit_result_summary;
 use agentflow_event_store::{load_task_events, EventStateTransition, TaskEvent};
+use agentflow_release::{load_delivery_summary, load_project_delivery_summary};
 use agentflow_spec::{
     list_completion_decision_runtimes, list_requirement_preview_runtimes, prepare_spec_workspace,
     read_project_brain_snapshot, sync_completion_decision_runtimes, CompletionDecisionRuntime,
@@ -423,6 +424,7 @@ fn project_project(
     }
     let all_finished = completed == project.issue_ids.len() && !project.issue_ids.is_empty();
     let completion_projection = completion.map(project_completion_decision);
+    let project_delivery = build_project_delivery_summary(root, project, tasks);
     let project_audit = build_project_audit_summary(project, tasks);
     let status = if completion_projection
         .as_ref()
@@ -533,20 +535,29 @@ fn project_project(
     };
     let completion_hint = if let Some(completion) = completion_projection.as_ref() {
         append_audit_hint(
-            completion.next_recommended_action_reason.clone(),
+            append_delivery_hint(
+                completion.next_recommended_action_reason.clone(),
+                project_delivery.as_ref(),
+            ),
             project_audit.as_ref(),
         )
     } else if all_finished {
         append_audit_hint(
-            "全部任务已完成，下一步由 Goal / Completion Runtime 重新判断项目是否真正结束。"
-                .to_string(),
+            append_delivery_hint(
+                "全部任务已完成，下一步由 Goal / Completion Runtime 重新判断项目是否真正结束。"
+                    .to_string(),
+                project_delivery.as_ref(),
+            ),
             project_audit.as_ref(),
         )
     } else {
         append_audit_hint(
-            format!(
-            "当前已完成 {completed}/{} 条任务，继续按状态流推进。",
-            project.issue_ids.len()
+            append_delivery_hint(
+                format!(
+                    "当前已完成 {completed}/{} 条任务，继续按状态流推进。",
+                    project.issue_ids.len()
+                ),
+                project_delivery.as_ref(),
             ),
             project_audit.as_ref(),
         )
@@ -588,6 +599,7 @@ fn project_project(
             rationale: projection.rationale,
             updated_at: projection.updated_at,
         }),
+        delivery: project_delivery,
         audit: project_audit,
         issue_count: project.issue_ids.len(),
         completed_issue_count: completed,
@@ -772,12 +784,30 @@ fn build_delivery_summary(
     issue: &SpecIssue,
     public_delivery: &ProjectionPublicDelivery,
 ) -> ProjectionDeliverySummary {
+    if let Ok(summary) = load_delivery_summary(root, &issue.issue_id) {
+        return ProjectionDeliverySummary {
+            status: summary.status,
+            evidence_status: summary.evidence_status,
+            evidence_path: summary.evidence_path,
+            pr_url: summary.pr_url,
+            merge_commit: summary.merge_commit,
+            public_record_path: summary.public_record_path,
+            summary_line: summary.summary_line,
+            public_record_items: summary.public_record_items,
+            missing_public_records: summary.missing_public_records,
+            current_issue_id: None,
+            published_count: 0,
+            ready_count: 0,
+            missing_count: 0,
+        };
+    }
+
     let evidence = agentflow_task_artifacts::load_task_evidence(root, &issue.issue_id).ok();
-    let referenced_public_record_path = public_delivery
+    let public_record_path = public_delivery
         .changelog_path
         .clone()
-        .or_else(|| public_delivery.release_notes_url.clone());
-    let public_record_path = referenced_public_record_path.filter(|path| root.join(path).is_file());
+        .or_else(|| public_delivery.release_notes_url.clone())
+        .filter(|path| root.join(path).is_file());
     let evidence_status = if evidence.is_some() {
         "ready".to_string()
     } else {
@@ -790,9 +820,21 @@ fn build_delivery_summary(
     } else {
         "missing".to_string()
     };
+    let mut public_record_items = Vec::new();
+    if public_delivery.pr_url.is_some() {
+        public_record_items.push("PR/MR body".to_string());
+    }
+    if let Some(path) = public_delivery.changelog_path.clone() {
+        public_record_items.push(path);
+    }
+    if let Some(path) = public_delivery.release_notes_url.clone() {
+        if !public_record_items.iter().any(|item| item == &path) {
+            public_record_items.push(path);
+        }
+    }
 
     ProjectionDeliverySummary {
-        status,
+        status: status.clone(),
         evidence_status,
         evidence_path: evidence
             .as_ref()
@@ -800,7 +842,111 @@ fn build_delivery_summary(
         pr_url: public_delivery.pr_url.clone(),
         merge_commit: public_delivery.merge_commit.clone(),
         public_record_path,
+        summary_line: match status.as_str() {
+            "published" => format!("公开交付已整理到 {}。", public_record_items.join("、")),
+            "ready" => "公开交付已开始整理，等待写入 CHANGELOG 或 release notes。".to_string(),
+            _ => "当前还没有公开交付记录。".to_string(),
+        },
+        public_record_items,
+        missing_public_records: if status == "ready" {
+            vec!["CHANGELOG.md 或 release notes".to_string()]
+        } else {
+            Vec::new()
+        },
+        current_issue_id: None,
+        published_count: 0,
+        ready_count: 0,
+        missing_count: 0,
     }
+}
+
+fn build_project_delivery_summary(
+    root: &Path,
+    project: &SpecProject,
+    tasks: &BTreeMap<String, TaskProjection>,
+) -> Option<ProjectionDeliverySummary> {
+    if let Ok(Some(summary)) = load_project_delivery_summary(root, &project.project_id) {
+        return Some(ProjectionDeliverySummary {
+            status: summary.status,
+            evidence_status: "ready".to_string(),
+            evidence_path: None,
+            pr_url: None,
+            merge_commit: None,
+            public_record_path: summary.public_record_items.first().cloned(),
+            summary_line: summary.summary_line,
+            public_record_items: summary.public_record_items,
+            missing_public_records: summary.missing_public_records,
+            current_issue_id: summary.current_issue_id,
+            published_count: summary.published_count,
+            ready_count: summary.ready_count,
+            missing_count: summary.missing_count,
+        });
+    }
+
+    let issue_ids = project.issue_ids.iter().cloned().collect::<BTreeSet<_>>();
+    let summaries = tasks
+        .values()
+        .filter(|task| issue_ids.contains(&task.issue_id))
+        .map(|task| task.delivery.clone())
+        .collect::<Vec<_>>();
+    if summaries.is_empty() {
+        return None;
+    }
+    let published_count = summaries
+        .iter()
+        .filter(|summary| summary.status == "published")
+        .count();
+    let ready_count = summaries
+        .iter()
+        .filter(|summary| summary.status == "ready")
+        .count();
+    let missing_count = summaries
+        .iter()
+        .filter(|summary| summary.status == "missing")
+        .count();
+    let public_record_items = summaries
+        .iter()
+        .flat_map(|summary| summary.public_record_items.clone())
+        .collect::<Vec<_>>();
+    Some(ProjectionDeliverySummary {
+        status: if missing_count == 0 && ready_count == 0 && published_count > 0 {
+            "published".to_string()
+        } else if published_count > 0 || ready_count > 0 {
+            "ready".to_string()
+        } else {
+            "missing".to_string()
+        },
+        evidence_status: "ready".to_string(),
+        evidence_path: None,
+        pr_url: None,
+        merge_commit: None,
+        public_record_path: public_record_items.first().cloned(),
+        summary_line: if missing_count > 0 {
+            "项目仍有任务缺少公开交付记录。".to_string()
+        } else if public_record_items.is_empty() {
+            "当前项目还没有公开交付记录。".to_string()
+        } else {
+            format!("项目公开交付已汇总到 {}。", public_record_items.join("、"))
+        },
+        public_record_items,
+        missing_public_records: if missing_count > 0 {
+            vec!["CHANGELOG.md 或 release notes".to_string()]
+        } else {
+            Vec::new()
+        },
+        current_issue_id: project
+            .issue_ids
+            .iter()
+            .find(|issue_id| {
+                tasks
+                    .get(*issue_id)
+                    .is_some_and(|task| !matches!(task.current_state.as_str(), "done" | "cancel"))
+            })
+            .cloned(),
+        published_count,
+        ready_count,
+        missing_count,
+    })
 }
 
 fn build_audit_summary(
@@ -883,6 +1029,16 @@ fn append_audit_hint(base: String, audit: Option<&ProjectionAuditSummary>) -> St
         return base;
     }
     format!("{base} 最近审计：{}", audit.summary_line)
+}
+
+fn append_delivery_hint(base: String, delivery: Option<&ProjectionDeliverySummary>) -> String {
+    let Some(delivery) = delivery else {
+        return base;
+    };
+    if delivery.summary_line.trim().is_empty() {
+        return base;
+    }
+    format!("{base} 最近交付：{}", delivery.summary_line)
 }
 
 fn load_projection_audit_index(root: &Path) -> Result<ProjectionAuditIndexFile> {
