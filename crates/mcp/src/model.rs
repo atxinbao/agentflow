@@ -19,6 +19,7 @@ pub enum McpProviderKind {
     Github,
     Gitlab,
     Codex,
+    ClaudeCode,
     BrowserPreview,
 }
 
@@ -28,6 +29,7 @@ impl McpProviderKind {
             Self::Github => "github",
             Self::Gitlab => "gitlab",
             Self::Codex => "codex",
+            Self::ClaudeCode => "claude",
             Self::BrowserPreview => "browser-preview",
         }
     }
@@ -37,6 +39,7 @@ impl McpProviderKind {
             "github" => Some(Self::Github),
             "gitlab" => Some(Self::Gitlab),
             "codex" => Some(Self::Codex),
+            "claude" => Some(Self::ClaudeCode),
             "browser-preview" => Some(Self::BrowserPreview),
             _ => None,
         }
@@ -145,6 +148,31 @@ pub fn provider_capability_profile(provider: &str) -> Option<McpProviderCapabili
             ],
             required_capabilities: vec!["launch".to_string(), "codex.exec".to_string()],
             degraded_capabilities: vec!["build_agent.complete".to_string()],
+        },
+        McpProviderKind::ClaudeCode => McpProviderCapabilityProfile {
+            version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
+            provider: provider.to_string(),
+            kind,
+            supported_roles: vec![
+                WorkflowAgentRole::SpecAgent,
+                WorkflowAgentRole::WorkAgent,
+                WorkflowAgentRole::AuditAgent,
+            ],
+            supported_skill_packs: vec![
+                WorkflowSkillPack::ContractSkills,
+                WorkflowSkillPack::ExecutionSkills,
+                WorkflowSkillPack::JudgmentSkills,
+            ],
+            required_capabilities: vec![
+                "launch".to_string(),
+                "claude.print".to_string(),
+                "session.poll".to_string(),
+            ],
+            degraded_capabilities: vec![
+                "session.logs".to_string(),
+                "session.cancel".to_string(),
+                "build_agent.complete".to_string(),
+            ],
         },
         McpProviderKind::BrowserPreview => McpProviderCapabilityProfile {
             version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
@@ -539,5 +567,17 @@ mod tests {
         assert!(github.supports_role(WorkflowAgentRole::DeliveryAgent));
         assert!(github.supports_skill_pack(WorkflowSkillPack::DeliverySkills));
         assert!(!github.supports_role(WorkflowAgentRole::WorkAgent));
+
+        let claude = provider_capability_profile("claude").unwrap();
+        assert!(claude.supports_role(WorkflowAgentRole::WorkAgent));
+        assert!(claude.supports_skill_pack(WorkflowSkillPack::ExecutionSkills));
+        assert_eq!(
+            claude.required_capabilities,
+            vec![
+                "launch".to_string(),
+                "claude.print".to_string(),
+                "session.poll".to_string()
+            ]
+        );
     }
 }
