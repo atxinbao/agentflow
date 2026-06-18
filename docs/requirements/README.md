@@ -1,7 +1,7 @@
 # Requirements
 
 创建日期：2026-06-01
-更新日期：2026-06-18
+更新日期：2026-06-19
 执行者：Codex
 
 ## 目的
@@ -91,6 +91,8 @@
 - [054-release-runtime-v1.md](054-release-runtime-v1.md) = release runtime
 - [055-external-audit-and-review-surface-v1.md](055-external-audit-and-review-surface-v1.md) = external audit and review surface
 - [056-work-loop-sequencing-and-closeout-gates-v1.md](056-work-loop-sequencing-and-closeout-gates-v1.md) = strict sequencing and closeout gates after v0.3.0 audit
+- [057-v0-3-0-pre-release-audit-rebaseline-v1.md](057-v0-3-0-pre-release-audit-rebaseline-v1.md) = v0.3.0 pre-release audit rebaseline after 056A/056B/056C
+- [058-v0-3-0-stable-gate-remediation-v1.md](058-v0-3-0-stable-gate-remediation-v1.md) = stable gate remediation package replacing the old raw audit order
 - [next-requirements.md](next-requirements.md)
 
 ## Dogfood Cutover 基线
