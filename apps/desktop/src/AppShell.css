@@ -1520,6 +1520,12 @@ button.v16-task-project-row:hover {
   min-width: 0;
 }
 
+.v16-task-project-summary {
+  color: var(--v16-muted);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
 .v16-task-project-title {
   min-width: 0;
   color: var(--v16-text);
@@ -1559,12 +1565,29 @@ button.v16-task-project-row:hover {
 .v16-task-timeline-section {
   display: grid;
   align-content: start;
+  gap: 4px;
 }
 
 .v16-task-timeline-section + .v16-task-timeline-section {
   border-top: 1px solid var(--v16-border-soft);
   margin-top: 6px;
   padding-top: 6px;
+}
+
+.v16-task-timeline-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 30px;
+  color: var(--v16-muted);
+  font-size: 10px;
+  font-weight: 620;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.v16-task-ungrouped-children .v16-task-timeline-section-header {
+  padding-left: 10px;
 }
 
 .v16-task-timeline-items {
