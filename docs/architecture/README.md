@@ -24,6 +24,7 @@
 | [003-workflow-schema-v1.md](003-workflow-schema-v1.md) | 定义 Project / Work / Audit / Delivery 四类流程的统一 schema |
 | [004-event-and-projection-model-v1.md](004-event-and-projection-model-v1.md) | 定义事件、状态、投影和 UI 读模型 |
 | [005-public-delivery-standard-v1.md](005-public-delivery-standard-v1.md) | 定义任务级与版本级公开交付模板、边界和 projection 输出 |
+| [006-release-runtime-v1.md](006-release-runtime-v1.md) | 定义 completion 之后的项目级 release gate、runtime、facts 和公开发布输出 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -34,8 +35,9 @@
 3. [003-workflow-schema-v1.md](003-workflow-schema-v1.md)
 4. [004-event-and-projection-model-v1.md](004-event-and-projection-model-v1.md)
 5. [005-public-delivery-standard-v1.md](005-public-delivery-standard-v1.md)
-6. [current-module-boundaries.md](current-module-boundaries.md)
-7. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+6. [006-release-runtime-v1.md](006-release-runtime-v1.md)
+7. [current-module-boundaries.md](current-module-boundaries.md)
+8. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 

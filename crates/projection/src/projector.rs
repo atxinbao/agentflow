@@ -2,11 +2,12 @@ use crate::{
     model::{
         CompletionDecisionIndex, CompletionDecisionIndexEntry, CompletionDecisionProjection,
         IssueStatusIndex, IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
-        ProjectCompletionProjection, ProjectIssueLanes, ProjectProjection, ProjectionAuditSummary,
-        ProjectionDeliverySummary, ProjectionPhase, ProjectionPublicDelivery,
-        ProjectionRuntimeSummary, ProjectionSessionSummary, ProjectionSummary,
-        RequirementPreviewIndex, RequirementPreviewIndexEntry, RequirementPreviewProjection,
-        TaskProjection, TaskTimelineEvent, TaskTimelineItem, COMPLETION_DECISION_INDEX_VERSION,
+        ProjectCompletionProjection, ProjectIssueLanes, ProjectProjection,
+        ProjectReleaseProjection, ProjectionAuditSummary, ProjectionDeliverySummary,
+        ProjectionPhase, ProjectionPublicDelivery, ProjectionRuntimeSummary,
+        ProjectionSessionSummary, ProjectionSummary, RequirementPreviewIndex,
+        RequirementPreviewIndexEntry, RequirementPreviewProjection, TaskProjection,
+        TaskTimelineEvent, TaskTimelineItem, COMPLETION_DECISION_INDEX_VERSION,
         COMPLETION_DECISION_PROJECTION_VERSION, ISSUE_STATUS_INDEX_VERSION,
         PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
         REQUIREMENT_PREVIEW_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
@@ -19,7 +20,9 @@ use crate::{
 };
 use agentflow_audit::load_audit_result_summary;
 use agentflow_event_store::{load_task_events, EventStateTransition, TaskEvent};
-use agentflow_release::{load_delivery_summary, load_project_delivery_summary};
+use agentflow_release::{
+    load_delivery_summary, load_project_delivery_summary, load_project_release_facts,
+};
 use agentflow_spec::{
     list_completion_decision_runtimes, list_requirement_preview_runtimes, prepare_spec_workspace,
     read_project_brain_snapshot, sync_completion_decision_runtimes, CompletionDecisionRuntime,
@@ -430,6 +433,7 @@ fn project_project(
     let all_finished = completed == project.issue_ids.len() && !project.issue_ids.is_empty();
     let completion_projection = completion.map(project_completion_decision);
     let project_delivery = build_project_delivery_summary(root, project, tasks);
+    let project_release = load_project_release_facts(root, &project.project_id).ok();
     let project_audit = build_project_audit_summary(project, tasks);
     let status = if all_finished {
         match completion_projection
@@ -452,38 +456,96 @@ fn project_project(
     };
     let brain = read_project_brain_snapshot(root, &project.project_id, &project.title)?;
     let (stage_key, stage_label, stage_summary) = if all_finished {
-        match completion_projection.as_ref() {
-            Some(projection) if projection.current_state == "accepted" => (
-                "done".to_string(),
-                "项目已完成".to_string(),
-                "全部任务已完成，完成判断已经接受。".to_string(),
-            ),
-            Some(projection) if projection.current_state == "continue" => (
-                "continue".to_string(),
-                "继续推进".to_string(),
-                projection.next_recommended_action_reason.clone(),
-            ),
-            Some(projection) if projection.current_state == "adjust" => (
-                "adjust".to_string(),
-                "需要调整".to_string(),
-                projection.next_recommended_action_reason.clone(),
-            ),
-            Some(projection) if projection.current_state == "pause" => (
-                "pause".to_string(),
-                "已暂停".to_string(),
-                projection.next_recommended_action_reason.clone(),
-            ),
-            Some(projection) if projection.current_state == "next-stage" => (
-                "next-stage".to_string(),
-                "进入下一阶段".to_string(),
-                projection.next_recommended_action_reason.clone(),
-            ),
-            _ => (
-                "completion-ready".to_string(),
-                "等待完成判断".to_string(),
-                "任务已全部完成，正在等待 Goal Recheck / Completion Runtime 做最后判断。"
-                    .to_string(),
-            ),
+        if let Some(release) = project_release.as_ref() {
+            match release.current_state.as_str() {
+                "published" => (
+                    "release-published".to_string(),
+                    "已发布".to_string(),
+                    release.summary_line.clone(),
+                ),
+                "in_progress" => (
+                    "release-in-progress".to_string(),
+                    "发布中".to_string(),
+                    release.summary_line.clone(),
+                ),
+                "ready" => (
+                    "release-ready".to_string(),
+                    "待发布".to_string(),
+                    release.summary_line.clone(),
+                ),
+                "blocked" => (
+                    "release-blocked".to_string(),
+                    "发布阻断".to_string(),
+                    release.summary_line.clone(),
+                ),
+                _ => match completion_projection.as_ref() {
+                    Some(projection) if projection.current_state == "accepted" => (
+                        "done".to_string(),
+                        "项目已完成".to_string(),
+                        "全部任务已完成，完成判断已经接受。".to_string(),
+                    ),
+                    Some(projection) if projection.current_state == "continue" => (
+                        "continue".to_string(),
+                        "继续推进".to_string(),
+                        projection.next_recommended_action_reason.clone(),
+                    ),
+                    Some(projection) if projection.current_state == "adjust" => (
+                        "adjust".to_string(),
+                        "需要调整".to_string(),
+                        projection.next_recommended_action_reason.clone(),
+                    ),
+                    Some(projection) if projection.current_state == "pause" => (
+                        "pause".to_string(),
+                        "已暂停".to_string(),
+                        projection.next_recommended_action_reason.clone(),
+                    ),
+                    Some(projection) if projection.current_state == "next-stage" => (
+                        "next-stage".to_string(),
+                        "进入下一阶段".to_string(),
+                        projection.next_recommended_action_reason.clone(),
+                    ),
+                    _ => (
+                        "completion-ready".to_string(),
+                        "等待完成判断".to_string(),
+                        "任务已全部完成，正在等待 Goal Recheck / Completion Runtime 做最后判断。"
+                            .to_string(),
+                    ),
+                },
+            }
+        } else {
+            match completion_projection.as_ref() {
+                Some(projection) if projection.current_state == "accepted" => (
+                    "done".to_string(),
+                    "项目已完成".to_string(),
+                    "全部任务已完成，完成判断已经接受。".to_string(),
+                ),
+                Some(projection) if projection.current_state == "continue" => (
+                    "continue".to_string(),
+                    "继续推进".to_string(),
+                    projection.next_recommended_action_reason.clone(),
+                ),
+                Some(projection) if projection.current_state == "adjust" => (
+                    "adjust".to_string(),
+                    "需要调整".to_string(),
+                    projection.next_recommended_action_reason.clone(),
+                ),
+                Some(projection) if projection.current_state == "pause" => (
+                    "pause".to_string(),
+                    "已暂停".to_string(),
+                    projection.next_recommended_action_reason.clone(),
+                ),
+                Some(projection) if projection.current_state == "next-stage" => (
+                    "next-stage".to_string(),
+                    "进入下一阶段".to_string(),
+                    projection.next_recommended_action_reason.clone(),
+                ),
+                _ => (
+                    "completion-ready".to_string(),
+                    "等待完成判断".to_string(),
+                    "任务已全部完成，正在等待 Goal Recheck / Completion Runtime 做最后判断。"
+                        .to_string(),
+                ),
+            }
         }
     } else if let Some(issue_id) = current_issue_id.as_ref() {
         let label = match current_issue_state.as_deref() {
@@ -560,7 +622,12 @@ fn project_project(
                 brain.next_recommended_action_reason.clone(),
             )
         };
-    let completion_hint = if let Some(completion) = completion_projection.as_ref() {
+    let completion_hint = if let Some(release) = project_release.as_ref() {
+        append_audit_hint(
+            append_delivery_hint(release.summary_line.clone(), project_delivery.as_ref()),
+            project_audit.as_ref(),
+        )
+    } else if let Some(completion) = completion_projection.as_ref() {
         append_audit_hint(
             append_delivery_hint(
                 completion.next_recommended_action_reason.clone(),
@@ -625,6 +692,20 @@ fn project_project(
             open_questions: projection.open_questions,
             rationale: projection.rationale,
             updated_at: projection.updated_at,
+        }),
+        release: project_release.map(|release| ProjectReleaseProjection {
+            current_state: release.current_state,
+            gate_status: release.gate_status,
+            gate_reason: release.gate_reason,
+            completion_state: release.completion_state,
+            completion_outcome: release.completion_outcome,
+            delivery_status: release.delivery_status,
+            changelog_path: release.changelog_path,
+            release_notes_path: release.release_notes_path,
+            entry_count: release.entry_count,
+            summary_line: release.summary_line,
+            published_at: release.published_at,
+            updated_at: release.updated_at,
         }),
         delivery: project_delivery,
         audit: project_audit,

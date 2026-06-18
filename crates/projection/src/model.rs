@@ -238,6 +238,23 @@ pub struct ProjectCompletionProjection {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectReleaseProjection {
+    pub current_state: String,
+    pub gate_status: String,
+    pub gate_reason: String,
+    pub completion_state: String,
+    pub completion_outcome: Option<String>,
+    pub delivery_status: String,
+    pub changelog_path: String,
+    pub release_notes_path: String,
+    pub entry_count: usize,
+    pub summary_line: String,
+    pub published_at: Option<u64>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskProjection {
     pub version: String,
     pub issue_id: String,
@@ -307,6 +324,8 @@ pub struct ProjectProjection {
     pub completion_hint: String,
     #[serde(default)]
     pub completion: Option<ProjectCompletionProjection>,
+    #[serde(default)]
+    pub release: Option<ProjectReleaseProjection>,
     #[serde(default)]
     pub delivery: Option<ProjectionDeliverySummary>,
     #[serde(default)]

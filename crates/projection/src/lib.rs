@@ -11,13 +11,12 @@ pub mod storage;
 pub use model::{
     CompletionDecisionIndex, CompletionDecisionIndexEntry, CompletionDecisionProjection,
     IssueStatusIndex, IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
-    ProjectCompletionProjection, ProjectIssueLanes, ProjectProjection,
+    ProjectCompletionProjection, ProjectIssueLanes, ProjectProjection, ProjectReleaseProjection,
     ProjectionAuditSummary, ProjectionDeliverySummary, ProjectionPhase, ProjectionPublicDelivery,
-    ProjectionRuntimeSummary, ProjectionSessionSummary, ProjectionSummary,
-    RequirementPreviewIndex, RequirementPreviewIndexEntry, RequirementPreviewProjection,
-    TaskProjection, TaskTimelineEvent, TaskTimelineItem, COMPLETION_DECISION_INDEX_VERSION,
-    COMPLETION_DECISION_PROJECTION_VERSION, ISSUE_STATUS_INDEX_VERSION,
-    PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
+    ProjectionRuntimeSummary, ProjectionSessionSummary, ProjectionSummary, RequirementPreviewIndex,
+    RequirementPreviewIndexEntry, RequirementPreviewProjection, TaskProjection, TaskTimelineEvent,
+    TaskTimelineItem, COMPLETION_DECISION_INDEX_VERSION, COMPLETION_DECISION_PROJECTION_VERSION,
+    ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
     REQUIREMENT_PREVIEW_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
 };
 pub use projector::rebuild_projections;

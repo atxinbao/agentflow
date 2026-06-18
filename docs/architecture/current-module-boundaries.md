@@ -426,6 +426,10 @@ docs/requirements/**
 
 负责：
 
+- completion 之后的项目级 release gate
+- 推进 canonical delivery workflow 的 release 状态
+- 写 `.agentflow/release/projects/<project-id>.json`
+- 写 `.agentflow/indexes/releases.json`
 - 从完成态 task projection 和 PR/MR 元数据汇总公开交付记录
 - 统一任务级 PR/MR body 模板
 - 生成 CHANGELOG / release notes
@@ -437,6 +441,7 @@ docs/requirements/**
 - Build Agent 执行
 - 本地 runtime 证据存储
 - 暴露 `.agentflow/tasks/**` 内部路径给外部 reviewer
+- 代替 completion 决定项目是否结束
 
 实现位置：
 

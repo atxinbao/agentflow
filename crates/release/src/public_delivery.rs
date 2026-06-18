@@ -50,8 +50,15 @@ struct TaskProjectionSnapshot {
 pub fn collect_public_release_summary(
     project_root: impl AsRef<Path>,
 ) -> Result<PublicReleaseSummary> {
+    collect_public_release_summary_for_project(project_root, None)
+}
+
+pub fn collect_public_release_summary_for_project(
+    project_root: impl AsRef<Path>,
+    project_id: Option<&str>,
+) -> Result<PublicReleaseSummary> {
     let root = canonical_project_root(project_root)?;
-    let mut entries = load_done_task_entries(&root)?;
+    let mut entries = load_done_task_entries(&root, project_id)?;
     entries.sort_by(|left, right| {
         right
             .updated_at
@@ -122,10 +129,17 @@ pub fn write_public_release_documents(
     })
 }
 
-fn load_done_task_entries(root: &Path) -> Result<Vec<PublicReleaseEntry>> {
+fn load_done_task_entries(
+    root: &Path,
+    project_id: Option<&str>,
+) -> Result<Vec<PublicReleaseEntry>> {
     let mut entries = Vec::new();
     for projection in load_task_projection_snapshots(root)? {
         if projection.current_state != "done" {
+            continue;
+        }
+        if project_id.is_some_and(|project_id| projection.project_id.as_deref() != Some(project_id))
+        {
             continue;
         }
         let issue = read_spec_issue(root, &projection.issue_id)?;

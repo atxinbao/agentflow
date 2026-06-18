@@ -4,7 +4,9 @@ use crate::model::{
 };
 use agentflow_event_store::{append_task_event, EventStateTransition, TaskEventDraft};
 use agentflow_task_artifacts::write_task_run_checkpoint;
-use agentflow_workflow_core::{TransitionDefinition, WorkflowDefinition};
+use agentflow_workflow_core::{
+    canonical_workflow, TransitionDefinition, WorkflowDefinition, WorkflowFlowType,
+};
 use anyhow::Result;
 use serde_json::json;
 use std::{collections::BTreeMap, path::Path};
@@ -271,6 +273,27 @@ pub fn apply_workflow_event(
     })
 }
 
+pub fn apply_canonical_workflow_event(
+    project_root: impl AsRef<Path>,
+    flow_type: WorkflowFlowType,
+    current_state: &str,
+    incoming_event_type: &str,
+    context: RuntimeContext,
+    guards: &impl GuardRegistry,
+    actions: &impl ActionRegistry,
+) -> Result<RuntimeTransitionResult> {
+    let workflow = canonical_workflow(flow_type);
+    apply_workflow_event(
+        project_root,
+        &workflow,
+        current_state,
+        incoming_event_type,
+        context,
+        guards,
+        actions,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -518,7 +541,8 @@ spec:
         let dir = tempdir().unwrap();
         let workflow = canonical_workflow(WorkflowFlowType::Audit);
         let guards = StaticGuardRegistry::all_pass(["audit.request.present", "audit.scope.ready"]);
-        let actions = StaticActionRegistry::all_complete(["audit.request.write", "audit.run.start"]);
+        let actions =
+            StaticActionRegistry::all_complete(["audit.request.write", "audit.run.start"]);
 
         let requested = apply_workflow_event(
             dir.path(),
@@ -748,11 +772,17 @@ spec:
 
         assert!(result.applied);
         assert_eq!(
-            result.next_binding.as_ref().map(|binding| binding.state_id.as_str()),
+            result
+                .next_binding
+                .as_ref()
+                .map(|binding| binding.state_id.as_str()),
             Some("goal_recheck")
         );
         assert_eq!(
-            result.handoff.as_ref().map(|handoff| handoff.to_role.as_str()),
+            result
+                .handoff
+                .as_ref()
+                .map(|handoff| handoff.to_role.as_str()),
             Some("goal-agent")
         );
         let events = load_task_events(dir.path()).unwrap();
@@ -761,7 +791,10 @@ spec:
         assert_eq!(events[0].aggregate_type, "project");
         assert_eq!(events[0].aggregate_id, "project-runtime-001");
         assert_eq!(
-            events[0].state.as_ref().map(|state| state.to_state.as_str()),
+            events[0]
+                .state
+                .as_ref()
+                .map(|state| state.to_state.as_str()),
             Some("goal_recheck")
         );
     }
@@ -790,7 +823,10 @@ spec:
 
         assert!(result.applied);
         assert_eq!(
-            result.next_binding.as_ref().map(|binding| binding.state_id.as_str()),
+            result
+                .next_binding
+                .as_ref()
+                .map(|binding| binding.state_id.as_str()),
             Some("accepted")
         );
         let handoff = result.handoff.as_ref().expect("missing handoff");
@@ -805,11 +841,17 @@ spec:
             Some(".agentflow/spec/completions/project-runtime-001.json")
         );
         assert_eq!(
-            events[0].state.as_ref().map(|state| state.from_state.as_str()),
+            events[0]
+                .state
+                .as_ref()
+                .map(|state| state.from_state.as_str()),
             Some("goal_recheck")
         );
         assert_eq!(
-            events[0].state.as_ref().map(|state| state.to_state.as_str()),
+            events[0]
+                .state
+                .as_ref()
+                .map(|state| state.to_state.as_str()),
             Some("accepted")
         );
     }
