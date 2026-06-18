@@ -717,6 +717,20 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                     .and_then(Value::as_str)
                     .map(str::to_string)
                     .or_else(|| summary.provider.clone());
+                if event.payload.get("providerKind").is_some() {
+                    summary.provider_kind = event
+                        .payload
+                        .get("providerKind")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("providerStatus").is_some() {
+                    summary.provider_status = event
+                        .payload
+                        .get("providerStatus")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
                 summary.status = Some("requested".to_string());
                 summary.launch_requested_at = Some(event.timestamp);
                 summary.updated_at = Some(event.timestamp);
@@ -748,6 +762,20 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                     .and_then(Value::as_str)
                     .map(str::to_string)
                     .or_else(|| summary.provider.clone());
+                if event.payload.get("providerKind").is_some() {
+                    summary.provider_kind = event
+                        .payload
+                        .get("providerKind")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("providerStatus").is_some() {
+                    summary.provider_status = event
+                        .payload
+                        .get("providerStatus")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
                 summary.session_id = event
                     .payload
                     .get("sessionId")
@@ -813,6 +841,71 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                         .get("writebackState")
                         .and_then(Value::as_str)
                         .map(str::to_string);
+                }
+                if event.payload.get("selectionStatus").is_some() {
+                    summary.selection_status = event
+                        .payload
+                        .get("selectionStatus")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("selectionReason").is_some() {
+                    summary.selection_reason = event
+                        .payload
+                        .get("selectionReason")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("degradationReason").is_some() {
+                    summary.degradation_reason = event
+                        .payload
+                        .get("degradationReason")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if let Some(Value::Array(items)) = event.payload.get("supportedRoles") {
+                    summary.supported_roles = items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect();
+                }
+                if let Some(Value::Array(items)) = event.payload.get("supportedSkillPacks") {
+                    summary.supported_skill_packs = items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect();
+                }
+                if let Some(Value::Array(items)) = event.payload.get("requiredCapabilities") {
+                    summary.required_capabilities = items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect();
+                }
+                if let Some(Value::Array(items)) = event.payload.get("degradedCapabilities") {
+                    summary.degraded_capabilities = items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect();
+                }
+                if let Some(Value::Array(items)) = event.payload.get("missingRequiredCapabilities")
+                {
+                    summary.missing_required_capabilities = items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect();
+                }
+                if let Some(Value::Array(items)) = event.payload.get("missingDegradedCapabilities")
+                {
+                    summary.missing_degraded_capabilities = items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect();
                 }
                 if event.payload.get("recoveryReason").is_some() {
                     summary.recovery_reason = event
@@ -1839,10 +1932,21 @@ mod tests {
                 "agent.session.failed",
                 json!({
                     "provider": "codex",
+                    "providerKind": "codex",
+                    "providerStatus": "ready",
                     "runId": "run-001",
                     "sessionId": "codex-run-001",
                     "sessionStatus": "failed",
                     "attemptCount": 1,
+                    "selectionStatus": "degraded",
+                    "selectionReason": "provider codex supports work-agent with degraded capabilities",
+                    "degradationReason": "missing degraded capabilities: build_agent.complete",
+                    "supportedRoles": ["spec-agent", "work-agent", "audit-agent"],
+                    "supportedSkillPacks": ["contract-skills", "execution-skills", "judgment-skills"],
+                    "requiredCapabilities": ["launch", "codex.exec"],
+                    "degradedCapabilities": ["build_agent.complete"],
+                    "missingRequiredCapabilities": [],
+                    "missingDegradedCapabilities": ["build_agent.complete"],
                     "logPath": ".agentflow/state/mcp/sessions/codex-run-001.jsonl",
                     "lastMessagePath": ".agentflow/state/mcp/sessions/codex-run-001-last-message.txt",
                     "lastError": "first attempt failed"
@@ -1893,7 +1997,29 @@ mod tests {
         let projection = crate::storage::load_task_projection(dir.path(), "AF-PROJ-001").unwrap();
 
         assert_eq!(projection.session.status.as_deref(), Some("in-review"));
+        assert_eq!(projection.session.provider_kind.as_deref(), Some("codex"));
+        assert_eq!(projection.session.provider_status.as_deref(), Some("ready"));
         assert_eq!(projection.session.attempt_count, 2);
+        assert_eq!(
+            projection.session.selection_status.as_deref(),
+            Some("degraded")
+        );
+        assert_eq!(
+            projection.session.selection_reason.as_deref(),
+            Some("provider codex supports work-agent with degraded capabilities")
+        );
+        assert_eq!(
+            projection.session.degradation_reason.as_deref(),
+            Some("missing degraded capabilities: build_agent.complete")
+        );
+        assert_eq!(
+            projection.session.required_capabilities,
+            vec!["launch".to_string(), "codex.exec".to_string()]
+        );
+        assert_eq!(
+            projection.session.missing_degraded_capabilities,
+            vec!["build_agent.complete".to_string()]
+        );
         assert_eq!(
             projection.session.recovery_reason.as_deref(),
             Some("retry after failed session")

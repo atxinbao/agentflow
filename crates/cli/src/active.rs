@@ -721,7 +721,7 @@ mod tests {
 
     impl McpAgentProvider for FakeProvider {
         fn provider_id(&self) -> &'static str {
-            "fake"
+            "codex"
         }
 
         fn kind(&self) -> McpProviderKind {
@@ -730,8 +730,13 @@ mod tests {
 
         fn check_health(&self, _project_root: &Path) -> McpProviderStatus {
             let mut status = McpProviderStatus::new(McpProviderKind::Codex, 1);
-            status.provider = "fake".to_string();
+            status.provider = "codex".to_string();
             status.status = McpProviderStatusCode::Ready;
+            status.capabilities = vec![
+                agentflow_mcp::McpCapability::new("launch", true),
+                agentflow_mcp::McpCapability::new("codex.exec", true),
+                agentflow_mcp::McpCapability::new("build_agent.complete", true),
+            ];
             status
         }
 
@@ -741,7 +746,7 @@ mod tests {
             request: &McpLaunchRequest,
         ) -> Result<McpLaunchPlan> {
             let mut plan = McpLaunchPlan::new(
-                "fake",
+                "codex",
                 format!("fake-{}", request.run_id),
                 request.issue_id.clone(),
                 request.run_id.clone(),
@@ -816,7 +821,7 @@ mod tests {
             .unwrap()
             .unwrap();
         let launch = loop_driver
-            .request_agent_launch(dir.path(), "AF-001", "fake")
+            .request_agent_launch(dir.path(), "AF-001", "codex")
             .unwrap();
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(FakeProvider));

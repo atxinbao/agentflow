@@ -91,6 +91,8 @@ pub struct ProjectionRuntimeSummary {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectionSessionSummary {
     pub provider: Option<String>,
+    pub provider_kind: Option<String>,
+    pub provider_status: Option<String>,
     pub session_id: Option<String>,
     pub status: Option<String>,
     #[serde(default)]
@@ -106,6 +108,21 @@ pub struct ProjectionSessionSummary {
     pub merge_proof_path: Option<String>,
     pub merge_state: Option<String>,
     pub writeback_state: Option<String>,
+    pub selection_status: Option<String>,
+    pub selection_reason: Option<String>,
+    pub degradation_reason: Option<String>,
+    #[serde(default)]
+    pub supported_roles: Vec<String>,
+    #[serde(default)]
+    pub supported_skill_packs: Vec<String>,
+    #[serde(default)]
+    pub required_capabilities: Vec<String>,
+    #[serde(default)]
+    pub degraded_capabilities: Vec<String>,
+    #[serde(default)]
+    pub missing_required_capabilities: Vec<String>,
+    #[serde(default)]
+    pub missing_degraded_capabilities: Vec<String>,
     pub recovery_reason: Option<String>,
     pub last_error: Option<String>,
     pub branch_name: Option<String>,
