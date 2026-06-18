@@ -84,7 +84,6 @@ import {
   buildAppInteractionState,
   buildAuditInteractionState,
   buildDeliveryInteractionState,
-  buildTaskCurrentStageSections,
   buildTaskDeliveryProjection,
   buildTaskExecutionProjection,
   buildTaskStatusContract,
@@ -3184,17 +3183,6 @@ function TaskDetailReader({
     () => deliveryReviewItems(effectiveTask, null, session, taskProjection),
     [effectiveTask, session, taskProjection],
   );
-  const currentStageSections = useMemo(
-    () =>
-      buildTaskCurrentStageSections({
-        contract: statusContract,
-        executeItems: executionProjection.summaryItems,
-        reviewItems,
-        stageItems: stageOutputItems,
-        status: effectiveDisplayStatus,
-      }),
-    [effectiveDisplayStatus, executionProjection.summaryItems, reviewItems, stageOutputItems, statusContract],
-  );
   const finalDeliveryArtifact = useMemo(
     () => outputBundle.deliveryArtifacts[deliveryProjection.deliveryRunId ?? effectiveTask.latestRunId ?? ""]
       ?? null,
@@ -3266,6 +3254,7 @@ function TaskDetailReader({
         <div className="v16-task-workspace-shell">
           <div className="v16-task-workspace-main">
             <IssueStatusFlow
+              deliveryProjection={deliveryProjection}
               task={effectiveTask}
               executeItems={executionProjection.summaryItems}
               projection={taskProjection}
@@ -3275,14 +3264,14 @@ function TaskDetailReader({
             />
           </div>
           <aside className="v16-task-workspace-sidebar" aria-label="当前阶段摘要">
-            <TaskCurrentStagePanel
-              sections={currentStageSections}
-              status={effectiveDisplayStatus}
-            />
-            <TaskFinalDeliveryCard
+            <TaskFlowSidebar
               artifact={finalDeliveryArtifact}
               deliveryProjection={deliveryProjection}
+              reviewItems={reviewItems}
+              stageItems={stageOutputItems}
+              status={effectiveDisplayStatus}
               task={effectiveTask}
+              taskProjection={taskProjection}
             />
           </aside>
         </div>
@@ -3349,28 +3338,6 @@ function TaskDetailReader({
   );
 }
 
-function TaskCurrentStagePanel({
-  sections,
-  status,
-}: {
-  sections: Array<{ title: string; items: string[] }>;
-  status: IssueDisplayStatus;
-}) {
-  return (
-    <section className="v16-task-stage-panel" aria-label="当前阶段摘要">
-      <div className="v16-task-stage-panel-header">
-        <span>当前阶段</span>
-        <strong>{displayStatusLabelZh(status)}</strong>
-      </div>
-      <div className="v16-task-stage-grid">
-        {sections.map((section) => (
-          <SectionList key={section.title} title={section.title} items={section.items} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function TaskWorkflowPanelShell({
   yamlModel,
 }: {
@@ -3387,14 +3354,22 @@ function TaskWorkflowPanelShell({
   );
 }
 
-function TaskFinalDeliveryCard({
+function TaskFlowSidebar({
   artifact,
   deliveryProjection,
+  reviewItems,
+  stageItems,
+  status,
   task,
+  taskProjection,
 }: {
   artifact: DeliveryArtifactState | null;
   deliveryProjection: TaskDeliveryProjection;
+  reviewItems: string[];
+  stageItems: string[];
+  status: IssueDisplayStatus;
   task: V1Issue;
+  taskProjection: TaskProjection | null;
 }) {
   const isDone = task.displayStatus === "done";
   const statusLabel = isDone
@@ -3421,31 +3396,47 @@ function TaskFinalDeliveryCard({
     task.displayStatus === "in_review" || task.displayStatus === "done"
       ? []
       : ["当前还没有进入最终交付阶段。", "任务完成本地验证并进入评审后，这里会显示交付摘要。"];
+  const auditItems = taskAuditSummaryItems(task, taskProjection);
+  const nextStepItems = [`当前状态：${displayStatusLabelZh(status)}`, ...stageItems];
 
   return (
-    <section className={isDone ? "v16-final-delivery-card done" : "v16-final-delivery-card"} aria-label="最终交付">
-      <div>
-        <span>最终交付</span>
-        <strong>{deliveryProjection.deliveryRunId ?? "未生成"}</strong>
-        <small>{statusLabel}</small>
-      </div>
-      <ul>
-        {releaseSummary.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-        {packageSummary.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-        {waitingItems.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-        <li>{deliveryProjection.missingItems.length ? `待补齐：${deliveryProjection.missingItems.length} 项` : "交付摘要已和当前状态对齐。"}</li>
-      </ul>
-    </section>
+    <div className="v16-task-side-rail">
+      <section className="v16-task-stage-panel" aria-label="当前阶段摘要">
+        <div className="v16-task-stage-panel-header">
+          <span>当前阶段</span>
+          <strong>{displayStatusLabelZh(status)}</strong>
+        </div>
+        <div className="v16-task-stage-grid v16-task-stage-grid-compact">
+          <SectionList title="当前动作" items={nextStepItems} />
+          <SectionList title="评审状态" items={reviewItems} />
+        </div>
+      </section>
+      <section className={isDone ? "v16-final-delivery-card done" : "v16-final-delivery-card"} aria-label="交付摘要">
+        <div>
+          <span>交付</span>
+          <strong>{deliveryProjection.deliveryRunId ?? "未生成"}</strong>
+          <small>{statusLabel}</small>
+        </div>
+        <ul>
+          {releaseSummary.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+          {packageSummary.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+          {waitingItems.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+          <li>{deliveryProjection.missingItems.length ? `待补齐：${deliveryProjection.missingItems.length} 项` : "交付摘要已和当前状态对齐。"}</li>
+        </ul>
+      </section>
+      <SectionList title="审计摘要" items={auditItems} />
+    </div>
   );
 }
 
 function IssueStatusFlow({
+  deliveryProjection,
   task,
   executeItems,
   projection,
@@ -3453,6 +3444,7 @@ function IssueStatusFlow({
   stageItems,
   status,
 }: {
+  deliveryProjection: TaskDeliveryProjection;
   task: V1Issue;
   executeItems: string[];
   projection: TaskProjection | null;
@@ -3476,7 +3468,7 @@ function IssueStatusFlow({
   return (
     <section className="v16-issue-status-flow" aria-label="任务状态流转">
       <div className="v16-issue-status-flow-header">
-        <span>状态流转</span>
+        <span>状态流 / 事件流</span>
         <strong>{selectedStepLabel}</strong>
       </div>
       <ol>
@@ -3488,6 +3480,7 @@ function IssueStatusFlow({
             ? enhanceTaskStatusStepDetailWithProjection({
                 detail: buildTaskStatusStepDetail({
                   currentStatus: projectedStatus,
+                  deliveryProjection,
                   executeItems,
                   reviewItems,
                   stageItems,
@@ -3621,11 +3614,25 @@ function enhanceTaskStatusStepDetailWithProjection({
     return detail;
   }
 
+  if (projectionItem.phase === "future") {
+    return {
+      descriptionItems: [
+        ...detail.descriptionItems,
+        ["事件阶段", projectionPhaseLabel(projectionItem.phase)] as [string, string],
+        [
+          "进入时间",
+          projectionItem.enteredAt ? formatTimestamp(projectionItem.enteredAt) : "等待进入",
+        ] as [string, string],
+      ],
+      sections: detail.sections,
+    };
+  }
+
   const eventItems = projectionItem.events.length
     ? projectionItem.events.map((event) => taskTimelineEventLine(event))
-    : projectionItem.phase === "future"
-      ? ["这个阶段还没有事件。"]
-      : ["这个阶段没有记录到事件。"];
+    : projectionItem.phase === "current"
+      ? ["当前阶段已进入，等待新的事件写入。"]
+      : ["这个阶段没有记录到历史事件。"];
   const artifactItems = [
     ...projectionItem.liveRefs,
     ...projectionItem.events.flatMap((event) => event.artifactRefs),
@@ -3633,13 +3640,17 @@ function enhanceTaskStatusStepDetailWithProjection({
   const uniqueArtifactItems = Array.from(new Set(artifactItems));
   const artifactLines = uniqueArtifactItems.length
     ? uniqueArtifactItems.map((ref) => `产物：${ref}`)
-    : projectionItem.phase === "future"
-      ? ["这个阶段还没有产物。"]
-      : ["这个阶段没有记录到产物。"];
+    : projectionItem.phase === "current"
+      ? ["当前阶段还没有产物写入。"]
+      : ["这个阶段没有保留产物记录。"];
   const runtimeItems = projectionRuntimeSessionItems(projection, projectionItem);
   const publicDeliveryItems =
-    projectionItem.state === "done"
+    projectionItem.state === "in_review" || projectionItem.state === "done"
       ? projectionPublicDeliveryItems(projection)
+      : [];
+  const auditItems =
+    projectionItem.state === "done"
+      ? projectionAuditItems(projection)
       : [];
 
   return {
@@ -3672,8 +3683,16 @@ function enhanceTaskStatusStepDetailWithProjection({
       ...(publicDeliveryItems.length
         ? [
             {
-              title: "公开交付",
+              title: "交付记录",
               items: publicDeliveryItems,
+            },
+          ]
+        : []),
+      ...(auditItems.length
+        ? [
+            {
+              title: "审计摘要",
+              items: auditItems,
             },
           ]
         : []),
@@ -3690,6 +3709,18 @@ function projectionPublicDeliveryItems(projection: TaskProjection) {
     delivery.evidencePath ? `验证证据：${delivery.evidencePath}` : "验证证据：未记录",
     delivery.changelogPath ? `CHANGELOG：${delivery.changelogPath}` : "CHANGELOG：未记录",
     delivery.releaseNotesUrl ? `Release notes：${delivery.releaseNotesUrl}` : "Release notes：未记录",
+  ];
+}
+
+function projectionAuditItems(projection: TaskProjection) {
+  const audit = projection.audit;
+  if (!audit || audit.status === "not-requested") {
+    return ["审计仍是独立流程，当前没有审计请求。"];
+  }
+  return [
+    `审计状态：${artifactStatusLabel(audit.status)}`,
+    audit.latestAuditId ? `审计编号：${audit.latestAuditId}` : "审计编号：未记录",
+    audit.reportPath ? `审计报告：${audit.reportPath}` : "审计报告：未记录",
   ];
 }
 
@@ -3730,6 +3761,7 @@ function taskStatusTransitionLabel(status: IssueDisplayStatus, nextEntry: string
 
 function buildTaskStatusStepDetail({
   currentStatus,
+  deliveryProjection,
   executeItems,
   reviewItems,
   stageItems,
@@ -3737,6 +3769,7 @@ function buildTaskStatusStepDetail({
   viewedStatus,
 }: {
   currentStatus: IssueDisplayStatus;
+  deliveryProjection: TaskDeliveryProjection;
   executeItems: string[];
   reviewItems: string[];
   stageItems: string[];
@@ -3780,14 +3813,82 @@ function buildTaskStatusStepDetail({
       ["进入下一步", taskStatusTransitionLabel(viewedStatus, contract.nextEntry)],
       ["信息流", live ? "当前阶段展示实时信息流。" : "这个阶段已结束，保留阶段日志。"],
     ] as Array<[string, string]>,
-    sections: buildTaskCurrentStageSections({
-      contract,
+    sections: buildTaskStatusDetailSections({
+      deliveryProjection,
       executeItems: sectionItems.executeItems,
       reviewItems: sectionItems.reviewItems,
       stageItems: sectionItems.stageItems,
       status: viewedStatus,
     }),
   };
+}
+
+function buildTaskStatusDetailSections({
+  deliveryProjection,
+  executeItems,
+  reviewItems,
+  stageItems,
+  status,
+}: {
+  deliveryProjection: TaskDeliveryProjection;
+  executeItems: string[];
+  reviewItems: string[];
+  stageItems: string[];
+  status: IssueDisplayStatus;
+}) {
+  const sections: Array<{ title: string; items: string[] }> = [];
+
+  if (status === "backlog" || status === "todo") {
+    sections.push({
+      title: "准备信息",
+      items: executeItems,
+    });
+  }
+
+  sections.push({
+    title: "阶段摘要",
+    items:
+      status === "in_review" || status === "done"
+        ? [...stageItems, ...deliveryProjection.summaryItems]
+        : stageItems,
+  });
+
+  if (status === "in_review" || status === "done") {
+    sections.push({
+      title: "评审与写回",
+      items: reviewItems,
+    });
+  }
+
+  if (status === "blocked" || status === "cancel") {
+    sections.push({
+      title: "状态说明",
+      items: executeItems,
+    });
+  }
+
+  return sections;
+}
+
+function taskAuditSummaryItems(task: V1Issue, projection?: TaskProjection | null) {
+  if (task.issueCategory === "audit") {
+    return [
+      `审计目标：${task.auditId ?? "未记录"}`,
+      `输出目录：${task.auditOutputDir ?? "未记录"}`,
+      `当前状态：${displayStatusLabelZh(task.displayStatus)}`,
+    ];
+  }
+
+  const audit = projection?.audit ?? null;
+  if (!audit || audit.status === "not-requested") {
+    return ["审计仍是独立流程，当前没有审计请求。"];
+  }
+
+  return [
+    `状态：${artifactStatusLabel(audit.status)}`,
+    audit.latestAuditId ? `审计编号：${audit.latestAuditId}` : "审计编号：未记录",
+    audit.reportPath ? `审计报告：${audit.reportPath}` : "审计报告：未记录",
+  ];
 }
 
 function isFutureTaskStatus(viewedStatus: IssueDisplayStatus, currentStatus: IssueDisplayStatus) {
