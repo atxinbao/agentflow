@@ -1049,6 +1049,8 @@ fn build_delivery_summary(
             pr_url: summary.pr_url,
             merge_commit: summary.merge_commit,
             public_record_path: summary.public_record_path,
+            public_record_targets: summary.public_record_targets,
+            public_record_markdown: summary.public_record_markdown,
             summary_line: summary.summary_line,
             public_record_items: summary.public_record_items,
             missing_public_records: summary.missing_public_records,
@@ -1078,16 +1080,24 @@ fn build_delivery_summary(
         "missing".to_string()
     };
     let mut public_record_items = Vec::new();
+    let mut public_record_targets = vec!["PR/MR body".to_string()];
     if public_delivery.pr_url.is_some() {
         public_record_items.push("PR/MR body".to_string());
     }
     if let Some(path) = public_delivery.changelog_path.clone() {
-        public_record_items.push(path);
+        public_record_items.push(path.clone());
+        public_record_targets.push(path);
     }
     if let Some(path) = public_delivery.release_notes_url.clone() {
         if !public_record_items.iter().any(|item| item == &path) {
-            public_record_items.push(path);
+            public_record_items.push(path.clone());
         }
+        if !public_record_targets.iter().any(|item| item == &path) {
+            public_record_targets.push(path);
+        }
+    }
+    if public_record_targets.len() == 1 && status == "ready" {
+        public_record_targets.push("CHANGELOG.md 或 release notes".to_string());
     }
 
     ProjectionDeliverySummary {
@@ -1099,9 +1109,25 @@ fn build_delivery_summary(
         pr_url: public_delivery.pr_url.clone(),
         merge_commit: public_delivery.merge_commit.clone(),
         public_record_path,
+        public_record_targets,
+        public_record_markdown: format!(
+            "# {} {}\n\n## 公开交付\n\n- 状态：{}\n- 目标位置：{}\n",
+            issue.issue_id,
+            issue.title,
+            match status.as_str() {
+                "published" => "已发布",
+                "ready" => "待发布",
+                _ => "缺失",
+            },
+            if public_record_items.is_empty() {
+                "PR/MR body".to_string()
+            } else {
+                public_record_items.join("、")
+            }
+        ),
         summary_line: match status.as_str() {
-            "published" => format!("公开交付已整理到 {}。", public_record_items.join("、")),
-            "ready" => "公开交付已开始整理，等待写入 CHANGELOG 或 release notes。".to_string(),
+            "published" => format!("公开交付已统一写入 {}。", public_record_items.join("、")),
+            "ready" => "公开交付准备已完成，下一步应整理 PR/MR body，并在需要时汇总到 CHANGELOG.md 或 release notes。".to_string(),
             _ => "当前还没有公开交付记录。".to_string(),
         },
         public_record_items,
@@ -1130,6 +1156,8 @@ fn build_project_delivery_summary(
             pr_url: None,
             merge_commit: None,
             public_record_path: summary.public_record_items.first().cloned(),
+            public_record_targets: summary.public_record_items.clone(),
+            public_record_markdown: String::new(),
             summary_line: summary.summary_line,
             public_record_items: summary.public_record_items,
             missing_public_records: summary.missing_public_records,
@@ -1178,6 +1206,8 @@ fn build_project_delivery_summary(
         pr_url: None,
         merge_commit: None,
         public_record_path: public_record_items.first().cloned(),
+        public_record_targets: public_record_items.clone(),
+        public_record_markdown: String::new(),
         summary_line: if missing_count > 0 {
             "项目仍有任务缺少公开交付记录。".to_string()
         } else if public_record_items.is_empty() {

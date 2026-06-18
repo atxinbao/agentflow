@@ -1,9 +1,11 @@
 use crate::model::{
     DeliverySummary, ProjectDeliverySummary, PublicReleaseDocumentPaths,
     PublicReleaseDocumentTarget, PublicReleaseEntry, PublicReleaseSummary,
-    DELIVERY_SUMMARY_VERSION, PROJECT_DELIVERY_SUMMARY_VERSION, PUBLIC_RELEASE_SUMMARY_VERSION,
+    CHANGELOG_TEMPLATE_VERSION, DELIVERY_SUMMARY_VERSION, PROJECT_DELIVERY_SUMMARY_VERSION,
+    PUBLIC_RELEASE_SUMMARY_VERSION, RELEASE_NOTES_TEMPLATE_VERSION,
+    TASK_PUBLIC_RECORD_TEMPLATE_VERSION,
 };
-use agentflow_spec::read_spec_issue;
+use agentflow_spec::{read_spec_issue, SpecIssue};
 use anyhow::{Context, Result};
 use std::{
     fs,
@@ -61,6 +63,8 @@ pub fn collect_public_release_summary(
 
     Ok(PublicReleaseSummary {
         version: PUBLIC_RELEASE_SUMMARY_VERSION.to_string(),
+        changelog_template_version: CHANGELOG_TEMPLATE_VERSION.to_string(),
+        release_notes_template_version: RELEASE_NOTES_TEMPLATE_VERSION.to_string(),
         generated_at: unix_timestamp_seconds(),
         entries,
         changelog_markdown,
@@ -74,7 +78,8 @@ pub fn load_delivery_summary(
 ) -> Result<DeliverySummary> {
     let root = canonical_project_root(project_root)?;
     let projection = load_task_projection_snapshot(&root, issue_id.as_ref())?;
-    Ok(delivery_summary_from_snapshot(&projection))
+    let issue = read_spec_issue(&root, issue_id.as_ref())?;
+    Ok(delivery_summary_from_snapshot(&projection, &issue))
 }
 
 pub fn load_project_delivery_summary(
@@ -97,8 +102,7 @@ pub fn load_project_delivery_summary(
             .then_with(|| left.issue_id.cmp(&right.issue_id))
     });
     Ok(Some(project_delivery_summary_from_snapshots(
-        project_id,
-        &snapshots,
+        &root, project_id, &snapshots,
     )))
 }
 
@@ -125,16 +129,23 @@ fn load_done_task_entries(root: &Path) -> Result<Vec<PublicReleaseEntry>> {
             continue;
         }
         let issue = read_spec_issue(root, &projection.issue_id)?;
+        let delivery = delivery_summary_from_snapshot(&projection, &issue);
         entries.push(PublicReleaseEntry {
             issue_id: projection.issue_id,
             project_id: projection.project_id,
+            source_requirement_id: issue.source_requirement_id.clone(),
+            source_requirement_path: issue.source_requirement_path.clone(),
             title: issue.title,
+            summary: issue.summary.clone(),
+            evidence_status: delivery.evidence_status.clone(),
             current_state: projection.current_state,
-            pr_url: projection.public_delivery.pr_url,
-            merge_commit: projection.public_delivery.merge_commit,
-            evidence_path: projection.public_delivery.evidence_path,
-            changelog_path: projection.public_delivery.changelog_path,
-            release_notes_url: projection.public_delivery.release_notes_url,
+            pr_url: delivery.pr_url.clone(),
+            merge_commit: delivery.merge_commit.clone(),
+            evidence_path: delivery.evidence_path.clone(),
+            changelog_path: projection.public_delivery.changelog_path.clone(),
+            release_notes_url: projection.public_delivery.release_notes_url.clone(),
+            validation_command_count: issue.validation_commands.len(),
+            public_record_targets: delivery.public_record_targets.clone(),
             updated_at: projection.updated_at,
         });
     }
@@ -169,7 +180,10 @@ fn task_projection_path(root: &Path, issue_id: &str) -> PathBuf {
         .join(format!("{issue_id}.json"))
 }
 
-fn delivery_summary_from_snapshot(snapshot: &TaskProjectionSnapshot) -> DeliverySummary {
+fn delivery_summary_from_snapshot(
+    snapshot: &TaskProjectionSnapshot,
+    issue: &SpecIssue,
+) -> DeliverySummary {
     let evidence_path = snapshot
         .delivery
         .evidence_path
@@ -192,18 +206,16 @@ fn delivery_summary_from_snapshot(snapshot: &TaskProjectionSnapshot) -> Delivery
         .or_else(|| snapshot.public_delivery.changelog_path.clone())
         .or_else(|| snapshot.public_delivery.release_notes_url.clone());
     let release_notes_url = snapshot.public_delivery.release_notes_url.clone();
-    let mut public_record_items = Vec::new();
-    if pr_url.is_some() {
-        public_record_items.push("PR/MR body".to_string());
-    }
-    if let Some(path) = snapshot.public_delivery.changelog_path.clone() {
-        public_record_items.push(path);
-    }
-    if let Some(path) = snapshot.public_delivery.release_notes_url.clone() {
-        if !public_record_items.iter().any(|item| item == &path) {
-            public_record_items.push(path);
-        }
-    }
+    let public_record_items = build_present_public_record_items(
+        pr_url.as_ref(),
+        snapshot.public_delivery.changelog_path.as_ref(),
+        snapshot.public_delivery.release_notes_url.as_ref(),
+    );
+    let public_record_targets = build_public_record_targets(
+        snapshot.current_state.as_str(),
+        snapshot.public_delivery.changelog_path.as_ref(),
+        snapshot.public_delivery.release_notes_url.as_ref(),
+    );
 
     let mut missing_public_records = Vec::new();
     if matches!(
@@ -236,26 +248,32 @@ fn delivery_summary_from_snapshot(snapshot: &TaskProjectionSnapshot) -> Delivery
     } else {
         "missing".to_string()
     };
-    let summary_line = if !missing_public_records.is_empty() {
-        format!(
-            "公开交付正在整理，当前缺少 {}。",
-            missing_public_records.join("、")
-        )
-    } else if !public_record_items.is_empty() {
-        format!(
-            "公开交付已整理到 {}。",
-            public_record_items.join("、")
-        )
-    } else if evidence_path.is_some() || pr_url.is_some() || merge_commit.is_some() {
-        "交付事实已存在，但公开交付记录还没有整理完成。".to_string()
-    } else {
-        "当前还没有公开交付记录。".to_string()
-    };
+    let summary_line = build_delivery_summary_line(
+        &status,
+        &public_record_items,
+        &missing_public_records,
+        evidence_path.is_some() || pr_url.is_some() || merge_commit.is_some(),
+    );
+    let public_record_markdown = render_task_public_record_markdown(
+        issue,
+        &status,
+        &evidence_status,
+        pr_url.as_deref(),
+        merge_commit.as_deref(),
+        snapshot.public_delivery.changelog_path.as_deref(),
+        snapshot.public_delivery.release_notes_url.as_deref(),
+        &public_record_targets,
+    );
 
     DeliverySummary {
         version: DELIVERY_SUMMARY_VERSION.to_string(),
+        public_record_template_version: TASK_PUBLIC_RECORD_TEMPLATE_VERSION.to_string(),
         issue_id: snapshot.issue_id.clone(),
         project_id: snapshot.project_id.clone(),
+        source_requirement_id: issue.source_requirement_id.clone(),
+        source_requirement_path: issue.source_requirement_path.clone(),
+        title: issue.title.clone(),
+        summary: issue.summary.clone(),
         status,
         evidence_status,
         evidence_path,
@@ -263,6 +281,9 @@ fn delivery_summary_from_snapshot(snapshot: &TaskProjectionSnapshot) -> Delivery
         merge_commit,
         public_record_path,
         release_notes_url,
+        validation_command_count: issue.validation_commands.len(),
+        public_record_targets,
+        public_record_markdown,
         summary_line,
         public_record_items,
         missing_public_records,
@@ -271,12 +292,16 @@ fn delivery_summary_from_snapshot(snapshot: &TaskProjectionSnapshot) -> Delivery
 }
 
 fn project_delivery_summary_from_snapshots(
+    root: &Path,
     project_id: &str,
     snapshots: &[TaskProjectionSnapshot],
 ) -> ProjectDeliverySummary {
     let summaries = snapshots
         .iter()
-        .map(delivery_summary_from_snapshot)
+        .filter_map(|snapshot| {
+            let issue = read_spec_issue(root, &snapshot.issue_id).ok();
+            issue.map(|issue| delivery_summary_from_snapshot(snapshot, &issue))
+        })
         .collect::<Vec<_>>();
     let published_count = summaries
         .iter()
@@ -305,14 +330,21 @@ fn project_delivery_summary_from_snapshots(
     } else {
         "missing".to_string()
     };
-    let updated_at = summaries.iter().map(|summary| summary.updated_at).max().unwrap_or(0);
+    let updated_at = summaries
+        .iter()
+        .map(|summary| summary.updated_at)
+        .max()
+        .unwrap_or(0);
     let public_record_items = summaries
         .iter()
         .flat_map(|summary| summary.public_record_items.clone())
         .collect::<Vec<_>>();
     let mut unique_public_record_items = Vec::new();
     for item in public_record_items {
-        if !unique_public_record_items.iter().any(|existing| existing == &item) {
+        if !unique_public_record_items
+            .iter()
+            .any(|existing| existing == &item)
+        {
             unique_public_record_items.push(item);
         }
     }
@@ -359,20 +391,26 @@ fn project_delivery_summary_from_snapshots(
 }
 
 fn render_changelog(entries: &[PublicReleaseEntry]) -> String {
-    let mut markdown = String::from("# Changelog\n\n## Generated Public Delivery Summary\n\n");
+    let mut markdown = String::from("# Changelog\n\n## Public Delivery\n\n");
     if entries.is_empty() {
-        markdown.push_str("- No completed task deliveries found.\n");
+        markdown.push_str("- 暂无已完成任务交付。\n");
         return markdown;
     }
     for entry in entries {
-        markdown.push_str(&format!("- `{}` {}\n", entry.issue_id, entry.title));
-        push_optional_line(&mut markdown, "  - PR/MR", entry.pr_url.as_deref());
-        push_optional_line(&mut markdown, "  - Merge", entry.merge_commit.as_deref());
-        push_optional_line(
-            &mut markdown,
-            "  - Evidence",
-            entry.evidence_path.as_deref(),
-        );
+        markdown.push_str(&format!("### {} {}\n\n", entry.issue_id, entry.title));
+        markdown.push_str(&format!("- 来源需求：`{}`\n", entry.source_requirement_id));
+        markdown.push_str(&format!("- 变更摘要：{}\n", entry.summary));
+        markdown.push_str(&format!(
+            "- 验证状态：{}\n",
+            render_evidence_status(&entry.evidence_status)
+        ));
+        markdown.push_str(&format!(
+            "- 公开交付目标：{}\n",
+            entry.public_record_targets.join("、")
+        ));
+        push_optional_line(&mut markdown, "- PR/MR", entry.pr_url.as_deref());
+        push_optional_line(&mut markdown, "- 合并提交", entry.merge_commit.as_deref());
+        markdown.push('\n');
     }
     markdown
 }
@@ -380,23 +418,151 @@ fn render_changelog(entries: &[PublicReleaseEntry]) -> String {
 fn render_release_notes(entries: &[PublicReleaseEntry]) -> String {
     let mut markdown = String::from("# Release Notes\n\n## Completed Tasks\n\n");
     if entries.is_empty() {
-        markdown.push_str("No completed task deliveries found.\n");
+        markdown.push_str("暂无已完成任务交付。\n");
         return markdown;
     }
     for entry in entries {
         markdown.push_str(&format!("### {} {}\n\n", entry.issue_id, entry.title));
+        markdown.push_str(&format!("- Summary: {}\n", entry.summary));
         markdown.push_str("- Status: done\n");
+        markdown.push_str(&format!(
+            "- Validation: {} commands, {}\n",
+            entry.validation_command_count,
+            render_evidence_status(&entry.evidence_status)
+        ));
+        markdown.push_str(&format!(
+            "- Public delivery: {}\n",
+            entry.public_record_targets.join("、")
+        ));
         push_optional_line(&mut markdown, "- PR/MR", entry.pr_url.as_deref());
         push_optional_line(&mut markdown, "- Merge", entry.merge_commit.as_deref());
-        push_optional_line(&mut markdown, "- Evidence", entry.evidence_path.as_deref());
         push_optional_line(
             &mut markdown,
-            "- Release notes",
-            entry.release_notes_url.as_deref(),
+            "- Source requirement",
+            Some(entry.source_requirement_path.as_str()),
         );
         markdown.push('\n');
     }
     markdown
+}
+
+fn build_present_public_record_items(
+    pr_url: Option<&String>,
+    changelog_path: Option<&String>,
+    release_notes_url: Option<&String>,
+) -> Vec<String> {
+    let mut items = Vec::new();
+    if pr_url.is_some() {
+        items.push("PR/MR body".to_string());
+    }
+    if let Some(path) = changelog_path {
+        items.push(path.clone());
+    }
+    if let Some(path) = release_notes_url {
+        if !items.iter().any(|item| item == path) {
+            items.push(path.clone());
+        }
+    }
+    items
+}
+
+fn build_public_record_targets(
+    current_state: &str,
+    changelog_path: Option<&String>,
+    release_notes_url: Option<&String>,
+) -> Vec<String> {
+    let mut items = vec!["PR/MR body".to_string()];
+    if let Some(path) = changelog_path {
+        items.push(path.clone());
+    }
+    if let Some(path) = release_notes_url {
+        if !items.iter().any(|item| item == path) {
+            items.push(path.clone());
+        }
+    }
+    if items.len() == 1 && matches!(current_state, "in_review" | "done" | "published") {
+        items.push("CHANGELOG.md 或 release notes".to_string());
+    }
+    items
+}
+
+fn build_delivery_summary_line(
+    status: &str,
+    public_record_items: &[String],
+    missing_public_records: &[String],
+    has_local_delivery_facts: bool,
+) -> String {
+    if !missing_public_records.is_empty() {
+        return format!(
+            "公开交付已开始整理，当前还缺少 {}。",
+            missing_public_records.join("、")
+        );
+    }
+    if !public_record_items.is_empty() {
+        return format!("公开交付已统一写入 {}。", public_record_items.join("、"));
+    }
+    if status == "ready" || has_local_delivery_facts {
+        return "公开交付准备已完成，下一步应整理 PR/MR body，并在需要时汇总到 CHANGELOG.md 或 release notes。".to_string();
+    }
+    "当前还没有公开交付记录。".to_string()
+}
+
+fn render_task_public_record_markdown(
+    issue: &SpecIssue,
+    status: &str,
+    evidence_status: &str,
+    pr_url: Option<&str>,
+    merge_commit: Option<&str>,
+    changelog_path: Option<&str>,
+    release_notes_url: Option<&str>,
+    public_record_targets: &[String],
+) -> String {
+    let mut markdown = String::new();
+    markdown.push_str(&format!("# {} {}\n\n", issue.issue_id, issue.title));
+    markdown.push_str("## 任务\n\n");
+    markdown.push_str(&format!("- 来源需求：`{}`\n", issue.source_requirement_id));
+    markdown.push_str(&format!(
+        "- 需求文档：`{}`\n",
+        issue.source_requirement_path
+    ));
+    markdown.push_str(&format!("- 工作流：`{}`\n", issue.workflow_ref));
+    markdown.push_str("\n## 变更摘要\n\n");
+    markdown.push_str(&format!("{}\n\n", issue.summary));
+    markdown.push_str("## 验证\n\n");
+    markdown.push_str(&format!(
+        "- 验证命令：{} 条\n",
+        issue.validation_commands.len()
+    ));
+    markdown.push_str(&format!(
+        "- 证据状态：{}\n",
+        render_evidence_status(evidence_status)
+    ));
+    markdown.push_str("\n## 公开交付\n\n");
+    markdown.push_str(&format!("- 状态：{}\n", render_public_status(status)));
+    markdown.push_str(&format!(
+        "- 目标位置：{}\n",
+        public_record_targets.join("、")
+    ));
+    push_optional_line(&mut markdown, "- PR/MR", pr_url);
+    push_optional_line(&mut markdown, "- 合并提交", merge_commit);
+    push_optional_line(&mut markdown, "- CHANGELOG", changelog_path);
+    push_optional_line(&mut markdown, "- Release Notes", release_notes_url);
+    markdown
+}
+
+fn render_public_status(status: &str) -> &'static str {
+    match status {
+        "published" => "已发布",
+        "ready" => "待发布",
+        _ => "缺失",
+    }
+}
+
+fn render_evidence_status(status: &str) -> &'static str {
+    match status {
+        "ready" => "已记录",
+        _ => "缺失",
+    }
 }
 
 fn push_optional_line(markdown: &mut String, label: &str, value: Option<&str>) {
@@ -497,8 +663,17 @@ mod tests {
         let summary = collect_public_release_summary(dir.path()).unwrap();
 
         assert_eq!(summary.version, PUBLIC_RELEASE_SUMMARY_VERSION);
+        assert_eq!(
+            summary.changelog_template_version,
+            CHANGELOG_TEMPLATE_VERSION
+        );
+        assert_eq!(
+            summary.release_notes_template_version,
+            RELEASE_NOTES_TEMPLATE_VERSION
+        );
         assert_eq!(summary.entries.len(), 1);
         assert_eq!(summary.entries[0].issue_id, "AF-REL-001");
+        assert_eq!(summary.entries[0].source_requirement_id, "034-release-test");
         assert!(summary.changelog_markdown.contains("完成公开交付记录"));
         assert!(summary.release_notes_markdown.contains("merge-20"));
     }
@@ -512,10 +687,22 @@ mod tests {
         let summary = load_delivery_summary(dir.path(), "AF-REL-001").unwrap();
 
         assert_eq!(summary.version, DELIVERY_SUMMARY_VERSION);
+        assert_eq!(
+            summary.public_record_template_version,
+            TASK_PUBLIC_RECORD_TEMPLATE_VERSION
+        );
         assert_eq!(summary.status, "published");
-        assert!(summary.public_record_items.contains(&"PR/MR body".to_string()));
-        assert!(summary.public_record_items.contains(&"CHANGELOG.md".to_string()));
-        assert!(summary.summary_line.contains("公开交付已整理到"));
+        assert!(summary
+            .public_record_items
+            .contains(&"PR/MR body".to_string()));
+        assert!(summary
+            .public_record_items
+            .contains(&"CHANGELOG.md".to_string()));
+        assert!(summary
+            .public_record_targets
+            .contains(&"PR/MR body".to_string()));
+        assert!(summary.public_record_markdown.contains("## 公开交付"));
+        assert!(summary.summary_line.contains("公开交付已统一写入"));
     }
 
     #[test]
@@ -535,7 +722,9 @@ mod tests {
         assert_eq!(summary.current_issue_id.as_deref(), Some("AF-REL-002"));
         assert_eq!(summary.published_count, 1);
         assert_eq!(summary.ready_count, 1);
-        assert!(summary.public_record_items.contains(&"PR/MR body".to_string()));
+        assert!(summary
+            .public_record_items
+            .contains(&"PR/MR body".to_string()));
     }
 
     #[test]

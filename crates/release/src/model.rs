@@ -4,13 +4,21 @@ use std::path::PathBuf;
 pub const PUBLIC_RELEASE_SUMMARY_VERSION: &str = "public-release-summary.v1";
 pub const DELIVERY_SUMMARY_VERSION: &str = "delivery-summary.v1";
 pub const PROJECT_DELIVERY_SUMMARY_VERSION: &str = "project-delivery-summary.v1";
+pub const TASK_PUBLIC_RECORD_TEMPLATE_VERSION: &str = "task-public-record-template.v1";
+pub const CHANGELOG_TEMPLATE_VERSION: &str = "changelog-template.v1";
+pub const RELEASE_NOTES_TEMPLATE_VERSION: &str = "release-notes-template.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeliverySummary {
     pub version: String,
+    pub public_record_template_version: String,
     pub issue_id: String,
     pub project_id: Option<String>,
+    pub source_requirement_id: String,
+    pub source_requirement_path: String,
+    pub title: String,
+    pub summary: String,
     pub status: String,
     pub evidence_status: String,
     pub evidence_path: Option<String>,
@@ -18,6 +26,9 @@ pub struct DeliverySummary {
     pub merge_commit: Option<String>,
     pub public_record_path: Option<String>,
     pub release_notes_url: Option<String>,
+    pub validation_command_count: usize,
+    pub public_record_targets: Vec<String>,
+    pub public_record_markdown: String,
     pub summary_line: String,
     pub public_record_items: Vec<String>,
     pub missing_public_records: Vec<String>,
@@ -45,13 +56,19 @@ pub struct ProjectDeliverySummary {
 pub struct PublicReleaseEntry {
     pub issue_id: String,
     pub project_id: Option<String>,
+    pub source_requirement_id: String,
+    pub source_requirement_path: String,
     pub title: String,
+    pub summary: String,
+    pub evidence_status: String,
     pub current_state: String,
     pub pr_url: Option<String>,
     pub merge_commit: Option<String>,
     pub evidence_path: Option<String>,
     pub changelog_path: Option<String>,
     pub release_notes_url: Option<String>,
+    pub validation_command_count: usize,
+    pub public_record_targets: Vec<String>,
     pub updated_at: u64,
 }
 
@@ -59,6 +76,8 @@ pub struct PublicReleaseEntry {
 #[serde(rename_all = "camelCase")]
 pub struct PublicReleaseSummary {
     pub version: String,
+    pub changelog_template_version: String,
+    pub release_notes_template_version: String,
     pub generated_at: u64,
     pub entries: Vec<PublicReleaseEntry>,
     pub changelog_markdown: String,

@@ -156,6 +156,10 @@ pub struct ProjectionDeliverySummary {
     pub merge_commit: Option<String>,
     pub public_record_path: Option<String>,
     #[serde(default)]
+    pub public_record_targets: Vec<String>,
+    #[serde(default)]
+    pub public_record_markdown: String,
+    #[serde(default)]
     pub summary_line: String,
     #[serde(default)]
     pub public_record_items: Vec<String>,
