@@ -85,6 +85,8 @@ fn gitlab_capabilities(available: bool) -> Vec<McpCapability> {
         "merge_request.ready",
         "merge_request.auto_merge",
         "merge_request.merged_query",
+        "issue.close",
+        "issue.closed_query",
     ]
     .into_iter()
     .map(|name| McpCapability::new(name, available))

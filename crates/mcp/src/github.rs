@@ -96,6 +96,8 @@ fn github_capabilities(available: bool) -> Vec<McpCapability> {
         "pull_request.ready",
         "pull_request.auto_merge",
         "pull_request.merged_query",
+        "issue.close",
+        "issue.closed_query",
     ]
     .into_iter()
     .map(|name| McpCapability::new(name, available))

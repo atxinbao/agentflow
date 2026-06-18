@@ -4,7 +4,7 @@ mod args;
 use active::{
     claim_next_build_agent_launch, complete_build_agent_issue_from_request,
     prepare_build_agent_review_from_request, start_build_agent_issue,
-    write_build_agent_merge_proof,
+    write_build_agent_closeout_proof,
 };
 use args::{
     AgentDispatcherCommand, BuildAgentCommand, Cli, Command, ProjectionCommand, ReleaseCommand,
@@ -48,15 +48,17 @@ fn main() -> anyhow::Result<()> {
                 println!("evidence: {}", prepared.evidence_path.display());
                 println!("validation passed: {}", prepared.validation_passed);
             }
-            BuildAgentCommand::WriteMergeProof {
+            BuildAgentCommand::WriteCloseoutProof {
                 issue_id,
                 run_id,
                 provider,
                 merge_mode,
                 remote_url,
                 merged,
+                issue_closed,
+                closed_at,
             } => {
-                let proof = write_build_agent_merge_proof(
+                let proof = write_build_agent_closeout_proof(
                     &cwd,
                     &issue_id,
                     &run_id,
@@ -64,11 +66,14 @@ fn main() -> anyhow::Result<()> {
                     &merge_mode,
                     remote_url,
                     merged,
+                    issue_closed,
+                    closed_at,
                 )?;
-                println!("build agent merge proof: recorded");
+                println!("build agent closeout proof: recorded");
                 println!("issue: {}", proof.issue_id);
                 println!("run: {}", proof.run_id);
                 println!("merged: {}", proof.merged);
+                println!("issue closed: {}", proof.issue_closed);
                 println!("path: {}", proof.proof_path.display());
             }
             BuildAgentCommand::Complete { request } => {
