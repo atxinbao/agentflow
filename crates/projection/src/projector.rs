@@ -266,6 +266,8 @@ fn project_issue(
     let mut current_state = issue.status.as_str().to_string();
     let mut updated_at = issue.system.updated_at;
     let mut latest_run_id = None;
+    let mut authoritative_run_id = None;
+    let mut active_run_id = None;
     let mut branch_name = None;
     let mut public_delivery = ProjectionPublicDelivery {
         evidence_path: Some(issue.expected_outputs.evidence_path.clone()),
@@ -275,12 +277,25 @@ fn project_issue(
 
     for event in events {
         updated_at = updated_at.max(event.timestamp);
-        if let Some(run_id) = event
+        let event_run_id = event
             .run_id
             .as_deref()
             .or_else(|| event.payload.get("runId").and_then(Value::as_str))
-        {
+            .map(str::to_string);
+        let should_track = should_track_issue_event(
+            &current_state,
+            active_run_id.as_deref(),
+            event_run_id.as_deref(),
+            event.event_type.as_str(),
+        );
+        if !should_track {
+            continue;
+        }
+        if let Some(run_id) = event_run_id.as_deref() {
             latest_run_id = Some(run_id.to_string());
+        }
+        if event.event_type == "agent.launch.requested" {
+            active_run_id = event_run_id.clone().or(active_run_id);
         }
         if let Some(branch) = event.payload.get("branchName").and_then(Value::as_str) {
             branch_name = Some(branch.to_string());
@@ -306,17 +321,25 @@ fn project_issue(
         }
         if let Some(next_state) = authoritative_state_from_event(&event) {
             current_state = next_state;
+            if let Some(run_id) = event_run_id.as_deref() {
+                authoritative_run_id = Some(run_id.to_string());
+                active_run_id = Some(run_id.to_string());
+            }
         }
         state_events.push((current_state.clone(), event));
     }
+    let latest_run_id = authoritative_run_id
+        .or(active_run_id)
+        .or(latest_run_id);
 
+    let session = build_session_summary(&state_events);
     let runtime = build_runtime_summary(
         root,
         issue,
         latest_run_id.as_deref(),
         branch_name.as_deref(),
+        &session,
     );
-    let session = build_session_summary(&state_events);
     let delivery = build_delivery_summary(root, issue, &public_delivery);
     let audit = build_audit_summary(issue, latest_run_id.as_deref(), audit_index);
     branch_name = branch_name
@@ -592,6 +615,7 @@ fn build_runtime_summary(
     issue: &SpecIssue,
     run_id: Option<&str>,
     branch_name: Option<&str>,
+    session: &ProjectionSessionSummary,
 ) -> ProjectionRuntimeSummary {
     let Some(run_id) = run_id else {
         return ProjectionRuntimeSummary::default();
@@ -605,10 +629,10 @@ fn build_runtime_summary(
 
     ProjectionRuntimeSummary {
         run_id: Some(run_id.to_string()),
-        run_status: run
-            .as_ref()
-            .map(|run| task_run_status_as_str(&run.status).to_string())
-            .unwrap_or_else(|| "missing".to_string()),
+        run_status: normalize_runtime_run_status(
+            run.as_ref().map(|run| task_run_status_as_str(&run.status)),
+            session.status.as_deref(),
+        ),
         branch_name: branch_name
             .map(str::to_string)
             .or_else(|| run.as_ref().and_then(|run| run.branch_name.clone())),
@@ -616,6 +640,20 @@ fn build_runtime_summary(
         latest_checkpoint_id: latest_checkpoint.map(|checkpoint| checkpoint.checkpoint_id.clone()),
         latest_checkpoint_state: latest_checkpoint.map(|checkpoint| checkpoint.state.clone()),
         latest_checkpoint_summary: latest_checkpoint.map(|checkpoint| checkpoint.summary.clone()),
+    }
+}
+
+fn normalize_runtime_run_status(
+    run_status: Option<&str>,
+    session_status: Option<&str>,
+) -> String {
+    match session_status {
+        Some("requested" | "queued" | "claimed" | "starting") => "queued".to_string(),
+        Some("running" | "interrupted") => "in_progress".to_string(),
+        Some("in-review" | "done") => "validating".to_string(),
+        Some("failed") => "failed".to_string(),
+        Some("cancelled") => "cancelled".to_string(),
+        _ => run_status.unwrap_or("missing").to_string(),
     }
 }
 
@@ -873,6 +911,26 @@ fn authoritative_state_from_event(event: &TaskEvent) -> Option<String> {
         "issue.blocked" | "issue.validation.failed" => Some("blocked".to_string()),
         "issue.cancelled" => Some("cancel".to_string()),
         _ => None,
+    }
+}
+
+fn should_track_issue_event(
+    current_state: &str,
+    active_run_id: Option<&str>,
+    event_run_id: Option<&str>,
+    event_type: &str,
+) -> bool {
+    let Some(event_run_id) = event_run_id else {
+        return true;
+    };
+    if event_type == "agent.launch.requested" {
+        return true;
+    }
+    match active_run_id {
+        None => true,
+        Some(active_run_id) if active_run_id == event_run_id => true,
+        Some(_) if matches!(current_state, "in_review" | "done") => false,
+        Some(_) => false,
     }
 }
 
@@ -1198,6 +1256,7 @@ mod tests {
         assert_eq!(projection.current_state, "in_progress");
         assert_eq!(projection.display_status, "in_progress");
         assert_eq!(projection.session.status.as_deref(), Some("done"));
+        assert_eq!(projection.runtime.run_status, "validating");
         let in_progress = projection
             .timeline
             .iter()
@@ -1207,6 +1266,60 @@ mod tests {
             .events
             .iter()
             .any(|event| event.event_type == "agent.session.completed"));
+    }
+
+    #[test]
+    fn stale_failed_run_does_not_override_completed_mainline() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.launch.requested",
+                json!({
+                    "runId": "run-001",
+                    "branchName": "agentflow/project-projection/AF-PROJ-001"
+                }),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.completed",
+                json!({
+                    "runId": "run-001",
+                    "mergeCommit": "abc123"
+                }),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.validation.failed",
+                json!({
+                    "runId": "run-000",
+                    "summary": "old failed run"
+                }),
+            ),
+        )
+        .unwrap();
+
+        rebuild_projections(dir.path()).unwrap();
+        let projection = crate::storage::load_task_projection(dir.path(), "AF-PROJ-001").unwrap();
+
+        assert_eq!(projection.current_state, "done");
+        assert_eq!(projection.latest_run_id.as_deref(), Some("run-001"));
+        assert_eq!(projection.runtime.run_id.as_deref(), Some("run-001"));
     }
 
     #[test]
