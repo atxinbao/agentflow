@@ -58,6 +58,7 @@ import {
 } from "./features/project-files";
 import {
   useIssueStatusIndex,
+  useProjectProjection,
   useStateStatus,
   useTaskProjection,
   type IssueStatusIndexState,
@@ -119,6 +120,7 @@ import type {
   IssueStatusIndex,
   OutputIndex,
   OutputIndexEntry,
+  ProjectProjection,
   ProjectionPhase,
   StateStatusSnapshot,
   TaskProjection,
@@ -896,8 +898,17 @@ function App() {
     selectedTask?.id ?? null,
     taskListRefreshToken + executeRefreshToken + mcpRefreshToken + outputRefreshToken,
   );
+  const projectProjectionState = useProjectProjection(
+    projectRoot,
+    selectedProjectGroup?.id ?? null,
+    taskListRefreshToken + executeRefreshToken + mcpRefreshToken + outputRefreshToken,
+  );
   const selectedTaskProjection =
     taskProjectionState.projection?.issueId === selectedTask?.id ? taskProjectionState.projection : null;
+  const selectedProjectProjection =
+    projectProjectionState.projection?.projectId === selectedProjectGroup?.id
+      ? projectProjectionState.projection
+      : null;
   const agentLocale = agentManualState.status?.locale.agentLocale ?? detectAppLocale() ?? "en-US";
   const nextStep = useMemo(
     () => buildNextStep(stateStatusState, inputSnapshotState.snapshot?.issues.length ?? 0, selectedTask),
@@ -1353,6 +1364,7 @@ function App() {
             outputBundle={outputBundle}
             projectRoot={projectRoot}
             selectedProjectGroup={selectedProjectGroup}
+            selectedProjectProjection={selectedProjectProjection}
             selectedTask={selectedTask}
             selectedTaskProjection={selectedTaskProjection}
             suggestions={initializationState.status?.recentContext ?? []}
@@ -2298,6 +2310,7 @@ function TasksPage({
   onSelectTask,
   outputBundle,
   selectedProjectGroup,
+  selectedProjectProjection,
   selectedTask,
   selectedTaskProjection,
   projectRoot,
@@ -2319,6 +2332,7 @@ function TasksPage({
   outputBundle: OutputBundleState;
   projectRoot: string | null;
   selectedProjectGroup: TaskProjectGroup | null;
+  selectedProjectProjection: ProjectProjection | null;
   selectedTask: V1Issue | null;
   selectedTaskProjection: TaskProjection | null;
   suggestions: ProjectInitializationContext[];
@@ -2342,6 +2356,7 @@ function TasksPage({
         outputBundle={outputBundle}
         projectRoot={projectRoot}
         selectedProjectGroup={selectedProjectGroup}
+        selectedProjectProjection={selectedProjectProjection}
         selectedTask={selectedTask}
         selectedTaskProjection={selectedTaskProjection}
         suggestions={suggestions}
@@ -2367,6 +2382,7 @@ function TaskList({
   outputBundle,
   projectRoot,
   selectedProjectGroup,
+  selectedProjectProjection,
   selectedTask,
   selectedTaskProjection,
   suggestions,
@@ -2387,6 +2403,7 @@ function TaskList({
   outputBundle: OutputBundleState;
   projectRoot: string | null;
   selectedProjectGroup: TaskProjectGroup | null;
+  selectedProjectProjection: ProjectProjection | null;
   selectedTask: V1Issue | null;
   selectedTaskProjection: TaskProjection | null;
   suggestions: ProjectInitializationContext[];
@@ -2554,6 +2571,7 @@ function TaskList({
         onSelectTask={onSelectTask}
         outputBundle={outputBundle}
         selectedProjectGroup={selectedProjectGroup}
+        selectedProjectProjection={selectedProjectProjection}
         suggestions={showContextSuggestions ? suggestions : []}
         task={selectedTask}
         taskProjection={selectedTaskProjection}
@@ -2740,6 +2758,7 @@ function TaskDetail({
   onTaskAction,
   outputBundle,
   selectedProjectGroup,
+  selectedProjectProjection,
   suggestions,
   task,
   taskProjection,
@@ -2757,6 +2776,7 @@ function TaskDetail({
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
   selectedProjectGroup: TaskProjectGroup | null;
+  selectedProjectProjection: ProjectProjection | null;
   suggestions: ProjectInitializationContext[];
   task: V1Issue | null;
   taskProjection: TaskProjection | null;
@@ -2767,6 +2787,7 @@ function TaskDetail({
       <ProjectSummaryReader
         group={selectedProjectGroup}
         onSelectTask={onSelectTask}
+        projection={selectedProjectProjection}
         treeSelection={taskTreeSelection}
       />
     );
@@ -2828,24 +2849,48 @@ function TaskDetail({
 function ProjectSummaryReader({
   group,
   onSelectTask,
+  projection,
   treeSelection,
 }: {
   group: TaskProjectGroup;
   onSelectTask: (taskId: string) => void;
+  projection: ProjectProjection | null;
   treeSelection: TaskProjectTreeViewModel["selection"] | null;
 }) {
   const priority = groupHighestPriority(group.issues);
-  const projectStatus = projectDisplayStatusForGroup(group);
-  const currentIssue = projectRecommendedIssue(group, treeSelection);
-  const nextIssue = projectNextScheduledIssue(group, currentIssue?.id ?? null);
-  const currentLaneCount = group.issues.filter((issue) =>
-    ["todo", "in_progress", "in_review", "blocked"].includes(issue.displayStatus),
-  ).length;
-  const futureLaneCount = group.issues.filter((issue) => issue.displayStatus === "backlog").length;
-  const completedLaneCount = group.issues.filter((issue) => issue.displayStatus === "done").length;
+  const projectStatus = normalizeProjectDisplayStatus(projection?.status ?? projectDisplayStatusForGroup(group));
+  const currentIssue = projection?.currentIssueId
+    ? group.issues.find((issue) => issue.id === projection.currentIssueId) ?? null
+    : projectRecommendedIssue(group, treeSelection);
+  const nextIssue = projectNextScheduledIssue(
+    group,
+    currentIssue?.id ?? null,
+    projection?.lanes.future ?? null,
+  );
+  const currentLaneCount = projection?.lanes.current.length
+    ?? group.issues.filter((issue) => ["todo", "in_progress", "in_review", "blocked"].includes(issue.displayStatus)).length;
+  const futureLaneCount = projection?.lanes.future.length
+    ?? group.issues.filter((issue) => issue.displayStatus === "backlog").length;
+  const completedLaneCount = projection
+    ? projection.lanes.past.filter((issueId) => {
+        const issue = group.issues.find((entry) => entry.id === issueId);
+        return issue?.displayStatus === "done";
+      }).length
+    : group.issues.filter((issue) => issue.displayStatus === "done").length;
   const canceledLaneCount = group.issues.filter((issue) => issue.displayStatus === "cancel").length;
-  const blockedLaneCount = group.issues.filter((issue) => issue.displayStatus === "blocked").length;
-  const reviewIssueCount = group.issues.filter((issue) => issue.displayStatus === "in_review").length;
+  const blockedLaneCount = projection?.lanes.blocked.length
+    ?? group.issues.filter((issue) => issue.displayStatus === "blocked").length;
+  const reviewIssueCount = projection
+    ? projection.lanes.current.filter((issueId) => {
+        const issue = group.issues.find((entry) => entry.id === issueId);
+        return issue?.displayStatus === "in_review";
+      }).length
+    : group.issues.filter((issue) => issue.displayStatus === "in_review").length;
+  const nextAction = projection?.nextAction ?? null;
+  const completionHint = projection?.completionHint ?? null;
+  const blockerItems = projection?.blockers.length
+    ? projection.blockers.map((blocker) => `${blocker.issueId}：${blocker.reason}`)
+    : null;
 
   return (
     <aside className="v16-detail-pane" aria-label="项目调度视图">
@@ -2901,7 +2946,7 @@ function ProjectSummaryReader({
                       nextIssue.blockedBy.length ? `前置依赖：${nextIssue.blockedBy.join("、")}` : "当前没有前置依赖。",
                       `优先级：${displayPriority(nextIssue.priority)}`,
                     ]
-                  : ["当前没有下一条待调度任务。"]
+                  : [nextAction ?? "当前没有下一条待调度任务。"]
               }
             />
             <SectionList
@@ -2910,6 +2955,7 @@ function ProjectSummaryReader({
                 `当前队列：${currentLaneCount} 条`,
                 `未来队列：${futureLaneCount} 条`,
                 blockedLaneCount ? `阻断：${blockedLaneCount} 条` : "当前没有阻断任务。",
+                ...(completionHint ? [completionHint] : []),
               ]}
             />
           </div>
@@ -2922,15 +2968,15 @@ function ProjectSummaryReader({
           <div className="v16-task-stage-grid">
             <SectionList
               title="当前"
-              items={projectCurrentLaneItems(group)}
+              items={projectCurrentLaneItems(group, projection)}
             />
             <SectionList
               title="过去"
-              items={projectPastLaneItems(group)}
+              items={projectPastLaneItems(group, projection)}
             />
             <SectionList
               title="未来"
-              items={projectFutureLaneItems(group)}
+              items={projectFutureLaneItems(group, projection)}
             />
           </div>
         </section>
@@ -2943,6 +2989,7 @@ function ProjectSummaryReader({
             <SectionList title="依赖摘要" items={projectDependencySummaryItems(group)} />
             <SectionList title="优先级摘要" items={projectPrioritySummaryItems(group)} />
             <SectionList title="任务进度" items={projectProgressItems(group)} />
+            {blockerItems?.length ? <SectionList title="阻断摘要" items={blockerItems} /> : null}
             <SectionList
               title="项目信息"
               items={[
@@ -3044,6 +3091,7 @@ function TaskDetailReader({
         executeWorkspaceWarnings: executeStatusState.status?.warnings ?? [],
         mcpSessionsError: mcpSessionsState.error,
         mcpSessionsSource: mcpSessionsState.source,
+        projection: taskProjection,
         session,
         task: effectiveTask,
       }),
@@ -5545,6 +5593,7 @@ function executeProgressLabel(status?: string | null) {
     checkpointed: "已记录检查点",
     completed: "执行已完成",
     failed: "执行失败",
+    in_progress: "正在执行",
     patching: "正在应用改动",
     planned: "前置检测完成，等待正式执行",
     preflight: "正在做前置检测",
@@ -5564,10 +5613,14 @@ function taskCurrentStageOutputItems(
   projection?: TaskProjection | null,
 ) {
   const publicDelivery = projection?.publicDelivery ?? null;
-  const projectedEvidencePath = publicDelivery?.evidencePath ?? null;
-  const projectedPrUrl = publicDelivery?.prUrl ?? null;
-  const projectedMergeCommit = publicDelivery?.mergeCommit ?? null;
-  const projectedPublicRecord = publicDelivery?.changelogPath ?? publicDelivery?.releaseNotesUrl ?? null;
+  const runtime = projection?.runtime ?? null;
+  const projectedDelivery = projection?.delivery ?? null;
+  const projectedAudit = projection?.audit ?? null;
+  const projectedEvidencePath = projectedDelivery?.evidencePath ?? publicDelivery?.evidencePath ?? null;
+  const projectedPrUrl = projectedDelivery?.prUrl ?? publicDelivery?.prUrl ?? null;
+  const projectedMergeCommit = projectedDelivery?.mergeCommit ?? publicDelivery?.mergeCommit ?? null;
+  const projectedPublicRecord =
+    projectedDelivery?.publicRecordPath ?? publicDelivery?.changelogPath ?? publicDelivery?.releaseNotesUrl ?? null;
 
   switch (task.displayStatus ?? "backlog") {
     case "backlog":
@@ -5578,34 +5631,39 @@ function taskCurrentStageOutputItems(
       ];
     case "todo":
       return [
-        task.latestRunId ? `当前 Run：${task.latestRunId}` : "当前 Run：等待创建。",
+        runtime?.runId ?? task.latestRunId ? `当前 Run：${runtime?.runId ?? task.latestRunId}` : "当前 Run：等待创建。",
         task.contextPackPath ? "Context Pack 已可用。" : "Context Pack：等待生成。",
-        `执行准备：${executeProgressLabel(task.executeStatus)}`,
+        `执行准备：${executeProgressLabel(runtime?.runStatus ?? task.executeStatus)}`,
       ];
     case "in_progress":
       return [
-        task.latestRunId ? `当前 Run：${task.latestRunId}` : "当前 Run：未记录。",
-        `执行进度：${executeProgressLabel(task.executeStatus)}`,
+        runtime?.runId ?? task.latestRunId ? `当前 Run：${runtime?.runId ?? task.latestRunId}` : "当前 Run：未记录。",
+        `执行进度：${executeProgressLabel(runtime?.runStatus ?? task.executeStatus)}`,
         session
           ? `会话状态：${mcpSessionStatusLabelZh(session.status)}`
           : "会话状态：还没有拉起，或已提前退出。",
+        ...(runtime?.latestCheckpointSummary ? [`最新检查点：${runtime.latestCheckpointSummary}`] : []),
         ...(session?.lastError ? [`最近错误：${session.lastError}`] : []),
       ];
     case "in_review":
       return [
-        task.latestRunId ? `当前 Run：${task.latestRunId}` : "当前 Run：未记录。",
+        runtime?.runId ?? task.latestRunId ? `当前 Run：${runtime?.runId ?? task.latestRunId}` : "当前 Run：未记录。",
         projectedEvidencePath ? `验证证据：${projectedEvidencePath}` : evidence ? `验证证据：${artifactStatusLabel(evidence.status)}` : "验证证据：等待写回。",
         projectedPrUrl ? "PR/MR：已创建。" : session?.prUrl ? "PR/MR：已创建。" : "PR/MR：等待记录。",
         projectedPublicRecord ? `公开交付：${projectedPublicRecord}` : "公开交付：等待记录。",
       ];
     case "done":
       return [
-        task.latestRunId ? `最终 Run：${task.latestRunId}` : "最终 Run：未记录。",
+        runtime?.runId ?? task.latestRunId ? `最终 Run：${runtime?.runId ?? task.latestRunId}` : "最终 Run：未记录。",
         projectedEvidencePath ? `验证证据：${projectedEvidencePath}` : evidence ? `验证证据：${artifactStatusLabel(evidence.status)}` : "验证证据：未找到记录。",
         projectedPrUrl ? `PR/MR：${projectedPrUrl}` : "PR/MR：未找到记录。",
         projectedMergeCommit ? `合并提交：${projectedMergeCommit}` : "合并提交：未找到记录。",
         projectedPublicRecord ? `公开交付：${projectedPublicRecord}` : "公开交付：未找到记录。",
-        audit ? `后续审计：${artifactStatusLabel(audit.status)}` : "后续审计：独立流程，按需触发。",
+        projectedAudit?.status && projectedAudit.status !== "not-requested"
+          ? `后续审计：${artifactStatusLabel(projectedAudit.status)}`
+          : audit
+            ? `后续审计：${artifactStatusLabel(audit.status)}`
+            : "后续审计：独立流程，按需触发。",
       ];
     case "blocked":
       return [
@@ -5819,36 +5877,58 @@ function projectRecommendedIssueItems(issue: TaskIssueNode | null) {
   ];
 }
 
-function projectCurrentLaneItems(group: TaskProjectGroup) {
-  const items = group.issues.filter((issue) =>
-    ["todo", "in_progress", "in_review", "blocked"].includes(issue.displayStatus),
-  );
+function projectCurrentLaneItems(group: TaskProjectGroup, projection?: ProjectProjection | null) {
+  const items = projection?.lanes.current.length
+    ? projection.lanes.current
+        .map((issueId) => group.issues.find((issue) => issue.id === issueId))
+        .filter((issue): issue is TaskIssueNode => Boolean(issue))
+    : group.issues.filter((issue) => ["todo", "in_progress", "in_review", "blocked"].includes(issue.displayStatus));
   if (!items.length) {
     return ["当前没有正在推进的任务。"];
   }
   return items.slice(0, 4).map((issue) => `${issue.id} · ${displayStatusLabelZh(issue.displayStatus)} · ${issue.title}`);
 }
 
-function projectPastLaneItems(group: TaskProjectGroup) {
-  const items = group.issues.filter((issue) => ["done", "cancel"].includes(issue.displayStatus));
+function projectPastLaneItems(group: TaskProjectGroup, projection?: ProjectProjection | null) {
+  const items = projection?.lanes.past.length
+    ? projection.lanes.past
+        .map((issueId) => group.issues.find((issue) => issue.id === issueId))
+        .filter((issue): issue is TaskIssueNode => Boolean(issue))
+    : group.issues.filter((issue) => ["done", "cancel"].includes(issue.displayStatus));
   if (!items.length) {
     return ["还没有已结束任务。"];
   }
   return items.slice(0, 4).map((issue) => `${issue.id} · ${displayStatusLabelZh(issue.displayStatus)} · ${issue.title}`);
 }
 
-function projectFutureLaneItems(group: TaskProjectGroup) {
-  const items = group.issues.filter((issue) => issue.displayStatus === "backlog");
+function projectFutureLaneItems(group: TaskProjectGroup, projection?: ProjectProjection | null) {
+  const items = projection?.lanes.future.length
+    ? projection.lanes.future
+        .map((issueId) => group.issues.find((issue) => issue.id === issueId))
+        .filter((issue): issue is TaskIssueNode => Boolean(issue))
+    : group.issues.filter((issue) => issue.displayStatus === "backlog");
   if (!items.length) {
     return ["后续没有待进入的任务。"];
   }
   return items.slice(0, 4).map((issue) => `${issue.id} · ${displayPriority(issue.priority)} · ${issue.title}`);
 }
 
-function projectNextScheduledIssue(group: TaskProjectGroup, currentIssueId: string | null) {
+function projectNextScheduledIssue(
+  group: TaskProjectGroup,
+  currentIssueId: string | null,
+  futureLaneIssueIds?: string[] | null,
+) {
   const runnableIssues = group.issues.filter((issue) => !["done", "cancel"].includes(issue.displayStatus));
   if (!runnableIssues.length) {
     return null;
+  }
+  if (futureLaneIssueIds?.length) {
+    const projectedNext = futureLaneIssueIds
+      .map((issueId) => runnableIssues.find((issue) => issue.id === issueId))
+      .find((issue): issue is TaskIssueNode => Boolean(issue));
+    if (projectedNext) {
+      return projectedNext;
+    }
   }
   if (!currentIssueId) {
     return runnableIssues[0] ?? null;

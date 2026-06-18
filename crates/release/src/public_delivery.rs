@@ -221,6 +221,31 @@ mod tests {
                 changelog_path: None,
                 release_notes_url: None,
             },
+            runtime: agentflow_projection::ProjectionRuntimeSummary {
+                run_id: Some("run-001".to_string()),
+                run_status: "completed".to_string(),
+                branch_name: Some(format!("agentflow/project-release/{issue_id}")),
+                checkpoint_count: 1,
+                latest_checkpoint_id: Some("checkpoint-001".to_string()),
+                latest_checkpoint_state: Some(state.to_string()),
+                latest_checkpoint_summary: Some("交付回放测试。".to_string()),
+            },
+            delivery: agentflow_projection::ProjectionDeliverySummary {
+                status: "published".to_string(),
+                evidence_status: "ready".to_string(),
+                evidence_path: Some(format!(
+                    ".agentflow/tasks/{issue_id}/evidence/evidence.json"
+                )),
+                pr_url: Some(format!("https://github.com/acme/repo/pull/{updated_at}")),
+                merge_commit: Some(format!("merge-{updated_at}")),
+                public_record_path: None,
+            },
+            audit: agentflow_projection::ProjectionAuditSummary {
+                status: "not-requested".to_string(),
+                latest_audit_id: None,
+                report_path: None,
+                requested_at: None,
+            },
             updated_at,
         };
         let dir = root.join(".agentflow/projections/tasks");
