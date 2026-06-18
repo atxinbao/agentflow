@@ -120,6 +120,7 @@ import type {
   OutputIndex,
   OutputIndexEntry,
   ProjectProjection,
+  ProjectionDeliverySummary,
   ProjectionPhase,
   StateStatusSnapshot,
   TaskProjection,
@@ -2956,6 +2957,7 @@ function ProjectSummaryReader({
   const brainOpenQuestions =
     projectBrain?.openQuestions.length ? projectBrain.openQuestions : ["当前没有待补充的开放问题。"];
   const projectAuditItems = projectAuditSummaryItems(projection);
+  const projectDeliveryItems = projectDeliverySummaryItems(projection);
   const blockerItems = projection?.blockers.length
     ? projection.blockers.map((blocker) => `${blocker.issueId}：${blocker.reason}`)
     : null;
@@ -3140,6 +3142,24 @@ function ProjectSummaryReader({
             <SectionList
               title="未来"
               items={projectFutureLaneItems(group, projection)}
+            />
+          </div>
+        </section>
+        <section className="v16-task-stage-panel" aria-label="项目交付摘要">
+          <div className="v16-task-stage-panel-header">
+            <span>交付摘要</span>
+            <strong>{projection?.delivery ? artifactStatusLabel(projection.delivery.status) : "未记录"}</strong>
+          </div>
+          <div className="v16-task-stage-grid">
+            <SectionList title="项目交付" items={projectDeliveryItems} />
+            <SectionList
+              title="对完成判断的影响"
+              items={[
+                projection?.delivery?.summaryLine || "当前还没有项目交付摘要。",
+                projection?.delivery?.missingPublicRecords?.length
+                  ? `待补记录：${projection.delivery.missingPublicRecords[0]}`
+                  : "当前没有额外交付缺口。",
+              ]}
             />
           </div>
         </section>
@@ -3821,14 +3841,7 @@ function enhanceTaskStatusStepDetailWithProjection({
 }
 
 function projectionPublicDeliveryItems(projection: TaskProjection) {
-  const delivery = projection.publicDelivery;
-  return [
-    delivery.prUrl ? `PR/MR：${delivery.prUrl}` : "PR/MR：未记录",
-    delivery.mergeCommit ? `合并提交：${delivery.mergeCommit}` : "合并提交：未记录",
-    delivery.evidencePath ? `验证证据：${delivery.evidencePath}` : "验证证据：未记录",
-    delivery.changelogPath ? `CHANGELOG：${delivery.changelogPath}` : "CHANGELOG：未记录",
-    delivery.releaseNotesUrl ? `Release notes：${delivery.releaseNotesUrl}` : "Release notes：未记录",
-  ];
+  return deliverySummaryDetailItems(projection.delivery);
 }
 
 function projectionAuditItems(projection: TaskProjection) {
@@ -4060,11 +4073,56 @@ function taskAuditSummaryItems(task: V1Issue, projection?: TaskProjection | null
   });
 }
 
+function deliverySummaryDetailItems(delivery: ProjectionDeliverySummary | null | undefined) {
+  if (!delivery) {
+    return ["当前还没有交付摘要。"];
+  }
+
+  const items = [
+    delivery.summaryLine || "当前还没有交付摘要。",
+    `交付状态：${artifactStatusLabel(delivery.status)}`,
+    `验证证据：${artifactStatusLabel(delivery.evidenceStatus)}`,
+  ];
+
+  if (delivery.currentIssueId) {
+    items.push(`当前任务：${delivery.currentIssueId}`);
+  }
+  if (delivery.prUrl) {
+    items.push(`PR/MR：${delivery.prUrl}`);
+  }
+  if (delivery.mergeCommit) {
+    items.push(`合并提交：${delivery.mergeCommit}`);
+  }
+  if (delivery.evidencePath) {
+    items.push(`证据路径：${delivery.evidencePath}`);
+  }
+  if (delivery.publicRecordPath) {
+    items.push(`主记录：${delivery.publicRecordPath}`);
+  }
+  if (delivery.publicRecordItems.length) {
+    items.push(`公开交付：${delivery.publicRecordItems.join("、")}`);
+  }
+  if (delivery.missingPublicRecords.length) {
+    items.push(`缺少记录：${delivery.missingPublicRecords.join("、")}`);
+  }
+  if (delivery.publishedCount || delivery.readyCount || delivery.missingCount) {
+    items.push(
+      `项目汇总：已发布 ${delivery.publishedCount} · 整理中 ${delivery.readyCount} · 缺失 ${delivery.missingCount}`,
+    );
+  }
+
+  return items;
+}
+
 function projectAuditSummaryItems(projection: ProjectProjection | null) {
   return auditSummaryDetailItems(projection?.audit, {
     includeIssue: true,
     includeRequestedAt: true,
   });
+}
+
+function projectDeliverySummaryItems(projection: ProjectProjection | null) {
+  return deliverySummaryDetailItems(projection?.delivery);
 }
 
 function isFutureTaskStatus(viewedStatus: IssueDisplayStatus, currentStatus: IssueDisplayStatus) {
@@ -6175,7 +6233,11 @@ function taskCurrentStageOutputItems(
         runtime?.runId ?? task.latestRunId ? `当前 Run：${runtime?.runId ?? task.latestRunId}` : "当前 Run：未记录。",
         projectedEvidencePath ? `验证证据：${projectedEvidencePath}` : evidence ? `验证证据：${artifactStatusLabel(evidence.status)}` : "验证证据：等待写回。",
         projectedPrUrl ? "PR/MR：已创建。" : session?.prUrl ? "PR/MR：已创建。" : "PR/MR：等待记录。",
-        projectedPublicRecord ? `公开交付：${projectedPublicRecord}` : "公开交付：等待记录。",
+        projectedDelivery?.summaryLine
+          ? `交付摘要：${projectedDelivery.summaryLine}`
+          : projectedPublicRecord
+            ? `公开交付：${projectedPublicRecord}`
+            : "公开交付：等待记录。",
         sessionStatus ? `会话状态：${mcpSessionStatusLabelZh(sessionStatus)}` : null,
       ].filter((item): item is string => Boolean(item));
     case "done":
@@ -6184,7 +6246,11 @@ function taskCurrentStageOutputItems(
         projectedEvidencePath ? `验证证据：${projectedEvidencePath}` : evidence ? `验证证据：${artifactStatusLabel(evidence.status)}` : "验证证据：未找到记录。",
         projectedPrUrl ? `PR/MR：${projectedPrUrl}` : "PR/MR：未找到记录。",
         projectedMergeCommit ? `合并提交：${projectedMergeCommit}` : "合并提交：未找到记录。",
-        projectedPublicRecord ? `公开交付：${projectedPublicRecord}` : "公开交付：未找到记录。",
+        projectedDelivery?.summaryLine
+          ? `交付摘要：${projectedDelivery.summaryLine}`
+          : projectedPublicRecord
+            ? `公开交付：${projectedPublicRecord}`
+            : "公开交付：未找到记录。",
         sessionBranchName ? `工作分支：${sessionBranchName}` : null,
         projectedAudit?.status && projectedAudit.status !== "not-requested"
           ? `后续审计：${projectedAudit.summaryLine || artifactStatusLabel(projectedAudit.status)}`

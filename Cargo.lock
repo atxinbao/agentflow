@@ -149,6 +149,7 @@ version = "0.2.0"
 dependencies = [
  "agentflow-audit",
  "agentflow-event-store",
+ "agentflow-release",
  "agentflow-spec",
  "agentflow-task-artifacts",
  "agentflow-workflow-core",
@@ -162,7 +163,6 @@ dependencies = [
 name = "agentflow-release"
 version = "0.2.0"
 dependencies = [
- "agentflow-projection",
  "agentflow-spec",
  "anyhow",
  "serde",

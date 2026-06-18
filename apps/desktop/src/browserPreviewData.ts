@@ -648,6 +648,24 @@ export function createBrowserPreviewTaskProjection(
       prUrl: currentState === "in_review" || currentState === "done" ? "https://github.com/example/agentflow/pull/100" : null,
       mergeCommit: currentState === "done" ? "426b217f" : null,
       publicRecordPath: currentState === "in_review" || currentState === "done" ? "CHANGELOG.md" : null,
+      summaryLine:
+        currentState === "done"
+          ? "公开交付已整理到 PR/MR body、CHANGELOG.md。"
+          : currentState === "in_review"
+            ? "公开交付正在整理，等待写入 CHANGELOG.md。"
+            : "当前还没有公开交付记录。",
+      publicRecordItems:
+        currentState === "in_review" || currentState === "done"
+          ? ["PR/MR body", "CHANGELOG.md"]
+          : [],
+      missingPublicRecords:
+        currentState === "in_review"
+          ? ["CHANGELOG.md 或 release notes"]
+          : [],
+      currentIssueId: null,
+      publishedCount: 0,
+      readyCount: 0,
+      missingCount: 0,
     },
     audit: {
       status: currentState === "done" ? "not-requested" : "not-requested",
@@ -716,6 +734,38 @@ export function createBrowserPreviewProjectProjection(
       completedIssueCount === issues.length && issues.length
         ? "全部任务已完成，下一步进入完成判断。"
         : `当前已完成 ${completedIssueCount}/${issues.length} 条任务。`,
+    delivery: {
+      status: completedIssueCount === issues.length && issues.length ? "published" : current.length ? "ready" : "missing",
+      evidenceStatus: "ready",
+      evidencePath: null,
+      prUrl: null,
+      mergeCommit: null,
+      publicRecordPath: completedIssueCount ? "CHANGELOG.md" : null,
+      summaryLine:
+        completedIssueCount === issues.length && issues.length
+          ? "项目公开交付已汇总到 PR/MR body、CHANGELOG.md。"
+          : current.length
+            ? `项目公开交付仍在围绕 ${current[0]} 整理。`
+            : "当前项目还没有公开交付记录。",
+      publicRecordItems: completedIssueCount ? ["PR/MR body", "CHANGELOG.md"] : [],
+      missingPublicRecords: current.length ? ["CHANGELOG.md 或 release notes"] : [],
+      currentIssueId: current.at(0) ?? null,
+      publishedCount: completedIssueCount,
+      readyCount: current.length,
+      missingCount: future.length,
+    },
+    audit: {
+      status: "not-requested",
+      latestAuditId: null,
+      sourceIssueId: null,
+      reportPath: null,
+      requestedAt: null,
+      summaryLine: "当前没有审计请求。",
+      findingsCount: 0,
+      findings: [],
+      evidenceGaps: [],
+      repairRecommendations: [],
+    },
     issueCount: issues.length,
     completedIssueCount,
     projectBrain: {

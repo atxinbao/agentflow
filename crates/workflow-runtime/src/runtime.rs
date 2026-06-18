@@ -356,6 +356,16 @@ spec:
         )
     }
 
+    fn delivery_context() -> RuntimeContext {
+        RuntimeContext::issue(
+            "AF-DELIVERY-001",
+            EventActor {
+                role: "delivery-loop".to_string(),
+                kind: "system".to_string(),
+            },
+        )
+    }
+
     #[test]
     fn applies_transition_and_writes_task_event() {
         let dir = tempdir().unwrap();
@@ -594,6 +604,112 @@ spec:
                 .as_ref()
                 .map(|binding| binding.state_id.as_str()),
             Some("needs_repair")
+        );
+    }
+
+    #[test]
+    fn delivery_runtime_enters_ready_and_in_progress() {
+        let dir = tempdir().unwrap();
+        let workflow = canonical_workflow(WorkflowFlowType::Delivery);
+        let guards =
+            StaticGuardRegistry::all_pass(["delivery.input.ready", "delivery.public_record.ready"]);
+        let actions =
+            StaticActionRegistry::all_complete(["delivery.ready.write", "delivery.summary.write"]);
+
+        let ready = apply_workflow_event(
+            dir.path(),
+            &workflow,
+            "pending",
+            "delivery.ready",
+            delivery_context(),
+            &guards,
+            &actions,
+        )
+        .unwrap();
+
+        assert!(ready.applied);
+        assert_eq!(
+            ready
+                .next_binding
+                .as_ref()
+                .map(|binding| binding.state_id.as_str()),
+            Some("ready")
+        );
+
+        let started = apply_workflow_event(
+            dir.path(),
+            &workflow,
+            "ready",
+            "delivery.started",
+            delivery_context(),
+            &guards,
+            &actions,
+        )
+        .unwrap();
+
+        assert!(started.applied);
+        assert_eq!(
+            started
+                .next_binding
+                .as_ref()
+                .map(|binding| binding.state_id.as_str()),
+            Some("in_progress")
+        );
+    }
+
+    #[test]
+    fn delivery_runtime_records_publish_and_return_paths() {
+        let dir = tempdir().unwrap();
+        let workflow = canonical_workflow(WorkflowFlowType::Delivery);
+
+        let publish_guards = StaticGuardRegistry::all_pass(["delivery.publish.confirmed"]);
+        let publish_actions = StaticActionRegistry::all_complete(["delivery.publish.write"]);
+        let published = apply_workflow_event(
+            dir.path(),
+            &workflow,
+            "in_progress",
+            "delivery.published",
+            delivery_context(),
+            &publish_guards,
+            &publish_actions,
+        )
+        .unwrap();
+
+        assert!(published.applied);
+        assert_eq!(
+            published
+                .next_binding
+                .as_ref()
+                .map(|binding| binding.state_id.as_str()),
+            Some("published")
+        );
+        assert_eq!(
+            published
+                .handoff
+                .as_ref()
+                .map(|handoff| handoff.to_role.as_str()),
+            Some("system")
+        );
+
+        let return_actions = StaticActionRegistry::all_complete(["delivery.return.write"]);
+        let returned = apply_workflow_event(
+            dir.path(),
+            &workflow,
+            "in_progress",
+            "delivery.returned",
+            delivery_context(),
+            &StaticGuardRegistry::default(),
+            &return_actions,
+        )
+        .unwrap();
+
+        assert!(returned.applied);
+        assert_eq!(
+            returned
+                .next_binding
+                .as_ref()
+                .map(|binding| binding.state_id.as_str()),
+            Some("returned")
         );
     }
 }

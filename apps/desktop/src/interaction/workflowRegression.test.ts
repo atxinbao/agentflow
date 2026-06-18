@@ -143,6 +143,17 @@ function projection(status: WorkflowStatus): TaskProjection | null {
       mergeCommit: status === "done" ? "merge-workflow-regression" : null,
       prUrl: status === "in_review" || status === "done" ? `https://example.invalid/pr/${status}` : null,
       publicRecordPath: status === "in_review" || status === "done" ? "CHANGELOG.md" : null,
+      summaryLine:
+        status === "done"
+          ? "公开交付已整理到 PR/MR body、CHANGELOG.md。"
+          : "公开交付正在整理，等待写入 CHANGELOG.md。",
+      publicRecordItems:
+        status === "in_review" || status === "done" ? ["PR/MR body", "CHANGELOG.md"] : ["PR/MR body"],
+      missingPublicRecords: status === "done" ? [] : ["CHANGELOG.md 或 release notes"],
+      currentIssueId: null,
+      publishedCount: 0,
+      readyCount: 0,
+      missingCount: 0,
     },
     displayStatus: status,
     audit: {
