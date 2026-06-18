@@ -207,10 +207,12 @@ pub fn read_project_brain_document_set(
     let goal_path = format!("{project_path}/GOAL.md");
     let plan_path = format!("{project_path}/PLAN.md");
     let decisions_path = format!("{project_path}/DECISIONS.md");
+    let health_path = format!("{project_path}/PROJECT_HEALTH.md");
 
     let goal = read_document_probe(&root, &goal_path)?;
     let plan = read_document_probe(&root, &plan_path)?;
     let decisions = read_document_probe(&root, &decisions_path)?;
+    let health = read_document_probe(&root, &health_path)?;
     let mut missing_documents = Vec::new();
     if !goal.exists {
         missing_documents.push("GOAL.md".to_string());
@@ -229,12 +231,15 @@ pub fn read_project_brain_document_set(
         goal_path,
         plan_path,
         decisions_path,
+        health_path,
         goal_exists: goal.exists,
         plan_exists: plan.exists,
         decisions_exists: decisions.exists,
+        health_exists: health.exists,
         goal_updated_at: goal.updated_at,
         plan_updated_at: plan.updated_at,
         decisions_updated_at: decisions.updated_at,
+        health_updated_at: health.updated_at,
         missing_documents,
         readonly: true,
     })
@@ -250,13 +255,17 @@ pub fn read_project_brain_snapshot(
     let goal_probe = read_document_probe(&root, &document_set.goal_path)?;
     let plan_probe = read_document_probe(&root, &document_set.plan_path)?;
     let decisions_probe = read_document_probe(&root, &document_set.decisions_path)?;
+    let health_probe = read_document_probe(&root, &document_set.health_path)?;
 
     let goal_status = classify_project_brain_document(&goal_probe);
     let plan_status = classify_project_brain_document(&plan_probe);
     let decision_status = classify_project_brain_document(&decisions_probe);
+    let health_status = classify_optional_project_health_document(&health_probe);
     let missing_documents = document_set.missing_documents.clone();
 
-    let brain_status = if missing_documents.len() == 3 {
+    let brain_status = if health_status == ProjectBrainDocumentStatus::Blocked {
+        ProjectBrainStatus::Blocked
+    } else if missing_documents.len() == 3 {
         ProjectBrainStatus::NotInitialized
     } else if !goal_probe.exists {
         ProjectBrainStatus::NeedsGoal
@@ -288,6 +297,13 @@ pub fn read_project_brain_snapshot(
         ProjectBrainDocumentStatus::Blocked | ProjectBrainDocumentStatus::Stale
     ) {
         ProjectBrainStatus::Blocked
+    } else if matches!(
+        health_status,
+        ProjectBrainDocumentStatus::Draft
+            | ProjectBrainDocumentStatus::NeedsConfirmation
+            | ProjectBrainDocumentStatus::Stale
+    ) {
+        ProjectBrainStatus::NeedsRecheck
     } else {
         ProjectBrainStatus::ReadyForProjectLoop
     };
@@ -308,18 +324,18 @@ pub fn read_project_brain_snapshot(
     if matches!(plan_status, ProjectBrainDocumentStatus::NeedsConfirmation) {
         open_questions.push("PLAN.md 仍处于待确认状态。".to_string());
     }
-
-    let next_recommended_action = match brain_status {
-        ProjectBrainStatus::NotInitialized | ProjectBrainStatus::NeedsGoal => {
-            "create-goal-draft-preview"
-        }
-        ProjectBrainStatus::NeedsPlan => "create-plan-draft-preview",
-        ProjectBrainStatus::NeedsConfirmation => "confirm-project-brain",
-        ProjectBrainStatus::ReadyForProjectLoop => "start-project-loop",
-        ProjectBrainStatus::NeedsRecheck => "run-goal-recheck",
-        ProjectBrainStatus::Blocked => "resolve-project-brain-blocker",
+    if matches!(
+        health_status,
+        ProjectBrainDocumentStatus::Draft | ProjectBrainDocumentStatus::NeedsConfirmation
+    ) {
+        open_questions.push("PROJECT_HEALTH.md 提示需要重新检查项目状态。".to_string());
     }
-    .to_string();
+
+    let next_recommended_action = project_brain_next_action(&brain_status).to_string();
+    let next_recommended_action_label = project_brain_next_action_label(&brain_status).to_string();
+    let next_recommended_action_reason =
+        project_brain_next_action_reason(&brain_status, &missing_documents, &health_status)
+            .to_string();
 
     Ok(ProjectBrainSnapshot {
         version: PROJECT_BRAIN_SNAPSHOT_VERSION.to_string(),
@@ -329,15 +345,76 @@ pub fn read_project_brain_snapshot(
         goal_document: document_set.goal_path,
         plan_document: document_set.plan_path,
         decisions_document: document_set.decisions_path,
+        health_document: document_set.health_path,
         goal_status,
         plan_status,
         decision_status,
+        health_status,
         brain_status,
         missing_documents,
         open_questions,
         next_recommended_action,
+        next_recommended_action_label,
+        next_recommended_action_reason,
         readonly: true,
     })
+}
+
+fn project_brain_next_action(status: &ProjectBrainStatus) -> &'static str {
+    match status {
+        ProjectBrainStatus::NotInitialized | ProjectBrainStatus::NeedsGoal => {
+            "create-goal-draft-preview"
+        }
+        ProjectBrainStatus::NeedsPlan => "create-plan-draft-preview",
+        ProjectBrainStatus::NeedsConfirmation => "confirm-project-brain",
+        ProjectBrainStatus::ReadyForProjectLoop => "start-project-loop",
+        ProjectBrainStatus::NeedsRecheck => "run-goal-recheck",
+        ProjectBrainStatus::Blocked => "resolve-project-brain-blocker",
+    }
+}
+
+fn project_brain_next_action_label(status: &ProjectBrainStatus) -> &'static str {
+    match status {
+        ProjectBrainStatus::NotInitialized | ProjectBrainStatus::NeedsGoal => "生成 Goal 草稿预览",
+        ProjectBrainStatus::NeedsPlan => "生成 Plan 草稿预览",
+        ProjectBrainStatus::NeedsConfirmation => "确认 Project Brain",
+        ProjectBrainStatus::ReadyForProjectLoop => "进入项目循环",
+        ProjectBrainStatus::NeedsRecheck => "重新检查项目目标",
+        ProjectBrainStatus::Blocked => "处理 Project Brain 阻断",
+    }
+}
+
+fn project_brain_next_action_reason(
+    status: &ProjectBrainStatus,
+    missing_documents: &[String],
+    health_status: &ProjectBrainDocumentStatus,
+) -> &'static str {
+    match status {
+        ProjectBrainStatus::NotInitialized | ProjectBrainStatus::NeedsGoal => {
+            "项目还没有确认目标，先把 Goal 变成可确认文档。"
+        }
+        ProjectBrainStatus::NeedsPlan => "目标已经存在，但当前还缺计划文档，不能直接进入项目循环。",
+        ProjectBrainStatus::NeedsConfirmation => {
+            "Goal / Plan / Decisions 还没有全部确认，先把 Project Brain 定稿。"
+        }
+        ProjectBrainStatus::ReadyForProjectLoop => {
+            "Goal / Plan / Decisions 已就绪，可以把项目正式交给 Spec / Project Loop 继续拆任务。"
+        }
+        ProjectBrainStatus::NeedsRecheck => {
+            if *health_status == ProjectBrainDocumentStatus::Missing {
+                "项目主文档已就绪；如果目标或计划发生漂移，再补一轮 Goal Recheck。"
+            } else {
+                "Project Health 提示需要重新检查目标、计划或当前决策。"
+            }
+        }
+        ProjectBrainStatus::Blocked => {
+            if missing_documents.is_empty() {
+                "Project Brain 文档里存在阻断标记，先解除阻断再继续。"
+            } else {
+                "Project Brain 仍有缺失或阻断文档，先补齐再继续。"
+            }
+        }
+    }
 }
 
 pub fn list_spec_issues(project_root: impl AsRef<Path>) -> Result<Vec<SpecIssue>> {
@@ -603,6 +680,13 @@ fn classify_project_brain_document(probe: &DocumentProbe) -> ProjectBrainDocumen
     ProjectBrainDocumentStatus::Confirmed
 }
 
+fn classify_optional_project_health_document(probe: &DocumentProbe) -> ProjectBrainDocumentStatus {
+    if !probe.exists {
+        return ProjectBrainDocumentStatus::Missing;
+    }
+    classify_project_brain_document(probe)
+}
+
 fn extract_title(raw: &str) -> Option<String> {
     raw.lines()
         .find_map(|line| line.trim().strip_prefix("# ").map(str::trim))
@@ -788,6 +872,12 @@ mod tests {
             missing.missing_documents,
             vec!["GOAL.md", "PLAN.md", "DECISIONS.md"]
         );
+        assert_eq!(
+            missing.health_document,
+            "docs/projects/project-spec-test/PROJECT_HEALTH.md"
+        );
+        assert_eq!(missing.health_status, ProjectBrainDocumentStatus::Missing);
+        assert_eq!(missing.next_recommended_action_label, "生成 Goal 草稿预览");
         assert_eq!(missing.next_recommended_action, "create-goal-draft-preview");
 
         let project_docs = dir.path().join("docs/projects/project-spec-test");
@@ -805,7 +895,46 @@ mod tests {
         assert_eq!(ready.brain_status, ProjectBrainStatus::ReadyForProjectLoop);
         assert!(ready.missing_documents.is_empty());
         assert_eq!(ready.goal_status, ProjectBrainDocumentStatus::Confirmed);
+        assert_eq!(ready.health_status, ProjectBrainDocumentStatus::Missing);
         assert_eq!(ready.next_recommended_action, "start-project-loop");
+        assert_eq!(ready.next_recommended_action_label, "进入项目循环");
+        assert!(ready
+            .next_recommended_action_reason
+            .contains("Goal / Plan / Decisions 已就绪"));
+    }
+
+    #[test]
+    fn project_brain_health_document_can_request_recheck_without_blocking_missing_core_docs() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+        let draft = SpecProjectDraft::new("project-health-test");
+        let project = project_from_requirement(dir.path(), &requirement, draft).unwrap();
+        write_spec_project(dir.path(), &project).unwrap();
+
+        let project_docs = dir.path().join("docs/projects/project-health-test");
+        fs::create_dir_all(&project_docs).unwrap();
+        fs::write(project_docs.join("GOAL.md"), "# Goal\n\n已确认目标。\n").unwrap();
+        fs::write(project_docs.join("PLAN.md"), "# Plan\n\n已确认计划。\n").unwrap();
+        fs::write(
+            project_docs.join("DECISIONS.md"),
+            "# Decisions\n\n已确认。\n",
+        )
+        .unwrap();
+        fs::write(
+            project_docs.join("PROJECT_HEALTH.md"),
+            "# Project Health\n\n待确认：需要重新检查项目状态。\n",
+        )
+        .unwrap();
+
+        let snapshot =
+            read_project_brain_snapshot(dir.path(), "project-health-test", &project.title).unwrap();
+        assert_eq!(
+            snapshot.health_status,
+            ProjectBrainDocumentStatus::NeedsConfirmation
+        );
+        assert_eq!(snapshot.brain_status, ProjectBrainStatus::NeedsRecheck);
+        assert_eq!(snapshot.next_recommended_action, "run-goal-recheck");
+        assert_eq!(snapshot.next_recommended_action_label, "重新检查项目目标");
     }
 
     #[test]

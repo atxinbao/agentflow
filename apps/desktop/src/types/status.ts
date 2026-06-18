@@ -612,13 +612,17 @@ export type ProjectProjection = {
     goalPath: string;
     planPath: string;
     decisionsPath: string;
+    healthPath: string;
     brainStatus: string;
     goalStatus: string;
     planStatus: string;
     decisionStatus: string;
+    healthStatus: string;
     missingDocuments: string[];
     openQuestions: string[];
     nextRecommendedAction: string;
+    nextRecommendedActionLabel: string;
+    nextRecommendedActionReason: string;
     readonly: boolean;
   };
   updatedAt: number;

@@ -304,13 +304,17 @@ fn project_project(
             goal_path: brain.goal_document,
             plan_path: brain.plan_document,
             decisions_path: brain.decisions_document,
+            health_path: brain.health_document,
             brain_status: brain.brain_status.as_str().to_string(),
             goal_status: brain.goal_status.as_str().to_string(),
             plan_status: brain.plan_status.as_str().to_string(),
             decision_status: brain.decision_status.as_str().to_string(),
+            health_status: brain.health_status.as_str().to_string(),
             missing_documents: brain.missing_documents,
             open_questions: brain.open_questions,
             next_recommended_action: brain.next_recommended_action,
+            next_recommended_action_label: brain.next_recommended_action_label,
+            next_recommended_action_reason: brain.next_recommended_action_reason,
             readonly: brain.readonly,
         },
         updated_at,
@@ -861,6 +865,15 @@ mod tests {
         assert_eq!(
             project.project_brain.project_path,
             "docs/projects/project-projection"
+        );
+        assert_eq!(
+            project.project_brain.health_path,
+            "docs/projects/project-projection/PROJECT_HEALTH.md"
+        );
+        assert_eq!(project.project_brain.health_status, "missing");
+        assert_eq!(
+            project.project_brain.next_recommended_action_label,
+            "进入项目循环"
         );
     }
 

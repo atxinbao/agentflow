@@ -129,13 +129,17 @@ pub struct ProjectBrainProjection {
     pub goal_path: String,
     pub plan_path: String,
     pub decisions_path: String,
+    pub health_path: String,
     pub brain_status: String,
     pub goal_status: String,
     pub plan_status: String,
     pub decision_status: String,
+    pub health_status: String,
     pub missing_documents: Vec<String>,
     pub open_questions: Vec<String>,
     pub next_recommended_action: String,
+    pub next_recommended_action_label: String,
+    pub next_recommended_action_reason: String,
     pub readonly: bool,
 }
 
