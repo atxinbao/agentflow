@@ -203,7 +203,7 @@ mod tests {
     use super::*;
     use agentflow_projection::{
         ProjectionAuditSummary, ProjectionDeliverySummary, ProjectionPublicDelivery,
-        ProjectionRuntimeSummary,
+        ProjectionRuntimeSummary, ProjectionSessionSummary,
     };
 
     fn projection(state: &str) -> TaskProjection {
@@ -228,6 +228,7 @@ mod tests {
                 latest_checkpoint_state: None,
                 latest_checkpoint_summary: None,
             },
+            session: ProjectionSessionSummary::default(),
             delivery: ProjectionDeliverySummary {
                 status: "missing".to_string(),
                 evidence_status: "missing".to_string(),

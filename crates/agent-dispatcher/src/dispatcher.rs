@@ -1,6 +1,6 @@
 use crate::model::{
-    AgentDispatchRoleBinding, AgentDispatcherClaim, AGENT_SESSION_CREATED, AGENT_SESSION_DONE,
-    AGENT_SESSION_FAILED, AGENT_SESSION_INTERRUPTED, AGENT_SESSION_IN_REVIEW,
+    AgentDispatchRoleBinding, AgentDispatcherClaim, AGENT_LAUNCH_CLAIMED, AGENT_SESSION_CREATED,
+    AGENT_SESSION_DONE, AGENT_SESSION_FAILED, AGENT_SESSION_INTERRUPTED, AGENT_SESSION_IN_REVIEW,
     AGENT_SESSION_RESUMED, AGENT_SESSION_RUNNING,
 };
 use agentflow_event_store::{
@@ -55,6 +55,7 @@ impl AgentDispatcher {
             .provider(&payload.provider)
             .ok_or_else(|| anyhow::anyhow!("provider {} is not registered", payload.provider))?;
         let session = provider.create_session(root, &request)?;
+        append_launch_claimed_event(root, &payload, &role_binding, &session)?;
         let created_event = append_session_event(
             root,
             &payload,
@@ -207,6 +208,54 @@ fn append_session_event(
     )
 }
 
+fn append_launch_claimed_event(
+    root: &Path,
+    payload: &AgentLaunchPayload,
+    role_binding: &AgentDispatchRoleBinding,
+    session: &McpSessionSnapshot,
+) -> Result<TaskEvent> {
+    append_task_event_once(
+        root,
+        TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: payload.issue_id.clone(),
+            project_id: payload.project_id.clone(),
+            issue_id: Some(payload.issue_id.clone()),
+            run_id: Some(session.run_id.clone()),
+            event_type: AGENT_LAUNCH_CLAIMED.to_string(),
+            authority_role: Some(role_binding.runtime_role),
+            actor: EventActor {
+                role: "agent-dispatcher".to_string(),
+                kind: "system".to_string(),
+            },
+            state: None,
+            correlation_id: Some(format!("corr-{}", payload.issue_id)),
+            causation_id: None,
+            payload: json!({
+                "provider": session.provider,
+                "requestedRole": role_binding.requested_role,
+                "runtimeRole": role_binding.runtime_role.as_str(),
+                "skillPack": role_binding.skill_pack.map(|value| value.as_str()),
+                "sessionId": session.session_id,
+                "sessionStatus": session.status.as_str(),
+                "issueId": session.issue_id,
+                "projectId": session.project_id,
+                "runId": session.run_id,
+                "branchName": session.branch_name,
+                "launchRequestPath": session.launch_request_path,
+                "planPath": session.plan_path,
+                "logPath": session.log_path,
+            }),
+            artifact_refs: session_artifact_refs(session),
+            idempotency_key: Some(format!(
+                "{AGENT_LAUNCH_CLAIMED}:{}:{}",
+                session.issue_id, session.run_id
+            )),
+        },
+    )
+}
+
 fn session_artifact_refs(session: &McpSessionSnapshot) -> Vec<String> {
     let mut refs = vec![session.plan_path.clone()];
     if let Some(log_path) = session.log_path.clone() {
@@ -314,7 +363,16 @@ mod tests {
         let events = load_task_events(dir.path()).unwrap();
         assert!(events
             .iter()
+            .any(|event| event.event_type == AGENT_LAUNCH_CLAIMED));
+        assert!(events
+            .iter()
             .any(|event| event.event_type == AGENT_SESSION_CREATED));
+        let claimed = events
+            .iter()
+            .find(|event| event.event_type == AGENT_LAUNCH_CLAIMED)
+            .unwrap();
+        assert_eq!(claimed.payload["requestedRole"], "build-agent");
+        assert_eq!(claimed.payload["runtimeRole"], "work-agent");
         let created = events
             .iter()
             .find(|event| event.event_type == AGENT_SESSION_CREATED)
