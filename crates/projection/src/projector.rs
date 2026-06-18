@@ -462,10 +462,11 @@ fn build_delivery_summary(
     public_delivery: &ProjectionPublicDelivery,
 ) -> ProjectionDeliverySummary {
     let evidence = agentflow_task_artifacts::load_task_evidence(root, &issue.issue_id).ok();
-    let public_record_path = public_delivery
+    let referenced_public_record_path = public_delivery
         .changelog_path
         .clone()
         .or_else(|| public_delivery.release_notes_url.clone());
+    let public_record_path = referenced_public_record_path.filter(|path| root.join(path).is_file());
     let evidence_status = if evidence.is_some() {
         "ready".to_string()
     } else {

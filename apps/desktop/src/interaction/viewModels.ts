@@ -1449,6 +1449,7 @@ function artifactProjectionStatusLabel(status?: string | null) {
     passed: "通过",
     "passed-with-warnings": "通过，有警告",
     pending: "待处理",
+    published: "已发布",
     ready: "就绪",
     requested: "已请求",
     running: "运行中",

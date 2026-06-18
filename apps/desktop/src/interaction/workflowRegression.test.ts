@@ -78,7 +78,7 @@ function workflowTask(status: WorkflowStatus): V1Issue {
     boundary: ["不创建审计。"],
     codexInstructions: [],
     dependencies: [],
-    deliveryStatus: status === "done" ? "delivered" : status === "in_review" ? "drafted" : "missing",
+    deliveryStatus: status === "done" ? "published" : status === "in_review" ? "ready" : "missing",
     displayStatus: status,
     evidenceRequired: ["本地验证证据。"],
     evidenceStatus: status === "done" || status === "in_review" ? "complete" : "missing",
@@ -453,7 +453,7 @@ function assertWorkflowYamlProjection() {
     contract: buildTaskStatusContract(doneTask),
     deliveryProjection: buildTaskDeliveryProjection({
       audit: auditForDone(),
-      delivery: outputEntry("run-done", doneTask.id, "delivered"),
+      delivery: outputEntry("run-done", doneTask.id, "published"),
       evidence: outputEntry("run-done", doneTask.id, "complete"),
       projection: projection("done"),
       session: session("done"),
