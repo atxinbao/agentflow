@@ -24,6 +24,7 @@ const TASK_EVENT_CLAIM_LEASE_TTL_SECONDS: u64 = 30;
 pub fn prepare_event_store(project_root: impl AsRef<Path>) -> Result<TaskEventManifest> {
     let root = canonical_project_root(project_root)?;
     ensure_directory(&root.join(".agentflow/events"))?;
+    ensure_directory(&root.join(".agentflow/events/task-events"))?;
     ensure_directory(&root.join(".agentflow/events/consumers"))?;
     ensure_directory(&root.join(".agentflow/events/dead-letter"))?;
     ensure_directory(&root.join(".agentflow/events/locks"))?;
@@ -31,6 +32,10 @@ pub fn prepare_event_store(project_root: impl AsRef<Path>) -> Result<TaskEventMa
     ensure_directory(&root.join(".agentflow/events/claims"))?;
     let stream_path = root.join(TASK_EVENT_STREAM_PATH);
     ensure_file_exists(&stream_path)?;
+    with_event_store_lock(&root, "runtime", |root| {
+        migrate_legacy_task_events_unlocked(root)?;
+        sync_task_event_stream_unlocked(root)
+    })?;
     let events = load_task_events(&root)?;
     let manifest = TaskEventManifest {
         version: TASK_EVENT_MANIFEST_VERSION.to_string(),
@@ -179,6 +184,24 @@ pub fn release_task_claim(
 
 pub fn load_task_events(project_root: impl AsRef<Path>) -> Result<Vec<TaskEvent>> {
     let root = canonical_project_root(project_root)?;
+    let events_directory = event_store_events_path(&root);
+    if events_directory.is_dir() {
+        let mut event_paths = fs::read_dir(&events_directory)
+            .with_context(|| format!("read {}", events_directory.display()))?
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.is_file() && path.extension().and_then(|value| value.to_str()) == Some("json")
+            })
+            .collect::<Vec<_>>();
+        event_paths.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+        if !event_paths.is_empty() {
+            return event_paths
+                .into_iter()
+                .map(|path| read_json::<TaskEvent>(&path))
+                .collect();
+        }
+    }
     let stream_path = root.join(TASK_EVENT_STREAM_PATH);
     if !stream_path.is_file() {
         return Ok(Vec::new());
@@ -365,7 +388,7 @@ fn append_task_event_locked(
             }
         }
         let event = materialize_event_unlocked(root, draft)?;
-        append_event_line(root, &event)?;
+        persist_task_event_unlocked(root, &event)?;
         Ok(event)
     })
 }
@@ -376,7 +399,7 @@ fn append_task_event_once_unlocked(root: &Path, draft: TaskEventDraft) -> Result
         return Ok(existing);
     }
     let event = materialize_event_unlocked(root, draft)?;
-    append_event_line(root, &event)?;
+    persist_task_event_unlocked(root, &event)?;
     Ok(event)
 }
 
@@ -416,15 +439,10 @@ fn materialize_event_unlocked(root: &Path, draft: TaskEventDraft) -> Result<Task
     })
 }
 
-fn append_event_line(root: &Path, event: &TaskEvent) -> Result<()> {
-    let line = serde_json::to_string(event)?;
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(root.join(TASK_EVENT_STREAM_PATH))
-        .with_context(|| format!("open {}", root.join(TASK_EVENT_STREAM_PATH).display()))?;
-    writeln!(file, "{line}")?;
-    Ok(())
+fn persist_task_event_unlocked(root: &Path, event: &TaskEvent) -> Result<()> {
+    let event_path = event_store_event_path(root, &event.event_id);
+    write_json(&event_path, event)?;
+    sync_task_event_stream_unlocked(root)
 }
 
 fn validate_draft(draft: &TaskEventDraft) -> Result<()> {
@@ -540,9 +558,17 @@ fn event_store_lock_path(root: &Path, scope: &str) -> PathBuf {
         .join(sanitize_namespace(scope))
 }
 
+fn event_store_events_path(root: &Path) -> PathBuf {
+    root.join(".agentflow/events/task-events")
+}
+
 fn event_store_sequence_path(root: &Path, namespace: &str) -> PathBuf {
     root.join(".agentflow/events/sequences")
         .join(format!("{}.seq", sanitize_namespace(namespace)))
+}
+
+fn event_store_event_path(root: &Path, event_id: &str) -> PathBuf {
+    event_store_events_path(root).join(format!("{}.json", sanitize_namespace(event_id)))
 }
 
 fn event_store_claim_path(root: &Path, run_id: &str) -> PathBuf {
@@ -695,6 +721,60 @@ fn claim_lease_is_active(lease: &TaskEventClaimLease, now: u64) -> bool {
     lease.status == TaskEventClaimStatus::Active && lease.expires_at > now
 }
 
+fn migrate_legacy_task_events_unlocked(root: &Path) -> Result<()> {
+    let events_directory = event_store_events_path(root);
+    ensure_directory(&events_directory)?;
+    let has_event_files = fs::read_dir(&events_directory)
+        .with_context(|| format!("read {}", events_directory.display()))?
+        .filter_map(|entry| entry.ok())
+        .any(|entry| {
+            entry.path().is_file()
+                && entry.path().extension().and_then(|value| value.to_str()) == Some("json")
+        });
+    if has_event_files {
+        return Ok(());
+    }
+    let stream_path = root.join(TASK_EVENT_STREAM_PATH);
+    if !stream_path.is_file() {
+        return Ok(());
+    }
+    let raw = fs::read_to_string(&stream_path)
+        .with_context(|| format!("read {}", stream_path.display()))?;
+    if raw.trim().is_empty() {
+        return Ok(());
+    }
+    for (index, line) in raw.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let event: TaskEvent = serde_json::from_str(line)
+            .with_context(|| format!("parse task event line {}", index + 1))?;
+        write_json(&event_store_event_path(root, &event.event_id), &event)?;
+    }
+    Ok(())
+}
+
+fn sync_task_event_stream_unlocked(root: &Path) -> Result<()> {
+    let events_directory = event_store_events_path(root);
+    ensure_directory(&events_directory)?;
+    let mut event_paths = fs::read_dir(&events_directory)
+        .with_context(|| format!("read {}", events_directory.display()))?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file() && path.extension().and_then(|value| value.to_str()) == Some("json")
+        })
+        .collect::<Vec<_>>();
+    event_paths.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+    let mut content = String::new();
+    for path in event_paths {
+        let event: TaskEvent = read_json(&path)?;
+        content.push_str(&serde_json::to_string(&event)?);
+        content.push('\n');
+    }
+    atomic_write_text(&root.join(TASK_EVENT_STREAM_PATH), &content)
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct EventStoreLockFact {
@@ -726,11 +806,25 @@ fn clear_stale_lock_if_needed(lock_path: &Path) -> Result<()> {
     if !metadata_path.is_file() {
         return Ok(());
     }
-    let fact: EventStoreLockFact = read_json(&metadata_path)?;
+    let fact: EventStoreLockFact = match read_json(&metadata_path) {
+        Ok(fact) => fact,
+        Err(error)
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
     if fact.expires_at > unix_timestamp_seconds() {
         return Ok(());
     }
-    fs::remove_dir_all(lock_path).with_context(|| format!("remove stale {}", lock_path.display()))
+    match fs::remove_dir_all(lock_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("remove stale {}", lock_path.display())),
+    }
 }
 
 fn atomic_write_text(path: &Path, content: &str) -> Result<()> {
@@ -1157,5 +1251,70 @@ mod tests {
             lease.claim_event_id.as_deref(),
             Some(reclaimed.event_id.as_str())
         );
+    }
+
+    #[test]
+    fn prepare_migrates_legacy_jsonl_into_authoritative_event_files() {
+        let dir = tempdir().unwrap();
+        let stream_path = dir.path().join(TASK_EVENT_STREAM_PATH);
+        ensure_directory(stream_path.parent().unwrap()).unwrap();
+        let legacy_event = TaskEvent {
+            event_id: "evt-000001".to_string(),
+            event_version: TASK_EVENT_VERSION.to_string(),
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: "AF-TASK-001".to_string(),
+            project_id: Some("project-task-workflow-v1".to_string()),
+            issue_id: Some("AF-TASK-001".to_string()),
+            run_id: None,
+            event_type: "issue.scheduled".to_string(),
+            timestamp: 1,
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
+            actor: EventActor {
+                role: "task-loop".to_string(),
+                kind: "system".to_string(),
+            },
+            state: Some(EventStateTransition {
+                from_state: "backlog".to_string(),
+                to_state: "todo".to_string(),
+            }),
+            correlation_id: "corr-AF-TASK-001".to_string(),
+            causation_id: None,
+            payload: json!({"workflowRef": "build-agent.issue-loop@v1"}),
+            artifact_refs: vec![".agentflow/panel/context-packs/AF-TASK-001.json".to_string()],
+            idempotency_key: Some("issue.scheduled:AF-TASK-001".to_string()),
+        };
+        fs::write(
+            &stream_path,
+            format!("{}\n", serde_json::to_string(&legacy_event).unwrap()),
+        )
+        .unwrap();
+
+        prepare_event_store(dir.path()).unwrap();
+
+        let event_path = event_store_event_path(dir.path(), "evt-000001");
+        assert!(event_path.is_file());
+        let events = load_task_events(dir.path()).unwrap();
+        assert_eq!(events, vec![legacy_event]);
+    }
+
+    #[test]
+    fn prepare_repairs_corrupt_jsonl_from_authoritative_event_files() {
+        let dir = tempdir().unwrap();
+        let original = append_task_event(dir.path(), issue_scheduled_draft("AF-TASK-001")).unwrap();
+        fs::write(dir.path().join(TASK_EVENT_STREAM_PATH), "{\"broken\":\n").unwrap();
+
+        prepare_event_store(dir.path()).unwrap();
+
+        let events = load_task_events(dir.path()).unwrap();
+        assert_eq!(events, vec![original.clone()]);
+
+        let repaired = fs::read_to_string(dir.path().join(TASK_EVENT_STREAM_PATH)).unwrap();
+        let parsed = repaired
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| serde_json::from_str::<TaskEvent>(line).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(parsed, vec![original]);
     }
 }
