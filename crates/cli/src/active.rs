@@ -24,6 +24,7 @@ use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -104,7 +105,10 @@ struct TrustedChangedFilesSnapshot {
     files: Vec<TaskChangedFile>,
     base_commit: Option<String>,
     head_commit: Option<String>,
+    tree_sha: Option<String>,
     working_tree_hash: String,
+    patch_sha256: String,
+    file_content_sha256: String,
 }
 
 pub(crate) fn complete_build_agent_issue_from_request(
@@ -442,7 +446,7 @@ fn ensure_review_prepared(
             },
         )?;
     }
-    let changed_files = collect_trusted_changed_files(root)?;
+    let changed_files = collect_trusted_changed_files(root, issue_id, run_id)?;
     write_task_changed_files(
         root,
         issue_id,
@@ -450,7 +454,10 @@ fn ensure_review_prepared(
         changed_files.files.clone(),
         changed_files.base_commit.clone(),
         changed_files.head_commit.clone(),
+        changed_files.tree_sha.clone(),
         changed_files.working_tree_hash.clone(),
+        changed_files.patch_sha256.clone(),
+        changed_files.file_content_sha256.clone(),
     )?;
     let boundary_failures = validate_changed_file_boundaries(&issue, &changed_files.files)?;
     let validation =
@@ -513,8 +520,11 @@ fn ensure_review_prepared(
                 "validationCommandCount": validation.command_ids.len(),
                 "boundaryFailures": validation.boundary_failures,
                 "changedFilesPath": relative_path(root, &task_changed_files_path(root, issue_id, run_id)?),
-                "commandHash": validation.command_hash,
-                "changedFileHash": validation.changed_file_hash,
+                "validationCommandHash": validation.validation_command_hash,
+                "validationOutputHash": validation.validation_output_hash,
+                "patchSha256": validation.patch_sha256,
+                "fileContentSha256": validation.file_content_sha256,
+                "treeSha": validation.tree_sha,
                 "validationResultHash": validation.validation_result_hash,
                 "evidencePath": task_evidence_path(issue_id),
             }),
@@ -572,40 +582,87 @@ fn run_validation_command(root: &Path, command: &str) -> Result<CommandResult> {
     })
 }
 
-fn collect_trusted_changed_files(root: &Path) -> Result<TrustedChangedFilesSnapshot> {
-    let status_output = git_stdout(root, &["status", "--porcelain=v1", "--untracked-files=all"])?;
-    let diff_stats = collect_diff_stats(root)?;
-    let files = status_output
-        .lines()
-        .filter_map(parse_status_line)
+fn collect_trusted_changed_files(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<TrustedChangedFilesSnapshot> {
+    let run = load_task_run(root, issue_id, run_id)?;
+    let head_commit = Some(git_stdout(root, &["rev-parse", "HEAD"])?);
+    let base_commit = run
+        .base_commit
+        .clone()
+        .or_else(|| resolve_base_commit(root).ok())
+        .or_else(|| head_commit.clone());
+    let tree_sha = git_stdout(root, &["rev-parse", "HEAD^{tree}"]).ok();
+    let tracked_stats = collect_diff_stats(root, base_commit.as_deref())?;
+    let mut files = collect_diff_name_status(root, base_commit.as_deref())?;
+    for file in collect_untracked_files(root)? {
+        files.entry(file.path.clone()).or_insert(file);
+    }
+    let files = files
+        .into_values()
         .filter(|file| !file.path.starts_with(".agentflow/"))
         .map(|mut file| {
-            if let Some((insertions, deletions)) = diff_stats.get(&file.path) {
+            if let Some((insertions, deletions)) = tracked_stats.get(&file.path) {
                 file.insertions = *insertions;
                 file.deletions = *deletions;
             }
             file
         })
         .collect::<Vec<_>>();
-    let head_commit = Some(git_stdout(root, &["rev-parse", "HEAD"])?);
-    let base_commit = resolve_base_commit(root)
-        .ok()
-        .or_else(|| head_commit.clone());
     let working_tree_hash = git_stdout(
         root,
         &["status", "--porcelain=v1", "--untracked-files=all", "-z"],
     )
     .map(|raw| sha256_hex(raw.as_bytes()))?;
+    let patch_sha256 = collect_patch_sha(root, base_commit.as_deref(), head_commit.as_deref())?;
+    let file_content_sha256 = collect_file_content_sha(root, &files)?;
     Ok(TrustedChangedFilesSnapshot {
         files,
         base_commit,
         head_commit,
+        tree_sha,
         working_tree_hash,
+        patch_sha256,
+        file_content_sha256,
     })
 }
 
-fn collect_diff_stats(root: &Path) -> Result<std::collections::HashMap<String, (usize, usize)>> {
-    let raw = git_stdout(root, &["diff", "--numstat", "HEAD", "--"])?;
+fn collect_diff_name_status(
+    root: &Path,
+    base_commit: Option<&str>,
+) -> Result<BTreeMap<String, TaskChangedFile>> {
+    let mut args = vec!["diff", "--name-status", "--find-renames"];
+    if let Some(base_commit) = base_commit {
+        args.push(base_commit);
+    } else {
+        args.push("HEAD");
+    }
+    args.push("--");
+    let raw = git_stdout(root, &args)?;
+    let mut files = BTreeMap::new();
+    for line in raw.lines() {
+        let Some(file) = parse_name_status_line(line) else {
+            continue;
+        };
+        files.insert(file.path.clone(), file);
+    }
+    Ok(files)
+}
+
+fn collect_diff_stats(
+    root: &Path,
+    base_commit: Option<&str>,
+) -> Result<std::collections::HashMap<String, (usize, usize)>> {
+    let mut args = vec!["diff", "--numstat", "--find-renames"];
+    if let Some(base_commit) = base_commit {
+        args.push(base_commit);
+    } else {
+        args.push("HEAD");
+    }
+    args.push("--");
+    let raw = git_stdout(root, &args)?;
     let mut stats = std::collections::HashMap::new();
     for line in raw.lines() {
         let mut parts = line.splitn(3, '\t');
@@ -627,12 +684,89 @@ fn collect_diff_stats(root: &Path) -> Result<std::collections::HashMap<String, (
     Ok(stats)
 }
 
-fn parse_status_line(line: &str) -> Option<TaskChangedFile> {
-    if line.len() < 4 {
+fn collect_untracked_files(root: &Path) -> Result<Vec<TaskChangedFile>> {
+    let raw = git_stdout(root, &["ls-files", "--others", "--exclude-standard"])?;
+    Ok(raw
+        .lines()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(|path| TaskChangedFile {
+            path: normalize_status_path(path),
+            change_type: "added".to_string(),
+            insertions: 0,
+            deletions: 0,
+        })
+        .collect())
+}
+
+fn collect_patch_sha(
+    root: &Path,
+    base_commit: Option<&str>,
+    head_commit: Option<&str>,
+) -> Result<String> {
+    let mut payload = Vec::new();
+    if let (Some(base_commit), Some(head_commit)) = (base_commit, head_commit) {
+        payload.extend_from_slice(
+            git_stdout(
+                root,
+                &[
+                    "diff",
+                    "--binary",
+                    &format!("{base_commit}..{head_commit}"),
+                    "--",
+                ],
+            )?
+            .as_bytes(),
+        );
+    }
+    if let Some(head_commit) = head_commit {
+        payload.extend_from_slice(b"\n--worktree--\n");
+        payload.extend_from_slice(
+            git_stdout(root, &["diff", "--binary", head_commit, "--"])?.as_bytes(),
+        );
+    }
+    payload.extend_from_slice(b"\n--untracked--\n");
+    for file in collect_untracked_files(root)? {
+        payload.extend_from_slice(file.path.as_bytes());
+        payload.extend_from_slice(b"\0");
+        let path = root.join(&file.path);
+        if path.is_file() {
+            payload.extend_from_slice(&fs::read(path)?);
+        }
+        payload.extend_from_slice(b"\n");
+    }
+    Ok(sha256_hex(&payload))
+}
+
+fn collect_file_content_sha(root: &Path, files: &[TaskChangedFile]) -> Result<String> {
+    let mut payload = Vec::new();
+    let mut sorted = files.to_vec();
+    sorted.sort_by(|left, right| left.path.cmp(&right.path));
+    for file in sorted {
+        payload.extend_from_slice(file.path.as_bytes());
+        payload.extend_from_slice(b"\0");
+        let path = root.join(&file.path);
+        if path.is_file() {
+            payload.extend_from_slice(&fs::read(path)?);
+        } else {
+            payload.extend_from_slice(b"__deleted__");
+        }
+        payload.extend_from_slice(b"\n");
+    }
+    Ok(sha256_hex(&payload))
+}
+
+fn parse_name_status_line(line: &str) -> Option<TaskChangedFile> {
+    let mut parts = line.split('\t');
+    let status = parts.next()?.trim();
+    if status.is_empty() {
         return None;
     }
-    let status = &line[..2];
-    let raw_path = line[3..].trim();
+    let raw_path = if status.starts_with('R') || status.starts_with('C') {
+        parts.nth(1)?
+    } else {
+        parts.next()?
+    };
     if raw_path.is_empty() {
         return None;
     }
@@ -646,6 +780,9 @@ fn parse_status_line(line: &str) -> Option<TaskChangedFile> {
 
 fn normalize_status_path(path: &str) -> String {
     path.rsplit(" -> ")
+        .next()
+        .unwrap_or(path)
+        .rsplit(" => ")
         .next()
         .unwrap_or(path)
         .trim()
@@ -1198,6 +1335,11 @@ mod tests {
         assert_eq!(changed_files.files.len(), 1);
         assert_eq!(changed_files.files[0].path, "src/lib.rs");
         let evidence = load_task_evidence(dir.path(), "AF-001").unwrap();
+        assert!(evidence.validation_command_hash.is_some());
+        assert!(evidence.validation_output_hash.is_some());
+        assert!(evidence.patch_sha256.is_some());
+        assert!(evidence.file_content_sha256.is_some());
+        assert!(evidence.tree_sha.is_some());
         assert!(evidence.command_hash.is_some());
         assert!(evidence.changed_file_hash.is_some());
         assert!(evidence.validation_result_hash.is_some());
@@ -1323,6 +1465,55 @@ mod tests {
         assert_eq!(next_projection.current_state, "in_progress");
         assert_eq!(next_projection.latest_run_id.as_deref(), Some("run-001"));
         assert!(dir.path().join(next_launch.launch_request_path).is_file());
+    }
+
+    #[test]
+    fn build_agent_review_provenance_keeps_committed_and_untracked_changes() {
+        let dir = tempdir().unwrap();
+        write_spec_project_fixture(dir.path(), "proj-001", "AF-001");
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"before\" }\n",
+        );
+        init_git_repo(dir.path());
+        let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"after-commit\" }\n",
+        );
+        run_git(dir.path(), &["add", "src/lib.rs"]);
+        run_git(dir.path(), &["commit", "-m", "committed change"]);
+        write_file(
+            dir.path().join("src/helper.rs"),
+            "pub fn helper() -> &'static str { \"untracked\" }\n",
+        );
+
+        let request_path = write_completion_request(dir.path(), "AF-001", &started.run_id);
+        let prepared = prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
+
+        assert_eq!(prepared.run_status, "completed");
+        let changed_files = load_task_changed_files(dir.path(), "AF-001", &started.run_id).unwrap();
+        let changed_paths = changed_files
+            .files
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect::<Vec<_>>();
+        assert!(changed_paths.contains(&"src/lib.rs"));
+        assert!(changed_paths.contains(&"src/helper.rs"));
+        assert!(changed_files.base_commit.is_some());
+        assert!(changed_files.head_commit.is_some());
+        assert_ne!(changed_files.base_commit, changed_files.head_commit);
+        assert!(changed_files.tree_sha.is_some());
+        assert!(!changed_files.patch_sha256.is_empty());
+        assert!(!changed_files.file_content_sha256.is_empty());
+
+        let evidence = load_task_evidence(dir.path(), "AF-001").unwrap();
+        assert!(evidence.validation_command_hash.is_some());
+        assert!(evidence.validation_output_hash.is_some());
+        assert!(evidence.patch_sha256.is_some());
+        assert!(evidence.file_content_sha256.is_some());
+        assert!(evidence.tree_sha.is_some());
     }
 
     #[test]
