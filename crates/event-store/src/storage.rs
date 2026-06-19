@@ -1,6 +1,7 @@
 use crate::model::{
-    classify_task_event, ReplayFilter, TaskEvent, TaskEventConsumerState, TaskEventDeadLetter,
-    TaskEventDraft, TaskEventManifest, TaskEventSummary, TaskReplayCursor,
+    classify_task_event, ReplayFilter, TaskEvent, TaskEventClaimLease, TaskEventClaimStatus,
+    TaskEventConsumerState, TaskEventDeadLetter, TaskEventDraft, TaskEventManifest,
+    TaskEventSummary, TaskReplayCursor, TASK_EVENT_CLAIM_LEASE_VERSION,
     TASK_EVENT_CONSUMER_VERSION, TASK_EVENT_DEAD_LETTER_VERSION, TASK_EVENT_MANIFEST_VERSION,
     TASK_EVENT_STREAM_PATH, TASK_EVENT_VERSION,
 };
@@ -10,12 +11,15 @@ use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
-    thread,
+    process, thread,
     time::{SystemTime, UNIX_EPOCH},
 };
+use tempfile::NamedTempFile;
 
 const EVENT_STORE_LOCK_RETRY_LIMIT: usize = 200;
 const EVENT_STORE_LOCK_RETRY_DELAY_MS: u64 = 10;
+const EVENT_STORE_LOCK_TTL_SECONDS: u64 = 30;
+const TASK_EVENT_CLAIM_LEASE_TTL_SECONDS: u64 = 30;
 
 pub fn prepare_event_store(project_root: impl AsRef<Path>) -> Result<TaskEventManifest> {
     let root = canonical_project_root(project_root)?;
@@ -24,10 +28,9 @@ pub fn prepare_event_store(project_root: impl AsRef<Path>) -> Result<TaskEventMa
     ensure_directory(&root.join(".agentflow/events/dead-letter"))?;
     ensure_directory(&root.join(".agentflow/events/locks"))?;
     ensure_directory(&root.join(".agentflow/events/sequences"))?;
+    ensure_directory(&root.join(".agentflow/events/claims"))?;
     let stream_path = root.join(TASK_EVENT_STREAM_PATH);
-    if !stream_path.exists() {
-        fs::write(&stream_path, "")?;
-    }
+    ensure_file_exists(&stream_path)?;
     let events = load_task_events(&root)?;
     let manifest = TaskEventManifest {
         version: TASK_EVENT_MANIFEST_VERSION.to_string(),
@@ -71,13 +74,14 @@ pub fn append_task_event_once(
 pub fn allocate_task_sequence(project_root: impl AsRef<Path>, namespace: &str) -> Result<u64> {
     let root = canonical_project_root(project_root)?;
     prepare_event_store(&root)?;
-    with_event_store_lock(&root, "sequence", |root| {
+    with_event_store_lock(&root, "runtime", |root| {
         next_sequence_value_unlocked(root, namespace)
     })
 }
 
 pub fn claim_task_event<F, G>(
     project_root: impl AsRef<Path>,
+    owner_id: &str,
     selector: F,
     draft_builder: G,
 ) -> Result<Option<(TaskEvent, TaskEvent)>>
@@ -87,7 +91,7 @@ where
 {
     let root = canonical_project_root(project_root)?;
     prepare_event_store(&root)?;
-    let claimed = with_event_store_lock(&root, "claim", |root| {
+    let claimed = with_event_store_lock(&root, "runtime", |root| {
         let events = load_task_events(root)?;
         let Some(requested) = events
             .iter()
@@ -96,12 +100,81 @@ where
         else {
             return Ok(None);
         };
-        let draft = draft_builder(&requested, &events)?;
+        let mut draft = draft_builder(&requested, &events)?;
+        let run_id = requested
+            .run_id
+            .as_deref()
+            .or(draft.run_id.as_deref())
+            .ok_or_else(|| anyhow::anyhow!("claimable task event must include runId"))?;
+        let now = unix_timestamp_seconds();
+        let mut lease =
+            allocate_task_claim_lease_unlocked(root, owner_id, &requested, run_id, now)?;
+        attach_claim_payload(&mut draft, &lease);
+        draft.idempotency_key = Some(qualify_claim_idempotency_key(
+            draft.idempotency_key.as_deref(),
+            &lease,
+        ));
         let claimed = append_task_event_once_unlocked(root, draft)?;
+        lease.claim_event_id = Some(claimed.event_id.clone());
+        lease.claimed_at = claimed.timestamp;
+        lease.heartbeat_at = claimed.timestamp;
+        lease.expires_at = claimed.timestamp + TASK_EVENT_CLAIM_LEASE_TTL_SECONDS;
+        write_task_claim_lease_unlocked(root, &lease)?;
         Ok(Some((requested, claimed)))
     })?;
     let _ = prepare_event_store(&root);
     Ok(claimed)
+}
+
+pub fn load_task_claim_lease(
+    project_root: impl AsRef<Path>,
+    run_id: &str,
+) -> Result<Option<TaskEventClaimLease>> {
+    let root = canonical_project_root(project_root)?;
+    prepare_event_store(&root)?;
+    load_task_claim_lease_unlocked(&root, run_id)
+}
+
+pub fn task_claim_is_active(project_root: impl AsRef<Path>, run_id: &str) -> Result<bool> {
+    let root = canonical_project_root(project_root)?;
+    prepare_event_store(&root)?;
+    Ok(load_task_claim_lease_unlocked(&root, run_id)?
+        .is_some_and(|lease| claim_lease_is_active(&lease, unix_timestamp_seconds())))
+}
+
+pub fn release_task_claim(
+    project_root: impl AsRef<Path>,
+    run_id: &str,
+    expected_claim_event_id: Option<&str>,
+    reason: &str,
+) -> Result<Option<TaskEventClaimLease>> {
+    let root = canonical_project_root(project_root)?;
+    prepare_event_store(&root)?;
+    with_event_store_lock(&root, "runtime", |root| {
+        let Some(mut lease) = load_task_claim_lease_unlocked(root, run_id)? else {
+            return Ok(None);
+        };
+        if let Some(expected) = expected_claim_event_id {
+            if lease.claim_event_id.as_deref() != Some(expected) {
+                return Ok(None);
+            }
+        }
+        if lease.status != TaskEventClaimStatus::Active {
+            return Ok(Some(lease));
+        }
+        let now = unix_timestamp_seconds();
+        lease.status = if lease.expires_at <= now {
+            TaskEventClaimStatus::Expired
+        } else {
+            TaskEventClaimStatus::Released
+        };
+        lease.heartbeat_at = now;
+        lease.expires_at = now;
+        lease.released_at = Some(now);
+        lease.release_reason = Some(reason.to_string());
+        write_task_claim_lease_unlocked(root, &lease)?;
+        Ok(Some(lease))
+    })
 }
 
 pub fn load_task_events(project_root: impl AsRef<Path>) -> Result<Vec<TaskEvent>> {
@@ -283,7 +356,7 @@ fn append_task_event_locked(
     enforce_idempotency: bool,
 ) -> Result<TaskEvent> {
     validate_draft(&draft)?;
-    with_event_store_lock(root, "append", move |root| {
+    with_event_store_lock(root, "runtime", move |root| {
         if enforce_idempotency {
             if let Some(existing) =
                 find_existing_idempotent_event(root, draft.idempotency_key.as_ref())?
@@ -397,6 +470,17 @@ fn ensure_directory(path: &Path) -> Result<()> {
     fs::create_dir_all(path).with_context(|| format!("create {}", path.display()))
 }
 
+fn ensure_file_exists(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        ensure_directory(parent)?;
+    }
+    match OpenOptions::new().write(true).create_new(true).open(path) {
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("create {}", path.display())),
+    }
+}
+
 fn with_event_store_lock<T, F>(root: &Path, scope: &str, action: F) -> Result<T>
 where
     F: FnOnce(&Path) -> Result<T>,
@@ -406,8 +490,9 @@ where
     for _ in 0..EVENT_STORE_LOCK_RETRY_LIMIT {
         match fs::create_dir(&lock_path) {
             Ok(()) => {
+                write_lock_fact(&lock_path, scope)?;
                 let result = action(root);
-                let cleanup = fs::remove_dir(&lock_path)
+                let cleanup = fs::remove_dir_all(&lock_path)
                     .with_context(|| format!("remove {}", lock_path.display()));
                 return match (result, cleanup) {
                     (Ok(value), Ok(())) => Ok(value),
@@ -417,6 +502,7 @@ where
                 };
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                clear_stale_lock_if_needed(&lock_path)?;
                 thread::sleep(std::time::Duration::from_millis(
                     EVENT_STORE_LOCK_RETRY_DELAY_MS,
                 ));
@@ -444,7 +530,8 @@ fn next_sequence_value_unlocked(root: &Path, namespace: &str) -> Result<u64> {
         0
     };
     let next = current + 1;
-    fs::write(&path, format!("{next}\n")).with_context(|| format!("write {}", path.display()))?;
+    atomic_write_text(&path, &format!("{next}\n"))
+        .with_context(|| format!("write {}", path.display()))?;
     Ok(next)
 }
 
@@ -456,6 +543,11 @@ fn event_store_lock_path(root: &Path, scope: &str) -> PathBuf {
 fn event_store_sequence_path(root: &Path, namespace: &str) -> PathBuf {
     root.join(".agentflow/events/sequences")
         .join(format!("{}.seq", sanitize_namespace(namespace)))
+}
+
+fn event_store_claim_path(root: &Path, run_id: &str) -> PathBuf {
+    root.join(".agentflow/events/claims")
+        .join(format!("{}.json", sanitize_namespace(run_id)))
 }
 
 fn sanitize_namespace(value: &str) -> String {
@@ -472,7 +564,7 @@ fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
     if let Some(parent) = path.parent() {
         ensure_directory(parent)?;
     }
-    fs::write(path, serde_json::to_string_pretty(value)? + "\n")
+    atomic_write_text(path, &(serde_json::to_string_pretty(value)? + "\n"))
         .with_context(|| format!("write {}", path.display()))
 }
 
@@ -496,6 +588,169 @@ fn unix_timestamp_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or_default()
+}
+
+fn load_task_claim_lease_unlocked(
+    root: &Path,
+    run_id: &str,
+) -> Result<Option<TaskEventClaimLease>> {
+    let path = event_store_claim_path(root, run_id);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    Ok(Some(read_json(&path)?))
+}
+
+fn allocate_task_claim_lease_unlocked(
+    root: &Path,
+    owner_id: &str,
+    requested: &TaskEvent,
+    run_id: &str,
+    now: u64,
+) -> Result<TaskEventClaimLease> {
+    let previous = load_task_claim_lease_unlocked(root, run_id)?;
+    if let Some(existing) = previous.as_ref() {
+        if claim_lease_is_active(existing, now) {
+            anyhow::bail!("run {run_id} already has an active launch claim");
+        }
+    }
+    let fencing_token = previous.map(|lease| lease.fencing_token + 1).unwrap_or(1);
+    let lease_id = format!(
+        "lease-{:06}",
+        next_sequence_value_unlocked(root, "claim-lease-id")?
+    );
+    let lease = TaskEventClaimLease {
+        version: TASK_EVENT_CLAIM_LEASE_VERSION.to_string(),
+        owner_id: owner_id.to_string(),
+        issue_id: requested
+            .issue_id
+            .clone()
+            .unwrap_or_else(|| requested.aggregate_id.clone()),
+        run_id: run_id.to_string(),
+        requested_event_id: requested.event_id.clone(),
+        claim_event_id: None,
+        lease_id,
+        fencing_token,
+        status: TaskEventClaimStatus::Active,
+        claimed_at: now,
+        heartbeat_at: now,
+        expires_at: now + TASK_EVENT_CLAIM_LEASE_TTL_SECONDS,
+        released_at: None,
+        release_reason: None,
+    };
+    write_task_claim_lease_unlocked(root, &lease)?;
+    Ok(lease)
+}
+
+fn attach_claim_payload(draft: &mut TaskEventDraft, lease: &TaskEventClaimLease) {
+    if !draft.payload.is_object() {
+        draft.payload = serde_json::Value::Object(Default::default());
+    }
+    if let Some(body) = draft.payload.as_object_mut() {
+        body.insert(
+            "claimOwnerId".to_string(),
+            serde_json::json!(lease.owner_id),
+        );
+        body.insert(
+            "claimLeaseId".to_string(),
+            serde_json::json!(lease.lease_id),
+        );
+        body.insert(
+            "claimFencingToken".to_string(),
+            serde_json::json!(lease.fencing_token),
+        );
+        body.insert(
+            "claimRequestedEventId".to_string(),
+            serde_json::json!(lease.requested_event_id),
+        );
+        body.insert(
+            "claimStatus".to_string(),
+            serde_json::json!(lease.status.as_str()),
+        );
+        body.insert(
+            "claimClaimedAt".to_string(),
+            serde_json::json!(lease.claimed_at),
+        );
+        body.insert(
+            "claimHeartbeatAt".to_string(),
+            serde_json::json!(lease.heartbeat_at),
+        );
+        body.insert(
+            "claimExpiresAt".to_string(),
+            serde_json::json!(lease.expires_at),
+        );
+    }
+}
+
+fn qualify_claim_idempotency_key(base: Option<&str>, lease: &TaskEventClaimLease) -> String {
+    let prefix = base.unwrap_or("agent.launch.claimed");
+    format!("{prefix}:lease-{}", lease.lease_id)
+}
+
+fn write_task_claim_lease_unlocked(root: &Path, lease: &TaskEventClaimLease) -> Result<()> {
+    write_json(&event_store_claim_path(root, &lease.run_id), lease)
+}
+
+fn claim_lease_is_active(lease: &TaskEventClaimLease, now: u64) -> bool {
+    lease.status == TaskEventClaimStatus::Active && lease.expires_at > now
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EventStoreLockFact {
+    version: String,
+    scope: String,
+    owner_id: String,
+    process_id: u32,
+    acquired_at: u64,
+    heartbeat_at: u64,
+    expires_at: u64,
+}
+
+fn write_lock_fact(lock_path: &Path, scope: &str) -> Result<()> {
+    let now = unix_timestamp_seconds();
+    let fact = EventStoreLockFact {
+        version: "event-store-lock.v1".to_string(),
+        scope: scope.to_string(),
+        owner_id: "event-store".to_string(),
+        process_id: process::id(),
+        acquired_at: now,
+        heartbeat_at: now,
+        expires_at: now + EVENT_STORE_LOCK_TTL_SECONDS,
+    };
+    write_json(&lock_path.join("lock.json"), &fact)
+}
+
+fn clear_stale_lock_if_needed(lock_path: &Path) -> Result<()> {
+    let metadata_path = lock_path.join("lock.json");
+    if !metadata_path.is_file() {
+        return Ok(());
+    }
+    let fact: EventStoreLockFact = read_json(&metadata_path)?;
+    if fact.expires_at > unix_timestamp_seconds() {
+        return Ok(());
+    }
+    fs::remove_dir_all(lock_path).with_context(|| format!("remove stale {}", lock_path.display()))
+}
+
+fn atomic_write_text(path: &Path, content: &str) -> Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("{} has no parent directory", path.display()))?;
+    ensure_directory(parent)?;
+    let mut temp = NamedTempFile::new_in(parent)
+        .with_context(|| format!("create temp file in {}", parent.display()))?;
+    temp.write_all(content.as_bytes())
+        .with_context(|| format!("write temp file for {}", path.display()))?;
+    temp.flush()
+        .with_context(|| format!("flush temp file for {}", path.display()))?;
+    temp.as_file()
+        .sync_all()
+        .with_context(|| format!("sync temp file for {}", path.display()))?;
+    temp.persist(path)
+        .map_err(|error| error.error)
+        .with_context(|| format!("persist {}", path.display()))?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -533,6 +788,31 @@ mod tests {
             payload: json!({"workflowRef": "build-agent.issue-loop@v1"}),
             artifact_refs: vec![".agentflow/panel/context-packs/AF-TASK-001.json".to_string()],
             idempotency_key: Some(format!("issue.scheduled:{issue_id}")),
+        }
+    }
+
+    fn launch_requested_draft(issue_id: &str, run_id: &str) -> TaskEventDraft {
+        TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue_id.to_string(),
+            project_id: Some("project-task-workflow-v1".to_string()),
+            issue_id: Some(issue_id.to_string()),
+            run_id: Some(run_id.to_string()),
+            event_type: "agent.launch.requested".to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
+            actor: EventActor {
+                role: "task-loop".to_string(),
+                kind: "system".to_string(),
+            },
+            state: None,
+            correlation_id: None,
+            causation_id: None,
+            payload: json!({"provider": "codex"}),
+            artifact_refs: vec![format!(
+                ".agentflow/tasks/{issue_id}/runs/{run_id}/launch/agent-request.json"
+            )],
+            idempotency_key: Some(format!("agent.launch.requested:{issue_id}:{run_id}")),
         }
     }
 
@@ -723,5 +1003,159 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("runtime taxonomy"));
+    }
+
+    #[test]
+    fn claim_task_event_writes_active_lease_and_release_marks_it_closed() {
+        let dir = tempdir().unwrap();
+        let requested =
+            append_task_event(dir.path(), launch_requested_draft("AF-TASK-001", "run-001"))
+                .unwrap();
+
+        let (original, claimed) = claim_task_event(
+            dir.path(),
+            "agent-dispatcher",
+            |event, _events| event.event_id == requested.event_id,
+            |event, _events| {
+                Ok(TaskEventDraft {
+                    flow_type: WorkflowFlowType::Work,
+                    aggregate_type: "issue".to_string(),
+                    aggregate_id: event.aggregate_id.clone(),
+                    project_id: event.project_id.clone(),
+                    issue_id: event.issue_id.clone(),
+                    run_id: event.run_id.clone(),
+                    event_type: "agent.launch.claimed".to_string(),
+                    authority_role: event.authority_role,
+                    actor: EventActor {
+                        role: "agent-dispatcher".to_string(),
+                        kind: "system".to_string(),
+                    },
+                    state: None,
+                    correlation_id: Some(event.correlation_id.clone()),
+                    causation_id: Some(event.event_id.clone()),
+                    payload: json!({}),
+                    artifact_refs: event.artifact_refs.clone(),
+                    idempotency_key: Some("agent.launch.claimed:AF-TASK-001:run-001".to_string()),
+                })
+            },
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(original.event_id, requested.event_id);
+        assert_eq!(claimed.event_type, "agent.launch.claimed");
+
+        let lease = load_task_claim_lease(dir.path(), "run-001")
+            .unwrap()
+            .expect("expected lease");
+        assert_eq!(lease.owner_id, "agent-dispatcher");
+        assert_eq!(lease.issue_id, "AF-TASK-001");
+        assert_eq!(lease.run_id, "run-001");
+        assert_eq!(
+            lease.claim_event_id.as_deref(),
+            Some(claimed.event_id.as_str())
+        );
+        assert_eq!(lease.fencing_token, 1);
+        assert_eq!(lease.status, TaskEventClaimStatus::Active);
+        assert!(task_claim_is_active(dir.path(), "run-001").unwrap());
+
+        let released = release_task_claim(
+            dir.path(),
+            "run-001",
+            Some(claimed.event_id.as_str()),
+            "session-created",
+        )
+        .unwrap()
+        .expect("expected released lease");
+        assert_eq!(released.status, TaskEventClaimStatus::Released);
+        assert_eq!(released.release_reason.as_deref(), Some("session-created"));
+        assert!(!task_claim_is_active(dir.path(), "run-001").unwrap());
+    }
+
+    #[test]
+    fn expired_claim_lease_allows_reclaim_with_new_fencing_token() {
+        let dir = tempdir().unwrap();
+        let requested =
+            append_task_event(dir.path(), launch_requested_draft("AF-TASK-001", "run-001"))
+                .unwrap();
+
+        let first_claim = claim_task_event(
+            dir.path(),
+            "agent-dispatcher",
+            |event, _events| event.event_id == requested.event_id,
+            |event, _events| {
+                Ok(TaskEventDraft {
+                    flow_type: WorkflowFlowType::Work,
+                    aggregate_type: "issue".to_string(),
+                    aggregate_id: event.aggregate_id.clone(),
+                    project_id: event.project_id.clone(),
+                    issue_id: event.issue_id.clone(),
+                    run_id: event.run_id.clone(),
+                    event_type: "agent.launch.claimed".to_string(),
+                    authority_role: event.authority_role,
+                    actor: EventActor {
+                        role: "agent-dispatcher".to_string(),
+                        kind: "system".to_string(),
+                    },
+                    state: None,
+                    correlation_id: Some(event.correlation_id.clone()),
+                    causation_id: Some(event.event_id.clone()),
+                    payload: json!({}),
+                    artifact_refs: event.artifact_refs.clone(),
+                    idempotency_key: Some("agent.launch.claimed:AF-TASK-001:run-001".to_string()),
+                })
+            },
+        )
+        .unwrap()
+        .unwrap()
+        .1;
+
+        let mut expired = load_task_claim_lease(dir.path(), "run-001")
+            .unwrap()
+            .expect("expected lease");
+        expired.expires_at = 1;
+        write_task_claim_lease_unlocked(dir.path(), &expired).unwrap();
+
+        let reclaimed = claim_task_event(
+            dir.path(),
+            "agent-dispatcher",
+            |event, _events| event.event_id == requested.event_id,
+            |event, _events| {
+                Ok(TaskEventDraft {
+                    flow_type: WorkflowFlowType::Work,
+                    aggregate_type: "issue".to_string(),
+                    aggregate_id: event.aggregate_id.clone(),
+                    project_id: event.project_id.clone(),
+                    issue_id: event.issue_id.clone(),
+                    run_id: event.run_id.clone(),
+                    event_type: "agent.launch.claimed".to_string(),
+                    authority_role: event.authority_role,
+                    actor: EventActor {
+                        role: "agent-dispatcher".to_string(),
+                        kind: "system".to_string(),
+                    },
+                    state: None,
+                    correlation_id: Some(event.correlation_id.clone()),
+                    causation_id: Some(event.event_id.clone()),
+                    payload: json!({}),
+                    artifact_refs: event.artifact_refs.clone(),
+                    idempotency_key: Some("agent.launch.claimed:AF-TASK-001:run-001".to_string()),
+                })
+            },
+        )
+        .unwrap()
+        .unwrap()
+        .1;
+
+        let lease = load_task_claim_lease(dir.path(), "run-001")
+            .unwrap()
+            .expect("expected lease");
+        assert_eq!(lease.fencing_token, 2);
+        assert_eq!(lease.status, TaskEventClaimStatus::Active);
+        assert_ne!(first_claim.event_id, reclaimed.event_id);
+        assert_eq!(
+            lease.claim_event_id.as_deref(),
+            Some(reclaimed.event_id.as_str())
+        );
     }
 }
