@@ -7,8 +7,8 @@
 
 给 `058H - CI / Release Gate / Real E2E Evidence` 提供一条正式、可复跑、可上传 artifact 的 gate 链路。
 
-这条链路不是 Build Agent 真执行代码的全量回放。
-它验证的是：
+这条链路不是任意业务需求的全量回放。
+它验证的是一条正式、最小、可复跑的 runtime 真链路：
 
 ```text
 requirement
@@ -16,11 +16,19 @@ requirement
 -> goal confirm
 -> plan confirm
 -> materialize
+-> task-loop
+-> build-agent prepare-review
+-> build-agent write-closeout-proof
+-> build-agent complete
 -> completion inspect
 -> completion decide
 -> release prepare
 -> release confirm
+-> release record-tag
+-> release record-remote
 -> release publish
+-> audit request-human
+-> release publish refresh
 ```
 
 一句话：
@@ -69,32 +77,37 @@ docs/requirements/058h-release-gate-e2e.md
 - `agentflow project confirm-goal`
 - `agentflow project confirm-plan`
 - `agentflow project materialize`
+- `agentflow task-loop tick`
+- `agentflow build-agent prepare-review`
+- `agentflow build-agent write-closeout-proof`
+- `agentflow build-agent complete`
 - `agentflow completion inspect`
 - `agentflow completion decide`
 - `agentflow release prepare`
 - `agentflow release confirm`
+- `agentflow release record-tag`
+- `agentflow release record-remote`
 - `agentflow release publish`
+- `agentflow audit request-human`
 
 中间不会修改当前仓库源码。
 所有运行时事实都写在临时 fixture workspace。
 
-## 为什么允许脚本种入 done task fixture
+## E2E 如何推进任务
 
-这条 gate 的目标是验证：
+这条 gate 不再直接改：
 
-- project / completion / release 的正式入口是否连通；
-- release facts 是否能正确生成；
-- public docs 和 external review handoff 是否能落盘；
-- CI 是否能把这些证据作为 artifact 上传。
+- `.agentflow/spec/issues/**`
+- `.agentflow/projections/**`
 
-它不是为了替代 Build Agent 真正执行 issue。
+脚本会先 materialize 一个最小 project 和 2 条 issue，再通过：
 
-因此脚本会在临时 workspace 中：
+- `task-loop tick`
+- `build-agent prepare-review`
+- `build-agent write-closeout-proof`
+- `build-agent complete`
 
-- 把 materialize 生成的 task 合同切成 `done`
-- 写入最小 task projection fixture
-
-这样 release runtime 可以直接进入 completion / release 证明链。
+把两条 issue 沿正式 runtime 推进到 `done`，然后再进入 completion / release / audit 证明链。
 
 ## 产物
 
@@ -105,6 +118,8 @@ artifacts/release-gate-e2e/
   cli/
   public/
   runtime/
+  certification.json
+  certification.md
   summary.json
   summary.md
 ```
@@ -118,6 +133,20 @@ artifacts/release-gate-e2e/
 - `external-review.md`
 
 这是给外部 reviewer 看的公开结果。
+
+### certification
+
+- `certification.json`
+- `certification.md`
+
+这是本轮 gate 的正式认证面。
+
+必须表达：
+
+- gate 当前是 `passed` 还是 `failed`
+- 如果失败，失败阶段是哪一环
+- requirement 到 release 的证明链是否齐全
+- 外部 reviewer 能读取哪些公开证据
 
 ### runtime/
 
@@ -153,10 +182,12 @@ artifacts/release-gate-e2e/
 - `docs/reviews/<project-id>.md` 已生成
 - `.agentflow/release/projects/<project-id>.json` 已生成
 - `.agentflow/release/reviews/<project-id>.json` 已生成
+- `artifacts/release-gate-e2e/certification.md` 已生成
+- gate 失败时 `summary.md` / `certification.md` 能指出失败阶段
 
 ## 非目标
 
-- 不验证 Build Agent 真正写代码
-- 不替代 provider closeout proof
-- 不验证 audit 结果
+- 不验证任意真实业务需求的代码实现
+- 不替代 provider closeout proof 真实联网查询
+- 不把 audit 结果当 release publish 的自动前置
 - 不把临时 fixture 作为真实项目状态写回当前仓库

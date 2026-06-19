@@ -23,10 +23,11 @@
 5. [foundation/README.md](foundation/README.md)
 6. [architecture/README.md](architecture/README.md)
 7. [verification/058h-release-gate-e2e-v1.md](verification/058h-release-gate-e2e-v1.md)
-8. [requirements/README.md](requirements/README.md)
-9. [requirements/next-requirements.md](requirements/next-requirements.md)
-10. [requirements/009-input-model-v1.md](requirements/009-input-model-v1.md)
-11. [requirements/010-execute-patch-checkpoint-v1.md](requirements/010-execute-patch-checkpoint-v1.md)
+8. [verification/064-v0-3-1-release-gate-certification-v1.md](verification/064-v0-3-1-release-gate-certification-v1.md)
+9. [requirements/README.md](requirements/README.md)
+10. [requirements/next-requirements.md](requirements/next-requirements.md)
+11. [requirements/009-input-model-v1.md](requirements/009-input-model-v1.md)
+12. [requirements/010-execute-patch-checkpoint-v1.md](requirements/010-execute-patch-checkpoint-v1.md)
 
 ## 规则
 
