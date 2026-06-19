@@ -63,8 +63,8 @@ requiredEvidence
 
 ```json
 {
-  "roleId": "BuildAgent",
-  "name": "Build Agent",
+  "roleId": "WorkAgent",
+  "name": "Work Agent",
   "description": "Executes approved spec issues within authorized contract boundaries.",
   "canRead": ["Spec", "Issue", "Run", "Evidence"],
   "canWrite": ["Run", "Evidence", "Artifact"],
@@ -84,9 +84,11 @@ requiredEvidence
 第一版建议定义：
 
 ```text
+GoalAgent
 SpecAgent
-BuildAgent
+WorkAgent
 AuditAgent
+DeliveryAgent
 ReviewAgent
 CoordinatorAgent
 HumanOwner
@@ -140,7 +142,7 @@ Spec Agent 可以生成 preview
 Spec Agent 不能绕过人类确认写执行事实
 ```
 
-## 5. Build Agent Policy
+## 5. Work Agent Policy
 
 职责：
 
@@ -184,9 +186,11 @@ bypassContract
 关键规则：
 
 ```text
-Build Agent 只认当前 Issue Contract
-Build Agent 不创建 Audit 事实
-Build Agent 不直接标记人类接受
+Work Agent 是运行时主命名
+BuildAgent 只作为 WorkAgent 的兼容别名保留
+Work Agent 只认当前 Issue Contract
+Work Agent 不创建 Audit 事实
+Work Agent 不直接标记人类接受
 ```
 
 ## 6. Audit Agent Policy
@@ -352,7 +356,7 @@ Agent Role Policy 必须约束工具范围。
 SpecAgent:
   allowedTools: readDocs, inspectContext, generatePreview
 
-BuildAgent:
+WorkAgent:
   allowedTools: filesystem, localBuild, localTest, browserSmoke
 
 AuditAgent:
@@ -372,7 +376,7 @@ CoordinatorAgent:
 示例：
 
 ```text
-BuildAgent:
+WorkAgent:
   objectScope:
     - assignedIssue
     - currentRun
@@ -423,7 +427,7 @@ role is not blocked by cannotDo
 
 - prompt 模板
 - 当前 v0.3.0 执行任务
-- Build Agent 当前 issue handoff
+- Work Agent 当前 issue handoff（含 `build-agent` 兼容别名）
 - 审计报告格式
 - `.agentflow/spec/**` 事实文件
 

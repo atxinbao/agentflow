@@ -201,6 +201,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-role-policy"
+version = "0.3.0"
+dependencies = [
+ "agentflow-action-contract",
+ "agentflow-ontology",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-spec"
 version = "0.3.0"
 dependencies = [

@@ -252,9 +252,11 @@ Handoff 是 Runtime 可检查的对象化边界，不是聊天约定。
 MVP core roles：
 
 ```text
+GoalAgent
 SpecAgent
-BuildAgent
+WorkAgent
 AuditAgent
+DeliveryAgent
 ReviewAgent
 CoordinatorAgent
 HumanOwner
@@ -290,7 +292,7 @@ specDraftPreview
 boundaryNotes
 ```
 
-### 6.2 BuildAgent
+### 6.2 WorkAgent
 
 允许：
 
@@ -323,10 +325,11 @@ artifactSummary
 硬规则：
 
 ```text
-BuildAgent 只处理 assignedIssue 和 currentRun
-BuildAgent 不创建 Audit 事实
-BuildAgent 不写 Finding
-BuildAgent 不代表 HumanOwner 接受交付
+WorkAgent 只处理 assignedIssue 和 currentRun
+BuildAgent 只保留为 WorkAgent 的兼容别名
+WorkAgent 不创建 Audit 事实
+WorkAgent 不写 Finding
+WorkAgent 不代表 HumanOwner 接受交付
 ```
 
 ### 6.3 AuditAgent
@@ -515,10 +518,10 @@ Desktop UI
 2. unknown role fails；
 3. role references unknown action type fails；
 4. role references unknown object type fails；
-5. BuildAgent cannot `draftSpec`；
-6. BuildAgent cannot `approveSpec`；
-7. BuildAgent cannot `requestAudit`；
-8. BuildAgent cannot `createFinding`；
+5. WorkAgent cannot `draftSpec`；
+6. WorkAgent cannot `approveSpec`；
+7. WorkAgent cannot `requestAudit`；
+8. WorkAgent cannot `createFinding`；
 9. AuditAgent cannot `markIssueDone`；
 10. AuditAgent cannot rewrite Build evidence；
 11. HumanOwner can `approveSpec`；
@@ -535,7 +538,7 @@ Desktop UI
 - 定义 core roles；
 - 定义 role-action matrix；
 - 定义 role-object matrix；
-- BuildAgent / AuditAgent 分离规则可机读；
+- WorkAgent / AuditAgent 分离规则可机读；
 - HumanOwner 决策必须走 Action Proposal；
 - prompt 不能覆盖 Role Policy；
 - Role Policy 可被 `AF-OS-005` Arbitration 读取。
