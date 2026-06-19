@@ -106,6 +106,32 @@ docs/requirements/**
 - 当前只提供 built-in core ontology，不落 `.agentflow/ontology/**`。
 - `BuildAgent` 兼容别名、Action Contract 和状态机迁移不在本模块完成。
 
+### Action Contract
+
+负责：
+
+- 提供 Runtime 可读取的 built-in Action Type / Action Contract / Action Proposal schema
+- 定义动作输入、目标对象、creates object、required evidence、expected event、expected link
+- 校验 proposal 结构合法性，不直接判定接受或拒绝
+- 为后续 Role Policy / State Machine / Arbitration 提供统一动作语言
+
+不负责：
+
+- 判定角色权限
+- 抢锁或处理冲突
+- 写 Event Store
+- 更新 Projection
+- 启动 Agent 会话
+
+实现位置：
+
+- `crates/action-contract/src/**`
+
+说明：
+
+- 当前只提供 built-in core action contracts，不落 `.agentflow/action-contracts/**`。
+- `markIssueDone` 不自动触发 `requestAudit`。
+
 ### Project Brain / Constitution
 
 负责：

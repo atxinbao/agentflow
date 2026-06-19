@@ -5,6 +5,7 @@ members = [
     "crates/panel",
     "crates/spec",
     "crates/ontology",
+    "crates/action-contract",
     "crates/workflow-core",
     "crates/event-store",
     "crates/workflow-runtime",
