@@ -519,11 +519,14 @@ docs/requirements/**
 - 从 task events 重建 task projection
 - 从 task events + spec contracts 重建 project projection
 - 生成任务页和项目页索引
-- 提供 Desktop 只读模型
+- 提供 Desktop / CLI / 行业客户端只读模型
+- 提供统一 query-facing read models：`RequirementIntakeView / SpecPreviewView / ProjectHomeView / TaskWorkbenchView / AuditSurfaceView / DeliveryPackageView / RuntimeHealthView`
+- 只读读取 `spec / event-store / task-artifacts / audit`，并输出 freshness / staleness / definition version metadata
 
 不负责：
 
 - 写 spec 合同
+- 追加 Event Store
 - 调用 provider
 - 执行本地命令
 
