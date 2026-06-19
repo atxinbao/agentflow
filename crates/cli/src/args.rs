@@ -174,6 +174,34 @@ pub(crate) enum ReleaseCommand {
         #[arg(long = "project-id")]
         project_id: String,
     },
+    RecordTag {
+        #[arg(long = "project-id")]
+        project_id: String,
+        #[arg(long = "tag-name")]
+        tag_name: String,
+        #[arg(long = "tag-commit-sha")]
+        tag_commit_sha: String,
+        #[arg(long, default_value = "release-agent")]
+        actor: String,
+    },
+    RecordRemote {
+        #[arg(long = "project-id")]
+        project_id: String,
+        #[arg(long)]
+        provider: String,
+        #[arg(long = "release-id")]
+        release_id: String,
+        #[arg(long = "release-url")]
+        release_url: String,
+        #[arg(long = "tag-name")]
+        tag_name: String,
+        #[arg(long = "release-commit-sha")]
+        release_commit_sha: String,
+        #[arg(long = "artifact-manifest-path")]
+        artifact_manifest_path: String,
+        #[arg(long, default_value = "release-agent")]
+        actor: String,
+    },
     Publish {
         #[arg(long = "project-id")]
         project_id: String,

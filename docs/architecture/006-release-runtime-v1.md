@@ -42,7 +42,7 @@ release gate 规则：
 
 ## Runtime State
 
-release runtime 使用 canonical delivery workflow：
+release runtime 仍然沿用 canonical delivery workflow 的主状态：
 
 ```text
 pending
@@ -51,6 +51,26 @@ pending
   -> published
 ```
 
+但 `published` 不再表示“本地 public record 已写入”，而是必须建立在远端发布证明之上。
+
+因此 release facts 还要额外暴露一层 `publicationStage`：
+
+```text
+pending
+public-record-written
+tag-created
+remote-release-created
+published
+```
+
+语义如下：
+
+- `pending`：release 还没确认
+- `public-record-written`：CHANGELOG / release notes 已写出
+- `tag-created`：本地 tag 证明已记录
+- `remote-release-created`：远端 GitHub / GitLab Release 证明已记录
+- `published`：远端发布证明与本地公开记录已对齐
+
 异常态：
 
 ```text
@@ -58,14 +78,6 @@ blocked
 cancel
 returned
 ```
-
-其中本轮只正式启用：
-
-- `pending`
-- `ready`
-- `in_progress`
-- `published`
-- `blocked`
 
 ## Event
 
@@ -76,6 +88,8 @@ release runtime 追加项目级事件到统一 task event store：
 - `delivery.published`
 
 这些事件仍走统一 envelope，但 `flowType = delivery`，`projectId` 必填。
+
+本轮不新增新的 canonical delivery 状态事件；`tag` / `remote release` 证明以 release proof 文件进入 facts。
 
 ## Facts
 
@@ -91,18 +105,37 @@ release runtime 输出本地 release facts：
 - `projectId`
 - `projectTitle`
 - `currentState`
+- `publicationStage`
 - `gateStatus`
 - `gateReason`
 - `completionState`
 - `completionOutcome`
 - `deliveryStatus`
+- `publicRecordWrittenAt`
 - `changelogPath`
 - `releaseNotesPath`
 - `entryCount`
 - `summaryLine`
+- `tagName`
+- `tagCommitSha`
+- `tagProofPath`
+- `remoteProvider`
+- `remoteReleaseId`
+- `remoteReleaseUrl`
+- `remoteReleaseCommitSha`
+- `remoteReleaseProofPath`
+- `artifactManifestPath`
+- `artifactManifestSha256`
 - `latestEventId`
 - `publishedAt`
 - `updatedAt`
+
+proof 文件本地路径：
+
+```text
+.agentflow/release/proofs/<project-id>/tag.json
+.agentflow/release/proofs/<project-id>/remote-release.json
+```
 
 ## Public Output
 
@@ -124,15 +157,27 @@ docs/release-notes/<project-id>.md
 project projection 需要读取 release facts，并暴露：
 
 - `release.currentState`
+- `release.publicationStage`
 - `release.gateStatus`
 - `release.gateReason`
 - `release.completionState`
 - `release.completionOutcome`
 - `release.deliveryStatus`
+- `release.publicRecordWrittenAt`
 - `release.changelogPath`
 - `release.releaseNotesPath`
 - `release.entryCount`
 - `release.summaryLine`
+- `release.tagName`
+- `release.tagCommitSha`
+- `release.tagProofPath`
+- `release.remoteProvider`
+- `release.remoteReleaseId`
+- `release.remoteReleaseUrl`
+- `release.remoteReleaseCommitSha`
+- `release.remoteReleaseProofPath`
+- `release.artifactManifestPath`
+- `release.artifactManifestSha256`
 - `release.publishedAt`
 - `release.updatedAt`
 
@@ -191,5 +236,7 @@ project stage 在所有任务完成后，优先显示 release 状态，而不是
 
 1. completion 未 accept 时，release 不能启动
 2. public delivery 不完整时，release 进入 blocked
-3. 条件满足时，release 走完 `pending -> ready -> in_progress -> published`
-4. CHANGELOG 和 release notes 被写出
+3. 仅写 public record 时，release 最多停在 `public-record-written`
+4. 缺少 remote release proof 时，`publish` 必须失败
+5. Tag proof + remote release proof 都存在时，release 才能进入 `published`
+6. CHANGELOG 和 release notes 被写出，且能追溯到 tag / remote release / artifact manifest

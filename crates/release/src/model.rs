@@ -11,6 +11,8 @@ pub const PROJECT_RELEASE_FACTS_VERSION: &str = "project-release-facts.v1";
 pub const PROJECT_RELEASE_INDEX_VERSION: &str = "project-release-index.v1";
 pub const PROJECT_EXTERNAL_REVIEW_SURFACE_VERSION: &str = "project-external-review-surface.v1";
 pub const PROJECT_EXTERNAL_REVIEW_INDEX_VERSION: &str = "project-external-review-index.v1";
+pub const RELEASE_TAG_PROOF_VERSION: &str = "release-tag-proof.v1";
+pub const REMOTE_RELEASE_PROOF_VERSION: &str = "remote-release-proof.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,18 +119,46 @@ pub struct ProjectReleaseFacts {
     pub project_id: String,
     pub project_title: String,
     pub current_state: String,
+    #[serde(default = "default_publication_stage")]
+    pub publication_stage: String,
     pub gate_status: String,
     pub gate_reason: String,
     pub completion_state: String,
     pub completion_outcome: Option<String>,
     pub delivery_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_record_written_at: Option<u64>,
     pub changelog_path: String,
     pub release_notes_path: String,
     pub entry_count: usize,
     pub summary_line: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag_commit_sha: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag_proof_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_release_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_release_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_release_commit_sha: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_release_proof_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_manifest_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_manifest_sha256: Option<String>,
     pub latest_event_id: Option<String>,
     pub published_at: Option<u64>,
     pub updated_at: u64,
+}
+
+fn default_publication_stage() -> String {
+    "pending".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,6 +166,8 @@ pub struct ProjectReleaseFacts {
 pub struct ProjectReleaseIndexEntry {
     pub project_id: String,
     pub current_state: String,
+    #[serde(default = "default_publication_stage")]
+    pub publication_stage: String,
     pub gate_status: String,
     pub changelog_path: String,
     pub release_notes_path: String,
@@ -149,6 +181,35 @@ pub struct ProjectReleaseIndex {
     pub version: String,
     pub updated_at: u64,
     pub releases: Vec<ProjectReleaseIndexEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseTagProof {
+    pub version: String,
+    pub project_id: String,
+    pub tag_name: String,
+    pub tag_commit_sha: String,
+    pub actor: String,
+    pub recorded_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteReleaseProof {
+    pub version: String,
+    pub project_id: String,
+    pub provider: String,
+    pub release_id: String,
+    pub release_url: String,
+    pub tag_name: String,
+    pub release_commit_sha: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_manifest_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_manifest_sha256: Option<String>,
+    pub actor: String,
+    pub recorded_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

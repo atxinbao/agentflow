@@ -1,5 +1,6 @@
 use agentflow_release::{
     confirm_project_release, prepare_project_release, publish_project_release,
+    record_project_release_tag, record_project_remote_release,
 };
 use agentflow_spec::{
     confirm_goal_draft_preview, confirm_plan_draft_preview,
@@ -111,6 +112,44 @@ pub(crate) fn release_publish(
     project_id: &str,
 ) -> Result<agentflow_release::ProjectReleaseFacts> {
     let facts = publish_project_release(root, project_id)?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
+    Ok(facts)
+}
+
+pub(crate) fn release_record_tag(
+    root: &Path,
+    project_id: &str,
+    tag_name: &str,
+    tag_commit_sha: &str,
+    actor: &str,
+) -> Result<agentflow_release::ProjectReleaseFacts> {
+    let facts = record_project_release_tag(root, project_id, tag_name, tag_commit_sha, actor)?;
+    let _ = agentflow_projection::rebuild_projections(root)?;
+    Ok(facts)
+}
+
+pub(crate) fn release_record_remote(
+    root: &Path,
+    project_id: &str,
+    provider: &str,
+    release_id: &str,
+    release_url: &str,
+    tag_name: &str,
+    release_commit_sha: &str,
+    artifact_manifest_path: &str,
+    actor: &str,
+) -> Result<agentflow_release::ProjectReleaseFacts> {
+    let facts = record_project_remote_release(
+        root,
+        project_id,
+        provider,
+        release_id,
+        release_url,
+        tag_name,
+        release_commit_sha,
+        artifact_manifest_path,
+        actor,
+    )?;
     let _ = agentflow_projection::rebuild_projections(root)?;
     Ok(facts)
 }
