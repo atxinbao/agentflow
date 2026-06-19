@@ -1,0 +1,75 @@
+name: release-gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Install desktop dependencies
+        run: npm --prefix apps/desktop ci
+
+      - name: Rust format check
+        run: cargo fmt --all --check
+
+      - name: Rust tests
+        run: cargo test --workspace
+
+      - name: Desktop build
+        run: npm --prefix apps/desktop run build
+
+      - name: Release gate E2E
+        run: bash scripts/verify_release_gate.sh --artifact-dir artifacts/release-gate-e2e
+
+      - name: Append gate summary
+        if: always()
+        run: |
+          if [ -f artifacts/release-gate-e2e/summary.md ]; then
+            cat artifacts/release-gate-e2e/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-e2e
+          path: artifacts/release-gate-e2e
+          if-no-files-found: warn

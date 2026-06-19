@@ -180,11 +180,7 @@ mod tests {
         "docs/requirements/058e-runtime-entry-test.md".to_string()
     }
 
-    fn write_public_delivery_projection(
-        root: &std::path::Path,
-        issue_id: &str,
-        project_id: &str,
-    ) {
+    fn write_public_delivery_projection(root: &std::path::Path, issue_id: &str, project_id: &str) {
         let path = root.join(".agentflow/projections/tasks");
         fs::create_dir_all(&path).unwrap();
         fs::write(
@@ -298,11 +294,7 @@ mod tests {
         .unwrap();
         assert_eq!(accepted.current_state.as_str(), "accepted");
         for materialized_issue in &materialized.issues {
-            write_public_delivery_projection(
-                dir.path(),
-                &materialized_issue.issue_id,
-                &project_id,
-            );
+            write_public_delivery_projection(dir.path(), &materialized_issue.issue_id, &project_id);
         }
         write_project_release_projection(dir.path(), &project_id);
 
