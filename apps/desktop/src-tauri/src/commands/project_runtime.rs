@@ -210,6 +210,44 @@ mod tests {
         .unwrap();
     }
 
+    fn write_completion_ready_artifacts(root: &std::path::Path, issue_id: &str, run_id: &str) {
+        let issue_root = root.join(".agentflow/tasks").join(issue_id);
+        let evidence_dir = issue_root.join("evidence");
+        let review_dir = issue_root.join("runs").join(run_id).join("review");
+        fs::create_dir_all(&evidence_dir).unwrap();
+        fs::create_dir_all(&review_dir).unwrap();
+        fs::write(
+            evidence_dir.join("evidence.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "version": "task-evidence.v1",
+                "issueId": issue_id,
+                "runId": run_id,
+                "status": "ready",
+                "summary": "本地验证通过。",
+                "runPath": format!(".agentflow/tasks/{issue_id}/runs/{run_id}/run.json"),
+                "commandPaths": [],
+                "validationPath": format!(".agentflow/tasks/{issue_id}/runs/{run_id}/validation.json"),
+                "createdAt": 1
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            review_dir.join("closeout-proof.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "merged": true,
+                "issueClosed": true,
+                "publicDeliveryWritten": true,
+                "prUrl": "https://github.com/acme/repo/pull/58",
+                "mergeCommitSha": "merge-058e",
+                "changelogPath": "CHANGELOG.md",
+                "releaseNotesPath": format!("docs/release-notes/{issue_id}.md")
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
     fn write_project_release_projection(root: &std::path::Path, project_id: &str) {
         let path = root.join(".agentflow/projections/projects");
         fs::create_dir_all(&path).unwrap();
@@ -220,7 +258,8 @@ mod tests {
                 "title": "project-runtime-entry",
                 "completion": {
                     "currentState": "accepted",
-                    "latestOutcome": "accept"
+                    "latestOutcome": "accept",
+                    "releaseReadiness": "ready"
                 },
                 "delivery": {
                     "status": "published",
@@ -276,6 +315,7 @@ mod tests {
                 agentflow_spec::read_spec_issue(dir.path(), &materialized_issue.issue_id).unwrap();
             issue.status = agentflow_spec::SpecIssueStatus::Done;
             agentflow_spec::write_spec_issue(dir.path(), &issue).unwrap();
+            write_completion_ready_artifacts(dir.path(), &materialized_issue.issue_id, "run-001");
         }
         agentflow_projection::rebuild_projections(dir.path()).unwrap();
 

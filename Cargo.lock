@@ -181,7 +181,9 @@ dependencies = [
 name = "agentflow-spec"
 version = "0.3.0"
 dependencies = [
+ "agentflow-audit",
  "agentflow-event-store",
+ "agentflow-task-artifacts",
  "agentflow-workflow-core",
  "agentflow-workflow-runtime",
  "anyhow",

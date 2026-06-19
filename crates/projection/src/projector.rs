@@ -253,6 +253,16 @@ fn project_completion_decision(
         canceled_issue_count: runtime.facts.canceled_issue_count,
         remaining_issue_count: runtime.facts.remaining_issue_count,
         blocked_issue_count: runtime.facts.blocked_issue_count,
+        task_evidence_ready_count: runtime.facts.task_evidence_ready_count,
+        task_evidence_missing_count: runtime.facts.task_evidence_missing_count,
+        delivery_status: runtime.facts.delivery_status.clone(),
+        delivery_missing_count: runtime.facts.delivery_missing_count,
+        audit_required: runtime.facts.audit_required,
+        audit_status: runtime.facts.audit_status.clone(),
+        audit_blocking_findings: runtime.facts.audit_blocking_findings,
+        goal_recheck_status: runtime.facts.goal_recheck_status.clone(),
+        project_health_status: runtime.facts.project_health_status.clone(),
+        release_readiness: runtime.facts.release_readiness.clone(),
         open_questions: runtime.open_questions.clone(),
         rationale: runtime.rationale.clone(),
         projection_path: format!(
@@ -694,6 +704,16 @@ fn project_project(
             canceled_issue_count: projection.canceled_issue_count,
             remaining_issue_count: projection.remaining_issue_count,
             blocked_issue_count: projection.blocked_issue_count,
+            task_evidence_ready_count: projection.task_evidence_ready_count,
+            task_evidence_missing_count: projection.task_evidence_missing_count,
+            delivery_status: projection.delivery_status,
+            delivery_missing_count: projection.delivery_missing_count,
+            audit_required: projection.audit_required,
+            audit_status: projection.audit_status,
+            audit_blocking_findings: projection.audit_blocking_findings,
+            goal_recheck_status: projection.goal_recheck_status,
+            project_health_status: projection.project_health_status,
+            release_readiness: projection.release_readiness,
             open_questions: projection.open_questions,
             rationale: projection.rationale,
             updated_at: projection.updated_at,
@@ -1966,6 +1986,52 @@ mod tests {
         fs::write(audit_dir.join("checklist.md"), "# Checklist\n").unwrap();
     }
 
+    fn write_completion_ready_artifacts(
+        root: &Path,
+        issue_id: &str,
+        run_id: &str,
+        public_delivery_written: bool,
+    ) {
+        let task_root = root.join(".agentflow/tasks").join(issue_id);
+        let evidence_dir = task_root.join("evidence");
+        let review_dir = task_root.join("runs").join(run_id).join("review");
+        fs::create_dir_all(&evidence_dir).unwrap();
+        fs::create_dir_all(&review_dir).unwrap();
+        fs::write(
+            evidence_dir.join("evidence.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": "task-evidence.v1",
+                "issueId": issue_id,
+                "runId": run_id,
+                "status": "ready",
+                "summary": "本地验证通过。",
+                "runPath": format!(".agentflow/tasks/{issue_id}/runs/{run_id}/run.json"),
+                "commandPaths": [],
+                "validationPath": format!(".agentflow/tasks/{issue_id}/runs/{run_id}/validation.json"),
+                "createdAt": 1
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            review_dir.join("closeout-proof.json"),
+            serde_json::to_string_pretty(&json!({
+                "version": "closeout-proof.v1",
+                "issueId": issue_id,
+                "runId": run_id,
+                "merged": true,
+                "issueClosed": true,
+                "publicDeliveryWritten": public_delivery_written,
+                "prUrl": "https://github.com/example/repo/pull/1",
+                "mergeCommitSha": "abc123",
+                "changelogPath": if public_delivery_written { Some("CHANGELOG.md") } else { None::<&str> },
+                "releaseNotesPath": if public_delivery_written { Some("docs/release-notes/test.md") } else { None::<&str> }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
     fn event(issue_id: &str, event_type: &str, payload: serde_json::Value) -> TaskEventDraft {
         TaskEventDraft {
             flow_type: agentflow_workflow_core::WorkflowFlowType::Work,
@@ -2043,6 +2109,7 @@ mod tests {
         let mut issue = read_spec_issue(dir.path(), "AF-PROJ-001").unwrap();
         issue.status = SpecIssueStatus::Done;
         write_spec_issue(dir.path(), &issue).unwrap();
+        write_completion_ready_artifacts(dir.path(), "AF-PROJ-001", "run-001", false);
         append_task_event_once(
             dir.path(),
             event(
@@ -2710,6 +2777,7 @@ mod tests {
         let mut issue = read_spec_issue(dir.path(), "AF-PROJ-001").unwrap();
         issue.status = SpecIssueStatus::Done;
         write_spec_issue(dir.path(), &issue).unwrap();
+        write_completion_ready_artifacts(dir.path(), "AF-PROJ-001", "run-001", false);
         agentflow_spec::sync_completion_decision_runtimes(dir.path()).unwrap();
         agentflow_spec::record_completion_decision(
             dir.path(),
