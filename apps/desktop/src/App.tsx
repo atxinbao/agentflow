@@ -3573,9 +3573,9 @@ function TaskDetailReader({
           <aside className="v16-task-workspace-sidebar" aria-label="当前阶段摘要">
             <TaskFlowSidebar
               artifact={finalDeliveryArtifact}
+              executionProjection={executionProjection}
               deliveryProjection={deliveryProjection}
               reviewItems={reviewItems}
-              stageItems={stageOutputItems}
               status={effectiveDisplayStatus}
               task={effectiveTask}
               taskProjection={taskProjection}
@@ -3663,81 +3663,42 @@ function TaskWorkflowPanelShell({
 
 function TaskFlowSidebar({
   artifact,
+  executionProjection,
   deliveryProjection,
   reviewItems,
-  stageItems,
   status,
   task,
   taskProjection,
 }: {
   artifact: DeliveryArtifactState | null;
+  executionProjection: TaskExecutionProjection;
   deliveryProjection: TaskDeliveryProjection;
   reviewItems: string[];
-  stageItems: string[];
   status: IssueDisplayStatus;
   task: V1Issue;
   taskProjection: TaskProjection | null;
 }) {
-  const isDone = task.displayStatus === "done";
-  const statusLabel = isDone
-    ? deliveryProjection.missingItems.length
-      ? "交付待补齐"
-      : "最终交付已就绪"
-    : task.displayStatus === "in_review"
-      ? "交付已生成，等待评审收口"
-      : "等待进入交付阶段";
-  const releaseTitle = artifact?.releaseNote?.title ?? null;
-  const releaseSummary = artifact?.releaseNote?.summaryLines.length
-    ? artifact.releaseNote.summaryLines.slice(0, 3)
-    : deliveryProjection.deliveryRunId
-      ? ["交付包已登记，release note 摘要未读取到。"]
-      : ["任务完成后显示交付包摘要。"];
-  const packageSummary = [
-    releaseTitle ? `交付标题：${releaseTitle}` : "交付标题：等待生成",
-    deliveryProjection.deliveryRunId ? `交付编号：${deliveryDisplayId(deliveryProjection.deliveryRunId)}` : "交付编号：未生成",
-    `验证证据：${deliveryProjection.evidencePath ? "已记录" : "未记录"}`,
-    `评审链接：${deliveryProjection.prUrl ? "已记录" : "未记录"}`,
-    `合并状态：${deliveryProjection.mergeState ? artifactStatusLabel(deliveryProjection.mergeState) : "未记录"}`,
-  ];
-  const waitingItems =
-    task.displayStatus === "in_review" || task.displayStatus === "done"
-      ? []
-      : ["当前还没有进入最终交付阶段。", "任务完成本地验证并进入评审后，这里会显示交付摘要。"];
+  const deliverySlotItems = taskDeliverySlotItems(task, deliveryProjection, artifact, taskProjection);
+  const publicDeliveryItems = deliveryReleaseNoteItems(task, artifact, taskProjection);
+  const verificationItems = taskVerificationEvidenceItems(executionProjection, deliveryProjection);
   const auditItems = taskAuditSummaryItems(task, taskProjection);
-  const nextStepItems = [`当前状态：${displayStatusLabelZh(status)}`, ...stageItems];
 
   return (
     <div className="v16-task-side-rail">
-      <section className="v16-task-stage-panel" aria-label="当前阶段摘要">
+      <section className="v16-task-stage-panel" aria-label="执行与交付">
         <div className="v16-task-stage-panel-header">
-          <span>当前阶段</span>
+          <span>执行与交付</span>
           <strong>{displayStatusLabelZh(status)}</strong>
         </div>
         <div className="v16-task-stage-grid v16-task-stage-grid-compact">
-          <SectionList title="当前动作" items={nextStepItems} />
+          <SectionList title="执行事实" items={executionProjection.summaryItems} />
+          <SectionList title="验证与证据" items={verificationItems} />
+          <SectionList title="交付槽位" items={deliverySlotItems} />
+          <SectionList title="公开交付" items={publicDeliveryItems} />
           <SectionList title="评审状态" items={reviewItems} />
+          <SectionList title="审计入口" items={auditItems} />
         </div>
       </section>
-      <section className={isDone ? "v16-final-delivery-card done" : "v16-final-delivery-card"} aria-label="交付摘要">
-        <div>
-          <span>交付</span>
-          <strong>{deliveryProjection.deliveryRunId ?? "未生成"}</strong>
-          <small>{statusLabel}</small>
-        </div>
-        <ul>
-          {releaseSummary.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-          {packageSummary.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-          {waitingItems.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-          <li>{deliveryProjection.missingItems.length ? `待补齐：${deliveryProjection.missingItems.length} 项` : "交付摘要已和当前状态对齐。"}</li>
-        </ul>
-      </section>
-      <SectionList ariaLabel="审计摘要" title="审计摘要" items={auditItems} />
     </div>
   );
 }
@@ -6582,6 +6543,68 @@ function deliveryReviewItems(
     branchName ? `工作分支：${branchName}` : "工作分支：未记录",
     publicDelivery?.mergeCommit ? `合并提交：${publicDelivery.mergeCommit}` : "合并提交：未记录",
   ];
+}
+
+function taskVerificationEvidenceItems(
+  executionProjection: TaskExecutionProjection,
+  deliveryProjection: TaskDeliveryProjection,
+) {
+  return [
+    ...executionProjection.validationItems,
+    deliveryProjection.evidencePath
+      ? `证据路径：${deliveryProjection.evidencePath}`
+      : "证据路径：还没有写入。",
+    ...(executionProjection.missingItems.length
+      ? executionProjection.missingItems
+      : ["执行与验证信息已和当前状态对齐。"]),
+  ];
+}
+
+function taskDeliverySlotItems(
+  task: V1Issue,
+  deliveryProjection: TaskDeliveryProjection,
+  artifact: DeliveryArtifactState | null,
+  projection?: TaskProjection | null,
+) {
+  const publicDelivery = projection?.publicDelivery ?? null;
+  const projectedDelivery = projection?.delivery ?? null;
+  const mergeCommit = projectedDelivery?.mergeCommit ?? publicDelivery?.mergeCommit ?? null;
+  const reviewUrl = deliveryProjection.prUrl ?? publicDelivery?.prUrl ?? null;
+  const releaseTitle = artifact?.releaseNote?.title ?? null;
+  const statusLine =
+    task.displayStatus === "done"
+      ? deliveryProjection.missingItems.length
+        ? "最终交付：待补齐"
+        : "最终交付：已就绪"
+      : task.displayStatus === "in_review"
+        ? "最终交付：等待合并与写回"
+        : "最终交付：尚未进入交付阶段";
+
+  const items = [
+    statusLine,
+    deliveryProjection.deliveryRunId
+      ? `交付编号：${deliveryDisplayId(deliveryProjection.deliveryRunId)}`
+      : "交付编号：未生成",
+    releaseTitle ? `交付标题：${releaseTitle}` : "交付标题：等待生成",
+    reviewUrl ? `PR/MR：${reviewUrl}` : "PR/MR：未记录",
+    mergeCommit ? `合并提交：${mergeCommit}` : "合并提交：未记录",
+    deliveryProjection.releaseNotePath
+      ? `公开交付路径：${deliveryProjection.releaseNotePath}`
+      : "公开交付路径：未记录",
+  ];
+
+  if (task.displayStatus !== "in_review" && task.displayStatus !== "done") {
+    items.push("当前还没有进入最终交付阶段。");
+    items.push("任务完成本地验证并进入评审后，这里会显示最终交付摘要。");
+  }
+
+  if (deliveryProjection.missingItems.length) {
+    items.push(...deliveryProjection.missingItems);
+  } else {
+    items.push("交付槽位已和当前状态对齐。");
+  }
+
+  return items;
 }
 
 function deliveryReleaseNoteItems(
