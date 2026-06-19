@@ -1,0 +1,14 @@
+[package]
+name = "agentflow-action-contract"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+agentflow-ontology = { path = "../ontology" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
