@@ -208,6 +208,10 @@ fn session_transition_payload(updated: &McpSessionSnapshot, attempt_count: u32) 
     );
     payload.insert("workspaceRoot".to_string(), json!(updated.workspace_root));
     payload.insert("worktreeRoot".to_string(), json!(updated.worktree_root));
+    payload.insert("runtimeRoot".to_string(), json!(updated.runtime_root));
+    payload.insert("tempRoot".to_string(), json!(updated.temp_root));
+    payload.insert("cacheRoot".to_string(), json!(updated.cache_root));
+    payload.insert("evidenceRoot".to_string(), json!(updated.evidence_root));
     payload.insert("logPath".to_string(), json!(updated.log_path));
     payload.insert(
         "lastMessagePath".to_string(),
@@ -282,6 +286,10 @@ fn session_transition_payload(updated: &McpSessionSnapshot, attempt_count: u32) 
         json!(updated.governance_facts.resumed_from_attempt),
     );
     payload.insert(
+        "processGroupId".to_string(),
+        json!(updated.process_group_id),
+    );
+    payload.insert(
         "takeoverSessionId".to_string(),
         json!(updated.governance_facts.takeover_session_id),
     );
@@ -323,6 +331,14 @@ mod tests {
             working_directory: "/repo".to_string(),
             workspace_root: Some("/repo".to_string()),
             worktree_root: Some("/repo".to_string()),
+            runtime_root: Some("/repo/.agentflow/tasks/AF-001/runs/run-001/runtime".to_string()),
+            temp_root: Some("/repo/.agentflow/tasks/AF-001/runs/run-001/runtime/tmp".to_string()),
+            cache_root: Some(
+                "/repo/.agentflow/tasks/AF-001/runs/run-001/runtime/cache".to_string(),
+            ),
+            evidence_root: Some(
+                "/repo/.agentflow/tasks/AF-001/runs/run-001/runtime/evidence".to_string(),
+            ),
             launch_request_path: ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json"
                 .to_string(),
             plan_path: ".agentflow/state/mcp/plans/codex-run-001.json".to_string(),
@@ -330,6 +346,7 @@ mod tests {
             branch_name: Some("agentflow/proj-001/AF-001".to_string()),
             attempt_count: 1,
             pid: Some(1),
+            process_group_id: Some(1),
             remote_session_id: None,
             pr_url: None,
             last_message_path: Some(

@@ -14,18 +14,26 @@ use std::os::unix::process::ExitStatusExt;
 use std::{
     collections::BTreeMap,
     fs,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, Command, Output},
+    thread,
+    time::Duration,
 };
+
+const PROCESS_TERMINATION_GRACE_MILLIS: u64 = 1_500;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LaunchIsolationBoundary {
-    pub workspace_root: std::path::PathBuf,
-    pub worktree_root: std::path::PathBuf,
-    pub launch_request_path: std::path::PathBuf,
-    pub prompt_path: std::path::PathBuf,
-    pub context_pack_path: Option<std::path::PathBuf>,
-    pub exit_proof_path: std::path::PathBuf,
+    pub workspace_root: PathBuf,
+    pub worktree_root: PathBuf,
+    pub runtime_root: PathBuf,
+    pub temp_root: PathBuf,
+    pub cache_root: PathBuf,
+    pub evidence_root: PathBuf,
+    pub launch_request_path: PathBuf,
+    pub prompt_path: PathBuf,
+    pub context_pack_path: Option<PathBuf>,
+    pub exit_proof_path: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,11 +77,27 @@ pub fn resolve_launch_isolation_boundary(
     attempt_count: u32,
 ) -> Result<LaunchIsolationBoundary> {
     let workspace_root = canonicalize_project_root(project_root)?;
-    let worktree_root = canonical_path_within_workspace(
-        &workspace_root,
-        &request.working_directory,
-        "working directory",
-    )?;
+    let runtime_root = launch_runtime_root(&workspace_root, &request.issue_id, &request.run_id)?;
+    ensure_directory(&runtime_root)?;
+    let temp_root = runtime_root.join("tmp");
+    let cache_root = runtime_root.join("cache");
+    let evidence_root = runtime_root.join("evidence");
+    ensure_directory(&temp_root)?;
+    ensure_directory(&cache_root)?;
+    ensure_directory(&evidence_root)?;
+    let worktree_root = if request.branch_name.is_some() && is_git_repository(&workspace_root) {
+        prepare_git_run_worktree(
+            &workspace_root,
+            &runtime_root.join("worktree"),
+            request.branch_name.as_deref(),
+        )?
+    } else {
+        canonical_path_within_workspace(
+            &workspace_root,
+            &request.working_directory,
+            "working directory",
+        )?
+    };
     let launch_request_path = existing_path_within_workspace(
         &workspace_root,
         &request.launch_request_path,
@@ -97,6 +121,10 @@ pub fn resolve_launch_isolation_boundary(
     Ok(LaunchIsolationBoundary {
         workspace_root,
         worktree_root,
+        runtime_root,
+        temp_root,
+        cache_root,
+        evidence_root,
         launch_request_path,
         prompt_path,
         context_pack_path,
@@ -109,6 +137,10 @@ pub fn ensure_parent_directory(path: &Path) -> Result<()> {
         fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
     Ok(())
+}
+
+pub fn ensure_directory(path: &Path) -> Result<()> {
+    fs::create_dir_all(path).with_context(|| format!("create {}", path.display()))
 }
 
 pub fn relative_project_path(project_root: &Path, path: &Path) -> String {
@@ -140,10 +172,15 @@ pub fn write_exit_proof(
         "workingDirectory": session.working_directory,
         "workspaceRoot": session.workspace_root,
         "worktreeRoot": session.worktree_root,
+        "runtimeRoot": session.runtime_root,
+        "tempRoot": session.temp_root,
+        "cacheRoot": session.cache_root,
+        "evidenceRoot": session.evidence_root,
         "permissionMode": session.permission_mode,
         "approvalPolicy": session.approval_policy,
         "sandboxMode": session.sandbox_mode,
         "supervisionMode": session.supervision_mode,
+        "processGroupId": session.process_group_id,
         "terminalReason": session.governance_facts.terminal_reason,
         "retryable": session.governance_facts.retryable,
         "lastError": last_error,
@@ -154,12 +191,16 @@ pub fn write_exit_proof(
 
 pub fn spawn_exit_watcher(
     mut child: Child,
-    proof_path: std::path::PathBuf,
-    mut session: McpSessionSnapshot,
+    project_root: PathBuf,
+    proof_path: PathBuf,
+    session_id: String,
+    fallback_session: McpSessionSnapshot,
 ) {
-    std::thread::spawn(move || {
+    thread::spawn(move || {
         let waited = child.wait();
         let exited_at = unix_timestamp_seconds();
+        let mut session =
+            read_session_snapshot(&project_root, &session_id).unwrap_or(fallback_session);
         let (status, exit_code, last_error) = match waited {
             Ok(exit_status) => {
                 #[cfg(unix)]
@@ -177,12 +218,44 @@ pub fn spawn_exit_watcher(
             }
             Err(error) => ("wait-failed".to_string(), None, Some(error.to_string())),
         };
+        let final_status = if session.governance_facts.cancel_requested_at.is_some() {
+            "cancelled".to_string()
+        } else if session.governance_facts.timed_out_at.is_some() {
+            "timeout".to_string()
+        } else {
+            status
+        };
         session.exited_at = Some(exited_at);
         session.exit_code = exit_code;
+        session.pid = None;
+        session.process_group_id = None;
+        session.updated_at = exited_at;
+        if final_status == "cancelled" {
+            session.status = McpSessionStatus::Cancelled;
+            session
+                .governance_facts
+                .cancelled_at
+                .get_or_insert(exited_at);
+            session.governance_facts.retryable = false;
+            session.governance_facts.terminal_reason = Some("cancelled".to_string());
+        } else if final_status == "timeout" {
+            session.status = McpSessionStatus::Interrupted;
+            session.governance_facts.terminal_reason = Some("timeout".to_string());
+        } else if matches!(
+            session.status,
+            McpSessionStatus::Claimed | McpSessionStatus::Starting | McpSessionStatus::Running
+        ) {
+            session.status = if exit_code == Some(0) {
+                McpSessionStatus::Interrupted
+            } else {
+                McpSessionStatus::Failed
+            };
+        }
+        let _ = write_session_snapshot(&project_root, &session);
         let _ = write_exit_proof(
             &proof_path,
             &session,
-            &status,
+            &final_status,
             exit_code,
             exited_at,
             last_error.as_deref(),
@@ -223,6 +296,184 @@ fn existing_path_within_workspace(
         anyhow::bail!("{label} does not exist: {}", canonical.display());
     }
     Ok(canonical)
+}
+
+fn launch_runtime_root(workspace_root: &Path, issue_id: &str, run_id: &str) -> Result<PathBuf> {
+    join_relative_path(
+        workspace_root,
+        PathBuf::from(".agentflow")
+            .join("tasks")
+            .join(issue_id)
+            .join("runs")
+            .join(run_id)
+            .join("runtime"),
+    )
+}
+
+fn is_git_repository(path: &Path) -> bool {
+    Command::new("git")
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .current_dir(path)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+fn prepare_git_run_worktree(
+    workspace_root: &Path,
+    worktree_root: &Path,
+    branch_name: Option<&str>,
+) -> Result<PathBuf> {
+    if is_git_repository(worktree_root) {
+        return worktree_root
+            .canonicalize()
+            .with_context(|| format!("canonicalize {}", worktree_root.display()));
+    }
+    if worktree_root.exists() {
+        fs::remove_dir_all(worktree_root)
+            .with_context(|| format!("remove stale {}", worktree_root.display()))?;
+    }
+    ensure_parent_directory(worktree_root)?;
+    let add = Command::new("git")
+        .args([
+            "worktree",
+            "add",
+            "--force",
+            "--detach",
+            worktree_root
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("invalid worktree path"))?,
+            "HEAD",
+        ])
+        .current_dir(workspace_root)
+        .output()
+        .with_context(|| format!("git worktree add {}", worktree_root.display()))?;
+    if !add.status.success() {
+        anyhow::bail!(
+            "git worktree add failed: {}",
+            String::from_utf8_lossy(&add.stderr).trim()
+        );
+    }
+    if let Some(branch_name) = branch_name {
+        let switch = Command::new("git")
+            .args(["switch", "-C", branch_name])
+            .current_dir(worktree_root)
+            .output()
+            .with_context(|| {
+                format!(
+                    "git switch -C {} in {}",
+                    branch_name,
+                    worktree_root.display()
+                )
+            })?;
+        if !switch.status.success() {
+            anyhow::bail!(
+                "git switch -C {} failed: {}",
+                branch_name,
+                String::from_utf8_lossy(&switch.stderr).trim()
+            );
+        }
+    }
+    worktree_root
+        .canonicalize()
+        .with_context(|| format!("canonicalize {}", worktree_root.display()))
+}
+
+pub fn terminate_process_group(process_group_id: Option<u32>, pid: Option<u32>) -> Result<bool> {
+    if let Some(process_group_id) = process_group_id {
+        match terminate_unix_process_group(process_group_id) {
+            Ok(true) => return Ok(true),
+            Ok(false) => {}
+            Err(_) => {}
+        }
+    }
+    if let Some(pid) = pid {
+        return terminate_single_process(pid);
+    }
+    Ok(true)
+}
+
+fn terminate_unix_process_group(process_group_id: u32) -> Result<bool> {
+    send_signal_to_process_group(process_group_id, "TERM")?;
+    if wait_for_process_group_exit(process_group_id, PROCESS_TERMINATION_GRACE_MILLIS)? {
+        return Ok(true);
+    }
+    send_signal_to_process_group(process_group_id, "KILL")?;
+    wait_for_process_group_exit(process_group_id, PROCESS_TERMINATION_GRACE_MILLIS)
+}
+
+fn terminate_single_process(pid: u32) -> Result<bool> {
+    let pid_text = pid.to_string();
+    let term = Command::new("kill")
+        .args(["-TERM", &pid_text])
+        .output()
+        .with_context(|| format!("kill -TERM {}", pid))?;
+    if !term.status.success() {
+        return Ok(false);
+    }
+    for _ in 0..15 {
+        if !is_pid_alive(pid)? {
+            return Ok(true);
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    let kill = Command::new("kill")
+        .args(["-KILL", &pid_text])
+        .output()
+        .with_context(|| format!("kill -KILL {}", pid))?;
+    if !kill.status.success() {
+        return Ok(false);
+    }
+    for _ in 0..15 {
+        if !is_pid_alive(pid)? {
+            return Ok(true);
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    Ok(false)
+}
+
+fn send_signal_to_process_group(process_group_id: u32, signal: &str) -> Result<()> {
+    let output = Command::new("kill")
+        .args([&format!("-{signal}"), "--", &format!("-{process_group_id}")])
+        .output()
+        .with_context(|| format!("kill -{} -- -{}", signal, process_group_id))?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "kill -{} -- -{} failed: {}",
+            signal,
+            process_group_id,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(())
+}
+
+fn wait_for_process_group_exit(process_group_id: u32, grace_millis: u64) -> Result<bool> {
+    let max_checks = (grace_millis / 100).max(1);
+    for _ in 0..max_checks {
+        if !is_process_group_alive(process_group_id)? {
+            return Ok(true);
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    Ok(!is_process_group_alive(process_group_id)?)
+}
+
+fn is_process_group_alive(process_group_id: u32) -> Result<bool> {
+    let output = Command::new("kill")
+        .args(["-0", "--", &format!("-{process_group_id}")])
+        .output()
+        .with_context(|| format!("kill -0 -- -{}", process_group_id))?;
+    Ok(output.status.success())
+}
+
+fn is_pid_alive(pid: u32) -> Result<bool> {
+    let output = Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .output()
+        .with_context(|| format!("kill -0 {}", pid))?;
+    Ok(output.status.success())
 }
 
 fn session_exit_proof_relative_path(session_id: &str, attempt_count: u32) -> String {
@@ -309,6 +560,7 @@ impl McpProviderBridge {
 mod tests {
     use super::*;
     use crate::model::{McpCapability, McpLaunchMode, McpProviderStatusCode};
+    use std::{fs, process::Command};
     use tempfile::tempdir;
 
     struct FakeProvider;
@@ -372,5 +624,81 @@ mod tests {
             .cancel_session(dir.path(), &session.session_id)
             .unwrap();
         assert_eq!(cancelled.status, McpSessionStatus::Cancelled);
+    }
+
+    #[test]
+    fn resolve_launch_isolation_boundary_prepares_runtime_dirs_for_git_workspace() {
+        let dir = tempdir().unwrap();
+        init_git_repo(dir.path());
+        let request_path = dir
+            .path()
+            .join(".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json");
+        fs::create_dir_all(request_path.parent().unwrap()).unwrap();
+        fs::write(&request_path, "{\"task\":\"run\"}\n").unwrap();
+
+        let mut request = McpLaunchRequest::new(
+            "codex",
+            "AF-001",
+            "run-001",
+            "build-agent",
+            dir.path().display().to_string(),
+            ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json",
+        );
+        request.branch_name = Some("agentflow/direct/AF-001".to_string());
+
+        let boundary =
+            resolve_launch_isolation_boundary(dir.path(), &request, "codex-run-001", 1).unwrap();
+
+        assert!(boundary.runtime_root.ends_with("runtime"));
+        assert!(boundary.temp_root.is_dir());
+        assert!(boundary.cache_root.is_dir());
+        assert!(boundary.evidence_root.is_dir());
+        assert!(boundary.worktree_root.is_dir());
+        assert_ne!(boundary.worktree_root, dir.path());
+
+        let branch = Command::new("git")
+            .args(["branch", "--show-current"])
+            .current_dir(&boundary.worktree_root)
+            .output()
+            .unwrap();
+        assert!(branch.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&branch.stdout).trim(),
+            "agentflow/direct/AF-001"
+        );
+    }
+
+    fn init_git_repo(root: &Path) {
+        let init = Command::new("git")
+            .args(["init", "-b", "main"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(init.status.success());
+        let config_name = Command::new("git")
+            .args(["config", "user.name", "Codex"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(config_name.status.success());
+        let config_email = Command::new("git")
+            .args(["config", "user.email", "codex@example.com"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(config_email.status.success());
+        fs::write(root.join("README.md"), "fixture\n").unwrap();
+        let add = Command::new("git")
+            .args(["add", "README.md"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(add.status.success());
+        let commit = Command::new("git")
+            .args(["commit", "-m", "initial fixture"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(commit.status.success());
     }
 }

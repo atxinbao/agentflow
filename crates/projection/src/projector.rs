@@ -926,6 +926,34 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                         .and_then(Value::as_str)
                         .map(str::to_string);
                 }
+                if event.payload.get("runtimeRoot").is_some() {
+                    summary.runtime_root = event
+                        .payload
+                        .get("runtimeRoot")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("tempRoot").is_some() {
+                    summary.temp_root = event
+                        .payload
+                        .get("tempRoot")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("cacheRoot").is_some() {
+                    summary.cache_root = event
+                        .payload
+                        .get("cacheRoot")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("evidenceRoot").is_some() {
+                    summary.evidence_root = event
+                        .payload
+                        .get("evidenceRoot")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
                 summary.launch_request_path = event
                     .payload
                     .get("launchRequestPath")
@@ -1057,6 +1085,13 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                         .get("lastError")
                         .and_then(Value::as_str)
                         .map(str::to_string);
+                }
+                if event.payload.get("processGroupId").is_some() {
+                    summary.process_group_id = event
+                        .payload
+                        .get("processGroupId")
+                        .and_then(Value::as_u64)
+                        .map(|value| value as u32);
                 }
                 if event.payload.get("permissionMode").is_some() {
                     summary.permission_mode = event
@@ -2320,9 +2355,9 @@ mod tests {
                     "sessionId": "codex-run-001",
                     "sessionStatus": "failed",
                     "attemptCount": 1,
-                    "workingDirectory": "/repo",
+                    "workingDirectory": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
                     "workspaceRoot": "/repo",
-                    "worktreeRoot": "/repo",
+                    "worktreeRoot": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
                     "selectionStatus": "ready",
                     "selectionReason": "provider codex supports runtime role work-agent and required capabilities are ready",
                     "degradationReason": null,
@@ -2365,9 +2400,9 @@ mod tests {
                     "sessionId": "codex-run-001",
                     "sessionStatus": "running",
                     "attemptCount": 2,
-                    "workingDirectory": "/repo",
+                    "workingDirectory": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
                     "workspaceRoot": "/repo",
-                    "worktreeRoot": "/repo",
+                    "worktreeRoot": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
                     "logPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2.jsonl",
                     "lastMessagePath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2-last-message.txt",
                     "exitProofPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2-exit.json",
@@ -2390,14 +2425,19 @@ mod tests {
                     "sessionId": "codex-run-001",
                     "sessionStatus": "in-review",
                     "attemptCount": 2,
-                    "workingDirectory": "/repo",
+                    "workingDirectory": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
                     "workspaceRoot": "/repo",
-                    "worktreeRoot": "/repo",
+                    "worktreeRoot": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
+                    "runtimeRoot": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime",
+                    "tempRoot": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/tmp",
+                    "cacheRoot": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/cache",
+                    "evidenceRoot": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/evidence",
                     "logPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2.jsonl",
                     "exitProofPath": ".agentflow/state/mcp/sessions/codex-run-001-attempt-2-exit.json",
                     "mergeProofPath": ".agentflow/tasks/AF-PROJ-001/runs/run-001/review/closeout-proof.json",
                     "mergeState": "awaiting-closeout",
                     "writebackState": "awaiting-complete",
+                    "processGroupId": 4321,
                     "permissionMode": "never",
                     "approvalPolicy": "never",
                     "sandboxMode": "workspace-write",
@@ -2416,6 +2456,23 @@ mod tests {
         assert_eq!(projection.session.provider_kind.as_deref(), Some("codex"));
         assert_eq!(projection.session.provider_status.as_deref(), Some("ready"));
         assert_eq!(projection.session.attempt_count, 2);
+        assert_eq!(
+            projection.session.runtime_root.as_deref(),
+            Some("/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime")
+        );
+        assert_eq!(
+            projection.session.temp_root.as_deref(),
+            Some("/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/tmp")
+        );
+        assert_eq!(
+            projection.session.cache_root.as_deref(),
+            Some("/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/cache")
+        );
+        assert_eq!(
+            projection.session.evidence_root.as_deref(),
+            Some("/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/evidence")
+        );
+        assert_eq!(projection.session.process_group_id, Some(4321));
         assert_eq!(
             projection.session.selection_status.as_deref(),
             Some("ready")
@@ -2439,10 +2496,13 @@ mod tests {
         assert!(projection.session.missing_degraded_capabilities.is_empty());
         assert_eq!(
             projection.session.working_directory.as_deref(),
-            Some("/repo")
+            Some("/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree")
         );
         assert_eq!(projection.session.workspace_root.as_deref(), Some("/repo"));
-        assert_eq!(projection.session.worktree_root.as_deref(), Some("/repo"));
+        assert_eq!(
+            projection.session.worktree_root.as_deref(),
+            Some("/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree")
+        );
         assert_eq!(
             projection.session.recovery_reason.as_deref(),
             Some("retry after failed session")

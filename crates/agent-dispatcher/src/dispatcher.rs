@@ -523,6 +523,10 @@ fn session_event_payload(
     );
     payload.insert("workspaceRoot".to_string(), json!(session.workspace_root));
     payload.insert("worktreeRoot".to_string(), json!(session.worktree_root));
+    payload.insert("runtimeRoot".to_string(), json!(session.runtime_root));
+    payload.insert("tempRoot".to_string(), json!(session.temp_root));
+    payload.insert("cacheRoot".to_string(), json!(session.cache_root));
+    payload.insert("evidenceRoot".to_string(), json!(session.evidence_root));
     payload.insert(
         "launchRequestPath".to_string(),
         json!(session.launch_request_path),
@@ -600,6 +604,10 @@ fn session_event_payload(
     payload.insert(
         "resumedFromAttempt".to_string(),
         json!(session.governance_facts.resumed_from_attempt),
+    );
+    payload.insert(
+        "processGroupId".to_string(),
+        json!(session.process_group_id),
     );
     payload.insert(
         "takeoverSessionId".to_string(),

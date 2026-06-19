@@ -514,6 +514,14 @@ pub struct McpLaunchPlan {
     pub workspace_root: Option<String>,
     #[serde(default)]
     pub worktree_root: Option<String>,
+    #[serde(default)]
+    pub runtime_root: Option<String>,
+    #[serde(default)]
+    pub temp_root: Option<String>,
+    #[serde(default)]
+    pub cache_root: Option<String>,
+    #[serde(default)]
+    pub evidence_root: Option<String>,
     pub program: String,
     pub args: Vec<String>,
     pub stdin_path: Option<String>,
@@ -551,6 +559,10 @@ impl McpLaunchPlan {
             working_directory: working_directory.into(),
             workspace_root: None,
             worktree_root: None,
+            runtime_root: None,
+            temp_root: None,
+            cache_root: None,
+            evidence_root: None,
             program: program.into(),
             args: Vec::new(),
             stdin_path: None,
@@ -581,6 +593,14 @@ pub struct McpSessionSnapshot {
     pub workspace_root: Option<String>,
     #[serde(default)]
     pub worktree_root: Option<String>,
+    #[serde(default)]
+    pub runtime_root: Option<String>,
+    #[serde(default)]
+    pub temp_root: Option<String>,
+    #[serde(default)]
+    pub cache_root: Option<String>,
+    #[serde(default)]
+    pub evidence_root: Option<String>,
     pub launch_request_path: String,
     pub plan_path: String,
     #[serde(default)]
@@ -591,6 +611,8 @@ pub struct McpSessionSnapshot {
     pub attempt_count: u32,
     #[serde(default)]
     pub pid: Option<u32>,
+    #[serde(default)]
+    pub process_group_id: Option<u32>,
     #[serde(default)]
     pub remote_session_id: Option<String>,
     #[serde(default)]
@@ -651,12 +673,17 @@ impl McpSessionSnapshot {
             working_directory: plan.working_directory.clone(),
             workspace_root: plan.workspace_root.clone(),
             worktree_root: plan.worktree_root.clone(),
+            runtime_root: plan.runtime_root.clone(),
+            temp_root: plan.temp_root.clone(),
+            cache_root: plan.cache_root.clone(),
+            evidence_root: plan.evidence_root.clone(),
             launch_request_path: request.launch_request_path.clone(),
             plan_path: format!(".agentflow/state/mcp/plans/{}.json", plan.session_id),
             log_path: plan.output_path.clone(),
             branch_name: request.branch_name.clone(),
             attempt_count: 1,
             pid: None,
+            process_group_id: None,
             remote_session_id: None,
             pr_url: None,
             last_message_path: None,
