@@ -9,8 +9,8 @@ use agentflow_event_store::{
     task_claim_is_active, EventActor, TaskEvent, TaskEventDraft,
 };
 use agentflow_mcp::{
-    default_provider_bridge, McpLaunchRequest, McpProviderBridge, McpSessionSnapshot,
-    McpSessionStatus,
+    default_provider_bridge, find_session_snapshot_by_run, McpLaunchRequest, McpProviderBridge,
+    McpSessionSnapshot, McpSessionStatus,
 };
 use agentflow_task_loop::{AgentLaunchPayload, AGENT_LAUNCH_REQUESTED};
 use agentflow_workflow_core::WorkflowFlowType;
@@ -59,6 +59,40 @@ impl AgentDispatcher {
                 "provider-not-runnable",
             );
             return Err(error);
+        }
+        if let Some(existing_session) =
+            recover_existing_session_snapshot(root, &payload, &payload.provider)?
+        {
+            let recovered_event = append_session_event(
+                root,
+                &payload,
+                &role_binding,
+                &selection,
+                &existing_session,
+                if had_prior_session_event(root, &payload.run_id)? {
+                    AGENT_SESSION_RESUMED
+                } else {
+                    AGENT_SESSION_CREATED
+                },
+            )?;
+            let _ = release_task_claim(
+                root,
+                &payload.run_id,
+                Some(claim_event.event_id.as_str()),
+                "session-recovered",
+            );
+            append_status_event(root, &payload, &selection, &existing_session)?;
+            return Ok(Some(AgentDispatcherClaim {
+                issue_id: payload.issue_id,
+                run_id: payload.run_id,
+                provider: existing_session.provider,
+                session_id: existing_session.session_id,
+                session_status: existing_session.status.as_str().to_string(),
+                runtime_role: role_binding.runtime_role,
+                skill_pack: role_binding.skill_pack,
+                selection,
+                created_event_id: recovered_event.event_id,
+            }));
         }
         let request = launch_payload_to_mcp_request(&payload, &role_binding);
         let provider = self
@@ -216,6 +250,26 @@ fn had_prior_session_event(root: &Path, run_id: &str) -> Result<bool> {
                 | AGENT_SESSION_CANCELLED
         ) && event.run_id.as_deref() == Some(run_id)
     }))
+}
+
+fn recover_existing_session_snapshot(
+    root: &Path,
+    payload: &AgentLaunchPayload,
+    provider_id: &str,
+) -> Result<Option<McpSessionSnapshot>> {
+    let Some(session) = find_session_snapshot_by_run(root, &payload.run_id)? else {
+        return Ok(None);
+    };
+    if session.issue_id != payload.issue_id || session.provider != provider_id {
+        return Ok(None);
+    }
+    if matches!(
+        session.status,
+        McpSessionStatus::Failed | McpSessionStatus::Cancelled
+    ) {
+        return Ok(None);
+    }
+    Ok(Some(session))
 }
 
 fn is_claimable_launch_request<'a>(
@@ -648,6 +702,7 @@ mod tests {
     }
 
     struct LimitedProvider;
+    struct NoCreateProvider;
 
     impl McpAgentProvider for FakeProvider {
         fn provider_id(&self) -> &'static str {
@@ -790,6 +845,57 @@ mod tests {
             );
             plan.stdin_path = Some(request.launch_request_path.clone());
             Ok(plan)
+        }
+    }
+
+    impl McpAgentProvider for NoCreateProvider {
+        fn provider_id(&self) -> &'static str {
+            "codex"
+        }
+
+        fn kind(&self) -> McpProviderKind {
+            McpProviderKind::Codex
+        }
+
+        fn check_health(&self, _project_root: &Path) -> McpProviderStatus {
+            let mut status = McpProviderStatus::new(McpProviderKind::Codex, 1);
+            status.provider = "codex".to_string();
+            status.status = McpProviderStatusCode::Ready;
+            status.capabilities = vec![
+                agentflow_mcp::McpCapability::new("launch", true),
+                agentflow_mcp::McpCapability::new("codex.exec", true),
+                agentflow_mcp::McpCapability::new("session.poll", true),
+                agentflow_mcp::McpCapability::new("session.logs", true),
+                agentflow_mcp::McpCapability::new("session.cancel", true),
+                agentflow_mcp::McpCapability::new("build_agent.complete", true),
+            ];
+            status
+        }
+
+        fn build_launch_plan(
+            &self,
+            _project_root: &Path,
+            request: &McpLaunchRequest,
+        ) -> Result<McpLaunchPlan> {
+            let mut plan = McpLaunchPlan::new(
+                "codex",
+                format!("recovered-{}", request.run_id),
+                request.issue_id.clone(),
+                request.run_id.clone(),
+                McpLaunchMode::CliExecPromptFile,
+                request.working_directory.clone(),
+                "fake-agent",
+            );
+            plan.stdin_path = Some(request.launch_request_path.clone());
+            Ok(plan)
+        }
+
+        fn create_session(
+            &self,
+            _project_root: &Path,
+            _request: &McpLaunchRequest,
+        ) -> Result<McpSessionSnapshot> {
+            anyhow::bail!("create_session should not run when snapshot is already durable")
         }
     }
 
@@ -1108,6 +1214,59 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| event.event_type == AGENT_SESSION_RESUMED));
+    }
+
+    #[test]
+    fn dispatcher_recovers_existing_session_snapshot_without_relaunching() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        let loop_driver = TaskLoop::new("project-dispatcher");
+        loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+        loop_driver
+            .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
+            .unwrap();
+
+        let request = McpLaunchRequest::new(
+            "codex",
+            "AF-DISPATCH-001",
+            "run-001",
+            "build-agent",
+            dir.path().display().to_string(),
+            ".agentflow/tasks/AF-DISPATCH-001/runs/run-001/launch/agent-request.json",
+        );
+        let provider = NoCreateProvider;
+        let plan = provider.build_launch_plan(dir.path(), &request).unwrap();
+        let mut session = McpSessionSnapshot::queued(&request, &plan, 1);
+        session.status = McpSessionStatus::Running;
+        session.updated_at = session.updated_at + 5;
+        write_launch_plan(dir.path(), &plan).unwrap();
+        write_session_snapshot(dir.path(), &session).unwrap();
+
+        let mut providers = McpProviderBridge::new();
+        providers.register(Box::new(NoCreateProvider));
+        let claim = AgentDispatcher::new(providers)
+            .claim_next_launch(dir.path())
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(claim.issue_id, "AF-DISPATCH-001");
+        assert_eq!(claim.run_id, "run-001");
+        assert_eq!(claim.session_id, session.session_id);
+        let events = load_task_events(dir.path()).unwrap();
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == AGENT_SESSION_CREATED));
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == AGENT_SESSION_RUNNING));
+        let lease = agentflow_event_store::load_task_claim_lease(dir.path(), "run-001")
+            .unwrap()
+            .expect("expected released lease after recovery");
+        assert_eq!(lease.status.as_str(), "released");
+        assert_eq!(lease.release_reason.as_deref(), Some("session-recovered"));
     }
 
     #[test]

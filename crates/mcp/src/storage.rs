@@ -6,8 +6,10 @@ use crate::{
 use anyhow::{Context, Result};
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
 };
+use tempfile::NamedTempFile;
 
 pub fn prepare_mcp_workspace(project_root: impl AsRef<Path>) -> Result<()> {
     let root = canonical_project_root(project_root)?;
@@ -117,6 +119,15 @@ pub fn load_session_snapshots(project_root: impl AsRef<Path>) -> Result<Vec<McpS
     Ok(sessions)
 }
 
+pub fn find_session_snapshot_by_run(
+    project_root: impl AsRef<Path>,
+    run_id: &str,
+) -> Result<Option<McpSessionSnapshot>> {
+    Ok(load_session_snapshots(project_root)?
+        .into_iter()
+        .find(|session| session.run_id == run_id))
+}
+
 fn provider_status_path(root: &Path, provider: &str) -> PathBuf {
     root.join(".agentflow/state/mcp/providers")
         .join(format!("{}.json", sanitize_id(provider)))
@@ -161,8 +172,28 @@ fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
     if let Some(parent) = path.parent() {
         ensure_directory(parent)?;
     }
-    fs::write(path, serde_json::to_string_pretty(value)?)
+    atomic_write_text(path, &(serde_json::to_string_pretty(value)? + "\n"))
         .with_context(|| format!("write {}", path.display()))
+}
+
+fn atomic_write_text(path: &Path, content: &str) -> Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("{} has no parent directory", path.display()))?;
+    ensure_directory(parent)?;
+    let mut temp = NamedTempFile::new_in(parent)
+        .with_context(|| format!("create temp file in {}", parent.display()))?;
+    temp.write_all(content.as_bytes())
+        .with_context(|| format!("write temp file for {}", path.display()))?;
+    temp.flush()
+        .with_context(|| format!("flush temp file for {}", path.display()))?;
+    temp.as_file()
+        .sync_all()
+        .with_context(|| format!("sync temp file for {}", path.display()))?;
+    temp.persist(path)
+        .map_err(|error| error.error)
+        .with_context(|| format!("persist {}", path.display()))?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -297,5 +328,12 @@ mod tests {
         let loaded = load_session_snapshots(dir.path()).unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].session_id, "codex-run-001");
+        assert_eq!(
+            find_session_snapshot_by_run(dir.path(), "run-001")
+                .unwrap()
+                .expect("expected run lookup")
+                .session_id,
+            "codex-run-001"
+        );
     }
 }

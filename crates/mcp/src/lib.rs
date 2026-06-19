@@ -35,9 +35,9 @@ pub use model::{
 };
 pub use provider::{run_command, CommandProbe, McpAgentProvider, McpProviderBridge};
 pub use storage::{
-    load_session_snapshots, prepare_mcp_workspace, read_launch_plan, read_provider_status,
-    read_registry, read_session_snapshot, write_launch_plan, write_provider_status, write_registry,
-    write_registry_for_statuses, write_session_snapshot,
+    find_session_snapshot_by_run, load_session_snapshots, prepare_mcp_workspace, read_launch_plan,
+    read_provider_status, read_registry, read_session_snapshot, write_launch_plan,
+    write_provider_status, write_registry, write_registry_for_statuses, write_session_snapshot,
 };
 
 pub fn default_provider_bridge() -> McpProviderBridge {

@@ -11,6 +11,4 @@ agentflow-projection = { path = "../projection" }
 agentflow-workflow-core = { path = "../workflow-core" }
 serde.workspace = true
 serde_json.workspace = true
-
-[dev-dependencies]
 tempfile.workspace = true
