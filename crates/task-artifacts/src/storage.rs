@@ -758,6 +758,7 @@ mod tests {
                 change_type: "modified".to_string(),
                 insertions: 1,
                 deletions: 0,
+                sources: Vec::new(),
             }],
             Some("base-001".to_string()),
             Some("head-001".to_string()),
