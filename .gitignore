@@ -10,6 +10,8 @@ AGENTS.md
 target/
 node_modules/
 apps/desktop/dist/
+apps/desktop/src-tauri/gen/schemas/linux-schema.json
+apps/desktop/src-tauri/gen/schemas/windows-schema.json
 .env
 .env.*
 !.env.example
