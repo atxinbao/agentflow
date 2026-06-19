@@ -2270,8 +2270,7 @@ button.v16-task-project-row:hover {
   gap: 8px;
 }
 
-.v16-task-workflow-summary article,
-.v16-final-delivery-card {
+.v16-task-workflow-summary article {
   display: grid;
   gap: 5px;
   min-width: 0;
@@ -2282,7 +2281,6 @@ button.v16-task-project-row:hover {
 }
 
 .v16-task-workflow-summary span,
-.v16-final-delivery-card span,
 .v16-task-stage-panel-header span,
 .v16-task-execution-panel-header span,
 .v16-task-artifact-flow-header span {
@@ -2293,7 +2291,6 @@ button.v16-task-project-row:hover {
 }
 
 .v16-task-workflow-summary strong,
-.v16-final-delivery-card strong,
 .v16-task-stage-panel-header strong,
 .v16-task-execution-panel-header strong,
 .v16-task-artifact-flow-header strong {
@@ -2305,8 +2302,7 @@ button.v16-task-project-row:hover {
   overflow-wrap: anywhere;
 }
 
-.v16-task-workflow-summary small,
-.v16-final-delivery-card small {
+.v16-task-workflow-summary small {
   min-width: 0;
   color: var(--v16-text-muted);
   font-size: 11px;
@@ -2360,38 +2356,6 @@ button.v16-task-project-row:hover {
 .v16-task-artifact-columns .v16-section-list,
 .v16-task-artifact-flow > .v16-section-list {
   background: var(--v16-surface);
-}
-
-.v16-final-delivery-card {
-  grid-template-columns: minmax(150px, 0.38fr) minmax(0, 1fr);
-  align-items: start;
-  background: color-mix(in srgb, var(--af-success), var(--v16-surface) 94%);
-}
-
-.v16-final-delivery-card.done {
-  border-color: color-mix(in srgb, var(--af-success), var(--v16-border) 50%);
-}
-
-.v16-final-delivery-card > div {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-
-.v16-final-delivery-card ul {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-  margin: 0;
-  padding-left: 17px;
-}
-
-.v16-final-delivery-card li {
-  min-width: 0;
-  color: var(--v16-text);
-  font-size: 12px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
 }
 
 .v16-section-list,
@@ -2957,8 +2921,7 @@ button.v16-list-item {
 
   .v16-task-stage-grid,
   .v16-task-execution-grid,
-  .v16-task-artifact-columns,
-  .v16-final-delivery-card {
+  .v16-task-artifact-columns {
     grid-template-columns: minmax(0, 1fr);
   }
 
