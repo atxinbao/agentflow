@@ -368,6 +368,8 @@ docs/requirements/**
 
 - 追加 `.agentflow/events/task-events.jsonl`
 - 统一 event envelope：`flowType / runId / authorityRole / correlationId / causationId / idempotencyKey`
+- 接收 `accepted action` 作为唯一 append 输入，并把它展开成 append-only runtime event
+- 提供 runtime event envelope 与旧 `TaskEvent` 的兼容映射，支持 replay 只读重放
 - 提供 event taxonomy、event id、replay filter、replay cursor
 
 不负责：
@@ -375,6 +377,7 @@ docs/requirements/**
 - 投影 UI
 - 决定状态
 - 执行任务
+- 把 `accepted action` 本身当成事实持久化
 
 实现位置：
 
