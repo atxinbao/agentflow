@@ -230,6 +230,30 @@ mod tests {
             working_directory: dir.path().display().to_string(),
             workspace_root: Some(dir.path().display().to_string()),
             worktree_root: Some(dir.path().display().to_string()),
+            runtime_root: Some(
+                dir.path()
+                    .join(".agentflow/tasks/AF-001/runs/run-001/runtime")
+                    .display()
+                    .to_string(),
+            ),
+            temp_root: Some(
+                dir.path()
+                    .join(".agentflow/tasks/AF-001/runs/run-001/runtime/tmp")
+                    .display()
+                    .to_string(),
+            ),
+            cache_root: Some(
+                dir.path()
+                    .join(".agentflow/tasks/AF-001/runs/run-001/runtime/cache")
+                    .display()
+                    .to_string(),
+            ),
+            evidence_root: Some(
+                dir.path()
+                    .join(".agentflow/tasks/AF-001/runs/run-001/runtime/evidence")
+                    .display()
+                    .to_string(),
+            ),
             launch_request_path: ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json"
                 .to_string(),
             plan_path: ".agentflow/state/mcp/plans/codex-run-001.json".to_string(),
@@ -237,6 +261,7 @@ mod tests {
             branch_name: Some("agentflow/proj-001/AF-001".to_string()),
             attempt_count: 1,
             pid: None,
+            process_group_id: None,
             remote_session_id: None,
             pr_url: None,
             last_message_path: Some(

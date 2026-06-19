@@ -6,13 +6,16 @@ use crate::{
     },
     provider::{
         ensure_parent_directory, relative_project_path, resolve_launch_isolation_boundary,
-        run_command, spawn_exit_watcher, write_exit_proof, McpAgentProvider,
+        run_command, spawn_exit_watcher, terminate_process_group, write_exit_proof,
+        McpAgentProvider,
     },
     storage::{read_session_snapshot, write_launch_plan, write_session_snapshot},
 };
 use agentflow_projection::load_task_projection;
 use anyhow::{Context, Result};
 use serde_json::Value;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::{
     fs::{self, File, OpenOptions},
     io::Read,
@@ -402,6 +405,10 @@ impl McpAgentProvider for CodexProvider {
         )?;
         plan.workspace_root = Some(isolation.workspace_root.display().to_string());
         plan.worktree_root = Some(isolation.worktree_root.display().to_string());
+        plan.runtime_root = Some(isolation.runtime_root.display().to_string());
+        plan.temp_root = Some(isolation.temp_root.display().to_string());
+        plan.cache_root = Some(isolation.cache_root.display().to_string());
+        plan.evidence_root = Some(isolation.evidence_root.display().to_string());
         plan.exit_proof_path = Some(relative_project_path(
             &isolation.workspace_root,
             &isolation.exit_proof_path,
@@ -436,15 +443,29 @@ impl McpAgentProvider for CodexProvider {
         command
             .args(&plan.args)
             .current_dir(&isolation.worktree_root)
+            .env("TMPDIR", &isolation.temp_root)
+            .env("TMP", &isolation.temp_root)
+            .env("TEMP", &isolation.temp_root)
+            .env("XDG_CACHE_HOME", &isolation.cache_root)
+            .env("AGENTFLOW_RUN_WORKTREE_ROOT", &isolation.worktree_root)
+            .env("AGENTFLOW_RUN_TEMP_ROOT", &isolation.temp_root)
+            .env("AGENTFLOW_RUN_CACHE_ROOT", &isolation.cache_root)
+            .env("AGENTFLOW_RUN_EVIDENCE_DIR", &isolation.evidence_root)
             .stdin(Stdio::from(stdin))
             .stdout(Stdio::from(stdout))
             .stderr(Stdio::from(stderr));
+        #[cfg(unix)]
+        command.process_group(0);
         let now = unix_timestamp_seconds();
         let mut session = McpSessionSnapshot::queued(request, &plan, now);
         session.status = McpSessionStatus::Starting;
         session.working_directory = isolation.worktree_root.display().to_string();
         session.workspace_root = Some(isolation.workspace_root.display().to_string());
         session.worktree_root = Some(isolation.worktree_root.display().to_string());
+        session.runtime_root = Some(isolation.runtime_root.display().to_string());
+        session.temp_root = Some(isolation.temp_root.display().to_string());
+        session.cache_root = Some(isolation.cache_root.display().to_string());
+        session.evidence_root = Some(isolation.evidence_root.display().to_string());
         session.log_path = plan.output_path.clone();
         session.last_message_path = Some(relative_project_path(
             &isolation.workspace_root,
@@ -505,10 +526,17 @@ impl McpAgentProvider for CodexProvider {
         };
         let pid = child.id();
         session.pid = Some(pid);
+        session.process_group_id = Some(pid);
         write_session_snapshot(project_root, &session)?;
         if let Some(exit_proof_path) = session.exit_proof_path.clone() {
             let absolute_exit_proof = isolation.workspace_root.join(exit_proof_path);
-            spawn_exit_watcher(child, absolute_exit_proof, session.clone());
+            spawn_exit_watcher(
+                child,
+                isolation.workspace_root.clone(),
+                absolute_exit_proof,
+                session.session_id.clone(),
+                session.clone(),
+            );
         }
         Ok(session)
     }
@@ -533,40 +561,39 @@ impl McpAgentProvider for CodexProvider {
                 .is_some_and(|timeout_at| timeout_at <= now)
             && session.governance_facts.timed_out_at.is_none()
         {
-            if let Some(pid) = session.pid {
-                let _ = Command::new("kill")
-                    .args(["-TERM", &pid.to_string()])
-                    .output();
-            }
+            let terminated =
+                terminate_process_group(session.process_group_id, session.pid).unwrap_or(false);
             process_alive = false;
             session.governance_facts.timed_out_at = Some(now);
             session.governance_facts.terminal_reason = Some("timeout".to_string());
             session.recovery_reason = Some("retry after timeout".to_string());
+            if terminated {
+                session.exited_at = Some(now);
+            }
         }
         if let Some(exit_proof_path) = session.exit_proof_path.clone() {
             let absolute_exit_proof = absolute_project_path(project_root, &exit_proof_path);
             if absolute_exit_proof.is_file() {
-                let proof: Value = serde_json::from_str(
-                    &fs::read_to_string(&absolute_exit_proof)
-                        .with_context(|| format!("read {}", absolute_exit_proof.display()))?,
-                )
-                .with_context(|| format!("parse {}", absolute_exit_proof.display()))?;
-                session.exited_at = proof.get("exitedAt").and_then(Value::as_u64);
-                session.exit_code = proof
-                    .get("exitCode")
-                    .and_then(Value::as_i64)
-                    .map(|value| value as i32);
-                if session.governance_facts.terminal_reason.is_none() {
-                    session.governance_facts.terminal_reason = proof
-                        .get("status")
-                        .and_then(Value::as_str)
-                        .map(str::to_string);
-                }
-                if session.last_error.is_none() {
-                    session.last_error = proof
-                        .get("lastError")
-                        .and_then(Value::as_str)
-                        .map(str::to_string);
+                let proof_content = fs::read_to_string(&absolute_exit_proof)
+                    .with_context(|| format!("read {}", absolute_exit_proof.display()))?;
+                if let Ok(proof) = serde_json::from_str::<Value>(&proof_content) {
+                    session.exited_at = proof.get("exitedAt").and_then(Value::as_u64);
+                    session.exit_code = proof
+                        .get("exitCode")
+                        .and_then(Value::as_i64)
+                        .map(|value| value as i32);
+                    if session.governance_facts.terminal_reason.is_none() {
+                        session.governance_facts.terminal_reason = proof
+                            .get("status")
+                            .and_then(Value::as_str)
+                            .map(str::to_string);
+                    }
+                    if session.last_error.is_none() {
+                        session.last_error = proof
+                            .get("lastError")
+                            .and_then(Value::as_str)
+                            .map(str::to_string);
+                    }
                 }
             }
         }
@@ -672,25 +699,17 @@ impl McpAgentProvider for CodexProvider {
 
     fn cancel_session(&self, project_root: &Path, session_id: &str) -> Result<McpSessionSnapshot> {
         let mut session = read_session_snapshot(project_root, session_id)?;
-        if let Some(pid) = session.pid {
-            let _ = Command::new("kill")
-                .args(["-TERM", &pid.to_string()])
-                .output();
-        }
+        let terminated = terminate_process_group(session.process_group_id, session.pid)?;
         let now = unix_timestamp_seconds();
         session.status = McpSessionStatus::Cancelled;
-        session.pid = None;
         session.updated_at = now;
         session.last_error = None;
-        session.exited_at = Some(now);
         session.governance_facts.cancel_requested_at = Some(now);
-        session.governance_facts.cancelled_at = Some(now);
+        if terminated {
+            session.governance_facts.cancelled_at = Some(now);
+        }
         session.governance_facts.retryable = false;
         session.governance_facts.terminal_reason = Some("cancelled".to_string());
-        if let Some(exit_proof_path) = session.exit_proof_path.clone() {
-            let absolute_exit_proof = absolute_project_path(project_root, &exit_proof_path);
-            write_exit_proof(&absolute_exit_proof, &session, "cancelled", None, now, None)?;
-        }
         write_session_snapshot(project_root, &session)?;
         Ok(session)
     }
