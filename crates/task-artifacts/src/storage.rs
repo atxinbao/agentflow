@@ -68,6 +68,7 @@ pub fn create_task_run(
         run_id: run_id.as_str().to_string(),
         workflow_ref: workflow_ref.to_string(),
         status: TaskRunStatus::Queued,
+        base_commit: git_head_commit(&root).ok(),
         branch_name,
         created_at: now,
         updated_at: now,
@@ -145,7 +146,10 @@ pub fn write_task_changed_files(
     files: Vec<TaskChangedFile>,
     base_commit: Option<String>,
     head_commit: Option<String>,
+    tree_sha: Option<String>,
     working_tree_hash: impl Into<String>,
+    patch_sha256: impl Into<String>,
+    file_content_sha256: impl Into<String>,
 ) -> Result<TaskChangedFilesRecord> {
     let root = canonicalize_project_root(project_root)?;
     let issue_id = IssueId::parse(issue_id)?;
@@ -162,7 +166,10 @@ pub fn write_task_changed_files(
         files,
         base_commit,
         head_commit,
+        tree_sha,
         working_tree_hash: working_tree_hash.into(),
+        patch_sha256: patch_sha256.into(),
+        file_content_sha256: file_content_sha256.into(),
         changed_file_hash,
         collected_at: unix_timestamp_seconds(),
     };
@@ -198,7 +205,7 @@ pub fn write_task_validation_with_assessment(
         .map(|record| record.command_id.clone())
         .collect::<Vec<_>>();
     let changed_files = load_task_changed_files(&root, issue_id, run_id).ok();
-    let command_hash = sha256_hex(&serde_json::to_vec(
+    let validation_command_hash = sha256_hex(&serde_json::to_vec(
         &command_records
             .iter()
             .map(|record| {
@@ -209,6 +216,29 @@ pub fn write_task_validation_with_assessment(
                 })
             })
             .collect::<Vec<_>>(),
+    )?);
+    let validation_output_hash = sha256_hex(&serde_json::to_vec(
+        &command_records
+            .iter()
+            .map(|record| {
+                let stdout = fs::read_to_string(
+                    task_run_dir_under_root(&root, issue_id, run_id)?
+                        .join("commands")
+                        .join(format!("{}.stdout.txt", record.command_id)),
+                )?;
+                let stderr = fs::read_to_string(
+                    task_run_dir_under_root(&root, issue_id, run_id)?
+                        .join("commands")
+                        .join(format!("{}.stderr.txt", record.command_id)),
+                )?;
+                Ok::<_, anyhow::Error>(serde_json::json!({
+                    "commandId": record.command_id,
+                    "exitCode": record.exit_code,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                }))
+            })
+            .collect::<Result<Vec<_>>>()?,
     )?);
     let passed = failed_command_ids.is_empty() && boundary_failures.is_empty();
     let changed_files_path = changed_files
@@ -227,18 +257,28 @@ pub fn write_task_validation_with_assessment(
     let changed_file_hash = changed_files
         .as_ref()
         .map(|record| record.changed_file_hash.clone());
+    let patch_sha256 = changed_files
+        .as_ref()
+        .map(|record| record.patch_sha256.clone());
+    let file_content_sha256 = changed_files
+        .as_ref()
+        .map(|record| record.file_content_sha256.clone());
     let base_commit = changed_files
         .as_ref()
         .and_then(|record| record.base_commit.clone());
     let head_commit = changed_files
         .as_ref()
         .and_then(|record| record.head_commit.clone());
+    let tree_sha = changed_files
+        .as_ref()
+        .and_then(|record| record.tree_sha.clone());
     let working_tree_hash = changed_files
         .as_ref()
         .map(|record| record.working_tree_hash.clone());
     let validation_result_hash = sha256_hex(&serde_json::to_vec(&serde_json::json!({
         "passed": passed,
-        "commandHash": &command_hash,
+        "validationCommandHash": &validation_command_hash,
+        "validationOutputHash": &validation_output_hash,
         "commandIds": command_records
             .iter()
             .map(|record| record.command_id.as_str())
@@ -246,8 +286,11 @@ pub fn write_task_validation_with_assessment(
         "failedCommandIds": &failed_command_ids,
         "boundaryFailures": &boundary_failures,
         "changedFileHash": &changed_file_hash,
+        "patchSha256": &patch_sha256,
+        "fileContentSha256": &file_content_sha256,
         "baseCommit": &base_commit,
         "headCommit": &head_commit,
+        "treeSha": &tree_sha,
         "workingTreeHash": &working_tree_hash,
     }))?);
     let validation = TaskValidationRecord {
@@ -262,7 +305,12 @@ pub fn write_task_validation_with_assessment(
         failed_command_ids,
         boundary_failures,
         changed_files_path,
-        command_hash: Some(command_hash),
+        validation_command_hash: Some(validation_command_hash.clone()),
+        validation_output_hash: Some(validation_output_hash.clone()),
+        patch_sha256,
+        file_content_sha256,
+        tree_sha,
+        command_hash: Some(validation_command_hash),
         changed_file_hash,
         validation_result_hash: Some(validation_result_hash),
         base_commit,
@@ -330,6 +378,11 @@ pub fn write_task_evidence(
                 .join("validation.json"),
         )?,
         changed_files_path: validation.changed_files_path.clone(),
+        validation_command_hash: validation.validation_command_hash.clone(),
+        validation_output_hash: validation.validation_output_hash.clone(),
+        patch_sha256: validation.patch_sha256.clone(),
+        file_content_sha256: validation.file_content_sha256.clone(),
+        tree_sha: validation.tree_sha.clone(),
         command_hash: validation.command_hash.clone(),
         changed_file_hash: validation.changed_file_hash.clone(),
         validation_result_hash: validation.validation_result_hash.clone(),
@@ -552,6 +605,23 @@ fn unix_timestamp_seconds() -> u64 {
         .unwrap_or_default()
 }
 
+fn git_head_commit(root: &Path) -> Result<String> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(root)
+        .output()
+        .with_context(|| format!("run git rev-parse HEAD in {}", root.display()))?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "git rev-parse HEAD failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .trim_end()
+        .to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -691,7 +761,10 @@ mod tests {
             }],
             Some("base-001".to_string()),
             Some("head-001".to_string()),
+            Some("tree-001".to_string()),
             "worktree-hash-001",
+            "patch-hash-001",
+            "file-content-hash-001",
         )
         .unwrap();
 
@@ -703,6 +776,11 @@ mod tests {
                 .unwrap();
 
         assert!(validation.changed_files_path.is_some());
+        assert!(validation.validation_command_hash.is_some());
+        assert!(validation.validation_output_hash.is_some());
+        assert!(validation.patch_sha256.is_some());
+        assert!(validation.file_content_sha256.is_some());
+        assert!(validation.tree_sha.is_some());
         assert!(validation.command_hash.is_some());
         assert!(validation.changed_file_hash.is_some());
         assert!(validation.validation_result_hash.is_some());
@@ -710,6 +788,23 @@ mod tests {
             evidence.changed_files_path.as_deref(),
             validation.changed_files_path.as_deref()
         );
+        assert_eq!(
+            evidence.validation_command_hash.as_deref(),
+            validation.validation_command_hash.as_deref()
+        );
+        assert_eq!(
+            evidence.validation_output_hash.as_deref(),
+            validation.validation_output_hash.as_deref()
+        );
+        assert_eq!(
+            evidence.patch_sha256.as_deref(),
+            validation.patch_sha256.as_deref()
+        );
+        assert_eq!(
+            evidence.file_content_sha256.as_deref(),
+            validation.file_content_sha256.as_deref()
+        );
+        assert_eq!(evidence.tree_sha.as_deref(), validation.tree_sha.as_deref());
         assert_eq!(
             evidence.command_hash.as_deref(),
             validation.command_hash.as_deref()
@@ -724,6 +819,7 @@ mod tests {
         );
         assert_eq!(evidence.base_commit.as_deref(), Some("base-001"));
         assert_eq!(evidence.head_commit.as_deref(), Some("head-001"));
+        assert_eq!(evidence.tree_sha.as_deref(), Some("tree-001"));
         assert_eq!(
             evidence.working_tree_hash.as_deref(),
             Some("worktree-hash-001")

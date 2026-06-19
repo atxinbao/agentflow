@@ -27,6 +27,8 @@ pub struct TaskRun {
     pub run_id: String,
     pub workflow_ref: String,
     pub status: TaskRunStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_commit: Option<String>,
     pub branch_name: Option<String>,
     pub created_at: u64,
     pub updated_at: u64,
@@ -79,7 +81,11 @@ pub struct TaskChangedFilesRecord {
     pub base_commit: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub head_commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tree_sha: Option<String>,
     pub working_tree_hash: String,
+    pub patch_sha256: String,
+    pub file_content_sha256: String,
     pub changed_file_hash: String,
     pub collected_at: u64,
 }
@@ -97,6 +103,16 @@ pub struct TaskValidationRecord {
     pub boundary_failures: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub changed_files_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_command_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_output_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub patch_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_content_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tree_sha: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -125,6 +141,16 @@ pub struct TaskEvidence {
     pub validation_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub changed_files_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_command_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_output_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub patch_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_content_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tree_sha: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
