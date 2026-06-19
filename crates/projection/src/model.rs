@@ -246,9 +246,41 @@ pub struct ProjectCompletionProjection {
     pub canceled_issue_count: usize,
     pub remaining_issue_count: usize,
     pub blocked_issue_count: usize,
+    #[serde(default)]
+    pub task_evidence_ready_count: usize,
+    #[serde(default)]
+    pub task_evidence_missing_count: usize,
+    #[serde(default = "default_projection_delivery_status")]
+    pub delivery_status: String,
+    #[serde(default)]
+    pub delivery_missing_count: usize,
+    #[serde(default)]
+    pub audit_required: bool,
+    #[serde(default = "default_projection_audit_status")]
+    pub audit_status: String,
+    #[serde(default)]
+    pub audit_blocking_findings: usize,
+    #[serde(default = "default_projection_completion_goal_recheck_status")]
+    pub goal_recheck_status: String,
+    #[serde(default = "default_projection_completion_project_health_status")]
+    pub project_health_status: String,
+    #[serde(default = "default_projection_completion_release_readiness")]
+    pub release_readiness: String,
     pub open_questions: Vec<String>,
     pub rationale: Vec<String>,
     pub updated_at: u64,
+}
+
+fn default_projection_completion_goal_recheck_status() -> String {
+    "not-ready".to_string()
+}
+
+fn default_projection_completion_project_health_status() -> String {
+    "missing".to_string()
+}
+
+fn default_projection_completion_release_readiness() -> String {
+    "blocked".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -453,6 +485,26 @@ pub struct CompletionDecisionProjection {
     pub canceled_issue_count: usize,
     pub remaining_issue_count: usize,
     pub blocked_issue_count: usize,
+    #[serde(default)]
+    pub task_evidence_ready_count: usize,
+    #[serde(default)]
+    pub task_evidence_missing_count: usize,
+    #[serde(default = "default_projection_delivery_status")]
+    pub delivery_status: String,
+    #[serde(default)]
+    pub delivery_missing_count: usize,
+    #[serde(default)]
+    pub audit_required: bool,
+    #[serde(default = "default_projection_audit_status")]
+    pub audit_status: String,
+    #[serde(default)]
+    pub audit_blocking_findings: usize,
+    #[serde(default = "default_projection_completion_goal_recheck_status")]
+    pub goal_recheck_status: String,
+    #[serde(default = "default_projection_completion_project_health_status")]
+    pub project_health_status: String,
+    #[serde(default = "default_projection_completion_release_readiness")]
+    pub release_readiness: String,
     pub open_questions: Vec<String>,
     pub rationale: Vec<String>,
     pub projection_path: String,

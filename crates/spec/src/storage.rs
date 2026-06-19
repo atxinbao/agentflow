@@ -11,6 +11,8 @@ use crate::model::{
     PROJECT_BRAIN_SNAPSHOT_VERSION, REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION,
     SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
 };
+use agentflow_audit::load_project_audit_review_summary;
+use agentflow_task_artifacts::load_task_evidence;
 use agentflow_workflow_core::{
     canonicalize_project_root, join_relative_path, normalize_relative_path_string,
     normalize_relative_to_root, validate_safe_local_id, IssueId, ProjectId,
@@ -84,6 +86,31 @@ struct SpecIssueIndexEntry {
     title: String,
     status: SpecIssueStatus,
     workflow_ref: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CloseoutProofSnapshot {
+    #[serde(default)]
+    merged: bool,
+    #[serde(default)]
+    issue_closed: bool,
+    #[serde(default)]
+    public_delivery_written: bool,
+    #[serde(default)]
+    pr_url: Option<String>,
+    #[serde(default)]
+    merge_commit_sha: Option<String>,
+    #[serde(default)]
+    changelog_path: Option<String>,
+    #[serde(default)]
+    release_notes_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct CompletionDeliveryFacts {
+    status: String,
+    missing_count: usize,
 }
 
 pub fn prepare_spec_workspace(project_root: impl AsRef<Path>) -> Result<SpecWorkspaceSummary> {
@@ -576,7 +603,7 @@ pub fn sync_completion_decision_runtimes(
             continue;
         }
 
-        let facts = build_completion_facts(&project_issues);
+        let facts = build_completion_facts(&root, &project, &project_issues);
         let all_finished = facts.remaining_issue_count == 0;
         let existing = read_completion_decision_runtime(&root, &project.project_id).ok();
 
@@ -603,6 +630,16 @@ pub fn record_completion_decision(
 ) -> Result<CompletionDecisionRuntime> {
     let root = canonicalize_project_root(project_root)?;
     let mut runtime = read_completion_decision_runtime(&root, project_id)?;
+    if matches!(outcome, CompletionDecisionOutcome::Accept) {
+        let blockers = completion_accept_blockers(&runtime.facts);
+        if !blockers.is_empty() {
+            anyhow::bail!(
+                "completion accept blocked for {}: {}",
+                project_id,
+                blockers.join("；")
+            );
+        }
+    }
     let previous_state = runtime.current_state.clone();
     runtime.history.push(CompletionDecisionRecord {
         actor: actor.to_string(),
@@ -625,11 +662,11 @@ pub fn record_completion_decision(
     runtime.next_recommended_action_reason = reason;
     runtime.updated_at = unix_timestamp_seconds();
 
-    write_completion_decision_runtime(&root, &runtime)?;
     match outcome {
         CompletionDecisionOutcome::Accept => emit_completion_acceptance(&root, &runtime, actor)?,
         _ => emit_completion_recheck_event(&root, &runtime, actor, &previous_state, summary)?,
     }
+    write_completion_decision_runtime(&root, &runtime)?;
     Ok(runtime)
 }
 
@@ -1321,7 +1358,11 @@ fn default_issue_prefix(project_id: &str) -> String {
         .collect()
 }
 
-fn build_completion_facts(issues: &[SpecIssue]) -> CompletionDecisionFacts {
+fn build_completion_facts(
+    root: &Path,
+    project: &SpecProject,
+    issues: &[SpecIssue],
+) -> CompletionDecisionFacts {
     let total_issue_count = issues.len();
     let completed_issue_count = issues
         .iter()
@@ -1337,13 +1378,224 @@ fn build_completion_facts(issues: &[SpecIssue]) -> CompletionDecisionFacts {
         .count();
     let remaining_issue_count =
         total_issue_count.saturating_sub(completed_issue_count + canceled_issue_count);
+    let task_evidence_ready_count = issues
+        .iter()
+        .filter(|issue| issue.status == SpecIssueStatus::Done)
+        .filter(|issue| {
+            load_task_evidence(root, &issue.issue_id)
+                .map(|evidence| evidence.status == "ready")
+                .unwrap_or(false)
+        })
+        .count();
+    let task_evidence_missing_count =
+        completed_issue_count.saturating_sub(task_evidence_ready_count);
+    let delivery = build_completion_delivery_facts(root, issues);
+    let audit = load_project_audit_review_summary(root, &project.project_id, &project.issue_ids)
+        .ok()
+        .flatten();
+    let audit_required = audit
+        .as_ref()
+        .is_some_and(|summary| summary.total_count > 0);
+    let audit_status = audit
+        .as_ref()
+        .and_then(|summary| summary.latest_status.clone())
+        .unwrap_or_else(|| "not-requested".to_string());
+    let audit_blocking_findings = if audit_status == "failed" {
+        audit
+            .as_ref()
+            .map(|summary| summary.findings_count)
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    let brain_snapshot =
+        read_project_brain_snapshot(root, &project.project_id, &project.title).ok();
+    let project_health_status = brain_snapshot
+        .as_ref()
+        .map(|snapshot| snapshot.health_status.as_str().to_string())
+        .unwrap_or_else(|| "missing".to_string());
+    let goal_recheck_status = build_goal_recheck_status(
+        remaining_issue_count,
+        brain_snapshot
+            .as_ref()
+            .map(|snapshot| &snapshot.health_status),
+    );
     CompletionDecisionFacts {
         total_issue_count,
         completed_issue_count,
         canceled_issue_count,
         remaining_issue_count,
         blocked_issue_count,
+        task_evidence_ready_count,
+        task_evidence_missing_count,
+        delivery_status: delivery.status.clone(),
+        delivery_missing_count: delivery.missing_count,
+        audit_required,
+        audit_status: audit_status.clone(),
+        audit_blocking_findings,
+        goal_recheck_status: goal_recheck_status.clone(),
+        project_health_status: project_health_status.clone(),
+        release_readiness: build_release_readiness(
+            remaining_issue_count,
+            task_evidence_missing_count,
+            delivery.missing_count,
+            audit_required,
+            &audit_status,
+            &goal_recheck_status,
+        ),
     }
+}
+
+fn build_completion_delivery_facts(root: &Path, issues: &[SpecIssue]) -> CompletionDeliveryFacts {
+    let mut ready_count = 0usize;
+    let mut published_count = 0usize;
+    let mut missing_count = 0usize;
+
+    for issue in issues
+        .iter()
+        .filter(|issue| issue.status == SpecIssueStatus::Done)
+    {
+        let evidence = load_task_evidence(root, &issue.issue_id).ok();
+        let Some(evidence) = evidence else {
+            missing_count += 1;
+            continue;
+        };
+        let closeout = load_closeout_proof_for_issue(root, &issue.issue_id, &evidence.run_id).ok();
+        let Some(closeout) = closeout else {
+            missing_count += 1;
+            continue;
+        };
+        let has_review_proof = closeout.merged
+            && closeout.issue_closed
+            && (has_value(closeout.pr_url.as_deref())
+                || has_value(closeout.merge_commit_sha.as_deref()));
+        if !has_review_proof {
+            missing_count += 1;
+            continue;
+        }
+        let has_public_record = closeout.public_delivery_written
+            || has_value(closeout.changelog_path.as_deref())
+            || has_value(closeout.release_notes_path.as_deref());
+        if has_public_record {
+            published_count += 1;
+        } else {
+            ready_count += 1;
+        }
+    }
+
+    let status = if missing_count == 0 && published_count > 0 && ready_count == 0 {
+        "published".to_string()
+    } else if published_count > 0 || ready_count > 0 {
+        "ready".to_string()
+    } else {
+        "missing".to_string()
+    };
+
+    CompletionDeliveryFacts {
+        status,
+        missing_count,
+    }
+}
+
+fn load_closeout_proof_for_issue(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<CloseoutProofSnapshot> {
+    validate_safe_local_id("runId", run_id)?;
+    let path = root
+        .join(".agentflow")
+        .join("tasks")
+        .join(IssueId::parse(issue_id)?.as_str())
+        .join("runs")
+        .join(run_id)
+        .join("review")
+        .join("closeout-proof.json");
+    read_json(&path)
+}
+
+fn has_value(value: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.trim().is_empty())
+}
+
+fn build_goal_recheck_status(
+    remaining_issue_count: usize,
+    health_status: Option<&ProjectBrainDocumentStatus>,
+) -> String {
+    if remaining_issue_count > 0 {
+        return "not-ready".to_string();
+    }
+    match health_status.unwrap_or(&ProjectBrainDocumentStatus::Missing) {
+        ProjectBrainDocumentStatus::Blocked => "blocked".to_string(),
+        ProjectBrainDocumentStatus::Draft
+        | ProjectBrainDocumentStatus::NeedsConfirmation
+        | ProjectBrainDocumentStatus::Stale => "needs-recheck".to_string(),
+        ProjectBrainDocumentStatus::Confirmed | ProjectBrainDocumentStatus::Missing => {
+            "ready".to_string()
+        }
+    }
+}
+
+fn build_release_readiness(
+    remaining_issue_count: usize,
+    task_evidence_missing_count: usize,
+    delivery_missing_count: usize,
+    audit_required: bool,
+    audit_status: &str,
+    goal_recheck_status: &str,
+) -> String {
+    if remaining_issue_count > 0 {
+        return "blocked-remaining-issues".to_string();
+    }
+    if task_evidence_missing_count > 0 {
+        return "blocked-missing-evidence".to_string();
+    }
+    if delivery_missing_count > 0 {
+        return "blocked-missing-delivery".to_string();
+    }
+    if audit_required && !audit_status_allows_accept(audit_status) {
+        return "blocked-audit".to_string();
+    }
+    if goal_recheck_status != "ready" {
+        return "blocked-goal-recheck".to_string();
+    }
+    "ready".to_string()
+}
+
+fn audit_status_allows_accept(status: &str) -> bool {
+    matches!(status, "passed" | "passed-with-warnings" | "not-requested")
+}
+
+fn completion_accept_blockers(facts: &CompletionDecisionFacts) -> Vec<String> {
+    let mut blockers = Vec::new();
+    if facts.remaining_issue_count > 0 {
+        blockers.push(format!(
+            "当前还有 {} 条任务未完成。",
+            facts.remaining_issue_count
+        ));
+    }
+    if facts.task_evidence_missing_count > 0 {
+        blockers.push(format!(
+            "还有 {} 条任务缺少验证证据。",
+            facts.task_evidence_missing_count
+        ));
+    }
+    if facts.delivery_missing_count > 0 {
+        blockers.push(format!(
+            "还有 {} 条任务缺少交付收口事实。",
+            facts.delivery_missing_count
+        ));
+    }
+    if facts.audit_required && !audit_status_allows_accept(&facts.audit_status) {
+        blockers.push(format!("审计当前处于 {}，还不能完成。", facts.audit_status));
+    }
+    if facts.goal_recheck_status != "ready" {
+        blockers.push(format!(
+            "Goal Recheck 当前状态是 {}，还不能接受项目完成。",
+            facts.goal_recheck_status
+        ));
+    }
+    blockers
 }
 
 fn sync_completion_runtime_for_project(
@@ -1353,6 +1605,7 @@ fn sync_completion_runtime_for_project(
     all_finished: bool,
 ) -> Result<CompletionDecisionRuntime> {
     let now = unix_timestamp_seconds();
+    let accept_blockers = completion_accept_blockers(&facts);
     let mut runtime = existing.unwrap_or_else(|| CompletionDecisionRuntime {
         version: COMPLETION_DECISION_VERSION.to_string(),
         project_id: project.project_id.clone(),
@@ -1383,10 +1636,19 @@ fn sync_completion_runtime_for_project(
             runtime.current_state = CompletionDecisionState::GoalRecheck;
             runtime.open_questions =
                 completion_open_questions_for_state(&CompletionDecisionState::GoalRecheck);
-            runtime.rationale = vec![
-                "任务执行已经收口，但交付是否满足 Goal / Plan 还需要重新判断。".to_string(),
-                "Project 完成必须由 Goal Agent 显式给出 completion decision。".to_string(),
-            ];
+            runtime.rationale = if accept_blockers.is_empty() {
+                vec![
+                    "任务执行已经收口，证据、交付、审计和目标满足度都已齐备。".to_string(),
+                    "Project 完成必须由 Goal Agent 显式给出 completion decision。".to_string(),
+                ]
+            } else {
+                let mut rationale = vec![
+                    "任务执行已经收口，但完成门还没有全部满足。".to_string(),
+                    "先补齐完成前置条件，再进入 Accept。".to_string(),
+                ];
+                rationale.extend(accept_blockers.clone());
+                rationale
+            };
             let (action, label, reason) = completion_next_action_bundle(
                 &runtime.current_state,
                 runtime.latest_outcome.as_ref(),
@@ -1453,11 +1715,22 @@ fn completion_next_action_bundle(
     facts: &CompletionDecisionFacts,
 ) -> (String, String, String) {
     match state {
-        CompletionDecisionState::GoalRecheck => (
-            "enter-completion-decision".to_string(),
-            "进入完成判断".to_string(),
-            "当前任务已经收口，下一步由 Goal Agent 明确给出项目完成决策。".to_string(),
-        ),
+        CompletionDecisionState::GoalRecheck => {
+            if completion_accept_blockers(facts).is_empty() {
+                (
+                    "enter-completion-decision".to_string(),
+                    "进入完成判断".to_string(),
+                    "当前任务已经收口，下一步由 Goal Agent 明确给出项目完成决策。".to_string(),
+                )
+            } else {
+                (
+                    "resolve-completion-blockers".to_string(),
+                    "补齐完成前置条件".to_string(),
+                    "当前还有证据、交付、审计或目标满足度缺口，先补齐再做 completion accept。"
+                        .to_string(),
+                )
+            }
+        }
         CompletionDecisionState::Continue => (
             "start-project-loop".to_string(),
             "继续项目循环".to_string(),
@@ -1848,6 +2121,56 @@ mod tests {
         path
     }
 
+    fn write_completion_ready_artifacts(
+        root: &Path,
+        issue_id: &str,
+        run_id: &str,
+        public_delivery_written: bool,
+    ) {
+        let issue_root = root.join(".agentflow/tasks").join(issue_id);
+        let evidence_dir = issue_root.join("evidence");
+        let review_dir = issue_root.join("runs").join(run_id).join("review");
+        fs::create_dir_all(&evidence_dir).unwrap();
+        fs::create_dir_all(&review_dir).unwrap();
+        write_json(
+            &evidence_dir.join("evidence.json"),
+            &serde_json::json!({
+                "version": "task-evidence.v1",
+                "issueId": issue_id,
+                "runId": run_id,
+                "status": "ready",
+                "summary": "验证通过",
+                "runPath": format!(".agentflow/tasks/{issue_id}/runs/{run_id}/run.json"),
+                "commandPaths": [],
+                "validationPath": format!(".agentflow/tasks/{issue_id}/runs/{run_id}/validation.json"),
+                "createdAt": 1
+            }),
+        )
+        .unwrap();
+        write_json(
+            &review_dir.join("closeout-proof.json"),
+            &serde_json::json!({
+                "merged": true,
+                "issueClosed": true,
+                "publicDeliveryWritten": public_delivery_written,
+                "prUrl": "https://github.com/acme/repo/pull/1",
+                "mergeCommitSha": "merge-001",
+                "changelogPath": if public_delivery_written { Some("CHANGELOG.md") } else { None::<&str> },
+                "releaseNotesPath": if public_delivery_written { Some("docs/release-notes/test.md") } else { None::<&str> }
+            }),
+        )
+        .unwrap();
+    }
+
+    fn write_project_health(root: &Path, project_id: &str, marker: &str) {
+        let path = root
+            .join("docs/projects")
+            .join(project_id)
+            .join("PROJECT_HEALTH.md");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, format!("# PROJECT_HEALTH\n\n{marker}\n")).unwrap();
+    }
+
     #[test]
     fn prepare_creates_spec_workspace_layout() {
         let dir = tempdir().unwrap();
@@ -2180,8 +2503,9 @@ mod tests {
         assert_eq!(runtimes[0].facts.completed_issue_count, 1);
         assert_eq!(
             runtimes[0].next_recommended_action,
-            "enter-completion-decision"
+            "resolve-completion-blockers"
         );
+        assert_eq!(runtimes[0].facts.task_evidence_missing_count, 1);
     }
 
     #[test]
@@ -2198,6 +2522,7 @@ mod tests {
         project_draft.issue_ids = vec!["AF-COMP-002".to_string()];
         let project = project_from_requirement(dir.path(), &requirement, project_draft).unwrap();
         write_spec_project(dir.path(), &project).unwrap();
+        write_completion_ready_artifacts(dir.path(), "AF-COMP-002", "run-001", false);
         sync_completion_decision_runtimes(dir.path()).unwrap();
 
         let runtime = record_completion_decision(
@@ -2221,6 +2546,132 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| event.event_type == "project.accepted"));
+    }
+
+    #[test]
+    fn accept_completion_rejects_missing_evidence() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+        let mut issue_draft = SpecIssueDraft::new("AF-COMP-004");
+        issue_draft.project_id = Some("project-completion-no-evidence".to_string());
+        let mut issue = issue_from_requirement(dir.path(), &requirement, issue_draft).unwrap();
+        issue.status = SpecIssueStatus::Done;
+        write_spec_issue(dir.path(), &issue).unwrap();
+
+        let mut project_draft = SpecProjectDraft::new("project-completion-no-evidence");
+        project_draft.issue_ids = vec!["AF-COMP-004".to_string()];
+        let project = project_from_requirement(dir.path(), &requirement, project_draft).unwrap();
+        write_spec_project(dir.path(), &project).unwrap();
+        sync_completion_decision_runtimes(dir.path()).unwrap();
+
+        let err = record_completion_decision(
+            dir.path(),
+            "project-completion-no-evidence",
+            CompletionDecisionOutcome::Accept,
+            "goal-agent",
+            "尝试完成。",
+            vec!["证据缺失时不允许 Accept。".to_string()],
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("缺少验证证据"));
+    }
+
+    #[test]
+    fn accept_completion_rejects_failed_audit() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+        let mut issue_draft = SpecIssueDraft::new("AF-COMP-005");
+        issue_draft.project_id = Some("project-completion-failed-audit".to_string());
+        let mut issue = issue_from_requirement(dir.path(), &requirement, issue_draft).unwrap();
+        issue.status = SpecIssueStatus::Done;
+        write_spec_issue(dir.path(), &issue).unwrap();
+
+        let mut project_draft = SpecProjectDraft::new("project-completion-failed-audit");
+        project_draft.issue_ids = vec!["AF-COMP-005".to_string()];
+        let project = project_from_requirement(dir.path(), &requirement, project_draft).unwrap();
+        write_spec_project(dir.path(), &project).unwrap();
+        write_completion_ready_artifacts(dir.path(), "AF-COMP-005", "run-001", false);
+        fs::create_dir_all(dir.path().join(".agentflow/audit/audit-001")).unwrap();
+        write_json(
+            &dir.path().join(".agentflow/audit/index.json"),
+            &serde_json::json!({
+                "version": "audit-index.v1",
+                "updatedAt": 1,
+                "audits": [{
+                    "auditId": "audit-001",
+                    "status": "failed",
+                    "trigger": "human-via-agent",
+                    "requestedBy": "audit-agent",
+                    "requestedAt": 1,
+                    "sourceIssueId": "AF-COMP-005",
+                    "reportPath": ".agentflow/audit/audit-001/audit-report.md",
+                    "auditPath": ".agentflow/audit/audit-001/audit.json"
+                }]
+            }),
+        )
+        .unwrap();
+        write_json(
+            &dir.path()
+                .join(".agentflow/audit/audit-001/audit-report.json"),
+            &serde_json::json!({
+                "version": "audit-result-summary.v1",
+                "auditId": "audit-001",
+                "status": "failed",
+                "requestedAt": 1,
+                "sourceIssueId": "AF-COMP-005",
+                "reportPath": ".agentflow/audit/audit-001/audit-report.md",
+                "summaryLine": "审计失败。",
+                "findingsCount": 2,
+                "findings": ["high：交付不完整"],
+                "evidenceGaps": ["缺少公开交付记录"],
+                "repairRecommendations": ["补齐交付后重新审计"]
+            }),
+        )
+        .unwrap();
+        sync_completion_decision_runtimes(dir.path()).unwrap();
+
+        let err = record_completion_decision(
+            dir.path(),
+            "project-completion-failed-audit",
+            CompletionDecisionOutcome::Accept,
+            "goal-agent",
+            "尝试完成。",
+            vec!["审计失败时不允许 Accept。".to_string()],
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("审计当前处于 failed"));
+    }
+
+    #[test]
+    fn accept_completion_rejects_goal_recheck_gap() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+        let mut issue_draft = SpecIssueDraft::new("AF-COMP-006");
+        issue_draft.project_id = Some("project-completion-goal-gap".to_string());
+        let mut issue = issue_from_requirement(dir.path(), &requirement, issue_draft).unwrap();
+        issue.status = SpecIssueStatus::Done;
+        write_spec_issue(dir.path(), &issue).unwrap();
+
+        let mut project_draft = SpecProjectDraft::new("project-completion-goal-gap");
+        project_draft.issue_ids = vec!["AF-COMP-006".to_string()];
+        let project = project_from_requirement(dir.path(), &requirement, project_draft).unwrap();
+        write_spec_project(dir.path(), &project).unwrap();
+        write_completion_ready_artifacts(dir.path(), "AF-COMP-006", "run-001", false);
+        write_project_health(dir.path(), "project-completion-goal-gap", "draft");
+        sync_completion_decision_runtimes(dir.path()).unwrap();
+
+        let err = record_completion_decision(
+            dir.path(),
+            "project-completion-goal-gap",
+            CompletionDecisionOutcome::Accept,
+            "goal-agent",
+            "尝试完成。",
+            vec!["Goal Recheck 未通过时不允许 Accept。".to_string()],
+        )
+        .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("Goal Recheck 当前状态是 needs-recheck"));
     }
 
     #[test]

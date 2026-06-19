@@ -37,6 +37,12 @@ struct ProjectProjectionSnapshot {
 struct CompletionProjectionSnapshot {
     current_state: String,
     latest_outcome: Option<String>,
+    #[serde(default = "default_completion_release_readiness")]
+    release_readiness: String,
+}
+
+fn default_completion_release_readiness() -> String {
+    "blocked".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -504,6 +510,22 @@ fn evaluate_release_gate(projection: &ProjectProjectionSnapshot) -> ReleaseGate 
         };
     }
 
+    if projection
+        .completion
+        .as_ref()
+        .is_some_and(|completion| completion.release_readiness != "ready")
+    {
+        return ReleaseGate {
+            current_state: "blocked".to_string(),
+            gate_status: "blocked".to_string(),
+            gate_reason: "completion 已接受，但完成门仍缺少证据、交付、审计或目标满足度证明。"
+                .to_string(),
+            completion_state,
+            completion_outcome,
+            delivery_status,
+        };
+    }
+
     let delivery = projection.delivery.as_ref();
     if delivery.is_none() {
         return ReleaseGate {
@@ -682,6 +704,7 @@ mod tests {
         project_id: &str,
         completion_state: &str,
         completion_outcome: Option<&str>,
+        release_readiness: &str,
         delivery_status: &str,
         missing_count: usize,
     ) {
@@ -691,6 +714,7 @@ mod tests {
             "completion": {
                 "currentState": completion_state,
                 "latestOutcome": completion_outcome,
+                "releaseReadiness": release_readiness,
             },
             "delivery": {
                 "status": delivery_status,
@@ -747,6 +771,7 @@ mod tests {
             &project_id,
             "accepted",
             Some("accept"),
+            "ready",
             "published",
             0,
         );
@@ -802,6 +827,7 @@ mod tests {
             &project_id,
             "continue",
             Some("continue"),
+            "blocked-remaining-issues",
             "ready",
             0,
         );
@@ -823,6 +849,7 @@ mod tests {
             &project_id,
             "accepted",
             Some("accept"),
+            "blocked-missing-delivery",
             "ready",
             1,
         );
@@ -831,7 +858,7 @@ mod tests {
 
         assert_eq!(facts.current_state, "blocked");
         assert_eq!(facts.gate_status, "blocked");
-        assert!(facts.gate_reason.contains("公开交付"));
+        assert!(facts.gate_reason.contains("完成门"));
     }
 
     #[test]

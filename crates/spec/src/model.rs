@@ -555,6 +555,46 @@ pub struct CompletionDecisionFacts {
     pub canceled_issue_count: usize,
     pub remaining_issue_count: usize,
     pub blocked_issue_count: usize,
+    #[serde(default)]
+    pub task_evidence_ready_count: usize,
+    #[serde(default)]
+    pub task_evidence_missing_count: usize,
+    #[serde(default = "default_completion_delivery_status")]
+    pub delivery_status: String,
+    #[serde(default)]
+    pub delivery_missing_count: usize,
+    #[serde(default)]
+    pub audit_required: bool,
+    #[serde(default = "default_completion_audit_status")]
+    pub audit_status: String,
+    #[serde(default)]
+    pub audit_blocking_findings: usize,
+    #[serde(default = "default_completion_goal_recheck_status")]
+    pub goal_recheck_status: String,
+    #[serde(default = "default_completion_project_health_status")]
+    pub project_health_status: String,
+    #[serde(default = "default_completion_release_readiness")]
+    pub release_readiness: String,
+}
+
+fn default_completion_delivery_status() -> String {
+    "missing".to_string()
+}
+
+fn default_completion_audit_status() -> String {
+    "not-requested".to_string()
+}
+
+fn default_completion_goal_recheck_status() -> String {
+    "not-ready".to_string()
+}
+
+fn default_completion_project_health_status() -> String {
+    "missing".to_string()
+}
+
+fn default_completion_release_readiness() -> String {
+    "blocked".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
