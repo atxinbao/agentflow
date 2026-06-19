@@ -272,6 +272,24 @@ mod tests {
         .unwrap();
     }
 
+    fn write_release_manifest(root: &std::path::Path, project_id: &str) -> String {
+        let path = root
+            .join("artifacts")
+            .join(format!("{project_id}-release-manifest.json"));
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            serde_json::to_string_pretty(&serde_json::json!({
+                "projectId": project_id,
+                "artifacts": ["CHANGELOG.md", format!("docs/release-notes/{project_id}.md")],
+                "generatedBy": "desktop-runtime-test"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        format!("artifacts/{project_id}-release-manifest.json")
+    }
+
     #[test]
     fn project_runtime_commands_materialize_and_drive_completion_release() {
         let dir = tempdir().unwrap();
@@ -345,9 +363,35 @@ mod tests {
         let confirmed =
             release_confirm(dir.path().display().to_string(), project_id.clone()).unwrap();
         assert_eq!(confirmed.current_state, "in_progress");
+        assert_eq!(confirmed.publication_stage, "public-record-written");
+
+        let manifest_path = write_release_manifest(dir.path(), &project_id);
+        let tagged = agentflow_release::record_project_release_tag(
+            dir.path(),
+            &project_id,
+            "v0.3.1",
+            "tag-058e",
+            "release-agent",
+        )
+        .unwrap();
+        assert_eq!(tagged.publication_stage, "tag-created");
+        let remote = agentflow_release::record_project_remote_release(
+            dir.path(),
+            &project_id,
+            "github",
+            "rel-058e",
+            "https://github.com/acme/repo/releases/tag/v0.3.1",
+            "v0.3.1",
+            "tag-058e",
+            &manifest_path,
+            "release-agent",
+        )
+        .unwrap();
+        assert_eq!(remote.publication_stage, "remote-release-created");
 
         let published =
             release_publish(dir.path().display().to_string(), project_id.clone()).unwrap();
         assert_eq!(published.current_state, "published");
+        assert_eq!(published.publication_stage, "published");
     }
 }

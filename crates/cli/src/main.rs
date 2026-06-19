@@ -15,7 +15,7 @@ use clap::Parser;
 use formal::{
     completion_decide, completion_inspect, project_confirm_goal, project_confirm_plan,
     project_intake, project_materialize, project_preview_goal, release_confirm, release_prepare,
-    release_publish,
+    release_publish, release_record_remote, release_record_tag,
 };
 
 fn main() -> anyhow::Result<()> {
@@ -246,6 +246,39 @@ fn main() -> anyhow::Result<()> {
             }
             ReleaseCommand::Confirm { project_id } => {
                 let facts = release_confirm(&cwd, &project_id)?;
+                println!("{}", serde_json::to_string_pretty(&facts)?);
+            }
+            ReleaseCommand::RecordTag {
+                project_id,
+                tag_name,
+                tag_commit_sha,
+                actor,
+            } => {
+                let facts =
+                    release_record_tag(&cwd, &project_id, &tag_name, &tag_commit_sha, &actor)?;
+                println!("{}", serde_json::to_string_pretty(&facts)?);
+            }
+            ReleaseCommand::RecordRemote {
+                project_id,
+                provider,
+                release_id,
+                release_url,
+                tag_name,
+                release_commit_sha,
+                artifact_manifest_path,
+                actor,
+            } => {
+                let facts = release_record_remote(
+                    &cwd,
+                    &project_id,
+                    &provider,
+                    &release_id,
+                    &release_url,
+                    &tag_name,
+                    &release_commit_sha,
+                    &artifact_manifest_path,
+                    &actor,
+                )?;
                 println!("{}", serde_json::to_string_pretty(&facts)?);
             }
             ReleaseCommand::Publish { project_id } => {

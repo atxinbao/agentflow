@@ -14,10 +14,12 @@ pub use model::{
     ProjectDeliverySummary, ProjectExternalReviewIndex, ProjectExternalReviewIndexEntry,
     ProjectExternalReviewSurface, ProjectReleaseFacts, ProjectReleaseIndex,
     ProjectReleaseIndexEntry, PublicReleaseDocumentPaths, PublicReleaseDocumentTarget,
-    PublicReleaseEntry, PublicReleaseSummary, DELIVERY_SUMMARY_VERSION,
-    PROJECT_DELIVERY_SUMMARY_VERSION, PROJECT_EXTERNAL_REVIEW_INDEX_VERSION,
-    PROJECT_EXTERNAL_REVIEW_SURFACE_VERSION, PROJECT_RELEASE_FACTS_VERSION,
-    PROJECT_RELEASE_INDEX_VERSION, PUBLIC_RELEASE_SUMMARY_VERSION,
+    PublicReleaseEntry, PublicReleaseSummary, ReleaseTagProof, RemoteReleaseProof,
+    CHANGELOG_TEMPLATE_VERSION, DELIVERY_SUMMARY_VERSION, PROJECT_DELIVERY_SUMMARY_VERSION,
+    PROJECT_EXTERNAL_REVIEW_INDEX_VERSION, PROJECT_EXTERNAL_REVIEW_SURFACE_VERSION,
+    PROJECT_RELEASE_FACTS_VERSION, PROJECT_RELEASE_INDEX_VERSION, PUBLIC_RELEASE_SUMMARY_VERSION,
+    RELEASE_NOTES_TEMPLATE_VERSION, RELEASE_TAG_PROOF_VERSION, REMOTE_RELEASE_PROOF_VERSION,
+    TASK_PUBLIC_RECORD_TEMPLATE_VERSION,
 };
 pub use public_delivery::{
     collect_public_release_summary, collect_public_release_summary_for_project,
@@ -28,5 +30,6 @@ pub use review_surface::{
 };
 pub use runtime::{
     confirm_project_release, load_project_release_facts, load_project_release_index,
-    prepare_project_release, publish_project_release, sync_project_release,
+    prepare_project_release, publish_project_release, record_project_release_tag,
+    record_project_remote_release, sync_project_release,
 };

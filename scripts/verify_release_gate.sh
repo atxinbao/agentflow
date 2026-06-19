@@ -86,7 +86,47 @@ for index, issue in enumerate(materialized["issues"], start=1):
     issue_path.write_text(json.dumps(issue_doc, ensure_ascii=False, indent=2) + "\n")
 
     issue_id = issue["issueId"]
+    run_id = f"run-{index:03d}"
     expected_outputs = issue.get("expectedOutputs", {})
+    issue_root = root / ".agentflow" / "tasks" / issue_id
+    evidence_dir = issue_root / "evidence"
+    review_dir = issue_root / "runs" / run_id / "review"
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    review_dir.mkdir(parents=True, exist_ok=True)
+    (evidence_dir / "evidence.json").write_text(
+        json.dumps(
+            {
+                "version": "task-evidence.v1",
+                "issueId": issue_id,
+                "runId": run_id,
+                "status": "ready",
+                "summary": "release gate e2e local verification passed",
+                "runPath": f".agentflow/tasks/{issue_id}/runs/{run_id}/run.json",
+                "commandPaths": [],
+                "validationPath": f".agentflow/tasks/{issue_id}/runs/{run_id}/validation.json",
+                "createdAt": now + index,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n"
+    )
+    (review_dir / "closeout-proof.json").write_text(
+        json.dumps(
+            {
+                "merged": True,
+                "issueClosed": True,
+                "publicDeliveryWritten": True,
+                "prUrl": f"https://github.com/example/agentflow/pull/{index}",
+                "mergeCommitSha": f"merge-058h-{index:03d}",
+                "changelogPath": "CHANGELOG.md",
+                "releaseNotesPath": f"docs/release-notes/{project_id}.md",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n"
+    )
     projection_payload = {
         "issueId": issue_id,
         "projectId": project_id,
@@ -125,6 +165,31 @@ run_json artifacts-completion-decide.json \
 "$BIN" projection rebuild > artifacts-projection-after-completion.txt
 run_json artifacts-release-prepare.json release prepare --project-id project-release-gate-e2e
 run_json artifacts-release-confirm.json release confirm --project-id project-release-gate-e2e
+mkdir -p artifacts
+cat > artifacts/project-release-gate-e2e-release-manifest.json <<'EOF'
+{
+  "projectId": "project-release-gate-e2e",
+  "artifacts": [
+    "CHANGELOG.md",
+    "docs/release-notes/project-release-gate-e2e.md"
+  ],
+  "generatedBy": "verify_release_gate.sh"
+}
+EOF
+run_json artifacts-release-record-tag.json \
+  release record-tag \
+  --project-id project-release-gate-e2e \
+  --tag-name v0.3.1-e2e \
+  --tag-commit-sha e2e-tag-commit-001
+run_json artifacts-release-record-remote.json \
+  release record-remote \
+  --project-id project-release-gate-e2e \
+  --provider github \
+  --release-id rel-e2e-001 \
+  --release-url https://github.com/example/agentflow/releases/tag/v0.3.1-e2e \
+  --tag-name v0.3.1-e2e \
+  --release-commit-sha e2e-tag-commit-001 \
+  --artifact-manifest-path artifacts/project-release-gate-e2e-release-manifest.json
 run_json artifacts-release-publish.json release publish --project-id project-release-gate-e2e
 "$BIN" release summary > artifacts-release-summary.txt
 
@@ -157,6 +222,8 @@ public_paths = {
 runtime_paths = {
     root / ".agentflow" / "release" / "projects" / f"{project_id}.json": runtime_dir / "release-facts.json",
     root / ".agentflow" / "release" / "reviews" / f"{project_id}.json": runtime_dir / "external-review-surface.json",
+    root / ".agentflow" / "release" / "proofs" / project_id / "tag.json": runtime_dir / "release-tag-proof.json",
+    root / ".agentflow" / "release" / "proofs" / project_id / "remote-release.json": runtime_dir / "remote-release-proof.json",
     root / ".agentflow" / "indexes" / "releases.json": runtime_dir / "release-index.json",
     root / ".agentflow" / "indexes" / "external-reviews.json": runtime_dir / "external-review-index.json",
 }
@@ -172,9 +239,12 @@ summary = {
     "projectId": project_id,
     "issueCount": len(materialized["issues"]),
     "releaseState": release_facts["currentState"],
+    "publicationStage": release_facts["publicationStage"],
     "gateStatus": release_facts["gateStatus"],
     "completionState": release_facts["completionState"],
     "completionOutcome": release_facts["completionOutcome"],
+    "tagName": release_facts.get("tagName"),
+    "remoteReleaseUrl": release_facts.get("remoteReleaseUrl"),
     "changelogPath": release_facts["changelogPath"],
     "releaseNotesPath": release_facts["releaseNotesPath"],
     "externalReviewPath": external_review["handoffPath"],
@@ -191,7 +261,10 @@ markdown = f"""# Release Gate E2E Summary
 - Issues: `{summary["issueCount"]}`
 - Completion: `{summary["completionState"]}` / `{summary["completionOutcome"]}`
 - Release: `{summary["releaseState"]}`
+- Publication Stage: `{summary["publicationStage"]}`
 - Gate: `{summary["gateStatus"]}`
+- Tag: `{summary["tagName"]}`
+- Remote Release: `{summary["remoteReleaseUrl"]}`
 - Entries: `{summary["entryCount"]}`
 - Latest Event: `{summary["latestEventId"]}`
 - Changelog: `{summary["changelogPath"]}`

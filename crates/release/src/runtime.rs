@@ -1,6 +1,8 @@
 use crate::model::{
     ProjectReleaseFacts, ProjectReleaseIndex, ProjectReleaseIndexEntry,
-    PublicReleaseDocumentTarget, PROJECT_RELEASE_FACTS_VERSION, PROJECT_RELEASE_INDEX_VERSION,
+    PublicReleaseDocumentTarget, ReleaseTagProof, RemoteReleaseProof,
+    PROJECT_RELEASE_FACTS_VERSION, PROJECT_RELEASE_INDEX_VERSION, RELEASE_TAG_PROOF_VERSION,
+    REMOTE_RELEASE_PROOF_VERSION,
 };
 use crate::public_delivery::{
     collect_public_release_summary_for_project, write_public_release_documents,
@@ -15,6 +17,7 @@ use agentflow_workflow_runtime::{
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -75,6 +78,54 @@ struct ReleaseRuntimeContext {
     existing: Option<ProjectReleaseFacts>,
 }
 
+const PUBLICATION_STAGE_PENDING: &str = "pending";
+const PUBLICATION_STAGE_PUBLIC_RECORD_WRITTEN: &str = "public-record-written";
+const PUBLICATION_STAGE_TAG_CREATED: &str = "tag-created";
+const PUBLICATION_STAGE_REMOTE_RELEASE_CREATED: &str = "remote-release-created";
+const PUBLICATION_STAGE_PUBLISHED: &str = "published";
+
+fn publication_stage_rank(stage: &str) -> usize {
+    match stage {
+        PUBLICATION_STAGE_PENDING => 0,
+        PUBLICATION_STAGE_PUBLIC_RECORD_WRITTEN => 1,
+        PUBLICATION_STAGE_TAG_CREATED => 2,
+        PUBLICATION_STAGE_REMOTE_RELEASE_CREATED => 3,
+        PUBLICATION_STAGE_PUBLISHED => 4,
+        _ => 0,
+    }
+}
+
+fn release_summary_line(
+    current_state: &str,
+    publication_stage: &str,
+    target: &PublicReleaseDocumentTarget,
+    gate_reason: &str,
+) -> String {
+    match current_state {
+        "published" => "Release 已发布，远端发布证明与公开记录已经对齐。".to_string(),
+        "in_progress" => match publication_stage {
+            PUBLICATION_STAGE_REMOTE_RELEASE_CREATED => {
+                "远端 Release 证明已写入，下一步可以正式标记 published。".to_string()
+            }
+            PUBLICATION_STAGE_TAG_CREATED => {
+                "Release Tag 证明已写入，下一步需要记录远端 Release 证明。".to_string()
+            }
+            PUBLICATION_STAGE_PUBLIC_RECORD_WRITTEN => {
+                "Release 公开记录已写入，下一步需要记录 Tag 证明。".to_string()
+            }
+            _ => "Release 已确认，正在等待公开记录写入。".to_string(),
+        },
+        "ready" => "Release 已准备好，等待确认发布内容。".to_string(),
+        "blocked" => format!("Release 已阻断：{}。", gate_reason),
+        _ if publication_stage == PUBLICATION_STAGE_PUBLIC_RECORD_WRITTEN => format!(
+            "Release 公开记录已写入 {} 和 {}。",
+            target.changelog_path.display(),
+            target.release_notes_path.display()
+        ),
+        _ => gate_reason.to_string(),
+    }
+}
+
 pub fn prepare_project_release(
     project_root: impl AsRef<Path>,
     project_id: impl AsRef<str>,
@@ -91,7 +142,7 @@ pub fn prepare_project_release(
     }
 
     if context.gate.gate_status != "ready" {
-        return write_release_gate_state(
+        let facts = build_release_facts(
             &context,
             context.gate.current_state.clone(),
             context.gate.gate_status.clone(),
@@ -107,6 +158,7 @@ pub fn prepare_project_release(
                 .and_then(|facts| facts.published_at),
             now,
         );
+        return persist_release_facts(&context, facts);
     }
 
     let summary = collect_public_release_summary_for_project(
@@ -114,7 +166,7 @@ pub fn prepare_project_release(
         Some(context.project_id.as_str()),
     )?;
     if summary.entries.is_empty() {
-        return write_release_gate_state(
+        let facts = build_release_facts(
             &context,
             "blocked".to_string(),
             "blocked".to_string(),
@@ -130,6 +182,7 @@ pub fn prepare_project_release(
                 .and_then(|facts| facts.published_at),
             now,
         );
+        return persist_release_facts(&context, facts);
     }
 
     let existing_state = context
@@ -166,12 +219,27 @@ pub fn prepare_project_release(
         "ready"
     };
     let persisted_reason = if persisted_state == "in_progress" {
-        "Release 说明已确认，正在等待正式发布。"
+        match context
+            .existing
+            .as_ref()
+            .map(|facts| facts.publication_stage.as_str())
+        {
+            Some(PUBLICATION_STAGE_REMOTE_RELEASE_CREATED) => {
+                "远端 Release 证明已写入，下一步可以正式标记 published。"
+            }
+            Some(PUBLICATION_STAGE_TAG_CREATED) => {
+                "Release Tag 已记录，正在等待远端 Release 证明。"
+            }
+            Some(PUBLICATION_STAGE_PUBLIC_RECORD_WRITTEN) => {
+                "Release 公开记录已写入，正在等待 Tag 证明。"
+            }
+            _ => "Release 说明已确认，正在等待正式发布。",
+        }
     } else {
         "Release 已就绪，下一步可以确认并生成公开说明。"
     };
 
-    write_release_gate_state(
+    let facts = build_release_facts(
         &context,
         persisted_state.to_string(),
         "ready".to_string(),
@@ -183,7 +251,8 @@ pub fn prepare_project_release(
             .as_ref()
             .and_then(|facts| facts.published_at),
         now,
-    )
+    );
+    persist_release_facts(&context, facts)
 }
 
 pub fn confirm_project_release(
@@ -208,7 +277,9 @@ pub fn confirm_project_release(
             prepared.current_state
         );
     }
-    if prepared.current_state == "in_progress" {
+    if prepared.current_state == "in_progress"
+        && prepared.publication_stage != PUBLICATION_STAGE_PENDING
+    {
         return Ok(prepared);
     }
 
@@ -231,16 +302,207 @@ pub fn confirm_project_release(
     )?
     .or(prepared.latest_event_id.clone());
 
-    write_release_gate_state(
+    let mut facts = build_release_facts(
         &context,
         "in_progress".to_string(),
         "ready".to_string(),
-        "Release 说明已确认，公开记录已生成，下一步可以正式发布。".to_string(),
+        "Release 公开记录已生成，下一步需要记录 Tag 证明。".to_string(),
         summary.entries.len(),
         latest_event_id,
         prepared.published_at,
         now,
-    )
+    );
+    facts.publication_stage = PUBLICATION_STAGE_PUBLIC_RECORD_WRITTEN.to_string();
+    facts.public_record_written_at = Some(now);
+    facts.changelog_path = paths.changelog_path;
+    facts.release_notes_path = paths.release_notes_path;
+    facts.summary_line = release_summary_line(
+        facts.current_state.as_str(),
+        facts.publication_stage.as_str(),
+        &context.target,
+        facts.gate_reason.as_str(),
+    );
+    persist_release_facts(&context, facts)
+}
+
+pub fn record_project_release_tag(
+    project_root: impl AsRef<Path>,
+    project_id: impl AsRef<str>,
+    tag_name: impl AsRef<str>,
+    tag_commit_sha: impl AsRef<str>,
+    actor: impl AsRef<str>,
+) -> Result<ProjectReleaseFacts> {
+    let context = build_release_runtime_context(project_root, project_id)?;
+    let now = unix_timestamp_seconds();
+    let confirmed = confirm_project_release(&context.root, &context.project_id)?;
+    if confirmed.current_state != "in_progress" {
+        anyhow::bail!(
+            "release record-tag requires in_progress state, found {}",
+            confirmed.current_state
+        );
+    }
+
+    let tag_name = tag_name.as_ref().trim();
+    let tag_commit_sha = tag_commit_sha.as_ref().trim();
+    let actor = actor.as_ref().trim();
+    if tag_name.is_empty() || tag_commit_sha.is_empty() || actor.is_empty() {
+        anyhow::bail!("release tag proof requires tag name, commit sha, and actor");
+    }
+
+    let proof = ReleaseTagProof {
+        version: RELEASE_TAG_PROOF_VERSION.to_string(),
+        project_id: context.project_id.clone(),
+        tag_name: tag_name.to_string(),
+        tag_commit_sha: tag_commit_sha.to_string(),
+        actor: actor.to_string(),
+        recorded_at: now,
+    };
+    let proof_relative_path = project_release_tag_proof_path(&context.project_id)?;
+    let proof_path = join_relative_path(&context.root, proof_relative_path.clone())?;
+    write_json(&proof_path, &proof)?;
+
+    let summary = collect_public_release_summary_for_project(
+        &context.root,
+        Some(context.project_id.as_str()),
+    )?;
+    let mut facts = build_release_facts(
+        &context,
+        "in_progress".to_string(),
+        "ready".to_string(),
+        "Release Tag 证明已写入，下一步需要记录远端 Release 证明。".to_string(),
+        summary.entries.len(),
+        confirmed.latest_event_id.clone(),
+        confirmed.published_at,
+        now,
+    );
+    facts.publication_stage = PUBLICATION_STAGE_TAG_CREATED.to_string();
+    facts.public_record_written_at = confirmed.public_record_written_at.or(Some(now));
+    facts.tag_name = Some(tag_name.to_string());
+    facts.tag_commit_sha = Some(tag_commit_sha.to_string());
+    facts.tag_proof_path = Some(proof_relative_path.display().to_string());
+    facts.summary_line = release_summary_line(
+        facts.current_state.as_str(),
+        facts.publication_stage.as_str(),
+        &context.target,
+        facts.gate_reason.as_str(),
+    );
+    persist_release_facts(&context, facts)
+}
+
+pub fn record_project_remote_release(
+    project_root: impl AsRef<Path>,
+    project_id: impl AsRef<str>,
+    provider: impl AsRef<str>,
+    release_id: impl AsRef<str>,
+    release_url: impl AsRef<str>,
+    tag_name: impl AsRef<str>,
+    release_commit_sha: impl AsRef<str>,
+    artifact_manifest_path: impl AsRef<str>,
+    actor: impl AsRef<str>,
+) -> Result<ProjectReleaseFacts> {
+    let context = build_release_runtime_context(project_root, project_id)?;
+    let now = unix_timestamp_seconds();
+    let tagged = if context.existing.as_ref().is_some_and(|facts| {
+        publication_stage_rank(facts.publication_stage.as_str())
+            >= publication_stage_rank(PUBLICATION_STAGE_TAG_CREATED)
+    }) {
+        context.existing.clone().unwrap()
+    } else {
+        let existing = context.existing.as_ref();
+        record_project_release_tag(
+            &context.root,
+            &context.project_id,
+            tag_name.as_ref(),
+            existing
+                .and_then(|facts| facts.tag_commit_sha.as_deref())
+                .unwrap_or_else(|| release_commit_sha.as_ref()),
+            actor.as_ref(),
+        )?
+    };
+    if tagged.current_state != "in_progress" {
+        anyhow::bail!(
+            "release record-remote requires in_progress state, found {}",
+            tagged.current_state
+        );
+    }
+
+    let provider = provider.as_ref().trim();
+    let release_id = release_id.as_ref().trim();
+    let release_url = release_url.as_ref().trim();
+    let tag_name = tag_name.as_ref().trim();
+    let release_commit_sha = release_commit_sha.as_ref().trim();
+    let artifact_manifest_path = artifact_manifest_path.as_ref().trim();
+    let actor = actor.as_ref().trim();
+    if provider.is_empty()
+        || release_id.is_empty()
+        || release_url.is_empty()
+        || tag_name.is_empty()
+        || release_commit_sha.is_empty()
+        || artifact_manifest_path.is_empty()
+        || actor.is_empty()
+    {
+        anyhow::bail!(
+            "remote release proof requires provider, release id/url, tag, commit sha, artifact manifest path, and actor"
+        );
+    }
+
+    let manifest_path = resolve_workspace_path(&context.root, artifact_manifest_path)?;
+    let manifest_sha256 = sha256_file(&manifest_path)?;
+    let manifest_display = workspace_or_absolute_display(&context.root, &manifest_path);
+    let proof = RemoteReleaseProof {
+        version: REMOTE_RELEASE_PROOF_VERSION.to_string(),
+        project_id: context.project_id.clone(),
+        provider: provider.to_string(),
+        release_id: release_id.to_string(),
+        release_url: release_url.to_string(),
+        tag_name: tag_name.to_string(),
+        release_commit_sha: release_commit_sha.to_string(),
+        artifact_manifest_path: Some(manifest_display.clone()),
+        artifact_manifest_sha256: Some(manifest_sha256.clone()),
+        actor: actor.to_string(),
+        recorded_at: now,
+    };
+    let proof_relative_path = project_remote_release_proof_path(&context.project_id)?;
+    let proof_path = join_relative_path(&context.root, proof_relative_path.clone())?;
+    write_json(&proof_path, &proof)?;
+
+    let summary = collect_public_release_summary_for_project(
+        &context.root,
+        Some(context.project_id.as_str()),
+    )?;
+    let mut facts = build_release_facts(
+        &context,
+        "in_progress".to_string(),
+        "ready".to_string(),
+        "远端 Release 证明已写入，下一步可以正式标记 published。".to_string(),
+        summary.entries.len(),
+        tagged.latest_event_id.clone(),
+        tagged.published_at,
+        now,
+    );
+    facts.publication_stage = PUBLICATION_STAGE_REMOTE_RELEASE_CREATED.to_string();
+    facts.public_record_written_at = tagged.public_record_written_at.or(Some(now));
+    facts.tag_name = Some(tag_name.to_string());
+    facts.tag_commit_sha = Some(
+        tagged
+            .tag_commit_sha
+            .unwrap_or_else(|| release_commit_sha.to_string()),
+    );
+    facts.tag_proof_path = tagged.tag_proof_path;
+    facts.remote_provider = Some(provider.to_string());
+    facts.remote_release_id = Some(release_id.to_string());
+    facts.remote_release_url = Some(release_url.to_string());
+    facts.remote_release_commit_sha = Some(release_commit_sha.to_string());
+    facts.remote_release_proof_path = Some(proof_relative_path.display().to_string());
+    facts.artifact_manifest_path = Some(manifest_display);
+    facts.artifact_manifest_sha256 = Some(manifest_sha256);
+    facts.summary_line = release_summary_line(
+        facts.current_state.as_str(),
+        facts.publication_stage.as_str(),
+        &context.target,
+        facts.gate_reason.as_str(),
+    );
+    persist_release_facts(&context, facts)
 }
 
 pub fn publish_project_release(
@@ -265,6 +527,12 @@ pub fn publish_project_release(
             confirmed.current_state
         );
     }
+    if confirmed.publication_stage != PUBLICATION_STAGE_REMOTE_RELEASE_CREATED {
+        anyhow::bail!(
+            "release publish requires remote release proof, found publication stage {}",
+            confirmed.publication_stage
+        );
+    }
 
     let summary = collect_public_release_summary_for_project(
         &context.root,
@@ -285,16 +553,24 @@ pub fn publish_project_release(
     )?
     .or(confirmed.latest_event_id.clone());
 
-    write_release_gate_state(
+    let mut facts = build_release_facts(
         &context,
         "published".to_string(),
         "ready".to_string(),
-        "Release 已发布。".to_string(),
+        "Release 已发布，远端发布证明与公开记录已对齐。".to_string(),
         summary.entries.len(),
         latest_event_id,
         Some(now),
         now,
-    )
+    );
+    facts.publication_stage = PUBLICATION_STAGE_PUBLISHED.to_string();
+    facts.summary_line = release_summary_line(
+        facts.current_state.as_str(),
+        facts.publication_stage.as_str(),
+        &context.target,
+        facts.gate_reason.as_str(),
+    );
+    persist_release_facts(&context, facts)
 }
 
 pub fn sync_project_release(
@@ -306,7 +582,9 @@ pub fn sync_project_release(
         return Ok(prepared);
     }
     let confirmed = confirm_project_release(&project_root, project_id.as_ref())?;
-    if confirmed.current_state != "in_progress" {
+    if confirmed.current_state != "in_progress"
+        || confirmed.publication_stage != PUBLICATION_STAGE_REMOTE_RELEASE_CREATED
+    {
         return Ok(confirmed);
     }
     publish_project_release(project_root, project_id)
@@ -354,11 +632,11 @@ fn refresh_published_release(
         Some(context.project_id.as_str()),
     )?;
     let paths = write_public_release_documents(&context.root, &summary, &context.target)?;
-    write_release_gate_state(
+    let mut facts = build_release_facts(
         context,
         "published".to_string(),
         "ready".to_string(),
-        "Release 已经发布。".to_string(),
+        "Release 已经发布，远端发布证明仍然有效。".to_string(),
         summary.entries.len(),
         context
             .existing
@@ -370,15 +648,14 @@ fn refresh_published_release(
             .and_then(|facts| facts.published_at)
             .or(Some(now)),
         now,
-    )
-    .map(|mut facts| {
-        facts.changelog_path = paths.changelog_path;
-        facts.release_notes_path = paths.release_notes_path;
-        facts
-    })
+    );
+    facts.publication_stage = PUBLICATION_STAGE_PUBLISHED.to_string();
+    facts.changelog_path = paths.changelog_path;
+    facts.release_notes_path = paths.release_notes_path;
+    persist_release_facts(context, facts)
 }
 
-fn write_release_gate_state(
+fn build_release_facts(
     context: &ReleaseRuntimeContext,
     current_state: String,
     gate_status: String,
@@ -387,37 +664,88 @@ fn write_release_gate_state(
     latest_event_id: Option<String>,
     published_at: Option<u64>,
     now: u64,
-) -> Result<ProjectReleaseFacts> {
-    let summary_line = match current_state.as_str() {
-        "published" => format!(
-            "Release 已发布，公开记录写入 {} 和 {}。",
-            context.target.changelog_path.display(),
-            context.target.release_notes_path.display()
-        ),
-        "in_progress" => "Release 已确认，正在等待正式发布。".to_string(),
-        "ready" => "Release 已准备好，等待确认发布内容。".to_string(),
-        "blocked" => format!("Release 已阻断：{}。", gate_reason),
-        _ => gate_reason.clone(),
-    };
+) -> ProjectReleaseFacts {
+    let inherited_publication_stage = context
+        .existing
+        .as_ref()
+        .map(|facts| facts.publication_stage.clone())
+        .unwrap_or_else(|| PUBLICATION_STAGE_PENDING.to_string());
+    let summary_line = release_summary_line(
+        current_state.as_str(),
+        inherited_publication_stage.as_str(),
+        &context.target,
+        &gate_reason,
+    );
 
-    let facts = ProjectReleaseFacts {
+    ProjectReleaseFacts {
         version: PROJECT_RELEASE_FACTS_VERSION.to_string(),
         project_id: context.projection.project_id.clone(),
         project_title: context.projection.title.clone(),
         current_state,
+        publication_stage: inherited_publication_stage,
         gate_status,
         gate_reason,
         completion_state: context.gate.completion_state.clone(),
         completion_outcome: context.gate.completion_outcome.clone(),
         delivery_status: context.gate.delivery_status.clone(),
+        public_record_written_at: context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.public_record_written_at),
         changelog_path: context.target.changelog_path.display().to_string(),
         release_notes_path: context.target.release_notes_path.display().to_string(),
         entry_count,
         summary_line,
+        tag_name: context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.tag_name.clone()),
+        tag_commit_sha: context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.tag_commit_sha.clone()),
+        tag_proof_path: context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.tag_proof_path.clone()),
+        remote_provider: context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.remote_provider.clone()),
+        remote_release_id: context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.remote_release_id.clone()),
+        remote_release_url: context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.remote_release_url.clone()),
+        remote_release_commit_sha: context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.remote_release_commit_sha.clone()),
+        remote_release_proof_path: context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.remote_release_proof_path.clone()),
+        artifact_manifest_path: context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.artifact_manifest_path.clone()),
+        artifact_manifest_sha256: context
+            .existing
+            .as_ref()
+            .and_then(|facts| facts.artifact_manifest_sha256.clone()),
         latest_event_id,
         published_at,
         updated_at: now,
-    };
+    }
+}
+
+fn persist_release_facts(
+    context: &ReleaseRuntimeContext,
+    facts: ProjectReleaseFacts,
+) -> Result<ProjectReleaseFacts> {
     write_project_release_facts(&context.root, &facts)?;
     write_project_release_index(&context.root)?;
     sync_project_external_review_surface(&context.root, &facts)?;
@@ -598,6 +926,7 @@ fn write_project_release_index(root: &Path) -> Result<()> {
         releases.push(ProjectReleaseIndexEntry {
             project_id: facts.project_id,
             current_state: facts.current_state,
+            publication_stage: facts.publication_stage,
             gate_status: facts.gate_status,
             changelog_path: facts.changelog_path,
             release_notes_path: facts.release_notes_path,
@@ -627,12 +956,56 @@ fn project_release_facts_path(root: &Path, project_id: &str) -> Result<PathBuf> 
     )
 }
 
+fn project_release_tag_proof_path(project_id: &str) -> Result<PathBuf> {
+    let project_id = ProjectId::parse(project_id)?;
+    Ok(PathBuf::from(".agentflow")
+        .join("release")
+        .join("proofs")
+        .join(project_id.as_str())
+        .join("tag.json"))
+}
+
+fn project_remote_release_proof_path(project_id: &str) -> Result<PathBuf> {
+    let project_id = ProjectId::parse(project_id)?;
+    Ok(PathBuf::from(".agentflow")
+        .join("release")
+        .join("proofs")
+        .join(project_id.as_str())
+        .join("remote-release.json"))
+}
+
 fn default_project_release_target(project_id: &str) -> Result<PublicReleaseDocumentTarget> {
     let project_id = ProjectId::parse(project_id)?;
     Ok(PublicReleaseDocumentTarget {
         changelog_path: PathBuf::from("CHANGELOG.md"),
         release_notes_path: PathBuf::from(format!("docs/release-notes/{}.md", project_id.as_str())),
     })
+}
+
+fn resolve_workspace_path(root: &Path, raw: &str) -> Result<PathBuf> {
+    let candidate = PathBuf::from(raw);
+    let path = if candidate.is_absolute() {
+        candidate
+    } else {
+        root.join(candidate)
+    };
+    if !path.is_file() {
+        anyhow::bail!("release artifact manifest is missing: {}", path.display());
+    }
+    Ok(path)
+}
+
+fn workspace_or_absolute_display(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .map(|relative| relative.display().to_string())
+        .unwrap_or_else(|_| path.display().to_string())
+}
+
+fn sha256_file(path: &Path) -> Result<String> {
+    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn ensure_directory(path: &Path) -> Result<()> {
@@ -761,8 +1134,26 @@ mod tests {
         .unwrap();
     }
 
+    fn write_release_manifest(root: &Path, project_id: &str) -> String {
+        let path = root
+            .join("artifacts")
+            .join(format!("{project_id}-release-manifest.json"));
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            serde_json::to_string_pretty(&serde_json::json!({
+                "projectId": project_id,
+                "artifacts": ["CHANGELOG.md", format!("docs/release-notes/{project_id}.md")],
+                "generatedBy": "release-runtime-test"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        format!("artifacts/{project_id}-release-manifest.json")
+    }
+
     #[test]
-    fn sync_project_release_publishes_release_facts_and_public_docs() {
+    fn sync_project_release_stops_at_public_record_written_without_remote_proof() {
         let dir = tempdir().unwrap();
         let project_id = write_project_fixture(dir.path());
         write_task_projection(dir.path(), "AF-REL-001", &project_id);
@@ -784,16 +1175,13 @@ mod tests {
             .map(|event| event.event_type)
             .collect::<Vec<_>>();
 
-        assert_eq!(facts.current_state, "published");
+        assert_eq!(facts.current_state, "in_progress");
+        assert_eq!(facts.publication_stage, "public-record-written");
         assert_eq!(facts.gate_status, "ready");
         assert_eq!(facts.entry_count, 1);
         assert_eq!(
             delivery_events,
-            vec![
-                "delivery.ready".to_string(),
-                "delivery.started".to_string(),
-                "delivery.published".to_string(),
-            ]
+            vec!["delivery.ready".to_string(), "delivery.started".to_string(),]
         );
         assert!(dir.path().join("CHANGELOG.md").is_file());
         assert!(dir
@@ -811,10 +1199,85 @@ mod tests {
         let review =
             crate::review_surface::load_project_external_review_surface(dir.path(), &project_id)
                 .unwrap();
-        assert_eq!(review.review_status, "ready");
+        assert_eq!(review.review_status, "not-ready");
         assert_eq!(review.total_entries, 1);
         let index = load_project_release_index(dir.path()).unwrap();
         assert_eq!(index.releases.len(), 1);
+        assert_eq!(index.releases[0].publication_stage, "public-record-written");
+    }
+
+    #[test]
+    fn publish_project_release_requires_remote_release_proof() {
+        let dir = tempdir().unwrap();
+        let project_id = write_project_fixture(dir.path());
+        write_task_projection(dir.path(), "AF-REL-001", &project_id);
+        write_project_projection(
+            dir.path(),
+            &project_id,
+            "accepted",
+            Some("accept"),
+            "ready",
+            "published",
+            0,
+        );
+
+        let confirmed = confirm_project_release(dir.path(), &project_id).unwrap();
+        assert_eq!(confirmed.publication_stage, "public-record-written");
+        let err = publish_project_release(dir.path(), &project_id)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("remote release proof"));
+    }
+
+    #[test]
+    fn release_publish_requires_tag_and_remote_proof_chain() {
+        let dir = tempdir().unwrap();
+        let project_id = write_project_fixture(dir.path());
+        write_task_projection(dir.path(), "AF-REL-001", &project_id);
+        write_project_projection(
+            dir.path(),
+            &project_id,
+            "accepted",
+            Some("accept"),
+            "ready",
+            "published",
+            0,
+        );
+
+        let confirmed = confirm_project_release(dir.path(), &project_id).unwrap();
+        assert_eq!(confirmed.publication_stage, "public-record-written");
+        let tagged = record_project_release_tag(
+            dir.path(),
+            &project_id,
+            "v0.3.1",
+            "tag-commit-001",
+            "release-agent",
+        )
+        .unwrap();
+        assert_eq!(tagged.publication_stage, "tag-created");
+        let manifest_path = write_release_manifest(dir.path(), &project_id);
+        let remote = record_project_remote_release(
+            dir.path(),
+            &project_id,
+            "github",
+            "rel-001",
+            "https://github.com/acme/repo/releases/tag/v0.3.1",
+            "v0.3.1",
+            "tag-commit-001",
+            &manifest_path,
+            "release-agent",
+        )
+        .unwrap();
+        assert_eq!(remote.publication_stage, "remote-release-created");
+        assert_eq!(remote.remote_provider.as_deref(), Some("github"));
+        assert_eq!(remote.tag_name.as_deref(), Some("v0.3.1"));
+        assert!(remote.artifact_manifest_sha256.is_some());
+
+        let published = publish_project_release(dir.path(), &project_id).unwrap();
+        assert_eq!(published.current_state, "published");
+        assert_eq!(published.publication_stage, "published");
+        assert_eq!(published.remote_release_id.as_deref(), Some("rel-001"));
+        assert!(published.remote_release_proof_path.is_some());
     }
 
     #[test]

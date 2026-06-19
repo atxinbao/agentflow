@@ -13,6 +13,7 @@ agentflow-workflow-core = { path = "../workflow-core" }
 agentflow-workflow-runtime = { path = "../workflow-runtime" }
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
