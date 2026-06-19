@@ -8,6 +8,7 @@ members = [
     "crates/action-contract",
     "crates/role-policy",
     "crates/object-state",
+    "crates/action-arbitration",
     "crates/workflow-core",
     "crates/event-store",
     "crates/workflow-runtime",

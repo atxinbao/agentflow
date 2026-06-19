@@ -186,6 +186,34 @@ docs/requirements/**
 - `workflow-core` 继续负责流程状态和 handoff 定义；`object-state` 只负责对象生命周期。
 - `Run.completed != Issue.done`、`Issue.done != Audit.requested`、`Finding.fixRequired` 通过修复 Issue 回流，这三条边界由这里固定。
 
+### Action Arbitration
+
+负责：
+
+- 提供 Runtime 写事实前的唯一仲裁入口
+- 组合 `action-contract / role-policy / object-state / dependency / evidence / object lock`
+- 把 `Action Proposal` 判定为 `accepted / rejected / humanDecisionRequired`
+- 生成 `AcceptedAction`，作为后续 Event Store append 输入
+- 输出稳定的 rejected reason taxonomy 和 human decision 请求
+
+不负责：
+
+- 直接追加 Event Store
+- 直接重建 Projection
+- 直接启动 Provider Session
+- 直接执行任务
+- 直接处理分布式锁或跨项目事务
+
+实现位置：
+
+- `crates/action-arbitration/src/**`
+
+说明：
+
+- 所有 Runtime 写入都必须先过 arbitration，不能绕过。
+- `accepted action` 不是事件，只是事件写入前的事实闸口结果。
+- MVP 只做本地对象锁和稳定拒绝原因，不做 silent lock stealing。
+
 ### Project Brain / Constitution
 
 负责：
