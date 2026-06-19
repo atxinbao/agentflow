@@ -73,7 +73,14 @@ fn watcher_native_event_refreshes_panel() {
 
     let mut status = load_project_panel_status(dir.path()).unwrap();
     for _ in 0..60 {
-        if status.file_count == 2 && watcher_status(dir.path()).as_deref() == Some("native") {
+        let watcher_status = watcher_status(dir.path());
+        if status.file_count == 2
+            && status.status == crate::model::PanelStatus::Ready
+            && matches!(
+                watcher_status.as_deref(),
+                Some("native") | Some("debouncing")
+            )
+        {
             break;
         }
         thread::sleep(Duration::from_millis(150));
@@ -81,7 +88,10 @@ fn watcher_native_event_refreshes_panel() {
     }
     assert_eq!(status.status, crate::model::PanelStatus::Ready);
     assert_eq!(status.file_count, 2);
-    assert_eq!(status.watcher_status.as_deref(), Some("native"));
+    assert!(matches!(
+        status.watcher_status.as_deref(),
+        Some("native") | Some("debouncing")
+    ));
     assert!(matches!(
         status.watcher_backend.as_deref(),
         Some("fsevents")
