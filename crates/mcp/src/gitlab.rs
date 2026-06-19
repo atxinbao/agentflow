@@ -114,29 +114,39 @@ pub fn query_gitlab_closeout_attestation(
     if !mr.status_success {
         anyhow::bail!("glab mr view failed: {}", mr.combined_output().trim());
     }
-    let mr_value: Value = serde_json::from_str(&mr.stdout).context("parse glab mr view json")?;
+    let issues = issue_refs
+        .iter()
+        .map(|issue_ref| query_gitlab_issue_status(&project_root, issue_ref))
+        .collect::<Result<Vec<_>>>()?;
+    parse_gitlab_closeout_attestation(review_ref, &mr.stdout, issues)
+}
+
+fn parse_gitlab_closeout_attestation(
+    review_ref: &str,
+    mr_stdout: &str,
+    issues: Vec<McpCloseoutIssueAttestation>,
+) -> Result<McpCloseoutAttestation> {
+    let mr_value: Value = serde_json::from_str(mr_stdout).context("parse glab mr view json")?;
     let review_url = mr_value
         .get("web_url")
         .or_else(|| mr_value.get("webUrl"))
         .and_then(Value::as_str)
         .map(ToString::to_string);
     let repository_full_name = mr_value
-        .get("references")
-        .and_then(|value| value.get("full"))
-        .and_then(Value::as_str)
-        .map(ToString::to_string)
+        .get("project")
+        .and_then(|value| value.get("full_name"))
         .or_else(|| {
             mr_value
                 .get("project")
-                .and_then(|value| value.get("full_name"))
-                .or_else(|| {
-                    mr_value
-                        .get("project")
-                        .and_then(|value| value.get("fullPath"))
-                })
-                .and_then(Value::as_str)
-                .map(ToString::to_string)
-        });
+                .and_then(|value| value.get("fullPath"))
+        })
+        .or_else(|| {
+            mr_value
+                .get("project")
+                .and_then(|value| value.get("path_with_namespace"))
+        })
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
     let source_branch = mr_value
         .get("source_branch")
         .or_else(|| mr_value.get("sourceBranch"))
@@ -178,10 +188,6 @@ pub fn query_gitlab_closeout_attestation(
             .and_then(Value::as_str)
             .map(|state| state.eq_ignore_ascii_case("merged"))
             .unwrap_or(false);
-    let issues = issue_refs
-        .iter()
-        .map(|issue_ref| query_gitlab_issue_status(&project_root, issue_ref))
-        .collect::<Result<Vec<_>>>()?;
     let issue_closed = !issues.is_empty() && issues.iter().all(|issue| issue.closed);
     Ok(McpCloseoutAttestation {
         version: MCP_CLOSEOUT_ATTESTATION_VERSION.to_string(),
@@ -254,7 +260,7 @@ fn parse_gitlab_issue_status(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_gitlab_issue_status;
+    use super::{parse_gitlab_closeout_attestation, parse_gitlab_issue_status};
 
     #[test]
     fn parses_gitlab_issue_status_payload() {
@@ -274,5 +280,53 @@ mod tests {
             Some("https://gitlab.example.com/acme/repo/-/issues/58")
         );
         assert_eq!(issue.closed_at.as_deref(), Some("2026-06-19T12:00:00Z"));
+    }
+
+    #[test]
+    fn parses_gitlab_closeout_attestation_v3_fields() {
+        let attestation = parse_gitlab_closeout_attestation(
+            "58",
+            r#"{
+              "web_url": "https://gitlab.example.com/acme/repo/-/merge_requests/58",
+              "references": { "full": "acme/repo!58" },
+              "project": { "fullPath": "acme/repo" },
+              "source_branch": "agentflow/direct/AF-001",
+              "target_branch": "main",
+              "diff_refs": { "base_sha": "base-001" },
+              "sha": "head-001",
+              "merge_commit_sha": "merge-001",
+              "merged_at": "2026-06-19T12:10:00Z",
+              "state": "merged"
+            }"#,
+            vec![super::McpCloseoutIssueAttestation {
+                issue_ref: "58".to_string(),
+                issue_url: Some("https://gitlab.example.com/acme/repo/-/issues/58".to_string()),
+                closed: true,
+                closed_at: Some("2026-06-19T12:11:00Z".to_string()),
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            attestation.review_url.as_deref(),
+            Some("https://gitlab.example.com/acme/repo/-/merge_requests/58")
+        );
+        assert_eq!(
+            attestation.repository_full_name.as_deref(),
+            Some("acme/repo")
+        );
+        assert_eq!(
+            attestation.source_branch.as_deref(),
+            Some("agentflow/direct/AF-001")
+        );
+        assert_eq!(attestation.target_branch.as_deref(), Some("main"));
+        assert_eq!(attestation.base_sha.as_deref(), Some("base-001"));
+        assert_eq!(attestation.head_sha.as_deref(), Some("head-001"));
+        assert_eq!(attestation.merge_commit_sha.as_deref(), Some("merge-001"));
+        assert_eq!(
+            attestation.merged_at.as_deref(),
+            Some("2026-06-19T12:10:00Z")
+        );
+        assert!(attestation.merged);
+        assert!(attestation.issue_closed);
     }
 }
