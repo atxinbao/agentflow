@@ -8,10 +8,10 @@ pub mod model;
 pub mod storage;
 
 pub use model::{
-    TaskChangedFile, TaskChangedFilesRecord, TaskCommandInput, TaskCommandRecord, TaskEvidence,
-    TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord, TASK_CHANGED_FILES_VERSION,
-    TASK_COMMAND_VERSION, TASK_EVIDENCE_VERSION, TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION,
-    TASK_VALIDATION_VERSION,
+    TaskChangedFile, TaskChangedFileSource, TaskChangedFilesRecord, TaskCommandInput,
+    TaskCommandRecord, TaskEvidence, TaskRun, TaskRunCheckpoint, TaskRunStatus,
+    TaskValidationRecord, TASK_CHANGED_FILES_VERSION, TASK_COMMAND_VERSION, TASK_EVIDENCE_VERSION,
+    TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION, TASK_VALIDATION_VERSION,
 };
 pub use storage::{
     checkpoint_replay_cursor, create_task_run, latest_task_run_checkpoint, load_task_changed_files,

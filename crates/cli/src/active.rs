@@ -14,7 +14,7 @@ use agentflow_task_artifacts::{
     load_task_changed_files, load_task_evidence, load_task_run, task_changed_files_path,
     task_evidence_dir, task_run_dir, update_task_run_status, write_task_changed_files,
     write_task_command_record, write_task_evidence, write_task_validation_with_assessment,
-    TaskChangedFile, TaskCommandInput, TaskEvidence, TaskRun, TaskRunStatus,
+    TaskChangedFile, TaskChangedFileSource, TaskCommandInput, TaskEvidence, TaskRun, TaskRunStatus,
 };
 use agentflow_task_loop::{AgentLaunchPayload, TaskLoop, TaskLoopLaunch, AGENT_LAUNCH_REQUESTED};
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
@@ -24,7 +24,7 @@ use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -596,6 +596,11 @@ fn ensure_review_prepared(
                         "changeType": file.change_type.as_str(),
                         "insertions": file.insertions,
                         "deletions": file.deletions,
+                        "sources": file.sources.iter().map(|source| match source {
+                            TaskChangedFileSource::Committed => "committed",
+                            TaskChangedFileSource::WorkingTree => "working_tree",
+                            TaskChangedFileSource::Untracked => "untracked",
+                        }).collect::<Vec<_>>(),
                     })
                 }).collect::<Vec<_>>(),
                 "validationCommandCount": validation.command_ids.len(),
@@ -676,21 +681,39 @@ fn collect_trusted_changed_files(
         .or_else(|| resolve_base_commit(root).ok())
         .or_else(|| head_commit.clone());
     let tree_sha = git_stdout(root, &["rev-parse", "HEAD^{tree}"]).ok();
-    let tracked_stats = collect_diff_stats(root, base_commit.as_deref())?;
-    let mut files = collect_diff_name_status(root, base_commit.as_deref())?;
+    let mut files = BTreeMap::new();
+    if let (Some(base_commit), Some(head_commit)) = (base_commit.as_deref(), head_commit.as_deref())
+    {
+        let committed_stats = collect_diff_stats_between(root, base_commit, head_commit)?;
+        for file in collect_diff_name_status_between(root, base_commit, head_commit)?.into_values()
+        {
+            let path = file.path.clone();
+            merge_changed_file(
+                &mut files,
+                file,
+                TaskChangedFileSource::Committed,
+                committed_stats.get(&path).copied(),
+            );
+        }
+    }
+    if let Some(head_commit) = head_commit.as_deref() {
+        let worktree_stats = collect_diff_stats_against_head(root, head_commit)?;
+        for file in collect_diff_name_status_against_head(root, head_commit)?.into_values() {
+            let path = file.path.clone();
+            merge_changed_file(
+                &mut files,
+                file,
+                TaskChangedFileSource::WorkingTree,
+                worktree_stats.get(&path).copied(),
+            );
+        }
+    }
     for file in collect_untracked_files(root)? {
-        files.entry(file.path.clone()).or_insert(file);
+        merge_changed_file(&mut files, file, TaskChangedFileSource::Untracked, None);
     }
     let files = files
         .into_values()
         .filter(|file| !file.path.starts_with(".agentflow/"))
-        .map(|mut file| {
-            if let Some((insertions, deletions)) = tracked_stats.get(&file.path) {
-                file.insertions = *insertions;
-                file.deletions = *deletions;
-            }
-            file
-        })
         .collect::<Vec<_>>();
     let working_tree_hash = git_stdout(
         root,
@@ -710,18 +733,36 @@ fn collect_trusted_changed_files(
     })
 }
 
-fn collect_diff_name_status(
+fn collect_diff_name_status_between(
     root: &Path,
-    base_commit: Option<&str>,
+    base_commit: &str,
+    head_commit: &str,
 ) -> Result<BTreeMap<String, TaskChangedFile>> {
-    let mut args = vec!["diff", "--name-status", "--find-renames"];
-    if let Some(base_commit) = base_commit {
-        args.push(base_commit);
-    } else {
-        args.push("HEAD");
-    }
-    args.push("--");
-    let raw = git_stdout(root, &args)?;
+    let raw = git_stdout(
+        root,
+        &[
+            "diff",
+            "--name-status",
+            "--find-renames",
+            &format!("{base_commit}..{head_commit}"),
+            "--",
+        ],
+    )?;
+    parse_diff_name_status(&raw)
+}
+
+fn collect_diff_name_status_against_head(
+    root: &Path,
+    head_commit: &str,
+) -> Result<BTreeMap<String, TaskChangedFile>> {
+    let raw = git_stdout(
+        root,
+        &["diff", "--name-status", "--find-renames", head_commit, "--"],
+    )?;
+    parse_diff_name_status(&raw)
+}
+
+fn parse_diff_name_status(raw: &str) -> Result<BTreeMap<String, TaskChangedFile>> {
     let mut files = BTreeMap::new();
     for line in raw.lines() {
         let Some(file) = parse_name_status_line(line) else {
@@ -732,19 +773,37 @@ fn collect_diff_name_status(
     Ok(files)
 }
 
-fn collect_diff_stats(
+fn collect_diff_stats_between(
     root: &Path,
-    base_commit: Option<&str>,
-) -> Result<std::collections::HashMap<String, (usize, usize)>> {
-    let mut args = vec!["diff", "--numstat", "--find-renames"];
-    if let Some(base_commit) = base_commit {
-        args.push(base_commit);
-    } else {
-        args.push("HEAD");
-    }
-    args.push("--");
-    let raw = git_stdout(root, &args)?;
-    let mut stats = std::collections::HashMap::new();
+    base_commit: &str,
+    head_commit: &str,
+) -> Result<HashMap<String, (usize, usize)>> {
+    let raw = git_stdout(
+        root,
+        &[
+            "diff",
+            "--numstat",
+            "--find-renames",
+            &format!("{base_commit}..{head_commit}"),
+            "--",
+        ],
+    )?;
+    parse_diff_stats(&raw)
+}
+
+fn collect_diff_stats_against_head(
+    root: &Path,
+    head_commit: &str,
+) -> Result<HashMap<String, (usize, usize)>> {
+    let raw = git_stdout(
+        root,
+        &["diff", "--numstat", "--find-renames", head_commit, "--"],
+    )?;
+    parse_diff_stats(&raw)
+}
+
+fn parse_diff_stats(raw: &str) -> Result<HashMap<String, (usize, usize)>> {
+    let mut stats = HashMap::new();
     for line in raw.lines() {
         let mut parts = line.splitn(3, '\t');
         let insertions = parts.next().unwrap_or_default();
@@ -776,8 +835,59 @@ fn collect_untracked_files(root: &Path) -> Result<Vec<TaskChangedFile>> {
             change_type: "added".to_string(),
             insertions: 0,
             deletions: 0,
+            sources: Vec::new(),
         })
         .collect())
+}
+
+fn merge_changed_file(
+    files: &mut BTreeMap<String, TaskChangedFile>,
+    file: TaskChangedFile,
+    source: TaskChangedFileSource,
+    stats: Option<(usize, usize)>,
+) {
+    let TaskChangedFile {
+        path,
+        change_type,
+        insertions,
+        deletions,
+        sources: _,
+    } = file;
+    let entry = files
+        .entry(path.clone())
+        .or_insert_with(|| TaskChangedFile {
+            path,
+            change_type: change_type.clone(),
+            insertions: 0,
+            deletions: 0,
+            sources: Vec::new(),
+        });
+    entry.change_type = merge_change_type(&entry.change_type, &change_type);
+    if let Some((insertions, deletions)) = stats {
+        entry.insertions += insertions;
+        entry.deletions += deletions;
+    } else {
+        entry.insertions += insertions;
+        entry.deletions += deletions;
+    }
+    let mut sources = entry.sources.iter().copied().collect::<BTreeSet<_>>();
+    sources.insert(source);
+    entry.sources = sources.into_iter().collect();
+}
+
+fn merge_change_type(current: &str, candidate: &str) -> String {
+    let choose_rank = |change_type: &str| match change_type {
+        "renamed" => 4,
+        "deleted" => 3,
+        "added" => 2,
+        "modified" => 1,
+        _ => 0,
+    };
+    if choose_rank(candidate) >= choose_rank(current) {
+        candidate.to_string()
+    } else {
+        current.to_string()
+    }
 }
 
 fn collect_patch_sha(
@@ -856,6 +966,7 @@ fn parse_name_status_line(line: &str) -> Option<TaskChangedFile> {
         change_type: status_to_change_type(status),
         insertions: 0,
         deletions: 0,
+        sources: Vec::new(),
     })
 }
 
@@ -1203,7 +1314,9 @@ mod tests {
         McpLaunchPlan, McpLaunchRequest, McpProviderBridge, McpProviderKind, McpProviderStatus,
         McpProviderStatusCode, MCP_CLOSEOUT_ATTESTATION_VERSION,
     };
-    use agentflow_task_artifacts::{load_task_changed_files, load_task_evidence};
+    use agentflow_task_artifacts::{
+        load_task_changed_files, load_task_evidence, TaskChangedFileSource,
+    };
     use anyhow::Result;
     use std::{
         fs,
@@ -1570,6 +1683,10 @@ mod tests {
         run_git(dir.path(), &["add", "src/lib.rs"]);
         run_git(dir.path(), &["commit", "-m", "committed change"]);
         write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"after-worktree\" }\n",
+        );
+        write_file(
             dir.path().join("src/helper.rs"),
             "pub fn helper() -> &'static str { \"untracked\" }\n",
         );
@@ -1592,6 +1709,24 @@ mod tests {
         assert!(changed_files.tree_sha.is_some());
         assert!(!changed_files.patch_sha256.is_empty());
         assert!(!changed_files.file_content_sha256.is_empty());
+        let lib_file = changed_files
+            .files
+            .iter()
+            .find(|file| file.path == "src/lib.rs")
+            .expect("committed file present");
+        assert_eq!(
+            lib_file.sources,
+            vec![
+                TaskChangedFileSource::Committed,
+                TaskChangedFileSource::WorkingTree,
+            ]
+        );
+        let helper_file = changed_files
+            .files
+            .iter()
+            .find(|file| file.path == "src/helper.rs")
+            .expect("untracked file present");
+        assert_eq!(helper_file.sources, vec![TaskChangedFileSource::Untracked]);
 
         let evidence = load_task_evidence(dir.path(), "AF-001").unwrap();
         assert!(evidence.validation_command_hash.is_some());
@@ -1704,6 +1839,38 @@ mod tests {
         let projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-SCOPE-001").unwrap();
         assert_eq!(projection.current_state, "blocked");
+    }
+
+    #[test]
+    fn build_agent_review_blocks_committed_out_of_scope_changes_even_after_worktree_revert() {
+        let dir = tempdir().unwrap();
+        write_out_of_scope_fixture(dir.path(), "proj-scope", "AF-SCOPE-001");
+        write_file(dir.path().join("README.md"), "before\n");
+        init_git_repo(dir.path());
+        let started = start_build_agent_issue(dir.path(), "AF-SCOPE-001").unwrap();
+        write_file(dir.path().join("README.md"), "committed forbidden change\n");
+        run_git(dir.path(), &["add", "README.md"]);
+        run_git(dir.path(), &["commit", "-m", "committed forbidden change"]);
+        write_file(dir.path().join("README.md"), "before\n");
+        let request_path = write_completion_request(dir.path(), "AF-SCOPE-001", &started.run_id);
+
+        let err = prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap_err();
+
+        assert!(err.to_string().contains("超出允许路径：README.md"));
+        let changed_files =
+            load_task_changed_files(dir.path(), "AF-SCOPE-001", &started.run_id).unwrap();
+        let readme = changed_files
+            .files
+            .iter()
+            .find(|file| file.path == "README.md")
+            .expect("README tracked in trusted set");
+        assert_eq!(
+            readme.sources,
+            vec![
+                TaskChangedFileSource::Committed,
+                TaskChangedFileSource::WorkingTree,
+            ]
+        );
     }
 
     fn write_spec_project_fixture(root: &Path, project_id: &str, issue_id: &str) {

@@ -68,6 +68,16 @@ pub struct TaskChangedFile {
     pub change_type: String,
     pub insertions: usize,
     pub deletions: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<TaskChangedFileSource>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskChangedFileSource {
+    Committed,
+    WorkingTree,
+    Untracked,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
