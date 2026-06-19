@@ -4,6 +4,7 @@ members = [
     "crates/agent-manual",
     "crates/panel",
     "crates/spec",
+    "crates/ontology",
     "crates/workflow-core",
     "crates/event-store",
     "crates/workflow-runtime",

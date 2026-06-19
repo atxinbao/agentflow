@@ -122,6 +122,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-ontology"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-panel"
 version = "0.3.0"
 dependencies = [
