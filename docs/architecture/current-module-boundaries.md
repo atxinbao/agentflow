@@ -1,7 +1,7 @@
 # Current Module Boundaries
 
 创建日期：2026-06-02
-最后更新：2026-06-18
+最后更新：2026-06-20
 执行者：Codex
 
 ## 结论
@@ -79,6 +79,32 @@ docs/requirements/**
 - `crates/cli/src/**`
 
 ## Requirement and Task Contract Layer
+
+### Ontology
+
+负责：
+
+- 提供 Runtime Core 读取的 built-in Ontology Registry
+- 定义核心 Object Type 和 Link Type
+- 定义 Ontology Bundle、Definition Record 和基础验证规则
+- 为后续 Action Contract / Role Policy / State Machine / Arbitration 提供统一世界模型
+
+不负责：
+
+- 写事件
+- 推进任务状态
+- 启动外部 Agent
+- 重建 Projection
+- 写 `.agentflow/**` 事实
+
+实现位置：
+
+- `crates/ontology/src/**`
+
+说明：
+
+- 当前只提供 built-in core ontology，不落 `.agentflow/ontology/**`。
+- `BuildAgent` 兼容别名、Action Contract 和状态机迁移不在本模块完成。
 
 ### Project Brain / Constitution
 
