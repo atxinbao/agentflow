@@ -154,10 +154,18 @@ pub(crate) fn complete_build_agent_issue_from_request(
                 "closeoutProofPath": relative_path(root, &proof_path),
                 "provider": proof.get("provider").cloned().unwrap_or(serde_json::Value::Null),
                 "mergeMode": proof.get("mergeMode").cloned().unwrap_or(serde_json::Value::Null),
+                "repositoryFullName": proof.get("repositoryFullName").cloned().unwrap_or(serde_json::Value::Null),
                 "remoteUrl": proof.get("remoteUrl").cloned().unwrap_or(serde_json::Value::Null),
                 "prUrl": proof.get("prUrl").cloned().unwrap_or(serde_json::Value::Null),
+                "sourceBranch": proof.get("sourceBranch").cloned().unwrap_or(serde_json::Value::Null),
+                "targetBranch": proof.get("targetBranch").cloned().unwrap_or(serde_json::Value::Null),
+                "baseSha": proof.get("baseSha").cloned().unwrap_or(serde_json::Value::Null),
+                "headSha": proof.get("headSha").cloned().unwrap_or(serde_json::Value::Null),
+                "mergeCommitSha": proof.get("mergeCommitSha").cloned().unwrap_or(serde_json::Value::Null),
                 "issueClosed": proof.get("issueClosed").cloned().unwrap_or(serde_json::Value::Null),
-                "closedAt": proof.get("closedAt").cloned().unwrap_or(serde_json::Value::Null),
+                "issueClosedAt": proof.get("issueClosedAt").cloned().unwrap_or(serde_json::Value::Null),
+                "evidenceHeadSha": proof.get("evidenceHeadSha").cloned().unwrap_or(serde_json::Value::Null),
+                "evidenceHash": proof.get("evidenceHash").cloned().unwrap_or(serde_json::Value::Null),
             }),
             artifact_refs: vec![
                 task_evidence_path(&review.issue_id),
@@ -298,31 +306,95 @@ fn write_build_agent_closeout_proof_from_attestation(
     attestation: McpCloseoutAttestation,
 ) -> Result<BuildAgentCloseoutProof> {
     let proof_path = closeout_proof_path(root, &issue.issue_id, run_id);
+    let run = load_task_run(root, &issue.issue_id, run_id)?;
+    let evidence = load_task_evidence(root, &issue.issue_id)?;
     let provider_name = attestation.provider.clone();
     let review_ref = attestation.review_ref.clone();
     let review_url = attestation.review_url.clone();
+    let repository_full_name = attestation
+        .repository_full_name
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("closeout proof requires repository_full_name"))?;
+    let source_branch = attestation
+        .source_branch
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("closeout proof requires source_branch"))?;
+    let target_branch = attestation
+        .target_branch
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("closeout proof requires target_branch"))?;
+    let base_sha = attestation
+        .base_sha
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("closeout proof requires base_sha"))?;
+    let head_sha = attestation
+        .head_sha
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("closeout proof requires head_sha"))?;
     let merged = attestation.merged;
     let merged_at = attestation.merged_at.clone();
+    let merge_commit_sha = if merged {
+        Some(
+            attestation
+                .merge_commit_sha
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("closeout proof requires merge_commit_sha"))?,
+        )
+    } else {
+        attestation.merge_commit_sha.clone()
+    };
     let issue_closed = attestation.issue_closed;
     let issues = attestation.issues.clone();
     let queried_at = attestation.queried_at;
     let closed_at = latest_closed_at(&issues);
+    let provider_issue_url = issues
+        .iter()
+        .find_map(|attested_issue| attested_issue.issue_url.clone())
+        .ok_or_else(|| anyhow::anyhow!("closeout proof requires provider_issue_url"))?;
+    let evidence_head_sha = evidence
+        .head_commit
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("closeout proof requires evidence head commit"))?;
+    let evidence_hash = sha256_hex(&serde_json::to_vec(&evidence)?);
+    if run.branch_name.as_deref() != Some(source_branch.as_str()) {
+        anyhow::bail!(
+            "closeout proof source branch mismatch: run {}, attestation {}",
+            run.branch_name.as_deref().unwrap_or("none"),
+            source_branch
+        );
+    }
+    if evidence_head_sha != head_sha {
+        anyhow::bail!(
+            "closeout proof head sha mismatch: evidence {}, attestation {}",
+            evidence_head_sha,
+            head_sha
+        );
+    }
     write_json(
         &proof_path,
         &json!({
-            "version": "task-closeout-proof.v2",
+            "version": "task-closeout-proof.v3",
             "issueId": issue.issue_id,
             "projectId": issue.project_id,
             "runId": run_id,
             "provider": &provider_name,
             "mergeMode": merge_mode,
+            "repositoryFullName": &repository_full_name,
+            "providerIssueUrl": &provider_issue_url,
             "reviewRef": &review_ref,
             "remoteUrl": &review_url,
             "prUrl": &review_url,
+            "sourceBranch": &source_branch,
+            "targetBranch": &target_branch,
+            "baseSha": &base_sha,
+            "headSha": &head_sha,
+            "mergeCommitSha": &merge_commit_sha,
             "merged": merged,
             "mergedAt": &merged_at,
             "issueClosed": issue_closed,
-            "closedAt": &closed_at,
+            "issueClosedAt": &closed_at,
+            "evidenceHeadSha": &evidence_head_sha,
+            "evidenceHash": &evidence_hash,
             "issues": &issues,
             "queriedAt": queried_at,
             "publicDeliveryWritten": false,
@@ -352,13 +424,22 @@ fn write_build_agent_closeout_proof_from_attestation(
                 "runId": run_id,
                 "provider": &provider_name,
                 "mergeMode": merge_mode,
+                "repositoryFullName": &repository_full_name,
+                "providerIssueUrl": &provider_issue_url,
                 "reviewRef": &review_ref,
                 "remoteUrl": &review_url,
                 "prUrl": &review_url,
+                "sourceBranch": &source_branch,
+                "targetBranch": &target_branch,
+                "baseSha": &base_sha,
+                "headSha": &head_sha,
+                "mergeCommitSha": &merge_commit_sha,
                 "merged": merged,
                 "mergedAt": &merged_at,
                 "issueClosed": issue_closed,
-                "closedAt": &closed_at,
+                "issueClosedAt": &closed_at,
+                "evidenceHeadSha": &evidence_head_sha,
+                "evidenceHash": &evidence_hash,
                 "issues": &issues,
                 "queriedAt": queried_at,
                 "publicDeliveryWritten": false,
@@ -1357,8 +1438,10 @@ mod tests {
             &started.run_id,
             "auto-merge-if-eligible",
             trusted_closeout(
+                dir.path(),
                 "github",
                 "https://github.com/atxinbao/agentflow/pull/1",
+                started.branch_name.as_deref().unwrap(),
                 true,
                 "1",
                 true,
@@ -1445,8 +1528,10 @@ mod tests {
             &started.run_id,
             "auto-merge-if-eligible",
             trusted_closeout(
+                dir.path(),
                 "github",
                 "https://github.com/atxinbao/agentflow/pull/2",
+                started.branch_name.as_deref().unwrap(),
                 true,
                 "2",
                 true,
@@ -1517,6 +1602,47 @@ mod tests {
     }
 
     #[test]
+    fn closeout_proof_rejects_head_sha_mismatch() {
+        let dir = tempdir().unwrap();
+        write_spec_project_fixture(dir.path(), "proj-001", "AF-001");
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"before\" }\n",
+        );
+        init_git_repo(dir.path());
+        let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"after\" }\n",
+        );
+        let request_path = write_completion_request(dir.path(), "AF-001", &started.run_id);
+        prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
+        let issue = agentflow_spec::read_spec_issue(dir.path(), "AF-001").unwrap();
+        let mut attestation = trusted_closeout(
+            dir.path(),
+            "github",
+            "https://github.com/atxinbao/agentflow/pull/4",
+            started.branch_name.as_deref().unwrap(),
+            true,
+            "4",
+            true,
+            Some("2026-06-19T11:20:04Z"),
+        );
+        attestation.head_sha = Some("mismatch-head".to_string());
+
+        let err = write_build_agent_closeout_proof_from_attestation(
+            dir.path(),
+            &issue,
+            &started.run_id,
+            "auto-merge-if-eligible",
+            attestation,
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("head sha mismatch"));
+    }
+
+    #[test]
     fn build_agent_complete_stays_in_review_until_issue_is_closed() {
         let dir = tempdir().unwrap();
         write_two_issue_project_fixture(dir.path(), "proj-chain", "AF-CHAIN-001", "AF-CHAIN-002");
@@ -1539,8 +1665,10 @@ mod tests {
             &started.run_id,
             "auto-merge-if-eligible",
             trusted_closeout(
+                dir.path(),
                 "github",
                 "https://github.com/atxinbao/agentflow/pull/3",
+                started.branch_name.as_deref().unwrap(),
                 true,
                 "3",
                 false,
@@ -1669,18 +1797,27 @@ mod tests {
     }
 
     fn trusted_closeout(
+        root: &Path,
         provider: &str,
         review_url: &str,
+        source_branch: &str,
         merged: bool,
         issue_ref: &str,
         issue_closed: bool,
         closed_at: Option<&str>,
     ) -> McpCloseoutAttestation {
+        let head_sha = git_output(root, &["rev-parse", "HEAD"]);
         McpCloseoutAttestation {
             version: MCP_CLOSEOUT_ATTESTATION_VERSION.to_string(),
             provider: provider.to_string(),
             review_ref: review_url.to_string(),
             review_url: Some(review_url.to_string()),
+            repository_full_name: Some("atxinbao/agentflow".to_string()),
+            source_branch: Some(source_branch.to_string()),
+            target_branch: Some("main".to_string()),
+            base_sha: Some(head_sha.clone()),
+            head_sha: Some(head_sha),
+            merge_commit_sha: merged.then(|| format!("merge-{issue_ref}")),
             merged,
             merged_at: merged.then(|| "2026-06-19T11:19:59Z".to_string()),
             issue_closed,
@@ -1717,5 +1854,17 @@ mod tests {
             .status()
             .unwrap();
         assert!(status.success(), "git {:?} failed", args);
+    }
+
+    fn git_output(root: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "git {:?} failed", args);
+        String::from_utf8_lossy(&output.stdout)
+            .trim_end()
+            .to_string()
     }
 }
