@@ -5,6 +5,8 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
+agentflow-action-arbitration = { path = "../action-arbitration" }
+agentflow-action-contract = { path = "../action-contract" }
 agentflow-workflow-core = { path = "../workflow-core" }
 anyhow.workspace = true
 serde.workspace = true

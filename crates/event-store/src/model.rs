@@ -267,7 +267,28 @@ pub fn classify_task_event(event_type: &str) -> TaskEventCategory {
                 || value.starts_with("panel.context-pack.")
                 || value.starts_with("run.")
                 || value.starts_with("checkpoint.")
-                || value.starts_with("verification.") =>
+                || value.starts_with("verification.")
+                || matches!(
+                    value,
+                    "RequirementSubmitted"
+                        | "RequirementNormalized"
+                        | "RequirementClassified"
+                        | "SpecDrafted"
+                        | "SpecApproved"
+                        | "ProjectCreated"
+                        | "IssueCreated"
+                        | "IssueActivated"
+                        | "RunStarted"
+                        | "EvidenceSubmitted"
+                        | "ArtifactSubmitted"
+                        | "IssueMarkedDone"
+                        | "DecisionRecorded"
+                        | "AuditRequested"
+                        | "FindingCreated"
+                        | "FixIssueLinked"
+                        | "ObjectStateChanged"
+                        | "ActionRejectedRecorded"
+                ) =>
         {
             TaskEventCategory::Runtime
         }

@@ -125,6 +125,7 @@ pub struct HumanDecisionRequest {
 pub struct AcceptedAction {
     pub accepted_action_id: String,
     pub proposal_id: String,
+    pub idempotency_key: String,
     pub action_type: String,
     pub actor_role: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

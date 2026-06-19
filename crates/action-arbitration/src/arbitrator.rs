@@ -252,6 +252,7 @@ pub fn build_accepted_action(
     AcceptedAction {
         accepted_action_id: format!("accepted-{}", proposal.proposal_id),
         proposal_id: proposal.proposal_id.clone(),
+        idempotency_key: proposal.idempotency_key.clone(),
         action_type: proposal.action_type.clone(),
         actor_role: proposal.actor_role.clone(),
         target_object_ref: proposal.target_object_ref.clone(),

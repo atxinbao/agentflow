@@ -5,6 +5,7 @@
 //! UI data directly.
 
 pub mod model;
+pub mod runtime;
 pub mod storage;
 
 pub use model::{
@@ -17,6 +18,11 @@ pub use model::{
     EVENT_TYPE_SPEC_ISSUE_READY, TASK_EVENT_CLAIM_LEASE_VERSION, TASK_EVENT_CONSUMER_VERSION,
     TASK_EVENT_DEAD_LETTER_VERSION, TASK_EVENT_MANIFEST_VERSION, TASK_EVENT_STREAM_PATH,
     TASK_EVENT_VERSION,
+};
+pub use runtime::{
+    append_accepted_action_event, build_runtime_event_envelope, map_task_event_to_runtime_event,
+    replay_runtime_events, AcceptedActionAppendContext, CompatibilityRuntimeEvent,
+    RuntimeEventEnvelope, RUNTIME_EVENT_ENVELOPE_VERSION,
 };
 pub use storage::{
     allocate_task_sequence, append_task_dead_letter, append_task_event, append_task_event_once,
