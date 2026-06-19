@@ -896,6 +896,10 @@ function App() {
     () => taskProjectTree?.groups.find((group) => group.id === selectedTaskProjectId) ?? null,
     [selectedTaskProjectId, taskProjectTree],
   );
+  const homeProjectGroup = useMemo(
+    () => selectedProjectGroup ?? taskProjectTree?.groups[0] ?? null,
+    [selectedProjectGroup, taskProjectTree],
+  );
   const selectedTaskCandidateId = useMemo(
     () => (selectedProjectGroup ? null : pickTaskId(tasks, selectedTaskId, null)),
     [selectedProjectGroup, selectedTaskId, tasks],
@@ -915,11 +919,20 @@ function App() {
     selectedProjectGroup?.id ?? null,
     taskListRefreshToken + executeRefreshToken + mcpRefreshToken + outputRefreshToken,
   );
+  const homeProjectProjectionState = useProjectProjection(
+    projectRoot,
+    homeProjectGroup?.id ?? null,
+    taskListRefreshToken + executeRefreshToken + mcpRefreshToken + outputRefreshToken,
+  );
   const selectedTaskProjection =
     taskProjectionState.projection?.issueId === selectedTask?.id ? taskProjectionState.projection : null;
   const selectedProjectProjection =
     projectProjectionState.projection?.projectId === selectedProjectGroup?.id
       ? projectProjectionState.projection
+      : null;
+  const homeProjectProjection =
+    homeProjectProjectionState.projection?.projectId === homeProjectGroup?.id
+      ? homeProjectProjectionState.projection
       : null;
   const agentLocale = agentManualState.status?.locale.agentLocale ?? detectAppLocale() ?? "en-US";
   const nextStep = useMemo(
@@ -1414,6 +1427,9 @@ function App() {
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "home" ? (
           <ProjectHomePage
+            homeProjectGroup={homeProjectGroup}
+            homeProjectProjection={homeProjectProjection}
+            initializationState={initializationState}
             onRunProjectLoop={() => void handleRunProjectLoop()}
             nextStep={nextStep}
             onOpenAudit={() => setActivePage("audit")}
@@ -1422,7 +1438,8 @@ function App() {
             projectLoopFeedback={projectLoopFeedback}
             projectLoopState={projectLoopState}
             selectedTask={selectedTask}
-            initializationState={initializationState}
+            stateStatus={stateStatusState.status}
+            tasks={tasks}
           />
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "tasks" ? (
@@ -2261,68 +2278,255 @@ function ProjectAvailabilityPage({
 }
 
 function ProjectHomePage({
+  homeProjectGroup,
+  homeProjectProjection,
+  initializationState,
   nextStep,
   onOpenAudit,
   onRunProjectLoop,
   onOpenTasks,
   outputBundle,
-  initializationState,
   projectLoopFeedback,
   projectLoopState,
   selectedTask,
+  stateStatus,
+  tasks,
 }: {
+  homeProjectGroup: TaskProjectGroup | null;
+  homeProjectProjection: ProjectProjection | null;
+  initializationState: ProjectInitializationState;
   nextStep: NextStepViewModel;
   onOpenAudit: () => void;
   onRunProjectLoop: () => void;
   onOpenTasks: () => void;
   outputBundle: OutputBundleState;
-  initializationState: ProjectInitializationState;
   projectLoopFeedback: string | null;
   projectLoopState: ButtonInteractionState;
   selectedTask: V1Issue | null;
+  stateStatus: StateStatusSnapshot | null;
+  tasks: V1Issue[];
 }) {
   const recentActivities = buildRecentActivities(outputBundle, initializationState.status);
+  const activeIssue =
+    homeProjectProjection?.currentIssueId
+      ? homeProjectGroup?.issues.find((issue) => issue.id === homeProjectProjection.currentIssueId) ?? null
+      : selectedTask
+        ?? homeProjectGroup?.issues.find((issue) => ["todo", "in_progress", "in_review", "blocked"].includes(issue.displayStatus))
+        ?? homeProjectGroup?.issues[0]
+        ?? null;
+  const nextIssue = homeProjectGroup
+    ? projectNextScheduledIssue(
+        homeProjectGroup,
+        activeIssue?.id ?? null,
+        homeProjectProjection?.lanes.future ?? null,
+      )
+    : null;
+  const stageLabel = homeProjectProjection?.stageLabel ?? (homeProjectGroup ? "项目已就绪" : nextStep.title);
+  const stageSummary =
+    homeProjectProjection?.stageSummary
+    ?? (activeIssue
+      ? `${activeIssue.id} 当前处于 ${displayStatusLabelZh(activeIssue.displayStatus)}。`
+      : nextStep.description);
+  const globalBlockers = stateStatus?.blockers.length
+    ? stateStatus.blockers.map((blocker) => blocker.reason)
+    : [];
+  const blockerItems = homeProjectProjection?.blockers.length
+    ? homeProjectProjection.blockers.map((blocker) => `${blocker.issueId}：${blocker.reason}`)
+    : globalBlockers.length
+      ? globalBlockers
+      : ["当前没有阻断项。"];
+  const completion = homeProjectProjection?.completion ?? null;
+  const completionLabel = projectCompletionStateLabelZh(
+    completion?.currentState,
+    completion?.latestOutcome,
+  );
+  const brain = homeProjectProjection?.projectBrain ?? null;
+  const brainActionLabel = projectBrainActionLabelZh(
+    brain?.nextRecommendedAction,
+    brain?.nextRecommendedActionLabel,
+  );
+  const brainActionReason = brain?.nextRecommendedActionReason ?? "当前还没有 Project Brain 下一步说明。";
+  const nextActionLabel = homeProjectProjection?.nextActionLabel ?? nextStep.action;
+  const nextActionReason = homeProjectProjection?.nextActionReason ?? nextStep.description;
+  const nextOwnerLabel = activeIssue
+    ? agentRoleLabelZh(activeIssue.requiredAgentRole)
+    : homeProjectProjection?.completion && homeProjectProjection.completion.currentState !== "accepted"
+      ? "目标助手"
+      : tasks.length === 0
+        ? "需求助手"
+        : "目标助手";
+  const primaryActionLabel = activeIssue ? "查看当前任务" : tasks.length === 0 ? "继续整理需求" : "运行 Project Loop";
+  const primaryActionHandler = activeIssue || tasks.length === 0 ? onOpenTasks : onRunProjectLoop;
+  const releaseItems = homeProjectProjection?.release
+    ? [
+        `Release：${homeProjectProjection.release.summaryLine}`,
+        `门禁：${homeProjectProjection.release.gateStatus}`,
+        `公开记录：${homeProjectProjection.release.changelogPath || homeProjectProjection.release.releaseNotesPath}`,
+      ]
+    : ["当前还没有 release 收口。"];
+  const homeRecentActivities = recentActivities.length
+    ? recentActivities
+    : [
+        {
+          detail: nextActionReason,
+          id: "activity-next-step",
+          target: "tasks" as const,
+          title: nextActionLabel,
+        },
+      ];
 
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
-      <section className="v16-home-columns" aria-label="工作台总览">
-        <Panel className="v16-home-column v16-home-task-column" title="当前任务">
-          {selectedTask ? (
-            <button className="v16-current-task-card" onClick={onOpenTasks} type="button">
-              <span className="v16-current-task-meta">
-                <span>{selectedTask.id}</span>
-                <PriorityBadge priority={selectedTask.priority} />
-              </span>
-              <strong>{selectedTask.title}</strong>
-              <dl>
-                <div>
-                  <dt>状态</dt>
-                  <dd>{displayStatusLabelZh(selectedTask.displayStatus)}</dd>
-                </div>
-              </dl>
-            </button>
-          ) : (
-            <div className="v16-home-empty">
-              <strong>还没有任务</strong>
-              <span>先确认需求，生成任务合约。</span>
-            </div>
-          )}
-          {nextStep.description ? <p className="v16-home-next-step">{nextStep.description}</p> : null}
-          <ActionBar>
-            <ActionButton
-              loading={projectLoopState === "loading"}
-              onClick={onRunProjectLoop}
-              variant="secondary"
-            >
-              运行 Project Loop
-            </ActionButton>
-          </ActionBar>
-          {projectLoopFeedback ? <p className="v16-feedback">{projectLoopFeedback}</p> : null}
+      <section className="v16-project-home-hero" aria-label="Project Home">
+        <Panel className="v16-home-column" title="项目阶段">
+          <div className="v16-summary-grid">
+            <MetricCard detail={stageSummary} label="当前阶段" value={stageLabel} />
+            <MetricCard detail={nextActionReason} label="下一步" value={nextActionLabel} />
+            <MetricCard
+              detail={activeIssue ? `${activeIssue.id} · ${displayStatusLabelZh(activeIssue.displayStatus)}` : "当前没有活跃任务。"}
+              label="活跃任务"
+              value={activeIssue?.id ?? "等待任务"}
+            />
+            <MetricCard
+              detail={completion?.nextRecommendedActionReason ?? homeProjectProjection?.completionHint ?? "当前还没有完成判断。"}
+              label="完成判断"
+              value={completionLabel}
+            />
+          </div>
+          <div className="v16-project-home-grid">
+            <SectionList
+              title="项目状态"
+              items={[
+                stageSummary,
+                homeProjectProjection
+                  ? `项目状态：${projectDisplayStatusLabelZh(normalizeProjectDisplayStatus(homeProjectProjection.status))}`
+                  : "项目状态：等待投影加载。",
+                homeProjectProjection
+                  ? `Project Brain：${projectBrainStatusLabelZh(brain?.brainStatus)}`
+                  : "Project Brain：等待加载。",
+              ]}
+            />
+            <SectionList
+              title="当前活跃任务"
+              items={
+                activeIssue
+                  ? [
+                      `${activeIssue.id} · ${activeIssue.title}`,
+                      `状态：${displayStatusLabelZh(activeIssue.displayStatus)}`,
+                      `角色：${agentRoleLabelZh(activeIssue.requiredAgentRole)}`,
+                    ]
+                  : ["当前没有活跃任务。", "先从需求或 Goal/Plan 决策入口开始。"]
+              }
+            />
+            <SectionList
+              title="阻断与下一步"
+              items={[
+                ...blockerItems,
+                `建议动作：${nextActionLabel}`,
+                `接管角色：${nextOwnerLabel}`,
+              ]}
+            />
+          </div>
         </Panel>
 
+        <Panel className="v16-home-column" title="下一步">
+          <div className="v16-project-home-next-step-card">
+            <div className="v16-project-home-next-step-header">
+              <StatusBadge status={nextStep.status}>{nextStep.title}</StatusBadge>
+              <strong>{nextOwnerLabel}</strong>
+            </div>
+            <h3>{nextActionLabel}</h3>
+            <p>{nextActionReason}</p>
+            <ul>
+              <li>{nextStep.description}</li>
+              <li>
+                {activeIssue
+                  ? `当前任务：${activeIssue.id} · ${activeIssue.title}`
+                  : nextIssue
+                    ? `后续任务：${nextIssue.id} · ${nextIssue.title}`
+                    : "当前还没有下一条任务。"}
+              </li>
+              <li>{completion?.nextRecommendedActionReason ?? homeProjectProjection?.completionHint ?? brainActionReason}</li>
+            </ul>
+            <ActionBar>
+              <ActionButton
+                loading={!activeIssue && projectLoopState === "loading"}
+                onClick={primaryActionHandler}
+                variant="primary"
+              >
+                {primaryActionLabel}
+              </ActionButton>
+            </ActionBar>
+            {projectLoopFeedback ? <p className="v16-feedback">{projectLoopFeedback}</p> : null}
+          </div>
+        </Panel>
+      </section>
+
+      <section className="v16-home-columns" aria-label="项目脑与完成判断">
+        <Panel className="v16-home-column" title="Project Brain">
+          <div className="v16-project-home-grid">
+            <SectionList
+              title="Goal / Plan / Decisions"
+              items={[
+                `Goal：${projectBrainDocumentStatusLabelZh(brain?.goalStatus)}`,
+                `Plan：${projectBrainDocumentStatusLabelZh(brain?.planStatus)}`,
+                `Decisions：${projectBrainDocumentStatusLabelZh(brain?.decisionStatus)}`,
+                `Health：${projectBrainDocumentStatusLabelZh(brain?.healthStatus)}`,
+              ]}
+            />
+            <SectionList
+              title="Project Brain 建议"
+              items={[
+                `建议动作：${brainActionLabel}`,
+                brainActionReason,
+                ...(brain?.missingDocuments.length
+                  ? [`缺失文档：${brain.missingDocuments.join("、")}`]
+                  : ["Project Brain 文档已齐全。"]),
+              ]}
+            />
+            <SectionList
+              title="开放问题"
+              items={brain?.openQuestions.length ? brain.openQuestions : ["当前没有开放问题。"]}
+            />
+          </div>
+        </Panel>
+
+        <Panel className="v16-home-column" title="完成判断">
+          <div className="v16-project-home-grid">
+            <SectionList
+              title="Goal Recheck / Completion"
+              items={[
+                `当前状态：${completionLabel}`,
+                completion?.nextRecommendedActionLabel
+                  ? `建议动作：${completion.nextRecommendedActionLabel}`
+                  : `建议动作：${nextActionLabel}`,
+                completion?.nextRecommendedActionReason
+                  ?? homeProjectProjection?.completionHint
+                  ?? "当前还没有完成判断提示。",
+              ]}
+            />
+            <SectionList
+              title="决策依据"
+              items={
+                completion?.rationale.length
+                  ? completion.rationale
+                  : [
+                      `总任务：${homeProjectProjection?.issueCount ?? homeProjectGroup?.counts.issueCount ?? 0}`,
+                      `已完成：${homeProjectProjection?.completedIssueCount ?? homeProjectGroup?.counts.doneIssueCount ?? 0}`,
+                      `待处理阻断：${homeProjectProjection?.blockers.length ?? 0}`,
+                    ]
+              }
+            />
+            <SectionList title="Release / Delivery" items={releaseItems} />
+          </div>
+        </Panel>
+      </section>
+
+      <section className="v16-home-columns" aria-label="项目入口与最近活动">
+        <ProjectHomeAgentEntryPanel activeOwnerLabel={nextOwnerLabel} />
         <Panel className="v16-home-column" title="最近活动">
           <div className="v16-activity-list">
-            {recentActivities.map((activity) => (
+            {homeRecentActivities.map((activity) => (
               <button
                 key={activity.id}
                 onClick={activity.target === "audit" ? onOpenAudit : onOpenTasks}
@@ -2335,48 +2539,28 @@ function ProjectHomePage({
           </div>
         </Panel>
       </section>
-      <CodexRoleGuideCard />
     </section>
   );
 }
 
-function CodexRoleGuideCard() {
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
-
-  async function copyStartupInstruction(guide: CodexRoleGuide) {
-    try {
-      await navigator.clipboard.writeText(guide.startupInstruction);
-      setCopyFeedback(`已复制。请粘贴到 ${guide.threadName} 线程。`);
-    } catch {
-      setCopyFeedback("复制失败。请手动复制启动指令。");
-    }
-  }
-
+function ProjectHomeAgentEntryPanel({ activeOwnerLabel }: { activeOwnerLabel: string }) {
   return (
-    <section className="v16-codex-role-guide" aria-labelledby="v16-codex-role-guide-title">
-      <header className="v16-codex-role-guide-header">
-        <span>
-          <strong id="v16-codex-role-guide-title">Agent 角色使用说明</strong>
-          <small>你需要按角色开启会话，每个会话只做一种工作。</small>
-        </span>
-      </header>
-      <div className="v16-codex-role-guide-body">
-        <div className="v16-codex-role-grid">
-          {codexRoleGuides.map((guide) => (
-            <article className="v16-codex-role-card" key={guide.role}>
-              <span>{guide.englishName}</span>
-              <strong>{guide.title}</strong>
-              <p>{guide.summary}</p>
-              <pre className="v16-codex-role-instruction">{guide.startupInstruction}</pre>
-              <ActionButton onClick={() => copyStartupInstruction(guide)} variant="secondary">
-                复制 {guide.englishName} 启动指令
-              </ActionButton>
-            </article>
-          ))}
-        </div>
-        {copyFeedback ? <p className="v16-feedback">{copyFeedback}</p> : null}
+    <Panel className="v16-home-column" title="Agent 入口">
+      <div className="v16-project-home-entry-grid">
+        <article className={`v16-project-home-entry-card${activeOwnerLabel === "目标助手" ? " active" : ""}`}>
+          <span>Goal Agent</span>
+          <strong>目标助手</strong>
+          <p>接住 Goal / Plan / Decisions，判断项目是否继续、调整、暂停或进入下一阶段。</p>
+          <small>适用：项目刚起步、需要 Goal Recheck、需要 completion decision。</small>
+        </article>
+        <article className={`v16-project-home-entry-card${activeOwnerLabel === "需求助手" ? " active" : ""}`}>
+          <span>Spec Agent</span>
+          <strong>需求助手</strong>
+          <p>把当前想法整理成规格，确认边界、验收标准和任务拆解。</p>
+          <small>适用：还没有确认需求、还没有生成任务、需要补规格。</small>
+        </article>
       </div>
-    </section>
+    </Panel>
   );
 }
 
