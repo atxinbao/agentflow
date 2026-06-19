@@ -37,10 +37,6 @@
 
 本需求以下列文档为输入基线：
 
-- [AGENTFLOW_PROJECT_OPERATING_SYSTEM_V1.md](/Users/mac/Documents/AgentFlow/AGENTFLOW_PROJECT_OPERATING_SYSTEM_V1.md)
-- [AGENTFLOW_AGENT_CAPABILITY_MATRIX_V1.md](/Users/mac/Documents/AgentFlow/AGENTFLOW_AGENT_CAPABILITY_MATRIX_V1.md)
-- [AGENTFLOW_WORKFLOW_SCHEMA_V1.md](/Users/mac/Documents/AgentFlow/AGENTFLOW_WORKFLOW_SCHEMA_V1.md)
-- [AGENTFLOW_EVENT_AND_PROJECTION_MODEL_V1.md](/Users/mac/Documents/AgentFlow/AGENTFLOW_EVENT_AND_PROJECTION_MODEL_V1.md)
 - [docs/architecture/001-project-operating-system-v1.md](/Users/mac/Documents/AgentFlow/docs/architecture/001-project-operating-system-v1.md)
 - [docs/architecture/002-agent-capability-matrix-v1.md](/Users/mac/Documents/AgentFlow/docs/architecture/002-agent-capability-matrix-v1.md)
 - [docs/architecture/003-workflow-schema-v1.md](/Users/mac/Documents/AgentFlow/docs/architecture/003-workflow-schema-v1.md)

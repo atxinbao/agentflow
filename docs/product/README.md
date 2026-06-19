@@ -56,6 +56,7 @@ Specialist Agent 不是固定顶层角色，而是按需加载的专家能力，
 | [003-goal-plan-document-model-v1.md](003-goal-plan-document-model-v1.md) | 定义 GOAL.md / PLAN.md / DECISIONS.md |
 | [004-requirement-to-goal-flow-v1.md](004-requirement-to-goal-flow-v1.md) | 定义用户输入如何转成项目目标 |
 | [005-goal-to-project-loop-flow-v1.md](005-goal-to-project-loop-flow-v1.md) | 定义目标和计划确认后如何进入项目循环 |
+| [design-system.md](design-system.md) | 定义当前桌面客户端设计基线和前端 Foundation 规则 |
 
 ## Relationship To Requirements
 

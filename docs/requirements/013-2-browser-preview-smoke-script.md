@@ -83,4 +83,4 @@ git diff --check
 
 ## 留痕
 
-验证记录见根目录 [verification.md](../../verification.md) 的 `2026-06-05 Browser Preview Smoke Script` 小节。
+验证记录见 [docs/verification/history.md](../verification/history.md) 的 `2026-06-05 Browser Preview Smoke Script` 小节。
