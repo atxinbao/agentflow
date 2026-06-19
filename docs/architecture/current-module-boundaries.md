@@ -67,7 +67,7 @@ docs/requirements/**
 
 - 暴露当前 AgentFlow 官方命令入口
 - 调用 `spec`、`task-loop`、`workflow-runtime`、`task-artifacts`、`release`、`audit` 等模块
-- 提供 Build Agent / 审计 / 运行时写回入口
+- 提供 Work Agent（`build-agent` 兼容别名）/ 审计 / 运行时写回入口
 
 不负责：
 
@@ -131,6 +131,33 @@ docs/requirements/**
 
 - 当前只提供 built-in core action contracts，不落 `.agentflow/action-contracts/**`。
 - `markIssueDone` 不自动触发 `requestAudit`。
+
+### Role Policy
+
+负责：
+
+- 提供 Runtime 可读取的 built-in Product Role / Runtime Role / Role Capability / Handoff Rule 定义
+- 收口产品层角色：`goal-agent / spec-agent / work-agent / audit-agent / delivery-agent`
+- 收口 runtime 层角色：`goal-agent / spec-agent / work-agent / audit-agent / delivery-agent / review-agent / coordinator-agent / human-owner`
+- 保留 `build-agent -> work-agent` 的兼容别名映射
+- 为后续 Arbitration 提供角色动作矩阵、对象矩阵和边界规则
+
+不负责：
+
+- 直接判定 accepted / rejected
+- 写 Event Store
+- 推进 Projection
+- 启动 Provider Session
+- 覆盖 prompt 或 handoff 之外的运行时事实
+
+实现位置：
+
+- `crates/role-policy/src/**`
+
+说明：
+
+- `BuildAgent` 只保留为 `WorkAgent` 的兼容别名，不再作为长期主命名。
+- `ReviewAgent / CoordinatorAgent / HumanOwner` 先在角色策略层收口，不在本阶段混入 UI 改造。
 
 ### Project Brain / Constitution
 

@@ -1,0 +1,15 @@
+[package]
+name = "agentflow-role-policy"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+agentflow-action-contract = { path = "../action-contract" }
+agentflow-ontology = { path = "../ontology" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
