@@ -1,15 +1,19 @@
+use agentflow_audit::{
+    request_human_audit, AuditScope, AuditScopeRef, HumanAuditReport, HumanAuditRequestDraft,
+};
 use agentflow_release::{
     confirm_project_release, prepare_project_release, publish_project_release,
     record_project_release_tag, record_project_remote_release,
 };
 use agentflow_spec::{
-    confirm_goal_draft_preview, confirm_plan_draft_preview,
+    confirm_goal_draft_preview, confirm_plan_draft_preview, list_spec_issues,
     materialize_spec_from_requirement_preview, read_completion_decision_runtime,
     read_requirement_preview_runtime, record_completion_decision,
     requirement_preview_from_requirement, sync_completion_decision_runtimes,
     CompletionDecisionOutcome, CompletionDecisionRuntime, RequirementPreviewRuntime, SpecIssue,
     SpecProject,
 };
+use agentflow_task_artifacts::load_task_run;
 use anyhow::{bail, Result};
 use serde::Serialize;
 use std::path::Path;
@@ -65,6 +69,45 @@ pub(crate) fn project_materialize(
     let (project, issues) = materialize_spec_from_requirement_preview(root, requirement_id)?;
     let _ = agentflow_projection::rebuild_projections(root)?;
     Ok(ProjectMaterializationResult { project, issues })
+}
+
+pub(crate) fn audit_request_human(
+    root: &Path,
+    run_id: &str,
+    issue_id: Option<&str>,
+    reason: &str,
+    public_delivery_path: &str,
+) -> Result<HumanAuditReport> {
+    let issue_id = resolve_issue_id_for_run(root, run_id, issue_id)?;
+    let draft = HumanAuditRequestDraft {
+        reason: reason.trim().to_string(),
+        scope: AuditScope {
+            description: format!("Audit workflow delivery for {issue_id} / {run_id}."),
+            refs: vec![
+                AuditScopeRef {
+                    kind: "issue".to_string(),
+                    id: issue_id.clone(),
+                    path: format!(".agentflow/spec/issues/{issue_id}.json"),
+                },
+                AuditScopeRef {
+                    kind: "task-run".to_string(),
+                    id: run_id.to_string(),
+                    path: format!(".agentflow/tasks/{issue_id}/runs/{run_id}/run.json"),
+                },
+                AuditScopeRef {
+                    kind: "evidence".to_string(),
+                    id: run_id.to_string(),
+                    path: format!(".agentflow/tasks/{issue_id}/evidence/evidence.json"),
+                },
+                AuditScopeRef {
+                    kind: "public-delivery".to_string(),
+                    id: public_delivery_path.trim().to_string(),
+                    path: public_delivery_path.trim().to_string(),
+                },
+            ],
+        },
+    };
+    request_human_audit(root, draft)
 }
 
 pub(crate) fn completion_inspect(
@@ -162,5 +205,29 @@ pub(crate) fn parse_completion_outcome(raw: &str) -> Result<CompletionDecisionOu
         "accept" => Ok(CompletionDecisionOutcome::Accept),
         "next-stage" => Ok(CompletionDecisionOutcome::NextStage),
         other => bail!("unsupported completion outcome: {other}"),
+    }
+}
+
+fn resolve_issue_id_for_run(root: &Path, run_id: &str, issue_id: Option<&str>) -> Result<String> {
+    if let Some(issue_id) = issue_id.map(str::trim).filter(|value| !value.is_empty()) {
+        load_task_run(root, issue_id, run_id)?;
+        return Ok(issue_id.to_string());
+    }
+
+    let issues = list_spec_issues(root)?;
+    let mut matched = issues
+        .into_iter()
+        .filter_map(|issue| {
+            load_task_run(root, &issue.issue_id, run_id)
+                .ok()
+                .map(|_| issue.issue_id)
+        })
+        .collect::<Vec<_>>();
+    matched.sort();
+    matched.dedup();
+    match matched.len() {
+        1 => Ok(matched.remove(0)),
+        0 => bail!("no task run matched runId {run_id}"),
+        _ => bail!("multiple task runs matched runId {run_id}; pass --issue-id explicitly"),
     }
 }

@@ -9,6 +9,7 @@ name = "agentflow"
 path = "src/main.rs"
 
 [dependencies]
+agentflow-audit = { path = "../audit" }
 agentflow-agent-dispatcher = { path = "../agent-dispatcher" }
 agentflow-event-store = { path = "../event-store" }
 agentflow-mcp = { path = "../mcp" }

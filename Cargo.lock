@@ -50,6 +50,7 @@ name = "agentflow-cli"
 version = "0.3.0"
 dependencies = [
  "agentflow-agent-dispatcher",
+ "agentflow-audit",
  "agentflow-event-store",
  "agentflow-mcp",
  "agentflow-projection",

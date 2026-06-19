@@ -228,6 +228,21 @@ pub fn read_spec_issue(project_root: impl AsRef<Path>, issue_id: &str) -> Result
     read_json(&spec_issue_path(&root, issue_id)?)
 }
 
+pub fn update_spec_issue_status(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    status: SpecIssueStatus,
+) -> Result<SpecIssue> {
+    let root = canonicalize_project_root(project_root)?;
+    let mut issue = read_spec_issue(&root, issue_id)?;
+    if issue.status != status {
+        issue.status = status;
+        issue.system.updated_at = unix_timestamp_seconds();
+        write_spec_issue(&root, &issue)?;
+    }
+    Ok(issue)
+}
+
 pub fn read_spec_project(project_root: impl AsRef<Path>, project_id: &str) -> Result<SpecProject> {
     let root = canonicalize_project_root(project_root)?;
     read_json(&spec_project_path(&root, project_id)?)
@@ -1383,7 +1398,7 @@ fn build_completion_facts(
         .filter(|issue| issue.status == SpecIssueStatus::Done)
         .filter(|issue| {
             load_task_evidence(root, &issue.issue_id)
-                .map(|evidence| evidence.status == "ready")
+                .map(|evidence| matches!(evidence.status.as_str(), "ready" | "passed"))
                 .unwrap_or(false)
         })
         .count();

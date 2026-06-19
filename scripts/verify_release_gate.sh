@@ -19,6 +19,10 @@ done
 
 mkdir -p "$ARTIFACT_DIR"
 ARTIFACT_DIR="$(cd "$ARTIFACT_DIR" && pwd)"
+CLI_DIR="$ARTIFACT_DIR/cli"
+PUBLIC_DIR="$ARTIFACT_DIR/public"
+RUNTIME_DIR="$ARTIFACT_DIR/runtime"
+mkdir -p "$CLI_DIR" "$PUBLIC_DIR" "$RUNTIME_DIR"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -26,254 +30,482 @@ if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
 fi
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agentflow-release-gate.XXXXXX")"
-trap 'rm -rf "$TMP_DIR"' EXIT
-
 WORKSPACE="$TMP_DIR/workspace"
-mkdir -p "$WORKSPACE/docs/requirements"
-cd "$WORKSPACE"
-git init -q
+STATUS_PATH="$ARTIFACT_DIR/status.json"
+STAGE_LOG_PATH="$ARTIFACT_DIR/stage-log.jsonl"
+BOOTSTRAP_BRANCH="release-gate-bootstrap"
+export RUST_TEST_THREADS="${RUST_TEST_THREADS:-1}"
 
-REQUIREMENT_FILE="docs/requirements/058h-release-gate-e2e.md"
-cat > "$REQUIREMENT_FILE" <<'EOF'
+cleanup() {
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+record_stage() {
+  local stage="$1"
+  local status="$2"
+  local detail="$3"
+  python3 - "$STAGE_LOG_PATH" "$stage" "$status" "$detail" <<'PY'
+import json, pathlib, sys, time
+path = pathlib.Path(sys.argv[1])
+entry = {
+    "stage": sys.argv[2],
+    "status": sys.argv[3],
+    "detail": sys.argv[4],
+    "timestamp": int(time.time()),
+}
+with path.open("a", encoding="utf-8") as handle:
+    handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+PY
+}
+
+write_status() {
+  local status="$1"
+  local stage="$2"
+  local message="$3"
+  python3 - "$STATUS_PATH" "$status" "$stage" "$message" <<'PY'
+import json, pathlib, sys, time
+path = pathlib.Path(sys.argv[1])
+payload = {
+    "status": sys.argv[2],
+    "stage": sys.argv[3],
+    "message": sys.argv[4],
+    "updatedAt": int(time.time()),
+}
+path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+fail_stage() {
+  local stage="$1"
+  local message="$2"
+  record_stage "$stage" "failed" "$message"
+  write_status "failed" "$stage" "$message"
+  exit 1
+}
+
+run_cli_json() {
+  local stage="$1"
+  local output="$2"
+  shift 2
+  if ! (cd "$WORKSPACE" && "$BIN" "$@" >"$output" 2>&1); then
+    fail_stage "$stage" "command failed: agentflow $*"
+  fi
+  record_stage "$stage" "passed" "$(basename "$output")"
+}
+
+run_workspace_cmd() {
+  local stage="$1"
+  local output="$2"
+  shift 2
+  if ! (cd "$WORKSPACE" && "$@" >"$output" 2>&1); then
+    fail_stage "$stage" "command failed: $*"
+  fi
+  record_stage "$stage" "passed" "$(basename "$output")"
+}
+
+json_field() {
+  local file="$1"
+  local expression="$2"
+  python3 - "$file" "$expression" <<'PY'
+import json, pathlib, sys
+data = json.loads(pathlib.Path(sys.argv[1]).read_text())
+expression = sys.argv[2]
+value = data
+for part in expression.split("."):
+    if part.isdigit():
+        value = value[int(part)]
+    else:
+        value = value[part]
+if isinstance(value, (dict, list)):
+    print(json.dumps(value, ensure_ascii=False))
+else:
+    print(value)
+PY
+}
+
+text_value() {
+  local file="$1"
+  local prefix="$2"
+  sed -n "s/^${prefix}//p" "$file" | tail -n 1
+}
+
+prepare_workspace() {
+  record_stage "workspace.prepare" "started" "$WORKSPACE"
+  git clone "$ROOT" "$WORKSPACE" >/dev/null
+  git -C "$WORKSPACE" config user.email "codex@example.com"
+  git -C "$WORKSPACE" config user.name "Codex"
+  git -C "$WORKSPACE" checkout -B "$BOOTSTRAP_BRANCH" >/dev/null
+  export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
+  record_stage "workspace.prepare" "passed" "$WORKSPACE"
+}
+
+write_requirement() {
+  local path="$WORKSPACE/docs/requirements/058h-release-gate-e2e.md"
+  mkdir -p "$(dirname "$path")"
+  cat >"$path" <<'EOF'
 # 058H Release Gate E2E
 
 验证 requirement 到 project/release 的正式入口。
 
-- 目标：验证 v0.3.0 stable release gate。
-- 范围：formal project/completion/release runtime。
-- 交付：release facts、CHANGELOG、release notes。
+- 目标：验证 v0.3.1 stable release gate 真链路。
+- 范围：formal project / task-loop / build-agent / completion / release runtime。
+- 交付：release facts、CHANGELOG、release notes、外部 review surface。
 EOF
-
-run_json() {
-  local output="$1"
-  shift
-  "$BIN" "$@" > "$output"
+  record_stage "requirement.write" "passed" "docs/requirements/058h-release-gate-e2e.md"
 }
 
-run_json artifacts-intake.json \
-  project intake \
-  --requirement-path "$REQUIREMENT_FILE" \
-  --project-id project-release-gate-e2e
-
-REQUIREMENT_ID="$(python3 - <<'PY'
-import json, pathlib
-data = json.loads(pathlib.Path("artifacts-intake.json").read_text())
-print(data["requirementId"])
+append_marker() {
+  local file="$1"
+  local marker="$2"
+  python3 - "$file" "$marker" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+marker = sys.argv[2]
+text = path.read_text(encoding="utf-8")
+if marker not in text:
+    if not text.endswith("\n"):
+        text += "\n"
+    text += marker + "\n"
+path.write_text(text, encoding="utf-8")
 PY
-)"
+}
 
-run_json artifacts-goal.json project confirm-goal --requirement-id "$REQUIREMENT_ID"
-run_json artifacts-plan.json project confirm-plan --requirement-id "$REQUIREMENT_ID"
-run_json artifacts-materialize.json project materialize --requirement-id "$REQUIREMENT_ID"
-
-python3 - <<'PY'
-import json
-import pathlib
-import time
-
-root = pathlib.Path(".")
-materialized = json.loads((root / "artifacts-materialize.json").read_text())
-project_id = materialized["project"]["projectId"]
-now = int(time.time())
-projection_dir = root / ".agentflow" / "projections" / "tasks"
-projection_dir.mkdir(parents=True, exist_ok=True)
-
-for index, issue in enumerate(materialized["issues"], start=1):
-    issue_path = root / issue["system"]["path"]
-    issue_doc = json.loads(issue_path.read_text())
-    issue_doc["status"] = "done"
-    issue_doc.setdefault("system", {})["updatedAt"] = now + index
-    issue_path.write_text(json.dumps(issue_doc, ensure_ascii=False, indent=2) + "\n")
-
-    issue_id = issue["issueId"]
-    run_id = f"run-{index:03d}"
-    expected_outputs = issue.get("expectedOutputs", {})
-    issue_root = root / ".agentflow" / "tasks" / issue_id
-    evidence_dir = issue_root / "evidence"
-    review_dir = issue_root / "runs" / run_id / "review"
-    evidence_dir.mkdir(parents=True, exist_ok=True)
-    review_dir.mkdir(parents=True, exist_ok=True)
-    (evidence_dir / "evidence.json").write_text(
-        json.dumps(
-            {
-                "version": "task-evidence.v1",
-                "issueId": issue_id,
-                "runId": run_id,
-                "status": "ready",
-                "summary": "release gate e2e local verification passed",
-                "runPath": f".agentflow/tasks/{issue_id}/runs/{run_id}/run.json",
-                "commandPaths": [],
-                "validationPath": f".agentflow/tasks/{issue_id}/runs/{run_id}/validation.json",
-                "createdAt": now + index,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n"
-    )
-    (review_dir / "closeout-proof.json").write_text(
-        json.dumps(
-            {
-                "merged": True,
-                "issueClosed": True,
-                "publicDeliveryWritten": True,
-                "prUrl": f"https://github.com/example/agentflow/pull/{index}",
-                "mergeCommitSha": f"merge-058h-{index:03d}",
-                "changelogPath": "CHANGELOG.md",
-                "releaseNotesPath": f"docs/release-notes/{project_id}.md",
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n"
-    )
-    projection_payload = {
-        "issueId": issue_id,
-        "projectId": project_id,
-        "currentState": "done",
-        "displayStatus": "done",
-        "publicDelivery": {
-            "prUrl": f"https://github.com/example/agentflow/pull/{index}",
-            "mergeCommit": f"merge-058h-{index:03d}",
-            "changelogPath": "CHANGELOG.md",
-            "releaseNotesUrl": f"docs/release-notes/{project_id}.md",
-        },
-        "delivery": {
-            "status": "ready",
-            "evidenceStatus": "ready",
-            "evidencePath": expected_outputs.get("evidencePath"),
-            "prUrl": f"https://github.com/example/agentflow/pull/{index}",
-            "mergeCommit": f"merge-058h-{index:03d}",
-            "publicRecordPath": "CHANGELOG.md",
-        },
-        "updatedAt": now + index,
-    }
-    (projection_dir / f"{issue_id}.json").write_text(
-        json.dumps(projection_payload, ensure_ascii=False, indent=2) + "\n"
-    )
+write_completion_request() {
+  local issue_id="$1"
+  local run_id="$2"
+  local path="$WORKSPACE/.agentflow/tmp/${run_id}-completion-request.json"
+  mkdir -p "$(dirname "$path")"
+  python3 - "$path" "$issue_id" "$run_id" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+path.write_text(json.dumps({
+    "issueId": sys.argv[2],
+    "runId": sys.argv[3],
+}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
-
-"$BIN" projection rebuild > artifacts-projection.txt
-run_json artifacts-completion-inspect.json completion inspect --project-id project-release-gate-e2e
-run_json artifacts-completion-decide.json \
-  completion decide \
-  --project-id project-release-gate-e2e \
-  --outcome accept \
-  --summary "Release gate fixture accepted" \
-  --rationale "all issues done" \
-  --rationale "projection rebuilt"
-"$BIN" projection rebuild > artifacts-projection-after-completion.txt
-run_json artifacts-release-prepare.json release prepare --project-id project-release-gate-e2e
-run_json artifacts-release-confirm.json release confirm --project-id project-release-gate-e2e
-mkdir -p artifacts
-cat > artifacts/project-release-gate-e2e-release-manifest.json <<'EOF'
-{
-  "projectId": "project-release-gate-e2e",
-  "artifacts": [
-    "CHANGELOG.md",
-    "docs/release-notes/project-release-gate-e2e.md"
-  ],
-  "generatedBy": "verify_release_gate.sh"
-}
-EOF
-run_json artifacts-release-record-tag.json \
-  release record-tag \
-  --project-id project-release-gate-e2e \
-  --tag-name v0.3.1-e2e \
-  --tag-commit-sha e2e-tag-commit-001
-run_json artifacts-release-record-remote.json \
-  release record-remote \
-  --project-id project-release-gate-e2e \
-  --provider github \
-  --release-id rel-e2e-001 \
-  --release-url https://github.com/example/agentflow/releases/tag/v0.3.1-e2e \
-  --tag-name v0.3.1-e2e \
-  --release-commit-sha e2e-tag-commit-001 \
-  --artifact-manifest-path artifacts/project-release-gate-e2e-release-manifest.json
-run_json artifacts-release-publish.json release publish --project-id project-release-gate-e2e
-"$BIN" release summary > artifacts-release-summary.txt
-
-ARTIFACT_DIR_PY="$ARTIFACT_DIR" python3 - <<'PY'
-import json
-import os
-import pathlib
-import shutil
-
-root = pathlib.Path(".")
-artifact_dir = pathlib.Path(os.environ["ARTIFACT_DIR_PY"])
-cli_dir = artifact_dir / "cli"
-public_dir = artifact_dir / "public"
-runtime_dir = artifact_dir / "runtime"
-
-for directory in (cli_dir, public_dir, runtime_dir):
-    directory.mkdir(parents=True, exist_ok=True)
-
-for path in root.glob("artifacts-*"):
-    shutil.copy2(path, cli_dir / path.name)
-
-release = json.loads((root / "artifacts-release-publish.json").read_text())
-project_id = release["projectId"]
-
-public_paths = {
-    root / "CHANGELOG.md": public_dir / "CHANGELOG.md",
-    root / "docs" / "release-notes" / f"{project_id}.md": public_dir / "release-notes.md",
-    root / "docs" / "reviews" / f"{project_id}.md": public_dir / "external-review.md",
-}
-runtime_paths = {
-    root / ".agentflow" / "release" / "projects" / f"{project_id}.json": runtime_dir / "release-facts.json",
-    root / ".agentflow" / "release" / "reviews" / f"{project_id}.json": runtime_dir / "external-review-surface.json",
-    root / ".agentflow" / "release" / "proofs" / project_id / "tag.json": runtime_dir / "release-tag-proof.json",
-    root / ".agentflow" / "release" / "proofs" / project_id / "remote-release.json": runtime_dir / "remote-release-proof.json",
-    root / ".agentflow" / "indexes" / "releases.json": runtime_dir / "release-index.json",
-    root / ".agentflow" / "indexes" / "external-reviews.json": runtime_dir / "external-review-index.json",
+  echo "$path"
 }
 
-for source, destination in {**public_paths, **runtime_paths}.items():
-    shutil.copy2(source, destination)
+write_attestation() {
+  local path="$1"
+  local branch="$2"
+  local review_url="$3"
+  local issue_ref="$4"
+  local head_sha="$5"
+  python3 - "$path" "$branch" "$review_url" "$issue_ref" "$head_sha" <<'PY'
+import json, pathlib, sys, time
+path = pathlib.Path(sys.argv[1])
+branch = sys.argv[2]
+review_url = sys.argv[3]
+issue_ref = sys.argv[4]
+head_sha = sys.argv[5]
+payload = {
+    "version": "agentflow-mcp-closeout-attestation.v1",
+    "provider": "github",
+    "reviewRef": review_url,
+    "reviewUrl": review_url,
+    "repositoryFullName": "atxinbao/agentflow",
+    "sourceBranch": branch,
+    "targetBranch": "main",
+    "baseSha": head_sha,
+    "headSha": head_sha,
+    "mergeCommitSha": f"merge-{issue_ref}",
+    "merged": True,
+    "mergedAt": "2026-06-19T12:00:00Z",
+    "issueClosed": True,
+    "issues": [{
+        "issueRef": issue_ref,
+        "issueUrl": f"https://github.com/atxinbao/agentflow/issues/{issue_ref}",
+        "closed": True,
+        "closedAt": "2026-06-19T12:01:00Z",
+    }],
+    "queriedAt": int(time.time()),
+}
+path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+}
 
-release_facts = json.loads((runtime_dir / "release-facts.json").read_text())
-external_review = json.loads((runtime_dir / "external-review-surface.json").read_text())
-materialized = json.loads((root / "artifacts-materialize.json").read_text())
-summary = {
-    "requirementId": materialized["project"]["sourceRequirementId"],
+bootstrap_public_surface() {
+  local project_id="$1"
+  run_workspace_cmd "bootstrap.commit" "$CLI_DIR/bootstrap-commit.txt" \
+    bash -lc "git add 'docs/requirements/058h-release-gate-e2e.md' 'docs/projects/${project_id}' && git commit -m 'e2e: bootstrap release-gate workspace'"
+}
+
+advance_bootstrap_base() {
+  local source_branch="$1"
+  run_workspace_cmd "bootstrap.advance" "$CLI_DIR/bootstrap-advance.txt" \
+    bash -lc "git checkout '$BOOTSTRAP_BRANCH' && git merge --ff-only '$source_branch'"
+}
+
+install_workspace_desktop_dependencies() {
+  run_workspace_cmd "workspace.desktop-deps" "$CLI_DIR/workspace-desktop-deps.txt" \
+    npm --prefix apps/desktop ci
+}
+
+run_issue() {
+  local issue_id="$1"
+  local run_id="$2"
+  local branch_name="$3"
+  local stage_prefix="$4"
+  local target_file="$5"
+  local marker="$6"
+  local issue_ref="$7"
+
+  run_workspace_cmd "${stage_prefix}.branch" "$CLI_DIR/${stage_prefix}-branch.txt" \
+    bash -lc "git checkout '$BOOTSTRAP_BRANCH' && git checkout -B '$branch_name' && git branch --set-upstream-to '$BOOTSTRAP_BRANCH' '$branch_name'"
+
+  append_marker "$WORKSPACE/$target_file" "$marker"
+  run_workspace_cmd "${stage_prefix}.commit" "$CLI_DIR/${stage_prefix}-commit.txt" \
+    bash -lc "git add '$target_file' && git commit -m 'e2e: complete $issue_id'"
+
+  local request_path
+  request_path="$(write_completion_request "$issue_id" "$run_id")"
+
+  run_cli_json "${stage_prefix}.prepare-review" "$CLI_DIR/${stage_prefix}-prepare-review.txt" \
+    build-agent prepare-review --request "$request_path"
+
+  local head_sha
+  head_sha="$(git -C "$WORKSPACE" rev-parse HEAD)"
+  local attestation_path="$WORKSPACE/.agentflow/tmp/${run_id}-attestation.json"
+  local review_url="https://github.com/atxinbao/agentflow/pull/${issue_ref}"
+  write_attestation "$attestation_path" "$branch_name" "$review_url" "$issue_ref" "$head_sha"
+
+  run_cli_json "${stage_prefix}.closeout-proof" "$CLI_DIR/${stage_prefix}-closeout.txt" \
+    build-agent write-closeout-proof \
+    --issue-id "$issue_id" \
+    --run-id "$run_id" \
+    --provider github \
+    --merge-mode auto-merge-if-eligible \
+    --attestation-path "$attestation_path"
+
+  run_cli_json "${stage_prefix}.complete" "$CLI_DIR/${stage_prefix}-complete.txt" \
+    build-agent complete --request "$request_path"
+}
+
+collect_artifacts() {
+  local project_id="$1"
+  local final_issue_id="$2"
+  local final_run_id="$3"
+
+  cp "$WORKSPACE/CHANGELOG.md" "$PUBLIC_DIR/CHANGELOG.md"
+  cp "$WORKSPACE/docs/release-notes/${project_id}.md" "$PUBLIC_DIR/release-notes.md"
+  cp "$WORKSPACE/docs/reviews/${project_id}.md" "$PUBLIC_DIR/external-review.md"
+
+  cp "$WORKSPACE/.agentflow/release/projects/${project_id}.json" "$RUNTIME_DIR/release-facts.json"
+  cp "$WORKSPACE/.agentflow/release/reviews/${project_id}.json" "$RUNTIME_DIR/external-review-surface.json"
+  cp "$WORKSPACE/.agentflow/release/proofs/${project_id}/tag.json" "$RUNTIME_DIR/release-tag-proof.json"
+  cp "$WORKSPACE/.agentflow/release/proofs/${project_id}/remote-release.json" "$RUNTIME_DIR/remote-release-proof.json"
+  cp "$WORKSPACE/.agentflow/indexes/releases.json" "$RUNTIME_DIR/release-index.json"
+  cp "$WORKSPACE/.agentflow/indexes/external-reviews.json" "$RUNTIME_DIR/external-review-index.json"
+  cp "$WORKSPACE/.agentflow/spec/completions/${project_id}.json" "$RUNTIME_DIR/completion-runtime.json"
+  cp "$WORKSPACE/.agentflow/projections/projects/${project_id}.json" "$RUNTIME_DIR/project-projection.json"
+  cp "$WORKSPACE/.agentflow/projections/tasks/${final_issue_id}.json" "$RUNTIME_DIR/final-task-projection.json"
+  cp "$WORKSPACE/.agentflow/tasks/${final_issue_id}/evidence/evidence.json" "$RUNTIME_DIR/final-evidence.json"
+  cp "$WORKSPACE/.agentflow/tasks/${final_issue_id}/runs/${final_run_id}/review/closeout-proof.json" "$RUNTIME_DIR/final-closeout-proof.json"
+  if [[ -f "$WORKSPACE/.agentflow/audit/index.json" ]]; then
+    cp "$WORKSPACE/.agentflow/audit/index.json" "$RUNTIME_DIR/audit-index.json"
+  fi
+}
+
+write_summary() {
+  local requirement_id="$1"
+  local project_id="$2"
+  local issue_count="$3"
+  python3 - "$ARTIFACT_DIR/summary.json" "$ARTIFACT_DIR/summary.md" "$requirement_id" "$project_id" "$issue_count" "$RUNTIME_DIR/release-facts.json" "$RUNTIME_DIR/external-review-surface.json" "$STATUS_PATH" <<'PY'
+import json, pathlib, sys
+summary_json = pathlib.Path(sys.argv[1])
+summary_md = pathlib.Path(sys.argv[2])
+requirement_id = sys.argv[3]
+project_id = sys.argv[4]
+issue_count = int(sys.argv[5])
+release = json.loads(pathlib.Path(sys.argv[6]).read_text())
+review = json.loads(pathlib.Path(sys.argv[7]).read_text())
+status = json.loads(pathlib.Path(sys.argv[8]).read_text())
+audit = review.get("auditSummary") or {}
+payload = {
+    "status": status["status"],
+    "requirementId": requirement_id,
     "projectId": project_id,
-    "issueCount": len(materialized["issues"]),
-    "releaseState": release_facts["currentState"],
-    "publicationStage": release_facts["publicationStage"],
-    "gateStatus": release_facts["gateStatus"],
-    "completionState": release_facts["completionState"],
-    "completionOutcome": release_facts["completionOutcome"],
-    "tagName": release_facts.get("tagName"),
-    "remoteReleaseUrl": release_facts.get("remoteReleaseUrl"),
-    "changelogPath": release_facts["changelogPath"],
-    "releaseNotesPath": release_facts["releaseNotesPath"],
-    "externalReviewPath": external_review["handoffPath"],
-    "entryCount": release_facts["entryCount"],
-    "latestEventId": release_facts["latestEventId"],
+    "issueCount": issue_count,
+    "releaseState": release["currentState"],
+    "publicationStage": release["publicationStage"],
+    "gateStatus": release["gateStatus"],
+    "completionState": release["completionState"],
+    "completionOutcome": release.get("completionOutcome"),
+    "tagName": release.get("tagName"),
+    "remoteReleaseUrl": release.get("remoteReleaseUrl"),
+    "changelogPath": release["changelogPath"],
+    "releaseNotesPath": release["releaseNotesPath"],
+    "externalReviewPath": review.get("handoffPath"),
+    "auditStatus": audit.get("latestStatus"),
+    "auditReportPath": audit.get("latestReportPath"),
 }
-summary_path = artifact_dir / "summary.json"
-summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n")
+summary_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+summary_md.write_text(
+    "\n".join([
+        "# Release Gate E2E Summary",
+        "",
+        f"- Requirement: `{requirement_id}`",
+        f"- Project: `{project_id}`",
+        f"- Issue count: `{issue_count}`",
+        f"- Release state: `{release['currentState']}`",
+        f"- Publication stage: `{release['publicationStage']}`",
+        f"- Completion state: `{release['completionState']}`",
+        f"- Completion outcome: `{release.get('completionOutcome')}`",
+        f"- Remote release URL: `{release.get('remoteReleaseUrl')}`",
+        f"- Changelog: `{release['changelogPath']}`",
+        f"- Release notes: `{release['releaseNotesPath']}`",
+        f"- External review: `{review.get('handoffPath')}`",
+        f"- Audit status: `{audit.get('latestStatus', 'not-requested')}`",
+    ]) + "\n",
+    encoding="utf-8",
+)
+PY
+}
 
-markdown = f"""# Release Gate E2E Summary
+main() {
+  write_status "running" "workspace.prepare" "preparing release gate workspace"
+  prepare_workspace
+  write_requirement
 
-- Requirement: `{summary["requirementId"]}`
-- Project: `{summary["projectId"]}`
-- Issues: `{summary["issueCount"]}`
-- Completion: `{summary["completionState"]}` / `{summary["completionOutcome"]}`
-- Release: `{summary["releaseState"]}`
-- Publication Stage: `{summary["publicationStage"]}`
-- Gate: `{summary["gateStatus"]}`
-- Tag: `{summary["tagName"]}`
-- Remote Release: `{summary["remoteReleaseUrl"]}`
-- Entries: `{summary["entryCount"]}`
-- Latest Event: `{summary["latestEventId"]}`
-- Changelog: `{summary["changelogPath"]}`
-- Release Notes: `{summary["releaseNotesPath"]}`
-- External Review: `{summary["externalReviewPath"]}`
-"""
-(artifact_dir / "summary.md").write_text(markdown)
+  local intake_json="$CLI_DIR/artifacts-intake.json"
+  local goal_json="$CLI_DIR/artifacts-goal.json"
+  local plan_json="$CLI_DIR/artifacts-plan.json"
+  local materialize_json="$CLI_DIR/artifacts-materialize.json"
+  local tick1_txt="$CLI_DIR/artifacts-task-loop-tick-1.txt"
+  local completion_inspect_json="$CLI_DIR/artifacts-completion-inspect.json"
+  local completion_decide_json="$CLI_DIR/artifacts-completion-decide.json"
+  local release_prepare_json="$CLI_DIR/artifacts-release-prepare.json"
+  local release_confirm_json="$CLI_DIR/artifacts-release-confirm.json"
+  local release_record_tag_json="$CLI_DIR/artifacts-release-record-tag.json"
+  local release_record_remote_json="$CLI_DIR/artifacts-release-record-remote.json"
+  local release_publish_json="$CLI_DIR/artifacts-release-publish.json"
+  local release_publish_refresh_json="$CLI_DIR/artifacts-release-publish-refresh.json"
+  local audit_request_json="$CLI_DIR/artifacts-audit-request.json"
+  local release_summary_txt="$CLI_DIR/artifacts-release-summary.txt"
+
+  run_cli_json "requirement.intake" "$intake_json" \
+    project intake \
+    --requirement-path docs/requirements/058h-release-gate-e2e.md \
+    --project-id project-release-gate-e2e
+
+  local requirement_id
+  requirement_id="$(json_field "$intake_json" requirementId)"
+  run_cli_json "goal.confirm" "$goal_json" \
+    project confirm-goal --requirement-id "$requirement_id"
+  run_cli_json "plan.confirm" "$plan_json" \
+    project confirm-plan --requirement-id "$requirement_id"
+  run_cli_json "project.materialize" "$materialize_json" \
+    project materialize --requirement-id "$requirement_id"
+
+  local project_id issue1_id issue2_id
+  project_id="$(json_field "$materialize_json" project.projectId)"
+  issue1_id="$(json_field "$materialize_json" issues.0.issueId)"
+  issue2_id="$(json_field "$materialize_json" issues.1.issueId)"
+  bootstrap_public_surface "$project_id"
+
+  run_workspace_cmd "task-loop.tick.issue1" "$tick1_txt" \
+    "$BIN" task-loop tick --project-id "$project_id" --provider codex
+
+  local issue1_run issue1_branch
+  issue1_run="$(text_value "$tick1_txt" 'run: ')"
+  issue1_branch="$(text_value "$tick1_txt" 'branch: ')"
+  [[ -n "$issue1_run" && -n "$issue1_branch" ]] || fail_stage "task-loop.tick.issue1" "missing run or branch output"
+
+  run_issue \
+    "$issue1_id" \
+    "$issue1_run" \
+    "$issue1_branch" \
+    "issue-1" \
+    "crates/spec/src/lib.rs" \
+    "// release-gate-e2e: ${issue1_id}" \
+    "9301"
+
+  advance_bootstrap_base "$issue1_branch"
+  install_workspace_desktop_dependencies
+
+  local issue2_run issue2_request issue2_branch
+  issue2_run="$(text_value "$CLI_DIR/issue-1-complete.txt" 'next run: ')"
+  issue2_request="$(text_value "$CLI_DIR/issue-1-complete.txt" 'next request: ')"
+  [[ -n "$issue2_run" && -n "$issue2_request" ]] || fail_stage "issue-1.complete" "missing next launch data"
+  issue2_branch="$(json_field "$WORKSPACE/$issue2_request" branchName)"
+
+  run_issue \
+    "$issue2_id" \
+    "$issue2_run" \
+    "$issue2_branch" \
+    "issue-2" \
+    "apps/desktop/src/browserPreviewData.ts" \
+    "// release-gate-e2e: ${issue2_id}" \
+    "9302"
+
+  run_cli_json "completion.inspect" "$completion_inspect_json" \
+    completion inspect --project-id "$project_id"
+  run_cli_json "completion.decide" "$completion_decide_json" \
+    completion decide \
+    --project-id "$project_id" \
+    --outcome accept \
+    --summary "Release gate runtime workflow accepted" \
+    --rationale "all issues reached done through official build-agent flow" \
+    --rationale "task evidence and closeout proof were generated by runtime"
+
+  run_cli_json "release.prepare" "$release_prepare_json" \
+    release prepare --project-id "$project_id"
+  run_cli_json "release.confirm" "$release_confirm_json" \
+    release confirm --project-id "$project_id"
+
+  mkdir -p "$WORKSPACE/artifacts"
+  python3 - "$WORKSPACE/artifacts/${project_id}-release-manifest.json" "$project_id" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+project_id = sys.argv[2]
+path.write_text(json.dumps({
+    "projectId": project_id,
+    "artifacts": [
+        "CHANGELOG.md",
+        f"docs/release-notes/{project_id}.md",
+        f"docs/reviews/{project_id}.md",
+    ],
+    "generatedBy": "verify_release_gate.sh",
+}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 
-echo "release gate e2e: ok"
-echo "artifact dir: $ARTIFACT_DIR"
-echo "summary: $ARTIFACT_DIR/summary.md"
+  run_cli_json "release.record-tag" "$release_record_tag_json" \
+    release record-tag \
+    --project-id "$project_id" \
+    --tag-name v0.3.1-e2e \
+    --tag-commit-sha "$(git -C "$WORKSPACE" rev-parse HEAD)"
+
+  run_cli_json "release.record-remote" "$release_record_remote_json" \
+    release record-remote \
+    --project-id "$project_id" \
+    --provider github \
+    --release-id rel-e2e-001 \
+    --release-url https://github.com/atxinbao/agentflow/releases/tag/v0.3.1-e2e \
+    --tag-name v0.3.1-e2e \
+    --release-commit-sha "$(git -C "$WORKSPACE" rev-parse HEAD)" \
+    --artifact-manifest-path "artifacts/${project_id}-release-manifest.json"
+
+  run_cli_json "release.publish" "$release_publish_json" \
+    release publish --project-id "$project_id"
+
+  run_cli_json "audit.request-human" "$audit_request_json" \
+    audit request-human \
+    --run-id "$issue2_run" \
+    --issue-id "$issue2_id" \
+    --reason "Release gate E2E human audit simulation." \
+    --public-delivery-path CHANGELOG.md
+
+  run_cli_json "release.publish.refresh" "$release_publish_refresh_json" \
+    release publish --project-id "$project_id"
+
+  run_workspace_cmd "release.summary" "$release_summary_txt" \
+    "$BIN" release summary
+
+  collect_artifacts "$project_id" "$issue2_id" "$issue2_run"
+  write_status "passed" "release.publish.refresh" "release gate E2E completed"
+  write_summary "$requirement_id" "$project_id" "2"
+}
+
+main "$@"

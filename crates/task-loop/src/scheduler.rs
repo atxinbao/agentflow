@@ -7,7 +7,8 @@ use agentflow_event_store::{
     EventActor, EventStateTransition, TaskEvent, TaskEventDraft,
 };
 use agentflow_spec::{
-    read_spec_issue, read_spec_project, SpecIssue, SpecIssueStatus, SpecPriority, SpecProject,
+    read_spec_issue, read_spec_project, update_spec_issue_status, SpecIssue, SpecIssueStatus,
+    SpecPriority, SpecProject,
 };
 use agentflow_task_artifacts::create_task_run;
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
@@ -265,6 +266,7 @@ fn request_issue_launch_inner(
             )),
         },
     )?;
+    let _ = update_spec_issue_status(root, &issue.issue_id, SpecIssueStatus::InProgress)?;
 
     Ok(TaskLoopLaunch {
         project_id: issue.project_id.clone(),
@@ -335,6 +337,7 @@ fn append_issue_scheduled_event(
             idempotency_key: Some(format!("issue.scheduled:{}", issue.issue_id)),
         },
     )?;
+    let _ = update_spec_issue_status(root, &issue.issue_id, SpecIssueStatus::Todo)?;
 
     Ok(TaskLoopSchedule {
         project_id: issue
@@ -807,6 +810,8 @@ mod tests {
             events[0].state.as_ref().unwrap().to_state,
             SpecIssueStatus::Todo.as_str()
         );
+        let issue = read_spec_issue(dir.path(), "AF-TASK-001").unwrap();
+        assert_eq!(issue.status, SpecIssueStatus::Todo);
     }
 
     #[test]
@@ -833,6 +838,8 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| event.event_type == AGENT_LAUNCH_REQUESTED));
+        let issue = read_spec_issue(dir.path(), "AF-TASK-001").unwrap();
+        assert_eq!(issue.status, SpecIssueStatus::InProgress);
     }
 
     #[test]
