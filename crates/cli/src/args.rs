@@ -17,6 +17,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: ProjectCommand,
     },
+    Audit {
+        #[command(subcommand)]
+        command: AuditCommand,
+    },
     Completion {
         #[command(subcommand)]
         command: CompletionCommand,
@@ -94,6 +98,20 @@ pub(crate) enum CompletionCommand {
 }
 
 #[derive(Debug, Subcommand)]
+pub(crate) enum AuditCommand {
+    RequestHuman {
+        #[arg(long = "run-id")]
+        run_id: String,
+        #[arg(long = "issue-id")]
+        issue_id: Option<String>,
+        #[arg(long)]
+        reason: String,
+        #[arg(long = "public-delivery-path", default_value = "CHANGELOG.md")]
+        public_delivery_path: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 pub(crate) enum BuildAgentCommand {
     Start {
         #[arg(long = "issue-id")]
@@ -117,6 +135,8 @@ pub(crate) enum BuildAgentCommand {
         remote_url: Option<String>,
         #[arg(long = "provider-issue-ref")]
         provider_issue_refs: Vec<String>,
+        #[arg(long = "attestation-path")]
+        attestation_path: Option<PathBuf>,
     },
     Complete {
         #[arg(long)]

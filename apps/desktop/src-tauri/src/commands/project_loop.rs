@@ -287,7 +287,7 @@ mod tests {
         assert!(!dir.path().join(".agentflow/execute").exists());
 
         let issue = read_spec_issue(dir.path(), "AF-LOOP-001").unwrap();
-        assert_eq!(issue.status, SpecIssueStatus::Backlog);
+        assert_eq!(issue.status, SpecIssueStatus::InProgress);
         let projection = load_task_projection(dir.path(), "AF-LOOP-001").unwrap();
         assert_eq!(projection.current_state, "in_progress");
         assert_eq!(projection.latest_run_id.as_deref(), Some("run-001"));

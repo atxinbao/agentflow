@@ -8,14 +8,14 @@ use active::{
     write_build_agent_closeout_proof,
 };
 use args::{
-    AgentDispatcherCommand, BuildAgentCommand, Cli, Command, CompletionCommand, ProjectCommand,
-    ProjectionCommand, ReleaseCommand, TaskLoopCommand,
+    AgentDispatcherCommand, AuditCommand, BuildAgentCommand, Cli, Command, CompletionCommand,
+    ProjectCommand, ProjectionCommand, ReleaseCommand, TaskLoopCommand,
 };
 use clap::Parser;
 use formal::{
-    completion_decide, completion_inspect, project_confirm_goal, project_confirm_plan,
-    project_intake, project_materialize, project_preview_goal, release_confirm, release_prepare,
-    release_publish, release_record_remote, release_record_tag,
+    audit_request_human, completion_decide, completion_inspect, project_confirm_goal,
+    project_confirm_plan, project_intake, project_materialize, project_preview_goal,
+    release_confirm, release_prepare, release_publish, release_record_remote, release_record_tag,
 };
 
 fn main() -> anyhow::Result<()> {
@@ -52,6 +52,23 @@ fn main() -> anyhow::Result<()> {
             ProjectCommand::Materialize { requirement_id } => {
                 let result = project_materialize(&cwd, &requirement_id)?;
                 println!("{}", serde_json::to_string_pretty(&result)?);
+            }
+        },
+        Command::Audit { command } => match command {
+            AuditCommand::RequestHuman {
+                run_id,
+                issue_id,
+                reason,
+                public_delivery_path,
+            } => {
+                let report = audit_request_human(
+                    &cwd,
+                    &run_id,
+                    issue_id.as_deref(),
+                    &reason,
+                    &public_delivery_path,
+                )?;
+                println!("{}", serde_json::to_string_pretty(&report)?);
             }
         },
         Command::Completion { command } => match command {
@@ -109,6 +126,7 @@ fn main() -> anyhow::Result<()> {
                 merge_mode,
                 remote_url,
                 provider_issue_refs,
+                attestation_path,
             } => {
                 let proof = write_build_agent_closeout_proof(
                     &cwd,
@@ -118,6 +136,7 @@ fn main() -> anyhow::Result<()> {
                     &merge_mode,
                     remote_url,
                     provider_issue_refs,
+                    attestation_path.as_deref(),
                 )?;
                 println!("build agent closeout proof: recorded");
                 println!("issue: {}", proof.issue_id);

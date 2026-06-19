@@ -9,7 +9,7 @@ use agentflow_event_store::{
 use agentflow_mcp::{
     query_closeout_attestation, McpCloseoutAttestation, McpCloseoutIssueAttestation,
 };
-use agentflow_spec::read_spec_issue;
+use agentflow_spec::{read_spec_issue, update_spec_issue_status, SpecIssueStatus};
 use agentflow_task_artifacts::{
     load_task_changed_files, load_task_evidence, load_task_run, task_changed_files_path,
     task_evidence_dir, task_run_dir, update_task_run_status, write_task_changed_files,
@@ -177,6 +177,7 @@ pub(crate) fn complete_build_agent_issue_from_request(
             )),
         },
     )?;
+    let _ = update_spec_issue_status(root, &issue.issue_id, SpecIssueStatus::Done)?;
     let _ = agentflow_projection::rebuild_projections(root)?;
     let next_launch = if let Some(project_id) = completed_project_id.as_deref() {
         TaskLoop::new(project_id)
@@ -278,6 +279,7 @@ pub(crate) fn write_build_agent_closeout_proof(
     merge_mode: &str,
     remote_url: Option<String>,
     provider_issue_refs: Vec<String>,
+    attestation_path: Option<&Path>,
 ) -> Result<BuildAgentCloseoutProof> {
     assert_current_cli_is_fresh(root)?;
     let issue =
@@ -290,11 +292,14 @@ pub(crate) fn write_build_agent_closeout_proof(
             run.issue_id
         );
     }
-    let review_ref = remote_url.clone().ok_or_else(|| {
-        anyhow::anyhow!("closeout proof requires provider review ref / remote-url")
-    })?;
-    let attestation =
-        query_closeout_attestation(root, provider, &review_ref, &provider_issue_refs)?;
+    let attestation = if let Some(attestation_path) = attestation_path {
+        read_closeout_attestation(attestation_path)?
+    } else {
+        let review_ref = remote_url.clone().ok_or_else(|| {
+            anyhow::anyhow!("closeout proof requires provider review ref / remote-url")
+        })?;
+        query_closeout_attestation(root, provider, &review_ref, &provider_issue_refs)?
+    };
     write_build_agent_closeout_proof_from_attestation(root, &issue, run_id, merge_mode, attestation)
 }
 
@@ -482,6 +487,7 @@ fn write_build_agent_closeout_proof_from_attestation(
             )),
         },
     )?;
+    let _ = update_spec_issue_status(root, &issue.issue_id, SpecIssueStatus::InReview)?;
     let _ = agentflow_projection::rebuild_projections(root)?;
     agentflow_state::refresh_state(root)?;
     Ok(BuildAgentCloseoutProof {
@@ -509,6 +515,13 @@ fn read_completion_request(
             request_path.display()
         )
     })
+}
+
+fn read_closeout_attestation(attestation_path: &Path) -> Result<McpCloseoutAttestation> {
+    let raw = fs::read_to_string(attestation_path)
+        .with_context(|| format!("read closeout attestation {}", attestation_path.display()))?;
+    serde_json::from_str(&raw)
+        .with_context(|| format!("parse closeout attestation {}", attestation_path.display()))
 }
 
 fn ensure_review_prepared(
@@ -1638,6 +1651,11 @@ mod tests {
         let still_review_projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-001").unwrap();
         assert_eq!(still_review_projection.current_state, "in_review");
+        let in_review_issue = agentflow_spec::read_spec_issue(dir.path(), "AF-001").unwrap();
+        assert_eq!(
+            in_review_issue.status,
+            agentflow_spec::SpecIssueStatus::InReview
+        );
 
         let outcome = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap();
         assert_eq!(outcome.issue_id, "AF-001");
@@ -1655,6 +1673,8 @@ mod tests {
         let done_projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-001").unwrap();
         assert_eq!(done_projection.current_state, "done");
+        let done_issue = agentflow_spec::read_spec_issue(dir.path(), "AF-001").unwrap();
+        assert_eq!(done_issue.status, agentflow_spec::SpecIssueStatus::Done);
         assert_eq!(
             done_projection.public_delivery.pr_url.as_deref(),
             Some("https://github.com/atxinbao/agentflow/pull/1")
@@ -1735,6 +1755,11 @@ mod tests {
             agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-002").unwrap();
         assert_eq!(next_projection.current_state, "in_progress");
         assert_eq!(next_projection.latest_run_id.as_deref(), Some("run-001"));
+        let next_issue = agentflow_spec::read_spec_issue(dir.path(), "AF-CHAIN-002").unwrap();
+        assert_eq!(
+            next_issue.status,
+            agentflow_spec::SpecIssueStatus::InProgress
+        );
         assert!(dir.path().join(next_launch.launch_request_path).is_file());
     }
 

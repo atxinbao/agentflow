@@ -26,6 +26,6 @@ pub use storage::{
     read_project_brain_document_set, read_project_brain_snapshot, read_requirement_preview_runtime,
     read_spec_issue, read_spec_project, record_completion_decision,
     requirement_preview_from_requirement, sync_completion_decision_runtimes,
-    write_completion_decision_runtime, write_requirement_preview_runtime, write_spec_issue,
-    write_spec_project, SpecWorkspaceSummary,
+    update_spec_issue_status, write_completion_decision_runtime, write_requirement_preview_runtime,
+    write_spec_issue, write_spec_project, SpecWorkspaceSummary,
 };

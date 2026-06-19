@@ -51,6 +51,8 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Rust tests
+        env:
+          RUST_TEST_THREADS: 1
         run: cargo test --workspace
 
       - name: Desktop build
