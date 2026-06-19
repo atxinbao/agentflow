@@ -1,8 +1,8 @@
 # 013.1 - Browser Preview Verification Polish
 
-创建日期：2026-06-05  
-执行者：Codex  
-状态：已开发  
+创建日期：2026-06-05
+执行者：Codex
+状态：已开发
 版本：final
 
 ---
@@ -85,4 +85,4 @@ PR #27 已完成 `012.1 - Desktop Human Audit Entry Polish` 和 `013 - Workflow 
 
 ## 验证记录
 
-记录见根目录 [verification.md](../../verification.md) 的 `2026-06-05 Browser Preview Verification Polish` 小节。
+记录见 [docs/verification/history.md](../verification/history.md) 的 `2026-06-05 Browser Preview Verification Polish` 小节。

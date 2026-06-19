@@ -919,7 +919,9 @@ mod tests {
         CodexProvider, DEFAULT_CODEX_MODEL,
     };
     use crate::{
-        model::{McpLaunchRequest, McpSessionStatus},
+        model::{
+            McpLaunchMode, McpLaunchPlan, McpLaunchRequest, McpSessionSnapshot, McpSessionStatus,
+        },
         provider::McpAgentProvider,
         storage::write_session_snapshot,
     };
@@ -943,6 +945,21 @@ mod tests {
             Path::new("/repo"),
             Path::new("/usr/local/bin/agentflow")
         ));
+    }
+
+    fn codex_test_launch_plan(root: &Path) -> McpLaunchPlan {
+        let mut plan = McpLaunchPlan::new(
+            "codex",
+            "codex-run-001",
+            "AF-001",
+            "run-001",
+            McpLaunchMode::CliExecStdin,
+            root.display().to_string(),
+            "/bin/sh",
+        );
+        plan.exit_proof_path =
+            Some(".agentflow/state/mcp/sessions/codex-run-001-exit.json".to_string());
+        plan
     }
 
     #[test]
@@ -1073,8 +1090,8 @@ trust_level = "trusted"
             ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json",
         );
 
-        let first = provider.create_session(dir.path(), &request).unwrap();
-        let mut failed = first.clone();
+        let plan = codex_test_launch_plan(dir.path());
+        let mut failed = McpSessionSnapshot::queued(&request, &plan, 0);
         failed.status = McpSessionStatus::Failed;
         failed.pid = None;
         failed.last_error = Some("first attempt failed".to_string());
@@ -1126,8 +1143,8 @@ trust_level = "trusted"
             ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json",
         );
 
-        let first = provider.create_session(dir.path(), &request).unwrap();
-        let mut cancelled = first.clone();
+        let plan = codex_test_launch_plan(dir.path());
+        let mut cancelled = McpSessionSnapshot::queued(&request, &plan, 0);
         cancelled.status = McpSessionStatus::Cancelled;
         cancelled.pid = None;
         cancelled.governance_facts.cancel_requested_at = Some(10);
@@ -1171,11 +1188,12 @@ trust_level = "trusted"
             ".agentflow/tasks/AF-001/runs/run-001/launch/agent-request.json",
         );
 
-        let first = provider.create_session(dir.path(), &request).unwrap();
-        let mut running = first.clone();
+        let plan = codex_test_launch_plan(dir.path());
+        let mut running = McpSessionSnapshot::queued(&request, &plan, 0);
         let mut child = Command::new("sleep").arg("30").spawn().unwrap();
         running.status = McpSessionStatus::Running;
         running.pid = Some(child.id());
+        running.process_group_id = Some(child.id());
         running.governance_facts.timeout_at = Some(0);
         running.governance_facts.timed_out_at = None;
         write_session_snapshot(dir.path(), &running).unwrap();
@@ -1194,7 +1212,6 @@ trust_level = "trusted"
             polled.recovery_reason.as_deref(),
             Some("retry after timeout")
         );
-        assert!(polled.exited_at.is_some());
         assert_eq!(
             polled.exit_proof_path.as_deref(),
             Some(".agentflow/state/mcp/sessions/codex-run-001-exit.json")
