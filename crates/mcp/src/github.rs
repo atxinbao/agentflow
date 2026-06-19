@@ -122,7 +122,7 @@ pub fn query_github_closeout_attestation(
             "view",
             review_ref,
             "--json",
-            "url,mergedAt,closingIssuesReferences",
+            "url,mergedAt,closingIssuesReferences,headRefName,headRefOid,baseRefName,baseRefOid,mergeCommit,repository",
         ],
     )?;
     if !pr.status_success {
@@ -142,6 +142,32 @@ fn parse_github_closeout_attestation(
         .get("url")
         .and_then(Value::as_str)
         .map(ToString::to_string);
+    let repository_full_name = pr
+        .get("repository")
+        .and_then(|value| value.get("nameWithOwner"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let source_branch = pr
+        .get("headRefName")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let target_branch = pr
+        .get("baseRefName")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let head_sha = pr
+        .get("headRefOid")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let base_sha = pr
+        .get("baseRefOid")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let merge_commit_sha = pr
+        .get("mergeCommit")
+        .and_then(|value| value.get("oid"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
     let merged_at = pr
         .get("mergedAt")
         .and_then(Value::as_str)
@@ -158,18 +184,50 @@ fn parse_github_closeout_attestation(
         .iter()
         .map(|issue_ref| query_github_issue_status(&project_root, issue_ref))
         .collect::<Result<Vec<_>>>()?;
+    Ok(build_github_closeout_attestation(
+        review_ref,
+        review_url,
+        repository_full_name,
+        source_branch,
+        target_branch,
+        base_sha,
+        head_sha,
+        merge_commit_sha,
+        merged_at,
+        issues,
+    ))
+}
+
+fn build_github_closeout_attestation(
+    review_ref: &str,
+    review_url: Option<String>,
+    repository_full_name: Option<String>,
+    source_branch: Option<String>,
+    target_branch: Option<String>,
+    base_sha: Option<String>,
+    head_sha: Option<String>,
+    merge_commit_sha: Option<String>,
+    merged_at: Option<String>,
+    issues: Vec<McpCloseoutIssueAttestation>,
+) -> McpCloseoutAttestation {
     let issue_closed = !issues.is_empty() && issues.iter().all(|issue| issue.closed);
-    Ok(McpCloseoutAttestation {
+    McpCloseoutAttestation {
         version: MCP_CLOSEOUT_ATTESTATION_VERSION.to_string(),
         provider: McpProviderKind::Github.as_str().to_string(),
         review_ref: review_ref.to_string(),
         review_url,
+        repository_full_name,
+        source_branch,
+        target_branch,
+        base_sha,
+        head_sha,
+        merge_commit_sha,
         merged: merged_at.is_some(),
         merged_at,
         issue_closed,
         issues,
         queried_at: unix_timestamp_seconds(),
-    })
+    }
 }
 
 fn infer_github_issue_refs(pr: &Value) -> Vec<String> {
@@ -257,8 +315,8 @@ fn repo_permission(stdout: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        infer_github_issue_refs, parse_github_closeout_attestation, parse_github_issue_status,
-        repo_permission,
+        build_github_closeout_attestation, infer_github_issue_refs,
+        parse_github_closeout_attestation, parse_github_issue_status, repo_permission,
     };
 
     #[test]
@@ -314,6 +372,12 @@ mod tests {
             r#"{
               "url": "https://github.com/acme/repo/pull/208",
               "mergedAt": "2026-06-19T11:20:00Z",
+              "headRefName": "agentflow/direct/AF-001",
+              "headRefOid": "head-001",
+              "baseRefName": "main",
+              "baseRefOid": "base-001",
+              "mergeCommit": { "oid": "merge-001" },
+              "repository": { "nameWithOwner": "acme/repo" },
               "closingIssuesReferences": []
             }"#,
             &[],
@@ -322,5 +386,69 @@ mod tests {
         assert!(err
             .to_string()
             .contains("github closeout query requires explicit issue refs or PR closing issues"));
+    }
+
+    #[test]
+    fn parses_github_closeout_attestation_v3_fields() {
+        let pr: serde_json::Value = serde_json::from_str(
+            r#"{
+              "url": "https://github.com/acme/repo/pull/208",
+              "mergedAt": "2026-06-19T11:20:00Z",
+              "headRefName": "agentflow/direct/AF-001",
+              "headRefOid": "head-001",
+              "baseRefName": "main",
+              "baseRefOid": "base-001",
+              "mergeCommit": { "oid": "merge-001" },
+              "repository": { "nameWithOwner": "acme/repo" }
+            }"#,
+        )
+        .unwrap();
+        let attestation = build_github_closeout_attestation(
+            "208",
+            pr.get("url")
+                .and_then(serde_json::Value::as_str)
+                .map(ToString::to_string),
+            pr.get("repository")
+                .and_then(|value| value.get("nameWithOwner"))
+                .and_then(serde_json::Value::as_str)
+                .map(ToString::to_string),
+            pr.get("headRefName")
+                .and_then(serde_json::Value::as_str)
+                .map(ToString::to_string),
+            pr.get("baseRefName")
+                .and_then(serde_json::Value::as_str)
+                .map(ToString::to_string),
+            pr.get("baseRefOid")
+                .and_then(serde_json::Value::as_str)
+                .map(ToString::to_string),
+            pr.get("headRefOid")
+                .and_then(serde_json::Value::as_str)
+                .map(ToString::to_string),
+            pr.get("mergeCommit")
+                .and_then(|value| value.get("oid"))
+                .and_then(serde_json::Value::as_str)
+                .map(ToString::to_string),
+            pr.get("mergedAt")
+                .and_then(serde_json::Value::as_str)
+                .map(ToString::to_string),
+            vec![super::McpCloseoutIssueAttestation {
+                issue_ref: "208".to_string(),
+                issue_url: Some("https://github.com/acme/repo/issues/208".to_string()),
+                closed: true,
+                closed_at: Some("2026-06-19T11:22:33Z".to_string()),
+            }],
+        );
+        assert_eq!(
+            attestation.repository_full_name.as_deref(),
+            Some("acme/repo")
+        );
+        assert_eq!(
+            attestation.source_branch.as_deref(),
+            Some("agentflow/direct/AF-001")
+        );
+        assert_eq!(attestation.target_branch.as_deref(), Some("main"));
+        assert_eq!(attestation.base_sha.as_deref(), Some("base-001"));
+        assert_eq!(attestation.head_sha.as_deref(), Some("head-001"));
+        assert_eq!(attestation.merge_commit_sha.as_deref(), Some("merge-001"));
     }
 }

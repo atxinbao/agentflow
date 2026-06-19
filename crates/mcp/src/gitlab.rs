@@ -120,6 +120,53 @@ pub fn query_gitlab_closeout_attestation(
         .or_else(|| mr_value.get("webUrl"))
         .and_then(Value::as_str)
         .map(ToString::to_string);
+    let repository_full_name = mr_value
+        .get("references")
+        .and_then(|value| value.get("full"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .or_else(|| {
+            mr_value
+                .get("project")
+                .and_then(|value| value.get("full_name"))
+                .or_else(|| {
+                    mr_value
+                        .get("project")
+                        .and_then(|value| value.get("fullPath"))
+                })
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        });
+    let source_branch = mr_value
+        .get("source_branch")
+        .or_else(|| mr_value.get("sourceBranch"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let target_branch = mr_value
+        .get("target_branch")
+        .or_else(|| mr_value.get("targetBranch"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let base_sha = mr_value
+        .get("diff_refs")
+        .and_then(|value| value.get("base_sha"))
+        .or_else(|| {
+            mr_value
+                .get("diffRefs")
+                .and_then(|value| value.get("baseSha"))
+        })
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let head_sha = mr_value
+        .get("sha")
+        .or_else(|| mr_value.get("headSha"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let merge_commit_sha = mr_value
+        .get("merge_commit_sha")
+        .or_else(|| mr_value.get("mergeCommitSha"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
     let merged_at = mr_value
         .get("merged_at")
         .or_else(|| mr_value.get("mergedAt"))
@@ -141,6 +188,12 @@ pub fn query_gitlab_closeout_attestation(
         provider: McpProviderKind::Gitlab.as_str().to_string(),
         review_ref: review_ref.to_string(),
         review_url,
+        repository_full_name,
+        source_branch,
+        target_branch,
+        base_sha,
+        head_sha,
+        merge_commit_sha,
         merged,
         merged_at,
         issue_closed,
