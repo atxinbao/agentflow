@@ -1821,7 +1821,15 @@ button.v16-task-project-row:hover {
   font-weight: 600;
 }
 
-.v16-issue-status-flow ol {
+.v16-issue-status-flow-shell {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  align-items: start;
+}
+
+.v16-issue-status-rail {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   margin: 0;
@@ -1922,21 +1930,6 @@ button.v16-task-project-row:hover {
   min-width: 0;
 }
 
-.v16-issue-status-step-details {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  margin-top: 2px;
-  padding-top: 8px;
-  padding-left: 12px;
-  border-top: 1px dashed color-mix(in srgb, var(--v16-border-strong), transparent 40%);
-}
-
-.v16-issue-status-event-stream {
-  display: grid;
-  gap: 8px;
-}
-
 .v16-issue-status-meta-list,
 .v16-issue-status-event-list {
   display: grid;
@@ -1965,6 +1958,50 @@ button.v16-task-project-row:hover {
   background: var(--v16-border-strong);
 }
 
+.v16-issue-status-stage-view {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border-left: 1px solid var(--v16-border-soft);
+}
+
+.v16-issue-status-stage-view-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.v16-issue-status-stage-view-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.v16-issue-status-stage-view-title span {
+  color: var(--v16-subtle);
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1.3;
+}
+
+.v16-issue-status-stage-view-title h3 {
+  margin: 0;
+  color: var(--v16-text);
+  font-size: 15px;
+  font-weight: 720;
+  line-height: 1.25;
+}
+
+.v16-issue-status-stage-view-title p {
+  margin: 0;
+  color: var(--v16-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .v16-issue-status-event-groups {
   display: grid;
   gap: 10px;
@@ -1974,8 +2011,18 @@ button.v16-task-project-row:hover {
   display: grid;
   gap: 6px;
   min-width: 0;
-  padding-left: 12px;
-  border-left: 1px solid var(--v16-border-soft);
+  padding: 10px 12px;
+  border: 1px solid var(--v16-border-soft);
+  border-radius: 8px;
+  background: var(--v16-surface);
+}
+
+.v16-issue-status-event-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
 }
 
 .v16-issue-status-event-group h3 {
@@ -1985,6 +2032,13 @@ button.v16-task-project-row:hover {
   font-weight: 680;
   line-height: 1.3;
   letter-spacing: 0;
+}
+
+.v16-issue-status-event-group-header span {
+  color: var(--v16-subtle);
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1.3;
 }
 
 .v16-issue-status-event-label {
@@ -2923,5 +2977,14 @@ button.v16-list-item {
   .v16-task-workspace-shell,
   .v16-task-advanced-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .v16-issue-status-flow-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .v16-issue-status-stage-view {
+    border-left: 0;
+    border-top: 1px solid var(--v16-border-soft);
   }
 }
