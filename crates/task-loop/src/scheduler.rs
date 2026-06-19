@@ -3,8 +3,8 @@ use crate::model::{
     ISSUE_SCHEDULED, TASK_LOOP_LAUNCH_REQUEST_VERSION,
 };
 use agentflow_event_store::{
-    allocate_task_sequence, append_task_event_once, load_task_events, EventActor,
-    EventStateTransition, TaskEvent, TaskEventDraft,
+    allocate_task_sequence, append_task_event_once, load_task_events, task_claim_is_active,
+    EventActor, EventStateTransition, TaskEvent, TaskEventDraft,
 };
 use agentflow_spec::{
     read_spec_issue, read_spec_project, SpecIssue, SpecIssueStatus, SpecPriority, SpecProject,
@@ -393,7 +393,7 @@ fn recoverable_launch_for_project(
     states: &BTreeMap<String, SpecIssueStatus>,
 ) -> Result<Option<TaskLoopLaunch>> {
     let events = load_task_events(root)?;
-    let recoverable_run_ids = recoverable_launch_run_ids(&events);
+    let recoverable_run_ids = recoverable_launch_run_ids(root, &events);
     let mut candidates = issues
         .iter()
         .filter(|issue| states.get(&issue.issue_id) == Some(&SpecIssueStatus::InProgress))
@@ -415,11 +415,11 @@ fn recoverable_launch_for_project(
 
 fn recoverable_launch_for_issue(root: &Path, issue: &SpecIssue) -> Result<Option<TaskLoopLaunch>> {
     let events = load_task_events(root)?;
-    let recoverable_run_ids = recoverable_launch_run_ids(&events);
+    let recoverable_run_ids = recoverable_launch_run_ids(root, &events);
     recoverable_launch_from_events(issue, &events, &recoverable_run_ids)
 }
 
-fn recoverable_launch_run_ids(events: &[TaskEvent]) -> BTreeSet<String> {
+fn recoverable_launch_run_ids(root: &Path, events: &[TaskEvent]) -> BTreeSet<String> {
     let mut claimable = BTreeMap::new();
     for event in events {
         let Some(run_id) = event.run_id.clone() else {
@@ -429,8 +429,11 @@ fn recoverable_launch_run_ids(events: &[TaskEvent]) -> BTreeSet<String> {
             AGENT_LAUNCH_REQUESTED => {
                 claimable.entry(run_id).or_insert(true);
             }
-            "agent.launch.claimed"
-            | "agent.session.created"
+            "agent.launch.claimed" => {
+                let active = task_claim_is_active(root, &run_id).unwrap_or(false);
+                claimable.insert(run_id, !active);
+            }
+            "agent.session.created"
             | "agent.session.running"
             | "agent.session.in_review"
             | "agent.session.completed" => {
@@ -1053,6 +1056,69 @@ mod tests {
             },
         )
         .unwrap();
+
+        let resumed_tick = loop_driver.tick(dir.path(), "codex").unwrap().unwrap();
+
+        assert!(resumed_tick.schedule.is_none());
+        assert_eq!(resumed_tick.launch.issue_id, "AF-TASK-001");
+        assert_eq!(resumed_tick.launch.run_id, "run-001");
+    }
+
+    #[test]
+    fn tick_reuses_expired_claimed_launch_before_new_schedule() {
+        let dir = tempdir().unwrap();
+        write_project_with_issues(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+        let first_tick = loop_driver.tick(dir.path(), "codex").unwrap().unwrap();
+        let launch_request_event = load_task_events(dir.path())
+            .unwrap()
+            .into_iter()
+            .find(|event| {
+                event.event_type == AGENT_LAUNCH_REQUESTED
+                    && event.run_id.as_deref() == Some(first_tick.launch.run_id.as_str())
+            })
+            .expect("expected launch request event");
+
+        agentflow_event_store::claim_task_event(
+            dir.path(),
+            "agent-dispatcher",
+            |event, _events| event.event_id == launch_request_event.event_id,
+            |event, _events| {
+                Ok(TaskEventDraft {
+                    flow_type: WorkflowFlowType::Work,
+                    aggregate_type: "issue".to_string(),
+                    aggregate_id: event.aggregate_id.clone(),
+                    project_id: event.project_id.clone(),
+                    issue_id: event.issue_id.clone(),
+                    run_id: event.run_id.clone(),
+                    event_type: "agent.launch.claimed".to_string(),
+                    authority_role: Some(WorkflowAgentRole::WorkAgent),
+                    actor: EventActor {
+                        role: "agent-dispatcher".to_string(),
+                        kind: "system".to_string(),
+                    },
+                    state: None,
+                    correlation_id: Some(event.correlation_id.clone()),
+                    causation_id: Some(event.event_id.clone()),
+                    payload: json!({}),
+                    artifact_refs: event.artifact_refs.clone(),
+                    idempotency_key: Some(format!(
+                        "agent.launch.claimed:{}:{}",
+                        event.issue_id.clone().unwrap_or_default(),
+                        event.run_id.clone().unwrap_or_default()
+                    )),
+                })
+            },
+        )
+        .unwrap()
+        .unwrap();
+
+        let mut lease = agentflow_event_store::load_task_claim_lease(dir.path(), "run-001")
+            .unwrap()
+            .expect("expected claim lease");
+        lease.expires_at = 1;
+        let path = dir.path().join(".agentflow/events/claims/run-001.json");
+        fs::write(&path, serde_json::to_string_pretty(&lease).unwrap() + "\n").unwrap();
 
         let resumed_tick = loop_driver.tick(dir.path(), "codex").unwrap().unwrap();
 

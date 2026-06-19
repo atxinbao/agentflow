@@ -7,6 +7,7 @@ pub const TASK_EVENT_MANIFEST_VERSION: &str = "task-event-store-manifest.v1";
 pub const TASK_EVENT_STREAM_PATH: &str = ".agentflow/events/task-events.jsonl";
 pub const TASK_EVENT_CONSUMER_VERSION: &str = "task-event-consumer.v1";
 pub const TASK_EVENT_DEAD_LETTER_VERSION: &str = "task-event-dead-letter.v1";
+pub const TASK_EVENT_CLAIM_LEASE_VERSION: &str = "task-event-claim-lease.v1";
 
 pub const EVENT_TYPE_SPEC_ISSUE_READY: &str = "spec.issue.ready";
 pub const EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED: &str = "panel.context-pack.requested";
@@ -136,6 +137,46 @@ pub struct TaskEventDeadLetter {
     pub subject_id: String,
     pub error: String,
     pub created_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TaskEventClaimStatus {
+    Active,
+    Released,
+    Expired,
+}
+
+impl TaskEventClaimStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Released => "released",
+            Self::Expired => "expired",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskEventClaimLease {
+    pub version: String,
+    pub owner_id: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub requested_event_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_event_id: Option<String>,
+    pub lease_id: String,
+    pub fencing_token: u64,
+    pub status: TaskEventClaimStatus,
+    pub claimed_at: u64,
+    pub heartbeat_at: u64,
+    pub expires_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub released_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

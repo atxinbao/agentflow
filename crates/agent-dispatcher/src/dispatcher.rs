@@ -5,8 +5,8 @@ use crate::model::{
     AGENT_SESSION_RESUMED, AGENT_SESSION_RUNNING,
 };
 use agentflow_event_store::{
-    append_task_event_once, claim_task_event, load_task_events, EventActor, TaskEvent,
-    TaskEventDraft,
+    append_task_event_once, claim_task_event, load_task_events, release_task_claim,
+    task_claim_is_active, EventActor, TaskEvent, TaskEventDraft,
 };
 use agentflow_mcp::{
     default_provider_bridge, McpLaunchRequest, McpProviderBridge, McpSessionSnapshot,
@@ -36,10 +36,12 @@ impl AgentDispatcher {
         project_root: impl AsRef<Path>,
     ) -> Result<Option<AgentDispatcherClaim>> {
         let root = project_root.as_ref();
-        let Some((event, claim_event)) =
-            claim_task_event(root, is_claimable_launch_request, |event, _events| {
-                self.build_launch_claim_draft(root, event)
-            })?
+        let Some((event, claim_event)) = claim_task_event(
+            root,
+            "agent-dispatcher",
+            is_claimable_launch_request(root),
+            |event, _events| self.build_launch_claim_draft(root, event),
+        )?
         else {
             return Ok(None);
         };
@@ -50,6 +52,12 @@ impl AgentDispatcher {
         let selection = self.evaluate_provider_selection(root, &payload, &role_binding)?;
         if let Err(error) = selection.ensure_runnable() {
             append_launch_failed_event(root, &payload, &role_binding, &selection, &error, false)?;
+            let _ = release_task_claim(
+                root,
+                &payload.run_id,
+                Some(claim_event.event_id.as_str()),
+                "provider-not-runnable",
+            );
             return Err(error);
         }
         let request = launch_payload_to_mcp_request(&payload, &role_binding);
@@ -68,6 +76,12 @@ impl AgentDispatcher {
                     &error,
                     true,
                 )?;
+                let _ = release_task_claim(
+                    root,
+                    &payload.run_id,
+                    Some(claim_event.event_id.as_str()),
+                    "provider-launch-failed",
+                );
                 return Err(error);
             }
         };
@@ -83,6 +97,12 @@ impl AgentDispatcher {
                 AGENT_SESSION_CREATED
             },
         )?;
+        let _ = release_task_claim(
+            root,
+            &payload.run_id,
+            Some(claim_event.event_id.as_str()),
+            "session-created",
+        );
         append_status_event(root, &payload, &selection, &session)?;
 
         Ok(Some(AgentDispatcherClaim {
@@ -149,15 +169,18 @@ impl AgentDispatcher {
     }
 }
 
-fn unavailable_run_ids(events: &[TaskEvent]) -> BTreeMap<String, bool> {
+fn unavailable_run_ids(root: &Path, events: &[TaskEvent]) -> BTreeMap<String, bool> {
     let mut state = BTreeMap::new();
     for event in events {
         let Some(run_id) = event.run_id.clone() else {
             continue;
         };
         match event.event_type.as_str() {
-            AGENT_LAUNCH_CLAIMED
-            | AGENT_SESSION_CREATED
+            AGENT_LAUNCH_CLAIMED => {
+                let active = task_claim_is_active(root, &run_id).unwrap_or(false);
+                state.insert(run_id, active);
+            }
+            AGENT_SESSION_CREATED
             | AGENT_SESSION_RESUMED
             | AGENT_SESSION_RUNNING
             | AGENT_SESSION_IN_REVIEW
@@ -195,15 +218,19 @@ fn had_prior_session_event(root: &Path, run_id: &str) -> Result<bool> {
     }))
 }
 
-fn is_claimable_launch_request(event: &TaskEvent, events: &[TaskEvent]) -> bool {
-    if event.event_type != AGENT_LAUNCH_REQUESTED {
-        return false;
+fn is_claimable_launch_request<'a>(
+    root: &'a Path,
+) -> impl Fn(&TaskEvent, &[TaskEvent]) -> bool + 'a {
+    move |event: &TaskEvent, events: &[TaskEvent]| {
+        if event.event_type != AGENT_LAUNCH_REQUESTED {
+            return false;
+        }
+        let unavailable_runs = unavailable_run_ids(root, events);
+        event
+            .run_id
+            .as_deref()
+            .is_some_and(|run_id| !unavailable_runs.get(run_id).copied().unwrap_or(false))
     }
-    let unavailable_runs = unavailable_run_ids(events);
-    event
-        .run_id
-        .as_deref()
-        .is_some_and(|run_id| !unavailable_runs.get(run_id).copied().unwrap_or(false))
 }
 
 fn launch_payload_to_mcp_request(
@@ -837,6 +864,11 @@ mod tests {
             .position(|event| event.event_type == AGENT_SESSION_CREATED)
             .unwrap();
         assert!(claimed_index < created_index);
+        let lease = agentflow_event_store::load_task_claim_lease(dir.path(), "run-001")
+            .unwrap()
+            .expect("expected claim lease");
+        assert_eq!(lease.status.as_str(), "released");
+        assert_eq!(lease.release_reason.as_deref(), Some("session-created"));
     }
 
     #[test]
@@ -1047,6 +1079,14 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| event.event_type == AGENT_SESSION_FAILED));
+        let failed_lease = agentflow_event_store::load_task_claim_lease(dir.path(), "run-001")
+            .unwrap()
+            .expect("expected released lease after failed launch");
+        assert_eq!(failed_lease.status.as_str(), "released");
+        assert_eq!(
+            failed_lease.release_reason.as_deref(),
+            Some("provider-launch-failed")
+        );
 
         let mut retry_providers = McpProviderBridge::new();
         retry_providers.register(Box::new(FailOnceProvider { attempts }));
