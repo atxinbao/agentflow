@@ -93,6 +93,11 @@
 - [056-work-loop-sequencing-and-closeout-gates-v1.md](056-work-loop-sequencing-and-closeout-gates-v1.md) = strict sequencing and closeout gates after v0.3.0 audit
 - [057-v0-3-0-pre-release-audit-rebaseline-v1.md](057-v0-3-0-pre-release-audit-rebaseline-v1.md) = v0.3.0 pre-release audit rebaseline after 056A/056B/056C
 - [058-v0-3-0-stable-gate-remediation-v1.md](058-v0-3-0-stable-gate-remediation-v1.md) = stable gate remediation package replacing the old raw audit order
+- [059-agentflow-desktop-frontend-information-architecture-v1.md](059-agentflow-desktop-frontend-information-architecture-v1.md) = desktop frontend information architecture baseline
+- [060-task-page-state-timeline-and-event-stream-v1.md](060-task-page-state-timeline-and-event-stream-v1.md) = task page state timeline and event stream
+- [061-task-page-execution-and-delivery-convergence-v1.md](061-task-page-execution-and-delivery-convergence-v1.md) = task page execution and delivery convergence
+- [062-project-home-and-next-step-surface-v1.md](062-project-home-and-next-step-surface-v1.md) = project home and next-step surface
+- [063-audit-page-independent-acceptance-surface-v1.md](063-audit-page-independent-acceptance-surface-v1.md) = audit page as independent acceptance surface
 - [next-requirements.md](next-requirements.md)
 
 ## Dogfood Cutover 基线
