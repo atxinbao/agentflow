@@ -1452,6 +1452,7 @@ function App() {
             executeStatusState={executeStatusState}
             mcpSessionsState={mcpSessionsState}
             onDetailFocusHandled={() => setTaskDetailFocus(null)}
+            onOpenAudit={() => setActivePage("audit")}
             onProjectRuntimeAction={(action, group, projection) =>
               void handleProjectRuntimeAction(action, group, projection)}
             onRunProjectLoop={() => void handleRunProjectLoop()}
@@ -1487,6 +1488,7 @@ function App() {
           <AuditPage
             onSelectAudit={setSelectedAuditId}
             outputBundle={outputBundle}
+            projectRoot={projectRoot}
             selectedAuditId={selectedAuditId}
           />
         ) : null}
@@ -2573,6 +2575,7 @@ function TasksPage({
   executeStatusState,
   mcpSessionsState,
   onDetailFocusHandled,
+  onOpenAudit,
   onProjectRuntimeAction,
   onRunProjectLoop,
   onSelectProjectGroup,
@@ -2600,6 +2603,7 @@ function TasksPage({
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
+  onOpenAudit: () => void;
   onProjectRuntimeAction: (
     action: ProjectRuntimeAction,
     group: TaskProjectGroup,
@@ -2634,6 +2638,7 @@ function TasksPage({
         executeStatusState={executeStatusState}
         mcpSessionsState={mcpSessionsState}
         onDetailFocusHandled={onDetailFocusHandled}
+        onOpenAudit={onOpenAudit}
         onProjectRuntimeAction={onProjectRuntimeAction}
         onRunProjectLoop={onRunProjectLoop}
         onSelectProjectGroup={onSelectProjectGroup}
@@ -2666,6 +2671,7 @@ function TaskList({
   executeStatusState,
   mcpSessionsState,
   onDetailFocusHandled,
+  onOpenAudit,
   onProjectRuntimeAction,
   onRunProjectLoop,
   onSelectProjectGroup,
@@ -2693,6 +2699,7 @@ function TaskList({
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
+  onOpenAudit: () => void;
   onProjectRuntimeAction: (
     action: ProjectRuntimeAction,
     group: TaskProjectGroup,
@@ -2873,6 +2880,7 @@ function TaskList({
         executeStatusState={executeStatusState}
         mcpSessionsState={mcpSessionsState}
         onDetailFocusHandled={onDetailFocusHandled}
+        onOpenAudit={onOpenAudit}
         onProjectRuntimeAction={onProjectRuntimeAction}
         onRunProjectLoop={onRunProjectLoop}
         onTaskAction={onTaskAction}
@@ -3075,6 +3083,7 @@ function TaskDetail({
   executeStatusState,
   mcpSessionsState,
   onDetailFocusHandled,
+  onOpenAudit,
   onProjectRuntimeAction,
   onRunProjectLoop,
   onSelectTask,
@@ -3099,6 +3108,7 @@ function TaskDetail({
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
+  onOpenAudit: () => void;
   onProjectRuntimeAction: (
     action: ProjectRuntimeAction,
     group: TaskProjectGroup,
@@ -3181,6 +3191,7 @@ function TaskDetail({
       executeStatusState={executeStatusState}
       mcpSessionsState={mcpSessionsState}
       onDetailFocusHandled={onDetailFocusHandled}
+      onOpenAudit={onOpenAudit}
       onTaskAction={onTaskAction}
       outputBundle={outputBundle}
       task={task}
@@ -3603,6 +3614,7 @@ function TaskDetailReader({
   executeStatusState,
   mcpSessionsState,
   onDetailFocusHandled,
+  onOpenAudit,
   onTaskAction,
   outputBundle,
   task,
@@ -3616,6 +3628,7 @@ function TaskDetailReader({
   executeStatusState: ExecuteStatusState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
+  onOpenAudit: () => void;
   onTaskAction: (action: TaskInteractionAction, task: V1Issue) => void;
   outputBundle: OutputBundleState;
   task: V1Issue;
@@ -3759,6 +3772,7 @@ function TaskDetailReader({
               artifact={finalDeliveryArtifact}
               executionProjection={executionProjection}
               deliveryProjection={deliveryProjection}
+              onOpenAudit={onOpenAudit}
               reviewItems={reviewItems}
               status={effectiveDisplayStatus}
               task={effectiveTask}
@@ -3849,6 +3863,7 @@ function TaskFlowSidebar({
   artifact,
   executionProjection,
   deliveryProjection,
+  onOpenAudit,
   reviewItems,
   status,
   task,
@@ -3857,6 +3872,7 @@ function TaskFlowSidebar({
   artifact: DeliveryArtifactState | null;
   executionProjection: TaskExecutionProjection;
   deliveryProjection: TaskDeliveryProjection;
+  onOpenAudit: () => void;
   reviewItems: string[];
   status: IssueDisplayStatus;
   task: V1Issue;
@@ -3880,7 +3896,20 @@ function TaskFlowSidebar({
           <SectionList title="交付槽位" items={deliverySlotItems} />
           <SectionList title="公开交付" items={publicDeliveryItems} />
           <SectionList title="评审状态" items={reviewItems} />
-          <SectionList title="审计入口" items={auditItems} />
+          <section className="v16-section-list v16-task-audit-entry">
+            <Section aria-label="审计摘要与入口" title="审计摘要">
+              <ul>
+                {auditItems.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+              <div className="v16-task-audit-entry-actions">
+                <ActionButton onClick={onOpenAudit} variant="secondary">
+                  打开审计页
+                </ActionButton>
+              </div>
+            </Section>
+          </section>
         </div>
       </section>
     </div>
@@ -4188,6 +4217,7 @@ type AuditSummaryLike = {
   status: string;
   latestAuditId?: string | null;
   sourceIssueId?: string | null;
+  sourceDeliveryId?: string | null;
   reportPath?: string | null;
   requestedAt?: number | null;
   summaryLine?: string;
@@ -4238,6 +4268,30 @@ function auditSummaryDetailItems(
     );
   }
   return items;
+}
+
+function compactAuditSummaryItems(audit: AuditSummaryLike) {
+  if (!audit || audit.status === "not-requested") {
+    return [
+      "当前没有审计请求。",
+      "需要完整验收结论时，进入审计页查看。",
+    ];
+  }
+
+  const items = [
+    `状态：${artifactStatusLabel(audit.status)}`,
+    `摘要：${audit.summaryLine || "当前还没有审计摘要。"}`,
+  ];
+  if (audit.latestAuditId) {
+    items.push(`审计编号：${audit.latestAuditId}`);
+  }
+  if (audit.sourceIssueId) {
+    items.push(`关联任务：${audit.sourceIssueId}`);
+  } else if (audit.sourceDeliveryId) {
+    items.push(`关联交付：${deliveryDisplayId(audit.sourceDeliveryId)}`);
+  }
+  items.push("完整结论、证据缺口和后续动作在审计页查看。");
+  return items.slice(0, 4);
 }
 
 function projectionRuntimeSessionItems(
@@ -4390,16 +4444,13 @@ function taskAuditSummaryItems(task: V1Issue, projection?: TaskProjection | null
   if (task.issueCategory === "audit") {
     return [
       `审计目标：${task.auditId ?? "未记录"}`,
-      `输出目录：${task.auditOutputDir ?? "未记录"}`,
-      `当前状态：${displayStatusLabelZh(task.displayStatus)}`,
+      `状态：${displayStatusLabelZh(task.displayStatus)}`,
+      "完整结论在审计页查看。",
     ];
   }
 
   const audit = projection?.audit ?? null;
-  return auditSummaryDetailItems(audit, {
-    includeIssue: false,
-    includeRequestedAt: true,
-  });
+  return compactAuditSummaryItems(audit);
 }
 
 function deliverySummaryDetailItems(delivery: ProjectionDeliverySummary | null | undefined) {
@@ -5084,16 +5135,71 @@ function DeliveryDetail({
 function AuditPage({
   onSelectAudit,
   outputBundle,
+  projectRoot,
   selectedAuditId,
 }: {
   onSelectAudit: (auditId: string) => void;
   outputBundle: OutputBundleState;
+  projectRoot: string | null;
   selectedAuditId: string | null;
 }) {
   const audits = sortAuditsByLatest(outputBundle.auditIndex?.audits ?? []);
   const auditInteractionState = buildAuditInteractionState(audits, selectedAuditId);
-  const selectedReport =
+  const previewSelectedReport =
     outputBundle.auditReport?.audit.auditId === auditInteractionState.selectedAuditId ? outputBundle.auditReport : null;
+  const [selectedReport, setSelectedReport] = useState<HumanAuditReport | null>(previewSelectedReport);
+  const [reportLoading, setReportLoading] = useState(false);
+
+  useEffect(() => {
+    const activeAuditId = auditInteractionState.selectedAuditId;
+    if (!activeAuditId) {
+      setSelectedReport(null);
+      setReportLoading(false);
+      return;
+    }
+
+    if (isBrowserPreviewRuntime()) {
+      setSelectedReport(previewSelectedReport);
+      setReportLoading(false);
+      return;
+    }
+
+    if (previewSelectedReport) {
+      setSelectedReport(previewSelectedReport);
+      setReportLoading(false);
+      return;
+    }
+
+    if (!projectRoot || outputBundle.source !== "tauri") {
+      setSelectedReport(null);
+      setReportLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setReportLoading(true);
+    void invoke<HumanAuditReport>("load_audit_report", { auditId: activeAuditId, projectRoot })
+      .then((report) => {
+        if (!cancelled) {
+          setSelectedReport(report);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSelectedReport(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setReportLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [auditInteractionState.selectedAuditId, outputBundle.source, previewSelectedReport, projectRoot]);
+
   return (
     <section className="v16-page v16-audit-page" data-agentflow-page="audit">
       <AuditList
@@ -5101,9 +5207,26 @@ function AuditPage({
         onSelectAudit={onSelectAudit}
         selectedAuditId={auditInteractionState.selectedAuditId}
       />
-      <AuditReport report={selectedReport} selectedAudit={auditInteractionState.selectedAudit} />
+      <AuditReport
+        loading={reportLoading}
+        report={selectedReport}
+        selectedAudit={auditInteractionState.selectedAudit}
+      />
     </section>
   );
+}
+
+function auditListTargetLabel(audit: AuditIndexEntry) {
+  if (audit.sourceIssueId) {
+    return `任务：${audit.sourceIssueId}`;
+  }
+  if (audit.sourceDeliveryId) {
+    return `交付：${deliveryDisplayId(audit.sourceDeliveryId)}`;
+  }
+  if (audit.sourceRunId) {
+    return `运行：${deliveryDisplayId(audit.sourceRunId)}`;
+  }
+  return "待补充审计对象";
 }
 
 function AuditList({
@@ -5133,7 +5256,7 @@ function AuditList({
             >
               <span className="v16-list-item-main">
                 <strong>{audit.auditId}</strong>
-                <span>{auditTriggerLabel(audit.trigger)}</span>
+                <span>{auditListTargetLabel(audit)}</span>
               </span>
               <small>{artifactStatusLabel(audit.status)}</small>
               <time>{formatTimestamp(audit.requestedAt)}</time>
@@ -5150,9 +5273,11 @@ function AuditList({
 }
 
 function AuditReport({
+  loading,
   report,
   selectedAudit,
 }: {
+  loading: boolean;
   report: HumanAuditReport | null;
   selectedAudit: AuditIndexEntry | null;
 }) {
@@ -5168,36 +5293,86 @@ function AuditReport({
     : Array.isArray((report?.findings as { findings?: unknown[] } | undefined)?.findings)
       ? (report?.findings as { findings: AuditFindingSummary[] }).findings
     : [];
+  const auditStatus = selectedAudit?.status ?? report?.audit.status ?? null;
+  const summaryLine =
+    report?.reportMarkdown
+      .split("\n")
+      .find((line) => line.startsWith("状态："))
+      ?.replace("状态：", "")
+      .trim()
+    ?? (selectedAudit ? `${artifactStatusLabel(selectedAudit.status)}，等待完整报告。` : "等待审计报告。");
+  const reportFindings = findings.length
+    ? findings.map((finding) => `${finding.severity ?? "info"}：${finding.summary ?? finding.title ?? finding.id ?? finding.findingId ?? "发现项"}`)
+    : ["暂无发现项。"];
+  const auditCheckEntries =
+    report?.audit.checks && typeof report.audit.checks === "object"
+      ? Object.entries(report.audit.checks as Record<string, unknown>)
+      : [];
+  const gapItems = auditCheckEntries
+    .filter(([, value]) => !["passed", "pass", "ready", "done"].includes(String(value).toLowerCase()))
+    .map(([key, value]) => `${humanizeKey(key)}：${String(value)}`);
+  const evidenceRows = summaryRowsFromValue(report?.evidenceMap, "等待交付证据。");
+  const traceabilityRows = summaryRowsFromValue(report?.traceability, "等待审计追溯关系。");
+  const nextActionItems =
+    report?.audit.status === "failed"
+      ? ["审计未通过，先补证据或修复问题，再重新发起审计。"]
+      : report?.audit.status === "passed-with-warnings"
+        ? ["审计通过，但还有警告。先处理证据缺口和发现项。"]
+        : report?.audit.status === "passed"
+          ? ["审计已通过，可以进入后续收口。"]
+          : selectedAudit?.status === "requested" || selectedAudit?.status === "running"
+            ? ["审计还在进行中，等待报告写回后再看完整结论。"]
+            : ["等待独立审计流程写回完整结论。"];
+  const auditObjectItems = [
+    selectedAudit?.sourceIssueId || report?.audit.sourceIssueId ? `关联任务：${selectedAudit?.sourceIssueId ?? report?.audit.sourceIssueId}` : "关联任务：未记录",
+    selectedAudit?.sourceDeliveryId || report?.audit.sourceDeliveryId ? `关联交付：${deliveryDisplayId(selectedAudit?.sourceDeliveryId ?? report?.audit.sourceDeliveryId ?? "")}` : "关联交付：未记录",
+    selectedAudit?.sourceRunId || report?.audit.sourceRunId ? `关联运行：${deliveryDisplayId(selectedAudit?.sourceRunId ?? report?.audit.sourceRunId ?? "")}` : "关联运行：未记录",
+    report?.request.source?.specId ? `关联规格：${String(report.request.source.specId)}` : "关联规格：未记录",
+  ];
+  const repairItems = reportFindings.length && reportFindings[0] !== "暂无发现项。"
+    ? reportFindings.map((item) => `处理：${item}`)
+    : nextActionItems;
   return (
     <section className={selectedAudit || report ? "v16-detail-pane" : "v16-detail-pane v16-empty-detail-pane"} aria-label="审计报告详情">
       <header>
         <h2>{selectedAudit?.auditId ?? report?.audit.auditId ?? "未登记审计"}</h2>
         <StatusBadge status={selectedAudit || report ? "warning" : "idle"}>
-          {artifactStatusLabel(selectedAudit?.status ?? report?.audit.status ?? "未登记")}
+          {artifactStatusLabel(auditStatus ?? "未登记")}
         </StatusBadge>
       </header>
-      <div className="v16-detail-document">
+      <div className="v16-detail-document v16-audit-acceptance-surface">
+        <div className="v16-summary-grid">
+          <MetricCard detail={summaryLine} label="审计结论" value={artifactStatusLabel(auditStatus ?? "未登记")} />
+          <MetricCard detail={auditObjectItems[0]} label="待审对象" value={selectedAudit?.auditId ?? report?.audit.auditId ?? "未记录"} />
+          <MetricCard detail={gapItems[0] ?? "当前没有证据缺口。"} label="证据缺口" value={`${gapItems.length} 项`} />
+          <MetricCard detail={repairItems[0] ?? "当前没有额外动作。"} label="后续动作" value={nextActionItems[0]?.replace("。", "") ?? "等待审计"} />
+        </div>
+        <div className="v16-audit-surface-grid">
+          <SectionList
+            title="审计判断"
+            items={[
+              `状态：${artifactStatusLabel(auditStatus ?? "未登记")}`,
+              `摘要：${summaryLine}`,
+              selectedAudit?.trigger || report?.audit.trigger ? `触发方式：${auditTriggerLabel(selectedAudit?.trigger ?? report?.audit.trigger)}` : "触发方式：未记录",
+              selectedAudit?.requestedAt || report?.audit.requestedAt ? `请求时间：${formatTimestamp(selectedAudit?.requestedAt ?? report?.audit.requestedAt ?? 0)}` : "请求时间：未记录",
+            ]}
+          />
+          <SectionList title="待审对象" items={auditObjectItems} />
+          <SectionList title="发现项" items={reportFindings} />
+          <SectionList title="证据缺口" items={gapItems.length ? gapItems : [loading ? "正在读取审计报告。" : "当前没有证据缺口。"]} />
+          <SectionList title="后续动作" items={repairItems} />
+        </div>
         <SectionList
-          title="审计结论"
+          title="验收说明"
           items={[
-            report?.reportMarkdown.split("\n").slice(0, 3).join(" ") ||
-              "暂无审计报告。审计需要通过独立审计任务或人工请求触发。",
+            loading ? "正在读取审计报告。" : "审计页用于查看完整判断，不承担执行日志展示。",
+            selectedAudit?.status === "requested" || selectedAudit?.status === "running"
+              ? "审计仍在进行中，等待完整报告落盘。"
+              : "用户需要在这里看 through / blocked / repair recommendation，而不是回任务页找完整结论。",
           ]}
         />
-        <SectionList
-          title="发现项"
-          items={
-            findings.length
-              ? findings.map((finding) => `${finding.severity ?? "info"}：${finding.summary ?? finding.title ?? finding.id ?? finding.findingId ?? "发现项"}`)
-              : ["暂无发现项。"]
-          }
-        />
-        <HumanSummaryTable title="证据链" rows={summaryRowsFromValue(report?.evidenceMap, "等待交付证据。")} />
-        <HumanSummaryTable title="追溯关系" rows={summaryRowsFromValue(report?.traceability, "等待审计追溯关系。")} />
-        <SectionList title="范围检查" items={["对照规格、任务、交付和证据。"]} />
-        <SectionList title="验证检查" items={["检查验证命令是否记录并通过。"]} />
-        <SectionList title="处理建议" items={["等待审计报告写入后展示。"]} />
-        <SectionList title="当前版本限制" items={["这里只读展示审计状态和报告，不写处理结果。"]} />
+        <HumanSummaryTable title="证据映射" rows={evidenceRows} />
+        <HumanSummaryTable title="追溯关系" rows={traceabilityRows} />
       </div>
     </section>
   );

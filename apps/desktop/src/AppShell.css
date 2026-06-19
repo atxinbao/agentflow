@@ -2689,6 +2689,34 @@ button.v16-list-item {
   overflow: hidden;
 }
 
+.v16-task-audit-entry {
+  background: var(--v16-surface);
+}
+
+.v16-task-audit-entry-actions {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 4px;
+}
+
+.v16-task-audit-entry-actions .af-button {
+  min-height: 30px;
+}
+
+.v16-audit-acceptance-surface {
+  gap: 12px;
+}
+
+.v16-audit-surface-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.v16-audit-acceptance-surface .v16-human-summary {
+  background: var(--v16-surface-2);
+}
+
 .v16-json-summary pre,
 .v16-json-reader {
   margin: 0;
@@ -3013,7 +3041,8 @@ button.v16-list-item {
 
   .v16-task-stage-grid,
   .v16-task-execution-grid,
-  .v16-task-artifact-columns {
+  .v16-task-artifact-columns,
+  .v16-audit-surface-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
