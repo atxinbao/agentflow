@@ -133,6 +133,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-object-state"
+version = "0.3.0"
+dependencies = [
+ "agentflow-action-contract",
+ "agentflow-ontology",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-ontology"
 version = "0.3.0"
 dependencies = [

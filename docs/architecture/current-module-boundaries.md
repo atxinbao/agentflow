@@ -159,6 +159,33 @@ docs/requirements/**
 - `BuildAgent` 只保留为 `WorkAgent` 的兼容别名，不再作为长期主命名。
 - `ReviewAgent / CoordinatorAgent / HumanOwner` 先在角色策略层收口，不在本阶段混入 UI 改造。
 
+### Object State
+
+负责：
+
+- 提供 Runtime 可读取的核心对象状态机定义
+- 收口 `Requirement / Spec / Issue / Run / Audit / Finding` 的生命周期
+- 定义 transition、requiredEvidence、emittedEvents、linkEffects、projectionHints
+- 提供旧状态词到新状态机状态的兼容映射
+- 为后续 Arbitration 提供对象状态合法性判断入口
+
+不负责：
+
+- 直接追加 Event Store
+- 直接改 Projection
+- 直接推进 Task Loop
+- 直接启动 Provider Session
+- 替代 `workflow-core` 的流程定义
+
+实现位置：
+
+- `crates/object-state/src/**`
+
+说明：
+
+- `workflow-core` 继续负责流程状态和 handoff 定义；`object-state` 只负责对象生命周期。
+- `Run.completed != Issue.done`、`Issue.done != Audit.requested`、`Finding.fixRequired` 通过修复 Issue 回流，这三条边界由这里固定。
+
 ### Project Brain / Constitution
 
 负责：
