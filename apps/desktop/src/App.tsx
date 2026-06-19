@@ -3771,83 +3771,99 @@ function IssueStatusFlow({
   }, [projectedStatus, task.id]);
 
   const selectedStepLabel = steps.find((step) => step.id === selectedStepId)?.label ?? contract.label;
+  const selectedStep = steps.find((step) => step.id === selectedStepId) ?? steps[0] ?? null;
+  const selectedProjectionItem = projection?.timeline.find((item) => item.state === selectedStepId) ?? null;
+  const selectedDetail = selectedStep
+    ? enhanceTaskStatusStepDetailWithProjection({
+        detail: buildTaskStatusStepDetail({
+          currentStatus: projectedStatus,
+          deliveryProjection,
+          executeItems,
+          reviewItems,
+          stageItems,
+          task,
+          viewedStatus: selectedStep.id,
+        }),
+        projection,
+        projectionItem: selectedProjectionItem,
+      })
+    : null;
+  const selectedStepPhaseLabel =
+    selectedProjectionItem?.phase ? projectionPhaseLabel(selectedProjectionItem.phase) : null;
 
   return (
     <section className="v16-issue-status-flow" aria-label="任务状态流转">
       <div className="v16-issue-status-flow-header">
-        <span>状态流 / 事件流</span>
+        <span>状态时间线 / 事件流</span>
         <strong>{selectedStepLabel}</strong>
       </div>
-      <ol>
-        {steps.map((step) => {
-          const state = step.state === "exception" ? step.id : step.state;
-          const expanded = step.id === selectedStepId;
-          const projectionItem = projection?.timeline.find((item) => item.state === step.id) ?? null;
-          const detail = expanded
-            ? enhanceTaskStatusStepDetailWithProjection({
-                detail: buildTaskStatusStepDetail({
-                  currentStatus: projectedStatus,
-                  deliveryProjection,
-                  executeItems,
-                  reviewItems,
-                  stageItems,
-                  task,
-                  viewedStatus: step.id,
-                }),
-                projection,
-                projectionItem,
-              })
-            : null;
-          return (
-            <li
-              aria-current={expanded ? "step" : undefined}
-              className={`v16-issue-status-step ${state}${expanded ? " selected" : ""}`}
-              key={step.id}
-            >
-              <span className="v16-issue-status-dot" aria-hidden="true" />
-              <div className="v16-issue-status-step-body">
-                <button
-                  aria-expanded={expanded}
-                  className="v16-issue-status-step-toggle"
-                  onClick={() => setSelectedStepId(step.id)}
-                  type="button"
-                >
-                  <strong>{step.label}</strong>
-                  <small>{step.note}</small>
-                </button>
-                {expanded && detail ? (
-                  <div className="v16-issue-status-step-details">
-                    <div className="v16-issue-status-event-stream">
-                      <ul className="v16-issue-status-meta-list">
-                        {detail.descriptionItems.map(([label, value]) => (
-                          <li className="v16-issue-status-meta-item" key={`${label}-${value}`}>
-                            <span className="v16-issue-status-event-label">{label}</span>
-                            <span className="v16-issue-status-event-text">{value}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="v16-issue-status-event-groups">
-                        {detail.sections.map((section) => (
-                          <section className="v16-issue-status-event-group" key={section.title}>
-                            <h3>{section.title}</h3>
-                            <ol className="v16-issue-status-event-list">
-                              {section.items.map((item) => (
-                                <li className="v16-issue-status-event-item" key={item}>
-                                  <span className="v16-issue-status-event-text">{item}</span>
-                                </li>
-                              ))}
-                            </ol>
-                          </section>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
+      <div className="v16-issue-status-flow-shell">
+        <ol className="v16-issue-status-rail" aria-label="任务阶段列表">
+          {steps.map((step) => {
+            const state = step.state === "exception" ? step.id : step.state;
+            const selected = step.id === selectedStepId;
+            return (
+              <li
+                aria-current={selected ? "step" : undefined}
+                className={`v16-issue-status-step ${state}${selected ? " selected" : ""}`}
+                key={step.id}
+              >
+                <span className="v16-issue-status-dot" aria-hidden="true" />
+                <div className="v16-issue-status-step-body">
+                  <button
+                    aria-pressed={selected}
+                    className="v16-issue-status-step-toggle"
+                    onClick={() => setSelectedStepId(step.id)}
+                    type="button"
+                  >
+                    <strong>{step.label}</strong>
+                    <small>{step.note}</small>
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        {selectedStep && selectedDetail ? (
+          <section className="v16-issue-status-stage-view" aria-label={`${selectedStep.label} 阶段详情`}>
+            <header className="v16-issue-status-stage-view-header">
+              <div className="v16-issue-status-stage-view-title">
+                <span>{selectedStepPhaseLabel ?? "阶段详情"}</span>
+                <h3>{selectedStep.label}</h3>
+                <p>{selectedStep.note}</p>
               </div>
-            </li>
-          );
-        })}
-      </ol>
+              <StatusBadge status={statusChipForDisplayStatus(selectedStep.id)}>
+                {displayStatusLabelZh(selectedStep.id)}
+              </StatusBadge>
+            </header>
+            <ul className="v16-issue-status-meta-list">
+              {selectedDetail.descriptionItems.map(([label, value]) => (
+                <li className="v16-issue-status-meta-item" key={`${selectedStep.id}-${label}-${value}`}>
+                  <span className="v16-issue-status-event-label">{label}</span>
+                  <span className="v16-issue-status-event-text">{value}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="v16-issue-status-event-groups">
+              {selectedDetail.sections.map((section) => (
+                <section className="v16-issue-status-event-group" key={`${selectedStep.id}-${section.title}`}>
+                  <div className="v16-issue-status-event-group-header">
+                    <h3>{section.title}</h3>
+                    <span>{section.items.length} 项</span>
+                  </div>
+                  <ol className="v16-issue-status-event-list">
+                    {section.items.map((item) => (
+                      <li className="v16-issue-status-event-item" key={`${section.title}-${item}`}>
+                        <span className="v16-issue-status-event-text">{item}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </div>
     </section>
   );
 }
