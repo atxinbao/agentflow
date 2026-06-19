@@ -64,6 +64,10 @@ jobs:
       - name: Append gate summary
         if: always()
         run: |
+          if [ -f artifacts/release-gate-e2e/certification.md ]; then
+            cat artifacts/release-gate-e2e/certification.md >> "$GITHUB_STEP_SUMMARY"
+            printf "\n\n" >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ -f artifacts/release-gate-e2e/summary.md ]; then
             cat artifacts/release-gate-e2e/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi

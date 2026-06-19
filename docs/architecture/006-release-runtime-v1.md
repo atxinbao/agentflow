@@ -226,6 +226,8 @@ project stage 在所有任务完成后，优先显示 release 状态，而不是
 
 其中 release gate E2E 会输出：
 
+- `artifacts/release-gate-e2e/certification.json`
+- `artifacts/release-gate-e2e/certification.md`
 - `CHANGELOG.md`
 - `docs/release-notes/<project-id>.md`
 - `docs/reviews/<project-id>.md`

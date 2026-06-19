@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACT_DIR="$ROOT/artifacts/release-gate-e2e"
+RELEASE_VERSION="${RELEASE_VERSION:-v0.3.1}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -33,8 +34,15 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agentflow-release-gate.XXXXXX")"
 WORKSPACE="$TMP_DIR/workspace"
 STATUS_PATH="$ARTIFACT_DIR/status.json"
 STAGE_LOG_PATH="$ARTIFACT_DIR/stage-log.jsonl"
+SUMMARY_JSON_PATH="$ARTIFACT_DIR/summary.json"
+SUMMARY_MD_PATH="$ARTIFACT_DIR/summary.md"
+CERTIFICATION_JSON_PATH="$ARTIFACT_DIR/certification.json"
+CERTIFICATION_MD_PATH="$ARTIFACT_DIR/certification.md"
 BOOTSTRAP_BRANCH="release-gate-bootstrap"
 export RUST_TEST_THREADS="${RUST_TEST_THREADS:-1}"
+REQUIREMENT_ID=""
+PROJECT_ID=""
+ISSUE_COUNT="0"
 
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -76,11 +84,249 @@ path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encodi
 PY
 }
 
+write_gate_reports() {
+  python3 - \
+    "$STATUS_PATH" \
+    "$STAGE_LOG_PATH" \
+    "$SUMMARY_JSON_PATH" \
+    "$SUMMARY_MD_PATH" \
+    "$CERTIFICATION_JSON_PATH" \
+    "$CERTIFICATION_MD_PATH" \
+    "$RELEASE_VERSION" \
+    "$REQUIREMENT_ID" \
+    "$PROJECT_ID" \
+    "$ISSUE_COUNT" \
+    "$RUNTIME_DIR/release-facts.json" \
+    "$RUNTIME_DIR/external-review-surface.json" <<'PY'
+import json
+import pathlib
+import sys
+
+status_path = pathlib.Path(sys.argv[1])
+stage_log_path = pathlib.Path(sys.argv[2])
+summary_json_path = pathlib.Path(sys.argv[3])
+summary_md_path = pathlib.Path(sys.argv[4])
+cert_json_path = pathlib.Path(sys.argv[5])
+cert_md_path = pathlib.Path(sys.argv[6])
+release_version = sys.argv[7]
+requirement_id = sys.argv[8] or None
+project_id = sys.argv[9] or None
+issue_count = int(sys.argv[10] or "0")
+release_path = pathlib.Path(sys.argv[11])
+review_path = pathlib.Path(sys.argv[12])
+
+def load_json(path: pathlib.Path):
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+status = load_json(status_path) or {}
+stage_log = []
+if stage_log_path.is_file():
+    for line in stage_log_path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            stage_log.append(json.loads(line))
+
+release = load_json(release_path) or {}
+review = load_json(review_path) or {}
+audit = review.get("auditSummary") or {}
+current_status = status.get("status", "unknown")
+current_stage = status.get("stage")
+current_message = status.get("message")
+
+stage_status = {}
+for entry in stage_log:
+    stage_status[entry["stage"]] = entry["status"]
+
+proof_chain = [
+    {"stage": "requirement.intake", "label": "Requirement Intake"},
+    {"stage": "goal.confirm", "label": "Goal Confirm"},
+    {"stage": "plan.confirm", "label": "Plan Confirm"},
+    {"stage": "project.materialize", "label": "Spec Materialize"},
+    {"stage": "task-loop.tick.issue1", "label": "Project Loop"},
+    {"stage": "issue-1.prepare-review", "label": "Task Review Prepare"},
+    {"stage": "issue-1.complete", "label": "Task Complete 1"},
+    {"stage": "issue-2.prepare-review", "label": "Task Review Prepare 2"},
+    {"stage": "issue-2.complete", "label": "Task Complete 2"},
+    {"stage": "completion.inspect", "label": "Completion Inspect"},
+    {"stage": "completion.decide", "label": "Completion Decide"},
+    {"stage": "release.prepare", "label": "Release Prepare"},
+    {"stage": "release.confirm", "label": "Release Confirm"},
+    {"stage": "release.record-tag", "label": "Release Tag Proof"},
+    {"stage": "release.record-remote", "label": "Remote Release Proof"},
+    {"stage": "release.publish", "label": "Release Publish"},
+    {"stage": "audit.request-human", "label": "Audit Request Human"},
+    {"stage": "release.publish.refresh", "label": "Release Publish Refresh"},
+]
+for item in proof_chain:
+    item["status"] = stage_status.get(item["stage"], "missing")
+
+public_artifacts = [
+    {"path": "public/CHANGELOG.md", "exists": pathlib.Path(summary_json_path.parent / "public/CHANGELOG.md").is_file()},
+    {"path": "public/release-notes.md", "exists": pathlib.Path(summary_json_path.parent / "public/release-notes.md").is_file()},
+    {"path": "public/external-review.md", "exists": pathlib.Path(summary_json_path.parent / "public/external-review.md").is_file()},
+]
+runtime_artifacts = [
+    {"path": "runtime/release-facts.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-facts.json").is_file()},
+    {"path": "runtime/external-review-surface.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/external-review-surface.json").is_file()},
+    {"path": "runtime/completion-runtime.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/completion-runtime.json").is_file()},
+    {"path": "runtime/final-closeout-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/final-closeout-proof.json").is_file()},
+    {"path": "runtime/audit-index.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-index.json").is_file()},
+]
+
+checklist = [
+    {
+        "id": "real-runtime-e2e",
+        "label": "release gate 跑真实 runtime E2E",
+        "passed": stage_status.get("release.publish.refresh") == "passed",
+    },
+    {
+        "id": "external-readable-proof",
+        "label": "发布结论有外部可读证据",
+        "passed": all(item["exists"] for item in public_artifacts),
+    },
+    {
+        "id": "failure-stage-visible",
+        "label": "gate 失败时能指出失败阶段",
+        "passed": bool(current_stage),
+    },
+    {
+        "id": "requirement-to-release-proof-chain",
+        "label": "存在 requirement-to-release 完整证明链",
+        "passed": all(item["status"] == "passed" for item in proof_chain) if current_status == "passed" else False,
+    },
+]
+
+summary_payload = {
+    "status": current_status,
+    "failedStage": current_stage if current_status == "failed" else None,
+    "failureMessage": current_message if current_status == "failed" else None,
+    "requirementId": requirement_id,
+    "projectId": project_id,
+    "issueCount": issue_count,
+    "releaseState": release.get("currentState"),
+    "publicationStage": release.get("publicationStage"),
+    "gateStatus": release.get("gateStatus"),
+    "completionState": release.get("completionState"),
+    "completionOutcome": release.get("completionOutcome"),
+    "tagName": release.get("tagName"),
+    "remoteReleaseUrl": release.get("remoteReleaseUrl"),
+    "changelogPath": release.get("changelogPath"),
+    "releaseNotesPath": release.get("releaseNotesPath"),
+    "externalReviewPath": review.get("handoffPath"),
+    "auditStatus": audit.get("latestStatus"),
+    "auditReportPath": audit.get("latestReportPath"),
+}
+summary_json_path.write_text(
+    json.dumps(summary_payload, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+
+summary_lines = [
+    "# Release Gate E2E Summary",
+    "",
+    f"- Release version: `{release_version}`",
+    f"- Gate status: `{current_status}`",
+    f"- Current stage: `{current_stage}`",
+    f"- Requirement: `{requirement_id}`",
+    f"- Project: `{project_id}`",
+    f"- Issue count: `{issue_count}`",
+]
+if current_message:
+    summary_lines.append(f"- Stage message: `{current_message}`")
+if summary_payload["releaseState"]:
+    summary_lines.extend([
+        f"- Release state: `{summary_payload['releaseState']}`",
+        f"- Publication stage: `{summary_payload['publicationStage']}`",
+        f"- Completion state: `{summary_payload['completionState']}` / `{summary_payload['completionOutcome']}`",
+        f"- Remote release URL: `{summary_payload['remoteReleaseUrl']}`",
+        f"- Changelog: `{summary_payload['changelogPath']}`",
+        f"- Release notes: `{summary_payload['releaseNotesPath']}`",
+        f"- External review: `{summary_payload['externalReviewPath']}`",
+        f"- Audit status: `{summary_payload['auditStatus'] or 'not-requested'}`",
+    ])
+summary_md_path.write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
+
+certification_payload = {
+    "version": "agentflow-release-gate-certification.v1",
+    "releaseVersion": release_version,
+    "gateWorkflow": "release-gate",
+    "gateStatus": current_status,
+    "failedStage": current_stage if current_status == "failed" else None,
+    "failureMessage": current_message if current_status == "failed" else None,
+    "requirementId": requirement_id,
+    "projectId": project_id,
+    "issueCount": issue_count,
+    "proofChain": proof_chain,
+    "checklist": checklist,
+    "publicArtifacts": public_artifacts,
+    "runtimeArtifacts": runtime_artifacts,
+    "generatedAt": status.get("updatedAt"),
+    "remoteReleaseUrl": release.get("remoteReleaseUrl"),
+}
+cert_json_path.write_text(
+    json.dumps(certification_payload, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+
+cert_lines = [
+    "# Release Gate Certification",
+    "",
+    f"- Release version: `{release_version}`",
+    f"- Gate workflow: `release-gate`",
+    f"- Gate status: `{current_status}`",
+]
+if current_status == "failed":
+    cert_lines.append(f"- Failed stage: `{current_stage}`")
+    if current_message:
+        cert_lines.append(f"- Failure message: `{current_message}`")
+else:
+    cert_lines.append(f"- Current stage: `{current_stage}`")
+    if current_message:
+        cert_lines.append(f"- Stage message: `{current_message}`")
+cert_lines.extend([
+    f"- Requirement: `{requirement_id}`",
+    f"- Project: `{project_id}`",
+    "",
+    "## Certification Checklist",
+    "",
+])
+for item in checklist:
+    mark = "PASS" if item["passed"] else "FAIL"
+    cert_lines.append(f"- [{mark}] {item['label']}")
+cert_lines.extend([
+    "",
+    "## Proof Chain",
+    "",
+])
+for item in proof_chain:
+    cert_lines.append(f"- `{item['stage']}`: `{item['status']}`")
+cert_lines.extend([
+    "",
+    "## Public Artifacts",
+    "",
+])
+for item in public_artifacts:
+    mark = "present" if item["exists"] else "missing"
+    cert_lines.append(f"- `{item['path']}`: `{mark}`")
+cert_lines.extend([
+    "",
+    "## Runtime Artifacts",
+    "",
+])
+for item in runtime_artifacts:
+    mark = "present" if item["exists"] else "missing"
+    cert_lines.append(f"- `{item['path']}`: `{mark}`")
+cert_md_path.write_text("\n".join(cert_lines) + "\n", encoding="utf-8")
+PY
+}
+
 fail_stage() {
   local stage="$1"
   local message="$2"
   record_stage "$stage" "failed" "$message"
   write_status "failed" "$stage" "$message"
+  write_gate_reports
   exit 1
 }
 
@@ -308,62 +554,6 @@ collect_artifacts() {
   fi
 }
 
-write_summary() {
-  local requirement_id="$1"
-  local project_id="$2"
-  local issue_count="$3"
-  python3 - "$ARTIFACT_DIR/summary.json" "$ARTIFACT_DIR/summary.md" "$requirement_id" "$project_id" "$issue_count" "$RUNTIME_DIR/release-facts.json" "$RUNTIME_DIR/external-review-surface.json" "$STATUS_PATH" <<'PY'
-import json, pathlib, sys
-summary_json = pathlib.Path(sys.argv[1])
-summary_md = pathlib.Path(sys.argv[2])
-requirement_id = sys.argv[3]
-project_id = sys.argv[4]
-issue_count = int(sys.argv[5])
-release = json.loads(pathlib.Path(sys.argv[6]).read_text())
-review = json.loads(pathlib.Path(sys.argv[7]).read_text())
-status = json.loads(pathlib.Path(sys.argv[8]).read_text())
-audit = review.get("auditSummary") or {}
-payload = {
-    "status": status["status"],
-    "requirementId": requirement_id,
-    "projectId": project_id,
-    "issueCount": issue_count,
-    "releaseState": release["currentState"],
-    "publicationStage": release["publicationStage"],
-    "gateStatus": release["gateStatus"],
-    "completionState": release["completionState"],
-    "completionOutcome": release.get("completionOutcome"),
-    "tagName": release.get("tagName"),
-    "remoteReleaseUrl": release.get("remoteReleaseUrl"),
-    "changelogPath": release["changelogPath"],
-    "releaseNotesPath": release["releaseNotesPath"],
-    "externalReviewPath": review.get("handoffPath"),
-    "auditStatus": audit.get("latestStatus"),
-    "auditReportPath": audit.get("latestReportPath"),
-}
-summary_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-summary_md.write_text(
-    "\n".join([
-        "# Release Gate E2E Summary",
-        "",
-        f"- Requirement: `{requirement_id}`",
-        f"- Project: `{project_id}`",
-        f"- Issue count: `{issue_count}`",
-        f"- Release state: `{release['currentState']}`",
-        f"- Publication stage: `{release['publicationStage']}`",
-        f"- Completion state: `{release['completionState']}`",
-        f"- Completion outcome: `{release.get('completionOutcome')}`",
-        f"- Remote release URL: `{release.get('remoteReleaseUrl')}`",
-        f"- Changelog: `{release['changelogPath']}`",
-        f"- Release notes: `{release['releaseNotesPath']}`",
-        f"- External review: `{review.get('handoffPath')}`",
-        f"- Audit status: `{audit.get('latestStatus', 'not-requested')}`",
-    ]) + "\n",
-    encoding="utf-8",
-)
-PY
-}
-
 main() {
   write_status "running" "workspace.prepare" "preparing release gate workspace"
   prepare_workspace
@@ -392,6 +582,7 @@ main() {
 
   local requirement_id
   requirement_id="$(json_field "$intake_json" requirementId)"
+  REQUIREMENT_ID="$requirement_id"
   run_cli_json "goal.confirm" "$goal_json" \
     project confirm-goal --requirement-id "$requirement_id"
   run_cli_json "plan.confirm" "$plan_json" \
@@ -401,8 +592,10 @@ main() {
 
   local project_id issue1_id issue2_id
   project_id="$(json_field "$materialize_json" project.projectId)"
+  PROJECT_ID="$project_id"
   issue1_id="$(json_field "$materialize_json" issues.0.issueId)"
   issue2_id="$(json_field "$materialize_json" issues.1.issueId)"
+  ISSUE_COUNT="2"
   bootstrap_public_surface "$project_id"
 
   run_workspace_cmd "task-loop.tick.issue1" "$tick1_txt" \
@@ -505,7 +698,7 @@ PY
 
   collect_artifacts "$project_id" "$issue2_id" "$issue2_run"
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
-  write_summary "$requirement_id" "$project_id" "2"
+  write_gate_reports
 }
 
 main "$@"
