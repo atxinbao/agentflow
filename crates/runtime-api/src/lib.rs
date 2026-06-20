@@ -9,6 +9,7 @@
 pub mod commands;
 pub mod errors;
 pub mod formal;
+pub mod handoff;
 pub mod mapping;
 pub mod query;
 pub mod responses;
@@ -24,6 +25,7 @@ pub use formal::{
     release_confirm, release_prepare, release_publish, release_record_remote, release_record_tag,
     ProjectMaterializationResult,
 };
+pub use handoff::{write_work_command_handoff_from_spec_issue, WorkCommandHandoff};
 pub use mapping::{map_command_to_action_proposal, RuntimeQueryHint};
 pub use query::{
     get_audit_surface_view, get_delivery_package_view, get_project_home_view,

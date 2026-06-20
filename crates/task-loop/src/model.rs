@@ -1,3 +1,4 @@
+use agentflow_runtime_api::WorkCommandHandoff;
 use serde::{Deserialize, Serialize};
 
 pub const ISSUE_SCHEDULED: &str = "issue.scheduled";
@@ -47,4 +48,6 @@ pub struct AgentLaunchPayload {
     pub context_pack_path: Option<String>,
     pub branch_name: String,
     pub merge_mode: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_command: Option<WorkCommandHandoff>,
 }
