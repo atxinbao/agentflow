@@ -207,4 +207,26 @@ mod tests {
         assert!(decision.allowed);
         assert_eq!(decision.next_state.as_deref(), Some("fixLinked"));
     }
+
+    #[test]
+    fn spec_approved_allows_create_project() {
+        let ontology = core_ontology_registry();
+        let actions = core_action_contract_registry(&ontology);
+        let registry = core_object_state_registry(&ontology, &actions).unwrap();
+
+        let decision = registry.is_transition_defined("Spec", Some("approved"), "createProject");
+        assert!(decision.allowed);
+        assert_eq!(decision.next_state.as_deref(), Some("approved"));
+    }
+
+    #[test]
+    fn project_planned_allows_create_issue() {
+        let ontology = core_ontology_registry();
+        let actions = core_action_contract_registry(&ontology);
+        let registry = core_object_state_registry(&ontology, &actions).unwrap();
+
+        let decision = registry.is_transition_defined("Project", Some("planned"), "createIssue");
+        assert!(decision.allowed);
+        assert_eq!(decision.next_state.as_deref(), Some("active"));
+    }
 }

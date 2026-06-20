@@ -74,8 +74,10 @@ pub fn arbitrate_action(
         );
     }
 
+    let human_confirmation_present =
+        context.evidence_count_by_type(&proposal.evidence_refs, "humanConfirmation") > 0;
     let human_decision_required = requires_human_decision(contract, &proposal, context)
-        || role_decision.requires_human_approval;
+        || (role_decision.requires_human_approval && !human_confirmation_present);
     if human_decision_required {
         return ArbitrationDecision {
             decision_id: format!("decision-{}", request.request_id),
