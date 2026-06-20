@@ -158,9 +158,18 @@ for entry in stage_log:
 
 proof_chain = [
     {"stage": "requirement.intake", "label": "Requirement Intake"},
+    {"stage": "classification.ready", "label": "Classification Ready"},
+    {"stage": "context.ready", "label": "Context Ready"},
+    {"stage": "boundary.ready", "label": "Boundary Ready"},
+    {"stage": "route.ready", "label": "Route Ready"},
+    {"stage": "preview.ready", "label": "Preview Ready"},
     {"stage": "goal.confirm", "label": "Goal Confirm"},
     {"stage": "plan.confirm", "label": "Plan Confirm"},
+    {"stage": "confirmation.confirmed", "label": "Confirmation Confirmed"},
     {"stage": "project.materialize", "label": "Spec Materialize"},
+    {"stage": "materialization.authority-written", "label": "Materialization Authority Written"},
+    {"stage": "runtime-action-proposal.accepted", "label": "Runtime Action Proposal Accepted"},
+    {"stage": "projection.current", "label": "Projection Current"},
     {"stage": "task-loop.tick.issue1", "label": "Project Loop"},
     {"stage": "issue-1.prepare-review", "label": "Task Review Prepare"},
     {"stage": "issue-1.complete", "label": "Task Complete 1"},
@@ -185,6 +194,8 @@ public_artifacts = [
     {"path": "public/external-review.md", "exists": pathlib.Path(summary_json_path.parent / "public/external-review.md").is_file()},
 ]
 runtime_artifacts = [
+    {"path": "runtime/spec-loop-manifest.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/spec-loop-manifest.json").is_file()},
+    {"path": "runtime/spec-loop-projection.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/spec-loop-projection.json").is_file()},
     {"path": "runtime/release-facts.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-facts.json").is_file()},
     {"path": "runtime/external-review-surface.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/external-review-surface.json").is_file()},
     {"path": "runtime/completion-runtime.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/completion-runtime.json").is_file()},
@@ -417,6 +428,78 @@ text_value() {
   sed -n "s/^${prefix}//p" "$file" | tail -n 1
 }
 
+verify_spec_stage_artifact() {
+  local record_name="$1"
+  local requirement_id="$2"
+  local stage_name="$3"
+  local expected_status="$4"
+  local expected_authority="${5:-}"
+
+  local file="$WORKSPACE/.agentflow/spec/requirements/${requirement_id}/${stage_name}.json"
+  python3 - "$file" "$expected_status" "$expected_authority" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+expected_status = sys.argv[2]
+expected_authority = sys.argv[3]
+
+if not path.is_file():
+    raise SystemExit(f"missing spec stage artifact: {path}")
+
+payload = json.loads(path.read_text(encoding="utf-8"))
+actual_status = payload.get("status")
+if actual_status != expected_status:
+    raise SystemExit(
+        f"unexpected status for {path.name}: expected {expected_status}, found {actual_status}"
+    )
+
+if expected_authority:
+    actual_authority = payload.get("authority")
+    if actual_authority != expected_authority:
+        raise SystemExit(
+            f"unexpected authority for {path.name}: expected {expected_authority}, found {actual_authority}"
+        )
+PY
+  record_stage "$record_name" "passed" "$(basename "$file")"
+}
+
+verify_spec_loop_projection() {
+  local record_name="$1"
+  local requirement_id="$2"
+  local projection_path="$WORKSPACE/.agentflow/projections/spec-loops/${requirement_id}.json"
+
+  python3 - "$projection_path" "$record_name" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+record_name = sys.argv[2]
+
+if not path.is_file():
+    raise SystemExit(f"missing spec loop projection: {path}")
+
+payload = json.loads(path.read_text(encoding="utf-8"))
+
+if record_name == "runtime-action-proposal.accepted":
+    proposals = payload.get("runtimeActionProposals") or []
+    if not proposals:
+        raise SystemExit("spec loop projection does not contain runtime action proposals")
+elif record_name == "projection.current":
+    current_state = payload.get("currentState")
+    updated_at = payload.get("updatedAt")
+    if not current_state:
+        raise SystemExit("spec loop projection missing currentState")
+    if not updated_at:
+        raise SystemExit("spec loop projection missing updatedAt")
+else:
+    raise SystemExit(f"unsupported projection verification record: {record_name}")
+PY
+  record_stage "$record_name" "passed" "$(basename "$projection_path")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -571,14 +654,17 @@ run_issue() {
 }
 
 collect_artifacts() {
-  local project_id="$1"
-  local final_issue_id="$2"
-  local final_run_id="$3"
+  local requirement_id="$1"
+  local project_id="$2"
+  local final_issue_id="$3"
+  local final_run_id="$4"
 
   cp "$WORKSPACE/CHANGELOG.md" "$PUBLIC_DIR/CHANGELOG.md"
   cp "$WORKSPACE/docs/release-notes/${project_id}.md" "$PUBLIC_DIR/release-notes.md"
   cp "$WORKSPACE/docs/reviews/${project_id}.md" "$PUBLIC_DIR/external-review.md"
 
+  cp "$WORKSPACE/.agentflow/spec/requirements/${requirement_id}/manifest.json" "$RUNTIME_DIR/spec-loop-manifest.json"
+  cp "$WORKSPACE/.agentflow/projections/spec-loops/${requirement_id}.json" "$RUNTIME_DIR/spec-loop-projection.json"
   cp "$WORKSPACE/.agentflow/release/projects/${project_id}.json" "$RUNTIME_DIR/release-facts.json"
   cp "$WORKSPACE/.agentflow/release/reviews/${project_id}.json" "$RUNTIME_DIR/external-review-surface.json"
   cp "$WORKSPACE/.agentflow/release/proofs/${project_id}/tag.json" "$RUNTIME_DIR/release-tag-proof.json"
@@ -624,12 +710,21 @@ main() {
   local requirement_id
   requirement_id="$(json_field "$intake_json" requirementId)"
   REQUIREMENT_ID="$requirement_id"
+  verify_spec_stage_artifact "classification.ready" "$requirement_id" "classification" "ready"
+  verify_spec_stage_artifact "context.ready" "$requirement_id" "context" "ready"
+  verify_spec_stage_artifact "boundary.ready" "$requirement_id" "boundary" "ready"
+  verify_spec_stage_artifact "route.ready" "$requirement_id" "route" "ready"
+  verify_spec_stage_artifact "preview.ready" "$requirement_id" "preview" "ready"
   run_cli_json "goal.confirm" "$goal_json" \
     project confirm-goal --requirement-id "$requirement_id"
   run_cli_json "plan.confirm" "$plan_json" \
     project confirm-plan --requirement-id "$requirement_id"
+  verify_spec_stage_artifact "confirmation.confirmed" "$requirement_id" "confirmation" "confirmed"
   run_cli_json "project.materialize" "$materialize_json" \
     project materialize --requirement-id "$requirement_id"
+  verify_spec_stage_artifact "materialization.authority-written" "$requirement_id" "materialization" "materialized" "authority"
+  verify_spec_loop_projection "runtime-action-proposal.accepted" "$requirement_id"
+  verify_spec_loop_projection "projection.current" "$requirement_id"
 
   local project_id issue1_id issue2_id
   project_id="$(json_field "$materialize_json" project.projectId)"
@@ -737,7 +832,7 @@ PY
   run_workspace_cmd "release.summary" "$release_summary_txt" \
     "$BIN" release summary
 
-  collect_artifacts "$project_id" "$issue2_id" "$issue2_run"
+  collect_artifacts "$requirement_id" "$project_id" "$issue2_id" "$issue2_run"
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
