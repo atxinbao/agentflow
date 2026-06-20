@@ -21,6 +21,7 @@
 ### Architecture
 
 - `v0.5.0` 保留为 Spec Loop Productization 功能基线。
+- `v0.5.0` 当前只应视为 functional baseline，不应表述为 clean stable release。
 - `v0.5.1` 先闭合发布卫生和 Runtime authority 顺序，不进入 `v0.6.0` Work Loop Handoff。
 - `v0.6.0` 必须建立在 `v0.5.1` 的 authority closure 之后。
 
