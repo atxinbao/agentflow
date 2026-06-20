@@ -5,22 +5,24 @@ use crate::model::{
     PreviewConfirmationRecord, ProjectBrainDocumentSet, ProjectBrainDocumentStatus,
     ProjectBrainSnapshot, ProjectBrainStatus, RequirementBoundaryBlocker,
     RequirementBoundarySummary, RequirementBoundaryVerdict, RequirementClass,
-    RequirementClassificationResult, RequirementContextDocumentRef, RequirementContextFactState,
-    RequirementContextGitFacts, RequirementContextIssueRef, RequirementContextProjectRef,
-    RequirementContextPullRequestRef, RequirementContextReleaseRef, RequirementContextSummary,
-    RequirementDocument, RequirementExecutionPermission, RequirementFactImpact,
-    RequirementGeneratedIssuePreview, RequirementGeneratedPreview, RequirementIntakeResult,
-    RequirementIntentType, RequirementPreviewLifecycle, RequirementPreviewRuntime,
-    RequirementRiskLevel, RequirementRouteDecision, RequirementRoutePath, RequirementTargetObject,
-    SpecArtifactAuthority, SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft,
-    SpecIssueStatus, SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageFileRef,
-    SpecLoopStageName, SpecLoopStageStatus, SpecPriority, SpecProject, SpecProjectDraft,
-    SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, COMPLETION_DECISION_VERSION,
-    PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
-    REQUIREMENT_BOUNDARY_VERSION, REQUIREMENT_CLASSIFICATION_VERSION, REQUIREMENT_CONTEXT_VERSION,
-    REQUIREMENT_GENERATED_PREVIEW_VERSION, REQUIREMENT_PREVIEW_VERSION, REQUIREMENT_ROUTE_VERSION,
-    SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
-    SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
+    RequirementClassificationResult, RequirementConfirmationGate, RequirementContextDocumentRef,
+    RequirementContextFactState, RequirementContextGitFacts, RequirementContextIssueRef,
+    RequirementContextProjectRef, RequirementContextPullRequestRef, RequirementContextReleaseRef,
+    RequirementContextSummary, RequirementDocument, RequirementExecutionPermission,
+    RequirementFactImpact, RequirementGeneratedIssuePreview, RequirementGeneratedPreview,
+    RequirementIntakeResult, RequirementIntentType, RequirementPreviewLifecycle,
+    RequirementPreviewRuntime, RequirementRiskLevel, RequirementRouteDecision,
+    RequirementRoutePath, RequirementTargetObject, SpecArtifactAuthority, SpecExpectedOutputs,
+    SpecIssue, SpecIssueCategory, SpecIssueDraft, SpecIssueStatus, SpecLoopRequirementManifest,
+    SpecLoopStageArtifact, SpecLoopStageFileRef, SpecLoopStageName, SpecLoopStageStatus,
+    SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
+    SpecSystemRecord, COMPLETION_DECISION_VERSION, PROJECT_BRAIN_DOCUMENT_SET_VERSION,
+    PROJECT_BRAIN_SNAPSHOT_VERSION, REQUIREMENT_BOUNDARY_VERSION,
+    REQUIREMENT_CLASSIFICATION_VERSION, REQUIREMENT_CONFIRMATION_VERSION,
+    REQUIREMENT_CONTEXT_VERSION, REQUIREMENT_GENERATED_PREVIEW_VERSION,
+    REQUIREMENT_PREVIEW_VERSION, REQUIREMENT_ROUTE_VERSION, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION,
+    SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION, SPEC_REQUIREMENT_MANIFEST_VERSION,
+    SPEC_STAGE_ARTIFACT_VERSION,
 };
 use agentflow_audit::load_project_audit_review_summary;
 use agentflow_task_artifacts::{load_task_evidence, load_task_run};
@@ -314,6 +316,36 @@ pub fn requirement_preview_from_requirement(
         .unwrap_or(1);
     let intake = build_requirement_intake(&requirement, &project_id);
     let goal_draft = build_goal_draft_preview(&requirement, &project_id, &intake, revision);
+    let mut confirmation_records = existing
+        .as_ref()
+        .map(|preview| preview.confirmation_records.clone())
+        .unwrap_or_default();
+    if let Some(existing_preview) = existing.as_ref() {
+        if existing_preview.lifecycle != RequirementPreviewLifecycle::Materialized
+            && (!existing_preview.confirmation_records.is_empty()
+                || existing_preview.current_state != "goal_draft")
+        {
+            confirmation_records.push(PreviewConfirmationRecord {
+                timestamp: now,
+                actor: "spec-agent".to_string(),
+                preview_artifact_path: preview_stage_artifact_ref(
+                    &root,
+                    &requirement.requirement_id,
+                )?,
+                preview_revision: existing_preview.revision,
+                target_type: "preview-revision".to_string(),
+                target_id: format!("preview-r{}", existing_preview.revision),
+                confirmation_scope: vec!["preview-artifact".to_string()],
+                summary: "生成新的 preview revision，旧确认记录保留。".to_string(),
+                decision: "modify-preview".to_string(),
+                impact: format!(
+                    "当前改为 revision {}，需要基于新 preview 重新确认。",
+                    revision
+                ),
+                next_action: "confirm-goal-draft-preview".to_string(),
+            });
+        }
+    }
 
     let preview = RequirementPreviewRuntime {
         version: REQUIREMENT_PREVIEW_VERSION.to_string(),
@@ -327,7 +359,7 @@ pub fn requirement_preview_from_requirement(
         intake,
         goal_draft,
         plan_draft: None,
-        confirmation_records: Vec::new(),
+        confirmation_records,
         materialized_project_id: None,
         materialized_issue_ids: Vec::new(),
         next_recommended_action: "confirm-goal-draft-preview".to_string(),
@@ -382,8 +414,15 @@ pub fn confirm_goal_draft_preview(
         .push(PreviewConfirmationRecord {
             timestamp: unix_timestamp_seconds(),
             actor: actor.to_string(),
+            preview_artifact_path: preview_stage_artifact_ref(&root, &preview.requirement_id)?,
+            preview_revision: preview.revision,
             target_type: "goal-draft".to_string(),
             target_id: preview.goal_draft.goal_draft_id.clone(),
+            confirmation_scope: vec![
+                "goal-draft".to_string(),
+                "goal-document".to_string(),
+                "plan-preview".to_string(),
+            ],
             summary: "确认 Goal 草稿，允许进入 Plan Draft Preview。".to_string(),
             decision: "confirmed".to_string(),
             impact: "GOAL.md 成为已确认项目目标，下一步进入 Plan Draft Preview。".to_string(),
@@ -450,8 +489,15 @@ pub fn confirm_plan_draft_preview(
         .push(PreviewConfirmationRecord {
             timestamp: unix_timestamp_seconds(),
             actor: actor.to_string(),
+            preview_artifact_path: preview_stage_artifact_ref(&root, &preview.requirement_id)?,
+            preview_revision: preview.revision,
             target_type: "plan-draft".to_string(),
             target_id: plan_draft_id.clone(),
+            confirmation_scope: vec![
+                "plan-draft".to_string(),
+                "issue-previews".to_string(),
+                "spec-materialization-gate".to_string(),
+            ],
             summary: "确认 Plan 草稿，允许物化 SpecProject / SpecIssue。".to_string(),
             decision: "confirmed".to_string(),
             impact: "PLAN.md 成为已确认项目计划，下一步可以正式物化任务合同。".to_string(),
@@ -499,6 +545,21 @@ pub fn cancel_requirement_preview(
 ) -> Result<RequirementPreviewRuntime> {
     let root = canonicalize_project_root(project_root)?;
     let mut preview = read_requirement_preview_runtime(&root, requirement_id)?;
+    preview
+        .confirmation_records
+        .push(PreviewConfirmationRecord {
+            timestamp: unix_timestamp_seconds(),
+            actor: "human-owner".to_string(),
+            preview_artifact_path: preview_stage_artifact_ref(&root, &preview.requirement_id)?,
+            preview_revision: preview.revision,
+            target_type: "preview".to_string(),
+            target_id: format!("preview-r{}", preview.revision),
+            confirmation_scope: vec!["preview-artifact".to_string()],
+            summary: format!("取消当前 preview：{reason}。"),
+            decision: "cancelled".to_string(),
+            impact: "当前 preview 不再进入 formal materialization。".to_string(),
+            next_action: "start-new-requirement".to_string(),
+        });
     preview.lifecycle = RequirementPreviewLifecycle::Cancelled;
     preview.next_recommended_action = "start-new-requirement".to_string();
     preview.next_recommended_action_label = "开始新需求".to_string();
@@ -2088,15 +2149,22 @@ fn build_requirement_stage_artifact(
                 preview_summary,
             )
         }
-        SpecLoopStageName::Confirmation => (
-            confirmation_stage_status(preview),
-            SpecArtifactAuthority::Derived,
-            vec![preview_ref.clone()],
-            vec![stage_ref.clone()],
-            confirmation_evidence_refs(preview)?,
-            None,
-            "确认阶段绑定到具体 preview artifact；没有确认记录就不能进入正式物化。".to_string(),
-        ),
+        SpecLoopStageName::Confirmation => {
+            let confirmation_gate = build_requirement_confirmation_gate(root, preview)?;
+            let confirmation_summary =
+                build_requirement_confirmation_summary_line(&confirmation_gate);
+            let confirmation_refs =
+                build_requirement_confirmation_refs(preview, &confirmation_gate)?;
+            (
+                confirmation_stage_status(preview),
+                SpecArtifactAuthority::Derived,
+                vec![preview_ref.clone()],
+                vec![stage_ref.clone()],
+                confirmation_refs,
+                Some(serde_json::to_value(&confirmation_gate)?),
+                confirmation_summary,
+            )
+        }
         SpecLoopStageName::Materialization => (
             materialization_stage_status(preview),
             SpecArtifactAuthority::Authority,
@@ -3718,6 +3786,70 @@ fn build_requirement_generated_preview_refs(
     Ok(dedupe_preserve_order(refs))
 }
 
+fn build_requirement_confirmation_gate(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Result<RequirementConfirmationGate> {
+    let preview_artifact_path = preview_stage_artifact_ref(root, &preview.requirement_id)?;
+    let latest_record = preview.confirmation_records.last();
+    let mut reasons = vec![
+        "确认记录必须绑定到具体 preview artifact 和 preview revision。".to_string(),
+        "没有确认或只确认了部分 preview 时，formal materialization 仍然关闭。".to_string(),
+    ];
+    if preview.lifecycle == RequirementPreviewLifecycle::Cancelled {
+        reasons.push("当前 preview 已取消，因此 formal write gate 保持关闭。".to_string());
+    }
+    if preview.current_state == "confirmed" {
+        reasons.push("Goal 和 Plan 都已确认，可以进入 Spec Materializer。".to_string());
+    } else if !preview.confirmation_records.is_empty() {
+        reasons.push("已有局部确认记录，但还未完成全部确认。".to_string());
+    }
+
+    Ok(RequirementConfirmationGate {
+        version: REQUIREMENT_CONFIRMATION_VERSION.to_string(),
+        requirement_id: preview.requirement_id.clone(),
+        project_id: preview.project_id.clone(),
+        preview_artifact_path,
+        preview_revision: preview.revision,
+        preview_current_state: preview.current_state.clone(),
+        preview_only: preview.current_state != "confirmed"
+            && preview.lifecycle != RequirementPreviewLifecycle::Materialized,
+        gate_open: preview.current_state == "confirmed"
+            || preview.lifecycle == RequirementPreviewLifecycle::Materialized,
+        cancelled: preview.lifecycle == RequirementPreviewLifecycle::Cancelled,
+        latest_decision: latest_record.map(|record| record.decision.clone()),
+        latest_confirmation_scope: latest_record
+            .map(|record| record.confirmation_scope.clone())
+            .unwrap_or_default(),
+        confirmation_records: preview.confirmation_records.clone(),
+        next_action: preview.next_recommended_action.clone(),
+        next_action_label: preview.next_recommended_action_label.clone(),
+        next_action_reason: preview.next_recommended_action_reason.clone(),
+        reasons,
+    })
+}
+
+fn build_requirement_confirmation_summary_line(
+    confirmation_gate: &RequirementConfirmationGate,
+) -> String {
+    format!(
+        "确认门状态：preview revision {}，记录 {} 条，gateOpen = {}，cancelled = {}。",
+        confirmation_gate.preview_revision,
+        confirmation_gate.confirmation_records.len(),
+        confirmation_gate.gate_open,
+        confirmation_gate.cancelled
+    )
+}
+
+fn build_requirement_confirmation_refs(
+    preview: &RequirementPreviewRuntime,
+    confirmation_gate: &RequirementConfirmationGate,
+) -> Result<Vec<String>> {
+    let mut refs = vec![confirmation_gate.preview_artifact_path.clone()];
+    refs.extend(confirmation_evidence_refs(preview)?);
+    Ok(dedupe_preserve_order(refs))
+}
+
 fn preview_stage_status(preview: &RequirementPreviewRuntime) -> SpecLoopStageStatus {
     match preview.lifecycle {
         RequirementPreviewLifecycle::Cancelled => SpecLoopStageStatus::Cancelled,
@@ -3733,6 +3865,8 @@ fn confirmation_stage_status(preview: &RequirementPreviewRuntime) -> SpecLoopSta
         RequirementPreviewLifecycle::Active => {
             if preview.current_state == "confirmed" {
                 SpecLoopStageStatus::Confirmed
+            } else if !preview.confirmation_records.is_empty() {
+                SpecLoopStageStatus::Ready
             } else {
                 SpecLoopStageStatus::Declared
             }
@@ -3854,6 +3988,11 @@ fn requirement_preview_runtime_path(root: &Path, requirement_id: &str) -> Result
 
 fn requirement_manifest_path(root: &Path, requirement_id: &str) -> Result<PathBuf> {
     Ok(requirement_preview_dir(root, requirement_id)?.join("manifest.json"))
+}
+
+fn preview_stage_artifact_ref(root: &Path, requirement_id: &str) -> Result<String> {
+    requirement_stage_artifact_path(root, requirement_id, &SpecLoopStageName::Preview)
+        .and_then(|path| normalize_relative_to_root(root, path))
 }
 
 fn requirement_stage_artifact_path(
@@ -4671,11 +4810,11 @@ mod tests {
     use super::*;
     use crate::model::{
         RequirementBoundarySummary, RequirementBoundaryVerdict, RequirementClass,
-        RequirementClassificationResult, RequirementContextFactState, RequirementContextSummary,
-        RequirementExecutionPermission, RequirementGeneratedPreview, RequirementRiskLevel,
-        RequirementRouteDecision, RequirementRoutePath, SpecArtifactAuthority,
-        SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageName, SpecLoopStageStatus,
-        SpecPriority, DEFAULT_WORKFLOW_REF,
+        RequirementClassificationResult, RequirementConfirmationGate, RequirementContextFactState,
+        RequirementContextSummary, RequirementExecutionPermission, RequirementGeneratedPreview,
+        RequirementRiskLevel, RequirementRouteDecision, RequirementRoutePath,
+        SpecArtifactAuthority, SpecLoopRequirementManifest, SpecLoopStageArtifact,
+        SpecLoopStageName, SpecLoopStageStatus, SpecPriority, DEFAULT_WORKFLOW_REF,
     };
     use agentflow_event_store::load_task_events;
     use serde_json::Value;
@@ -5982,6 +6121,102 @@ mod tests {
             generated.first_executable_issue_candidate.as_deref(),
             Some("PROJECT-PREVIEW-001")
         );
+    }
+
+    #[test]
+    fn confirmation_stage_binds_records_to_preview_artifact() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+        confirm_goal_draft_preview(dir.path(), "999-task-workflow-test", "goal-agent").unwrap();
+
+        let confirmation_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/999-task-workflow-test/confirmation.json"),
+        )
+        .unwrap();
+        assert_eq!(confirmation_artifact.stage, SpecLoopStageName::Confirmation);
+        assert_eq!(confirmation_artifact.status, SpecLoopStageStatus::Ready);
+
+        let confirmation_gate: RequirementConfirmationGate =
+            serde_json::from_value(confirmation_artifact.payload.unwrap()).unwrap();
+        assert_eq!(confirmation_gate.preview_revision, 1);
+        assert_eq!(
+            confirmation_gate.preview_artifact_path,
+            ".agentflow/spec/requirements/999-task-workflow-test/preview.json"
+        );
+        assert!(!confirmation_gate.gate_open);
+        assert_eq!(
+            confirmation_gate.latest_decision.as_deref(),
+            Some("confirmed")
+        );
+        assert!(confirmation_gate
+            .latest_confirmation_scope
+            .contains(&"goal-draft".to_string()));
+        assert_eq!(confirmation_gate.confirmation_records.len(), 1);
+    }
+
+    #[test]
+    fn cancelling_preview_records_closeout_and_blocks_materialization() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+        let cancelled = cancel_requirement_preview(
+            dir.path(),
+            "999-task-workflow-test",
+            "当前需求需要重新整理",
+        )
+        .unwrap();
+        assert_eq!(cancelled.lifecycle, RequirementPreviewLifecycle::Cancelled);
+        assert!(
+            materialize_spec_from_requirement_preview(dir.path(), "999-task-workflow-test")
+                .is_err()
+        );
+
+        let confirmation_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/999-task-workflow-test/confirmation.json"),
+        )
+        .unwrap();
+        let confirmation_gate: RequirementConfirmationGate =
+            serde_json::from_value(confirmation_artifact.payload.unwrap()).unwrap();
+        assert!(confirmation_gate.cancelled);
+        assert_eq!(
+            confirmation_gate.latest_decision.as_deref(),
+            Some("cancelled")
+        );
+        assert!(!confirmation_gate.gate_open);
+        assert!(!dir
+            .path()
+            .join(".agentflow/spec/projects/project-preview.json")
+            .exists());
+    }
+
+    #[test]
+    fn regenerating_preview_keeps_old_confirmation_semantics() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+        confirm_goal_draft_preview(dir.path(), "999-task-workflow-test", "goal-agent").unwrap();
+
+        let regenerated =
+            requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+                .unwrap();
+        assert_eq!(regenerated.revision, 2);
+        assert!(regenerated
+            .confirmation_records
+            .iter()
+            .any(|record| record.decision == "modify-preview"));
+        assert!(regenerated
+            .confirmation_records
+            .iter()
+            .any(|record| record.decision == "confirmed"));
     }
 
     #[test]
