@@ -23,12 +23,13 @@ mod tests {
         core_ontology_bundle, core_ontology_registry, validate_ontology_bundle,
     };
     use agentflow_projection::{
-        load_project_projection, load_task_projection, rebuild_projections,
+        get_spec_loop_view, load_project_projection, load_task_projection, rebuild_projections,
     };
     use agentflow_role_policy::{core_role_policy_bundle, validate_role_policy_bundle};
     use agentflow_runtime_api::{
         execute_command_via_arbitration, get_project_home_view, get_runtime_health_view,
-        get_task_workbench_view, RuntimeCommandRequest, RuntimeCommandStatus,
+        get_task_workbench_view, project_confirm_goal, project_confirm_plan, project_intake,
+        project_materialize, RuntimeCommandRequest, RuntimeCommandStatus,
     };
     use agentflow_state::{WorkflowAuditStatus, WorkflowStage};
     use agentflow_task_loop::TaskLoop;
@@ -287,6 +288,82 @@ mod tests {
         assert_eq!(next_issue.current_state, "in_progress");
         assert_eq!(next_issue.latest_run_id.as_deref(), Some("run-001"));
         fixture.fixture.assert_user_files_unchanged()?;
+        Ok(())
+    }
+
+    #[test]
+    fn spec_loop_projection_proves_main_chain_to_runtime_action_proposal() -> anyhow::Result<()> {
+        let fixture = create_fixture_project()?;
+        let root = fixture.root();
+        let define = agentflow_agent_manual::prepare_agent_working_manual(root)?;
+        assert!(define.ready);
+        let panel = agentflow_panel::prepare_project_panel(
+            root,
+            agentflow_panel::PanelPrepareMode::Blocking,
+        )?;
+        assert!(matches!(panel.status, agentflow_panel::PanelStatus::Ready));
+        agentflow_spec::prepare_spec_workspace(root)?;
+        agentflow_projection::prepare_projection_workspace(root)?;
+        agentflow_event_store::prepare_event_store(root)?;
+        agentflow_audit::prepare_audit_workspace(root)?;
+        let state = agentflow_state::prepare_state_workspace(root)?;
+        assert_eq!(state.status, agentflow_state::StateWorkspaceStatus::Ready);
+
+        let requirement = root.join("docs/requirements/041-spec-loop-acceptance.md");
+        std::fs::create_dir_all(requirement.parent().unwrap())?;
+        std::fs::write(
+            &requirement,
+            "# Spec Loop Acceptance\n\n把原始需求走到 preview、confirmation、materialization，并接到 Runtime Action Proposal。\n",
+        )?;
+
+        let preview = project_intake(root, &requirement, Some("project-spec-loop"))?;
+        assert_eq!(preview.requirement_id, "041-spec-loop-acceptance");
+
+        let preview = project_confirm_goal(root, "041-spec-loop-acceptance", "goal-agent")?;
+        assert_eq!(preview.current_state, "plan_draft");
+
+        let preview = project_confirm_plan(root, "041-spec-loop-acceptance", "spec-agent")?;
+        assert_eq!(preview.current_state, "confirmed");
+
+        let materialized = project_materialize(root, "041-spec-loop-acceptance")?;
+        let view = get_spec_loop_view(root, "041-spec-loop-acceptance")?;
+
+        assert_eq!(view.requirement_id, "041-spec-loop-acceptance");
+        assert_eq!(view.stages.len(), 8);
+        assert_eq!(
+            view.stages.last().map(|stage| stage.status.as_str()),
+            Some("materialized")
+        );
+        assert_eq!(materialized.project.project_id, "project-spec-loop");
+        assert_eq!(
+            materialized.action_proposal_bridge.len(),
+            view.runtime_action_proposals.len()
+        );
+        assert_eq!(
+            materialized.accepted_count,
+            materialized.action_proposal_bridge.len()
+        );
+        assert_eq!(materialized.rejected_count, 0);
+        assert!(view.traceability.iter().any(|edge| {
+            edge.from_ref == "docs/requirements/041-spec-loop-acceptance.md"
+                && edge.to_ref.ends_with("/intake.json")
+        }));
+        assert!(view.traceability.iter().any(|edge| {
+            edge.from_ref.ends_with("/materialization.json")
+                && edge
+                    .to_ref
+                    .starts_with("runtime-action-proposal:createProject:")
+        }));
+        assert!(view.runtime_action_proposals.iter().any(|proposal| {
+            proposal.action_type == "createProject" && proposal.target_object_type == "Spec"
+        }));
+        assert!(view.runtime_action_proposals.iter().any(|proposal| {
+            proposal.action_type == "createIssue" && proposal.target_object_type == "Project"
+        }));
+        assert_eq!(view.freshness.staleness, "current");
+
+        fixture.assert_user_files_unchanged()?;
+        boundaries::assert_write_boundary(root)?;
         Ok(())
     }
 }

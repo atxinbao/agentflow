@@ -698,6 +698,45 @@ pub fn list_requirement_preview_runtimes(
     Ok(previews)
 }
 
+pub fn read_spec_loop_requirement_manifest(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+) -> Result<SpecLoopRequirementManifest> {
+    let root = canonicalize_project_root(project_root)?;
+    read_json(&requirement_manifest_path(&root, requirement_id)?)
+}
+
+pub fn read_spec_loop_stage_artifact(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+    stage: SpecLoopStageName,
+) -> Result<SpecLoopStageArtifact> {
+    let root = canonicalize_project_root(project_root)?;
+    read_json(&requirement_stage_artifact_path(
+        &root,
+        requirement_id,
+        &stage,
+    )?)
+}
+
+pub fn list_spec_loop_stage_artifacts(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+) -> Result<Vec<SpecLoopStageArtifact>> {
+    let root = canonicalize_project_root(project_root)?;
+    SpecLoopStageName::all()
+        .iter()
+        .cloned()
+        .map(|stage| {
+            read_json(&requirement_stage_artifact_path(
+                &root,
+                requirement_id,
+                &stage,
+            )?)
+        })
+        .collect()
+}
+
 pub fn write_completion_decision_runtime(
     project_root: impl AsRef<Path>,
     runtime: &CompletionDecisionRuntime,
