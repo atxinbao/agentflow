@@ -4,11 +4,25 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACT_DIR="$ROOT/artifacts/release-gate-v0.5.1-e2e"
 RELEASE_VERSION="${RELEASE_VERSION:-v0.5.1}"
+RELEASE_TAG_NAME="${RELEASE_TAG_NAME:-$RELEASE_VERSION}"
+SOURCE_COMMIT_SHA="${SOURCE_COMMIT_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --artifact-dir)
       ARTIFACT_DIR="$2"
+      shift 2
+      ;;
+    --release-version)
+      RELEASE_VERSION="$2"
+      shift 2
+      ;;
+    --release-tag)
+      RELEASE_TAG_NAME="$2"
+      shift 2
+      ;;
+    --source-commit-sha)
+      SOURCE_COMMIT_SHA="$2"
       shift 2
       ;;
     *)
@@ -93,6 +107,8 @@ write_gate_reports() {
     "$CERTIFICATION_JSON_PATH" \
     "$CERTIFICATION_MD_PATH" \
     "$RELEASE_VERSION" \
+    "$RELEASE_TAG_NAME" \
+    "$SOURCE_COMMIT_SHA" \
     "$REQUIREMENT_ID" \
     "$PROJECT_ID" \
     "$ISSUE_COUNT" \
@@ -109,11 +125,13 @@ summary_md_path = pathlib.Path(sys.argv[4])
 cert_json_path = pathlib.Path(sys.argv[5])
 cert_md_path = pathlib.Path(sys.argv[6])
 release_version = sys.argv[7]
-requirement_id = sys.argv[8] or None
-project_id = sys.argv[9] or None
-issue_count = int(sys.argv[10] or "0")
-release_path = pathlib.Path(sys.argv[11])
-review_path = pathlib.Path(sys.argv[12])
+release_tag_name = sys.argv[8] or None
+source_commit_sha = sys.argv[9] or None
+requirement_id = sys.argv[10] or None
+project_id = sys.argv[11] or None
+issue_count = int(sys.argv[12] or "0")
+release_path = pathlib.Path(sys.argv[13])
+review_path = pathlib.Path(sys.argv[14])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -199,8 +217,12 @@ checklist = [
 
 summary_payload = {
     "status": current_status,
+    "conclusion": current_status,
     "failedStage": current_stage if current_status == "failed" else None,
     "failureMessage": current_message if current_status == "failed" else None,
+    "sourceCommitSha": source_commit_sha,
+    "tagName": release_tag_name or release.get("tagName"),
+    "releaseVersion": release_version,
     "requirementId": requirement_id,
     "projectId": project_id,
     "issueCount": issue_count,
@@ -209,7 +231,6 @@ summary_payload = {
     "gateStatus": release.get("gateStatus"),
     "completionState": release.get("completionState"),
     "completionOutcome": release.get("completionOutcome"),
-    "tagName": release.get("tagName"),
     "remoteReleaseUrl": release.get("remoteReleaseUrl"),
     "changelogPath": release.get("changelogPath"),
     "releaseNotesPath": release.get("releaseNotesPath"),
@@ -226,6 +247,8 @@ summary_lines = [
     "# Release Gate E2E Summary",
     "",
     f"- Release version: `{release_version}`",
+    f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
+    f"- Source commit: `{source_commit_sha or 'n/a'}`",
     f"- Gate status: `{current_status}`",
     f"- Current stage: `{current_stage}`",
     f"- Requirement: `{requirement_id}`",
@@ -250,8 +273,17 @@ summary_md_path.write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
 certification_payload = {
     "version": "agentflow-release-gate-certification.v1",
     "releaseVersion": release_version,
+    "tagName": release_tag_name or release.get("tagName"),
+    "sourceCommitSha": source_commit_sha,
     "gateWorkflow": "release-gate",
     "gateStatus": current_status,
+    "conclusion": current_status,
+    "gateCommands": [
+        "cargo fmt --all --check",
+        "cargo test --workspace",
+        "npm --prefix apps/desktop run build",
+        f"bash scripts/verify_release_gate.sh --artifact-dir {summary_json_path.parent} --release-version {release_version} --release-tag {release_tag_name or release_version} --source-commit-sha {source_commit_sha or 'unknown'}",
+    ],
     "failedStage": current_stage if current_status == "failed" else None,
     "failureMessage": current_message if current_status == "failed" else None,
     "requirementId": requirement_id,
@@ -273,6 +305,8 @@ cert_lines = [
     "# Release Gate Certification",
     "",
     f"- Release version: `{release_version}`",
+    f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
+    f"- Source commit: `{source_commit_sha or 'n/a'}`",
     f"- Gate workflow: `release-gate`",
     f"- Gate status: `{current_status}`",
 ]
@@ -287,6 +321,13 @@ else:
 cert_lines.extend([
     f"- Requirement: `{requirement_id}`",
     f"- Project: `{project_id}`",
+    "",
+    "## Gate Commands",
+    "",
+])
+for command in certification_payload["gateCommands"]:
+    cert_lines.append(f"- `{command}`")
+cert_lines.extend([
     "",
     "## Certification Checklist",
     "",

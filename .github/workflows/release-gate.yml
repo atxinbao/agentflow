@@ -1,14 +1,15 @@
 name: release-gate
 
-env:
-  RELEASE_VERSION: v0.5.1
-  RELEASE_GATE_ARTIFACT_DIR: artifacts/release-gate-v0.5.1-e2e
-
 on:
   pull_request:
   push:
     branches:
       - main
+    tags:
+      - "v*"
+  release:
+    types:
+      - published
   workflow_dispatch:
 
 jobs:
@@ -52,6 +53,27 @@ jobs:
       - name: Install desktop dependencies
         run: npm --prefix apps/desktop ci
 
+      - name: Resolve release metadata
+        id: release_meta
+        run: |
+          event_name="${GITHUB_EVENT_NAME}"
+          release_tag=""
+
+          if [[ "$event_name" == "push" && "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            release_tag="${GITHUB_REF_NAME}"
+          elif [[ "$event_name" == "release" ]]; then
+            release_tag="$(python3 -c 'import json, os; from pathlib import Path; payload = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8")); print((payload.get("release") or {}).get("tag_name", ""))')"
+          fi
+
+          if [[ -z "$release_tag" ]]; then
+            release_tag="v0.5.1"
+          fi
+
+          artifact_dir="artifacts/release-gate-${release_tag}-e2e"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "release_version=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
+
       - name: Rust format check
         run: cargo fmt --all --check
 
@@ -64,23 +86,33 @@ jobs:
         run: npm --prefix apps/desktop run build
 
       - name: Release gate E2E
-        run: bash scripts/verify_release_gate.sh --artifact-dir "$RELEASE_GATE_ARTIFACT_DIR"
+        env:
+          RELEASE_VERSION: ${{ steps.release_meta.outputs.release_version }}
+          RELEASE_TAG_NAME: ${{ steps.release_meta.outputs.release_tag }}
+          SOURCE_COMMIT_SHA: ${{ github.sha }}
+        run: |
+          bash scripts/verify_release_gate.sh \
+            --artifact-dir "${{ steps.release_meta.outputs.artifact_dir }}" \
+            --release-version "${{ steps.release_meta.outputs.release_version }}" \
+            --release-tag "${{ steps.release_meta.outputs.release_tag }}" \
+            --source-commit-sha "${{ github.sha }}"
 
       - name: Append gate summary
         if: always()
         run: |
-          if [ -f "$RELEASE_GATE_ARTIFACT_DIR/certification.md" ]; then
-            cat "$RELEASE_GATE_ARTIFACT_DIR/certification.md" >> "$GITHUB_STEP_SUMMARY"
+          artifact_dir="${{ steps.release_meta.outputs.artifact_dir }}"
+          if [ -f "$artifact_dir/certification.md" ]; then
+            cat "$artifact_dir/certification.md" >> "$GITHUB_STEP_SUMMARY"
             printf "\n\n" >> "$GITHUB_STEP_SUMMARY"
           fi
-          if [ -f "$RELEASE_GATE_ARTIFACT_DIR/summary.md" ]; then
-            cat "$RELEASE_GATE_ARTIFACT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$artifact_dir/summary.md" ]; then
+            cat "$artifact_dir/summary.md" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload gate artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-gate-${{ env.RELEASE_VERSION }}
-          path: ${{ env.RELEASE_GATE_ARTIFACT_DIR }}
+          name: release-gate-${{ steps.release_meta.outputs.release_version }}
+          path: ${{ steps.release_meta.outputs.artifact_dir }}
           if-no-files-found: warn
