@@ -20,13 +20,12 @@ pub(crate) fn project_intake(
     requirement_path: String,
     project_id: Option<String>,
 ) -> Result<agentflow_spec::RequirementPreviewRuntime, String> {
-    let preview = agentflow_spec::requirement_preview_from_requirement(
-        &project_root,
-        &requirement_path,
+    let preview = agentflow_runtime_api::project_intake(
+        std::path::Path::new(&project_root),
+        std::path::Path::new(&requirement_path),
         project_id.as_deref(),
     )
     .map_err(|error| error.to_string())?;
-    agentflow_projection::rebuild_projections(&project_root).map_err(|error| error.to_string())?;
     Ok(preview)
 }
 
@@ -35,8 +34,11 @@ pub(crate) fn project_preview_goal(
     project_root: String,
     requirement_id: String,
 ) -> Result<agentflow_spec::RequirementPreviewRuntime, String> {
-    agentflow_spec::read_requirement_preview_runtime(&project_root, &requirement_id)
-        .map_err(|error| error.to_string())
+    agentflow_runtime_api::project_preview_goal(
+        std::path::Path::new(&project_root),
+        &requirement_id,
+    )
+    .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -45,13 +47,12 @@ pub(crate) fn project_confirm_goal(
     requirement_id: String,
     actor: Option<String>,
 ) -> Result<agentflow_spec::RequirementPreviewRuntime, String> {
-    let preview = agentflow_spec::confirm_goal_draft_preview(
-        &project_root,
+    let preview = agentflow_runtime_api::project_confirm_goal(
+        std::path::Path::new(&project_root),
         &requirement_id,
         actor.as_deref().unwrap_or("goal-agent"),
     )
     .map_err(|error| error.to_string())?;
-    agentflow_projection::rebuild_projections(&project_root).map_err(|error| error.to_string())?;
     Ok(preview)
 }
 
@@ -61,13 +62,12 @@ pub(crate) fn project_confirm_plan(
     requirement_id: String,
     actor: Option<String>,
 ) -> Result<agentflow_spec::RequirementPreviewRuntime, String> {
-    let preview = agentflow_spec::confirm_plan_draft_preview(
-        &project_root,
+    let preview = agentflow_runtime_api::project_confirm_plan(
+        std::path::Path::new(&project_root),
         &requirement_id,
         actor.as_deref().unwrap_or("goal-agent"),
     )
     .map_err(|error| error.to_string())?;
-    agentflow_projection::rebuild_projections(&project_root).map_err(|error| error.to_string())?;
     Ok(preview)
 }
 
@@ -76,11 +76,15 @@ pub(crate) fn project_materialize(
     project_root: String,
     requirement_id: String,
 ) -> Result<ProjectMaterializationResult, String> {
-    let (project, issues) =
-        agentflow_spec::materialize_spec_from_requirement_preview(&project_root, &requirement_id)
-            .map_err(|error| error.to_string())?;
-    agentflow_projection::rebuild_projections(&project_root).map_err(|error| error.to_string())?;
-    Ok(ProjectMaterializationResult { project, issues })
+    let result = agentflow_runtime_api::project_materialize(
+        std::path::Path::new(&project_root),
+        &requirement_id,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(ProjectMaterializationResult {
+        project: result.project,
+        issues: result.issues,
+    })
 }
 
 #[tauri::command]
@@ -88,9 +92,7 @@ pub(crate) fn completion_inspect(
     project_root: String,
     project_id: String,
 ) -> Result<agentflow_spec::CompletionDecisionRuntime, String> {
-    agentflow_spec::sync_completion_decision_runtimes(&project_root)
-        .map_err(|error| error.to_string())?;
-    agentflow_spec::read_completion_decision_runtime(&project_root, &project_id)
+    agentflow_runtime_api::completion_inspect(std::path::Path::new(&project_root), &project_id)
         .map_err(|error| error.to_string())
 }
 
@@ -104,16 +106,21 @@ pub(crate) fn completion_decide(
     rationale: Vec<String>,
 ) -> Result<agentflow_spec::CompletionDecisionRuntime, String> {
     let parsed = parse_completion_outcome(&outcome).map_err(|error| error.to_string())?;
-    let runtime = agentflow_spec::record_completion_decision(
-        &project_root,
+    let runtime = agentflow_runtime_api::completion_decide(
+        std::path::Path::new(&project_root),
         &project_id,
-        parsed,
+        match parsed {
+            agentflow_spec::CompletionDecisionOutcome::Continue => "continue",
+            agentflow_spec::CompletionDecisionOutcome::Adjust => "adjust",
+            agentflow_spec::CompletionDecisionOutcome::Pause => "pause",
+            agentflow_spec::CompletionDecisionOutcome::Accept => "accept",
+            agentflow_spec::CompletionDecisionOutcome::NextStage => "next-stage",
+        },
         actor.as_deref().unwrap_or("goal-agent"),
         &summary,
         rationale,
     )
     .map_err(|error| error.to_string())?;
-    agentflow_projection::rebuild_projections(&project_root).map_err(|error| error.to_string())?;
     Ok(runtime)
 }
 
@@ -122,10 +129,8 @@ pub(crate) fn release_prepare(
     project_root: String,
     project_id: String,
 ) -> Result<agentflow_release::ProjectReleaseFacts, String> {
-    let facts = agentflow_release::prepare_project_release(&project_root, &project_id)
-        .map_err(|error| error.to_string())?;
-    agentflow_projection::rebuild_projections(&project_root).map_err(|error| error.to_string())?;
-    Ok(facts)
+    agentflow_runtime_api::release_prepare(std::path::Path::new(&project_root), &project_id)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -133,10 +138,8 @@ pub(crate) fn release_confirm(
     project_root: String,
     project_id: String,
 ) -> Result<agentflow_release::ProjectReleaseFacts, String> {
-    let facts = agentflow_release::confirm_project_release(&project_root, &project_id)
-        .map_err(|error| error.to_string())?;
-    agentflow_projection::rebuild_projections(&project_root).map_err(|error| error.to_string())?;
-    Ok(facts)
+    agentflow_runtime_api::release_confirm(std::path::Path::new(&project_root), &project_id)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -144,10 +147,8 @@ pub(crate) fn release_publish(
     project_root: String,
     project_id: String,
 ) -> Result<agentflow_release::ProjectReleaseFacts, String> {
-    let facts = agentflow_release::publish_project_release(&project_root, &project_id)
-        .map_err(|error| error.to_string())?;
-    agentflow_projection::rebuild_projections(&project_root).map_err(|error| error.to_string())?;
-    Ok(facts)
+    agentflow_runtime_api::release_publish(std::path::Path::new(&project_root), &project_id)
+        .map_err(|error| error.to_string())
 }
 
 fn parse_completion_outcome(

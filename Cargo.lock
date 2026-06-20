@@ -79,6 +79,7 @@ dependencies = [
  "agentflow-mcp",
  "agentflow-projection",
  "agentflow-release",
+ "agentflow-runtime-api",
  "agentflow-spec",
  "agentflow-state",
  "agentflow-task-artifacts",
@@ -105,6 +106,7 @@ dependencies = [
  "agentflow-panel",
  "agentflow-projection",
  "agentflow-release",
+ "agentflow-runtime-api",
  "agentflow-spec",
  "agentflow-state",
  "agentflow-task-loop",
@@ -232,6 +234,26 @@ version = "0.3.0"
 dependencies = [
  "agentflow-action-contract",
  "agentflow-ontology",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "agentflow-runtime-api"
+version = "0.3.0"
+dependencies = [
+ "agentflow-action-arbitration",
+ "agentflow-action-contract",
+ "agentflow-audit",
+ "agentflow-object-state",
+ "agentflow-ontology",
+ "agentflow-projection",
+ "agentflow-release",
+ "agentflow-role-policy",
+ "agentflow-spec",
+ "agentflow-task-artifacts",
  "anyhow",
  "serde",
  "serde_json",

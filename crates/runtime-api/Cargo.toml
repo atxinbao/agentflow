@@ -1,0 +1,23 @@
+[package]
+name = "agentflow-runtime-api"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+agentflow-action-arbitration = { path = "../action-arbitration" }
+agentflow-action-contract = { path = "../action-contract" }
+agentflow-audit = { path = "../audit" }
+agentflow-object-state = { path = "../object-state" }
+agentflow-ontology = { path = "../ontology" }
+agentflow-projection = { path = "../projection" }
+agentflow-release = { path = "../release" }
+agentflow-role-policy = { path = "../role-policy" }
+agentflow-spec = { path = "../spec" }
+agentflow-task-artifacts = { path = "../task-artifacts" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

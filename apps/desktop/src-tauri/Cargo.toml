@@ -16,6 +16,7 @@ agentflow-mcp = { path = "../../../crates/mcp" }
 agentflow-audit = { path = "../../../crates/audit" }
 agentflow-projection = { path = "../../../crates/projection" }
 agentflow-release = { path = "../../../crates/release" }
+agentflow-runtime-api = { path = "../../../crates/runtime-api" }
 agentflow-spec = { path = "../../../crates/spec" }
 agentflow-state = { path = "../../../crates/state" }
 agentflow-task-loop = { path = "../../../crates/task-loop" }
