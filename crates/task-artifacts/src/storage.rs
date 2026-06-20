@@ -1,8 +1,10 @@
 use crate::model::{
     TaskChangedFile, TaskChangedFilesRecord, TaskCommandInput, TaskCommandRecord, TaskEvidence,
-    TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord, TASK_CHANGED_FILES_VERSION,
-    TASK_COMMAND_VERSION, TASK_EVIDENCE_VERSION, TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION,
-    TASK_VALIDATION_VERSION,
+    TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord, WorkLoopArtifactClass,
+    WorkLoopArtifactContract, WorkLoopFilesystemContract, WorkLoopRoleAlias, WorkLoopStage,
+    WorkLoopStageContract, TASK_CHANGED_FILES_VERSION, TASK_COMMAND_VERSION, TASK_EVIDENCE_VERSION,
+    TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION, TASK_VALIDATION_VERSION,
+    WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
 };
 use agentflow_event_store::TaskReplayCursor;
 use agentflow_workflow_core::{
@@ -49,6 +51,52 @@ pub fn task_changed_files_path(
     Ok(task_run_dir(project_root, issue_id, run_id)?.join("changed-files.json"))
 }
 
+pub fn task_work_loop_contract_path(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+) -> Result<PathBuf> {
+    let root = canonicalize_project_root(project_root)?;
+    Ok(task_issue_dir(&root, issue_id)?.join("work-loop-contract.json"))
+}
+
+pub fn task_launch_request_path(issue_id: &str, run_id: &str) -> Result<String> {
+    normalize_relative_path_string(
+        PathBuf::from(".agentflow")
+            .join("tasks")
+            .join(IssueId::parse(issue_id)?.as_str())
+            .join("runs")
+            .join(RunId::parse(run_id)?.as_str())
+            .join("launch")
+            .join("agent-request.json"),
+    )
+}
+
+pub fn write_work_loop_filesystem_contract(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    workflow_ref: &str,
+) -> Result<WorkLoopFilesystemContract> {
+    let root = canonicalize_project_root(project_root)?;
+    let issue_id = IssueId::parse(issue_id)?;
+    validate_required("workflowRef", workflow_ref)?;
+    let contract_path = task_work_loop_contract_path(&root, issue_id.as_str())?;
+    let contract = build_work_loop_filesystem_contract(
+        issue_id.as_str(),
+        workflow_ref,
+        normalize_relative_to_project(&root, &contract_path)?,
+    )?;
+    write_json(&contract_path, &contract)?;
+    Ok(contract)
+}
+
+pub fn load_work_loop_filesystem_contract(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+) -> Result<WorkLoopFilesystemContract> {
+    let root = canonicalize_project_root(project_root)?;
+    read_json(task_work_loop_contract_path(&root, issue_id)?)
+}
+
 pub fn create_task_run(
     project_root: impl AsRef<Path>,
     issue_id: &str,
@@ -61,6 +109,7 @@ pub fn create_task_run(
     let run_id = RunId::parse(run_id)?;
     validate_required("workflowRef", workflow_ref)?;
     prepare_task_artifact_workspace(&root, issue_id.as_str())?;
+    let _ = write_work_loop_filesystem_contract(&root, issue_id.as_str(), workflow_ref)?;
     let now = unix_timestamp_seconds();
     let run = TaskRun {
         version: TASK_RUN_VERSION.to_string(),
@@ -513,6 +562,368 @@ fn load_command_records(
     paths.into_iter().map(read_json).collect()
 }
 
+fn build_work_loop_filesystem_contract(
+    issue_id: &str,
+    workflow_ref: &str,
+    contract_path: String,
+) -> Result<WorkLoopFilesystemContract> {
+    let run_id = "<run-id>";
+    let command_id = "<command-id>";
+    let proposal_id = "<proposal-id>";
+    let accepted_action_id = "<accepted-action-id>";
+    let checkpoint_id = "<checkpoint-id>";
+    let artifacts = vec![
+        WorkLoopArtifactContract {
+            key: "spec_issue_authority".to_string(),
+            stage: WorkLoopStage::Command,
+            class: WorkLoopArtifactClass::Authority,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("spec")
+                    .join("issues")
+                    .join(format!("{issue_id}.json")),
+            )?,
+            description: "Spec issue 是 Work Loop 的唯一任务权威。".to_string(),
+            traces_to: vec!["issue".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "work_command".to_string(),
+            stage: WorkLoopStage::Command,
+            class: WorkLoopArtifactClass::Authority,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("runtime")
+                    .join("commands")
+                    .join(format!("{command_id}.json")),
+            )?,
+            description: "Work Command 是由 spec issue 派生出的 runtime 执行入口。".to_string(),
+            traces_to: vec!["issue".to_string(), "command".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "action_proposal".to_string(),
+            stage: WorkLoopStage::Proposal,
+            class: WorkLoopArtifactClass::Authority,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("runtime")
+                    .join("proposals")
+                    .join(format!("{proposal_id}.json")),
+            )?,
+            description: "关键执行动作必须先写成 Action Proposal。".to_string(),
+            traces_to: vec!["issue".to_string(), "proposal".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "proposal_decision".to_string(),
+            stage: WorkLoopStage::Proposal,
+            class: WorkLoopArtifactClass::DerivedArtifact,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("runtime")
+                    .join("decisions")
+                    .join(format!("{proposal_id}.json")),
+            )?,
+            description: "Proposal decision 记录 proposal 是否被 runtime 接受。".to_string(),
+            traces_to: vec!["issue".to_string(), "proposal".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "accepted_action".to_string(),
+            stage: WorkLoopStage::Proposal,
+            class: WorkLoopArtifactClass::DerivedArtifact,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("runtime")
+                    .join("actions")
+                    .join(format!("{accepted_action_id}.json")),
+            )?,
+            description: "接受后的 action 作为真正进入执行面的 runtime 事实。".to_string(),
+            traces_to: vec![
+                "issue".to_string(),
+                "proposal".to_string(),
+                "accepted_action".to_string(),
+            ],
+        },
+        WorkLoopArtifactContract {
+            key: "preflight_report".to_string(),
+            stage: WorkLoopStage::Preflight,
+            class: WorkLoopArtifactClass::DerivedArtifact,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("tasks")
+                    .join(issue_id)
+                    .join("runs")
+                    .join(run_id)
+                    .join("preflight")
+                    .join("preflight.json"),
+            )?,
+            description: "Preflight report 记录依赖、上下文、工作区与合同检查结果。".to_string(),
+            traces_to: vec!["issue".to_string(), "run".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "handoff_request".to_string(),
+            stage: WorkLoopStage::Handoff,
+            class: WorkLoopArtifactClass::TransportSnapshot,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("tasks")
+                    .join(issue_id)
+                    .join("runs")
+                    .join(run_id)
+                    .join("launch")
+                    .join("agent-request.json"),
+            )?,
+            description: "Handoff 只是 transport snapshot，不会替代 spec issue authority。"
+                .to_string(),
+            traces_to: vec!["issue".to_string(), "run".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "run_record".to_string(),
+            stage: WorkLoopStage::Session,
+            class: WorkLoopArtifactClass::DerivedArtifact,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("tasks")
+                    .join(issue_id)
+                    .join("runs")
+                    .join(run_id)
+                    .join("run.json"),
+            )?,
+            description: "run.json 记录本次 Work Session 的主体状态。".to_string(),
+            traces_to: vec!["issue".to_string(), "run".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "command_records".to_string(),
+            stage: WorkLoopStage::Session,
+            class: WorkLoopArtifactClass::DerivedArtifact,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("tasks")
+                    .join(issue_id)
+                    .join("runs")
+                    .join(run_id)
+                    .join("commands")
+                    .join(format!("{command_id}.json")),
+            )?,
+            description: "命令记录、stdout、stderr 都落在 runs/<run-id>/commands/**。".to_string(),
+            traces_to: vec![
+                "issue".to_string(),
+                "run".to_string(),
+                "command".to_string(),
+            ],
+        },
+        WorkLoopArtifactContract {
+            key: "run_checkpoint".to_string(),
+            stage: WorkLoopStage::Session,
+            class: WorkLoopArtifactClass::DerivedArtifact,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("tasks")
+                    .join(issue_id)
+                    .join("runs")
+                    .join(run_id)
+                    .join("checkpoints")
+                    .join(format!("{checkpoint_id}.json")),
+            )?,
+            description: "checkpoint 用于恢复、重放和 durable session。".to_string(),
+            traces_to: vec!["issue".to_string(), "run".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "validation_record".to_string(),
+            stage: WorkLoopStage::Evidence,
+            class: WorkLoopArtifactClass::DerivedArtifact,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("tasks")
+                    .join(issue_id)
+                    .join("runs")
+                    .join(run_id)
+                    .join("validation.json"),
+            )?,
+            description: "validation.json 记录本地验证命令与结果。".to_string(),
+            traces_to: vec![
+                "issue".to_string(),
+                "run".to_string(),
+                "command".to_string(),
+            ],
+        },
+        WorkLoopArtifactContract {
+            key: "changed_files".to_string(),
+            stage: WorkLoopStage::Evidence,
+            class: WorkLoopArtifactClass::DerivedArtifact,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("tasks")
+                    .join(issue_id)
+                    .join("runs")
+                    .join(run_id)
+                    .join("changed-files.json"),
+            )?,
+            description: "变更文件摘要用于验证和写回追溯。".to_string(),
+            traces_to: vec!["issue".to_string(), "run".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "task_evidence".to_string(),
+            stage: WorkLoopStage::Evidence,
+            class: WorkLoopArtifactClass::Authority,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("tasks")
+                    .join(issue_id)
+                    .join("evidence")
+                    .join("evidence.json"),
+            )?,
+            description: "本地 evidence 是任务验证事实的稳定出口。".to_string(),
+            traces_to: vec![
+                "issue".to_string(),
+                "run".to_string(),
+                "proposal".to_string(),
+                "command".to_string(),
+            ],
+        },
+        WorkLoopArtifactContract {
+            key: "task_event_stream".to_string(),
+            stage: WorkLoopStage::Session,
+            class: WorkLoopArtifactClass::Authority,
+            location_ref: ".agentflow/events/task-events.jsonl".to_string(),
+            description: "Work Loop 事件统一进入 task-events.jsonl。".to_string(),
+            traces_to: vec!["issue".to_string(), "run".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "task_projection".to_string(),
+            stage: WorkLoopStage::Delivery,
+            class: WorkLoopArtifactClass::ReadModel,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("projections")
+                    .join("tasks")
+                    .join(format!("{issue_id}.json")),
+            )?,
+            description: "任务投影是 Desktop 和查询面的只读视图。".to_string(),
+            traces_to: vec!["issue".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "public_pr_record".to_string(),
+            stage: WorkLoopStage::Delivery,
+            class: WorkLoopArtifactClass::PublicRecord,
+            location_ref: "public://pr-or-mr-body".to_string(),
+            description: "PR/MR body 是公开交付记录，不写回 .agentflow/tasks/**。".to_string(),
+            traces_to: vec!["issue".to_string(), "run".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "public_changelog_record".to_string(),
+            stage: WorkLoopStage::Delivery,
+            class: WorkLoopArtifactClass::PublicRecord,
+            location_ref: "CHANGELOG.md".to_string(),
+            description: "CHANGELOG 是版本级公开交付事实。".to_string(),
+            traces_to: vec!["issue".to_string()],
+        },
+        WorkLoopArtifactContract {
+            key: "public_release_notes".to_string(),
+            stage: WorkLoopStage::Delivery,
+            class: WorkLoopArtifactClass::PublicRecord,
+            location_ref: "public://release-notes".to_string(),
+            description: "Release notes 是版本发布后的外部交付记录。".to_string(),
+            traces_to: vec!["issue".to_string()],
+        },
+    ];
+    let stages = vec![
+        WorkLoopStageContract {
+            stage: WorkLoopStage::Command,
+            issue_statuses: vec!["todo".to_string()],
+            inputs: vec!["spec_issue_authority".to_string()],
+            outputs: vec!["work_command".to_string()],
+            evidence: Vec::new(),
+        },
+        WorkLoopStageContract {
+            stage: WorkLoopStage::Proposal,
+            issue_statuses: vec!["todo".to_string(), "in_progress".to_string()],
+            inputs: vec!["work_command".to_string()],
+            outputs: vec![
+                "action_proposal".to_string(),
+                "proposal_decision".to_string(),
+                "accepted_action".to_string(),
+            ],
+            evidence: vec!["proposal_decision".to_string()],
+        },
+        WorkLoopStageContract {
+            stage: WorkLoopStage::Preflight,
+            issue_statuses: vec!["todo".to_string()],
+            inputs: vec![
+                "spec_issue_authority".to_string(),
+                "accepted_action".to_string(),
+            ],
+            outputs: vec!["preflight_report".to_string()],
+            evidence: vec!["preflight_report".to_string()],
+        },
+        WorkLoopStageContract {
+            stage: WorkLoopStage::Session,
+            issue_statuses: vec!["in_progress".to_string()],
+            inputs: vec![
+                "accepted_action".to_string(),
+                "preflight_report".to_string(),
+                "handoff_request".to_string(),
+            ],
+            outputs: vec![
+                "run_record".to_string(),
+                "command_records".to_string(),
+                "run_checkpoint".to_string(),
+                "task_event_stream".to_string(),
+            ],
+            evidence: vec![
+                "run_checkpoint".to_string(),
+                "task_event_stream".to_string(),
+            ],
+        },
+        WorkLoopStageContract {
+            stage: WorkLoopStage::Evidence,
+            issue_statuses: vec!["in_review".to_string(), "done".to_string()],
+            inputs: vec![
+                "run_record".to_string(),
+                "command_records".to_string(),
+                "changed_files".to_string(),
+            ],
+            outputs: vec!["validation_record".to_string(), "task_evidence".to_string()],
+            evidence: vec!["validation_record".to_string(), "task_evidence".to_string()],
+        },
+        WorkLoopStageContract {
+            stage: WorkLoopStage::Handoff,
+            issue_statuses: vec!["todo".to_string(), "in_progress".to_string()],
+            inputs: vec![
+                "spec_issue_authority".to_string(),
+                "work_command".to_string(),
+            ],
+            outputs: vec!["handoff_request".to_string()],
+            evidence: vec!["handoff_request".to_string()],
+        },
+        WorkLoopStageContract {
+            stage: WorkLoopStage::Delivery,
+            issue_statuses: vec!["in_review".to_string(), "done".to_string()],
+            inputs: vec!["task_evidence".to_string(), "task_projection".to_string()],
+            outputs: vec![
+                "public_pr_record".to_string(),
+                "public_changelog_record".to_string(),
+                "public_release_notes".to_string(),
+            ],
+            evidence: vec!["task_projection".to_string()],
+        },
+    ];
+
+    Ok(WorkLoopFilesystemContract {
+        version: WORK_LOOP_FILESYSTEM_CONTRACT_VERSION.to_string(),
+        issue_id: issue_id.to_string(),
+        workflow_ref: workflow_ref.to_string(),
+        contract_path,
+        role_aliases: vec![WorkLoopRoleAlias {
+            canonical_role: "work-agent".to_string(),
+            accepted_aliases: vec!["build-agent".to_string()],
+            description: "Build Agent 是 Work Agent 在当前 Runtime 和任务包中的兼容别名。"
+                .to_string(),
+        }],
+        stages,
+        artifacts,
+        generated_at: unix_timestamp_seconds(),
+    })
+}
+
 fn task_issue_dir(root: &Path, issue_id: &str) -> Result<PathBuf> {
     let issue_id = IssueId::parse(issue_id)?;
     join_relative_path(
@@ -552,6 +963,13 @@ fn relative_command_path(
             .join("commands")
             .join(format!("{command_id}.{suffix}")),
     )
+}
+
+fn normalize_relative_to_project(root: &Path, path: &Path) -> Result<String> {
+    let relative = path
+        .strip_prefix(root)
+        .with_context(|| format!("{} is outside {}", path.display(), root.display()))?;
+    normalize_relative_path_string(relative)
 }
 
 fn next_named_id(directory: &Path, prefix: &str) -> Result<String> {
@@ -658,8 +1076,60 @@ mod tests {
             .is_file());
         assert!(dir
             .path()
+            .join(".agentflow/tasks/AF-TASK-001/work-loop-contract.json")
+            .is_file());
+        assert!(dir
+            .path()
             .join(".agentflow/tasks/AF-TASK-001/evidence")
             .is_dir());
+    }
+
+    #[test]
+    fn writes_issue_scoped_work_loop_contract() {
+        let dir = tempdir().unwrap();
+
+        let contract = write_work_loop_filesystem_contract(
+            dir.path(),
+            "AF-TASK-001",
+            "work-agent.issue-loop@v1",
+        )
+        .unwrap();
+
+        assert_eq!(contract.version, WORK_LOOP_FILESYSTEM_CONTRACT_VERSION);
+        assert_eq!(contract.issue_id, "AF-TASK-001");
+        assert_eq!(
+            contract.contract_path,
+            ".agentflow/tasks/AF-TASK-001/work-loop-contract.json"
+        );
+        assert!(contract
+            .role_aliases
+            .iter()
+            .any(|alias| alias.canonical_role == "work-agent"
+                && alias.accepted_aliases == vec!["build-agent".to_string()]));
+        assert!(contract.artifacts.iter().any(|artifact| {
+            artifact.key == "task_event_stream"
+                && artifact.location_ref == ".agentflow/events/task-events.jsonl"
+        }));
+        assert!(contract.artifacts.iter().any(|artifact| {
+            artifact.key == "public_changelog_record" && artifact.location_ref == "CHANGELOG.md"
+        }));
+        assert_eq!(
+            contract
+                .stages
+                .iter()
+                .find(|stage| stage.stage == WorkLoopStage::Delivery)
+                .unwrap()
+                .outputs,
+            vec![
+                "public_pr_record".to_string(),
+                "public_changelog_record".to_string(),
+                "public_release_notes".to_string()
+            ]
+        );
+        assert!(dir
+            .path()
+            .join(".agentflow/tasks/AF-TASK-001/work-loop-contract.json")
+            .is_file());
     }
 
     #[test]
