@@ -9,17 +9,18 @@ use crate::model::{
     RequirementContextGitFacts, RequirementContextIssueRef, RequirementContextProjectRef,
     RequirementContextPullRequestRef, RequirementContextReleaseRef, RequirementContextSummary,
     RequirementDocument, RequirementExecutionPermission, RequirementFactImpact,
-    RequirementIntakeResult, RequirementIntentType, RequirementPreviewLifecycle,
-    RequirementPreviewRuntime, RequirementRiskLevel, RequirementRouteDecision,
-    RequirementRoutePath, RequirementTargetObject, SpecArtifactAuthority, SpecExpectedOutputs,
-    SpecIssue, SpecIssueCategory, SpecIssueDraft, SpecIssueStatus, SpecLoopRequirementManifest,
-    SpecLoopStageArtifact, SpecLoopStageFileRef, SpecLoopStageName, SpecLoopStageStatus,
-    SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
-    SpecSystemRecord, COMPLETION_DECISION_VERSION, PROJECT_BRAIN_DOCUMENT_SET_VERSION,
-    PROJECT_BRAIN_SNAPSHOT_VERSION, REQUIREMENT_BOUNDARY_VERSION,
-    REQUIREMENT_CLASSIFICATION_VERSION, REQUIREMENT_CONTEXT_VERSION, REQUIREMENT_PREVIEW_VERSION,
-    REQUIREMENT_ROUTE_VERSION, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION,
-    SPEC_PROJECT_VERSION, SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
+    RequirementGeneratedIssuePreview, RequirementGeneratedPreview, RequirementIntakeResult,
+    RequirementIntentType, RequirementPreviewLifecycle, RequirementPreviewRuntime,
+    RequirementRiskLevel, RequirementRouteDecision, RequirementRoutePath, RequirementTargetObject,
+    SpecArtifactAuthority, SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft,
+    SpecIssueStatus, SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageFileRef,
+    SpecLoopStageName, SpecLoopStageStatus, SpecPriority, SpecProject, SpecProjectDraft,
+    SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, COMPLETION_DECISION_VERSION,
+    PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
+    REQUIREMENT_BOUNDARY_VERSION, REQUIREMENT_CLASSIFICATION_VERSION, REQUIREMENT_CONTEXT_VERSION,
+    REQUIREMENT_GENERATED_PREVIEW_VERSION, REQUIREMENT_PREVIEW_VERSION, REQUIREMENT_ROUTE_VERSION,
+    SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
+    SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
 };
 use agentflow_audit::load_project_audit_review_summary;
 use agentflow_task_artifacts::{load_task_evidence, load_task_run};
@@ -2071,15 +2072,22 @@ fn build_requirement_stage_artifact(
                 route_summary,
             )
         }
-        SpecLoopStageName::Preview => (
-            preview_stage_status(preview),
-            SpecArtifactAuthority::Derived,
-            vec![route_ref.clone(), runtime_ref.clone()],
-            vec![stage_ref.clone(), runtime_ref.clone()],
-            Vec::new(),
-            None,
-            "预览阶段保存当前可读预览产物；它可追踪，但不是 authority。".to_string(),
-        ),
+        SpecLoopStageName::Preview => {
+            let generated_preview = build_requirement_generated_preview(root, preview)?;
+            let preview_summary =
+                build_requirement_generated_preview_summary_line(&generated_preview);
+            let preview_refs =
+                build_requirement_generated_preview_refs(root, preview, &generated_preview)?;
+            (
+                preview_stage_status(preview),
+                SpecArtifactAuthority::Derived,
+                vec![route_ref.clone(), runtime_ref.clone()],
+                vec![stage_ref.clone(), runtime_ref.clone()],
+                preview_refs,
+                Some(serde_json::to_value(&generated_preview)?),
+                preview_summary,
+            )
+        }
         SpecLoopStageName::Confirmation => (
             confirmation_stage_status(preview),
             SpecArtifactAuthority::Derived,
@@ -3394,6 +3402,322 @@ fn build_requirement_route_refs(
     Ok(dedupe_preserve_order(refs))
 }
 
+fn build_requirement_generated_preview(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Result<RequirementGeneratedPreview> {
+    let route = build_requirement_route_decision(root, preview)?;
+    let boundary = build_requirement_boundary_summary(root, preview)?;
+    let resolved_plan = preview
+        .plan_draft
+        .clone()
+        .unwrap_or_else(|| build_plan_draft_preview(&preview.goal_draft, preview.revision));
+    let spec_preview_enabled = matches!(
+        route.route,
+        RequirementRoutePath::RequirementDraft
+            | RequirementRoutePath::SpecPreview
+            | RequirementRoutePath::BuildIssuePreview
+    );
+    let issue_previews = if spec_preview_enabled {
+        build_requirement_generated_issue_previews(&resolved_plan)
+    } else {
+        Vec::new()
+    };
+    let first_executable_issue_candidate =
+        issue_previews.first().map(|issue| issue.issue_id.clone());
+    let validation_direction =
+        build_requirement_generated_preview_validation_direction(&route, &issue_previews);
+    let forbidden_paths =
+        build_requirement_generated_preview_forbidden_paths(&route, &boundary, &issue_previews);
+    let available_actions = build_requirement_generated_preview_actions(preview, &route);
+    let spec_draft_preview_markdown = spec_preview_enabled
+        .then(|| build_requirement_spec_draft_preview_markdown(preview, &route, &resolved_plan));
+    let project_preview_markdown = spec_preview_enabled
+        .then(|| build_requirement_project_preview_markdown(preview, &resolved_plan));
+    let issues_preview_markdown = spec_preview_enabled
+        .then(|| build_requirement_issues_preview_markdown(&resolved_plan, &issue_previews));
+    let primary_preview_markdown = build_requirement_primary_preview_markdown(
+        preview,
+        &route,
+        &validation_direction,
+        first_executable_issue_candidate.as_deref(),
+        spec_draft_preview_markdown.as_deref(),
+        project_preview_markdown.as_deref(),
+        issues_preview_markdown.as_deref(),
+    );
+
+    let mut reasons = route.reasons.clone();
+    reasons.extend(boundary.reasons.iter().cloned());
+    reasons.push("Preview artifact 只用于人类确认和追踪，不会直接成为 authority。".to_string());
+    let reasons = dedupe_preserve_order(reasons);
+
+    Ok(RequirementGeneratedPreview {
+        version: REQUIREMENT_GENERATED_PREVIEW_VERSION.to_string(),
+        requirement_id: preview.requirement_id.clone(),
+        project_id: preview.project_id.clone(),
+        route: route.route,
+        primary_preview_markdown,
+        spec_draft_preview_markdown,
+        project_preview_markdown,
+        issues_preview_markdown,
+        issue_previews,
+        first_executable_issue_candidate,
+        validation_direction,
+        forbidden_paths,
+        available_actions,
+        reasons,
+    })
+}
+
+fn build_requirement_generated_issue_previews(
+    plan: &PlanDraftPreview,
+) -> Vec<RequirementGeneratedIssuePreview> {
+    plan.issue_contract_drafts
+        .iter()
+        .map(|draft| RequirementGeneratedIssuePreview {
+            issue_id: draft.issue_draft_id.clone(),
+            title: draft.title.clone(),
+            summary: draft.goal.clone(),
+            priority: draft.priority.clone(),
+            dependencies: draft.dependencies.clone(),
+            validation_commands: draft.validation_commands.clone(),
+        })
+        .collect()
+}
+
+fn build_requirement_generated_preview_validation_direction(
+    route: &RequirementRouteDecision,
+    issue_previews: &[RequirementGeneratedIssuePreview],
+) -> Vec<String> {
+    let mut directions = match route.route {
+        RequirementRoutePath::AnswerOnly => {
+            vec!["输出直接回答，不进入本地构建或执行验证。".to_string()]
+        }
+        RequirementRoutePath::ResearchOnly => {
+            vec!["输出研究结论，补充事实来源，不进入执行验证。".to_string()]
+        }
+        RequirementRoutePath::DesignPreview => {
+            vec!["保持设计预览，不进入代码验证或执行链路。".to_string()]
+        }
+        RequirementRoutePath::AuditPreview => {
+            vec!["保持独立审计预览，不进入 Build Loop。".to_string()]
+        }
+        RequirementRoutePath::ReleaseCloseout => {
+            vec!["补齐发布收口说明，再决定是否进入正式 closeout。".to_string()]
+        }
+        RequirementRoutePath::RequirementDraft => {
+            vec!["先回答澄清问题，再决定是否进入 SPEC Preview。".to_string()]
+        }
+        RequirementRoutePath::SpecPreview | RequirementRoutePath::BuildIssuePreview => vec![
+            "先确认 Preview，再物化正式 requirement / spec / issue authority。".to_string(),
+            "物化后按 issue validationCommands 做本地验证。".to_string(),
+        ],
+    };
+    for issue in issue_previews {
+        for command in &issue.validation_commands {
+            push_unique(
+                &mut directions,
+                format!("Issue {} 验证：{}。", issue.issue_id, command),
+            );
+        }
+    }
+    directions
+}
+
+fn build_requirement_generated_preview_forbidden_paths(
+    route: &RequirementRouteDecision,
+    _boundary: &RequirementBoundarySummary,
+    _issue_previews: &[RequirementGeneratedIssuePreview],
+) -> Vec<String> {
+    let mut forbidden_paths = vec![
+        "docs/requirements/**".to_string(),
+        ".agentflow/spec/projects/**".to_string(),
+        ".agentflow/spec/issues/**".to_string(),
+        ".agentflow/tasks/**".to_string(),
+    ];
+    match route.route {
+        RequirementRoutePath::AnswerOnly
+        | RequirementRoutePath::ResearchOnly
+        | RequirementRoutePath::DesignPreview
+        | RequirementRoutePath::AuditPreview
+        | RequirementRoutePath::ReleaseCloseout => {
+            push_unique(&mut forbidden_paths, "docs/projects/**".to_string());
+        }
+        RequirementRoutePath::RequirementDraft
+        | RequirementRoutePath::SpecPreview
+        | RequirementRoutePath::BuildIssuePreview => {}
+    }
+    dedupe_preserve_order(forbidden_paths)
+}
+
+fn build_requirement_generated_preview_actions(
+    preview: &RequirementPreviewRuntime,
+    route: &RequirementRouteDecision,
+) -> Vec<String> {
+    let mut actions = vec![
+        "modify-preview".to_string(),
+        "cancel-preview".to_string(),
+        route.next_action.clone(),
+    ];
+    match preview.current_state.as_str() {
+        "goal_draft" => push_unique(&mut actions, "confirm-goal-draft-preview".to_string()),
+        "plan_draft" => push_unique(&mut actions, "confirm-plan-draft-preview".to_string()),
+        "confirmed" => push_unique(
+            &mut actions,
+            "materialize-spec-project-and-issues".to_string(),
+        ),
+        _ => {}
+    }
+    dedupe_preserve_order(actions)
+}
+
+fn build_requirement_spec_draft_preview_markdown(
+    preview: &RequirementPreviewRuntime,
+    route: &RequirementRouteDecision,
+    plan: &PlanDraftPreview,
+) -> String {
+    format!(
+        "# SPEC Draft Preview\n\n## Requirement\n- ID: {}\n- Route: {}\n- 当前状态: {}\n\n## 目标\n{}\n\n## 范围\n{}\n\n## 非目标\n{}\n\n## 验收标准\n{}\n\n## 风险\n{}\n\n## 计划阶段\n{}\n",
+        preview.requirement_id,
+        route.route.as_str(),
+        preview.current_state,
+        preview.goal_draft.outcome,
+        markdown_list(&preview.goal_draft.scope),
+        markdown_list(&preview.goal_draft.non_goals),
+        markdown_list(&preview.goal_draft.success_criteria),
+        markdown_list(&plan.risk_list),
+        markdown_list(&plan.stage_plan),
+    )
+}
+
+fn build_requirement_project_preview_markdown(
+    preview: &RequirementPreviewRuntime,
+    plan: &PlanDraftPreview,
+) -> String {
+    let milestone_titles = plan
+        .milestone_drafts
+        .iter()
+        .map(|milestone| milestone.title.clone())
+        .collect::<Vec<_>>();
+    format!(
+        "# Project Preview\n\n- Project ID: {}\n- 标题: {}\n- 当前预览状态: {}\n- 候选任务数: {}\n\n## 项目目标\n{}\n\n## 关键里程碑\n{}\n",
+        preview.project_id,
+        preview.project_title,
+        preview.current_state,
+        plan.issue_contract_drafts.len(),
+        preview.goal_draft.outcome,
+        markdown_list(&milestone_titles),
+    )
+}
+
+fn build_requirement_issues_preview_markdown(
+    plan: &PlanDraftPreview,
+    issue_previews: &[RequirementGeneratedIssuePreview],
+) -> String {
+    let mut markdown = String::from("# Issues Preview\n\n");
+    if issue_previews.is_empty() {
+        markdown.push_str("当前没有候选 issue。\n");
+        return markdown;
+    }
+    for issue in &plan.issue_contract_drafts {
+        let deps = if issue.dependencies.is_empty() {
+            "无".to_string()
+        } else {
+            issue.dependencies.join(", ")
+        };
+        markdown.push_str(&format!(
+            "## {}\n- 标题: {}\n- 目标: {}\n- 优先级: {:?}\n- 依赖: {}\n\n### 范围\n{}\
+\n### 非目标\n{}\
+\n### 验收标准\n{}\
+\n### 验证方向\n{}\
+\n",
+            issue.issue_draft_id,
+            issue.title,
+            issue.goal,
+            issue.priority,
+            deps,
+            markdown_list(&issue.scope),
+            markdown_list(&issue.non_goals),
+            markdown_list(&issue.acceptance_criteria),
+            markdown_list(&issue.validation_commands),
+        ));
+    }
+    markdown
+}
+
+fn build_requirement_primary_preview_markdown(
+    preview: &RequirementPreviewRuntime,
+    route: &RequirementRouteDecision,
+    validation_direction: &[String],
+    first_executable_issue_candidate: Option<&str>,
+    spec_draft_preview_markdown: Option<&str>,
+    project_preview_markdown: Option<&str>,
+    issues_preview_markdown: Option<&str>,
+) -> String {
+    let first_issue = first_executable_issue_candidate.unwrap_or("无");
+    let mut markdown = format!(
+        "# Preview Artifact\n\n- Requirement: {}\n- Route: {}\n- 当前状态: {}\n- 下一步: {}\n- 首个可执行任务候选: {}\n\n## 说明\n当前 preview 可追踪，但不是 authority；未确认前不会写正式 requirement / spec / issue。\n\n## 验证方向\n{}\n",
+        preview.requirement_id,
+        route.route.as_str(),
+        preview.current_state,
+        route.next_action_label,
+        first_issue,
+        markdown_list(validation_direction),
+    );
+    if let Some(spec) = spec_draft_preview_markdown {
+        markdown.push_str("\n");
+        markdown.push_str(spec);
+        markdown.push_str("\n");
+    }
+    if let Some(project) = project_preview_markdown {
+        markdown.push_str("\n");
+        markdown.push_str(project);
+        markdown.push_str("\n");
+    }
+    if let Some(issues) = issues_preview_markdown {
+        markdown.push_str("\n");
+        markdown.push_str(issues);
+        markdown.push('\n');
+    }
+    markdown
+}
+
+fn build_requirement_generated_preview_summary_line(
+    generated_preview: &RequirementGeneratedPreview,
+) -> String {
+    format!(
+        "预览已生成：route = {}，候选 issue {} 条，首个可执行候选 = {}。",
+        generated_preview.route.as_str(),
+        generated_preview.issue_previews.len(),
+        generated_preview
+            .first_executable_issue_candidate
+            .as_deref()
+            .unwrap_or("无")
+    )
+}
+
+fn build_requirement_generated_preview_refs(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+    generated_preview: &RequirementGeneratedPreview,
+) -> Result<Vec<String>> {
+    let mut refs = vec![
+        preview.requirement_path.clone(),
+        requirement_preview_runtime_path(root, &preview.requirement_id)
+            .and_then(|path| normalize_relative_to_root(root, path))?,
+        requirement_stage_artifact_path(root, &preview.requirement_id, &SpecLoopStageName::Route)
+            .and_then(|path| normalize_relative_to_root(root, path))?,
+    ];
+    refs.extend(preview.intake.referenced_files.iter().cloned());
+    refs.extend(
+        generated_preview
+            .issue_previews
+            .iter()
+            .flat_map(|issue| issue.validation_commands.iter().cloned()),
+    );
+    Ok(dedupe_preserve_order(refs))
+}
+
 fn preview_stage_status(preview: &RequirementPreviewRuntime) -> SpecLoopStageStatus {
     match preview.lifecycle {
         RequirementPreviewLifecycle::Cancelled => SpecLoopStageStatus::Cancelled,
@@ -4348,10 +4672,10 @@ mod tests {
     use crate::model::{
         RequirementBoundarySummary, RequirementBoundaryVerdict, RequirementClass,
         RequirementClassificationResult, RequirementContextFactState, RequirementContextSummary,
-        RequirementExecutionPermission, RequirementRiskLevel, RequirementRouteDecision,
-        RequirementRoutePath, SpecArtifactAuthority, SpecLoopRequirementManifest,
-        SpecLoopStageArtifact, SpecLoopStageName, SpecLoopStageStatus, SpecPriority,
-        DEFAULT_WORKFLOW_REF,
+        RequirementExecutionPermission, RequirementGeneratedPreview, RequirementRiskLevel,
+        RequirementRouteDecision, RequirementRoutePath, SpecArtifactAuthority,
+        SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageName, SpecLoopStageStatus,
+        SpecPriority, DEFAULT_WORKFLOW_REF,
     };
     use agentflow_event_store::load_task_events;
     use serde_json::Value;
@@ -5488,6 +5812,176 @@ mod tests {
         assert_eq!(route.next_action, "clarify-requirement");
         assert!(!route.clarification_questions.is_empty());
         assert!(route.clarification_questions.len() <= 3);
+    }
+
+    #[test]
+    fn preview_stage_emits_human_readable_spec_project_and_issue_previews() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "preview-feature",
+            "# 任务页状态流\n\n请重构任务页状态时间线，更新 apps/desktop/src/App.tsx 并补充验证。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let preview_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/preview-feature/preview.json"),
+        )
+        .unwrap();
+        assert_eq!(preview_artifact.stage, SpecLoopStageName::Preview);
+        assert_eq!(preview_artifact.status, SpecLoopStageStatus::Ready);
+        assert_eq!(preview_artifact.authority, SpecArtifactAuthority::Derived);
+
+        let generated: RequirementGeneratedPreview =
+            serde_json::from_value(preview_artifact.payload.unwrap()).unwrap();
+        assert_eq!(generated.route, RequirementRoutePath::SpecPreview);
+        assert!(generated
+            .primary_preview_markdown
+            .contains("Preview Artifact"));
+        assert!(generated
+            .spec_draft_preview_markdown
+            .as_deref()
+            .unwrap_or_default()
+            .contains("SPEC Draft Preview"));
+        assert!(generated
+            .project_preview_markdown
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Project Preview"));
+        assert!(generated
+            .issues_preview_markdown
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Issues Preview"));
+        assert_eq!(generated.issue_previews.len(), 2);
+        assert_eq!(
+            generated.first_executable_issue_candidate.as_deref(),
+            Some("PROJECT-PREVIEW-001")
+        );
+        assert!(generated
+            .available_actions
+            .contains(&"modify-preview".to_string()));
+        assert!(generated
+            .available_actions
+            .contains(&"confirm-goal-draft-preview".to_string()));
+        assert!(generated
+            .available_actions
+            .contains(&"cancel-preview".to_string()));
+        assert!(generated
+            .forbidden_paths
+            .contains(&"docs/requirements/**".to_string()));
+        assert!(generated
+            .validation_direction
+            .iter()
+            .any(|line| line.contains("validationCommands")));
+        assert!(!dir
+            .path()
+            .join(".agentflow/spec/projects/project-preview.json")
+            .exists());
+    }
+
+    #[test]
+    fn preview_stage_keeps_audit_route_out_of_spec_issue_preview() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "preview-audit",
+            "# 审计任务页交付\n\n请审计任务页交付内容，输出 findings。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let preview_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/preview-audit/preview.json"),
+        )
+        .unwrap();
+        let generated: RequirementGeneratedPreview =
+            serde_json::from_value(preview_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(generated.route, RequirementRoutePath::AuditPreview);
+        assert!(generated.issue_previews.is_empty());
+        assert!(generated.spec_draft_preview_markdown.is_none());
+        assert!(generated.project_preview_markdown.is_none());
+        assert!(generated.issues_preview_markdown.is_none());
+        assert!(generated
+            .primary_preview_markdown
+            .contains("Preview Artifact"));
+        assert!(generated
+            .validation_direction
+            .iter()
+            .any(|line| line.contains("独立审计预览")));
+    }
+
+    #[test]
+    fn preview_stage_uses_plan_draft_candidates_before_confirmation() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "preview-draft",
+            "# 工作台改版\n\n请改工作台布局并补测试。\n",
+        );
+
+        let preview =
+            requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+                .unwrap();
+        assert!(preview.plan_draft.is_none());
+
+        let preview_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/preview-draft/preview.json"),
+        )
+        .unwrap();
+        let generated: RequirementGeneratedPreview =
+            serde_json::from_value(preview_artifact.payload.unwrap()).unwrap();
+        assert_eq!(generated.issue_previews.len(), 2);
+        assert_eq!(
+            generated.first_executable_issue_candidate.as_deref(),
+            Some("PROJECT-PREVIEW-001")
+        );
     }
 
     #[test]
