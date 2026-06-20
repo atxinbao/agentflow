@@ -14,9 +14,11 @@ pub use model::{
     PreviewConfirmationRecord, ProjectBrainDocumentSet, ProjectBrainDocumentStatus,
     ProjectBrainSnapshot, ProjectBrainStatus, PublicDeliveryRecord, RequirementDocument,
     RequirementIntakeResult, RequirementIntentType, RequirementPreviewLifecycle,
-    RequirementPreviewRuntime, SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft,
-    SpecIssueStatus, SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus,
-    SpecRequiredAgentRole, SpecSystemRecord, DEFAULT_WORKFLOW_REF,
+    RequirementPreviewRuntime, SpecArtifactAuthority, SpecExpectedOutputs, SpecIssue,
+    SpecIssueCategory, SpecIssueDraft, SpecIssueStatus, SpecLoopRequirementManifest,
+    SpecLoopStageArtifact, SpecLoopStageFileRef, SpecLoopStageName, SpecLoopStageStatus,
+    SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
+    SpecSystemRecord, DEFAULT_WORKFLOW_REF,
 };
 pub use storage::{
     cancel_requirement_preview, confirm_goal_draft_preview, confirm_plan_draft_preview,
