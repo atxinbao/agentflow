@@ -14,12 +14,25 @@ pub use fixture::{create_fixture_project, WorkflowFixture};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agentflow_action_contract::{
+        core_action_contract_bundle, validate_action_contract_bundle, ActionSourceSurface,
+    };
     use agentflow_audit::AuditStatus;
+    use agentflow_object_state::{core_object_state_bundle, validate_object_state_bundle};
+    use agentflow_ontology::{
+        core_ontology_bundle, core_ontology_registry, validate_ontology_bundle,
+    };
     use agentflow_projection::{
         load_project_projection, load_task_projection, rebuild_projections,
     };
+    use agentflow_role_policy::{core_role_policy_bundle, validate_role_policy_bundle};
+    use agentflow_runtime_api::{
+        execute_command_via_arbitration, get_project_home_view, get_runtime_health_view,
+        get_task_workbench_view, RuntimeCommandRequest, RuntimeCommandStatus,
+    };
     use agentflow_state::{WorkflowAuditStatus, WorkflowStage};
     use agentflow_task_loop::TaskLoop;
+    use serde_json::json;
 
     #[test]
     fn full_workflow_keeps_execute_completed_without_auto_audit_request() -> anyhow::Result<()> {
@@ -42,6 +55,98 @@ mod tests {
         assert_eq!(audit_index.audits.len(), 0);
         ready.fixture.assert_user_files_unchanged()?;
         boundaries::assert_write_boundary(ready.fixture.root())?;
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_foundation_main_chain_closeout_is_verifiable() -> anyhow::Result<()> {
+        let ontology_bundle = core_ontology_bundle();
+        let ontology_report = validate_ontology_bundle(&ontology_bundle);
+        assert!(ontology_report.valid, "{:?}", ontology_report.errors);
+
+        let ontology_registry = core_ontology_registry();
+        let action_bundle = core_action_contract_bundle();
+        let action_report = validate_action_contract_bundle(&action_bundle, &ontology_registry);
+        assert!(action_report.valid, "{:?}", action_report.errors);
+
+        let action_registry =
+            agentflow_action_contract::core_action_contract_registry(&ontology_registry);
+        let role_bundle = core_role_policy_bundle();
+        let role_report =
+            validate_role_policy_bundle(&role_bundle, &ontology_registry, &action_registry);
+        assert!(role_report.valid, "{:?}", role_report.errors);
+
+        let state_bundle = core_object_state_bundle();
+        let state_report =
+            validate_object_state_bundle(&state_bundle, &ontology_registry, &action_registry);
+        assert!(state_report.valid, "{state_report:?}");
+
+        let response = execute_command_via_arbitration(&RuntimeCommandRequest {
+            command_id: "cmd-foundation-submit".to_string(),
+            command_type: "submitRequirement".to_string(),
+            source_surface: ActionSourceSurface::Desktop,
+            actor_role: "spec-agent".to_string(),
+            target_object_ref: None,
+            input: json!({
+                "summary": "收口 Runtime Foundation closeout baseline",
+                "requestType": "feature"
+            }),
+            evidence_refs: Vec::new(),
+            artifact_refs: Vec::new(),
+            idempotency_key: "idem-foundation-submit".to_string(),
+            created_at: "2026-06-20T00:00:00Z".to_string(),
+        })?;
+        assert_ne!(response.status, RuntimeCommandStatus::InvalidCommand);
+        assert_eq!(
+            response
+                .next_query_hint
+                .as_ref()
+                .map(|hint| hint.view.as_str()),
+            Some("RequirementIntakeView")
+        );
+        assert_eq!(response.correlation_id, "cmd-foundation-submit");
+
+        let fixture = prepare_project_in_review_fixture()?;
+        let project_view = get_project_home_view(fixture.fixture.root(), &fixture.project_id)?;
+        let task_view = get_task_workbench_view(fixture.fixture.root(), &fixture.current_issue_id)?;
+        let health_view = get_runtime_health_view(fixture.fixture.root(), &fixture.project_id)?;
+
+        assert_eq!(project_view.project_id, fixture.project_id);
+        assert!(matches!(
+            project_view.freshness.staleness.as_str(),
+            "fresh" | "current"
+        ));
+        assert!(!project_view.recent_events.is_empty());
+        assert_eq!(
+            project_view.issue_groups.current,
+            vec![fixture.current_issue_id.clone()]
+        );
+        assert_eq!(
+            project_view.issue_groups.future,
+            vec![fixture.next_issue_id.clone()]
+        );
+
+        assert_eq!(task_view.issue_id, fixture.current_issue_id);
+        assert_eq!(task_view.issue_state, "in_review");
+        assert!(matches!(
+            task_view.freshness.staleness.as_str(),
+            "fresh" | "current"
+        ));
+        assert!(task_view
+            .timeline
+            .iter()
+            .any(|item| item.state == "in_review" && !item.events.is_empty()));
+
+        assert_eq!(health_view.project_id, fixture.project_id);
+        assert!(matches!(health_view.project_status.as_str(), "active" | "in_review"));
+        assert_eq!(
+            health_view.current_issue_id.as_deref(),
+            Some(fixture.current_issue_id.as_str())
+        );
+        assert_eq!(health_view.active_issue_count, 1);
+
+        fixture.fixture.assert_user_files_unchanged()?;
+        boundaries::assert_write_boundary(fixture.fixture.root())?;
         Ok(())
     }
 
