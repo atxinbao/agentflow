@@ -33,6 +33,10 @@ use agentflow_spec::{
     CompletionDecisionRuntime, RequirementPreviewRuntime, SpecIssue, SpecProject,
     SpecProjectStatus,
 };
+use agentflow_workflow_runtime::{
+    load_runtime_command_bundle, runtime_accepted_action_fact_path, runtime_command_fact_path,
+    runtime_decision_fact_path, runtime_proposal_fact_path,
+};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::Value;
@@ -278,7 +282,7 @@ fn project_spec_loop(
         .collect::<Vec<_>>();
 
     let runtime_action_proposals =
-        build_spec_loop_action_proposals(preview, issues_by_id, projects_by_id);
+        build_spec_loop_action_proposals(root, preview, issues_by_id, projects_by_id);
     let traceability = build_spec_loop_traceability(&stages, &runtime_action_proposals);
 
     Ok(SpecLoopProjection {
@@ -354,6 +358,7 @@ fn build_spec_loop_traceability(
 }
 
 fn build_spec_loop_action_proposals(
+    root: &Path,
     preview: &RequirementPreviewRuntime,
     issues_by_id: &HashMap<String, &SpecIssue>,
     projects_by_id: &HashMap<String, &SpecProject>,
@@ -363,47 +368,116 @@ fn build_spec_loop_action_proposals(
         preview.materialized_project_id.as_ref(),
         preview.plan_draft.as_ref(),
     ) {
-        proposals.push(SpecLoopActionProposalProjection {
-            proposal_ref: format!("runtime-action-proposal:createProject:{project_id}"),
-            action_type: "createProject".to_string(),
-            target_object_type: "Spec".to_string(),
-            target_object_id: plan_draft.plan_draft_id.clone(),
-            created_object_type: Some("Project".to_string()),
-            created_object_id: Some(project_id.clone()),
-            actor_role: "spec-agent".to_string(),
-            handoff_rule: None,
-        });
+        proposals.push(enrich_runtime_action_proposal(
+            root,
+            format!("cmd-create-project-{project_id}"),
+            SpecLoopActionProposalProjection {
+                proposal_ref: format!("runtime-action-proposal:createProject:{project_id}"),
+                action_type: "createProject".to_string(),
+                target_object_type: "Spec".to_string(),
+                target_object_id: plan_draft.plan_draft_id.clone(),
+                created_object_type: Some("Project".to_string()),
+                created_object_id: Some(project_id.clone()),
+                actor_role: "spec-agent".to_string(),
+                handoff_rule: None,
+                command_status: None,
+                decision_status: None,
+                accepted_action_id: None,
+                command_path: None,
+                proposal_path: None,
+                decision_path: None,
+                accepted_action_path: None,
+            },
+        ));
         if let Some(project) = projects_by_id.get(project_id) {
             for issue_id in &project.issue_ids {
                 if let Some(issue) = issues_by_id.get(issue_id) {
-                    proposals.push(SpecLoopActionProposalProjection {
+                    proposals.push(enrich_runtime_action_proposal(
+                        root,
+                        format!("cmd-create-issue-{issue_id}"),
+                        SpecLoopActionProposalProjection {
+                            proposal_ref: format!("runtime-action-proposal:createIssue:{issue_id}"),
+                            action_type: "createIssue".to_string(),
+                            target_object_type: "Project".to_string(),
+                            target_object_id: project_id.clone(),
+                            created_object_type: Some("Issue".to_string()),
+                            created_object_id: Some(issue.issue_id.clone()),
+                            actor_role: "spec-agent".to_string(),
+                            handoff_rule: Some("spec-to-work-approved-spec".to_string()),
+                            command_status: None,
+                            decision_status: None,
+                            accepted_action_id: None,
+                            command_path: None,
+                            proposal_path: None,
+                            decision_path: None,
+                            accepted_action_path: None,
+                        },
+                    ));
+                }
+            }
+        } else {
+            for issue_id in &preview.materialized_issue_ids {
+                proposals.push(enrich_runtime_action_proposal(
+                    root,
+                    format!("cmd-create-issue-{issue_id}"),
+                    SpecLoopActionProposalProjection {
                         proposal_ref: format!("runtime-action-proposal:createIssue:{issue_id}"),
                         action_type: "createIssue".to_string(),
                         target_object_type: "Project".to_string(),
                         target_object_id: project_id.clone(),
                         created_object_type: Some("Issue".to_string()),
-                        created_object_id: Some(issue.issue_id.clone()),
+                        created_object_id: Some(issue_id.clone()),
                         actor_role: "spec-agent".to_string(),
                         handoff_rule: Some("spec-to-work-approved-spec".to_string()),
-                    });
-                }
-            }
-        } else {
-            for issue_id in &preview.materialized_issue_ids {
-                proposals.push(SpecLoopActionProposalProjection {
-                    proposal_ref: format!("runtime-action-proposal:createIssue:{issue_id}"),
-                    action_type: "createIssue".to_string(),
-                    target_object_type: "Project".to_string(),
-                    target_object_id: project_id.clone(),
-                    created_object_type: Some("Issue".to_string()),
-                    created_object_id: Some(issue_id.clone()),
-                    actor_role: "spec-agent".to_string(),
-                    handoff_rule: Some("spec-to-work-approved-spec".to_string()),
-                });
+                        command_status: None,
+                        decision_status: None,
+                        accepted_action_id: None,
+                        command_path: None,
+                        proposal_path: None,
+                        decision_path: None,
+                        accepted_action_path: None,
+                    },
+                ));
             }
         }
     }
     proposals
+}
+
+fn enrich_runtime_action_proposal(
+    root: &Path,
+    command_id: String,
+    mut proposal: SpecLoopActionProposalProjection,
+) -> SpecLoopActionProposalProjection {
+    let proposal_id = format!("proposal-{command_id}");
+    let command_path = runtime_command_fact_path(root, &command_id);
+    let proposal_path = runtime_proposal_fact_path(root, &proposal_id);
+    let decision_path = runtime_decision_fact_path(root, &proposal_id);
+    let command_path_str = command_path.display().to_string();
+    let proposal_path_str = proposal_path.display().to_string();
+    let decision_path_str = decision_path.display().to_string();
+    proposal.command_path = Some(relative_projection_path(root, &command_path_str));
+    proposal.proposal_path = Some(relative_projection_path(root, &proposal_path_str));
+    proposal.decision_path = Some(relative_projection_path(root, &decision_path_str));
+    if let Ok(bundle) = load_runtime_command_bundle(root, &command_id) {
+        proposal.command_status = Some(if bundle.command.validation.valid {
+            "recorded".to_string()
+        } else {
+            "invalid".to_string()
+        });
+        if let Some(decision) = bundle.decision {
+            proposal.decision_status = Some(decision.status.clone());
+            proposal.accepted_action_id = decision.accepted_action_id.clone();
+            if let Some(accepted_action_id) = decision.accepted_action_id {
+                let accepted_action_path =
+                    runtime_accepted_action_fact_path(root, &accepted_action_id);
+                let accepted_action_path_str = accepted_action_path.display().to_string();
+                proposal.accepted_action_path =
+                    Some(relative_projection_path(root, &accepted_action_path_str));
+            }
+        }
+    }
+    proposal
 }
 
 fn project_completion_decision(

@@ -503,6 +503,20 @@ pub struct SpecLoopActionProposalProjection {
     pub actor_role: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub handoff_rule: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_action_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_action_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

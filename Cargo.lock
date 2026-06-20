@@ -206,6 +206,7 @@ dependencies = [
  "agentflow-spec",
  "agentflow-task-artifacts",
  "agentflow-workflow-core",
+ "agentflow-workflow-runtime",
  "anyhow",
  "serde",
  "serde_json",
@@ -247,6 +248,7 @@ dependencies = [
  "agentflow-action-arbitration",
  "agentflow-action-contract",
  "agentflow-audit",
+ "agentflow-event-store",
  "agentflow-object-state",
  "agentflow-ontology",
  "agentflow-projection",
@@ -254,6 +256,8 @@ dependencies = [
  "agentflow-role-policy",
  "agentflow-spec",
  "agentflow-task-artifacts",
+ "agentflow-workflow-core",
+ "agentflow-workflow-runtime",
  "anyhow",
  "serde",
  "serde_json",
@@ -360,6 +364,8 @@ dependencies = [
 name = "agentflow-workflow-runtime"
 version = "0.5.1"
 dependencies = [
+ "agentflow-action-arbitration",
+ "agentflow-action-contract",
  "agentflow-event-store",
  "agentflow-task-artifacts",
  "agentflow-workflow-core",
