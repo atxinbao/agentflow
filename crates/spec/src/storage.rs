@@ -1,28 +1,28 @@
 use crate::model::{
     CompletionDecisionFacts, CompletionDecisionOutcome, CompletionDecisionRecord,
     CompletionDecisionRuntime, CompletionDecisionState, GoalDraftPreview, GoalDraftStatus,
-    IssueContractDraftPreview, MilestoneDraftPreview, PlanDraftPreview, PlanDraftStatus,
-    PreviewConfirmationRecord, ProjectBrainDocumentSet, ProjectBrainDocumentStatus,
-    ProjectBrainSnapshot, ProjectBrainStatus, RequirementBoundaryBlocker,
-    RequirementBoundarySummary, RequirementBoundaryVerdict, RequirementClass,
-    RequirementClassificationResult, RequirementConfirmationGate, RequirementContextDocumentRef,
-    RequirementContextFactState, RequirementContextGitFacts, RequirementContextIssueRef,
-    RequirementContextProjectRef, RequirementContextPullRequestRef, RequirementContextReleaseRef,
-    RequirementContextSummary, RequirementDocument, RequirementExecutionPermission,
-    RequirementFactImpact, RequirementGeneratedIssuePreview, RequirementGeneratedPreview,
-    RequirementIntakeResult, RequirementIntentType, RequirementPreviewLifecycle,
-    RequirementPreviewRuntime, RequirementRiskLevel, RequirementRouteDecision,
-    RequirementRoutePath, RequirementTargetObject, SpecArtifactAuthority, SpecExpectedOutputs,
-    SpecIssue, SpecIssueCategory, SpecIssueDraft, SpecIssueStatus, SpecLoopRequirementManifest,
-    SpecLoopStageArtifact, SpecLoopStageFileRef, SpecLoopStageName, SpecLoopStageStatus,
-    SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
-    SpecSystemRecord, COMPLETION_DECISION_VERSION, PROJECT_BRAIN_DOCUMENT_SET_VERSION,
-    PROJECT_BRAIN_SNAPSHOT_VERSION, REQUIREMENT_BOUNDARY_VERSION,
-    REQUIREMENT_CLASSIFICATION_VERSION, REQUIREMENT_CONFIRMATION_VERSION,
-    REQUIREMENT_CONTEXT_VERSION, REQUIREMENT_GENERATED_PREVIEW_VERSION,
-    REQUIREMENT_PREVIEW_VERSION, REQUIREMENT_ROUTE_VERSION, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION,
-    SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION, SPEC_REQUIREMENT_MANIFEST_VERSION,
-    SPEC_STAGE_ARTIFACT_VERSION,
+    IssueContractDraftPreview, MaterializationDecision, MilestoneDraftPreview, PlanDraftPreview,
+    PlanDraftStatus, PreviewConfirmationRecord, ProjectBrainDocumentSet,
+    ProjectBrainDocumentStatus, ProjectBrainSnapshot, ProjectBrainStatus,
+    RequirementBoundaryBlocker, RequirementBoundarySummary, RequirementBoundaryVerdict,
+    RequirementClass, RequirementClassificationResult, RequirementConfirmationGate,
+    RequirementContextDocumentRef, RequirementContextFactState, RequirementContextGitFacts,
+    RequirementContextIssueRef, RequirementContextProjectRef, RequirementContextPullRequestRef,
+    RequirementContextReleaseRef, RequirementContextSummary, RequirementDocument,
+    RequirementExecutionPermission, RequirementFactImpact, RequirementGeneratedIssuePreview,
+    RequirementGeneratedPreview, RequirementIntakeResult, RequirementIntentType,
+    RequirementPreviewLifecycle, RequirementPreviewRuntime, RequirementRiskLevel,
+    RequirementRouteDecision, RequirementRoutePath, RequirementTargetObject, SpecArtifactAuthority,
+    SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft, SpecIssueStatus,
+    SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageFileRef, SpecLoopStageName,
+    SpecLoopStageStatus, SpecMaterializationReport, SpecPriority, SpecProject, SpecProjectDraft,
+    SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, COMPLETION_DECISION_VERSION,
+    PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
+    REQUIREMENT_BOUNDARY_VERSION, REQUIREMENT_CLASSIFICATION_VERSION,
+    REQUIREMENT_CONFIRMATION_VERSION, REQUIREMENT_CONTEXT_VERSION,
+    REQUIREMENT_GENERATED_PREVIEW_VERSION, REQUIREMENT_PREVIEW_VERSION, REQUIREMENT_ROUTE_VERSION,
+    SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
+    SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
 };
 use agentflow_audit::load_project_audit_review_summary;
 use agentflow_task_artifacts::{load_task_evidence, load_task_run};
@@ -575,7 +575,41 @@ pub fn materialize_spec_from_requirement_preview(
     requirement_id: &str,
 ) -> Result<(SpecProject, Vec<SpecIssue>)> {
     let root = canonicalize_project_root(project_root)?;
-    let mut preview = read_requirement_preview_runtime(&root, requirement_id)?;
+    let (mut preview, project, issues) =
+        draft_materialization_contracts_from_requirement_preview(&root, requirement_id)?;
+    let plan_draft = preview
+        .plan_draft
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("plan draft is missing"))?;
+    let issue_ids = issues
+        .iter()
+        .map(|issue| issue.issue_id.clone())
+        .collect::<Vec<_>>();
+
+    write_spec_project(&root, &project)?;
+    write_materialized_requirement_document(&root, &preview, &plan_draft)?;
+    for issue in &issues {
+        write_spec_issue(&root, issue)?;
+    }
+
+    preview.lifecycle = RequirementPreviewLifecycle::Materialized;
+    preview.materialized_project_id = Some(project.project_id.clone());
+    preview.materialized_issue_ids = issue_ids;
+    preview.next_recommended_action = "start-project-loop".to_string();
+    preview.next_recommended_action_label = "进入项目循环".to_string();
+    preview.next_recommended_action_reason =
+        "SpecProject / SpecIssue 已生成，后续由项目循环继续调度。".to_string();
+    preview.updated_at = unix_timestamp_seconds();
+    write_requirement_preview_runtime(&root, &preview)?;
+    Ok((project, issues))
+}
+
+pub fn draft_materialization_contracts_from_requirement_preview(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+) -> Result<(RequirementPreviewRuntime, SpecProject, Vec<SpecIssue>)> {
+    let root = canonicalize_project_root(project_root)?;
+    let preview = read_requirement_preview_runtime(&root, requirement_id)?;
     ensure_active_preview(&preview)?;
     if preview.current_state != "confirmed" {
         anyhow::bail!(
@@ -585,7 +619,7 @@ pub fn materialize_spec_from_requirement_preview(
     }
     let plan_draft = preview
         .plan_draft
-        .as_ref()
+        .clone()
         .ok_or_else(|| anyhow::anyhow!("plan draft is missing"))?;
     if plan_draft.status != PlanDraftStatus::Confirmed {
         anyhow::bail!("plan draft must be confirmed before materialization");
@@ -601,12 +635,9 @@ pub fn materialize_spec_from_requirement_preview(
     project_draft.title = Some(preview.project_title.clone());
     project_draft.summary = Some(preview.goal_draft.outcome.clone());
     project_draft.objective = Some(preview.goal_draft.outcome.clone());
-    project_draft.issue_ids = issue_ids.clone();
+    project_draft.issue_ids = issue_ids;
     let project =
         project_from_requirement(&root, root.join(&preview.requirement_path), project_draft)?;
-    write_spec_project(&root, &project)?;
-
-    write_materialized_requirement_document(&root, &preview, plan_draft)?;
 
     let issues = plan_draft
         .issue_contract_drafts
@@ -624,20 +655,8 @@ pub fn materialize_spec_from_requirement_preview(
             issue_from_requirement(&root, root.join(&preview.requirement_path), issue_draft)
         })
         .collect::<Result<Vec<_>>>()?;
-    for issue in &issues {
-        write_spec_issue(&root, issue)?;
-    }
 
-    preview.lifecycle = RequirementPreviewLifecycle::Materialized;
-    preview.materialized_project_id = Some(project.project_id.clone());
-    preview.materialized_issue_ids = issue_ids;
-    preview.next_recommended_action = "start-project-loop".to_string();
-    preview.next_recommended_action_label = "进入项目循环".to_string();
-    preview.next_recommended_action_reason =
-        "SpecProject / SpecIssue 已生成，后续由项目循环继续调度。".to_string();
-    preview.updated_at = unix_timestamp_seconds();
-    write_requirement_preview_runtime(&root, &preview)?;
-    Ok((project, issues))
+    Ok((preview, project, issues))
 }
 
 pub fn write_requirement_preview_runtime(
@@ -667,6 +686,27 @@ pub fn read_requirement_preview_runtime(
         return read_json(&runtime_path);
     }
     read_json(&legacy_requirement_preview_path(&root, requirement_id)?)
+}
+
+pub fn write_requirement_materialization_report(
+    project_root: impl AsRef<Path>,
+    report: &SpecMaterializationReport,
+) -> Result<PathBuf> {
+    let root = canonicalize_project_root(project_root)?;
+    prepare_spec_workspace(&root)?;
+    let requirement_dir = requirement_preview_dir(&root, &report.requirement_id)?;
+    ensure_directory(&requirement_dir)?;
+    let path = materialization_report_path(&root, &report.requirement_id)?;
+    write_json(&path, report)?;
+    Ok(path)
+}
+
+pub fn read_requirement_materialization_report(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+) -> Result<SpecMaterializationReport> {
+    let root = canonicalize_project_root(project_root)?;
+    read_json(&materialization_report_path(&root, requirement_id)?)
 }
 
 pub fn list_requirement_preview_runtimes(
@@ -2109,7 +2149,8 @@ fn build_requirement_stage_artifact(
         classification.execution_permission.as_str()
     );
 
-    let (status, authority, input_refs, output_refs, evidence_refs, payload, summary) = match stage {
+    let (status, authority, input_refs, output_refs, evidence_refs, payload, summary) = match stage
+    {
         SpecLoopStageName::Intake => (
             SpecLoopStageStatus::Ready,
             SpecArtifactAuthority::Derived,
@@ -2149,7 +2190,11 @@ fn build_requirement_stage_artifact(
             (
                 SpecLoopStageStatus::Ready,
                 SpecArtifactAuthority::Derived,
-                vec![classification_ref.clone(), context_ref.clone(), runtime_ref.clone()],
+                vec![
+                    classification_ref.clone(),
+                    context_ref.clone(),
+                    runtime_ref.clone(),
+                ],
                 vec![stage_ref.clone()],
                 boundary_refs,
                 Some(serde_json::to_value(&boundary)?),
@@ -2207,15 +2252,18 @@ fn build_requirement_stage_artifact(
                 confirmation_summary,
             )
         }
-        SpecLoopStageName::Materialization => (
-            materialization_stage_status(preview),
-            SpecArtifactAuthority::Authority,
-            vec![confirmation_ref],
-            materialization_output_refs(root, preview)?,
-            materialization_evidence_refs(preview)?,
-            None,
-            "物化阶段只负责把 preview / confirmation artifact 转成正式 requirement、spec project 和 spec issues。".to_string(),
-        ),
+        SpecLoopStageName::Materialization => {
+            let report = read_requirement_materialization_report(root, requirement_id).ok();
+            (
+                materialization_stage_status(preview, report.as_ref()),
+                SpecArtifactAuthority::Authority,
+                vec![confirmation_ref],
+                materialization_output_refs(root, preview, report.as_ref())?,
+                materialization_evidence_refs(preview)?,
+                report.as_ref().map(serde_json::to_value).transpose()?,
+                materialization_stage_summary(report.as_ref()),
+            )
+        }
     };
 
     Ok(SpecLoopStageArtifact {
@@ -3916,11 +3964,20 @@ fn confirmation_stage_status(preview: &RequirementPreviewRuntime) -> SpecLoopSta
     }
 }
 
-fn materialization_stage_status(preview: &RequirementPreviewRuntime) -> SpecLoopStageStatus {
+fn materialization_stage_status(
+    preview: &RequirementPreviewRuntime,
+    report: Option<&SpecMaterializationReport>,
+) -> SpecLoopStageStatus {
     match preview.lifecycle {
         RequirementPreviewLifecycle::Cancelled => SpecLoopStageStatus::Cancelled,
         RequirementPreviewLifecycle::Materialized => SpecLoopStageStatus::Materialized,
-        RequirementPreviewLifecycle::Active => SpecLoopStageStatus::Declared,
+        RequirementPreviewLifecycle::Active => {
+            if report.is_some_and(|report| report.decision == MaterializationDecision::Rejected) {
+                SpecLoopStageStatus::Rejected
+            } else {
+                SpecLoopStageStatus::Declared
+            }
+        }
     }
 }
 
@@ -3954,12 +4011,19 @@ fn confirmation_evidence_refs(preview: &RequirementPreviewRuntime) -> Result<Vec
 fn materialization_output_refs(
     root: &Path,
     preview: &RequirementPreviewRuntime,
+    report: Option<&SpecMaterializationReport>,
 ) -> Result<Vec<String>> {
     let mut refs = vec![
         preview.requirement_path.clone(),
         requirement_preview_runtime_path(root, &preview.requirement_id)
             .and_then(|path| normalize_relative_to_root(root, path))?,
     ];
+    if report.is_some() {
+        refs.push(
+            materialization_report_path(root, &preview.requirement_id)
+                .and_then(|path| normalize_relative_to_root(root, path))?,
+        );
+    }
     if let Some(project_id) = preview.materialized_project_id.as_deref() {
         refs.push(
             spec_project_path(root, project_id)
@@ -3979,6 +4043,20 @@ fn materialization_evidence_refs(preview: &RequirementPreviewRuntime) -> Result<
     let mut refs = confirmation_evidence_refs(preview)?;
     refs.push(preview.requirement_path.clone());
     Ok(refs)
+}
+
+fn materialization_stage_summary(report: Option<&SpecMaterializationReport>) -> String {
+    match report {
+        Some(report) if report.decision == MaterializationDecision::Rejected => format!(
+            "物化阶段已被仲裁拒绝：{} 条 proposal 通过，{} 条 proposal 被拒绝。当前只保留 rejected report，不写 authority。",
+            report.accepted_count, report.rejected_count
+        ),
+        Some(report) => format!(
+            "物化阶段已通过仲裁：{} 条 proposal 通过，authority 已写入正式 requirement、spec project 和 spec issues。",
+            report.accepted_count
+        ),
+        None => "物化阶段只负责把 preview / confirmation artifact 转成正式 requirement、spec project 和 spec issues。".to_string(),
+    }
 }
 
 fn write_materialized_requirement_document(
@@ -4060,6 +4138,10 @@ fn requirement_preview_runtime_path(root: &Path, requirement_id: &str) -> Result
 
 fn requirement_manifest_path(root: &Path, requirement_id: &str) -> Result<PathBuf> {
     Ok(requirement_preview_dir(root, requirement_id)?.join("manifest.json"))
+}
+
+fn materialization_report_path(root: &Path, requirement_id: &str) -> Result<PathBuf> {
+    Ok(requirement_preview_dir(root, requirement_id)?.join("materialization-report.json"))
 }
 
 fn preview_stage_artifact_ref(root: &Path, requirement_id: &str) -> Result<String> {
