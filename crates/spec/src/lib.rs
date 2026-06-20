@@ -19,11 +19,11 @@ pub use model::{
     RequirementContextReleaseRef, RequirementContextSummary, RequirementDocument,
     RequirementExecutionPermission, RequirementFactImpact, RequirementIntakeResult,
     RequirementIntentType, RequirementPreviewLifecycle, RequirementPreviewRuntime,
-    RequirementRiskLevel, RequirementTargetObject, SpecArtifactAuthority, SpecExpectedOutputs,
-    SpecIssue, SpecIssueCategory, SpecIssueDraft, SpecIssueStatus, SpecLoopRequirementManifest,
-    SpecLoopStageArtifact, SpecLoopStageFileRef, SpecLoopStageName, SpecLoopStageStatus,
-    SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
-    SpecSystemRecord, DEFAULT_WORKFLOW_REF,
+    RequirementRiskLevel, RequirementRouteDecision, RequirementRoutePath, RequirementTargetObject,
+    SpecArtifactAuthority, SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft,
+    SpecIssueStatus, SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageFileRef,
+    SpecLoopStageName, SpecLoopStageStatus, SpecPriority, SpecProject, SpecProjectDraft,
+    SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, DEFAULT_WORKFLOW_REF,
 };
 pub use storage::{
     cancel_requirement_preview, confirm_goal_draft_preview, confirm_plan_draft_preview,
