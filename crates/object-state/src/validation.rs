@@ -611,9 +611,10 @@ mod tests {
         let ontology = core_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let mut bundle = core_object_state_bundle();
-        let transition = bundle.state_machines[2]
-            .transitions
+        let transition = bundle
+            .state_machines
             .iter_mut()
+            .flat_map(|machine| machine.transitions.iter_mut())
             .find(|transition| transition.action_type == "markIssueDone")
             .unwrap();
         transition.required_evidence.push("unknownEvidence".into());

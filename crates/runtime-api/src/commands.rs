@@ -160,7 +160,7 @@ pub fn execute_command_via_arbitration_with_context(
     Ok(response)
 }
 
-fn build_core_arbitration_context() -> Result<ArbitrationContext> {
+pub(crate) fn build_core_arbitration_context() -> Result<ArbitrationContext> {
     let ontology = core_ontology_registry();
     let contracts = core_action_contract_registry(&ontology);
     let role_policy = core_role_policy_registry(&ontology, &contracts);
