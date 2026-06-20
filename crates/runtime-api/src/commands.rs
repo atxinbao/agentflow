@@ -859,8 +859,8 @@ mod tests {
                 "human-confirmation-1".to_string(),
             ],
             artifact_refs: vec![".agentflow/spec/requirements/req-001/preview.json".to_string()],
-            idempotency_key:
-                "spec:req-001:project:project-001:createProject:2026-06-20T00:00:00Z".to_string(),
+            idempotency_key: "spec:req-001:project:project-001:createProject:2026-06-20T00:00:00Z"
+                .to_string(),
             created_at: "2026-06-20T00:00:00Z".to_string(),
         };
 
