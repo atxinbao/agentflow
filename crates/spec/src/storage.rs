@@ -5,11 +5,13 @@ use crate::model::{
     PreviewConfirmationRecord, ProjectBrainDocumentSet, ProjectBrainDocumentStatus,
     ProjectBrainSnapshot, ProjectBrainStatus, RequirementDocument, RequirementIntakeResult,
     RequirementIntentType, RequirementPreviewLifecycle, RequirementPreviewRuntime,
-    SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft, SpecIssueStatus,
-    SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
-    SpecSystemRecord, COMPLETION_DECISION_VERSION, PROJECT_BRAIN_DOCUMENT_SET_VERSION,
-    PROJECT_BRAIN_SNAPSHOT_VERSION, REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION,
-    SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
+    SpecArtifactAuthority, SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft,
+    SpecIssueStatus, SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageFileRef,
+    SpecLoopStageName, SpecLoopStageStatus, SpecPriority, SpecProject, SpecProjectDraft,
+    SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, COMPLETION_DECISION_VERSION,
+    PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
+    REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION,
+    SPEC_PROJECT_VERSION, SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
 };
 use agentflow_audit::load_project_audit_review_summary;
 use agentflow_task_artifacts::load_task_evidence;
@@ -547,8 +549,14 @@ pub fn write_requirement_preview_runtime(
 ) -> Result<PathBuf> {
     let root = canonicalize_project_root(project_root)?;
     prepare_spec_workspace(&root)?;
-    let path = requirement_preview_path(&root, &preview.requirement_id)?;
+    let path = requirement_preview_runtime_path(&root, &preview.requirement_id)?;
     write_json(&path, preview)?;
+    sync_requirement_preview_stage_contracts(&root, preview)?;
+    let legacy_path = legacy_requirement_preview_path(&root, &preview.requirement_id)?;
+    if legacy_path.is_file() {
+        fs::remove_file(&legacy_path)
+            .with_context(|| format!("remove {}", legacy_path.display()))?;
+    }
     Ok(path)
 }
 
@@ -557,15 +565,38 @@ pub fn read_requirement_preview_runtime(
     requirement_id: &str,
 ) -> Result<RequirementPreviewRuntime> {
     let root = canonicalize_project_root(project_root)?;
-    read_json(&requirement_preview_path(&root, requirement_id)?)
+    let runtime_path = requirement_preview_runtime_path(&root, requirement_id)?;
+    if runtime_path.is_file() {
+        return read_json(&runtime_path);
+    }
+    read_json(&legacy_requirement_preview_path(&root, requirement_id)?)
 }
 
 pub fn list_requirement_preview_runtimes(
     project_root: impl AsRef<Path>,
 ) -> Result<Vec<RequirementPreviewRuntime>> {
     let root = canonicalize_project_root(project_root)?;
-    let mut previews: Vec<RequirementPreviewRuntime> =
-        read_json_files(&root.join(".agentflow/spec/requirements"))?;
+    let requirements_root = root.join(".agentflow/spec/requirements");
+    if !requirements_root.exists() {
+        return Ok(Vec::new());
+    }
+    let mut previews: Vec<RequirementPreviewRuntime> = Vec::new();
+    for entry in fs::read_dir(&requirements_root)
+        .with_context(|| format!("read {}", requirements_root.display()))?
+    {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            let runtime_path = path.join("runtime.json");
+            if runtime_path.is_file() {
+                previews.push(read_json(&runtime_path)?);
+            }
+            continue;
+        }
+        if path.extension().and_then(|value| value.to_str()) == Some("json") {
+            previews.push(read_json(&path)?);
+        }
+    }
     previews.sort_by(|left, right| left.requirement_id.cmp(&right.requirement_id));
     Ok(previews)
 }
@@ -1018,6 +1049,7 @@ fn read_requirement_document(
         path: relative,
         title,
         summary,
+        raw_text: raw,
     })
 }
 
@@ -1025,6 +1057,7 @@ fn build_requirement_intake(
     requirement: &RequirementDocument,
     project_id: &str,
 ) -> RequirementIntakeResult {
+    let raw_text = requirement.raw_text.trim().to_string();
     let intent = detect_requirement_intent(requirement);
     let detected_scope = vec![requirement.summary.clone()];
     let detected_deliverables = default_deliverables(&intent);
@@ -1044,10 +1077,36 @@ fn build_requirement_intake(
     } else {
         64
     };
+    let referenced_files = extract_referenced_files(&raw_text);
+    let referenced_urls = extract_referenced_urls(&raw_text);
+    let referenced_versions = extract_referenced_versions(&raw_text);
+    let referenced_releases = extract_referenced_releases(&raw_text);
+    let referenced_branches = extract_referenced_branches(&raw_text);
+    let referenced_issues = extract_referenced_issues(&raw_text);
+    let referenced_pull_requests = extract_referenced_pull_requests(&raw_text);
+    let explicit_actions = extract_explicit_actions(&raw_text);
+    let input_sources = detect_input_sources(
+        &raw_text,
+        &referenced_files,
+        &referenced_urls,
+        &referenced_issues,
+        &referenced_pull_requests,
+        &referenced_releases,
+    );
     RequirementIntakeResult {
         requirement_id: requirement.requirement_id.clone(),
         project_id: project_id.to_string(),
-        raw_text: requirement.summary.clone(),
+        raw_text,
+        agent_locale: detect_agent_locale(&requirement.raw_text),
+        referenced_files,
+        referenced_urls,
+        referenced_versions,
+        referenced_releases,
+        referenced_branches,
+        referenced_issues,
+        referenced_pull_requests,
+        explicit_actions,
+        input_sources,
         detected_intent: intent,
         detected_scope,
         detected_non_goals: Vec::new(),
@@ -1058,6 +1117,271 @@ fn build_requirement_intake(
         confidence,
         next_action: "confirm-goal-draft-preview".to_string(),
     }
+}
+
+fn detect_agent_locale(raw: &str) -> String {
+    if raw.chars().any(is_cjk_character) {
+        "zh-CN".to_string()
+    } else {
+        "en-US".to_string()
+    }
+}
+
+fn is_cjk_character(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF
+    )
+}
+
+fn extract_referenced_files(raw: &str) -> Vec<String> {
+    let mut values = extract_markdown_link_targets(raw)
+        .into_iter()
+        .filter(|target| looks_like_file_reference(target))
+        .collect::<Vec<_>>();
+    values.extend(
+        tokenize_requirement_text(raw)
+            .into_iter()
+            .filter(|token| looks_like_file_reference(token)),
+    );
+    dedupe_preserve_order(values)
+}
+
+fn extract_referenced_urls(raw: &str) -> Vec<String> {
+    let mut values = extract_markdown_link_targets(raw)
+        .into_iter()
+        .filter(|target| target.starts_with("http://") || target.starts_with("https://"))
+        .collect::<Vec<_>>();
+    values.extend(
+        tokenize_requirement_text(raw)
+            .into_iter()
+            .filter(|token| token.starts_with("http://") || token.starts_with("https://")),
+    );
+    dedupe_preserve_order(values)
+}
+
+fn extract_referenced_versions(raw: &str) -> Vec<String> {
+    dedupe_preserve_order(
+        tokenize_requirement_text(raw)
+            .into_iter()
+            .filter(|token| is_version_token(token))
+            .collect(),
+    )
+}
+
+fn extract_referenced_releases(raw: &str) -> Vec<String> {
+    let lowered = raw.to_ascii_lowercase();
+    let mut values = Vec::new();
+    if lowered.contains("release") {
+        values.push("release".to_string());
+    }
+    if lowered.contains("发布") {
+        values.push("发布".to_string());
+    }
+    for token in tokenize_requirement_text(raw) {
+        let lowered = token.to_ascii_lowercase();
+        if lowered.contains("release") || lowered.contains("tag") {
+            values.push(token);
+        }
+    }
+    dedupe_preserve_order(values)
+}
+
+fn extract_referenced_branches(raw: &str) -> Vec<String> {
+    let mut values = Vec::new();
+    for token in tokenize_requirement_text(raw) {
+        if token == "main" || token == "master" || token.starts_with("origin/") {
+            values.push(token);
+            continue;
+        }
+        if token.contains('/') && !token.starts_with("http") && !looks_like_file_reference(&token) {
+            values.push(token);
+        }
+    }
+    dedupe_preserve_order(values)
+}
+
+fn extract_referenced_issues(raw: &str) -> Vec<String> {
+    dedupe_preserve_order(
+        tokenize_requirement_text(raw)
+            .into_iter()
+            .filter_map(|token| normalize_hash_reference(&token))
+            .collect(),
+    )
+}
+
+fn extract_referenced_pull_requests(raw: &str) -> Vec<String> {
+    let tokens = tokenize_requirement_text(raw);
+    let mut values = Vec::new();
+    for window in tokens.windows(2) {
+        let current = window[0].to_ascii_lowercase();
+        if matches!(current.as_str(), "pr" | "pull-request" | "mr") {
+            if let Some(reference) = normalize_hash_reference(&window[1]) {
+                values.push(reference);
+            }
+        }
+    }
+    dedupe_preserve_order(values)
+}
+
+fn extract_explicit_actions(raw: &str) -> Vec<String> {
+    let keywords = [
+        "审计",
+        "修复",
+        "设计",
+        "规划",
+        "执行",
+        "确认",
+        "取消",
+        "发布",
+        "研究",
+        "理解",
+        "audit",
+        "fix",
+        "design",
+        "plan",
+        "execute",
+        "confirm",
+        "cancel",
+        "release",
+        "research",
+        "understand",
+    ];
+    let lowered = raw.to_ascii_lowercase();
+    let mut values = Vec::new();
+    for keyword in keywords {
+        if keyword.is_ascii() {
+            if lowered.contains(keyword) {
+                values.push(keyword.to_string());
+            }
+        } else if raw.contains(keyword) {
+            values.push(keyword.to_string());
+        }
+    }
+    dedupe_preserve_order(values)
+}
+
+fn detect_input_sources(
+    raw: &str,
+    referenced_files: &[String],
+    referenced_urls: &[String],
+    referenced_issues: &[String],
+    referenced_pull_requests: &[String],
+    referenced_releases: &[String],
+) -> Vec<String> {
+    let mut sources = vec!["requirement-document".to_string()];
+    if !referenced_files.is_empty() {
+        sources.push("file-reference".to_string());
+    }
+    if !referenced_urls.is_empty() {
+        sources.push("url-reference".to_string());
+    }
+    if !referenced_issues.is_empty() {
+        sources.push("issue-reference".to_string());
+    }
+    if !referenced_pull_requests.is_empty() {
+        sources.push("pull-request-reference".to_string());
+    }
+    if !referenced_releases.is_empty()
+        || raw.to_ascii_lowercase().contains("release")
+        || raw.contains("发布")
+    {
+        sources.push("release-reference".to_string());
+    }
+    dedupe_preserve_order(sources)
+}
+
+fn extract_markdown_link_targets(raw: &str) -> Vec<String> {
+    let bytes = raw.as_bytes();
+    let mut values = Vec::new();
+    let mut index = 0usize;
+    while index + 1 < bytes.len() {
+        if bytes[index] == b']' && bytes[index + 1] == b'(' {
+            let start = index + 2;
+            if let Some(end_offset) = raw[start..].find(')') {
+                let target = raw[start..start + end_offset].trim();
+                if !target.is_empty() {
+                    values.push(target.to_string());
+                }
+                index = start + end_offset + 1;
+                continue;
+            }
+        }
+        index += 1;
+    }
+    values
+}
+
+fn tokenize_requirement_text(raw: &str) -> Vec<String> {
+    raw.split(|ch: char| ch.is_whitespace() || matches!(ch, '，' | '。' | ',' | ';' | '；' | '、'))
+        .map(trim_token)
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+fn trim_token(raw: &str) -> String {
+    raw.trim_matches(|ch: char| {
+        matches!(
+            ch,
+            '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | ',' | ';' | ':' | '"' | '\'' | '`'
+        )
+    })
+    .trim_end_matches('.')
+    .trim_end_matches('。')
+    .trim_end_matches('，')
+    .to_string()
+}
+
+fn looks_like_file_reference(token: &str) -> bool {
+    let lowered = token.to_ascii_lowercase();
+    let has_known_extension = [
+        ".md", ".json", ".yaml", ".yml", ".txt", ".png", ".svg", ".html", ".rs", ".tsx", ".ts",
+    ]
+    .iter()
+    .any(|suffix| lowered.ends_with(suffix));
+    has_known_extension
+        && (token.contains('/')
+            || token.starts_with("docs/")
+            || token.starts_with(".agentflow/")
+            || token.starts_with("apps/")
+            || token.starts_with("crates/"))
+}
+
+fn is_version_token(token: &str) -> bool {
+    let Some(rest) = token.strip_prefix('v') else {
+        return false;
+    };
+    let mut has_digit = false;
+    for ch in rest.chars() {
+        if ch.is_ascii_digit() {
+            has_digit = true;
+            continue;
+        }
+        if ch == '.' {
+            continue;
+        }
+        return false;
+    }
+    has_digit
+}
+
+fn normalize_hash_reference(token: &str) -> Option<String> {
+    let stripped = token.strip_prefix('#')?;
+    if stripped.chars().all(|ch| ch.is_ascii_digit()) && !stripped.is_empty() {
+        Some(format!("#{stripped}"))
+    } else {
+        None
+    }
+}
+
+fn dedupe_preserve_order(values: Vec<String>) -> Vec<String> {
+    let mut unique = Vec::new();
+    for value in values {
+        if !unique.contains(&value) {
+            unique.push(value);
+        }
+    }
+    unique
 }
 
 fn build_goal_draft_preview(
@@ -1293,6 +1617,255 @@ fn emit_project_preview_transition(
     Ok(())
 }
 
+fn sync_requirement_preview_stage_contracts(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Result<()> {
+    let requirement_dir = requirement_preview_dir(root, &preview.requirement_id)?;
+    ensure_directory(&requirement_dir)?;
+    let runtime_path = requirement_preview_runtime_path(root, &preview.requirement_id)?;
+    let runtime_ref = normalize_relative_to_root(root, &runtime_path)?;
+    let stage_artifacts = build_requirement_stage_artifacts(root, preview)?;
+    let mut stage_files = Vec::new();
+
+    for artifact in stage_artifacts {
+        let path = requirement_stage_artifact_path(root, &preview.requirement_id, &artifact.stage)?;
+        write_json(&path, &artifact)?;
+        stage_files.push(SpecLoopStageFileRef {
+            stage: artifact.stage,
+            path: normalize_relative_to_root(root, &path)?,
+            status: artifact.status,
+            authority: artifact.authority,
+        });
+    }
+
+    let manifest = SpecLoopRequirementManifest {
+        version: SPEC_REQUIREMENT_MANIFEST_VERSION.to_string(),
+        requirement_id: preview.requirement_id.clone(),
+        project_id: preview.project_id.clone(),
+        root_path: normalize_relative_to_root(root, &requirement_dir)?,
+        runtime_path: runtime_ref,
+        stage_files,
+        updated_at: preview.updated_at,
+    };
+    write_json(
+        &requirement_manifest_path(root, &preview.requirement_id)?,
+        &manifest,
+    )
+}
+
+fn build_requirement_stage_artifacts(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Result<Vec<SpecLoopStageArtifact>> {
+    SpecLoopStageName::all()
+        .iter()
+        .cloned()
+        .map(|stage| build_requirement_stage_artifact(root, preview, stage))
+        .collect()
+}
+
+fn build_requirement_stage_artifact(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+    stage: SpecLoopStageName,
+) -> Result<SpecLoopStageArtifact> {
+    let requirement_id = preview.requirement_id.as_str();
+    let stage_path = requirement_stage_artifact_path(root, requirement_id, &stage)?;
+    let stage_ref = normalize_relative_to_root(root, &stage_path)?;
+    let runtime_path = requirement_preview_runtime_path(root, requirement_id)?;
+    let runtime_ref = normalize_relative_to_root(root, &runtime_path)?;
+    let confirmation_ref =
+        requirement_stage_artifact_path(root, requirement_id, &SpecLoopStageName::Confirmation)
+            .and_then(|path| normalize_relative_to_root(root, path))?;
+    let preview_ref =
+        requirement_stage_artifact_path(root, requirement_id, &SpecLoopStageName::Preview)
+            .and_then(|path| normalize_relative_to_root(root, path))?;
+    let intake_ref =
+        requirement_stage_artifact_path(root, requirement_id, &SpecLoopStageName::Intake)
+            .and_then(|path| normalize_relative_to_root(root, path))?;
+    let classification_ref =
+        requirement_stage_artifact_path(root, requirement_id, &SpecLoopStageName::Classification)
+            .and_then(|path| normalize_relative_to_root(root, path))?;
+    let context_ref =
+        requirement_stage_artifact_path(root, requirement_id, &SpecLoopStageName::Context)
+            .and_then(|path| normalize_relative_to_root(root, path))?;
+    let boundary_ref =
+        requirement_stage_artifact_path(root, requirement_id, &SpecLoopStageName::Boundary)
+            .and_then(|path| normalize_relative_to_root(root, path))?;
+    let route_ref =
+        requirement_stage_artifact_path(root, requirement_id, &SpecLoopStageName::Route)
+            .and_then(|path| normalize_relative_to_root(root, path))?;
+
+    let (status, authority, input_refs, output_refs, evidence_refs, summary) = match stage {
+        SpecLoopStageName::Intake => (
+            SpecLoopStageStatus::Ready,
+            SpecArtifactAuthority::Derived,
+            vec![preview.requirement_path.clone()],
+            vec![stage_ref.clone(), runtime_ref.clone()],
+            vec![preview.requirement_path.clone()],
+            "原始需求已经清洗成 Normalized Requirement，并作为后续阶段的共同输入。".to_string(),
+        ),
+        SpecLoopStageName::Classification => (
+            SpecLoopStageStatus::Declared,
+            SpecArtifactAuthority::Derived,
+            vec![intake_ref.clone()],
+            vec![stage_ref.clone()],
+            Vec::new(),
+            "分类阶段文件合同已建立，后续由 AF-SPEC-002 写入真实分类结果。".to_string(),
+        ),
+        SpecLoopStageName::Context => (
+            SpecLoopStageStatus::Declared,
+            SpecArtifactAuthority::Derived,
+            vec![classification_ref.clone()],
+            vec![stage_ref.clone()],
+            Vec::new(),
+            "上下文解析阶段文件合同已建立，后续由 AF-SPEC-003 写入上下文结果。".to_string(),
+        ),
+        SpecLoopStageName::Boundary => (
+            SpecLoopStageStatus::Declared,
+            SpecArtifactAuthority::Derived,
+            vec![context_ref.clone()],
+            vec![stage_ref.clone()],
+            Vec::new(),
+            "边界判断阶段文件合同已建立，后续由 AF-SPEC-004 写入边界结果。".to_string(),
+        ),
+        SpecLoopStageName::Route => (
+            SpecLoopStageStatus::Declared,
+            SpecArtifactAuthority::Derived,
+            vec![boundary_ref.clone()],
+            vec![stage_ref.clone()],
+            Vec::new(),
+            "路由决策阶段文件合同已建立，后续由 AF-SPEC-005 写入 route 决策。".to_string(),
+        ),
+        SpecLoopStageName::Preview => (
+            preview_stage_status(preview),
+            SpecArtifactAuthority::Derived,
+            vec![route_ref.clone(), runtime_ref.clone()],
+            vec![stage_ref.clone(), runtime_ref.clone()],
+            Vec::new(),
+            "预览阶段保存当前可读预览产物；它可追踪，但不是 authority。".to_string(),
+        ),
+        SpecLoopStageName::Confirmation => (
+            confirmation_stage_status(preview),
+            SpecArtifactAuthority::Derived,
+            vec![preview_ref.clone()],
+            vec![stage_ref.clone()],
+            confirmation_evidence_refs(preview)?,
+            "确认阶段绑定到具体 preview artifact；没有确认记录就不能进入正式物化。".to_string(),
+        ),
+        SpecLoopStageName::Materialization => (
+            materialization_stage_status(preview),
+            SpecArtifactAuthority::Authority,
+            vec![confirmation_ref],
+            materialization_output_refs(root, preview)?,
+            materialization_evidence_refs(preview)?,
+            "物化阶段只负责把 preview / confirmation artifact 转成正式 requirement、spec project 和 spec issues。".to_string(),
+        ),
+    };
+
+    Ok(SpecLoopStageArtifact {
+        version: SPEC_STAGE_ARTIFACT_VERSION.to_string(),
+        requirement_id: preview.requirement_id.clone(),
+        project_id: preview.project_id.clone(),
+        stage,
+        status,
+        authority,
+        current_state: Some(preview.current_state.clone()),
+        input_refs,
+        output_refs,
+        evidence_refs,
+        summary,
+        updated_at: preview.updated_at,
+    })
+}
+
+fn preview_stage_status(preview: &RequirementPreviewRuntime) -> SpecLoopStageStatus {
+    match preview.lifecycle {
+        RequirementPreviewLifecycle::Cancelled => SpecLoopStageStatus::Cancelled,
+        RequirementPreviewLifecycle::Materialized => SpecLoopStageStatus::Ready,
+        RequirementPreviewLifecycle::Active => SpecLoopStageStatus::Ready,
+    }
+}
+
+fn confirmation_stage_status(preview: &RequirementPreviewRuntime) -> SpecLoopStageStatus {
+    match preview.lifecycle {
+        RequirementPreviewLifecycle::Cancelled => SpecLoopStageStatus::Cancelled,
+        RequirementPreviewLifecycle::Materialized => SpecLoopStageStatus::Confirmed,
+        RequirementPreviewLifecycle::Active => {
+            if preview.current_state == "confirmed" {
+                SpecLoopStageStatus::Confirmed
+            } else {
+                SpecLoopStageStatus::Declared
+            }
+        }
+    }
+}
+
+fn materialization_stage_status(preview: &RequirementPreviewRuntime) -> SpecLoopStageStatus {
+    match preview.lifecycle {
+        RequirementPreviewLifecycle::Cancelled => SpecLoopStageStatus::Cancelled,
+        RequirementPreviewLifecycle::Materialized => SpecLoopStageStatus::Materialized,
+        RequirementPreviewLifecycle::Active => SpecLoopStageStatus::Declared,
+    }
+}
+
+fn confirmation_evidence_refs(preview: &RequirementPreviewRuntime) -> Result<Vec<String>> {
+    if preview.confirmation_records.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut refs = vec![format!(
+        "{}/DECISIONS.md",
+        project_brain_root(&preview.project_id)?
+    )];
+    if preview.goal_draft.status == GoalDraftStatus::Confirmed {
+        refs.push(format!(
+            "{}/GOAL.md",
+            project_brain_root(&preview.project_id)?
+        ));
+    }
+    if preview
+        .plan_draft
+        .as_ref()
+        .is_some_and(|draft| draft.status == PlanDraftStatus::Confirmed)
+    {
+        refs.push(format!(
+            "{}/PLAN.md",
+            project_brain_root(&preview.project_id)?
+        ));
+    }
+    Ok(refs)
+}
+
+fn materialization_output_refs(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Result<Vec<String>> {
+    let mut refs = vec![
+        requirement_preview_runtime_path(root, &preview.requirement_id)
+            .and_then(|path| normalize_relative_to_root(root, path))?,
+    ];
+    if let Some(project_id) = preview.materialized_project_id.as_deref() {
+        refs.push(
+            spec_project_path(root, project_id)
+                .and_then(|path| normalize_relative_to_root(root, path))?,
+        );
+    }
+    for issue_id in &preview.materialized_issue_ids {
+        refs.push(
+            spec_issue_path(root, issue_id)
+                .and_then(|path| normalize_relative_to_root(root, path))?,
+        );
+    }
+    Ok(refs)
+}
+
+fn materialization_evidence_refs(preview: &RequirementPreviewRuntime) -> Result<Vec<String>> {
+    let mut refs = confirmation_evidence_refs(preview)?;
+    refs.push(preview.requirement_path.clone());
+    Ok(refs)
+}
+
 fn ensure_active_preview(preview: &RequirementPreviewRuntime) -> Result<()> {
     if preview.lifecycle != RequirementPreviewLifecycle::Active {
         anyhow::bail!(
@@ -1326,7 +1899,34 @@ fn spec_project_path(root: &Path, project_id: &str) -> Result<PathBuf> {
     )
 }
 
-fn requirement_preview_path(root: &Path, requirement_id: &str) -> Result<PathBuf> {
+fn requirement_preview_dir(root: &Path, requirement_id: &str) -> Result<PathBuf> {
+    validate_safe_local_id("requirementId", requirement_id)?;
+    join_relative_path(
+        root,
+        PathBuf::from(".agentflow")
+            .join("spec")
+            .join("requirements")
+            .join(requirement_id),
+    )
+}
+
+fn requirement_preview_runtime_path(root: &Path, requirement_id: &str) -> Result<PathBuf> {
+    Ok(requirement_preview_dir(root, requirement_id)?.join("runtime.json"))
+}
+
+fn requirement_manifest_path(root: &Path, requirement_id: &str) -> Result<PathBuf> {
+    Ok(requirement_preview_dir(root, requirement_id)?.join("manifest.json"))
+}
+
+fn requirement_stage_artifact_path(
+    root: &Path,
+    requirement_id: &str,
+    stage: &SpecLoopStageName,
+) -> Result<PathBuf> {
+    Ok(requirement_preview_dir(root, requirement_id)?.join(stage.file_name()))
+}
+
+fn legacy_requirement_preview_path(root: &Path, requirement_id: &str) -> Result<PathBuf> {
     validate_safe_local_id("requirementId", requirement_id)?;
     join_relative_path(
         root,
@@ -2124,15 +2724,26 @@ fn unix_timestamp_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{SpecPriority, DEFAULT_WORKFLOW_REF};
+    use crate::model::{
+        SpecArtifactAuthority, SpecLoopRequirementManifest, SpecLoopStageArtifact,
+        SpecLoopStageName, SpecLoopStageStatus, SpecPriority, DEFAULT_WORKFLOW_REF,
+    };
     use agentflow_event_store::load_task_events;
     use serde_json::Value;
     use tempfile::tempdir;
 
     fn write_requirement(root: &Path) -> PathBuf {
-        let path = root.join("docs/requirements/999-task-workflow-test.md");
+        write_requirement_with_text(
+            root,
+            "999-task-workflow-test",
+            "# 任务工作流测试\n\n把任务运行状态改成事件驱动。\n",
+        )
+    }
+
+    fn write_requirement_with_text(root: &Path, file_stem: &str, content: &str) -> PathBuf {
+        let path = root.join(format!("docs/requirements/{file_stem}.md"));
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, "# 任务工作流测试\n\n把任务运行状态改成事件驱动。\n").unwrap();
+        fs::write(&path, content).unwrap();
         path
     }
 
@@ -2418,6 +3029,134 @@ mod tests {
     }
 
     #[test]
+    fn requirement_preview_runtime_writes_stage_contracts_and_normalized_intake() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "340-spec-loop-filesystem-contract",
+            "# 发布前需求整理\n\n请阅读 docs/requirements/source.md 与 crates/spec/src/lib.rs，参考 https://example.com/spec 。\n在 main 分支上，处理 issue #34 和 PR #12，针对 v0.5.0 release 做规划、确认和发布。\n",
+        );
+
+        let preview =
+            requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+                .unwrap();
+
+        assert_eq!(preview.intake.agent_locale, "zh-CN");
+        assert_eq!(
+            preview.intake.raw_text,
+            fs::read_to_string(&requirement).unwrap().trim()
+        );
+        assert!(preview
+            .intake
+            .referenced_files
+            .contains(&"docs/requirements/source.md".to_string()));
+        assert!(
+            preview
+                .intake
+                .referenced_files
+                .iter()
+                .any(|value| value.contains("crates/spec/src/lib.rs")),
+            "{:?}",
+            preview.intake.referenced_files
+        );
+        assert_eq!(
+            preview.intake.referenced_urls,
+            vec!["https://example.com/spec".to_string()]
+        );
+        assert!(preview
+            .intake
+            .referenced_versions
+            .contains(&"v0.5.0".to_string()));
+        assert!(preview
+            .intake
+            .referenced_releases
+            .contains(&"release".to_string()));
+        assert!(preview
+            .intake
+            .referenced_branches
+            .contains(&"main".to_string()));
+        assert!(preview
+            .intake
+            .referenced_issues
+            .contains(&"#34".to_string()));
+        assert!(preview
+            .intake
+            .referenced_pull_requests
+            .contains(&"#12".to_string()));
+        assert!(preview
+            .intake
+            .explicit_actions
+            .contains(&"规划".to_string()));
+        assert!(preview
+            .intake
+            .explicit_actions
+            .contains(&"确认".to_string()));
+        assert!(preview
+            .intake
+            .explicit_actions
+            .contains(&"发布".to_string()));
+        assert!(preview
+            .intake
+            .input_sources
+            .contains(&"requirement-document".to_string()));
+        assert!(preview
+            .intake
+            .input_sources
+            .contains(&"file-reference".to_string()));
+        assert!(preview
+            .intake
+            .input_sources
+            .contains(&"url-reference".to_string()));
+        assert!(preview
+            .intake
+            .input_sources
+            .contains(&"issue-reference".to_string()));
+        assert!(preview
+            .intake
+            .input_sources
+            .contains(&"pull-request-reference".to_string()));
+        assert!(preview
+            .intake
+            .input_sources
+            .contains(&"release-reference".to_string()));
+
+        let requirement_dir = dir
+            .path()
+            .join(".agentflow/spec/requirements/340-spec-loop-filesystem-contract");
+        assert!(requirement_dir.join("runtime.json").is_file());
+        assert!(requirement_dir.join("manifest.json").is_file());
+        for stage in SpecLoopStageName::all() {
+            assert!(requirement_dir.join(stage.file_name()).is_file());
+        }
+
+        let manifest: SpecLoopRequirementManifest =
+            read_json(&requirement_dir.join("manifest.json")).unwrap();
+        assert_eq!(manifest.version, "agentflow-spec-requirement-manifest.v1");
+        assert_eq!(manifest.requirement_id, "340-spec-loop-filesystem-contract");
+        assert_eq!(manifest.stage_files.len(), 8);
+
+        let intake_artifact: SpecLoopStageArtifact =
+            read_json(&requirement_dir.join("intake.json")).unwrap();
+        assert_eq!(intake_artifact.stage, SpecLoopStageName::Intake);
+        assert_eq!(intake_artifact.status, SpecLoopStageStatus::Ready);
+        assert_eq!(intake_artifact.authority, SpecArtifactAuthority::Derived);
+        assert!(intake_artifact
+            .input_refs
+            .contains(&"docs/requirements/340-spec-loop-filesystem-contract.md".to_string()));
+
+        let classification_artifact: SpecLoopStageArtifact =
+            read_json(&requirement_dir.join("classification.json")).unwrap();
+        assert_eq!(
+            classification_artifact.stage,
+            SpecLoopStageName::Classification
+        );
+        assert_eq!(
+            classification_artifact.status,
+            SpecLoopStageStatus::Declared
+        );
+    }
+
+    #[test]
     fn confirming_goal_and_plan_writes_project_brain_documents() {
         let dir = tempdir().unwrap();
         let requirement = write_requirement(dir.path());
@@ -2452,6 +3191,54 @@ mod tests {
         .unwrap();
         assert!(decisions.contains("goal-draft"));
         assert!(decisions.contains("plan-draft"));
+    }
+
+    #[test]
+    fn confirmation_and_materialization_stage_files_follow_preview_state() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+        let requirement_dir = dir
+            .path()
+            .join(".agentflow/spec/requirements/999-task-workflow-test");
+
+        let confirmation_before: SpecLoopStageArtifact =
+            read_json(&requirement_dir.join("confirmation.json")).unwrap();
+        let materialization_before: SpecLoopStageArtifact =
+            read_json(&requirement_dir.join("materialization.json")).unwrap();
+        assert_eq!(confirmation_before.status, SpecLoopStageStatus::Declared);
+        assert_eq!(materialization_before.status, SpecLoopStageStatus::Declared);
+
+        confirm_goal_draft_preview(dir.path(), "999-task-workflow-test", "goal-agent").unwrap();
+        confirm_plan_draft_preview(dir.path(), "999-task-workflow-test", "spec-agent").unwrap();
+
+        let confirmation_after: SpecLoopStageArtifact =
+            read_json(&requirement_dir.join("confirmation.json")).unwrap();
+        assert_eq!(confirmation_after.status, SpecLoopStageStatus::Confirmed);
+        assert!(!confirmation_after.evidence_refs.is_empty());
+
+        materialize_spec_from_requirement_preview(dir.path(), "999-task-workflow-test").unwrap();
+
+        let materialization_after: SpecLoopStageArtifact =
+            read_json(&requirement_dir.join("materialization.json")).unwrap();
+        assert_eq!(
+            materialization_after.status,
+            SpecLoopStageStatus::Materialized
+        );
+        assert_eq!(
+            materialization_after.authority,
+            SpecArtifactAuthority::Authority
+        );
+        assert!(materialization_after
+            .output_refs
+            .iter()
+            .any(|path| path == ".agentflow/spec/projects/project-preview.json"));
+        assert!(materialization_after
+            .output_refs
+            .iter()
+            .any(|path| path.starts_with(".agentflow/spec/issues/")));
     }
 
     #[test]

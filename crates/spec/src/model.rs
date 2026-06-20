@@ -6,6 +6,8 @@ pub const SPEC_INDEX_VERSION: &str = "agentflow-spec-index.v1";
 pub const SPEC_ISSUE_VERSION: &str = "agentflow-spec-issue.v1";
 pub const SPEC_PROJECT_VERSION: &str = "agentflow-spec-project.v1";
 pub const REQUIREMENT_PREVIEW_VERSION: &str = "agentflow-requirement-preview.v1";
+pub const SPEC_REQUIREMENT_MANIFEST_VERSION: &str = "agentflow-spec-requirement-manifest.v1";
+pub const SPEC_STAGE_ARTIFACT_VERSION: &str = "agentflow-spec-stage-artifact.v1";
 pub const COMPLETION_DECISION_VERSION: &str = "agentflow-completion-decision.v1";
 pub const PROJECT_BRAIN_DOCUMENT_SET_VERSION: &str = "agentflow-project-brain-document-set.v1";
 pub const PROJECT_BRAIN_SNAPSHOT_VERSION: &str = "agentflow-project-brain-snapshot.v1";
@@ -251,6 +253,137 @@ impl RequirementPreviewLifecycle {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum SpecLoopStageName {
+    Intake,
+    Classification,
+    Context,
+    Boundary,
+    Route,
+    Preview,
+    Confirmation,
+    Materialization,
+}
+
+impl SpecLoopStageName {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Intake => "intake",
+            Self::Classification => "classification",
+            Self::Context => "context",
+            Self::Boundary => "boundary",
+            Self::Route => "route",
+            Self::Preview => "preview",
+            Self::Confirmation => "confirmation",
+            Self::Materialization => "materialization",
+        }
+    }
+
+    pub fn file_name(&self) -> &'static str {
+        match self {
+            Self::Intake => "intake.json",
+            Self::Classification => "classification.json",
+            Self::Context => "context.json",
+            Self::Boundary => "boundary.json",
+            Self::Route => "route.json",
+            Self::Preview => "preview.json",
+            Self::Confirmation => "confirmation.json",
+            Self::Materialization => "materialization.json",
+        }
+    }
+
+    pub fn all() -> &'static [SpecLoopStageName] {
+        const STAGES: &[SpecLoopStageName] = &[
+            SpecLoopStageName::Intake,
+            SpecLoopStageName::Classification,
+            SpecLoopStageName::Context,
+            SpecLoopStageName::Boundary,
+            SpecLoopStageName::Route,
+            SpecLoopStageName::Preview,
+            SpecLoopStageName::Confirmation,
+            SpecLoopStageName::Materialization,
+        ];
+        STAGES
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SpecLoopStageStatus {
+    Declared,
+    Ready,
+    Confirmed,
+    Materialized,
+    Cancelled,
+}
+
+impl SpecLoopStageStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Declared => "declared",
+            Self::Ready => "ready",
+            Self::Confirmed => "confirmed",
+            Self::Materialized => "materialized",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SpecArtifactAuthority {
+    Derived,
+    Authority,
+}
+
+impl SpecArtifactAuthority {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Derived => "derived",
+            Self::Authority => "authority",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopStageFileRef {
+    pub stage: SpecLoopStageName,
+    pub path: String,
+    pub status: SpecLoopStageStatus,
+    pub authority: SpecArtifactAuthority,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopRequirementManifest {
+    pub version: String,
+    pub requirement_id: String,
+    pub project_id: String,
+    pub root_path: String,
+    pub runtime_path: String,
+    pub stage_files: Vec<SpecLoopStageFileRef>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopStageArtifact {
+    pub version: String,
+    pub requirement_id: String,
+    pub project_id: String,
+    pub stage: SpecLoopStageName,
+    pub status: SpecLoopStageStatus,
+    pub authority: SpecArtifactAuthority,
+    pub current_state: Option<String>,
+    pub input_refs: Vec<String>,
+    pub output_refs: Vec<String>,
+    pub evidence_refs: Vec<String>,
+    pub summary: String,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ProjectBrainDocumentStatus {
     Missing,
     Draft,
@@ -379,6 +512,26 @@ pub struct RequirementIntakeResult {
     pub requirement_id: String,
     pub project_id: String,
     pub raw_text: String,
+    #[serde(default = "default_agent_locale")]
+    pub agent_locale: String,
+    #[serde(default)]
+    pub referenced_files: Vec<String>,
+    #[serde(default)]
+    pub referenced_urls: Vec<String>,
+    #[serde(default)]
+    pub referenced_versions: Vec<String>,
+    #[serde(default)]
+    pub referenced_releases: Vec<String>,
+    #[serde(default)]
+    pub referenced_branches: Vec<String>,
+    #[serde(default)]
+    pub referenced_issues: Vec<String>,
+    #[serde(default)]
+    pub referenced_pull_requests: Vec<String>,
+    #[serde(default)]
+    pub explicit_actions: Vec<String>,
+    #[serde(default)]
+    pub input_sources: Vec<String>,
     pub detected_intent: RequirementIntentType,
     pub detected_scope: Vec<String>,
     pub detected_non_goals: Vec<String>,
@@ -663,6 +816,11 @@ pub struct RequirementDocument {
     pub path: String,
     pub title: String,
     pub summary: String,
+    pub raw_text: String,
+}
+
+fn default_agent_locale() -> String {
+    "zh-CN".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
