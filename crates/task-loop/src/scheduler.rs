@@ -6,7 +6,9 @@ use agentflow_event_store::{
     allocate_task_sequence, append_task_event_once, load_task_events, task_claim_is_active,
     EventActor, EventStateTransition, TaskEvent, TaskEventDraft,
 };
-use agentflow_runtime_api::write_work_command_handoff_from_spec_issue;
+use agentflow_runtime_api::{
+    write_work_action_proposals_from_spec_issue, write_work_command_handoff_from_spec_issue,
+};
 use agentflow_spec::{
     read_spec_issue, read_spec_project, update_spec_issue_status, SpecIssue, SpecIssueStatus,
     SpecPriority, SpecProject,
@@ -216,6 +218,8 @@ fn request_issue_launch_inner(
         Some(branch_name.clone()),
     )?;
     let work_command = write_work_command_handoff_from_spec_issue(root, &issue, &run.run_id)?;
+    let work_action_proposals =
+        write_work_action_proposals_from_spec_issue(root, &issue, &run.run_id, &work_command)?;
     let payload = AgentLaunchPayload {
         version: TASK_LOOP_LAUNCH_REQUEST_VERSION.to_string(),
         provider: provider.to_string(),
@@ -231,6 +235,7 @@ fn request_issue_launch_inner(
         branch_name: branch_name.clone(),
         merge_mode: "auto-merge-if-eligible".to_string(),
         work_command: Some(work_command.clone()),
+        work_action_proposals_path: Some(work_action_proposals.contract_path.clone()),
     };
     write_launch_request(root, &payload)?;
 
@@ -258,6 +263,7 @@ fn request_issue_launch_inner(
             payload: serde_json::to_value(&payload)?,
             artifact_refs: vec![
                 work_command.command_path.clone(),
+                work_action_proposals.contract_path.clone(),
                 payload.launch_request_path.clone(),
                 format!(
                     ".agentflow/tasks/{}/runs/{}/run.json",
@@ -851,6 +857,10 @@ mod tests {
             .path()
             .join(".agentflow/runtime/commands/start-run-AF-TASK-001-run-001.json")
             .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/tasks/AF-TASK-001/runs/run-001/launch/work-action-proposals.json")
+            .is_file());
         let payload: AgentLaunchPayload = serde_json::from_str(
             &fs::read_to_string(dir.path().join(&launch.launch_request_path)).unwrap(),
         )
@@ -861,6 +871,10 @@ mod tests {
                 .as_ref()
                 .map(|command| command.command_id.as_str()),
             Some("start-run-AF-TASK-001-run-001")
+        );
+        assert_eq!(
+            payload.work_action_proposals_path.as_deref(),
+            Some(".agentflow/tasks/AF-TASK-001/runs/run-001/launch/work-action-proposals.json")
         );
         let events = replay_task_events(dir.path(), ReplayFilter::issue("AF-TASK-001")).unwrap();
         assert!(events

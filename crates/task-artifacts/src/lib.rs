@@ -21,8 +21,9 @@ pub use storage::{
     checkpoint_replay_cursor, create_task_run, latest_task_run_checkpoint, load_task_changed_files,
     load_task_evidence, load_task_run, load_task_run_checkpoints,
     load_work_loop_filesystem_contract, prepare_task_artifact_workspace, task_changed_files_path,
-    task_evidence_dir, task_launch_request_path, task_run_dir, task_work_loop_contract_path,
-    update_task_run_status, write_task_changed_files, write_task_command_record,
-    write_task_evidence, write_task_run_checkpoint, write_task_validation,
-    write_task_validation_with_assessment, write_work_loop_filesystem_contract,
+    task_evidence_dir, task_launch_request_path, task_run_dir, task_work_action_proposals_path,
+    task_work_loop_contract_path, update_task_run_status, write_task_changed_files,
+    write_task_command_record, write_task_evidence, write_task_run_checkpoint,
+    write_task_validation, write_task_validation_with_assessment,
+    write_work_loop_filesystem_contract,
 };
