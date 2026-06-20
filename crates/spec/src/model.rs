@@ -13,6 +13,7 @@ pub const REQUIREMENT_CLASSIFICATION_VERSION: &str = "agentflow-requirement-clas
 pub const REQUIREMENT_CONTEXT_VERSION: &str = "agentflow-requirement-context.v1";
 pub const REQUIREMENT_BOUNDARY_VERSION: &str = "agentflow-requirement-boundary.v1";
 pub const REQUIREMENT_ROUTE_VERSION: &str = "agentflow-requirement-route.v1";
+pub const REQUIREMENT_GENERATED_PREVIEW_VERSION: &str = "agentflow-generated-preview.v1";
 pub const COMPLETION_DECISION_VERSION: &str = "agentflow-completion-decision.v1";
 pub const PROJECT_BRAIN_DOCUMENT_SET_VERSION: &str = "agentflow-project-brain-document-set.v1";
 pub const PROJECT_BRAIN_SNAPSHOT_VERSION: &str = "agentflow-project-brain-snapshot.v1";
@@ -747,6 +748,47 @@ pub struct RequirementRouteDecision {
     pub next_action: String,
     pub next_action_label: String,
     pub next_action_reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementGeneratedIssuePreview {
+    pub issue_id: String,
+    pub title: String,
+    pub summary: String,
+    pub priority: SpecPriority,
+    #[serde(default)]
+    pub dependencies: Vec<String>,
+    #[serde(default)]
+    pub validation_commands: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementGeneratedPreview {
+    pub version: String,
+    pub requirement_id: String,
+    pub project_id: String,
+    pub route: RequirementRoutePath,
+    pub primary_preview_markdown: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec_draft_preview_markdown: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_preview_markdown: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issues_preview_markdown: Option<String>,
+    #[serde(default)]
+    pub issue_previews: Vec<RequirementGeneratedIssuePreview>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_executable_issue_candidate: Option<String>,
+    #[serde(default)]
+    pub validation_direction: Vec<String>,
+    #[serde(default)]
+    pub forbidden_paths: Vec<String>,
+    #[serde(default)]
+    pub available_actions: Vec<String>,
+    #[serde(default)]
+    pub reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
