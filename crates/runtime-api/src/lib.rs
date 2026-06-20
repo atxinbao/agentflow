@@ -13,6 +13,7 @@ pub mod handoff;
 pub mod mapping;
 pub mod query;
 pub mod responses;
+pub mod work_proposals;
 
 pub use commands::{
     execute_command_via_arbitration, execute_command_via_arbitration_with_context,
@@ -35,4 +36,8 @@ pub use query::{
 pub use responses::{
     RuntimeCommandDecision, RuntimeCommandResponse, RuntimeCommandStatus,
     RuntimeCommandValidationReport, RUNTIME_COMMAND_API_VERSION,
+};
+pub use work_proposals::{
+    write_work_action_proposals_from_spec_issue, WorkActionProposalContract,
+    WorkActionProposalEntry, WorkProposalStageAction, WORK_ACTION_PROPOSAL_CONTRACT_VERSION,
 };

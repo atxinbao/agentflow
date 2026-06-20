@@ -71,6 +71,16 @@ pub fn task_launch_request_path(issue_id: &str, run_id: &str) -> Result<String> 
     )
 }
 
+pub fn task_work_action_proposals_path(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<PathBuf> {
+    Ok(task_run_dir(project_root, issue_id, run_id)?
+        .join("launch")
+        .join("work-action-proposals.json"))
+}
+
 pub fn write_work_loop_filesystem_contract(
     project_root: impl AsRef<Path>,
     issue_id: &str,

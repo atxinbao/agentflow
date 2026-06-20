@@ -343,7 +343,11 @@ fn work_agent_policy() -> AgentRolePolicy {
             .collect(),
         action_capabilities: vec![
             capability("activateIssue", RoleCapabilityMode::Execute, Some("Issue"), Some(ObjectScopeKind::AssignedIssue), false, None, false, &[]),
+            capability("claimIssue", RoleCapabilityMode::Execute, Some("Issue"), Some(ObjectScopeKind::AssignedIssue), false, None, false, &[]),
             capability("startRun", RoleCapabilityMode::Execute, Some("Issue"), Some(ObjectScopeKind::AssignedIssue), false, None, false, &["runLog"]),
+            capability("writePatch", RoleCapabilityMode::Execute, Some("Run"), Some(ObjectScopeKind::CurrentRun), false, None, false, &["artifactSummary"]),
+            capability("runValidation", RoleCapabilityMode::Execute, Some("Run"), Some(ObjectScopeKind::CurrentRun), false, None, false, &["verificationLog"]),
+            capability("prepareDelivery", RoleCapabilityMode::Execute, Some("Run"), Some(ObjectScopeKind::CurrentRun), false, None, false, &["artifactSummary"]),
             capability("submitEvidence", RoleCapabilityMode::Execute, Some("Run"), Some(ObjectScopeKind::CurrentRun), false, None, false, &["verificationLog"]),
             capability("submitArtifact", RoleCapabilityMode::Execute, Some("Run"), Some(ObjectScopeKind::CurrentRun), false, None, false, &["artifactSummary"]),
             capability("markIssueDone", RoleCapabilityMode::Execute, Some("Issue"), Some(ObjectScopeKind::AssignedIssue), true, Some("work-to-delivery-closeout"), false, &["verificationLog", "artifactSummary", "implementationSummary"]),
