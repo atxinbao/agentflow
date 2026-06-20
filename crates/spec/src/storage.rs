@@ -606,6 +606,8 @@ pub fn materialize_spec_from_requirement_preview(
         project_from_requirement(&root, root.join(&preview.requirement_path), project_draft)?;
     write_spec_project(&root, &project)?;
 
+    write_materialized_requirement_document(&root, &preview, plan_draft)?;
+
     let issues = plan_draft
         .issue_contract_drafts
         .iter()
@@ -616,6 +618,7 @@ pub fn materialize_spec_from_requirement_preview(
             issue_draft.source_spec_id = Some(plan_draft.plan_draft_id.clone());
             issue_draft.project_id = Some(preview.project_id.clone());
             issue_draft.priority = draft.priority.clone();
+            issue_draft.blocked_by = draft.dependencies.clone();
             issue_draft.allowed_paths = draft.boundary.clone();
             issue_draft.validation_commands = draft.validation_commands.clone();
             issue_from_requirement(&root, root.join(&preview.requirement_path), issue_draft)
@@ -3914,6 +3917,7 @@ fn materialization_output_refs(
     preview: &RequirementPreviewRuntime,
 ) -> Result<Vec<String>> {
     let mut refs = vec![
+        preview.requirement_path.clone(),
         requirement_preview_runtime_path(root, &preview.requirement_id)
             .and_then(|path| normalize_relative_to_root(root, path))?,
     ];
@@ -3936,6 +3940,35 @@ fn materialization_evidence_refs(preview: &RequirementPreviewRuntime) -> Result<
     let mut refs = confirmation_evidence_refs(preview)?;
     refs.push(preview.requirement_path.clone());
     Ok(refs)
+}
+
+fn write_materialized_requirement_document(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+    plan_draft: &PlanDraftPreview,
+) -> Result<()> {
+    let issue_ids = plan_draft
+        .issue_contract_drafts
+        .iter()
+        .map(|draft| draft.issue_draft_id.clone())
+        .collect::<Vec<_>>();
+    let content = format!(
+        "# {}\n\n## Requirement Authority\n- requirementId: {}\n- projectId: {}\n- lifecycle: {}\n- currentState: {}\n\n## Confirmed Goal\n{}\n\n## Scope\n{}\n\n## Non-goals\n{}\n\n## Acceptance Criteria\n{}\n\n## Confirmed Plan\n- planDraftId: {}\n- nextAction: {}\n\n## Planned Issues\n{}\n\n## Validation Direction\n{}\n",
+        preview.project_title,
+        preview.requirement_id,
+        preview.project_id,
+        preview.lifecycle.as_str(),
+        preview.current_state,
+        preview.goal_draft.outcome,
+        markdown_list(&preview.goal_draft.scope),
+        markdown_list(&preview.goal_draft.non_goals),
+        markdown_list(&preview.goal_draft.success_criteria),
+        plan_draft.plan_draft_id,
+        preview.next_recommended_action,
+        markdown_list(&issue_ids),
+        markdown_list(&plan_draft.validation_strategy),
+    );
+    write_text(&root.join(&preview.requirement_path), &content)
 }
 
 fn ensure_active_preview(preview: &RequirementPreviewRuntime) -> Result<()> {
@@ -4650,6 +4683,19 @@ fn validate_issue_contract(issue: &SpecIssue) -> Result<()> {
     if system_path != format!(".agentflow/spec/issues/{}.json", issue_id.as_str()) {
         anyhow::bail!("issue {} has invalid system path", issue.issue_id);
     }
+    for dependency in &issue.blocked_by {
+        let dependency_id = IssueId::parse(dependency).with_context(|| {
+            format!(
+                "issue {} has invalid blockedBy id {}",
+                issue.issue_id, dependency
+            )
+        })?;
+        if dependency_id.as_str() == issue_id.as_str() {
+            anyhow::bail!("issue {} cannot block itself", issue.issue_id);
+        }
+    }
+    ensure_no_legacy_spec_path("allowedPath", &issue.issue_id, &issue.allowed_paths)?;
+    ensure_no_legacy_spec_path("forbiddenPath", &issue.issue_id, &issue.forbidden_paths)?;
     Ok(())
 }
 
@@ -4668,6 +4714,31 @@ fn validate_project_contract(project: &SpecProject) -> Result<()> {
     let system_path = normalize_relative_path_string(&project.system.path)?;
     if system_path != format!(".agentflow/spec/projects/{}.json", project_id.as_str()) {
         anyhow::bail!("project {} has invalid system path", project.project_id);
+    }
+    Ok(())
+}
+
+fn ensure_no_legacy_spec_path(field: &str, owner_id: &str, paths: &[String]) -> Result<()> {
+    let legacy_prefixes = [
+        ".agentflow/input/",
+        ".agentflow/execute/",
+        ".agentflow/output/",
+        ".agentflow/goal-tree/",
+    ];
+    for path in paths {
+        let normalized = normalize_relative_path_string(path)?;
+        if legacy_prefixes
+            .iter()
+            .any(|prefix| normalized.starts_with(prefix))
+        {
+            anyhow::bail!(
+                "{} {} references legacy path in {}: {}",
+                field,
+                owner_id,
+                field,
+                normalized
+            );
+        }
     }
     Ok(())
 }
@@ -6297,6 +6368,10 @@ mod tests {
         assert!(materialization_after
             .output_refs
             .iter()
+            .any(|path| path == "docs/requirements/999-task-workflow-test.md"));
+        assert!(materialization_after
+            .output_refs
+            .iter()
             .any(|path| path == ".agentflow/spec/projects/project-preview.json"));
         assert!(materialization_after
             .output_refs
@@ -6331,6 +6406,30 @@ mod tests {
                 issues[0].issue_id
             ))
             .is_file());
+        let rewritten_requirement = fs::read_to_string(
+            dir.path()
+                .join("docs/requirements/999-task-workflow-test.md"),
+        )
+        .unwrap();
+        assert!(rewritten_requirement.contains("## Requirement Authority"));
+        assert!(rewritten_requirement.contains("## Planned Issues"));
+        assert_eq!(issues[0].blocked_by, Vec::<String>::new());
+        assert_eq!(issues[1].blocked_by, vec![issues[0].issue_id.clone()]);
+        assert_eq!(issues[0].source_requirement_id, "999-task-workflow-test");
+        assert_eq!(
+            issues[0].source_requirement_path,
+            "docs/requirements/999-task-workflow-test.md"
+        );
+        assert_eq!(issues[0].source_spec_id, "plan-999-task-workflow-test-r1");
+        assert_eq!(issues[0].workflow_ref, DEFAULT_WORKFLOW_REF);
+        assert!(issues.iter().all(|issue| issue
+            .expected_outputs
+            .task_run_dir
+            .starts_with(".agentflow/tasks/")));
+        assert!(issues.iter().all(|issue| issue
+            .forbidden_paths
+            .iter()
+            .all(|path| !path.starts_with(".agentflow/input/"))));
         let preview =
             read_requirement_preview_runtime(dir.path(), "999-task-workflow-test").unwrap();
         assert_eq!(preview.lifecycle, RequirementPreviewLifecycle::Materialized);
@@ -6340,6 +6439,24 @@ mod tests {
             Some("project-preview")
         );
         assert_eq!(preview.materialized_issue_ids.len(), 2);
+    }
+
+    #[test]
+    fn materialization_requires_confirmed_preview() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement(dir.path());
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        assert!(
+            materialize_spec_from_requirement_preview(dir.path(), "999-task-workflow-test")
+                .is_err()
+        );
+        assert!(!dir
+            .path()
+            .join(".agentflow/spec/projects/project-preview.json")
+            .exists());
     }
 
     #[test]
