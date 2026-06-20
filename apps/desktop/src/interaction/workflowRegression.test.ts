@@ -108,7 +108,7 @@ function workflowTask(status: WorkflowStatus): V1Issue {
     nonGoals: ["不扩展新功能。"],
     priority: "p1",
     rawStatus: status,
-    requiredAgentRole: "build-agent",
+    requiredAgentRole: "work-agent",
     scope: ["验证任务状态、执行摘要、交付摘要同步。"],
     status,
     title: `状态链路 ${status}`,
@@ -203,7 +203,7 @@ function projection(status: WorkflowStatus): TaskProjection | null {
     timeline: [],
     updatedAt: 1780291200,
     version: "task-projection.workflow-regression",
-    workflowRef: "build-agent.issue-loop@v1",
+    workflowRef: "work-agent.issue-loop@v1",
   };
 }
 

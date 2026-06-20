@@ -1059,7 +1059,7 @@ mod tests {
             dir.path(),
             "AF-PROJ-001",
             "run-001",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             Some("agentflow/project-projection/AF-PROJ-001".to_string()),
         )
         .unwrap();

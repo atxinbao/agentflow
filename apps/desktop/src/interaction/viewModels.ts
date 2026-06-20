@@ -1075,7 +1075,7 @@ function pickTaskSelection(
 }
 
 function defaultAgentRoleForIssueCategory(issueCategory: IssueCategory): AgentRole {
-  return issueCategory === "audit" ? "audit-agent" : "build-agent";
+  return issueCategory === "audit" ? "audit-agent" : "work-agent";
 }
 
 function displayStatusFromInputStatus(status: InputIssueStatus): IssueDisplayStatus {

@@ -9,7 +9,7 @@ pub const REQUIREMENT_PREVIEW_VERSION: &str = "agentflow-requirement-preview.v1"
 pub const COMPLETION_DECISION_VERSION: &str = "agentflow-completion-decision.v1";
 pub const PROJECT_BRAIN_DOCUMENT_SET_VERSION: &str = "agentflow-project-brain-document-set.v1";
 pub const PROJECT_BRAIN_SNAPSHOT_VERSION: &str = "agentflow-project-brain-snapshot.v1";
-pub const DEFAULT_WORKFLOW_REF: &str = "build-agent.issue-loop@v1";
+pub const DEFAULT_WORKFLOW_REF: &str = "work-agent.issue-loop@v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -27,6 +27,7 @@ impl Default for SpecIssueCategory {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum SpecRequiredAgentRole {
+    #[serde(rename = "work-agent", alias = "build-agent")]
     BuildAgent,
     AuditAgent,
 }

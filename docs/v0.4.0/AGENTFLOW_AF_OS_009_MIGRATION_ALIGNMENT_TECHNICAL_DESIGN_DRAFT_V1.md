@@ -71,7 +71,7 @@ docs/architecture/current-module-boundaries.md
 | old term | new term | rule |
 | --- | --- | --- |
 | Project Operating System | Agent Project OS / Runtime Foundation | 保留方向，收敛底层术语 |
-| Work Agent | BuildAgent | 兼容别名，不再作为 core role |
+| BuildAgent / `build-agent` | WorkAgent / `work-agent` | `WorkAgent` 是 runtime 主命名，`BuildAgent` 只保留为兼容别名 |
 | Capability Matrix | Agent Role Policy | 权限以 Role Policy 为准 |
 | Workflow State | Object State Machine / Projection State | 写侧状态和读侧状态拆开 |
 | Workflow Action | Action Type / Action Contract | action 必须有 contract |
@@ -111,7 +111,7 @@ crates/runtime-api
 下一版本应标记为 deprecated 或 compatibility-only：
 
 ```text
-Work Agent as primary role name
+BuildAgent as primary role name
 AuditFinding as object name
 Workflow State as write-side final state
 Delivery as core write object
@@ -169,7 +169,7 @@ Runtime Foundation 设计不会绕过它。
 
 迁移说明必须检查：
 
-- `Work Agent` 已映射到 `BuildAgent`；
+- `BuildAgent` 已映射到 `WorkAgent`；
 - `AuditFinding` 已映射到 `Finding`；
 - `Workflow State` 不再作为写侧唯一状态；
 - Event model 与 Runtime Event Envelope 不冲突；

@@ -180,7 +180,7 @@ mod tests {
             dir.path(),
             "iss-001",
             "run-001",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             None,
         )
         .unwrap();
@@ -272,7 +272,7 @@ mod tests {
             dir.path(),
             StateSessionUpdate {
                 session_id: "session-001".to_string(),
-                active_role: Some("Build Agent".to_string()),
+                active_role: Some("Work Agent".to_string()),
                 active_issue_id: Some("iss-001".to_string()),
                 active_run_id: Some("run-001".to_string()),
                 status: Some("waiting-human-confirmation".to_string()),

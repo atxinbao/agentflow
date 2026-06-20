@@ -153,7 +153,7 @@ export type InputStatusSnapshot = {
 
 export type InputIssueStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done" | "blocked" | "cancel";
 export type IssueCategory = "spec" | "audit";
-export type AgentRole = "spec-agent" | "build-agent" | "audit-agent";
+export type AgentRole = "spec-agent" | "work-agent" | "build-agent" | "audit-agent" | "delivery-agent";
 export type ExpectedOutputs = Record<string, string>;
 
 export type ExecutionPipelineStage = {

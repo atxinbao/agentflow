@@ -220,7 +220,7 @@ fn request_issue_launch_inner(
         issue_id: issue.issue_id.clone(),
         project_id: issue.project_id.clone(),
         run_id: run.run_id.clone(),
-        agent_role: "build-agent".to_string(),
+        agent_role: "work-agent".to_string(),
         workflow_ref: issue.workflow_ref.clone(),
         working_directory: root.display().to_string(),
         issue_path: issue.system.path.clone(),
@@ -1187,7 +1187,7 @@ mod tests {
                 event_type: "agent.session.in_review".to_string(),
                 authority_role: Some(WorkflowAgentRole::WorkAgent),
                 actor: EventActor {
-                    role: "build-agent".to_string(),
+                    role: "work-agent".to_string(),
                     kind: "agent".to_string(),
                 },
                 state: Some(EventStateTransition {

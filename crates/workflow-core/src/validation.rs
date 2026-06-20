@@ -326,7 +326,7 @@ apiVersion: agentflow.dev/v1
 kind: TaskWorkflow
 flowType: work
 metadata:
-  name: build-agent.issue-loop
+  name: work-agent.issue-loop
   version: v1
   title: Build Agent Issue Loop
 spec:
@@ -461,7 +461,7 @@ spec:
             validate_workflow_with_registry(&workflow, &WorkflowRegistry::build_agent_issue_loop())
                 .unwrap();
 
-        assert_eq!(report.workflow_ref, "build-agent.issue-loop@v1");
+        assert_eq!(report.workflow_ref, "work-agent.issue-loop@v1");
         assert_eq!(report.state_count, 7);
         assert_eq!(report.transition_count, 6);
         assert_eq!(report.terminal_states, vec!["done", "cancel"]);

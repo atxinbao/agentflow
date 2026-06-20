@@ -311,9 +311,9 @@ apiVersion: agentflow.dev/v1
 kind: TaskWorkflow
 flowType: work
 metadata:
-  name: build-agent.issue-loop
+  name: work-agent.issue-loop
   version: v1
-  title: Build Agent Issue Loop
+  title: Work Agent Issue Loop
 spec:
   initialState: backlog
   terminalStates:
@@ -452,7 +452,7 @@ spec:
             dir.path(),
             "AF-TASK-001",
             "run-001",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             Some("agentflow/direct/AF-TASK-001".to_string()),
         )
         .unwrap();

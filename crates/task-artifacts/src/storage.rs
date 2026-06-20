@@ -646,7 +646,7 @@ mod tests {
             dir.path(),
             "AF-TASK-001",
             "run-001",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             Some("agentflow/AF-TASK-001".to_string()),
         )
         .unwrap();
@@ -669,7 +669,7 @@ mod tests {
             dir.path(),
             "AF-TASK-001",
             "run-001",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             None,
         )
         .unwrap();
@@ -692,7 +692,7 @@ mod tests {
             dir.path(),
             "AF-TASK-001",
             "run-001",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             None,
         )
         .unwrap();
@@ -717,7 +717,7 @@ mod tests {
             dir.path(),
             "AF-TASK-001",
             "run-001",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             None,
         )
         .unwrap();
@@ -744,7 +744,7 @@ mod tests {
             dir.path(),
             "AF-TASK-001",
             "run-001",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             None,
         )
         .unwrap();
@@ -835,7 +835,7 @@ mod tests {
             dir.path(),
             "AF-TASK-001",
             "run-001",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             Some("agentflow/direct/AF-TASK-001".to_string()),
         )
         .unwrap();
@@ -871,7 +871,7 @@ mod tests {
             dir.path(),
             "AF-TASK-001",
             "run-001",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             None,
         )
         .unwrap();
@@ -890,7 +890,7 @@ mod tests {
             dir.path(),
             "../bad",
             "run-001",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             None,
         )
         .unwrap_err()
@@ -906,7 +906,7 @@ mod tests {
             dir.path(),
             "AF-TASK-001",
             "../run",
-            "build-agent.issue-loop@v1",
+            "work-agent.issue-loop@v1",
             None,
         )
         .unwrap_err()

@@ -104,12 +104,12 @@
 1. `spec.issue.ready`
 2. `panel.context-pack.requested`
 3. `panel.context-pack.ready`
-4. `build-agent.launch.requested`
-5. `build-agent.launch.claimed`
-6. `build-agent.session.running`
-7. `build-agent.session.review-ready`
-8. `build-agent.merge.confirmed`
-9. `build-agent.writeback.completed`
+4. `agent.launch.requested`
+5. `agent.session.created`
+6. `agent.session.running`
+7. `agent.session.in_review`
+8. `merge.confirmed`
+9. `issue.completed`
 10. `project.issue.next`
 
 说明：
@@ -117,6 +117,7 @@
 - 前端刷新不是流程驱动器。
 - `loop` 和 `workflow-events` 才是流程驱动器。
 - `mcp` 只消费 launch 相关事件和 provider 状态。
+- runtime authority 统一写 `work-agent`；provider 兼容别名 `build-agent` 只保留在外部启动口和 CLI 子命令。
 
 ## Provider 抽象
 
