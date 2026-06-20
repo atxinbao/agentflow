@@ -9,6 +9,7 @@ pub const SPEC_PROJECT_VERSION: &str = "agentflow-spec-project.v1";
 pub const REQUIREMENT_PREVIEW_VERSION: &str = "agentflow-requirement-preview.v1";
 pub const SPEC_REQUIREMENT_MANIFEST_VERSION: &str = "agentflow-spec-requirement-manifest.v1";
 pub const SPEC_STAGE_ARTIFACT_VERSION: &str = "agentflow-spec-stage-artifact.v1";
+pub const SPEC_MATERIALIZATION_REPORT_VERSION: &str = "agentflow-spec-materialization-report.v1";
 pub const REQUIREMENT_CLASSIFICATION_VERSION: &str = "agentflow-requirement-classification.v1";
 pub const REQUIREMENT_CONTEXT_VERSION: &str = "agentflow-requirement-context.v1";
 pub const REQUIREMENT_BOUNDARY_VERSION: &str = "agentflow-requirement-boundary.v1";
@@ -320,6 +321,7 @@ pub enum SpecLoopStageStatus {
     Ready,
     Confirmed,
     Materialized,
+    Rejected,
     Cancelled,
 }
 
@@ -330,6 +332,7 @@ impl SpecLoopStageStatus {
             Self::Ready => "ready",
             Self::Confirmed => "confirmed",
             Self::Materialized => "materialized",
+            Self::Rejected => "rejected",
             Self::Cancelled => "cancelled",
         }
     }
@@ -388,6 +391,49 @@ pub struct SpecLoopStageArtifact {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
     pub summary: String,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MaterializationDecision {
+    Accepted,
+    Rejected,
+}
+
+impl MaterializationDecision {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::Rejected => "rejected",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterializationProposalDecision {
+    pub sequence: usize,
+    pub entity_kind: String,
+    pub entity_id: String,
+    pub command_type: String,
+    pub proposal_id: String,
+    pub status: String,
+    #[serde(default)]
+    pub rejected_reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecMaterializationReport {
+    pub version: String,
+    pub requirement_id: String,
+    pub project_id: String,
+    pub decision: MaterializationDecision,
+    pub accepted_count: usize,
+    pub rejected_count: usize,
+    #[serde(default)]
+    pub proposal_decisions: Vec<MaterializationProposalDecision>,
     pub updated_at: u64,
 }
 

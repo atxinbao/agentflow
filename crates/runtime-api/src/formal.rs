@@ -21,17 +21,24 @@ use agentflow_release::{
     record_project_release_tag, record_project_remote_release,
 };
 use agentflow_spec::{
-    confirm_goal_draft_preview, confirm_plan_draft_preview, list_spec_issues,
+    confirm_goal_draft_preview, confirm_plan_draft_preview,
+    draft_materialization_contracts_from_requirement_preview, list_spec_issues,
     materialize_spec_from_requirement_preview, read_completion_decision_runtime,
     read_requirement_preview_runtime, record_completion_decision,
     requirement_preview_from_requirement, sync_completion_decision_runtimes,
-    CompletionDecisionOutcome, CompletionDecisionRuntime, RequirementPreviewRuntime, SpecIssue,
-    SpecProject,
+    write_requirement_materialization_report, write_requirement_preview_runtime,
+    CompletionDecisionOutcome, CompletionDecisionRuntime, MaterializationDecision,
+    MaterializationProposalDecision, RequirementPreviewRuntime, SpecIssue,
+    SpecMaterializationReport, SpecProject,
 };
 use agentflow_task_artifacts::load_task_run;
 use anyhow::{bail, Result};
 use serde::Serialize;
-use std::{collections::BTreeSet, path::Path};
+use std::{
+    collections::BTreeSet,
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 const SPEC_ACTION_PROPOSAL_BRIDGE_VERSION: &str = "agentflow-spec-action-proposal-bridge.v1";
 
@@ -126,23 +133,62 @@ pub fn project_materialize(
     root: &Path,
     requirement_id: &str,
 ) -> Result<ProjectMaterializationResult> {
-    let (project, issues) = materialize_spec_from_requirement_preview(root, requirement_id)?;
-    let action_proposal_bridge =
-        build_materialization_bridge_records(root, requirement_id, &project, &issues)?;
+    let mut context = build_materialization_bridge_context(root, requirement_id)?;
+    let result = project_materialize_with_context(root, requirement_id, &mut context)?;
     let _ = agentflow_projection::rebuild_projections(root)?;
+    Ok(result)
+}
+
+fn project_materialize_with_context(
+    root: &Path,
+    requirement_id: &str,
+    context: &mut ArbitrationContext,
+) -> Result<ProjectMaterializationResult> {
+    let (mut preview, draft_project, draft_issues) =
+        draft_materialization_contracts_from_requirement_preview(root, requirement_id)?;
+    let action_proposal_bridge = build_materialization_bridge_records_with_context(
+        root,
+        requirement_id,
+        &draft_project,
+        &draft_issues,
+        context,
+    )?;
     let accepted_count = action_proposal_bridge
         .iter()
         .filter(|record| record.arbitration.status == RuntimeCommandStatus::Accepted)
         .count();
-    let rejected_count = action_proposal_bridge
-        .iter()
-        .filter(|record| {
-            matches!(
-                record.arbitration.status,
-                RuntimeCommandStatus::Rejected | RuntimeCommandStatus::InvalidCommand
-            )
-        })
-        .count();
+    let rejected_count = action_proposal_bridge.len().saturating_sub(accepted_count);
+    let materialization_report = build_materialization_report(
+        &preview,
+        &action_proposal_bridge,
+        accepted_count,
+        rejected_count,
+    );
+    write_requirement_materialization_report(root, &materialization_report)?;
+
+    if rejected_count > 0 {
+        let first_rejection = action_proposal_bridge
+            .iter()
+            .find(|record| record.arbitration.status != RuntimeCommandStatus::Accepted)
+            .map(format_rejection_reason)
+            .unwrap_or_else(|| "存在未通过的 runtime action proposal。".to_string());
+        preview.next_recommended_action = "review-materialization-rejection".to_string();
+        preview.next_recommended_action_label = "处理物化拒绝".to_string();
+        preview.next_recommended_action_reason =
+            format!("当前 formal materialization 被仲裁拒绝：{first_rejection}");
+        preview.updated_at = unix_timestamp_seconds();
+        write_requirement_preview_runtime(root, &preview)?;
+        return Ok(ProjectMaterializationResult {
+            project: draft_project,
+            issues: draft_issues,
+            action_proposal_bridge_version: SPEC_ACTION_PROPOSAL_BRIDGE_VERSION.to_string(),
+            action_proposal_bridge,
+            accepted_count,
+            rejected_count,
+        });
+    }
+
+    let (project, issues) = materialize_spec_from_requirement_preview(root, requirement_id)?;
     Ok(ProjectMaterializationResult {
         project,
         issues,
@@ -285,22 +331,6 @@ pub fn parse_completion_outcome(raw: &str) -> Result<CompletionDecisionOutcome> 
         "next-stage" => Ok(CompletionDecisionOutcome::NextStage),
         other => bail!("unsupported completion outcome: {other}"),
     }
-}
-
-fn build_materialization_bridge_records(
-    root: &Path,
-    requirement_id: &str,
-    project: &SpecProject,
-    issues: &[SpecIssue],
-) -> Result<Vec<ActionProposalBridgeRecord>> {
-    let mut context = build_materialization_bridge_context(root, requirement_id)?;
-    build_materialization_bridge_records_with_context(
-        root,
-        requirement_id,
-        project,
-        issues,
-        &mut context,
-    )
 }
 
 fn build_materialization_bridge_context(
@@ -625,6 +655,90 @@ fn materialization_confirmation_evidence_ref(
     format!("confirmation:{requirement_id}:preview-r{preview_revision}")
 }
 
+fn build_materialization_report(
+    preview: &RequirementPreviewRuntime,
+    action_proposal_bridge: &[ActionProposalBridgeRecord],
+    accepted_count: usize,
+    rejected_count: usize,
+) -> SpecMaterializationReport {
+    let decision = if rejected_count == 0 {
+        MaterializationDecision::Accepted
+    } else {
+        MaterializationDecision::Rejected
+    };
+    let proposal_decisions = action_proposal_bridge
+        .iter()
+        .map(|record| MaterializationProposalDecision {
+            sequence: record.sequence,
+            entity_kind: record.entity_kind.clone(),
+            entity_id: record.entity_id.clone(),
+            command_type: record.command.command_type.clone(),
+            proposal_id: record.proposal.proposal_id.clone(),
+            status: runtime_command_status_str(&record.arbitration.status).to_string(),
+            rejected_reasons: record
+                .arbitration
+                .rejected_reasons
+                .iter()
+                .map(|reason| reason.message.clone())
+                .collect(),
+        })
+        .collect();
+    SpecMaterializationReport {
+        version: agentflow_spec::model::SPEC_MATERIALIZATION_REPORT_VERSION.to_string(),
+        requirement_id: preview.requirement_id.clone(),
+        project_id: preview.project_id.clone(),
+        decision,
+        accepted_count,
+        rejected_count,
+        proposal_decisions,
+        updated_at: unix_timestamp_seconds(),
+    }
+}
+
+fn format_rejection_reason(record: &ActionProposalBridgeRecord) -> String {
+    if !record.arbitration.rejected_reasons.is_empty() {
+        let reasons = record
+            .arbitration
+            .rejected_reasons
+            .iter()
+            .map(|reason| reason.message.as_str())
+            .collect::<Vec<_>>()
+            .join("; ");
+        return format!(
+            "{} {} 被拒绝：{}",
+            record.entity_kind, record.entity_id, reasons
+        );
+    }
+    if let Some(request) = &record.arbitration.human_decision_request {
+        return format!(
+            "{} {} 需要人工决策：{}",
+            record.entity_kind, record.entity_id, request.question
+        );
+    }
+    format!(
+        "{} {} 的 proposal 状态是 {}",
+        record.entity_kind,
+        record.entity_id,
+        runtime_command_status_str(&record.arbitration.status)
+    )
+}
+
+fn runtime_command_status_str(status: &RuntimeCommandStatus) -> &'static str {
+    match status {
+        RuntimeCommandStatus::Accepted => "accepted",
+        RuntimeCommandStatus::Rejected => "rejected",
+        RuntimeCommandStatus::HumanDecisionRequired => "human-decision-required",
+        RuntimeCommandStatus::InvalidCommand => "invalid-command",
+    }
+}
+
+fn unix_timestamp_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 fn resolve_issue_id_for_run(root: &Path, run_id: &str, issue_id: Option<&str>) -> Result<String> {
     if let Some(issue_id) = issue_id.map(str::trim).filter(|value| !value.is_empty()) {
         load_task_run(root, issue_id, run_id)?;
@@ -652,9 +766,13 @@ fn resolve_issue_id_for_run(root: &Path, run_id: &str, issue_id: Option<&str>) -
 #[cfg(test)]
 mod tests {
     use super::{
-        build_core_arbitration_context, build_materialization_bridge_records_with_context,
-        project_confirm_goal, project_confirm_plan, project_intake, project_materialize,
-        RuntimeCommandStatus, SPEC_ACTION_PROPOSAL_BRIDGE_VERSION,
+        build_core_arbitration_context, project_confirm_goal, project_confirm_plan, project_intake,
+        project_materialize, project_materialize_with_context, RuntimeCommandStatus,
+        SPEC_ACTION_PROPOSAL_BRIDGE_VERSION,
+    };
+    use agentflow_spec::{
+        read_requirement_materialization_report, read_requirement_preview_runtime,
+        read_spec_loop_stage_artifact, MaterializationDecision, SpecLoopStageStatus,
     };
     use std::{
         fs,
@@ -760,10 +878,28 @@ mod tests {
             second_issue_record.arbitration.status,
             RuntimeCommandStatus::Accepted
         );
+
+        let report =
+            read_requirement_materialization_report(dir.path(), "999-task-workflow-test").unwrap();
+        assert_eq!(report.decision, MaterializationDecision::Accepted);
+        assert_eq!(report.accepted_count, 3);
+        assert_eq!(report.rejected_count, 0);
+
+        let stage = read_spec_loop_stage_artifact(
+            dir.path(),
+            "999-task-workflow-test",
+            agentflow_spec::SpecLoopStageName::Materialization,
+        )
+        .unwrap();
+        assert_eq!(stage.status, SpecLoopStageStatus::Materialized);
+        assert!(stage
+            .output_refs
+            .iter()
+            .any(|path| path.ends_with("materialization-report.json")));
     }
 
     #[test]
-    fn rejected_bridge_records_do_not_write_event_store() {
+    fn rejected_materialization_writes_report_without_authority() {
         let dir = tempdir().unwrap();
         let requirement = write_requirement(dir.path());
 
@@ -771,27 +907,58 @@ mod tests {
         project_confirm_goal(dir.path(), "999-task-workflow-test", "goal-agent").unwrap();
         project_confirm_plan(dir.path(), "999-task-workflow-test", "spec-agent").unwrap();
 
-        let (project, issues) = agentflow_spec::materialize_spec_from_requirement_preview(
-            dir.path(),
-            "999-task-workflow-test",
-        )
-        .unwrap();
         let event_store_before = snapshot_event_store(dir.path());
 
         let mut context = build_core_arbitration_context().unwrap();
-        let bridge = build_materialization_bridge_records_with_context(
+        let result =
+            project_materialize_with_context(dir.path(), "999-task-workflow-test", &mut context)
+                .unwrap();
+
+        assert_eq!(result.action_proposal_bridge.len(), 3);
+        assert_eq!(result.accepted_count, 0);
+        assert_eq!(result.rejected_count, 3);
+        assert!(result
+            .action_proposal_bridge
+            .iter()
+            .all(|record| record.arbitration.status == RuntimeCommandStatus::Rejected));
+        assert_eq!(snapshot_event_store(dir.path()), event_store_before);
+        assert!(!dir
+            .path()
+            .join(".agentflow/spec/projects/project-preview.json")
+            .exists());
+        assert_eq!(
+            fs::read_dir(dir.path().join(".agentflow/spec/issues"))
+                .unwrap()
+                .count(),
+            0
+        );
+
+        let report =
+            read_requirement_materialization_report(dir.path(), "999-task-workflow-test").unwrap();
+        assert_eq!(report.decision, MaterializationDecision::Rejected);
+        assert_eq!(report.accepted_count, 0);
+        assert_eq!(report.rejected_count, 3);
+
+        let preview =
+            read_requirement_preview_runtime(dir.path(), "999-task-workflow-test").unwrap();
+        assert_eq!(
+            preview.lifecycle,
+            agentflow_spec::RequirementPreviewLifecycle::Active
+        );
+        assert_eq!(preview.current_state, "confirmed");
+        assert_eq!(
+            preview.next_recommended_action,
+            "review-materialization-rejection"
+        );
+
+        let stage = read_spec_loop_stage_artifact(
             dir.path(),
             "999-task-workflow-test",
-            &project,
-            &issues,
-            &mut context,
+            agentflow_spec::SpecLoopStageName::Materialization,
         )
         .unwrap();
-
-        assert_eq!(bridge.len(), 3);
-        assert_eq!(bridge[0].arbitration.status, RuntimeCommandStatus::Rejected);
-        assert_eq!(bridge[1].arbitration.status, RuntimeCommandStatus::Rejected);
-        assert_eq!(bridge[2].arbitration.status, RuntimeCommandStatus::Rejected);
-        assert_eq!(snapshot_event_store(dir.path()), event_store_before);
+        assert_eq!(stage.status, SpecLoopStageStatus::Rejected);
+        let payload = stage.payload.unwrap();
+        assert_eq!(payload["decision"], "rejected");
     }
 }
