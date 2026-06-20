@@ -8,25 +8,40 @@ use agentflow_event_store::{
 };
 use agentflow_runtime_api::{
     write_work_action_proposals_from_spec_issue, write_work_command_handoff_from_spec_issue,
+    WorkActionProposalContract,
 };
 use agentflow_spec::{
-    read_spec_issue, read_spec_project, update_spec_issue_status, SpecIssue, SpecIssueStatus,
-    SpecPriority, SpecProject,
+    read_spec_issue, read_spec_project, update_spec_issue_status, SpecIssue, SpecIssueCategory,
+    SpecIssueStatus, SpecPriority, SpecProject, SpecRequiredAgentRole,
 };
-use agentflow_task_artifacts::{create_task_run, task_launch_request_path};
+use agentflow_task_artifacts::{
+    create_task_run, task_launch_request_path, write_task_preflight_decision, TaskPreflightCheck,
+    TaskPreflightCheckStatus, TaskPreflightDecision,
+};
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::{Context, Result};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde_json::json;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
+    process::Command,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 const ISSUE_CONTRACT_COMPLETE_GUARD: &str = "issue.contract.complete";
 const DEPENDENCIES_DONE_GUARD: &str = "dependencies.done";
 const PROJECT_PREDECESSORS_DONE_GUARD: &str = "project.sequence.predecessors.done";
 const PROJECT_SERIAL_SLOT_FREE_GUARD: &str = "project.serial_slot.free";
+const ISSUE_TODO_GUARD: &str = "issue.status.todo";
+const ISSUE_BOUNDARY_GUARD: &str = "issue.boundary.valid";
+const ISSUE_VALIDATION_COMMANDS_GUARD: &str = "issue.validation.commands";
+const ISSUE_EXPECTED_OUTPUTS_GUARD: &str = "issue.expected.outputs";
+const ACTION_PROPOSALS_READY_GUARD: &str = "action.proposals.ready";
+const WORKSPACE_CLEAN_GUARD: &str = "workspace.clean";
+const ISSUE_PREFLIGHT_PASSED: &str = "issue.preflight.passed";
+const ISSUE_PREFLIGHT_FAILED: &str = "issue.preflight.failed";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskLoop {
@@ -207,9 +222,45 @@ fn request_issue_launch_inner(
         );
     }
     let context = load_issue_runtime_context(root, &issue)?;
-    validate_launch_guards(&issue, context.project.as_ref(), &context.states)?;
     let run_id = next_run_id(root, &issue.issue_id)?;
     let branch_name = branch_name(&issue);
+    let preflight = write_issue_preflight_decision(
+        root,
+        &issue,
+        &run_id,
+        context.project.as_ref(),
+        &context.states,
+        None,
+        None,
+    )?;
+    if !preflight.passed {
+        append_preflight_event(root, &issue, &run_id, &preflight)?;
+        anyhow::bail!(
+            "issue {} preflight failed: {}",
+            issue.issue_id,
+            preflight.blockers.join("; ")
+        );
+    }
+    let work_command = write_work_command_handoff_from_spec_issue(root, &issue, &run_id)?;
+    let work_action_proposals =
+        write_work_action_proposals_from_spec_issue(root, &issue, &run_id, &work_command)?;
+    let preflight = write_issue_preflight_decision(
+        root,
+        &issue,
+        &run_id,
+        context.project.as_ref(),
+        &context.states,
+        Some(work_command.command_path.as_str()),
+        Some(&work_action_proposals),
+    )?;
+    append_preflight_event(root, &issue, &run_id, &preflight)?;
+    if !preflight.passed {
+        anyhow::bail!(
+            "issue {} preflight failed: {}",
+            issue.issue_id,
+            preflight.blockers.join("; ")
+        );
+    }
     let run = create_task_run(
         root,
         &issue.issue_id,
@@ -217,9 +268,6 @@ fn request_issue_launch_inner(
         &issue.workflow_ref,
         Some(branch_name.clone()),
     )?;
-    let work_command = write_work_command_handoff_from_spec_issue(root, &issue, &run.run_id)?;
-    let work_action_proposals =
-        write_work_action_proposals_from_spec_issue(root, &issue, &run.run_id, &work_command)?;
     let payload = AgentLaunchPayload {
         version: TASK_LOOP_LAUNCH_REQUEST_VERSION.to_string(),
         provider: provider.to_string(),
@@ -236,6 +284,7 @@ fn request_issue_launch_inner(
         merge_mode: "auto-merge-if-eligible".to_string(),
         work_command: Some(work_command.clone()),
         work_action_proposals_path: Some(work_action_proposals.contract_path.clone()),
+        preflight_path: Some(task_preflight_path_ref(&issue.issue_id, &run.run_id)),
     };
     write_launch_request(root, &payload)?;
 
@@ -264,6 +313,7 @@ fn request_issue_launch_inner(
             artifact_refs: vec![
                 work_command.command_path.clone(),
                 work_action_proposals.contract_path.clone(),
+                task_preflight_path_ref(&issue.issue_id, &run.run_id),
                 payload.launch_request_path.clone(),
                 format!(
                     ".agentflow/tasks/{}/runs/{}/run.json",
@@ -578,15 +628,207 @@ fn validate_launch_guards(
     Ok(passed)
 }
 
+fn write_issue_preflight_decision(
+    root: &Path,
+    issue: &SpecIssue,
+    run_id: &str,
+    project: Option<&SpecProject>,
+    states: &BTreeMap<String, SpecIssueStatus>,
+    work_command_path: Option<&str>,
+    work_action_proposals: Option<&WorkActionProposalContract>,
+) -> Result<TaskPreflightDecision> {
+    let mut checks = Vec::new();
+    collect_preflight_check(
+        &mut checks,
+        ISSUE_TODO_GUARD,
+        ensure_issue_is_todo(issue, states),
+    );
+    collect_preflight_check(
+        &mut checks,
+        ISSUE_CONTRACT_COMPLETE_GUARD,
+        ensure_issue_contract_complete(issue),
+    );
+    collect_preflight_check(
+        &mut checks,
+        DEPENDENCIES_DONE_GUARD,
+        ensure_dependencies_done(issue, states),
+    );
+    if let Some(project) = project {
+        collect_preflight_check(
+            &mut checks,
+            PROJECT_PREDECESSORS_DONE_GUARD,
+            ensure_project_predecessors_done(project, issue, states),
+        );
+        collect_preflight_check(
+            &mut checks,
+            PROJECT_SERIAL_SLOT_FREE_GUARD,
+            ensure_project_serial_slot_free(project, &issue.issue_id, states, true),
+        );
+    }
+    collect_preflight_check(
+        &mut checks,
+        ISSUE_BOUNDARY_GUARD,
+        ensure_issue_boundaries_valid(issue),
+    );
+    collect_preflight_check(
+        &mut checks,
+        ISSUE_VALIDATION_COMMANDS_GUARD,
+        ensure_validation_commands_present(issue),
+    );
+    collect_preflight_check(
+        &mut checks,
+        ISSUE_EXPECTED_OUTPUTS_GUARD,
+        ensure_expected_outputs_valid(issue),
+    );
+    if let Some(work_action_proposals) = work_action_proposals {
+        collect_preflight_check(
+            &mut checks,
+            ACTION_PROPOSALS_READY_GUARD,
+            ensure_work_action_proposals_ready(work_action_proposals),
+        );
+    }
+    collect_preflight_check(
+        &mut checks,
+        WORKSPACE_CLEAN_GUARD,
+        ensure_workspace_clean(root),
+    );
+
+    let blockers = checks
+        .iter()
+        .filter(|check| matches!(check.status, TaskPreflightCheckStatus::Failed))
+        .flat_map(|check| {
+            if check.details.is_empty() {
+                vec![check.summary.clone()]
+            } else {
+                check.details.clone()
+            }
+        })
+        .collect::<Vec<_>>();
+    let decision = TaskPreflightDecision {
+        version: String::new(),
+        issue_id: issue.issue_id.clone(),
+        run_id: run_id.to_string(),
+        workflow_ref: issue.workflow_ref.clone(),
+        issue_path: issue.system.path.clone(),
+        work_command_path: work_command_path.map(ToString::to_string),
+        work_action_proposals_path: work_action_proposals
+            .map(|contract| contract.contract_path.clone()),
+        passed: blockers.is_empty(),
+        blockers,
+        checks,
+        checked_at: unix_timestamp_seconds(),
+    };
+    write_task_preflight_decision(root, &issue.issue_id, run_id, &decision)
+}
+
+fn collect_preflight_check(checks: &mut Vec<TaskPreflightCheck>, key: &str, result: Result<()>) {
+    match result {
+        Ok(()) => checks.push(TaskPreflightCheck {
+            key: key.to_string(),
+            status: TaskPreflightCheckStatus::Passed,
+            summary: "passed".to_string(),
+            details: Vec::new(),
+        }),
+        Err(error) => checks.push(TaskPreflightCheck {
+            key: key.to_string(),
+            status: TaskPreflightCheckStatus::Failed,
+            summary: error.to_string(),
+            details: vec![error.to_string()],
+        }),
+    }
+}
+
+fn append_preflight_event(
+    root: &Path,
+    issue: &SpecIssue,
+    run_id: &str,
+    preflight: &TaskPreflightDecision,
+) -> Result<()> {
+    let event_type = if preflight.passed {
+        ISSUE_PREFLIGHT_PASSED
+    } else {
+        ISSUE_PREFLIGHT_FAILED
+    };
+    let idempotency_key = format!("{event_type}:{}:{run_id}", issue.issue_id);
+    let _ = append_task_event_once(
+        root,
+        TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(run_id.to_string()),
+            event_type: event_type.to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
+            actor: EventActor {
+                role: "task-loop".to_string(),
+                kind: "system".to_string(),
+            },
+            state: None,
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: serde_json::to_value(preflight)?,
+            artifact_refs: vec![
+                task_preflight_path_ref(&issue.issue_id, run_id),
+                preflight.work_command_path.clone().unwrap_or_default(),
+                preflight
+                    .work_action_proposals_path
+                    .clone()
+                    .unwrap_or_default(),
+            ]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect(),
+            idempotency_key: Some(idempotency_key),
+        },
+    )?;
+    Ok(())
+}
+
 fn ensure_issue_contract_complete(issue: &SpecIssue) -> Result<()> {
     if issue.issue_id.trim().is_empty()
         || issue.workflow_ref.trim().is_empty()
+        || issue.source_requirement_id.trim().is_empty()
+        || issue.source_requirement_path.trim().is_empty()
         || issue.source_spec_id.trim().is_empty()
         || issue.system.path.trim().is_empty()
     {
         anyhow::bail!("issue {} contract incomplete", issue.issue_id);
     }
+    if issue.issue_category != SpecIssueCategory::Spec {
+        anyhow::bail!(
+            "issue {} must be spec category before launch",
+            issue.issue_id
+        );
+    }
+    if issue.required_agent_role != SpecRequiredAgentRole::BuildAgent {
+        anyhow::bail!(
+            "issue {} must require build-agent/work-agent before launch",
+            issue.issue_id
+        );
+    }
+    if !issue.system.path.starts_with(".agentflow/spec/issues/") {
+        anyhow::bail!(
+            "issue {} path must stay under .agentflow/spec/issues/**",
+            issue.issue_id
+        );
+    }
     Ok(())
+}
+
+fn ensure_issue_is_todo(
+    issue: &SpecIssue,
+    states: &BTreeMap<String, SpecIssueStatus>,
+) -> Result<()> {
+    match states.get(&issue.issue_id).unwrap_or(&issue.status) {
+        SpecIssueStatus::Todo => Ok(()),
+        status => anyhow::bail!(
+            "issue {} must be todo before launch, found {}",
+            issue.issue_id,
+            status.as_str()
+        ),
+    }
 }
 
 fn ensure_dependencies_done(
@@ -674,6 +916,175 @@ fn ensure_project_serial_slot_free(
     );
 }
 
+fn ensure_issue_boundaries_valid(issue: &SpecIssue) -> Result<()> {
+    if issue.allowed_paths.is_empty() {
+        anyhow::bail!("issue {} missing allowedPaths", issue.issue_id);
+    }
+    if issue.forbidden_paths.is_empty() {
+        anyhow::bail!("issue {} missing forbiddenPaths", issue.issue_id);
+    }
+    let _ = build_globset(&issue.allowed_paths)?;
+    let _ = build_globset(&issue.forbidden_paths)?;
+    let overlap = issue
+        .allowed_paths
+        .iter()
+        .filter(|pattern| {
+            issue
+                .forbidden_paths
+                .iter()
+                .any(|blocked| blocked == *pattern)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if overlap.is_empty() {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "issue {} has conflicting boundary patterns: {}",
+        issue.issue_id,
+        overlap.join(", ")
+    );
+}
+
+fn ensure_validation_commands_present(issue: &SpecIssue) -> Result<()> {
+    let commands = issue
+        .validation_commands
+        .iter()
+        .map(|command| command.trim())
+        .filter(|command| !command.is_empty())
+        .collect::<Vec<_>>();
+    if commands.is_empty() {
+        anyhow::bail!("issue {} missing validationCommands", issue.issue_id);
+    }
+    Ok(())
+}
+
+fn ensure_expected_outputs_valid(issue: &SpecIssue) -> Result<()> {
+    let run_prefix = format!(".agentflow/tasks/{}/runs/", issue.issue_id);
+    let evidence_prefix = format!(".agentflow/tasks/{}/evidence/", issue.issue_id);
+    let task_run_dir = issue.expected_outputs.task_run_dir.trim();
+    if task_run_dir.is_empty() {
+        anyhow::bail!(
+            "issue {} missing expectedOutputs.taskRunDir",
+            issue.issue_id
+        );
+    }
+    if !task_run_dir.starts_with(&run_prefix) {
+        anyhow::bail!(
+            "issue {} taskRunDir must start with {}",
+            issue.issue_id,
+            run_prefix
+        );
+    }
+    let evidence_path = issue.expected_outputs.evidence_path.trim();
+    if evidence_path.is_empty() {
+        anyhow::bail!(
+            "issue {} missing expectedOutputs.evidencePath",
+            issue.issue_id
+        );
+    }
+    if !evidence_path.starts_with(&evidence_prefix) {
+        anyhow::bail!(
+            "issue {} evidencePath must start with {}",
+            issue.issue_id,
+            evidence_prefix
+        );
+    }
+    let public_record = issue
+        .expected_outputs
+        .public_delivery_record
+        .changelog_or_release_notes
+        .trim();
+    if public_record.is_empty() {
+        anyhow::bail!(
+            "issue {} missing expectedOutputs.publicDeliveryRecord.changelogOrReleaseNotes",
+            issue.issue_id
+        );
+    }
+    Ok(())
+}
+
+fn ensure_work_action_proposals_ready(contract: &WorkActionProposalContract) -> Result<()> {
+    let failed = contract
+        .proposals
+        .iter()
+        .filter(|entry| !entry.readiness.consumable_by_arbitration)
+        .map(|entry| {
+            format!(
+                "{:?}: {}",
+                entry.stage_action,
+                entry.readiness.rejection_reasons.join(", ")
+            )
+        })
+        .collect::<Vec<_>>();
+    if failed.is_empty() {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "work action proposals not consumable: {}",
+        failed.join("; ")
+    );
+}
+
+fn ensure_workspace_clean(root: &Path) -> Result<()> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain", "--untracked-files=all"])
+        .current_dir(root)
+        .output()
+        .with_context(|| format!("run git status in {}", root.display()))?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "workspace preflight could not read git status: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let dirty = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(parse_git_status_line)
+        .filter(|path| path != ".agentflow" && !path.starts_with(".agentflow/"))
+        .collect::<Vec<_>>();
+    if dirty.is_empty() {
+        return Ok(());
+    }
+    anyhow::bail!("workspace not clean: {}", dirty.join(", "))
+}
+
+fn build_globset(patterns: &[String]) -> Result<Option<GlobSet>> {
+    let active = patterns
+        .iter()
+        .map(|pattern| pattern.trim())
+        .filter(|pattern| !pattern.is_empty())
+        .collect::<Vec<_>>();
+    if active.is_empty() {
+        return Ok(None);
+    }
+    let mut builder = GlobSetBuilder::new();
+    for pattern in active {
+        builder
+            .add(Glob::new(pattern).with_context(|| format!("invalid glob pattern `{pattern}`"))?);
+    }
+    Ok(Some(builder.build()?))
+}
+
+fn parse_git_status_line(line: &str) -> Option<String> {
+    let normalized = line.trim();
+    if normalized.is_empty() || normalized.len() < 4 {
+        return None;
+    }
+    Some(normalize_status_path(&normalized[3..]))
+}
+
+fn normalize_status_path(path: &str) -> String {
+    path.rsplit(" -> ")
+        .next()
+        .unwrap_or(path)
+        .rsplit(" => ")
+        .next()
+        .unwrap_or(path)
+        .trim()
+        .replace('\\', "/")
+}
+
 fn parse_issue_status(value: &str) -> Option<SpecIssueStatus> {
     match value {
         "backlog" => Some(SpecIssueStatus::Backlog),
@@ -715,6 +1126,17 @@ fn branch_name(issue: &SpecIssue) -> String {
     format!("agentflow/{project}/{}", issue.issue_id)
 }
 
+fn task_preflight_path_ref(issue_id: &str, run_id: &str) -> String {
+    format!(".agentflow/tasks/{issue_id}/runs/{run_id}/preflight/preflight.json")
+}
+
+fn unix_timestamp_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 fn write_launch_request(root: &Path, payload: &AgentLaunchPayload) -> Result<()> {
     let path = root.join(&payload.launch_request_path);
     if let Some(parent) = path.parent() {
@@ -739,7 +1161,7 @@ mod tests {
         write_spec_issue, write_spec_project, SpecIssueDraft, SpecPriority, SpecProjectDraft,
         DEFAULT_WORKFLOW_REF,
     };
-    use std::path::Path;
+    use std::{path::Path, process::Command};
     use tempfile::tempdir;
 
     fn write_requirement(root: &Path) {
@@ -752,6 +1174,24 @@ mod tests {
         draft.allowed_paths = vec!["apps/desktop/src/**".to_string()];
         draft.forbidden_paths = vec![".agentflow/**".to_string()];
         draft.validation_commands = vec!["npm --prefix apps/desktop run build".to_string()];
+    }
+
+    fn init_git_repo(root: &Path) {
+        fs::write(root.join(".gitignore"), ".agentflow/\n").unwrap();
+        run_git(root, &["init"]);
+        run_git(root, &["config", "user.email", "codex@example.com"]);
+        run_git(root, &["config", "user.name", "Codex"]);
+        run_git(root, &["add", "."]);
+        run_git(root, &["commit", "-m", "initial fixture"]);
+    }
+
+    fn run_git(root: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {:?} failed", args);
     }
 
     fn write_project_with_issues(root: &Path) {
@@ -777,6 +1217,7 @@ mod tests {
         let project =
             agentflow_spec::project_from_requirement(root, &requirement, project).unwrap();
         write_spec_project(root, &project).unwrap();
+        init_git_repo(root);
     }
 
     fn write_ordered_project_without_dependencies(root: &Path) {
@@ -804,6 +1245,7 @@ mod tests {
         let project =
             agentflow_spec::project_from_requirement(root, &requirement, project).unwrap();
         write_spec_project(root, &project).unwrap();
+        init_git_repo(root);
     }
 
     #[test]
@@ -876,10 +1318,24 @@ mod tests {
             payload.work_action_proposals_path.as_deref(),
             Some(".agentflow/tasks/AF-TASK-001/runs/run-001/launch/work-action-proposals.json")
         );
+        assert_eq!(
+            payload.preflight_path.as_deref(),
+            Some(".agentflow/tasks/AF-TASK-001/runs/run-001/preflight/preflight.json")
+        );
+        let preflight = agentflow_task_artifacts::load_task_preflight_decision(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+        )
+        .unwrap();
+        assert!(preflight.passed);
         let events = replay_task_events(dir.path(), ReplayFilter::issue("AF-TASK-001")).unwrap();
         assert!(events
             .iter()
             .any(|event| event.event_type == AGENT_LAUNCH_REQUESTED));
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == ISSUE_PREFLIGHT_PASSED));
         let issue = read_spec_issue(dir.path(), "AF-TASK-001").unwrap();
         assert_eq!(issue.status, SpecIssueStatus::InProgress);
     }
@@ -945,6 +1401,7 @@ mod tests {
         let direct =
             agentflow_spec::issue_from_requirement(dir.path(), &requirement, draft).unwrap();
         write_spec_issue(dir.path(), &direct).unwrap();
+        init_git_repo(dir.path());
 
         let tick = TaskLoop::start_issue(dir.path(), "AF-DIRECT-001", "codex").unwrap();
 
@@ -1192,6 +1649,83 @@ mod tests {
             .unwrap_err();
 
         assert!(err.to_string().contains("already has a launch request"));
+    }
+
+    #[test]
+    fn launch_fails_preflight_when_workspace_dirty() {
+        let dir = tempdir().unwrap();
+        write_project_with_issues(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+        loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+        fs::write(dir.path().join("dirty.txt"), "dirty\n").unwrap();
+
+        let err = loop_driver
+            .request_agent_launch(dir.path(), "AF-TASK-001", "codex")
+            .unwrap_err();
+
+        assert!(err.to_string().contains("preflight failed"));
+        assert!(err.to_string().contains("workspace not clean"));
+        let preflight = agentflow_task_artifacts::load_task_preflight_decision(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+        )
+        .unwrap();
+        assert!(!preflight.passed);
+        assert!(!dir
+            .path()
+            .join(".agentflow/tasks/AF-TASK-001/runs/run-001/run.json")
+            .exists());
+        let issue = read_spec_issue(dir.path(), "AF-TASK-001").unwrap();
+        assert_eq!(issue.status, SpecIssueStatus::Todo);
+    }
+
+    #[test]
+    fn launch_fails_preflight_when_validation_commands_missing() {
+        let dir = tempdir().unwrap();
+        write_requirement(dir.path());
+        let requirement = dir.path().join("docs/requirements/034-test.md");
+        let mut draft = SpecIssueDraft::new("AF-TASK-001");
+        draft.project_id = Some("project-task-loop".to_string());
+        draft.priority = SpecPriority::P1;
+        draft.allowed_paths = vec!["apps/desktop/src/**".to_string()];
+        draft.forbidden_paths = vec![".agentflow/**".to_string()];
+        let issue =
+            agentflow_spec::issue_from_requirement(dir.path(), &requirement, draft).unwrap();
+        write_spec_issue(dir.path(), &issue).unwrap();
+        let mut project = SpecProjectDraft::new("project-task-loop");
+        project.issue_ids = vec!["AF-TASK-001".to_string()];
+        let project =
+            agentflow_spec::project_from_requirement(dir.path(), &requirement, project).unwrap();
+        write_spec_project(dir.path(), &project).unwrap();
+        init_git_repo(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+        loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+
+        let err = loop_driver
+            .request_agent_launch(dir.path(), "AF-TASK-001", "codex")
+            .unwrap_err();
+
+        assert!(err.to_string().contains("missing validationCommands"));
+        let preflight = agentflow_task_artifacts::load_task_preflight_decision(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+        )
+        .unwrap();
+        assert!(!preflight.passed);
+        assert!(!dir
+            .path()
+            .join(".agentflow/tasks/AF-TASK-001/runs/run-001/run.json")
+            .exists());
+        let issue = read_spec_issue(dir.path(), "AF-TASK-001").unwrap();
+        assert_eq!(issue.status, SpecIssueStatus::Todo);
     }
 
     #[test]

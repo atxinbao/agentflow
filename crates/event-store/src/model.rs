@@ -257,7 +257,11 @@ pub fn classify_task_event(event_type: &str) -> TaskEventCategory {
                 || value.starts_with("delivery.state.")
                 || matches!(
                     value,
-                    "issue.scheduled" | "issue.blocked" | "issue.cancelled"
+                    "issue.scheduled"
+                        | "issue.blocked"
+                        | "issue.cancelled"
+                        | "issue.preflight.passed"
+                        | "issue.preflight.failed"
                 ) =>
         {
             TaskEventCategory::Workflow

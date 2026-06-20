@@ -6,6 +6,7 @@ pub const TASK_COMMAND_VERSION: &str = "task-command.v1";
 pub const TASK_CHANGED_FILES_VERSION: &str = "task-changed-files.v1";
 pub const TASK_VALIDATION_VERSION: &str = "task-validation.v1";
 pub const TASK_EVIDENCE_VERSION: &str = "task-evidence.v1";
+pub const TASK_PREFLIGHT_VERSION: &str = "task-preflight.v1";
 pub const TASK_RUN_CHECKPOINT_VERSION: &str = "task-run-checkpoint.v1";
 pub const WORK_LOOP_FILESYSTEM_CONTRACT_VERSION: &str = "work-loop-filesystem-contract.v1";
 
@@ -177,6 +178,42 @@ pub struct TaskEvidence {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generated_at: Option<u64>,
     pub created_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskPreflightCheckStatus {
+    Passed,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskPreflightCheck {
+    pub key: String,
+    pub status: TaskPreflightCheckStatus,
+    pub summary: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub details: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskPreflightDecision {
+    pub version: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub workflow_ref: String,
+    pub issue_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_command_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_action_proposals_path: Option<String>,
+    pub passed: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blockers: Vec<String>,
+    pub checks: Vec<TaskPreflightCheck>,
+    pub checked_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
