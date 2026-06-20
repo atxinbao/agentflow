@@ -12,6 +12,7 @@ pub const SPEC_STAGE_ARTIFACT_VERSION: &str = "agentflow-spec-stage-artifact.v1"
 pub const REQUIREMENT_CLASSIFICATION_VERSION: &str = "agentflow-requirement-classification.v1";
 pub const REQUIREMENT_CONTEXT_VERSION: &str = "agentflow-requirement-context.v1";
 pub const REQUIREMENT_BOUNDARY_VERSION: &str = "agentflow-requirement-boundary.v1";
+pub const REQUIREMENT_ROUTE_VERSION: &str = "agentflow-requirement-route.v1";
 pub const COMPLETION_DECISION_VERSION: &str = "agentflow-completion-decision.v1";
 pub const PROJECT_BRAIN_DOCUMENT_SET_VERSION: &str = "agentflow-project-brain-document-set.v1";
 pub const PROJECT_BRAIN_SNAPSHOT_VERSION: &str = "agentflow-project-brain-snapshot.v1";
@@ -701,6 +702,51 @@ pub struct RequirementBoundarySummary {
     pub alternatives: Vec<String>,
     #[serde(default)]
     pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RequirementRoutePath {
+    AnswerOnly,
+    ResearchOnly,
+    DesignPreview,
+    RequirementDraft,
+    SpecPreview,
+    AuditPreview,
+    BuildIssuePreview,
+    ReleaseCloseout,
+}
+
+impl RequirementRoutePath {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::AnswerOnly => "answer-only",
+            Self::ResearchOnly => "research-only",
+            Self::DesignPreview => "design-preview",
+            Self::RequirementDraft => "requirement-draft",
+            Self::SpecPreview => "spec-preview",
+            Self::AuditPreview => "audit-preview",
+            Self::BuildIssuePreview => "build-issue-preview",
+            Self::ReleaseCloseout => "release-closeout",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementRouteDecision {
+    pub version: String,
+    pub requirement_id: String,
+    pub project_id: String,
+    pub route: RequirementRoutePath,
+    pub confidence: u8,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+    #[serde(default)]
+    pub clarification_questions: Vec<String>,
+    pub next_action: String,
+    pub next_action_label: String,
+    pub next_action_reason: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -10,14 +10,15 @@ use crate::model::{
     RequirementContextPullRequestRef, RequirementContextReleaseRef, RequirementContextSummary,
     RequirementDocument, RequirementExecutionPermission, RequirementFactImpact,
     RequirementIntakeResult, RequirementIntentType, RequirementPreviewLifecycle,
-    RequirementPreviewRuntime, RequirementRiskLevel, RequirementTargetObject,
-    SpecArtifactAuthority, SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft,
-    SpecIssueStatus, SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageFileRef,
-    SpecLoopStageName, SpecLoopStageStatus, SpecPriority, SpecProject, SpecProjectDraft,
-    SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, COMPLETION_DECISION_VERSION,
-    PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
-    REQUIREMENT_BOUNDARY_VERSION, REQUIREMENT_CLASSIFICATION_VERSION, REQUIREMENT_CONTEXT_VERSION,
-    REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION,
+    RequirementPreviewRuntime, RequirementRiskLevel, RequirementRouteDecision,
+    RequirementRoutePath, RequirementTargetObject, SpecArtifactAuthority, SpecExpectedOutputs,
+    SpecIssue, SpecIssueCategory, SpecIssueDraft, SpecIssueStatus, SpecLoopRequirementManifest,
+    SpecLoopStageArtifact, SpecLoopStageFileRef, SpecLoopStageName, SpecLoopStageStatus,
+    SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
+    SpecSystemRecord, COMPLETION_DECISION_VERSION, PROJECT_BRAIN_DOCUMENT_SET_VERSION,
+    PROJECT_BRAIN_SNAPSHOT_VERSION, REQUIREMENT_BOUNDARY_VERSION,
+    REQUIREMENT_CLASSIFICATION_VERSION, REQUIREMENT_CONTEXT_VERSION, REQUIREMENT_PREVIEW_VERSION,
+    REQUIREMENT_ROUTE_VERSION, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION,
     SPEC_PROJECT_VERSION, SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
 };
 use agentflow_audit::load_project_audit_review_summary;
@@ -2051,15 +2052,25 @@ fn build_requirement_stage_artifact(
                 boundary_summary,
             )
         }
-        SpecLoopStageName::Route => (
-            SpecLoopStageStatus::Declared,
-            SpecArtifactAuthority::Derived,
-            vec![boundary_ref.clone()],
-            vec![stage_ref.clone()],
-            Vec::new(),
-            None,
-            "路由决策阶段文件合同已建立，后续由 AF-SPEC-005 写入 route 决策。".to_string(),
-        ),
+        SpecLoopStageName::Route => {
+            let route = build_requirement_route_decision(root, preview)?;
+            let route_summary = build_requirement_route_summary_line(&route);
+            let route_refs = build_requirement_route_refs(root, preview, &route)?;
+            (
+                SpecLoopStageStatus::Ready,
+                SpecArtifactAuthority::Derived,
+                vec![
+                    classification_ref.clone(),
+                    context_ref.clone(),
+                    boundary_ref.clone(),
+                    runtime_ref.clone(),
+                ],
+                vec![stage_ref.clone()],
+                route_refs,
+                Some(serde_json::to_value(&route)?),
+                route_summary,
+            )
+        }
         SpecLoopStageName::Preview => (
             preview_stage_status(preview),
             SpecArtifactAuthority::Derived,
@@ -3099,6 +3110,290 @@ fn requests_runtime_bypass(raw: &str, lowered: &str) -> bool {
         || lowered.contains("write docs/requirements directly")
 }
 
+fn build_requirement_route_decision(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Result<RequirementRouteDecision> {
+    let classification = build_requirement_classification(&preview.intake);
+    let context = build_requirement_context_summary(root, preview)?;
+    let boundary = build_requirement_boundary_summary(root, preview)?;
+    let route = decide_requirement_route(preview, &classification, &context, &boundary);
+    let clarification_questions =
+        build_requirement_route_questions(preview, &classification, &context, &boundary);
+    let confidence =
+        build_requirement_route_confidence(preview, &classification, &context, &boundary, &route);
+    let (next_action, next_action_label, next_action_reason) =
+        route_next_action(&route, &clarification_questions);
+
+    let mut reasons = classification.reasons.clone();
+    reasons.push(format!(
+        "边界阶段判定 writeRequirement = {}，writeSpecAuthority = {}。",
+        boundary.write_requirement.as_str(),
+        boundary.write_spec_authority.as_str()
+    ));
+    reasons.extend(
+        boundary
+            .blockers
+            .iter()
+            .map(|blocker| blocker.reason.clone()),
+    );
+    if !context.missing_context.is_empty() {
+        reasons.push(format!(
+            "Context 仍缺少 {} 项事实，因此 route 会更保守。",
+            context.missing_context.len()
+        ));
+    }
+    reasons.push(match route {
+        RequirementRoutePath::AnswerOnly => "当前请求保持只读回答，不进入 SPEC。".to_string(),
+        RequirementRoutePath::ResearchOnly => {
+            "当前请求信息不足或研究语义更强，先走 research-only。".to_string()
+        }
+        RequirementRoutePath::DesignPreview => {
+            "当前请求以设计预览为主，不进入执行合同。".to_string()
+        }
+        RequirementRoutePath::RequirementDraft => {
+            "当前请求仍需澄清或补上下文，先停在 requirement draft。".to_string()
+        }
+        RequirementRoutePath::SpecPreview => {
+            "当前请求属于 feature / bug / maintenance 变更，进入 SPEC Preview。".to_string()
+        }
+        RequirementRoutePath::AuditPreview => {
+            "当前请求进入独立 audit preview，不和 build 混合。".to_string()
+        }
+        RequirementRoutePath::BuildIssuePreview => {
+            "当前请求已接近单条执行任务，进入 build issue preview。".to_string()
+        }
+        RequirementRoutePath::ReleaseCloseout => "当前请求进入 release closeout 路线。".to_string(),
+    });
+    let reasons = dedupe_preserve_order(reasons);
+
+    Ok(RequirementRouteDecision {
+        version: REQUIREMENT_ROUTE_VERSION.to_string(),
+        requirement_id: preview.requirement_id.clone(),
+        project_id: preview.project_id.clone(),
+        route,
+        confidence,
+        reasons,
+        clarification_questions,
+        next_action,
+        next_action_label,
+        next_action_reason,
+    })
+}
+
+fn decide_requirement_route(
+    preview: &RequirementPreviewRuntime,
+    classification: &RequirementClassificationResult,
+    _context: &RequirementContextSummary,
+    boundary: &RequirementBoundarySummary,
+) -> RequirementRoutePath {
+    let is_audit = classification
+        .basic_types
+        .contains(&RequirementClass::Audit);
+    if is_audit {
+        return RequirementRoutePath::AuditPreview;
+    }
+    let is_release = classification
+        .basic_types
+        .contains(&RequirementClass::Release);
+    if is_release {
+        return RequirementRoutePath::ReleaseCloseout;
+    }
+    let is_design_only = classification
+        .basic_types
+        .contains(&RequirementClass::DesignOnly)
+        && !classification
+            .basic_types
+            .contains(&RequirementClass::ExecutableIssue);
+    if is_design_only {
+        return RequirementRoutePath::DesignPreview;
+    }
+    if classification.execution_permission == RequirementExecutionPermission::AnswerOnly {
+        if classification.primary_type == RequirementClass::Research
+            || classification
+                .basic_types
+                .contains(&RequirementClass::Research)
+        {
+            return RequirementRoutePath::ResearchOnly;
+        }
+        return RequirementRoutePath::AnswerOnly;
+    }
+
+    let clarification_needed = !preview.intake.clarification_questions.is_empty()
+        || classification.ambiguous
+        || classification.conflicting;
+    if clarification_needed {
+        return RequirementRoutePath::RequirementDraft;
+    }
+
+    let executable_only = classification.primary_type == RequirementClass::ExecutableIssue
+        && !classification
+            .basic_types
+            .contains(&RequirementClass::Feature)
+        && !classification.basic_types.contains(&RequirementClass::Bug)
+        && !classification
+            .basic_types
+            .contains(&RequirementClass::Maintenance)
+        && !classification
+            .basic_types
+            .contains(&RequirementClass::Cleanup);
+    if executable_only
+        && boundary.write_spec_authority == RequirementBoundaryVerdict::ConfirmationRequired
+    {
+        return RequirementRoutePath::BuildIssuePreview;
+    }
+
+    RequirementRoutePath::SpecPreview
+}
+
+fn build_requirement_route_questions(
+    preview: &RequirementPreviewRuntime,
+    classification: &RequirementClassificationResult,
+    context: &RequirementContextSummary,
+    boundary: &RequirementBoundarySummary,
+) -> Vec<String> {
+    let mut questions = preview.intake.clarification_questions.clone();
+    if classification.conflicting {
+        questions.push("这个需求最终是要做审计、研究，还是要进入执行类 SPEC？".to_string());
+    }
+    if classification.ambiguous {
+        questions.push("请补充这条需求的最终交付物和边界。".to_string());
+    }
+    if !context.missing_context.is_empty() {
+        questions.push(
+            "当前引用的 branch / PR / release / 文件事实不完整，是否需要补充准确对象？".to_string(),
+        );
+    }
+    if boundary
+        .blockers
+        .iter()
+        .any(|blocker| blocker.gate == "spec-confirmation")
+    {
+        questions.push("是否先生成并确认 SPEC Draft Preview？".to_string());
+    }
+    dedupe_preserve_order(questions)
+        .into_iter()
+        .take(3)
+        .collect()
+}
+
+fn build_requirement_route_confidence(
+    preview: &RequirementPreviewRuntime,
+    classification: &RequirementClassificationResult,
+    context: &RequirementContextSummary,
+    boundary: &RequirementBoundarySummary,
+    route: &RequirementRoutePath,
+) -> u8 {
+    let mut confidence = preview.intake.confidence as i32;
+    if classification.ambiguous {
+        confidence -= 16;
+    }
+    if classification.conflicting {
+        confidence -= 18;
+    }
+    confidence -= (context.missing_context.len().min(3) as i32) * 8;
+    if boundary
+        .blockers
+        .iter()
+        .any(|blocker| blocker.gate == "runtime-api")
+    {
+        confidence -= 10;
+    }
+    if matches!(route, RequirementRoutePath::RequirementDraft) {
+        confidence -= 6;
+    }
+    confidence.clamp(32, 96) as u8
+}
+
+fn route_next_action(
+    route: &RequirementRoutePath,
+    clarification_questions: &[String],
+) -> (String, String, String) {
+    match route {
+        RequirementRoutePath::AnswerOnly => (
+            "answer-user-question".to_string(),
+            "输出直接回答".to_string(),
+            "当前请求是只读问答，不需要进入 SPEC。".to_string(),
+        ),
+        RequirementRoutePath::ResearchOnly => (
+            "prepare-research-response".to_string(),
+            "输出研究结论".to_string(),
+            "当前请求先以研究解释为主，不写正式事实源。".to_string(),
+        ),
+        RequirementRoutePath::DesignPreview => (
+            "generate-design-preview".to_string(),
+            "生成设计预览".to_string(),
+            "当前请求先输出设计说明或原型预览。".to_string(),
+        ),
+        RequirementRoutePath::RequirementDraft => (
+            "clarify-requirement".to_string(),
+            "继续澄清需求".to_string(),
+            if clarification_questions.is_empty() {
+                "当前需求还需要进一步收口，先停在 requirement draft。".to_string()
+            } else {
+                format!(
+                    "当前还需要先回答 {} 个澄清问题。",
+                    clarification_questions.len()
+                )
+            },
+        ),
+        RequirementRoutePath::SpecPreview => (
+            "generate-spec-draft-preview".to_string(),
+            "生成 SPEC Draft Preview".to_string(),
+            "当前需求已经满足进入 SPEC Preview 的边界。".to_string(),
+        ),
+        RequirementRoutePath::AuditPreview => (
+            "generate-audit-preview".to_string(),
+            "生成审计预览".to_string(),
+            "当前需求属于独立 audit 路线。".to_string(),
+        ),
+        RequirementRoutePath::BuildIssuePreview => (
+            "generate-build-issue-preview".to_string(),
+            "生成执行任务预览".to_string(),
+            "当前需求更接近单条执行任务，先输出 build issue preview。".to_string(),
+        ),
+        RequirementRoutePath::ReleaseCloseout => (
+            "generate-release-closeout-preview".to_string(),
+            "生成发布收口预览".to_string(),
+            "当前需求进入 release closeout 路线。".to_string(),
+        ),
+    }
+}
+
+fn build_requirement_route_summary_line(route: &RequirementRouteDecision) -> String {
+    format!(
+        "路由已确定：{}，置信度 {}，待澄清 {} 项。",
+        route.route.as_str(),
+        route.confidence,
+        route.clarification_questions.len()
+    )
+}
+
+fn build_requirement_route_refs(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+    route: &RequirementRouteDecision,
+) -> Result<Vec<String>> {
+    let mut refs = vec![
+        preview.requirement_path.clone(),
+        requirement_preview_runtime_path(root, &preview.requirement_id)
+            .and_then(|path| normalize_relative_to_root(root, path))?,
+    ];
+    refs.extend(preview.intake.referenced_files.iter().cloned());
+    if matches!(
+        route.route,
+        RequirementRoutePath::SpecPreview | RequirementRoutePath::BuildIssuePreview
+    ) {
+        refs.push(format!(
+            "{}/{}",
+            requirement_preview_dir(root, &preview.requirement_id)
+                .and_then(|path| normalize_relative_to_root(root, path))?,
+            SpecLoopStageName::Preview.file_name()
+        ));
+    }
+    Ok(dedupe_preserve_order(refs))
+}
+
 fn preview_stage_status(preview: &RequirementPreviewRuntime) -> SpecLoopStageStatus {
     match preview.lifecycle {
         RequirementPreviewLifecycle::Cancelled => SpecLoopStageStatus::Cancelled,
@@ -4053,9 +4348,10 @@ mod tests {
     use crate::model::{
         RequirementBoundarySummary, RequirementBoundaryVerdict, RequirementClass,
         RequirementClassificationResult, RequirementContextFactState, RequirementContextSummary,
-        RequirementExecutionPermission, RequirementRiskLevel, SpecArtifactAuthority,
-        SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageName, SpecLoopStageStatus,
-        SpecPriority, DEFAULT_WORKFLOW_REF,
+        RequirementExecutionPermission, RequirementRiskLevel, RequirementRouteDecision,
+        RequirementRoutePath, SpecArtifactAuthority, SpecLoopRequirementManifest,
+        SpecLoopStageArtifact, SpecLoopStageName, SpecLoopStageStatus, SpecPriority,
+        DEFAULT_WORKFLOW_REF,
     };
     use agentflow_event_store::load_task_events;
     use serde_json::Value;
@@ -5006,6 +5302,192 @@ mod tests {
                 || alternative.contains("preview")
                 || alternative.contains("materialization")
         }));
+    }
+
+    #[test]
+    fn route_stage_keeps_question_out_of_spec() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "route-question",
+            "# 只是提问\n\n为什么当前 release-gate 会失败？\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let route_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/route-question/route.json"),
+        )
+        .unwrap();
+        assert_eq!(route_artifact.stage, SpecLoopStageName::Route);
+        assert_eq!(route_artifact.status, SpecLoopStageStatus::Ready);
+        let route: RequirementRouteDecision =
+            serde_json::from_value(route_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(route.route, RequirementRoutePath::AnswerOnly);
+        assert_eq!(route.next_action, "answer-user-question");
+    }
+
+    #[test]
+    fn route_stage_sends_feature_into_spec_preview() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "route-feature",
+            "# 任务页重构\n\n请实现任务页状态时间线，并更新 apps/desktop/src/App.tsx。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let route_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/route-feature/route.json"),
+        )
+        .unwrap();
+        let route: RequirementRouteDecision =
+            serde_json::from_value(route_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(route.route, RequirementRoutePath::SpecPreview);
+        assert_eq!(route.next_action, "generate-spec-draft-preview");
+    }
+
+    #[test]
+    fn route_stage_keeps_audit_out_of_build() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "route-audit",
+            "# 审计发布结果\n\n请审计 v0.5.0 release，并输出 findings。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let route_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/route-audit/route.json"),
+        )
+        .unwrap();
+        let route: RequirementRouteDecision =
+            serde_json::from_value(route_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(route.route, RequirementRoutePath::AuditPreview);
+        assert_eq!(route.next_action, "generate-audit-preview");
+    }
+
+    #[test]
+    fn route_stage_sends_release_request_to_closeout() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "route-release",
+            "# 发布收口\n\n请补齐 v0.5.0 release notes 和 changelog。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let route_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/route-release/route.json"),
+        )
+        .unwrap();
+        let route: RequirementRouteDecision =
+            serde_json::from_value(route_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(route.route, RequirementRoutePath::ReleaseCloseout);
+        assert_eq!(route.next_action, "generate-release-closeout-preview");
+    }
+
+    #[test]
+    fn route_stage_uses_requirement_draft_when_clarification_is_needed() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement =
+            write_requirement_with_text(dir.path(), "route-draft", "# 改一下\n\n短。\n");
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let route_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/route-draft/route.json"),
+        )
+        .unwrap();
+        let route: RequirementRouteDecision =
+            serde_json::from_value(route_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(route.route, RequirementRoutePath::RequirementDraft);
+        assert_eq!(route.next_action, "clarify-requirement");
+        assert!(!route.clarification_questions.is_empty());
+        assert!(route.clarification_questions.len() <= 3);
     }
 
     #[test]
