@@ -1,5 +1,9 @@
 name: release-gate
 
+env:
+  RELEASE_VERSION: v0.5.1
+  RELEASE_GATE_ARTIFACT_DIR: artifacts/release-gate-v0.5.1-e2e
+
 on:
   pull_request:
   push:
@@ -60,23 +64,23 @@ jobs:
         run: npm --prefix apps/desktop run build
 
       - name: Release gate E2E
-        run: bash scripts/verify_release_gate.sh --artifact-dir artifacts/release-gate-e2e
+        run: bash scripts/verify_release_gate.sh --artifact-dir "$RELEASE_GATE_ARTIFACT_DIR"
 
       - name: Append gate summary
         if: always()
         run: |
-          if [ -f artifacts/release-gate-e2e/certification.md ]; then
-            cat artifacts/release-gate-e2e/certification.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$RELEASE_GATE_ARTIFACT_DIR/certification.md" ]; then
+            cat "$RELEASE_GATE_ARTIFACT_DIR/certification.md" >> "$GITHUB_STEP_SUMMARY"
             printf "\n\n" >> "$GITHUB_STEP_SUMMARY"
           fi
-          if [ -f artifacts/release-gate-e2e/summary.md ]; then
-            cat artifacts/release-gate-e2e/summary.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$RELEASE_GATE_ARTIFACT_DIR/summary.md" ]; then
+            cat "$RELEASE_GATE_ARTIFACT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload gate artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-gate-e2e
-          path: artifacts/release-gate-e2e
+          name: release-gate-${{ env.RELEASE_VERSION }}
+          path: ${{ env.RELEASE_GATE_ARTIFACT_DIR }}
           if-no-files-found: warn

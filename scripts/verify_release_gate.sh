@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ARTIFACT_DIR="$ROOT/artifacts/release-gate-e2e"
-RELEASE_VERSION="${RELEASE_VERSION:-v0.3.1}"
+ARTIFACT_DIR="$ROOT/artifacts/release-gate-v0.5.1-e2e"
+RELEASE_VERSION="${RELEASE_VERSION:-v0.5.1}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -394,7 +394,7 @@ write_requirement() {
 
 验证 requirement 到 project/release 的正式入口。
 
-- 目标：验证 v0.3.1 stable release gate 真链路。
+- 目标：验证 v0.5.1 stable release gate 真链路。
 - 范围：formal project / task-loop / build-agent / completion / release runtime。
 - 交付：release facts、CHANGELOG、release notes、外部 review surface。
 EOF
@@ -667,7 +667,7 @@ PY
   run_cli_json "release.record-tag" "$release_record_tag_json" \
     release record-tag \
     --project-id "$project_id" \
-    --tag-name v0.3.1-e2e \
+    --tag-name v0.5.1-e2e \
     --tag-commit-sha "$(git -C "$WORKSPACE" rev-parse HEAD)"
 
   run_cli_json "release.record-remote" "$release_record_remote_json" \
@@ -675,8 +675,8 @@ PY
     --project-id "$project_id" \
     --provider github \
     --release-id rel-e2e-001 \
-    --release-url https://github.com/atxinbao/agentflow/releases/tag/v0.3.1-e2e \
-    --tag-name v0.3.1-e2e \
+    --release-url https://github.com/atxinbao/agentflow/releases/tag/v0.5.1-e2e \
+    --tag-name v0.5.1-e2e \
     --release-commit-sha "$(git -C "$WORKSPACE" rev-parse HEAD)" \
     --artifact-manifest-path "artifacts/${project_id}-release-manifest.json"
 
