@@ -33,7 +33,7 @@
   "runId": "run-001",
   "authorityRole": "work-agent",
   "actor": {
-    "role": "build-agent",
+    "role": "work-agent",
     "kind": "system"
   },
   "timestamp": "2026-06-18T10:00:00Z",
@@ -49,7 +49,8 @@
 - `flowType` 是 runtime authority 所属流程，不允许页面自己猜；
 - `runId` 进入执行阶段后必须成为 event envelope 一等字段，不只藏在 payload；
 - `authorityRole` 表示当前事件写入后对应的 runtime role；
-- `actor.role` 表示实际写事件的组件或 agent 身份，和 authority role 不是一回事。
+- `actor.role` 表示实际写事件的组件或 agent 身份，和 authority role 不是一回事；
+- 如果 provider 侧仍使用 `build-agent`，必须把它当成 `work-agent` 的兼容别名解释。
 
 ## Event 分类
 

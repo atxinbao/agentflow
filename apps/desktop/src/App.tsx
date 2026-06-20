@@ -345,14 +345,14 @@ const codexRoleGuides: CodexRoleGuide[] = [
   },
   {
     cannotDo: ["不执行 audit issue", "不写 audit report", "不写 findings.json", "不使用外部任务源"],
-    englishName: "Build Agent",
-    role: "build-agent",
+    englishName: "Work Agent",
+    role: "work-agent",
     startupInstruction: [
-      "你现在是 AgentFlow 的 Build Agent。",
+      "你现在是 AgentFlow 的 Work Agent（Build Agent 是兼容别名）。",
       "",
       "你只能执行：",
       "issueCategory = spec",
-      "requiredAgentRole = build-agent",
+      "requiredAgentRole = work-agent",
       "AgentFlow 当前 spec issue 是唯一任务源。",
       "handoff package 只是这份 issue 的派生快照。",
       "executionPipeline 只是这份 issue 合同里的一部分，不是独立任务源。",
@@ -393,10 +393,10 @@ const codexRoleGuides: CodexRoleGuide[] = [
       "不要直接复用可能过期的 target/release/agentflow。",
       "进入 in_progress 前必须确认 Context Pack 可读，且当前工作区没有未提交的用户源码改动。",
       "如果任务不是 spec issue，必须停止。",
-      "如果 requiredAgentRole 不是 build-agent，必须停止。",
+      "如果 requiredAgentRole 不是 work-agent 或 build-agent，必须停止。",
     ].join("\n"),
     summary: "任务打包 · 执行改动 · 写回结果",
-    threadName: "AgentFlow / Build Agent",
+    threadName: "AgentFlow / Work Agent",
     title: "执行助手",
   },
   {
@@ -5991,7 +5991,7 @@ const buildAgentPipelineStageIds = [
 
 function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
   return {
-    agentRole: "build-agent",
+    agentRole: "work-agent",
     gitProviders: [],
     mergeModes: ["auto-merge-if-eligible", "manual-merge"],
     stages: [
@@ -6076,7 +6076,7 @@ function defaultBuildAgentExecutionPipeline(): ExecutionPipeline {
         stageId: "writeback-done",
       },
     ],
-    version: "build-agent-execution-pipeline.v1",
+    version: "work-agent-execution-pipeline.v1",
   };
 }
 
@@ -6091,7 +6091,7 @@ function inputIssueToV1Issue(issue: InputIssue, issueStatusIndex: IssueStatusInd
   const indexed = issueStatusIndex?.issues.find((item) => item.issueId === issue.issueId);
   const displayStatus = indexed?.displayStatus ?? issue.displayStatus;
   const issueCategory = issue.issueCategory ?? "spec";
-  const requiredAgentRole = issue.requiredAgentRole ?? (issueCategory === "audit" ? "audit-agent" : "build-agent");
+  const requiredAgentRole = issue.requiredAgentRole ?? (issueCategory === "audit" ? "audit-agent" : "work-agent");
   const auditId = issue.audit?.auditId ?? (issueCategory === "audit" ? issue.issueId : null);
   const auditOutputDir = issue.audit?.auditOutputDir ?? (auditId ? `.agentflow/audit/${auditId}` : null);
   const expectedOutputs = normalizeExpectedOutputs(
@@ -6592,13 +6592,16 @@ function agentRoleLabelZh(role?: string | null) {
   const labels: Record<string, string> = {
     "audit-agent": "审计助手",
     "build-agent": "执行助手",
+    "delivery-agent": "交付助手",
     "spec-agent": "需求助手",
+    "work-agent": "执行助手",
   };
   return labels[role ?? ""] ?? "执行助手";
 }
 
 function codexRoleGuideForRole(role?: string | null) {
-  return codexRoleGuides.find((guide) => guide.role === role) ?? codexRoleGuides[1];
+  const normalizedRole = role === "build-agent" ? "work-agent" : role;
+  return codexRoleGuides.find((guide) => guide.role === normalizedRole) ?? codexRoleGuides[1];
 }
 
 function codexThreadNameForRole(role?: string | null) {
@@ -6613,7 +6616,7 @@ function agentInstructionForTask(task: V1Issue) {
   if (task.requiredAgentRole === "audit-agent") {
     return "你现在是 Audit Agent，只能执行 audit issue。如果你不是 audit-agent，请停止执行。不要修改源码、不要生成 patch、不要创建远程 PR/MR。";
   }
-  return "你现在是 Build Agent，只能执行 spec issue。如果你不是 build-agent，请停止执行。AgentFlow 当前 spec issue 是唯一任务源；handoff package 只是这份 issue 的派生快照；executionPipeline 只是这份 issue 合同里的一部分，不是独立任务源。不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按执行前置检测、测试设计、执行、沙箱验证、创建 PR/MR、合并 PR/MR、写回 Done 的流程执行。先调用 `agentflow build-agent start --issue-id <issue-id>` 创建当前 run；没有 run 就不能开工。完成本地验证后，调用 `agentflow build-agent prepare-review --request <completion-request.json>` 生成 result、evidence、delivery，并把 issue 推到 in_review。PR/MR 创建或合并后，调用 `agentflow build-agent write-merge-proof --issue-id <issue-id> --run-id <run-id> --provider <github|gitlab> --merge-mode <auto-merge-if-eligible|manual-merge> [--remote-url <url>] [--merged]` 记录 review 状态。PR/MR 合并后，再调用 `agentflow build-agent complete --request <completion-request.json>` 写回 Done。不要手写 `.agentflow/**`，但这不等于不能调用 AgentFlow 官方命令推进 loop、补生成 Context Pack 或写回完成结果。写回 Done 前必须确认当前 AgentFlow CLI 支持这些 build-agent 命令；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
+  return "你现在是 Work Agent，Build Agent 只是当前 provider-facing 兼容别名。你只能执行 spec issue。如果你不是 work-agent 或 build-agent，请停止执行。AgentFlow 当前 spec issue 是唯一任务源；handoff package 只是这份 issue 的派生快照；executionPipeline 只是这份 issue 合同里的一部分，不是独立任务源。不要把外部 issue、任务、计划、队列、线程或工具状态当成任务源，也不要用外部状态拆分、重排或推进 AgentFlow 任务。按执行前置检测、测试设计、执行、沙箱验证、创建 PR/MR、合并 PR/MR、写回 Done 的流程执行。先调用 `agentflow build-agent start --issue-id <issue-id>` 创建当前 run；没有 run 就不能开工。完成本地验证后，调用 `agentflow build-agent prepare-review --request <completion-request.json>` 生成 result、evidence、delivery，并把 issue 推到 in_review。PR/MR 创建或合并后，调用 `agentflow build-agent write-merge-proof --issue-id <issue-id> --run-id <run-id> --provider <github|gitlab> --merge-mode <auto-merge-if-eligible|manual-merge> [--remote-url <url>] [--merged]` 记录 review 状态。PR/MR 合并后，再调用 `agentflow build-agent complete --request <completion-request.json>` 写回 Done。不要手写 `.agentflow/**`，但这不等于不能调用 AgentFlow 官方命令推进 loop、补生成 Context Pack 或写回完成结果。写回 Done 前必须确认当前 AgentFlow CLI 支持这些 build-agent 命令；不要直接复用过期 target/release/agentflow。不要写 audit report、findings、evidence-map 或 traceability。";
 }
 
 function taskAuditDescriptionItems(task: V1Issue): Array<[string, string]> {
@@ -7190,7 +7193,10 @@ function hasCompleteBuildAgentPipeline(task: V1Issue) {
   if (!pipeline) {
     return false;
   }
-  if (pipeline.version !== "build-agent-execution-pipeline.v1" || pipeline.agentRole !== "build-agent") {
+  const legacyVersion = pipeline.version === "build-agent-execution-pipeline.v1";
+  const canonicalVersion = pipeline.version === "work-agent-execution-pipeline.v1";
+  const compatibleRole = pipeline.agentRole === "work-agent" || pipeline.agentRole === "build-agent";
+  if ((!legacyVersion && !canonicalVersion) || !compatibleRole) {
     return false;
   }
   return buildAgentPipelineStageIds.every((stageId) =>
@@ -7634,7 +7640,7 @@ function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
     exitCode: 0,
     label: command,
     program: command.split(" ")[0] ?? command,
-    source: "build-agent",
+    source: "work-agent",
   }));
   const changedFileTemplates = task.allowedFiles.slice(0, 3).map((path) => ({
     changeType: "modified",
@@ -7706,7 +7712,7 @@ function buildCodexHandoff(task: V1Issue, agentLocale?: string | null) {
           issuePath: task.issuePath,
           priority: task.priority,
           projectId: task.projectId,
-          requiredAgentRole: task.requiredAgentRole ?? "build-agent",
+          requiredAgentRole: task.requiredAgentRole ?? "work-agent",
           sourceSpecId: task.sourceSpecId,
           sourceSpecPath: task.sourceSpecPath,
         };
@@ -7847,7 +7853,7 @@ function agentRoleRulesDocument() {
         writes: ["docs/requirements/**", ".agentflow/spec/**"],
       },
       {
-        agentRole: "build-agent",
+        agentRole: "work-agent",
         handlesIssueCategory: ["spec"],
         writes: [".agentflow/tasks/<issue-id>/runs/**", ".agentflow/tasks/<issue-id>/evidence/**", "PR/MR body", "CHANGELOG.md or release notes"],
       },

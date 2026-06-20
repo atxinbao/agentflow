@@ -164,7 +164,7 @@ function browserPreviewInputIssue(
     issueId,
     issueModel: options.issueModel ?? "direct",
     issueCategory,
-    requiredAgentRole: options.requiredAgentRole ?? (issueCategory === "audit" ? "audit-agent" : "build-agent"),
+    requiredAgentRole: options.requiredAgentRole ?? (issueCategory === "audit" ? "audit-agent" : "work-agent"),
     sourceSpecId: previewSpecId,
     projectId: options.projectId ?? null,
     title,
@@ -581,7 +581,7 @@ export function createBrowserPreviewTaskProjection(
     version: "task-projection.browser-preview",
     issueId,
     projectId: issue.projectId ?? null,
-    workflowRef: "build-agent.issue-loop.v1",
+    workflowRef: "work-agent.issue-loop.v1",
     currentState,
     displayStatus: currentState,
     currentTransition: browserPreviewTransitionForState(currentState),
@@ -890,7 +890,7 @@ function browserPreviewEventsForState(state: TaskTimelineItem["state"], index: n
   };
   return (eventTypes[state] ?? []).map((eventType, eventIndex) => ({
     actorKind: eventType.startsWith("agent.") ? "agent" : "system",
-    actorRole: eventType.startsWith("agent.") ? "build-agent" : "agentflow-loop",
+    actorRole: eventType.startsWith("agent.") ? "work-agent" : "agentflow-loop",
     artifactRefs: eventIndex === 0 ? browserPreviewLiveRefsForState(state, issue).slice(0, 1) : [],
     eventId: `browser-${issue.issueId}-${state}-${eventIndex + 1}`,
     eventType,
@@ -901,7 +901,7 @@ function browserPreviewEventsForState(state: TaskTimelineItem["state"], index: n
 
 function browserPreviewEventSummary(eventType: string) {
   const summaries: Record<string, string> = {
-    "agent.launch.requested": "已生成 Build Agent 启动请求。",
+    "agent.launch.requested": "已生成 Work Agent 启动请求。",
     "agent.session.running": "外部执行会话正在运行。",
     "context-pack.ready": "Context Pack 已就绪。",
     "issue.blocked": "任务进入阻断状态。",

@@ -26,6 +26,7 @@
 | [005-public-delivery-standard-v1.md](005-public-delivery-standard-v1.md) | 定义任务级与版本级公开交付模板、边界和 projection 输出 |
 | [006-release-runtime-v1.md](006-release-runtime-v1.md) | 定义 completion 之后的项目级 release gate、runtime、facts 和公开发布输出 |
 | [007-external-review-surface-v1.md](007-external-review-surface-v1.md) | 定义外部 reviewer 的统一阅读面、evidence index、audit summary 和 handoff package |
+| [008-runtime-terminology-convergence-v1.md](008-runtime-terminology-convergence-v1.md) | 定义 Work Agent / Build Agent、workflow ref、event、projection 的统一术语规则 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -38,8 +39,9 @@
 5. [005-public-delivery-standard-v1.md](005-public-delivery-standard-v1.md)
 6. [006-release-runtime-v1.md](006-release-runtime-v1.md)
 7. [007-external-review-surface-v1.md](007-external-review-surface-v1.md)
-8. [current-module-boundaries.md](current-module-boundaries.md)
-9. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+8. [008-runtime-terminology-convergence-v1.md](008-runtime-terminology-convergence-v1.md)
+9. [current-module-boundaries.md](current-module-boundaries.md)
+10. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 

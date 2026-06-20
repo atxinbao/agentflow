@@ -959,14 +959,14 @@ mod tests {
             .iter()
             .find(|event| event.event_type == AGENT_LAUNCH_CLAIMED)
             .unwrap();
-        assert_eq!(claimed.payload["requestedRole"], "build-agent");
+        assert_eq!(claimed.payload["requestedRole"], "work-agent");
         assert_eq!(claimed.payload["runtimeRole"], "work-agent");
         assert_eq!(claimed.payload["selectionStatus"], "ready");
         let created = events
             .iter()
             .find(|event| event.event_type == AGENT_SESSION_CREATED)
             .unwrap();
-        assert_eq!(created.payload["requestedRole"], "build-agent");
+        assert_eq!(created.payload["requestedRole"], "work-agent");
         assert_eq!(created.payload["runtimeRole"], "work-agent");
         assert_eq!(created.payload["selectionStatus"], "ready");
         let claimed_index = events

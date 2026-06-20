@@ -206,9 +206,9 @@ apiVersion: agentflow.dev/v1
 kind: TaskWorkflow
 flowType: work
 metadata:
-  name: build-agent.issue-loop
+  name: work-agent.issue-loop
   version: v1
-  title: Build Agent Issue Loop
+  title: Work Agent Issue Loop
 spec:
   initialState: backlog
   terminalStates:

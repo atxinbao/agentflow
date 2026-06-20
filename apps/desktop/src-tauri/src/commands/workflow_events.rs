@@ -508,7 +508,7 @@ mod tests {
             issue_id: issue_id.to_string(),
             issue_path: format!(".agentflow/spec/issues/{issue_id}.json"),
             issue_category: "spec".to_string(),
-            required_agent_role: "build-agent".to_string(),
+            required_agent_role: "work-agent".to_string(),
             display_status: display_status.to_string(),
             title: "准备上下文包".to_string(),
             objective: "为任务生成 Panel Context Pack。".to_string(),

@@ -15,6 +15,13 @@ pub fn load_workflow_yaml(path: impl AsRef<Path>) -> Result<WorkflowDefinition> 
     parse_workflow_yaml(&raw).with_context(|| format!("load {}", path.display()))
 }
 
+fn canonical_workflow_name(name: &str) -> &str {
+    match name.trim() {
+        "build-agent.issue-loop" => "work-agent.issue-loop",
+        other => other,
+    }
+}
+
 pub fn workflow_name_from_ref(workflow_ref: &str) -> Result<String> {
     let Some((name, version)) = workflow_ref.rsplit_once('@') else {
         anyhow::bail!("workflowRef must use <workflow-name>@<version>, found {workflow_ref}");
@@ -22,7 +29,7 @@ pub fn workflow_name_from_ref(workflow_ref: &str) -> Result<String> {
     if name.trim().is_empty() || version.trim().is_empty() {
         anyhow::bail!("workflowRef must use <workflow-name>@<version>, found {workflow_ref}");
     }
-    Ok(name.to_string())
+    Ok(canonical_workflow_name(name).to_string())
 }
 
 pub fn workflow_path_for_ref(
@@ -46,7 +53,17 @@ mod tests {
 
         assert_eq!(
             path,
-            PathBuf::from("/project/.agentflow/workflows/build-agent.issue-loop.yaml")
+            PathBuf::from("/project/.agentflow/workflows/work-agent.issue-loop.yaml")
+        );
+    }
+
+    #[test]
+    fn workflow_ref_preserves_canonical_work_agent_name() {
+        let path = workflow_path_for_ref("/project", "work-agent.issue-loop@v1").unwrap();
+
+        assert_eq!(
+            path,
+            PathBuf::from("/project/.agentflow/workflows/work-agent.issue-loop.yaml")
         );
     }
 

@@ -26,7 +26,7 @@ pub fn update_state_session(
         active_role: update
             .active_role
             .or_else(|| existing.as_ref().map(|value| value.active_role.clone()))
-            .unwrap_or_else(|| "Build Agent".to_string()),
+            .unwrap_or_else(|| "Work Agent".to_string()),
         active_issue_id: update.active_issue_id.or_else(|| {
             existing
                 .as_ref()

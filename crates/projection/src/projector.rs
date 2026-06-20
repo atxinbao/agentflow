@@ -1762,7 +1762,7 @@ fn fallback_session_status(event_type: &str) -> Option<String> {
 fn event_summary(event: &TaskEvent) -> String {
     match event.event_type.as_str() {
         "issue.scheduled" => "任务进入待执行队列。".to_string(),
-        "agent.launch.requested" => "已生成 Build Agent 启动请求。".to_string(),
+        "agent.launch.requested" => "已生成 Work Agent 启动请求。".to_string(),
         "agent.session.created" => "外部执行会话已创建。".to_string(),
         "agent.session.resumed" => "外部执行会话已恢复。".to_string(),
         "agent.session.running" => "外部执行会话正在运行。".to_string(),

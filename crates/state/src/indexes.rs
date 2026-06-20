@@ -213,7 +213,7 @@ mod tests {
             version: "task-projection.v2".to_string(),
             issue_id: "iss-001".to_string(),
             project_id: None,
-            workflow_ref: "build-agent.issue-loop@v1".to_string(),
+            workflow_ref: "work-agent.issue-loop@v1".to_string(),
             current_state: state.to_string(),
             display_status: state.to_string(),
             current_transition: None,
