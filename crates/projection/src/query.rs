@@ -141,6 +141,7 @@ pub struct SpecLoopStageView {
     pub path: String,
     pub status: String,
     pub authority: String,
+    pub authority_layer: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_state: Option<String>,
     #[serde(default)]
@@ -151,6 +152,14 @@ pub struct SpecLoopStageView {
     pub evidence_refs: Vec<String>,
     pub summary: String,
     pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopAuthorityLayerView {
+    pub authority_layer: String,
+    pub path: String,
+    pub summary: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -211,6 +220,8 @@ pub struct SpecLoopView {
     pub materialized_issue_ids: Vec<String>,
     #[serde(default)]
     pub stages: Vec<SpecLoopStageView>,
+    #[serde(default)]
+    pub authority_layers: Vec<SpecLoopAuthorityLayerView>,
     #[serde(default)]
     pub traceability: Vec<SpecLoopTraceabilityView>,
     #[serde(default)]
@@ -471,12 +482,22 @@ pub fn get_spec_loop_view(
                 path: stage.path,
                 status: stage.status,
                 authority: stage.authority,
+                authority_layer: stage.authority_layer,
                 current_state: stage.current_state,
                 input_refs: stage.input_refs,
                 output_refs: stage.output_refs,
                 evidence_refs: stage.evidence_refs,
                 summary: stage.summary,
                 updated_at: stage.updated_at,
+            })
+            .collect(),
+        authority_layers: projection
+            .authority_layers
+            .into_iter()
+            .map(|entry| SpecLoopAuthorityLayerView {
+                authority_layer: entry.authority_layer,
+                path: entry.path,
+                summary: entry.summary,
             })
             .collect(),
         traceability: projection
@@ -1374,6 +1395,10 @@ mod tests {
             ".agentflow/spec/requirements/041-spec-loop-view/manifest.json"
         );
         assert_eq!(view.stages.len(), 8);
+        assert!(view
+            .stages
+            .iter()
+            .all(|stage| stage.authority_layer == "preview-artifact"));
         assert_eq!(
             view.stages
                 .iter()
@@ -1394,6 +1419,28 @@ mod tests {
             view.materialized_project_id.as_deref(),
             Some("project-preview")
         );
+        assert!(view.authority_layers.iter().any(|entry| {
+            entry.authority_layer == "preview-artifact"
+                && entry.path == ".agentflow/spec/requirements/041-spec-loop-view"
+        }));
+        assert!(view.authority_layers.iter().any(|entry| {
+            entry.authority_layer == "project-authority"
+                && entry.path == ".agentflow/spec/projects/project-preview.json"
+        }));
+        assert_eq!(
+            view.authority_layers
+                .iter()
+                .filter(|entry| {
+                    entry.authority_layer == "issue-authority"
+                        && entry.path.starts_with(".agentflow/spec/issues/")
+                })
+                .count(),
+            view.materialized_issue_ids.len()
+        );
+        assert!(view.authority_layers.iter().any(|entry| {
+            entry.authority_layer == "derived-projection"
+                && entry.path == ".agentflow/projections/spec-loops/041-spec-loop-view.json"
+        }));
         assert_eq!(
             view.runtime_action_proposals.len(),
             1 + view.materialized_issue_ids.len()

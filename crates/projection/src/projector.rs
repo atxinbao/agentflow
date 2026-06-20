@@ -256,28 +256,41 @@ fn project_spec_loop(
 ) -> Result<SpecLoopProjection> {
     let manifest = read_spec_loop_requirement_manifest(root, &preview.requirement_id)?;
     let stage_artifacts = list_spec_loop_stage_artifacts(root, &preview.requirement_id)?;
-    let stage_paths = manifest
+    let stage_entries = manifest
         .stage_files
         .iter()
-        .map(|entry| (entry.stage.as_str().to_string(), entry.path.clone()))
+        .map(|entry| (entry.stage.as_str().to_string(), entry))
         .collect::<HashMap<_, _>>();
 
     let stages = stage_artifacts
         .iter()
         .map(|artifact| SpecLoopStageProjection {
             stage: artifact.stage.as_str().to_string(),
-            path: stage_paths
+            path: stage_entries
                 .get(artifact.stage.as_str())
-                .cloned()
+                .map(|entry| entry.path.clone())
                 .unwrap_or_else(|| artifact.stage.as_str().to_string()),
             status: artifact.status.as_str().to_string(),
             authority: artifact.authority.as_str().to_string(),
+            authority_layer: stage_entries
+                .get(artifact.stage.as_str())
+                .map(|entry| entry.authority_layer.as_str().to_string())
+                .unwrap_or_else(|| "preview-artifact".to_string()),
             current_state: artifact.current_state.clone(),
             input_refs: artifact.input_refs.clone(),
             output_refs: artifact.output_refs.clone(),
             evidence_refs: artifact.evidence_refs.clone(),
             summary: artifact.summary.clone(),
             updated_at: artifact.updated_at,
+        })
+        .collect::<Vec<_>>();
+    let authority_layers = manifest
+        .authority_layers
+        .iter()
+        .map(|entry| crate::model::SpecLoopAuthorityLayerProjection {
+            authority_layer: entry.authority_layer.as_str().to_string(),
+            path: entry.path.clone(),
+            summary: entry.summary.clone(),
         })
         .collect::<Vec<_>>();
 
@@ -304,6 +317,7 @@ fn project_spec_loop(
         materialized_project_id: preview.materialized_project_id.clone(),
         materialized_issue_ids: preview.materialized_issue_ids.clone(),
         stages,
+        authority_layers,
         traceability,
         runtime_action_proposals,
         updated_at: preview.updated_at,

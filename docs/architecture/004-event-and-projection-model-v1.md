@@ -155,6 +155,30 @@ Projection 至少要重建三类视图：
 - latest command / log snippet
 - retry / failure hints
 
+## Spec Authority Layers
+
+Spec Loop 需要把文件层 authority 和 projection 层明确分开：
+
+1. `preview-artifact`
+   - 路径：`.agentflow/spec/requirements/<requirement-id>/**`
+   - 含义：intake / preview / confirmation / materialization 等运行期产物。
+   - 约束：这些文件用于追踪阶段和确认过程，不是最终 authority。
+
+2. `project-authority`
+   - 路径：`.agentflow/spec/projects/<project-id>.json`
+   - 含义：Project 的正式 authority。
+
+3. `issue-authority`
+   - 路径：`.agentflow/spec/issues/<issue-id>.json`
+   - 含义：Issue 的正式 authority。
+
+4. `derived-projection`
+   - 路径：`.agentflow/projections/**`
+   - 含义：只读派生视图，供 Desktop / CLI / reviewer 消费。
+   - 约束：Projection 不能被误认为 authority，也不能直接驱动写回。
+
+Spec Loop manifest 必须把这些层级直接写出来，让 reviewer 不需要猜目录语义。
+
 ## UI 展示语义
 
 页面展示应该固定成三种语义：
