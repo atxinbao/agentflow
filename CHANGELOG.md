@@ -1,5 +1,88 @@
 # Changelog
 
+## 0.5.1 - 2026-06-20
+
+执行者：Codex
+
+AgentFlow 0.5.1 是一次 release documentation closeout hotfix。这个版本不改运行时能力，只修正文档与 release 事实之间的冲突，补齐已发布版本的 closeout 记录。
+
+### Included
+
+- 为 `0.4.0` 和 `0.5.0` 补齐正式 `CHANGELOG` 条目，避免 release tag 与仓库主线文档脱节。
+- 将 `docs/v0.4.0/README.md` 和 `docs/v0.5.0/README.md` 从 planning draft 收口为 released baseline / release closeout。
+- 更新 `docs/README.md`，明确 `v0.4.0/` 和 `v0.5.0/` 是已发布版本基线，不再要求先转成草案再视作有效事实。
+- 对齐 `docs/**` 与 GitHub Release、`.agentflow/spec/**` runtime contract 的口径，消除文档层双轨表述。
+
+### Architecture
+
+- 已发布版本的 closeout 事实以 `CHANGELOG.md`、对应 `docs/vX.Y.Z/**`、GitHub Release notes 和通过的 release gate 为准。
+- 后续新版本需求仍然进入 `docs/requirements/**`；运行时 authority 仍然以 `.agentflow/spec/**` 和正式 runtime facts 为准。
+- 版本目录不再混用“规划草案”和“已发布基线”两种状态表达。
+
+### Validation
+
+- `git diff --check`
+
+## 0.5.0 - 2026-06-20
+
+执行者：Codex
+
+AgentFlow 0.5.0 将系统从 Runtime Foundation 继续推进到 Spec Loop Productization。这个版本的重点不是再扩展执行面，而是把需求理解链路正式文件化、可追踪化，并把它稳定接到 Runtime Action Proposal。
+
+### Included
+
+- Spec Loop Filesystem Contract 正式落地：`intake / classification / context / boundary / route / preview / confirmation / materialization` 8 个阶段都有文件合同。
+- Requirement Intake Normalizer、Classifier、Context Resolver、Boundary Checker、Route Decider、Preview Generator、Confirmation Gate、Spec Materializer 全链打通。
+- Spec Materialization 不再只是写 project / issue；现在会同步生成 Spec-to-Action Proposal Bridge，证明 confirmed preview 可以进入 Runtime Foundation。
+- Projection / Query 面新增 Spec Loop 专用只读视图，可统一读取阶段状态、文件链路、traceability 和 runtime action proposal 摘要。
+- Acceptance 覆盖主链闭环：`Raw Human Request -> Runtime Action Proposal`，并验证文件链路和 traceability，不依赖人工点击。
+
+### Architecture
+
+- `docs/v0.5.0/**` 定义本版 Spec Loop Productization 目标与任务收口。
+- `.agentflow/spec/requirements/<requirement-id>/**` 是 Spec Loop 阶段事实源。
+- `.agentflow/projections/spec-loops/<requirement-id>.json` 是 Spec Loop 只读 Projection。
+- `runtime-api` 继续作为 command / query 正式边界。
+- Runtime authority 仍然来自 Event Store 与 spec facts，Projection 只读，不回写 authority。
+
+### Validation
+
+- `cargo fmt --all --check`
+- `cargo test -p agentflow-projection`
+- `cargo test -p agentflow-runtime-api`
+- `cargo test -p agentflow-workflow-acceptance`
+- `cargo check --workspace`
+- `release-gate` on `main`
+- `git diff --check`
+
+## 0.4.0 - 2026-06-20
+
+执行者：Codex
+
+AgentFlow 0.4.0 完成了 `Definition-driven Runtime Foundation` 的正式收口，把运行时 authority、写前裁决、事件事实源和只读投影边界压成同一条主链。
+
+### Included
+
+- Ontology Registry、Action Contract、Agent Role Policy、Object State Machine 四层定义模型全部落地。
+- Action Arbitration 成为唯一写前裁决口，统一处理 command -> proposal -> accepted-event 的运行时入口。
+- Event Store、Projection、Runtime Command / Query API 正式收口，形成 Runtime Foundation 主干。
+- 运行时角色统一到 `work-agent` 主别名，`build-agent` 仅保留兼容映射。
+- Runtime Foundation closeout baseline 和 release-gate 验证链路完成，成为 `v0.5.0` Spec Loop 的正式地基。
+
+### Architecture
+
+- `Contract` 是 authority，不是 Agent。
+- `Arbitration` 是唯一写前裁决口。
+- `Event Store` 是唯一事实源。
+- `Projection` 只读，不回写 authority。
+- `Runtime API` 是对外正式 command / query 边界。
+
+### Validation
+
+- `release-gate` on PR
+- `release-gate` on `main`
+- closeout baseline in `docs/architecture/009-runtime-foundation-closeout-baseline-v1.md`
+
 ## 0.3.0 - 2026-06-19
 
 执行者：Codex

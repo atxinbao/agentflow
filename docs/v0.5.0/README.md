@@ -2,11 +2,11 @@
 
 日期：2026-06-20
 执行者：Codex
-状态：Version Planning Draft / 开发前置文档 / 不授权 Build Agent 执行
+状态：Released Baseline / Release Closeout / 已发布版本文档
 
 ## 1. Purpose
 
-本目录收口 AgentFlow `v0.5.0` 的版本开发任务规划。
+本目录收口 AgentFlow `v0.5.0` 的正式发布基线与版本任务结果。
 
 `v0.5.0` 的版本目标是：
 
@@ -31,31 +31,14 @@ Human Input
 
 ## 2. Boundary
 
-本目录当前只保存 `v0.5.0` 的版本任务规划。
+本目录当前保存 `v0.5.0` 的发布基线、任务范围和收口结论。
 
-不代表：
+它说明的是：
 
-- 已写入正式 `docs/requirements/**`；
-- 已写入 `.agentflow/spec/**`；
-- 已授权 Build Agent 执行；
-- 已进入 Build Loop 多 Agent 并发开发；
-- 已进入行业 Pack 或 UI Console 产品化。
-
-后续进入正式开发前，仍必须先生成：
-
-```text
-SPEC Draft Preview
-Project Preview
-Issues Preview
-```
-
-经人类确认后，才允许写：
-
-```text
-docs/requirements/**
-.agentflow/spec/projects/**
-.agentflow/spec/issues/**
-```
+- `v0.5.0` 已经发布；
+- Spec Loop 主链已经正式落地；
+- `.agentflow/spec/requirements/<requirement-id>/**` 已经成为当前版本的文件化阶段合同事实源；
+- 当前文档用于 release closeout、版本回顾和后续版本衔接。
 
 ## 3. Reading Order
 
@@ -63,7 +46,7 @@ docs/requirements/**
 
 ## 4. Version Scope
 
-`v0.5.0` 只做：
+`v0.5.0` 已完成：
 
 - Spec Loop Filesystem Contract；
 - Requirement Intake Normalizer；
@@ -77,7 +60,7 @@ docs/requirements/**
 - Spec-to-Action Proposal Bridge；
 - Spec Loop Projection and Acceptance。
 
-`v0.5.0` 不做：
+`v0.5.0` 未覆盖：
 
 - Build Loop 多 Agent 并发执行；
 - 行业客户端壳；
@@ -88,7 +71,7 @@ docs/requirements/**
 
 ## 5. Filesystem-first Constraint
 
-`v0.5.0` 现在补一个更硬的约束：
+`v0.5.0` 最终落地的硬约束：
 
 ```text
 Spec Loop 不能只是一组内存模块。
@@ -102,11 +85,11 @@ intake / classification / context / boundary / route / preview / confirmation
 这些阶段的输入、输出、证据、状态分别落在哪里？
 ```
 
-如果没有这层文件合同，后续实现会退化成一组函数和结构体，能跑，但看不出 AgentFlow 的 filesystem-first 架构。
+当前版本已经把这层文件合同落到 `.agentflow/spec/requirements/<requirement-id>/**`，后续版本继续在这条 filesystem-first 基线上推进。
 
-## 6. First Executable Candidate
+## 6. Historical Execution Entry
 
-第一条可执行任务应从：
+本版执行链当时从：
 
 ```text
 AF-SPEC-001 Requirement Intake Normalizer
@@ -114,8 +97,23 @@ AF-SPEC-001 Requirement Intake Normalizer
 
 开始。
 
-原因要进一步收紧：
+原因是：
 
 - `AF-SPEC-001` 不再只是 Normalizer；
 - 它是整条 Spec Loop 的文件合同入口；
 - 没有它，Classifier、Context Resolver、Boundary Checker、Route Decider、Preview Generator 都会变成散乱判断。
+
+## 7. Release Closeout
+
+`v0.5.0` 已发布，正式 release 事实：
+
+- tag：`v0.5.0`
+- release：`AgentFlow v0.5.0`
+- 发布入口：[GitHub Release](https://github.com/atxinbao/agentflow/releases/tag/v0.5.0)
+
+本版的 release closeout 以以下事实为准：
+
+- `CHANGELOG.md`
+- `docs/v0.5.0/**`
+- GitHub Release notes
+- 当前 `main` 上通过的 `release-gate`

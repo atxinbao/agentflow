@@ -2,11 +2,11 @@
 
 日期：2026-06-20
 执行者：Codex
-状态：Version Planning Draft / 非执行需求 / 不授权 Build Agent 执行
+状态：Released Baseline / Release Closeout / 已发布版本文档
 
 ## 1. Purpose
 
-本目录收口 AgentFlow `v0.4.0` 的版本前置文档。
+本目录收口 AgentFlow `v0.4.0` 的正式发布基线与版本 closeout 文档。
 
 `v0.4.0` 的版本目标是：
 
@@ -29,14 +29,13 @@ Runtime Command
 
 ## 2. Boundary
 
-本目录当前只保存版本规划和技术设计草案。
+本目录当前保存 Runtime Foundation 已发布版本的技术基线、设计来源和 release closeout 事实。
 
-不代表：
+它不再表示“未进入实现的 planning draft”，而是：
 
-- 已写入正式 `docs/requirements/**`；
-- 已写入 `.agentflow/spec/**`；
-- 已授权 Build Agent 执行；
-- 已进入当前 `v0.3.x` 审计或修复流。
+- `v0.4.0` 已发布；
+- Runtime Foundation 已收口；
+- 这些文档现在用于版本回顾、架构追溯和后续版本衔接。
 
 ## 3. Reading Order
 
@@ -70,7 +69,7 @@ Runtime Command
 
 ## 4. Version Scope
 
-`v0.4.0` 只做：
+`v0.4.0` 已完成：
 
 - Project Ontology Registry；
 - Action Contract；
@@ -83,7 +82,7 @@ Runtime Command
 - migration alignment；
 - integration closeout。
 
-`v0.4.0` 不做：
+`v0.4.0` 未覆盖：
 
 - 行业客户端壳；
 - Figma/UI 产品化；
@@ -92,20 +91,17 @@ Runtime Command
 - Domain Pack 市场；
 - 完整多 Agent 并发调度平台。
 
-## 5. Next Gate
+## 5. Release Closeout
 
-下一步如果进入正式开发，必须先生成：
+`v0.4.0` 的正式 release 事实：
 
-```text
-SPEC Draft Preview
-Project Preview
-Issues Preview
-```
+- tag：`v0.4.0`
+- release：`AgentFlow v0.4.0`
+- 发布入口：[GitHub Release](https://github.com/atxinbao/agentflow/releases/tag/v0.4.0)
 
-经人类确认后，才允许写：
+当前版本 closeout 以以下事实为准：
 
-```text
-docs/requirements/**
-.agentflow/spec/projects/**
-.agentflow/spec/issues/**
-```
+- `CHANGELOG.md`
+- `docs/v0.4.0/**`
+- `docs/architecture/009-runtime-foundation-closeout-baseline-v1.md`
+- GitHub Release notes
