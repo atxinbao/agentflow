@@ -1,15 +1,28 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
+use std::{
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use agentflow_action_arbitration::{
-    arbitrate_action, ArbitrationContext, ArbitrationDecisionStatus, ArbitrationRequest,
-    DefinitionVersions,
+    arbitrate_action, AcceptedAction, ArbitrationContext, ArbitrationDecision,
+    ArbitrationDecisionStatus, ArbitrationRequest, DefinitionVersions,
 };
 use agentflow_action_contract::{core_action_contract_registry, ActionRef, ActionSourceSurface};
+use agentflow_event_store::{append_accepted_action_event, AcceptedActionAppendContext};
 use agentflow_object_state::core_object_state_registry;
 use agentflow_ontology::core_ontology_registry;
 use agentflow_role_policy::core_role_policy_registry;
+use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
+use agentflow_workflow_runtime::{
+    prepare_runtime_workspace, write_runtime_accepted_action_fact, write_runtime_command_fact,
+    write_runtime_decision_fact, write_runtime_proposal_fact, RuntimeAcceptedActionFact,
+    RuntimeCommandFact, RuntimeCommandValidationFact, RuntimeDecisionFact, RuntimeProposalFact,
+    RuntimeQueryHintFact, RUNTIME_ACCEPTED_ACTION_FACT_VERSION, RUNTIME_COMMAND_FACT_VERSION,
+    RUNTIME_DECISION_FACT_VERSION, RUNTIME_PROPOSAL_FACT_VERSION,
+};
 
 use crate::errors::{RuntimeCommandError, RuntimeCommandErrorCode};
 use crate::mapping::{
@@ -92,22 +105,46 @@ pub fn validate_runtime_command(request: &RuntimeCommandRequest) -> RuntimeComma
 }
 
 pub fn execute_command_via_arbitration(
+    project_root: impl AsRef<Path>,
     request: &RuntimeCommandRequest,
 ) -> Result<RuntimeCommandResponse> {
     let context = build_core_arbitration_context()?;
-    execute_command_via_arbitration_with_context(request, &context)
+    execute_command_via_arbitration_with_context(project_root, request, &context)
 }
 
 pub fn execute_command_via_arbitration_with_context(
+    project_root: impl AsRef<Path>,
     request: &RuntimeCommandRequest,
     context: &ArbitrationContext,
 ) -> Result<RuntimeCommandResponse> {
+    let root = project_root.as_ref();
+    prepare_runtime_workspace(root)?;
     let validation = validate_runtime_command(request);
     let proposal_id = format!("proposal-{}", request.command_id);
     let next_query_hint = Some(runtime_query_hint_for_command(request));
+    let recorded_at = unix_timestamp_seconds();
+
+    write_runtime_command_fact(
+        root,
+        &RuntimeCommandFact {
+            version: RUNTIME_COMMAND_FACT_VERSION.to_string(),
+            command_id: request.command_id.clone(),
+            command_type: request.command_type.clone(),
+            source_surface: request.source_surface.clone(),
+            actor_role: request.actor_role.clone(),
+            target_object_ref: request.target_object_ref.clone(),
+            input: request.input.clone(),
+            evidence_refs: request.evidence_refs.clone(),
+            artifact_refs: request.artifact_refs.clone(),
+            idempotency_key: request.idempotency_key.clone(),
+            created_at: request.created_at.clone(),
+            recorded_at,
+            validation: build_validation_fact(&validation),
+        },
+    )?;
 
     if !validation.valid {
-        return Ok(RuntimeCommandResponse {
+        let response = RuntimeCommandResponse {
             version: RUNTIME_COMMAND_API_VERSION.to_string(),
             command_id: request.command_id.clone(),
             proposal_id,
@@ -118,10 +155,43 @@ pub fn execute_command_via_arbitration_with_context(
             human_decision_request: None,
             next_query_hint,
             correlation_id: request.command_id.clone(),
-        });
+        };
+        write_runtime_decision_fact(
+            root,
+            &build_runtime_decision_fact(
+                request,
+                response.proposal_id.as_str(),
+                None,
+                &response,
+                None,
+                recorded_at,
+            ),
+        )?;
+        return Ok(response);
     }
 
     let proposal = map_command_to_action_proposal(request)?;
+    write_runtime_proposal_fact(
+        root,
+        &RuntimeProposalFact {
+            version: RUNTIME_PROPOSAL_FACT_VERSION.to_string(),
+            command_id: request.command_id.clone(),
+            proposal_id: proposal.proposal_id.clone(),
+            action_type: proposal.action_type.clone(),
+            actor_role: proposal.actor_role.clone(),
+            source_surface: proposal.source_surface.clone(),
+            target_object_ref: proposal.target_object_ref.clone(),
+            input: proposal.input.clone(),
+            evidence_refs: proposal.evidence_refs.clone(),
+            artifact_refs: proposal.artifact_refs.clone(),
+            reason: proposal.reason.clone(),
+            expected_effects: proposal.expected_effects.clone(),
+            ontology_version: proposal.ontology_version.clone(),
+            contract_version: proposal.contract_version.clone(),
+            created_at: proposal.created_at.clone(),
+            recorded_at,
+        },
+    )?;
     let arbitration_request = ArbitrationRequest {
         request_id: request.command_id.clone(),
         proposal: proposal.clone(),
@@ -154,9 +224,41 @@ pub fn execute_command_via_arbitration_with_context(
     let response = response_from_arbitration_decision(
         request,
         &proposal.proposal_id,
-        decision,
+        &decision,
         next_query_hint,
     );
+
+    let mut accepted_action_event = None;
+    if let Some(accepted_action) = decision.accepted_action.as_ref() {
+        accepted_action_event = Some(append_runtime_accepted_action_event(
+            root,
+            request,
+            &proposal,
+            accepted_action,
+            &decision,
+            context,
+        )?);
+        write_runtime_accepted_action_fact(
+            root,
+            &build_runtime_accepted_action_fact(
+                request,
+                accepted_action,
+                accepted_action_event.as_ref(),
+                recorded_at,
+            ),
+        )?;
+    }
+    write_runtime_decision_fact(
+        root,
+        &build_runtime_decision_fact(
+            request,
+            &proposal.proposal_id,
+            Some(&decision),
+            &response,
+            accepted_action_event,
+            recorded_at,
+        ),
+    )?;
     Ok(response)
 }
 
@@ -177,7 +279,7 @@ pub(crate) fn build_core_arbitration_context() -> Result<ArbitrationContext> {
 fn response_from_arbitration_decision(
     request: &RuntimeCommandRequest,
     proposal_id: &str,
-    decision: agentflow_action_arbitration::ArbitrationDecision,
+    decision: &ArbitrationDecision,
     next_query_hint: Option<crate::mapping::RuntimeQueryHint>,
 ) -> RuntimeCommandResponse {
     match decision.status {
@@ -204,11 +306,11 @@ fn response_from_arbitration_decision(
             decision: RuntimeCommandDecision::HumanDecisionRequired,
             accepted_action_id: None,
             rejected_reasons: Vec::new(),
-            human_decision_request: decision.required_human_decision.map(|required| {
+            human_decision_request: decision.required_human_decision.as_ref().map(|required| {
                 RuntimeHumanDecisionRequest {
-                    question: required.question,
-                    allowed_responses: required.allowed_responses,
-                    required_evidence_type: required.required_evidence_type,
+                    question: required.question.clone(),
+                    allowed_responses: required.allowed_responses.clone(),
+                    required_evidence_type: required.required_evidence_type.clone(),
                 }
             }),
             next_query_hint,
@@ -225,12 +327,12 @@ fn response_from_arbitration_decision(
             accepted_action_id: None,
             rejected_reasons: decision
                 .rejected_reasons
-                .into_iter()
+                .iter()
                 .map(|reason| {
                     RuntimeCommandError::new(
                         RuntimeCommandErrorCode::ArbitrationRejected,
-                        reason.message,
-                        reason.detail,
+                        reason.message.clone(),
+                        reason.detail.clone(),
                     )
                 })
                 .collect(),
@@ -241,14 +343,303 @@ fn response_from_arbitration_decision(
     }
 }
 
+fn build_validation_fact(report: &RuntimeCommandValidationReport) -> RuntimeCommandValidationFact {
+    RuntimeCommandValidationFact {
+        valid: report.valid,
+        normalized_action_type: report.normalized_action_type.clone(),
+        errors: report
+            .errors
+            .iter()
+            .map(|error| error.message.clone())
+            .collect(),
+        warnings: report.warnings.clone(),
+    }
+}
+
+fn build_runtime_decision_fact(
+    request: &RuntimeCommandRequest,
+    proposal_id: &str,
+    decision: Option<&ArbitrationDecision>,
+    response: &RuntimeCommandResponse,
+    accepted_action_event: Option<(String, String)>,
+    recorded_at: u64,
+) -> RuntimeDecisionFact {
+    RuntimeDecisionFact {
+        version: RUNTIME_DECISION_FACT_VERSION.to_string(),
+        command_id: request.command_id.clone(),
+        proposal_id: proposal_id.to_string(),
+        decision_id: decision.map(|value| value.decision_id.clone()),
+        status: runtime_command_status_str(&response.status).to_string(),
+        decision: runtime_command_decision_str(&response.decision).to_string(),
+        accepted_action_id: response.accepted_action_id.clone(),
+        rejected_reasons: response
+            .rejected_reasons
+            .iter()
+            .map(|reason| reason.message.clone())
+            .collect(),
+        human_decision_request: response
+            .human_decision_request
+            .as_ref()
+            .map(|request| request.question.clone()),
+        next_query_hint: response
+            .next_query_hint
+            .as_ref()
+            .map(|hint| RuntimeQueryHintFact {
+                view: hint.view.clone(),
+                target_id: hint.target_id.clone(),
+                reason: hint.reason.clone(),
+            }),
+        correlation_id: response.correlation_id.clone(),
+        would_emit_events: accepted_action_event
+            .as_ref()
+            .map(|(event_type, _)| vec![event_type.clone()])
+            .unwrap_or_else(|| {
+                decision
+                    .map(|value| value.would_emit_events.clone())
+                    .unwrap_or_default()
+            }),
+        recorded_at,
+    }
+}
+
+fn build_runtime_accepted_action_fact(
+    request: &RuntimeCommandRequest,
+    accepted_action: &AcceptedAction,
+    accepted_action_event: Option<&(String, String)>,
+    recorded_at: u64,
+) -> RuntimeAcceptedActionFact {
+    let mut event_id = None;
+    let mut event_path = None;
+    let mut event_type = None;
+    if let Some((kind, event)) = accepted_action_event {
+        event_type = Some(kind.clone());
+        event_id = Some(event.clone());
+        event_path = Some(format!(".agentflow/events/task-events/{}.json", event));
+    }
+
+    RuntimeAcceptedActionFact {
+        version: RUNTIME_ACCEPTED_ACTION_FACT_VERSION.to_string(),
+        command_id: request.command_id.clone(),
+        proposal_id: accepted_action.proposal_id.clone(),
+        accepted_action_id: accepted_action.accepted_action_id.clone(),
+        action_type: accepted_action.action_type.clone(),
+        actor_role: accepted_action.actor_role.clone(),
+        target_object_ref: accepted_action.target_object_ref.clone(),
+        from_state: accepted_action.from_state.clone(),
+        to_state: accepted_action.to_state.clone(),
+        evidence_refs: accepted_action.evidence_refs.clone(),
+        artifact_refs: accepted_action.artifact_refs.clone(),
+        expected_events: accepted_action.expected_events.clone(),
+        lock_plan: accepted_action.lock_plan.clone(),
+        definition_versions: accepted_action.definition_versions.clone(),
+        event_id,
+        event_path,
+        event_type,
+        recorded_at,
+    }
+}
+
+fn append_runtime_accepted_action_event(
+    project_root: &Path,
+    request: &RuntimeCommandRequest,
+    proposal: &agentflow_action_contract::ActionProposal,
+    accepted_action: &AcceptedAction,
+    decision: &ArbitrationDecision,
+    context: &ArbitrationContext,
+) -> Result<(String, String)> {
+    let contract = context
+        .action_contract_registry
+        .get_action_contract(&proposal.action_type, &proposal.contract_version)
+        .ok_or_else(|| anyhow::anyhow!("missing action contract {}", proposal.action_type))?;
+    let event_type = decision
+        .would_emit_events
+        .first()
+        .cloned()
+        .or_else(|| accepted_action.expected_events.first().cloned())
+        .unwrap_or_else(|| format!("{}Accepted", accepted_action.action_type));
+    let aggregate_type = contract
+        .expected_events
+        .first()
+        .and_then(|event| event.object_type.clone())
+        .or_else(|| contract.creates_object_type.clone())
+        .or_else(|| {
+            accepted_action
+                .target_object_ref
+                .as_ref()
+                .map(|target| target.object_type.clone())
+        })
+        .unwrap_or_else(|| "RuntimeCommand".to_string());
+    let aggregate_id =
+        resolve_runtime_aggregate_id(&aggregate_type, request, proposal, accepted_action);
+    let task_event = append_accepted_action_event(
+        project_root,
+        accepted_action,
+        AcceptedActionAppendContext {
+            flow_type: flow_type_for_object_type(&aggregate_type),
+            aggregate_type: aggregate_type.clone(),
+            aggregate_id: aggregate_id.clone(),
+            project_id: resolve_project_id(
+                &aggregate_type,
+                &aggregate_id,
+                request,
+                accepted_action,
+            ),
+            issue_id: resolve_issue_id(&aggregate_type, &aggregate_id, request, accepted_action),
+            run_id: resolve_run_id(&aggregate_type, &aggregate_id, request),
+            event_type: event_type.clone(),
+            authority_role: WorkflowAgentRole::parse_alias(&accepted_action.actor_role),
+            actor_kind: "runtime-api".to_string(),
+            correlation_id: request.command_id.clone(),
+            causation_id: Some(proposal.proposal_id.clone()),
+            occurred_at: Some(unix_timestamp_seconds()),
+            decision: Some("accepted".to_string()),
+            payload: json!({
+                "commandId": request.command_id,
+                "commandType": request.command_type,
+                "proposalId": proposal.proposal_id,
+                "acceptedActionId": accepted_action.accepted_action_id,
+                "targetObjectRef": accepted_action.target_object_ref,
+                "sourceSurface": request.source_surface,
+            }),
+        },
+    )?;
+    Ok((event_type, task_event.event_id))
+}
+
+fn resolve_runtime_aggregate_id(
+    aggregate_type: &str,
+    request: &RuntimeCommandRequest,
+    proposal: &agentflow_action_contract::ActionProposal,
+    accepted_action: &AcceptedAction,
+) -> String {
+    if let Some(target) = accepted_action.target_object_ref.as_ref() {
+        if target.object_type == aggregate_type {
+            return target.id.clone();
+        }
+    }
+    if let Some(target) = proposal.target_object_ref.as_ref() {
+        if target.object_type == aggregate_type {
+            return target.id.clone();
+        }
+    }
+    candidate_value_strings(&request.input, aggregate_type)
+        .or_else(|| value_string(&request.input, "id"))
+        .unwrap_or_else(|| request.command_id.clone())
+}
+
+fn resolve_project_id(
+    aggregate_type: &str,
+    aggregate_id: &str,
+    request: &RuntimeCommandRequest,
+    accepted_action: &AcceptedAction,
+) -> Option<String> {
+    if aggregate_type == "Project" {
+        return Some(aggregate_id.to_string());
+    }
+    if let Some(target) = accepted_action.target_object_ref.as_ref() {
+        if target.object_type == "Project" {
+            return Some(target.id.clone());
+        }
+    }
+    value_string(&request.input, "projectId")
+}
+
+fn resolve_issue_id(
+    aggregate_type: &str,
+    aggregate_id: &str,
+    request: &RuntimeCommandRequest,
+    accepted_action: &AcceptedAction,
+) -> Option<String> {
+    if aggregate_type == "Issue" {
+        return Some(aggregate_id.to_string());
+    }
+    if let Some(target) = accepted_action.target_object_ref.as_ref() {
+        if target.object_type == "Issue" {
+            return Some(target.id.clone());
+        }
+    }
+    value_string(&request.input, "issueId")
+}
+
+fn resolve_run_id(
+    aggregate_type: &str,
+    aggregate_id: &str,
+    request: &RuntimeCommandRequest,
+) -> Option<String> {
+    if aggregate_type == "Run" {
+        return Some(aggregate_id.to_string());
+    }
+    value_string(&request.input, "runId")
+}
+
+fn flow_type_for_object_type(object_type: &str) -> WorkflowFlowType {
+    match object_type {
+        "Project" | "Requirement" | "Spec" => WorkflowFlowType::Project,
+        "Issue" | "Run" => WorkflowFlowType::Work,
+        "Audit" | "Finding" => WorkflowFlowType::Audit,
+        "Release" | "Delivery" => WorkflowFlowType::Delivery,
+        _ => WorkflowFlowType::Work,
+    }
+}
+
+fn candidate_value_strings(input: &Value, object_type: &str) -> Option<String> {
+    let keys: &[&str] = match object_type {
+        "Project" => &["projectId", "id"],
+        "Issue" => &["issueId", "id"],
+        "Requirement" => &["requirementId", "id"],
+        "Spec" => &["specId", "id"],
+        "Run" => &["runId", "id"],
+        "Release" => &["releaseId", "id"],
+        "Delivery" => &["deliveryId", "id"],
+        "Audit" => &["auditId", "id"],
+        "Finding" => &["findingId", "id"],
+        _ => &["id"],
+    };
+    keys.iter().find_map(|key| value_string(input, key))
+}
+
+fn value_string(input: &Value, key: &str) -> Option<String> {
+    input.get(key).and_then(Value::as_str).map(str::to_string)
+}
+
+fn runtime_command_status_str(status: &RuntimeCommandStatus) -> &'static str {
+    match status {
+        RuntimeCommandStatus::Accepted => "accepted",
+        RuntimeCommandStatus::Rejected => "rejected",
+        RuntimeCommandStatus::HumanDecisionRequired => "human-decision-required",
+        RuntimeCommandStatus::InvalidCommand => "invalid-command",
+    }
+}
+
+fn runtime_command_decision_str(decision: &RuntimeCommandDecision) -> &'static str {
+    match decision {
+        RuntimeCommandDecision::Accepted => "accepted",
+        RuntimeCommandDecision::Rejected => "rejected",
+        RuntimeCommandDecision::HumanDecisionRequired => "human-decision-required",
+        RuntimeCommandDecision::InvalidCommand => "invalid-command",
+    }
+}
+
+fn unix_timestamp_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use tempfile::tempdir;
 
     use agentflow_action_arbitration::{
         AcceptedAction, ArbitrationDecision, ArbitrationDecisionStatus, DefinitionVersions,
         DependencyFact, EvidenceFact, HumanDecisionRequest, HumanDecisionResponseKind,
         ObjectLockPlan, StateFact,
+    };
+    use agentflow_workflow_runtime::{
+        load_runtime_accepted_action_fact, load_runtime_command_fact, load_runtime_decision_fact,
+        load_runtime_proposal_fact,
     };
 
     use super::{
@@ -284,13 +675,17 @@ mod tests {
 
     #[test]
     fn invalid_command_returns_invalid_command() {
+        let dir = tempdir().unwrap();
         let response = execute_command_via_arbitration_with_context(
+            dir.path(),
             &request("unknownCommand"),
             &build_core_arbitration_context().unwrap(),
         )
         .unwrap();
         assert_eq!(response.status, RuntimeCommandStatus::InvalidCommand);
         assert!(!response.rejected_reasons.is_empty());
+        let decision = load_runtime_decision_fact(dir.path(), &response.proposal_id).unwrap();
+        assert_eq!(decision.status, "invalid-command");
     }
 
     #[test]
@@ -299,7 +694,7 @@ mod tests {
         let response = response_from_arbitration_decision(
             &request,
             "proposal-cmd-submitRequirement",
-            ArbitrationDecision {
+            &ArbitrationDecision {
                 decision_id: "decision-cmd-submitRequirement".to_string(),
                 request_id: request.command_id.clone(),
                 proposal_id: "proposal-cmd-submitRequirement".to_string(),
@@ -350,7 +745,7 @@ mod tests {
         let response = response_from_arbitration_decision(
             &request,
             "proposal-cmd-approveSpec",
-            ArbitrationDecision {
+            &ArbitrationDecision {
                 decision_id: "decision-cmd-approveSpec".to_string(),
                 request_id: request.command_id.clone(),
                 proposal_id: "proposal-cmd-approveSpec".to_string(),
@@ -382,6 +777,7 @@ mod tests {
 
     #[test]
     fn rejected_reasons_propagate_from_arbitration() {
+        let dir = tempdir().unwrap();
         let mut request = request("submitEvidence");
         request.actor_role = "work-agent".to_string();
         request.target_object_ref = Some(target_ref("Run", "run-001"));
@@ -400,9 +796,16 @@ mod tests {
             reason: None,
         });
 
-        let response = execute_command_via_arbitration_with_context(&request, &context).unwrap();
+        let response =
+            execute_command_via_arbitration_with_context(dir.path(), &request, &context).unwrap();
         assert_eq!(response.status, RuntimeCommandStatus::Rejected);
         assert!(!response.rejected_reasons.is_empty());
+        assert!(load_runtime_command_fact(dir.path(), &request.command_id).is_ok());
+        assert!(load_runtime_proposal_fact(dir.path(), &response.proposal_id).is_ok());
+        assert!(load_runtime_decision_fact(dir.path(), &response.proposal_id).is_ok());
+        if let Some(accepted_action_id) = response.accepted_action_id.as_deref() {
+            assert!(load_runtime_accepted_action_fact(dir.path(), accepted_action_id).is_err());
+        }
     }
 
     #[test]
@@ -417,6 +820,7 @@ mod tests {
 
     #[test]
     fn request_audit_with_human_confirmation_can_validate() {
+        let dir = tempdir().unwrap();
         let mut request = request("recordDecision");
         request.actor_role = "human-owner".to_string();
         request.input = json!({
@@ -432,7 +836,64 @@ mod tests {
             evidence_type: "humanConfirmation".to_string(),
         });
 
-        let response = execute_command_via_arbitration_with_context(&request, &context).unwrap();
+        let response =
+            execute_command_via_arbitration_with_context(dir.path(), &request, &context).unwrap();
         assert_ne!(response.status, RuntimeCommandStatus::InvalidCommand);
+    }
+
+    #[test]
+    fn accepted_command_writes_durable_runtime_records() {
+        let dir = tempdir().unwrap();
+        let request = RuntimeCommandRequest {
+            command_id: "cmd-create-project-runtime-records".to_string(),
+            command_type: "createProject".to_string(),
+            source_surface: ActionSourceSurface::Agent,
+            actor_role: "spec-agent".to_string(),
+            target_object_ref: Some(target_ref("Spec", "spec-001")),
+            input: json!({
+                "projectId": "project-001",
+                "projectTitle": "Project Runtime Records"
+            }),
+            evidence_refs: vec![
+                "approved-spec-1".to_string(),
+                "human-confirmation-1".to_string(),
+            ],
+            artifact_refs: vec![".agentflow/spec/requirements/req-001/preview.json".to_string()],
+            idempotency_key:
+                "spec:req-001:project:project-001:createProject:2026-06-20T00:00:00Z".to_string(),
+            created_at: "2026-06-20T00:00:00Z".to_string(),
+        };
+
+        let mut context = build_core_arbitration_context().unwrap();
+        context.insert_state(StateFact {
+            object_type: "Spec".to_string(),
+            object_id: "spec-001".to_string(),
+            state_id: "approved".to_string(),
+        });
+        context.insert_evidence(EvidenceFact {
+            evidence_ref: "approved-spec-1".to_string(),
+            evidence_type: "approvedSpecAvailable".to_string(),
+        });
+        context.insert_evidence(EvidenceFact {
+            evidence_ref: "human-confirmation-1".to_string(),
+            evidence_type: "humanConfirmation".to_string(),
+        });
+
+        let response =
+            execute_command_via_arbitration_with_context(dir.path(), &request, &context).unwrap();
+        assert_eq!(response.status, RuntimeCommandStatus::Accepted);
+        let command = load_runtime_command_fact(dir.path(), &request.command_id).unwrap();
+        let proposal = load_runtime_proposal_fact(dir.path(), &response.proposal_id).unwrap();
+        let decision = load_runtime_decision_fact(dir.path(), &response.proposal_id).unwrap();
+        let action = load_runtime_accepted_action_fact(
+            dir.path(),
+            response.accepted_action_id.as_deref().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(command.command_id, request.command_id);
+        assert_eq!(proposal.action_type, "createProject");
+        assert_eq!(decision.status, "accepted");
+        assert_eq!(action.event_type.as_deref(), Some("ProjectCreated"));
+        assert!(action.event_path.is_some());
     }
 }

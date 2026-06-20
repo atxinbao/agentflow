@@ -32,6 +32,7 @@ use agentflow_spec::{
     SpecMaterializationReport, SpecProject,
 };
 use agentflow_task_artifacts::load_task_run;
+use agentflow_workflow_runtime::load_runtime_command_bundle;
 use anyhow::{bail, Result};
 use serde::Serialize;
 use std::{
@@ -378,6 +379,7 @@ fn build_materialization_bridge_records_with_context(
         &source_spec_id,
     );
     let project_record = build_action_proposal_bridge_record(
+        root,
         1,
         "project",
         &project.project_id,
@@ -402,6 +404,7 @@ fn build_materialization_bridge_records_with_context(
             index + 1,
         );
         let issue_record = build_action_proposal_bridge_record(
+            root,
             index + 2,
             "issue",
             &issue.issue_id,
@@ -446,6 +449,7 @@ fn insert_materialization_confirmation_facts(
 }
 
 fn build_action_proposal_bridge_record(
+    root: &Path,
     sequence: usize,
     entity_kind: &str,
     entity_id: &str,
@@ -454,15 +458,88 @@ fn build_action_proposal_bridge_record(
 ) -> Result<ActionProposalBridgeRecord> {
     let proposal = map_command_to_action_proposal(&command)?;
     let binding = build_action_proposal_binding_summary(&proposal, context)?;
-    let arbitration = execute_command_via_arbitration_with_context(&command, context)?;
+    let _ = execute_command_via_arbitration_with_context(root, &command, context)?;
+    let stored = load_runtime_command_bundle(root, &command.command_id)?;
+    let proposal = stored.proposal.ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing durable runtime proposal for {}",
+            command.command_id
+        )
+    })?;
+    let arbitration = stored.decision.ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing durable runtime decision for {}",
+            command.command_id
+        )
+    })?;
     Ok(ActionProposalBridgeRecord {
         sequence,
         entity_kind: entity_kind.to_string(),
         entity_id: entity_id.to_string(),
         command,
-        proposal,
+        proposal: agentflow_action_contract::ActionProposal {
+            proposal_id: proposal.proposal_id,
+            idempotency_key: stored.command.idempotency_key,
+            action_type: proposal.action_type,
+            actor_role: proposal.actor_role,
+            source_surface: proposal.source_surface,
+            target_object_ref: proposal.target_object_ref,
+            input: proposal.input,
+            evidence_refs: proposal.evidence_refs,
+            artifact_refs: proposal.artifact_refs,
+            reason: proposal.reason,
+            expected_effects: proposal.expected_effects,
+            ontology_version: proposal.ontology_version,
+            contract_version: proposal.contract_version,
+            created_at: proposal.created_at,
+        },
         binding,
-        arbitration,
+        arbitration: crate::responses::RuntimeCommandResponse {
+            version: crate::responses::RUNTIME_COMMAND_API_VERSION.to_string(),
+            command_id: arbitration.command_id,
+            proposal_id: arbitration.proposal_id,
+            status: match arbitration.status.as_str() {
+                "accepted" => RuntimeCommandStatus::Accepted,
+                "human-decision-required" => RuntimeCommandStatus::HumanDecisionRequired,
+                "invalid-command" => RuntimeCommandStatus::InvalidCommand,
+                _ => RuntimeCommandStatus::Rejected,
+            },
+            decision: match arbitration.decision.as_str() {
+                "accepted" => crate::responses::RuntimeCommandDecision::Accepted,
+                "human-decision-required" => {
+                    crate::responses::RuntimeCommandDecision::HumanDecisionRequired
+                }
+                "invalid-command" => crate::responses::RuntimeCommandDecision::InvalidCommand,
+                _ => crate::responses::RuntimeCommandDecision::Rejected,
+            },
+            accepted_action_id: arbitration.accepted_action_id,
+            rejected_reasons: arbitration
+                .rejected_reasons
+                .into_iter()
+                .map(|message| {
+                    crate::errors::RuntimeCommandError::new(
+                        crate::errors::RuntimeCommandErrorCode::ArbitrationRejected,
+                        message,
+                        None::<String>,
+                    )
+                })
+                .collect(),
+            human_decision_request: arbitration.human_decision_request.map(|question| {
+                crate::responses::RuntimeHumanDecisionRequest {
+                    question,
+                    allowed_responses: Vec::new(),
+                    required_evidence_type: "humanConfirmation".to_string(),
+                }
+            }),
+            next_query_hint: arbitration.next_query_hint.map(|hint| {
+                crate::mapping::RuntimeQueryHint {
+                    view: hint.view,
+                    target_id: hint.target_id,
+                    reason: hint.reason,
+                }
+            }),
+            correlation_id: arbitration.correlation_id,
+        },
     })
 }
 

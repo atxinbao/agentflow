@@ -34,6 +34,7 @@ mod tests {
     use agentflow_state::{WorkflowAuditStatus, WorkflowStage};
     use agentflow_task_loop::TaskLoop;
     use serde_json::json;
+    use tempfile::tempdir;
 
     #[test]
     fn full_workflow_keeps_execute_completed_without_auto_audit_request() -> anyhow::Result<()> {
@@ -82,21 +83,25 @@ mod tests {
             validate_object_state_bundle(&state_bundle, &ontology_registry, &action_registry);
         assert!(state_report.valid, "{state_report:?}");
 
-        let response = execute_command_via_arbitration(&RuntimeCommandRequest {
-            command_id: "cmd-foundation-submit".to_string(),
-            command_type: "submitRequirement".to_string(),
-            source_surface: ActionSourceSurface::Desktop,
-            actor_role: "spec-agent".to_string(),
-            target_object_ref: None,
-            input: json!({
-                "summary": "收口 Runtime Foundation closeout baseline",
-                "requestType": "feature"
-            }),
-            evidence_refs: Vec::new(),
-            artifact_refs: Vec::new(),
-            idempotency_key: "idem-foundation-submit".to_string(),
-            created_at: "2026-06-20T00:00:00Z".to_string(),
-        })?;
+        let runtime_dir = tempdir()?;
+        let response = execute_command_via_arbitration(
+            runtime_dir.path(),
+            &RuntimeCommandRequest {
+                command_id: "cmd-foundation-submit".to_string(),
+                command_type: "submitRequirement".to_string(),
+                source_surface: ActionSourceSurface::Desktop,
+                actor_role: "spec-agent".to_string(),
+                target_object_ref: None,
+                input: json!({
+                    "summary": "收口 Runtime Foundation closeout baseline",
+                    "requestType": "feature"
+                }),
+                evidence_refs: Vec::new(),
+                artifact_refs: Vec::new(),
+                idempotency_key: "idem-foundation-submit".to_string(),
+                created_at: "2026-06-20T00:00:00Z".to_string(),
+            },
+        )?;
         assert_ne!(response.status, RuntimeCommandStatus::InvalidCommand);
         assert_eq!(
             response

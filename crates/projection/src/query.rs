@@ -175,6 +175,20 @@ pub struct SpecLoopActionProposalView {
     pub actor_role: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub handoff_rule: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_action_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_action_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -486,6 +500,13 @@ pub fn get_spec_loop_view(
                 created_object_id: proposal.created_object_id,
                 actor_role: proposal.actor_role,
                 handoff_rule: proposal.handoff_rule,
+                command_status: proposal.command_status,
+                decision_status: proposal.decision_status,
+                accepted_action_id: proposal.accepted_action_id,
+                command_path: proposal.command_path,
+                proposal_path: proposal.proposal_path,
+                decision_path: proposal.decision_path,
+                accepted_action_path: proposal.accepted_action_path,
             })
             .collect(),
         allowed_actions: next_action_hints(
