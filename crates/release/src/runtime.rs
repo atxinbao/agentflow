@@ -1249,7 +1249,7 @@ mod tests {
         let tagged = record_project_release_tag(
             dir.path(),
             &project_id,
-            "v0.3.1",
+            "v0.5.1",
             "tag-commit-001",
             "release-agent",
         )
@@ -1261,8 +1261,8 @@ mod tests {
             &project_id,
             "github",
             "rel-001",
-            "https://github.com/acme/repo/releases/tag/v0.3.1",
-            "v0.3.1",
+            "https://github.com/acme/repo/releases/tag/v0.5.1",
+            "v0.5.1",
             "tag-commit-001",
             &manifest_path,
             "release-agent",
@@ -1270,7 +1270,7 @@ mod tests {
         .unwrap();
         assert_eq!(remote.publication_stage, "remote-release-created");
         assert_eq!(remote.remote_provider.as_deref(), Some("github"));
-        assert_eq!(remote.tag_name.as_deref(), Some("v0.3.1"));
+        assert_eq!(remote.tag_name.as_deref(), Some("v0.5.1"));
         assert!(remote.artifact_manifest_sha256.is_some());
 
         let published = publish_project_release(dir.path(), &project_id).unwrap();

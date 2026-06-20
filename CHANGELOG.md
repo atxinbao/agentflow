@@ -1,27 +1,32 @@
 # Changelog
 
-## 0.5.1 - 2026-06-20
+## Unreleased
 
 执行者：Codex
 
-AgentFlow 0.5.1 是一次 release documentation closeout hotfix。这个版本不改运行时能力，只修正文档与 release 事实之间的冲突，补齐已发布版本的 closeout 记录。
+下一版修复目标暂定为 `0.5.1 - Spec Loop Release Hygiene & Authority Closure`。
+
+当前状态：计划中，尚未发布。
 
 ### Included
 
-- 为 `0.4.0` 和 `0.5.0` 补齐正式 `CHANGELOG` 条目，避免 release tag 与仓库主线文档脱节。
-- 将 `docs/v0.4.0/README.md` 和 `docs/v0.5.0/README.md` 从 planning draft 收口为 released baseline / release closeout。
-- 更新 `docs/README.md`，明确 `v0.4.0/` 和 `v0.5.0/` 是已发布版本基线，不再要求先转成草案再视作有效事实。
-- 对齐 `docs/**` 与 GitHub Release、`.agentflow/spec/**` runtime contract 的口径，消除文档层双轨表述。
+- 计划修复 release metadata、workspace version、Desktop package version、Tauri version 和 release-gate 默认版本。
+- 计划补齐 tag / release 级 release-gate 触发与 certification artifact。
+- 计划增加 Spec Loop 专用版本 gate。
+- 计划重排 Spec materialization 权威链路，确保 proposal / arbitration 先于 authority write。
+- 计划持久化 Runtime Command / Proposal / Decision / Accepted Action。
+- 计划补清 preview artifact、authority artifact、derived projection 的 manifest 边界。
+- 计划修正 `v0.4.0` / `v0.5.0` 文档状态和本机绝对路径。
 
 ### Architecture
 
-- 已发布版本的 closeout 事实以 `CHANGELOG.md`、对应 `docs/vX.Y.Z/**`、GitHub Release notes 和通过的 release gate 为准。
-- 后续新版本需求仍然进入 `docs/requirements/**`；运行时 authority 仍然以 `.agentflow/spec/**` 和正式 runtime facts 为准。
-- 版本目录不再混用“规划草案”和“已发布基线”两种状态表达。
+- `v0.5.0` 保留为 Spec Loop Productization 功能基线。
+- `v0.5.1` 先闭合发布卫生和 Runtime authority 顺序，不进入 `v0.6.0` Work Loop Handoff。
+- `v0.6.0` 必须建立在 `v0.5.1` 的 authority closure 之后。
 
 ### Validation
 
-- `git diff --check`
+- 待实现后补齐。
 
 ## 0.5.0 - 2026-06-20
 

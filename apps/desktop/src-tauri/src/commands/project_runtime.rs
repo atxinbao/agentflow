@@ -370,7 +370,7 @@ mod tests {
         let tagged = agentflow_release::record_project_release_tag(
             dir.path(),
             &project_id,
-            "v0.3.1",
+            "v0.5.1",
             "tag-058e",
             "release-agent",
         )
@@ -381,8 +381,8 @@ mod tests {
             &project_id,
             "github",
             "rel-058e",
-            "https://github.com/acme/repo/releases/tag/v0.3.1",
-            "v0.3.1",
+            "https://github.com/acme/repo/releases/tag/v0.5.1",
+            "v0.5.1",
             "tag-058e",
             &manifest_path,
             "release-agent",
