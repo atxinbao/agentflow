@@ -12,14 +12,14 @@
 
 ```text
 人类输入
--> 需求清洗
--> 需求分类
--> 上下文解析
--> 边界判断
--> 路由决策
--> 预览生成
--> 人类确认
--> SPEC / Project / Issue 物化
+-> Intake Artifact
+-> Classification Artifact
+-> Context Artifact
+-> Boundary Artifact
+-> Route Artifact
+-> Preview Artifact
+-> Confirmation Artifact
+-> Requirement / Spec / Issue Authority
 -> Runtime Action Proposal
 ```
 
@@ -46,6 +46,7 @@
 
 `v0.5.0` 包含：
 
+- Spec Loop Filesystem Contract；
 - Requirement Intake Normalizer；
 - Requirement Classifier；
 - Context Resolver；
@@ -77,31 +78,33 @@
 
 ```text
 Raw Human Request
--> Normalized Requirement
--> Classified Requirement
--> Resolved Context
--> Boundary Result
--> Route Decision
--> Draft Preview
--> Human Confirmation
--> Spec Project / Spec Issue Contract
+-> Intake Artifact
+-> Classification Artifact
+-> Context Artifact
+-> Boundary Artifact
+-> Route Artifact
+-> Preview Artifact
+-> Confirmation Artifact
+-> Requirement / Spec / Issue Authority
 -> Runtime Action Proposal
 ```
 
 关键规则：
 
 1. 未确认前，不写正式事实源。
-2. Projection 只读，不作为 authority。
-3. SPEC / Project / Issue 必须来自确认后的 requirement。
-4. Spec Loop 不能直接执行 Build Loop。
-5. Audit 仍然保持独立入口。
-6. Runtime API 是对下层 Runtime Foundation 的正式边界。
+2. Spec Loop 不能只是一组内存模块，必须有文件化阶段合同。
+3. Projection 只读，不作为 authority。
+4. SPEC / Project / Issue 必须来自确认后的 requirement。
+5. Spec Loop 不能直接执行 Build Loop。
+6. Audit 仍然保持独立入口。
+7. Runtime API 是对下层 Runtime Foundation 的正式边界。
+8. Preview、Confirmation 等中间产物必须可追踪，但不能成为 authority。
 
 ## 6. Issue Preview
 
 | Issue | Title | Dependency | First executable |
 | --- | --- | --- | --- |
-| `AF-SPEC-001` | Requirement Intake Normalizer | 无 | 是 |
+| `AF-SPEC-001` | Spec Loop Filesystem Contract + Requirement Intake Normalizer | 无 | 是 |
 | `AF-SPEC-002` | Requirement Classifier | `AF-SPEC-001` | 否 |
 | `AF-SPEC-003` | Context Resolver | `AF-SPEC-001` | 否 |
 | `AF-SPEC-004` | Boundary Checker | `AF-SPEC-002`, `AF-SPEC-003` | 否 |
@@ -114,14 +117,34 @@ Raw Human Request
 
 ## 7. Development Tasks
 
-### AF-SPEC-001 - Requirement Intake Normalizer
+## 6.1 Filesystem-first Constraint
+
+`v0.5.0` 需要补一个更硬的约束：
+
+```text
+Spec Loop 不能只是一组内存模块。
+它必须有文件化阶段合同。
+```
+
+所以 `v0.5.0` 现在必须多回答一个问题：
+
+```text
+intake / classification / context / boundary / route / preview / confirmation
+这些阶段的输入、输出、证据、状态分别落在哪里？
+```
+
+这层文件合同是 `v0.5.0` 的 filesystem-first 试点。它的目的不是一次性把 `codeflow`、`designflow`、Eve adapter 或多 Agent 并发都做完，而是先让 Spec Loop 这一条链具备稳定、可追踪、可审计的文件化边界。
+
+### AF-SPEC-001 - Spec Loop Filesystem Contract + Requirement Intake Normalizer
 
 目标：
 
-把人类原始输入清洗成稳定的 `Normalized Requirement`。
+把人类原始输入清洗成稳定的 `Normalized Requirement`，并定义 Spec Loop 的文件化阶段合同入口。
 
 范围：
 
+- 定义 `intake`、`classification`、`context`、`boundary`、`route`、`preview`、`confirmation`、`materialization` 的阶段文件合同；
+- 定义每个阶段的输入、输出、证据、状态应如何表达；
 - 保留原始输入；
 - 识别 `agentLocale`；
 - 提取引用文件、URL、版本号、release、branch、issue、PR；
@@ -131,6 +154,7 @@ Raw Human Request
 
 验收标准：
 
+- Spec Loop 主要阶段都有文件化合同，不只是内存结构；
 - 同一条人类输入可以稳定生成同一种 normalized record；
 - 原始文本不丢失；
 - 引用对象可以被后续 Context Resolver 使用；
@@ -259,13 +283,14 @@ Raw Human Request
 
 目标：
 
-生成可供人类确认的预览。
+生成可供人类确认、可追踪但非 authority 的预览。
 
 范围：
 
 - 生成 `SPEC Draft Preview`；
 - 生成 `Project Preview`；
 - 生成 `Issues Preview`；
+- 为 preview 生成可追踪 artifact；
 - 明确目标、范围、非目标、验收标准、风险、依赖顺序；
 - 标记 first executable issue candidate；
 - 标记 forbidden paths 和 validation direction；
@@ -274,6 +299,7 @@ Raw Human Request
 验收标准：
 
 - Preview 是人类可读文本，不是默认 JSON dump；
+- Preview 有可追踪 artifact，但 preview artifact 不是 authority；
 - Issues Preview 有清晰依赖；
 - 每个 issue 都有目标、范围、验收和非目标；
 - 未确认前不写 `docs/requirements/**` 或 `.agentflow/spec/**`。
@@ -293,6 +319,7 @@ Raw Human Request
 范围：
 
 - 识别 `确认`、`取消`、`修改后再看` 等确认语义；
+- 确认必须绑定到具体 preview artifact；
 - 确认前保持 preview-only；
 - 确认后允许进入 Spec Materializer；
 - 取消后停止写入；
@@ -303,6 +330,7 @@ Raw Human Request
 
 - 没有确认就不能写正式事实源；
 - 确认必须绑定到具体 preview；
+- 确认 artifact 与 preview artifact 可追溯关联；
 - 取消不会留下半成品 spec；
 - 修改后的 preview 不覆盖旧确认语义。
 
@@ -316,10 +344,11 @@ Raw Human Request
 
 目标：
 
-把确认后的 preview 物化为正式 requirement、spec project 和 spec issues。
+把确认后的 preview / confirmation artifact 物化为正式 requirement、spec project 和 spec issues。
 
 范围：
 
+- 从 draft/session artifact 转换到正式事实源；
 - 写入正式 `docs/requirements/**`；
 - 写入 `.agentflow/spec/projects/**`；
 - 写入 `.agentflow/spec/issues/**`；
@@ -332,6 +361,15 @@ Raw Human Request
 验收标准：
 
 - 只从确认后的 requirement / preview 物化；
+- 物化路径清晰：
+
+```text
+preview / confirmation
+-> docs/requirements/**
+-> .agentflow/spec/projects/**
+-> .agentflow/spec/issues/**
+```
+
 - 不从聊天直接生成正式 issue；
 - issue 依赖使用 `blockedBy`；
 - 不写 legacy `.agentflow/input/**`、`.agentflow/execute/**`、`.agentflow/output/**`、`.agentflow/goal-tree/**`；
@@ -385,7 +423,8 @@ Raw Human Request
 - 展示 intake、classification、context、boundary、route、preview、confirmation、materialization 状态；
 - 提供 query surface；
 - 增加 acceptance 测试；
-- 验证从 raw request 到 Runtime Action Proposal 的完整链路。
+- 验证从 raw request 到 Runtime Action Proposal 的完整链路；
+- 验证文件链路和 traceability。
 
 验收标准：
 
@@ -395,18 +434,19 @@ Raw Human Request
 
 ```text
 Raw Human Request
--> Normalized Requirement
--> Classified Requirement
--> Resolved Context
--> Boundary Result
--> Route Decision
--> Preview
--> Confirmation
--> Spec Materialization
+-> Intake Artifact
+-> Classification Artifact
+-> Context Artifact
+-> Boundary Artifact
+-> Route Artifact
+-> Preview Artifact
+-> Confirmation Artifact
+-> Requirement / Spec / Issue Authority
 -> Runtime Action Proposal
 ```
 
 - 验收测试不依赖人工点击；
+- 验收覆盖文件链路和 traceability；
 - 不把 UI 状态当事实源。
 
 非目标：

@@ -18,14 +18,14 @@ Spec Loop Productization
 
 ```text
 Human Input
--> Requirement Intake
--> Requirement Classification
--> Context Resolution
--> Boundary Check
--> Route Decision
--> Preview Generation
--> Confirmation Gate
--> Spec Materialization
+-> Intake Artifact
+-> Classification Artifact
+-> Context Artifact
+-> Boundary Artifact
+-> Route Artifact
+-> Preview Artifact
+-> Confirmation Artifact
+-> Requirement / Spec / Issue Authority
 -> Runtime Action Proposal
 ```
 
@@ -65,6 +65,7 @@ docs/requirements/**
 
 `v0.5.0` 只做：
 
+- Spec Loop Filesystem Contract；
 - Requirement Intake Normalizer；
 - Requirement Classifier；
 - Context Resolver；
@@ -85,7 +86,25 @@ docs/requirements/**
 - 云端部署；
 - Desktop OS Console 全量产品化。
 
-## 5. First Executable Candidate
+## 5. Filesystem-first Constraint
+
+`v0.5.0` 现在补一个更硬的约束：
+
+```text
+Spec Loop 不能只是一组内存模块。
+它必须有文件化阶段合同。
+```
+
+也就是说，`v0.5.0` 不只是把需求理解链路跑通，还必须回答：
+
+```text
+intake / classification / context / boundary / route / preview / confirmation
+这些阶段的输入、输出、证据、状态分别落在哪里？
+```
+
+如果没有这层文件合同，后续实现会退化成一组函数和结构体，能跑，但看不出 AgentFlow 的 filesystem-first 架构。
+
+## 6. First Executable Candidate
 
 第一条可执行任务应从：
 
@@ -95,4 +114,8 @@ AF-SPEC-001 Requirement Intake Normalizer
 
 开始。
 
-原因很简单：Normalizer 是 Spec Loop 的输入合同。没有稳定输入合同，Classifier、Boundary Checker、Route Decider、Preview Generator 都会变成散乱判断。
+原因要进一步收紧：
+
+- `AF-SPEC-001` 不再只是 Normalizer；
+- 它是整条 Spec Loop 的文件合同入口；
+- 没有它，Classifier、Context Resolver、Boundary Checker、Route Decider、Preview Generator 都会变成散乱判断。

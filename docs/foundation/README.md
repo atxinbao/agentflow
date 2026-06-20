@@ -51,6 +51,7 @@ docs/requirements/
 | [017-project-status-mutation-boundary-v1.md](017-project-status-mutation-boundary-v1.md) | 定义项目状态变更的提案和写入边界 |
 | [018-project-status-mutation-writer-v1.md](018-project-status-mutation-writer-v1.md) | 定义项目状态写入器的幂等、证据和回滚边界 |
 | [019-project-terminal-boundaries-v1.md](019-project-terminal-boundaries-v1.md) | 一次性定义项目终态后的归档、保留、取消、重开和后续项目边界 |
+| [agentflow-filesystem-workflow-architecture-v1.md](agentflow-filesystem-workflow-architecture-v1.md) | 定义 AgentFlow filesystem-first workflow 架构基准、CodeFlow / DesignFlow 分层和未来 Eve adapter 边界 |
 
 ## Rules
 
