@@ -528,6 +528,7 @@ fn project_issue(
 ) -> TaskProjection {
     let events = events.cloned().unwrap_or_default();
     let mut current_state = issue.status.as_str().to_string();
+    let terminal_issue_authority = matches!(current_state.as_str(), "done" | "cancel");
     let mut updated_at = issue.system.updated_at;
     let mut latest_run_id = None;
     let mut authoritative_run_id = None;
@@ -583,14 +584,19 @@ fn project_issue(
         {
             public_delivery.release_notes_url = Some(release_notes_url.to_string());
         }
+        let mut event_state = current_state.clone();
         if let Some(next_state) = authoritative_state_from_event(&event) {
-            current_state = next_state;
+            let next_state_is_terminal = matches!(next_state.as_str(), "done" | "cancel");
+            event_state = next_state.clone();
+            if !terminal_issue_authority || next_state_is_terminal {
+                current_state = next_state;
+            }
             if let Some(run_id) = event_run_id.as_deref() {
                 authoritative_run_id = Some(run_id.to_string());
                 active_run_id = Some(run_id.to_string());
             }
         }
-        state_events.push((current_state.clone(), event));
+        state_events.push((event_state, event));
     }
     let latest_run_id = authoritative_run_id.or(active_run_id).or(latest_run_id);
 
@@ -2445,6 +2451,76 @@ mod tests {
                 .map(|completion| completion.current_state.as_str()),
             Some("goal-recheck")
         );
+    }
+
+    #[test]
+    fn terminal_issue_authority_is_not_regressed_by_stale_runtime_events() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        let mut issue = read_spec_issue(dir.path(), "AF-PROJ-001").unwrap();
+        issue.status = SpecIssueStatus::Done;
+        write_spec_issue(dir.path(), &issue).unwrap();
+
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.launch.requested",
+                json!({
+                    "runId": "run-001",
+                    "branchName": "agentflow/project-projection/AF-PROJ-001"
+                }),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.review.requested",
+                json!({"runId": "run-001"}),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.pr.created",
+                json!({"runId": "run-001"}),
+            ),
+        )
+        .unwrap();
+
+        rebuild_projections(dir.path()).unwrap();
+        let task = crate::storage::load_task_projection(dir.path(), "AF-PROJ-001").unwrap();
+        let project =
+            crate::storage::load_project_projection(dir.path(), "project-projection").unwrap();
+
+        assert_eq!(task.current_state, "done");
+        assert_eq!(task.display_status, "done");
+        assert_eq!(project.completed_issue_count, 1);
+        assert_eq!(project.current_issue_id, None);
+        assert!(task
+            .timeline
+            .iter()
+            .find(|item| item.state == "todo")
+            .is_some_and(|item| !item.events.is_empty()));
+        assert!(task
+            .timeline
+            .iter()
+            .find(|item| item.state == "in_progress")
+            .is_some_and(|item| !item.events.is_empty()));
+        assert!(task
+            .timeline
+            .iter()
+            .find(|item| item.state == "in_review")
+            .is_some_and(|item| !item.events.is_empty()));
     }
 
     #[test]
