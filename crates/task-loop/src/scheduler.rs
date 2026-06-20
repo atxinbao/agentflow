@@ -10,7 +10,7 @@ use agentflow_spec::{
     read_spec_issue, read_spec_project, update_spec_issue_status, SpecIssue, SpecIssueStatus,
     SpecPriority, SpecProject,
 };
-use agentflow_task_artifacts::create_task_run;
+use agentflow_task_artifacts::{create_task_run, task_launch_request_path};
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::{Context, Result};
 use serde_json::json;
@@ -224,7 +224,7 @@ fn request_issue_launch_inner(
         workflow_ref: issue.workflow_ref.clone(),
         working_directory: root.display().to_string(),
         issue_path: issue.system.path.clone(),
-        launch_request_path: launch_request_path(&issue.issue_id, &run.run_id),
+        launch_request_path: task_launch_request_path(&issue.issue_id, &run.run_id)?,
         context_pack_path: None,
         branch_name: branch_name.clone(),
         merge_mode: "auto-merge-if-eligible".to_string(),
@@ -705,10 +705,6 @@ fn branch_name(issue: &SpecIssue) -> String {
     format!("agentflow/{project}/{}", issue.issue_id)
 }
 
-fn launch_request_path(issue_id: &str, run_id: &str) -> String {
-    format!(".agentflow/tasks/{issue_id}/runs/{run_id}/launch/agent-request.json")
-}
-
 fn write_launch_request(root: &Path, payload: &AgentLaunchPayload) -> Result<()> {
     let path = root.join(&payload.launch_request_path);
     if let Some(parent) = path.parent() {
@@ -832,6 +828,10 @@ mod tests {
         assert!(dir
             .path()
             .join(".agentflow/tasks/AF-TASK-001/runs/run-001/run.json")
+            .is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/tasks/AF-TASK-001/work-loop-contract.json")
             .is_file());
         assert!(dir.path().join(&launch.launch_request_path).is_file());
         let events = replay_task_events(dir.path(), ReplayFilter::issue("AF-TASK-001")).unwrap();

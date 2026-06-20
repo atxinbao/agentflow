@@ -7,6 +7,7 @@ pub const TASK_CHANGED_FILES_VERSION: &str = "task-changed-files.v1";
 pub const TASK_VALIDATION_VERSION: &str = "task-validation.v1";
 pub const TASK_EVIDENCE_VERSION: &str = "task-evidence.v1";
 pub const TASK_RUN_CHECKPOINT_VERSION: &str = "task-run-checkpoint.v1";
+pub const WORK_LOOP_FILESYSTEM_CONTRACT_VERSION: &str = "work-loop-filesystem-contract.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -192,4 +193,70 @@ pub struct TaskRunCheckpoint {
     pub correlation_id: Option<String>,
     pub summary: String,
     pub created_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkLoopStage {
+    Command,
+    Proposal,
+    Preflight,
+    Session,
+    Evidence,
+    Handoff,
+    Delivery,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkLoopArtifactClass {
+    Authority,
+    DerivedArtifact,
+    TransportSnapshot,
+    ReadModel,
+    PublicRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkLoopArtifactContract {
+    pub key: String,
+    pub stage: WorkLoopStage,
+    pub class: WorkLoopArtifactClass,
+    pub location_ref: String,
+    pub description: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub traces_to: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkLoopStageContract {
+    pub stage: WorkLoopStage,
+    pub issue_statuses: Vec<String>,
+    pub inputs: Vec<String>,
+    pub outputs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkLoopRoleAlias {
+    pub canonical_role: String,
+    pub accepted_aliases: Vec<String>,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkLoopFilesystemContract {
+    pub version: String,
+    pub issue_id: String,
+    pub workflow_ref: String,
+    pub contract_path: String,
+    pub role_aliases: Vec<WorkLoopRoleAlias>,
+    pub stages: Vec<WorkLoopStageContract>,
+    pub artifacts: Vec<WorkLoopArtifactContract>,
+    pub generated_at: u64,
 }
