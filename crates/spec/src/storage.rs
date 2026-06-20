@@ -3,21 +3,22 @@ use crate::model::{
     CompletionDecisionRuntime, CompletionDecisionState, GoalDraftPreview, GoalDraftStatus,
     IssueContractDraftPreview, MilestoneDraftPreview, PlanDraftPreview, PlanDraftStatus,
     PreviewConfirmationRecord, ProjectBrainDocumentSet, ProjectBrainDocumentStatus,
-    ProjectBrainSnapshot, ProjectBrainStatus, RequirementClass, RequirementClassificationResult,
-    RequirementContextDocumentRef, RequirementContextFactState, RequirementContextGitFacts,
-    RequirementContextIssueRef, RequirementContextProjectRef, RequirementContextPullRequestRef,
-    RequirementContextReleaseRef, RequirementContextSummary, RequirementDocument,
-    RequirementExecutionPermission, RequirementFactImpact, RequirementIntakeResult,
-    RequirementIntentType, RequirementPreviewLifecycle, RequirementPreviewRuntime,
-    RequirementRiskLevel, RequirementTargetObject, SpecArtifactAuthority, SpecExpectedOutputs,
-    SpecIssue, SpecIssueCategory, SpecIssueDraft, SpecIssueStatus, SpecLoopRequirementManifest,
-    SpecLoopStageArtifact, SpecLoopStageFileRef, SpecLoopStageName, SpecLoopStageStatus,
-    SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
-    SpecSystemRecord, COMPLETION_DECISION_VERSION, PROJECT_BRAIN_DOCUMENT_SET_VERSION,
-    PROJECT_BRAIN_SNAPSHOT_VERSION, REQUIREMENT_CLASSIFICATION_VERSION,
-    REQUIREMENT_CONTEXT_VERSION, REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION,
-    SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
-    SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
+    ProjectBrainSnapshot, ProjectBrainStatus, RequirementBoundaryBlocker,
+    RequirementBoundarySummary, RequirementBoundaryVerdict, RequirementClass,
+    RequirementClassificationResult, RequirementContextDocumentRef, RequirementContextFactState,
+    RequirementContextGitFacts, RequirementContextIssueRef, RequirementContextProjectRef,
+    RequirementContextPullRequestRef, RequirementContextReleaseRef, RequirementContextSummary,
+    RequirementDocument, RequirementExecutionPermission, RequirementFactImpact,
+    RequirementIntakeResult, RequirementIntentType, RequirementPreviewLifecycle,
+    RequirementPreviewRuntime, RequirementRiskLevel, RequirementTargetObject,
+    SpecArtifactAuthority, SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft,
+    SpecIssueStatus, SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageFileRef,
+    SpecLoopStageName, SpecLoopStageStatus, SpecPriority, SpecProject, SpecProjectDraft,
+    SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, COMPLETION_DECISION_VERSION,
+    PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
+    REQUIREMENT_BOUNDARY_VERSION, REQUIREMENT_CLASSIFICATION_VERSION, REQUIREMENT_CONTEXT_VERSION,
+    REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION,
+    SPEC_PROJECT_VERSION, SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
 };
 use agentflow_audit::load_project_audit_review_summary;
 use agentflow_task_artifacts::{load_task_evidence, load_task_run};
@@ -2036,15 +2037,20 @@ fn build_requirement_stage_artifact(
                 context_summary,
             )
         }
-        SpecLoopStageName::Boundary => (
-            SpecLoopStageStatus::Declared,
-            SpecArtifactAuthority::Derived,
-            vec![context_ref.clone()],
-            vec![stage_ref.clone()],
-            Vec::new(),
-            None,
-            "边界判断阶段文件合同已建立，后续由 AF-SPEC-004 写入边界结果。".to_string(),
-        ),
+        SpecLoopStageName::Boundary => {
+            let boundary = build_requirement_boundary_summary(root, preview)?;
+            let boundary_summary = build_requirement_boundary_summary_line(&boundary);
+            let boundary_refs = build_requirement_boundary_refs(root, preview, &boundary)?;
+            (
+                SpecLoopStageStatus::Ready,
+                SpecArtifactAuthority::Derived,
+                vec![classification_ref.clone(), context_ref.clone(), runtime_ref.clone()],
+                vec![stage_ref.clone()],
+                boundary_refs,
+                Some(serde_json::to_value(&boundary)?),
+                boundary_summary,
+            )
+        }
         SpecLoopStageName::Route => (
             SpecLoopStageStatus::Declared,
             SpecArtifactAuthority::Derived,
@@ -2809,6 +2815,288 @@ fn fact_state_rank(state: &RequirementContextFactState) -> u8 {
         RequirementContextFactState::History => 2,
         RequirementContextFactState::Missing => 3,
     }
+}
+
+fn build_requirement_boundary_summary(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Result<RequirementBoundarySummary> {
+    let classification = build_requirement_classification(&preview.intake);
+    let context = build_requirement_context_summary(root, preview)?;
+    let raw = preview.intake.raw_text.as_str();
+    let lowered = raw.to_ascii_lowercase();
+    let preview_confirmed = matches!(preview.lifecycle, RequirementPreviewLifecycle::Materialized)
+        || preview.current_state == "confirmed";
+    let wants_direct_execute = requests_direct_build_execution(raw, &lowered);
+    let wants_runtime_bypass = requests_runtime_bypass(raw, &lowered);
+    let is_audit = classification
+        .basic_types
+        .contains(&RequirementClass::Audit);
+    let is_release = classification
+        .basic_types
+        .contains(&RequirementClass::Release);
+    let is_design_only = classification
+        .basic_types
+        .contains(&RequirementClass::DesignOnly)
+        && !classification
+            .basic_types
+            .contains(&RequirementClass::ExecutableIssue);
+    let is_answer_only =
+        classification.execution_permission == RequirementExecutionPermission::AnswerOnly;
+
+    let write_requirement = match classification.execution_permission {
+        RequirementExecutionPermission::SpecLoop => {
+            if preview_confirmed {
+                RequirementBoundaryVerdict::Allowed
+            } else {
+                RequirementBoundaryVerdict::ConfirmationRequired
+            }
+        }
+        RequirementExecutionPermission::AnswerOnly => RequirementBoundaryVerdict::Blocked,
+        RequirementExecutionPermission::PreviewOnly => RequirementBoundaryVerdict::PreviewOnly,
+        RequirementExecutionPermission::AuditLoop => RequirementBoundaryVerdict::PreviewOnly,
+        RequirementExecutionPermission::ReleaseCloseout => RequirementBoundaryVerdict::PreviewOnly,
+    };
+
+    let write_spec_authority = match classification.execution_permission {
+        RequirementExecutionPermission::SpecLoop => {
+            if preview_confirmed {
+                RequirementBoundaryVerdict::Allowed
+            } else {
+                RequirementBoundaryVerdict::ConfirmationRequired
+            }
+        }
+        RequirementExecutionPermission::AnswerOnly
+        | RequirementExecutionPermission::PreviewOnly
+        | RequirementExecutionPermission::AuditLoop
+        | RequirementExecutionPermission::ReleaseCloseout => RequirementBoundaryVerdict::Blocked,
+    };
+
+    let preview_gate = match classification.execution_permission {
+        RequirementExecutionPermission::AnswerOnly => RequirementBoundaryVerdict::Allowed,
+        RequirementExecutionPermission::SpecLoop if preview_confirmed => {
+            RequirementBoundaryVerdict::Allowed
+        }
+        RequirementExecutionPermission::SpecLoop
+        | RequirementExecutionPermission::PreviewOnly
+        | RequirementExecutionPermission::AuditLoop
+        | RequirementExecutionPermission::ReleaseCloseout => {
+            RequirementBoundaryVerdict::PreviewOnly
+        }
+    };
+
+    let execution_gate = RequirementBoundaryVerdict::Blocked;
+    let runtime_api_gate = if wants_runtime_bypass {
+        RequirementBoundaryVerdict::Blocked
+    } else {
+        RequirementBoundaryVerdict::Allowed
+    };
+
+    let mut blockers = Vec::new();
+    if matches!(
+        classification.execution_permission,
+        RequirementExecutionPermission::SpecLoop
+    ) && !preview_confirmed
+    {
+        blockers.push(RequirementBoundaryBlocker {
+            gate: "spec-confirmation".to_string(),
+            reason: "当前 preview 还没有完成确认，不能写正式 requirement 或 spec authority。"
+                .to_string(),
+            alternative_path: "先生成并确认 SPEC Draft Preview，再进入 Spec Materializer。"
+                .to_string(),
+        });
+    }
+    if is_audit {
+        blockers.push(RequirementBoundaryBlocker {
+            gate: "audit-independent".to_string(),
+            reason: "当前需求属于审计语义，不能把 audit 当成 build/spec 执行。".to_string(),
+            alternative_path: "保持独立 audit 路线，进入 audit preview / audit loop。".to_string(),
+        });
+    }
+    if is_release {
+        blockers.push(RequirementBoundaryBlocker {
+            gate: "release-closeout".to_string(),
+            reason: "当前需求属于 release / closeout 语义，不能直接写 SpecProject / SpecIssue。"
+                .to_string(),
+            alternative_path: "进入 release closeout 路线，输出 release 相关预览或收口记录。"
+                .to_string(),
+        });
+    }
+    if is_design_only {
+        blockers.push(RequirementBoundaryBlocker {
+            gate: "design-preview-only".to_string(),
+            reason: "当前需求以设计或 UI 为主，不能直接写执行任务。".to_string(),
+            alternative_path: "进入 design preview，仅输出设计说明、原型或预览。".to_string(),
+        });
+    }
+    if is_answer_only {
+        blockers.push(RequirementBoundaryBlocker {
+            gate: "answer-only".to_string(),
+            reason: "当前需求是问题或研究请求，不应进入 formal spec materialization。".to_string(),
+            alternative_path: "进入 answer-only / research-only 路线，先输出解释或研究结果。"
+                .to_string(),
+        });
+    }
+    if wants_direct_execute {
+        blockers.push(RequirementBoundaryBlocker {
+            gate: "build-agent-direct-execute".to_string(),
+            reason: "Build Agent 不能从聊天直接执行。".to_string(),
+            alternative_path:
+                "先走 preview、confirmation、materialization，再进入 Runtime Action Proposal。"
+                    .to_string(),
+        });
+    }
+    if wants_runtime_bypass {
+        blockers.push(RequirementBoundaryBlocker {
+            gate: "runtime-api".to_string(),
+            reason: "当前需求试图绕过 Runtime API 或直接操作下层事实源。".to_string(),
+            alternative_path:
+                "通过 Runtime Command -> Action Proposal -> Arbitration 进入下层运行时。"
+                    .to_string(),
+        });
+    }
+    if !context.missing_context.is_empty() {
+        blockers.push(RequirementBoundaryBlocker {
+            gate: "context-missing".to_string(),
+            reason: format!(
+                "当前上下文仍缺少 {} 项事实，不能直接推进正式写入。",
+                context.missing_context.len()
+            ),
+            alternative_path: "先补齐缺失上下文，或者保持 preview-only 等待进一步确认。"
+                .to_string(),
+        });
+    }
+
+    let allowed_paths = build_requirement_boundary_allowed_paths(root, preview, preview_confirmed)?;
+    let mut alternatives = blockers
+        .iter()
+        .map(|blocker| blocker.alternative_path.clone())
+        .collect::<Vec<_>>();
+    alternatives.extend(match classification.execution_permission {
+        RequirementExecutionPermission::AnswerOnly => {
+            vec!["answer-only".to_string(), "research-only".to_string()]
+        }
+        RequirementExecutionPermission::PreviewOnly => {
+            if is_design_only {
+                vec!["design-preview".to_string()]
+            } else {
+                vec!["requirement-draft".to_string(), "spec-preview".to_string()]
+            }
+        }
+        RequirementExecutionPermission::SpecLoop => vec![
+            "requirement-draft".to_string(),
+            "spec-preview".to_string(),
+            "confirmation".to_string(),
+            "materialization".to_string(),
+        ],
+        RequirementExecutionPermission::AuditLoop => vec!["audit-preview".to_string()],
+        RequirementExecutionPermission::ReleaseCloseout => vec!["release-closeout".to_string()],
+    });
+    let alternatives = dedupe_preserve_order(alternatives);
+
+    let mut reasons = classification.reasons.clone();
+    reasons.push(format!(
+        "当前 preview 状态为 {}，lifecycle 为 {}。",
+        preview.current_state,
+        preview.lifecycle.as_str()
+    ));
+    if !preview_confirmed {
+        reasons.push("当前还处在 preview-first / confirm-first 边界内。".to_string());
+    }
+    reasons.extend(context.conflict_signals.iter().cloned());
+    reasons.extend(context.missing_context.iter().cloned());
+    let reasons = dedupe_preserve_order(reasons);
+
+    Ok(RequirementBoundarySummary {
+        version: REQUIREMENT_BOUNDARY_VERSION.to_string(),
+        requirement_id: preview.requirement_id.clone(),
+        project_id: preview.project_id.clone(),
+        write_requirement,
+        write_spec_authority,
+        preview_gate,
+        execution_gate,
+        runtime_api_gate,
+        human_confirmation_required: classification.confirmation_required,
+        blocked: !blockers.is_empty(),
+        blockers,
+        allowed_paths,
+        alternatives,
+        reasons,
+    })
+}
+
+fn build_requirement_boundary_summary_line(boundary: &RequirementBoundarySummary) -> String {
+    let blockers = boundary.blockers.len();
+    if blockers == 0 {
+        format!(
+            "边界已通过：当前可写 requirement = {}，spec authority = {}。",
+            boundary.write_requirement.as_str(),
+            boundary.write_spec_authority.as_str()
+        )
+    } else {
+        format!(
+            "边界已收口：{} 个阻断，当前写入 requirement = {}，spec authority = {}。",
+            blockers,
+            boundary.write_requirement.as_str(),
+            boundary.write_spec_authority.as_str()
+        )
+    }
+}
+
+fn build_requirement_boundary_refs(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+    boundary: &RequirementBoundarySummary,
+) -> Result<Vec<String>> {
+    let mut refs = vec![
+        preview.requirement_path.clone(),
+        requirement_preview_runtime_path(root, &preview.requirement_id)
+            .and_then(|path| normalize_relative_to_root(root, path))?,
+    ];
+    if boundary.human_confirmation_required {
+        refs.extend(confirmation_evidence_refs(preview)?);
+    }
+    refs.extend(boundary.allowed_paths.iter().cloned());
+    Ok(dedupe_preserve_order(refs))
+}
+
+fn build_requirement_boundary_allowed_paths(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+    preview_confirmed: bool,
+) -> Result<Vec<String>> {
+    let preview_dir = requirement_preview_dir(root, &preview.requirement_id)
+        .and_then(|path| normalize_relative_to_root(root, path))?;
+    let mut refs = vec![format!("{preview_dir}/**")];
+    if preview_confirmed {
+        refs.push("docs/requirements/**".to_string());
+        refs.push(".agentflow/spec/projects/**".to_string());
+        refs.push(".agentflow/spec/issues/**".to_string());
+    }
+    Ok(dedupe_preserve_order(refs))
+}
+
+fn requests_direct_build_execution(raw: &str, lowered: &str) -> bool {
+    let zh = raw.contains("直接执行")
+        || raw.contains("直接开工")
+        || raw.contains("直接让 Build Agent")
+        || raw.contains("直接让 build agent")
+        || raw.contains("从聊天直接执行");
+    let en = (lowered.contains("build agent") || lowered.contains("execute issue"))
+        && (lowered.contains("direct") || lowered.contains("skip preview"));
+    zh || en
+}
+
+fn requests_runtime_bypass(raw: &str, lowered: &str) -> bool {
+    raw.contains("绕过 Runtime API")
+        || raw.contains("跳过 Runtime API")
+        || raw.contains("直接写 Event Store")
+        || raw.contains("直接写 .agentflow/spec")
+        || raw.contains("直接写 docs/requirements")
+        || lowered.contains("bypass runtime api")
+        || lowered.contains("write event store directly")
+        || lowered.contains("write .agentflow/spec directly")
+        || lowered.contains("write docs/requirements directly")
 }
 
 fn preview_stage_status(preview: &RequirementPreviewRuntime) -> SpecLoopStageStatus {
@@ -3763,10 +4051,11 @@ fn unix_timestamp_seconds() -> u64 {
 mod tests {
     use super::*;
     use crate::model::{
-        RequirementClass, RequirementClassificationResult, RequirementContextFactState,
-        RequirementContextSummary, RequirementExecutionPermission, RequirementRiskLevel,
-        SpecArtifactAuthority, SpecLoopRequirementManifest, SpecLoopStageArtifact,
-        SpecLoopStageName, SpecLoopStageStatus, SpecPriority, DEFAULT_WORKFLOW_REF,
+        RequirementBoundarySummary, RequirementBoundaryVerdict, RequirementClass,
+        RequirementClassificationResult, RequirementContextFactState, RequirementContextSummary,
+        RequirementExecutionPermission, RequirementRiskLevel, SpecArtifactAuthority,
+        SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageName, SpecLoopStageStatus,
+        SpecPriority, DEFAULT_WORKFLOW_REF,
     };
     use agentflow_event_store::load_task_events;
     use serde_json::Value;
@@ -4507,6 +4796,216 @@ mod tests {
             .missing_context
             .iter()
             .any(|entry| entry.contains("branch")));
+    }
+
+    #[test]
+    fn boundary_stage_blocks_formal_spec_writes_until_confirmation() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "boundary-feature",
+            "# 任务页时间线\n\n请实现任务页状态时间线，并更新 apps/desktop/src/App.tsx。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let boundary_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/boundary-feature/boundary.json"),
+        )
+        .unwrap();
+        assert_eq!(boundary_artifact.stage, SpecLoopStageName::Boundary);
+        assert_eq!(boundary_artifact.status, SpecLoopStageStatus::Ready);
+        let boundary: RequirementBoundarySummary =
+            serde_json::from_value(boundary_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(
+            boundary.write_requirement,
+            RequirementBoundaryVerdict::ConfirmationRequired
+        );
+        assert_eq!(
+            boundary.write_spec_authority,
+            RequirementBoundaryVerdict::ConfirmationRequired
+        );
+        assert_eq!(
+            boundary.preview_gate,
+            RequirementBoundaryVerdict::PreviewOnly
+        );
+        assert_eq!(boundary.execution_gate, RequirementBoundaryVerdict::Blocked);
+        assert!(boundary.human_confirmation_required);
+        assert!(boundary
+            .blockers
+            .iter()
+            .any(|blocker| blocker.gate == "spec-confirmation"));
+        assert!(boundary
+            .allowed_paths
+            .iter()
+            .any(|path| path == ".agentflow/spec/requirements/boundary-feature/**"));
+    }
+
+    #[test]
+    fn boundary_stage_keeps_audit_independent() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "boundary-audit",
+            "# Release 审计\n\n请审计 v0.5.0 release，并输出 findings。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let boundary_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/boundary-audit/boundary.json"),
+        )
+        .unwrap();
+        let boundary: RequirementBoundarySummary =
+            serde_json::from_value(boundary_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(
+            boundary.write_requirement,
+            RequirementBoundaryVerdict::PreviewOnly
+        );
+        assert_eq!(
+            boundary.write_spec_authority,
+            RequirementBoundaryVerdict::Blocked
+        );
+        assert!(boundary
+            .blockers
+            .iter()
+            .any(|blocker| blocker.gate == "audit-independent"));
+        assert!(boundary
+            .alternatives
+            .iter()
+            .any(|alternative| alternative.contains("audit")));
+    }
+
+    #[test]
+    fn boundary_stage_keeps_design_only_non_executable() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "boundary-design",
+            "# Figma 设计调整\n\n请基于 Figma 调整工作台视觉和交互，只输出设计方案。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let boundary_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/boundary-design/boundary.json"),
+        )
+        .unwrap();
+        let boundary: RequirementBoundarySummary =
+            serde_json::from_value(boundary_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(
+            boundary.write_spec_authority,
+            RequirementBoundaryVerdict::Blocked
+        );
+        assert_eq!(boundary.execution_gate, RequirementBoundaryVerdict::Blocked);
+        assert!(boundary
+            .blockers
+            .iter()
+            .any(|blocker| blocker.gate == "design-preview-only"));
+        assert!(boundary
+            .alternatives
+            .iter()
+            .any(|alternative| alternative.contains("design-preview")));
+    }
+
+    #[test]
+    fn boundary_stage_blocks_runtime_api_bypass_and_direct_execute() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "boundary-bypass",
+            "# 直接执行修复\n\n请跳过 Runtime API，直接写 .agentflow/spec/ 并直接让 Build Agent 执行这个修复。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let boundary_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/boundary-bypass/boundary.json"),
+        )
+        .unwrap();
+        let boundary: RequirementBoundarySummary =
+            serde_json::from_value(boundary_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(
+            boundary.runtime_api_gate,
+            RequirementBoundaryVerdict::Blocked
+        );
+        assert!(boundary
+            .blockers
+            .iter()
+            .any(|blocker| blocker.gate == "runtime-api"));
+        assert!(boundary
+            .blockers
+            .iter()
+            .any(|blocker| blocker.gate == "build-agent-direct-execute"));
+        assert!(boundary.alternatives.iter().any(|alternative| {
+            alternative.contains("Runtime Command")
+                || alternative.contains("preview")
+                || alternative.contains("materialization")
+        }));
     }
 
     #[test]
