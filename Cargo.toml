@@ -4,6 +4,7 @@ members = [
     "crates/agent-manual",
     "crates/panel",
     "crates/spec",
+    "crates/runtime-api",
     "crates/ontology",
     "crates/action-contract",
     "crates/role-policy",

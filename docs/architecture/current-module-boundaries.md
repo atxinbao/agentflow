@@ -66,17 +66,47 @@ docs/requirements/**
 负责：
 
 - 暴露当前 AgentFlow 官方命令入口
-- 调用 `spec`、`task-loop`、`workflow-runtime`、`task-artifacts`、`release`、`audit` 等模块
+- 通过 `runtime-api` 调用正式 command / query 边界
+- 调用 `task-loop`、`workflow-runtime`、`task-artifacts`、`release`、`audit` 等模块
 - 提供 Work Agent（`build-agent` 兼容别名）/ 审计 / 运行时写回入口
 
 不负责：
 
 - 保存独立业务状态
-- 保留旧 CLI 兼容壳
+- 直接绕过 `runtime-api` 读写 formal runtime 事实
 
 实现位置：
 
 - `crates/cli/src/**`
+
+### Runtime API
+
+负责：
+
+- 提供 Desktop / CLI 的统一 Runtime Command API 边界
+- 提供 Runtime Query API，只读取 projection read models
+- 把正式命令映射为 `action proposal / arbitration / command response`
+- 收口 Project / Completion / Release 等 formal runtime 入口，避免 UI 和 CLI 直接依赖底层写实现
+
+不负责：
+
+- 直接承担事件存储实现
+- 直接重建所有 projection 读模型逻辑
+- 直接实现外部 Agent 调度
+- 长期保留对底层旧写接口的散落直连
+
+实现位置：
+
+- `crates/runtime-api/src/commands.rs`
+- `crates/runtime-api/src/query.rs`
+- `crates/runtime-api/src/responses.rs`
+- `crates/runtime-api/src/formal.rs`
+
+说明：
+
+- `commands.rs` 是正式 command boundary。
+- `query.rs` 是 projection-only query boundary。
+- `formal.rs` 当前仍是过渡层 wrapper；后续 formal runtime 写入口会继续收口到统一 command path。
 
 ## Requirement and Task Contract Layer
 
