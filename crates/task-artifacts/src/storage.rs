@@ -1,10 +1,10 @@
 use crate::model::{
     TaskChangedFile, TaskChangedFilesRecord, TaskCommandInput, TaskCommandRecord, TaskEvidence,
-    TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord, WorkLoopArtifactClass,
-    WorkLoopArtifactContract, WorkLoopFilesystemContract, WorkLoopRoleAlias, WorkLoopStage,
-    WorkLoopStageContract, TASK_CHANGED_FILES_VERSION, TASK_COMMAND_VERSION, TASK_EVIDENCE_VERSION,
-    TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION, TASK_VALIDATION_VERSION,
-    WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
+    TaskPreflightDecision, TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord,
+    WorkLoopArtifactClass, WorkLoopArtifactContract, WorkLoopFilesystemContract, WorkLoopRoleAlias,
+    WorkLoopStage, WorkLoopStageContract, TASK_CHANGED_FILES_VERSION, TASK_COMMAND_VERSION,
+    TASK_EVIDENCE_VERSION, TASK_PREFLIGHT_VERSION, TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION,
+    TASK_VALIDATION_VERSION, WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
 };
 use agentflow_event_store::TaskReplayCursor;
 use agentflow_workflow_core::{
@@ -79,6 +79,42 @@ pub fn task_work_action_proposals_path(
     Ok(task_run_dir(project_root, issue_id, run_id)?
         .join("launch")
         .join("work-action-proposals.json"))
+}
+
+pub fn task_preflight_path(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<PathBuf> {
+    Ok(task_run_dir(project_root, issue_id, run_id)?
+        .join("preflight")
+        .join("preflight.json"))
+}
+
+pub fn write_task_preflight_decision(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+    decision: &TaskPreflightDecision,
+) -> Result<TaskPreflightDecision> {
+    let root = canonicalize_project_root(project_root)?;
+    let path = task_preflight_path(&root, issue_id, run_id)?;
+    if let Some(parent) = path.parent() {
+        ensure_directory(parent)?;
+    }
+    let mut stored = decision.clone();
+    stored.version = TASK_PREFLIGHT_VERSION.to_string();
+    write_json(&path, &stored)?;
+    Ok(stored)
+}
+
+pub fn load_task_preflight_decision(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<TaskPreflightDecision> {
+    let root = canonicalize_project_root(project_root)?;
+    read_json(task_preflight_path(&root, issue_id, run_id)?)
 }
 
 pub fn write_work_loop_filesystem_contract(

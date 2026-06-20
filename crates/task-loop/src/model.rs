@@ -52,4 +52,6 @@ pub struct AgentLaunchPayload {
     pub work_command: Option<WorkCommandHandoff>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub work_action_proposals_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preflight_path: Option<String>,
 }

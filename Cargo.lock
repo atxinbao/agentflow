@@ -320,6 +320,7 @@ dependencies = [
  "agentflow-task-artifacts",
  "agentflow-workflow-core",
  "anyhow",
+ "globset",
  "serde",
  "serde_json",
  "tempfile",
