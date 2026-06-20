@@ -10,6 +10,7 @@ pub const REQUIREMENT_PREVIEW_VERSION: &str = "agentflow-requirement-preview.v1"
 pub const SPEC_REQUIREMENT_MANIFEST_VERSION: &str = "agentflow-spec-requirement-manifest.v1";
 pub const SPEC_STAGE_ARTIFACT_VERSION: &str = "agentflow-spec-stage-artifact.v1";
 pub const REQUIREMENT_CLASSIFICATION_VERSION: &str = "agentflow-requirement-classification.v1";
+pub const REQUIREMENT_CONTEXT_VERSION: &str = "agentflow-requirement-context.v1";
 pub const COMPLETION_DECISION_VERSION: &str = "agentflow-completion-decision.v1";
 pub const PROJECT_BRAIN_DOCUMENT_SET_VERSION: &str = "agentflow-project-brain-document-set.v1";
 pub const PROJECT_BRAIN_SNAPSHOT_VERSION: &str = "agentflow-project-brain-snapshot.v1";
@@ -496,6 +497,157 @@ pub struct RequirementClassificationResult {
     pub confirmation_required: bool,
     pub ambiguous: bool,
     pub conflicting: bool,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RequirementContextFactState {
+    Current,
+    History,
+    Draft,
+    Missing,
+}
+
+impl RequirementContextFactState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Current => "current",
+            Self::History => "history",
+            Self::Draft => "draft",
+            Self::Missing => "missing",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementContextGitFacts {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_commit_sha: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementContextDocumentRef {
+    pub path: String,
+    pub title: String,
+    pub summary: String,
+    pub fact_state: RequirementContextFactState,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementContextProjectRef {
+    pub project_id: String,
+    pub path: String,
+    pub title: String,
+    pub summary: String,
+    pub status: SpecProjectStatus,
+    pub fact_state: RequirementContextFactState,
+    pub source_requirement_path: String,
+    pub issue_count: usize,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementContextIssueRef {
+    pub issue_id: String,
+    pub path: String,
+    pub title: String,
+    pub summary: String,
+    pub status: SpecIssueStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    pub workflow_ref: String,
+    pub fact_state: RequirementContextFactState,
+    pub source_requirement_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementContextReleaseRef {
+    pub project_id: String,
+    pub facts_path: String,
+    pub current_state: String,
+    pub publication_stage: String,
+    pub gate_status: String,
+    pub fact_state: RequirementContextFactState,
+    pub changelog_path: String,
+    pub release_notes_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag_commit_sha: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_release_url: Option<String>,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementContextPullRequestRef {
+    pub issue_id: String,
+    pub run_id: String,
+    pub fact_state: RequirementContextFactState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_commit_sha: Option<String>,
+    pub merged: bool,
+    pub issue_closed: bool,
+    pub public_delivery_written: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closeout_proof_path: Option<String>,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementContextSummary {
+    pub version: String,
+    pub requirement_id: String,
+    pub project_id: String,
+    pub git_facts: RequirementContextGitFacts,
+    #[serde(default)]
+    pub baseline_documents: Vec<RequirementContextDocumentRef>,
+    #[serde(default)]
+    pub related_requirements: Vec<RequirementContextDocumentRef>,
+    #[serde(default)]
+    pub related_projects: Vec<RequirementContextProjectRef>,
+    #[serde(default)]
+    pub related_issues: Vec<RequirementContextIssueRef>,
+    #[serde(default)]
+    pub related_releases: Vec<RequirementContextReleaseRef>,
+    #[serde(default)]
+    pub related_pull_requests: Vec<RequirementContextPullRequestRef>,
+    #[serde(default)]
+    pub duplicate_signals: Vec<String>,
+    #[serde(default)]
+    pub conflict_signals: Vec<String>,
+    #[serde(default)]
+    pub stale_context: Vec<String>,
+    #[serde(default)]
+    pub missing_context: Vec<String>,
+    #[serde(default)]
     pub reasons: Vec<String>,
 }
 
