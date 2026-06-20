@@ -324,11 +324,16 @@ dependencies = [
 name = "agentflow-workflow-acceptance"
 version = "0.3.0"
 dependencies = [
+ "agentflow-action-contract",
  "agentflow-agent-manual",
  "agentflow-audit",
  "agentflow-event-store",
+ "agentflow-object-state",
+ "agentflow-ontology",
  "agentflow-panel",
  "agentflow-projection",
+ "agentflow-role-policy",
+ "agentflow-runtime-api",
  "agentflow-spec",
  "agentflow-state",
  "agentflow-task-artifacts",

@@ -21,4 +21,9 @@ sha2.workspace = true
 tempfile.workspace = true
 
 [dev-dependencies]
+agentflow-action-contract = { path = "../action-contract" }
+agentflow-object-state = { path = "../object-state" }
+agentflow-ontology = { path = "../ontology" }
+agentflow-role-policy = { path = "../role-policy" }
+agentflow-runtime-api = { path = "../runtime-api" }
 agentflow-task-loop = { path = "../task-loop" }

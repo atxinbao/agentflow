@@ -27,6 +27,7 @@
 | [006-release-runtime-v1.md](006-release-runtime-v1.md) | 定义 completion 之后的项目级 release gate、runtime、facts 和公开发布输出 |
 | [007-external-review-surface-v1.md](007-external-review-surface-v1.md) | 定义外部 reviewer 的统一阅读面、evidence index、audit summary 和 handoff package |
 | [008-runtime-terminology-convergence-v1.md](008-runtime-terminology-convergence-v1.md) | 定义 Work Agent / Build Agent、workflow ref、event、projection 的统一术语规则 |
+| [009-runtime-foundation-closeout-baseline-v1.md](009-runtime-foundation-closeout-baseline-v1.md) | 定义 v0.4.0 Runtime Foundation 的正式 closeout baseline 与主链验证锚点 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -40,8 +41,9 @@
 6. [006-release-runtime-v1.md](006-release-runtime-v1.md)
 7. [007-external-review-surface-v1.md](007-external-review-surface-v1.md)
 8. [008-runtime-terminology-convergence-v1.md](008-runtime-terminology-convergence-v1.md)
-9. [current-module-boundaries.md](current-module-boundaries.md)
-10. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+9. [009-runtime-foundation-closeout-baseline-v1.md](009-runtime-foundation-closeout-baseline-v1.md)
+10. [current-module-boundaries.md](current-module-boundaries.md)
+11. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 
