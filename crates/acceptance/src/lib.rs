@@ -138,7 +138,10 @@ mod tests {
             .any(|item| item.state == "in_review" && !item.events.is_empty()));
 
         assert_eq!(health_view.project_id, fixture.project_id);
-        assert!(matches!(health_view.project_status.as_str(), "active" | "in_review"));
+        assert!(matches!(
+            health_view.project_status.as_str(),
+            "active" | "in_review"
+        ));
         assert_eq!(
             health_view.current_issue_id.as_deref(),
             Some(fixture.current_issue_id.as_str())
