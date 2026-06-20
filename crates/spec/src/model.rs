@@ -355,12 +355,41 @@ impl SpecArtifactAuthority {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SpecAuthorityLayer {
+    PreviewArtifact,
+    ProjectAuthority,
+    IssueAuthority,
+    DerivedProjection,
+}
+
+impl SpecAuthorityLayer {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::PreviewArtifact => "preview-artifact",
+            Self::ProjectAuthority => "project-authority",
+            Self::IssueAuthority => "issue-authority",
+            Self::DerivedProjection => "derived-projection",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpecLoopStageFileRef {
     pub stage: SpecLoopStageName,
     pub path: String,
     pub status: SpecLoopStageStatus,
     pub authority: SpecArtifactAuthority,
+    pub authority_layer: SpecAuthorityLayer,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecAuthorityLayerRef {
+    pub authority_layer: SpecAuthorityLayer,
+    pub path: String,
+    pub summary: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -372,6 +401,7 @@ pub struct SpecLoopRequirementManifest {
     pub root_path: String,
     pub runtime_path: String,
     pub stage_files: Vec<SpecLoopStageFileRef>,
+    pub authority_layers: Vec<SpecAuthorityLayerRef>,
     pub updated_at: u64,
 }
 

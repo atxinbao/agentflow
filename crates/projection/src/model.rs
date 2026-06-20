@@ -469,6 +469,7 @@ pub struct SpecLoopStageProjection {
     pub path: String,
     pub status: String,
     pub authority: String,
+    pub authority_layer: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_state: Option<String>,
     #[serde(default)]
@@ -479,6 +480,14 @@ pub struct SpecLoopStageProjection {
     pub evidence_refs: Vec<String>,
     pub summary: String,
     pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopAuthorityLayerProjection {
+    pub authority_layer: String,
+    pub path: String,
+    pub summary: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -540,6 +549,8 @@ pub struct SpecLoopProjection {
     pub materialized_issue_ids: Vec<String>,
     #[serde(default)]
     pub stages: Vec<SpecLoopStageProjection>,
+    #[serde(default)]
+    pub authority_layers: Vec<SpecLoopAuthorityLayerProjection>,
     #[serde(default)]
     pub traceability: Vec<SpecLoopTraceabilityEdge>,
     #[serde(default)]

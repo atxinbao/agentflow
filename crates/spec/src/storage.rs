@@ -13,16 +13,17 @@ use crate::model::{
     RequirementGeneratedPreview, RequirementIntakeResult, RequirementIntentType,
     RequirementPreviewLifecycle, RequirementPreviewRuntime, RequirementRiskLevel,
     RequirementRouteDecision, RequirementRoutePath, RequirementTargetObject, SpecArtifactAuthority,
-    SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft, SpecIssueStatus,
-    SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageFileRef, SpecLoopStageName,
-    SpecLoopStageStatus, SpecMaterializationReport, SpecPriority, SpecProject, SpecProjectDraft,
-    SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, COMPLETION_DECISION_VERSION,
-    PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
-    REQUIREMENT_BOUNDARY_VERSION, REQUIREMENT_CLASSIFICATION_VERSION,
-    REQUIREMENT_CONFIRMATION_VERSION, REQUIREMENT_CONTEXT_VERSION,
-    REQUIREMENT_GENERATED_PREVIEW_VERSION, REQUIREMENT_PREVIEW_VERSION, REQUIREMENT_ROUTE_VERSION,
-    SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
-    SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
+    SpecAuthorityLayer, SpecAuthorityLayerRef, SpecExpectedOutputs, SpecIssue, SpecIssueCategory,
+    SpecIssueDraft, SpecIssueStatus, SpecLoopRequirementManifest, SpecLoopStageArtifact,
+    SpecLoopStageFileRef, SpecLoopStageName, SpecLoopStageStatus, SpecMaterializationReport,
+    SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
+    SpecSystemRecord, COMPLETION_DECISION_VERSION, PROJECT_BRAIN_DOCUMENT_SET_VERSION,
+    PROJECT_BRAIN_SNAPSHOT_VERSION, REQUIREMENT_BOUNDARY_VERSION,
+    REQUIREMENT_CLASSIFICATION_VERSION, REQUIREMENT_CONFIRMATION_VERSION,
+    REQUIREMENT_CONTEXT_VERSION, REQUIREMENT_GENERATED_PREVIEW_VERSION,
+    REQUIREMENT_PREVIEW_VERSION, REQUIREMENT_ROUTE_VERSION, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION,
+    SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION, SPEC_REQUIREMENT_MANIFEST_VERSION,
+    SPEC_STAGE_ARTIFACT_VERSION,
 };
 use agentflow_audit::load_project_audit_review_summary;
 use agentflow_task_artifacts::{load_task_evidence, load_task_run};
@@ -2082,8 +2083,10 @@ fn sync_requirement_preview_stage_contracts(
             path: normalize_relative_to_root(root, &path)?,
             status: artifact.status,
             authority: artifact.authority,
+            authority_layer: SpecAuthorityLayer::PreviewArtifact,
         });
     }
+    let authority_layers = build_requirement_authority_layers(root, preview)?;
 
     let manifest = SpecLoopRequirementManifest {
         version: SPEC_REQUIREMENT_MANIFEST_VERSION.to_string(),
@@ -2092,12 +2095,52 @@ fn sync_requirement_preview_stage_contracts(
         root_path: normalize_relative_to_root(root, &requirement_dir)?,
         runtime_path: runtime_ref,
         stage_files,
+        authority_layers,
         updated_at: preview.updated_at,
     };
     write_json(
         &requirement_manifest_path(root, &preview.requirement_id)?,
         &manifest,
     )
+}
+
+fn build_requirement_authority_layers(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Result<Vec<SpecAuthorityLayerRef>> {
+    let mut layers = vec![
+        SpecAuthorityLayerRef {
+            authority_layer: SpecAuthorityLayer::PreviewArtifact,
+            path: normalize_relative_to_root(root, requirement_preview_dir(root, &preview.requirement_id)?)?,
+            summary: "Spec Loop 当前 requirement 的 preview/runtime artifacts，只用于阶段追踪和确认，不是最终 authority。".to_string(),
+        },
+        SpecAuthorityLayerRef {
+            authority_layer: SpecAuthorityLayer::DerivedProjection,
+            path: format!(
+                ".agentflow/projections/spec-loops/{}.json",
+                preview.requirement_id
+            ),
+            summary: "Projection 是只读派生视图，只供 Desktop / CLI / reviewer 阅读，不回写 authority。".to_string(),
+        },
+    ];
+
+    if let Some(project_id) = preview.materialized_project_id.as_deref() {
+        layers.push(SpecAuthorityLayerRef {
+            authority_layer: SpecAuthorityLayer::ProjectAuthority,
+            path: format!(".agentflow/spec/projects/{project_id}.json"),
+            summary: "Project authority 以 spec/projects 为准。".to_string(),
+        });
+    }
+
+    for issue_id in &preview.materialized_issue_ids {
+        layers.push(SpecAuthorityLayerRef {
+            authority_layer: SpecAuthorityLayer::IssueAuthority,
+            path: format!(".agentflow/spec/issues/{issue_id}.json"),
+            summary: "Issue authority 以 spec/issues 为准。".to_string(),
+        });
+    }
+
+    Ok(layers)
 }
 
 fn build_requirement_stage_artifacts(
@@ -5005,8 +5048,9 @@ mod tests {
         RequirementClassificationResult, RequirementConfirmationGate, RequirementContextFactState,
         RequirementContextSummary, RequirementExecutionPermission, RequirementGeneratedPreview,
         RequirementRiskLevel, RequirementRouteDecision, RequirementRoutePath,
-        SpecArtifactAuthority, SpecLoopRequirementManifest, SpecLoopStageArtifact,
-        SpecLoopStageName, SpecLoopStageStatus, SpecPriority, DEFAULT_WORKFLOW_REF,
+        SpecArtifactAuthority, SpecAuthorityLayer, SpecLoopRequirementManifest,
+        SpecLoopStageArtifact, SpecLoopStageName, SpecLoopStageStatus, SpecPriority,
+        DEFAULT_WORKFLOW_REF,
     };
     use agentflow_event_store::load_task_events;
     use serde_json::Value;
@@ -5474,6 +5518,19 @@ mod tests {
         assert_eq!(manifest.version, "agentflow-spec-requirement-manifest.v1");
         assert_eq!(manifest.requirement_id, "340-spec-loop-filesystem-contract");
         assert_eq!(manifest.stage_files.len(), 8);
+        assert!(manifest
+            .stage_files
+            .iter()
+            .all(|entry| { entry.authority_layer == SpecAuthorityLayer::PreviewArtifact }));
+        assert!(manifest.authority_layers.iter().any(|entry| {
+            entry.authority_layer == SpecAuthorityLayer::PreviewArtifact
+                && entry.path == ".agentflow/spec/requirements/340-spec-loop-filesystem-contract"
+        }));
+        assert!(manifest.authority_layers.iter().any(|entry| {
+            entry.authority_layer == SpecAuthorityLayer::DerivedProjection
+                && entry.path
+                    == ".agentflow/projections/spec-loops/340-spec-loop-filesystem-contract.json"
+        }));
 
         let intake_artifact: SpecLoopStageArtifact =
             read_json(&requirement_dir.join("intake.json")).unwrap();
