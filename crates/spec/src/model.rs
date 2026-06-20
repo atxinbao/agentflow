@@ -1,5 +1,6 @@
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowSkillPack};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 pub const SPEC_MANIFEST_VERSION: &str = "agentflow-spec-manifest.v1";
 pub const SPEC_INDEX_VERSION: &str = "agentflow-spec-index.v1";
@@ -8,6 +9,7 @@ pub const SPEC_PROJECT_VERSION: &str = "agentflow-spec-project.v1";
 pub const REQUIREMENT_PREVIEW_VERSION: &str = "agentflow-requirement-preview.v1";
 pub const SPEC_REQUIREMENT_MANIFEST_VERSION: &str = "agentflow-spec-requirement-manifest.v1";
 pub const SPEC_STAGE_ARTIFACT_VERSION: &str = "agentflow-spec-stage-artifact.v1";
+pub const REQUIREMENT_CLASSIFICATION_VERSION: &str = "agentflow-requirement-classification.v1";
 pub const COMPLETION_DECISION_VERSION: &str = "agentflow-completion-decision.v1";
 pub const PROJECT_BRAIN_DOCUMENT_SET_VERSION: &str = "agentflow-project-brain-document-set.v1";
 pub const PROJECT_BRAIN_SNAPSHOT_VERSION: &str = "agentflow-project-brain-snapshot.v1";
@@ -378,8 +380,123 @@ pub struct SpecLoopStageArtifact {
     pub input_refs: Vec<String>,
     pub output_refs: Vec<String>,
     pub evidence_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload: Option<Value>,
     pub summary: String,
     pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RequirementClass {
+    Question,
+    Research,
+    Feature,
+    Bug,
+    Audit,
+    DesignOnly,
+    ExecutableIssue,
+    Release,
+    Maintenance,
+    Cleanup,
+}
+
+impl RequirementClass {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Question => "question",
+            Self::Research => "research",
+            Self::Feature => "feature",
+            Self::Bug => "bug",
+            Self::Audit => "audit",
+            Self::DesignOnly => "design-only",
+            Self::ExecutableIssue => "executable-issue",
+            Self::Release => "release",
+            Self::Maintenance => "maintenance",
+            Self::Cleanup => "cleanup",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RequirementExecutionPermission {
+    AnswerOnly,
+    PreviewOnly,
+    SpecLoop,
+    AuditLoop,
+    ReleaseCloseout,
+}
+
+impl RequirementExecutionPermission {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::AnswerOnly => "answer-only",
+            Self::PreviewOnly => "preview-only",
+            Self::SpecLoop => "spec-loop",
+            Self::AuditLoop => "audit-loop",
+            Self::ReleaseCloseout => "release-closeout",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RequirementFactImpact {
+    ReadOnly,
+    RequirementPreview,
+    SpecAuthority,
+    RuntimeProposal,
+    AuditSurface,
+    ReleaseSurface,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RequirementRiskLevel {
+    Low,
+    Medium,
+    High,
+}
+
+impl RequirementRiskLevel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RequirementTargetObject {
+    Requirement,
+    SpecProject,
+    SpecIssue,
+    Code,
+    Design,
+    Audit,
+    Release,
+    Documentation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementClassificationResult {
+    pub version: String,
+    pub primary_type: RequirementClass,
+    pub basic_types: Vec<RequirementClass>,
+    pub intent_type: RequirementIntentType,
+    pub execution_permission: RequirementExecutionPermission,
+    pub fact_impacts: Vec<RequirementFactImpact>,
+    pub risk_level: RequirementRiskLevel,
+    pub target_objects: Vec<RequirementTargetObject>,
+    pub confirmation_required: bool,
+    pub ambiguous: bool,
+    pub conflicting: bool,
+    pub reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

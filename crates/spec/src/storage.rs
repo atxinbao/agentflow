@@ -3,15 +3,18 @@ use crate::model::{
     CompletionDecisionRuntime, CompletionDecisionState, GoalDraftPreview, GoalDraftStatus,
     IssueContractDraftPreview, MilestoneDraftPreview, PlanDraftPreview, PlanDraftStatus,
     PreviewConfirmationRecord, ProjectBrainDocumentSet, ProjectBrainDocumentStatus,
-    ProjectBrainSnapshot, ProjectBrainStatus, RequirementDocument, RequirementIntakeResult,
-    RequirementIntentType, RequirementPreviewLifecycle, RequirementPreviewRuntime,
+    ProjectBrainSnapshot, ProjectBrainStatus, RequirementClass, RequirementClassificationResult,
+    RequirementDocument, RequirementExecutionPermission, RequirementFactImpact,
+    RequirementIntakeResult, RequirementIntentType, RequirementPreviewLifecycle,
+    RequirementPreviewRuntime, RequirementRiskLevel, RequirementTargetObject,
     SpecArtifactAuthority, SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft,
     SpecIssueStatus, SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageFileRef,
     SpecLoopStageName, SpecLoopStageStatus, SpecPriority, SpecProject, SpecProjectDraft,
     SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, COMPLETION_DECISION_VERSION,
     PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
-    REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION, SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION,
-    SPEC_PROJECT_VERSION, SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
+    REQUIREMENT_CLASSIFICATION_VERSION, REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION,
+    SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
+    SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
 };
 use agentflow_audit::load_project_audit_review_summary;
 use agentflow_task_artifacts::load_task_evidence;
@@ -1291,6 +1294,270 @@ fn detect_input_sources(
     dedupe_preserve_order(sources)
 }
 
+fn build_requirement_classification(
+    intake: &RequirementIntakeResult,
+) -> RequirementClassificationResult {
+    let raw = intake.raw_text.as_str();
+    let lowered = raw.to_ascii_lowercase();
+    let tokens = tokenize_requirement_text(raw);
+
+    let has_question = raw.contains('？')
+        || raw.contains('?')
+        || ["为什么", "怎么", "如何", "是否", "what", "why", "how"]
+            .iter()
+            .any(|keyword| lowered.contains(&keyword.to_ascii_lowercase()));
+    let has_research = [
+        "研究",
+        "调研",
+        "分析",
+        "理解",
+        "research",
+        "investigate",
+        "understand",
+    ]
+    .iter()
+    .any(|keyword| lowered.contains(&keyword.to_ascii_lowercase()));
+    let has_feature = [
+        "新增",
+        "实现",
+        "添加",
+        "支持",
+        "功能",
+        "开发",
+        "接入",
+        "feature",
+        "implement",
+    ]
+    .iter()
+    .any(|keyword| lowered.contains(&keyword.to_ascii_lowercase()));
+    let has_bug = ["修复", "bug", "错误", "异常", "故障", "fix", "regression"]
+        .iter()
+        .any(|keyword| lowered.contains(&keyword.to_ascii_lowercase()));
+    let has_audit = ["审计", "audit", "review", "验收"]
+        .iter()
+        .any(|keyword| lowered.contains(&keyword.to_ascii_lowercase()));
+    let has_design = ["设计", "figma", "ui", "ux", "原型", "交互", "design"]
+        .iter()
+        .any(|keyword| lowered.contains(&keyword.to_ascii_lowercase()));
+    let has_release = raw.contains("发布")
+        || lowered.contains("release notes")
+        || lowered.contains("changelog")
+        || tokens.iter().any(|token| {
+            let lowered = token.to_ascii_lowercase();
+            lowered == "release" || lowered == "tag" || is_version_token(token)
+        });
+    let has_maintenance = [
+        "维护",
+        "upgrade",
+        "升级",
+        "依赖",
+        "dependency",
+        "迁移",
+        "重构",
+    ]
+    .iter()
+    .any(|keyword| lowered.contains(&keyword.to_ascii_lowercase()));
+    let has_cleanup = [
+        "清理", "cleanup", "删除", "移除", "去掉", "retire", "remove", "delete",
+    ]
+    .iter()
+    .any(|keyword| lowered.contains(&keyword.to_ascii_lowercase()));
+    let has_executable_hint = ["issue", "任务", "执行", "编码", "代码", "build agent"]
+        .iter()
+        .any(|keyword| lowered.contains(&keyword.to_ascii_lowercase()))
+        || !intake.referenced_files.is_empty();
+    let design_only = has_design
+        && !has_feature
+        && !has_bug
+        && !has_audit
+        && !has_release
+        && !has_executable_hint;
+    let executable_issue =
+        (has_feature || has_bug || has_maintenance || has_cleanup || has_executable_hint)
+            && !has_audit
+            && !design_only;
+
+    let mut basic_types = Vec::new();
+    let mut reasons = Vec::new();
+
+    if has_question {
+        push_unique(&mut basic_types, RequirementClass::Question);
+        reasons.push("需求包含疑问句或提问关键词。".to_string());
+    }
+    if has_research {
+        push_unique(&mut basic_types, RequirementClass::Research);
+        reasons.push("需求包含研究、理解或调研语义。".to_string());
+    }
+    if has_feature {
+        push_unique(&mut basic_types, RequirementClass::Feature);
+        reasons.push("需求包含新增、实现或支持类语义。".to_string());
+    }
+    if has_bug {
+        push_unique(&mut basic_types, RequirementClass::Bug);
+        reasons.push("需求包含修复或缺陷处理语义。".to_string());
+    }
+    if has_audit {
+        push_unique(&mut basic_types, RequirementClass::Audit);
+        reasons.push("需求明确提到了审计或验收。".to_string());
+    }
+    if design_only {
+        push_unique(&mut basic_types, RequirementClass::DesignOnly);
+        reasons.push("需求以设计/UI 为主，没有明确代码执行语义。".to_string());
+    }
+    if executable_issue {
+        push_unique(&mut basic_types, RequirementClass::ExecutableIssue);
+        reasons.push("需求带有任务/Issue/代码落地语义，可继续进入 Spec Loop。".to_string());
+    }
+    if has_release {
+        push_unique(&mut basic_types, RequirementClass::Release);
+        reasons.push("需求涉及 release、tag 或 changelog。".to_string());
+    }
+    if has_maintenance {
+        push_unique(&mut basic_types, RequirementClass::Maintenance);
+        reasons.push("需求涉及升级、维护或迁移。".to_string());
+    }
+    if has_cleanup {
+        push_unique(&mut basic_types, RequirementClass::Cleanup);
+        reasons.push("需求包含清理、删除或收口动作。".to_string());
+    }
+
+    let mut ambiguous = false;
+    if basic_types.is_empty() {
+        basic_types.push(RequirementClass::Research);
+        reasons.push("未命中明确分类关键词，先按 research 保守处理。".to_string());
+        ambiguous = true;
+    }
+
+    let conflicting = (has_audit && executable_issue)
+        || (has_question && executable_issue)
+        || (has_question && has_release);
+    if conflicting {
+        reasons.push("需求同时包含互相竞争的执行语义，需要后续边界检查收口。".to_string());
+    }
+    if basic_types.len() > 3 {
+        ambiguous = true;
+        reasons.push("需求同时命中多个类型标签，后续 route 需要更保守处理。".to_string());
+    }
+
+    let primary_type = pick_primary_requirement_class(&basic_types);
+    let execution_permission = if conflicting {
+        RequirementExecutionPermission::PreviewOnly
+    } else if basic_types.contains(&RequirementClass::Audit) {
+        RequirementExecutionPermission::AuditLoop
+    } else if basic_types.contains(&RequirementClass::Release) {
+        RequirementExecutionPermission::ReleaseCloseout
+    } else if basic_types.len() == 1 && basic_types[0] == RequirementClass::Question {
+        RequirementExecutionPermission::AnswerOnly
+    } else if basic_types.iter().all(|class| {
+        matches!(
+            class,
+            RequirementClass::Question | RequirementClass::Research | RequirementClass::DesignOnly
+        )
+    }) {
+        RequirementExecutionPermission::PreviewOnly
+    } else {
+        RequirementExecutionPermission::SpecLoop
+    };
+
+    let fact_impacts = match execution_permission {
+        RequirementExecutionPermission::AnswerOnly => vec![RequirementFactImpact::ReadOnly],
+        RequirementExecutionPermission::PreviewOnly => {
+            vec![RequirementFactImpact::RequirementPreview]
+        }
+        RequirementExecutionPermission::SpecLoop => vec![
+            RequirementFactImpact::RequirementPreview,
+            RequirementFactImpact::SpecAuthority,
+            RequirementFactImpact::RuntimeProposal,
+        ],
+        RequirementExecutionPermission::AuditLoop => vec![
+            RequirementFactImpact::RequirementPreview,
+            RequirementFactImpact::AuditSurface,
+        ],
+        RequirementExecutionPermission::ReleaseCloseout => vec![
+            RequirementFactImpact::RequirementPreview,
+            RequirementFactImpact::ReleaseSurface,
+        ],
+    };
+
+    let risk_level = if conflicting || has_audit || has_release {
+        RequirementRiskLevel::High
+    } else if executable_issue || has_feature || has_bug || has_maintenance {
+        RequirementRiskLevel::Medium
+    } else {
+        RequirementRiskLevel::Low
+    };
+
+    let mut target_objects = vec![RequirementTargetObject::Requirement];
+    if basic_types.contains(&RequirementClass::ExecutableIssue)
+        || basic_types.contains(&RequirementClass::Feature)
+        || basic_types.contains(&RequirementClass::Bug)
+        || basic_types.contains(&RequirementClass::Maintenance)
+        || basic_types.contains(&RequirementClass::Cleanup)
+    {
+        push_unique(&mut target_objects, RequirementTargetObject::SpecProject);
+        push_unique(&mut target_objects, RequirementTargetObject::SpecIssue);
+        push_unique(&mut target_objects, RequirementTargetObject::Code);
+    }
+    if basic_types.contains(&RequirementClass::DesignOnly) {
+        push_unique(&mut target_objects, RequirementTargetObject::Design);
+    }
+    if basic_types.contains(&RequirementClass::Audit) {
+        push_unique(&mut target_objects, RequirementTargetObject::Audit);
+    }
+    if basic_types.contains(&RequirementClass::Release) {
+        push_unique(&mut target_objects, RequirementTargetObject::Release);
+    }
+    if basic_types.contains(&RequirementClass::Question)
+        || basic_types.contains(&RequirementClass::Research)
+    {
+        push_unique(&mut target_objects, RequirementTargetObject::Documentation);
+    }
+
+    reasons.push(format!(
+        "执行权限判定为 {}。",
+        execution_permission.as_str()
+    ));
+    let confirmation_required = !matches!(
+        execution_permission,
+        RequirementExecutionPermission::AnswerOnly
+    );
+
+    RequirementClassificationResult {
+        version: REQUIREMENT_CLASSIFICATION_VERSION.to_string(),
+        primary_type,
+        basic_types,
+        intent_type: intake.detected_intent.clone(),
+        execution_permission,
+        fact_impacts,
+        risk_level,
+        target_objects,
+        confirmation_required,
+        ambiguous,
+        conflicting,
+        reasons,
+    }
+}
+
+fn pick_primary_requirement_class(classes: &[RequirementClass]) -> RequirementClass {
+    for candidate in [
+        RequirementClass::Audit,
+        RequirementClass::Release,
+        RequirementClass::Bug,
+        RequirementClass::Feature,
+        RequirementClass::ExecutableIssue,
+        RequirementClass::DesignOnly,
+        RequirementClass::Maintenance,
+        RequirementClass::Cleanup,
+        RequirementClass::Research,
+        RequirementClass::Question,
+    ] {
+        if classes.contains(&candidate) {
+            return candidate;
+        }
+    }
+    RequirementClass::Research
+}
+
 fn extract_markdown_link_targets(raw: &str) -> Vec<String> {
     let bytes = raw.as_bytes();
     let mut values = Vec::new();
@@ -1382,6 +1649,12 @@ fn dedupe_preserve_order(values: Vec<String>) -> Vec<String> {
         }
     }
     unique
+}
+
+fn push_unique<T: PartialEq>(values: &mut Vec<T>, value: T) {
+    if !values.contains(&value) {
+        values.push(value);
+    }
 }
 
 fn build_goal_draft_preview(
@@ -1696,23 +1969,31 @@ fn build_requirement_stage_artifact(
     let route_ref =
         requirement_stage_artifact_path(root, requirement_id, &SpecLoopStageName::Route)
             .and_then(|path| normalize_relative_to_root(root, path))?;
+    let classification = build_requirement_classification(&preview.intake);
+    let classification_summary = format!(
+        "分类结果：{}，执行权限 {}。",
+        classification.primary_type.as_str(),
+        classification.execution_permission.as_str()
+    );
 
-    let (status, authority, input_refs, output_refs, evidence_refs, summary) = match stage {
+    let (status, authority, input_refs, output_refs, evidence_refs, payload, summary) = match stage {
         SpecLoopStageName::Intake => (
             SpecLoopStageStatus::Ready,
             SpecArtifactAuthority::Derived,
             vec![preview.requirement_path.clone()],
             vec![stage_ref.clone(), runtime_ref.clone()],
             vec![preview.requirement_path.clone()],
+            None,
             "原始需求已经清洗成 Normalized Requirement，并作为后续阶段的共同输入。".to_string(),
         ),
         SpecLoopStageName::Classification => (
-            SpecLoopStageStatus::Declared,
+            SpecLoopStageStatus::Ready,
             SpecArtifactAuthority::Derived,
             vec![intake_ref.clone()],
             vec![stage_ref.clone()],
             Vec::new(),
-            "分类阶段文件合同已建立，后续由 AF-SPEC-002 写入真实分类结果。".to_string(),
+            Some(serde_json::to_value(&classification)?),
+            classification_summary,
         ),
         SpecLoopStageName::Context => (
             SpecLoopStageStatus::Declared,
@@ -1720,6 +2001,7 @@ fn build_requirement_stage_artifact(
             vec![classification_ref.clone()],
             vec![stage_ref.clone()],
             Vec::new(),
+            None,
             "上下文解析阶段文件合同已建立，后续由 AF-SPEC-003 写入上下文结果。".to_string(),
         ),
         SpecLoopStageName::Boundary => (
@@ -1728,6 +2010,7 @@ fn build_requirement_stage_artifact(
             vec![context_ref.clone()],
             vec![stage_ref.clone()],
             Vec::new(),
+            None,
             "边界判断阶段文件合同已建立，后续由 AF-SPEC-004 写入边界结果。".to_string(),
         ),
         SpecLoopStageName::Route => (
@@ -1736,6 +2019,7 @@ fn build_requirement_stage_artifact(
             vec![boundary_ref.clone()],
             vec![stage_ref.clone()],
             Vec::new(),
+            None,
             "路由决策阶段文件合同已建立，后续由 AF-SPEC-005 写入 route 决策。".to_string(),
         ),
         SpecLoopStageName::Preview => (
@@ -1744,6 +2028,7 @@ fn build_requirement_stage_artifact(
             vec![route_ref.clone(), runtime_ref.clone()],
             vec![stage_ref.clone(), runtime_ref.clone()],
             Vec::new(),
+            None,
             "预览阶段保存当前可读预览产物；它可追踪，但不是 authority。".to_string(),
         ),
         SpecLoopStageName::Confirmation => (
@@ -1752,6 +2037,7 @@ fn build_requirement_stage_artifact(
             vec![preview_ref.clone()],
             vec![stage_ref.clone()],
             confirmation_evidence_refs(preview)?,
+            None,
             "确认阶段绑定到具体 preview artifact；没有确认记录就不能进入正式物化。".to_string(),
         ),
         SpecLoopStageName::Materialization => (
@@ -1760,6 +2046,7 @@ fn build_requirement_stage_artifact(
             vec![confirmation_ref],
             materialization_output_refs(root, preview)?,
             materialization_evidence_refs(preview)?,
+            None,
             "物化阶段只负责把 preview / confirmation artifact 转成正式 requirement、spec project 和 spec issues。".to_string(),
         ),
     };
@@ -1775,6 +2062,7 @@ fn build_requirement_stage_artifact(
         input_refs,
         output_refs,
         evidence_refs,
+        payload,
         summary,
         updated_at: preview.updated_at,
     })
@@ -2725,8 +3013,10 @@ fn unix_timestamp_seconds() -> u64 {
 mod tests {
     use super::*;
     use crate::model::{
-        SpecArtifactAuthority, SpecLoopRequirementManifest, SpecLoopStageArtifact,
-        SpecLoopStageName, SpecLoopStageStatus, SpecPriority, DEFAULT_WORKFLOW_REF,
+        RequirementClass, RequirementClassificationResult, RequirementExecutionPermission,
+        RequirementRiskLevel, SpecArtifactAuthority, SpecLoopRequirementManifest,
+        SpecLoopStageArtifact, SpecLoopStageName, SpecLoopStageStatus, SpecPriority,
+        DEFAULT_WORKFLOW_REF,
     };
     use agentflow_event_store::load_task_events;
     use serde_json::Value;
@@ -3150,10 +3440,109 @@ mod tests {
             classification_artifact.stage,
             SpecLoopStageName::Classification
         );
+        assert_eq!(classification_artifact.status, SpecLoopStageStatus::Ready);
+        let classification: RequirementClassificationResult =
+            serde_json::from_value(classification_artifact.payload.unwrap()).unwrap();
+        assert_eq!(classification.primary_type, RequirementClass::Release);
         assert_eq!(
-            classification_artifact.status,
-            SpecLoopStageStatus::Declared
+            classification.execution_permission,
+            RequirementExecutionPermission::ReleaseCloseout
         );
+        assert_eq!(classification.risk_level, RequirementRiskLevel::High);
+    }
+
+    #[test]
+    fn classification_marks_question_as_answer_only() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "question-only",
+            "# 只是提问\n\n为什么当前 release-gate 会失败？\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let classification_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/question-only/classification.json"),
+        )
+        .unwrap();
+        let classification: RequirementClassificationResult =
+            serde_json::from_value(classification_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(classification.primary_type, RequirementClass::Question);
+        assert_eq!(
+            classification.execution_permission,
+            RequirementExecutionPermission::AnswerOnly
+        );
+        assert!(!classification.confirmation_required);
+        assert!(!classification.conflicting);
+    }
+
+    #[test]
+    fn classification_keeps_audit_out_of_build_loop() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "audit-only",
+            "# 发布审计\n\n请对 v0.5.0 release 做审计并输出 findings。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let classification_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/audit-only/classification.json"),
+        )
+        .unwrap();
+        let classification: RequirementClassificationResult =
+            serde_json::from_value(classification_artifact.payload.unwrap()).unwrap();
+
+        assert!(classification
+            .basic_types
+            .contains(&RequirementClass::Audit));
+        assert_eq!(
+            classification.execution_permission,
+            RequirementExecutionPermission::AuditLoop
+        );
+        assert!(classification
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("审计")));
+    }
+
+    #[test]
+    fn classification_keeps_design_only_non_executable() {
+        let dir = tempdir().unwrap();
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "design-only",
+            "# 设计稿调整\n\n请基于 Figma 调整页面 UI 视觉和交互，只输出设计说明。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let classification_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/design-only/classification.json"),
+        )
+        .unwrap();
+        let classification: RequirementClassificationResult =
+            serde_json::from_value(classification_artifact.payload.unwrap()).unwrap();
+
+        assert!(classification
+            .basic_types
+            .contains(&RequirementClass::DesignOnly));
+        assert_eq!(
+            classification.execution_permission,
+            RequirementExecutionPermission::PreviewOnly
+        );
+        assert!(!classification
+            .basic_types
+            .contains(&RequirementClass::ExecutableIssue));
     }
 
     #[test]
