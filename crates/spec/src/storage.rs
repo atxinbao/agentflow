@@ -4,20 +4,23 @@ use crate::model::{
     IssueContractDraftPreview, MilestoneDraftPreview, PlanDraftPreview, PlanDraftStatus,
     PreviewConfirmationRecord, ProjectBrainDocumentSet, ProjectBrainDocumentStatus,
     ProjectBrainSnapshot, ProjectBrainStatus, RequirementClass, RequirementClassificationResult,
-    RequirementDocument, RequirementExecutionPermission, RequirementFactImpact,
-    RequirementIntakeResult, RequirementIntentType, RequirementPreviewLifecycle,
-    RequirementPreviewRuntime, RequirementRiskLevel, RequirementTargetObject,
-    SpecArtifactAuthority, SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecIssueDraft,
-    SpecIssueStatus, SpecLoopRequirementManifest, SpecLoopStageArtifact, SpecLoopStageFileRef,
-    SpecLoopStageName, SpecLoopStageStatus, SpecPriority, SpecProject, SpecProjectDraft,
-    SpecProjectStatus, SpecRequiredAgentRole, SpecSystemRecord, COMPLETION_DECISION_VERSION,
-    PROJECT_BRAIN_DOCUMENT_SET_VERSION, PROJECT_BRAIN_SNAPSHOT_VERSION,
-    REQUIREMENT_CLASSIFICATION_VERSION, REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION,
+    RequirementContextDocumentRef, RequirementContextFactState, RequirementContextGitFacts,
+    RequirementContextIssueRef, RequirementContextProjectRef, RequirementContextPullRequestRef,
+    RequirementContextReleaseRef, RequirementContextSummary, RequirementDocument,
+    RequirementExecutionPermission, RequirementFactImpact, RequirementIntakeResult,
+    RequirementIntentType, RequirementPreviewLifecycle, RequirementPreviewRuntime,
+    RequirementRiskLevel, RequirementTargetObject, SpecArtifactAuthority, SpecExpectedOutputs,
+    SpecIssue, SpecIssueCategory, SpecIssueDraft, SpecIssueStatus, SpecLoopRequirementManifest,
+    SpecLoopStageArtifact, SpecLoopStageFileRef, SpecLoopStageName, SpecLoopStageStatus,
+    SpecPriority, SpecProject, SpecProjectDraft, SpecProjectStatus, SpecRequiredAgentRole,
+    SpecSystemRecord, COMPLETION_DECISION_VERSION, PROJECT_BRAIN_DOCUMENT_SET_VERSION,
+    PROJECT_BRAIN_SNAPSHOT_VERSION, REQUIREMENT_CLASSIFICATION_VERSION,
+    REQUIREMENT_CONTEXT_VERSION, REQUIREMENT_PREVIEW_VERSION, SPEC_INDEX_VERSION,
     SPEC_ISSUE_VERSION, SPEC_MANIFEST_VERSION, SPEC_PROJECT_VERSION,
     SPEC_REQUIREMENT_MANIFEST_VERSION, SPEC_STAGE_ARTIFACT_VERSION,
 };
 use agentflow_audit::load_project_audit_review_summary;
-use agentflow_task_artifacts::load_task_evidence;
+use agentflow_task_artifacts::{load_task_evidence, load_task_run};
 use agentflow_workflow_core::{
     canonicalize_project_root, join_relative_path, normalize_relative_path_string,
     normalize_relative_to_root, validate_safe_local_id, IssueId, ProjectId,
@@ -25,6 +28,7 @@ use agentflow_workflow_core::{
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
+    collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -110,6 +114,29 @@ struct CloseoutProofSnapshot {
     changelog_path: Option<String>,
     #[serde(default)]
     release_notes_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectReleaseFactsSnapshot {
+    #[serde(default)]
+    project_id: String,
+    #[serde(default)]
+    current_state: String,
+    #[serde(default)]
+    publication_stage: String,
+    #[serde(default)]
+    gate_status: String,
+    #[serde(default)]
+    changelog_path: String,
+    #[serde(default)]
+    release_notes_path: String,
+    #[serde(default)]
+    tag_name: Option<String>,
+    #[serde(default)]
+    tag_commit_sha: Option<String>,
+    #[serde(default)]
+    remote_release_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1995,15 +2022,20 @@ fn build_requirement_stage_artifact(
             Some(serde_json::to_value(&classification)?),
             classification_summary,
         ),
-        SpecLoopStageName::Context => (
-            SpecLoopStageStatus::Declared,
-            SpecArtifactAuthority::Derived,
-            vec![classification_ref.clone()],
-            vec![stage_ref.clone()],
-            Vec::new(),
-            None,
-            "上下文解析阶段文件合同已建立，后续由 AF-SPEC-003 写入上下文结果。".to_string(),
-        ),
+        SpecLoopStageName::Context => {
+            let context = build_requirement_context_summary(root, preview)?;
+            let context_summary = build_requirement_context_summary_line(&context);
+            let context_refs = build_requirement_context_refs(&context);
+            (
+                SpecLoopStageStatus::Ready,
+                SpecArtifactAuthority::Derived,
+                vec![classification_ref.clone()],
+                vec![stage_ref.clone()],
+                context_refs,
+                Some(serde_json::to_value(&context)?),
+                context_summary,
+            )
+        }
         SpecLoopStageName::Boundary => (
             SpecLoopStageStatus::Declared,
             SpecArtifactAuthority::Derived,
@@ -2066,6 +2098,717 @@ fn build_requirement_stage_artifact(
         summary,
         updated_at: preview.updated_at,
     })
+}
+
+fn build_requirement_context_summary(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Result<RequirementContextSummary> {
+    let git_facts = load_requirement_context_git_facts(root);
+    let mut missing_context = Vec::new();
+    if git_facts.current_branch.is_none() {
+        missing_context.push("当前 Git branch 不可解析。".to_string());
+    }
+    if git_facts.current_commit_sha.is_none() {
+        missing_context.push("当前 Git HEAD commit 不可解析。".to_string());
+    }
+
+    for referenced_file in &preview.intake.referenced_files {
+        if !workspace_path_exists(root, referenced_file) {
+            missing_context.push(format!("引用文件不存在：{}。", referenced_file));
+        }
+    }
+
+    let (baseline_documents, baseline_missing) = load_runtime_foundation_documents(root);
+    missing_context.extend(baseline_missing);
+
+    let (related_requirements, duplicate_signals) =
+        collect_related_requirement_documents(root, preview)?;
+    let related_projects = collect_related_projects(root, preview);
+    let related_issues = collect_related_issues(root, preview);
+    let related_releases = collect_related_releases(root, preview, &related_projects);
+    let related_pull_requests = collect_related_pull_requests(root, &related_issues);
+
+    if !preview.intake.referenced_pull_requests.is_empty()
+        && !preview
+            .intake
+            .referenced_pull_requests
+            .iter()
+            .all(|reference| has_matching_pull_request(reference, &related_pull_requests))
+    {
+        missing_context.push("需求引用了 Pull Request，但当前没有解析到对应 PR 事实。".to_string());
+    }
+    if !preview.intake.referenced_branches.is_empty()
+        && !preview.intake.referenced_branches.iter().all(|branch| {
+            git_facts.current_branch.as_deref() == Some(branch.as_str())
+                || related_pull_requests
+                    .iter()
+                    .any(|pull| pull.branch_name.as_deref() == Some(branch.as_str()))
+        })
+    {
+        missing_context.push("需求引用了 branch，但当前仓库事实没有匹配。".to_string());
+    }
+    if !preview.intake.referenced_releases.is_empty() && related_releases.is_empty() {
+        missing_context
+            .push("需求引用了 release / tag，但当前没有解析到对应 release 事实。".to_string());
+    }
+
+    let stale_context = collect_stale_context(
+        &related_requirements,
+        &related_releases,
+        &related_pull_requests,
+    );
+    let conflict_signals = collect_conflict_signals(
+        preview,
+        &related_projects,
+        &related_issues,
+        &related_releases,
+    );
+
+    let reasons = vec![
+        "Context Resolver 只读取当前 requirement、spec authority、release 事实和 closeout 证明，不直接修改事实源。"
+            .to_string(),
+        "Context 结果供后续 Boundary Checker 和 Route Decider 使用。".to_string(),
+    ];
+
+    Ok(RequirementContextSummary {
+        version: REQUIREMENT_CONTEXT_VERSION.to_string(),
+        requirement_id: preview.requirement_id.clone(),
+        project_id: preview.project_id.clone(),
+        git_facts,
+        baseline_documents,
+        related_requirements,
+        related_projects,
+        related_issues,
+        related_releases,
+        related_pull_requests,
+        duplicate_signals,
+        conflict_signals,
+        stale_context,
+        missing_context,
+        reasons,
+    })
+}
+
+fn build_requirement_context_summary_line(context: &RequirementContextSummary) -> String {
+    format!(
+        "上下文已解析：{} 个 requirement，{} 个 project，{} 个 issue，{} 条 release，{} 条 PR，{} 个缺失项。",
+        context.related_requirements.len(),
+        context.related_projects.len(),
+        context.related_issues.len(),
+        context.related_releases.len(),
+        context.related_pull_requests.len(),
+        context.missing_context.len()
+    )
+}
+
+fn build_requirement_context_refs(context: &RequirementContextSummary) -> Vec<String> {
+    let mut refs = Vec::new();
+    refs.extend(
+        context
+            .baseline_documents
+            .iter()
+            .map(|document| document.path.clone()),
+    );
+    refs.extend(
+        context
+            .related_requirements
+            .iter()
+            .map(|document| document.path.clone()),
+    );
+    refs.extend(
+        context
+            .related_projects
+            .iter()
+            .map(|project| project.path.clone()),
+    );
+    refs.extend(
+        context
+            .related_issues
+            .iter()
+            .map(|issue| issue.path.clone()),
+    );
+    refs.extend(
+        context
+            .related_releases
+            .iter()
+            .map(|release| release.facts_path.clone()),
+    );
+    refs.extend(context.related_pull_requests.iter().filter_map(|pull| {
+        pull.closeout_proof_path
+            .as_ref()
+            .cloned()
+            .or_else(|| pull.evidence_path.as_ref().cloned())
+    }));
+    dedupe_preserve_order(refs)
+}
+
+fn load_runtime_foundation_documents(
+    root: &Path,
+) -> (Vec<RequirementContextDocumentRef>, Vec<String>) {
+    let candidates = [
+        (
+            "docs/architecture/009-runtime-foundation-closeout-baseline-v1.md",
+            RequirementContextFactState::Current,
+            "Runtime Foundation closeout baseline。".to_string(),
+        ),
+        (
+            "docs/foundation/agentflow-filesystem-workflow-architecture-v1.md",
+            RequirementContextFactState::Current,
+            "filesystem-first 主架构基线。".to_string(),
+        ),
+    ];
+    let mut documents = Vec::new();
+    let mut missing = Vec::new();
+    for (path, fact_state, reason) in candidates {
+        let absolute = root.join(path);
+        if !absolute.is_file() {
+            missing.push(format!("缺少 Runtime Foundation 基线文档：{}。", path));
+            continue;
+        }
+        let raw = match fs::read_to_string(&absolute) {
+            Ok(raw) => raw,
+            Err(_) => {
+                missing.push(format!("无法读取 Runtime Foundation 基线文档：{}。", path));
+                continue;
+            }
+        };
+        let title = extract_title(&raw).unwrap_or_else(|| path.to_string());
+        let summary = extract_summary(&raw).unwrap_or_else(|| title.clone());
+        documents.push(RequirementContextDocumentRef {
+            path: path.to_string(),
+            title,
+            summary,
+            fact_state,
+            reasons: vec![reason],
+        });
+    }
+    (documents, missing)
+}
+
+fn collect_related_requirement_documents(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Result<(Vec<RequirementContextDocumentRef>, Vec<String>)> {
+    let directory = root.join("docs/requirements");
+    if !directory.exists() {
+        return Ok((
+            Vec::new(),
+            vec!["docs/requirements 目录不存在。".to_string()],
+        ));
+    }
+    let mut documents = Vec::new();
+    let mut duplicate_signals = Vec::new();
+    let current_title_tokens = tokenize_requirement_text(&preview.project_title);
+    let current_summary_tokens = tokenize_requirement_text(&preview.goal_draft.outcome);
+    let current_tokens = current_title_tokens
+        .into_iter()
+        .chain(current_summary_tokens)
+        .collect::<Vec<_>>();
+
+    for entry in
+        fs::read_dir(&directory).with_context(|| format!("read {}", directory.display()))?
+    {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("md") {
+            continue;
+        }
+        let document = read_requirement_document(root, &path)?;
+        let reasons = requirement_document_match_reasons(preview, &document, &current_tokens);
+        let is_current = document.path == preview.requirement_path;
+        if !is_current && reasons.is_empty() {
+            continue;
+        }
+        let fact_state = requirement_document_fact_state(&document, is_current);
+        if !is_current
+            && (document.title == preview.project_title
+                || reasons.iter().any(|reason| reason.contains("关键词重合")))
+        {
+            duplicate_signals.push(format!(
+                "发现可能重复的 requirement：{}（{}）。",
+                document.path, document.title
+            ));
+        }
+        documents.push(RequirementContextDocumentRef {
+            path: document.path,
+            title: document.title,
+            summary: document.summary,
+            fact_state,
+            reasons: if is_current {
+                vec!["当前 requirement authority。".to_string()]
+            } else {
+                reasons
+            },
+        });
+    }
+    documents.sort_by(|left, right| {
+        fact_state_rank(&left.fact_state)
+            .cmp(&fact_state_rank(&right.fact_state))
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    Ok((documents, duplicate_signals))
+}
+
+fn collect_related_projects(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Vec<RequirementContextProjectRef> {
+    let Ok(projects) = list_spec_projects(root) else {
+        return Vec::new();
+    };
+    let mut refs = Vec::new();
+    for project in projects {
+        let reasons = project_match_reasons(preview, &project);
+        if reasons.is_empty() {
+            continue;
+        }
+        refs.push(RequirementContextProjectRef {
+            project_id: project.project_id.clone(),
+            path: project.system.path.clone(),
+            title: project.title.clone(),
+            summary: project.summary.clone(),
+            status: project.status.clone(),
+            fact_state: if project.source_requirement_path == preview.requirement_path
+                || project.project_id == preview.project_id
+            {
+                RequirementContextFactState::Current
+            } else {
+                RequirementContextFactState::History
+            },
+            source_requirement_path: project.source_requirement_path.clone(),
+            issue_count: project.issue_ids.len(),
+            reasons,
+        });
+    }
+    refs.sort_by(|left, right| left.project_id.cmp(&right.project_id));
+    refs
+}
+
+fn collect_related_issues(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+) -> Vec<RequirementContextIssueRef> {
+    let Ok(issues) = list_spec_issues(root) else {
+        return Vec::new();
+    };
+    let mut refs = Vec::new();
+    for issue in issues {
+        let reasons = issue_match_reasons(preview, &issue);
+        if reasons.is_empty() {
+            continue;
+        }
+        let evidence = load_task_evidence(root, &issue.issue_id).ok();
+        refs.push(RequirementContextIssueRef {
+            issue_id: issue.issue_id.clone(),
+            path: issue.system.path.clone(),
+            title: issue.title.clone(),
+            summary: issue.summary.clone(),
+            status: issue.status.clone(),
+            project_id: issue.project_id.clone(),
+            workflow_ref: issue.workflow_ref.clone(),
+            fact_state: if is_terminal_issue_status(&issue.status) {
+                RequirementContextFactState::History
+            } else {
+                RequirementContextFactState::Current
+            },
+            source_requirement_path: issue.source_requirement_path.clone(),
+            evidence_path: evidence
+                .as_ref()
+                .map(|evidence| evidence.validation_path.clone()),
+            run_id: evidence.as_ref().map(|evidence| evidence.run_id.clone()),
+            reasons,
+        });
+    }
+    refs.sort_by(|left, right| left.issue_id.cmp(&right.issue_id));
+    refs
+}
+
+fn collect_related_releases(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+    related_projects: &[RequirementContextProjectRef],
+) -> Vec<RequirementContextReleaseRef> {
+    let mut project_ids = BTreeSet::new();
+    project_ids.insert(preview.project_id.clone());
+    for project in related_projects {
+        project_ids.insert(project.project_id.clone());
+    }
+    let mut refs = Vec::new();
+    for project_id in project_ids {
+        let path = project_release_facts_path(root, &project_id);
+        let Ok(facts) = read_json::<ProjectReleaseFactsSnapshot>(&path) else {
+            continue;
+        };
+        refs.push(RequirementContextReleaseRef {
+            project_id: facts.project_id.clone(),
+            facts_path: normalize_relative_to_root(root, &path).unwrap_or_else(|_| {
+                format!(".agentflow/release/projects/{}.json", facts.project_id)
+            }),
+            current_state: facts.current_state.clone(),
+            publication_stage: facts.publication_stage.clone(),
+            gate_status: facts.gate_status.clone(),
+            fact_state: if facts.project_id == preview.project_id {
+                RequirementContextFactState::Current
+            } else {
+                RequirementContextFactState::History
+            },
+            changelog_path: facts.changelog_path.clone(),
+            release_notes_path: facts.release_notes_path.clone(),
+            tag_name: facts.tag_name.clone(),
+            tag_commit_sha: facts.tag_commit_sha.clone(),
+            remote_release_url: facts.remote_release_url.clone(),
+            reasons: vec![format!(
+                "Release 事实来自 project {} 的公开交付状态。",
+                facts.project_id
+            )],
+        });
+    }
+    refs.sort_by(|left, right| left.project_id.cmp(&right.project_id));
+    refs
+}
+
+fn collect_related_pull_requests(
+    root: &Path,
+    related_issues: &[RequirementContextIssueRef],
+) -> Vec<RequirementContextPullRequestRef> {
+    let mut refs = Vec::new();
+    for issue in related_issues {
+        let Some(run_id) = issue.run_id.as_deref() else {
+            continue;
+        };
+        let evidence = load_task_evidence(root, &issue.issue_id).ok();
+        let closeout = load_closeout_proof_for_issue(root, &issue.issue_id, run_id).ok();
+        let run = load_task_run(root, &issue.issue_id, run_id).ok();
+        let Some(closeout) = closeout else {
+            continue;
+        };
+        refs.push(RequirementContextPullRequestRef {
+            issue_id: issue.issue_id.clone(),
+            run_id: run_id.to_string(),
+            fact_state: if closeout.merged || issue.status == SpecIssueStatus::Done {
+                RequirementContextFactState::History
+            } else {
+                RequirementContextFactState::Current
+            },
+            branch_name: run.and_then(|run| run.branch_name),
+            pr_url: closeout.pr_url.clone(),
+            merge_commit_sha: closeout.merge_commit_sha.clone(),
+            merged: closeout.merged,
+            issue_closed: closeout.issue_closed,
+            public_delivery_written: closeout.public_delivery_written,
+            evidence_path: evidence.map(|evidence| evidence.validation_path),
+            closeout_proof_path: Some(format!(
+                ".agentflow/tasks/{}/runs/{}/review/closeout-proof.json",
+                issue.issue_id, run_id
+            )),
+            reasons: vec!["Closeout 证明和 Task evidence 已存在。".to_string()],
+        });
+    }
+    refs.sort_by(|left, right| left.issue_id.cmp(&right.issue_id));
+    refs
+}
+
+fn collect_stale_context(
+    related_requirements: &[RequirementContextDocumentRef],
+    related_releases: &[RequirementContextReleaseRef],
+    related_pull_requests: &[RequirementContextPullRequestRef],
+) -> Vec<String> {
+    let release_is_published = related_releases.iter().any(|release| {
+        matches!(
+            release.publication_stage.as_str(),
+            "tag-created" | "remote-release-created" | "published"
+        )
+    });
+    let closeout_is_merged = related_pull_requests
+        .iter()
+        .any(|pull| pull.merged && pull.issue_closed);
+    let mut stale = Vec::new();
+    if release_is_published || closeout_is_merged {
+        for document in related_requirements
+            .iter()
+            .filter(|document| document.fact_state == RequirementContextFactState::Draft)
+        {
+            stale.push(format!(
+                "文档 {} 仍然标记为 draft，但相关 release / closeout 事实已经存在。",
+                document.path
+            ));
+        }
+    }
+    stale
+}
+
+fn collect_conflict_signals(
+    preview: &RequirementPreviewRuntime,
+    related_projects: &[RequirementContextProjectRef],
+    related_issues: &[RequirementContextIssueRef],
+    related_releases: &[RequirementContextReleaseRef],
+) -> Vec<String> {
+    let mut conflicts = Vec::new();
+    for project in related_projects {
+        if project.fact_state == RequirementContextFactState::Current
+            && project.source_requirement_path != preview.requirement_path
+            && project.project_id == preview.project_id
+        {
+            conflicts.push(format!(
+                "project {} 当前仍由其他 requirement 占用，可能与本次需求边界冲突。",
+                project.project_id
+            ));
+        }
+    }
+    for issue in related_issues {
+        if issue.fact_state == RequirementContextFactState::Current
+            && issue.source_requirement_path != preview.requirement_path
+        {
+            conflicts.push(format!(
+                "issue {} 仍处于活动状态，可能与当前需求存在范围重叠。",
+                issue.issue_id
+            ));
+        }
+    }
+    for release in related_releases {
+        if release.fact_state == RequirementContextFactState::Current
+            && matches!(
+                release.publication_stage.as_str(),
+                "tag-created" | "remote-release-created" | "published"
+            )
+        {
+            conflicts.push(format!(
+                "project {} 已进入 release 阶段，当前需求需要确认是否允许继续改动。",
+                release.project_id
+            ));
+        }
+    }
+    dedupe_preserve_order(conflicts)
+}
+
+fn load_requirement_context_git_facts(root: &Path) -> RequirementContextGitFacts {
+    let Some(git_dir) = resolve_git_dir(root) else {
+        return RequirementContextGitFacts {
+            current_branch: None,
+            current_commit_sha: None,
+        };
+    };
+    let Some(head) = fs::read_to_string(git_dir.join("HEAD")).ok() else {
+        return RequirementContextGitFacts {
+            current_branch: None,
+            current_commit_sha: None,
+        };
+    };
+    let head = head.trim();
+    if let Some(reference) = head.strip_prefix("ref:") {
+        let reference = reference.trim();
+        RequirementContextGitFacts {
+            current_branch: reference.strip_prefix("refs/heads/").map(str::to_string),
+            current_commit_sha: resolve_git_reference(&git_dir, reference),
+        }
+    } else if head.is_empty() {
+        RequirementContextGitFacts {
+            current_branch: None,
+            current_commit_sha: None,
+        }
+    } else {
+        RequirementContextGitFacts {
+            current_branch: None,
+            current_commit_sha: Some(head.to_string()),
+        }
+    }
+}
+
+fn resolve_git_dir(root: &Path) -> Option<PathBuf> {
+    let git_path = root.join(".git");
+    if git_path.is_dir() {
+        return Some(git_path);
+    }
+    if !git_path.is_file() {
+        return None;
+    }
+    let git_file = fs::read_to_string(&git_path).ok()?;
+    let path_value = git_file.trim().strip_prefix("gitdir:")?.trim();
+    let candidate = PathBuf::from(path_value);
+    Some(if candidate.is_absolute() {
+        candidate
+    } else {
+        root.join(candidate)
+    })
+}
+
+fn resolve_git_reference(git_dir: &Path, reference: &str) -> Option<String> {
+    let reference_path = git_dir.join(reference);
+    if let Ok(value) = fs::read_to_string(reference_path) {
+        let value = value.trim().to_string();
+        if !value.is_empty() {
+            return Some(value);
+        }
+    }
+    let packed_refs = fs::read_to_string(git_dir.join("packed-refs")).ok()?;
+    for line in packed_refs.lines() {
+        if line.starts_with('#') || line.starts_with('^') {
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        let sha = parts.next()?;
+        let name = parts.next()?;
+        if name == reference {
+            return Some(sha.to_string());
+        }
+    }
+    None
+}
+
+fn workspace_path_exists(root: &Path, reference: &str) -> bool {
+    let path = PathBuf::from(reference);
+    if path.is_absolute() {
+        return path.exists();
+    }
+    root.join(path).exists()
+}
+
+fn requirement_document_match_reasons(
+    preview: &RequirementPreviewRuntime,
+    document: &RequirementDocument,
+    current_tokens: &[String],
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    let candidate_tokens =
+        tokenize_requirement_text(&format!("{} {}", document.title, document.summary));
+    let overlap = shared_tokens(current_tokens, &candidate_tokens);
+    if !overlap.is_empty() {
+        reasons.push(format!("标题/摘要关键词重合：{}。", overlap.join("、")));
+    }
+    for referenced_file in &preview.intake.referenced_files {
+        if document.raw_text.contains(referenced_file) {
+            reasons.push(format!("共同引用文件：{}。", referenced_file));
+        }
+    }
+    for referenced_release in &preview.intake.referenced_releases {
+        if document.raw_text.contains(referenced_release) {
+            reasons.push(format!("共同引用 release：{}。", referenced_release));
+        }
+    }
+    for referenced_pr in &preview.intake.referenced_pull_requests {
+        if document.raw_text.contains(referenced_pr) {
+            reasons.push(format!("共同引用 PR：{}。", referenced_pr));
+        }
+    }
+    dedupe_preserve_order(reasons)
+}
+
+fn requirement_document_fact_state(
+    document: &RequirementDocument,
+    is_current: bool,
+) -> RequirementContextFactState {
+    if is_current {
+        return RequirementContextFactState::Current;
+    }
+    let lower = document.raw_text.to_lowercase();
+    if lower.contains("草稿")
+        || lower.contains("draft")
+        || lower.contains("preview")
+        || lower.contains("待确认")
+    {
+        RequirementContextFactState::Draft
+    } else {
+        RequirementContextFactState::History
+    }
+}
+
+fn project_match_reasons(
+    preview: &RequirementPreviewRuntime,
+    project: &SpecProject,
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    if project.source_requirement_path == preview.requirement_path {
+        reasons.push("来自当前 requirement 的 authority project。".to_string());
+    }
+    if project.project_id == preview.project_id {
+        reasons.push("与当前 preview projectId 一致。".to_string());
+    }
+    if project.title == preview.project_title {
+        reasons.push("project 标题与当前需求标题一致。".to_string());
+    }
+    dedupe_preserve_order(reasons)
+}
+
+fn issue_match_reasons(preview: &RequirementPreviewRuntime, issue: &SpecIssue) -> Vec<String> {
+    let mut reasons = Vec::new();
+    if issue.source_requirement_path == preview.requirement_path {
+        reasons.push("来自当前 requirement 的 authority issue。".to_string());
+    }
+    if issue.project_id.as_deref() == Some(preview.project_id.as_str()) {
+        reasons.push("属于当前 preview projectId。".to_string());
+    }
+    for referenced_file in &preview.intake.referenced_files {
+        if issue
+            .allowed_paths
+            .iter()
+            .any(|path| path.contains(referenced_file))
+            || issue
+                .forbidden_paths
+                .iter()
+                .any(|path| path.contains(referenced_file))
+        {
+            reasons.push(format!("issue 范围与引用文件 {} 有重叠。", referenced_file));
+        }
+    }
+    let current_tokens = tokenize_requirement_text(&format!(
+        "{} {}",
+        preview.project_title, preview.goal_draft.outcome
+    ));
+    let issue_tokens = tokenize_requirement_text(&format!("{} {}", issue.title, issue.summary));
+    let overlap = shared_tokens(&current_tokens, &issue_tokens);
+    if !overlap.is_empty() {
+        reasons.push(format!(
+            "issue 与当前需求关键词重合：{}。",
+            overlap.join("、")
+        ));
+    }
+    dedupe_preserve_order(reasons)
+}
+
+fn shared_tokens(left: &[String], right: &[String]) -> Vec<String> {
+    let right_set = right.iter().cloned().collect::<BTreeSet<_>>();
+    let mut shared = Vec::new();
+    for token in left {
+        if token.len() < 2 {
+            continue;
+        }
+        if right_set.contains(token) {
+            shared.push(token.clone());
+        }
+    }
+    dedupe_preserve_order(shared)
+}
+
+fn has_matching_pull_request(reference: &str, pulls: &[RequirementContextPullRequestRef]) -> bool {
+    pulls.iter().any(|pull| {
+        pull.pr_url
+            .as_deref()
+            .and_then(pull_request_alias)
+            .is_some_and(|alias| alias == reference)
+    })
+}
+
+fn pull_request_alias(url: &str) -> Option<String> {
+    let number = url.rsplit("/pull/").next()?;
+    let number = number.split('/').next()?.trim();
+    if number.is_empty() {
+        return None;
+    }
+    Some(format!("#{number}"))
+}
+
+fn is_terminal_issue_status(status: &SpecIssueStatus) -> bool {
+    matches!(status, SpecIssueStatus::Done | SpecIssueStatus::Cancel)
+}
+
+fn fact_state_rank(state: &RequirementContextFactState) -> u8 {
+    match state {
+        RequirementContextFactState::Current => 0,
+        RequirementContextFactState::Draft => 1,
+        RequirementContextFactState::History => 2,
+        RequirementContextFactState::Missing => 3,
+    }
 }
 
 fn preview_stage_status(preview: &RequirementPreviewRuntime) -> SpecLoopStageStatus {
@@ -2419,6 +3162,13 @@ fn load_closeout_proof_for_issue(
 
 fn has_value(value: Option<&str>) -> bool {
     value.is_some_and(|value| !value.trim().is_empty())
+}
+
+fn project_release_facts_path(root: &Path, project_id: &str) -> PathBuf {
+    root.join(".agentflow")
+        .join("release")
+        .join("projects")
+        .join(format!("{project_id}.json"))
 }
 
 fn build_goal_recheck_status(
@@ -3013,10 +3763,10 @@ fn unix_timestamp_seconds() -> u64 {
 mod tests {
     use super::*;
     use crate::model::{
-        RequirementClass, RequirementClassificationResult, RequirementExecutionPermission,
-        RequirementRiskLevel, SpecArtifactAuthority, SpecLoopRequirementManifest,
-        SpecLoopStageArtifact, SpecLoopStageName, SpecLoopStageStatus, SpecPriority,
-        DEFAULT_WORKFLOW_REF,
+        RequirementClass, RequirementClassificationResult, RequirementContextFactState,
+        RequirementContextSummary, RequirementExecutionPermission, RequirementRiskLevel,
+        SpecArtifactAuthority, SpecLoopRequirementManifest, SpecLoopStageArtifact,
+        SpecLoopStageName, SpecLoopStageStatus, SpecPriority, DEFAULT_WORKFLOW_REF,
     };
     use agentflow_event_store::load_task_events;
     use serde_json::Value;
@@ -3045,9 +3795,24 @@ mod tests {
     ) {
         let issue_root = root.join(".agentflow/tasks").join(issue_id);
         let evidence_dir = issue_root.join("evidence");
+        let run_dir = issue_root.join("runs").join(run_id);
         let review_dir = issue_root.join("runs").join(run_id).join("review");
         fs::create_dir_all(&evidence_dir).unwrap();
         fs::create_dir_all(&review_dir).unwrap();
+        write_json(
+            &run_dir.join("run.json"),
+            &serde_json::json!({
+                "version": "task-run.v1",
+                "issueId": issue_id,
+                "runId": run_id,
+                "workflowRef": "work-agent.issue-loop@v1",
+                "status": "completed",
+                "branchName": format!("agentflow/direct/{issue_id}"),
+                "createdAt": 1,
+                "updatedAt": 2
+            }),
+        )
+        .unwrap();
         write_json(
             &evidence_dir.join("evidence.json"),
             &serde_json::json!({
@@ -3085,6 +3850,51 @@ mod tests {
             .join("PROJECT_HEALTH.md");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, format!("# PROJECT_HEALTH\n\n{marker}\n")).unwrap();
+    }
+
+    fn write_fake_git_head(root: &Path, branch: &str, commit: &str) {
+        let head = root.join(".git/HEAD");
+        let reference = root.join(".git/refs/heads").join(branch);
+        fs::create_dir_all(reference.parent().unwrap()).unwrap();
+        fs::write(&head, format!("ref: refs/heads/{branch}\n")).unwrap();
+        fs::write(reference, format!("{commit}\n")).unwrap();
+    }
+
+    fn write_release_facts(root: &Path, project_id: &str, publication_stage: &str, tag_name: &str) {
+        let release_path = root
+            .join(".agentflow/release/projects")
+            .join(format!("{project_id}.json"));
+        fs::create_dir_all(release_path.parent().unwrap()).unwrap();
+        write_json(
+            &release_path,
+            &serde_json::json!({
+                "version": "project-release-facts.v1",
+                "projectId": project_id,
+                "projectTitle": "上下文项目",
+                "currentState": "published",
+                "publicationStage": publication_stage,
+                "gateStatus": "ready",
+                "gateReason": "release 已完成",
+                "completionState": "accepted",
+                "completionOutcome": "accept",
+                "deliveryStatus": "published",
+                "publicRecordWrittenAt": 100,
+                "changelogPath": "CHANGELOG.md",
+                "releaseNotesPath": format!("docs/release-notes/{project_id}.md"),
+                "entryCount": 1,
+                "summaryLine": "release 已发布",
+                "tagName": tag_name,
+                "tagCommitSha": "release-commit-001",
+                "remoteProvider": "github",
+                "remoteReleaseId": "release-001",
+                "remoteReleaseUrl": "https://github.com/acme/repo/releases/tag/v0.5.0",
+                "remoteReleaseCommitSha": "release-commit-001",
+                "latestEventId": "evt-release-001",
+                "publishedAt": 100,
+                "updatedAt": 100
+            }),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -3543,6 +4353,160 @@ mod tests {
         assert!(!classification
             .basic_types
             .contains(&RequirementClass::ExecutableIssue));
+    }
+
+    #[test]
+    fn context_stage_resolves_requirement_release_and_pull_request_facts() {
+        let dir = tempdir().unwrap();
+        write_fake_git_head(dir.path(), "main", "abc123def456");
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path().join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nContext Resolver / Boundary Checker / Route Decider。\n",
+        )
+        .unwrap();
+        write_text(&dir.path().join("CHANGELOG.md"), "# Changelog\n").unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/release-notes/project-context-preview.md"),
+            "# Release Notes\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "342-context-resolver",
+            "# Runtime closeout 收口\n\n请结合 docs/architecture/009-runtime-foundation-closeout-baseline-v1.md、CHANGELOG.md、main 分支和 PR #1，继续收口 v0.5.0 release。\n",
+        );
+        write_requirement_with_text(
+            dir.path(),
+            "341-context-resolver-draft",
+            "# Runtime closeout 收口草稿\n\n这是一个 draft preview，仍引用 CHANGELOG.md 和 PR #1。\n",
+        );
+
+        let mut project_draft = SpecProjectDraft::new("project-context-preview");
+        project_draft.issue_ids = vec!["AF-CONTEXT-001".to_string()];
+        let project = project_from_requirement(dir.path(), &requirement, project_draft).unwrap();
+        write_spec_project(dir.path(), &project).unwrap();
+
+        let mut issue_draft = SpecIssueDraft::new("AF-CONTEXT-001");
+        issue_draft.project_id = Some("project-context-preview".to_string());
+        issue_draft.allowed_paths = vec![
+            "CHANGELOG.md".to_string(),
+            "docs/release-notes/**".to_string(),
+        ];
+        let mut issue = issue_from_requirement(dir.path(), &requirement, issue_draft).unwrap();
+        issue.status = SpecIssueStatus::Done;
+        write_spec_issue(dir.path(), &issue).unwrap();
+
+        write_completion_ready_artifacts(dir.path(), "AF-CONTEXT-001", "run-001", true);
+        write_release_facts(dir.path(), "project-context-preview", "published", "v0.5.0");
+
+        requirement_preview_from_requirement(
+            dir.path(),
+            &requirement,
+            Some("project-context-preview"),
+        )
+        .unwrap();
+
+        let context_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/342-context-resolver/context.json"),
+        )
+        .unwrap();
+        assert_eq!(context_artifact.stage, SpecLoopStageName::Context);
+        assert_eq!(context_artifact.status, SpecLoopStageStatus::Ready);
+        let context: RequirementContextSummary =
+            serde_json::from_value(context_artifact.payload.unwrap()).unwrap();
+
+        assert_eq!(context.git_facts.current_branch.as_deref(), Some("main"));
+        assert_eq!(
+            context.git_facts.current_commit_sha.as_deref(),
+            Some("abc123def456")
+        );
+        assert!(context.baseline_documents.iter().any(|document| {
+            document.path == "docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"
+        }));
+        assert!(context.related_requirements.iter().any(|document| {
+            document.path == "docs/requirements/341-context-resolver-draft.md"
+                && document.fact_state == RequirementContextFactState::Draft
+        }));
+        assert!(context
+            .duplicate_signals
+            .iter()
+            .any(|signal| signal.contains("341-context-resolver-draft")));
+        assert!(context.related_projects.iter().any(|project| {
+            project.project_id == "project-context-preview"
+                && project.fact_state == RequirementContextFactState::Current
+        }));
+        assert!(context.related_issues.iter().any(|issue| {
+            issue.issue_id == "AF-CONTEXT-001" && issue.run_id.as_deref() == Some("run-001")
+        }));
+        assert!(context.related_pull_requests.iter().any(|pull| {
+            pull.issue_id == "AF-CONTEXT-001"
+                && pull.pr_url.as_deref() == Some("https://github.com/acme/repo/pull/1")
+                && pull.branch_name.as_deref() == Some("agentflow/direct/AF-CONTEXT-001")
+        }));
+        assert!(context.related_releases.iter().any(|release| {
+            release.project_id == "project-context-preview"
+                && release.tag_name.as_deref() == Some("v0.5.0")
+        }));
+        assert!(context
+            .stale_context
+            .iter()
+            .any(|entry| entry.contains("341-context-resolver-draft")));
+    }
+
+    #[test]
+    fn context_stage_reports_missing_pull_request_and_release_facts() {
+        let dir = tempdir().unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/architecture/009-runtime-foundation-closeout-baseline-v1.md"),
+            "# Runtime Foundation Closeout Baseline\n\n当前 closeout baseline。\n",
+        )
+        .unwrap();
+        write_text(
+            &dir.path()
+                .join("docs/foundation/agentflow-filesystem-workflow-architecture-v1.md"),
+            "# Filesystem Workflow Architecture\n\nSpec Loop 文件合同。\n",
+        )
+        .unwrap();
+
+        let requirement = write_requirement_with_text(
+            dir.path(),
+            "missing-context",
+            "# 缺失上下文\n\n请基于 feature/spec-loop 分支处理 PR #99，并确认 v0.9.0 release。\n",
+        );
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+
+        let context_artifact: SpecLoopStageArtifact = read_json(
+            &dir.path()
+                .join(".agentflow/spec/requirements/missing-context/context.json"),
+        )
+        .unwrap();
+        let context: RequirementContextSummary =
+            serde_json::from_value(context_artifact.payload.unwrap()).unwrap();
+
+        assert!(context
+            .missing_context
+            .iter()
+            .any(|entry| entry.contains("Pull Request")));
+        assert!(context
+            .missing_context
+            .iter()
+            .any(|entry| entry.contains("release")));
+        assert!(context
+            .missing_context
+            .iter()
+            .any(|entry| entry.contains("branch")));
     }
 
     #[test]
