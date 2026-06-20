@@ -315,6 +315,7 @@ name = "agentflow-task-loop"
 version = "0.5.1"
 dependencies = [
  "agentflow-event-store",
+ "agentflow-runtime-api",
  "agentflow-spec",
  "agentflow-task-artifacts",
  "agentflow-workflow-core",

@@ -6,6 +6,7 @@ use agentflow_event_store::{
     allocate_task_sequence, append_task_event_once, load_task_events, task_claim_is_active,
     EventActor, EventStateTransition, TaskEvent, TaskEventDraft,
 };
+use agentflow_runtime_api::write_work_command_handoff_from_spec_issue;
 use agentflow_spec::{
     read_spec_issue, read_spec_project, update_spec_issue_status, SpecIssue, SpecIssueStatus,
     SpecPriority, SpecProject,
@@ -214,6 +215,7 @@ fn request_issue_launch_inner(
         &issue.workflow_ref,
         Some(branch_name.clone()),
     )?;
+    let work_command = write_work_command_handoff_from_spec_issue(root, &issue, &run.run_id)?;
     let payload = AgentLaunchPayload {
         version: TASK_LOOP_LAUNCH_REQUEST_VERSION.to_string(),
         provider: provider.to_string(),
@@ -228,6 +230,7 @@ fn request_issue_launch_inner(
         context_pack_path: None,
         branch_name: branch_name.clone(),
         merge_mode: "auto-merge-if-eligible".to_string(),
+        work_command: Some(work_command.clone()),
     };
     write_launch_request(root, &payload)?;
 
@@ -254,6 +257,7 @@ fn request_issue_launch_inner(
             causation_id: None,
             payload: serde_json::to_value(&payload)?,
             artifact_refs: vec![
+                work_command.command_path.clone(),
                 payload.launch_request_path.clone(),
                 format!(
                     ".agentflow/tasks/{}/runs/{}/run.json",
@@ -738,12 +742,19 @@ mod tests {
         fs::write(&path, "# 测试需求\n\n用于 task-loop 测试。\n").unwrap();
     }
 
+    fn apply_execution_contract(draft: &mut SpecIssueDraft) {
+        draft.allowed_paths = vec!["apps/desktop/src/**".to_string()];
+        draft.forbidden_paths = vec![".agentflow/**".to_string()];
+        draft.validation_commands = vec!["npm --prefix apps/desktop run build".to_string()];
+    }
+
     fn write_project_with_issues(root: &Path) {
         write_requirement(root);
         let requirement = root.join("docs/requirements/034-test.md");
         let mut first = SpecIssueDraft::new("AF-TASK-001");
         first.project_id = Some("project-task-loop".to_string());
         first.priority = SpecPriority::P1;
+        apply_execution_contract(&mut first);
         let first = agentflow_spec::issue_from_requirement(root, &requirement, first).unwrap();
         write_spec_issue(root, &first).unwrap();
 
@@ -751,6 +762,7 @@ mod tests {
         second.project_id = Some("project-task-loop".to_string());
         second.priority = SpecPriority::P0;
         second.blocked_by = vec!["AF-TASK-001".to_string()];
+        apply_execution_contract(&mut second);
         let second = agentflow_spec::issue_from_requirement(root, &requirement, second).unwrap();
         write_spec_issue(root, &second).unwrap();
 
@@ -772,6 +784,7 @@ mod tests {
             } else {
                 SpecPriority::P1
             };
+            apply_execution_contract(&mut draft);
             let issue = agentflow_spec::issue_from_requirement(root, &requirement, draft).unwrap();
             write_spec_issue(root, &issue).unwrap();
         }
@@ -834,6 +847,21 @@ mod tests {
             .join(".agentflow/tasks/AF-TASK-001/work-loop-contract.json")
             .is_file());
         assert!(dir.path().join(&launch.launch_request_path).is_file());
+        assert!(dir
+            .path()
+            .join(".agentflow/runtime/commands/start-run-AF-TASK-001-run-001.json")
+            .is_file());
+        let payload: AgentLaunchPayload = serde_json::from_str(
+            &fs::read_to_string(dir.path().join(&launch.launch_request_path)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            payload
+                .work_command
+                .as_ref()
+                .map(|command| command.command_id.as_str()),
+            Some("start-run-AF-TASK-001-run-001")
+        );
         let events = replay_task_events(dir.path(), ReplayFilter::issue("AF-TASK-001")).unwrap();
         assert!(events
             .iter()
@@ -898,12 +926,10 @@ mod tests {
         let dir = tempdir().unwrap();
         write_requirement(dir.path());
         let requirement = dir.path().join("docs/requirements/034-test.md");
-        let direct = agentflow_spec::issue_from_requirement(
-            dir.path(),
-            &requirement,
-            SpecIssueDraft::new("AF-DIRECT-001"),
-        )
-        .unwrap();
+        let mut draft = SpecIssueDraft::new("AF-DIRECT-001");
+        apply_execution_contract(&mut draft);
+        let direct =
+            agentflow_spec::issue_from_requirement(dir.path(), &requirement, draft).unwrap();
         write_spec_issue(dir.path(), &direct).unwrap();
 
         let tick = TaskLoop::start_issue(dir.path(), "AF-DIRECT-001", "codex").unwrap();
