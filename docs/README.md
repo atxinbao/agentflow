@@ -1,6 +1,6 @@
 # Docs Index
 
-更新日期：2026-06-18
+更新日期：2026-06-20
 执行者：Codex
 
 ## 当前文档入口
@@ -12,6 +12,7 @@
 | `architecture/` | AgentFlow 底层技术蓝图、模块边界与运行时模型 |
 | `verification/` | Gate、E2E 证据链和正式验证入口说明 |
 | `v0.4.0/` | v0.4.0 Definition-driven Runtime Foundation 版本规划与技术设计草案 |
+| `v0.5.0/` | v0.5.0 Spec Loop Productization 版本规划与任务草案 |
 | `requirements/` | 新需求文档入口，后续开发只从这里开始 |
 | `archive/2026-05-agentflow-legacy/` | 旧需求、旧规划、旧规格和旧验证摘要归档 |
 
@@ -19,15 +20,16 @@
 
 1. [../README.md](../README.md)
 2. [v0.4.0/README.md](v0.4.0/README.md)
-3. [requirements/README.md](requirements/README.md)
-4. [requirements/next-requirements.md](requirements/next-requirements.md)
-5. [product/README.md](product/README.md)
-6. [product/design-system.md](product/design-system.md)
-7. [foundation/README.md](foundation/README.md)
-8. [architecture/README.md](architecture/README.md)
-9. [verification/058h-release-gate-e2e-v1.md](verification/058h-release-gate-e2e-v1.md)
-10. [verification/064-v0-3-1-release-gate-certification-v1.md](verification/064-v0-3-1-release-gate-certification-v1.md)
-11. [verification/history.md](verification/history.md)
+3. [v0.5.0/README.md](v0.5.0/README.md)
+4. [requirements/README.md](requirements/README.md)
+5. [requirements/next-requirements.md](requirements/next-requirements.md)
+6. [product/README.md](product/README.md)
+7. [product/design-system.md](product/design-system.md)
+8. [foundation/README.md](foundation/README.md)
+9. [architecture/README.md](architecture/README.md)
+10. [verification/058h-release-gate-e2e-v1.md](verification/058h-release-gate-e2e-v1.md)
+11. [verification/064-v0-3-1-release-gate-certification-v1.md](verification/064-v0-3-1-release-gate-certification-v1.md)
+12. [verification/history.md](verification/history.md)
 
 ## 规则
 
@@ -37,6 +39,7 @@
 - `architecture/` 下文档作为底层技术蓝图、authority 边界和运行时模型，不直接等同于实现任务。
 - `verification/` 下文档定义正式 gate、E2E 证据链和可复跑验证入口。
 - `v0.4.0/` 下文档是版本规划和技术设计草案；进入实现前仍必须转成正式 `requirements/` 和 `.agentflow/spec/**`。
+- `v0.5.0/` 下文档是版本规划和任务草案；进入实现前仍必须转成正式 `requirements/` 和 `.agentflow/spec/**`。
 - 根目录旧 `GOAL.md`、`ROADMAP.md` 和 `verification.md` 已退出入口；历史验证记录迁入 `verification/history.md`。
 - 根目录 `design.md` 只保留兼容入口；完整设计基线迁入 `product/design-system.md`。
 - 新功能、新页面、新数据模型和新验收标准必须写入 `requirements/`。
