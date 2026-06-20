@@ -14,6 +14,7 @@ pub const REQUIREMENT_CONTEXT_VERSION: &str = "agentflow-requirement-context.v1"
 pub const REQUIREMENT_BOUNDARY_VERSION: &str = "agentflow-requirement-boundary.v1";
 pub const REQUIREMENT_ROUTE_VERSION: &str = "agentflow-requirement-route.v1";
 pub const REQUIREMENT_GENERATED_PREVIEW_VERSION: &str = "agentflow-generated-preview.v1";
+pub const REQUIREMENT_CONFIRMATION_VERSION: &str = "agentflow-requirement-confirmation.v1";
 pub const COMPLETION_DECISION_VERSION: &str = "agentflow-completion-decision.v1";
 pub const PROJECT_BRAIN_DOCUMENT_SET_VERSION: &str = "agentflow-project-brain-document-set.v1";
 pub const PROJECT_BRAIN_SNAPSHOT_VERSION: &str = "agentflow-project-brain-snapshot.v1";
@@ -1026,12 +1027,40 @@ pub struct PlanDraftPreview {
 pub struct PreviewConfirmationRecord {
     pub timestamp: u64,
     pub actor: String,
+    pub preview_artifact_path: String,
+    pub preview_revision: u32,
     pub target_type: String,
     pub target_id: String,
+    pub confirmation_scope: Vec<String>,
     pub summary: String,
     pub decision: String,
     pub impact: String,
     pub next_action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementConfirmationGate {
+    pub version: String,
+    pub requirement_id: String,
+    pub project_id: String,
+    pub preview_artifact_path: String,
+    pub preview_revision: u32,
+    pub preview_current_state: String,
+    pub preview_only: bool,
+    pub gate_open: bool,
+    pub cancelled: bool,
+    #[serde(default)]
+    pub latest_decision: Option<String>,
+    #[serde(default)]
+    pub latest_confirmation_scope: Vec<String>,
+    #[serde(default)]
+    pub confirmation_records: Vec<PreviewConfirmationRecord>,
+    pub next_action: String,
+    pub next_action_label: String,
+    pub next_action_reason: String,
+    #[serde(default)]
+    pub reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
