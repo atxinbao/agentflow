@@ -2,7 +2,7 @@
 
 日期：2026-06-20
 执行者：Codex
-状态：Released Baseline / Release Closeout / 已发布版本文档
+状态：Released Functional Baseline / Not Clean Stable / v0.5.1 Remediation Required
 
 ## 1. Purpose
 
@@ -31,18 +31,20 @@ Human Input
 
 ## 2. Boundary
 
-本目录当前保存 `v0.5.0` 的发布基线、任务范围和收口结论。
+本目录当前保存 `v0.5.0` 的发布基线、任务范围、已交付事实和后续修复边界。
 
 它说明的是：
 
 - `v0.5.0` 已经发布；
 - Spec Loop 主链已经正式落地；
 - `.agentflow/spec/requirements/<requirement-id>/**` 已经成为当前版本的文件化阶段合同事实源；
-- 当前文档用于 release closeout、版本回顾和后续版本衔接。
+- 当前文档用于 release closeout、版本回顾和后续版本衔接；
+- 但它当前只能视为 functional baseline，不能直接表述为 clean stable release；
+- 进入 `v0.6.0` 之前，必须先完成 `v0.5.1` 的 release hygiene 与 authority closure 修复链。
 
 ## 3. Reading Order
 
-1. [AGENTFLOW_V0_5_0_SPEC_LOOP_PRODUCTIZATION_TASKS_V1.md](/Users/mac/Documents/AgentFlow/docs/v0.5.0/AGENTFLOW_V0_5_0_SPEC_LOOP_PRODUCTIZATION_TASKS_V1.md)
+1. [AGENTFLOW_V0_5_0_SPEC_LOOP_PRODUCTIZATION_TASKS_V1.md](AGENTFLOW_V0_5_0_SPEC_LOOP_PRODUCTIZATION_TASKS_V1.md)
 
 ## 4. Version Scope
 
@@ -115,5 +117,6 @@ AF-SPEC-001 Requirement Intake Normalizer
 
 - `CHANGELOG.md`
 - `docs/v0.5.0/**`
+- `docs/v0.5.1/**`
 - GitHub Release notes
 - 当前 `main` 上通过的 `release-gate`

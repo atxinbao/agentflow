@@ -12,7 +12,8 @@
 | `architecture/` | AgentFlow 底层技术蓝图、模块边界与运行时模型 |
 | `verification/` | Gate、E2E 证据链和正式验证入口说明 |
 | `v0.4.0/` | v0.4.0 Definition-driven Runtime Foundation 已发布版本基线与 closeout 文档 |
-| `v0.5.0/` | v0.5.0 Spec Loop Productization 功能基线与非 stable 风险记录 |
+| `v0.5.0/` | v0.5.0 Spec Loop Productization 功能基线与风险延期记录 |
+| `v0.5.1/` | v0.5.1 Release Hygiene 与 Authority Closure 修复链 |
 | `v0.6.0/` | v0.6.0 Work Loop Handoff & Controlled Execution 开发前置规划，受 v0.5.1 修复链约束 |
 | `requirements/` | 新需求文档入口，后续开发只从这里开始 |
 | `archive/2026-05-agentflow-legacy/` | 旧需求、旧规划、旧规格和旧验证摘要归档 |
@@ -22,16 +23,17 @@
 1. [../README.md](../README.md)
 2. [v0.4.0/README.md](v0.4.0/README.md)
 3. [v0.5.0/README.md](v0.5.0/README.md)
-4. [v0.6.0/README.md](v0.6.0/README.md)
-5. [requirements/README.md](requirements/README.md)
-6. [requirements/next-requirements.md](requirements/next-requirements.md)
-7. [product/README.md](product/README.md)
-8. [product/design-system.md](product/design-system.md)
-9. [foundation/README.md](foundation/README.md)
-10. [architecture/README.md](architecture/README.md)
-11. [verification/058h-release-gate-e2e-v1.md](verification/058h-release-gate-e2e-v1.md)
-12. [verification/064-v0-3-1-release-gate-certification-v1.md](verification/064-v0-3-1-release-gate-certification-v1.md)
-13. [verification/history.md](verification/history.md)
+4. [v0.5.1/README.md](v0.5.1/README.md)
+5. [v0.6.0/README.md](v0.6.0/README.md)
+6. [requirements/README.md](requirements/README.md)
+7. [requirements/next-requirements.md](requirements/next-requirements.md)
+8. [product/README.md](product/README.md)
+9. [product/design-system.md](product/design-system.md)
+10. [foundation/README.md](foundation/README.md)
+11. [architecture/README.md](architecture/README.md)
+12. [verification/058h-release-gate-e2e-v1.md](verification/058h-release-gate-e2e-v1.md)
+13. [verification/064-v0-3-1-release-gate-certification-v1.md](verification/064-v0-3-1-release-gate-certification-v1.md)
+14. [verification/history.md](verification/history.md)
 
 ## 规则
 
@@ -41,7 +43,8 @@
 - `architecture/` 下文档作为底层技术蓝图、authority 边界和运行时模型，不直接等同于实现任务。
 - `verification/` 下文档定义正式 gate、E2E 证据链和可复跑验证入口。
 - `v0.4.0/` 下文档记录已发布版本的技术基线与 closeout 事实，不再视为未执行草案。
-- `v0.5.0/` 下文档记录已发布版本的 Spec Loop 功能基线，但当前不能直接视为 clean stable release。
+- `v0.5.0/` 下文档记录已发布版本的 Spec Loop 功能基线，但当前只能视为 functional baseline，不应直接视为 clean stable release。
+- `v0.5.1/` 下文档记录修复版本入口；在 `v0.5.1` 完成前，不进入 `v0.6.0` 实现。
 - `v0.6.0/` 下文档记录下一版本 Work Loop handoff 与受控执行规划；进入开发前仍必须先完成 `v0.5.1` release hygiene 与 authority closure 修复链，再转成正式 requirement 和 spec issue。
 - 后续新开发需求仍然要进入 `requirements/`；新版本运行时事实源仍然以 `.agentflow/spec/**` 为准。
 - 根目录旧 `GOAL.md`、`ROADMAP.md` 和 `verification.md` 已退出入口；历史验证记录迁入 `verification/history.md`。

@@ -2,11 +2,11 @@
 
 日期：2026-06-20
 执行者：Codex
-状态：Version Planning Draft / 开发前置文档 / 不授权 Build Agent 执行
+状态：Released Functional Baseline / Historical Execution Closeout / 后续修复转入 v0.5.1
 
 ## 1. Purpose
 
-本文档沉淀 AgentFlow `v0.5.0` 的开发任务规划。
+本文档沉淀 AgentFlow `v0.5.0` 的任务范围、执行结果和 release closeout 历史记录。
 
 `v0.5.0` 的核心目标是把 Spec Loop 产品化：
 
@@ -23,7 +23,13 @@
 -> Runtime Action Proposal
 ```
 
-一句话：`v0.5.0` 要让 AgentFlow 稳定理解需求，并把需求转成可确认、可追踪、可进入 Runtime Foundation 的项目合同。
+一句话：`v0.5.0` 让 AgentFlow 可以稳定理解需求，并把需求转成可确认、可追踪、可进入 Runtime Foundation 的项目合同。
+
+本文件现在不再表示“待执行规划”，而是：
+
+- `v0.5.0` 已发布；
+- 任务链已经完成；
+- 当前文档用于历史回顾、版本 closeout 和后续修复衔接。
 
 ## 2. Baseline
 
@@ -515,8 +521,7 @@ Raw Human Request
 从 `v0.4.0` 审计带入 `v0.5.0` 的修复项：
 
 1. 修正文档状态不一致问题。
-   - `docs/v0.4.0/README.md` 仍标记为 `Version Planning Draft / 非执行需求 / 不授权 Build Agent 执行`。
-   - `v0.4.0` 已发布，该文档状态应在后续 closeout 中改为 released baseline 或明确归档为 planning source。
+   - `v0.4.0` / `v0.5.0` / `v0.5.1` 的版本文档口径收口，已转入 `V051-007 Documentation Closeout` 统一处理。
 
 2. 明确 Spec Loop 和 Runtime Foundation 的边界。
    - `v0.4.0` 已完成 Runtime Foundation；
@@ -529,7 +534,7 @@ Raw Human Request
 
 ## 11. Next Step
 
-下一步不是直接执行这些任务。
+下一步不是重新执行 `v0.5.0` 任务。
 
 正确顺序是：
 
@@ -543,4 +548,12 @@ SPEC Draft Preview
 -> .agentflow/spec/issues/**
 ```
 
-确认前，本文件只是 `v0.5.0` 的开发前置规划。
+当前正确顺序是：
+
+```text
+v0.5.0 Released Functional Baseline
+-> v0.5.1 Release Hygiene & Authority Closure
+-> v0.6.0 Work Loop Handoff & Controlled Execution
+```
+
+因此，本文件现在只作为 `v0.5.0` 的历史 closeout 文档使用。
