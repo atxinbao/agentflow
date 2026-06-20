@@ -11,6 +11,7 @@ pub const SPEC_REQUIREMENT_MANIFEST_VERSION: &str = "agentflow-spec-requirement-
 pub const SPEC_STAGE_ARTIFACT_VERSION: &str = "agentflow-spec-stage-artifact.v1";
 pub const REQUIREMENT_CLASSIFICATION_VERSION: &str = "agentflow-requirement-classification.v1";
 pub const REQUIREMENT_CONTEXT_VERSION: &str = "agentflow-requirement-context.v1";
+pub const REQUIREMENT_BOUNDARY_VERSION: &str = "agentflow-requirement-boundary.v1";
 pub const COMPLETION_DECISION_VERSION: &str = "agentflow-completion-decision.v1";
 pub const PROJECT_BRAIN_DOCUMENT_SET_VERSION: &str = "agentflow-project-brain-document-set.v1";
 pub const PROJECT_BRAIN_SNAPSHOT_VERSION: &str = "agentflow-project-brain-snapshot.v1";
@@ -647,6 +648,57 @@ pub struct RequirementContextSummary {
     pub stale_context: Vec<String>,
     #[serde(default)]
     pub missing_context: Vec<String>,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RequirementBoundaryVerdict {
+    Allowed,
+    PreviewOnly,
+    ConfirmationRequired,
+    Blocked,
+}
+
+impl RequirementBoundaryVerdict {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Allowed => "allowed",
+            Self::PreviewOnly => "preview-only",
+            Self::ConfirmationRequired => "confirmation-required",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementBoundaryBlocker {
+    pub gate: String,
+    pub reason: String,
+    pub alternative_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementBoundarySummary {
+    pub version: String,
+    pub requirement_id: String,
+    pub project_id: String,
+    pub write_requirement: RequirementBoundaryVerdict,
+    pub write_spec_authority: RequirementBoundaryVerdict,
+    pub preview_gate: RequirementBoundaryVerdict,
+    pub execution_gate: RequirementBoundaryVerdict,
+    pub runtime_api_gate: RequirementBoundaryVerdict,
+    pub human_confirmation_required: bool,
+    pub blocked: bool,
+    #[serde(default)]
+    pub blockers: Vec<RequirementBoundaryBlocker>,
+    #[serde(default)]
+    pub allowed_paths: Vec<String>,
+    #[serde(default)]
+    pub alternatives: Vec<String>,
     #[serde(default)]
     pub reasons: Vec<String>,
 }
