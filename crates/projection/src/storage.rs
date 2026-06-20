@@ -1,6 +1,6 @@
 use crate::model::{
     CompletionDecisionIndex, CompletionDecisionProjection, IssueStatusIndex, ProjectProjection,
-    RequirementPreviewIndex, RequirementPreviewProjection, TaskProjection,
+    RequirementPreviewIndex, RequirementPreviewProjection, SpecLoopProjection, TaskProjection,
     PROJECT_PROJECTION_VERSION,
 };
 use anyhow::{Context, Result};
@@ -14,6 +14,7 @@ pub fn prepare_projection_workspace(project_root: impl AsRef<Path>) -> Result<()
     ensure_directory(&root.join(".agentflow/projections/tasks"))?;
     ensure_directory(&root.join(".agentflow/projections/projects"))?;
     ensure_directory(&root.join(".agentflow/projections/requirements"))?;
+    ensure_directory(&root.join(".agentflow/projections/spec-loops"))?;
     ensure_directory(&root.join(".agentflow/projections/completions"))?;
     ensure_directory(&root.join(".agentflow/indexes"))?;
     Ok(())
@@ -71,6 +72,17 @@ pub fn write_requirement_preview_index(
     prepare_projection_workspace(&root)?;
     let path = root.join(".agentflow/indexes/requirement-previews.json");
     write_json(&path, index)?;
+    Ok(path)
+}
+
+pub fn write_spec_loop_projection(
+    project_root: impl AsRef<Path>,
+    projection: &SpecLoopProjection,
+) -> Result<PathBuf> {
+    let root = canonical_project_root(project_root)?;
+    prepare_projection_workspace(&root)?;
+    let path = spec_loop_projection_path(&root, &projection.requirement_id);
+    write_json(&path, projection)?;
     Ok(path)
 }
 
@@ -132,6 +144,14 @@ pub fn load_requirement_preview_index(
     read_json(&root.join(".agentflow/indexes/requirement-previews.json"))
 }
 
+pub fn load_spec_loop_projection(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+) -> Result<SpecLoopProjection> {
+    let root = canonical_project_root(project_root)?;
+    read_json(&spec_loop_projection_path(&root, requirement_id))
+}
+
 pub fn load_completion_decision_projection(
     project_root: impl AsRef<Path>,
     project_id: &str,
@@ -159,6 +179,11 @@ fn project_projection_path(root: &Path, project_id: &str) -> PathBuf {
 
 fn requirement_preview_projection_path(root: &Path, requirement_id: &str) -> PathBuf {
     root.join(".agentflow/projections/requirements")
+        .join(format!("{}.json", sanitize_id(requirement_id)))
+}
+
+fn spec_loop_projection_path(root: &Path, requirement_id: &str) -> PathBuf {
+    root.join(".agentflow/projections/spec-loops")
         .join(format!("{}.json", sanitize_id(requirement_id)))
 }
 

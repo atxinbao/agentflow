@@ -5,6 +5,7 @@ pub const PROJECT_PROJECTION_VERSION: &str = "project-projection.v3";
 pub const ISSUE_STATUS_INDEX_VERSION: &str = "issue-status-index.v3";
 pub const REQUIREMENT_PREVIEW_PROJECTION_VERSION: &str = "requirement-preview-projection.v1";
 pub const REQUIREMENT_PREVIEW_INDEX_VERSION: &str = "requirement-preview-index.v1";
+pub const SPEC_LOOP_PROJECTION_VERSION: &str = "spec-loop-projection.v1";
 pub const COMPLETION_DECISION_PROJECTION_VERSION: &str = "completion-decision-projection.v1";
 pub const COMPLETION_DECISION_INDEX_VERSION: &str = "completion-decision-index.v1";
 
@@ -458,6 +459,77 @@ pub struct RequirementPreviewProjection {
     pub issue_contract_draft_count: usize,
     pub materialized_project_id: Option<String>,
     pub materialized_issue_ids: Vec<String>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopStageProjection {
+    pub stage: String,
+    pub path: String,
+    pub status: String,
+    pub authority: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_state: Option<String>,
+    #[serde(default)]
+    pub input_refs: Vec<String>,
+    #[serde(default)]
+    pub output_refs: Vec<String>,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    pub summary: String,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopTraceabilityEdge {
+    pub from_ref: String,
+    pub to_ref: String,
+    pub relation: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopActionProposalProjection {
+    pub proposal_ref: String,
+    pub action_type: String,
+    pub target_object_type: String,
+    pub target_object_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_object_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_object_id: Option<String>,
+    pub actor_role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff_rule: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopProjection {
+    pub version: String,
+    pub requirement_id: String,
+    pub requirement_path: String,
+    pub project_id: String,
+    pub project_title: String,
+    pub lifecycle: String,
+    pub current_state: String,
+    pub manifest_path: String,
+    pub runtime_path: String,
+    pub next_recommended_action: String,
+    pub next_recommended_action_label: String,
+    pub next_recommended_action_reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materialized_project_id: Option<String>,
+    #[serde(default)]
+    pub materialized_issue_ids: Vec<String>,
+    #[serde(default)]
+    pub stages: Vec<SpecLoopStageProjection>,
+    #[serde(default)]
+    pub traceability: Vec<SpecLoopTraceabilityEdge>,
+    #[serde(default)]
+    pub runtime_action_proposals: Vec<SpecLoopActionProposalProjection>,
     pub updated_at: u64,
 }
 

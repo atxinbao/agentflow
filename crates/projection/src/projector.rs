@@ -7,15 +7,17 @@ use crate::{
         ProjectionDeliverySummary, ProjectionPhase, ProjectionPublicDelivery,
         ProjectionRuntimeSummary, ProjectionSessionSummary, ProjectionSummary,
         RequirementPreviewIndex, RequirementPreviewIndexEntry, RequirementPreviewProjection,
-        TaskProjection, TaskTimelineEvent, TaskTimelineItem, COMPLETION_DECISION_INDEX_VERSION,
-        COMPLETION_DECISION_PROJECTION_VERSION, ISSUE_STATUS_INDEX_VERSION,
-        PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
-        REQUIREMENT_PREVIEW_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
+        SpecLoopActionProposalProjection, SpecLoopProjection, SpecLoopStageProjection,
+        SpecLoopTraceabilityEdge, TaskProjection, TaskTimelineEvent, TaskTimelineItem,
+        COMPLETION_DECISION_INDEX_VERSION, COMPLETION_DECISION_PROJECTION_VERSION,
+        ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
+        REQUIREMENT_PREVIEW_PROJECTION_VERSION, SPEC_LOOP_PROJECTION_VERSION,
+        TASK_PROJECTION_VERSION,
     },
     storage::{
         write_completion_decision_index, write_completion_decision_projection,
         write_issue_status_index, write_project_projection, write_requirement_preview_index,
-        write_requirement_preview_projection, write_task_projection,
+        write_requirement_preview_projection, write_spec_loop_projection, write_task_projection,
     },
 };
 use agentflow_audit::load_audit_result_summary;
@@ -25,9 +27,11 @@ use agentflow_release::{
     load_project_release_facts,
 };
 use agentflow_spec::{
-    list_completion_decision_runtimes, list_requirement_preview_runtimes, prepare_spec_workspace,
-    read_project_brain_snapshot, sync_completion_decision_runtimes, CompletionDecisionRuntime,
-    RequirementPreviewRuntime, SpecIssue, SpecProject, SpecProjectStatus,
+    list_completion_decision_runtimes, list_requirement_preview_runtimes,
+    list_spec_loop_stage_artifacts, prepare_spec_workspace, read_project_brain_snapshot,
+    read_spec_loop_requirement_manifest, sync_completion_decision_runtimes,
+    CompletionDecisionRuntime, RequirementPreviewRuntime, SpecIssue, SpecProject,
+    SpecProjectStatus,
 };
 use anyhow::{Context, Result};
 use serde::Deserialize;
@@ -82,6 +86,10 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
         .iter()
         .map(|issue| (issue.issue_id.clone(), issue))
         .collect::<HashMap<_, _>>();
+    let projects_by_id = projects
+        .iter()
+        .map(|project| (project.project_id.clone(), project))
+        .collect::<HashMap<_, _>>();
     let mut task_projections = BTreeMap::new();
 
     for issue in &issues {
@@ -112,6 +120,9 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
         let projection_path = write_requirement_preview_projection(&root, &projection)?
             .display()
             .to_string();
+        let spec_loop_projection =
+            project_spec_loop(&root, preview, &issues_by_id, &projects_by_id)?;
+        write_spec_loop_projection(&root, &spec_loop_projection)?;
         requirement_preview_entries.push(RequirementPreviewIndexEntry {
             requirement_id: preview.requirement_id.clone(),
             project_id: preview.project_id.clone(),
@@ -231,6 +242,168 @@ fn project_requirement_preview(
         materialized_issue_ids: preview.materialized_issue_ids.clone(),
         updated_at: preview.updated_at,
     }
+}
+
+fn project_spec_loop(
+    root: &Path,
+    preview: &RequirementPreviewRuntime,
+    issues_by_id: &HashMap<String, &SpecIssue>,
+    projects_by_id: &HashMap<String, &SpecProject>,
+) -> Result<SpecLoopProjection> {
+    let manifest = read_spec_loop_requirement_manifest(root, &preview.requirement_id)?;
+    let stage_artifacts = list_spec_loop_stage_artifacts(root, &preview.requirement_id)?;
+    let stage_paths = manifest
+        .stage_files
+        .iter()
+        .map(|entry| (entry.stage.as_str().to_string(), entry.path.clone()))
+        .collect::<HashMap<_, _>>();
+
+    let stages = stage_artifacts
+        .iter()
+        .map(|artifact| SpecLoopStageProjection {
+            stage: artifact.stage.as_str().to_string(),
+            path: stage_paths
+                .get(artifact.stage.as_str())
+                .cloned()
+                .unwrap_or_else(|| artifact.stage.as_str().to_string()),
+            status: artifact.status.as_str().to_string(),
+            authority: artifact.authority.as_str().to_string(),
+            current_state: artifact.current_state.clone(),
+            input_refs: artifact.input_refs.clone(),
+            output_refs: artifact.output_refs.clone(),
+            evidence_refs: artifact.evidence_refs.clone(),
+            summary: artifact.summary.clone(),
+            updated_at: artifact.updated_at,
+        })
+        .collect::<Vec<_>>();
+
+    let runtime_action_proposals =
+        build_spec_loop_action_proposals(preview, issues_by_id, projects_by_id);
+    let traceability = build_spec_loop_traceability(&stages, &runtime_action_proposals);
+
+    Ok(SpecLoopProjection {
+        version: SPEC_LOOP_PROJECTION_VERSION.to_string(),
+        requirement_id: preview.requirement_id.clone(),
+        requirement_path: preview.requirement_path.clone(),
+        project_id: preview.project_id.clone(),
+        project_title: preview.project_title.clone(),
+        lifecycle: preview.lifecycle.as_str().to_string(),
+        current_state: preview.current_state.clone(),
+        manifest_path: format!(
+            ".agentflow/spec/requirements/{}/manifest.json",
+            preview.requirement_id
+        ),
+        runtime_path: manifest.runtime_path,
+        next_recommended_action: preview.next_recommended_action.clone(),
+        next_recommended_action_label: preview.next_recommended_action_label.clone(),
+        next_recommended_action_reason: preview.next_recommended_action_reason.clone(),
+        materialized_project_id: preview.materialized_project_id.clone(),
+        materialized_issue_ids: preview.materialized_issue_ids.clone(),
+        stages,
+        traceability,
+        runtime_action_proposals,
+        updated_at: preview.updated_at,
+    })
+}
+
+fn build_spec_loop_traceability(
+    stages: &[SpecLoopStageProjection],
+    runtime_action_proposals: &[SpecLoopActionProposalProjection],
+) -> Vec<SpecLoopTraceabilityEdge> {
+    let mut edges = Vec::new();
+    let materialization_path = stages
+        .iter()
+        .find(|stage| stage.stage == "materialization")
+        .map(|stage| stage.path.clone());
+    for stage in stages {
+        for input_ref in &stage.input_refs {
+            edges.push(SpecLoopTraceabilityEdge {
+                from_ref: input_ref.clone(),
+                to_ref: stage.path.clone(),
+                relation: "stage-input".to_string(),
+            });
+        }
+        for output_ref in &stage.output_refs {
+            if output_ref == &stage.path {
+                continue;
+            }
+            edges.push(SpecLoopTraceabilityEdge {
+                from_ref: stage.path.clone(),
+                to_ref: output_ref.clone(),
+                relation: "stage-output".to_string(),
+            });
+        }
+        for evidence_ref in &stage.evidence_refs {
+            edges.push(SpecLoopTraceabilityEdge {
+                from_ref: evidence_ref.clone(),
+                to_ref: stage.path.clone(),
+                relation: "stage-evidence".to_string(),
+            });
+        }
+    }
+    if let Some(materialization_path) = materialization_path {
+        for proposal in runtime_action_proposals {
+            edges.push(SpecLoopTraceabilityEdge {
+                from_ref: materialization_path.clone(),
+                to_ref: proposal.proposal_ref.clone(),
+                relation: "runtime-action-proposal".to_string(),
+            });
+        }
+    }
+    edges
+}
+
+fn build_spec_loop_action_proposals(
+    preview: &RequirementPreviewRuntime,
+    issues_by_id: &HashMap<String, &SpecIssue>,
+    projects_by_id: &HashMap<String, &SpecProject>,
+) -> Vec<SpecLoopActionProposalProjection> {
+    let mut proposals = Vec::new();
+    if let (Some(project_id), Some(plan_draft)) = (
+        preview.materialized_project_id.as_ref(),
+        preview.plan_draft.as_ref(),
+    ) {
+        proposals.push(SpecLoopActionProposalProjection {
+            proposal_ref: format!("runtime-action-proposal:createProject:{project_id}"),
+            action_type: "createProject".to_string(),
+            target_object_type: "Spec".to_string(),
+            target_object_id: plan_draft.plan_draft_id.clone(),
+            created_object_type: Some("Project".to_string()),
+            created_object_id: Some(project_id.clone()),
+            actor_role: "spec-agent".to_string(),
+            handoff_rule: None,
+        });
+        if let Some(project) = projects_by_id.get(project_id) {
+            for issue_id in &project.issue_ids {
+                if let Some(issue) = issues_by_id.get(issue_id) {
+                    proposals.push(SpecLoopActionProposalProjection {
+                        proposal_ref: format!("runtime-action-proposal:createIssue:{issue_id}"),
+                        action_type: "createIssue".to_string(),
+                        target_object_type: "Project".to_string(),
+                        target_object_id: project_id.clone(),
+                        created_object_type: Some("Issue".to_string()),
+                        created_object_id: Some(issue.issue_id.clone()),
+                        actor_role: "spec-agent".to_string(),
+                        handoff_rule: Some("spec-to-work-approved-spec".to_string()),
+                    });
+                }
+            }
+        } else {
+            for issue_id in &preview.materialized_issue_ids {
+                proposals.push(SpecLoopActionProposalProjection {
+                    proposal_ref: format!("runtime-action-proposal:createIssue:{issue_id}"),
+                    action_type: "createIssue".to_string(),
+                    target_object_type: "Project".to_string(),
+                    target_object_id: project_id.clone(),
+                    created_object_type: Some("Issue".to_string()),
+                    created_object_id: Some(issue_id.clone()),
+                    actor_role: "spec-agent".to_string(),
+                    handoff_rule: Some("spec-to-work-approved-spec".to_string()),
+                });
+            }
+        }
+    }
+    proposals
 }
 
 fn project_completion_decision(

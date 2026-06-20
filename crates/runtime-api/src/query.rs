@@ -18,6 +18,13 @@ pub fn get_spec_preview_view(
     agentflow_projection::get_spec_preview_view(project_root, requirement_id)
 }
 
+pub fn get_spec_loop_view(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+) -> Result<agentflow_projection::SpecLoopView> {
+    agentflow_projection::get_spec_loop_view(project_root, requirement_id)
+}
+
 pub fn get_project_home_view(
     project_root: impl AsRef<Path>,
     project_id: &str,

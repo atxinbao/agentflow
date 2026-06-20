@@ -20,7 +20,8 @@ use crate::model::{
     TaskTimelineItem,
 };
 use crate::storage::{
-    load_project_projection, load_requirement_preview_projection, load_task_projection,
+    load_project_projection, load_requirement_preview_projection, load_spec_loop_projection,
+    load_task_projection,
 };
 
 pub const PROJECTION_QUERY_SURFACE_VERSION: &str = "projection-query-surface.v1";
@@ -128,6 +129,78 @@ pub struct SpecPreviewView {
     #[serde(default)]
     pub issue_preview: Vec<IssuePreviewItem>,
     pub confirmation_state: String,
+    #[serde(default)]
+    pub allowed_actions: Vec<ViewActionHint>,
+    pub freshness: ProjectionFreshness,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopStageView {
+    pub stage: String,
+    pub path: String,
+    pub status: String,
+    pub authority: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_state: Option<String>,
+    #[serde(default)]
+    pub input_refs: Vec<String>,
+    #[serde(default)]
+    pub output_refs: Vec<String>,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    pub summary: String,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopTraceabilityView {
+    pub from_ref: String,
+    pub to_ref: String,
+    pub relation: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopActionProposalView {
+    pub proposal_ref: String,
+    pub action_type: String,
+    pub target_object_type: String,
+    pub target_object_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_object_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_object_id: Option<String>,
+    pub actor_role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff_rule: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpecLoopView {
+    pub requirement_id: String,
+    pub requirement_path: String,
+    pub project_id: String,
+    pub project_title: String,
+    pub lifecycle: String,
+    pub current_state: String,
+    pub manifest_path: String,
+    pub runtime_path: String,
+    pub next_recommended_action: String,
+    pub next_recommended_action_label: String,
+    pub next_recommended_action_reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materialized_project_id: Option<String>,
+    #[serde(default)]
+    pub materialized_issue_ids: Vec<String>,
+    #[serde(default)]
+    pub stages: Vec<SpecLoopStageView>,
+    #[serde(default)]
+    pub traceability: Vec<SpecLoopTraceabilityView>,
+    #[serde(default)]
+    pub runtime_action_proposals: Vec<SpecLoopActionProposalView>,
     #[serde(default)]
     pub allowed_actions: Vec<ViewActionHint>,
     pub freshness: ProjectionFreshness,
@@ -337,6 +410,84 @@ pub fn get_spec_preview_view(
         acceptance_criteria,
         issue_preview,
         confirmation_state,
+        allowed_actions: next_action_hints(
+            &projection.next_recommended_action,
+            &projection.next_recommended_action_label,
+            &projection.next_recommended_action_reason,
+        ),
+        freshness,
+    })
+}
+
+pub fn get_spec_loop_view(
+    project_root: impl AsRef<Path>,
+    requirement_id: &str,
+) -> Result<SpecLoopView> {
+    let runtime = read_requirement_preview_runtime(&project_root, requirement_id)?;
+    let projection = load_spec_loop_projection(&project_root, requirement_id)?;
+    let freshness = explain_projection_staleness(
+        &project_root,
+        ProjectionScope::RequirementPreview {
+            project_id: runtime.project_id.clone(),
+        },
+        &projection.version,
+        projection.updated_at,
+        None,
+    )?;
+
+    Ok(SpecLoopView {
+        requirement_id: projection.requirement_id,
+        requirement_path: projection.requirement_path,
+        project_id: projection.project_id,
+        project_title: projection.project_title,
+        lifecycle: projection.lifecycle,
+        current_state: projection.current_state,
+        manifest_path: projection.manifest_path,
+        runtime_path: projection.runtime_path,
+        next_recommended_action: projection.next_recommended_action.clone(),
+        next_recommended_action_label: projection.next_recommended_action_label.clone(),
+        next_recommended_action_reason: projection.next_recommended_action_reason.clone(),
+        materialized_project_id: projection.materialized_project_id,
+        materialized_issue_ids: projection.materialized_issue_ids,
+        stages: projection
+            .stages
+            .into_iter()
+            .map(|stage| SpecLoopStageView {
+                stage: stage.stage,
+                path: stage.path,
+                status: stage.status,
+                authority: stage.authority,
+                current_state: stage.current_state,
+                input_refs: stage.input_refs,
+                output_refs: stage.output_refs,
+                evidence_refs: stage.evidence_refs,
+                summary: stage.summary,
+                updated_at: stage.updated_at,
+            })
+            .collect(),
+        traceability: projection
+            .traceability
+            .into_iter()
+            .map(|edge| SpecLoopTraceabilityView {
+                from_ref: edge.from_ref,
+                to_ref: edge.to_ref,
+                relation: edge.relation,
+            })
+            .collect(),
+        runtime_action_proposals: projection
+            .runtime_action_proposals
+            .into_iter()
+            .map(|proposal| SpecLoopActionProposalView {
+                proposal_ref: proposal.proposal_ref,
+                action_type: proposal.action_type,
+                target_object_type: proposal.target_object_type,
+                target_object_id: proposal.target_object_id,
+                created_object_type: proposal.created_object_type,
+                created_object_id: proposal.created_object_id,
+                actor_role: proposal.actor_role,
+                handoff_rule: proposal.handoff_rule,
+            })
+            .collect(),
         allowed_actions: next_action_hints(
             &projection.next_recommended_action,
             &projection.next_recommended_action_label,
@@ -953,8 +1104,9 @@ mod tests {
     use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
     use agentflow_spec::{
         confirm_goal_draft_preview, confirm_plan_draft_preview, issue_from_requirement,
-        project_from_requirement, requirement_preview_from_requirement, write_spec_issue,
-        write_spec_project, SpecIssueDraft, SpecIssueStatus, SpecProjectDraft,
+        materialize_spec_from_requirement_preview, project_from_requirement,
+        requirement_preview_from_requirement, write_spec_issue, write_spec_project, SpecIssueDraft,
+        SpecIssueStatus, SpecProjectDraft,
     };
     use agentflow_task_artifacts::{create_task_run, update_task_run_status, TaskRunStatus};
     use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
@@ -1173,5 +1325,70 @@ mod tests {
         assert_eq!(preview.spec_id, "project-preview");
         assert!(!preview.issue_preview.is_empty());
         assert!(!preview.acceptance_criteria.is_empty());
+    }
+
+    #[test]
+    fn spec_loop_view_covers_stage_files_traceability_and_action_proposals() {
+        let dir = tempdir().unwrap();
+        let requirement = dir.path().join("docs/requirements/041-spec-loop-view.md");
+        fs::create_dir_all(requirement.parent().unwrap()).unwrap();
+        fs::write(
+            &requirement,
+            "# Spec Loop View\n\n把需求转成 preview、confirmation、materialization 和 runtime action proposal。\n",
+        )
+        .unwrap();
+
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+        confirm_goal_draft_preview(dir.path(), "041-spec-loop-view", "goal-agent").unwrap();
+        confirm_plan_draft_preview(dir.path(), "041-spec-loop-view", "spec-agent").unwrap();
+        materialize_spec_from_requirement_preview(dir.path(), "041-spec-loop-view").unwrap();
+        rebuild_projections(dir.path()).unwrap();
+
+        let view = get_spec_loop_view(dir.path(), "041-spec-loop-view").unwrap();
+
+        assert_eq!(view.requirement_id, "041-spec-loop-view");
+        assert_eq!(
+            view.manifest_path,
+            ".agentflow/spec/requirements/041-spec-loop-view/manifest.json"
+        );
+        assert_eq!(view.stages.len(), 8);
+        assert_eq!(
+            view.stages
+                .iter()
+                .map(|stage| stage.stage.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "intake",
+                "classification",
+                "context",
+                "boundary",
+                "route",
+                "preview",
+                "confirmation",
+                "materialization"
+            ]
+        );
+        assert_eq!(
+            view.materialized_project_id.as_deref(),
+            Some("project-preview")
+        );
+        assert_eq!(
+            view.runtime_action_proposals.len(),
+            1 + view.materialized_issue_ids.len()
+        );
+        assert!(view.traceability.iter().any(|edge| {
+            edge.from_ref == "docs/requirements/041-spec-loop-view.md"
+                && edge.to_ref.ends_with("/intake.json")
+                && edge.relation == "stage-input"
+        }));
+        assert!(view.traceability.iter().any(|edge| {
+            edge.from_ref.ends_with("/materialization.json")
+                && edge
+                    .to_ref
+                    .starts_with("runtime-action-proposal:createProject:")
+                && edge.relation == "runtime-action-proposal"
+        }));
+        assert_eq!(view.freshness.staleness, "current");
     }
 }

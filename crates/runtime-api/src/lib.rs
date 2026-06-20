@@ -27,8 +27,8 @@ pub use formal::{
 pub use mapping::{map_command_to_action_proposal, RuntimeQueryHint};
 pub use query::{
     get_audit_surface_view, get_delivery_package_view, get_project_home_view,
-    get_requirement_intake_view, get_runtime_health_view, get_spec_preview_view,
-    get_task_workbench_view, RUNTIME_QUERY_API_VERSION,
+    get_requirement_intake_view, get_runtime_health_view, get_spec_loop_view,
+    get_spec_preview_view, get_task_workbench_view, RUNTIME_QUERY_API_VERSION,
 };
 pub use responses::{
     RuntimeCommandDecision, RuntimeCommandResponse, RuntimeCommandStatus,
