@@ -39,6 +39,21 @@ pub fn get_task_workbench_view(
     agentflow_projection::get_task_workbench_view(project_root, issue_id)
 }
 
+pub fn get_work_loop_run_view(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<agentflow_projection::WorkLoopRunView> {
+    agentflow_projection::get_work_loop_run_view(project_root, issue_id, run_id)
+}
+
+pub fn get_work_loop_session_view(
+    project_root: impl AsRef<Path>,
+    session_id: &str,
+) -> Result<agentflow_projection::WorkLoopSessionView> {
+    agentflow_projection::get_work_loop_session_view(project_root, session_id)
+}
+
 pub fn get_audit_surface_view(
     project_root: impl AsRef<Path>,
     audit_id: &str,
