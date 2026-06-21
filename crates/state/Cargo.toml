@@ -12,6 +12,7 @@ agentflow-panel = { path = "../panel" }
 agentflow-projection = { path = "../projection" }
 agentflow-spec = { path = "../spec" }
 agentflow-task-artifacts = { path = "../task-artifacts" }
+agentflow-workflow-runtime = { path = "../workflow-runtime" }
 agentflow-workflow-core = { path = "../workflow-core" }
 anyhow = { workspace = true }
 serde = { workspace = true }

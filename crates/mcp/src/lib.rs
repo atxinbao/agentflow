@@ -11,7 +11,9 @@ pub mod provider;
 pub mod registry;
 pub mod storage;
 
-use agentflow_event_store::{append_task_event_once, EventActor, TaskEventDraft};
+use agentflow_event_store::{
+    append_task_event_once, release_task_claim, renew_task_claim, EventActor, TaskEventDraft,
+};
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::Result;
 use serde_json::{json, Map, Value};
@@ -75,6 +77,7 @@ pub fn poll_session_snapshot(
     let bridge = default_provider_bridge();
     if let Some(provider) = bridge.provider(&session.provider) {
         let updated = provider.poll_session(root, session_id)?;
+        let _ = sync_session_claim_lease(root, &updated);
         observe_session_transition(root, Some(&session), &updated)?;
         Ok(updated)
     } else {
@@ -91,6 +94,7 @@ pub fn poll_session_snapshots(project_root: impl AsRef<Path>) -> Result<Vec<McpS
         if let Some(provider) = bridge.provider(&session.provider) {
             match provider.poll_session(root, &session.session_id) {
                 Ok(updated) => {
+                    let _ = sync_session_claim_lease(root, &updated);
                     let _ = observe_session_transition(root, Some(&session), &updated);
                     polled.push(updated);
                 }
@@ -173,6 +177,31 @@ fn observe_session_transition(
         )?;
     }
 
+    Ok(())
+}
+
+fn sync_session_claim_lease(root: &Path, updated: &McpSessionSnapshot) -> Result<()> {
+    match updated.status {
+        McpSessionStatus::Queued
+        | McpSessionStatus::Claimed
+        | McpSessionStatus::Starting
+        | McpSessionStatus::Running
+        | McpSessionStatus::InReview => {
+            let _ = renew_task_claim(root, &updated.run_id, None)?;
+        }
+        McpSessionStatus::Interrupted => {
+            let _ = release_task_claim(root, &updated.run_id, None, "session-interrupted")?;
+        }
+        McpSessionStatus::Done => {
+            let _ = release_task_claim(root, &updated.run_id, None, "session-completed")?;
+        }
+        McpSessionStatus::Failed => {
+            let _ = release_task_claim(root, &updated.run_id, None, "session-failed")?;
+        }
+        McpSessionStatus::Cancelled => {
+            let _ = release_task_claim(root, &updated.run_id, None, "session-cancelled")?;
+        }
+    }
     Ok(())
 }
 

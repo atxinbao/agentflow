@@ -299,6 +299,7 @@ pub fn classify_task_event(event_type: &str) -> TaskEventCategory {
         value if value.starts_with("agent.launch.") || value.starts_with("agent.session.") => {
             TaskEventCategory::Session
         }
+        value if value.starts_with("issue.lease.") => TaskEventCategory::Session,
         value
             if value.starts_with("review.")
                 || value.starts_with("audit.")

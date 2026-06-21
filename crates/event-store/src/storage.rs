@@ -1,10 +1,11 @@
 use crate::model::{
-    classify_task_event, ReplayFilter, TaskEvent, TaskEventClaimLease, TaskEventClaimStatus,
-    TaskEventConsumerState, TaskEventDeadLetter, TaskEventDraft, TaskEventManifest,
-    TaskEventSummary, TaskReplayCursor, TASK_EVENT_CLAIM_LEASE_VERSION,
+    classify_task_event, EventActor, ReplayFilter, TaskEvent, TaskEventClaimLease,
+    TaskEventClaimStatus, TaskEventConsumerState, TaskEventDeadLetter, TaskEventDraft,
+    TaskEventManifest, TaskEventSummary, TaskReplayCursor, TASK_EVENT_CLAIM_LEASE_VERSION,
     TASK_EVENT_CONSUMER_VERSION, TASK_EVENT_DEAD_LETTER_VERSION, TASK_EVENT_MANIFEST_VERSION,
     TASK_EVENT_STREAM_PATH, TASK_EVENT_VERSION,
 };
+use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::{Context, Result};
 use std::collections::BTreeSet;
 use std::{
@@ -34,6 +35,7 @@ pub fn prepare_event_store(project_root: impl AsRef<Path>) -> Result<TaskEventMa
     ensure_file_exists(&stream_path)?;
     with_event_store_lock(&root, "runtime", |root| {
         migrate_legacy_task_events_unlocked(root)?;
+        expire_stale_task_claims_unlocked(root)?;
         sync_task_event_stream_unlocked(root)
     })?;
     let events = load_task_events(&root)?;
@@ -140,11 +142,49 @@ pub fn load_task_claim_lease(
     load_task_claim_lease_unlocked(&root, run_id)
 }
 
+pub fn load_task_claim_leases(project_root: impl AsRef<Path>) -> Result<Vec<TaskEventClaimLease>> {
+    let root = canonical_project_root(project_root)?;
+    prepare_event_store(&root)?;
+    load_task_claim_leases_unlocked(&root)
+}
+
 pub fn task_claim_is_active(project_root: impl AsRef<Path>, run_id: &str) -> Result<bool> {
     let root = canonical_project_root(project_root)?;
     prepare_event_store(&root)?;
     Ok(load_task_claim_lease_unlocked(&root, run_id)?
         .is_some_and(|lease| claim_lease_is_active(&lease, unix_timestamp_seconds())))
+}
+
+pub fn renew_task_claim(
+    project_root: impl AsRef<Path>,
+    run_id: &str,
+    expected_claim_event_id: Option<&str>,
+) -> Result<Option<TaskEventClaimLease>> {
+    let root = canonical_project_root(project_root)?;
+    prepare_event_store(&root)?;
+    with_event_store_lock(&root, "runtime", |root| {
+        let Some(mut lease) = load_task_claim_lease_unlocked(root, run_id)? else {
+            return Ok(None);
+        };
+        if let Some(expected) = expected_claim_event_id {
+            if lease.claim_event_id.as_deref() != Some(expected) {
+                return Ok(None);
+            }
+        }
+        if lease.status != TaskEventClaimStatus::Active {
+            return Ok(Some(lease));
+        }
+        let now = unix_timestamp_seconds();
+        if lease.expires_at <= now {
+            mark_claim_expired_unlocked(root, &mut lease, now, "lease-expired")?;
+            return Ok(Some(lease));
+        }
+        lease.heartbeat_at = now;
+        lease.expires_at = now + TASK_EVENT_CLAIM_LEASE_TTL_SECONDS;
+        write_task_claim_lease_unlocked(root, &lease)?;
+        append_claim_lifecycle_event_unlocked(root, &lease, "issue.lease.renewed", now)?;
+        Ok(Some(lease))
+    })
 }
 
 pub fn release_task_claim(
@@ -168,16 +208,11 @@ pub fn release_task_claim(
             return Ok(Some(lease));
         }
         let now = unix_timestamp_seconds();
-        lease.status = if lease.expires_at <= now {
-            TaskEventClaimStatus::Expired
+        if lease.expires_at <= now {
+            mark_claim_expired_unlocked(root, &mut lease, now, reason)?;
         } else {
-            TaskEventClaimStatus::Released
-        };
-        lease.heartbeat_at = now;
-        lease.expires_at = now;
-        lease.released_at = Some(now);
-        lease.release_reason = Some(reason.to_string());
-        write_task_claim_lease_unlocked(root, &lease)?;
+            mark_claim_released_unlocked(root, &mut lease, now, reason)?;
+        }
         Ok(Some(lease))
     })
 }
@@ -627,6 +662,26 @@ fn load_task_claim_lease_unlocked(
     Ok(Some(read_json(&path)?))
 }
 
+fn load_task_claim_leases_unlocked(root: &Path) -> Result<Vec<TaskEventClaimLease>> {
+    let claims_dir = root.join(".agentflow/events/claims");
+    if !claims_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut claim_paths = fs::read_dir(&claims_dir)
+        .with_context(|| format!("read {}", claims_dir.display()))?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file() && path.extension().and_then(|value| value.to_str()) == Some("json")
+        })
+        .collect::<Vec<_>>();
+    claim_paths.sort();
+    claim_paths
+        .into_iter()
+        .map(|path| read_json(&path))
+        .collect()
+}
+
 fn allocate_task_claim_lease_unlocked(
     root: &Path,
     owner_id: &str,
@@ -640,6 +695,24 @@ fn allocate_task_claim_lease_unlocked(
             anyhow::bail!("run {run_id} already has an active launch claim");
         }
     }
+    let requested_issue_id = requested
+        .issue_id
+        .clone()
+        .unwrap_or_else(|| requested.aggregate_id.clone());
+    if let Some(existing) = load_task_claim_leases_unlocked(root)?
+        .into_iter()
+        .find(|lease| {
+            lease.run_id != run_id
+                && lease.issue_id == requested_issue_id
+                && claim_lease_is_active(lease, now)
+        })
+    {
+        anyhow::bail!(
+            "issue {} already has an active execution lease held by run {}",
+            requested_issue_id,
+            existing.run_id
+        );
+    }
     let fencing_token = previous.map(|lease| lease.fencing_token + 1).unwrap_or(1);
     let lease_id = format!(
         "lease-{:06}",
@@ -648,10 +721,7 @@ fn allocate_task_claim_lease_unlocked(
     let lease = TaskEventClaimLease {
         version: TASK_EVENT_CLAIM_LEASE_VERSION.to_string(),
         owner_id: owner_id.to_string(),
-        issue_id: requested
-            .issue_id
-            .clone()
-            .unwrap_or_else(|| requested.aggregate_id.clone()),
+        issue_id: requested_issue_id,
         run_id: run_id.to_string(),
         requested_event_id: requested.event_id.clone(),
         claim_event_id: None,
@@ -715,6 +785,126 @@ fn qualify_claim_idempotency_key(base: Option<&str>, lease: &TaskEventClaimLease
 
 fn write_task_claim_lease_unlocked(root: &Path, lease: &TaskEventClaimLease) -> Result<()> {
     write_json(&event_store_claim_path(root, &lease.run_id), lease)
+}
+
+fn expire_stale_task_claims_unlocked(root: &Path) -> Result<()> {
+    let now = unix_timestamp_seconds();
+    for mut lease in load_task_claim_leases_unlocked(root)? {
+        if lease.status == TaskEventClaimStatus::Active && lease.expires_at <= now {
+            mark_claim_expired_unlocked(root, &mut lease, now, "lease-expired")?;
+        }
+    }
+    Ok(())
+}
+
+fn mark_claim_released_unlocked(
+    root: &Path,
+    lease: &mut TaskEventClaimLease,
+    now: u64,
+    reason: &str,
+) -> Result<()> {
+    lease.status = TaskEventClaimStatus::Released;
+    lease.heartbeat_at = now;
+    lease.expires_at = now;
+    lease.released_at = Some(now);
+    lease.release_reason = Some(reason.to_string());
+    write_task_claim_lease_unlocked(root, lease)?;
+    append_claim_lifecycle_event_unlocked(root, lease, "issue.lease.released", now)
+}
+
+fn mark_claim_expired_unlocked(
+    root: &Path,
+    lease: &mut TaskEventClaimLease,
+    now: u64,
+    reason: &str,
+) -> Result<()> {
+    lease.status = TaskEventClaimStatus::Expired;
+    lease.heartbeat_at = now;
+    lease.expires_at = now;
+    lease.released_at = Some(now);
+    lease.release_reason = Some(reason.to_string());
+    write_task_claim_lease_unlocked(root, lease)?;
+    append_claim_lifecycle_event_unlocked(root, lease, "issue.lease.expired", now)
+}
+
+fn append_claim_lifecycle_event_unlocked(
+    root: &Path,
+    lease: &TaskEventClaimLease,
+    event_type: &str,
+    now: u64,
+) -> Result<()> {
+    let mut payload = serde_json::Map::new();
+    payload.insert("ownerId".to_string(), serde_json::json!(lease.owner_id));
+    payload.insert("issueId".to_string(), serde_json::json!(lease.issue_id));
+    payload.insert("runId".to_string(), serde_json::json!(lease.run_id));
+    payload.insert("leaseId".to_string(), serde_json::json!(lease.lease_id));
+    payload.insert(
+        "fencingToken".to_string(),
+        serde_json::json!(lease.fencing_token),
+    );
+    payload.insert(
+        "requestedEventId".to_string(),
+        serde_json::json!(lease.requested_event_id),
+    );
+    payload.insert(
+        "claimEventId".to_string(),
+        serde_json::json!(lease.claim_event_id),
+    );
+    payload.insert(
+        "status".to_string(),
+        serde_json::json!(lease.status.as_str()),
+    );
+    payload.insert("claimedAt".to_string(), serde_json::json!(lease.claimed_at));
+    payload.insert(
+        "heartbeatAt".to_string(),
+        serde_json::json!(lease.heartbeat_at),
+    );
+    payload.insert("expiresAt".to_string(), serde_json::json!(lease.expires_at));
+    payload.insert(
+        "releasedAt".to_string(),
+        serde_json::json!(lease.released_at),
+    );
+    payload.insert(
+        "releaseReason".to_string(),
+        serde_json::json!(lease.release_reason),
+    );
+
+    let idempotency_key = if event_type == "issue.lease.renewed" {
+        format!("{event_type}:{}:{}", lease.lease_id, lease.heartbeat_at)
+    } else {
+        format!("{event_type}:{}:{}", lease.lease_id, lease.fencing_token)
+    };
+
+    append_task_event_once_unlocked(
+        root,
+        TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: lease.issue_id.clone(),
+            project_id: None,
+            issue_id: Some(lease.issue_id.clone()),
+            run_id: Some(lease.run_id.clone()),
+            event_type: event_type.to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
+            actor: EventActor {
+                role: lease.owner_id.clone(),
+                kind: "system".to_string(),
+            },
+            state: None,
+            correlation_id: Some(format!("corr-{}", lease.issue_id)),
+            causation_id: Some(
+                lease
+                    .claim_event_id
+                    .clone()
+                    .unwrap_or_else(|| lease.requested_event_id.clone()),
+            ),
+            payload: serde_json::Value::Object(payload),
+            artifact_refs: vec![format!(".agentflow/events/claims/{}.json", lease.run_id)],
+            idempotency_key: Some(idempotency_key),
+        },
+    )?;
+    let _ = now;
+    Ok(())
 }
 
 fn claim_lease_is_active(lease: &TaskEventClaimLease, now: u64) -> bool {
@@ -908,6 +1098,46 @@ mod tests {
             )],
             idempotency_key: Some(format!("agent.launch.requested:{issue_id}:{run_id}")),
         }
+    }
+
+    fn claim_launch_request(root: &Path, requested: &TaskEvent, owner_id: &str) -> TaskEvent {
+        claim_task_event(
+            root,
+            owner_id,
+            |event, _events| event.event_id == requested.event_id,
+            |event, _events| {
+                Ok(TaskEventDraft {
+                    flow_type: WorkflowFlowType::Work,
+                    aggregate_type: "issue".to_string(),
+                    aggregate_id: event.aggregate_id.clone(),
+                    project_id: event.project_id.clone(),
+                    issue_id: event.issue_id.clone(),
+                    run_id: event.run_id.clone(),
+                    event_type: "agent.launch.claimed".to_string(),
+                    authority_role: event.authority_role,
+                    actor: EventActor {
+                        role: owner_id.to_string(),
+                        kind: "system".to_string(),
+                    },
+                    state: None,
+                    correlation_id: Some(event.correlation_id.clone()),
+                    causation_id: Some(event.event_id.clone()),
+                    payload: json!({}),
+                    artifact_refs: event.artifact_refs.clone(),
+                    idempotency_key: Some(format!(
+                        "agent.launch.claimed:{}:{}",
+                        event
+                            .issue_id
+                            .as_deref()
+                            .unwrap_or(event.aggregate_id.as_str()),
+                        event.run_id.as_deref().unwrap_or("run-unknown")
+                    )),
+                })
+            },
+        )
+        .unwrap()
+        .unwrap()
+        .1
     }
 
     #[test]
@@ -1251,6 +1481,84 @@ mod tests {
             lease.claim_event_id.as_deref(),
             Some(reclaimed.event_id.as_str())
         );
+    }
+
+    #[test]
+    fn active_issue_lease_rejects_second_run_for_same_issue() {
+        let dir = tempdir().unwrap();
+        let first_requested =
+            append_task_event(dir.path(), launch_requested_draft("AF-TASK-001", "run-001"))
+                .unwrap();
+        let second_requested =
+            append_task_event(dir.path(), launch_requested_draft("AF-TASK-001", "run-002"))
+                .unwrap();
+
+        let _first_claim = claim_launch_request(dir.path(), &first_requested, "agent-dispatcher");
+        let error = claim_task_event(
+            dir.path(),
+            "agent-dispatcher",
+            |event, _events| event.event_id == second_requested.event_id,
+            |event, _events| {
+                Ok(TaskEventDraft {
+                    flow_type: WorkflowFlowType::Work,
+                    aggregate_type: "issue".to_string(),
+                    aggregate_id: event.aggregate_id.clone(),
+                    project_id: event.project_id.clone(),
+                    issue_id: event.issue_id.clone(),
+                    run_id: event.run_id.clone(),
+                    event_type: "agent.launch.claimed".to_string(),
+                    authority_role: event.authority_role,
+                    actor: EventActor {
+                        role: "agent-dispatcher".to_string(),
+                        kind: "system".to_string(),
+                    },
+                    state: None,
+                    correlation_id: Some(event.correlation_id.clone()),
+                    causation_id: Some(event.event_id.clone()),
+                    payload: json!({}),
+                    artifact_refs: event.artifact_refs.clone(),
+                    idempotency_key: Some("agent.launch.claimed:AF-TASK-001:run-002".to_string()),
+                })
+            },
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("already has an active execution lease"));
+    }
+
+    #[test]
+    fn renew_and_expire_claim_lease_append_replayable_events() {
+        let dir = tempdir().unwrap();
+        let requested =
+            append_task_event(dir.path(), launch_requested_draft("AF-TASK-001", "run-001"))
+                .unwrap();
+        let claimed = claim_launch_request(dir.path(), &requested, "agent-dispatcher");
+
+        let renewed = renew_task_claim(dir.path(), "run-001", Some(claimed.event_id.as_str()))
+            .unwrap()
+            .expect("expected renewed lease");
+        assert_eq!(renewed.status, TaskEventClaimStatus::Active);
+        assert!(load_task_events(dir.path())
+            .unwrap()
+            .iter()
+            .any(|event| event.event_type == "issue.lease.renewed"));
+
+        let mut expired = load_task_claim_lease(dir.path(), "run-001")
+            .unwrap()
+            .expect("expected lease");
+        expired.expires_at = 1;
+        write_task_claim_lease_unlocked(dir.path(), &expired).unwrap();
+        prepare_event_store(dir.path()).unwrap();
+
+        let expired = load_task_claim_lease(dir.path(), "run-001")
+            .unwrap()
+            .expect("expected expired lease");
+        assert_eq!(expired.status, TaskEventClaimStatus::Expired);
+        assert!(load_task_events(dir.path())
+            .unwrap()
+            .iter()
+            .any(|event| event.event_type == "issue.lease.expired"));
     }
 
     #[test]

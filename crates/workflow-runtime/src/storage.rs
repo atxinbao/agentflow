@@ -96,6 +96,29 @@ pub fn load_runtime_accepted_action_fact(
     ))
 }
 
+pub fn load_runtime_accepted_action_facts(
+    project_root: impl AsRef<Path>,
+) -> Result<Vec<RuntimeAcceptedActionFact>> {
+    let root = canonical_project_root(project_root)?;
+    let actions_dir = root.join(".agentflow/runtime/actions");
+    if !actions_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut action_paths = fs::read_dir(&actions_dir)
+        .with_context(|| format!("read {}", actions_dir.display()))?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file() && path.extension().and_then(|value| value.to_str()) == Some("json")
+        })
+        .collect::<Vec<_>>();
+    action_paths.sort();
+    action_paths
+        .into_iter()
+        .map(|path| read_json(&path))
+        .collect()
+}
+
 pub fn load_runtime_command_bundle(
     project_root: impl AsRef<Path>,
     command_id: &str,

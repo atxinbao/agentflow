@@ -26,7 +26,7 @@ pub use runtime::{
 };
 pub use storage::{
     allocate_task_sequence, append_task_dead_letter, append_task_event, append_task_event_once,
-    claim_task_event, load_pending_task_events, load_task_claim_lease, load_task_events,
-    mark_task_event_consumed, prepare_event_store, release_task_claim, replay_task_events,
-    replay_task_events_from_cursor, task_claim_is_active,
+    claim_task_event, load_pending_task_events, load_task_claim_lease, load_task_claim_leases,
+    load_task_events, mark_task_event_consumed, prepare_event_store, release_task_claim,
+    renew_task_claim, replay_task_events, replay_task_events_from_cursor, task_claim_is_active,
 };

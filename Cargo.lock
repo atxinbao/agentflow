@@ -291,6 +291,7 @@ dependencies = [
  "agentflow-spec",
  "agentflow-task-artifacts",
  "agentflow-workflow-core",
+ "agentflow-workflow-runtime",
  "anyhow",
  "serde",
  "serde_json",

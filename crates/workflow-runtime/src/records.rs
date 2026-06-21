@@ -107,6 +107,10 @@ pub struct RuntimeAcceptedActionFact {
     pub command_id: String,
     pub proposal_id: String,
     pub accepted_action_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
     pub action_type: String,
     pub actor_role: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
