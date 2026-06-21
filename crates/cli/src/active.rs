@@ -11,10 +11,12 @@ use agentflow_mcp::{
 };
 use agentflow_spec::{read_spec_issue, update_spec_issue_status, SpecIssueStatus};
 use agentflow_task_artifacts::{
-    load_task_changed_files, load_task_evidence, load_task_run, task_changed_files_path,
-    task_evidence_dir, task_run_dir, update_task_run_status, write_task_changed_files,
-    write_task_command_record, write_task_evidence, write_task_validation_with_assessment,
-    TaskChangedFile, TaskChangedFileSource, TaskCommandInput, TaskEvidence, TaskRun, TaskRunStatus,
+    load_task_changed_files, load_task_evidence, load_task_run, load_task_validation,
+    task_changed_files_path, task_evidence_dir, task_run_dir, update_task_run_status,
+    write_task_changed_files, write_task_command_record, write_task_evidence,
+    write_task_evidence_gate_decision, write_task_validation_with_assessment, TaskChangedFile,
+    TaskChangedFileSource, TaskCommandInput, TaskEvidence, TaskEvidenceEntry,
+    TaskEvidenceEntryStatus, TaskEvidenceGateDecision, TaskRun, TaskRunStatus,
 };
 use agentflow_task_loop::{AgentLaunchPayload, TaskLoop, TaskLoopLaunch, AGENT_LAUNCH_REQUESTED};
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
@@ -118,12 +120,28 @@ pub(crate) fn complete_build_agent_issue_from_request(
     assert_current_cli_is_fresh(root)?;
     let request = read_completion_request(request_path, "completion")?;
     let review = ensure_review_prepared(root, request.clone())?;
-    let proof = load_closeout_proof(root, &review.issue_id, &review.run_id)?;
-    ensure_closeout_ready(&review.issue_id, &review.run_id, &proof)?;
+    let proof_path = closeout_proof_path(root, &review.issue_id, &review.run_id);
+    let proof = if proof_path.is_file() {
+        load_closeout_proof(root, &review.issue_id, &review.run_id)?
+    } else {
+        json!({})
+    };
     let issue = read_spec_issue(root, &review.issue_id)?;
     let completed_project_id = issue.project_id.clone();
     let evidence = load_task_evidence(root, &review.issue_id)?;
-    let proof_path = closeout_proof_path(root, &review.issue_id, &review.run_id);
+    let gate_decision =
+        build_evidence_gate_decision(root, &issue, &review.run_id, &evidence, &proof)?;
+    write_task_evidence_gate_decision(root, &review.issue_id, &gate_decision)?;
+    if !gate_decision.passed {
+        let _ = agentflow_projection::rebuild_projections(root)?;
+        agentflow_state::refresh_state(root)?;
+        anyhow::bail!(
+            "build agent completion requires evidence gate to pass for {} {}: {}",
+            review.issue_id,
+            review.run_id,
+            gate_decision.blockers.join("; ")
+        );
+    }
     write_json(&proof_path, &proof)?;
     append_task_event_once(
         root,
@@ -1190,30 +1208,245 @@ fn load_closeout_proof(root: &Path, issue_id: &str, run_id: &str) -> Result<serd
     serde_json::from_str(&raw).with_context(|| format!("parse {}", path.display()))
 }
 
-fn ensure_closeout_ready(issue_id: &str, run_id: &str, proof: &serde_json::Value) -> Result<()> {
-    if !proof
+fn build_evidence_gate_decision(
+    root: &Path,
+    issue: &agentflow_spec::SpecIssue,
+    run_id: &str,
+    evidence: &TaskEvidence,
+    proof: &serde_json::Value,
+) -> Result<TaskEvidenceGateDecision> {
+    let validation = load_task_validation(root, &issue.issue_id, run_id)?;
+    let expected_validation_path = resolve_output_path(
+        issue.expected_outputs.validation_result_path.as_deref(),
+        &issue.issue_id,
+        run_id,
+        "validation.json",
+    );
+    let expected_changed_files_path = resolve_output_path(
+        issue.expected_outputs.changed_files_path.as_deref(),
+        &issue.issue_id,
+        run_id,
+        "changed-files.json",
+    );
+    let expected_closeout_proof_path = resolve_output_path(
+        issue.expected_outputs.closeout_proof_path.as_deref(),
+        &issue.issue_id,
+        run_id,
+        "review/closeout-proof.json",
+    );
+    let proof_path = closeout_proof_path(root, &issue.issue_id, run_id);
+    let proof_ref = expected_closeout_proof_path.clone();
+    let merged = proof
         .get("merged")
         .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
-    {
-        anyhow::bail!(
-            "build agent completion requires merged PR/MR proof for {} {}",
-            issue_id,
-            run_id
-        );
-    }
-    if !proof
+        .unwrap_or(false);
+    let issue_closed = proof
         .get("issueClosed")
         .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
-    {
-        anyhow::bail!(
-            "build agent completion requires closed issue proof for {} {}",
-            issue_id,
-            run_id
-        );
+        .unwrap_or(false);
+    let pr_url = proof
+        .get("prUrl")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let manual_reason = proof
+        .get("manualVerificationReason")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let manual_risk = proof
+        .get("manualVerificationRisk")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+
+    let mut entries = evidence.entries.clone();
+    entries.push(TaskEvidenceEntry {
+        evidence_type: "prLink".to_string(),
+        required: issue.expected_outputs.public_delivery_record.pr_or_mr_body,
+        status: if pr_url.is_some() {
+            TaskEvidenceEntryStatus::Ready
+        } else {
+            TaskEvidenceEntryStatus::Missing
+        },
+        summary: if pr_url.is_some() {
+            "PR/MR 链接已记录。".to_string()
+        } else {
+            "缺少 PR/MR 链接。".to_string()
+        },
+        refs: pr_url.clone().into_iter().collect(),
+        manual_reason: None,
+        manual_risk: None,
+    });
+    entries.push(TaskEvidenceEntry {
+        evidence_type: "mergeProof".to_string(),
+        required: true,
+        status: if proof_path.is_file() && merged && issue_closed {
+            TaskEvidenceEntryStatus::Ready
+        } else if proof_path.is_file() {
+            TaskEvidenceEntryStatus::Failed
+        } else {
+            TaskEvidenceEntryStatus::Missing
+        },
+        summary: if proof_path.is_file() && merged && issue_closed {
+            "合并证明已记录，PR/MR 已合并且 issue 已关闭。".to_string()
+        } else if proof_path.is_file() {
+            "合并证明已写入，但缺少 merged 或 issueClosed 事实。".to_string()
+        } else {
+            "缺少合并证明。".to_string()
+        },
+        refs: vec![proof_ref.clone()],
+        manual_reason: None,
+        manual_risk: None,
+    });
+    entries.push(TaskEvidenceEntry {
+        evidence_type: "artifactSummary".to_string(),
+        required: true,
+        status: if proof_path.is_file()
+            && (!issue.expected_outputs.public_delivery_record.pr_or_mr_body || pr_url.is_some())
+        {
+            TaskEvidenceEntryStatus::Ready
+        } else if proof_path.is_file() {
+            TaskEvidenceEntryStatus::Failed
+        } else {
+            TaskEvidenceEntryStatus::Missing
+        },
+        summary: if proof_path.is_file()
+            && (!issue.expected_outputs.public_delivery_record.pr_or_mr_body || pr_url.is_some())
+        {
+            "交付摘要已通过 closeout proof 记录。".to_string()
+        } else if proof_path.is_file() {
+            "closeout proof 已存在，但交付摘要不完整。".to_string()
+        } else {
+            "缺少交付摘要。".to_string()
+        },
+        refs: vec![proof_ref.clone()],
+        manual_reason: None,
+        manual_risk: None,
+    });
+    if manual_reason.is_some() || manual_risk.is_some() {
+        entries.push(TaskEvidenceEntry {
+            evidence_type: "manualVerification".to_string(),
+            required: false,
+            status: if manual_reason.is_some() && manual_risk.is_some() {
+                TaskEvidenceEntryStatus::Manual
+            } else {
+                TaskEvidenceEntryStatus::Failed
+            },
+            summary: if manual_reason.is_some() && manual_risk.is_some() {
+                "人工验证原因与风险已记录。".to_string()
+            } else {
+                "人工验证只记录了部分信息，缺少原因或风险。".to_string()
+            },
+            refs: vec![proof_ref.clone()],
+            manual_reason,
+            manual_risk,
+        });
     }
-    Ok(())
+
+    let required_evidence_types = entries
+        .iter()
+        .filter(|entry| entry.required)
+        .map(|entry| entry.evidence_type.clone())
+        .collect::<Vec<_>>();
+    let mut blockers = Vec::new();
+    if evidence.validation_path != expected_validation_path {
+        blockers.push(format!(
+            "validation result path mismatch: expected {}, got {}",
+            expected_validation_path, evidence.validation_path
+        ));
+    }
+    if !root.join(&expected_validation_path).is_file() {
+        blockers.push(format!(
+            "missing validation result artifact: {}",
+            expected_validation_path
+        ));
+    }
+    if evidence.changed_files_path.as_deref() != Some(expected_changed_files_path.as_str()) {
+        blockers.push(format!(
+            "implementation summary path mismatch: expected {}, got {}",
+            expected_changed_files_path,
+            evidence
+                .changed_files_path
+                .clone()
+                .unwrap_or_else(|| "<missing>".to_string())
+        ));
+    }
+    if !root.join(&expected_changed_files_path).is_file() {
+        blockers.push(format!(
+            "missing implementation summary artifact: {}",
+            expected_changed_files_path
+        ));
+    }
+    if issue.expected_outputs.evidence_path != task_evidence_path(&issue.issue_id) {
+        blockers.push(format!(
+            "evidence path mismatch: expected {}, got {}",
+            issue.expected_outputs.evidence_path,
+            task_evidence_path(&issue.issue_id)
+        ));
+    }
+    if !root.join(task_evidence_path(&issue.issue_id)).is_file() {
+        blockers.push(format!(
+            "missing evidence artifact: {}",
+            task_evidence_path(&issue.issue_id)
+        ));
+    }
+    if !validation.passed {
+        blockers.push("failed validation cannot count as passing evidence".to_string());
+    }
+    if let Some(entry) = entries
+        .iter()
+        .find(|entry| entry.evidence_type == "manualVerification")
+    {
+        if entry.status == TaskEvidenceEntryStatus::Failed {
+            blockers.push("manual verification requires both reason and risk".to_string());
+        }
+    }
+    for entry in entries.iter().filter(|entry| entry.required) {
+        if entry.status != TaskEvidenceEntryStatus::Ready {
+            blockers.push(format!(
+                "required evidence `{}` is {}",
+                entry.evidence_type,
+                evidence_entry_status_as_str(&entry.status)
+            ));
+        }
+    }
+
+    Ok(TaskEvidenceGateDecision {
+        version: String::new(),
+        issue_id: issue.issue_id.clone(),
+        run_id: run_id.to_string(),
+        passed: blockers.is_empty(),
+        validation_passed: validation.passed,
+        required_evidence_types,
+        blockers,
+        entries,
+        checked_at: current_unix_timestamp(),
+    })
+}
+
+fn resolve_output_path(
+    configured: Option<&str>,
+    issue_id: &str,
+    run_id: &str,
+    fallback_suffix: &str,
+) -> String {
+    configured
+        .map(|value| value.replace("<run-id>", run_id))
+        .unwrap_or_else(|| format!(".agentflow/tasks/{issue_id}/runs/{run_id}/{fallback_suffix}"))
+}
+
+fn current_unix_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn evidence_entry_status_as_str(status: &TaskEvidenceEntryStatus) -> &'static str {
+    match status {
+        TaskEvidenceEntryStatus::Ready => "ready",
+        TaskEvidenceEntryStatus::Missing => "missing",
+        TaskEvidenceEntryStatus::Failed => "failed",
+        TaskEvidenceEntryStatus::Manual => "manual",
+    }
 }
 
 fn closeout_proof_path(root: &Path, issue_id: &str, run_id: &str) -> PathBuf {
@@ -1401,7 +1634,8 @@ mod tests {
         McpProviderStatusCode, MCP_CLOSEOUT_ATTESTATION_VERSION,
     };
     use agentflow_task_artifacts::{
-        load_task_changed_files, load_task_evidence, TaskChangedFileSource,
+        load_task_changed_files, load_task_evidence, load_task_evidence_gate_decision,
+        TaskChangedFileSource,
     };
     use anyhow::Result;
     use std::{
@@ -1675,6 +1909,21 @@ mod tests {
         assert_eq!(outcome.issue_id, "AF-001");
         assert_eq!(outcome.run_status, "completed");
         assert!(outcome.next_launch.is_none());
+        let gate = load_task_evidence_gate_decision(dir.path(), "AF-001").unwrap();
+        assert!(gate.passed);
+        assert!(gate.validation_passed);
+        assert!(gate
+            .required_evidence_types
+            .iter()
+            .any(|item| item == "verificationLog"));
+        assert!(gate
+            .required_evidence_types
+            .iter()
+            .any(|item| item == "artifactSummary"));
+        assert!(gate
+            .required_evidence_types
+            .iter()
+            .any(|item| item == "implementationSummary"));
         assert_eq!(
             std::fs::canonicalize(&outcome.closeout_proof_path).unwrap(),
             std::fs::canonicalize(
@@ -2009,13 +2258,47 @@ mod tests {
 
         let err = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap_err();
 
-        assert!(err.to_string().contains("closed issue proof"));
+        assert!(err.to_string().contains("evidence gate"));
+        let gate = load_task_evidence_gate_decision(dir.path(), "AF-CHAIN-001").unwrap();
+        assert!(!gate.passed);
+        assert!(gate
+            .blockers
+            .iter()
+            .any(|item| item.contains("mergeProof") || item.contains("issueClosed")));
         let projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-001").unwrap();
         assert_eq!(projection.current_state, "in_review");
         let next_projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-002").unwrap();
         assert_eq!(next_projection.current_state, "backlog");
+    }
+
+    #[test]
+    fn build_agent_complete_records_failed_gate_when_closeout_proof_is_missing() {
+        let dir = tempdir().unwrap();
+        write_spec_project_fixture(dir.path(), "proj-001", "AF-001");
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"before\" }\n",
+        );
+        init_git_repo(dir.path());
+        let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"after\" }\n",
+        );
+        let request_path = write_completion_request(dir.path(), "AF-001", &started.run_id);
+        prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
+
+        let err = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap_err();
+
+        assert!(err.to_string().contains("evidence gate"));
+        let gate = load_task_evidence_gate_decision(dir.path(), "AF-001").unwrap();
+        assert!(!gate.passed);
+        assert!(gate
+            .blockers
+            .iter()
+            .any(|item| item.contains("closeout proof") || item.contains("mergeProof")));
     }
 
     #[test]

@@ -4843,6 +4843,29 @@ fn validate_issue_contract(issue: &SpecIssue) -> Result<()> {
     if !evidence_path.starts_with(&format!(".agentflow/tasks/{}/evidence/", issue_id.as_str())) {
         anyhow::bail!("issue {} has invalid evidencePath", issue.issue_id);
     }
+    if let Some(changed_files_path) = issue.expected_outputs.changed_files_path.as_ref() {
+        let changed_files_path = normalize_relative_path_string(changed_files_path)?;
+        if !changed_files_path.starts_with(&format!(".agentflow/tasks/{}/runs/", issue_id.as_str()))
+        {
+            anyhow::bail!("issue {} has invalid changedFilesPath", issue.issue_id);
+        }
+    }
+    if let Some(validation_result_path) = issue.expected_outputs.validation_result_path.as_ref() {
+        let validation_result_path = normalize_relative_path_string(validation_result_path)?;
+        if !validation_result_path
+            .starts_with(&format!(".agentflow/tasks/{}/runs/", issue_id.as_str()))
+        {
+            anyhow::bail!("issue {} has invalid validationResultPath", issue.issue_id);
+        }
+    }
+    if let Some(closeout_proof_path) = issue.expected_outputs.closeout_proof_path.as_ref() {
+        let closeout_proof_path = normalize_relative_path_string(closeout_proof_path)?;
+        if !closeout_proof_path
+            .starts_with(&format!(".agentflow/tasks/{}/runs/", issue_id.as_str()))
+        {
+            anyhow::bail!("issue {} has invalid closeoutProofPath", issue.issue_id);
+        }
+    }
     let system_path = normalize_relative_path_string(&issue.system.path)?;
     if system_path != format!(".agentflow/spec/issues/{}.json", issue_id.as_str()) {
         anyhow::bail!("issue {} has invalid system path", issue.issue_id);
@@ -5230,6 +5253,18 @@ mod tests {
         assert_eq!(
             stored.expected_outputs.evidence_path,
             ".agentflow/tasks/AF-SPEC-001/evidence/evidence.json"
+        );
+        assert_eq!(
+            stored.expected_outputs.changed_files_path.as_deref(),
+            Some(".agentflow/tasks/AF-SPEC-001/runs/<run-id>/changed-files.json")
+        );
+        assert_eq!(
+            stored.expected_outputs.validation_result_path.as_deref(),
+            Some(".agentflow/tasks/AF-SPEC-001/runs/<run-id>/validation.json")
+        );
+        assert_eq!(
+            stored.expected_outputs.closeout_proof_path.as_deref(),
+            Some(".agentflow/tasks/AF-SPEC-001/runs/<run-id>/review/closeout-proof.json")
         );
 
         let index: Value = read_json(&dir.path().join(".agentflow/spec/index.json")).unwrap();
