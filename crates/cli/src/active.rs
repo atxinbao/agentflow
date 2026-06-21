@@ -1806,6 +1806,7 @@ mod tests {
             project_id: Some("proj-001".to_string()),
             run_id: run_id.to_string(),
             session_id: format!("codex-{run_id}"),
+            owner_id: "work-agent".to_string(),
             status: McpSessionStatus::Running,
             launch_mode: McpLaunchMode::CliExecPromptFile,
             working_directory: root.display().to_string(),
@@ -1851,6 +1852,8 @@ mod tests {
             governance_policy: McpSessionGovernancePolicy::default(),
             governance_facts: McpSessionGovernanceFacts::default(),
             created_at: 1,
+            started_at: 1,
+            last_heartbeat_at: 1,
             updated_at: 1,
         };
         write_session_snapshot(root, &session).unwrap();

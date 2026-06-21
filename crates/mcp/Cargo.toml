@@ -8,6 +8,7 @@ version.workspace = true
 anyhow.workspace = true
 agentflow-event-store = { path = "../event-store" }
 agentflow-projection = { path = "../projection" }
+agentflow-task-artifacts = { path = "../task-artifacts" }
 agentflow-workflow-core = { path = "../workflow-core" }
 serde.workspace = true
 serde_json.workspace = true

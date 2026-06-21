@@ -94,6 +94,7 @@ pub struct ProjectionSessionSummary {
     pub provider: Option<String>,
     pub provider_kind: Option<String>,
     pub provider_status: Option<String>,
+    pub owner_id: Option<String>,
     pub session_id: Option<String>,
     pub status: Option<String>,
     #[serde(default)]
@@ -136,6 +137,8 @@ pub struct ProjectionSessionSummary {
     pub last_error: Option<String>,
     pub branch_name: Option<String>,
     pub process_group_id: Option<u32>,
+    pub started_at: Option<u64>,
+    pub last_heartbeat_at: Option<u64>,
     pub permission_mode: Option<String>,
     pub approval_policy: Option<String>,
     pub sandbox_mode: Option<String>,

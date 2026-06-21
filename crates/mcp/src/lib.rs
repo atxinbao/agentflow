@@ -228,6 +228,7 @@ fn session_transition_payload(updated: &McpSessionSnapshot, attempt_count: u32) 
     payload.insert("projectId".to_string(), json!(updated.project_id));
     payload.insert("runId".to_string(), json!(updated.run_id));
     payload.insert("sessionId".to_string(), json!(updated.session_id));
+    payload.insert("ownerId".to_string(), json!(updated.owner_id));
     payload.insert("provider".to_string(), json!(updated.provider));
     payload.insert("branchName".to_string(), json!(updated.branch_name));
     payload.insert("attemptCount".to_string(), json!(attempt_count));
@@ -261,6 +262,11 @@ fn session_transition_payload(updated: &McpSessionSnapshot, attempt_count: u32) 
     payload.insert(
         "supervisionMode".to_string(),
         json!(updated.supervision_mode),
+    );
+    payload.insert("startedAt".to_string(), json!(updated.started_at));
+    payload.insert(
+        "lastHeartbeatAt".to_string(),
+        json!(updated.last_heartbeat_at),
     );
     payload.insert(
         "governancePolicyVersion".to_string(),
@@ -355,6 +361,7 @@ mod tests {
             project_id: Some("proj-001".to_string()),
             run_id: "run-001".to_string(),
             session_id: "codex-run-001".to_string(),
+            owner_id: "work-agent".to_string(),
             status,
             launch_mode: McpLaunchMode::CliExecStdin,
             working_directory: "/repo".to_string(),
@@ -394,6 +401,8 @@ mod tests {
             approval_policy: Some("never".to_string()),
             sandbox_mode: Some("workspace-write".to_string()),
             supervision_mode: Some("local-process-watch".to_string()),
+            started_at: 1,
+            last_heartbeat_at: 2,
             exited_at: None,
             exit_code: None,
             governance_policy: McpSessionGovernancePolicy::default(),

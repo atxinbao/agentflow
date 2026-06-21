@@ -1201,6 +1201,13 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                         .and_then(Value::as_str)
                         .map(str::to_string);
                 }
+                if event.payload.get("ownerId").is_some() {
+                    summary.owner_id = event
+                        .payload
+                        .get("ownerId")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
                 summary.session_id = event
                     .payload
                     .get("sessionId")
@@ -1408,6 +1415,13 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                         .get("processGroupId")
                         .and_then(Value::as_u64)
                         .map(|value| value as u32);
+                }
+                if event.payload.get("startedAt").is_some() {
+                    summary.started_at = event.payload.get("startedAt").and_then(Value::as_u64);
+                }
+                if event.payload.get("lastHeartbeatAt").is_some() {
+                    summary.last_heartbeat_at =
+                        event.payload.get("lastHeartbeatAt").and_then(Value::as_u64);
                 }
                 if event.payload.get("permissionMode").is_some() {
                     summary.permission_mode = event
@@ -2784,10 +2798,13 @@ mod tests {
                     "provider": "codex",
                     "providerKind": "codex",
                     "providerStatus": "ready",
+                    "ownerId": "work-agent",
                     "runId": "run-001",
                     "sessionId": "codex-run-001",
                     "sessionStatus": "failed",
                     "attemptCount": 1,
+                    "startedAt": 10,
+                    "lastHeartbeatAt": 20,
                     "workingDirectory": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
                     "workspaceRoot": "/repo",
                     "worktreeRoot": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
@@ -2829,10 +2846,13 @@ mod tests {
                 "agent.session.resumed",
                 json!({
                     "provider": "codex",
+                    "ownerId": "work-agent",
                     "runId": "run-001",
                     "sessionId": "codex-run-001",
                     "sessionStatus": "running",
                     "attemptCount": 2,
+                    "startedAt": 10,
+                    "lastHeartbeatAt": 30,
                     "workingDirectory": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
                     "workspaceRoot": "/repo",
                     "worktreeRoot": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
@@ -2854,10 +2874,13 @@ mod tests {
                 "agent.session.in_review",
                 json!({
                     "provider": "codex",
+                    "ownerId": "work-agent",
                     "runId": "run-001",
                     "sessionId": "codex-run-001",
                     "sessionStatus": "in-review",
                     "attemptCount": 2,
+                    "startedAt": 10,
+                    "lastHeartbeatAt": 40,
                     "workingDirectory": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
                     "workspaceRoot": "/repo",
                     "worktreeRoot": "/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime/worktree",
@@ -2888,7 +2911,10 @@ mod tests {
         assert_eq!(projection.session.status.as_deref(), Some("in-review"));
         assert_eq!(projection.session.provider_kind.as_deref(), Some("codex"));
         assert_eq!(projection.session.provider_status.as_deref(), Some("ready"));
+        assert_eq!(projection.session.owner_id.as_deref(), Some("work-agent"));
         assert_eq!(projection.session.attempt_count, 2);
+        assert_eq!(projection.session.started_at, Some(10));
+        assert_eq!(projection.session.last_heartbeat_at, Some(40));
         assert_eq!(
             projection.session.runtime_root.as_deref(),
             Some("/repo/.agentflow/tasks/AF-PROJ-001/runs/run-001/runtime")
