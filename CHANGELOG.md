@@ -4,26 +4,25 @@
 
 执行者：Codex
 
-下一版修复目标暂定为 `0.5.1 - Spec Loop Release Hygiene & Authority Closure`。
+下一版修复目标暂定为 `0.6.1 - Release Closeout & Acceptance Gate Refinement`。
 
 当前状态：计划中，尚未发布。
 
 ### Included
 
-- 计划修复 release metadata、workspace version、Desktop package version、Tauri version 和 release-gate 默认版本。
-- 计划补齐 tag / release 级 release-gate 触发与 certification artifact。
-- 计划增加 Spec Loop 专用版本 gate。
-- 计划重排 Spec materialization 权威链路，确保 proposal / arbitration 先于 authority write。
-- 计划持久化 Runtime Command / Proposal / Decision / Accepted Action。
-- 计划补清 preview artifact、authority artifact、derived projection 的 manifest 边界。
-- 计划修正 `v0.4.0` / `v0.5.0` 文档状态和本机绝对路径。
+- 计划修复 `v0.6.0` 发布后暴露的 release metadata 漂移。
+- 计划补齐 `0.6.0` CHANGELOG 与 `docs/v0.6.0/**` release closeout。
+- 计划修复 release-gate 默认版本和 E2E fixture 仍指向 `v0.5.1` 的问题。
+- 计划将 Evidence Gate 升级为 Acceptance Gate，覆盖 verification / evidence / contract / state。
+- 计划定义 Completion Commit，明确 Event Store、status writeback、Projection refresh、Delivery record 的权威顺序。
+- 计划保留 Done 后 optional audit trigger evaluation，但不自动触发 Audit。
+- 计划生成 `v0.6.1` release audit certification。
 
 ### Architecture
 
-- `v0.5.0` 保留为 Spec Loop Productization 功能基线。
-- `v0.5.0` 当前只应视为 functional baseline，不应表述为 clean stable release。
-- `v0.5.1` 先闭合发布卫生和 Runtime authority 顺序，不进入 `v0.6.0` Work Loop Handoff。
-- `v0.6.0` 必须建立在 `v0.5.1` 的 authority closure 之后。
+- `v0.6.0` 保留为 Work Loop Handoff & Controlled Execution 功能发布。
+- `v0.6.0` 当前只应视为 functional release，不应表述为 clean stable closeout。
+- `v0.6.1` 收口 release closeout、Acceptance Gate、Completion Commit 和 Audit separation。
 
 ### Validation
 
