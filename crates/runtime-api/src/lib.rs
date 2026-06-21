@@ -14,6 +14,7 @@ pub mod mapping;
 pub mod query;
 pub mod responses;
 pub mod work_proposals;
+pub mod work_state;
 
 pub use commands::{
     execute_command_via_arbitration, execute_command_via_arbitration_with_context,
@@ -40,4 +41,9 @@ pub use responses::{
 pub use work_proposals::{
     write_work_action_proposals_from_spec_issue, WorkActionProposalContract,
     WorkActionProposalEntry, WorkProposalStageAction, WORK_ACTION_PROPOSAL_CONTRACT_VERSION,
+};
+pub use work_state::{
+    assert_issue_activation_allowed, assert_issue_mark_done_allowed,
+    assert_issue_start_run_allowed, assert_issue_transition, assert_run_transition,
+    issue_surface_state_id, run_surface_state_id,
 };
