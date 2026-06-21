@@ -36,6 +36,7 @@ impl AgentDispatcher {
         project_root: impl AsRef<Path>,
     ) -> Result<Option<AgentDispatcherClaim>> {
         let root = project_root.as_ref();
+        reconcile_terminal_session_leases(root)?;
         let Some((event, claim_event)) = claim_task_event(
             root,
             "agent-dispatcher",
@@ -75,12 +76,6 @@ impl AgentDispatcher {
                     AGENT_SESSION_CREATED
                 },
             )?;
-            let _ = release_task_claim(
-                root,
-                &payload.run_id,
-                Some(claim_event.event_id.as_str()),
-                "session-recovered",
-            );
             append_status_event(root, &payload, &selection, &existing_session)?;
             return Ok(Some(AgentDispatcherClaim {
                 issue_id: payload.issue_id,
@@ -131,12 +126,6 @@ impl AgentDispatcher {
                 AGENT_SESSION_CREATED
             },
         )?;
-        let _ = release_task_claim(
-            root,
-            &payload.run_id,
-            Some(claim_event.event_id.as_str()),
-            "session-created",
-        );
         append_status_event(root, &payload, &selection, &session)?;
 
         Ok(Some(AgentDispatcherClaim {
@@ -250,6 +239,34 @@ fn had_prior_session_event(root: &Path, run_id: &str) -> Result<bool> {
                 | AGENT_SESSION_CANCELLED
         ) && event.run_id.as_deref() == Some(run_id)
     }))
+}
+
+fn reconcile_terminal_session_leases(root: &Path) -> Result<()> {
+    let mut terminal_by_run = BTreeMap::new();
+    for event in load_task_events(root)? {
+        let Some(run_id) = event.run_id.clone() else {
+            continue;
+        };
+        let reason = match event.event_type.as_str() {
+            AGENT_SESSION_INTERRUPTED => Some("session-interrupted"),
+            AGENT_SESSION_FAILED => Some("session-failed"),
+            AGENT_SESSION_CANCELLED => Some("session-cancelled"),
+            AGENT_SESSION_DONE => Some("session-completed"),
+            AGENT_SESSION_CREATED
+            | AGENT_SESSION_RESUMED
+            | AGENT_SESSION_RUNNING
+            | AGENT_SESSION_IN_REVIEW => None,
+            _ => continue,
+        };
+        terminal_by_run.insert(run_id, reason);
+    }
+
+    for (run_id, reason) in terminal_by_run {
+        if let Some(reason) = reason {
+            let _ = release_task_claim(root, &run_id, None, reason)?;
+        }
+    }
+    Ok(())
 }
 
 fn recover_existing_session_snapshot(
@@ -692,7 +709,7 @@ mod tests {
         atomic::{AtomicUsize, Ordering},
         Arc,
     };
-    use std::{fs, path::Path};
+    use std::{fs, path::Path, process::Command};
     use tempfile::tempdir;
 
     struct FakeProvider;
@@ -903,10 +920,29 @@ mod tests {
         let requirement = root.join("docs/requirements/034-test.md");
         fs::create_dir_all(requirement.parent().unwrap()).unwrap();
         fs::write(&requirement, "# 测试需求\n\n用于 agent-dispatcher 测试。\n").unwrap();
+        Command::new("git")
+            .arg("init")
+            .arg("-b")
+            .arg("main")
+            .current_dir(root)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.name", "AgentFlow Test"])
+            .current_dir(root)
+            .output()
+            .unwrap();
 
         let mut issue = agentflow_spec::SpecIssueDraft::new("AF-DISPATCH-001");
         issue.project_id = Some("project-dispatcher".to_string());
-        let issue = agentflow_spec::issue_from_requirement(root, &requirement, issue).unwrap();
+        let mut issue = agentflow_spec::issue_from_requirement(root, &requirement, issue).unwrap();
+        issue.allowed_paths = vec!["apps/desktop/src/**".to_string(), "docs/**".to_string()];
+        issue.validation_commands = vec!["npm --prefix apps/desktop run build".to_string()];
         agentflow_spec::write_spec_issue(root, &issue).unwrap();
 
         let mut project = agentflow_spec::SpecProjectDraft::new("project-dispatcher");
@@ -914,6 +950,29 @@ mod tests {
         let project =
             agentflow_spec::project_from_requirement(root, &requirement, project).unwrap();
         agentflow_spec::write_spec_project(root, &project).unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "fixture"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+    }
+
+    fn commit_workspace(root: &Path, message: &str) {
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", message])
+            .current_dir(root)
+            .output()
+            .unwrap();
     }
 
     #[test]
@@ -925,9 +984,11 @@ mod tests {
             .schedule_next_issue(dir.path())
             .unwrap()
             .unwrap();
+        commit_workspace(dir.path(), "scheduled");
         loop_driver
             .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
             .unwrap();
+        commit_workspace(dir.path(), "launch-request");
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(FakeProvider));
 
@@ -981,8 +1042,8 @@ mod tests {
         let lease = agentflow_event_store::load_task_claim_lease(dir.path(), "run-001")
             .unwrap()
             .expect("expected claim lease");
-        assert_eq!(lease.status.as_str(), "released");
-        assert_eq!(lease.release_reason.as_deref(), Some("session-created"));
+        assert_eq!(lease.status.as_str(), "active");
+        assert_eq!(lease.release_reason, None);
     }
 
     #[test]
@@ -994,9 +1055,11 @@ mod tests {
             .schedule_next_issue(dir.path())
             .unwrap()
             .unwrap();
+        commit_workspace(dir.path(), "scheduled");
         loop_driver
             .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
             .unwrap();
+        commit_workspace(dir.path(), "launch-request");
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(FakeProvider));
         let dispatcher = AgentDispatcher::new(providers);
@@ -1014,9 +1077,11 @@ mod tests {
             .schedule_next_issue(dir.path())
             .unwrap()
             .unwrap();
+        commit_workspace(dir.path(), "scheduled");
         loop_driver
             .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
             .unwrap();
+        commit_workspace(dir.path(), "launch-request");
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(FakeProvider));
         let dispatcher = AgentDispatcher::new(providers);
@@ -1058,6 +1123,7 @@ mod tests {
             },
         )
         .unwrap();
+        commit_workspace(dir.path(), "session-interrupted");
 
         let resumed_claim = dispatcher.claim_next_launch(dir.path()).unwrap().unwrap();
 
@@ -1078,9 +1144,11 @@ mod tests {
             .schedule_next_issue(dir.path())
             .unwrap()
             .unwrap();
+        commit_workspace(dir.path(), "scheduled");
         loop_driver
             .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
             .unwrap();
+        commit_workspace(dir.path(), "launch-request");
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(FakeProvider));
         let dispatcher = AgentDispatcher::new(providers);
@@ -1121,6 +1189,7 @@ mod tests {
             },
         )
         .unwrap();
+        commit_workspace(dir.path(), "session-interrupted");
         assert!(dispatcher.claim_next_launch(dir.path()).unwrap().is_some());
 
         append_task_event_once(
@@ -1158,6 +1227,7 @@ mod tests {
             },
         )
         .unwrap();
+        commit_workspace(dir.path(), "session-cancelled");
 
         assert!(dispatcher.claim_next_launch(dir.path()).unwrap().is_none());
     }
@@ -1171,9 +1241,11 @@ mod tests {
             .schedule_next_issue(dir.path())
             .unwrap()
             .unwrap();
+        commit_workspace(dir.path(), "scheduled");
         loop_driver
             .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
             .unwrap();
+        commit_workspace(dir.path(), "launch-request");
 
         let attempts = Arc::new(AtomicUsize::new(0));
         let mut failing_providers = McpProviderBridge::new();
@@ -1225,9 +1297,11 @@ mod tests {
             .schedule_next_issue(dir.path())
             .unwrap()
             .unwrap();
+        commit_workspace(dir.path(), "scheduled");
         loop_driver
             .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
             .unwrap();
+        commit_workspace(dir.path(), "launch-request");
 
         let request = McpLaunchRequest::new(
             "codex",
@@ -1244,6 +1318,7 @@ mod tests {
         session.updated_at = session.updated_at + 5;
         write_launch_plan(dir.path(), &plan).unwrap();
         write_session_snapshot(dir.path(), &session).unwrap();
+        commit_workspace(dir.path(), "recovered-session");
 
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(NoCreateProvider));
@@ -1264,9 +1339,9 @@ mod tests {
             .any(|event| event.event_type == AGENT_SESSION_RUNNING));
         let lease = agentflow_event_store::load_task_claim_lease(dir.path(), "run-001")
             .unwrap()
-            .expect("expected released lease after recovery");
-        assert_eq!(lease.status.as_str(), "released");
-        assert_eq!(lease.release_reason.as_deref(), Some("session-recovered"));
+            .expect("expected active lease after recovery");
+        assert_eq!(lease.status.as_str(), "active");
+        assert_eq!(lease.release_reason, None);
     }
 
     #[test]
@@ -1293,9 +1368,11 @@ mod tests {
             .schedule_next_issue(dir.path())
             .unwrap()
             .unwrap();
+        commit_workspace(dir.path(), "scheduled");
         loop_driver
             .request_agent_launch(dir.path(), "AF-DISPATCH-001", "codex")
             .unwrap();
+        commit_workspace(dir.path(), "launch-request");
 
         let mut providers = McpProviderBridge::new();
         providers.register(Box::new(LimitedProvider));

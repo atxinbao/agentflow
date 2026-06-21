@@ -16,7 +16,7 @@ use agentflow_task_artifacts::TaskCommandInput;
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::Result;
 use serde_json::json;
-use std::{fs, path::Path};
+use std::{fs, path::Path, process::Command};
 
 pub struct ExecutionCompletedFixture {
     pub fixture: WorkflowFixture,
@@ -272,6 +272,7 @@ fn prepare_project_closeout_fixture(mark_done: bool) -> Result<ProjectLoopCloseo
     project_draft.issue_ids = vec![current_issue.issue_id.clone(), next_issue.issue_id.clone()];
     let project = agentflow_spec::project_from_requirement(root, &requirement, project_draft)?;
     write_spec_project(root, &project)?;
+    init_git_repo(root)?;
 
     let run_id = "run-001";
     agentflow_task_artifacts::create_task_run(
@@ -427,5 +428,21 @@ fn append_issue_event(
             idempotency_key: Some(format!("{event_type}:{}", issue.issue_id)),
         },
     )?;
+    Ok(())
+}
+
+fn init_git_repo(root: &Path) -> Result<()> {
+    fs::write(root.join(".gitignore"), ".agentflow/\n")?;
+    run_git(root, &["init"])?;
+    run_git(root, &["config", "user.email", "codex@example.com"])?;
+    run_git(root, &["config", "user.name", "Codex"])?;
+    run_git(root, &["add", "."])?;
+    run_git(root, &["commit", "-m", "initial fixture"])?;
+    Ok(())
+}
+
+fn run_git(root: &Path, args: &[&str]) -> Result<()> {
+    let status = Command::new("git").args(args).current_dir(root).status()?;
+    anyhow::ensure!(status.success(), "git {:?} failed", args);
     Ok(())
 }

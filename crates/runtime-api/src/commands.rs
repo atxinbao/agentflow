@@ -11,16 +11,17 @@ use agentflow_action_arbitration::{
     ArbitrationDecisionStatus, ArbitrationRequest, DefinitionVersions,
 };
 use agentflow_action_contract::{core_action_contract_registry, ActionRef, ActionSourceSurface};
-use agentflow_event_store::{append_accepted_action_event, AcceptedActionAppendContext};
+use agentflow_event_store::{append_accepted_action_event, AcceptedActionAppendContext, TaskEvent};
 use agentflow_object_state::core_object_state_registry;
 use agentflow_ontology::core_ontology_registry;
 use agentflow_role_policy::core_role_policy_registry;
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use agentflow_workflow_runtime::{
-    prepare_runtime_workspace, write_runtime_accepted_action_fact, write_runtime_command_fact,
-    write_runtime_decision_fact, write_runtime_proposal_fact, RuntimeAcceptedActionFact,
-    RuntimeCommandFact, RuntimeCommandValidationFact, RuntimeDecisionFact, RuntimeProposalFact,
-    RuntimeQueryHintFact, RUNTIME_ACCEPTED_ACTION_FACT_VERSION, RUNTIME_COMMAND_FACT_VERSION,
+    load_runtime_lock_snapshot, prepare_runtime_workspace, write_runtime_accepted_action_fact,
+    write_runtime_command_fact, write_runtime_decision_fact, write_runtime_proposal_fact,
+    RuntimeAcceptedActionFact, RuntimeCommandFact, RuntimeCommandValidationFact,
+    RuntimeDecisionFact, RuntimeProposalFact, RuntimeQueryHintFact,
+    RUNTIME_ACCEPTED_ACTION_FACT_VERSION, RUNTIME_COMMAND_FACT_VERSION,
     RUNTIME_DECISION_FACT_VERSION, RUNTIME_PROPOSAL_FACT_VERSION,
 };
 
@@ -108,8 +109,9 @@ pub fn execute_command_via_arbitration(
     project_root: impl AsRef<Path>,
     request: &RuntimeCommandRequest,
 ) -> Result<RuntimeCommandResponse> {
-    let context = build_core_arbitration_context()?;
-    execute_command_via_arbitration_with_context(project_root, request, &context)
+    let root = project_root.as_ref();
+    let context = build_project_arbitration_context(root)?;
+    execute_command_via_arbitration_with_context(root, request, &context)
 }
 
 pub fn execute_command_via_arbitration_with_context(
@@ -276,6 +278,17 @@ pub(crate) fn build_core_arbitration_context() -> Result<ArbitrationContext> {
     ))
 }
 
+pub(crate) fn build_project_arbitration_context(
+    project_root: impl AsRef<Path>,
+) -> Result<ArbitrationContext> {
+    let mut context = build_core_arbitration_context()?;
+    let snapshot = load_runtime_lock_snapshot(project_root)?;
+    for record in snapshot.active_object_locks {
+        context.push_lock(record.lock);
+    }
+    Ok(context)
+}
+
 fn response_from_arbitration_decision(
     request: &RuntimeCommandRequest,
     proposal_id: &str,
@@ -361,7 +374,7 @@ fn build_runtime_decision_fact(
     proposal_id: &str,
     decision: Option<&ArbitrationDecision>,
     response: &RuntimeCommandResponse,
-    accepted_action_event: Option<(String, String)>,
+    accepted_action_event: Option<TaskEvent>,
     recorded_at: u64,
 ) -> RuntimeDecisionFact {
     RuntimeDecisionFact {
@@ -392,7 +405,7 @@ fn build_runtime_decision_fact(
         correlation_id: response.correlation_id.clone(),
         would_emit_events: accepted_action_event
             .as_ref()
-            .map(|(event_type, _)| vec![event_type.clone()])
+            .map(|event| vec![event.event_type.clone()])
             .unwrap_or_else(|| {
                 decision
                     .map(|value| value.would_emit_events.clone())
@@ -405,16 +418,23 @@ fn build_runtime_decision_fact(
 fn build_runtime_accepted_action_fact(
     request: &RuntimeCommandRequest,
     accepted_action: &AcceptedAction,
-    accepted_action_event: Option<&(String, String)>,
+    accepted_action_event: Option<&TaskEvent>,
     recorded_at: u64,
 ) -> RuntimeAcceptedActionFact {
     let mut event_id = None;
     let mut event_path = None;
     let mut event_type = None;
-    if let Some((kind, event)) = accepted_action_event {
-        event_type = Some(kind.clone());
-        event_id = Some(event.clone());
-        event_path = Some(format!(".agentflow/events/task-events/{}.json", event));
+    let mut issue_id = None;
+    let mut run_id = None;
+    if let Some(event) = accepted_action_event {
+        event_type = Some(event.event_type.clone());
+        event_id = Some(event.event_id.clone());
+        event_path = Some(format!(
+            ".agentflow/events/task-events/{}.json",
+            event.event_id
+        ));
+        issue_id = event.issue_id.clone();
+        run_id = event.run_id.clone();
     }
 
     RuntimeAcceptedActionFact {
@@ -422,6 +442,8 @@ fn build_runtime_accepted_action_fact(
         command_id: request.command_id.clone(),
         proposal_id: accepted_action.proposal_id.clone(),
         accepted_action_id: accepted_action.accepted_action_id.clone(),
+        issue_id,
+        run_id,
         action_type: accepted_action.action_type.clone(),
         actor_role: accepted_action.actor_role.clone(),
         target_object_ref: accepted_action.target_object_ref.clone(),
@@ -446,7 +468,7 @@ fn append_runtime_accepted_action_event(
     accepted_action: &AcceptedAction,
     decision: &ArbitrationDecision,
     context: &ArbitrationContext,
-) -> Result<(String, String)> {
+) -> Result<TaskEvent> {
     let contract = context
         .action_contract_registry
         .get_action_contract(&proposal.action_type, &proposal.contract_version)
@@ -503,7 +525,7 @@ fn append_runtime_accepted_action_event(
             }),
         },
     )?;
-    Ok((event_type, task_event.event_id))
+    Ok(task_event)
 }
 
 fn resolve_runtime_aggregate_id(
@@ -634,18 +656,21 @@ mod tests {
 
     use agentflow_action_arbitration::{
         AcceptedAction, ArbitrationDecision, ArbitrationDecisionStatus, DefinitionVersions,
-        DependencyFact, EvidenceFact, HumanDecisionRequest, HumanDecisionResponseKind,
-        ObjectLockPlan, StateFact,
+        DependencyFact, EvidenceFact, HumanDecisionRequest, HumanDecisionResponseKind, ObjectLock,
+        ObjectLockKind, ObjectLockPlan, StateFact,
     };
+    use agentflow_event_store::{claim_task_event, EventActor, TaskEventDraft};
+    use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
     use agentflow_workflow_runtime::{
         load_runtime_accepted_action_fact, load_runtime_command_fact, load_runtime_decision_fact,
-        load_runtime_proposal_fact,
+        load_runtime_proposal_fact, write_runtime_accepted_action_fact, RuntimeAcceptedActionFact,
+        RUNTIME_ACCEPTED_ACTION_FACT_VERSION,
     };
 
     use super::{
-        build_core_arbitration_context, execute_command_via_arbitration_with_context,
-        map_command_to_action_proposal, response_from_arbitration_decision,
-        validate_runtime_command, RuntimeCommandRequest,
+        build_core_arbitration_context, build_project_arbitration_context,
+        execute_command_via_arbitration_with_context, map_command_to_action_proposal,
+        response_from_arbitration_decision, validate_runtime_command, RuntimeCommandRequest,
     };
     use crate::mapping::target_ref;
     use crate::responses::RuntimeCommandStatus;
@@ -895,5 +920,156 @@ mod tests {
         assert_eq!(decision.status, "accepted");
         assert_eq!(action.event_type.as_deref(), Some("ProjectCreated"));
         assert!(action.event_path.is_some());
+    }
+
+    #[test]
+    fn project_context_rejects_command_when_runtime_object_lock_is_active() {
+        let dir = tempdir().unwrap();
+        let requested = agentflow_event_store::append_task_event(
+            dir.path(),
+            TaskEventDraft {
+                flow_type: WorkflowFlowType::Work,
+                aggregate_type: "issue".to_string(),
+                aggregate_id: "AF-LOCK-001".to_string(),
+                project_id: Some("project-locks".to_string()),
+                issue_id: Some("AF-LOCK-001".to_string()),
+                run_id: Some("run-001".to_string()),
+                event_type: "agent.launch.requested".to_string(),
+                authority_role: Some(WorkflowAgentRole::WorkAgent),
+                actor: EventActor {
+                    role: "task-loop".to_string(),
+                    kind: "system".to_string(),
+                },
+                state: None,
+                correlation_id: Some("corr-AF-LOCK-001".to_string()),
+                causation_id: None,
+                payload: json!({ "provider": "codex" }),
+                artifact_refs: Vec::new(),
+                idempotency_key: Some("agent.launch.requested:AF-LOCK-001:run-001".to_string()),
+            },
+        )
+        .unwrap();
+        claim_task_event(
+            dir.path(),
+            "agent-dispatcher",
+            |event, _events| event.event_id == requested.event_id,
+            |event, _events| {
+                Ok(TaskEventDraft {
+                    flow_type: WorkflowFlowType::Work,
+                    aggregate_type: "issue".to_string(),
+                    aggregate_id: event.aggregate_id.clone(),
+                    project_id: event.project_id.clone(),
+                    issue_id: event.issue_id.clone(),
+                    run_id: event.run_id.clone(),
+                    event_type: "agent.launch.claimed".to_string(),
+                    authority_role: event.authority_role,
+                    actor: EventActor {
+                        role: "agent-dispatcher".to_string(),
+                        kind: "system".to_string(),
+                    },
+                    state: None,
+                    correlation_id: Some(event.correlation_id.clone()),
+                    causation_id: Some(event.event_id.clone()),
+                    payload: json!({}),
+                    artifact_refs: Vec::new(),
+                    idempotency_key: Some("agent.launch.claimed:AF-LOCK-001:run-001".to_string()),
+                })
+            },
+        )
+        .unwrap()
+        .unwrap();
+
+        write_runtime_accepted_action_fact(
+            dir.path(),
+            &RuntimeAcceptedActionFact {
+                version: RUNTIME_ACCEPTED_ACTION_FACT_VERSION.to_string(),
+                command_id: "cmd-lock-seed".to_string(),
+                proposal_id: "proposal-cmd-lock-seed".to_string(),
+                accepted_action_id: "accepted-proposal-cmd-lock-seed".to_string(),
+                issue_id: Some("AF-LOCK-001".to_string()),
+                run_id: Some("run-001".to_string()),
+                action_type: "createProject".to_string(),
+                actor_role: "spec-agent".to_string(),
+                target_object_ref: Some(target_ref("Spec", "spec-001")),
+                from_state: Some("approved".to_string()),
+                to_state: Some("projectCreated".to_string()),
+                evidence_refs: vec![
+                    "approved-spec-1".to_string(),
+                    "human-confirmation-1".to_string(),
+                ],
+                artifact_refs: Vec::new(),
+                expected_events: vec!["ProjectCreated".to_string()],
+                lock_plan: ObjectLockPlan {
+                    acquire: vec![ObjectLock {
+                        lock_id: "lock-proposal-cmd-lock-seed".to_string(),
+                        object_type: "Spec".to_string(),
+                        object_id: "spec-001".to_string(),
+                        lock_kind: ObjectLockKind::DecisionPending,
+                        owner_proposal_id: "proposal-cmd-lock-seed".to_string(),
+                        owner_role: "spec-agent".to_string(),
+                        expires_at: None,
+                        reason: "accepted action `createProject`".to_string(),
+                    }],
+                    release: Vec::new(),
+                },
+                definition_versions: DefinitionVersions {
+                    ontology_version: "v1".to_string(),
+                    contract_version: "v1".to_string(),
+                    role_policy_version: "v1".to_string(),
+                    object_state_version: "v1".to_string(),
+                },
+                event_id: None,
+                event_path: None,
+                event_type: Some("ProjectCreated".to_string()),
+                recorded_at: 1,
+            },
+        )
+        .unwrap();
+
+        let request = RuntimeCommandRequest {
+            command_id: "cmd-create-project-lock-2".to_string(),
+            command_type: "createProject".to_string(),
+            source_surface: ActionSourceSurface::Agent,
+            actor_role: "spec-agent".to_string(),
+            target_object_ref: Some(target_ref("Spec", "spec-001")),
+            input: json!({
+                "projectId": "project-002",
+                "projectTitle": "Locked Project"
+            }),
+            evidence_refs: vec![
+                "approved-spec-1".to_string(),
+                "human-confirmation-1".to_string(),
+            ],
+            artifact_refs: Vec::new(),
+            idempotency_key: "spec:spec-001:project:project-002:createProject:2026-06-21T00:05:00Z"
+                .to_string(),
+            created_at: "2026-06-21T00:05:00Z".to_string(),
+        };
+        let project_context = build_project_arbitration_context(dir.path()).unwrap();
+        let mut second_context = build_core_arbitration_context().unwrap();
+        second_context.insert_state(StateFact {
+            object_type: "Spec".to_string(),
+            object_id: "spec-001".to_string(),
+            state_id: "approved".to_string(),
+        });
+        second_context.insert_evidence(EvidenceFact {
+            evidence_ref: "approved-spec-1".to_string(),
+            evidence_type: "approvedSpecAvailable".to_string(),
+        });
+        second_context.insert_evidence(EvidenceFact {
+            evidence_ref: "human-confirmation-1".to_string(),
+            evidence_type: "humanConfirmation".to_string(),
+        });
+        for lock in project_context.object_locks {
+            second_context.push_lock(lock);
+        }
+        let second =
+            execute_command_via_arbitration_with_context(dir.path(), &request, &second_context)
+                .unwrap();
+        assert_eq!(second.status, RuntimeCommandStatus::Rejected);
+        assert!(second
+            .rejected_reasons
+            .iter()
+            .any(|reason| reason.message.contains("active DecisionPending lock")));
     }
 }
