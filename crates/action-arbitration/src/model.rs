@@ -151,7 +151,23 @@ pub enum ArbitrationDecisionStatus {
     Rejected,
     HumanDecisionRequired,
     Queued,
+    Superseded,
+    Cancelled,
     ConflictDetected,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingProposal {
+    pub proposal_id: String,
+    pub actor_role: String,
+    pub action_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_object_ref: Option<ActionRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conflict_scope_key: Option<String>,
+    pub status: ArbitrationDecisionStatus,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,6 +177,8 @@ pub struct ArbitrationDecision {
     pub request_id: String,
     pub proposal_id: String,
     pub status: ArbitrationDecisionStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocking_proposal_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted_action: Option<AcceptedAction>,
     #[serde(default)]
@@ -183,6 +201,67 @@ impl ArbitrationDecision {
             request_id: request.request_id.clone(),
             proposal_id: request.proposal.proposal_id.clone(),
             status: ArbitrationDecisionStatus::Rejected,
+            blocking_proposal_id: None,
+            accepted_action: None,
+            rejected_reasons: reasons,
+            required_human_decision: None,
+            lock_plan: ObjectLockPlan::default(),
+            would_emit_events: Vec::new(),
+            created_at: request.requested_at.clone(),
+        }
+    }
+
+    pub fn queued(
+        request: &ArbitrationRequest,
+        blocking_proposal_id: Option<String>,
+        reasons: Vec<crate::reasons::RejectionReason>,
+    ) -> Self {
+        Self {
+            decision_id: format!("decision-{}", request.request_id),
+            request_id: request.request_id.clone(),
+            proposal_id: request.proposal.proposal_id.clone(),
+            status: ArbitrationDecisionStatus::Queued,
+            blocking_proposal_id,
+            accepted_action: None,
+            rejected_reasons: reasons,
+            required_human_decision: None,
+            lock_plan: ObjectLockPlan::default(),
+            would_emit_events: Vec::new(),
+            created_at: request.requested_at.clone(),
+        }
+    }
+
+    pub fn superseded(
+        request: &ArbitrationRequest,
+        blocking_proposal_id: Option<String>,
+        reasons: Vec<crate::reasons::RejectionReason>,
+    ) -> Self {
+        Self {
+            decision_id: format!("decision-{}", request.request_id),
+            request_id: request.request_id.clone(),
+            proposal_id: request.proposal.proposal_id.clone(),
+            status: ArbitrationDecisionStatus::Superseded,
+            blocking_proposal_id,
+            accepted_action: None,
+            rejected_reasons: reasons,
+            required_human_decision: None,
+            lock_plan: ObjectLockPlan::default(),
+            would_emit_events: Vec::new(),
+            created_at: request.requested_at.clone(),
+        }
+    }
+
+    pub fn cancelled(
+        request: &ArbitrationRequest,
+        blocking_proposal_id: Option<String>,
+        reasons: Vec<crate::reasons::RejectionReason>,
+    ) -> Self {
+        Self {
+            decision_id: format!("decision-{}", request.request_id),
+            request_id: request.request_id.clone(),
+            proposal_id: request.proposal.proposal_id.clone(),
+            status: ArbitrationDecisionStatus::Cancelled,
+            blocking_proposal_id,
             accepted_action: None,
             rejected_reasons: reasons,
             required_human_decision: None,
@@ -203,6 +282,7 @@ pub struct ArbitrationContext {
     pub evidence_index: BTreeMap<String, EvidenceFact>,
     pub dependency_index: BTreeMap<String, DependencyFact>,
     pub object_locks: Vec<ObjectLock>,
+    pub pending_proposals: Vec<PendingProposal>,
 }
 
 impl ArbitrationContext {
@@ -221,6 +301,7 @@ impl ArbitrationContext {
             evidence_index: BTreeMap::new(),
             dependency_index: BTreeMap::new(),
             object_locks: Vec::new(),
+            pending_proposals: Vec::new(),
         }
     }
 
@@ -242,6 +323,10 @@ impl ArbitrationContext {
 
     pub fn push_lock(&mut self, lock: ObjectLock) {
         self.object_locks.push(lock);
+    }
+
+    pub fn push_pending_proposal(&mut self, proposal: PendingProposal) {
+        self.pending_proposals.push(proposal);
     }
 
     pub fn current_state_for(&self, target: &ActionRef) -> Option<&str> {

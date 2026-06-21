@@ -8,6 +8,9 @@ pub enum RuntimeCommandErrorCode {
     MissingField,
     MappingFailed,
     ArbitrationRejected,
+    ArbitrationQueued,
+    ArbitrationSuperseded,
+    ArbitrationCancelled,
     HumanDecisionRequired,
 }
 

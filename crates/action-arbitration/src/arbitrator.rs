@@ -2,8 +2,9 @@ use std::collections::BTreeSet;
 
 use agentflow_action_contract::{
     validate_action_proposal, ActionContract, ActionPreconditionKind, ActionProposal,
-    ActionProposalValidationStatus,
+    ActionProposalValidationStatus, ActionRef,
 };
+use serde_json::Value;
 
 use crate::locks::{check_object_lock as check_lock, default_lock_kind_for_object};
 use crate::model::{
@@ -84,6 +85,7 @@ pub fn arbitrate_action(
             request_id: request.request_id.clone(),
             proposal_id: request.proposal.proposal_id.clone(),
             status: ArbitrationDecisionStatus::HumanDecisionRequired,
+            blocking_proposal_id: None,
             accepted_action: None,
             rejected_reasons: Vec::new(),
             required_human_decision: Some(HumanDecisionRequest {
@@ -133,6 +135,10 @@ pub fn arbitrate_action(
         _ => None,
     };
 
+    let conflict_scope_key = proposal_conflict_scope_key_with_contract(&proposal, contract);
+    let matching_pending_proposals =
+        matching_pending_proposals(context, &proposal, conflict_scope_key.as_deref());
+
     let state_object_type = object_type.expect("validated action must resolve object type");
     let transition = context.state_machine_registry.is_transition_defined(
         state_object_type,
@@ -140,12 +146,67 @@ pub fn arbitrate_action(
         &proposal.action_type,
     );
     if !transition.allowed {
+        if let Some(blocking) = matching_pending_proposals
+            .iter()
+            .copied()
+            .filter(|candidate| candidate.actor_role == proposal.actor_role)
+            .filter(|candidate| candidate.action_type == proposal.action_type)
+            .max_by(|left, right| left.created_at.cmp(&right.created_at))
+        {
+            return ArbitrationDecision::cancelled(
+                request,
+                Some(blocking.proposal_id.clone()),
+                vec![RejectionReason::new(
+                    RejectionReasonCode::ProposalCancelled,
+                    format!(
+                        "proposal `{}` is obsolete because newer proposal `{}` already controls scope `{}`",
+                        proposal.proposal_id,
+                        blocking.proposal_id,
+                        conflict_scope_key
+                            .clone()
+                            .unwrap_or_else(|| "object".to_string())
+                    ),
+                    Some(blocking.proposal_id.clone()),
+                )],
+            );
+        }
         return ArbitrationDecision::rejected(
             request,
             vec![RejectionReason::new(
                 RejectionReasonCode::InvalidObjectState,
                 transition.reason,
                 None,
+            )],
+        );
+    }
+
+    if let Some(blocking) = newest_matching_pending(&matching_pending_proposals, &proposal) {
+        return ArbitrationDecision::superseded(
+            request,
+            Some(blocking.proposal_id.clone()),
+            vec![RejectionReason::new(
+                RejectionReasonCode::ProposalSuperseded,
+                format!(
+                    "proposal `{}` is superseded by newer proposal `{}` on scope `{}`",
+                    proposal.proposal_id,
+                    blocking.proposal_id,
+                    conflict_scope_key
+                        .clone()
+                        .unwrap_or_else(|| "object".to_string())
+                ),
+                Some(blocking.proposal_id.clone()),
+            )],
+        );
+    }
+
+    if let Some(blocking) = blocking_pending_proposal(&matching_pending_proposals, &proposal) {
+        return ArbitrationDecision::queued(
+            request,
+            Some(blocking.proposal_id.clone()),
+            vec![RejectionReason::new(
+                RejectionReasonCode::ProposalQueued,
+                queue_reason_for_pending(blocking, conflict_scope_key.as_deref()),
+                Some(blocking.proposal_id.clone()),
             )],
         );
     }
@@ -175,48 +236,45 @@ pub fn arbitrate_action(
         }
     }
 
-    let lock_plan = proposal
-        .target_object_ref
-        .as_ref()
-        .map(|target| {
-            let lock_kind = default_lock_kind_for_object(target.object_type.as_str());
-            let decision = check_lock(target, lock_kind, context);
-            if !decision.available {
-                return Err(ArbitrationDecision::rejected(
-                    request,
-                    vec![RejectionReason::new(
-                        RejectionReasonCode::ObjectLockUnavailable,
-                        decision
-                            .reason
-                            .unwrap_or_else(|| "object lock unavailable".into()),
-                        decision.blocking_lock.map(|lock| {
-                            format!(
-                                "{:?}:{}:{}",
-                                lock.lock_kind, lock.object_type, lock.object_id
-                            )
-                        }),
-                    )],
-                ));
-            }
-            Ok(ObjectLockPlan {
-                acquire: vec![ObjectLock {
-                    lock_id: format!("lock-{}", proposal.proposal_id),
-                    object_type: target.object_type.clone(),
-                    object_id: target.id.clone(),
-                    lock_kind,
-                    owner_proposal_id: proposal.proposal_id.clone(),
-                    owner_role: proposal.actor_role.clone(),
-                    expires_at: None,
-                    reason: format!("accepted action `{}`", proposal.action_type),
-                }],
-                release: Vec::new(),
-            })
-        })
-        .transpose();
-
-    let lock_plan = match lock_plan {
-        Ok(plan) => plan.unwrap_or_default(),
-        Err(rejected) => return rejected,
+    let lock_plan = if let Some(target) = proposal.target_object_ref.as_ref() {
+        let lock_kind = default_lock_kind_for_object(target.object_type.as_str());
+        let decision = check_lock(target, lock_kind, context);
+        if !decision.available {
+            return ArbitrationDecision::queued(
+                request,
+                decision
+                    .blocking_lock
+                    .as_ref()
+                    .map(|lock| lock.owner_proposal_id.clone()),
+                vec![RejectionReason::new(
+                    RejectionReasonCode::ObjectLockUnavailable,
+                    decision
+                        .reason
+                        .unwrap_or_else(|| "object lock unavailable".into()),
+                    decision.blocking_lock.as_ref().map(|lock| {
+                        format!(
+                            "{:?}:{}:{}",
+                            lock.lock_kind, lock.object_type, lock.object_id
+                        )
+                    }),
+                )],
+            );
+        }
+        ObjectLockPlan {
+            acquire: vec![ObjectLock {
+                lock_id: format!("lock-{}", proposal.proposal_id),
+                object_type: target.object_type.clone(),
+                object_id: target.id.clone(),
+                lock_kind,
+                owner_proposal_id: proposal.proposal_id.clone(),
+                owner_role: proposal.actor_role.clone(),
+                expires_at: None,
+                reason: format!("accepted action `{}`", proposal.action_type),
+            }],
+            release: Vec::new(),
+        }
+    } else {
+        ObjectLockPlan::default()
     };
 
     let accepted_action =
@@ -227,6 +285,7 @@ pub fn arbitrate_action(
         request_id: request.request_id.clone(),
         proposal_id: proposal.proposal_id.clone(),
         status: ArbitrationDecisionStatus::Accepted,
+        blocking_proposal_id: None,
         accepted_action: Some(accepted_action),
         rejected_reasons: Vec::new(),
         required_human_decision: None,
@@ -234,6 +293,16 @@ pub fn arbitrate_action(
         would_emit_events: collect_expected_events(contract, &transition.emitted_events),
         created_at: request.requested_at.clone(),
     }
+}
+
+pub fn proposal_conflict_scope_key(
+    context: &ArbitrationContext,
+    proposal: &ActionProposal,
+) -> Option<String> {
+    let contract = context
+        .action_contract_registry
+        .get_action_contract(&proposal.action_type, &proposal.contract_version)?;
+    proposal_conflict_scope_key_with_contract(proposal, contract)
 }
 
 pub fn check_object_lock(
@@ -413,6 +482,142 @@ fn validate_evidence(
             ),
             None,
         )])
+    }
+}
+
+fn proposal_conflict_scope_key_with_contract(
+    proposal: &ActionProposal,
+    contract: &ActionContract,
+) -> Option<String> {
+    resolve_conflict_scope_key(
+        proposal.target_object_ref.as_ref(),
+        &proposal.input,
+        contract.conflict_scope_hint.as_deref(),
+    )
+}
+
+fn resolve_conflict_scope_key(
+    target: Option<&ActionRef>,
+    input: &Value,
+    hint: Option<&str>,
+) -> Option<String> {
+    match hint.unwrap_or("object") {
+        "issue" => target
+            .filter(|target| target.object_type == "Issue")
+            .map(|target| format!("issue:{}", target.id))
+            .or_else(|| input_string(input, &["issueId"]).map(|value| format!("issue:{value}"))),
+        "run" => target
+            .filter(|target| target.object_type == "Run")
+            .map(|target| format!("run:{}", target.id))
+            .or_else(|| input_string(input, &["runId"]).map(|value| format!("run:{value}"))),
+        _ => target.map(|target| format!("object:{}:{}", target.object_type, target.id)),
+    }
+}
+
+fn input_string(input: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        input
+            .get(key)
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+    })
+}
+
+fn matching_pending_proposals<'a>(
+    context: &'a ArbitrationContext,
+    proposal: &ActionProposal,
+    conflict_scope_key: Option<&str>,
+) -> Vec<&'a crate::model::PendingProposal> {
+    let target = proposal.target_object_ref.as_ref();
+
+    context
+        .pending_proposals
+        .iter()
+        .filter(|pending| pending.proposal_id != proposal.proposal_id)
+        .filter(|pending| {
+            let scope_match = conflict_scope_key.is_some_and(|conflict_scope_key| {
+                pending
+                    .conflict_scope_key
+                    .as_deref()
+                    .is_some_and(|scope| scope == conflict_scope_key)
+            });
+            let target_match = pending.target_object_ref.as_ref().zip(target).is_some_and(
+                |(pending_target, current_target)| {
+                    pending_target.object_type == current_target.object_type
+                        && pending_target.id == current_target.id
+                },
+            );
+            scope_match || target_match
+        })
+        .filter(|pending| {
+            matches!(
+                pending.status,
+                ArbitrationDecisionStatus::Accepted
+                    | ArbitrationDecisionStatus::HumanDecisionRequired
+                    | ArbitrationDecisionStatus::Queued
+                    | ArbitrationDecisionStatus::ConflictDetected
+            )
+        })
+        .collect()
+}
+
+fn newest_matching_pending<'a>(
+    pending: &[&'a crate::model::PendingProposal],
+    proposal: &ActionProposal,
+) -> Option<&'a crate::model::PendingProposal> {
+    pending
+        .iter()
+        .copied()
+        .filter(|candidate| candidate.actor_role == proposal.actor_role)
+        .filter(|candidate| candidate.action_type == proposal.action_type)
+        .filter(|candidate| candidate.created_at > proposal.created_at)
+        .max_by(|left, right| left.created_at.cmp(&right.created_at))
+}
+
+fn blocking_pending_proposal<'a>(
+    pending: &[&'a crate::model::PendingProposal],
+    proposal: &ActionProposal,
+) -> Option<&'a crate::model::PendingProposal> {
+    pending
+        .iter()
+        .copied()
+        .filter(|candidate| {
+            !(candidate.actor_role == proposal.actor_role
+                && candidate.action_type == proposal.action_type)
+        })
+        .max_by_key(|candidate| match candidate.status {
+            ArbitrationDecisionStatus::HumanDecisionRequired => 3u8,
+            ArbitrationDecisionStatus::Accepted => 2u8,
+            ArbitrationDecisionStatus::Queued | ArbitrationDecisionStatus::ConflictDetected => 1u8,
+            ArbitrationDecisionStatus::Rejected
+            | ArbitrationDecisionStatus::Superseded
+            | ArbitrationDecisionStatus::Cancelled => 0u8,
+        })
+}
+
+fn queue_reason_for_pending(
+    pending: &crate::model::PendingProposal,
+    conflict_scope_key: Option<&str>,
+) -> String {
+    let scope = conflict_scope_key.unwrap_or("object");
+    match pending.status {
+        ArbitrationDecisionStatus::HumanDecisionRequired => format!(
+            "scope `{scope}` 正在等待 proposal `{}` 的人工决策",
+            pending.proposal_id
+        ),
+        ArbitrationDecisionStatus::Accepted => format!(
+            "scope `{scope}` 已被 proposal `{}` 占用，等待当前执行链路结束",
+            pending.proposal_id
+        ),
+        ArbitrationDecisionStatus::Queued | ArbitrationDecisionStatus::ConflictDetected => format!(
+            "scope `{scope}` 已有待处理 proposal `{}`，当前 proposal 进入队列",
+            pending.proposal_id
+        ),
+        ArbitrationDecisionStatus::Rejected
+        | ArbitrationDecisionStatus::Superseded
+        | ArbitrationDecisionStatus::Cancelled => {
+            format!("scope `{scope}` 当前不可用")
+        }
     }
 }
 
@@ -686,7 +891,7 @@ mod tests {
     }
 
     #[test]
-    fn active_write_lock_returns_rejected() {
+    fn active_write_lock_returns_queued() {
         let mut context = core_context();
         context.insert_state(StateFact {
             object_type: "Issue".into(),
@@ -721,10 +926,167 @@ mod tests {
         );
 
         let decision = arbitrate_action(&request, &context);
-        assert_eq!(decision.status, ArbitrationDecisionStatus::Rejected);
+        assert_eq!(decision.status, ArbitrationDecisionStatus::Queued);
+        assert_eq!(
+            decision.blocking_proposal_id.as_deref(),
+            Some("other-proposal")
+        );
         assert_eq!(
             decision.rejected_reasons[0].code,
             RejectionReasonCode::ObjectLockUnavailable
+        );
+    }
+
+    #[test]
+    fn newer_same_scope_proposal_supersedes_current_request() {
+        let mut context = core_context();
+        context.insert_state(StateFact {
+            object_type: "Issue".into(),
+            object_id: "ISS-1".into(),
+            state_id: "reviewReady".into(),
+        });
+        context.insert_evidence(evidence("artifact-1", "implementationSummary"));
+        context.insert_evidence(evidence("log-1", "verificationLog"));
+        context.insert_evidence(evidence("artifact-2", "artifactSummary"));
+        context.push_pending_proposal(crate::model::PendingProposal {
+            proposal_id: "proposal-markIssueDone-newer".into(),
+            actor_role: "BuildAgent".into(),
+            action_type: "markIssueDone".into(),
+            target_object_ref: Some(ActionRef {
+                object_type: "Issue".into(),
+                id: "ISS-1".into(),
+            }),
+            conflict_scope_key: Some("issue:ISS-1".into()),
+            status: ArbitrationDecisionStatus::Queued,
+            created_at: "2026-06-20T00:10:00Z".into(),
+        });
+
+        let decision = arbitrate_action(
+            &request(
+                proposal(
+                    "markIssueDone",
+                    "BuildAgent",
+                    Some(ActionRef {
+                        object_type: "Issue".into(),
+                        id: "ISS-1".into(),
+                    }),
+                    vec!["artifact-1", "log-1", "artifact-2"],
+                ),
+                "req-supersede",
+            ),
+            &context,
+        );
+
+        assert_eq!(decision.status, ArbitrationDecisionStatus::Superseded);
+        assert_eq!(
+            decision.blocking_proposal_id.as_deref(),
+            Some("proposal-markIssueDone-newer")
+        );
+        assert_eq!(
+            decision.rejected_reasons[0].code,
+            RejectionReasonCode::ProposalSuperseded
+        );
+    }
+
+    #[test]
+    fn waiting_human_decision_on_same_scope_queues_current_request() {
+        let mut context = core_context();
+        context.insert_state(StateFact {
+            object_type: "Issue".into(),
+            object_id: "ISS-1".into(),
+            state_id: "reviewReady".into(),
+        });
+        context.insert_evidence(evidence("artifact-1", "implementationSummary"));
+        context.insert_evidence(evidence("log-1", "verificationLog"));
+        context.insert_evidence(evidence("artifact-2", "artifactSummary"));
+        context.push_pending_proposal(crate::model::PendingProposal {
+            proposal_id: "proposal-human-review".into(),
+            actor_role: "AuditAgent".into(),
+            action_type: "requestAudit".into(),
+            target_object_ref: Some(ActionRef {
+                object_type: "Issue".into(),
+                id: "ISS-1".into(),
+            }),
+            conflict_scope_key: Some("issue:ISS-1".into()),
+            status: ArbitrationDecisionStatus::HumanDecisionRequired,
+            created_at: "2026-06-20T00:05:00Z".into(),
+        });
+
+        let decision = arbitrate_action(
+            &request(
+                proposal(
+                    "markIssueDone",
+                    "BuildAgent",
+                    Some(ActionRef {
+                        object_type: "Issue".into(),
+                        id: "ISS-1".into(),
+                    }),
+                    vec!["artifact-1", "log-1", "artifact-2"],
+                ),
+                "req-queue",
+            ),
+            &context,
+        );
+
+        assert_eq!(decision.status, ArbitrationDecisionStatus::Queued);
+        assert_eq!(
+            decision.blocking_proposal_id.as_deref(),
+            Some("proposal-human-review")
+        );
+        assert_eq!(
+            decision.rejected_reasons[0].code,
+            RejectionReasonCode::ProposalQueued
+        );
+    }
+
+    #[test]
+    fn stale_scope_request_is_cancelled_when_newer_proposal_already_controls_scope() {
+        let mut context = core_context();
+        context.insert_state(StateFact {
+            object_type: "Issue".into(),
+            object_id: "ISS-1".into(),
+            state_id: "done".into(),
+        });
+        context.insert_evidence(evidence("artifact-1", "implementationSummary"));
+        context.insert_evidence(evidence("log-1", "verificationLog"));
+        context.insert_evidence(evidence("artifact-2", "artifactSummary"));
+        context.push_pending_proposal(crate::model::PendingProposal {
+            proposal_id: "proposal-markIssueDone-newer".into(),
+            actor_role: "BuildAgent".into(),
+            action_type: "markIssueDone".into(),
+            target_object_ref: Some(ActionRef {
+                object_type: "Issue".into(),
+                id: "ISS-1".into(),
+            }),
+            conflict_scope_key: Some("issue:ISS-1".into()),
+            status: ArbitrationDecisionStatus::Accepted,
+            created_at: "2026-06-20T00:10:00Z".into(),
+        });
+
+        let decision = arbitrate_action(
+            &request(
+                proposal(
+                    "markIssueDone",
+                    "BuildAgent",
+                    Some(ActionRef {
+                        object_type: "Issue".into(),
+                        id: "ISS-1".into(),
+                    }),
+                    vec!["artifact-1", "log-1", "artifact-2"],
+                ),
+                "req-cancel",
+            ),
+            &context,
+        );
+
+        assert_eq!(decision.status, ArbitrationDecisionStatus::Cancelled);
+        assert_eq!(
+            decision.blocking_proposal_id.as_deref(),
+            Some("proposal-markIssueDone-newer")
+        );
+        assert_eq!(
+            decision.rejected_reasons[0].code,
+            RejectionReasonCode::ProposalCancelled
         );
     }
 

@@ -77,12 +77,26 @@ pub fn load_runtime_proposal_fact(
     read_json(&runtime_proposal_fact_path(&root, proposal_id))
 }
 
+pub fn load_runtime_proposal_facts(
+    project_root: impl AsRef<Path>,
+) -> Result<Vec<RuntimeProposalFact>> {
+    let root = canonical_project_root(project_root)?;
+    load_runtime_json_dir(root.join(".agentflow/runtime/proposals"))
+}
+
 pub fn load_runtime_decision_fact(
     project_root: impl AsRef<Path>,
     proposal_id: &str,
 ) -> Result<RuntimeDecisionFact> {
     let root = canonical_project_root(project_root)?;
     read_json(&runtime_decision_fact_path(&root, proposal_id))
+}
+
+pub fn load_runtime_decision_facts(
+    project_root: impl AsRef<Path>,
+) -> Result<Vec<RuntimeDecisionFact>> {
+    let root = canonical_project_root(project_root)?;
+    load_runtime_json_dir(root.join(".agentflow/runtime/decisions"))
 }
 
 pub fn load_runtime_accepted_action_fact(
@@ -181,6 +195,22 @@ fn sanitize_id(id: &str) -> String {
             _ => ch,
         })
         .collect()
+}
+
+fn load_runtime_json_dir<T: serde::de::DeserializeOwned>(dir: PathBuf) -> Result<Vec<T>> {
+    if !dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut paths = fs::read_dir(&dir)
+        .with_context(|| format!("read {}", dir.display()))?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file() && path.extension().and_then(|value| value.to_str()) == Some("json")
+        })
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.into_iter().map(|path| read_json(&path)).collect()
 }
 
 fn canonical_project_root(project_root: impl AsRef<Path>) -> Result<PathBuf> {

@@ -16,6 +16,9 @@ pub enum RejectionReasonCode {
     HumanDecisionMissing,
     DefinitionVersionMismatch,
     ConflictDetected,
+    ProposalQueued,
+    ProposalSuperseded,
+    ProposalCancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

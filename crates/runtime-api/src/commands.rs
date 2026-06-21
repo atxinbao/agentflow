@@ -7,8 +7,9 @@ use std::{
 };
 
 use agentflow_action_arbitration::{
-    arbitrate_action, AcceptedAction, ArbitrationContext, ArbitrationDecision,
-    ArbitrationDecisionStatus, ArbitrationRequest, DefinitionVersions,
+    arbitrate_action, proposal_conflict_scope_key, AcceptedAction, ArbitrationContext,
+    ArbitrationDecision, ArbitrationDecisionStatus, ArbitrationRequest, DefinitionVersions,
+    PendingProposal,
 };
 use agentflow_action_contract::{core_action_contract_registry, ActionRef, ActionSourceSurface};
 use agentflow_event_store::{append_accepted_action_event, AcceptedActionAppendContext, TaskEvent};
@@ -17,11 +18,11 @@ use agentflow_ontology::core_ontology_registry;
 use agentflow_role_policy::core_role_policy_registry;
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use agentflow_workflow_runtime::{
-    load_runtime_lock_snapshot, prepare_runtime_workspace, write_runtime_accepted_action_fact,
-    write_runtime_command_fact, write_runtime_decision_fact, write_runtime_proposal_fact,
-    RuntimeAcceptedActionFact, RuntimeCommandFact, RuntimeCommandValidationFact,
-    RuntimeDecisionFact, RuntimeProposalFact, RuntimeQueryHintFact,
-    RUNTIME_ACCEPTED_ACTION_FACT_VERSION, RUNTIME_COMMAND_FACT_VERSION,
+    load_runtime_decision_facts, load_runtime_lock_snapshot, load_runtime_proposal_facts,
+    prepare_runtime_workspace, write_runtime_accepted_action_fact, write_runtime_command_fact,
+    write_runtime_decision_fact, write_runtime_proposal_fact, RuntimeAcceptedActionFact,
+    RuntimeCommandFact, RuntimeCommandValidationFact, RuntimeDecisionFact, RuntimeProposalFact,
+    RuntimeQueryHintFact, RUNTIME_ACCEPTED_ACTION_FACT_VERSION, RUNTIME_COMMAND_FACT_VERSION,
     RUNTIME_DECISION_FACT_VERSION, RUNTIME_PROPOSAL_FACT_VERSION,
 };
 
@@ -282,9 +283,59 @@ pub(crate) fn build_project_arbitration_context(
     project_root: impl AsRef<Path>,
 ) -> Result<ArbitrationContext> {
     let mut context = build_core_arbitration_context()?;
-    let snapshot = load_runtime_lock_snapshot(project_root)?;
+    let snapshot = load_runtime_lock_snapshot(&project_root)?;
     for record in snapshot.active_object_locks {
         context.push_lock(record.lock);
+    }
+    let proposal_facts = load_runtime_proposal_facts(&project_root)?;
+    let decision_facts = load_runtime_decision_facts(&project_root)?;
+    for proposal in proposal_facts {
+        let Some(status) = decision_facts
+            .iter()
+            .find(|decision| decision.proposal_id == proposal.proposal_id)
+            .and_then(|decision| {
+                arbitration_status_from_runtime_decision(decision.status.as_str())
+            })
+        else {
+            continue;
+        };
+        if !matches!(
+            status,
+            ArbitrationDecisionStatus::Accepted
+                | ArbitrationDecisionStatus::HumanDecisionRequired
+                | ArbitrationDecisionStatus::Queued
+                | ArbitrationDecisionStatus::ConflictDetected
+        ) {
+            continue;
+        }
+        let conflict_scope_key = proposal_conflict_scope_key(
+            &context,
+            &agentflow_action_contract::ActionProposal {
+                proposal_id: proposal.proposal_id.clone(),
+                idempotency_key: String::new(),
+                action_type: proposal.action_type.clone(),
+                actor_role: proposal.actor_role.clone(),
+                source_surface: proposal.source_surface.clone(),
+                target_object_ref: proposal.target_object_ref.clone(),
+                input: proposal.input.clone(),
+                evidence_refs: proposal.evidence_refs.clone(),
+                artifact_refs: proposal.artifact_refs.clone(),
+                reason: proposal.reason.clone(),
+                expected_effects: proposal.expected_effects.clone(),
+                ontology_version: proposal.ontology_version.clone(),
+                contract_version: proposal.contract_version.clone(),
+                created_at: proposal.created_at.clone(),
+            },
+        );
+        context.push_pending_proposal(PendingProposal {
+            proposal_id: proposal.proposal_id,
+            actor_role: proposal.actor_role,
+            action_type: proposal.action_type,
+            target_object_ref: proposal.target_object_ref,
+            conflict_scope_key,
+            status,
+            created_at: proposal.created_at,
+        });
     }
     Ok(context)
 }
@@ -329,21 +380,19 @@ fn response_from_arbitration_decision(
             next_query_hint,
             correlation_id: request.command_id.clone(),
         },
-        ArbitrationDecisionStatus::Rejected
-        | ArbitrationDecisionStatus::ConflictDetected
-        | ArbitrationDecisionStatus::Queued => RuntimeCommandResponse {
+        ArbitrationDecisionStatus::Queued => RuntimeCommandResponse {
             version: RUNTIME_COMMAND_API_VERSION.to_string(),
             command_id: request.command_id.clone(),
             proposal_id: proposal_id.to_string(),
-            status: RuntimeCommandStatus::Rejected,
-            decision: RuntimeCommandDecision::Rejected,
+            status: RuntimeCommandStatus::Queued,
+            decision: RuntimeCommandDecision::Queued,
             accepted_action_id: None,
             rejected_reasons: decision
                 .rejected_reasons
                 .iter()
                 .map(|reason| {
                     RuntimeCommandError::new(
-                        RuntimeCommandErrorCode::ArbitrationRejected,
+                        RuntimeCommandErrorCode::ArbitrationQueued,
                         reason.message.clone(),
                         reason.detail.clone(),
                     )
@@ -353,6 +402,74 @@ fn response_from_arbitration_decision(
             next_query_hint,
             correlation_id: request.command_id.clone(),
         },
+        ArbitrationDecisionStatus::Superseded => RuntimeCommandResponse {
+            version: RUNTIME_COMMAND_API_VERSION.to_string(),
+            command_id: request.command_id.clone(),
+            proposal_id: proposal_id.to_string(),
+            status: RuntimeCommandStatus::Superseded,
+            decision: RuntimeCommandDecision::Superseded,
+            accepted_action_id: None,
+            rejected_reasons: decision
+                .rejected_reasons
+                .iter()
+                .map(|reason| {
+                    RuntimeCommandError::new(
+                        RuntimeCommandErrorCode::ArbitrationSuperseded,
+                        reason.message.clone(),
+                        reason.detail.clone(),
+                    )
+                })
+                .collect(),
+            human_decision_request: None,
+            next_query_hint,
+            correlation_id: request.command_id.clone(),
+        },
+        ArbitrationDecisionStatus::Cancelled => RuntimeCommandResponse {
+            version: RUNTIME_COMMAND_API_VERSION.to_string(),
+            command_id: request.command_id.clone(),
+            proposal_id: proposal_id.to_string(),
+            status: RuntimeCommandStatus::Cancelled,
+            decision: RuntimeCommandDecision::Cancelled,
+            accepted_action_id: None,
+            rejected_reasons: decision
+                .rejected_reasons
+                .iter()
+                .map(|reason| {
+                    RuntimeCommandError::new(
+                        RuntimeCommandErrorCode::ArbitrationCancelled,
+                        reason.message.clone(),
+                        reason.detail.clone(),
+                    )
+                })
+                .collect(),
+            human_decision_request: None,
+            next_query_hint,
+            correlation_id: request.command_id.clone(),
+        },
+        ArbitrationDecisionStatus::Rejected | ArbitrationDecisionStatus::ConflictDetected => {
+            RuntimeCommandResponse {
+                version: RUNTIME_COMMAND_API_VERSION.to_string(),
+                command_id: request.command_id.clone(),
+                proposal_id: proposal_id.to_string(),
+                status: RuntimeCommandStatus::Rejected,
+                decision: RuntimeCommandDecision::Rejected,
+                accepted_action_id: None,
+                rejected_reasons: decision
+                    .rejected_reasons
+                    .iter()
+                    .map(|reason| {
+                        RuntimeCommandError::new(
+                            RuntimeCommandErrorCode::ArbitrationRejected,
+                            reason.message.clone(),
+                            reason.detail.clone(),
+                        )
+                    })
+                    .collect(),
+                human_decision_request: None,
+                next_query_hint,
+                correlation_id: request.command_id.clone(),
+            }
+        }
     }
 }
 
@@ -384,6 +501,7 @@ fn build_runtime_decision_fact(
         decision_id: decision.map(|value| value.decision_id.clone()),
         status: runtime_command_status_str(&response.status).to_string(),
         decision: runtime_command_decision_str(&response.decision).to_string(),
+        blocking_proposal_id: decision.and_then(|value| value.blocking_proposal_id.clone()),
         accepted_action_id: response.accepted_action_id.clone(),
         rejected_reasons: response
             .rejected_reasons
@@ -629,6 +747,9 @@ fn runtime_command_status_str(status: &RuntimeCommandStatus) -> &'static str {
         RuntimeCommandStatus::Accepted => "accepted",
         RuntimeCommandStatus::Rejected => "rejected",
         RuntimeCommandStatus::HumanDecisionRequired => "human-decision-required",
+        RuntimeCommandStatus::Queued => "queued",
+        RuntimeCommandStatus::Superseded => "superseded",
+        RuntimeCommandStatus::Cancelled => "cancelled",
         RuntimeCommandStatus::InvalidCommand => "invalid-command",
     }
 }
@@ -638,7 +759,23 @@ fn runtime_command_decision_str(decision: &RuntimeCommandDecision) -> &'static s
         RuntimeCommandDecision::Accepted => "accepted",
         RuntimeCommandDecision::Rejected => "rejected",
         RuntimeCommandDecision::HumanDecisionRequired => "human-decision-required",
+        RuntimeCommandDecision::Queued => "queued",
+        RuntimeCommandDecision::Superseded => "superseded",
+        RuntimeCommandDecision::Cancelled => "cancelled",
         RuntimeCommandDecision::InvalidCommand => "invalid-command",
+    }
+}
+
+fn arbitration_status_from_runtime_decision(status: &str) -> Option<ArbitrationDecisionStatus> {
+    match status {
+        "accepted" => Some(ArbitrationDecisionStatus::Accepted),
+        "rejected" => Some(ArbitrationDecisionStatus::Rejected),
+        "human-decision-required" => Some(ArbitrationDecisionStatus::HumanDecisionRequired),
+        "queued" => Some(ArbitrationDecisionStatus::Queued),
+        "superseded" => Some(ArbitrationDecisionStatus::Superseded),
+        "cancelled" => Some(ArbitrationDecisionStatus::Cancelled),
+        "conflict-detected" => Some(ArbitrationDecisionStatus::ConflictDetected),
+        _ => None,
     }
 }
 
@@ -724,6 +861,7 @@ mod tests {
                 request_id: request.command_id.clone(),
                 proposal_id: "proposal-cmd-submitRequirement".to_string(),
                 status: ArbitrationDecisionStatus::Accepted,
+                blocking_proposal_id: None,
                 accepted_action: Some(AcceptedAction {
                     accepted_action_id: "accepted-proposal-cmd-submitRequirement".to_string(),
                     proposal_id: "proposal-cmd-submitRequirement".to_string(),
@@ -775,6 +913,7 @@ mod tests {
                 request_id: request.command_id.clone(),
                 proposal_id: "proposal-cmd-approveSpec".to_string(),
                 status: ArbitrationDecisionStatus::HumanDecisionRequired,
+                blocking_proposal_id: None,
                 accepted_action: None,
                 rejected_reasons: Vec::new(),
                 required_human_decision: Some(HumanDecisionRequest {
@@ -923,7 +1062,7 @@ mod tests {
     }
 
     #[test]
-    fn project_context_rejects_command_when_runtime_object_lock_is_active() {
+    fn project_context_queues_command_when_runtime_object_lock_is_active() {
         let dir = tempdir().unwrap();
         let requested = agentflow_event_store::append_task_event(
             dir.path(),
@@ -1066,7 +1205,11 @@ mod tests {
         let second =
             execute_command_via_arbitration_with_context(dir.path(), &request, &second_context)
                 .unwrap();
-        assert_eq!(second.status, RuntimeCommandStatus::Rejected);
+        assert_eq!(second.status, RuntimeCommandStatus::Queued);
+        assert_eq!(
+            second.decision,
+            crate::responses::RuntimeCommandDecision::Queued
+        );
         assert!(second
             .rejected_reasons
             .iter()

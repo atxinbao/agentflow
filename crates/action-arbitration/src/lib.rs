@@ -13,14 +13,15 @@ pub mod reasons;
 pub mod report;
 
 pub use arbitrator::{
-    arbitrate_action, build_accepted_action, check_object_lock, ActionArbitrator,
+    arbitrate_action, build_accepted_action, check_object_lock, proposal_conflict_scope_key,
+    ActionArbitrator,
 };
 pub use locks::{default_lock_kind_for_object, LockDecision};
 pub use model::{
     AcceptedAction, ArbitrationContext, ArbitrationDecision, ArbitrationDecisionStatus,
     ArbitrationRequest, DefinitionVersions, DependencyFact, EvidenceFact, HumanDecisionRequest,
-    HumanDecisionResponseKind, ObjectLock, ObjectLockKind, ObjectLockPlan, ObjectRefKey, StateFact,
-    ACTION_ARBITRATION_VERSION,
+    HumanDecisionResponseKind, ObjectLock, ObjectLockKind, ObjectLockPlan, ObjectRefKey,
+    PendingProposal, StateFact, ACTION_ARBITRATION_VERSION,
 };
 pub use reasons::{RejectionReason, RejectionReasonCode};
 pub use report::RejectionExplanation;
