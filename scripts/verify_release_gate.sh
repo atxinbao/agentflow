@@ -171,8 +171,10 @@ proof_chain = [
     {"stage": "runtime-action-proposal.accepted", "label": "Runtime Action Proposal Accepted"},
     {"stage": "projection.current", "label": "Projection Current"},
     {"stage": "task-loop.tick.issue1", "label": "Project Loop"},
+    {"stage": "issue-1.session", "label": "Task Session 1"},
     {"stage": "issue-1.prepare-review", "label": "Task Review Prepare"},
     {"stage": "issue-1.complete", "label": "Task Complete 1"},
+    {"stage": "issue-2.session", "label": "Task Session 2"},
     {"stage": "issue-2.prepare-review", "label": "Task Review Prepare 2"},
     {"stage": "issue-2.complete", "label": "Task Complete 2"},
     {"stage": "completion.inspect", "label": "Completion Inspect"},
@@ -613,6 +615,157 @@ install_workspace_desktop_dependencies() {
     npm --prefix apps/desktop ci
 }
 
+record_release_gate_session() {
+  local issue_id="$1"
+  local run_id="$2"
+  local branch_name="$3"
+  local stage="$4"
+  local output="$CLI_DIR/${stage//./-}.txt"
+  python3 - "$WORKSPACE" "$issue_id" "$run_id" "$branch_name" >"$output" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+issue_id = sys.argv[2]
+run_id = sys.argv[3]
+branch_name = sys.argv[4]
+session_id = f"codex-{run_id}"
+now = int(time.time())
+launch_request_path = f".agentflow/tasks/{issue_id}/runs/{run_id}/launch/agent-request.json"
+plan_path = f".agentflow/state/mcp/plans/{session_id}.json"
+log_path = f".agentflow/state/mcp/sessions/{session_id}.jsonl"
+last_message_path = f".agentflow/state/mcp/sessions/{session_id}-last-message.txt"
+exit_proof_path = f".agentflow/state/mcp/sessions/{session_id}-exit.json"
+runtime_root = f".agentflow/tasks/{issue_id}/runs/{run_id}/runtime"
+
+launch_request_file = root / launch_request_path
+if not launch_request_file.is_file():
+    raise SystemExit(f"missing launch request: {launch_request_path}")
+
+request = json.loads(launch_request_file.read_text(encoding="utf-8"))
+project_id = request.get("projectId")
+working_directory = request.get("workingDirectory") or str(root)
+
+for relative in [
+    ".agentflow/state/mcp/plans",
+    ".agentflow/state/mcp/sessions",
+    runtime_root,
+    f"{runtime_root}/tmp",
+    f"{runtime_root}/cache",
+    f"{runtime_root}/evidence",
+]:
+    (root / relative).mkdir(parents=True, exist_ok=True)
+
+plan = {
+    "version": "agentflow-mcp-launch-plan.v1",
+    "provider": "codex",
+    "sessionId": session_id,
+    "issueId": issue_id,
+    "runId": run_id,
+    "launchMode": "cli-exec-stdin",
+    "workingDirectory": working_directory,
+    "workspaceRoot": str(root),
+    "worktreeRoot": str(root),
+    "runtimeRoot": str(root / runtime_root),
+    "tempRoot": str(root / runtime_root / "tmp"),
+    "cacheRoot": str(root / runtime_root / "cache"),
+    "evidenceRoot": str(root / runtime_root / "evidence"),
+    "program": "codex",
+    "args": ["release-gate-e2e-session"],
+    "stdinPath": launch_request_path,
+    "outputPath": log_path,
+    "permissionMode": "never",
+    "approvalPolicy": "never",
+    "sandboxMode": "workspace-write",
+    "supervisionMode": "release-gate-local-session",
+    "exitProofPath": exit_proof_path,
+    "note": "release-gate local Build Agent session fixture",
+}
+
+session = {
+    "version": "agentflow-mcp-session.v1",
+    "provider": "codex",
+    "issueId": issue_id,
+    "projectId": project_id,
+    "runId": run_id,
+    "sessionId": session_id,
+    "ownerId": "work-agent",
+    "status": "running",
+    "launchMode": "cli-exec-stdin",
+    "workingDirectory": working_directory,
+    "workspaceRoot": str(root),
+    "worktreeRoot": str(root),
+    "runtimeRoot": str(root / runtime_root),
+    "tempRoot": str(root / runtime_root / "tmp"),
+    "cacheRoot": str(root / runtime_root / "cache"),
+    "evidenceRoot": str(root / runtime_root / "evidence"),
+    "launchRequestPath": launch_request_path,
+    "planPath": plan_path,
+    "logPath": log_path,
+    "branchName": branch_name,
+    "attemptCount": 1,
+    "pid": None,
+    "processGroupId": None,
+    "remoteSessionId": None,
+    "prUrl": None,
+    "lastMessagePath": last_message_path,
+    "exitProofPath": exit_proof_path,
+    "mergeProofPath": None,
+    "mergeState": None,
+    "writebackState": None,
+    "recoveryReason": None,
+    "note": "release-gate local Build Agent session fixture",
+    "lastError": None,
+    "permissionMode": "never",
+    "approvalPolicy": "never",
+    "sandboxMode": "workspace-write",
+    "supervisionMode": "release-gate-local-session",
+    "startedAt": now,
+    "lastHeartbeatAt": now,
+    "exitedAt": None,
+    "exitCode": None,
+    "governancePolicy": {
+        "version": "agentflow-mcp-session-policy.v1",
+        "claimPolicy": "single-active-session-per-run",
+        "timeoutPolicy": "interrupt-and-recover",
+        "timeoutSeconds": 3600,
+        "takeoverPolicy": "resume-interrupted-or-failed-attempt",
+        "retryPolicy": "bounded-retry",
+        "maxAttempts": 3,
+        "cancelPolicy": "terminal-for-current-run",
+    },
+    "governanceFacts": {
+        "timeoutAt": now + 3600,
+        "timedOutAt": None,
+        "cancelRequestedAt": None,
+        "cancelledAt": None,
+        "resumedFromAttempt": None,
+        "takeoverSessionId": None,
+        "terminalReason": None,
+        "retryable": True,
+    },
+    "createdAt": now,
+    "updatedAt": now,
+}
+
+(root / plan_path).write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+(root / f".agentflow/state/mcp/sessions/{session_id}.json").write_text(
+    json.dumps(session, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+(root / log_path).write_text(
+    json.dumps({"event": "release-gate-session", "issueId": issue_id, "runId": run_id}, ensure_ascii=False) + "\n",
+    encoding="utf-8",
+)
+(root / last_message_path).write_text("release gate local Build Agent session recorded\n", encoding="utf-8")
+print(f"session: {session_id}")
+print(f"plan: {plan_path}")
+PY
+  record_stage "$stage" "passed" "$(basename "$output")"
+}
+
 run_issue() {
   local issue_id="$1"
   local run_id="$2"
@@ -621,6 +774,8 @@ run_issue() {
   local target_file="$5"
   local marker="$6"
   local issue_ref="$7"
+
+  record_release_gate_session "$issue_id" "$run_id" "$branch_name" "${stage_prefix}.session"
 
   run_workspace_cmd "${stage_prefix}.branch" "$CLI_DIR/${stage_prefix}-branch.txt" \
     bash -lc "git checkout '$BOOTSTRAP_BRANCH' && git checkout -B '$branch_name' && git branch --set-upstream-to '$BOOTSTRAP_BRANCH' '$branch_name'"
