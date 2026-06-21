@@ -3,25 +3,29 @@ use std::path::Path;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use agentflow_audit::{load_audit_report, load_audit_result_summary};
 use agentflow_event_store::{
-    map_task_event_to_runtime_event, replay_runtime_events, replay_task_events, ReplayFilter,
-    TaskEvent,
+    classify_task_event, map_task_event_to_runtime_event, replay_runtime_events,
+    replay_task_events, ReplayFilter, TaskEvent,
 };
 use agentflow_spec::{
     read_requirement_preview_runtime, read_spec_issue, read_spec_project, SpecIssue, SpecPriority,
     SpecRequiredAgentRole,
 };
-use agentflow_task_artifacts::load_task_evidence;
+use agentflow_task_artifacts::{
+    load_task_evidence, load_task_run, load_task_session_evidence,
+    load_task_session_history_record, load_task_session_recovery_summary,
+};
 
 use crate::model::{
     ProjectIssueLanes, ProjectionDeliverySummary, ProjectionPublicDelivery, TaskProjection,
     TaskTimelineItem,
 };
 use crate::storage::{
-    load_project_projection, load_requirement_preview_projection, load_spec_loop_projection,
-    load_task_projection,
+    load_issue_status_index, load_project_projection, load_requirement_preview_projection,
+    load_spec_loop_projection, load_task_projection,
 };
 
 pub const PROJECTION_QUERY_SURFACE_VERSION: &str = "projection-query-surface.v1";
@@ -69,6 +73,45 @@ pub struct RuntimeEventRow {
     pub timestamp: u64,
     pub actor_role: String,
     pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkLoopEventView {
+    pub event_id: String,
+    pub event_type: String,
+    pub category: String,
+    pub stage_key: String,
+    pub stage_label: String,
+    pub timestamp: u64,
+    pub actor_role: String,
+    pub actor_kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to_state: Option<String>,
+    pub summary: String,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    #[serde(default)]
+    pub artifact_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkLoopEvidenceSummaryView {
+    pub status: String,
+    pub summary: String,
+    #[serde(default)]
+    pub verification_refs: Vec<String>,
+    #[serde(default)]
+    pub session_refs: Vec<String>,
+    #[serde(default)]
+    pub delivery_refs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -272,8 +315,69 @@ pub struct TaskWorkbenchView {
     pub allowed_actions: Vec<ViewActionHint>,
     #[serde(default)]
     pub blocked_reasons: Vec<String>,
+    pub state_explanation: String,
+    pub evidence_summary: WorkLoopEvidenceSummaryView,
+    #[serde(default)]
+    pub event_stream: Vec<WorkLoopEventView>,
     #[serde(default)]
     pub timeline: Vec<TaskTimelineItem>,
+    pub freshness: ProjectionFreshness,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkLoopRunView {
+    pub issue_id: String,
+    pub run_id: String,
+    pub issue_state: String,
+    pub run_state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_status: Option<String>,
+    pub state_explanation: String,
+    pub evidence_summary: WorkLoopEvidenceSummaryView,
+    #[serde(default)]
+    pub event_stream: Vec<WorkLoopEventView>,
+    pub freshness: ProjectionFreshness,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkLoopSessionView {
+    pub issue_id: String,
+    pub run_id: String,
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_status: Option<String>,
+    #[serde(default)]
+    pub attempt_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_heartbeat_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_attempt: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_policy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retryable: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    pub state_explanation: String,
+    pub evidence_summary: WorkLoopEvidenceSummaryView,
+    #[serde(default)]
+    pub event_stream: Vec<WorkLoopEventView>,
     pub freshness: ProjectionFreshness,
 }
 
@@ -630,6 +734,11 @@ pub fn get_task_workbench_view(
     )?;
 
     let runtime_events = replay_runtime_events(&project_root, ReplayFilter::issue(issue_id))?;
+    let event_stream = collect_work_loop_events(
+        &project_root,
+        ReplayFilter::issue(issue_id),
+        EventStreamScope::Issue,
+    )?;
     let mut evidence_refs = BTreeSet::new();
     let mut artifact_refs = BTreeSet::new();
     for event in runtime_events {
@@ -650,6 +759,15 @@ pub fn get_task_workbench_view(
             evidence_refs.insert(path);
         }
     }
+    let evidence_summary = build_work_loop_evidence_summary(
+        &project_root,
+        issue_id,
+        projection.latest_run_id.as_deref(),
+        projection.session.session_id.as_deref(),
+        &projection.public_delivery,
+    );
+    let state_explanation =
+        explain_issue_state(&projection.current_state, &event_stream, &projection);
 
     Ok(TaskWorkbenchView {
         issue_id: issue.issue_id.clone(),
@@ -663,7 +781,132 @@ pub fn get_task_workbench_view(
         acceptance_mapping: issue_acceptance_mapping(&issue, &projection.delivery),
         allowed_actions: task_allowed_actions(&projection),
         blocked_reasons: task_blocked_reasons(&issue, &projection),
+        state_explanation,
+        evidence_summary,
+        event_stream,
         timeline: projection.timeline.clone(),
+        freshness,
+    })
+}
+
+pub fn get_work_loop_run_view(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<WorkLoopRunView> {
+    let projection = load_task_projection(&project_root, issue_id)?;
+    let task_run = load_task_run(&project_root, issue_id, run_id)?;
+    let event_stream = collect_work_loop_events(
+        &project_root,
+        ReplayFilter::run(issue_id.to_string(), run_id.to_string()),
+        EventStreamScope::Run {
+            run_id: run_id.to_string(),
+        },
+    )?;
+    let evidence_summary = build_work_loop_evidence_summary(
+        &project_root,
+        issue_id,
+        Some(run_id),
+        task_run.session_id.as_deref(),
+        &projection.public_delivery,
+    );
+    let run_state = task_run_status_label(&task_run.status).to_string();
+    let state_explanation = explain_run_state(&run_state, &event_stream, &task_run);
+    let freshness = explain_projection_staleness(
+        &project_root,
+        ProjectionScope::Issue {
+            issue_id: issue_id.to_string(),
+        },
+        &projection.version,
+        projection.updated_at,
+        projection
+            .timeline
+            .iter()
+            .flat_map(|item| item.events.iter().map(|event| event.event_id.clone()))
+            .last(),
+    )?;
+
+    Ok(WorkLoopRunView {
+        issue_id: issue_id.to_string(),
+        run_id: run_id.to_string(),
+        issue_state: projection.current_state,
+        run_state,
+        branch_name: task_run.branch_name,
+        session_id: task_run.session_id,
+        session_status: task_run.session_status,
+        state_explanation,
+        evidence_summary,
+        event_stream,
+        freshness,
+    })
+}
+
+pub fn get_work_loop_session_view(
+    project_root: impl AsRef<Path>,
+    session_id: &str,
+) -> Result<WorkLoopSessionView> {
+    let (issue_id, run_id, projection) =
+        find_session_projection_context(&project_root, session_id)?;
+    let session_record =
+        load_task_session_history_record(&project_root, &issue_id, &run_id, session_id)?;
+    let recovery_summary =
+        load_task_session_recovery_summary(&project_root, &issue_id, &run_id).ok();
+    let event_stream = collect_work_loop_events(
+        &project_root,
+        ReplayFilter::run(issue_id.clone(), run_id.clone()),
+        EventStreamScope::Session {
+            run_id: run_id.clone(),
+            session_id: session_id.to_string(),
+        },
+    )?;
+    let evidence_summary = build_work_loop_evidence_summary(
+        &project_root,
+        &issue_id,
+        Some(&run_id),
+        Some(session_id),
+        &projection.public_delivery,
+    );
+    let state_explanation =
+        explain_session_state(&session_record, recovery_summary.as_ref(), &event_stream);
+    let freshness = explain_projection_staleness(
+        &project_root,
+        ProjectionScope::Issue {
+            issue_id: issue_id.clone(),
+        },
+        &projection.version,
+        projection.updated_at,
+        projection
+            .timeline
+            .iter()
+            .flat_map(|item| item.events.iter().map(|event| event.event_id.clone()))
+            .last(),
+    )?;
+
+    Ok(WorkLoopSessionView {
+        issue_id,
+        run_id,
+        session_id: session_id.to_string(),
+        provider: Some(session_record.provider),
+        session_owner: Some(session_record.session_owner),
+        session_status: Some(session_record.status.as_str().to_string()),
+        attempt_count: session_record.attempt_count,
+        started_at: Some(session_record.started_at),
+        last_heartbeat_at: Some(session_record.last_heartbeat_at),
+        recovery_reason: recovery_summary
+            .as_ref()
+            .and_then(|summary| summary.recovery_reason.clone())
+            .or(session_record.recovery_reason),
+        resumed_from_attempt: recovery_summary
+            .as_ref()
+            .and_then(|summary| summary.resumed_from_attempt)
+            .or(session_record.resumed_from_attempt),
+        retry_policy: session_record.retry_policy,
+        retryable: Some(session_record.retryable),
+        terminal_reason: session_record.terminal_reason,
+        last_error: session_record.last_error,
+        state_explanation,
+        evidence_summary,
+        event_stream,
         freshness,
     })
 }
@@ -819,6 +1062,300 @@ pub fn get_runtime_health_view(
     })
 }
 
+#[derive(Debug, Clone)]
+enum EventStreamScope {
+    Issue,
+    Run { run_id: String },
+    Session { run_id: String, session_id: String },
+}
+
+fn collect_work_loop_events(
+    project_root: impl AsRef<Path>,
+    filter: ReplayFilter,
+    scope: EventStreamScope,
+) -> Result<Vec<WorkLoopEventView>> {
+    let events = replay_task_events(project_root, filter)?;
+    Ok(events
+        .into_iter()
+        .filter(|event| match &scope {
+            EventStreamScope::Issue => true,
+            EventStreamScope::Run { run_id } => event.run_id.as_deref() == Some(run_id.as_str()),
+            EventStreamScope::Session { run_id, session_id } => {
+                if event.run_id.as_deref() != Some(run_id.as_str()) {
+                    return false;
+                }
+                match payload_string(&event.payload, "sessionId") {
+                    Some(value) => value == *session_id,
+                    None => true,
+                }
+            }
+        })
+        .map(work_loop_event_view)
+        .collect())
+}
+
+fn work_loop_event_view(event: TaskEvent) -> WorkLoopEventView {
+    let compatibility = map_task_event_to_runtime_event(&event).ok();
+    let mut evidence_refs = BTreeSet::new();
+    let mut artifact_refs = BTreeSet::new();
+    if let Some(runtime) = compatibility.as_ref() {
+        evidence_refs.extend(runtime.envelope.evidence_refs.iter().cloned());
+        artifact_refs.extend(runtime.envelope.artifact_refs.iter().cloned());
+    }
+    artifact_refs.extend(event.artifact_refs.iter().cloned());
+
+    let (stage_key, stage_label) = work_loop_stage(event.event_type.as_str());
+    WorkLoopEventView {
+        event_id: event.event_id.clone(),
+        event_type: event.event_type.clone(),
+        category: classify_task_event(event.event_type.as_str())
+            .as_str()
+            .to_string(),
+        stage_key: stage_key.to_string(),
+        stage_label: stage_label.to_string(),
+        timestamp: event.timestamp,
+        actor_role: event.actor.role.clone(),
+        actor_kind: event.actor.kind.clone(),
+        run_id: event.run_id.clone(),
+        session_id: payload_string(&event.payload, "sessionId"),
+        from_state: event.state.as_ref().map(|state| state.from_state.clone()),
+        to_state: event.state.as_ref().map(|state| state.to_state.clone()),
+        summary: work_loop_event_summary(&event),
+        evidence_refs: evidence_refs.into_iter().collect(),
+        artifact_refs: artifact_refs.into_iter().collect(),
+    }
+}
+
+fn work_loop_stage(event_type: &str) -> (&'static str, &'static str) {
+    match event_type {
+        "issue.scheduled" => ("todo", "准备开工"),
+        "issue.preflight.passed"
+        | "issue.preflight.failed"
+        | "panel.context-pack.ready"
+        | "panel.context-pack.failed" => ("preflight", "前置检测"),
+        "agent.launch.requested" | "agent.launch.claimed" => ("launch", "启动会话"),
+        value if value.starts_with("agent.session.") => ("session", "执行会话"),
+        "issue.validation.passed" | "issue.validation.failed" => ("verification", "沙箱验证"),
+        "issue.review.requested"
+        | "issue.pr.created"
+        | "issue.closeout.proof.recorded"
+        | "issue.pr.merged" => ("review", "评审收口"),
+        "issue.completed" => ("done", "Done 写回"),
+        _ => ("event", "事件记录"),
+    }
+}
+
+fn work_loop_event_summary(event: &TaskEvent) -> String {
+    match event.event_type.as_str() {
+        "issue.scheduled" => "任务进入待执行队列。".to_string(),
+        "agent.launch.requested" => "已生成 Work Agent 启动请求。".to_string(),
+        "agent.launch.claimed" => "执行会话已认领启动请求。".to_string(),
+        "agent.session.created" => "外部执行会话已创建。".to_string(),
+        "agent.session.resumed" => "外部执行会话已恢复。".to_string(),
+        "agent.session.running" => "外部执行会话正在运行。".to_string(),
+        "agent.session.interrupted" => "外部执行会话已中断，等待恢复。".to_string(),
+        "agent.session.in_review" => "外部执行会话已进入评审。".to_string(),
+        "agent.session.completed" => "外部执行会话已完成。".to_string(),
+        "agent.session.failed" => "外部执行会话失败。".to_string(),
+        "agent.session.cancelled" => "外部执行会话已取消。".to_string(),
+        "issue.validation.passed" => "本地沙箱验证已通过。".to_string(),
+        "issue.validation.failed" => "本地沙箱验证失败。".to_string(),
+        "issue.review.requested" => "任务已请求评审。".to_string(),
+        "issue.pr.created" => "PR/MR 已创建。".to_string(),
+        "issue.closeout.proof.recorded" => "收口证明已写入，等待 Done 写回。".to_string(),
+        "issue.pr.merged" => "PR/MR 已合并，等待关单与收口证明。".to_string(),
+        "issue.completed" => "任务 Done 写回完成。".to_string(),
+        "issue.blocked" => "任务进入阻断状态。".to_string(),
+        "issue.cancelled" => "任务已取消。".to_string(),
+        other => format!("记录事件：{other}。"),
+    }
+}
+
+fn payload_string(payload: &Value, key: &str) -> Option<String> {
+    payload
+        .get(key)
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+}
+
+fn build_work_loop_evidence_summary(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: Option<&str>,
+    session_id: Option<&str>,
+    public_delivery: &ProjectionPublicDelivery,
+) -> WorkLoopEvidenceSummaryView {
+    let mut status = "missing".to_string();
+    let mut summary_parts = Vec::new();
+    let mut verification_refs = BTreeSet::new();
+    let mut session_refs = BTreeSet::new();
+    let mut delivery_refs = BTreeSet::new();
+
+    if let Ok(evidence) = load_task_evidence(&project_root, issue_id) {
+        status = evidence.status.clone();
+        if !evidence.summary.trim().is_empty() {
+            summary_parts.push(evidence.summary);
+        }
+        verification_refs.insert(evidence.run_path);
+        verification_refs.insert(evidence.validation_path);
+        verification_refs.extend(evidence.command_paths);
+        if let Some(changed_files_path) = evidence.changed_files_path {
+            verification_refs.insert(changed_files_path);
+        }
+    }
+
+    if let (Some(run_id), Some(_session_id)) = (run_id, session_id) {
+        if let Ok(session_evidence) = load_task_session_evidence(&project_root, issue_id, run_id) {
+            status = session_evidence.status.as_str().to_string();
+            if !session_evidence.summary.trim().is_empty() {
+                summary_parts.push(session_evidence.summary);
+            }
+            session_refs.extend(session_evidence.refs);
+        }
+    }
+
+    if let Some(pr_url) = public_delivery.pr_url.clone() {
+        delivery_refs.insert(pr_url);
+    }
+    if let Some(evidence_path) = public_delivery.evidence_path.clone() {
+        delivery_refs.insert(evidence_path);
+    }
+    if let Some(changelog_path) = public_delivery.changelog_path.clone() {
+        delivery_refs.insert(changelog_path);
+    }
+    if let Some(release_notes_url) = public_delivery.release_notes_url.clone() {
+        delivery_refs.insert(release_notes_url);
+    }
+
+    if summary_parts.is_empty() {
+        summary_parts.push("当前还没有可展示的验证或交付证据。".to_string());
+    }
+
+    WorkLoopEvidenceSummaryView {
+        status,
+        summary: summary_parts.join(" "),
+        verification_refs: verification_refs.into_iter().collect(),
+        session_refs: session_refs.into_iter().collect(),
+        delivery_refs: delivery_refs.into_iter().collect(),
+    }
+}
+
+fn explain_issue_state(
+    current_state: &str,
+    event_stream: &[WorkLoopEventView],
+    projection: &TaskProjection,
+) -> String {
+    if let Some(last_event) = event_stream.last() {
+        return match current_state {
+            "todo" => format!("任务已满足开工前置条件，当前停在 {}。", last_event.summary),
+            "in_progress" => format!("任务正在执行，当前事实是：{}。", last_event.summary),
+            "in_review" => format!("任务已进入评审，当前事实是：{}。", last_event.summary),
+            "done" => format!("任务已完成，最终写回事实是：{}。", last_event.summary),
+            "blocked" => format!("任务已阻断，最近事实是：{}。", last_event.summary),
+            "cancel" => format!("任务已取消，最近事实是：{}。", last_event.summary),
+            _ => format!("当前状态由最新事件驱动：{}。", last_event.summary),
+        };
+    }
+
+    match current_state {
+        "backlog" => "任务还未进入执行，等待进入调度。".to_string(),
+        "todo" => "任务已准备开工，等待拉起执行会话。".to_string(),
+        "in_progress" => "任务正在执行，但还没有生成可展示事件。".to_string(),
+        "in_review" => "任务已进入评审，但还没有生成可展示事件。".to_string(),
+        "done" => "任务已完成。".to_string(),
+        "blocked" => projection
+            .audit
+            .findings
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "任务被阻断。".to_string()),
+        "cancel" => "任务已取消。".to_string(),
+        _ => "当前状态没有额外解释。".to_string(),
+    }
+}
+
+fn explain_run_state(
+    run_state: &str,
+    event_stream: &[WorkLoopEventView],
+    task_run: &agentflow_task_artifacts::TaskRun,
+) -> String {
+    if let Some(last_event) = event_stream.last() {
+        return format!(
+            "当前 run 状态是 {run_state}，最近事件是：{}。",
+            last_event.summary
+        );
+    }
+    match run_state {
+        "queued" => "当前 run 已创建，等待真正进入执行。".to_string(),
+        "in_progress" => "当前 run 正在执行。".to_string(),
+        "validating" => "当前 run 正在收集验证结果。".to_string(),
+        "completed" => "当前 run 已完成，等待或已经进入后续写回。".to_string(),
+        "failed" => task_run
+            .last_error
+            .clone()
+            .map(|error| format!("当前 run 已失败：{error}。"))
+            .unwrap_or_else(|| "当前 run 已失败。".to_string()),
+        "cancelled" => "当前 run 已取消。".to_string(),
+        _ => "当前 run 状态未知。".to_string(),
+    }
+}
+
+fn explain_session_state(
+    session_record: &agentflow_task_artifacts::TaskWorkSessionRecord,
+    recovery_summary: Option<&agentflow_task_artifacts::TaskWorkSessionRecoverySummary>,
+    event_stream: &[WorkLoopEventView],
+) -> String {
+    if let Some(last_event) = event_stream.last() {
+        return format!(
+            "当前会话状态是 {}，最近事件是：{}。",
+            session_record.status.as_str(),
+            last_event.summary
+        );
+    }
+    if let Some(summary) = recovery_summary {
+        return format!(
+            "当前会话处于 {}，恢复原因：{}。",
+            session_record.status.as_str(),
+            summary
+                .recovery_reason
+                .clone()
+                .unwrap_or_else(|| "未记录".to_string())
+        );
+    }
+    format!("当前会话状态是 {}。", session_record.status.as_str())
+}
+
+fn find_session_projection_context(
+    project_root: impl AsRef<Path>,
+    session_id: &str,
+) -> Result<(String, String, TaskProjection)> {
+    let index = load_issue_status_index(&project_root)?;
+    for entry in index.issues {
+        let projection = load_task_projection(&project_root, &entry.issue_id)?;
+        let Some(run_id) = projection.latest_run_id.clone() else {
+            continue;
+        };
+        if projection.session.session_id.as_deref() == Some(session_id)
+            || load_task_session_history_record(&project_root, &entry.issue_id, &run_id, session_id)
+                .is_ok()
+        {
+            return Ok((entry.issue_id, run_id, projection));
+        }
+    }
+    anyhow::bail!("failed to locate work session `{session_id}` in task projections")
+}
+
+fn task_run_status_label(status: &agentflow_task_artifacts::TaskRunStatus) -> &'static str {
+    match status {
+        agentflow_task_artifacts::TaskRunStatus::Queued => "queued",
+        agentflow_task_artifacts::TaskRunStatus::InProgress => "in_progress",
+        agentflow_task_artifacts::TaskRunStatus::Validating => "validating",
+        agentflow_task_artifacts::TaskRunStatus::Completed => "completed",
+        agentflow_task_artifacts::TaskRunStatus::Failed => "failed",
+        agentflow_task_artifacts::TaskRunStatus::Cancelled => "cancelled",
+    }
+}
+
 fn explain_projection_staleness(
     project_root: impl AsRef<Path>,
     scope: ProjectionScope,
@@ -937,12 +1474,13 @@ fn recent_events(
 }
 
 fn runtime_event_row(event: TaskEvent) -> RuntimeEventRow {
+    let summary = work_loop_event_summary(&event);
     RuntimeEventRow {
-        event_id: event.event_id,
+        event_id: event.event_id.clone(),
         event_type: event.event_type.clone(),
         timestamp: event.timestamp,
-        actor_role: event.actor.role,
-        summary: event.event_type,
+        actor_role: event.actor.role.clone(),
+        summary,
     }
 }
 
@@ -1150,7 +1688,10 @@ mod tests {
         requirement_preview_from_requirement, write_spec_issue, write_spec_project, SpecIssueDraft,
         SpecIssueStatus, SpecProjectDraft,
     };
-    use agentflow_task_artifacts::{create_task_run, update_task_run_status, TaskRunStatus};
+    use agentflow_task_artifacts::{
+        create_task_run, sync_task_session, update_task_run_status, TaskRunStatus,
+        TaskSessionMirror,
+    };
     use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
     use serde_json::json;
     use tempfile::tempdir;
@@ -1201,6 +1742,62 @@ mod tests {
                 "createdAt": 1
             }))
             .unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn sync_running_session(root: &Path, issue_id: &str, run_id: &str, session_id: &str) {
+        sync_task_session(
+            root,
+            issue_id,
+            run_id,
+            &TaskSessionMirror {
+                provider: "codex".to_string(),
+                session_owner: "work-agent".to_string(),
+                session_id: session_id.to_string(),
+                status: agentflow_task_artifacts::TaskWorkSessionStatus::Running,
+                branch_name: Some(format!("agentflow/{issue_id}/{run_id}")),
+                working_directory: root.display().to_string(),
+                workspace_root: Some(root.display().to_string()),
+                worktree_root: Some(root.display().to_string()),
+                runtime_root: Some(
+                    root.join(format!(".agentflow/tasks/{issue_id}/runs/{run_id}/runtime"))
+                        .display()
+                        .to_string(),
+                ),
+                temp_root: None,
+                cache_root: None,
+                evidence_root: Some(
+                    root.join(format!(".agentflow/tasks/{issue_id}/evidence"))
+                        .display()
+                        .to_string(),
+                ),
+                launch_request_path: format!(
+                    ".agentflow/tasks/{issue_id}/runs/{run_id}/launch/agent-request.json"
+                ),
+                plan_path: format!(".agentflow/tasks/{issue_id}/runs/{run_id}/plan.json"),
+                log_path: Some(format!(
+                    ".agentflow/tasks/{issue_id}/runs/{run_id}/runtime.log"
+                )),
+                last_message_path: None,
+                exit_proof_path: None,
+                merge_proof_path: None,
+                started_at: 10,
+                last_heartbeat_at: 40,
+                attempt_count: 2,
+                retry_policy: Some("reuse-session-or-relaunch".to_string()),
+                max_attempts: Some(3),
+                resumed_from_attempt: Some(1),
+                retryable: true,
+                recovery_reason: Some("timeout".to_string()),
+                merge_state: None,
+                writeback_state: None,
+                terminal_reason: None,
+                last_error: None,
+                exited_at: None,
+                exit_code: None,
+                updated_at: 40,
+            },
         )
         .unwrap();
     }
@@ -1276,6 +1873,70 @@ mod tests {
     }
 
     #[test]
+    fn task_workbench_view_exposes_event_stream_and_evidence_summary() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.launch.requested",
+                json!({"runId":"run-001","branchName":"agentflow/project-projection/AF-PROJ-001"}),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.session.running",
+                json!({"runId":"run-001","sessionId":"codex-run-001","sessionStatus":"running","provider":"codex","ownerId":"work-agent"}),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.validation.passed",
+                json!({"runId":"run-001"}),
+            ),
+        )
+        .unwrap();
+        create_task_run(
+            dir.path(),
+            "AF-PROJ-001",
+            "run-001",
+            "work-agent.issue-loop@v1",
+            Some("agentflow/project-projection/AF-PROJ-001".to_string()),
+        )
+        .unwrap();
+        sync_running_session(dir.path(), "AF-PROJ-001", "run-001", "codex-run-001");
+        write_completion_ready_artifacts(dir.path(), "AF-PROJ-001", "run-001");
+
+        rebuild_projections(dir.path()).unwrap();
+        let view = get_task_workbench_view(dir.path(), "AF-PROJ-001").unwrap();
+
+        assert!(view.state_explanation.contains("当前事实"));
+        assert!(view
+            .event_stream
+            .iter()
+            .any(|event| event.stage_key == "session"));
+        assert!(view
+            .event_stream
+            .iter()
+            .any(|event| event.event_type == "issue.validation.passed"));
+        assert_eq!(view.evidence_summary.status, "running");
+        assert!(!view.evidence_summary.verification_refs.is_empty());
+        assert!(!view.evidence_summary.session_refs.is_empty());
+    }
+
+    #[test]
     fn delivery_view_shows_done_issue_without_audit_side_effect() {
         let dir = tempdir().unwrap();
         write_fixture(dir.path());
@@ -1315,6 +1976,136 @@ mod tests {
         assert!(!view.verification_logs.is_empty());
         assert_eq!(task.issue_state, "done");
         assert_eq!(task.freshness.staleness, "current");
+    }
+
+    #[test]
+    fn work_loop_run_view_filters_events_and_keeps_done_writeback_visible() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.launch.requested",
+                json!({"runId":"run-001"}),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.validation.passed",
+                json!({"runId":"run-001"}),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "issue.completed",
+                json!({"runId":"run-001","mergeCommit":"abc123"}),
+            ),
+        )
+        .unwrap();
+        create_task_run(
+            dir.path(),
+            "AF-PROJ-001",
+            "run-001",
+            "work-agent.issue-loop@v1",
+            Some("agentflow/project-projection/AF-PROJ-001".to_string()),
+        )
+        .unwrap();
+        update_task_run_status(
+            dir.path(),
+            "AF-PROJ-001",
+            "run-001",
+            TaskRunStatus::Completed,
+        )
+        .unwrap();
+        write_completion_ready_artifacts(dir.path(), "AF-PROJ-001", "run-001");
+
+        rebuild_projections(dir.path()).unwrap();
+        let view = get_work_loop_run_view(dir.path(), "AF-PROJ-001", "run-001").unwrap();
+
+        assert_eq!(view.run_id, "run-001");
+        assert_eq!(view.run_state, "completed");
+        assert!(view.state_explanation.contains("Done 写回"));
+        assert_eq!(
+            view.event_stream
+                .last()
+                .map(|event| event.event_type.as_str()),
+            Some("issue.completed")
+        );
+        assert!(!view.evidence_summary.verification_refs.is_empty());
+    }
+
+    #[test]
+    fn work_loop_session_view_reads_recovery_and_session_evidence() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.launch.requested",
+                json!({"runId":"run-001"}),
+            ),
+        )
+        .unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.session.interrupted",
+                json!({
+                    "runId":"run-001",
+                    "sessionId":"codex-run-001",
+                    "sessionStatus":"interrupted",
+                    "provider":"codex",
+                    "ownerId":"work-agent",
+                    "startedAt":10,
+                    "lastHeartbeatAt":40,
+                    "recoveryReason":"timeout"
+                }),
+            ),
+        )
+        .unwrap();
+        create_task_run(
+            dir.path(),
+            "AF-PROJ-001",
+            "run-001",
+            "work-agent.issue-loop@v1",
+            Some("agentflow/project-projection/AF-PROJ-001".to_string()),
+        )
+        .unwrap();
+        sync_running_session(dir.path(), "AF-PROJ-001", "run-001", "codex-run-001");
+
+        rebuild_projections(dir.path()).unwrap();
+        let view = get_work_loop_session_view(dir.path(), "codex-run-001").unwrap();
+
+        assert_eq!(view.issue_id, "AF-PROJ-001");
+        assert_eq!(view.run_id, "run-001");
+        assert_eq!(view.session_status.as_deref(), Some("running"));
+        assert_eq!(view.recovery_reason.as_deref(), Some("timeout"));
+        assert_eq!(view.resumed_from_attempt, Some(1));
+        assert_eq!(view.attempt_count, 2);
+        assert!(view
+            .event_stream
+            .iter()
+            .any(|event| event.event_type == "agent.session.interrupted"));
+        assert!(!view.evidence_summary.session_refs.is_empty());
     }
 
     #[test]
