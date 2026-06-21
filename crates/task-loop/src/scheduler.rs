@@ -1,6 +1,7 @@
 use crate::model::{
-    AgentLaunchPayload, TaskLoopLaunch, TaskLoopSchedule, TaskLoopTick, AGENT_LAUNCH_REQUESTED,
-    ISSUE_SCHEDULED, TASK_LOOP_LAUNCH_REQUEST_VERSION,
+    AgentLaunchPayload, TaskLoopDependencyQueue, TaskLoopDependencyQueueEntry, TaskLoopLaunch,
+    TaskLoopSchedule, TaskLoopTick, AGENT_LAUNCH_REQUESTED, ISSUE_SCHEDULED,
+    TASK_LOOP_DEPENDENCY_QUEUE_VERSION, TASK_LOOP_LAUNCH_REQUEST_VERSION,
 };
 use agentflow_event_store::{
     allocate_task_sequence, append_task_event_once, load_task_events, task_claim_is_active,
@@ -64,14 +65,27 @@ impl TaskLoop {
         project_root: impl AsRef<Path>,
     ) -> Result<Option<TaskLoopSchedule>> {
         let root = canonical_project_root(project_root)?;
+        let queue = self.dependency_queue(&root)?;
+        let Some(issue_id) = queue.next_issue_candidate.as_deref() else {
+            return Ok(None);
+        };
+        let issue = read_spec_issue(&root, issue_id)?;
         let project = read_spec_project(&root, &self.project_id)?;
         let issues = load_project_issues(&root, &project)?;
         let states = current_issue_states(&root, &issues)?;
-        let Some(issue) = next_schedulable_issue(&issues, &project, &states) else {
-            return Ok(None);
-        };
-        let guards = validate_schedule_guards(issue, Some(&project), &states)?;
-        Ok(Some(append_issue_scheduled_event(&root, issue, &guards)?))
+        let guards = validate_schedule_guards(&issue, Some(&project), &states)?;
+        Ok(Some(append_issue_scheduled_event(&root, &issue, &guards)?))
+    }
+
+    pub fn dependency_queue(
+        &self,
+        project_root: impl AsRef<Path>,
+    ) -> Result<TaskLoopDependencyQueue> {
+        let root = canonical_project_root(project_root)?;
+        let project = read_spec_project(&root, &self.project_id)?;
+        let issues = load_project_issues(&root, &project)?;
+        let states = current_issue_states(&root, &issues)?;
+        Ok(build_dependency_queue(&project, &issues, &states))
     }
 
     pub fn request_agent_launch(
@@ -418,15 +432,113 @@ fn load_project_issues(root: &Path, project: &SpecProject) -> Result<Vec<SpecIss
         .collect()
 }
 
-fn next_schedulable_issue<'a>(
-    issues: &'a [SpecIssue],
+fn build_dependency_queue(
+    project: &SpecProject,
+    issues: &[SpecIssue],
+    states: &BTreeMap<String, SpecIssueStatus>,
+) -> TaskLoopDependencyQueue {
+    let entries = issues
+        .iter()
+        .map(|issue| dependency_queue_entry(issue, project, states))
+        .collect::<Vec<_>>();
+    let ready_issue_ids = entries
+        .iter()
+        .filter(|entry| entry.queue_status == "ready")
+        .map(|entry| entry.issue_id.clone())
+        .collect::<Vec<_>>();
+    let next_issue_candidate = ready_issue_ids.first().cloned();
+    let next_issue_candidate_reason = next_issue_candidate
+        .as_ref()
+        .map(|issue_id| {
+            format!("{issue_id} 依赖已满足，且位于当前项目依赖队列最前，可以进入 todo。")
+        })
+        .unwrap_or_else(|| "当前没有 ready issue，项目还不能推进下一条任务。".to_string());
+    let no_ready_reasons = if next_issue_candidate.is_some() {
+        Vec::new()
+    } else if entries
+        .iter()
+        .all(|entry| matches!(entry.current_state.as_str(), "done" | "cancel"))
+    {
+        vec!["当前项目下的 issue 都已经完成或取消。".to_string()]
+    } else {
+        entries
+            .iter()
+            .filter(|entry| {
+                matches!(
+                    entry.queue_status.as_str(),
+                    "waiting" | "blocked" | "active"
+                )
+            })
+            .flat_map(|entry| entry.reasons.iter().cloned())
+            .fold(Vec::new(), |mut acc, reason| {
+                if !acc.contains(&reason) {
+                    acc.push(reason);
+                }
+                acc
+            })
+    };
+    TaskLoopDependencyQueue {
+        version: TASK_LOOP_DEPENDENCY_QUEUE_VERSION.to_string(),
+        project_id: project.project_id.clone(),
+        next_issue_candidate,
+        next_issue_candidate_reason,
+        ready_issue_ids,
+        no_ready_reasons,
+        entries,
+    }
+}
+
+fn dependency_queue_entry(
+    issue: &SpecIssue,
     project: &SpecProject,
     states: &BTreeMap<String, SpecIssueStatus>,
-) -> Option<&'a SpecIssue> {
-    issues.iter().find(|issue| {
-        states.get(&issue.issue_id) == Some(&SpecIssueStatus::Backlog)
-            && validate_schedule_guards(issue, Some(project), states).is_ok()
-    })
+) -> TaskLoopDependencyQueueEntry {
+    let current_state = states
+        .get(&issue.issue_id)
+        .cloned()
+        .unwrap_or_else(|| issue.status.clone());
+    let (queue_status, reasons) = match current_state {
+        SpecIssueStatus::Backlog => {
+            let reasons = schedule_guard_failures(issue, Some(project), states);
+            if reasons.is_empty() {
+                (
+                    "ready".to_string(),
+                    vec!["当前 issue 依赖已满足，可以进入 todo。".to_string()],
+                )
+            } else {
+                ("waiting".to_string(), reasons)
+            }
+        }
+        SpecIssueStatus::Todo | SpecIssueStatus::InProgress | SpecIssueStatus::InReview => (
+            "active".to_string(),
+            vec![format!(
+                "issue {} 当前状态是 {}，项目必须先收口当前活跃任务。",
+                issue.issue_id,
+                current_state.as_str()
+            )],
+        ),
+        SpecIssueStatus::Blocked => (
+            "blocked".to_string(),
+            if issue.blocked_by.is_empty() {
+                vec![format!("issue {} 当前已阻断。", issue.issue_id)]
+            } else {
+                vec![format!(
+                    "issue {} 仍在等待依赖 {} 完成。",
+                    issue.issue_id,
+                    issue.blocked_by.join("、")
+                )]
+            },
+        ),
+        SpecIssueStatus::Done => ("past".to_string(), Vec::new()),
+        SpecIssueStatus::Cancel => ("cancel".to_string(), Vec::new()),
+    };
+    TaskLoopDependencyQueueEntry {
+        issue_id: issue.issue_id.clone(),
+        title: issue.title.clone(),
+        current_state: current_state.as_str().to_string(),
+        queue_status,
+        reasons,
+    }
 }
 
 fn next_launchable_issue<'a>(
@@ -599,16 +711,12 @@ fn validate_schedule_guards(
     project: Option<&SpecProject>,
     states: &BTreeMap<String, SpecIssueStatus>,
 ) -> Result<Vec<&'static str>> {
-    let mut passed = vec![ISSUE_CONTRACT_COMPLETE_GUARD, DEPENDENCIES_DONE_GUARD];
-    ensure_issue_contract_complete(issue)?;
-    ensure_dependencies_done(issue, states)?;
-    if let Some(project) = project {
-        ensure_project_predecessors_done(project, issue, states)?;
-        ensure_project_serial_slot_free(project, &issue.issue_id, states, false)?;
-        passed.push(PROJECT_PREDECESSORS_DONE_GUARD);
-        passed.push(PROJECT_SERIAL_SLOT_FREE_GUARD);
+    let failures = schedule_guard_failures(issue, project, states);
+    if failures.is_empty() {
+        Ok(schedule_guard_keys(project.is_some()))
+    } else {
+        anyhow::bail!(failures.join("; "))
     }
-    Ok(passed)
 }
 
 fn validate_launch_guards(
@@ -616,16 +724,69 @@ fn validate_launch_guards(
     project: Option<&SpecProject>,
     states: &BTreeMap<String, SpecIssueStatus>,
 ) -> Result<Vec<&'static str>> {
-    let mut passed = vec![ISSUE_CONTRACT_COMPLETE_GUARD, DEPENDENCIES_DONE_GUARD];
-    ensure_issue_contract_complete(issue)?;
-    ensure_dependencies_done(issue, states)?;
+    let failures = launch_guard_failures(issue, project, states);
+    if failures.is_empty() {
+        Ok(schedule_guard_keys(project.is_some()))
+    } else {
+        anyhow::bail!(failures.join("; "))
+    }
+}
+
+fn schedule_guard_failures(
+    issue: &SpecIssue,
+    project: Option<&SpecProject>,
+    states: &BTreeMap<String, SpecIssueStatus>,
+) -> Vec<String> {
+    let mut failures = Vec::new();
+    if let Err(error) = ensure_issue_contract_complete(issue) {
+        failures.push(error.to_string());
+    }
+    if let Err(error) = ensure_dependencies_done(issue, states) {
+        failures.push(error.to_string());
+    }
     if let Some(project) = project {
-        ensure_project_predecessors_done(project, issue, states)?;
-        ensure_project_serial_slot_free(project, &issue.issue_id, states, true)?;
+        if let Err(error) = ensure_project_predecessors_done(project, issue, states) {
+            failures.push(error.to_string());
+        }
+        if let Err(error) = ensure_project_serial_slot_free(project, &issue.issue_id, states, false)
+        {
+            failures.push(error.to_string());
+        }
+    }
+    failures
+}
+
+fn launch_guard_failures(
+    issue: &SpecIssue,
+    project: Option<&SpecProject>,
+    states: &BTreeMap<String, SpecIssueStatus>,
+) -> Vec<String> {
+    let mut failures = Vec::new();
+    if let Err(error) = ensure_issue_contract_complete(issue) {
+        failures.push(error.to_string());
+    }
+    if let Err(error) = ensure_dependencies_done(issue, states) {
+        failures.push(error.to_string());
+    }
+    if let Some(project) = project {
+        if let Err(error) = ensure_project_predecessors_done(project, issue, states) {
+            failures.push(error.to_string());
+        }
+        if let Err(error) = ensure_project_serial_slot_free(project, &issue.issue_id, states, true)
+        {
+            failures.push(error.to_string());
+        }
+    }
+    failures
+}
+
+fn schedule_guard_keys(project_scoped: bool) -> Vec<&'static str> {
+    let mut passed = vec![ISSUE_CONTRACT_COMPLETE_GUARD, DEPENDENCIES_DONE_GUARD];
+    if project_scoped {
         passed.push(PROJECT_PREDECESSORS_DONE_GUARD);
         passed.push(PROJECT_SERIAL_SLOT_FREE_GUARD);
     }
-    Ok(passed)
+    passed
 }
 
 fn write_issue_preflight_decision(
@@ -1269,6 +1430,76 @@ mod tests {
         );
         let issue = read_spec_issue(dir.path(), "AF-TASK-001").unwrap();
         assert_eq!(issue.status, SpecIssueStatus::Todo);
+    }
+
+    #[test]
+    fn dependency_queue_reports_ready_candidate_and_waiting_reasons() {
+        let dir = tempdir().unwrap();
+        write_project_with_issues(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+
+        let queue = loop_driver.dependency_queue(dir.path()).unwrap();
+
+        assert_eq!(queue.next_issue_candidate.as_deref(), Some("AF-TASK-001"));
+        assert_eq!(queue.ready_issue_ids, vec!["AF-TASK-001".to_string()]);
+        let waiting = queue
+            .entries
+            .iter()
+            .find(|entry| entry.issue_id == "AF-TASK-002")
+            .unwrap();
+        assert_eq!(waiting.queue_status, "waiting");
+        assert!(waiting
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("unfinished dependencies")));
+    }
+
+    #[test]
+    fn dependency_queue_keeps_project_order_and_waits_for_predecessors() {
+        let dir = tempdir().unwrap();
+        write_ordered_project_without_dependencies(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+
+        let queue = loop_driver.dependency_queue(dir.path()).unwrap();
+
+        assert_eq!(queue.next_issue_candidate.as_deref(), Some("AF-TASK-001"));
+        assert_eq!(queue.ready_issue_ids, vec!["AF-TASK-001".to_string()]);
+        assert_eq!(
+            queue.entries
+                .iter()
+                .map(|entry| entry.issue_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["AF-TASK-001", "AF-TASK-002", "AF-TASK-003"]
+        );
+        assert_eq!(queue.entries[1].queue_status, "waiting");
+        assert!(queue.entries[1]
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("unfinished project predecessors")));
+    }
+
+    #[test]
+    fn dependency_queue_explains_when_no_ready_issue_exists() {
+        let dir = tempdir().unwrap();
+        write_project_with_issues(dir.path());
+        let loop_driver = TaskLoop::new("project-task-loop");
+        loop_driver
+            .schedule_next_issue(dir.path())
+            .unwrap()
+            .unwrap();
+
+        let queue = loop_driver.dependency_queue(dir.path()).unwrap();
+
+        assert!(queue.next_issue_candidate.is_none());
+        assert!(queue.ready_issue_ids.is_empty());
+        assert!(queue
+            .no_ready_reasons
+            .iter()
+            .any(|reason| reason.contains("当前状态是 todo")));
+        assert!(queue
+            .no_ready_reasons
+            .iter()
+            .any(|reason| reason.contains("unfinished dependencies")));
     }
 
     #[test]

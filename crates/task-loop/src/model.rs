@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub const ISSUE_SCHEDULED: &str = "issue.scheduled";
 pub const AGENT_LAUNCH_REQUESTED: &str = "agent.launch.requested";
 pub const TASK_LOOP_LAUNCH_REQUEST_VERSION: &str = "task-loop-launch-request.v1";
+pub const TASK_LOOP_DEPENDENCY_QUEUE_VERSION: &str = "task-loop-dependency-queue.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +31,28 @@ pub struct TaskLoopLaunch {
 pub struct TaskLoopTick {
     pub schedule: Option<TaskLoopSchedule>,
     pub launch: TaskLoopLaunch,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskLoopDependencyQueue {
+    pub version: String,
+    pub project_id: String,
+    pub next_issue_candidate: Option<String>,
+    pub next_issue_candidate_reason: String,
+    pub ready_issue_ids: Vec<String>,
+    pub no_ready_reasons: Vec<String>,
+    pub entries: Vec<TaskLoopDependencyQueueEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskLoopDependencyQueueEntry {
+    pub issue_id: String,
+    pub title: String,
+    pub current_state: String,
+    pub queue_status: String,
+    pub reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
