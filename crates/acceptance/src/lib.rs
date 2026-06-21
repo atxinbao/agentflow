@@ -5,7 +5,7 @@ pub mod browser_preview;
 pub mod fixture;
 
 pub use acceptance::{
-    create_high_risk_blocker_fixture, create_stale_lease_fixture,
+    create_high_risk_blocker_fixture, create_stale_lease_fixture, prepare_done_writeback_fixture,
     prepare_execution_completed_fixture, prepare_project_done_fixture,
     prepare_project_in_review_fixture, ExecutionCompletedFixture, ProjectLoopCloseoutFixture,
 };
@@ -25,6 +25,7 @@ mod tests {
     use agentflow_projection::{
         get_spec_loop_view, load_project_projection, load_task_projection, rebuild_projections,
     };
+    use agentflow_release::load_delivery_summary;
     use agentflow_role_policy::{core_role_policy_bundle, validate_role_policy_bundle};
     use agentflow_runtime_api::{
         execute_command_via_arbitration, get_project_home_view, get_runtime_health_view,
@@ -57,6 +58,52 @@ mod tests {
         assert_eq!(audit_index.audits.len(), 0);
         ready.fixture.assert_user_files_unchanged()?;
         boundaries::assert_write_boundary(ready.fixture.root())?;
+        Ok(())
+    }
+
+    #[test]
+    fn done_writeback_records_delivery_summary_without_auto_audit_request() -> anyhow::Result<()> {
+        let done = prepare_done_writeback_fixture()?;
+        let summary = load_delivery_summary(done.fixture.root(), "iss-001")?;
+
+        assert_eq!(summary.issue_id, "iss-001");
+        assert_eq!(summary.status, "ready");
+        assert_eq!(
+            summary.pr_url.as_deref(),
+            Some("https://github.com/atxinbao/agentflow/pull/388")
+        );
+        assert_eq!(
+            summary.merge_commit.as_deref(),
+            Some("abcdef1234567890donewriteback")
+        );
+        assert_eq!(summary.public_record_path.as_deref(), Some("CHANGELOG.md"));
+        assert!(summary.evidence_path.is_some());
+        assert!(summary
+            .public_record_targets
+            .iter()
+            .any(|item| item == "PR/MR body"));
+        assert!(summary
+            .public_record_targets
+            .iter()
+            .any(|item| item == "CHANGELOG.md"));
+        assert!(summary
+            .public_record_targets
+            .iter()
+            .any(|item| item == "docs/release-notes/agentflow-v060-012.md"));
+        assert!(!summary.public_record_markdown.trim().is_empty());
+        assert!(summary.summary_line.contains("公开交付"));
+
+        let task = load_task_projection(done.fixture.root(), "iss-001")?;
+        assert_eq!(task.current_state, "done");
+
+        let state = agentflow_state::refresh_state(done.fixture.root())?;
+        assert_eq!(state.audit_status, WorkflowAuditStatus::NotRequested);
+        let audit_index =
+            agentflow_audit::load_audit_index(done.fixture.root()).unwrap_or_default();
+        assert!(audit_index.audits.is_empty());
+
+        done.fixture.assert_user_files_unchanged()?;
+        boundaries::assert_write_boundary(done.fixture.root())?;
         Ok(())
     }
 
@@ -193,6 +240,27 @@ mod tests {
         assert_ne!(state.audit_status, WorkflowAuditStatus::NotRequested);
         ready.fixture.assert_user_files_unchanged()?;
         boundaries::assert_write_boundary(ready.fixture.root())?;
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_audit_request_remains_independent_after_done_writeback() -> anyhow::Result<()> {
+        let done = prepare_done_writeback_fixture()?;
+        let report = done.request_human_audit()?;
+
+        let task = load_task_projection(done.fixture.root(), "iss-001")?;
+        assert_eq!(task.current_state, "done");
+        assert_eq!(report.request.scope.refs.len(), 4);
+
+        let audit_index = agentflow_audit::load_audit_index(done.fixture.root())?;
+        assert_eq!(audit_index.audits.len(), 1);
+
+        let state = agentflow_state::refresh_state(done.fixture.root())?;
+        assert_eq!(state.current_stage, WorkflowStage::AuditCompleted);
+        assert_ne!(state.audit_status, WorkflowAuditStatus::NotRequested);
+
+        done.fixture.assert_user_files_unchanged()?;
+        boundaries::assert_write_boundary(done.fixture.root())?;
         Ok(())
     }
 
