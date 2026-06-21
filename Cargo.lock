@@ -340,6 +340,7 @@ dependencies = [
  "agentflow-ontology",
  "agentflow-panel",
  "agentflow-projection",
+ "agentflow-release",
  "agentflow-role-policy",
  "agentflow-runtime-api",
  "agentflow-spec",

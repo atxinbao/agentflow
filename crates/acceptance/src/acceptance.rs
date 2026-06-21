@@ -99,6 +99,130 @@ pub fn prepare_execution_completed_fixture() -> Result<ExecutionCompletedFixture
     })
 }
 
+pub fn prepare_done_writeback_fixture() -> Result<ExecutionCompletedFixture> {
+    let ready = prepare_execution_completed_fixture()?;
+    let root = ready.fixture.root();
+    let issue = agentflow_spec::read_spec_issue(root, "iss-001")?;
+    let run_id = ready.run_id.clone();
+
+    append_task_event_once(
+        root,
+        TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(run_id.clone()),
+            event_type: "issue.closeout.proof.recorded".to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
+            actor: EventActor {
+                role: "acceptance".to_string(),
+                kind: "system".to_string(),
+            },
+            state: Some(EventStateTransition {
+                from_state: "in_review".to_string(),
+                to_state: "in_review".to_string(),
+            }),
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: json!({
+                "runId": run_id,
+                "prUrl": "https://github.com/atxinbao/agentflow/pull/388",
+                "mergeCommit": "abcdef1234567890donewriteback",
+                "changelogPath": "CHANGELOG.md",
+                "releaseNotesUrl": "docs/release-notes/agentflow-v060-012.md"
+            }),
+            artifact_refs: vec![issue.system.path.clone()],
+            idempotency_key: Some(format!("issue.closeout.proof.recorded:{}", issue.issue_id)),
+        },
+    )?;
+    append_task_event_once(
+        root,
+        TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(run_id.clone()),
+            event_type: "issue.pr.merged".to_string(),
+            authority_role: Some(WorkflowAgentRole::WorkAgent),
+            actor: EventActor {
+                role: "acceptance".to_string(),
+                kind: "system".to_string(),
+            },
+            state: Some(EventStateTransition {
+                from_state: "in_review".to_string(),
+                to_state: "in_review".to_string(),
+            }),
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: json!({
+                "runId": run_id,
+                "prUrl": "https://github.com/atxinbao/agentflow/pull/388",
+                "mergeCommit": "abcdef1234567890donewriteback",
+                "changelogPath": "CHANGELOG.md",
+                "releaseNotesUrl": "docs/release-notes/agentflow-v060-012.md"
+            }),
+            artifact_refs: vec![issue.system.path.clone()],
+            idempotency_key: Some(format!("issue.pr.merged:{}", issue.issue_id)),
+        },
+    )?;
+    append_task_event_once(
+        root,
+        TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(run_id.clone()),
+            event_type: "issue.completed".to_string(),
+            authority_role: Some(WorkflowAgentRole::System),
+            actor: EventActor {
+                role: "acceptance".to_string(),
+                kind: "system".to_string(),
+            },
+            state: Some(EventStateTransition {
+                from_state: "in_review".to_string(),
+                to_state: "done".to_string(),
+            }),
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: json!({
+                "issueId": issue.issue_id,
+                "runId": run_id,
+                "prUrl": "https://github.com/atxinbao/agentflow/pull/388",
+                "mergeCommit": "abcdef1234567890donewriteback",
+                "changelogPath": "CHANGELOG.md",
+                "releaseNotesUrl": "docs/release-notes/agentflow-v060-012.md",
+                "evidencePath": ".agentflow/tasks/iss-001/evidence/evidence.json"
+            }),
+            artifact_refs: vec![issue.system.path.clone()],
+            idempotency_key: Some(format!("issue.completed:{}", issue.issue_id)),
+        },
+    )?;
+
+    let mut completed_issue = issue;
+    completed_issue.status = SpecIssueStatus::Done;
+    agentflow_spec::write_spec_issue(root, &completed_issue)?;
+    agentflow_projection::rebuild_projections(root)?;
+    let execution_state = agentflow_state::refresh_state(root)?;
+
+    anyhow::ensure!(
+        execution_state.audit_status == WorkflowAuditStatus::NotRequested,
+        "done writeback fixture must not create audit request automatically"
+    );
+    ready.fixture.assert_user_files_unchanged()?;
+
+    Ok(ExecutionCompletedFixture {
+        fixture: ready.fixture,
+        run_id,
+        execution_state,
+    })
+}
+
 pub fn create_high_risk_blocker_fixture() -> Result<WorkflowFixture> {
     let fixture = create_fixture_project()?;
     let root = fixture.root();
