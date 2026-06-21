@@ -1465,7 +1465,8 @@ mod tests {
         assert_eq!(queue.next_issue_candidate.as_deref(), Some("AF-TASK-001"));
         assert_eq!(queue.ready_issue_ids, vec!["AF-TASK-001".to_string()]);
         assert_eq!(
-            queue.entries
+            queue
+                .entries
                 .iter()
                 .map(|entry| entry.issue_id.as_str())
                 .collect::<Vec<_>>(),

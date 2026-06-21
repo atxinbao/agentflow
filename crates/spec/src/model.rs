@@ -1300,6 +1300,12 @@ pub struct CompletionDecisionRuntime {
 pub struct SpecExpectedOutputs {
     pub task_run_dir: String,
     pub evidence_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changed_files_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_result_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closeout_proof_path: Option<String>,
     pub public_delivery_record: PublicDeliveryRecord,
 }
 
@@ -1308,6 +1314,15 @@ impl SpecExpectedOutputs {
         Self {
             task_run_dir: format!(".agentflow/tasks/{issue_id}/runs/<run-id>"),
             evidence_path: format!(".agentflow/tasks/{issue_id}/evidence/evidence.json"),
+            changed_files_path: Some(format!(
+                ".agentflow/tasks/{issue_id}/runs/<run-id>/changed-files.json"
+            )),
+            validation_result_path: Some(format!(
+                ".agentflow/tasks/{issue_id}/runs/<run-id>/validation.json"
+            )),
+            closeout_proof_path: Some(format!(
+                ".agentflow/tasks/{issue_id}/runs/<run-id>/review/closeout-proof.json"
+            )),
             public_delivery_record: PublicDeliveryRecord::default(),
         }
     }

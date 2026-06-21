@@ -1,10 +1,12 @@
 use crate::model::{
     TaskChangedFile, TaskChangedFilesRecord, TaskCommandInput, TaskCommandRecord, TaskEvidence,
-    TaskPreflightDecision, TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord,
-    WorkLoopArtifactClass, WorkLoopArtifactContract, WorkLoopFilesystemContract, WorkLoopRoleAlias,
-    WorkLoopStage, WorkLoopStageContract, TASK_CHANGED_FILES_VERSION, TASK_COMMAND_VERSION,
-    TASK_EVIDENCE_VERSION, TASK_PREFLIGHT_VERSION, TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION,
-    TASK_VALIDATION_VERSION, WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
+    TaskEvidenceEntry, TaskEvidenceEntryStatus, TaskEvidenceGateDecision, TaskPreflightDecision,
+    TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord, WorkLoopArtifactClass,
+    WorkLoopArtifactContract, WorkLoopFilesystemContract, WorkLoopRoleAlias, WorkLoopStage,
+    WorkLoopStageContract, TASK_CHANGED_FILES_VERSION, TASK_COMMAND_VERSION,
+    TASK_EVIDENCE_GATE_VERSION, TASK_EVIDENCE_VERSION, TASK_PREFLIGHT_VERSION,
+    TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION, TASK_VALIDATION_VERSION,
+    WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
 };
 use agentflow_event_store::TaskReplayCursor;
 use agentflow_workflow_core::{
@@ -41,6 +43,10 @@ pub fn task_run_dir(
 pub fn task_evidence_dir(project_root: impl AsRef<Path>, issue_id: &str) -> Result<PathBuf> {
     let root = canonicalize_project_root(project_root)?;
     task_evidence_dir_under_root(&root, issue_id)
+}
+
+pub fn task_evidence_gate_path(project_root: impl AsRef<Path>, issue_id: &str) -> Result<PathBuf> {
+    Ok(task_evidence_dir(project_root, issue_id)?.join("gate-decision.json"))
 }
 
 pub fn task_changed_files_path(
@@ -485,6 +491,7 @@ pub fn write_task_evidence(
         head_commit: validation.head_commit.clone(),
         working_tree_hash: validation.working_tree_hash.clone(),
         generated_at: Some(generated_at),
+        entries: build_task_evidence_entries(&validation, &command_records, issue_id, run_id)?,
         created_at: generated_at,
     };
     write_json(
@@ -492,6 +499,22 @@ pub fn write_task_evidence(
         &evidence,
     )?;
     Ok(evidence)
+}
+
+pub fn write_task_evidence_gate_decision(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    decision: &TaskEvidenceGateDecision,
+) -> Result<TaskEvidenceGateDecision> {
+    let root = canonicalize_project_root(project_root)?;
+    let path = task_evidence_gate_path(&root, issue_id)?;
+    if let Some(parent) = path.parent() {
+        ensure_directory(parent)?;
+    }
+    let mut stored = decision.clone();
+    stored.version = TASK_EVIDENCE_GATE_VERSION.to_string();
+    write_json(&path, &stored)?;
+    Ok(stored)
 }
 
 pub fn write_task_run_checkpoint(
@@ -578,6 +601,14 @@ pub fn load_task_evidence(project_root: impl AsRef<Path>, issue_id: &str) -> Res
     read_json(&task_evidence_dir_under_root(&root, issue_id)?.join("evidence.json"))
 }
 
+pub fn load_task_evidence_gate_decision(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+) -> Result<TaskEvidenceGateDecision> {
+    let root = canonicalize_project_root(project_root)?;
+    read_json(task_evidence_gate_path(&root, issue_id)?)
+}
+
 pub fn load_task_changed_files(
     project_root: impl AsRef<Path>,
     issue_id: &str,
@@ -585,6 +616,15 @@ pub fn load_task_changed_files(
 ) -> Result<TaskChangedFilesRecord> {
     let root = canonicalize_project_root(project_root)?;
     read_json(&task_changed_files_path(&root, issue_id, run_id)?)
+}
+
+pub fn load_task_validation(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<TaskValidationRecord> {
+    let root = canonicalize_project_root(project_root)?;
+    read_json(&task_run_dir_under_root(&root, issue_id, run_id)?.join("validation.json"))
 }
 
 fn load_command_records(
@@ -968,6 +1008,140 @@ fn build_work_loop_filesystem_contract(
         artifacts,
         generated_at: unix_timestamp_seconds(),
     })
+}
+
+fn build_task_evidence_entries(
+    validation: &TaskValidationRecord,
+    command_records: &[TaskCommandRecord],
+    issue_id: &str,
+    run_id: &str,
+) -> Result<Vec<TaskEvidenceEntry>> {
+    let validation_path = normalize_relative_path_string(
+        PathBuf::from(".agentflow")
+            .join("tasks")
+            .join(IssueId::parse(issue_id)?.as_str())
+            .join("runs")
+            .join(RunId::parse(run_id)?.as_str())
+            .join("validation.json"),
+    )?;
+    let command_refs = command_records
+        .iter()
+        .map(|record| {
+            normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("tasks")
+                    .join(IssueId::parse(issue_id)?.as_str())
+                    .join("runs")
+                    .join(RunId::parse(run_id)?.as_str())
+                    .join("commands")
+                    .join(format!("{}.json", record.command_id)),
+            )
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let changed_files_refs = validation
+        .changed_files_path
+        .clone()
+        .map(|path| vec![path])
+        .unwrap_or_default();
+    Ok(vec![
+        TaskEvidenceEntry {
+            evidence_type: "verificationLog".to_string(),
+            required: true,
+            status: if validation.passed {
+                TaskEvidenceEntryStatus::Ready
+            } else {
+                TaskEvidenceEntryStatus::Failed
+            },
+            summary: if validation.passed {
+                "验证日志已生成且全部通过。".to_string()
+            } else {
+                "验证日志已生成，但存在失败项。".to_string()
+            },
+            refs: std::iter::once(validation_path.clone())
+                .chain(command_refs.iter().cloned())
+                .collect(),
+            manual_reason: None,
+            manual_risk: None,
+        },
+        TaskEvidenceEntry {
+            evidence_type: "commandOutput".to_string(),
+            required: false,
+            status: if command_refs.is_empty() {
+                TaskEvidenceEntryStatus::Missing
+            } else if validation.failed_command_ids.is_empty() {
+                TaskEvidenceEntryStatus::Ready
+            } else {
+                TaskEvidenceEntryStatus::Failed
+            },
+            summary: if command_refs.is_empty() {
+                "没有记录命令输出。".to_string()
+            } else if validation.failed_command_ids.is_empty() {
+                "命令输出已记录。".to_string()
+            } else {
+                format!(
+                    "命令输出已记录，但有 {} 条失败。",
+                    validation.failed_command_ids.len()
+                )
+            },
+            refs: command_refs.clone(),
+            manual_reason: None,
+            manual_risk: None,
+        },
+        TaskEvidenceEntry {
+            evidence_type: "testResult".to_string(),
+            required: false,
+            status: if validation.command_ids.is_empty() {
+                TaskEvidenceEntryStatus::Missing
+            } else if validation.passed {
+                TaskEvidenceEntryStatus::Ready
+            } else {
+                TaskEvidenceEntryStatus::Failed
+            },
+            summary: if validation.command_ids.is_empty() {
+                "没有验证命令结果。".to_string()
+            } else if validation.passed {
+                format!("{} 条验证命令全部通过。", validation.command_ids.len())
+            } else {
+                format!(
+                    "{} 条验证命令失败，{} 条通过。",
+                    validation.failed_command_ids.len(),
+                    validation
+                        .command_ids
+                        .len()
+                        .saturating_sub(validation.failed_command_ids.len())
+                )
+            },
+            refs: vec![validation_path.clone()],
+            manual_reason: None,
+            manual_risk: None,
+        },
+        TaskEvidenceEntry {
+            evidence_type: "implementationSummary".to_string(),
+            required: true,
+            status: if changed_files_refs.is_empty() {
+                TaskEvidenceEntryStatus::Missing
+            } else {
+                TaskEvidenceEntryStatus::Ready
+            },
+            summary: if changed_files_refs.is_empty() {
+                "缺少变更文件摘要。".to_string()
+            } else {
+                "变更文件摘要已记录。".to_string()
+            },
+            refs: changed_files_refs,
+            manual_reason: None,
+            manual_risk: None,
+        },
+        TaskEvidenceEntry {
+            evidence_type: "screenshot".to_string(),
+            required: false,
+            status: TaskEvidenceEntryStatus::Missing,
+            summary: "当前任务没有截图证据。".to_string(),
+            refs: Vec::new(),
+            manual_reason: None,
+            manual_risk: None,
+        },
+    ])
 }
 
 fn task_issue_dir(root: &Path, issue_id: &str) -> Result<PathBuf> {
