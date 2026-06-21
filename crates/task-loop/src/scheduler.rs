@@ -8,6 +8,7 @@ use agentflow_event_store::{
     EventActor, EventStateTransition, TaskEvent, TaskEventDraft,
 };
 use agentflow_runtime_api::{
+    assert_issue_activation_allowed, assert_issue_start_run_allowed, assert_run_transition,
     write_work_action_proposals_from_spec_issue, write_work_command_handoff_from_spec_issue,
     WorkActionProposalContract,
 };
@@ -16,8 +17,9 @@ use agentflow_spec::{
     SpecIssueStatus, SpecPriority, SpecProject, SpecRequiredAgentRole,
 };
 use agentflow_task_artifacts::{
-    create_task_run, task_launch_request_path, write_task_preflight_decision, TaskPreflightCheck,
-    TaskPreflightCheckStatus, TaskPreflightDecision,
+    create_task_run, task_launch_request_path, update_task_run_status,
+    write_task_preflight_decision, TaskPreflightCheck, TaskPreflightCheckStatus,
+    TaskPreflightDecision, TaskRunStatus,
 };
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use anyhow::{Context, Result};
@@ -282,6 +284,8 @@ fn request_issue_launch_inner(
         &issue.workflow_ref,
         Some(branch_name.clone()),
     )?;
+    let _ = assert_issue_start_run_allowed(root, &issue.issue_id, &state, &run.run_id)?;
+    let _ = assert_run_transition(&run.status, "startRun")?;
     let payload = AgentLaunchPayload {
         version: TASK_LOOP_LAUNCH_REQUEST_VERSION.to_string(),
         provider: provider.to_string(),
@@ -340,6 +344,12 @@ fn request_issue_launch_inner(
             )),
         },
     )?;
+    let _ = update_task_run_status(
+        root,
+        &issue.issue_id,
+        &run.run_id,
+        TaskRunStatus::InProgress,
+    )?;
     let _ = update_spec_issue_status(root, &issue.issue_id, SpecIssueStatus::InProgress)?;
 
     Ok(TaskLoopLaunch {
@@ -381,6 +391,7 @@ fn append_issue_scheduled_event(
     issue: &SpecIssue,
     guards_passed: &[&str],
 ) -> Result<TaskLoopSchedule> {
+    let _ = assert_issue_activation_allowed(root, &issue.issue_id, &issue.status)?;
     let event = append_task_event_once(
         root,
         TaskEventDraft {
@@ -1570,6 +1581,9 @@ mod tests {
             .any(|event| event.event_type == ISSUE_PREFLIGHT_PASSED));
         let issue = read_spec_issue(dir.path(), "AF-TASK-001").unwrap();
         assert_eq!(issue.status, SpecIssueStatus::InProgress);
+        let run =
+            agentflow_task_artifacts::load_task_run(dir.path(), "AF-TASK-001", "run-001").unwrap();
+        assert_eq!(run.status, TaskRunStatus::InProgress);
     }
 
     #[test]
@@ -1621,6 +1635,9 @@ mod tests {
                 .map(|state| state.to_state.as_str()),
             Some(SpecIssueStatus::InProgress.as_str())
         );
+        let run =
+            agentflow_task_artifacts::load_task_run(dir.path(), "AF-TASK-001", "run-001").unwrap();
+        assert_eq!(run.status, TaskRunStatus::InProgress);
     }
 
     #[test]

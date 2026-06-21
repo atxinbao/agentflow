@@ -7,7 +7,11 @@ use agentflow_event_store::{
     append_task_event_once, EventActor, EventStateTransition, TaskEventDraft,
 };
 use agentflow_mcp::{
-    query_closeout_attestation, McpCloseoutAttestation, McpCloseoutIssueAttestation,
+    find_session_snapshot_by_run, query_closeout_attestation, McpCloseoutAttestation,
+    McpCloseoutIssueAttestation,
+};
+use agentflow_runtime_api::{
+    assert_issue_mark_done_allowed, assert_issue_transition, assert_run_transition,
 };
 use agentflow_spec::{read_spec_issue, update_spec_issue_status, SpecIssueStatus};
 use agentflow_task_artifacts::{
@@ -119,7 +123,20 @@ pub(crate) fn complete_build_agent_issue_from_request(
 ) -> Result<BuildAgentCompletionOutcome> {
     assert_current_cli_is_fresh(root)?;
     let request = read_completion_request(request_path, "completion")?;
-    let review = ensure_review_prepared(root, request.clone())?;
+    let review = if let Some(run_id) = request
+        .run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        if let Some(review) = load_prepared_review_if_available(root, &request.issue_id, run_id)? {
+            review
+        } else {
+            ensure_review_prepared(root, request.clone())?
+        }
+    } else {
+        ensure_review_prepared(root, request.clone())?
+    };
     let proof_path = closeout_proof_path(root, &review.issue_id, &review.run_id);
     let proof = if proof_path.is_file() {
         load_closeout_proof(root, &review.issue_id, &review.run_id)?
@@ -142,6 +159,7 @@ pub(crate) fn complete_build_agent_issue_from_request(
             gate_decision.blockers.join("; ")
         );
     }
+    let _ = assert_issue_mark_done_allowed(root, &issue.issue_id, &issue.status)?;
     write_json(&proof_path, &proof)?;
     append_task_event_once(
         root,
@@ -217,6 +235,34 @@ pub(crate) fn complete_build_agent_issue_from_request(
         closeout_proof_path: proof_path,
         next_launch,
     })
+}
+
+fn load_prepared_review_if_available(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<Option<BuildAgentReview>> {
+    let run = load_task_run(root, issue_id, run_id)?;
+    if run.status != TaskRunStatus::Completed {
+        return Ok(None);
+    }
+    let issue = read_spec_issue(root, issue_id)?;
+    if issue.status != SpecIssueStatus::InReview {
+        anyhow::bail!(
+            "completed run {} requires issue {} to be in_review before completion, found {}",
+            run_id,
+            issue_id,
+            issue.status.as_str()
+        );
+    }
+    let evidence = load_task_evidence(root, issue_id)?;
+    Ok(Some(BuildAgentReview {
+        issue_id: issue_id.to_string(),
+        run_id: run_id.to_string(),
+        run_status: task_run_status_as_str(&run).to_string(),
+        validation_passed: evidence.status == "passed",
+        evidence_path: evidence_path(root, &evidence),
+    }))
 }
 
 pub(crate) fn prepare_build_agent_review_from_request(
@@ -328,6 +374,14 @@ fn write_build_agent_closeout_proof_from_attestation(
     merge_mode: &str,
     attestation: McpCloseoutAttestation,
 ) -> Result<BuildAgentCloseoutProof> {
+    let current_issue = read_spec_issue(root, &issue.issue_id)?;
+    if current_issue.status != SpecIssueStatus::InReview {
+        anyhow::bail!(
+            "closeout proof requires issue {} to be in_review, found {}",
+            current_issue.issue_id,
+            current_issue.status.as_str()
+        );
+    }
     let proof_path = closeout_proof_path(root, &issue.issue_id, run_id);
     let run = load_task_run(root, &issue.issue_id, run_id)?;
     let evidence = load_task_evidence(root, &issue.issue_id)?;
@@ -505,7 +559,6 @@ fn write_build_agent_closeout_proof_from_attestation(
             )),
         },
     )?;
-    let _ = update_spec_issue_status(root, &issue.issue_id, SpecIssueStatus::InReview)?;
     let _ = agentflow_projection::rebuild_projections(root)?;
     agentflow_state::refresh_state(root)?;
     Ok(BuildAgentCloseoutProof {
@@ -570,6 +623,7 @@ fn ensure_review_prepared(
             run.issue_id
         );
     }
+    let _ = assert_run_transition(&run.status, "runValidation")?;
 
     reset_review_artifacts(root, issue_id, run_id)?;
     update_task_run_status(root, issue_id, run_id, TaskRunStatus::Validating)?;
@@ -612,8 +666,18 @@ fn ensure_review_prepared(
         format_validation_summary(&validation),
     )?;
     if validation.passed {
+        if find_session_snapshot_by_run(root, run_id)?.is_none() {
+            anyhow::bail!(
+                "build agent review preparation requires session snapshot before run {} can enter completed",
+                run_id
+            );
+        }
+        let _ = assert_run_transition(&TaskRunStatus::Validating, "completeRun")?;
         update_task_run_status(root, issue_id, run_id, TaskRunStatus::Completed)?;
+        let _ = assert_issue_transition(&issue.status, "submitDelivery")?;
+        let _ = update_spec_issue_status(root, &issue.issue_id, SpecIssueStatus::InReview)?;
     } else {
+        let _ = assert_run_transition(&TaskRunStatus::Validating, "failRun")?;
         update_task_run_status(root, issue_id, run_id, TaskRunStatus::Failed)?;
         append_validation_failed_event(root, &issue, run_id, &evidence)?;
         let _ = agentflow_projection::rebuild_projections(root)?;
@@ -1629,13 +1693,15 @@ mod tests {
         write_build_agent_closeout_proof_from_attestation,
     };
     use agentflow_mcp::{
-        McpAgentProvider, McpCloseoutAttestation, McpCloseoutIssueAttestation, McpLaunchMode,
-        McpLaunchPlan, McpLaunchRequest, McpProviderBridge, McpProviderKind, McpProviderStatus,
-        McpProviderStatusCode, MCP_CLOSEOUT_ATTESTATION_VERSION,
+        write_session_snapshot, McpAgentProvider, McpCloseoutAttestation,
+        McpCloseoutIssueAttestation, McpLaunchMode, McpLaunchPlan, McpLaunchRequest,
+        McpProviderBridge, McpProviderKind, McpProviderStatus, McpProviderStatusCode,
+        McpSessionGovernanceFacts, McpSessionGovernancePolicy, McpSessionSnapshot,
+        McpSessionStatus, MCP_CLOSEOUT_ATTESTATION_VERSION,
     };
     use agentflow_task_artifacts::{
         load_task_changed_files, load_task_evidence, load_task_evidence_gate_decision,
-        TaskChangedFileSource,
+        load_task_run, TaskChangedFileSource, TaskRunStatus,
     };
     use anyhow::Result;
     use std::{
@@ -1725,6 +1791,69 @@ mod tests {
             rebuild_hint(Path::new("/repo/target/release/agentflow")),
             "cargo build --release --bin agentflow"
         );
+    }
+
+    fn write_running_session_snapshot(
+        root: &Path,
+        issue_id: &str,
+        run_id: &str,
+        branch_name: &str,
+    ) {
+        let session = McpSessionSnapshot {
+            version: "agentflow-mcp-session.v1".to_string(),
+            provider: "codex".to_string(),
+            issue_id: issue_id.to_string(),
+            project_id: Some("proj-001".to_string()),
+            run_id: run_id.to_string(),
+            session_id: format!("codex-{run_id}"),
+            status: McpSessionStatus::Running,
+            launch_mode: McpLaunchMode::CliExecPromptFile,
+            working_directory: root.display().to_string(),
+            workspace_root: Some(root.display().to_string()),
+            worktree_root: Some(root.display().to_string()),
+            runtime_root: Some(
+                root.join(format!(".agentflow/tasks/{issue_id}/runs/{run_id}/runtime"))
+                    .display()
+                    .to_string(),
+            ),
+            temp_root: None,
+            cache_root: None,
+            evidence_root: Some(
+                root.join(format!(".agentflow/tasks/{issue_id}/evidence"))
+                    .display()
+                    .to_string(),
+            ),
+            launch_request_path: format!(
+                ".agentflow/tasks/{issue_id}/runs/{run_id}/launch/agent-request.json"
+            ),
+            plan_path: format!(".agentflow/state/mcp/plans/codex-{run_id}.json"),
+            log_path: None,
+            branch_name: Some(branch_name.to_string()),
+            attempt_count: 1,
+            pid: None,
+            process_group_id: None,
+            remote_session_id: Some(format!("remote-{run_id}")),
+            pr_url: None,
+            last_message_path: None,
+            exit_proof_path: None,
+            merge_proof_path: None,
+            merge_state: None,
+            writeback_state: None,
+            recovery_reason: None,
+            note: Some("test-running-session".to_string()),
+            last_error: None,
+            permission_mode: Some("never".to_string()),
+            approval_policy: Some("never".to_string()),
+            sandbox_mode: Some("workspace-write".to_string()),
+            supervision_mode: Some("local-process-watch".to_string()),
+            exited_at: None,
+            exit_code: None,
+            governance_policy: McpSessionGovernancePolicy::default(),
+            governance_facts: McpSessionGovernanceFacts::default(),
+            created_at: 1,
+            updated_at: 1,
+        };
+        write_session_snapshot(root, &session).unwrap();
     }
 
     #[test]
@@ -1819,6 +1948,7 @@ mod tests {
         init_git_repo(dir.path());
 
         let started = start_build_agent_issue(dir.path(), "AF-START-001").unwrap();
+        let run = load_task_run(dir.path(), "AF-START-001", &started.run_id).unwrap();
 
         assert_eq!(started.issue_id, "AF-START-001");
         assert_eq!(started.run_id, "run-001");
@@ -1836,6 +1966,7 @@ mod tests {
             .path()
             .join(".agentflow/spec/issues/AF-START-001.json")
             .is_file());
+        assert_eq!(run.status, TaskRunStatus::InProgress);
     }
 
     #[test]
@@ -1848,6 +1979,12 @@ mod tests {
         );
         init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
         write_file(
             dir.path().join("src/lib.rs"),
             "pub fn status() -> &'static str { \"after\" }\n",
@@ -1975,6 +2112,66 @@ mod tests {
     }
 
     #[test]
+    fn build_agent_review_requires_session_snapshot_before_completion() {
+        let dir = tempdir().unwrap();
+        write_spec_project_fixture(dir.path(), "proj-001", "AF-001");
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"before\" }\n",
+        );
+        init_git_repo(dir.path());
+        let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"after\" }\n",
+        );
+
+        let request_path = write_completion_request(dir.path(), "AF-001", &started.run_id);
+        let err = prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap_err();
+
+        assert!(err.to_string().contains("session snapshot"));
+    }
+
+    #[test]
+    fn closeout_proof_requires_issue_already_in_review() {
+        let dir = tempdir().unwrap();
+        write_spec_project_fixture(dir.path(), "proj-001", "AF-001");
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"before\" }\n",
+        );
+        init_git_repo(dir.path());
+        let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
+        let issue = agentflow_spec::read_spec_issue(dir.path(), "AF-001").unwrap();
+
+        let err = write_build_agent_closeout_proof_from_attestation(
+            dir.path(),
+            &issue,
+            &started.run_id,
+            "auto-merge-if-eligible",
+            trusted_closeout(
+                dir.path(),
+                "github",
+                "https://github.com/atxinbao/agentflow/pull/8",
+                started.branch_name.as_deref().unwrap(),
+                true,
+                "8",
+                true,
+                Some("2026-06-19T11:20:08Z"),
+            ),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("to be in_review"));
+    }
+
+    #[test]
     fn build_agent_complete_launches_next_project_issue() {
         let dir = tempdir().unwrap();
         write_two_issue_project_fixture(dir.path(), "proj-chain", "AF-CHAIN-001", "AF-CHAIN-002");
@@ -1984,6 +2181,12 @@ mod tests {
         );
         init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-CHAIN-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-CHAIN-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
         write_file(
             dir.path().join("src/lib.rs"),
             "pub fn chain() -> &'static str { \"after\" }\n",
@@ -2038,6 +2241,12 @@ mod tests {
         );
         init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
 
         write_file(
             dir.path().join("src/lib.rs"),
@@ -2109,6 +2318,12 @@ mod tests {
         );
         init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
         write_file(
             dir.path().join("src/lib.rs"),
             "pub fn status() -> &'static str { \"after\" }\n",
@@ -2150,6 +2365,12 @@ mod tests {
         );
         init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
         write_file(
             dir.path().join("src/lib.rs"),
             "pub fn status() -> &'static str { \"after\" }\n",
@@ -2191,6 +2412,12 @@ mod tests {
         );
         init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
         write_file(
             dir.path().join("src/lib.rs"),
             "pub fn status() -> &'static str { \"after\" }\n",
@@ -2231,6 +2458,12 @@ mod tests {
         );
         init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-CHAIN-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-CHAIN-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
         write_file(
             dir.path().join("src/lib.rs"),
             "pub fn chain() -> &'static str { \"after\" }\n",
@@ -2283,6 +2516,12 @@ mod tests {
         );
         init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
         write_file(
             dir.path().join("src/lib.rs"),
             "pub fn status() -> &'static str { \"after\" }\n",
@@ -2308,6 +2547,12 @@ mod tests {
         write_file(dir.path().join("README.md"), "before\n");
         init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-SCOPE-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-SCOPE-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
         write_file(dir.path().join("README.md"), "after\n");
         let request_path = write_completion_request(dir.path(), "AF-SCOPE-001", &started.run_id);
 
@@ -2326,6 +2571,12 @@ mod tests {
         write_file(dir.path().join("README.md"), "before\n");
         init_git_repo(dir.path());
         let started = start_build_agent_issue(dir.path(), "AF-SCOPE-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-SCOPE-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
         write_file(dir.path().join("README.md"), "committed forbidden change\n");
         run_git(dir.path(), &["add", "README.md"]);
         run_git(dir.path(), &["commit", "-m", "committed forbidden change"]);
