@@ -1505,6 +1505,8 @@ mod tests {
         .unwrap();
         let mut issue = agentflow_spec::SpecIssueDraft::new("AF-001");
         issue.project_id = Some("proj-001".to_string());
+        issue.allowed_paths = vec!["src/**".to_string()];
+        issue.validation_commands = vec!["test -f src/lib.rs".to_string()];
         let issue =
             agentflow_spec::issue_from_requirement(dir.path(), &requirement, issue).unwrap();
         agentflow_spec::write_spec_issue(dir.path(), &issue).unwrap();
@@ -1513,6 +1515,11 @@ mod tests {
         let project =
             agentflow_spec::project_from_requirement(dir.path(), &requirement, project).unwrap();
         agentflow_spec::write_spec_project(dir.path(), &project).unwrap();
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn claim_fixture() -> &'static str { \"ok\" }\n",
+        );
+        init_git_repo(dir.path());
         let loop_driver = agentflow_task_loop::TaskLoop::new("proj-001");
         loop_driver
             .schedule_next_issue(dir.path())
@@ -1561,6 +1568,8 @@ mod tests {
         .unwrap();
         let mut issue = agentflow_spec::SpecIssueDraft::new("AF-START-001");
         issue.project_id = Some("proj-start".to_string());
+        issue.allowed_paths = vec!["src/**".to_string()];
+        issue.validation_commands = vec!["test -f src/lib.rs".to_string()];
         let issue =
             agentflow_spec::issue_from_requirement(dir.path(), &requirement, issue).unwrap();
         agentflow_spec::write_spec_issue(dir.path(), &issue).unwrap();
@@ -1569,6 +1578,11 @@ mod tests {
         let project =
             agentflow_spec::project_from_requirement(dir.path(), &requirement, project).unwrap();
         agentflow_spec::write_spec_project(dir.path(), &project).unwrap();
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn start_fixture() -> &'static str { \"ok\" }\n",
+        );
+        init_git_repo(dir.path());
 
         let started = start_build_agent_issue(dir.path(), "AF-START-001").unwrap();
 
@@ -1725,6 +1739,8 @@ mod tests {
             dir.path().join("src/lib.rs"),
             "pub fn chain() -> &'static str { \"after\" }\n",
         );
+        run_git(dir.path(), &["add", "src/lib.rs"]);
+        run_git(dir.path(), &["commit", "-m", "complete first issue"]);
         let request_path = write_completion_request(dir.path(), "AF-CHAIN-001", &started.run_id);
         prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
         let issue = agentflow_spec::read_spec_issue(dir.path(), "AF-CHAIN-001").unwrap();

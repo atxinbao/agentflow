@@ -215,7 +215,7 @@ mod tests {
         issue_from_requirement, project_from_requirement, read_spec_issue, write_spec_issue,
         write_spec_project, SpecIssueDraft, SpecIssueStatus, SpecProjectDraft,
     };
-    use std::fs;
+    use std::{fs, path::Path, process::Command};
     use tempfile::tempdir;
 
     fn write_requirement(root: &Path) -> std::path::PathBuf {
@@ -248,14 +248,34 @@ mod tests {
         let requirement = write_requirement(root);
         let mut issue = SpecIssueDraft::new("AF-DIRECT-001");
         issue.allowed_paths = vec!["apps/desktop/src/**".to_string()];
+        issue.validation_commands = vec!["npm --prefix apps/desktop run build".to_string()];
         let issue = issue_from_requirement(root, &requirement, issue).unwrap();
         write_spec_issue(root, &issue).unwrap();
+    }
+
+    fn init_git_repo(root: &Path) {
+        fs::write(root.join(".gitignore"), ".agentflow/\n").unwrap();
+        run_git(root, &["init"]);
+        run_git(root, &["config", "user.email", "codex@example.com"]);
+        run_git(root, &["config", "user.name", "Codex"]);
+        run_git(root, &["add", "."]);
+        run_git(root, &["commit", "-m", "initial fixture"]);
+    }
+
+    fn run_git(root: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {:?} failed", args);
     }
 
     #[test]
     fn run_project_loop_launches_spec_project_issue_from_desktop_entrypoint() {
         let dir = tempdir().unwrap();
         write_project_with_backlog_issue(dir.path());
+        init_git_repo(dir.path());
 
         let summary = run_project_loop_inner(dir.path()).unwrap();
 
@@ -297,6 +317,7 @@ mod tests {
     fn run_project_loop_keeps_direct_issues_out_of_project_scheduler() {
         let dir = tempdir().unwrap();
         write_direct_backlog_issue(dir.path());
+        init_git_repo(dir.path());
 
         let summary = run_project_loop_inner(dir.path()).unwrap();
 
