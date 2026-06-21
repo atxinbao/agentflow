@@ -87,6 +87,8 @@ pub struct RuntimeDecisionFact {
     pub status: String,
     pub decision: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocking_proposal_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted_action_id: Option<String>,
     #[serde(default)]
     pub rejected_reasons: Vec<String>,

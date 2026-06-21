@@ -1051,7 +1051,12 @@ fn contract(
         expected_events,
         expected_links: expected_links.into_iter().map(str::to_string).collect(),
         idempotency: ActionIdempotencyPolicy { required: true },
-        conflict_scope_hint: None,
+        conflict_scope_hint: match action_type {
+            "claimIssue" | "startRun" | "markIssueDone" => Some("issue".to_string()),
+            "writePatch" | "runValidation" | "prepareDelivery" | "submitEvidence"
+            | "submitArtifact" => Some("run".to_string()),
+            _ => None,
+        },
         approval_hint: ActionApprovalHint {
             human_approval_required: matches!(
                 action_type,

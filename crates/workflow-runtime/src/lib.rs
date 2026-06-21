@@ -30,8 +30,8 @@ pub use runtime::{
 pub use storage::{
     load_runtime_accepted_action_fact, load_runtime_accepted_action_facts,
     load_runtime_command_bundle, load_runtime_command_fact, load_runtime_decision_fact,
-    load_runtime_proposal_fact, prepare_runtime_workspace, runtime_accepted_action_fact_path,
-    runtime_command_fact_path, runtime_decision_fact_path, runtime_proposal_fact_path,
-    write_runtime_accepted_action_fact, write_runtime_command_fact, write_runtime_decision_fact,
-    write_runtime_proposal_fact,
+    load_runtime_decision_facts, load_runtime_proposal_fact, load_runtime_proposal_facts,
+    prepare_runtime_workspace, runtime_accepted_action_fact_path, runtime_command_fact_path,
+    runtime_decision_fact_path, runtime_proposal_fact_path, write_runtime_accepted_action_fact,
+    write_runtime_command_fact, write_runtime_decision_fact, write_runtime_proposal_fact,
 };

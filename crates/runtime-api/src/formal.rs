@@ -501,6 +501,9 @@ fn build_action_proposal_bridge_record(
             status: match arbitration.status.as_str() {
                 "accepted" => RuntimeCommandStatus::Accepted,
                 "human-decision-required" => RuntimeCommandStatus::HumanDecisionRequired,
+                "queued" => RuntimeCommandStatus::Queued,
+                "superseded" => RuntimeCommandStatus::Superseded,
+                "cancelled" => RuntimeCommandStatus::Cancelled,
                 "invalid-command" => RuntimeCommandStatus::InvalidCommand,
                 _ => RuntimeCommandStatus::Rejected,
             },
@@ -509,6 +512,9 @@ fn build_action_proposal_bridge_record(
                 "human-decision-required" => {
                     crate::responses::RuntimeCommandDecision::HumanDecisionRequired
                 }
+                "queued" => crate::responses::RuntimeCommandDecision::Queued,
+                "superseded" => crate::responses::RuntimeCommandDecision::Superseded,
+                "cancelled" => crate::responses::RuntimeCommandDecision::Cancelled,
                 "invalid-command" => crate::responses::RuntimeCommandDecision::InvalidCommand,
                 _ => crate::responses::RuntimeCommandDecision::Rejected,
             },
@@ -805,6 +811,9 @@ fn runtime_command_status_str(status: &RuntimeCommandStatus) -> &'static str {
         RuntimeCommandStatus::Accepted => "accepted",
         RuntimeCommandStatus::Rejected => "rejected",
         RuntimeCommandStatus::HumanDecisionRequired => "human-decision-required",
+        RuntimeCommandStatus::Queued => "queued",
+        RuntimeCommandStatus::Superseded => "superseded",
+        RuntimeCommandStatus::Cancelled => "cancelled",
         RuntimeCommandStatus::InvalidCommand => "invalid-command",
     }
 }

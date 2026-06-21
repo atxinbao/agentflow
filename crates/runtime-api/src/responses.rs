@@ -11,6 +11,9 @@ pub enum RuntimeCommandStatus {
     Accepted,
     Rejected,
     HumanDecisionRequired,
+    Queued,
+    Superseded,
+    Cancelled,
     InvalidCommand,
 }
 
@@ -20,6 +23,9 @@ pub enum RuntimeCommandDecision {
     Accepted,
     Rejected,
     HumanDecisionRequired,
+    Queued,
+    Superseded,
+    Cancelled,
     InvalidCommand,
 }
 
