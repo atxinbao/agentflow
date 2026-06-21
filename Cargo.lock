@@ -142,6 +142,7 @@ version = "0.5.1"
 dependencies = [
  "agentflow-event-store",
  "agentflow-projection",
+ "agentflow-task-artifacts",
  "agentflow-workflow-core",
  "anyhow",
  "serde",

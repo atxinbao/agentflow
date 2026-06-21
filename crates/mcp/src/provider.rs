@@ -230,6 +230,7 @@ pub fn spawn_exit_watcher(
         session.pid = None;
         session.process_group_id = None;
         session.updated_at = exited_at;
+        session.last_heartbeat_at = exited_at;
         if final_status == "cancelled" {
             session.status = McpSessionStatus::Cancelled;
             session
@@ -526,7 +527,9 @@ pub trait McpAgentProvider: Send + Sync {
     fn cancel_session(&self, project_root: &Path, session_id: &str) -> Result<McpSessionSnapshot> {
         let mut session = read_session_snapshot(project_root, session_id)?;
         session.status = McpSessionStatus::Cancelled;
-        session.updated_at = unix_timestamp_seconds();
+        let now = unix_timestamp_seconds();
+        session.updated_at = now;
+        session.last_heartbeat_at = now;
         write_session_snapshot(project_root, &session)?;
         Ok(session)
     }

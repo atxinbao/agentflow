@@ -495,6 +495,7 @@ impl McpAgentProvider for CodexProvider {
         session.governance_facts.cancelled_at = None;
         session.note = plan.note.clone();
         session.updated_at = now;
+        session.last_heartbeat_at = now;
         let child = match command.spawn().with_context(|| {
             format!(
                 "spawn codex session for issue {} run {}",
@@ -651,6 +652,7 @@ impl McpAgentProvider for CodexProvider {
                 McpSessionStatus::Cancelled | McpSessionStatus::Done
             );
         session.updated_at = now;
+        session.last_heartbeat_at = now;
         write_session_snapshot(project_root, &session)?;
         Ok(session)
     }
@@ -703,6 +705,7 @@ impl McpAgentProvider for CodexProvider {
         let now = unix_timestamp_seconds();
         session.status = McpSessionStatus::Cancelled;
         session.updated_at = now;
+        session.last_heartbeat_at = now;
         session.last_error = None;
         session.governance_facts.cancel_requested_at = Some(now);
         if terminated {

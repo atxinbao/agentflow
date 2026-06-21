@@ -581,6 +581,7 @@ fn session_event_payload(
         "missingDegradedCapabilities".to_string(),
         json!(selection.missing_degraded_capabilities),
     );
+    payload.insert("ownerId".to_string(), json!(session.owner_id));
     payload.insert("sessionId".to_string(), json!(session.session_id));
     payload.insert("sessionStatus".to_string(), json!(session.status.as_str()));
     payload.insert("attemptCount".to_string(), json!(attempt_count));
@@ -623,6 +624,11 @@ fn session_event_payload(
     payload.insert(
         "supervisionMode".to_string(),
         json!(session.supervision_mode),
+    );
+    payload.insert("startedAt".to_string(), json!(session.started_at));
+    payload.insert(
+        "lastHeartbeatAt".to_string(),
+        json!(session.last_heartbeat_at),
     );
     payload.insert(
         "governancePolicyVersion".to_string(),

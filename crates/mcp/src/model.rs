@@ -586,6 +586,7 @@ pub struct McpSessionSnapshot {
     pub project_id: Option<String>,
     pub run_id: String,
     pub session_id: String,
+    pub owner_id: String,
     pub status: McpSessionStatus,
     pub launch_mode: McpLaunchMode,
     pub working_directory: String,
@@ -641,6 +642,8 @@ pub struct McpSessionSnapshot {
     pub sandbox_mode: Option<String>,
     #[serde(default)]
     pub supervision_mode: Option<String>,
+    pub started_at: u64,
+    pub last_heartbeat_at: u64,
     #[serde(default)]
     pub exited_at: Option<u64>,
     #[serde(default)]
@@ -668,6 +671,7 @@ impl McpSessionSnapshot {
             project_id: request.project_id.clone(),
             run_id: request.run_id.clone(),
             session_id: plan.session_id.clone(),
+            owner_id: request.agent_role.clone(),
             status: McpSessionStatus::Queued,
             launch_mode: plan.launch_mode.clone(),
             working_directory: plan.working_directory.clone(),
@@ -698,6 +702,8 @@ impl McpSessionSnapshot {
             approval_policy: plan.approval_policy.clone(),
             sandbox_mode: plan.sandbox_mode.clone(),
             supervision_mode: plan.supervision_mode.clone(),
+            started_at: created_at,
+            last_heartbeat_at: created_at,
             exited_at: None,
             exit_code: None,
             governance_policy,

@@ -3,6 +3,9 @@ use crate::{
     model::{McpLaunchPlan, McpProviderStatus, McpRegistry, McpSessionSnapshot},
     registry::build_registry,
 };
+use agentflow_task_artifacts::{
+    sync_task_session, task_run_dir, TaskSessionMirror, TaskWorkSessionStatus,
+};
 use anyhow::{Context, Result};
 use std::{
     fs,
@@ -82,6 +85,7 @@ pub fn write_session_snapshot(
     prepare_mcp_workspace(&root)?;
     let path = session_snapshot_path(&root, &session.session_id);
     write_json(&path, session)?;
+    sync_task_session_if_present(&root, session)?;
     Ok(path)
 }
 
@@ -157,6 +161,64 @@ fn canonical_project_root(project_root: impl AsRef<Path>) -> Result<PathBuf> {
         .as_ref()
         .canonicalize()
         .with_context(|| format!("canonicalize {}", project_root.as_ref().display()))
+}
+
+fn sync_task_session_if_present(root: &Path, session: &McpSessionSnapshot) -> Result<()> {
+    let run_directory = task_run_dir(root, &session.issue_id, &session.run_id)?;
+    if !run_directory.join("run.json").is_file() {
+        return Ok(());
+    }
+    let mirror = TaskSessionMirror {
+        provider: session.provider.clone(),
+        session_owner: session.owner_id.clone(),
+        session_id: session.session_id.clone(),
+        status: task_session_status(&session.status),
+        branch_name: session.branch_name.clone(),
+        working_directory: session.working_directory.clone(),
+        workspace_root: session.workspace_root.clone(),
+        worktree_root: session.worktree_root.clone(),
+        runtime_root: session.runtime_root.clone(),
+        temp_root: session.temp_root.clone(),
+        cache_root: session.cache_root.clone(),
+        evidence_root: session.evidence_root.clone(),
+        launch_request_path: session.launch_request_path.clone(),
+        plan_path: session.plan_path.clone(),
+        log_path: session.log_path.clone(),
+        last_message_path: session.last_message_path.clone(),
+        exit_proof_path: session.exit_proof_path.clone(),
+        merge_proof_path: session.merge_proof_path.clone(),
+        started_at: session.started_at,
+        last_heartbeat_at: session.last_heartbeat_at,
+        attempt_count: session.attempt_count,
+        retry_policy: Some(session.governance_policy.retry_policy.clone()),
+        max_attempts: Some(session.governance_policy.max_attempts),
+        resumed_from_attempt: session.governance_facts.resumed_from_attempt,
+        retryable: session.governance_facts.retryable,
+        recovery_reason: session.recovery_reason.clone(),
+        merge_state: session.merge_state.clone(),
+        writeback_state: session.writeback_state.clone(),
+        terminal_reason: session.governance_facts.terminal_reason.clone(),
+        last_error: session.last_error.clone(),
+        exited_at: session.exited_at,
+        exit_code: session.exit_code,
+        updated_at: session.updated_at,
+    };
+    let _ = sync_task_session(root, &session.issue_id, &session.run_id, &mirror)?;
+    Ok(())
+}
+
+fn task_session_status(status: &crate::model::McpSessionStatus) -> TaskWorkSessionStatus {
+    match status {
+        crate::model::McpSessionStatus::Queued => TaskWorkSessionStatus::Queued,
+        crate::model::McpSessionStatus::Claimed => TaskWorkSessionStatus::Claimed,
+        crate::model::McpSessionStatus::Starting => TaskWorkSessionStatus::Starting,
+        crate::model::McpSessionStatus::Running => TaskWorkSessionStatus::Running,
+        crate::model::McpSessionStatus::InReview => TaskWorkSessionStatus::InReview,
+        crate::model::McpSessionStatus::Done => TaskWorkSessionStatus::Done,
+        crate::model::McpSessionStatus::Interrupted => TaskWorkSessionStatus::Interrupted,
+        crate::model::McpSessionStatus::Failed => TaskWorkSessionStatus::Failed,
+        crate::model::McpSessionStatus::Cancelled => TaskWorkSessionStatus::Cancelled,
+    }
 }
 
 fn ensure_directory(path: &Path) -> Result<()> {
@@ -235,6 +297,14 @@ mod tests {
     #[test]
     fn writes_launch_plan_and_session_snapshot() {
         let dir = tempdir().unwrap();
+        agentflow_task_artifacts::create_task_run(
+            dir.path(),
+            "AF-001",
+            "run-001",
+            "work-agent.issue-loop@v1",
+            Some("agentflow/proj-001/AF-001".to_string()),
+        )
+        .unwrap();
         let mut plan = McpLaunchPlan::new(
             "codex",
             "codex-run-001",
@@ -256,6 +326,7 @@ mod tests {
             project_id: Some("proj-001".to_string()),
             run_id: "run-001".to_string(),
             session_id: "codex-run-001".to_string(),
+            owner_id: "work-agent".to_string(),
             status: McpSessionStatus::Queued,
             launch_mode: McpLaunchMode::CliExecStdin,
             working_directory: dir.path().display().to_string(),
@@ -311,6 +382,8 @@ mod tests {
             approval_policy: Some("never".to_string()),
             sandbox_mode: Some("workspace-write".to_string()),
             supervision_mode: Some("local-process-watch".to_string()),
+            started_at: 1,
+            last_heartbeat_at: 1,
             exited_at: None,
             exit_code: None,
             governance_policy: McpSessionGovernancePolicy::default(),
@@ -328,6 +401,10 @@ mod tests {
         let loaded = load_session_snapshots(dir.path()).unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].session_id, "codex-run-001");
+        let mirrored_run =
+            agentflow_task_artifacts::load_task_run(dir.path(), "AF-001", "run-001").unwrap();
+        assert_eq!(mirrored_run.session_owner.as_deref(), Some("work-agent"));
+        assert_eq!(mirrored_run.session_id.as_deref(), Some("codex-run-001"));
         assert_eq!(
             find_session_snapshot_by_run(dir.path(), "run-001")
                 .unwrap()

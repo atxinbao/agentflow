@@ -9,6 +9,9 @@ pub const TASK_EVIDENCE_VERSION: &str = "task-evidence.v1";
 pub const TASK_EVIDENCE_GATE_VERSION: &str = "task-evidence-gate.v1";
 pub const TASK_PREFLIGHT_VERSION: &str = "task-preflight.v1";
 pub const TASK_RUN_CHECKPOINT_VERSION: &str = "task-run-checkpoint.v1";
+pub const TASK_WORK_SESSION_VERSION: &str = "task-work-session.v1";
+pub const TASK_WORK_SESSION_RECOVERY_VERSION: &str = "task-work-session-recovery.v1";
+pub const TASK_WORK_SESSION_EVIDENCE_VERSION: &str = "task-work-session-evidence.v1";
 pub const WORK_LOOP_FILESYSTEM_CONTRACT_VERSION: &str = "work-loop-filesystem-contract.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,9 +35,215 @@ pub struct TaskRun {
     pub status: TaskRunStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_status: Option<String>,
     pub branch_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_directory: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temp_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch_request_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_message_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_proof_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_proof_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_heartbeat_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attempt_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_policy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_attempts: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_attempt: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retryable: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writeback_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exited_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
     pub created_at: u64,
     pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskWorkSessionStatus {
+    Queued,
+    Claimed,
+    Starting,
+    Running,
+    InReview,
+    Done,
+    Interrupted,
+    Failed,
+    Cancelled,
+}
+
+impl TaskWorkSessionStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Claimed => "claimed",
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::InReview => "in_review",
+            Self::Done => "done",
+            Self::Interrupted => "interrupted",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskWorkSessionRecord {
+    pub version: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub session_id: String,
+    pub provider: String,
+    pub session_owner: String,
+    pub status: TaskWorkSessionStatus,
+    pub attempt_count: u32,
+    pub working_directory: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temp_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_root: Option<String>,
+    pub launch_request_path: String,
+    pub plan_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_message_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_proof_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_proof_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_name: Option<String>,
+    pub started_at: u64,
+    pub last_heartbeat_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_policy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_attempts: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_attempt: Option<u32>,
+    pub retryable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writeback_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exited_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskWorkSessionRecoverySummary {
+    pub version: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub session_id: String,
+    pub provider: String,
+    pub session_owner: String,
+    pub status: TaskWorkSessionStatus,
+    pub attempt_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_attempt: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_policy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_attempts: Option<u32>,
+    pub retryable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskWorkSessionEvidence {
+    pub version: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub session_id: String,
+    pub provider: String,
+    pub session_owner: String,
+    pub status: TaskWorkSessionStatus,
+    pub summary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writeback_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refs: Vec<String>,
+    pub generated_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

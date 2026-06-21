@@ -1,12 +1,14 @@
 use crate::model::{
     TaskChangedFile, TaskChangedFilesRecord, TaskCommandInput, TaskCommandRecord, TaskEvidence,
     TaskEvidenceEntry, TaskEvidenceEntryStatus, TaskEvidenceGateDecision, TaskPreflightDecision,
-    TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord, WorkLoopArtifactClass,
-    WorkLoopArtifactContract, WorkLoopFilesystemContract, WorkLoopRoleAlias, WorkLoopStage,
-    WorkLoopStageContract, TASK_CHANGED_FILES_VERSION, TASK_COMMAND_VERSION,
+    TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord, TaskWorkSessionEvidence,
+    TaskWorkSessionRecord, TaskWorkSessionRecoverySummary, TaskWorkSessionStatus,
+    WorkLoopArtifactClass, WorkLoopArtifactContract, WorkLoopFilesystemContract, WorkLoopRoleAlias,
+    WorkLoopStage, WorkLoopStageContract, TASK_CHANGED_FILES_VERSION, TASK_COMMAND_VERSION,
     TASK_EVIDENCE_GATE_VERSION, TASK_EVIDENCE_VERSION, TASK_PREFLIGHT_VERSION,
     TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION, TASK_VALIDATION_VERSION,
-    WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
+    TASK_WORK_SESSION_EVIDENCE_VERSION, TASK_WORK_SESSION_RECOVERY_VERSION,
+    TASK_WORK_SESSION_VERSION, WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
 };
 use agentflow_event_store::TaskReplayCursor;
 use agentflow_workflow_core::{
@@ -97,6 +99,43 @@ pub fn task_preflight_path(
         .join("preflight.json"))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskSessionMirror {
+    pub provider: String,
+    pub session_owner: String,
+    pub session_id: String,
+    pub status: TaskWorkSessionStatus,
+    pub branch_name: Option<String>,
+    pub working_directory: String,
+    pub workspace_root: Option<String>,
+    pub worktree_root: Option<String>,
+    pub runtime_root: Option<String>,
+    pub temp_root: Option<String>,
+    pub cache_root: Option<String>,
+    pub evidence_root: Option<String>,
+    pub launch_request_path: String,
+    pub plan_path: String,
+    pub log_path: Option<String>,
+    pub last_message_path: Option<String>,
+    pub exit_proof_path: Option<String>,
+    pub merge_proof_path: Option<String>,
+    pub started_at: u64,
+    pub last_heartbeat_at: u64,
+    pub attempt_count: u32,
+    pub retry_policy: Option<String>,
+    pub max_attempts: Option<u32>,
+    pub resumed_from_attempt: Option<u32>,
+    pub retryable: bool,
+    pub recovery_reason: Option<String>,
+    pub merge_state: Option<String>,
+    pub writeback_state: Option<String>,
+    pub terminal_reason: Option<String>,
+    pub last_error: Option<String>,
+    pub exited_at: Option<u64>,
+    pub exit_code: Option<i32>,
+    pub updated_at: u64,
+}
+
 pub fn write_task_preflight_decision(
     project_root: impl AsRef<Path>,
     issue_id: &str,
@@ -170,7 +209,38 @@ pub fn create_task_run(
         workflow_ref: workflow_ref.to_string(),
         status: TaskRunStatus::Queued,
         base_commit: git_head_commit(&root).ok(),
+        provider: None,
+        session_owner: None,
+        session_id: None,
+        session_status: None,
         branch_name,
+        working_directory: None,
+        workspace_root: None,
+        worktree_root: None,
+        runtime_root: None,
+        temp_root: None,
+        cache_root: None,
+        evidence_root: None,
+        launch_request_path: None,
+        plan_path: None,
+        log_path: None,
+        last_message_path: None,
+        exit_proof_path: None,
+        merge_proof_path: None,
+        started_at: None,
+        last_heartbeat_at: None,
+        attempt_count: None,
+        retry_policy: None,
+        max_attempts: None,
+        resumed_from_attempt: None,
+        retryable: None,
+        recovery_reason: None,
+        merge_state: None,
+        writeback_state: None,
+        terminal_reason: None,
+        last_error: None,
+        exited_at: None,
+        exit_code: None,
         created_at: now,
         updated_at: now,
     };
@@ -201,6 +271,158 @@ pub fn update_task_run_status(
     run.status = status;
     run.updated_at = unix_timestamp_seconds();
     write_json(&path, &run)?;
+    Ok(run)
+}
+
+pub fn sync_task_session(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+    session: &TaskSessionMirror,
+) -> Result<TaskRun> {
+    let root = canonicalize_project_root(project_root)?;
+    let mut run = load_task_run(&root, issue_id, run_id)?;
+    run.provider = Some(session.provider.clone());
+    run.session_owner = Some(session.session_owner.clone());
+    run.session_id = Some(session.session_id.clone());
+    run.session_status = Some(session.status.as_str().to_string());
+    run.branch_name = session
+        .branch_name
+        .clone()
+        .or_else(|| run.branch_name.clone());
+    run.working_directory = Some(session.working_directory.clone());
+    run.workspace_root = session.workspace_root.clone();
+    run.worktree_root = session.worktree_root.clone();
+    run.runtime_root = session.runtime_root.clone();
+    run.temp_root = session.temp_root.clone();
+    run.cache_root = session.cache_root.clone();
+    run.evidence_root = session.evidence_root.clone();
+    run.launch_request_path = Some(session.launch_request_path.clone());
+    run.plan_path = Some(session.plan_path.clone());
+    run.log_path = session.log_path.clone();
+    run.last_message_path = session.last_message_path.clone();
+    run.exit_proof_path = session.exit_proof_path.clone();
+    run.merge_proof_path = session.merge_proof_path.clone();
+    run.started_at = Some(session.started_at);
+    run.last_heartbeat_at = Some(session.last_heartbeat_at);
+    run.attempt_count = Some(session.attempt_count);
+    run.retry_policy = session.retry_policy.clone();
+    run.max_attempts = session.max_attempts;
+    run.resumed_from_attempt = session.resumed_from_attempt;
+    run.retryable = Some(session.retryable);
+    run.recovery_reason = session.recovery_reason.clone();
+    run.merge_state = session.merge_state.clone();
+    run.writeback_state = session.writeback_state.clone();
+    run.terminal_reason = session.terminal_reason.clone();
+    run.last_error = session.last_error.clone();
+    run.exited_at = session.exited_at;
+    run.exit_code = session.exit_code;
+    run.updated_at = session.updated_at.max(run.updated_at);
+
+    let run_path = task_run_dir_under_root(&root, issue_id, run_id)?.join("run.json");
+    write_json(&run_path, &run)?;
+
+    let record = TaskWorkSessionRecord {
+        version: TASK_WORK_SESSION_VERSION.to_string(),
+        issue_id: issue_id.to_string(),
+        run_id: run_id.to_string(),
+        session_id: session.session_id.clone(),
+        provider: session.provider.clone(),
+        session_owner: session.session_owner.clone(),
+        status: session.status.clone(),
+        attempt_count: session.attempt_count,
+        working_directory: session.working_directory.clone(),
+        workspace_root: session.workspace_root.clone(),
+        worktree_root: session.worktree_root.clone(),
+        runtime_root: session.runtime_root.clone(),
+        temp_root: session.temp_root.clone(),
+        cache_root: session.cache_root.clone(),
+        evidence_root: session.evidence_root.clone(),
+        launch_request_path: session.launch_request_path.clone(),
+        plan_path: session.plan_path.clone(),
+        log_path: session.log_path.clone(),
+        last_message_path: session.last_message_path.clone(),
+        exit_proof_path: session.exit_proof_path.clone(),
+        merge_proof_path: session.merge_proof_path.clone(),
+        branch_name: session.branch_name.clone(),
+        started_at: session.started_at,
+        last_heartbeat_at: session.last_heartbeat_at,
+        retry_policy: session.retry_policy.clone(),
+        max_attempts: session.max_attempts,
+        resumed_from_attempt: session.resumed_from_attempt,
+        retryable: session.retryable,
+        recovery_reason: session.recovery_reason.clone(),
+        merge_state: session.merge_state.clone(),
+        writeback_state: session.writeback_state.clone(),
+        terminal_reason: session.terminal_reason.clone(),
+        last_error: session.last_error.clone(),
+        exited_at: session.exited_at,
+        exit_code: session.exit_code,
+        created_at: session.started_at,
+        updated_at: session.updated_at,
+    };
+    write_json(
+        &task_session_history_path_under_root(&root, issue_id, run_id, &session.session_id)?,
+        &record,
+    )?;
+
+    let recovery = TaskWorkSessionRecoverySummary {
+        version: TASK_WORK_SESSION_RECOVERY_VERSION.to_string(),
+        issue_id: issue_id.to_string(),
+        run_id: run_id.to_string(),
+        session_id: session.session_id.clone(),
+        provider: session.provider.clone(),
+        session_owner: session.session_owner.clone(),
+        status: session.status.clone(),
+        attempt_count: session.attempt_count,
+        resumed_from_attempt: session.resumed_from_attempt,
+        recovery_reason: session.recovery_reason.clone(),
+        retry_policy: session.retry_policy.clone(),
+        max_attempts: session.max_attempts,
+        retryable: session.retryable,
+        terminal_reason: session.terminal_reason.clone(),
+        last_error: session.last_error.clone(),
+        updated_at: session.updated_at,
+    };
+    write_json(
+        &task_session_recovery_summary_path_under_root(&root, issue_id, run_id)?,
+        &recovery,
+    )?;
+
+    let mut refs = Vec::new();
+    if let Some(path) = session.log_path.clone() {
+        refs.push(path);
+    }
+    if let Some(path) = session.last_message_path.clone() {
+        refs.push(path);
+    }
+    if let Some(path) = session.exit_proof_path.clone() {
+        refs.push(path);
+    }
+    if let Some(path) = session.merge_proof_path.clone() {
+        refs.push(path);
+    }
+    let evidence = TaskWorkSessionEvidence {
+        version: TASK_WORK_SESSION_EVIDENCE_VERSION.to_string(),
+        issue_id: issue_id.to_string(),
+        run_id: run_id.to_string(),
+        session_id: session.session_id.clone(),
+        provider: session.provider.clone(),
+        session_owner: session.session_owner.clone(),
+        status: session.status.clone(),
+        summary: session_evidence_summary(session),
+        merge_state: session.merge_state.clone(),
+        writeback_state: session.writeback_state.clone(),
+        terminal_reason: session.terminal_reason.clone(),
+        last_error: session.last_error.clone(),
+        refs,
+        generated_at: session.updated_at,
+    };
+    write_json(
+        &task_session_evidence_path_under_root(&root, issue_id, run_id)?,
+        &evidence,
+    )?;
+
     Ok(run)
 }
 
@@ -625,6 +847,68 @@ pub fn load_task_validation(
 ) -> Result<TaskValidationRecord> {
     let root = canonicalize_project_root(project_root)?;
     read_json(&task_run_dir_under_root(&root, issue_id, run_id)?.join("validation.json"))
+}
+
+pub fn task_session_history_path(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+    session_id: &str,
+) -> Result<PathBuf> {
+    let root = canonicalize_project_root(project_root)?;
+    task_session_history_path_under_root(&root, issue_id, run_id, session_id)
+}
+
+pub fn task_session_recovery_summary_path(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<PathBuf> {
+    let root = canonicalize_project_root(project_root)?;
+    task_session_recovery_summary_path_under_root(&root, issue_id, run_id)
+}
+
+pub fn task_session_evidence_path(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<PathBuf> {
+    let root = canonicalize_project_root(project_root)?;
+    task_session_evidence_path_under_root(&root, issue_id, run_id)
+}
+
+pub fn load_task_session_history_record(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+    session_id: &str,
+) -> Result<TaskWorkSessionRecord> {
+    let root = canonicalize_project_root(project_root)?;
+    read_json(task_session_history_path_under_root(
+        &root, issue_id, run_id, session_id,
+    )?)
+}
+
+pub fn load_task_session_recovery_summary(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<TaskWorkSessionRecoverySummary> {
+    let root = canonicalize_project_root(project_root)?;
+    read_json(task_session_recovery_summary_path_under_root(
+        &root, issue_id, run_id,
+    )?)
+}
+
+pub fn load_task_session_evidence(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<TaskWorkSessionEvidence> {
+    let root = canonicalize_project_root(project_root)?;
+    read_json(task_session_evidence_path_under_root(
+        &root, issue_id, run_id,
+    )?)
 }
 
 fn load_command_records(
@@ -1167,6 +1451,38 @@ fn task_evidence_dir_under_root(root: &Path, issue_id: &str) -> Result<PathBuf> 
     Ok(task_issue_dir(root, issue_id)?.join("evidence"))
 }
 
+fn task_session_dir_under_root(root: &Path, issue_id: &str, run_id: &str) -> Result<PathBuf> {
+    Ok(task_run_dir_under_root(root, issue_id, run_id)?.join("session"))
+}
+
+fn task_session_history_path_under_root(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+    session_id: &str,
+) -> Result<PathBuf> {
+    validate_safe_local_id("sessionId", session_id)?;
+    Ok(task_session_dir_under_root(root, issue_id, run_id)?
+        .join("history")
+        .join(format!("{session_id}.json")))
+}
+
+fn task_session_recovery_summary_path_under_root(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<PathBuf> {
+    Ok(task_session_dir_under_root(root, issue_id, run_id)?.join("recovery-summary.json"))
+}
+
+fn task_session_evidence_path_under_root(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<PathBuf> {
+    Ok(task_session_dir_under_root(root, issue_id, run_id)?.join("evidence.json"))
+}
+
 fn relative_command_path(
     issue_id: &str,
     run_id: &str,
@@ -1212,6 +1528,42 @@ fn validate_required(field: &str, value: &str) -> Result<()> {
         anyhow::bail!("{field} is required");
     }
     Ok(())
+}
+
+fn session_evidence_summary(session: &TaskSessionMirror) -> String {
+    match session.status {
+        TaskWorkSessionStatus::Queued => "执行会话已排队，等待外部 Agent 接管。".to_string(),
+        TaskWorkSessionStatus::Claimed => {
+            "执行会话已被调度器认领，等待外部 Agent 启动。".to_string()
+        }
+        TaskWorkSessionStatus::Starting => "执行会话正在启动外部 Agent。".to_string(),
+        TaskWorkSessionStatus::Running => "执行会话正在运行，日志和证据持续写入中。".to_string(),
+        TaskWorkSessionStatus::InReview => session
+            .writeback_state
+            .as_ref()
+            .map(|state| format!("执行会话已进入评审阶段，写回状态：{state}。"))
+            .unwrap_or_else(|| "执行会话已进入评审阶段。".to_string()),
+        TaskWorkSessionStatus::Done => session
+            .writeback_state
+            .as_ref()
+            .map(|state| format!("执行会话已完成，写回状态：{state}。"))
+            .unwrap_or_else(|| "执行会话已完成。".to_string()),
+        TaskWorkSessionStatus::Interrupted => session
+            .recovery_reason
+            .as_ref()
+            .map(|reason| format!("执行会话已中断，恢复原因：{reason}。"))
+            .unwrap_or_else(|| "执行会话已中断，等待恢复。".to_string()),
+        TaskWorkSessionStatus::Failed => session
+            .last_error
+            .as_ref()
+            .map(|error| format!("执行会话失败：{error}"))
+            .unwrap_or_else(|| "执行会话失败。".to_string()),
+        TaskWorkSessionStatus::Cancelled => session
+            .terminal_reason
+            .as_ref()
+            .map(|reason| format!("执行会话已取消：{reason}。"))
+            .unwrap_or_else(|| "执行会话已取消。".to_string()),
+    }
 }
 
 fn ensure_directory(path: &Path) -> Result<()> {
@@ -1398,6 +1750,109 @@ mod tests {
         assert_eq!(updated.status, TaskRunStatus::Completed);
         let loaded = load_task_run(dir.path(), "AF-TASK-001", "run-001").unwrap();
         assert_eq!(loaded.status, TaskRunStatus::Completed);
+    }
+
+    #[test]
+    fn syncs_durable_work_session_and_preserves_retry_history() {
+        let dir = tempdir().unwrap();
+        create_task_run(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            "work-agent.issue-loop@v1",
+            Some("agentflow/direct/AF-TASK-001".to_string()),
+        )
+        .unwrap();
+
+        let first = TaskSessionMirror {
+            provider: "codex".to_string(),
+            session_owner: "work-agent".to_string(),
+            session_id: "codex-run-001-attempt-1".to_string(),
+            status: TaskWorkSessionStatus::Running,
+            branch_name: Some("agentflow/direct/AF-TASK-001".to_string()),
+            working_directory: "/repo".to_string(),
+            workspace_root: Some("/repo".to_string()),
+            worktree_root: Some("/repo/.agentflow/runtime/worktrees/run-001".to_string()),
+            runtime_root: Some("/repo/.agentflow/runtime".to_string()),
+            temp_root: Some("/repo/.agentflow/runtime/tmp".to_string()),
+            cache_root: Some("/repo/.agentflow/runtime/cache".to_string()),
+            evidence_root: Some("/repo/.agentflow/tasks/AF-TASK-001/evidence".to_string()),
+            launch_request_path:
+                ".agentflow/tasks/AF-TASK-001/runs/run-001/launch/agent-request.json".to_string(),
+            plan_path: ".agentflow/state/mcp/plans/codex-run-001-attempt-1.json".to_string(),
+            log_path: Some(".agentflow/runtime/logs/codex-run-001-attempt-1.log".to_string()),
+            last_message_path: None,
+            exit_proof_path: Some(
+                ".agentflow/runtime/exits/codex-run-001-attempt-1.json".to_string(),
+            ),
+            merge_proof_path: None,
+            started_at: 100,
+            last_heartbeat_at: 120,
+            attempt_count: 1,
+            retry_policy: Some("bounded-retry".to_string()),
+            max_attempts: Some(3),
+            resumed_from_attempt: None,
+            retryable: true,
+            recovery_reason: None,
+            merge_state: None,
+            writeback_state: Some("awaiting-complete".to_string()),
+            terminal_reason: None,
+            last_error: None,
+            exited_at: None,
+            exit_code: None,
+            updated_at: 120,
+        };
+        sync_task_session(dir.path(), "AF-TASK-001", "run-001", &first).unwrap();
+
+        let retry = TaskSessionMirror {
+            session_id: "codex-run-001-attempt-2".to_string(),
+            status: TaskWorkSessionStatus::Interrupted,
+            last_heartbeat_at: 240,
+            attempt_count: 2,
+            resumed_from_attempt: Some(1),
+            recovery_reason: Some("retry after failed session".to_string()),
+            last_error: Some("provider timeout".to_string()),
+            updated_at: 240,
+            ..first
+        };
+        sync_task_session(dir.path(), "AF-TASK-001", "run-001", &retry).unwrap();
+
+        let run = load_task_run(dir.path(), "AF-TASK-001", "run-001").unwrap();
+        assert_eq!(run.session_id.as_deref(), Some("codex-run-001-attempt-2"));
+        assert_eq!(run.session_status.as_deref(), Some("interrupted"));
+        assert_eq!(run.attempt_count, Some(2));
+        assert_eq!(run.last_heartbeat_at, Some(240));
+
+        let history_first = load_task_session_history_record(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            "codex-run-001-attempt-1",
+        )
+        .unwrap();
+        let history_retry = load_task_session_history_record(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            "codex-run-001-attempt-2",
+        )
+        .unwrap();
+        assert_eq!(history_first.attempt_count, 1);
+        assert_eq!(history_retry.attempt_count, 2);
+        assert_eq!(history_retry.resumed_from_attempt, Some(1));
+
+        let recovery =
+            load_task_session_recovery_summary(dir.path(), "AF-TASK-001", "run-001").unwrap();
+        assert_eq!(
+            recovery.recovery_reason.as_deref(),
+            Some("retry after failed session")
+        );
+        assert_eq!(recovery.resumed_from_attempt, Some(1));
+
+        let evidence = load_task_session_evidence(dir.path(), "AF-TASK-001", "run-001").unwrap();
+        assert_eq!(evidence.status, TaskWorkSessionStatus::Interrupted);
+        assert!(evidence.summary.contains("retry after failed session"));
+        assert!(evidence.refs.iter().any(|item| item.ends_with(".log")));
     }
 
     #[test]
