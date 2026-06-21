@@ -1,6 +1,6 @@
 # AgentFlow v0.6.0 Work Loop Handoff Tasks V1
 
-日期：2026-06-20
+日期：2026-06-21
 执行者：Codex
 状态：Version Planning Draft / 开发前置文档 / 不授权 Build Agent 执行
 
@@ -10,21 +10,41 @@
 
 `v0.6.0` 的核心目标不是重新做 Spec Loop，也不是直接做完整多 Agent 平台。
 
-它要完成这一条链：
+它要完成两层链路。
+
+产品主闭环：
+
+```text
+确认任务
+-> 准入
+-> 执行
+-> 验证
+-> 证据归档
+-> 验收判定
+-> 完成写入
+-> Done
+```
+
+Runtime 详细链路：
 
 ```text
 Confirmed Spec Issue
--> Work Command
--> Work Action Proposal
--> Arbitration
--> Issue Preflight
--> Lock / Queue
+-> Work Handoff
+   - Work Command
+   - Work Action Proposal
+   - Expected Outputs
+   - Acceptance Criteria
+   - Evidence Policy
+-> Runtime Admission
+   - Arbitration
+   - Issue Preflight
+   - Lock / Queue
 -> Work Session
--> Evidence Gate
--> State Transition
--> Event Store
--> Projection
--> Done Writeback
+-> Verification Run
+-> Evidence Pack
+-> Acceptance Gate
+-> Completion Commit
+-> Done
 ```
 
 一句话：
@@ -43,6 +63,7 @@ Confirmed Spec Issue
 - 合法 Agent 行为；
 - 合法执行状态；
 - 合法证据；
+- 合法验收；
 - 合法 Done 写回；
 - 基础多 Agent proposal 仲裁。
 
@@ -70,12 +91,12 @@ Confirmed Spec Issue
 | `V060-004` | Issue Preflight Runtime Gate | `V060-003` | P0 | 否 |
 | `V060-005` | Issue / Object Lock and Lease | `V060-004` | P0 | 否 |
 | `V060-006` | Dependency Queue and Next Issue Selection | `V060-005` | P0 | 否 |
-| `V060-007` | Evidence Gate and Verification Contract | `V060-004` | P0 | 否 |
+| `V060-007` | Acceptance Gate: Verification + Evidence + Contract Check | `V060-004` | P0 | 否 |
 | `V060-008` | Work State Transition Enforcement | `V060-005`, `V060-007` | P0 | 否 |
 | `V060-009` | Durable Work Session and Recovery | `V060-008` | P1 | 否 |
 | `V060-010` | Work Loop Event Model and Projection | `V060-009` | P1 | 否 |
 | `V060-011` | Controlled Multi-agent Proposal Arbitration | `V060-006`, `V060-010` | P1 | 否 |
-| `V060-012` | Done Writeback / Delivery / Audit Separation Acceptance | `V060-010`, `V060-011` | P1 | 否 |
+| `V060-012` | Acceptance Closeout: Completion Commit + Delivery Record + Optional Audit Trigger | `V060-010`, `V060-011` | P1 | 否 |
 
 ## 5. Development Tasks
 
@@ -88,7 +109,7 @@ Confirmed Spec Issue
 范围：
 
 - 定义 Work Loop / CodeFlow 的阶段边界；
-- 定义 work command、proposal、preflight、session、evidence、handoff、delivery 的文件合同；
+- 定义 work command、proposal、preflight、session、verification、evidence、acceptance、handoff、delivery 的文件合同；
 - 明确哪些文件是 authority，哪些只是 derived artifact；
 - 定义 Work Loop 与现有 `.agentflow/spec/**`、`.agentflow/tasks/**`、`.agentflow/events/**`、`.agentflow/projections/**` 的映射；
 - 明确 Build Agent / Work Agent 命名关系。
@@ -252,28 +273,36 @@ Confirmed Spec Issue
 - 不做完整项目管理 UI；
 - 不做跨项目调度。
 
-### V060-007 - Evidence Gate and Verification Contract
+### V060-007 - Acceptance Gate: Verification + Evidence + Contract Check
 
 目标：
 
-阻止没有验证证据的任务被标记为 Done。
+把验证、证据、合同和状态检查收成一个明确的 Done 判定。
 
 范围：
 
+- 定义 Acceptance Gate；
+- 定义 Verification Gate，检查验证命令或替代验证是否通过；
 - 定义 evidence 类型；
 - 定义 validation result artifact；
 - 定义 command output / test result / screenshot / PR link / merge proof 等证据规则；
+- 定义 Evidence Gate，检查 required evidence 是否完整；
+- 定义 Contract Gate，检查 issue acceptance criteria、allowedPaths、forbiddenPaths、expectedOutputs 是否满足；
+- 定义 State Gate，检查 issue / run 是否允许进入 Done；
 - 绑定 issue expectedOutputs；
-- 在 Done 前检查 required evidence；
-- 记录 evidence gate decision。
+- 在 Done 前生成 acceptance decision；
+- 记录 acceptance decision、失败原因和可修复建议。
 
 验收标准：
 
+- 验证失败不能 Done；
 - 没有 required evidence 不能 Done；
 - evidence 必须能追溯到 issue 和 run；
 - failed validation 不能被当作通过证据；
+- 未满足 issue contract 不能 Done；
+- 状态不允许时不能 Done；
 - 手动无法验证时必须记录原因和风险；
-- Evidence Gate 不自动触发 Audit。
+- Acceptance Gate 不自动触发 Audit。
 
 非目标：
 
@@ -301,7 +330,7 @@ Confirmed Spec Issue
 - issue 不能跳过 preflight 直接进入 done；
 - run 不能没有 session 就进入 completed；
 - failed / interrupted / resumed 有明确迁移规则；
-- done 必须经过 Evidence Gate；
+- done 必须经过 Acceptance Gate；
 - cancel / supersede / retry / resume 都有明确状态效果。
 
 非目标：
@@ -348,7 +377,7 @@ Confirmed Spec Issue
 范围：
 
 - 定义 Work Loop event types；
-- 覆盖 command created、proposal accepted、preflight passed、lock acquired、session started、validation recorded、state transitioned、done written 等事件；
+- 覆盖 command created、proposal accepted、preflight passed、lock acquired、session started、verification recorded、evidence packed、acceptance decided、completion committed、projection refreshed 等事件；
 - 定义 projection read model；
 - 支持按 project、issue、run、session 查询；
 - 支持 evidence summary。
@@ -359,7 +388,8 @@ Confirmed Spec Issue
 - Projection 只读；
 - UI / CLI 查询不能直接修改事实；
 - event 和 projection 能解释当前 issue 为什么处于某状态；
-- Done writeback 能被 projection 看见。
+- Completion Commit 和 Done 能被 projection 看见；
+- Projection 只能刷新只读视图，不能成为 authority。
 
 非目标：
 
@@ -397,27 +427,35 @@ Confirmed Spec Issue
 - 不做 worker autoscaling；
 - 不引入 Message Bus 作为中心主链。
 
-### V060-012 - Done Writeback / Delivery / Audit Separation Acceptance
+### V060-012 - Acceptance Closeout: Completion Commit + Delivery Record + Optional Audit Trigger
 
 目标：
 
-证明 Work Loop 能完整收尾，并保持 Delivery 与 Audit 分离。
+证明 Work Loop 在验收通过后能完成权威写入，并保持 Audit 独立。
 
 范围：
 
-- 定义 Done writeback 合同；
+- 定义 Completion Commit 合同；
+- 绑定 Acceptance Decision；
+- 追加 accepted action / issue.completed / run.completed 等权威事件；
+- 通过 Runtime 写回 issue / run status；
+- 刷新 Projection；
 - 绑定 merged PR / release note / changelog / evidence；
-- 写入 delivery summary；
-- 更新 issue / run 状态；
+- 写入 delivery record；
+- 定义 Done 后的 optional audit trigger evaluation；
 - 生成 acceptance test；
 - 验证 Done 不自动创建 audit issue；
 - 验证 explicit audit request 才进入 Audit Agent。
 
 验收标准：
 
-- Done writeback 只能在 evidence gate 通过后发生；
+- Completion Commit 只能在 Acceptance Gate 通过后发生；
+- Event Store 是权威事实入口；
+- issue / run status writeback 必须来自 accepted completion action；
+- projection refresh 只是派生视图更新；
 - delivery 有清晰证据链；
 - audit 不被 Build / Work Loop 自动触发；
+- optional audit trigger evaluation 只能输出 audit queue / no audit，不改变 Done 事实；
 - explicit audit request 能被识别为独立流程；
 - acceptance 覆盖从 spec issue 到 done 的完整链。
 
@@ -449,7 +487,7 @@ Confirmed Spec Issue
 - `V060-007`
 - `V060-008`
 
-完成后，AgentFlow 能判断任务能不能执行、谁能执行、证据是否足够、状态能不能迁移。
+完成后，AgentFlow 能判断任务能不能执行、谁能执行、验证是否通过、证据是否足够、合同是否满足、状态能不能迁移。
 
 ### Milestone 3 - Session and Projection
 
@@ -467,7 +505,7 @@ Confirmed Spec Issue
 - `V060-011`
 - `V060-012`
 
-完成后，AgentFlow 能支持基础多 Agent proposal 仲裁，并完成 Done / Delivery / Audit 分离验收。
+完成后，AgentFlow 能支持基础多 Agent proposal 仲裁，并完成 Acceptance / Completion Commit / Delivery / Audit 分离验收。
 
 ## 7. Completion Criteria
 
@@ -479,12 +517,13 @@ Confirmed Spec Issue
 - preflight 未通过不能启动 work session；
 - lock / lease 能阻止冲突执行；
 - dependency queue 能稳定找出下一条可执行 issue；
-- evidence gate 能阻止无证据 Done；
+- acceptance gate 能阻止验证失败、证据不足、合同不满足或状态非法的 Done；
 - state transition 不能非法跳转；
 - work session 可以中断、恢复、重试；
 - event store 可以回放 Work Loop 状态；
 - projection 只读；
 - 多 Agent 只能提交 proposal，不能直接写事实；
+- Completion Commit 必须在 Acceptance Gate 通过后发生；
 - Done writeback 不自动触发 Audit。
 
 ## 8. Verification Direction
@@ -493,7 +532,9 @@ Confirmed Spec Issue
 
 - 单 issue 从 spec issue 到 done 的 happy path；
 - 依赖未完成时 preflight 拒绝；
-- 缺 evidence 时 Done 拒绝；
+- 缺 evidence 时 Acceptance Gate 拒绝；
+- 合同不满足时 Acceptance Gate 拒绝；
+- 状态非法时 Acceptance Gate 拒绝；
 - 两个 Agent 抢同一 issue 时 lock 拒绝或 queue；
 - 被 reject 的 proposal 不写 Event Store；
 - interrupted session 可以恢复；
