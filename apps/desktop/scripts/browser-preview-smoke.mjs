@@ -96,6 +96,7 @@ try {
   const todoProjection = preview.createBrowserPreviewTaskProjection("iss-ready", smokeRoot, "default");
   const progressProjection = preview.createBrowserPreviewTaskProjection("iss-progress", smokeRoot, "default");
   const reviewProjection = preview.createBrowserPreviewTaskProjection("iss-review", smokeRoot, "default");
+  const auditQueuedProjection = preview.createBrowserPreviewTaskProjection("iss-audit-ready", smokeRoot, "default");
   const doneProjection = preview.createBrowserPreviewTaskProjection("iss-done", smokeRoot, "default");
   const projectProjection = preview.createBrowserPreviewProjectProjection("project-browser-preview", smokeRoot, "default");
   const specWorkbenchProjection = preview.createBrowserPreviewSpecWorkbenchProjection();
@@ -128,14 +129,17 @@ try {
   assert.equal(todoProjection?.timeline.find((item) => item.state === "in_progress")?.events.length, 0);
   assert.equal(progressProjection?.timeline.find((item) => item.state === "in_progress")?.phase, "current");
   assert.equal(progressProjection?.timeline.find((item) => item.state === "in_progress")?.events.length, 3);
+  assert.equal(progressProjection?.audit.status, "audit-running");
   assert.equal(progressProjection?.timeline.find((item) => item.state === "in_review")?.phase, "future");
   assert.equal(progressProjection?.timeline.find((item) => item.state === "in_review")?.events.length, 0);
   assert.equal(reviewProjection?.timeline.find((item) => item.state === "in_review")?.phase, "current");
   assert.equal(reviewProjection?.timeline.find((item) => item.state === "done")?.phase, "future");
   assert.equal(reviewProjection?.timeline.find((item) => item.state === "done")?.events.length, 0);
+  assert.equal(auditQueuedProjection?.audit.status, "audit-requested");
   assert.equal(doneProjection?.timeline.find((item) => item.state === "done")?.phase, "current");
   assert.equal(doneProjection?.timeline.find((item) => item.state === "done")?.events.length, 2);
   assert.equal(doneProjection?.timeline.find((item) => item.state === "in_review")?.phase, "past");
+  assert.equal(doneProjection?.audit.status, "audit-completed");
   assert.equal(progressProjection?.acceptance?.outcome, "pending");
   assert.equal(reviewProjection?.acceptance?.outcome, "needs-human-decision");
   assert.equal(doneProjection?.acceptance?.passed, true);
@@ -287,6 +291,10 @@ try {
   assert.ok(appEntry.includes('aria-label="验收与交付表面"'));
   assert.ok(appEntry.includes("Release readiness"));
   assert.ok(appEntry.includes("Projection refresh 不是 authority"));
+  assert.ok(appEntry.includes('aria-label="审计只读表面"'));
+  assert.ok(appEntry.includes("Audit Surface 不修改 Work Loop facts"));
+  assert.ok(appEntry.includes("audit queued 不等于 audit passed"));
+  assert.ok(appEntry.includes("Done 后 no audit 是合法状态"));
   assert.ok(appEntry.includes("交付槽位"));
   assert.ok(appEntry.includes("公开交付"));
   assert.ok(appEntry.includes("需求工作台"));
@@ -303,6 +311,7 @@ try {
   assert.ok(appShellCss.includes(".v16-task-evidence-graph"));
   assert.ok(appShellCss.includes(".v16-task-evidence-chain"));
   assert.ok(appShellCss.includes(".v16-task-acceptance-delivery"));
+  assert.ok(appShellCss.includes(".v16-task-audit-surface"));
   assert.ok(appShellCss.includes(".v16-files-page"));
   assert.ok(appShellCss.includes("@media (prefers-color-scheme: dark)"));
   assert.ok(projectLocalFilesPage.indexOf("<ProjectFileBrowser") < projectLocalFilesPage.indexOf("<article className=\"project-file-reader\""));

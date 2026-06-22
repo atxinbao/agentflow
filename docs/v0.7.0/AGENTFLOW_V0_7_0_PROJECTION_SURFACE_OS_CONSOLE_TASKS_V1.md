@@ -373,6 +373,16 @@ Facts
 - 不写 audit report；
 - 不把 Audit 放回 Work Loop。
 
+实现状态：
+
+- 已完成；
+- Task detail 新增 `Audit Read-only Surface`，作为 Work Loop Done 主链之外的独立旁支；
+- 展示 Audit Trigger / Audit Status / Findings / Evidence Map / Traceability / Boundary；
+- 支持 `no audit`、`audit queued`、`audit running`、`audit completed` 四类只读状态；
+- 明确 `Audit Surface 不修改 Work Loop facts`、`audit queued 不等于 audit passed`、`Done 后 no audit 是合法状态`；
+- Browser Preview mock 已覆盖 queued / running / completed 审计状态；
+- Browser Preview smoke 已覆盖审计只读表面和样式入口。
+
 ### V070-009 - Command Surface Runtime API Bridge
 
 目标：
