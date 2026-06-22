@@ -76,12 +76,48 @@ This certification proves:
 This certification does not prove:
 
 - full provider production lifecycle execution;
+- provider smoke gate coverage;
 - automatic audit execution;
 - cloud runtime readiness;
 - industry Pack readiness;
 - that GitHub issue content is an AgentFlow authority source.
 
-## 6. Follow-up
+## 6. Gate Class Boundary
+
+The current release gate should be read as:
+
+```text
+runtime-fixture-gate
+```
+
+It uses deterministic local fixtures to prove the runtime release chain:
+
+```text
+requirement
+-> project
+-> task loop
+-> acceptance
+-> release facts
+-> audit request surface
+```
+
+It does not launch a production Codex or Claude provider session.
+
+The future provider smoke gate should be tracked separately:
+
+```text
+provider-smoke-gate
+```
+
+Minimum future scope:
+
+- provider health check;
+- minimal real provider launch request;
+- session snapshot creation;
+- clean exit or cancellation;
+- terminal provider state visible in projection.
+
+## 7. Follow-up
 
 The next V071 items should keep this evidence boundary:
 
@@ -89,5 +125,4 @@ The next V071 items should keep this evidence boundary:
 - `V071-003` should add a real temporary workspace projection readiness check.
 - `V071-004` should update released v0.7.0 docs from planning language to closeout language.
 - `V071-005` should clarify onboarding writes versus Console read-only surfaces.
-- `V071-006` should avoid overclaiming real provider lifecycle coverage.
-
+- `V071-006` should avoid overclaiming real provider lifecycle coverage and leave provider smoke as a future independent gate.

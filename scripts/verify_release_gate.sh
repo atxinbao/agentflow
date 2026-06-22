@@ -278,8 +278,8 @@ runtime_artifacts = [
 
 checklist = [
     {
-        "id": "real-runtime-e2e",
-        "label": "release gate 跑真实 runtime E2E",
+        "id": "runtime-fixture-gate",
+        "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
     },
     {
@@ -302,6 +302,8 @@ checklist = [
 summary_payload = {
     "status": current_status,
     "conclusion": current_status,
+    "gateClass": "runtime-fixture-gate",
+    "providerSmokeGate": "deferred",
     "failedStage": current_stage if current_status == "failed" else None,
     "failureMessage": current_message if current_status == "failed" else None,
     "sourceCommitSha": source_commit_sha,
@@ -329,8 +331,10 @@ summary_json_path.write_text(
 )
 
 summary_lines = [
-    "# Release Gate E2E Summary",
+    "# Release Gate Runtime Fixture Summary",
     "",
+    "- Gate class: `runtime-fixture-gate`",
+    "- Provider smoke gate: `deferred`",
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
     f"- Source commit: `{source_commit_sha or 'n/a'}`",
@@ -376,6 +380,9 @@ certification_payload = {
     "tagName": release_tag_name or release.get("tagName"),
     "sourceCommitSha": source_commit_sha,
     "gateWorkflow": "release-gate",
+    "gateClass": "runtime-fixture-gate",
+    "providerSmokeGate": "deferred",
+    "providerSmokeBoundary": "future provider-smoke-gate should prove minimal real provider launch, exit, and session projection without replacing runtime fixture coverage",
     "currentGateRun": current_gate_run,
     "mainGateRun": main_gate_run,
     "tagGateRun": tag_gate_run,
@@ -410,6 +417,8 @@ cert_json_path.write_text(
 cert_lines = [
     "# Release Gate Certification",
     "",
+    "- Gate class: `runtime-fixture-gate`",
+    "- Provider smoke gate: `deferred`",
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
     f"- Source commit: `{source_commit_sha or 'n/a'}`",
