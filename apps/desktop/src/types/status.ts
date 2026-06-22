@@ -712,14 +712,20 @@ export type ProjectionDeliverySummary = {
 export type ProjectionAuditSummary = {
   status: string;
   latestAuditId?: string | null;
+  auditIssueId?: string | null;
+  sourceDeliveryId?: string | null;
   sourceIssueId?: string | null;
   reportPath?: string | null;
   requestedAt?: number | null;
+  trigger?: string | null;
+  triggerEvaluation?: string | null;
   summaryLine: string;
   findingsCount: number;
   findings: string[];
   evidenceGaps: string[];
   repairRecommendations: string[];
+  evidenceMap?: string[];
+  traceability?: string[];
 };
 
 export type ProjectionAcceptanceSubGateSummary = {

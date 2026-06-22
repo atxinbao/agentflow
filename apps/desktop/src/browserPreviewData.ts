@@ -818,18 +818,7 @@ export function createBrowserPreviewTaskProjection(
       readyCount: 0,
       missingCount: 0,
     },
-    audit: {
-      status: currentState === "done" ? "not-requested" : "not-requested",
-      latestAuditId: null,
-      sourceIssueId: null,
-      reportPath: null,
-      requestedAt: null,
-      summaryLine: "当前没有审计请求。",
-      findingsCount: 0,
-      findings: [],
-      evidenceGaps: [],
-      repairRecommendations: [],
-    },
+    audit: browserPreviewAuditSummaryForIssue(issue, currentState, runId),
     acceptance: runId
       ? {
           outcome:
@@ -890,6 +879,101 @@ export function createBrowserPreviewTaskProjection(
         }
       : null,
     updatedAt: previewTimestamp + 360,
+  };
+}
+
+function browserPreviewAuditSummaryForIssue(
+  issue: InputIssue,
+  currentState: TaskProjection["displayStatus"],
+  runId: string | null,
+): TaskProjection["audit"] {
+  if (issue.issueId === "iss-audit-ready") {
+    return {
+      status: "audit-requested",
+      latestAuditId: previewAuditId,
+      auditIssueId: "iss-audit-ready",
+      sourceIssueId: previewDoneIssueId,
+      sourceDeliveryId: previewDeliveryRunId,
+      reportPath: null,
+      requestedAt: previewTimestamp + 380,
+      trigger: "optional-audit",
+      triggerEvaluation: "交付已生成，可以排队审计；排队不等于通过。",
+      summaryLine: "审计请求已排队，等待 Audit Agent 接管。",
+      findingsCount: 0,
+      findings: [],
+      evidenceGaps: [],
+      repairRecommendations: [],
+      evidenceMap: [`.agentflow/tasks/${previewDoneIssueId}/evidence/evidence.json`, "CHANGELOG.md"],
+      traceability: [`源任务：${previewDoneIssueId}`, "审计任务：iss-audit-ready", `源交付：${previewDeliveryRunId}`],
+    };
+  }
+
+  if (currentState === "in_progress") {
+    return {
+      status: "audit-running",
+      latestAuditId: `${previewAuditId}-running`,
+      auditIssueId: null,
+      sourceIssueId: issue.issueId,
+      sourceDeliveryId: runId,
+      reportPath: null,
+      requestedAt: previewTimestamp + 300,
+      trigger: "manual-check",
+      triggerEvaluation: "审计正在核对证据，但不影响 Work Loop 当前执行。",
+      summaryLine: "审计核对进行中，findings 尚未完成。",
+      findingsCount: 0,
+      findings: [],
+      evidenceGaps: ["等待最新验证日志写入。"],
+      repairRecommendations: ["审计完成前不要把 queued/running 当作 passed。"],
+      evidenceMap: runId ? [`.agentflow/tasks/${issue.issueId}/evidence/evidence.json`] : [],
+      traceability: [`源任务：${issue.issueId}`, runId ? `源运行：${runId}` : "源运行：未创建"],
+    };
+  }
+
+  if (currentState === "done") {
+    return {
+      status: "audit-completed",
+      latestAuditId: previewAuditId,
+      auditIssueId: null,
+      sourceIssueId: issue.issueId,
+      sourceDeliveryId: runId,
+      reportPath: ".agentflow/audit/audit-browser-preview-001/audit-report.md",
+      requestedAt: previewTimestamp + 420,
+      trigger: "human-via-agent",
+      triggerEvaluation: "Done 后可选审计已完成；审计是独立旁支。",
+      summaryLine: "审计完成，发现项已映射到证据。",
+      findingsCount: 1,
+      findings: ["公开交付缺少 release notes 链接。"],
+      evidenceGaps: ["release notes 未在公开交付记录中出现。"],
+      repairRecommendations: ["补充 CHANGELOG 或 release notes 链接。"],
+      evidenceMap: [
+        `.agentflow/tasks/${issue.issueId}/evidence/evidence.json`,
+        ".agentflow/audit/audit-browser-preview-001/audit-report.md",
+      ],
+      traceability: [
+        `源任务：${issue.issueId}`,
+        runId ? `源运行：${runId}` : "源运行：未记录",
+        "审计报告：.agentflow/audit/audit-browser-preview-001/audit-report.md",
+      ],
+    };
+  }
+
+  return {
+    status: "not-requested",
+    latestAuditId: null,
+    auditIssueId: null,
+    sourceIssueId: issue.issueId,
+    sourceDeliveryId: runId,
+    reportPath: null,
+    requestedAt: null,
+    trigger: null,
+    triggerEvaluation: "等待任务完成后再评估是否需要审计。",
+    summaryLine: "当前没有审计请求。",
+    findingsCount: 0,
+    findings: [],
+    evidenceGaps: [],
+    repairRecommendations: [],
+    evidenceMap: [],
+    traceability: [`源任务：${issue.issueId}`],
   };
 }
 

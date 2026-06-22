@@ -4031,6 +4031,7 @@ function TaskDetailReader({
             />
             <TaskEvidenceGraph task={effectiveTask} projection={taskProjection} />
             <TaskAcceptanceDeliverySurface task={effectiveTask} projection={taskProjection} />
+            <TaskAuditReadOnlySurface task={effectiveTask} projection={taskProjection} />
           </div>
           <aside className="v16-task-workspace-sidebar" aria-label="当前阶段摘要">
             <TaskFlowSidebar
@@ -4537,6 +4538,147 @@ function taskAcceptanceDeliverySurfaceItems(task: V1Issue, projection: TaskProje
 
 function taskAcceptanceDeliveryReadinessTone(ready: boolean) {
   return ready ? "ready" : "warning";
+}
+
+function TaskAuditReadOnlySurface({
+  projection,
+  task,
+}: {
+  projection: TaskProjection | null;
+  task: V1Issue;
+}) {
+  const items = taskAuditReadOnlySurfaceItems(task, projection);
+
+  return (
+    <section className="v16-task-audit-surface" aria-label="审计只读表面">
+      <div className="v16-task-audit-surface-header">
+        <div>
+          <span>Audit Read-only Surface</span>
+          <strong>审计是独立旁支，不修改 Work Loop facts</strong>
+        </div>
+        <StatusBadge status={taskAuditSurfaceTone(items.statusKey)}>
+          {items.statusLabel}
+        </StatusBadge>
+      </div>
+
+      <div className="v16-task-audit-surface-grid">
+        <SectionList title="Audit Trigger" items={items.trigger} />
+        <SectionList title="Audit Status" items={items.status} />
+        <SectionList title="Findings" items={items.findings} />
+        <SectionList title="Evidence Map" items={items.evidenceMap} />
+        <SectionList title="Traceability" items={items.traceability} />
+        <SectionList title="Boundary" items={items.boundary} />
+      </div>
+    </section>
+  );
+}
+
+function taskAuditReadOnlySurfaceItems(task: V1Issue, projection: TaskProjection | null) {
+  const audit = projection?.audit ?? null;
+  const acceptance = projection?.acceptance ?? null;
+  const delivery = projection?.delivery ?? null;
+  const normalizedStatus = normalizeAuditProjectionStatus(audit?.status);
+  const auditIssueId = audit?.auditIssueId ?? (task.issueCategory === "audit" ? task.id : null);
+  const sourceIssueId = audit?.sourceIssueId ?? task.id;
+  const sourceDeliveryId = audit?.sourceDeliveryId ?? delivery?.currentIssueId ?? null;
+  const evidencePath = acceptance?.traceability.evidencePath ?? delivery?.evidencePath ?? null;
+  const validationPath = acceptance?.traceability.validationPath ?? null;
+  const reportPath = audit?.reportPath ?? null;
+  const findings = audit?.findings?.length
+    ? audit.findings.map((finding) => `发现项：${finding}`)
+    : normalizedStatus === "completed"
+      ? ["发现项：无阻断发现。"]
+      : ["发现项：等待审计完成后展示。"];
+  const evidenceMap = audit?.evidenceMap?.length
+    ? audit.evidenceMap
+    : [
+        evidencePath ? `证据：${evidencePath}` : "证据：等待 evidence pack",
+        validationPath ? `验证：${validationPath}` : "验证：等待验证记录",
+        reportPath ? `报告：${reportPath}` : "报告：未生成",
+      ];
+  const traceability = audit?.traceability?.length
+    ? audit.traceability
+    : [
+        `源任务：${sourceIssueId}`,
+        sourceDeliveryId ? `源交付：${sourceDeliveryId}` : "源交付：未记录",
+        auditIssueId ? `审计任务：${auditIssueId}` : "审计任务：未创建",
+      ];
+
+  return {
+    boundary: [
+      "Audit Surface 只读展示，不执行审计。",
+      "Audit Surface 不修改 Work Loop facts。",
+      "audit queued 不等于 audit passed。",
+      "Done 后 no audit 是合法状态。",
+    ],
+    evidenceMap,
+    findings: [
+      audit?.findingsCount ? `发现数量：${audit.findingsCount}` : "发现数量：0",
+      ...findings,
+      ...(audit?.evidenceGaps ?? []).map((gap) => `证据缺口：${gap}`),
+      ...(audit?.repairRecommendations ?? []).map((line) => `修复建议：${line}`),
+    ],
+    status: [
+      `状态：${auditReadOnlyStatusLabel(normalizedStatus)}`,
+      audit?.summaryLine ?? "当前没有审计请求。",
+      audit?.latestAuditId ? `审计编号：${audit.latestAuditId}` : "审计编号：未记录",
+      reportPath ? `审计报告：${reportPath}` : "审计报告：未生成",
+      audit?.requestedAt ? `请求时间：${formatTimestamp(audit.requestedAt)}` : "请求时间：未记录",
+    ],
+    statusKey: normalizedStatus,
+    statusLabel: auditReadOnlyStatusLabel(normalizedStatus),
+    traceability,
+    trigger: [
+      `触发评估：${audit?.triggerEvaluation ?? optionalAuditTriggerEvaluation(task, projection)}`,
+      audit?.trigger ? `触发来源：${audit.trigger}` : "触发来源：未触发",
+      auditIssueId ? `审计 Issue：${auditIssueId}` : "审计 Issue：未创建",
+    ],
+  };
+}
+
+type NormalizedAuditStatus = "none" | "queued" | "running" | "completed";
+
+function normalizeAuditProjectionStatus(status: string | null | undefined): NormalizedAuditStatus {
+  if (!status || status === "not-requested") {
+    return "none";
+  }
+  if (status === "audit-requested" || status === "queued" || status === "requested") {
+    return "queued";
+  }
+  if (status === "audit-running" || status === "running") {
+    return "running";
+  }
+  if (status === "audit-completed" || status === "passed" || status === "passed-with-warnings" || status === "completed") {
+    return "completed";
+  }
+  return "queued";
+}
+
+function auditReadOnlyStatusLabel(status: NormalizedAuditStatus) {
+  const labels: Record<NormalizedAuditStatus, string> = {
+    completed: "审计已完成",
+    none: "没有审计",
+    queued: "审计已排队",
+    running: "审计进行中",
+  };
+  return labels[status];
+}
+
+function taskAuditSurfaceTone(status: NormalizedAuditStatus) {
+  if (status === "completed") {
+    return "ready";
+  }
+  if (status === "running") {
+    return "warning";
+  }
+  return "idle";
+}
+
+function optionalAuditTriggerEvaluation(task: V1Issue, projection: TaskProjection | null) {
+  if (projection?.displayStatus === "done" || task.displayStatus === "done") {
+    return "Done 后可选触发审计；没有审计也不阻断任务完成。";
+  }
+  return "等待任务完成后再评估是否需要审计。";
 }
 
 function buildProjectionTaskStatusTimeline(
