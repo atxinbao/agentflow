@@ -9,6 +9,7 @@
 ### Added
 
 - 新增 `docs/v0.7.2/**`，固定 Runtime Foundation hardening 任务基线和 V072 issue 顺序。
+- 新增 `crates/schema-registry` 和 schema migration 架构文档，提供当前 schema version 清单、legacy 检测、migration preview 和显式 apply 边界。
 - 新增 `docs/v0.7.1/**`，固定 `v0.7.0` release certification evidence，包括 PR / main / tag / release event gate run、artifact、release URL 和 source commit。
 - release-gate 增加明确的 Browser Preview smoke 和 Console readiness 步骤，并把两个步骤的 status JSON 写入 gate artifact。
 - Desktop Tauri projection command 增加真实临时 workspace readiness 测试，覆盖 `.agentflow/spec/**`、`.agentflow/events/**`、`.agentflow/tasks/**` 和 `.agentflow/projections/**` 的真实读路径。
