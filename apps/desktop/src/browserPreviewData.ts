@@ -25,6 +25,7 @@ import type {
   HumanAuditReport,
   ProjectProjection,
   StateStatusSnapshot,
+  SpecWorkbenchProjection,
   TaskProjection,
   TaskTimelineItem,
 } from "./types";
@@ -530,6 +531,156 @@ export function createBrowserPreviewInputSnapshot(
       version: "input-issue-relations.browser-preview",
       relations,
     },
+  };
+}
+
+export function createBrowserPreviewSpecWorkbenchProjection(): SpecWorkbenchProjection {
+  const requirementId = "001-add-local-project";
+  return {
+    version: "spec-workbench-projection.browser-preview",
+    selectedRequirementId: requirementId,
+    requirements: [
+      {
+        requirementId,
+        projectId: previewProjectId,
+        currentState: "materialized",
+        lifecycle: "confirmed",
+        nextRecommendedAction: "open-generated-issues",
+        projectionPath: `.agentflow/projections/spec-loops/${requirementId}.json`,
+        updatedAt: previewTimestamp + 420,
+      },
+    ],
+    intake: {
+      requirementId,
+      state: "materialized",
+      classification: "feature",
+      ambiguities: [],
+      boundaryNotes: ["浏览器预览只读展示，不写入本地事实源。", "真实客户端读取本地 projection。"],
+      allowedActions: [
+        {
+          action: "open-generated-issues",
+          allowed: true,
+          label: "查看生成任务",
+          reason: "预览已确认并物化为任务合同。",
+        },
+      ],
+      lastEventId: "evt-browser-preview-spec-008",
+      freshness: browserPreviewProjectionFreshness(),
+    },
+    preview: {
+      specId: previewProjectId,
+      state: "materialized",
+      requirementRef: requirementId,
+      previewSummary: "把添加本地项目的用户意图整理成可确认的项目和任务预览。",
+      acceptanceCriteria: previewIssueAcceptanceCriteria,
+      issuePreview: previewInputIssues.slice(0, 3).map((issue) => ({
+        blockedBy: issue.relations?.blockedBy ?? [],
+        issueId: issue.issueId,
+        priority: issue.priority,
+        requiredAgentRole: issue.requiredAgentRole ?? "work-agent",
+        summary: issue.summary,
+        title: issue.title,
+      })),
+      confirmationState: "confirmed",
+      allowedActions: [],
+      freshness: browserPreviewProjectionFreshness(),
+    },
+    specLoop: {
+      allowedActions: [],
+      authorityLayers: [
+        {
+          authorityLayer: "preview-artifact",
+          path: `.agentflow/spec/requirements/${requirementId}`,
+          summary: "Intake 到 confirmation 的阶段文件，只能作为预览证据。",
+        },
+        {
+          authorityLayer: "project-authority",
+          path: `.agentflow/spec/projects/${previewProjectId}.json`,
+          summary: "已确认项目任务集合。",
+        },
+        {
+          authorityLayer: "issue-authority",
+          path: `.agentflow/spec/issues/${previewInputIssues[0].issueId}.json`,
+          summary: "已确认任务合同。",
+        },
+      ],
+      currentState: "materialized",
+      freshness: browserPreviewProjectionFreshness(),
+      lifecycle: "confirmed",
+      manifestPath: `.agentflow/spec/requirements/${requirementId}/manifest.json`,
+      materializedIssueIds: previewProjectIssueIds,
+      materializedProjectId: previewProjectId,
+      nextRecommendedAction: "open-generated-issues",
+      nextRecommendedActionLabel: "查看生成任务",
+      nextRecommendedActionReason: "需求已经物化为项目和任务，下一步进入任务工作台。",
+      projectId: previewProjectId,
+      projectTitle: "浏览器预览任务项目",
+      requirementId,
+      requirementPath: `docs/requirements/${requirementId}.md`,
+      runtimeActionProposals: [
+        {
+          actionType: "create-project-and-issues",
+          actorRole: "spec-agent",
+          commandPath: `.agentflow/spec/requirements/${requirementId}/runtime-command.json`,
+          commandStatus: "accepted",
+          createdObjectId: previewProjectId,
+          createdObjectType: "spec-project",
+          decisionStatus: "accepted",
+          proposalPath: `.agentflow/spec/requirements/${requirementId}/action-proposal.json`,
+          proposalRef: "proposal-browser-preview-001",
+          targetObjectId: requirementId,
+          targetObjectType: "requirement",
+        },
+      ],
+      runtimePath: `.agentflow/spec/requirements/${requirementId}/runtime.json`,
+      stages: [
+        "intake",
+        "classification",
+        "context",
+        "boundary",
+        "route",
+        "preview",
+        "confirmation",
+        "materialization",
+      ].map((stage, index) => ({
+        authority: index < 7 ? "preview" : "authority",
+        authorityLayer: index < 7 ? "preview-artifact" : "project-authority",
+        currentState: "materialized",
+        evidenceRefs: [`evt-browser-preview-spec-${String(index + 1).padStart(3, "0")}`],
+        inputRefs: index === 0 ? [`docs/requirements/${requirementId}.md`] : [`.agentflow/spec/requirements/${requirementId}/${index}.json`],
+        outputRefs: [`.agentflow/spec/requirements/${requirementId}/${stage}.json`],
+        path: `.agentflow/spec/requirements/${requirementId}/${stage}.json`,
+        stage,
+        status: "done",
+        summary: `${stage} 阶段已完成，只读展示阶段输入、输出和证据。`,
+        updatedAt: previewTimestamp + index * 30,
+      })),
+      traceability: [
+        {
+          fromRef: `docs/requirements/${requirementId}.md`,
+          relation: "produces-preview",
+          toRef: `.agentflow/spec/requirements/${requirementId}`,
+        },
+        {
+          fromRef: `.agentflow/spec/requirements/${requirementId}`,
+          relation: "materializes",
+          toRef: `.agentflow/spec/projects/${previewProjectId}.json`,
+        },
+      ],
+    },
+    warnings: [],
+  };
+}
+
+function browserPreviewProjectionFreshness() {
+  return {
+    lastEventId: "evt-browser-preview-spec-008",
+    missingFacts: [],
+    projectionVersion: "browser-preview",
+    staleFacts: [],
+    status: "fresh",
+    updatedAt: previewTimestamp + 420,
+    warnings: [],
   };
 }
 

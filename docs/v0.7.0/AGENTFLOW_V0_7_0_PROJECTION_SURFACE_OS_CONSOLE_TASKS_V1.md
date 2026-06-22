@@ -190,6 +190,15 @@ Facts
 
 让 Spec Loop 状态成为可读、可追踪、可确认的工作台视图。
 
+实现状态：
+
+- 已完成；
+- 新增 Desktop `需求` 一级栏目，作为只读 Spec Workbench；
+- Tauri 新增 `load_spec_workbench_projection`，从 Projection Read Model 读取 requirement intake、spec preview 和 spec loop；
+- 页面展示 intake / classification / context / boundary / route / preview / confirmation / materialization 八阶段；
+- 页面明确区分 preview artifact、project authority、issue authority、derived projection 和 runtime action proposal；
+- Browser Preview 补齐 Spec Workbench mock projection，真实 Tauri 客户端继续读取本地 projection。
+
 范围：
 
 - 展示 intake / classification / context / boundary / route / preview / confirmation / materialization；

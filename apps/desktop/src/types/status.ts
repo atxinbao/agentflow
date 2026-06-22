@@ -322,6 +322,141 @@ export type InputIssue = {
   };
 };
 
+export type ProjectionFreshness = {
+  status: string;
+  projectionVersion: string;
+  updatedAt: number;
+  lastEventId?: string | null;
+  warnings: string[];
+  missingFacts: string[];
+  staleFacts: string[];
+};
+
+export type ViewActionHint = {
+  action: string;
+  label: string;
+  reason: string;
+  allowed: boolean;
+};
+
+export type RequirementPreviewIndexEntry = {
+  requirementId: string;
+  projectId: string;
+  currentState: string;
+  lifecycle: string;
+  nextRecommendedAction: string;
+  projectionPath: string;
+  updatedAt: number;
+};
+
+export type RequirementIntakeView = {
+  requirementId: string;
+  state: string;
+  classification: string;
+  ambiguities: string[];
+  boundaryNotes: string[];
+  allowedActions: ViewActionHint[];
+  lastEventId?: string | null;
+  freshness: ProjectionFreshness;
+};
+
+export type IssuePreviewItem = {
+  issueId: string;
+  title: string;
+  summary: string;
+  priority: string;
+  requiredAgentRole: string;
+  blockedBy: string[];
+};
+
+export type SpecPreviewView = {
+  specId: string;
+  state: string;
+  requirementRef: string;
+  previewSummary: string;
+  acceptanceCriteria: string[];
+  issuePreview: IssuePreviewItem[];
+  confirmationState: string;
+  allowedActions: ViewActionHint[];
+  freshness: ProjectionFreshness;
+};
+
+export type SpecLoopStageView = {
+  stage: string;
+  path: string;
+  status: string;
+  authority: string;
+  authorityLayer: string;
+  currentState?: string | null;
+  inputRefs: string[];
+  outputRefs: string[];
+  evidenceRefs: string[];
+  summary: string;
+  updatedAt: number;
+};
+
+export type SpecLoopAuthorityLayerView = {
+  authorityLayer: string;
+  path: string;
+  summary: string;
+};
+
+export type SpecLoopTraceabilityView = {
+  fromRef: string;
+  toRef: string;
+  relation: string;
+};
+
+export type SpecLoopActionProposalView = {
+  proposalRef: string;
+  actionType: string;
+  targetObjectType: string;
+  targetObjectId: string;
+  createdObjectType?: string | null;
+  createdObjectId?: string | null;
+  actorRole: string;
+  handoffRule?: string | null;
+  commandStatus?: string | null;
+  decisionStatus?: string | null;
+  acceptedActionId?: string | null;
+  commandPath?: string | null;
+  proposalPath?: string | null;
+  decisionPath?: string | null;
+  acceptedActionPath?: string | null;
+};
+
+export type SpecLoopView = {
+  requirementId: string;
+  requirementPath: string;
+  projectId: string;
+  projectTitle: string;
+  lifecycle: string;
+  currentState: string;
+  manifestPath: string;
+  runtimePath: string;
+  nextRecommendedAction: string;
+  nextRecommendedActionLabel: string;
+  nextRecommendedActionReason: string;
+  materializedProjectId?: string | null;
+  materializedIssueIds: string[];
+  stages: SpecLoopStageView[];
+  authorityLayers: SpecLoopAuthorityLayerView[];
+  traceability: SpecLoopTraceabilityView[];
+  runtimeActionProposals: SpecLoopActionProposalView[];
+  allowedActions: ViewActionHint[];
+  freshness: ProjectionFreshness;
+};
+
+export type SpecWorkbenchProjection = {
+  version: string;
+  selectedRequirementId?: string | null;
+  requirements: RequirementPreviewIndexEntry[];
+  intake?: RequirementIntakeView | null;
+  preview?: SpecPreviewView | null;
+  specLoop?: SpecLoopView | null;
+  warnings: string[];
+};
+
 export type InputSnapshot = {
   version: string;
   projectRoot: string;

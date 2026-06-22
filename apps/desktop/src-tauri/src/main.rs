@@ -50,6 +50,7 @@ fn main() {
             commands::projection::load_projection_issue_status_index,
             commands::projection::load_task_projection,
             commands::projection::load_project_projection,
+            commands::projection::load_spec_workbench_projection,
             commands::spec::load_spec_task_snapshot,
             commands::agent_manual::prepare_agent_working_manual,
             commands::agent_manual::load_agent_environment_status,

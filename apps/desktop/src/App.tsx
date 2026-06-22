@@ -26,6 +26,7 @@ import {
   createBrowserPreviewAuditIndex,
   createBrowserPreviewHumanAuditReport,
   createBrowserPreviewOutputIndex,
+  createBrowserPreviewSpecWorkbenchProjection,
 } from "./browserPreviewData";
 import {
   ActionButton,
@@ -122,6 +123,7 @@ import type {
   ProjectProjection,
   ProjectionDeliverySummary,
   ProjectionPhase,
+  SpecWorkbenchProjection,
   StateStatusSnapshot,
   TaskProjection,
   TaskTimelineItem,
@@ -281,8 +283,15 @@ type NextStepViewModel = {
   title: string;
 };
 
+type SpecWorkbenchState = {
+  error: string | null;
+  source: DataSource;
+  view: SpecWorkbenchProjection | null;
+};
+
 const pages: Array<{ icon: LucideIcon; id: AppPage; label: string }> = [
   { icon: LayoutDashboard, id: "home", label: "工作台" },
+  { icon: ListChecks, id: "spec", label: "需求" },
   { icon: ClipboardList, id: "tasks", label: "任务" },
   { icon: ShieldCheck, id: "audit", label: "审计" },
   { icon: FileSearch, id: "files", label: "文件" },
@@ -511,6 +520,12 @@ function App() {
   const [mcpRefreshToken, setMcpRefreshToken] = useState(0);
   const [outputRefreshToken, setOutputRefreshToken] = useState(0);
   const [stateRefreshToken, setStateRefreshToken] = useState(0);
+  const [specWorkbenchRefreshToken, setSpecWorkbenchRefreshToken] = useState(0);
+  const [specWorkbenchState, setSpecWorkbenchState] = useState<SpecWorkbenchState>({
+    error: null,
+    source: "idle",
+    view: null,
+  });
   const [selectedIntent, setSelectedIntent] = useState("我要新增功能");
   const [onboardingFeedback, setOnboardingFeedback] = useState<string | null>(null);
   const [taskActionFeedback, setTaskActionFeedback] = useState<string | null>(null);
@@ -646,6 +661,10 @@ function App() {
         setStateRefreshToken((current) => current + 1);
       }
 
+      if ((refreshSpec || refreshProjection) && activePage === "spec") {
+        setSpecWorkbenchRefreshToken((current) => current + 1);
+      }
+
       if (refreshExecute && (activePage === "tasks" || activePage === "advanced")) {
         setExecuteRefreshToken((current) => current + 1);
         setMcpRefreshToken((current) => current + 1);
@@ -717,6 +736,49 @@ function App() {
       unlisten?.();
     };
   }, [activePage, loadProjectFiles, projectRoot]);
+
+  useEffect(() => {
+    if (!projectRoot) {
+      setSpecWorkbenchState({ error: null, source: "idle", view: null });
+      return;
+    }
+    if (activePage !== "spec") {
+      return;
+    }
+    if (isBrowserPreviewRuntime()) {
+      setSpecWorkbenchState({
+        error: null,
+        source: "preview",
+        view: createBrowserPreviewSpecWorkbenchProjection(),
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setSpecWorkbenchState((current) => ({ ...current, error: null, source: "loading" }));
+    void invoke<SpecWorkbenchProjection>("load_spec_workbench_projection", {
+      projectRoot,
+      requirementId: null,
+    })
+      .then((view) => {
+        if (!cancelled) {
+          setSpecWorkbenchState({ error: null, source: "tauri", view });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setSpecWorkbenchState({
+            error: error instanceof Error ? error.message : String(error),
+            source: "unavailable",
+            view: null,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePage, projectRoot, specWorkbenchRefreshToken]);
 
   useEffect(() => {
     if (!projectRoot || isBrowserPreviewRuntime()) {
@@ -1004,6 +1066,11 @@ function App() {
       setMcpRefreshToken((current) => current + 1);
       setOutputRefreshToken((current) => current + 1);
       setStateRefreshToken((current) => current + 1);
+      return;
+    }
+
+    if (page === "spec") {
+      setSpecWorkbenchRefreshToken((current) => current + 1);
       return;
     }
 
@@ -1473,6 +1540,9 @@ function App() {
             taskTree={taskProjectTree}
             tasks={filteredTasks}
           />
+        ) : null}
+        {projectRoot && !projectAvailabilityStatus && activePage === "spec" ? (
+          <SpecWorkbenchPage state={specWorkbenchState} />
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "files" ? (
           <FilesPage
@@ -2627,6 +2697,135 @@ function ProjectHomeAgentEntryPanel({ activeOwnerLabel }: { activeOwnerLabel: st
         </article>
       </div>
     </Panel>
+  );
+}
+
+function SpecWorkbenchPage({ state }: { state: SpecWorkbenchState }) {
+  const view = state.view;
+  const specLoop = view?.specLoop ?? null;
+  const preview = view?.preview ?? null;
+  const intake = view?.intake ?? null;
+  const selectedRequirementId = view?.selectedRequirementId ?? null;
+
+  if (state.source === "loading") {
+    return (
+      <section className="v16-page v16-spec-page" data-agentflow-page="spec">
+        <Panel className="v16-spec-empty-panel" title="需求工作台">
+          <p>正在读取 Spec Loop 投影。</p>
+        </Panel>
+      </section>
+    );
+  }
+
+  if (state.error) {
+    return (
+      <section className="v16-page v16-spec-page" data-agentflow-page="spec">
+        <Panel className="v16-spec-empty-panel" title="需求工作台">
+          <p>无法读取 Spec Workbench：{state.error}</p>
+        </Panel>
+      </section>
+    );
+  }
+
+  if (!view || !selectedRequirementId || !specLoop || !preview || !intake) {
+    return (
+      <section className="v16-page v16-spec-page" data-agentflow-page="spec">
+        <Panel className="v16-spec-empty-panel" title="还没有需求">
+          <p>Spec Agent 写入需求预览并确认后，这里会展示 intake、preview、confirmation 和 materialization 链路。</p>
+        </Panel>
+      </section>
+    );
+  }
+
+  const authorityItems = specLoop.authorityLayers.map(
+    (entry) => `${specAuthorityLayerLabel(entry.authorityLayer)}：${entry.path}`,
+  );
+  const proposalItems = specLoop.runtimeActionProposals.map((proposal) =>
+    [
+      specActionTypeLabel(proposal.actionType),
+      `${proposal.targetObjectType}:${proposal.targetObjectId}`,
+      proposal.createdObjectId ? `生成 ${proposal.createdObjectType ?? "object"}:${proposal.createdObjectId}` : null,
+      proposal.commandStatus ? `命令 ${proposal.commandStatus}` : null,
+      proposal.decisionStatus ? `决策 ${proposal.decisionStatus}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  );
+
+  return (
+    <section className="v16-page v16-spec-page" data-agentflow-page="spec">
+      <section className="v16-spec-layout">
+        <Panel className="v16-spec-list-panel" title="需求预览">
+          <div className="v16-spec-requirement-list">
+            {view.requirements.map((requirement) => (
+              <article
+                className={requirement.requirementId === selectedRequirementId ? "active" : ""}
+                key={requirement.requirementId}
+              >
+                <strong>{requirement.requirementId}</strong>
+                <span>{specStateLabel(requirement.currentState)} · {requirement.projectId}</span>
+              </article>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel className="v16-spec-main-panel" title={specLoop.projectTitle || selectedRequirementId}>
+          <header className="v16-spec-header">
+            <div>
+              <h2>{selectedRequirementId}</h2>
+              <p>{preview.previewSummary}</p>
+            </div>
+            <StatusBadge status={specStatusTone(specLoop.currentState)}>{specStateLabel(specLoop.currentState)}</StatusBadge>
+          </header>
+
+          <div className="v16-spec-meta-strip">
+            <span>来源需求：{specLoop.requirementPath}</span>
+            <span>预览：{preview.specId}</span>
+            <span>确认：{specStateLabel(preview.confirmationState)}</span>
+          </div>
+
+          <section className="v16-spec-stage-list" aria-label="Spec Loop 阶段">
+            {specLoop.stages.map((stage) => (
+              <article className="v16-spec-stage-row" key={stage.stage}>
+                <span className={`v16-spec-stage-dot ${specStatusTone(stage.status)}`} />
+                <div>
+                  <strong>{specStageLabel(stage.stage)}</strong>
+                  <p>{stage.summary}</p>
+                  <small>{stage.path}</small>
+                </div>
+                <span>{specAuthorityLayerLabel(stage.authorityLayer)}</span>
+              </article>
+            ))}
+          </section>
+
+          <section className="v16-spec-preview-grid" aria-label="预览与物化">
+            <SectionList
+              title="Intake / Boundary"
+              items={[
+                `分类：${intake.classification}`,
+                ...intake.boundaryNotes,
+                ...intake.ambiguities.map((item) => `待澄清：${item}`),
+              ]}
+            />
+            <SectionList
+              title="Generated Issues Preview"
+              items={preview.issuePreview.map(
+                (issue) => `${issue.issueId} · ${issue.title} · ${issue.requiredAgentRole} · ${issue.priority}`,
+              )}
+            />
+          </section>
+        </Panel>
+
+        <Panel className="v16-spec-side-panel" title="Authority / Action">
+          <SectionList title="Authority Layers" items={authorityItems} />
+          <SectionList title="Runtime Action Proposal" items={proposalItems} />
+          <SectionList
+            title="Traceability"
+            items={specLoop.traceability.map((edge) => `${edge.fromRef} -> ${edge.toRef} · ${edge.relation}`)}
+          />
+        </Panel>
+      </section>
+    </section>
   );
 }
 
@@ -8092,12 +8291,73 @@ function formatTimestamp(timestamp: number) {
   });
 }
 
+function specStateLabel(state: string) {
+  const labels: Record<string, string> = {
+    accepted: "已接受",
+    classified: "已分类",
+    confirmed: "已确认",
+    done: "已完成",
+    draft: "草稿",
+    materialized: "已物化",
+    preview: "预览",
+    ready: "就绪",
+    rejected: "已拒绝",
+  };
+  return labels[state] ?? state;
+}
+
+function specStageLabel(stage: string) {
+  const labels: Record<string, string> = {
+    boundary: "边界",
+    classification: "分类",
+    confirmation: "确认",
+    context: "上下文",
+    intake: "接收",
+    materialization: "物化",
+    preview: "预览",
+    route: "路由",
+  };
+  return labels[stage] ?? stage;
+}
+
+function specAuthorityLayerLabel(layer: string) {
+  const labels: Record<string, string> = {
+    "derived-projection": "派生投影",
+    "issue-authority": "任务事实",
+    "preview-artifact": "预览产物",
+    "project-authority": "项目事实",
+  };
+  return labels[layer] ?? layer;
+}
+
+function specActionTypeLabel(actionType: string) {
+  const labels: Record<string, string> = {
+    "create-project-and-issues": "生成项目和任务",
+    "materialize-spec-project-and-issues": "物化项目和任务",
+  };
+  return labels[actionType] ?? actionType;
+}
+
+function specStatusTone(state: string): StatusChipStatus {
+  if (["done", "confirmed", "materialized", "accepted"].includes(state)) {
+    return "done";
+  }
+  if (["preview", "classified", "ready"].includes(state)) {
+    return "working";
+  }
+  if (["rejected", "blocked"].includes(state)) {
+    return "blocked";
+  }
+  return "idle";
+}
+
 function pageTitle(page: AppPage) {
   const labels: Record<AppPage, string> = {
     advanced: "高级",
     audit: "审计",
     files: "文件",
     home: "工作台",
+    spec: "需求工作台",
     tasks: "任务流转",
   };
   return labels[page] ?? "工作台";
