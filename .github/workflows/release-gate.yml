@@ -66,14 +66,7 @@ jobs:
           fi
 
           if [[ -z "$release_tag" ]]; then
-            package_version="$(python3 - <<'PY'
-import tomllib
-from pathlib import Path
-
-payload = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8"))
-print(payload["workspace"]["package"]["version"])
-PY
-)"
+            package_version="$(python3 -c 'import tomllib; from pathlib import Path; payload = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8")); print(payload["workspace"]["package"]["version"])')"
             release_tag="v${package_version}"
           fi
 
