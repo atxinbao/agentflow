@@ -19,9 +19,10 @@
 ## Reading Order
 
 1. [AGENTFLOW_V0_7_2_RUNTIME_FOUNDATION_HARDENING_TASKS_V1.md](AGENTFLOW_V0_7_2_RUNTIME_FOUNDATION_HARDENING_TASKS_V1.md)
-2. [../v0.7.1/README.md](../v0.7.1/README.md)
-3. [../architecture/003-workflow-schema-v1.md](../architecture/003-workflow-schema-v1.md)
-4. [../architecture/current-module-boundaries.md](../architecture/current-module-boundaries.md)
+2. [AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md](AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md)
+3. [../v0.7.1/README.md](../v0.7.1/README.md)
+4. [../architecture/003-workflow-schema-v1.md](../architecture/003-workflow-schema-v1.md)
+5. [../architecture/current-module-boundaries.md](../architecture/current-module-boundaries.md)
 
 ## Scope
 
@@ -60,4 +61,5 @@
 - provider smoke gate 有最小 launch / exit / projection 标准；
 - provider smoke gate 默认 clear skip，显式 `PROVIDER_SMOKE=1` 才执行真实 provider 最小 smoke；
 - projection / command / runtime plane 有 `api-plane-manifest.json`，并在 Advanced API Plane 中只读展示；
+- foundation readiness report 说明 completed / baseline / deferred / v0.8.0 carryover；
 - release-gate 能证明 Runtime Foundation hardening 覆盖。
