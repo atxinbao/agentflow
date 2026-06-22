@@ -109,6 +109,7 @@ Event Store / Spec Facts / Task Facts / Audit Facts
 ## 6. Reading Order
 
 1. [AGENTFLOW_V0_7_0_PROJECTION_SURFACE_OS_CONSOLE_TASKS_V1.md](AGENTFLOW_V0_7_0_PROJECTION_SURFACE_OS_CONSOLE_TASKS_V1.md)
+2. [../architecture/011-projection-surface-console-ia-v1.md](../architecture/011-projection-surface-console-ia-v1.md)
 
 ## 7. Development Entry
 
@@ -123,6 +124,11 @@ V070-001 Projection Surface Contract and Console IA
 - 没有 Projection Surface contract，页面会各自解释事实；
 - 没有 Console IA，Project Home、Task Workbench、Audit Surface 会互相抢职责；
 - 没有 Command Surface 边界，UI 很容易退回直接改状态。
+
+实现边界：
+
+- Projection Surface contract 和 Console IA 以 [../architecture/011-projection-surface-console-ia-v1.md](../architecture/011-projection-surface-console-ia-v1.md) 为准；
+- 后续 V070 issues 必须引用该文档，不允许页面绕过 projection / runtime-api 边界。
 
 ## 8. Completion Standard
 

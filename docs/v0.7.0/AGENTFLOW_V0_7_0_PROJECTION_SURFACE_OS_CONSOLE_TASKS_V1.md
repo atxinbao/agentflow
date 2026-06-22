@@ -80,6 +80,10 @@ Facts
 
 定义 Projection Surface 和 Project OS Console 的页面职责、事实边界和命令回流规则。
 
+架构合同：
+
+- [../architecture/011-projection-surface-console-ia-v1.md](../architecture/011-projection-surface-console-ia-v1.md)
+
 范围：
 
 - 定义 Projection Surface contract；
