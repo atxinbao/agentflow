@@ -146,7 +146,18 @@ V070-001 Projection Surface Contract and Console IA
 - Projection / View Model 不是 authority；
 - 软件开发场景可以从需求、拆解、执行、验收、交付、审计阅读完成闭环。
 
-## 9. Boundary
+## 9. Release Evidence
+
+`v0.7.0` 发布事实：
+
+- Release：[AgentFlow v0.7.0](https://github.com/atxinbao/agentflow/releases/tag/v0.7.0)
+- Source commit：`2890c4d173a935eb8cbafc6f7fc067cc9ce77172`
+- mainGateRun：[27949663555](https://github.com/atxinbao/agentflow/actions/runs/27949663555)
+- tagGateRun：[27949712566](https://github.com/atxinbao/agentflow/actions/runs/27949712566)
+- releaseGateRun：[27949939628](https://github.com/atxinbao/agentflow/actions/runs/27949939628)
+- durable evidence：[../v0.7.1/AGENTFLOW_V0_7_1_RELEASE_CERTIFICATION_EVIDENCE_V1.md](../v0.7.1/AGENTFLOW_V0_7_1_RELEASE_CERTIFICATION_EVIDENCE_V1.md)
+
+## 10. Boundary
 
 本目录是 `v0.7.0` 的 Project OS Console 基线与验收记录。
 

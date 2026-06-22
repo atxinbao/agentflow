@@ -4,7 +4,18 @@
 
 执行者：Codex
 
-当前状态：暂无未发布变更。
+当前状态：`v0.7.1` release closeout remediation 正在进行。
+
+### Added
+
+- 新增 `docs/v0.7.1/**`，固定 `v0.7.0` release certification evidence，包括 PR / main / tag / release event gate run、artifact、release URL 和 source commit。
+- release-gate 增加明确的 Browser Preview smoke 和 Console readiness 步骤，并把两个步骤的 status JSON 写入 gate artifact。
+- Desktop Tauri projection command 增加真实临时 workspace readiness 测试，覆盖 `.agentflow/spec/**`、`.agentflow/events/**`、`.agentflow/tasks/**` 和 `.agentflow/projections/**` 的真实读路径。
+
+### Changed
+
+- `docs/v0.7.0/**` 从 planning draft 口径收口为 released implementation record。
+- `v0.7.0` 验证说明改为显式列出 `preview:smoke`、`console:readiness` 和 release-gate 版本认证命令。
 
 ## 0.7.0 - 2026-06-22
 
