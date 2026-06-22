@@ -2,11 +2,11 @@
 
 日期：2026-06-21
 执行者：Codex
-状态：Version Planning Draft / 开发前置文档 / 不授权 Build Agent 执行
+状态：Released Implementation Record / Project OS Console closeout baseline
 
 ## 1. Purpose
 
-本文档沉淀 AgentFlow `v0.7.0` 的开发任务规划。
+本文档沉淀 AgentFlow `v0.7.0` 的开发任务规划和发布后实现状态。
 
 `v0.7.0` 的目标不是继续扩底层 Work Loop，而是把底层事实投影成可用的 Project OS Console。
 
@@ -45,7 +45,7 @@ Facts
 
 ## 3. Precondition
 
-进入 `v0.7.0` 前，必须先完成 `v0.6.1`：
+`v0.7.0` 正式开发前必须先完成 `v0.6.1`：
 
 1. release closeout 与版本事实对齐；
 2. Acceptance Gate 成为 Done 决策入口；
@@ -53,24 +53,31 @@ Facts
 4. Done 后 Audit 仍保持独立流程；
 5. release audit certification 可追溯。
 
-如果这些前置条件未完成，`v0.7.0` 不能进入正式开发。
+这些前置条件已经在 `v0.7.0` 开发前收口。
+
+发布事实：
+
+- `v0.7.0` tag 已发布；
+- `v0.7.0` GitHub Release 已发布；
+- release-gate 已覆盖 PR / main / tag / release event；
+- durable evidence 已在 `v0.7.1` closeout 文档中记录。
 
 ## 4. Issue Preview
 
-| Issue | Title | Dependency | Priority | First executable |
+| Issue | Title | Dependency | Priority | Release status |
 | --- | --- | --- | --- | --- |
-| `V070-001` | Projection Surface Contract and Console IA | 无 | P0 | 是 |
-| `V070-002` | Projection Query API and Unified Read Models | `V070-001` | P0 | 否 |
-| `V070-003` | Project Home and Next Action Console | `V070-002` | P0 | 否 |
-| `V070-004` | Spec Workbench Projection Surface | `V070-002` | P0 | 否 |
-| `V070-005` | Task Workbench Execution and Acceptance Surface | `V070-002`, `V070-003` | P0 | 否 |
-| `V070-006` | Event Timeline and Evidence Graph | `V070-002`, `V070-005` | P0 | 否 |
-| `V070-007` | Acceptance and Delivery Surface | `V070-005`, `V070-006` | P0 | 否 |
-| `V070-008` | Audit Read-only Surface and Audit Trigger Visibility | `V070-006`, `V070-007` | P1 | 否 |
-| `V070-009` | Command Surface Runtime API Bridge | `V070-001`, `V070-002` | P0 | 否 |
-| `V070-010` | Advanced Runtime Diagnostics Surface | `V070-002` | P1 | 否 |
-| `V070-011` | Desktop View Models and Browser Preview Regression | `V070-003`, `V070-004`, `V070-005`, `V070-007`, `V070-008`, `V070-009` | P1 | 否 |
-| `V070-012` | Project OS Console Acceptance and Release Readiness | `V070-011` | P1 | 否 |
+| `V070-001` | Projection Surface Contract and Console IA | 无 | P0 | Implemented |
+| `V070-002` | Projection Query API and Unified Read Models | `V070-001` | P0 | Implemented |
+| `V070-003` | Project Home and Next Action Console | `V070-002` | P0 | Implemented |
+| `V070-004` | Spec Workbench Projection Surface | `V070-002` | P0 | Implemented |
+| `V070-005` | Task Workbench Execution and Acceptance Surface | `V070-002`, `V070-003` | P0 | Implemented |
+| `V070-006` | Event Timeline and Evidence Graph | `V070-002`, `V070-005` | P0 | Implemented |
+| `V070-007` | Acceptance and Delivery Surface | `V070-005`, `V070-006` | P0 | Implemented |
+| `V070-008` | Audit Read-only Surface and Audit Trigger Visibility | `V070-006`, `V070-007` | P1 | Implemented |
+| `V070-009` | Command Surface Runtime API Bridge | `V070-001`, `V070-002` | P0 | Implemented |
+| `V070-010` | Advanced Runtime Diagnostics Surface | `V070-002` | P1 | Implemented |
+| `V070-011` | Desktop View Models and Browser Preview Regression | `V070-003`, `V070-004`, `V070-005`, `V070-007`, `V070-008`, `V070-009` | P1 | Implemented |
+| `V070-012` | Project OS Console Acceptance and Release Readiness | `V070-011` | P1 | Implemented |
 
 ## 5. Development Tasks
 
@@ -79,6 +86,13 @@ Facts
 目标：
 
 定义 Projection Surface 和 Project OS Console 的页面职责、事实边界和命令回流规则。
+
+实现状态：
+
+- 已完成；
+- Projection Surface contract 和 Console IA 已落到 [../architecture/011-projection-surface-console-ia-v1.md](../architecture/011-projection-surface-console-ia-v1.md)；
+- Project Home、Spec Workbench、Task Workbench、Audit、Files、Advanced 的页面职责已经冻结；
+- Command Surface 被定义为 Runtime API / Action Proposal 入口，不直接写事实源。
 
 架构合同：
 
@@ -603,29 +617,36 @@ Facts
 
 ## 8. Verification Direction
 
-正式 SPEC 生成时，应至少覆盖：
+发布验证至少覆盖：
 
 - `npm --prefix apps/desktop run build`；
-- Desktop browser preview / smoke；
+- `npm --prefix apps/desktop run preview:smoke`；
+- `npm --prefix apps/desktop run console:readiness`；
 - projection read model tests；
 - command surface rejected / accepted tests；
 - workflow regression tests；
+- `bash scripts/verify_release_gate.sh --release-version v0.7.0 --release-tag v0.7.0`；
 - `git diff --check`。
 
-## 9. Next Step
+## 9. Release Closeout
 
-下一步不是直接执行这些任务。
+`v0.7.0` 已经发布。
 
-正确顺序是：
+发布后发现的缺口不是 Console 功能缺失，而是 release certification 证据和文档状态需要补齐。
 
 ```text
-SPEC Draft Preview
--> Project Preview
--> Issues Preview
--> Human Confirmation
--> docs/requirements/**
--> .agentflow/spec/projects/**
--> .agentflow/spec/issues/**
+v0.7.1 = Console Release Certification & Real Readiness Gate
 ```
 
-确认前，本文件只是 `v0.7.0` 的开发前置规划。
+`v0.7.1` 负责：
+
+- 固定 `v0.7.0` main / tag / release event gate run；
+- 把 Browser Preview readiness 和真实 Tauri workspace readiness 区分开；
+- 把本文件从 planning draft 收口为 released implementation record；
+- 澄清 Console write boundary；
+- 澄清 provider smoke gate 的边界。
+
+相关证据：
+
+- [AgentFlow v0.7.0](https://github.com/atxinbao/agentflow/releases/tag/v0.7.0)
+- [v0.7.1 release certification evidence](../v0.7.1/AGENTFLOW_V0_7_1_RELEASE_CERTIFICATION_EVIDENCE_V1.md)
