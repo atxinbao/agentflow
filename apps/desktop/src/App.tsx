@@ -4030,6 +4030,7 @@ function TaskDetailReader({
               status={effectiveDisplayStatus}
             />
             <TaskEvidenceGraph task={effectiveTask} projection={taskProjection} />
+            <TaskAcceptanceDeliverySurface task={effectiveTask} projection={taskProjection} />
           </div>
           <aside className="v16-task-workspace-sidebar" aria-label="当前阶段摘要">
             <TaskFlowSidebar
@@ -4431,6 +4432,111 @@ function evidenceGraphNode(label: string, value: string, ready: boolean, note: s
     status: ready ? "ready" : "missing",
     value,
   };
+}
+
+function TaskAcceptanceDeliverySurface({
+  projection,
+  task,
+}: {
+  projection: TaskProjection | null;
+  task: V1Issue;
+}) {
+  const items = taskAcceptanceDeliverySurfaceItems(task, projection);
+
+  return (
+    <section className="v16-task-acceptance-delivery" aria-label="验收与交付表面">
+      <div className="v16-task-acceptance-delivery-header">
+        <div>
+          <span>Acceptance / Delivery</span>
+          <strong>验证、证据、验收、完成写回和公开交付</strong>
+        </div>
+        <StatusBadge status={taskAcceptanceDeliveryReadinessTone(items.releaseReadiness.ready)}>
+          {items.releaseReadiness.ready ? "交付可读" : "等待交付"}
+        </StatusBadge>
+      </div>
+
+      <div className="v16-task-acceptance-delivery-grid">
+        <SectionList title="Verification" items={items.verification} />
+        <SectionList title="Evidence" items={items.evidence} />
+        <SectionList title="Acceptance" items={items.acceptance} />
+        <SectionList title="Completion" items={items.completion} />
+        <SectionList title="Delivery" items={items.delivery} />
+        <SectionList title="Release Readiness" items={items.releaseReadiness.items} />
+      </div>
+    </section>
+  );
+}
+
+function taskAcceptanceDeliverySurfaceItems(task: V1Issue, projection: TaskProjection | null) {
+  const acceptance = projection?.acceptance ?? null;
+  const delivery = projection?.delivery ?? null;
+  const publicDelivery = projection?.publicDelivery ?? null;
+  const validationPath = acceptance?.traceability.validationPath ?? null;
+  const evidencePath = acceptance?.traceability.evidencePath ?? delivery?.evidencePath ?? publicDelivery?.evidencePath ?? null;
+  const closeoutProofPath = acceptance?.traceability.closeoutProofPath ?? null;
+  const publicRecordPath = delivery?.publicRecordPath ?? publicDelivery?.changelogPath ?? publicDelivery?.releaseNotesUrl ?? null;
+  const prUrl = acceptance?.traceability.prUrl ?? delivery?.prUrl ?? publicDelivery?.prUrl ?? null;
+  const mergeCommit = acceptance?.traceability.mergeCommitSha ?? delivery?.mergeCommit ?? publicDelivery?.mergeCommit ?? null;
+  const readinessReady = Boolean(
+    task.displayStatus === "done"
+    && evidencePath
+    && acceptance?.passed
+    && closeoutProofPath
+    && (publicRecordPath || prUrl)
+  );
+  const acceptanceFailures = acceptance?.failureReasons ?? [];
+  const subGateLines =
+    acceptance?.subGates.flatMap((gate) => [
+      `${acceptanceGateLabelZh(gate.gate)}：${gate.passed ? "通过" : "未通过"}`,
+      ...gate.failureReasons.map((reason) => `失败原因：${reason}`),
+      gate.repairSuggestion ? `修复建议：${gate.repairSuggestion}` : null,
+    ].filter((line): line is string => Boolean(line))) ?? [];
+
+  return {
+    acceptance: acceptance
+      ? [
+          `判定：${acceptanceOutcomeLabelZh(acceptance.outcome, acceptance.passed)}`,
+          `摘要：${acceptance.summary}`,
+          ...acceptanceFailures.map((reason) => `失败原因：${reason}`),
+          ...subGateLines.slice(0, 8),
+        ]
+      : ["Acceptance Gate：等待验证证据。", "无审计时也可以阅读交付，审计不是 Done 默认步骤。"],
+    completion: [
+      closeoutProofPath ? `Completion Commit：${closeoutProofPath}` : "Completion Commit：未生成",
+      mergeCommit ? `合并提交：${mergeCommit}` : "合并提交：未记录",
+      projection?.session.writebackState ? `写回状态：${projection.session.writebackState}` : "写回状态：未记录",
+      task.displayStatus === "done" ? "任务状态：Done 已写回。" : "任务状态：尚未完成写回。",
+    ],
+    delivery: [
+      delivery?.summaryLine ?? "交付摘要：等待生成。",
+      publicRecordPath ? `公开记录：${publicRecordPath}` : "公开记录：未记录",
+      prUrl ? `PR/MR：${prUrl}` : "PR/MR：未记录",
+      ...(delivery?.missingPublicRecords ?? []).map((item) => `缺少公开记录：${item}`),
+    ],
+    evidence: [
+      delivery?.evidenceStatus ? `证据状态：${artifactStatusLabel(delivery.evidenceStatus)}` : "证据状态：未记录",
+      evidencePath ? `证据路径：${evidencePath}` : "证据路径：未生成",
+      acceptance?.traceability.acceptanceDecisionPath ? `验收判定：${acceptance.traceability.acceptanceDecisionPath}` : "验收判定：未生成",
+    ],
+    releaseReadiness: {
+      items: [
+        readinessReady ? "Release readiness：已满足当前任务交付阅读条件。" : "Release readiness：等待证据、验收或公开交付记录。",
+        projection ? "来源：Projection View Model。" : "来源：等待 Projection。",
+        "Projection refresh 不是 authority。",
+        "Audit 可选触发，独立于任务 Done。",
+      ],
+      ready: readinessReady,
+    },
+    verification: [
+      validationPath ? `验证记录：${validationPath}` : "验证记录：未生成",
+      projection?.runtime.runStatus ? `Run 状态：${executeProgressLabel(projection.runtime.runStatus)}` : "Run 状态：未记录",
+      projection?.session.status ? `会话状态：${mcpSessionStatusLabelZh(projection.session.status)}` : "会话状态：未记录",
+    ],
+  };
+}
+
+function taskAcceptanceDeliveryReadinessTone(ready: boolean) {
+  return ready ? "ready" : "warning";
 }
 
 function buildProjectionTaskStatusTimeline(

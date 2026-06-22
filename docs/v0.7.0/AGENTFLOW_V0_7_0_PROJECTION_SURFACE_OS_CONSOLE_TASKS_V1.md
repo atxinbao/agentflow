@@ -309,6 +309,16 @@ Facts
 
 把验收和交付做成一等只读表面。
 
+实现状态：
+
+- 已完成；
+- 任务页主列新增 `验收与交付表面`；
+- Surface 明确区分 Verification、Evidence、Acceptance、Completion、Delivery、Release Readiness；
+- Acceptance 展示 decision、sub-gates、failed reason、repair suggestion；
+- Completion 展示 Completion Commit、merge commit、writeback state；
+- Delivery 展示 delivery summary、public delivery links、缺失公开记录；
+- 明确 `Projection refresh 不是 authority`，无 audit 时也能完成 delivery 阅读。
+
 范围：
 
 - 展示 Acceptance Gate 子 gate；
