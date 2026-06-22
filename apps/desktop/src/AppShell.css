@@ -2509,6 +2509,189 @@ button.v16-task-project-row:hover {
   background: var(--v16-surface);
 }
 
+.v16-task-evidence-graph {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--v16-border-soft);
+  border-radius: 6px;
+  background: var(--v16-surface-muted);
+}
+
+.v16-task-evidence-graph-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.v16-task-evidence-graph-header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.v16-task-evidence-graph-header span {
+  color: var(--v16-muted);
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.3;
+}
+
+.v16-task-evidence-graph-header strong {
+  color: var(--v16-text);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
+.v16-task-evidence-graph-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.v16-task-evidence-timeline,
+.v16-task-evidence-chain {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--v16-border-soft);
+  border-radius: 6px;
+  background: var(--v16-surface);
+}
+
+.v16-task-evidence-timeline h3,
+.v16-task-evidence-chain h3 {
+  margin: 0;
+  color: var(--v16-text);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.v16-task-evidence-timeline ol,
+.v16-task-evidence-chain ol {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.v16-task-evidence-timeline li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 9px;
+  min-width: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--v16-border-subtle);
+}
+
+.v16-task-evidence-chain li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px 10px;
+  min-width: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--v16-border-subtle);
+}
+
+.v16-task-evidence-timeline li:first-child,
+.v16-task-evidence-chain li:first-child {
+  border-top: 0;
+}
+
+.v16-task-evidence-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--v16-muted);
+}
+
+.v16-task-evidence-dot.past,
+.v16-task-evidence-chain li.ready::before {
+  background: var(--v16-success);
+}
+
+.v16-task-evidence-dot.current {
+  background: var(--v16-warning);
+}
+
+.v16-task-evidence-dot.future,
+.v16-task-evidence-chain li.missing::before {
+  background: var(--v16-muted);
+}
+
+.v16-task-evidence-chain li::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 999px;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.v16-task-evidence-chain li span {
+  grid-column: 1;
+  padding-left: 14px;
+}
+
+.v16-task-evidence-timeline strong,
+.v16-task-evidence-chain strong {
+  min-width: 0;
+  color: var(--v16-text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.v16-task-evidence-timeline small,
+.v16-task-evidence-chain span,
+.v16-task-evidence-chain small {
+  min-width: 0;
+  color: var(--v16-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.v16-task-evidence-timeline p {
+  margin: 4px 0 0;
+  color: var(--v16-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.v16-task-evidence-chain small {
+  grid-column: 2;
+}
+
+.v16-task-evidence-warning {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--v16-warning) 34%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--v16-warning) 8%, transparent);
+}
+
+.v16-task-evidence-warning p {
+  margin: 0;
+  color: var(--v16-text);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .v16-task-workflow-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
@@ -3197,6 +3380,7 @@ button.v16-list-item {
   }
 
   .v16-task-stage-grid,
+  .v16-task-evidence-graph-grid,
   .v16-task-execution-grid,
   .v16-task-artifact-columns,
   .v16-audit-surface-grid {
@@ -3229,6 +3413,10 @@ button.v16-list-item {
 
   .v16-issue-status-flow-shell {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .v16-task-evidence-chain li {
+    grid-template-columns: 82px minmax(0, 1fr);
   }
 
   .v16-issue-status-stage-view {
