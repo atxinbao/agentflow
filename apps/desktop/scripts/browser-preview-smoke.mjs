@@ -109,6 +109,25 @@ try {
     projects: inputSnapshot.projects,
     relations: inputSnapshot.relations,
   });
+  const desktopViewModels = viewModels.buildDesktopProjectionViewModels({
+    projectProjection,
+    selectedTaskProjection: progressProjection,
+    specWorkbenchProjection,
+    taskProjections,
+    taskTree,
+  });
+  const missingProjectHomeViewModel = viewModels.buildProjectHomeViewModel(null);
+  const staleProjectHomeViewModel = viewModels.buildProjectHomeViewModel({
+    ...projectProjection,
+    projectBrain: {
+      ...projectProjection.projectBrain,
+      missingDocuments: ["docs/product/project-brain.md"],
+    },
+  });
+  const conflictSpecWorkbenchViewModel = viewModels.buildSpecWorkbenchViewModel({
+    ...specWorkbenchProjection,
+    warnings: ["conflict: preview artifact 与 issue authority 不一致。"],
+  });
   assert.equal(inputSnapshot.issues.some((issue) => "riskLevel" in issue), false);
   assert.equal(inputSnapshot.issues.every((issue) => "executionRisk" in issue), true);
   assert.deepEqual(
@@ -171,6 +190,38 @@ try {
     taskProjections.some((task) => task.publicDelivery?.prUrl?.includes("/pull/100")),
     true,
   );
+  assert.equal(desktopViewModels.version, "desktop-projection-view-models.v1");
+  assert.equal(desktopViewModels.projectHome.readiness.status, "ready");
+  assert.equal(desktopViewModels.specWorkbench.readiness.status, "ready");
+  assert.equal(desktopViewModels.taskWorkbench.readiness.status, "ready");
+  assert.equal(desktopViewModels.taskWorkbench.selectedIssueId, "iss-progress");
+  assert.equal(desktopViewModels.taskWorkbench.statusCounts.in_progress, 1);
+  assert.deepEqual(desktopViewModels.taskWorkbench.timelineStates, [
+    "backlog",
+    "todo",
+    "in_progress",
+    "in_review",
+    "done",
+  ]);
+  assert.equal(desktopViewModels.acceptanceDeliveryAudit.acceptanceState, "ready");
+  assert.equal(desktopViewModels.acceptanceDeliveryAudit.auditState, "ready");
+  assert.equal(desktopViewModels.acceptanceDeliveryAudit.deliveryState, "ready");
+  assert.equal(desktopViewModels.surfaces.every((surface) => surface.readonly), true);
+  assert.deepEqual(
+    desktopViewModels.surfaces.map((surface) => surface.id),
+    [
+      "project-home",
+      "spec-workbench",
+      "task-workbench",
+      "event-timeline",
+      "evidence-graph",
+      "acceptance-delivery-audit",
+      "command-surface",
+    ],
+  );
+  assert.equal(missingProjectHomeViewModel.readiness.status, "missing");
+  assert.equal(staleProjectHomeViewModel.readiness.status, "stale");
+  assert.equal(conflictSpecWorkbenchViewModel.readiness.status, "conflict");
   assert.equal(
     taskProjections.every((task) => !JSON.stringify(task.publicDelivery).includes(".agentflow/output/release")),
     true,
