@@ -92,6 +92,40 @@ jobs:
       - name: Desktop build
         run: npm --prefix apps/desktop run build
 
+      - name: Browser preview smoke
+        run: |
+          artifact_dir="${{ steps.release_meta.outputs.artifact_dir }}"
+          mkdir -p "$artifact_dir"
+          log_path="$artifact_dir/browser-preview-smoke.log"
+          status_path="$artifact_dir/browser-preview-smoke.status.json"
+
+          set +e
+          npm --prefix apps/desktop run preview:smoke > "$log_path" 2>&1
+          exit_code=$?
+          set -e
+
+          node -e "const fs=require('fs'); const code=Number(process.argv[2]); fs.writeFileSync(process.argv[1], JSON.stringify({command:'npm --prefix apps/desktop run preview:smoke', exitCode: code, status: code === 0 ? 'passed' : 'failed', logPath:'browser-preview-smoke.log'}, null, 2) + '\n');" "$status_path" "$exit_code"
+
+          cat "$log_path"
+          exit "$exit_code"
+
+      - name: Console readiness
+        run: |
+          artifact_dir="${{ steps.release_meta.outputs.artifact_dir }}"
+          mkdir -p "$artifact_dir"
+          log_path="$artifact_dir/console-readiness.log"
+          status_path="$artifact_dir/console-readiness.status.json"
+
+          set +e
+          npm --prefix apps/desktop run console:readiness > "$log_path" 2>&1
+          exit_code=$?
+          set -e
+
+          node -e "const fs=require('fs'); const code=Number(process.argv[2]); fs.writeFileSync(process.argv[1], JSON.stringify({command:'npm --prefix apps/desktop run console:readiness', exitCode: code, status: code === 0 ? 'passed' : 'failed', logPath:'console-readiness.log'}, null, 2) + '\n');" "$status_path" "$exit_code"
+
+          cat "$log_path"
+          exit "$exit_code"
+
       - name: Release gate E2E
         env:
           RELEASE_VERSION: ${{ steps.release_meta.outputs.release_version }}
@@ -117,6 +151,17 @@ jobs:
           if [ -f "$artifact_dir/summary.md" ]; then
             cat "$artifact_dir/summary.md" >> "$GITHUB_STEP_SUMMARY"
           fi
+          for status_file in \
+            "$artifact_dir/browser-preview-smoke.status.json" \
+            "$artifact_dir/console-readiness.status.json"
+          do
+            if [ -f "$status_file" ]; then
+              printf "\n\n## %s\n\n" "$(basename "$status_file" .status.json)" >> "$GITHUB_STEP_SUMMARY"
+              printf '```json\n' >> "$GITHUB_STEP_SUMMARY"
+              cat "$status_file" >> "$GITHUB_STEP_SUMMARY"
+              printf '```\n' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
 
       - name: Upload gate artifacts
         if: always()
