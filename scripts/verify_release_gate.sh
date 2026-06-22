@@ -85,6 +85,10 @@ CLI_DIR="$ARTIFACT_DIR/cli"
 PUBLIC_DIR="$ARTIFACT_DIR/public"
 RUNTIME_DIR="$ARTIFACT_DIR/runtime"
 mkdir -p "$CLI_DIR" "$PUBLIC_DIR" "$RUNTIME_DIR"
+PROVIDER_SMOKE="${PROVIDER_SMOKE:-0}"
+PROVIDER_SMOKE_PROVIDER="${PROVIDER_SMOKE_PROVIDER:-codex}"
+PROVIDER_SMOKE_STATUS_PATH="$RUNTIME_DIR/provider-smoke-status.json"
+PROVIDER_SMOKE_ARTIFACT_PATH="$RUNTIME_DIR/provider-smoke-artifact.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -145,6 +149,25 @@ path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encodi
 PY
 }
 
+write_provider_smoke_status() {
+  local status="$1"
+  local provider="$2"
+  local reason="$3"
+  local artifact_path="$4"
+  python3 - "$PROVIDER_SMOKE_STATUS_PATH" "$status" "$provider" "$reason" "$artifact_path" <<'PY'
+import json, pathlib, sys, time
+path = pathlib.Path(sys.argv[1])
+payload = {
+    "status": sys.argv[2],
+    "provider": sys.argv[3],
+    "reason": sys.argv[4],
+    "artifactPath": sys.argv[5] or None,
+    "updatedAt": int(time.time()),
+}
+path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 write_gate_reports() {
   python3 - \
     "$STATUS_PATH" \
@@ -169,7 +192,9 @@ write_gate_reports() {
     "$GATE_REF_TYPE" \
     "$REQUIRE_PUBLISHED_RELEASE_FACTS" \
     "$RUNTIME_DIR/release-facts.json" \
-    "$RUNTIME_DIR/external-review-surface.json" <<'PY'
+    "$RUNTIME_DIR/external-review-surface.json" \
+    "$PROVIDER_SMOKE_STATUS_PATH" \
+    "$PROVIDER_SMOKE_ARTIFACT_PATH" <<'PY'
 import json
 import pathlib
 import sys
@@ -197,6 +222,8 @@ gate_ref_type = sys.argv[20] or None
 require_published_release_facts = sys.argv[21] == "1"
 release_path = pathlib.Path(sys.argv[22])
 review_path = pathlib.Path(sys.argv[23])
+provider_smoke_status_path = pathlib.Path(sys.argv[24])
+provider_smoke_artifact_path = pathlib.Path(sys.argv[25])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -213,6 +240,12 @@ if stage_log_path.is_file():
 release = load_json(release_path) or {}
 review = load_json(review_path) or {}
 audit = review.get("auditSummary") or {}
+provider_smoke = load_json(provider_smoke_status_path) or {
+    "status": "missing",
+    "provider": None,
+    "reason": "provider smoke status missing",
+    "artifactPath": None,
+}
 current_status = status.get("status", "unknown")
 current_stage = status.get("stage")
 current_message = status.get("message")
@@ -274,6 +307,8 @@ runtime_artifacts = [
     {"path": "runtime/completion-runtime.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/completion-runtime.json").is_file()},
     {"path": "runtime/final-closeout-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/final-closeout-proof.json").is_file()},
     {"path": "runtime/audit-index.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-index.json").is_file()},
+    {"path": "runtime/provider-smoke-status.json", "exists": provider_smoke_status_path.is_file()},
+    {"path": "runtime/provider-smoke-artifact.json", "exists": provider_smoke_artifact_path.is_file()},
 ]
 
 checklist = [
@@ -303,7 +338,10 @@ summary_payload = {
     "status": current_status,
     "conclusion": current_status,
     "gateClass": "runtime-fixture-gate",
-    "providerSmokeGate": "deferred",
+    "providerSmokeGate": provider_smoke.get("status"),
+    "providerSmokeProvider": provider_smoke.get("provider"),
+    "providerSmokeReason": provider_smoke.get("reason"),
+    "providerSmokeArtifactPath": provider_smoke.get("artifactPath"),
     "failedStage": current_stage if current_status == "failed" else None,
     "failureMessage": current_message if current_status == "failed" else None,
     "sourceCommitSha": source_commit_sha,
@@ -334,7 +372,9 @@ summary_lines = [
     "# Release Gate Runtime Fixture Summary",
     "",
     "- Gate class: `runtime-fixture-gate`",
-    "- Provider smoke gate: `deferred`",
+    f"- Provider smoke gate: `{provider_smoke.get('status')}`",
+    f"- Provider smoke provider: `{provider_smoke.get('provider') or 'n/a'}`",
+    f"- Provider smoke reason: `{provider_smoke.get('reason') or 'n/a'}`",
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
     f"- Source commit: `{source_commit_sha or 'n/a'}`",
@@ -381,8 +421,11 @@ certification_payload = {
     "sourceCommitSha": source_commit_sha,
     "gateWorkflow": "release-gate",
     "gateClass": "runtime-fixture-gate",
-    "providerSmokeGate": "deferred",
-    "providerSmokeBoundary": "future provider-smoke-gate should prove minimal real provider launch, exit, and session projection without replacing runtime fixture coverage",
+    "providerSmokeGate": provider_smoke.get("status"),
+    "providerSmokeProvider": provider_smoke.get("provider"),
+    "providerSmokeReason": provider_smoke.get("reason"),
+    "providerSmokeArtifactPath": provider_smoke.get("artifactPath"),
+    "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "currentGateRun": current_gate_run,
     "mainGateRun": main_gate_run,
     "tagGateRun": tag_gate_run,
@@ -418,7 +461,9 @@ cert_lines = [
     "# Release Gate Certification",
     "",
     "- Gate class: `runtime-fixture-gate`",
-    "- Provider smoke gate: `deferred`",
+    f"- Provider smoke gate: `{provider_smoke.get('status')}`",
+    f"- Provider smoke provider: `{provider_smoke.get('provider') or 'n/a'}`",
+    f"- Provider smoke reason: `{provider_smoke.get('reason') or 'n/a'}`",
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
     f"- Source commit: `{source_commit_sha or 'n/a'}`",
@@ -716,6 +761,44 @@ else:
     raise SystemExit(f"unsupported projection verification record: {record_name}")
 PY
   record_stage "$record_name" "passed" "$(basename "$projection_path")"
+}
+
+run_provider_smoke_gate() {
+  if [[ "$PROVIDER_SMOKE" != "1" ]]; then
+    write_provider_smoke_status "skipped" "$PROVIDER_SMOKE_PROVIDER" "PROVIDER_SMOKE=0" ""
+    record_stage "provider-smoke-gate" "skipped" "PROVIDER_SMOKE=0"
+    return 0
+  fi
+
+  local smoke_workspace="$TMP_DIR/provider-smoke-workspace"
+  mkdir -p "$smoke_workspace"
+  git -C "$smoke_workspace" init -q
+  git -C "$smoke_workspace" config user.email "codex@example.com"
+  git -C "$smoke_workspace" config user.name "Codex"
+
+  if ! (
+    cd "$smoke_workspace"
+    "$BIN" provider-smoke \
+      --provider "$PROVIDER_SMOKE_PROVIDER" \
+      --issue-id AF-PROVIDER-SMOKE-001 \
+      --run-id run-provider-smoke-001 \
+      --working-directory "$smoke_workspace" \
+      --launch-request-path .agentflow/tmp/provider-smoke-request.md \
+      >"$PROVIDER_SMOKE_ARTIFACT_PATH"
+  ); then
+    write_provider_smoke_status "failed" "$PROVIDER_SMOKE_PROVIDER" "provider smoke command failed" "$PROVIDER_SMOKE_ARTIFACT_PATH"
+    fail_stage "provider-smoke-gate" "provider smoke command failed"
+  fi
+
+  local outcome reason
+  outcome="$(json_field "$PROVIDER_SMOKE_ARTIFACT_PATH" outcome)"
+  reason="$(json_field "$PROVIDER_SMOKE_ARTIFACT_PATH" reason)"
+  write_provider_smoke_status "$outcome" "$PROVIDER_SMOKE_PROVIDER" "$reason" "$PROVIDER_SMOKE_ARTIFACT_PATH"
+  if [[ "$outcome" == "passed" || "$outcome" == "skipped" ]]; then
+    record_stage "provider-smoke-gate" "$outcome" "$reason"
+  else
+    fail_stage "provider-smoke-gate" "$reason"
+  fi
 }
 
 prepare_workspace() {
@@ -1057,6 +1140,7 @@ main() {
   prepare_workspace
   verify_release_metadata "$WORKSPACE"
   verify_release_publication_facts "$WORKSPACE"
+  run_provider_smoke_gate
   write_requirement
 
   local intake_json="$CLI_DIR/artifacts-intake.json"

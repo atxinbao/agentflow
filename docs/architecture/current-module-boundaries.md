@@ -620,6 +620,7 @@ docs/requirements/**
 - launch plan 生成
 - provider session snapshot
 - poll / cancel / logs
+- provider smoke gate 最小 health / launch / terminal projection 证明
 - GitHub、GitLab、Codex、Browser Preview 等 provider 适配
 
 不负责：
@@ -627,6 +628,8 @@ docs/requirements/**
 - 决定哪条任务先跑
 - 替代 workflow runtime
 - 持有任务 authority
+- 替代 runtime-fixture-gate
+- 执行长时间 provider production E2E
 
 实现位置：
 

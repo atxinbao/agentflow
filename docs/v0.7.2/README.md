@@ -58,6 +58,6 @@
 - simulation 不写 authority / event store；
 - message bus 只定义本地进程内 event envelope 和 consumer boundary；
 - provider smoke gate 有最小 launch / exit / projection 标准；
+- provider smoke gate 默认 clear skip，显式 `PROVIDER_SMOKE=1` 才执行真实 provider 最小 smoke；
 - projection / command / runtime plane 有 manifest；
 - release-gate 能证明 Runtime Foundation hardening 覆盖。
-

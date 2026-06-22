@@ -9,6 +9,7 @@ pub mod health;
 pub mod model;
 pub mod provider;
 pub mod registry;
+pub mod smoke;
 pub mod storage;
 
 use agentflow_event_store::{
@@ -36,6 +37,10 @@ pub use model::{
     MCP_SESSION_SNAPSHOT_VERSION,
 };
 pub use provider::{run_command, CommandProbe, McpAgentProvider, McpProviderBridge};
+pub use smoke::{
+    run_provider_smoke_gate, McpProviderSmokeArtifact, McpProviderSmokeOutcome,
+    McpProviderSmokeRequest, MCP_PROVIDER_SMOKE_ARTIFACT_VERSION,
+};
 pub use storage::{
     find_session_snapshot_by_run, load_session_snapshots, prepare_mcp_workspace, read_launch_plan,
     read_provider_status, read_registry, read_session_snapshot, write_launch_plan,
