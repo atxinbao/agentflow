@@ -9,14 +9,15 @@ pub mod model;
 pub mod storage;
 
 pub use model::{
-    TaskAcceptanceGateDecision, TaskAcceptanceGateKind, TaskAcceptanceSubGateDecision,
-    TaskChangedFile, TaskChangedFileSource, TaskChangedFilesRecord, TaskCommandInput,
-    TaskCommandRecord, TaskEvidence, TaskEvidenceEntry, TaskEvidenceEntryStatus,
-    TaskPreflightCheck, TaskPreflightCheckStatus, TaskPreflightDecision, TaskRun,
-    TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord, TaskWorkSessionEvidence,
-    TaskWorkSessionRecord, TaskWorkSessionRecoverySummary, TaskWorkSessionStatus,
-    WorkLoopArtifactClass, WorkLoopArtifactContract, WorkLoopFilesystemContract, WorkLoopRoleAlias,
-    WorkLoopStage, WorkLoopStageContract, TASK_ACCEPTANCE_GATE_VERSION, TASK_CHANGED_FILES_VERSION,
+    TaskAcceptanceGateDecision, TaskAcceptanceGateKind, TaskAcceptanceOutcome,
+    TaskAcceptanceSubGateDecision, TaskAcceptanceTraceability, TaskChangedFile,
+    TaskChangedFileSource, TaskChangedFilesRecord, TaskCommandInput, TaskCommandRecord,
+    TaskEvidence, TaskEvidenceEntry, TaskEvidenceEntryStatus, TaskPreflightCheck,
+    TaskPreflightCheckStatus, TaskPreflightDecision, TaskRun, TaskRunCheckpoint, TaskRunStatus,
+    TaskValidationRecord, TaskWorkSessionEvidence, TaskWorkSessionRecord,
+    TaskWorkSessionRecoverySummary, TaskWorkSessionStatus, WorkLoopArtifactClass,
+    WorkLoopArtifactContract, WorkLoopFilesystemContract, WorkLoopRoleAlias, WorkLoopStage,
+    WorkLoopStageContract, TASK_ACCEPTANCE_GATE_VERSION, TASK_CHANGED_FILES_VERSION,
     TASK_COMMAND_VERSION, TASK_EVIDENCE_VERSION, TASK_PREFLIGHT_VERSION,
     TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION, TASK_VALIDATION_VERSION,
     TASK_WORK_SESSION_EVIDENCE_VERSION, TASK_WORK_SESSION_RECOVERY_VERSION,

@@ -168,6 +168,28 @@ Acceptance Gate
 - 记录下一步修复建议；
 - 接入 event / task evidence。
 
+实现契约：
+
+```text
+.agentflow/tasks/<issue-id>/acceptance-gate.json
+```
+
+必须记录：
+
+- `outcome`：`accepted` / `rejected` / `human_review_required`；
+- `summary`：面向人类的判定摘要；
+- `subGates[]`：每个子 gate 的通过状态、输入、输出、失败原因和修复建议；
+- `failureReasons[]`：拒绝 Done 的直接原因；
+- `nextSteps[]`：下一步修复或提交动作；
+- `traceability`：issue、run、session、证据、验证、closeout proof、PR/MR、merge commit 的追溯关系。
+
+事件规则：
+
+- 验收通过写入 `issue.acceptance.accepted`；
+- 验收拒绝写入 `issue.acceptance.rejected`；
+- 需要人工判断写入 `issue.acceptance.human-review-required`；
+- projection 只能读取 acceptance summary，不允许反向驱动 Done。
+
 验收标准：
 
 - 每次 Done 前都有 acceptance decision；

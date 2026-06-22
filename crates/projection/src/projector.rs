@@ -3,14 +3,16 @@ use crate::{
         CompletionDecisionIndex, CompletionDecisionIndexEntry, CompletionDecisionProjection,
         IssueStatusIndex, IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
         ProjectCompletionProjection, ProjectExternalReviewProjection, ProjectIssueLanes,
-        ProjectProjection, ProjectReleaseProjection, ProjectionAuditSummary,
-        ProjectionDeliverySummary, ProjectionPhase, ProjectionPublicDelivery,
-        ProjectionRuntimeSummary, ProjectionSessionSummary, ProjectionSummary,
-        RequirementPreviewIndex, RequirementPreviewIndexEntry, RequirementPreviewProjection,
-        SpecLoopActionProposalProjection, SpecLoopProjection, SpecLoopStageProjection,
-        SpecLoopTraceabilityEdge, TaskProjection, TaskTimelineEvent, TaskTimelineItem,
-        COMPLETION_DECISION_INDEX_VERSION, COMPLETION_DECISION_PROJECTION_VERSION,
-        ISSUE_STATUS_INDEX_VERSION, PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
+        ProjectProjection, ProjectReleaseProjection, ProjectionAcceptanceSubGateSummary,
+        ProjectionAcceptanceSummary, ProjectionAcceptanceTraceabilitySummary,
+        ProjectionAuditSummary, ProjectionDeliverySummary, ProjectionPhase,
+        ProjectionPublicDelivery, ProjectionRuntimeSummary, ProjectionSessionSummary,
+        ProjectionSummary, RequirementPreviewIndex, RequirementPreviewIndexEntry,
+        RequirementPreviewProjection, SpecLoopActionProposalProjection, SpecLoopProjection,
+        SpecLoopStageProjection, SpecLoopTraceabilityEdge, TaskProjection, TaskTimelineEvent,
+        TaskTimelineItem, COMPLETION_DECISION_INDEX_VERSION,
+        COMPLETION_DECISION_PROJECTION_VERSION, ISSUE_STATUS_INDEX_VERSION,
+        PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
         REQUIREMENT_PREVIEW_PROJECTION_VERSION, SPEC_LOOP_PROJECTION_VERSION,
         TASK_PROJECTION_VERSION,
     },
@@ -624,6 +626,7 @@ fn project_issue(
     );
     let delivery = build_delivery_summary(root, issue, &public_delivery);
     let audit = build_audit_summary(root, issue, latest_run_id.as_deref(), audit_index);
+    let acceptance = build_acceptance_summary(root, issue);
     branch_name = branch_name
         .or_else(|| runtime.branch_name.clone())
         .or_else(|| session.branch_name.clone());
@@ -646,8 +649,44 @@ fn project_issue(
         session,
         delivery,
         audit,
+        acceptance,
         updated_at,
     }
+}
+
+fn build_acceptance_summary(root: &Path, issue: &SpecIssue) -> Option<ProjectionAcceptanceSummary> {
+    let decision =
+        agentflow_task_artifacts::load_task_acceptance_gate_decision(root, &issue.issue_id).ok()?;
+    Some(ProjectionAcceptanceSummary {
+        outcome: decision.outcome.as_str().to_string(),
+        passed: decision.passed,
+        summary: decision.summary,
+        failure_reasons: decision.failure_reasons,
+        next_steps: decision.next_steps,
+        sub_gates: decision
+            .sub_gates
+            .into_iter()
+            .map(|gate| ProjectionAcceptanceSubGateSummary {
+                gate: gate.gate.as_str().to_string(),
+                passed: gate.passed,
+                failure_reasons: gate.failure_reasons,
+                repair_suggestion: gate.repair_suggestion,
+            })
+            .collect(),
+        traceability: ProjectionAcceptanceTraceabilitySummary {
+            issue_id: decision.traceability.issue_id,
+            run_id: decision.traceability.run_id,
+            acceptance_decision_path: decision.traceability.acceptance_decision_path,
+            evidence_path: decision.traceability.evidence_path,
+            validation_path: decision.traceability.validation_path,
+            closeout_proof_path: decision.traceability.closeout_proof_path,
+            session_id: decision.traceability.session_id,
+            provider: decision.traceability.provider,
+            pr_url: decision.traceability.pr_url,
+            merge_commit_sha: decision.traceability.merge_commit_sha,
+        },
+        checked_at: decision.checked_at,
+    })
 }
 
 fn project_project(
@@ -2057,6 +2096,11 @@ fn event_summary(event: &TaskEvent) -> String {
         "issue.pr.created" => "PR/MR 已创建。".to_string(),
         "issue.closeout.proof.recorded" => "收口证明已写入，等待 Done 写回。".to_string(),
         "issue.pr.merged" => "PR/MR 已合并，等待关单与收口证明。".to_string(),
+        "issue.acceptance.accepted" => "验收判定已通过。".to_string(),
+        "issue.acceptance.rejected" => "验收判定被拒绝，需先修复失败原因。".to_string(),
+        "issue.acceptance.human-review-required" => {
+            "验收判定需要人工判断，不能伪装成自动通过。".to_string()
+        }
         "issue.completed" => "任务 Done 写回完成。".to_string(),
         "issue.blocked" => "任务进入阻断状态。".to_string(),
         "issue.cancelled" => "任务已取消。".to_string(),

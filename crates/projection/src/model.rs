@@ -218,6 +218,51 @@ pub struct ProjectionAuditSummary {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectionAcceptanceSubGateSummary {
+    pub gate: String,
+    pub passed: bool,
+    #[serde(default)]
+    pub failure_reasons: Vec<String>,
+    pub repair_suggestion: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionAcceptanceTraceabilitySummary {
+    pub issue_id: String,
+    pub run_id: String,
+    pub acceptance_decision_path: String,
+    pub evidence_path: String,
+    pub validation_path: String,
+    pub closeout_proof_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_commit_sha: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionAcceptanceSummary {
+    pub outcome: String,
+    pub passed: bool,
+    pub summary: String,
+    #[serde(default)]
+    pub failure_reasons: Vec<String>,
+    #[serde(default)]
+    pub next_steps: Vec<String>,
+    #[serde(default)]
+    pub sub_gates: Vec<ProjectionAcceptanceSubGateSummary>,
+    pub traceability: ProjectionAcceptanceTraceabilitySummary,
+    pub checked_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectBrainProjection {
     pub project_path: String,
     pub goal_path: String,
@@ -352,6 +397,8 @@ pub struct TaskProjection {
     pub delivery: ProjectionDeliverySummary,
     #[serde(default)]
     pub audit: ProjectionAuditSummary,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acceptance: Option<ProjectionAcceptanceSummary>,
     pub updated_at: u64,
 }
 

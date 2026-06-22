@@ -304,6 +304,7 @@ pub fn classify_task_event(event_type: &str) -> TaskEventCategory {
             if value.starts_with("review.")
                 || value.starts_with("audit.")
                 || value.starts_with("delivery.")
+                || value.starts_with("issue.acceptance.")
                 || value.starts_with("issue.validation.")
                 || value.starts_with("issue.review.")
                 || value.starts_with("issue.pr.")

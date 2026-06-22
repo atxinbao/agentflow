@@ -16,12 +16,13 @@ use agentflow_runtime_api::{
 use agentflow_spec::{read_spec_issue, update_spec_issue_status, SpecIssueStatus};
 use agentflow_task_artifacts::{
     load_task_changed_files, load_task_evidence, load_task_run, load_task_validation,
-    task_changed_files_path, task_evidence_dir, task_run_dir, update_task_run_status,
-    write_task_acceptance_gate_decision, write_task_changed_files, write_task_command_record,
-    write_task_evidence, write_task_validation_with_assessment, TaskAcceptanceGateDecision,
-    TaskAcceptanceGateKind, TaskAcceptanceSubGateDecision, TaskChangedFile, TaskChangedFileSource,
-    TaskCommandInput, TaskEvidence, TaskEvidenceEntry, TaskEvidenceEntryStatus, TaskRun,
-    TaskRunStatus,
+    task_acceptance_gate_path, task_changed_files_path, task_evidence_dir, task_run_dir,
+    update_task_run_status, write_task_acceptance_gate_decision, write_task_changed_files,
+    write_task_command_record, write_task_evidence, write_task_validation_with_assessment,
+    TaskAcceptanceGateDecision, TaskAcceptanceGateKind, TaskAcceptanceOutcome,
+    TaskAcceptanceSubGateDecision, TaskAcceptanceTraceability, TaskChangedFile,
+    TaskChangedFileSource, TaskCommandInput, TaskEvidence, TaskEvidenceEntry,
+    TaskEvidenceEntryStatus, TaskRun, TaskRunStatus,
 };
 use agentflow_task_loop::{AgentLaunchPayload, TaskLoop, TaskLoopLaunch, AGENT_LAUNCH_REQUESTED};
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
@@ -151,18 +152,26 @@ pub(crate) fn complete_build_agent_issue_from_request(
         build_acceptance_gate_decision(root, &issue, &review.run_id, &evidence, &proof)?;
     write_task_acceptance_gate_decision(root, &review.issue_id, &gate_decision)?;
     if !gate_decision.passed {
+        append_acceptance_decision_event(
+            root,
+            &issue,
+            &review.run_id,
+            &gate_decision,
+            &proof_path,
+        )?;
         let _ = agentflow_projection::rebuild_projections(root)?;
         agentflow_state::refresh_state(root)?;
         anyhow::bail!(
             "build agent completion requires acceptance gate to pass for {} {}: {}",
             review.issue_id,
             review.run_id,
-            gate_decision.blockers.join("; ")
+            gate_decision.failure_reasons.join("; ")
         );
     }
     let _ = assert_issue_mark_done_allowed(root, &issue.issue_id, &issue.status)?;
     write_json(&proof_path, &proof)?;
-    append_task_event_once(
+    append_acceptance_decision_event(root, &issue, &review.run_id, &gate_decision, &proof_path)?;
+    let _ = append_task_event_once(
         root,
         TaskEventDraft {
             flow_type: WorkflowFlowType::Work,
@@ -236,6 +245,59 @@ pub(crate) fn complete_build_agent_issue_from_request(
         closeout_proof_path: proof_path,
         next_launch,
     })
+}
+
+fn append_acceptance_decision_event(
+    root: &Path,
+    issue: &agentflow_spec::SpecIssue,
+    run_id: &str,
+    decision: &TaskAcceptanceGateDecision,
+    proof_path: &Path,
+) -> Result<()> {
+    let event_type = match decision.outcome {
+        TaskAcceptanceOutcome::Accepted => "issue.acceptance.accepted",
+        TaskAcceptanceOutcome::Rejected => "issue.acceptance.rejected",
+        TaskAcceptanceOutcome::HumanReviewRequired => "issue.acceptance.human-review-required",
+    };
+    append_task_event_once(
+        root,
+        TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(run_id.to_string()),
+            event_type: event_type.to_string(),
+            authority_role: Some(WorkflowAgentRole::System),
+            actor: EventActor {
+                role: "build-agent".to_string(),
+                kind: "system".to_string(),
+            },
+            state: None,
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: json!({
+                "issueId": issue.issue_id,
+                "projectId": issue.project_id,
+                "runId": run_id,
+                "outcome": decision.outcome.as_str(),
+                "passed": decision.passed,
+                "summary": decision.summary.as_str(),
+                "failureReasons": &decision.failure_reasons,
+                "nextSteps": &decision.next_steps,
+                "subGates": serde_json::to_value(&decision.sub_gates)?,
+                "traceability": serde_json::to_value(&decision.traceability)?,
+            }),
+            artifact_refs: vec![
+                decision.traceability.acceptance_decision_path.clone(),
+                decision.traceability.evidence_path.clone(),
+                relative_path(root, proof_path),
+            ],
+            idempotency_key: Some(format!("{}:{}:{}", event_type, issue.issue_id, run_id)),
+        },
+    )?;
+    Ok(())
 }
 
 fn load_prepared_review_if_available(
@@ -1302,6 +1364,8 @@ fn build_acceptance_gate_decision(
     );
     let proof_path = closeout_proof_path(root, &issue.issue_id, run_id);
     let proof_ref = expected_closeout_proof_path.clone();
+    let _ = task_acceptance_gate_path(root, &issue.issue_id)?;
+    let acceptance_decision_path = task_acceptance_gate_ref(&issue.issue_id);
     let merged = proof
         .get("merged")
         .and_then(serde_json::Value::as_bool)
@@ -1312,6 +1376,11 @@ fn build_acceptance_gate_decision(
         .unwrap_or(false);
     let pr_url = proof
         .get("prUrl")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let merge_commit_sha = proof
+        .get("mergeCommitSha")
+        .or_else(|| proof.get("mergeCommit"))
         .and_then(serde_json::Value::as_str)
         .map(str::to_string);
     let manual_reason = proof
@@ -1564,16 +1633,70 @@ fn build_acceptance_gate_decision(
                 .map(move |reason| format!("{} gate: {reason}", gate.gate.as_str()))
         })
         .collect::<Vec<_>>();
+    let outcome = if blockers.is_empty()
+        && entries
+            .iter()
+            .any(|entry| entry.required && entry.status == TaskEvidenceEntryStatus::Manual)
+    {
+        TaskAcceptanceOutcome::HumanReviewRequired
+    } else if blockers.is_empty() {
+        TaskAcceptanceOutcome::Accepted
+    } else {
+        TaskAcceptanceOutcome::Rejected
+    };
+    let mut next_steps = if blockers.is_empty() {
+        vec!["进入 Completion Commit，写回 Done 事实。".to_string()]
+    } else {
+        sub_gates
+            .iter()
+            .filter(|gate| !gate.passed)
+            .map(|gate| gate.repair_suggestion.clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
+    };
+    if next_steps.is_empty() {
+        next_steps.push("重新运行验收并确认 issue、run、session 与交付事实一致。".to_string());
+    }
+    let summary = match outcome {
+        TaskAcceptanceOutcome::Accepted => "验收通过，允许进入 Completion Commit。".to_string(),
+        TaskAcceptanceOutcome::Rejected => {
+            format!("验收拒绝，{} 个阻断项需要修复。", blockers.len())
+        }
+        TaskAcceptanceOutcome::HumanReviewRequired => {
+            "验收需要人工判断，不能伪装成自动通过。".to_string()
+        }
+    };
+    let traceability = TaskAcceptanceTraceability {
+        issue_id: issue.issue_id.clone(),
+        run_id: run_id.to_string(),
+        session_id: run.session_id.clone(),
+        session_owner: run.session_owner.clone(),
+        provider: run.provider.clone(),
+        branch_name: run.branch_name.clone(),
+        acceptance_decision_path,
+        evidence_path: task_evidence_path(&issue.issue_id),
+        validation_path: expected_validation_path.clone(),
+        changed_files_path: evidence.changed_files_path.clone(),
+        closeout_proof_path: proof_ref.clone(),
+        pr_url,
+        merge_commit_sha,
+    };
 
     Ok(TaskAcceptanceGateDecision {
         version: String::new(),
         issue_id: issue.issue_id.clone(),
         run_id: run_id.to_string(),
         passed: blockers.is_empty(),
+        outcome,
+        summary,
         sub_gates,
         required_evidence_types,
         evidence_entries: entries,
-        blockers,
+        blockers: blockers.clone(),
+        failure_reasons: blockers,
+        next_steps,
+        traceability,
         checked_at: current_unix_timestamp(),
     })
 }
@@ -1679,6 +1802,10 @@ fn ensure_attested_url_matches_repository(
 
 fn task_evidence_path(issue_id: &str) -> String {
     format!(".agentflow/tasks/{issue_id}/evidence/evidence.json")
+}
+
+fn task_acceptance_gate_ref(issue_id: &str) -> String {
+    format!(".agentflow/tasks/{issue_id}/acceptance-gate.json")
 }
 
 fn evidence_path(root: &Path, evidence: &TaskEvidence) -> PathBuf {
@@ -1814,7 +1941,7 @@ mod tests {
     };
     use agentflow_task_artifacts::{
         load_task_acceptance_gate_decision, load_task_changed_files, load_task_evidence,
-        load_task_run, TaskChangedFileSource, TaskRunStatus,
+        load_task_run, TaskAcceptanceOutcome, TaskChangedFileSource, TaskRunStatus,
     };
     use anyhow::Result;
     use std::{
@@ -2164,6 +2291,18 @@ mod tests {
         assert!(outcome.next_launch.is_none());
         let gate = load_task_acceptance_gate_decision(dir.path(), "AF-001").unwrap();
         assert!(gate.passed);
+        assert_eq!(gate.outcome, TaskAcceptanceOutcome::Accepted);
+        assert_eq!(gate.traceability.issue_id, "AF-001");
+        assert_eq!(gate.traceability.run_id, started.run_id);
+        assert_eq!(
+            gate.traceability.acceptance_decision_path,
+            ".agentflow/tasks/AF-001/acceptance-gate.json"
+        );
+        assert!(gate.failure_reasons.is_empty());
+        assert!(gate
+            .next_steps
+            .iter()
+            .any(|step| step.contains("Completion Commit")));
         assert_eq!(gate.sub_gates.len(), 4);
         assert!(gate.sub_gates.iter().all(|item| item.passed));
         assert!(gate
@@ -2238,7 +2377,16 @@ mod tests {
             .any(|event| event.event_type == "issue.closeout.proof.recorded"));
         assert!(events
             .iter()
+            .any(|event| event.event_type == "issue.acceptance.accepted"));
+        assert!(events
+            .iter()
             .any(|event| event.event_type == "issue.completed"));
+        let done_projection =
+            agentflow_projection::load_task_projection(dir.path(), "AF-001").unwrap();
+        let acceptance = done_projection.acceptance.expect("acceptance summary");
+        assert_eq!(acceptance.outcome, "accepted");
+        assert!(acceptance.passed);
+        assert_eq!(acceptance.traceability.issue_id, "AF-001");
         assert!(!dir.path().join(".agentflow/output").exists());
         assert!(!dir.path().join(".agentflow/execute").exists());
         assert!(!dir.path().join(".agentflow/input").exists());
@@ -2627,13 +2775,25 @@ mod tests {
         assert!(err.to_string().contains("acceptance gate"));
         let gate = load_task_acceptance_gate_decision(dir.path(), "AF-CHAIN-001").unwrap();
         assert!(!gate.passed);
+        assert_eq!(gate.outcome, TaskAcceptanceOutcome::Rejected);
         assert!(gate
             .blockers
             .iter()
             .any(|item| item.contains("state gate") && item.contains("issueClosed")));
+        assert!(gate
+            .failure_reasons
+            .iter()
+            .any(|item| item.contains("issueClosed")));
+        assert!(gate
+            .next_steps
+            .iter()
+            .any(|item| item.contains("合并 PR/MR")));
         let projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-001").unwrap();
         assert_eq!(projection.current_state, "in_review");
+        let acceptance = projection.acceptance.expect("acceptance summary");
+        assert_eq!(acceptance.outcome, "rejected");
+        assert!(!acceptance.passed);
         let next_projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-002").unwrap();
         assert_eq!(next_projection.current_state, "backlog");
@@ -2667,10 +2827,19 @@ mod tests {
         assert!(err.to_string().contains("acceptance gate"));
         let gate = load_task_acceptance_gate_decision(dir.path(), "AF-001").unwrap();
         assert!(!gate.passed);
+        assert_eq!(gate.outcome, TaskAcceptanceOutcome::Rejected);
         assert!(gate
             .blockers
             .iter()
             .any(|item| item.contains("evidence gate") && item.contains("closeout proof")));
+        assert!(gate
+            .failure_reasons
+            .iter()
+            .any(|item| item.contains("closeout proof")));
+        assert!(gate
+            .next_steps
+            .iter()
+            .any(|item| item.contains("补齐验证证据")));
     }
 
     #[test]
