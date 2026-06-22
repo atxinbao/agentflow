@@ -8,8 +8,9 @@ use active::{
     write_build_agent_closeout_proof,
 };
 use args::{
-    AgentDispatcherCommand, ApiPlaneCommand, AuditCommand, BuildAgentCommand, Cli, Command,
-    CompletionCommand, ProjectCommand, ProjectionCommand, ReleaseCommand, TaskLoopCommand,
+    AgentDispatcherCommand, ApiPlaneCommand, AuditCommand, BuildAgentCommand,
+    CapabilityRegistryCommand, Cli, Command, CompletionCommand, ProjectCommand, ProjectionCommand,
+    ReleaseCommand, TaskLoopCommand,
 };
 use clap::Parser;
 use formal::{
@@ -265,6 +266,19 @@ fn main() -> anyhow::Result<()> {
                     agentflow_runtime_api::write_api_plane_manifest(output, &manifest)?;
                 } else {
                     println!("{}", serde_json::to_string_pretty(&manifest)?);
+                }
+            }
+        },
+        Command::CapabilityRegistry { command } => match command {
+            CapabilityRegistryCommand::Manifest { output } => {
+                let registry = agentflow_capability_registry::default_capability_registry();
+                if let Some(output) = output {
+                    if let Some(parent) = output.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    std::fs::write(output, serde_json::to_string_pretty(&registry)? + "\n")?;
+                } else {
+                    println!("{}", serde_json::to_string_pretty(&registry)?);
                 }
             }
         },

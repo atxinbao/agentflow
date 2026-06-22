@@ -90,6 +90,10 @@ PROVIDER_SMOKE_PROVIDER="${PROVIDER_SMOKE_PROVIDER:-codex}"
 PROVIDER_SMOKE_STATUS_PATH="$RUNTIME_DIR/provider-smoke-status.json"
 PROVIDER_SMOKE_ARTIFACT_PATH="$RUNTIME_DIR/provider-smoke-artifact.json"
 API_PLANE_MANIFEST_PATH="$RUNTIME_DIR/api-plane-manifest.json"
+CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
+FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
+FOUNDATION_READINESS_REPORT_PATH="$RUNTIME_DIR/foundation-readiness-report.md"
+FOUNDATION_COVERAGE_PATH="$RUNTIME_DIR/foundation-coverage.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -195,7 +199,11 @@ write_gate_reports() {
     "$RUNTIME_DIR/release-facts.json" \
     "$RUNTIME_DIR/external-review-surface.json" \
     "$PROVIDER_SMOKE_STATUS_PATH" \
-    "$PROVIDER_SMOKE_ARTIFACT_PATH" <<'PY'
+    "$PROVIDER_SMOKE_ARTIFACT_PATH" \
+    "$API_PLANE_MANIFEST_PATH" \
+    "$CAPABILITY_REGISTRY_PATH" \
+    "$FOUNDATION_READINESS_REPORT_PATH" \
+    "$FOUNDATION_COVERAGE_PATH" <<'PY'
 import json
 import pathlib
 import sys
@@ -225,6 +233,10 @@ release_path = pathlib.Path(sys.argv[22])
 review_path = pathlib.Path(sys.argv[23])
 provider_smoke_status_path = pathlib.Path(sys.argv[24])
 provider_smoke_artifact_path = pathlib.Path(sys.argv[25])
+api_plane_manifest_path = pathlib.Path(sys.argv[26])
+capability_registry_path = pathlib.Path(sys.argv[27])
+foundation_readiness_report_path = pathlib.Path(sys.argv[28])
+foundation_coverage_path = pathlib.Path(sys.argv[29])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -310,7 +322,10 @@ runtime_artifacts = [
     {"path": "runtime/audit-index.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-index.json").is_file()},
     {"path": "runtime/provider-smoke-status.json", "exists": provider_smoke_status_path.is_file()},
     {"path": "runtime/provider-smoke-artifact.json", "exists": provider_smoke_artifact_path.is_file()},
-    {"path": "runtime/api-plane-manifest.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/api-plane-manifest.json").is_file()},
+    {"path": "runtime/api-plane-manifest.json", "exists": api_plane_manifest_path.is_file()},
+    {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
+    {"path": "runtime/foundation-readiness-report.md", "exists": foundation_readiness_report_path.is_file()},
+    {"path": "runtime/foundation-coverage.json", "exists": foundation_coverage_path.is_file()},
 ]
 
 checklist = [
@@ -334,6 +349,16 @@ checklist = [
         "label": "存在 requirement-to-release 完整证明链",
         "passed": all(item["status"] == "passed" for item in proof_chain) if current_status == "passed" else False,
     },
+    {
+        "id": "v072-foundation-coverage",
+        "label": "v0.7.2 foundation coverage artifacts are present",
+        "passed": all(path.is_file() for path in [
+            api_plane_manifest_path,
+            capability_registry_path,
+            foundation_readiness_report_path,
+            foundation_coverage_path,
+        ]),
+    },
 ]
 
 summary_payload = {
@@ -344,6 +369,12 @@ summary_payload = {
     "providerSmokeProvider": provider_smoke.get("provider"),
     "providerSmokeReason": provider_smoke.get("reason"),
     "providerSmokeArtifactPath": provider_smoke.get("artifactPath"),
+    "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage",
+    "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
+    "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
+    "foundationReadinessReportPath": "runtime/foundation-readiness-report.md" if foundation_readiness_report_path.is_file() else None,
+    "apiPlaneManifestPath": "runtime/api-plane-manifest.json" if api_plane_manifest_path.is_file() else None,
+    "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
     "failedStage": current_stage if current_status == "failed" else None,
     "failureMessage": current_message if current_status == "failed" else None,
     "sourceCommitSha": source_commit_sha,
@@ -374,9 +405,15 @@ summary_lines = [
     "# Release Gate Runtime Fixture Summary",
     "",
     "- Gate class: `runtime-fixture-gate`",
+    "- Runtime fixture boundary: `proves AgentFlow local runtime workflow coverage`",
     f"- Provider smoke gate: `{provider_smoke.get('status')}`",
     f"- Provider smoke provider: `{provider_smoke.get('provider') or 'n/a'}`",
     f"- Provider smoke reason: `{provider_smoke.get('reason') or 'n/a'}`",
+    "- Provider smoke boundary: `minimal provider health / launch / session / terminal projection; does not replace runtime fixture gate`",
+    f"- Foundation coverage: `{'present' if foundation_coverage_path.is_file() else 'missing'}`",
+    f"- Foundation readiness report: `{'present' if foundation_readiness_report_path.is_file() else 'missing'}`",
+    f"- API Plane manifest: `{'present' if api_plane_manifest_path.is_file() else 'missing'}`",
+    f"- Capability registry: `{'present' if capability_registry_path.is_file() else 'missing'}`",
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
     f"- Source commit: `{source_commit_sha or 'n/a'}`",
@@ -434,6 +471,11 @@ certification_payload = {
     "releaseGateRun": release_gate_run,
     "gateStatus": current_status,
     "conclusion": current_status,
+    "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage and remains required even when provider-smoke-gate is skipped or passed",
+    "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
+    "foundationReadinessReportPath": "runtime/foundation-readiness-report.md" if foundation_readiness_report_path.is_file() else None,
+    "apiPlaneManifestPath": "runtime/api-plane-manifest.json" if api_plane_manifest_path.is_file() else None,
+    "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
     "gateCommands": [
         "cargo fmt --all --check",
         "cargo test --workspace",
@@ -836,6 +878,163 @@ PY
   record_stage "api-plane-manifest" "passed" "$(basename "$API_PLANE_MANIFEST_PATH")"
 }
 
+run_capability_registry_gate() {
+  record_stage "capability-registry" "started" "$CAPABILITY_REGISTRY_PATH"
+  "$BIN" capability-registry manifest --output "$CAPABILITY_REGISTRY_PATH"
+  python3 - "$CAPABILITY_REGISTRY_PATH" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+if not path.is_file():
+    raise SystemExit(f"missing capability registry: {path}")
+payload = json.loads(path.read_text(encoding="utf-8"))
+if payload.get("version") != "agentflow-capability-registry.v1":
+    raise SystemExit("capability registry version mismatch")
+workers = payload.get("workers") or []
+worker_ids = {worker.get("workerId") for worker in workers}
+required_workers = {
+    "codex",
+    "claude",
+    "local-shell-validator",
+    "git-provider",
+    "github",
+    "mcp-connector",
+    "audit-worker",
+}
+missing = sorted(required_workers - worker_ids)
+if missing:
+    raise SystemExit(f"capability registry missing workers: {missing}")
+for worker in workers:
+    boundary = worker.get("boundary") or {}
+    if boundary.get("authorityWrite") is not False:
+        raise SystemExit(f"worker grants authority write: {worker}")
+    if boundary.get("runtimeCommandRequired") is not True:
+        raise SystemExit(f"worker does not require runtime command: {worker}")
+PY
+  record_stage "capability-registry" "passed" "$(basename "$CAPABILITY_REGISTRY_PATH")"
+}
+
+run_foundation_coverage_gate() {
+  record_stage "foundation-coverage" "started" "$FOUNDATION_COVERAGE_PATH"
+  if [[ ! -f "$FOUNDATION_READINESS_REPORT_SOURCE" ]]; then
+    fail_stage "foundation-coverage" "missing foundation readiness report source"
+  fi
+  cp "$FOUNDATION_READINESS_REPORT_SOURCE" "$FOUNDATION_READINESS_REPORT_PATH"
+  python3 - \
+    "$ROOT" \
+    "$FOUNDATION_READINESS_REPORT_PATH" \
+    "$FOUNDATION_COVERAGE_PATH" \
+    "$API_PLANE_MANIFEST_PATH" \
+    "$CAPABILITY_REGISTRY_PATH" \
+    "$PROVIDER_SMOKE_STATUS_PATH" <<'PY'
+import json, pathlib, sys, time
+root = pathlib.Path(sys.argv[1])
+report_path = pathlib.Path(sys.argv[2])
+coverage_path = pathlib.Path(sys.argv[3])
+api_plane_path = pathlib.Path(sys.argv[4])
+capability_path = pathlib.Path(sys.argv[5])
+provider_smoke_path = pathlib.Path(sys.argv[6])
+
+checks = [
+    {
+        "id": "audit-sidecar",
+        "status": "completed",
+        "evidence": [
+            "crates/audit",
+            "docs/v0.7.2/AGENTFLOW_V0_7_2_RUNTIME_FOUNDATION_HARDENING_TASKS_V1.md",
+        ],
+    },
+    {
+        "id": "schema-migration",
+        "status": "completed",
+        "evidence": [
+            "crates/schema-registry",
+            "docs/architecture/012-schema-version-migration-registry-v1.md",
+        ],
+    },
+    {
+        "id": "simulation-dry-run",
+        "status": "completed",
+        "evidence": [
+            "crates/simulation",
+            "docs/architecture/013-simulation-dry-run-runtime-v1.md",
+        ],
+    },
+    {
+        "id": "local-message-bus",
+        "status": "completed",
+        "evidence": [
+            "crates/message-bus",
+            "docs/architecture/014-local-message-bus-contract-v1.md",
+        ],
+    },
+    {
+        "id": "worker-tool-capability-registry",
+        "status": "completed",
+        "evidence": [
+            "crates/capability-registry",
+            "docs/architecture/015-worker-tool-capability-registry-v1.md",
+            str(capability_path),
+        ],
+    },
+    {
+        "id": "connector-mcp-boundary",
+        "status": "completed",
+        "evidence": [
+            "crates/mcp",
+            "docs/architecture/017-connector-mcp-boundary-v1.md",
+        ],
+    },
+    {
+        "id": "runtime-projection-command-api-plane",
+        "status": "completed",
+        "evidence": [
+            "crates/runtime-api/src/api_plane.rs",
+            "docs/architecture/018-api-plane-manifest-v1.md",
+            str(api_plane_path),
+        ],
+    },
+    {
+        "id": "provider-smoke-gate",
+        "status": "baseline",
+        "evidence": [
+            "crates/mcp/src/smoke.rs",
+            "docs/architecture/016-provider-smoke-gate-v1.md",
+            str(provider_smoke_path),
+        ],
+    },
+    {
+        "id": "foundation-readiness-report",
+        "status": "completed",
+        "evidence": [str(report_path)],
+    },
+]
+
+missing = []
+for check in checks:
+    for evidence in check["evidence"]:
+        path = pathlib.Path(evidence)
+        if not path.is_absolute():
+            path = root / path
+        if not path.exists():
+            missing.append({"check": check["id"], "path": evidence})
+
+payload = {
+    "version": "agentflow-foundation-coverage.v1",
+    "coverageClass": "v0.7.2-runtime-foundation",
+    "runtimeFixtureGateRequired": True,
+    "providerSmokeReplacesRuntimeFixture": False,
+    "checks": checks,
+    "missing": missing,
+    "status": "passed" if not missing else "failed",
+    "generatedAt": int(time.time()),
+}
+coverage_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if missing:
+    raise SystemExit(f"foundation coverage missing evidence: {missing}")
+PY
+  record_stage "foundation-coverage" "passed" "$(basename "$FOUNDATION_COVERAGE_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -1177,6 +1376,8 @@ main() {
   verify_release_publication_facts "$WORKSPACE"
   run_provider_smoke_gate
   run_api_plane_manifest_gate
+  run_capability_registry_gate
+  run_foundation_coverage_gate
   write_requirement
 
   local intake_json="$CLI_DIR/artifacts-intake.json"

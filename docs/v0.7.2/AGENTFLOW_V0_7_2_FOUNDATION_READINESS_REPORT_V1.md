@@ -231,7 +231,7 @@ Runtime foundation: ready
 Projection read surface: ready
 Command boundary: ready
 Connector/provider minimum boundary: ready
-Release gate foundation coverage: pending V072-010
+Release gate foundation coverage: ready after V072-010 lands
 Pack / Cloud / Industry productization: not started
 ```
 
@@ -239,7 +239,6 @@ Pack / Cloud / Industry productization: not started
 
 ```text
 V072-009 = complete after this report lands
-V072-010 must make release gate prove this report and related foundation artifacts
-v0.8.0 can only start after V072-010 passes
+V072-010 makes release gate prove this report and related foundation artifacts
+v0.8.0 can only start after V072-010 lands and release gate passes
 ```
-

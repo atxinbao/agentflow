@@ -45,6 +45,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: ApiPlaneCommand,
     },
+    CapabilityRegistry {
+        #[command(subcommand)]
+        command: CapabilityRegistryCommand,
+    },
     Release {
         #[command(subcommand)]
         command: ReleaseCommand,
@@ -205,6 +209,14 @@ pub(crate) enum ProjectionCommand {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum ApiPlaneCommand {
+    Manifest {
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum CapabilityRegistryCommand {
     Manifest {
         #[arg(long)]
         output: Option<PathBuf>,
