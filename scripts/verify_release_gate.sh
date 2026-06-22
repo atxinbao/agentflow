@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ARTIFACT_DIR="$ROOT/artifacts/release-gate-v0.5.1-e2e"
-RELEASE_VERSION="${RELEASE_VERSION:-v0.5.1}"
-RELEASE_TAG_NAME="${RELEASE_TAG_NAME:-$RELEASE_VERSION}"
+ARTIFACT_DIR="${ARTIFACT_DIR:-}"
+RELEASE_VERSION="${RELEASE_VERSION:-}"
+RELEASE_TAG_NAME="${RELEASE_TAG_NAME:-}"
 SOURCE_COMMIT_SHA="${SOURCE_COMMIT_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
 while [[ $# -gt 0 ]]; do
@@ -31,6 +31,30 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+read_workspace_version() {
+  python3 - "$ROOT/Cargo.toml" <<'PY'
+import pathlib
+import sys
+import tomllib
+
+payload = tomllib.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["workspace"]["package"]["version"])
+PY
+}
+
+if [[ -z "$RELEASE_VERSION" ]]; then
+  RELEASE_VERSION="v$(read_workspace_version)"
+fi
+if [[ "$RELEASE_VERSION" != v* ]]; then
+  RELEASE_VERSION="v$RELEASE_VERSION"
+fi
+if [[ -z "$RELEASE_TAG_NAME" ]]; then
+  RELEASE_TAG_NAME="$RELEASE_VERSION"
+fi
+if [[ -z "$ARTIFACT_DIR" ]]; then
+  ARTIFACT_DIR="$ROOT/artifacts/release-gate-${RELEASE_VERSION}-e2e"
+fi
 
 mkdir -p "$ARTIFACT_DIR"
 ARTIFACT_DIR="$(cd "$ARTIFACT_DIR" && pwd)"
@@ -157,6 +181,7 @@ for entry in stage_log:
     stage_status[entry["stage"]] = entry["status"]
 
 proof_chain = [
+    {"stage": "release.version-metadata", "label": "Release Version Metadata"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -384,6 +409,52 @@ fail_stage() {
   exit 1
 }
 
+verify_release_metadata() {
+  local metadata_root="$1"
+  local expected_version="${RELEASE_VERSION#v}"
+  if ! python3 - "$metadata_root" "$expected_version" "$RELEASE_VERSION" <<'PY'
+import json
+import pathlib
+import sys
+import tomllib
+
+root = pathlib.Path(sys.argv[1])
+expected = sys.argv[2]
+release_version = sys.argv[3]
+
+def read_json(path: pathlib.Path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+cargo = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
+desktop_package = read_json(root / "apps/desktop/package.json")
+desktop_lock = read_json(root / "apps/desktop/package-lock.json")
+tauri = read_json(root / "apps/desktop/src-tauri/tauri.conf.json")
+
+versions = {
+    "Cargo.toml workspace.package.version": cargo["workspace"]["package"]["version"],
+    "apps/desktop/package.json version": desktop_package["version"],
+    "apps/desktop/package-lock.json version": desktop_lock["version"],
+    "apps/desktop/package-lock.json packages[''].version": desktop_lock["packages"][""]["version"],
+    "apps/desktop/src-tauri/tauri.conf.json version": tauri["version"],
+}
+
+mismatches = {
+    name: value
+    for name, value in versions.items()
+    if value != expected
+}
+if mismatches:
+    details = ", ".join(f"{name}={value}" for name, value in sorted(mismatches.items()))
+    raise SystemExit(
+        f"release version metadata mismatch for {release_version}: expected {expected}; {details}"
+    )
+PY
+  then
+    fail_stage "release.version-metadata" "release metadata does not match $RELEASE_VERSION"
+  fi
+  record_stage "release.version-metadata" "passed" "$RELEASE_VERSION"
+}
+
 run_cli_json() {
   local stage="$1"
   local output="$2"
@@ -520,7 +591,7 @@ write_requirement() {
 
 验证 requirement 到 project/release 的正式入口。
 
-- 目标：验证 v0.5.1 stable release gate 真链路。
+- 目标：验证当前 release gate 真链路。
 - 范围：formal project / task-loop / build-agent / completion / release runtime。
 - 交付：release facts、CHANGELOG、release notes、外部 review surface。
 EOF
@@ -839,6 +910,7 @@ collect_artifacts() {
 main() {
   write_status "running" "workspace.prepare" "preparing release gate workspace"
   prepare_workspace
+  verify_release_metadata "$WORKSPACE"
   write_requirement
 
   local intake_json="$CLI_DIR/artifacts-intake.json"
@@ -958,7 +1030,7 @@ PY
   run_cli_json "release.record-tag" "$release_record_tag_json" \
     release record-tag \
     --project-id "$project_id" \
-    --tag-name v0.5.1-e2e \
+    --tag-name "$RELEASE_TAG_NAME" \
     --tag-commit-sha "$(git -C "$WORKSPACE" rev-parse HEAD)"
 
   run_cli_json "release.record-remote" "$release_record_remote_json" \
@@ -966,8 +1038,8 @@ PY
     --project-id "$project_id" \
     --provider github \
     --release-id rel-e2e-001 \
-    --release-url https://github.com/atxinbao/agentflow/releases/tag/v0.5.1-e2e \
-    --tag-name v0.5.1-e2e \
+    --release-url "https://github.com/atxinbao/agentflow/releases/tag/${RELEASE_TAG_NAME}" \
+    --tag-name "$RELEASE_TAG_NAME" \
     --release-commit-sha "$(git -C "$WORKSPACE" rev-parse HEAD)" \
     --artifact-manifest-path "artifacts/${project_id}-release-manifest.json"
 
