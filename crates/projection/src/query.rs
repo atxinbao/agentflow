@@ -1140,6 +1140,7 @@ fn work_loop_stage(event_type: &str) -> (&'static str, &'static str) {
         | "issue.pr.created"
         | "issue.closeout.proof.recorded"
         | "issue.pr.merged" => ("review", "评审收口"),
+        value if value.starts_with("issue.acceptance.") => ("acceptance", "验收判定"),
         "issue.completed" => ("done", "Done 写回"),
         _ => ("event", "事件记录"),
     }
@@ -1164,6 +1165,11 @@ fn work_loop_event_summary(event: &TaskEvent) -> String {
         "issue.pr.created" => "PR/MR 已创建。".to_string(),
         "issue.closeout.proof.recorded" => "收口证明已写入，等待 Done 写回。".to_string(),
         "issue.pr.merged" => "PR/MR 已合并，等待关单与收口证明。".to_string(),
+        "issue.acceptance.accepted" => "验收判定已通过。".to_string(),
+        "issue.acceptance.rejected" => "验收判定被拒绝，需先修复失败原因。".to_string(),
+        "issue.acceptance.human-review-required" => {
+            "验收判定需要人工判断，不能伪装成自动通过。".to_string()
+        }
         "issue.completed" => "任务 Done 写回完成。".to_string(),
         "issue.blocked" => "任务进入阻断状态。".to_string(),
         "issue.cancelled" => "任务已取消。".to_string(),

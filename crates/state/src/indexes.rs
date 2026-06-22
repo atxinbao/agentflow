@@ -245,6 +245,7 @@ mod tests {
                 latest_audit_id: None,
                 ..ProjectionAuditSummary::default()
             },
+            acceptance: None,
             updated_at: 1,
         }
     }

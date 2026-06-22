@@ -451,12 +451,57 @@ pub struct TaskAcceptanceSubGateDecision {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskAcceptanceOutcome {
+    Accepted,
+    Rejected,
+    HumanReviewRequired,
+}
+
+impl TaskAcceptanceOutcome {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::Rejected => "rejected",
+            Self::HumanReviewRequired => "human_review_required",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskAcceptanceTraceability {
+    pub issue_id: String,
+    pub run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_name: Option<String>,
+    pub acceptance_decision_path: String,
+    pub evidence_path: String,
+    pub validation_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changed_files_path: Option<String>,
+    pub closeout_proof_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_commit_sha: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskAcceptanceGateDecision {
     pub version: String,
     pub issue_id: String,
     pub run_id: String,
     pub passed: bool,
+    pub outcome: TaskAcceptanceOutcome,
+    pub summary: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sub_gates: Vec<TaskAcceptanceSubGateDecision>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -465,6 +510,11 @@ pub struct TaskAcceptanceGateDecision {
     pub evidence_entries: Vec<TaskEvidenceEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blockers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failure_reasons: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub next_steps: Vec<String>,
+    pub traceability: TaskAcceptanceTraceability,
     pub checked_at: u64,
 }
 
