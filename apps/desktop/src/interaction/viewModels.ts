@@ -13,7 +13,9 @@ import type {
   IssueStatusIndexEntry,
   McpSessionSnapshot,
   OutputIndexEntry,
+  ProjectProjection,
   ProjectionSessionSummary,
+  SpecWorkbenchProjection,
   TaskProjection,
   V1Issue,
   WorkflowAuditStatus,
@@ -145,6 +147,85 @@ export type AdvancedInteractionState = {
 export type CompanionInteractionState = {
   currentTaskId: string | null;
   status: PageInteractionState;
+};
+
+export type ProjectionSurfaceStatus =
+  | "loading"
+  | "empty"
+  | "missing"
+  | "stale"
+  | "conflict"
+  | "ready"
+  | "done";
+
+export type ProjectionSurfaceReadiness = {
+  status: ProjectionSurfaceStatus;
+  title: string;
+  summary: string;
+  missingFacts: string[];
+  staleFacts: string[];
+  conflicts: string[];
+  warnings: string[];
+  nextAction: string;
+  readonly: true;
+};
+
+export type ProjectHomeViewModel = {
+  version: "project-home-view-model.v1";
+  readiness: ProjectionSurfaceReadiness;
+  projectId: string | null;
+  title: string;
+  stageLabel: string;
+  currentIssueId: string | null;
+  completedIssueCount: number;
+  totalIssueCount: number;
+  commandSurfaceState: ProjectionSurfaceStatus;
+};
+
+export type SpecWorkbenchViewModel = {
+  version: "spec-workbench-view-model.v1";
+  readiness: ProjectionSurfaceReadiness;
+  selectedRequirementId: string | null;
+  stageCount: number;
+  previewIssueCount: number;
+  authorityLayerCount: number;
+  runtimeActionProposalCount: number;
+};
+
+export type TaskWorkbenchViewModel = {
+  version: "task-workbench-view-model.v1";
+  readiness: ProjectionSurfaceReadiness;
+  issueCount: number;
+  projectCount: number;
+  selectedIssueId: string | null;
+  statusCounts: Record<IssueDisplayStatus, number>;
+  timelineStates: IssueDisplayStatus[];
+  evidenceGraphState: ProjectionSurfaceStatus;
+  commandSurfaceState: ProjectionSurfaceStatus;
+};
+
+export type AcceptanceDeliveryAuditViewModel = {
+  version: "acceptance-delivery-audit-view-model.v1";
+  readiness: ProjectionSurfaceReadiness;
+  acceptanceState: ProjectionSurfaceStatus;
+  deliveryState: ProjectionSurfaceStatus;
+  auditState: ProjectionSurfaceStatus;
+  evidenceCount: number;
+  publicRecordCount: number;
+  auditFindingCount: number;
+};
+
+export type DesktopProjectionViewModels = {
+  version: "desktop-projection-view-models.v1";
+  projectHome: ProjectHomeViewModel;
+  specWorkbench: SpecWorkbenchViewModel;
+  taskWorkbench: TaskWorkbenchViewModel;
+  acceptanceDeliveryAudit: AcceptanceDeliveryAuditViewModel;
+  surfaces: Array<{
+    id: string;
+    status: ProjectionSurfaceStatus;
+    readonly: true;
+  }>;
 };
 
 export type TaskSelection =
@@ -1529,4 +1610,238 @@ export function buildAuditInteractionState(audits: AuditIndexEntry[], selectedAu
     selectedAuditId: selectedAudit?.auditId ?? null,
     status: audits.length ? "ready" : "empty",
   };
+}
+
+export function buildDesktopProjectionViewModels({
+  projectProjection,
+  selectedTaskProjection,
+  specWorkbenchProjection,
+  taskProjections,
+  taskTree,
+}: {
+  projectProjection?: ProjectProjection | null;
+  selectedTaskProjection?: TaskProjection | null;
+  specWorkbenchProjection?: SpecWorkbenchProjection | null;
+  taskProjections: TaskProjection[];
+  taskTree: TaskProjectTreeViewModel;
+}): DesktopProjectionViewModels {
+  const projectHome = buildProjectHomeViewModel(projectProjection);
+  const specWorkbench = buildSpecWorkbenchViewModel(specWorkbenchProjection);
+  const taskWorkbench = buildTaskWorkbenchViewModel(taskTree, selectedTaskProjection);
+  const acceptanceDeliveryAudit = buildAcceptanceDeliveryAuditViewModel(selectedTaskProjection);
+
+  return {
+    acceptanceDeliveryAudit,
+    projectHome,
+    specWorkbench,
+    surfaces: [
+      { id: "project-home", readonly: true, status: projectHome.readiness.status },
+      { id: "spec-workbench", readonly: true, status: specWorkbench.readiness.status },
+      { id: "task-workbench", readonly: true, status: taskWorkbench.readiness.status },
+      { id: "event-timeline", readonly: true, status: selectedTaskProjection ? "ready" : "missing" },
+      { id: "evidence-graph", readonly: true, status: taskWorkbench.evidenceGraphState },
+      { id: "acceptance-delivery-audit", readonly: true, status: acceptanceDeliveryAudit.readiness.status },
+      { id: "command-surface", readonly: true, status: taskWorkbench.commandSurfaceState },
+    ],
+    taskWorkbench,
+    version: "desktop-projection-view-models.v1",
+  };
+}
+
+export function buildProjectHomeViewModel(projection?: ProjectProjection | null): ProjectHomeViewModel {
+  const totalIssueCount = projection?.issueCount ?? projection?.issueIds.length ?? 0;
+  const completedIssueCount = projection?.completedIssueCount ?? projection?.completion?.completedIssueCount ?? 0;
+  const readiness = projectionReadiness({
+    done: totalIssueCount > 0 && completedIssueCount >= totalIssueCount,
+    missingFacts: projection ? [] : ["ProjectProjection"],
+    nextAction: projection?.nextActionLabel ?? "等待 Project Projection",
+    staleFacts: projection?.projectBrain.missingDocuments ?? [],
+    title: projection?.title ?? "项目工作台",
+    warnings: projection?.blockers.map((blocker) => blocker.reason) ?? [],
+  });
+
+  return {
+    commandSurfaceState: readiness.status === "missing" ? "missing" : "ready",
+    completedIssueCount,
+    currentIssueId: projection?.currentIssueId ?? null,
+    projectId: projection?.projectId ?? null,
+    readiness,
+    stageLabel: projection?.stageLabel ?? "等待投影",
+    title: projection?.title ?? "项目工作台",
+    totalIssueCount,
+    version: "project-home-view-model.v1",
+  };
+}
+
+export function buildSpecWorkbenchViewModel(projection?: SpecWorkbenchProjection | null): SpecWorkbenchViewModel {
+  const specLoop = projection?.specLoop ?? null;
+  const readiness = projectionReadiness({
+    missingFacts: projection ? [] : ["SpecWorkbenchProjection"],
+    nextAction: specLoop?.nextRecommendedActionLabel ?? "等待 Spec Workbench Projection",
+    title: "需求工作台",
+    warnings: projection?.warnings ?? [],
+  });
+
+  return {
+    authorityLayerCount: specLoop?.authorityLayers.length ?? 0,
+    previewIssueCount: projection?.preview?.issuePreview.length ?? 0,
+    readiness,
+    runtimeActionProposalCount: specLoop?.runtimeActionProposals.length ?? 0,
+    selectedRequirementId: projection?.selectedRequirementId ?? null,
+    stageCount: specLoop?.stages.length ?? 0,
+    version: "spec-workbench-view-model.v1",
+  };
+}
+
+export function buildTaskWorkbenchViewModel(
+  taskTree: TaskProjectTreeViewModel,
+  selectedProjection?: TaskProjection | null,
+): TaskWorkbenchViewModel {
+  const statusCounts = taskWorkbenchStatusCounts(taskTree);
+  const allIssues = [...taskTree.groups.flatMap((group) => group.issues), ...taskTree.ungroupedIssues];
+  const readiness = projectionReadiness({
+    missingFacts: allIssues.length ? [] : ["TaskProjectTreeViewModel.issues"],
+    nextAction: selectedProjection?.currentTransition ?? "选择任务查看状态流",
+    title: "任务工作台",
+    warnings: taskTree.warnings.map((warning) => warning.message),
+  });
+  const selectedIssueId = taskTree.selection.kind === "issue" ? taskTree.selection.issueId : null;
+  const timelineStates = selectedProjection?.timeline.map((item) => item.state) ?? [];
+
+  return {
+    commandSurfaceState: selectedIssueId ? "ready" : "missing",
+    evidenceGraphState: selectedProjection ? evidenceGraphReadiness(selectedProjection) : "missing",
+    issueCount: taskTree.counts.issueCount,
+    projectCount: taskTree.counts.projectCount,
+    readiness,
+    selectedIssueId,
+    statusCounts,
+    timelineStates,
+    version: "task-workbench-view-model.v1",
+  };
+}
+
+export function buildAcceptanceDeliveryAuditViewModel(
+  projection?: TaskProjection | null,
+): AcceptanceDeliveryAuditViewModel {
+  const acceptance = projection?.acceptance ?? null;
+  const delivery = projection?.delivery ?? null;
+  const audit = projection?.audit ?? null;
+  const missingFacts = projection ? [] : ["TaskProjection"];
+  const readiness = projectionReadiness({
+    done: Boolean(acceptance?.passed && delivery?.mergeCommit),
+    missingFacts,
+    nextAction: acceptance?.nextSteps.at(0) ?? "等待任务投影",
+    title: "Acceptance / Delivery / Audit",
+    warnings: [...(acceptance?.failureReasons ?? []), ...(audit?.evidenceGaps ?? [])],
+  });
+  const publicRecordCount = [
+    delivery?.publicRecordPath,
+    projection?.publicDelivery.changelogPath,
+    projection?.publicDelivery.releaseNotesUrl,
+    projection?.publicDelivery.prUrl,
+  ].filter(Boolean).length;
+
+  return {
+    acceptanceState: acceptance ? (acceptance.passed ? "done" : "ready") : "missing",
+    auditFindingCount: audit?.findingsCount ?? 0,
+    auditState: audit ? auditSurfaceStatus(audit.status) : "missing",
+    deliveryState: delivery ? (delivery.mergeCommit ? "done" : "ready") : "missing",
+    evidenceCount: [delivery?.evidencePath, projection?.publicDelivery.evidencePath].filter(Boolean).length,
+    publicRecordCount,
+    readiness,
+    version: "acceptance-delivery-audit-view-model.v1",
+  };
+}
+
+function projectionReadiness({
+  done = false,
+  missingFacts = [],
+  nextAction,
+  staleFacts = [],
+  title,
+  warnings = [],
+}: {
+  done?: boolean;
+  missingFacts?: string[];
+  nextAction: string;
+  staleFacts?: string[];
+  title: string;
+  warnings?: string[];
+}): ProjectionSurfaceReadiness {
+  const conflicts = warnings.filter((warning) => /conflict|冲突/i.test(warning));
+  const status: ProjectionSurfaceStatus = missingFacts.length
+    ? "missing"
+    : conflicts.length
+      ? "conflict"
+      : staleFacts.length
+        ? "stale"
+        : done
+          ? "done"
+          : "ready";
+
+  return {
+    conflicts,
+    missingFacts,
+    nextAction,
+    readonly: true,
+    staleFacts,
+    status,
+    summary: projectionSurfaceSummary(status, title),
+    title,
+    warnings,
+  };
+}
+
+function projectionSurfaceSummary(status: ProjectionSurfaceStatus, title: string) {
+  const summaries: Record<ProjectionSurfaceStatus, string> = {
+    conflict: `${title} 存在冲突诊断，只能只读展示。`,
+    done: `${title} 已完成并可只读核对。`,
+    empty: `${title} 暂无可展示内容。`,
+    loading: `${title} 正在读取。`,
+    missing: `${title} 缺少投影事实。`,
+    ready: `${title} 已就绪。`,
+    stale: `${title} 存在过期事实，需要刷新投影。`,
+  };
+  return summaries[status];
+}
+
+function taskWorkbenchStatusCounts(tree: TaskProjectTreeViewModel): Record<IssueDisplayStatus, number> {
+  const counts: Record<IssueDisplayStatus, number> = {
+    backlog: 0,
+    blocked: 0,
+    cancel: 0,
+    done: 0,
+    in_progress: 0,
+    in_review: 0,
+    todo: 0,
+  };
+  [...tree.groups.flatMap((group) => group.issues), ...tree.ungroupedIssues].forEach((issue) => {
+    counts[issue.displayStatus] += 1;
+  });
+  return counts;
+}
+
+function evidenceGraphReadiness(projection: TaskProjection): ProjectionSurfaceStatus {
+  if (!projection.timeline.length) {
+    return "missing";
+  }
+  if (projection.acceptance?.passed || projection.publicDelivery.evidencePath || projection.delivery?.evidencePath) {
+    return "done";
+  }
+  if (projection.timeline.some((item) => item.events.length || item.liveRefs.length)) {
+    return "ready";
+  }
+  return "missing";
+}
+
+function auditSurfaceStatus(status: string): ProjectionSurfaceStatus {
+  const normalized = status.toLowerCase();
+  if (normalized.includes("completed") || normalized.includes("passed")) {
+    return "done";
+  }
+  if (normalized.includes("not") || normalized.includes("none")) {
+    return "empty";
+  }
+  return "ready";
 }

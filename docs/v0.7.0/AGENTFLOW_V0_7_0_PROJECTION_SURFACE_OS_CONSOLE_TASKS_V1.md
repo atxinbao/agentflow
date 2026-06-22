@@ -491,6 +491,12 @@ Facts
 - 不引入复杂前端状态库；
 - 不实现行业 Surface。
 
+完成记录：
+
+- 已新增稳定 Desktop Projection View Models，覆盖 Project Home、Spec Workbench、Task Workbench、Event Timeline / Evidence Graph、Acceptance / Delivery / Audit 和 Command Surface；
+- Browser Preview smoke 已验证 ready / done / missing / stale / conflict 等只读状态；
+- View Model 只消费 projection / issue / task tree facts，不写事实源。
+
 ### V070-012 - Project OS Console Acceptance and Release Readiness
 
 目标：
