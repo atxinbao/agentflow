@@ -1142,6 +1142,7 @@ fn work_loop_stage(event_type: &str) -> (&'static str, &'static str) {
         | "issue.pr.merged" => ("review", "评审收口"),
         value if value.starts_with("issue.acceptance.") => ("acceptance", "验收判定"),
         value if value.starts_with("issue.completion.") => ("completion", "完成提交"),
+        value if value.starts_with("issue.audit.") => ("audit-evaluation", "审计判断"),
         "issue.completed" => ("done", "Done 写回"),
         _ => ("event", "事件记录"),
     }
@@ -1173,6 +1174,9 @@ fn work_loop_event_summary(event: &TaskEvent) -> String {
         }
         "issue.completion.committed" => {
             "Completion Commit 已写入，Done 写回只能由该事件触发。".to_string()
+        }
+        "issue.audit.evaluated" => {
+            "Done 后的可选审计触发已评估；该判断不改变任务完成事实。".to_string()
         }
         "issue.completed" => "任务 Done 写回完成。".to_string(),
         "issue.blocked" => "任务进入阻断状态。".to_string(),
