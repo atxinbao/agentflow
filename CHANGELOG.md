@@ -14,6 +14,7 @@
 - 新增 `agentflow-mcp` provider smoke gate，支持最小 provider health / launch request / session snapshot / terminal projection 证明，并通过 `agentflow provider-smoke` 暴露 CLI 入口。
 - 新增 Connector / MCP boundary baseline，在 provider profile 和 capability registry 中显式暴露 read/write capability、authority write 禁止、Runtime Command 必经和输出落点。
 - 新增 Runtime / Projection / Command API Plane manifest，覆盖 runtime_commands、projection_queries、command_surface_actions、connector_actions、provider_actions、audit_actions 和 release_actions，并接入 Desktop Advanced 与 release-gate 检查。
+- 新增 v0.7.2 foundation readiness report，明确 Runtime Foundation 的 completed / baseline / deferred / v0.8.0 carryover 状态。
 - 新增 `crates/simulation` 和 Simulation Dry-run Runtime 架构文档，提供 command / issue / completion 的只读 dry-run 报告、expected events、rejected reasons、affected projections、risk / conflict 和 gate impact。
 - 新增 `crates/schema-registry` 和 schema migration 架构文档，提供当前 schema version 清单、legacy 检测、migration preview 和显式 apply 边界。
 - 新增 `docs/v0.7.1/**`，固定 `v0.7.0` release certification evidence，包括 PR / main / tag / release event gate run、artifact、release URL 和 source commit。
