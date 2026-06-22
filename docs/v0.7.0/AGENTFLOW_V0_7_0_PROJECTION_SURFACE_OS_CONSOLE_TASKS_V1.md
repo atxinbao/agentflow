@@ -152,6 +152,13 @@ Facts
 
 把工作台做成真正的 Project Home。
 
+实现状态：
+
+- 已完成；
+- 工作台首屏展示项目阶段、下一步、活跃任务、完成判断和 Project Brain 健康；
+- 新增明确的 `Command Surface` 区块，入口只调用 Runtime API / 页面跳转，不直接修改事实文件；
+- Agent 入口补齐 `Goal Agent`、`Spec Agent`、`Work Agent`、`Delivery Agent`、`Audit Agent` 五类角色，帮助用户判断下一步由谁接管。
+
 范围：
 
 - 展示项目阶段；
