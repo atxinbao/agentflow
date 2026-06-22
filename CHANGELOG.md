@@ -11,11 +11,13 @@
 - 新增 `docs/v0.7.1/**`，固定 `v0.7.0` release certification evidence，包括 PR / main / tag / release event gate run、artifact、release URL 和 source commit。
 - release-gate 增加明确的 Browser Preview smoke 和 Console readiness 步骤，并把两个步骤的 status JSON 写入 gate artifact。
 - Desktop Tauri projection command 增加真实临时 workspace readiness 测试，覆盖 `.agentflow/spec/**`、`.agentflow/events/**`、`.agentflow/tasks/**` 和 `.agentflow/projections/**` 的真实读路径。
+- release-gate certification 增加 `runtime-fixture-gate` / `provider-smoke-gate` 边界，避免把本地 fixture E2E 误表述为真实 provider production E2E。
 
 ### Changed
 
 - `docs/v0.7.0/**` 从 planning draft 口径收口为 released implementation record。
 - `v0.7.0` 验证说明改为显式列出 `preview:smoke`、`console:readiness` 和 release-gate 版本认证命令。
+- `scripts/verify_release_gate.sh` 的 summary / certification payload 改用 `runtime-fixture-gate` 命名，并把 `provider-smoke-gate` 标为 deferred。
 
 ## 0.7.0 - 2026-06-22
 
