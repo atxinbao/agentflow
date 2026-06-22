@@ -86,6 +86,7 @@ version = "0.7.0"
 dependencies = [
  "agentflow-agent-dispatcher",
  "agentflow-audit",
+ "agentflow-capability-registry",
  "agentflow-event-store",
  "agentflow-mcp",
  "agentflow-projection",
