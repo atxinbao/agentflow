@@ -1,14 +1,15 @@
 use crate::model::{
-    TaskChangedFile, TaskChangedFilesRecord, TaskCommandInput, TaskCommandRecord, TaskEvidence,
-    TaskEvidenceEntry, TaskEvidenceEntryStatus, TaskEvidenceGateDecision, TaskPreflightDecision,
-    TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord, TaskWorkSessionEvidence,
-    TaskWorkSessionRecord, TaskWorkSessionRecoverySummary, TaskWorkSessionStatus,
-    WorkLoopArtifactClass, WorkLoopArtifactContract, WorkLoopFilesystemContract, WorkLoopRoleAlias,
-    WorkLoopStage, WorkLoopStageContract, TASK_CHANGED_FILES_VERSION, TASK_COMMAND_VERSION,
-    TASK_EVIDENCE_GATE_VERSION, TASK_EVIDENCE_VERSION, TASK_PREFLIGHT_VERSION,
-    TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION, TASK_VALIDATION_VERSION,
-    TASK_WORK_SESSION_EVIDENCE_VERSION, TASK_WORK_SESSION_RECOVERY_VERSION,
-    TASK_WORK_SESSION_VERSION, WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
+    TaskAcceptanceGateDecision, TaskChangedFile, TaskChangedFilesRecord, TaskCommandInput,
+    TaskCommandRecord, TaskEvidence, TaskEvidenceEntry, TaskEvidenceEntryStatus,
+    TaskPreflightDecision, TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord,
+    TaskWorkSessionEvidence, TaskWorkSessionRecord, TaskWorkSessionRecoverySummary,
+    TaskWorkSessionStatus, WorkLoopArtifactClass, WorkLoopArtifactContract,
+    WorkLoopFilesystemContract, WorkLoopRoleAlias, WorkLoopStage, WorkLoopStageContract,
+    TASK_ACCEPTANCE_GATE_VERSION, TASK_CHANGED_FILES_VERSION, TASK_COMMAND_VERSION,
+    TASK_EVIDENCE_VERSION, TASK_PREFLIGHT_VERSION, TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION,
+    TASK_VALIDATION_VERSION, TASK_WORK_SESSION_EVIDENCE_VERSION,
+    TASK_WORK_SESSION_RECOVERY_VERSION, TASK_WORK_SESSION_VERSION,
+    WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
 };
 use agentflow_event_store::TaskReplayCursor;
 use agentflow_workflow_core::{
@@ -47,8 +48,12 @@ pub fn task_evidence_dir(project_root: impl AsRef<Path>, issue_id: &str) -> Resu
     task_evidence_dir_under_root(&root, issue_id)
 }
 
-pub fn task_evidence_gate_path(project_root: impl AsRef<Path>, issue_id: &str) -> Result<PathBuf> {
-    Ok(task_evidence_dir(project_root, issue_id)?.join("gate-decision.json"))
+pub fn task_acceptance_gate_path(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+) -> Result<PathBuf> {
+    let root = canonicalize_project_root(project_root)?;
+    Ok(task_issue_dir(&root, issue_id)?.join("acceptance-gate.json"))
 }
 
 pub fn task_changed_files_path(
@@ -723,18 +728,18 @@ pub fn write_task_evidence(
     Ok(evidence)
 }
 
-pub fn write_task_evidence_gate_decision(
+pub fn write_task_acceptance_gate_decision(
     project_root: impl AsRef<Path>,
     issue_id: &str,
-    decision: &TaskEvidenceGateDecision,
-) -> Result<TaskEvidenceGateDecision> {
+    decision: &TaskAcceptanceGateDecision,
+) -> Result<TaskAcceptanceGateDecision> {
     let root = canonicalize_project_root(project_root)?;
-    let path = task_evidence_gate_path(&root, issue_id)?;
+    let path = task_acceptance_gate_path(&root, issue_id)?;
     if let Some(parent) = path.parent() {
         ensure_directory(parent)?;
     }
     let mut stored = decision.clone();
-    stored.version = TASK_EVIDENCE_GATE_VERSION.to_string();
+    stored.version = TASK_ACCEPTANCE_GATE_VERSION.to_string();
     write_json(&path, &stored)?;
     Ok(stored)
 }
@@ -823,12 +828,12 @@ pub fn load_task_evidence(project_root: impl AsRef<Path>, issue_id: &str) -> Res
     read_json(&task_evidence_dir_under_root(&root, issue_id)?.join("evidence.json"))
 }
 
-pub fn load_task_evidence_gate_decision(
+pub fn load_task_acceptance_gate_decision(
     project_root: impl AsRef<Path>,
     issue_id: &str,
-) -> Result<TaskEvidenceGateDecision> {
+) -> Result<TaskAcceptanceGateDecision> {
     let root = canonicalize_project_root(project_root)?;
-    read_json(task_evidence_gate_path(&root, issue_id)?)
+    read_json(task_acceptance_gate_path(&root, issue_id)?)
 }
 
 pub fn load_task_changed_files(

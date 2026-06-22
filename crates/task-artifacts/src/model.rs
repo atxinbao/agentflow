@@ -6,7 +6,7 @@ pub const TASK_COMMAND_VERSION: &str = "task-command.v1";
 pub const TASK_CHANGED_FILES_VERSION: &str = "task-changed-files.v1";
 pub const TASK_VALIDATION_VERSION: &str = "task-validation.v1";
 pub const TASK_EVIDENCE_VERSION: &str = "task-evidence.v1";
-pub const TASK_EVIDENCE_GATE_VERSION: &str = "task-evidence-gate.v1";
+pub const TASK_ACCEPTANCE_GATE_VERSION: &str = "task-acceptance-gate.v1";
 pub const TASK_PREFLIGHT_VERSION: &str = "task-preflight.v1";
 pub const TASK_RUN_CHECKPOINT_VERSION: &str = "task-run-checkpoint.v1";
 pub const TASK_WORK_SESSION_VERSION: &str = "task-work-session.v1";
@@ -417,19 +417,54 @@ pub struct TaskEvidenceEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskAcceptanceGateKind {
+    Verification,
+    Evidence,
+    Contract,
+    State,
+}
+
+impl TaskAcceptanceGateKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Verification => "verification",
+            Self::Evidence => "evidence",
+            Self::Contract => "contract",
+            Self::State => "state",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TaskEvidenceGateDecision {
+pub struct TaskAcceptanceSubGateDecision {
+    pub gate: TaskAcceptanceGateKind,
+    pub passed: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inputs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failure_reasons: Vec<String>,
+    pub repair_suggestion: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskAcceptanceGateDecision {
     pub version: String,
     pub issue_id: String,
     pub run_id: String,
     pub passed: bool,
-    pub validation_passed: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sub_gates: Vec<TaskAcceptanceSubGateDecision>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub required_evidence_types: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub blockers: Vec<String>,
+    pub evidence_entries: Vec<TaskEvidenceEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub entries: Vec<TaskEvidenceEntry>,
+    pub blockers: Vec<String>,
     pub checked_at: u64,
 }
 
