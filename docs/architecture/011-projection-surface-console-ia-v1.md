@@ -16,9 +16,20 @@
 
 ## 1. Core Boundary
 
-Project OS Console 只能读取 projection read models 和 runtime query API。
+Project OS Console projection surfaces 只能读取 projection read models 和 runtime query API。
 
-它不能直接解释底层 authority 文件，也不能直接写 `.agentflow/**`。
+它不能直接解释底层 authority 文件，也不能直接写 `.agentflow/**` authority facts。
+
+这条边界只约束 Console / projection surface。
+
+它不否认 Desktop 的项目打开、项目注册、prepare workspace 等 onboarding 流程需要写初始化文件，例如：
+
+```text
+.agentflow/workspace.yaml
+.agentflow/config.yaml
+```
+
+这些初始化写入必须由 project onboarding / prepare workspace 的 owning runtime path 负责，不能由 Console 页面、View Model 或 Projection Surface 偷偷完成。
 
 ```text
 Authority facts
@@ -306,9 +317,9 @@ Command Surface 必须展示：
 - 点击按钮直接修改 projection；
 - 页面自己猜测 command 是否成功。
 
-## 7. UI Forbidden Writes
+## 7. Console Forbidden Writes
 
-Desktop UI 不允许直接写：
+Project OS Console 页面、Projection Surface 和 View Model 不允许直接写：
 
 ```text
 .agentflow/spec/**
@@ -326,10 +337,13 @@ release notes
 
 例外：
 
+- Project onboarding / prepare workspace 拥有的初始化文件，例如 `.agentflow/workspace.yaml`、`.agentflow/config.yaml`；
 - 本地项目 registry；
 - 窗口状态；
 - 用户偏好；
 - search / filter / selected tab 等纯 UI 状态。
+
+这些例外不能写入 spec、events、tasks、audit 或 projection authority facts。
 
 ## 8. Page To Source Mapping
 
@@ -371,4 +385,3 @@ V070-001 完成条件：
 - Command Surface 只能回流 Runtime API；
 - UI forbidden writes 明确；
 - 后续 V070 issues 可以引用本文作为实现边界。
-

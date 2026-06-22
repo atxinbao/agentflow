@@ -69,7 +69,8 @@ Event Store / Spec Facts / Task Facts / Audit Facts
 
 - Projection 只读；
 - View Model 是页面状态，不是事实源；
-- UI 不直接写 `.agentflow/**`；
+- Project OS Console surface 不直接写 `.agentflow/**` authority facts；
+- Project onboarding / prepare workspace 可以通过 owning runtime path 写 `.agentflow/workspace.yaml`、`.agentflow/config.yaml` 等初始化文件；
 - Command Surface 只提交 command / proposal；
 - Runtime 接受后才进入 Event Store；
 - Audit Surface 只展示独立审计事实，不执行审计。
@@ -142,7 +143,8 @@ V070-001 Projection Surface Contract and Console IA
 - Evidence Graph 能追溯 requirement -> spec -> issue -> run -> evidence -> acceptance -> delivery；
 - Audit Surface 只读独立审计事实；
 - Command Surface 所有操作都回流 Runtime API；
-- UI 不能直接写事实源；
+- Console surface 不能直接写事实源；
+- Desktop onboarding 初始化写入和 Console projection surface 只读边界不冲突；
 - Projection / View Model 不是 authority；
 - 软件开发场景可以从需求、拆解、执行、验收、交付、审计阅读完成闭环。
 
@@ -164,7 +166,7 @@ V070-001 Projection Surface Contract and Console IA
 它不代表：
 
 - 已进入行业 Pack / Surface Pack；
-- UI 可以直接写事实源；
+- Console 可以直接写事实源；
 - Console 可以绕过 Runtime API。
 
 后续 `v0.8.0` 可以基于这个 Console 基线进入 Pack System，但仍必须保持 Projection / View Model / Console 只读边界。

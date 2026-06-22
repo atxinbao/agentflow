@@ -18,7 +18,9 @@ Project
 -> Command Surface
 ```
 
-Console 只消费 projection / view model / browser preview facts，不直接写事实源。
+Console 只消费 projection / view model / browser preview facts，不直接写 authority facts。
+
+Desktop project onboarding / prepare workspace 可以写初始化文件，例如 `.agentflow/workspace.yaml` 和 `.agentflow/config.yaml`。这属于 onboarding runtime path，不属于 Project OS Console projection surface。
 
 ## Covered Surfaces
 
@@ -64,4 +66,4 @@ The following remain read-only presentation layers:
 - Command Surface labels
 - Advanced Runtime Diagnostics
 
-Fact writes must continue to go through runtime APIs, accepted action proposals, or existing authority files. The Console must not become a new authority source.
+Fact writes must continue to go through runtime APIs, accepted action proposals, existing authority files, or explicit onboarding / prepare-workspace runtime paths. The Console must not become a new authority source.

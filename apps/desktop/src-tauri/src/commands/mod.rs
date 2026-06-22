@@ -1,8 +1,9 @@
 //! Tauri command registration modules.
 //!
 //! Command names stay stable while implementation modules are split by product
-//! boundary. Desktop remains read-only unless a requirement explicitly changes
-//! that boundary.
+//! boundary. Project OS Console projection surfaces remain read-only. Project
+//! onboarding and prepare-workspace commands may still write initialization
+//! files through their owning runtime paths.
 
 pub(crate) mod agent_manual;
 pub(crate) mod agentflow_watcher;

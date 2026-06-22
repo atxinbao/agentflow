@@ -105,13 +105,15 @@ Facts
 - 定义 Project Home / Spec Workbench / Task Workbench / Audit / Files / Advanced 的职责；
 - 定义 read model 与 view model 的边界；
 - 定义 Command Surface 只能回流 Runtime API；
-- 定义 UI forbidden writes；
+- 定义 Console forbidden writes；
+- 明确 Project onboarding / prepare workspace 初始化写入不属于 Console projection surface 写入；
 - 明确 Projection 只读，不成为 authority。
 
 验收标准：
 
 - 每个 Console 页面都有唯一职责；
-- UI 不能直接修改 `.agentflow/spec/**`、`.agentflow/tasks/**`、`.agentflow/events/**`；
+- Console surface 不能直接修改 `.agentflow/spec/**`、`.agentflow/tasks/**`、`.agentflow/events/**`；
+- Desktop onboarding / prepare workspace 可以通过 owning runtime path 写初始化文件；
 - Command Surface 不直接改状态；
 - Projection / View Model / Runtime API 边界明确；
 - 后续任务能按该合同实现页面。
@@ -548,7 +550,7 @@ Facts
 - 已新增 `console:readiness` 本地验收命令；
 - 已生成 Project OS Console readiness evidence；
 - 验收覆盖 Project Home、Spec Workbench、Task Workbench、Acceptance / Delivery、Audit read-only、Command Surface 和 projection missing / stale / conflict 状态；
-- Console 继续保持只读，不直接写事实源。
+- Console 继续保持只读，不直接写 authority facts；项目 onboarding 初始化写入不属于 Console surface。
 
 ## 6. Suggested Milestones
 
@@ -613,7 +615,7 @@ Facts
 - Command Surface 不绕过 Runtime API；
 - Advanced 只读诊断；
 - Desktop browser preview 和回归测试覆盖核心视图；
-- Console 不直接写事实源。
+- Console 不直接写事实源；Desktop onboarding 初始化文件由 prepare workspace 路径负责。
 
 ## 8. Verification Direction
 
