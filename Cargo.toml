@@ -12,6 +12,7 @@ members = [
     "crates/action-arbitration",
     "crates/workflow-core",
     "crates/schema-registry",
+    "crates/simulation",
     "crates/event-store",
     "crates/workflow-runtime",
     "crates/task-artifacts",

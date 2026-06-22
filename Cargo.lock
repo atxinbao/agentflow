@@ -284,6 +284,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-simulation"
+version = "0.7.0"
+dependencies = [
+ "agentflow-action-arbitration",
+ "agentflow-action-contract",
+ "agentflow-object-state",
+ "agentflow-ontology",
+ "agentflow-role-policy",
+ "agentflow-runtime-api",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-spec"
 version = "0.7.0"
 dependencies = [

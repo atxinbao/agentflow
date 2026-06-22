@@ -1,0 +1,19 @@
+[package]
+name = "agentflow-simulation"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+agentflow-action-arbitration = { path = "../action-arbitration" }
+agentflow-action-contract = { path = "../action-contract" }
+agentflow-object-state = { path = "../object-state" }
+agentflow-ontology = { path = "../ontology" }
+agentflow-role-policy = { path = "../role-policy" }
+agentflow-runtime-api = { path = "../runtime-api" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
