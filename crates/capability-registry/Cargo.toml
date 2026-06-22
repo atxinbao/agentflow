@@ -1,0 +1,12 @@
+[package]
+name = "agentflow-capability-registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+agentflow-mcp = { path = "../mcp" }
+agentflow-role-policy = { path = "../role-policy" }
+agentflow-workflow-core = { path = "../workflow-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }

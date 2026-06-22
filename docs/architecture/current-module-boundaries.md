@@ -590,6 +590,28 @@ docs/requirements/**
 
 - `crates/agent-dispatcher/src/**`
 
+### Capability Registry
+
+负责：
+
+- 聚合 worker / provider / connector 能力目录
+- 读取 MCP provider capability profile 和 provider health status
+- 暴露 Command Surface 可用性判断
+- 给不可用 command 返回 disabled reason
+- 列出 worker、capability、health、requiresAuth 和 tool scope
+
+不负责：
+
+- 启动 provider session
+- 执行 provider smoke gate
+- 管理 provider auth
+- 写 `.agentflow/**` authority facts
+- 替代 role-policy 或 mcp provider adapter
+
+实现位置：
+
+- `crates/capability-registry/src/**`
+
 ### MCP
 
 负责：
