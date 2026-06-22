@@ -392,6 +392,27 @@ docs/requirements/**
 
 - `crates/workflow-core/src/**`
 
+### Schema Registry
+
+负责：
+
+- 列出核心事实 schema version；
+- 检测 current / legacy / missing version / unknown schema；
+- 生成 migration preview；
+- 定义 migration apply 显式确认边界；
+- 返回 apply receipt。
+
+不负责：
+
+- 扫描整个工作区；
+- 自动修改 `.agentflow/**` authority；
+- 做数据库 migration framework；
+- 迁移 Pack schema。
+
+实现位置：
+
+- `crates/schema-registry/src/**`
+
 ### Event Store
 
 负责：

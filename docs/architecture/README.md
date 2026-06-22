@@ -30,6 +30,7 @@
 | [009-runtime-foundation-closeout-baseline-v1.md](009-runtime-foundation-closeout-baseline-v1.md) | 定义 v0.4.0 Runtime Foundation 的正式 closeout baseline 与主链验证锚点 |
 | [010-work-loop-filesystem-contract-v1.md](010-work-loop-filesystem-contract-v1.md) | 定义 v0.6.0 Work Loop / CodeFlow 的文件合同、authority 和阶段路径 |
 | [011-projection-surface-console-ia-v1.md](011-projection-surface-console-ia-v1.md) | 定义 v0.7.0 Projection Surface、Project OS Console 信息架构、读写边界和命令回流 |
+| [012-schema-version-migration-registry-v1.md](012-schema-version-migration-registry-v1.md) | 定义 schema version registry、legacy detection、migration preview 和 explicit apply 边界 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -46,8 +47,9 @@
 9. [009-runtime-foundation-closeout-baseline-v1.md](009-runtime-foundation-closeout-baseline-v1.md)
 10. [010-work-loop-filesystem-contract-v1.md](010-work-loop-filesystem-contract-v1.md)
 11. [011-projection-surface-console-ia-v1.md](011-projection-surface-console-ia-v1.md)
-12. [current-module-boundaries.md](current-module-boundaries.md)
-13. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+12. [012-schema-version-migration-registry-v1.md](012-schema-version-migration-registry-v1.md)
+13. [current-module-boundaries.md](current-module-boundaries.md)
+14. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 

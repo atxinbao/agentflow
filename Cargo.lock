@@ -266,6 +266,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-schema-registry"
+version = "0.7.0"
+dependencies = [
+ "agentflow-audit",
+ "agentflow-event-store",
+ "agentflow-projection",
+ "agentflow-release",
+ "agentflow-runtime-api",
+ "agentflow-spec",
+ "agentflow-state",
+ "agentflow-task-artifacts",
+ "agentflow-workflow-core",
+ "anyhow",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "agentflow-spec"
 version = "0.7.0"
 dependencies = [
