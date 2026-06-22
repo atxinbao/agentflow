@@ -17,10 +17,11 @@ use agentflow_spec::{read_spec_issue, update_spec_issue_status, SpecIssueStatus}
 use agentflow_task_artifacts::{
     load_task_changed_files, load_task_evidence, load_task_run, load_task_validation,
     task_changed_files_path, task_evidence_dir, task_run_dir, update_task_run_status,
-    write_task_changed_files, write_task_command_record, write_task_evidence,
-    write_task_evidence_gate_decision, write_task_validation_with_assessment, TaskChangedFile,
-    TaskChangedFileSource, TaskCommandInput, TaskEvidence, TaskEvidenceEntry,
-    TaskEvidenceEntryStatus, TaskEvidenceGateDecision, TaskRun, TaskRunStatus,
+    write_task_acceptance_gate_decision, write_task_changed_files, write_task_command_record,
+    write_task_evidence, write_task_validation_with_assessment, TaskAcceptanceGateDecision,
+    TaskAcceptanceGateKind, TaskAcceptanceSubGateDecision, TaskChangedFile, TaskChangedFileSource,
+    TaskCommandInput, TaskEvidence, TaskEvidenceEntry, TaskEvidenceEntryStatus, TaskRun,
+    TaskRunStatus,
 };
 use agentflow_task_loop::{AgentLaunchPayload, TaskLoop, TaskLoopLaunch, AGENT_LAUNCH_REQUESTED};
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
@@ -147,13 +148,13 @@ pub(crate) fn complete_build_agent_issue_from_request(
     let completed_project_id = issue.project_id.clone();
     let evidence = load_task_evidence(root, &review.issue_id)?;
     let gate_decision =
-        build_evidence_gate_decision(root, &issue, &review.run_id, &evidence, &proof)?;
-    write_task_evidence_gate_decision(root, &review.issue_id, &gate_decision)?;
+        build_acceptance_gate_decision(root, &issue, &review.run_id, &evidence, &proof)?;
+    write_task_acceptance_gate_decision(root, &review.issue_id, &gate_decision)?;
     if !gate_decision.passed {
         let _ = agentflow_projection::rebuild_projections(root)?;
         agentflow_state::refresh_state(root)?;
         anyhow::bail!(
-            "build agent completion requires evidence gate to pass for {} {}: {}",
+            "build agent completion requires acceptance gate to pass for {} {}: {}",
             review.issue_id,
             review.run_id,
             gate_decision.blockers.join("; ")
@@ -1272,13 +1273,14 @@ fn load_closeout_proof(root: &Path, issue_id: &str, run_id: &str) -> Result<serd
     serde_json::from_str(&raw).with_context(|| format!("parse {}", path.display()))
 }
 
-fn build_evidence_gate_decision(
+fn build_acceptance_gate_decision(
     root: &Path,
     issue: &agentflow_spec::SpecIssue,
     run_id: &str,
     evidence: &TaskEvidence,
     proof: &serde_json::Value,
-) -> Result<TaskEvidenceGateDecision> {
+) -> Result<TaskAcceptanceGateDecision> {
+    let run = load_task_run(root, &issue.issue_id, run_id)?;
     let validation = load_task_validation(root, &issue.issue_id, run_id)?;
     let expected_validation_path = resolve_output_path(
         issue.expected_outputs.validation_result_path.as_deref(),
@@ -1410,21 +1412,27 @@ fn build_evidence_gate_decision(
         .filter(|entry| entry.required)
         .map(|entry| entry.evidence_type.clone())
         .collect::<Vec<_>>();
-    let mut blockers = Vec::new();
-    if evidence.validation_path != expected_validation_path {
-        blockers.push(format!(
-            "validation result path mismatch: expected {}, got {}",
-            expected_validation_path, evidence.validation_path
-        ));
+    let mut verification_failures = Vec::new();
+    let mut evidence_failures = Vec::new();
+    let mut contract_failures = Vec::new();
+    let mut state_failures = Vec::new();
+    if !validation.passed {
+        verification_failures.push("failed validation cannot enter Done".to_string());
     }
     if !root.join(&expected_validation_path).is_file() {
-        blockers.push(format!(
+        verification_failures.push(format!(
             "missing validation result artifact: {}",
             expected_validation_path
         ));
     }
+    if evidence.validation_path != expected_validation_path {
+        contract_failures.push(format!(
+            "validation result path mismatch: expected {}, got {}",
+            expected_validation_path, evidence.validation_path
+        ));
+    }
     if evidence.changed_files_path.as_deref() != Some(expected_changed_files_path.as_str()) {
-        blockers.push(format!(
+        contract_failures.push(format!(
             "implementation summary path mismatch: expected {}, got {}",
             expected_changed_files_path,
             evidence
@@ -1434,56 +1442,157 @@ fn build_evidence_gate_decision(
         ));
     }
     if !root.join(&expected_changed_files_path).is_file() {
-        blockers.push(format!(
+        evidence_failures.push(format!(
             "missing implementation summary artifact: {}",
             expected_changed_files_path
         ));
     }
     if issue.expected_outputs.evidence_path != task_evidence_path(&issue.issue_id) {
-        blockers.push(format!(
+        contract_failures.push(format!(
             "evidence path mismatch: expected {}, got {}",
             issue.expected_outputs.evidence_path,
             task_evidence_path(&issue.issue_id)
         ));
     }
     if !root.join(task_evidence_path(&issue.issue_id)).is_file() {
-        blockers.push(format!(
+        evidence_failures.push(format!(
             "missing evidence artifact: {}",
             task_evidence_path(&issue.issue_id)
         ));
     }
-    if !validation.passed {
-        blockers.push("failed validation cannot count as passing evidence".to_string());
+    if !root.join(&proof_ref).is_file() {
+        evidence_failures.push(format!("missing closeout proof artifact: {proof_ref}"));
     }
     if let Some(entry) = entries
         .iter()
         .find(|entry| entry.evidence_type == "manualVerification")
     {
         if entry.status == TaskEvidenceEntryStatus::Failed {
-            blockers.push("manual verification requires both reason and risk".to_string());
+            evidence_failures.push("manual verification requires both reason and risk".to_string());
         }
     }
     for entry in entries.iter().filter(|entry| entry.required) {
         if entry.status != TaskEvidenceEntryStatus::Ready {
-            blockers.push(format!(
+            evidence_failures.push(format!(
                 "required evidence `{}` is {}",
                 entry.evidence_type,
                 evidence_entry_status_as_str(&entry.status)
             ));
         }
     }
+    if run.status != TaskRunStatus::Completed {
+        state_failures.push(format!(
+            "run state must be completed before Done, found {}",
+            task_run_status_value_as_str(&run.status)
+        ));
+    }
+    if issue.status != SpecIssueStatus::InReview {
+        state_failures.push(format!(
+            "issue state must be in_review before Done, found {}",
+            issue.status.as_str()
+        ));
+    }
+    if !merged {
+        state_failures.push("closeout proof must show merged=true".to_string());
+    }
+    if !issue_closed {
+        state_failures.push("closeout proof must show issueClosed=true".to_string());
+    }
 
-    Ok(TaskEvidenceGateDecision {
+    let sub_gates = vec![
+        build_acceptance_sub_gate(
+            TaskAcceptanceGateKind::Verification,
+            vec![expected_validation_path.clone()],
+            vec![expected_validation_path.clone()],
+            verification_failures,
+            "重新运行验证命令，确保 validation.json 存在且所有验证通过。",
+        ),
+        build_acceptance_sub_gate(
+            TaskAcceptanceGateKind::Evidence,
+            vec![
+                task_evidence_path(&issue.issue_id),
+                expected_changed_files_path.clone(),
+                proof_ref.clone(),
+            ],
+            entries
+                .iter()
+                .flat_map(|entry| entry.refs.clone())
+                .collect::<Vec<_>>(),
+            evidence_failures,
+            "补齐验证证据、变更摘要、合并证明或人工验证原因与风险。",
+        ),
+        build_acceptance_sub_gate(
+            TaskAcceptanceGateKind::Contract,
+            vec![
+                issue.expected_outputs.evidence_path.clone(),
+                expected_validation_path.clone(),
+                expected_changed_files_path.clone(),
+                expected_closeout_proof_path.clone(),
+            ],
+            vec![
+                evidence.validation_path.clone(),
+                evidence
+                    .changed_files_path
+                    .clone()
+                    .unwrap_or_else(|| "<missing>".to_string()),
+                task_evidence_path(&issue.issue_id),
+                proof_ref.clone(),
+            ],
+            contract_failures,
+            "修正 issue expectedOutputs 或实际产物路径，保证任务合同与写入位置一致。",
+        ),
+        build_acceptance_sub_gate(
+            TaskAcceptanceGateKind::State,
+            vec![
+                format!("issue:{}", issue.status.as_str()),
+                format!("run:{}", task_run_status_value_as_str(&run.status)),
+                proof_ref.clone(),
+            ],
+            vec![
+                format!("merged:{merged}"),
+                format!("issueClosed:{issue_closed}"),
+            ],
+            state_failures,
+            "先进入 in_review、完成 run、合并 PR/MR 并关闭对应外部 issue。",
+        ),
+    ];
+    let blockers = sub_gates
+        .iter()
+        .flat_map(|gate| {
+            gate.failure_reasons
+                .iter()
+                .map(move |reason| format!("{} gate: {reason}", gate.gate.as_str()))
+        })
+        .collect::<Vec<_>>();
+
+    Ok(TaskAcceptanceGateDecision {
         version: String::new(),
         issue_id: issue.issue_id.clone(),
         run_id: run_id.to_string(),
         passed: blockers.is_empty(),
-        validation_passed: validation.passed,
+        sub_gates,
         required_evidence_types,
+        evidence_entries: entries,
         blockers,
-        entries,
         checked_at: current_unix_timestamp(),
     })
+}
+
+fn build_acceptance_sub_gate(
+    gate: TaskAcceptanceGateKind,
+    inputs: Vec<String>,
+    outputs: Vec<String>,
+    failure_reasons: Vec<String>,
+    repair_suggestion: &str,
+) -> TaskAcceptanceSubGateDecision {
+    TaskAcceptanceSubGateDecision {
+        gate,
+        passed: failure_reasons.is_empty(),
+        inputs,
+        outputs,
+        failure_reasons,
+        repair_suggestion: repair_suggestion.to_string(),
+    }
 }
 
 fn resolve_output_path(
@@ -1594,7 +1703,11 @@ fn write_json(path: &Path, value: &serde_json::Value) -> Result<()> {
 }
 
 fn task_run_status_as_str(run: &TaskRun) -> &'static str {
-    match run.status {
+    task_run_status_value_as_str(&run.status)
+}
+
+fn task_run_status_value_as_str(status: &TaskRunStatus) -> &'static str {
+    match status {
         TaskRunStatus::Queued => "queued",
         TaskRunStatus::InProgress => "in_progress",
         TaskRunStatus::Validating => "validating",
@@ -1700,7 +1813,7 @@ mod tests {
         McpSessionStatus, MCP_CLOSEOUT_ATTESTATION_VERSION,
     };
     use agentflow_task_artifacts::{
-        load_task_changed_files, load_task_evidence, load_task_evidence_gate_decision,
+        load_task_acceptance_gate_decision, load_task_changed_files, load_task_evidence,
         load_task_run, TaskChangedFileSource, TaskRunStatus,
     };
     use anyhow::Result;
@@ -2049,9 +2162,26 @@ mod tests {
         assert_eq!(outcome.issue_id, "AF-001");
         assert_eq!(outcome.run_status, "completed");
         assert!(outcome.next_launch.is_none());
-        let gate = load_task_evidence_gate_decision(dir.path(), "AF-001").unwrap();
+        let gate = load_task_acceptance_gate_decision(dir.path(), "AF-001").unwrap();
         assert!(gate.passed);
-        assert!(gate.validation_passed);
+        assert_eq!(gate.sub_gates.len(), 4);
+        assert!(gate.sub_gates.iter().all(|item| item.passed));
+        assert!(gate
+            .sub_gates
+            .iter()
+            .any(|item| item.gate.as_str() == "verification"));
+        assert!(gate
+            .sub_gates
+            .iter()
+            .any(|item| item.gate.as_str() == "evidence"));
+        assert!(gate
+            .sub_gates
+            .iter()
+            .any(|item| item.gate.as_str() == "contract"));
+        assert!(gate
+            .sub_gates
+            .iter()
+            .any(|item| item.gate.as_str() == "state"));
         assert!(gate
             .required_evidence_types
             .iter()
@@ -2494,13 +2624,13 @@ mod tests {
 
         let err = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap_err();
 
-        assert!(err.to_string().contains("evidence gate"));
-        let gate = load_task_evidence_gate_decision(dir.path(), "AF-CHAIN-001").unwrap();
+        assert!(err.to_string().contains("acceptance gate"));
+        let gate = load_task_acceptance_gate_decision(dir.path(), "AF-CHAIN-001").unwrap();
         assert!(!gate.passed);
         assert!(gate
             .blockers
             .iter()
-            .any(|item| item.contains("mergeProof") || item.contains("issueClosed")));
+            .any(|item| item.contains("state gate") && item.contains("issueClosed")));
         let projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-CHAIN-001").unwrap();
         assert_eq!(projection.current_state, "in_review");
@@ -2534,13 +2664,13 @@ mod tests {
 
         let err = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap_err();
 
-        assert!(err.to_string().contains("evidence gate"));
-        let gate = load_task_evidence_gate_decision(dir.path(), "AF-001").unwrap();
+        assert!(err.to_string().contains("acceptance gate"));
+        let gate = load_task_acceptance_gate_decision(dir.path(), "AF-001").unwrap();
         assert!(!gate.passed);
         assert!(gate
             .blockers
             .iter()
-            .any(|item| item.contains("closeout proof") || item.contains("mergeProof")));
+            .any(|item| item.contains("evidence gate") && item.contains("closeout proof")));
     }
 
     #[test]

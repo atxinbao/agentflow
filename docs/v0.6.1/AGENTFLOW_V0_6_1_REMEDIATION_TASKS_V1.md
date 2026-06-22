@@ -125,6 +125,22 @@ Release Closeout
 - 明确四个子 gate 的输入、输出、失败原因和修复建议；
 - 更新 Work Loop 文档和代码命名。
 
+实现契约：
+
+```text
+Acceptance Gate
+= Verification Gate
+  + Evidence Gate
+  + Contract Gate
+  + State Gate
+```
+
+- `Verification Gate`：只判断验证命令与验证产物是否通过；
+- `Evidence Gate`：只判断验证证据、变更摘要、合并证明等任务证据是否齐全；
+- `Contract Gate`：只判断 issue expectedOutputs 与实际写入路径是否一致；
+- `State Gate`：只判断 run / issue / closeout proof 是否处于允许 Done 的状态；
+- `Audit` 不属于 Acceptance Gate，审计只在 Done 后作为独立复查流程触发或请求。
+
 验收标准：
 
 - Done 决策不再只写成 evidence gate；
