@@ -45,6 +45,21 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: ReleaseCommand,
     },
+    ProviderSmoke {
+        #[arg(long, default_value = "codex")]
+        provider: String,
+        #[arg(long = "issue-id")]
+        issue_id: String,
+        #[arg(long = "run-id")]
+        run_id: String,
+        #[arg(long = "working-directory")]
+        working_directory: Option<PathBuf>,
+        #[arg(
+            long = "launch-request-path",
+            default_value = ".agentflow/tmp/provider-smoke-request.md"
+        )]
+        launch_request_path: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]

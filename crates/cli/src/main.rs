@@ -327,6 +327,32 @@ fn main() -> anyhow::Result<()> {
                 println!("entries: {}", summary.entries.len());
             }
         },
+        Command::ProviderSmoke {
+            provider,
+            issue_id,
+            run_id,
+            working_directory,
+            launch_request_path,
+        } => {
+            let working_directory = working_directory
+                .unwrap_or_else(|| cwd.clone())
+                .display()
+                .to_string();
+            let mut request = agentflow_mcp::McpProviderSmokeRequest::new(
+                provider.clone(),
+                issue_id,
+                run_id,
+                working_directory,
+                launch_request_path,
+            );
+            request.enabled = true;
+            let bridge = agentflow_mcp::default_provider_bridge();
+            let provider_impl = bridge.provider(&provider).ok_or_else(|| {
+                anyhow::anyhow!("unsupported provider smoke provider: {provider}")
+            })?;
+            let artifact = agentflow_mcp::run_provider_smoke_gate(&cwd, provider_impl, &request)?;
+            println!("{}", serde_json::to_string_pretty(&artifact)?);
+        }
     }
 
     Ok(())

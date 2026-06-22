@@ -11,6 +11,7 @@
 - 新增 `docs/v0.7.2/**`，固定 Runtime Foundation hardening 任务基线和 V072 issue 顺序。
 - 新增 `crates/message-bus` 和 Local Message Bus 架构文档，固定本地 runtime / projection / command / worker / audit channel，明确 bus 只做 fanout / refresh signal，Event Store 仍是 durable authority。
 - 新增 `crates/capability-registry` 和 Worker / Tool Capability Registry 架构文档，提供 worker/tool 列表、health、capability、requiresAuth 和 Command Surface disabled reason 判断。
+- 新增 `agentflow-mcp` provider smoke gate，支持最小 provider health / launch request / session snapshot / terminal projection 证明，并通过 `agentflow provider-smoke` 暴露 CLI 入口。
 - 新增 `crates/simulation` 和 Simulation Dry-run Runtime 架构文档，提供 command / issue / completion 的只读 dry-run 报告、expected events、rejected reasons、affected projections、risk / conflict 和 gate impact。
 - 新增 `crates/schema-registry` 和 schema migration 架构文档，提供当前 schema version 清单、legacy 检测、migration preview 和显式 apply 边界。
 - 新增 `docs/v0.7.1/**`，固定 `v0.7.0` release certification evidence，包括 PR / main / tag / release event gate run、artifact、release URL 和 source commit。
@@ -22,7 +23,7 @@
 
 - `docs/v0.7.0/**` 从 planning draft 口径收口为 released implementation record。
 - `v0.7.0` 验证说明改为显式列出 `preview:smoke`、`console:readiness` 和 release-gate 版本认证命令。
-- `scripts/verify_release_gate.sh` 的 summary / certification payload 改用 `runtime-fixture-gate` 命名，并把 `provider-smoke-gate` 标为 deferred。
+- `scripts/verify_release_gate.sh` 的 summary / certification payload 改用 `runtime-fixture-gate` 命名，并把 `provider-smoke-gate` 接入为默认 clear skip、显式执行的独立门禁。
 - Project canonical workflow 不再把 Audit 放在 Work Done 和 Delivery 之间；Audit 改为独立 Sidecar Loop，finding 只能回流为 Follow-up Proposal。
 
 ## 0.7.0 - 2026-06-22
