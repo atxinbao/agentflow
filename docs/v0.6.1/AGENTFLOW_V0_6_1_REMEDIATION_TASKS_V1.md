@@ -2,7 +2,7 @@
 
 日期：2026-06-21
 执行者：Codex
-状态：Remediation Planning Draft / 不授权 Build Agent 执行
+状态：Remediation Implemented / Release Closeout Hotfix Required
 
 ## 1. Purpose
 
@@ -326,7 +326,7 @@ issue.completion.committed
 
 - 认证产物：[AGENTFLOW_V0_6_1_RELEASE_AUDIT_CERTIFICATION_V1.md](AGENTFLOW_V0_6_1_RELEASE_AUDIT_CERTIFICATION_V1.md)
 - 认证范围：V061-001 到 V061-007 的 PR 链、merge commit、release-gate run、版本元数据、Acceptance Gate、Completion Commit 和 Audit separation。
-- 认证结论：`v0.6.1` 可以作为 `v0.6.0` 之后的 clean remediation release 候选；tag / GitHub Release 需要在本认证合并后执行。
+- 认证结论：`v0.6.1` 可以作为 `v0.6.0` 之后的 clean remediation release 候选；首次 tag / GitHub Release 后发现 changelog release entry 缺口，需要 hotfix 后重新发布。
 
 ## 4. Suggested Milestones
 

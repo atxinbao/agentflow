@@ -2,7 +2,7 @@
 
 日期：2026-06-22
 执行者：Codex
-状态：Release Audit Certification / v0.6.1 tag 前认证 / 可作为 release notes 证据入口
+状态：Release Audit Certification / v0.6.1 release closeout hotfix / 可作为 release notes 证据入口
 
 ## 1. Certification Judgment
 
@@ -28,7 +28,7 @@ v0.6.1 可以作为 v0.6.0 之后的 clean remediation release 候选。
 - `v1.0` API 稳定；
 - `v0.7.0` Projection Surface 已经完成；
 - 自动审计已经进入默认闭环；
-- tag / GitHub Release 已经创建。
+- tag / GitHub Release 首次创建后，release event gate 暴露 changelog release entry 缺口。
 
 ## 2. Version Facts
 
@@ -125,8 +125,9 @@ git diff --check
 
 `v0.6.1` 仍然保留以下边界：
 
-- GitHub tag `v0.6.1` 和 GitHub Release 需要在本认证合并后创建；
-- tag / release event 的 release-gate run 需要在发布时再次确认；
+- 首次 GitHub tag `v0.6.1` 和 GitHub Release 已创建，但 release event gate 因缺少 `## 0.6.1` changelog entry 失败；
+- 本 hotfix 补齐 changelog release entry 后，需要重新创建 `v0.6.1` tag / GitHub Release；
+- tag / release event 的 release-gate run 需要在重新发布时再次确认；
 - `v0.7.0` 只能在 `v0.6.1` tag / release 成功后进入实现；
 - 本认证不新增行业 Pack、OS Console 或自动审计能力。
 
@@ -137,7 +138,8 @@ git diff --check
 ```text
 merge V061-008 certification PR
 -> confirm main release-gate success
--> create tag v0.6.1
+-> fix changelog release entry if release event gate reports missing 0.6.1 heading
+-> recreate tag v0.6.1
 -> publish GitHub Release v0.6.1
 -> confirm tag / release event release-gate success
 ```

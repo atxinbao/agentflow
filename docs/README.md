@@ -15,7 +15,7 @@
 | `v0.5.0/` | v0.5.0 Spec Loop Productization 功能基线与风险延期记录 |
 | `v0.5.1/` | v0.5.1 Release Hygiene 与 Authority Closure 历史修复基线，已折入 v0.6.0 发布路径 |
 | `v0.6.0/` | v0.6.0 Work Loop Handoff & Controlled Execution 已发布功能基线与 release closeout |
-| `v0.6.1/` | v0.6.0 审计后续、release closeout、Acceptance Gate 修复链与 tag 前认证 |
+| `v0.6.1/` | v0.6.0 审计后续、release closeout、Acceptance Gate 修复链与发布认证 |
 | `v0.7.0/` | v0.7.0 Projection Surface 与 Project OS Console 开发前置规划 |
 | `requirements/` | 新需求文档入口，后续开发只从这里开始 |
 | `archive/2026-05-agentflow-legacy/` | 旧需求、旧规划、旧规格和旧验证摘要归档 |
@@ -50,7 +50,7 @@
 - `v0.5.0/` 下文档记录已发布版本的 Spec Loop 功能基线，但当前只能视为 functional baseline，不应直接视为 clean stable release。
 - `v0.5.1/` 下文档记录历史 release hygiene 与 authority closure 修复基线；它不再阻塞已经发布的 `v0.6.0`，剩余问题进入 `v0.6.1`。
 - `v0.6.0/` 下文档记录已发布的 Work Loop handoff 与受控执行功能基线；它不是 clean stable closeout，遗留 release hygiene 与 Acceptance Gate 问题进入 `v0.6.1`。
-- `v0.6.1/` 下文档记录 `v0.6.0` 发布审计后的修复链和 tag 前认证，重点是 release closeout、Acceptance Gate、Completion Commit 和 Audit separation。
+- `v0.6.1/` 下文档记录 `v0.6.0` 发布审计后的修复链和发布认证，重点是 release closeout、Acceptance Gate、Completion Commit 和 Audit separation。
 - `v0.7.0/` 下文档记录 Projection Surface 与 Project OS Console 规划；进入实现前必须先完成 `v0.6.1` 验收闭环和发布收口。
 - 后续新开发需求仍然要进入 `requirements/`；新版本运行时事实源仍然以 `.agentflow/spec/**` 为准。
 - 根目录旧 `GOAL.md`、`ROADMAP.md` 和 `verification.md` 已退出入口；历史验证记录迁入 `verification/history.md`。
