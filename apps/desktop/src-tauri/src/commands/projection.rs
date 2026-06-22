@@ -113,3 +113,66 @@ pub(crate) fn load_spec_workbench_projection(
         warnings,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn desktop_projection_commands_read_real_workspace_fixture() {
+        let fixture = agentflow_workflow_acceptance::prepare_project_in_review_fixture()
+            .expect("prepare real workspace projection fixture");
+        let root = fixture.fixture.root();
+        let project_root = root.to_string_lossy().to_string();
+
+        for relative_path in [
+            ".agentflow/spec",
+            ".agentflow/events",
+            ".agentflow/tasks",
+            ".agentflow/projections",
+        ] {
+            assert!(
+                root.join(relative_path).exists(),
+                "expected fixture path {relative_path}"
+            );
+        }
+
+        let summary =
+            rebuild_task_projections(project_root.clone()).expect("rebuild projection commands");
+        assert!(
+            summary.task_count >= 2,
+            "expected project fixture tasks to be rebuilt"
+        );
+
+        let project = load_project_projection(project_root.clone(), fixture.project_id.clone())
+            .expect("load project projection through desktop command");
+        assert_eq!(project.project_id, fixture.project_id);
+        assert_eq!(
+            project.current_issue_id.as_deref(),
+            Some(fixture.current_issue_id.as_str())
+        );
+
+        let task = load_task_projection(project_root.clone(), fixture.current_issue_id.clone())
+            .expect("load task projection through desktop command");
+        assert_eq!(task.issue_id, fixture.current_issue_id);
+        assert_eq!(task.current_state, "in_review");
+        assert_eq!(task.latest_run_id.as_deref(), Some("run-001"));
+
+        let issue_index = load_projection_issue_status_index(project_root.clone())
+            .expect("load issue status index through desktop command");
+        assert!(issue_index
+            .issues
+            .iter()
+            .any(|issue| issue.issue_id == fixture.current_issue_id));
+
+        let spec_workbench = load_spec_workbench_projection(project_root.clone(), None)
+            .expect("load spec workbench projection through desktop command");
+        assert_eq!(spec_workbench.version, "spec-workbench-projection.v1");
+
+        let missing_task = load_task_projection(project_root, "AF-MISSING-404".to_string());
+        assert!(
+            missing_task.is_err(),
+            "missing task projection should surface a read error"
+        );
+    }
+}
