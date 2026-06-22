@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.7.2 - 2026-06-23
 
 执行者：Codex
 
-当前状态：`v0.7.1` release closeout remediation 正在进行。
+`0.7.2 - Runtime Foundation Hardening` 收口 `v0.7.x` Console 之后暴露的底层运行时边界，为后续 Pack / Industry Shell 提供可验证底座。
 
 ### Added
 
