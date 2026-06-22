@@ -4029,6 +4029,7 @@ function TaskDetailReader({
               stageItems={stageOutputItems}
               status={effectiveDisplayStatus}
             />
+            <TaskEvidenceGraph task={effectiveTask} projection={taskProjection} />
           </div>
           <aside className="v16-task-workspace-sidebar" aria-label="当前阶段摘要">
             <TaskFlowSidebar
@@ -4307,6 +4308,129 @@ function IssueStatusFlow({
       </div>
     </section>
   );
+}
+
+function TaskEvidenceGraph({
+  projection,
+  task,
+}: {
+  projection: TaskProjection | null;
+  task: V1Issue;
+}) {
+  const timelineEvents = projection
+    ? projection.timeline
+        .flatMap((item) => item.events.map((event) => ({ ...event, state: item.state, phase: item.phase })))
+        .sort((left, right) => left.timestamp - right.timestamp || left.eventId.localeCompare(right.eventId))
+    : [];
+  const graphNodes = taskEvidenceGraphNodes(task, projection);
+  const warnings = projection?.acceptance?.failureReasons ?? [];
+
+  return (
+    <section className="v16-task-evidence-graph" aria-label="事件时间线与证据图">
+      <div className="v16-task-evidence-graph-header">
+        <div>
+          <span>Event Timeline / Evidence Graph</span>
+          <strong>状态为什么变化，交付从哪里来</strong>
+        </div>
+        <StatusBadge status={projection ? "ready" : "warning"}>
+          {projection ? "只读投影" : "等待投影"}
+        </StatusBadge>
+      </div>
+
+      <div className="v16-task-evidence-graph-grid">
+        <section className="v16-task-evidence-timeline" aria-label="事件时间线">
+          <h3>事件时间线</h3>
+          {timelineEvents.length ? (
+            <ol>
+              {timelineEvents.map((event) => (
+                <li key={event.eventId}>
+                  <span className={`v16-task-evidence-dot ${event.phase}`} aria-hidden="true" />
+                  <div>
+                    <strong>{event.summary}</strong>
+                    <small>
+                      {displayStatusLabelZh(event.state)} · {event.actorRole || event.actorKind} · {formatTimestamp(event.timestamp)}
+                    </small>
+                    {event.artifactRefs.length ? <p>{event.artifactRefs.join(" · ")}</p> : null}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="v16-empty-text">当前任务还没有事件流记录。</p>
+          )}
+        </section>
+
+        <section className="v16-task-evidence-chain" aria-label="证据图">
+          <h3>证据图</h3>
+          <ol>
+            {graphNodes.map((node) => (
+              <li className={node.status} key={`${node.label}-${node.value}`}>
+                <span>{node.label}</span>
+                <strong>{node.value}</strong>
+                <small>{node.note}</small>
+              </li>
+            ))}
+          </ol>
+          {warnings.length ? (
+            <div className="v16-task-evidence-warning">
+              {warnings.slice(0, 3).map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function taskEvidenceGraphNodes(task: V1Issue, projection: TaskProjection | null) {
+  const acceptance = projection?.acceptance ?? null;
+  const runId = projection?.runtime.runId ?? task.latestRunId ?? null;
+  const evidencePath =
+    acceptance?.traceability.evidencePath
+    ?? projection?.delivery.evidencePath
+    ?? projection?.publicDelivery.evidencePath
+    ?? null;
+  const validationPath = acceptance?.traceability.validationPath ?? null;
+  const deliveryPath =
+    projection?.delivery.publicRecordPath
+    ?? projection?.publicDelivery.changelogPath
+    ?? projection?.publicDelivery.releaseNotesUrl
+    ?? projection?.publicDelivery.prUrl
+    ?? null;
+  const auditPath = projection?.audit.reportPath ?? null;
+
+  return [
+    evidenceGraphNode("Requirement", task.sourceSpecPath ?? task.sourceSpecId ?? "未记录", Boolean(task.sourceSpecId), "公开需求或来源规格"),
+    evidenceGraphNode("Spec Issue", task.issuePath ?? `.agentflow/spec/issues/${task.id}.json`, true, "任务权威合同"),
+    evidenceGraphNode("Context", task.contextPackPath ?? "未生成", Boolean(task.contextPackPath), "执行前上下文包"),
+    evidenceGraphNode("Run", runId ?? "未创建", Boolean(runId), "Work Agent 执行实例"),
+    evidenceGraphNode("Verification", validationPath ?? "等待验证记录", Boolean(validationPath), "本地验证与沙箱输出"),
+    evidenceGraphNode("Evidence", evidencePath ?? "等待 evidence pack", Boolean(evidencePath), "验证证据包"),
+    evidenceGraphNode(
+      "Acceptance",
+      acceptance?.traceability.acceptanceDecisionPath ?? "等待 Acceptance Gate",
+      Boolean(acceptance),
+      acceptance ? acceptanceOutcomeLabelZh(acceptance.outcome, acceptance.passed) : "验收判定尚未生成",
+    ),
+    evidenceGraphNode("Delivery", deliveryPath ?? "等待公开交付记录", Boolean(deliveryPath), "PR/MR body、CHANGELOG 或 release notes"),
+    evidenceGraphNode(
+      "Audit",
+      auditPath ?? "独立审计未触发",
+      Boolean(auditPath),
+      "审计是独立旁支，不参与 Done 默认链路",
+    ),
+  ];
+}
+
+function evidenceGraphNode(label: string, value: string, ready: boolean, note: string) {
+  return {
+    label,
+    note,
+    status: ready ? "ready" : "missing",
+    value,
+  };
 }
 
 function buildProjectionTaskStatusTimeline(

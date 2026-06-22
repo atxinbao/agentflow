@@ -280,6 +280,10 @@ try {
   assert.ok(appEntry.includes("完成写回"));
   assert.ok(appEntry.includes("Acceptance Gate"));
   assert.ok(appEntry.includes("Completion Commit"));
+  assert.ok(appEntry.includes('aria-label="事件时间线与证据图"'));
+  assert.ok(appEntry.includes('aria-label="事件时间线"'));
+  assert.ok(appEntry.includes('aria-label="证据图"'));
+  assert.ok(appEntry.includes("审计是独立旁支，不参与 Done 默认链路"));
   assert.ok(appEntry.includes("交付槽位"));
   assert.ok(appEntry.includes("公开交付"));
   assert.ok(appEntry.includes("需求工作台"));
@@ -293,6 +297,8 @@ try {
   assert.ok(appShellCss.includes(".v16-task-queue-row"));
   assert.ok(appShellCss.includes(".v16-spec-layout"));
   assert.ok(appShellCss.includes(".v16-spec-stage-row"));
+  assert.ok(appShellCss.includes(".v16-task-evidence-graph"));
+  assert.ok(appShellCss.includes(".v16-task-evidence-chain"));
   assert.ok(appShellCss.includes(".v16-files-page"));
   assert.ok(appShellCss.includes("@media (prefers-color-scheme: dark)"));
   assert.ok(projectLocalFilesPage.indexOf("<ProjectFileBrowser") < projectLocalFilesPage.indexOf("<article className=\"project-file-reader\""));

@@ -271,6 +271,15 @@ Facts
 
 让项目事实变化和证据链可追溯。
 
+实现状态：
+
+- 已完成；
+- 任务页主列新增 `事件时间线 / 证据图` 只读区域；
+- Event Timeline 从 TaskProjection timeline events 聚合，按状态、执行者、时间和 artifact refs 展示；
+- Evidence Graph 展示 requirement / spec issue / context / run / verification / evidence / acceptance / delivery 主链；
+- Audit 作为独立旁支展示，不混入 Done 主链；
+- 缺失事实显示为 `未生成` / `等待` / `独立审计未触发`，timeline 不作为 authority。
+
 范围：
 
 - 建立 Event Timeline；
