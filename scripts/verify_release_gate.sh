@@ -6,6 +6,15 @@ ARTIFACT_DIR="${ARTIFACT_DIR:-}"
 RELEASE_VERSION="${RELEASE_VERSION:-}"
 RELEASE_TAG_NAME="${RELEASE_TAG_NAME:-}"
 SOURCE_COMMIT_SHA="${SOURCE_COMMIT_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
+RELEASE_URL="${RELEASE_URL:-}"
+REQUIRE_PUBLISHED_RELEASE_FACTS="${REQUIRE_PUBLISHED_RELEASE_FACTS:-}"
+GATE_EVENT_NAME="${GITHUB_EVENT_NAME:-local}"
+GATE_RUN_ID="${GITHUB_RUN_ID:-}"
+GATE_RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT:-}"
+GATE_REPOSITORY="${GITHUB_REPOSITORY:-atxinbao/agentflow}"
+GATE_SERVER_URL="${GITHUB_SERVER_URL:-https://github.com}"
+GATE_REF_NAME="${GITHUB_REF_NAME:-}"
+GATE_REF_TYPE="${GITHUB_REF_TYPE:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -23,6 +32,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --source-commit-sha)
       SOURCE_COMMIT_SHA="$2"
+      shift 2
+      ;;
+    --release-url)
+      RELEASE_URL="$2"
       shift 2
       ;;
     *)
@@ -51,6 +64,16 @@ if [[ "$RELEASE_VERSION" != v* ]]; then
 fi
 if [[ -z "$RELEASE_TAG_NAME" ]]; then
   RELEASE_TAG_NAME="$RELEASE_VERSION"
+fi
+if [[ -z "$RELEASE_URL" ]]; then
+  RELEASE_URL="${GATE_SERVER_URL}/${GATE_REPOSITORY}/releases/tag/${RELEASE_TAG_NAME}"
+fi
+if [[ -z "$REQUIRE_PUBLISHED_RELEASE_FACTS" ]]; then
+  if [[ "$GATE_EVENT_NAME" == "release" ]]; then
+    REQUIRE_PUBLISHED_RELEASE_FACTS="1"
+  else
+    REQUIRE_PUBLISHED_RELEASE_FACTS="0"
+  fi
 fi
 if [[ -z "$ARTIFACT_DIR" ]]; then
   ARTIFACT_DIR="$ROOT/artifacts/release-gate-${RELEASE_VERSION}-e2e"
@@ -136,6 +159,15 @@ write_gate_reports() {
     "$REQUIREMENT_ID" \
     "$PROJECT_ID" \
     "$ISSUE_COUNT" \
+    "$RELEASE_URL" \
+    "$GATE_EVENT_NAME" \
+    "$GATE_RUN_ID" \
+    "$GATE_RUN_ATTEMPT" \
+    "$GATE_REPOSITORY" \
+    "$GATE_SERVER_URL" \
+    "$GATE_REF_NAME" \
+    "$GATE_REF_TYPE" \
+    "$REQUIRE_PUBLISHED_RELEASE_FACTS" \
     "$RUNTIME_DIR/release-facts.json" \
     "$RUNTIME_DIR/external-review-surface.json" <<'PY'
 import json
@@ -154,8 +186,17 @@ source_commit_sha = sys.argv[9] or None
 requirement_id = sys.argv[10] or None
 project_id = sys.argv[11] or None
 issue_count = int(sys.argv[12] or "0")
-release_path = pathlib.Path(sys.argv[13])
-review_path = pathlib.Path(sys.argv[14])
+release_url = sys.argv[13] or None
+gate_event_name = sys.argv[14] or "local"
+gate_run_id = sys.argv[15] or None
+gate_run_attempt = sys.argv[16] or None
+gate_repository = sys.argv[17] or "atxinbao/agentflow"
+gate_server_url = sys.argv[18] or "https://github.com"
+gate_ref_name = sys.argv[19] or None
+gate_ref_type = sys.argv[20] or None
+require_published_release_facts = sys.argv[21] == "1"
+release_path = pathlib.Path(sys.argv[22])
+review_path = pathlib.Path(sys.argv[23])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -177,11 +218,15 @@ current_stage = status.get("stage")
 current_message = status.get("message")
 
 stage_status = {}
+stage_detail = {}
 for entry in stage_log:
     stage_status[entry["stage"]] = entry["status"]
+    stage_detail[entry["stage"]] = entry.get("detail")
 
 proof_chain = [
     {"stage": "release.version-metadata", "label": "Release Version Metadata"},
+    {"stage": "release.changelog-entry", "label": "Release Changelog Entry"},
+    {"stage": "release.github-release-fact", "label": "GitHub Release Fact"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -214,6 +259,7 @@ proof_chain = [
 ]
 for item in proof_chain:
     item["status"] = stage_status.get(item["stage"], "missing")
+    item["detail"] = stage_detail.get(item["stage"])
 
 public_artifacts = [
     {"path": "public/CHANGELOG.md", "exists": pathlib.Path(summary_json_path.parent / "public/CHANGELOG.md").is_file()},
@@ -270,6 +316,7 @@ summary_payload = {
     "completionState": release.get("completionState"),
     "completionOutcome": release.get("completionOutcome"),
     "remoteReleaseUrl": release.get("remoteReleaseUrl"),
+    "certifiedReleaseUrl": release_url,
     "changelogPath": release.get("changelogPath"),
     "releaseNotesPath": release.get("releaseNotesPath"),
     "externalReviewPath": review.get("handoffPath"),
@@ -306,7 +353,22 @@ if summary_payload["releaseState"]:
         f"- External review: `{summary_payload['externalReviewPath']}`",
         f"- Audit status: `{summary_payload['auditStatus'] or 'not-requested'}`",
     ])
+elif release_url:
+    summary_lines.append(f"- Release URL: `{release_url}`")
 summary_md_path.write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
+
+current_gate_run = {
+    "eventName": gate_event_name,
+    "runId": gate_run_id,
+    "runAttempt": gate_run_attempt,
+    "runUrl": f"{gate_server_url}/{gate_repository}/actions/runs/{gate_run_id}" if gate_run_id else None,
+    "refName": gate_ref_name,
+    "refType": gate_ref_type,
+    "sourceCommitSha": source_commit_sha,
+}
+main_gate_run = current_gate_run if gate_event_name == "push" and gate_ref_name == "main" else None
+tag_gate_run = current_gate_run if gate_event_name == "push" and gate_ref_type == "tag" else None
+release_gate_run = current_gate_run if gate_event_name == "release" else None
 
 certification_payload = {
     "version": "agentflow-release-gate-certification.v1",
@@ -314,13 +376,17 @@ certification_payload = {
     "tagName": release_tag_name or release.get("tagName"),
     "sourceCommitSha": source_commit_sha,
     "gateWorkflow": "release-gate",
+    "currentGateRun": current_gate_run,
+    "mainGateRun": main_gate_run,
+    "tagGateRun": tag_gate_run,
+    "releaseGateRun": release_gate_run,
     "gateStatus": current_status,
     "conclusion": current_status,
     "gateCommands": [
         "cargo fmt --all --check",
         "cargo test --workspace",
         "npm --prefix apps/desktop run build",
-        f"bash scripts/verify_release_gate.sh --artifact-dir {summary_json_path.parent} --release-version {release_version} --release-tag {release_tag_name or release_version} --source-commit-sha {source_commit_sha or 'unknown'}",
+        f"bash scripts/verify_release_gate.sh --artifact-dir {summary_json_path.parent} --release-version {release_version} --release-tag {release_tag_name or release_version} --source-commit-sha {source_commit_sha or 'unknown'} --release-url {release_url or 'unknown'}",
     ],
     "failedStage": current_stage if current_status == "failed" else None,
     "failureMessage": current_message if current_status == "failed" else None,
@@ -332,7 +398,9 @@ certification_payload = {
     "publicArtifacts": public_artifacts,
     "runtimeArtifacts": runtime_artifacts,
     "generatedAt": status.get("updatedAt"),
-    "remoteReleaseUrl": release.get("remoteReleaseUrl"),
+    "remoteReleaseUrl": release.get("remoteReleaseUrl") or release_url,
+    "releaseUrl": release_url,
+    "requirePublishedReleaseFacts": require_published_release_facts,
 }
 cert_json_path.write_text(
     json.dumps(certification_payload, ensure_ascii=False, indent=2) + "\n",
@@ -345,8 +413,13 @@ cert_lines = [
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
     f"- Source commit: `{source_commit_sha or 'n/a'}`",
+    f"- Release URL: `{release_url or 'n/a'}`",
     f"- Gate workflow: `release-gate`",
     f"- Gate status: `{current_status}`",
+    f"- Current gate run: `{current_gate_run['runUrl'] or 'local'}`",
+    f"- Main gate run: `{(main_gate_run or {}).get('runUrl') or 'not-this-run'}`",
+    f"- Tag gate run: `{(tag_gate_run or {}).get('runUrl') or 'not-this-run'}`",
+    f"- Release gate run: `{(release_gate_run or {}).get('runUrl') or 'not-this-run'}`",
 ]
 if current_status == "failed":
     cert_lines.append(f"- Failed stage: `{current_stage}`")
@@ -379,7 +452,8 @@ cert_lines.extend([
     "",
 ])
 for item in proof_chain:
-    cert_lines.append(f"- `{item['stage']}`: `{item['status']}`")
+    detail = f" - {item['detail']}" if item.get("detail") else ""
+    cert_lines.append(f"- `{item['stage']}`: `{item['status']}`{detail}")
 cert_lines.extend([
     "",
     "## Public Artifacts",
@@ -453,6 +527,68 @@ PY
     fail_stage "release.version-metadata" "release metadata does not match $RELEASE_VERSION"
   fi
   record_stage "release.version-metadata" "passed" "$RELEASE_VERSION"
+}
+
+verify_release_publication_facts() {
+  local metadata_root="$1"
+  local expected_version="${RELEASE_VERSION#v}"
+  if python3 - "$metadata_root/CHANGELOG.md" "${RELEASE_VERSION#v}" <<'PY'
+import pathlib
+import re
+import sys
+
+path = pathlib.Path(sys.argv[1])
+expected = sys.argv[2]
+if not path.is_file():
+    raise SystemExit(1)
+text = path.read_text(encoding="utf-8")
+heading = re.compile(rf"^##\s+(?:\[)?{re.escape(expected)}(?:\])?(?:\s|$)", re.MULTILINE)
+if not heading.search(text):
+    raise SystemExit(1)
+PY
+  then
+    record_stage "release.changelog-entry" "passed" "CHANGELOG.md contains ${RELEASE_VERSION#v}"
+  elif [[ "$REQUIRE_PUBLISHED_RELEASE_FACTS" == "1" ]]; then
+    fail_stage "release.changelog-entry" "CHANGELOG.md missing release entry for ${RELEASE_VERSION#v}"
+  else
+    record_stage "release.changelog-entry" "passed" "not required before release publication"
+  fi
+
+  if [[ "$REQUIRE_PUBLISHED_RELEASE_FACTS" == "1" ]]; then
+    if ! python3 - "$RELEASE_TAG_NAME" "$RELEASE_URL" "$GATE_EVENT_NAME" <<'PY'
+import json
+import os
+import pathlib
+import sys
+
+release_tag = sys.argv[1]
+release_url = sys.argv[2]
+event_name = sys.argv[3]
+event_path = os.environ.get("GITHUB_EVENT_PATH")
+if event_name != "release" or not event_path:
+    raise SystemExit("published GitHub Release fact requires a release event payload")
+
+payload = json.loads(pathlib.Path(event_path).read_text(encoding="utf-8"))
+release = payload.get("release") or {}
+payload_tag = release.get("tag_name") or ""
+payload_url = release.get("html_url") or ""
+if payload_tag != release_tag:
+    raise SystemExit(f"release event tag mismatch: expected {release_tag}; got {payload_tag or 'missing'}")
+if payload_url != release_url:
+    raise SystemExit(f"release event URL mismatch: expected {release_url}; got {payload_url or 'missing'}")
+if not release.get("target_commitish"):
+    raise SystemExit("release event missing target_commitish")
+PY
+    then
+      fail_stage "release.github-release-fact" "release publication facts are incomplete for $RELEASE_VERSION"
+    fi
+  fi
+
+  if [[ "$REQUIRE_PUBLISHED_RELEASE_FACTS" == "1" ]]; then
+    record_stage "release.github-release-fact" "passed" "$RELEASE_URL"
+  else
+    record_stage "release.github-release-fact" "passed" "not required before release publication"
+  fi
 }
 
 run_cli_json() {
@@ -911,6 +1047,7 @@ main() {
   write_status "running" "workspace.prepare" "preparing release gate workspace"
   prepare_workspace
   verify_release_metadata "$WORKSPACE"
+  verify_release_publication_facts "$WORKSPACE"
   write_requirement
 
   local intake_json="$CLI_DIR/artifacts-intake.json"
@@ -1038,7 +1175,7 @@ PY
     --project-id "$project_id" \
     --provider github \
     --release-id rel-e2e-001 \
-    --release-url "https://github.com/atxinbao/agentflow/releases/tag/${RELEASE_TAG_NAME}" \
+    --release-url "$RELEASE_URL" \
     --tag-name "$RELEASE_TAG_NAME" \
     --release-commit-sha "$(git -C "$WORKSPACE" rev-parse HEAD)" \
     --artifact-manifest-path "artifacts/${project_id}-release-manifest.json"

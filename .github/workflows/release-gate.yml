@@ -58,21 +58,27 @@ jobs:
         run: |
           event_name="${GITHUB_EVENT_NAME}"
           release_tag=""
+          release_url=""
 
           if [[ "$event_name" == "push" && "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
             release_tag="${GITHUB_REF_NAME}"
           elif [[ "$event_name" == "release" ]]; then
             release_tag="$(python3 -c 'import json, os; from pathlib import Path; payload = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8")); print((payload.get("release") or {}).get("tag_name", ""))')"
+            release_url="$(python3 -c 'import json, os; from pathlib import Path; payload = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8")); print((payload.get("release") or {}).get("html_url", ""))')"
           fi
 
           if [[ -z "$release_tag" ]]; then
             package_version="$(python3 -c 'import tomllib; from pathlib import Path; payload = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8")); print(payload["workspace"]["package"]["version"])')"
             release_tag="v${package_version}"
           fi
+          if [[ -z "$release_url" ]]; then
+            release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${release_tag}"
+          fi
 
           artifact_dir="artifacts/release-gate-${release_tag}-e2e"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "release_version=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "release_url=$release_url" >> "$GITHUB_OUTPUT"
           echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
 
       - name: Rust format check
@@ -90,13 +96,15 @@ jobs:
         env:
           RELEASE_VERSION: ${{ steps.release_meta.outputs.release_version }}
           RELEASE_TAG_NAME: ${{ steps.release_meta.outputs.release_tag }}
+          RELEASE_URL: ${{ steps.release_meta.outputs.release_url }}
           SOURCE_COMMIT_SHA: ${{ github.sha }}
         run: |
           bash scripts/verify_release_gate.sh \
             --artifact-dir "${{ steps.release_meta.outputs.artifact_dir }}" \
             --release-version "${{ steps.release_meta.outputs.release_version }}" \
             --release-tag "${{ steps.release_meta.outputs.release_tag }}" \
-            --source-commit-sha "${{ github.sha }}"
+            --source-commit-sha "${{ github.sha }}" \
+            --release-url "${{ steps.release_meta.outputs.release_url }}"
 
       - name: Append gate summary
         if: always()
