@@ -621,6 +621,7 @@ docs/requirements/**
 - provider session snapshot
 - poll / cancel / logs
 - provider smoke gate 最小 health / launch / terminal projection 证明
+- connector boundary profile：`readCapabilities / writeCapabilities / authorityWrite / runtimeCommandRequired / outputChannels`
 - GitHub、GitLab、Codex、Browser Preview 等 provider 适配
 
 不负责：
@@ -630,6 +631,7 @@ docs/requirements/**
 - 持有任务 authority
 - 替代 runtime-fixture-gate
 - 执行长时间 provider production E2E
+- 直接写 spec authority、Work Loop Done、release authority 或 audit authority
 
 实现位置：
 

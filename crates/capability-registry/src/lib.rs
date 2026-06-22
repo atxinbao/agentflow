@@ -6,7 +6,8 @@
 //! checks, manage authentication, write authority files, or append events.
 
 use agentflow_mcp::{
-    provider_capability_profile, McpProviderKind, McpProviderStatus, McpProviderStatusCode,
+    provider_capability_profile, McpConnectorBoundary, McpProviderKind, McpProviderStatus,
+    McpProviderStatusCode,
 };
 use agentflow_role_policy::ToolKind;
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowSkillPack};
@@ -115,6 +116,7 @@ pub struct WorkerRegistryEntry {
     pub tool_kinds: Vec<ToolKind>,
     #[serde(default)]
     pub capabilities: Vec<WorkerCapability>,
+    pub boundary: WorkerBoundary,
 }
 
 impl WorkerRegistryEntry {
@@ -122,6 +124,61 @@ impl WorkerRegistryEntry {
         self.capabilities
             .iter()
             .find(|capability| capability.command == command || capability.capability_id == command)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerBoundary {
+    #[serde(default)]
+    pub read_capabilities: Vec<String>,
+    #[serde(default)]
+    pub write_capabilities: Vec<String>,
+    pub authority_write: bool,
+    pub runtime_command_required: bool,
+    #[serde(default)]
+    pub output_channels: Vec<String>,
+    pub failure_surface: String,
+}
+
+impl WorkerBoundary {
+    pub fn connector(
+        read_capabilities: Vec<String>,
+        write_capabilities: Vec<String>,
+        output_channels: Vec<String>,
+    ) -> Self {
+        Self {
+            read_capabilities,
+            write_capabilities,
+            authority_write: false,
+            runtime_command_required: true,
+            output_channels,
+            failure_surface: "capability-registry.disabled-reason".to_string(),
+        }
+    }
+
+    pub fn runtime_worker(output_channels: Vec<String>) -> Self {
+        Self {
+            read_capabilities: Vec::new(),
+            write_capabilities: Vec::new(),
+            authority_write: false,
+            runtime_command_required: true,
+            output_channels,
+            failure_surface: "capability-registry.disabled-reason".to_string(),
+        }
+    }
+}
+
+impl From<McpConnectorBoundary> for WorkerBoundary {
+    fn from(value: McpConnectorBoundary) -> Self {
+        Self {
+            read_capabilities: value.read_capabilities,
+            write_capabilities: value.write_capabilities,
+            authority_write: value.authority_write,
+            runtime_command_required: value.runtime_command_required,
+            output_channels: value.output_channels,
+            failure_surface: value.failure_surface,
+        }
     }
 }
 
@@ -341,6 +398,7 @@ fn provider_worker(
             .collect(),
         tool_kinds: provider_tool_kinds(&kind),
         capabilities,
+        boundary: profile.connector_boundary.into(),
     }
 }
 
@@ -365,6 +423,7 @@ fn local_shell_validator_worker() -> WorkerRegistryEntry {
             ),
             ("diff.inspect", "Inspect local diff", "validate.diff"),
         ],
+        WorkerBoundary::runtime_worker(vec!["evidence".to_string()]),
     )
 }
 
@@ -379,6 +438,15 @@ fn git_provider_worker() -> WorkerRegistryEntry {
             ("git.branch", "Read current branch", "git.branch"),
             ("git.diff", "Read git diff", "git.diff"),
         ],
+        WorkerBoundary::connector(
+            vec![
+                "git.status".to_string(),
+                "git.branch".to_string(),
+                "git.diff".to_string(),
+            ],
+            Vec::new(),
+            vec!["context".to_string(), "external-fact".to_string()],
+        ),
     )
 }
 
@@ -397,6 +465,19 @@ fn mcp_connector_worker() -> WorkerRegistryEntry {
                 "mcp.sessions.logs",
             ),
         ],
+        WorkerBoundary::connector(
+            vec![
+                "mcp.provider.list".to_string(),
+                "mcp.session.poll".to_string(),
+                "mcp.session.logs".to_string(),
+            ],
+            Vec::new(),
+            vec![
+                "context".to_string(),
+                "evidence".to_string(),
+                "external-fact".to_string(),
+            ],
+        ),
     )
 }
 
@@ -419,6 +500,7 @@ fn audit_worker() -> WorkerRegistryEntry {
                 "audit.finding.propose",
             ),
         ],
+        WorkerBoundary::runtime_worker(vec!["evidence".to_string(), "external-fact".to_string()]),
     )
 }
 
@@ -428,6 +510,7 @@ fn static_worker(
     kind: WorkerKind,
     tool_kinds: Vec<ToolKind>,
     commands: Vec<(&str, &str, &str)>,
+    boundary: WorkerBoundary,
 ) -> WorkerRegistryEntry {
     WorkerRegistryEntry {
         worker_id: worker_id.to_string(),
@@ -454,6 +537,7 @@ fn static_worker(
                 )
             })
             .collect(),
+        boundary,
     }
 }
 
@@ -539,6 +623,36 @@ mod tests {
         assert!(worker_ids.contains(&"github"));
         assert!(worker_ids.contains(&"mcp-connector"));
         assert!(worker_ids.contains(&"audit-worker"));
+    }
+
+    #[test]
+    fn connector_boundaries_do_not_grant_authority_writes() {
+        let registry = build_capability_registry(&[]);
+        let git = registry.worker("git-provider").unwrap();
+        let mcp = registry.worker("mcp-connector").unwrap();
+        let github = registry.worker("github").unwrap();
+
+        assert_eq!(git.kind, super::WorkerKind::Connector);
+        assert!(!git.boundary.authority_write);
+        assert!(git.boundary.runtime_command_required);
+        assert!(git.boundary.write_capabilities.is_empty());
+        assert!(git
+            .boundary
+            .output_channels
+            .contains(&"external-fact".to_string()));
+
+        assert!(!mcp.boundary.authority_write);
+        assert!(mcp
+            .boundary
+            .read_capabilities
+            .contains(&"mcp.session.poll".to_string()));
+
+        assert!(!github.boundary.authority_write);
+        assert!(github.boundary.runtime_command_required);
+        assert!(github
+            .boundary
+            .write_capabilities
+            .contains(&"pull_request.create".to_string()));
     }
 
     #[test]

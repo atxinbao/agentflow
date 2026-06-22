@@ -35,6 +35,7 @@
 | [014-local-message-bus-contract-v1.md](014-local-message-bus-contract-v1.md) | 定义本地 Message Bus 的 channel、refresh signal、replay 和非 authority 边界 |
 | [015-worker-tool-capability-registry-v1.md](015-worker-tool-capability-registry-v1.md) | 定义 worker / tool capability registry、health、command availability 和 disabled reason |
 | [016-provider-smoke-gate-v1.md](016-provider-smoke-gate-v1.md) | 定义 provider smoke gate 的最小 health / launch / session / terminal projection 证明 |
+| [017-connector-mcp-boundary-v1.md](017-connector-mcp-boundary-v1.md) | 定义 connector / MCP read-write capability、authority 边界和失败展示面 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -56,8 +57,9 @@
 14. [014-local-message-bus-contract-v1.md](014-local-message-bus-contract-v1.md)
 15. [015-worker-tool-capability-registry-v1.md](015-worker-tool-capability-registry-v1.md)
 16. [016-provider-smoke-gate-v1.md](016-provider-smoke-gate-v1.md)
-17. [current-module-boundaries.md](current-module-boundaries.md)
-18. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+17. [017-connector-mcp-boundary-v1.md](017-connector-mcp-boundary-v1.md)
+18. [current-module-boundaries.md](current-module-boundaries.md)
+19. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 
