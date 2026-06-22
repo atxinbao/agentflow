@@ -2,7 +2,7 @@
 
 日期：2026-06-21
 执行者：Codex
-状态：Remediation Chain Implemented / Release Audit Certification Ready / tag 前收口
+状态：Release Closeout Hotfix / Release Audit Certification / v0.6.1 发布收口
 
 ## 1. Purpose
 
@@ -125,16 +125,18 @@ Confirmed Spec Issue
 
 ## 7. Boundary
 
-本目录是 `v0.6.1` 的修复规划、审计后续和 tag 前 release audit certification。
+本目录是 `v0.6.1` 的修复规划、审计后续和 release audit certification。
 
 它不代表：
 
 - 已写入正式 `docs/requirements/**`；
 - 已写入 `.agentflow/spec/**`；
-- 已发布 `v0.6.1`。
+- `v0.6.1` 当前发布事实不完整。
 
 当前事实：
 
 - V061-001 到 V061-007 已完成并合并；
 - V061-008 提供 release audit certification；
-- `v0.6.1` tag / GitHub Release 仍需要在 certification 合并后执行。
+- `v0.6.1` tag / GitHub Release 已创建过一次；
+- 首次 release event gate 失败在 `release.changelog-entry`，原因是 tag 内容缺少正式 `## 0.6.1` changelog entry；
+- 本 hotfix 补齐 changelog release entry，并要求重新创建 `v0.6.1` tag / GitHub Release 后确认 tag / release event gate 通过。

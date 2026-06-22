@@ -4,9 +4,15 @@
 
 执行者：Codex
 
-下一版修复目标为 `0.6.1 - Release Closeout & Acceptance Gate Refinement`。
+当前状态：暂无未发布变更。
 
-当前状态：修复链已实现，release audit certification 已补齐；尚未创建 `v0.6.1` tag / GitHub Release。
+## 0.6.1 - 2026-06-22
+
+执行者：Codex
+
+`0.6.1 - Release Closeout & Acceptance Gate Refinement` 修复 `v0.6.0` 发布后暴露的 release hygiene 和验收闭环问题。
+
+当前状态：修复链已实现，release audit certification 已补齐，作为 `v0.6.0` 之后的 clean remediation release。
 
 ### Included
 
