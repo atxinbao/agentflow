@@ -2,11 +2,11 @@
 
 日期：2026-06-21
 执行者：Codex
-状态：Version Planning Draft / 开发前置文档 / 不授权 Build Agent 执行
+状态：Release Readiness Baseline / Project OS Console 可读闭环
 
 ## 1. Purpose
 
-本目录沉淀 AgentFlow `v0.7.0` 的版本目标和开发任务规划。
+本目录沉淀 AgentFlow `v0.7.0` 的版本目标、开发任务规划和 Project OS Console 验收证据。
 
 `v0.7.0` 的核心目标是：
 
@@ -109,7 +109,8 @@ Event Store / Spec Facts / Task Facts / Audit Facts
 ## 6. Reading Order
 
 1. [AGENTFLOW_V0_7_0_PROJECTION_SURFACE_OS_CONSOLE_TASKS_V1.md](AGENTFLOW_V0_7_0_PROJECTION_SURFACE_OS_CONSOLE_TASKS_V1.md)
-2. [../architecture/011-projection-surface-console-ia-v1.md](../architecture/011-projection-surface-console-ia-v1.md)
+2. [AGENTFLOW_V0_7_0_PROJECT_OS_CONSOLE_READINESS_EVIDENCE_V1.md](AGENTFLOW_V0_7_0_PROJECT_OS_CONSOLE_READINESS_EVIDENCE_V1.md)
+3. [../architecture/011-projection-surface-console-ia-v1.md](../architecture/011-projection-surface-console-ia-v1.md)
 
 ## 7. Development Entry
 
@@ -147,14 +148,13 @@ V070-001 Projection Surface Contract and Console IA
 
 ## 9. Boundary
 
-本目录只是 `v0.7.0` 的开发前置规划。
+本目录是 `v0.7.0` 的 Project OS Console 基线与验收记录。
 
 它不代表：
 
-- 已写入正式 `docs/requirements/**`；
-- 已写入 `.agentflow/spec/**`；
-- 已授权 Build Agent 执行；
-- 已创建 GitHub issue；
-- 已进入实现阶段。
+- 已发布 `v0.7.0` tag；
+- 已进入行业 Pack / Surface Pack；
+- UI 可以直接写事实源；
+- Console 可以绕过 Runtime API。
 
-进入正式执行前，仍需要按 AgentFlow 当前规则生成 requirement 和 spec issue 合同。
+后续 `v0.8.0` 可以基于这个 Console 基线进入 Pack System，但仍必须保持 Projection / View Model / Console 只读边界。
