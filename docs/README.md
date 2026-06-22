@@ -13,8 +13,8 @@
 | `verification/` | Gate、E2E 证据链和正式验证入口说明 |
 | `v0.4.0/` | v0.4.0 Definition-driven Runtime Foundation 已发布版本基线与 closeout 文档 |
 | `v0.5.0/` | v0.5.0 Spec Loop Productization 功能基线与风险延期记录 |
-| `v0.5.1/` | v0.5.1 Release Hygiene 与 Authority Closure 修复链 |
-| `v0.6.0/` | v0.6.0 Work Loop Handoff & Controlled Execution 开发前置规划，受 v0.5.1 修复链约束 |
+| `v0.5.1/` | v0.5.1 Release Hygiene 与 Authority Closure 历史修复基线，已折入 v0.6.0 发布路径 |
+| `v0.6.0/` | v0.6.0 Work Loop Handoff & Controlled Execution 已发布功能基线与 release closeout |
 | `v0.6.1/` | v0.6.0 审计后续、release closeout 与 Acceptance Gate 修复规划 |
 | `v0.7.0/` | v0.7.0 Projection Surface 与 Project OS Console 开发前置规划 |
 | `requirements/` | 新需求文档入口，后续开发只从这里开始 |
@@ -48,8 +48,8 @@
 - `verification/` 下文档定义正式 gate、E2E 证据链和可复跑验证入口。
 - `v0.4.0/` 下文档记录已发布版本的技术基线与 closeout 事实，不再视为未执行草案。
 - `v0.5.0/` 下文档记录已发布版本的 Spec Loop 功能基线，但当前只能视为 functional baseline，不应直接视为 clean stable release。
-- `v0.5.1/` 下文档记录修复版本入口；在 `v0.5.1` 完成前，不进入 `v0.6.0` 实现。
-- `v0.6.0/` 下文档记录下一版本 Work Loop handoff 与受控执行规划；进入开发前仍必须先完成 `v0.5.1` release hygiene 与 authority closure 修复链，再转成正式 requirement 和 spec issue。
+- `v0.5.1/` 下文档记录历史 release hygiene 与 authority closure 修复基线；它不再阻塞已经发布的 `v0.6.0`，剩余问题进入 `v0.6.1`。
+- `v0.6.0/` 下文档记录已发布的 Work Loop handoff 与受控执行功能基线；它不是 clean stable closeout，遗留 release hygiene 与 Acceptance Gate 问题进入 `v0.6.1`。
 - `v0.6.1/` 下文档记录 `v0.6.0` 发布审计后的修复规划，重点是 release closeout、Acceptance Gate、Completion Commit 和 Audit separation。
 - `v0.7.0/` 下文档记录 Projection Surface 与 Project OS Console 规划；进入实现前必须先完成 `v0.6.1` 验收闭环和发布收口。
 - 后续新开发需求仍然要进入 `requirements/`；新版本运行时事实源仍然以 `.agentflow/spec/**` 为准。

@@ -2,7 +2,7 @@
 
 日期：2026-06-21
 执行者：Codex
-状态：Version Planning Draft / 开发前置文档 / 不授权 Build Agent 执行
+状态：Released Functional Baseline / Historical Task Plan / v0.6.1 Remediation Required
 
 ## 1. Purpose
 
@@ -69,9 +69,9 @@ Confirmed Spec Issue
 
 它不处理完整云端调度、Message Bus 中心化、行业 Pack、完整 OS Console 和自动审计。
 
-## 3. Precondition
+## 3. Historical Preconditions
 
-进入 `v0.6.0` 前，必须先完成 `v0.5.1` 修复：
+进入 `v0.6.0` 前，原计划要求先完成 `v0.5.1` 修复：
 
 1. release metadata / tag gate / release gate 修复；
 2. Spec materialization 必须先 Arbitration，再写 authority；
@@ -79,7 +79,7 @@ Confirmed Spec Issue
 4. Spec authority manifest 明确；
 5. `v0.5.0` 文档状态从 clean stable 改成 functional baseline 或 release closeout。
 
-如果这些前置条件未完成，`v0.6.0` 不能进入正式开发。
+`v0.6.0` 已经发布。当前文档保留这组前置条件作为历史约束和审计依据；未完全收口的 release hygiene、Acceptance Gate 和 Completion Commit 问题已经转入 `v0.6.1`。
 
 ## 4. Issue Preview
 
@@ -556,4 +556,6 @@ SPEC Draft Preview
 -> .agentflow/spec/issues/**
 ```
 
-确认前，本文件只是 `v0.6.0` 的开发前置规划。
+本文件现在是 `v0.6.0` 的历史任务计划和 release closeout 参考。
+
+后续修复不再修改 `v0.6.0` 的发布事实；所有遗留项进入 `docs/v0.6.1/**`。
