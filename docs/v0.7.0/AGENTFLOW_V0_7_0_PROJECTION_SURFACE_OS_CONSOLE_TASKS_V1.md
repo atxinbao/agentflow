@@ -529,6 +529,13 @@ Facts
 - 不做行业 Pack；
 - 不做云端部署。
 
+完成记录：
+
+- 已新增 `console:readiness` 本地验收命令；
+- 已生成 Project OS Console readiness evidence；
+- 验收覆盖 Project Home、Spec Workbench、Task Workbench、Acceptance / Delivery、Audit read-only、Command Surface 和 projection missing / stale / conflict 状态；
+- Console 继续保持只读，不直接写事实源。
+
 ## 6. Suggested Milestones
 
 ### Milestone 1 - Projection Contract
