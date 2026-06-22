@@ -233,6 +233,14 @@ pub(crate) fn complete_build_agent_issue_from_request(
         },
     )?;
     let _ = update_spec_issue_status(root, &issue.issue_id, SpecIssueStatus::Done)?;
+    let _ = append_optional_audit_trigger_evaluation(
+        root,
+        &issue,
+        &review.run_id,
+        &completion_commit.event_id,
+        &proof_path,
+        &proof,
+    )?;
     let _ = agentflow_projection::rebuild_projections(root)?;
     let next_launch = if let Some(project_id) = completed_project_id.as_deref() {
         TaskLoop::new(project_id)
@@ -386,6 +394,105 @@ fn append_completion_commit_event(
             ],
             idempotency_key: Some(format!(
                 "issue.completion.committed:{}:{}",
+                issue.issue_id, run_id
+            )),
+        },
+    )
+}
+
+fn append_optional_audit_trigger_evaluation(
+    root: &Path,
+    issue: &agentflow_spec::SpecIssue,
+    run_id: &str,
+    completion_commit_event_id: &str,
+    proof_path: &Path,
+    proof: &serde_json::Value,
+) -> Result<TaskEvent> {
+    let human_requested = proof
+        .get("humanAuditRequested")
+        .or_else(|| proof.get("auditRequested"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let release_policy_requires = proof
+        .pointer("/releasePolicy/auditRequired")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let risk_flags = proof
+        .get("riskFlags")
+        .and_then(serde_json::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let risk_requires_audit = risk_flags
+        .iter()
+        .any(|flag| matches!(flag.as_str(), "requires-audit" | "audit-required"));
+    let result = if human_requested || release_policy_requires || risk_requires_audit {
+        "audit-queue"
+    } else {
+        "no-audit"
+    };
+    let reasons = [
+        (human_requested, "human request explicitly asks for audit"),
+        (release_policy_requires, "release policy requires audit"),
+        (risk_requires_audit, "risk flags require audit"),
+    ]
+    .into_iter()
+    .filter_map(|(enabled, reason)| enabled.then_some(reason.to_string()))
+    .collect::<Vec<_>>();
+    append_task_event_once(
+        root,
+        TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(run_id.to_string()),
+            event_type: "issue.audit.evaluated".to_string(),
+            authority_role: Some(WorkflowAgentRole::System),
+            actor: EventActor {
+                role: "build-agent".to_string(),
+                kind: "system".to_string(),
+            },
+            state: None,
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: Some(completion_commit_event_id.to_string()),
+            payload: json!({
+                "issueId": issue.issue_id,
+                "projectId": issue.project_id,
+                "runId": run_id,
+                "result": result,
+                "doneResult": {
+                    "completionCommitEventId": completion_commit_event_id,
+                    "issueStatus": "done"
+                },
+                "inputs": {
+                    "deliveryRecord": {
+                        "evidencePath": task_evidence_path(&issue.issue_id),
+                        "closeoutProofPath": relative_path(root, proof_path),
+                        "prUrl": proof.get("prUrl").cloned().unwrap_or(serde_json::Value::Null),
+                        "mergeCommitSha": proof.get("mergeCommitSha").or_else(|| proof.get("mergeCommit")).cloned().unwrap_or(serde_json::Value::Null),
+                    },
+                    "riskFlags": risk_flags,
+                    "humanRequest": human_requested,
+                    "releasePolicy": proof.get("releasePolicy").cloned().unwrap_or(serde_json::Value::Null)
+                },
+                "reasons": reasons,
+                "auditIssueCreated": false,
+                "auditFactsMutated": false,
+                "note": "optional audit trigger evaluation is advisory and does not change Done facts"
+            }),
+            artifact_refs: vec![
+                task_evidence_path(&issue.issue_id),
+                relative_path(root, proof_path),
+            ],
+            idempotency_key: Some(format!(
+                "issue.audit.evaluated:{}:{}",
                 issue.issue_id, run_id
             )),
         },
@@ -2502,6 +2609,26 @@ mod tests {
             completed.payload["completionCommitEventId"].as_str(),
             Some(completion_commit.event_id.as_str())
         );
+        let audit_evaluation = events
+            .iter()
+            .find(|event| event.event_type == "issue.audit.evaluated")
+            .expect("audit evaluation event");
+        assert_eq!(
+            audit_evaluation.causation_id.as_deref(),
+            Some(completion_commit.event_id.as_str())
+        );
+        assert_eq!(
+            audit_evaluation.payload["result"].as_str(),
+            Some("no-audit")
+        );
+        assert_eq!(
+            audit_evaluation.payload["auditIssueCreated"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(
+            audit_evaluation.payload["auditFactsMutated"].as_bool(),
+            Some(false)
+        );
         let done_projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-001").unwrap();
         let acceptance = done_projection.acceptance.expect("acceptance summary");
@@ -2511,6 +2638,7 @@ mod tests {
         assert!(!dir.path().join(".agentflow/output").exists());
         assert!(!dir.path().join(".agentflow/execute").exists());
         assert!(!dir.path().join(".agentflow/input").exists());
+        assert!(!dir.path().join(".agentflow/audit").exists());
     }
 
     #[test]
@@ -2975,6 +3103,9 @@ mod tests {
         assert!(!events
             .iter()
             .any(|event| event.event_type == "issue.completed"));
+        assert!(!events
+            .iter()
+            .any(|event| event.event_type == "issue.audit.evaluated"));
     }
 
     #[test]

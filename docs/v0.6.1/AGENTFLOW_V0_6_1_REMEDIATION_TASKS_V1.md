@@ -268,6 +268,21 @@ Acceptance Decision accepted
 - 明确该判断不改变 Done 事实；
 - 明确 Audit Agent 仍从独立 audit issue 或明确人类请求进入。
 
+实现规则：
+
+```text
+issue.completion.committed
+-> issue.completed
+-> issue.audit.evaluated
+```
+
+`issue.audit.evaluated` 只读取 Done result、delivery record、risk flags、human request、release policy，并输出：
+
+- `no-audit`：合法的默认结果；
+- `audit-queue`：仅表示后续可进入独立 Audit Agent 入口。
+
+该事件不得创建 audit issue，不得写 audit report，不得修改 Work Loop facts，也不得改变 `done` 状态。
+
 验收标准：
 
 - Done 不自动创建 audit issue；
