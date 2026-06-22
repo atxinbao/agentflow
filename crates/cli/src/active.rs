@@ -4,7 +4,7 @@
 //! They must not call archived 2026-05 writers.
 
 use agentflow_event_store::{
-    append_task_event_once, EventActor, EventStateTransition, TaskEventDraft,
+    append_task_event_once, EventActor, EventStateTransition, TaskEvent, TaskEventDraft,
 };
 use agentflow_mcp::{
     find_session_snapshot_by_run, query_closeout_attestation, McpCloseoutAttestation,
@@ -171,6 +171,14 @@ pub(crate) fn complete_build_agent_issue_from_request(
     let _ = assert_issue_mark_done_allowed(root, &issue.issue_id, &issue.status)?;
     write_json(&proof_path, &proof)?;
     append_acceptance_decision_event(root, &issue, &review.run_id, &gate_decision, &proof_path)?;
+    let completion_commit = append_completion_commit_event(
+        root,
+        &issue,
+        &review.run_id,
+        &gate_decision,
+        &proof_path,
+        &proof,
+    )?;
     let _ = append_task_event_once(
         root,
         TaskEventDraft {
@@ -191,11 +199,12 @@ pub(crate) fn complete_build_agent_issue_from_request(
                 to_state: "done".to_string(),
             }),
             correlation_id: Some(format!("corr-{}", issue.issue_id)),
-            causation_id: None,
+            causation_id: Some(completion_commit.event_id.clone()),
             payload: json!({
                 "issueId": issue.issue_id,
                 "projectId": issue.project_id,
                 "runId": review.run_id,
+                "completionCommitEventId": completion_commit.event_id,
                 "evidencePath": task_evidence_path(&review.issue_id),
                 "closeoutProofPath": relative_path(root, &proof_path),
                 "provider": proof.get("provider").cloned().unwrap_or(serde_json::Value::Null),
@@ -298,6 +307,89 @@ fn append_acceptance_decision_event(
         },
     )?;
     Ok(())
+}
+
+fn append_completion_commit_event(
+    root: &Path,
+    issue: &agentflow_spec::SpecIssue,
+    run_id: &str,
+    decision: &TaskAcceptanceGateDecision,
+    proof_path: &Path,
+    proof: &serde_json::Value,
+) -> Result<TaskEvent> {
+    if !decision.passed || decision.outcome != TaskAcceptanceOutcome::Accepted {
+        anyhow::bail!(
+            "completion commit requires accepted acceptance decision for {} {}",
+            issue.issue_id,
+            run_id
+        );
+    }
+    let proof_ref = relative_path(root, proof_path);
+    let delivery_record = json!({
+        "recordType": "task-delivery-record",
+        "issueId": issue.issue_id,
+        "projectId": issue.project_id,
+        "runId": run_id,
+        "evidencePath": task_evidence_path(&issue.issue_id),
+        "acceptanceDecisionPath": decision.traceability.acceptance_decision_path,
+        "closeoutProofPath": proof_ref,
+        "prUrl": proof.get("prUrl").cloned().unwrap_or(serde_json::Value::Null),
+        "mergeCommitSha": proof.get("mergeCommitSha").or_else(|| proof.get("mergeCommit")).cloned().unwrap_or(serde_json::Value::Null),
+        "publicDeliveryWritten": proof.get("publicDeliveryWritten").cloned().unwrap_or(serde_json::Value::Bool(false)),
+        "changelogPath": proof.get("changelogPath").cloned().unwrap_or(serde_json::Value::Null),
+        "releaseNotesPath": proof.get("releaseNotesPath").cloned().unwrap_or(serde_json::Value::Null),
+    });
+    append_task_event_once(
+        root,
+        TaskEventDraft {
+            flow_type: WorkflowFlowType::Work,
+            aggregate_type: "issue".to_string(),
+            aggregate_id: issue.issue_id.clone(),
+            project_id: issue.project_id.clone(),
+            issue_id: Some(issue.issue_id.clone()),
+            run_id: Some(run_id.to_string()),
+            event_type: "issue.completion.committed".to_string(),
+            authority_role: Some(WorkflowAgentRole::System),
+            actor: EventActor {
+                role: "build-agent".to_string(),
+                kind: "system".to_string(),
+            },
+            state: Some(EventStateTransition {
+                from_state: "in_review".to_string(),
+                to_state: "done".to_string(),
+            }),
+            correlation_id: Some(format!("corr-{}", issue.issue_id)),
+            causation_id: None,
+            payload: json!({
+                "issueId": issue.issue_id,
+                "projectId": issue.project_id,
+                "runId": run_id,
+                "acceptedAction": {
+                    "action": "commit-completion",
+                    "requiresAcceptanceOutcome": "accepted",
+                    "statusWritebackEventType": "issue.completed",
+                    "projectionRole": "derived-read-model"
+                },
+                "acceptanceDecision": {
+                    "outcome": decision.outcome.as_str(),
+                    "passed": decision.passed,
+                    "path": decision.traceability.acceptance_decision_path,
+                    "summary": decision.summary.as_str(),
+                },
+                "deliveryRecord": delivery_record,
+            }),
+            artifact_refs: vec![
+                decision.traceability.acceptance_decision_path.clone(),
+                decision.traceability.evidence_path.clone(),
+                decision.traceability.validation_path.clone(),
+                decision.traceability.closeout_proof_path.clone(),
+            ],
+            idempotency_key: Some(format!(
+                "issue.completion.committed:{}:{}",
+                issue.issue_id, run_id
+            )),
+        },
+    )
 }
 
 fn load_prepared_review_if_available(
@@ -2378,9 +2470,38 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| event.event_type == "issue.acceptance.accepted"));
-        assert!(events
+        let completion_commit = events
             .iter()
-            .any(|event| event.event_type == "issue.completed"));
+            .find(|event| event.event_type == "issue.completion.committed")
+            .expect("completion commit event");
+        assert_eq!(
+            completion_commit.payload["acceptedAction"]["action"].as_str(),
+            Some("commit-completion")
+        );
+        assert_eq!(
+            completion_commit.payload["deliveryRecord"]["evidencePath"].as_str(),
+            Some(".agentflow/tasks/AF-001/evidence/evidence.json")
+        );
+        assert_eq!(
+            completion_commit.payload["deliveryRecord"]["prUrl"].as_str(),
+            Some("https://github.com/atxinbao/agentflow/pull/1")
+        );
+        assert!(completion_commit
+            .artifact_refs
+            .iter()
+            .any(|item| item == ".agentflow/tasks/AF-001/acceptance-gate.json"));
+        let completed = events
+            .iter()
+            .find(|event| event.event_type == "issue.completed")
+            .expect("completed event");
+        assert_eq!(
+            completed.causation_id.as_deref(),
+            Some(completion_commit.event_id.as_str())
+        );
+        assert_eq!(
+            completed.payload["completionCommitEventId"].as_str(),
+            Some(completion_commit.event_id.as_str())
+        );
         let done_projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-001").unwrap();
         let acceptance = done_projection.acceptance.expect("acceptance summary");
@@ -2840,6 +2961,20 @@ mod tests {
             .next_steps
             .iter()
             .any(|item| item.contains("补齐验证证据")));
+        let events = agentflow_event_store::replay_task_events(
+            dir.path(),
+            agentflow_event_store::ReplayFilter::issue("AF-001"),
+        )
+        .unwrap();
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == "issue.acceptance.rejected"));
+        assert!(!events
+            .iter()
+            .any(|event| event.event_type == "issue.completion.committed"));
+        assert!(!events
+            .iter()
+            .any(|event| event.event_type == "issue.completed"));
     }
 
     #[test]

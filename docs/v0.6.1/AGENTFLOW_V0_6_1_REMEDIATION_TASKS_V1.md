@@ -218,6 +218,29 @@ Acceptance Gate
 - 写入 delivery record；
 - 明确 projection refresh 是派生视图，不是 authority。
 
+实现规则：
+
+```text
+Acceptance Decision accepted
+-> issue.completion.committed
+-> issue.completed
+-> issue / run status writeback
+-> projection refresh
+```
+
+`issue.completion.committed` 是 Completion Commit 的唯一权威事件。它必须包含：
+
+- accepted action；
+- acceptance decision path；
+- evidence path；
+- closeout proof path；
+- PR/MR URL；
+- merge commit；
+- delivery record；
+- projection 只读说明。
+
+`issue.completed` 必须通过 `causationId` 指向 `issue.completion.committed`，不能作为孤立 Done 事实写入。
+
 验收标准：
 
 - Completion Commit 不能在 acceptance failed 时发生；

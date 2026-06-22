@@ -314,6 +314,7 @@ pub fn classify_task_event(event_type: &str) -> TaskEventCategory {
         }
         value
             if value.starts_with("merge.")
+                || value.starts_with("issue.completion.")
                 || value == "issue.completed"
                 || value.starts_with("project.goal_recheck.")
                 || value == "project.accepted" =>
