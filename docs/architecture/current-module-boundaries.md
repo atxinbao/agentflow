@@ -458,6 +458,31 @@ docs/requirements/**
 
 - `crates/event-store/src/**`
 
+### Message Bus
+
+负责：
+
+- 本地 runtime / projection / command / worker / audit channel；
+- 内存 fanout message；
+- projection refresh signal；
+- console refresh signal；
+- Event Store replay 到 bus envelope 的映射；
+- 声明 bus 不保存 authority。
+
+不负责：
+
+- 保存 authority；
+- 写 `.agentflow/**`；
+- 替代 Event Store；
+- 分布式消息队列；
+- 云端 pub/sub；
+- provider 执行；
+- projection rebuild。
+
+实现位置：
+
+- `crates/message-bus/src/**`
+
 ### Workflow Runtime
 
 负责：

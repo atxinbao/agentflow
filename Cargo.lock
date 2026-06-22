@@ -151,6 +151,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-message-bus"
+version = "0.7.0"
+dependencies = [
+ "agentflow-event-store",
+ "agentflow-workflow-core",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-object-state"
 version = "0.7.0"
 dependencies = [
