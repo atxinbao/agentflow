@@ -4,29 +4,33 @@
 
 执行者：Codex
 
-下一版修复目标暂定为 `0.6.1 - Release Closeout & Acceptance Gate Refinement`。
+下一版修复目标为 `0.6.1 - Release Closeout & Acceptance Gate Refinement`。
 
-当前状态：计划中，尚未发布。
+当前状态：修复链已实现，release audit certification 已补齐；尚未创建 `v0.6.1` tag / GitHub Release。
 
 ### Included
 
-- 计划修复 `v0.6.0` 发布后暴露的 release metadata 漂移。
-- 计划补齐 `0.6.0` CHANGELOG 与 `docs/v0.6.0/**` release closeout。
-- 计划修复 release-gate 默认版本和 E2E fixture 仍指向 `v0.5.1` 的问题。
-- 计划将 Evidence Gate 升级为 Acceptance Gate，覆盖 verification / evidence / contract / state。
-- 计划定义 Completion Commit，明确 Event Store、status writeback、Projection refresh、Delivery record 的权威顺序。
-- 计划保留 Done 后 optional audit trigger evaluation，但不自动触发 Audit。
-- 计划生成 `v0.6.1` release audit certification。
+- 修复 `v0.6.0` 发布后暴露的 release metadata 漂移。
+- 补齐 `0.6.0` CHANGELOG 与 `docs/v0.6.0/**` release closeout。
+- 修复 release-gate 默认版本和 E2E fixture 仍指向 `v0.5.1` 的问题。
+- 将 Evidence Gate 升级为 Acceptance Gate，覆盖 verification / evidence / contract / state。
+- 定义 Completion Commit，明确 Event Store、status writeback、Projection refresh、Delivery record 的权威顺序。
+- 保留 Done 后 optional audit trigger evaluation，但不自动触发 Audit。
+- 生成 `v0.6.1` release audit certification。
 
 ### Architecture
 
 - `v0.6.0` 保留为 Work Loop Handoff & Controlled Execution 功能发布。
 - `v0.6.0` 当前只应视为 functional release，不应表述为 clean stable closeout。
-- `v0.6.1` 收口 release closeout、Acceptance Gate、Completion Commit 和 Audit separation。
+- `v0.6.1` 已收口 release closeout、Acceptance Gate、Completion Commit 和 Audit separation。
 
 ### Validation
 
-- 待实现后补齐。
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `npm --prefix apps/desktop run build`
+- `git diff --check`
+- `release-gate` on PR / main for V061 closeout PRs
 
 ## 0.6.0 - 2026-06-21
 

@@ -322,6 +322,12 @@ issue.completion.committed
 - 不承诺 v1.0 稳定 API；
 - 不引入行业 Pack。
 
+实现记录：
+
+- 认证产物：[AGENTFLOW_V0_6_1_RELEASE_AUDIT_CERTIFICATION_V1.md](AGENTFLOW_V0_6_1_RELEASE_AUDIT_CERTIFICATION_V1.md)
+- 认证范围：V061-001 到 V061-007 的 PR 链、merge commit、release-gate run、版本元数据、Acceptance Gate、Completion Commit 和 Audit separation。
+- 认证结论：`v0.6.1` 可以作为 `v0.6.0` 之后的 clean remediation release 候选；tag / GitHub Release 需要在本认证合并后执行。
+
 ## 4. Suggested Milestones
 
 ### Milestone 1 - Release Closeout

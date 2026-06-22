@@ -2,7 +2,7 @@
 
 日期：2026-06-21
 执行者：Codex
-状态：Remediation Planning Draft / v0.6.0 审计后续 / 不授权 Build Agent 执行
+状态：Remediation Chain Implemented / Release Audit Certification Ready / tag 前收口
 
 ## 1. Purpose
 
@@ -44,6 +44,7 @@ v0.6.1 要把发布事实、版本文档和验收闭环收干净。
 
 1. [AGENTFLOW_V0_6_0_RELEASE_AUDIT_FINDINGS_V1.md](AGENTFLOW_V0_6_0_RELEASE_AUDIT_FINDINGS_V1.md)
 2. [AGENTFLOW_V0_6_1_REMEDIATION_TASKS_V1.md](AGENTFLOW_V0_6_1_REMEDIATION_TASKS_V1.md)
+3. [AGENTFLOW_V0_6_1_RELEASE_AUDIT_CERTIFICATION_V1.md](AGENTFLOW_V0_6_1_RELEASE_AUDIT_CERTIFICATION_V1.md)
 
 ## 4. v0.6.1 Boundary
 
@@ -124,12 +125,16 @@ Confirmed Spec Issue
 
 ## 7. Boundary
 
-本目录是 `v0.6.1` 的修复规划和审计后续。
+本目录是 `v0.6.1` 的修复规划、审计后续和 tag 前 release audit certification。
 
 它不代表：
 
 - 已写入正式 `docs/requirements/**`；
 - 已写入 `.agentflow/spec/**`；
-- 已授权 Build Agent 执行；
-- 已创建 GitHub issue；
 - 已发布 `v0.6.1`。
+
+当前事实：
+
+- V061-001 到 V061-007 已完成并合并；
+- V061-008 提供 release audit certification；
+- `v0.6.1` tag / GitHub Release 仍需要在 certification 合并后执行。
