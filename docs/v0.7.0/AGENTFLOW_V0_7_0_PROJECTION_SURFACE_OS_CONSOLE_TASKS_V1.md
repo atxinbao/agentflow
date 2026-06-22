@@ -452,6 +452,15 @@ Facts
 - 不执行修复命令；
 - 不替代 release audit。
 
+实现状态：
+
+- 已完成；
+- Advanced 新增 `运行诊断` 分类，只读展示底层 runtime 诊断信息；
+- 提供 `projection-freshness.json`、`runtime-status.json`、`event-replay-summary.json`、`provider-sessions.json`、`role-policy-boundary.json`、`fact-diagnostics.json`、`conflict-diagnostics.json`；
+- 诊断内容覆盖 projection freshness、runtime status、event replay summary、provider/session 摘要、role policy / boundary、missing facts、stale projection、conflict diagnostics；
+- 每个 JSON 文件可单独点击读取，Advanced 不提供修复或写入按钮；
+- Browser Preview smoke 覆盖运行诊断入口和全部诊断 JSON 名称。
+
 ### V070-011 - Desktop View Models and Browser Preview Regression
 
 目标：

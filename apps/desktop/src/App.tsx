@@ -6460,8 +6460,17 @@ function AdvancedPage({
   workspaceData: WorkspaceDataState;
 }) {
   const stateJsonFilesState = useAdvancedStateJsonFiles(projectRoot, stateStatusState.status);
+  const runtimeDiagnostics = buildAdvancedRuntimeDiagnostics({
+    agentManualState,
+    issueStatusIndexState,
+    outputBundle,
+    projectPanelState,
+    stateStatusState,
+    workspaceData,
+  });
   const categories = [
     { id: "state", label: "状态", value: stateStatusState, files: advancedFilesForCategory("state", stateStatusState, stateJsonFilesState) },
+    { id: "runtimeDiagnostics", label: "运行诊断", value: runtimeDiagnostics, files: advancedFilesForCategory("runtimeDiagnostics", runtimeDiagnostics) },
     { id: "agentRoles", label: "Agent 角色", value: agentRoleRulesDocument(), files: advancedFilesForCategory("agentRoles", agentRoleRulesDocument()) },
     { id: "initialization", label: "初始化", value: initializationState, files: advancedFilesForCategory("initialization", initializationState) },
     { id: "panel", label: "Panel", value: projectPanelState, files: advancedFilesForCategory("panel", projectPanelState) },
@@ -6547,6 +6556,107 @@ function AdvancedStateViewer({
       </section>
     </div>
   );
+}
+
+function buildAdvancedRuntimeDiagnostics({
+  agentManualState,
+  issueStatusIndexState,
+  outputBundle,
+  projectPanelState,
+  stateStatusState,
+  workspaceData,
+}: {
+  agentManualState: unknown;
+  issueStatusIndexState: IssueStatusIndexState;
+  outputBundle: OutputBundleState;
+  projectPanelState: ProjectPanelState;
+  stateStatusState: StateStatusState;
+  workspaceData: WorkspaceDataState;
+}) {
+  const issueIndex = issueStatusIndexState.index;
+  const stateStatus = stateStatusState.status;
+  const issues = issueIndex?.issues ?? [];
+  const activeIssue = stateStatus?.activeIssueId
+    ? issues.find((issue) => issue.issueId === stateStatus.activeIssueId) ?? null
+    : null;
+  const missingFacts = [
+    !issueIndex ? "issue-status projection index missing" : null,
+    !stateStatus ? "workflow state status missing" : null,
+    projectPanelState.source === "unavailable" ? "panel status unavailable" : null,
+    workspaceData.error ? `workspace data error: ${workspaceData.error}` : null,
+  ].filter((item): item is string => Boolean(item));
+  const staleProjection =
+    Boolean(issueIndex?.updatedAt && stateStatus?.updatedAt && Math.abs(issueIndex.updatedAt - stateStatus.updatedAt) > 300);
+  const conflictDiagnostics = [
+    staleProjection ? "issue-status index timestamp differs from workflow status by more than 300 seconds" : null,
+    activeIssue && activeIssue.displayStatus === "done" && activeIssue.executeStatus && activeIssue.executeStatus !== "completed"
+      ? `${activeIssue.issueId} done but executeStatus is ${activeIssue.executeStatus}`
+      : null,
+    stateStatus?.blockers?.length ? `${stateStatus.blockers.length} workflow blockers present` : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    "conflict-diagnostics.json": {
+      conflicts: conflictDiagnostics,
+      staleProjection,
+      summary: conflictDiagnostics.length ? "conflict diagnostics require operator review" : "no projection conflict detected",
+      version: "advanced-runtime-conflicts.v1",
+    },
+    "event-replay-summary.json": {
+      activeIssueId: stateStatus?.activeIssueId ?? null,
+      activeRunId: stateStatus?.activeRunId ?? null,
+      issueCount: issues.length,
+      replayHint: "Rebuild projections from event store if issue-status, task projection, and workflow state diverge.",
+      source: issueStatusIndexState.source,
+      version: "advanced-event-replay-summary.v1",
+    },
+    "fact-diagnostics.json": {
+      missingFacts,
+      staleProjection,
+      conflictCount: conflictDiagnostics.length,
+      version: "advanced-fact-diagnostics.v1",
+    },
+    "projection-freshness.json": {
+      issueStatusIndexUpdatedAt: issueIndex?.updatedAt ?? null,
+      stateStatusUpdatedAt: stateStatus?.updatedAt ?? null,
+      staleProjection,
+      source: {
+        issueStatusIndex: issueStatusIndexState.source,
+        stateStatus: stateStatusState.source,
+      },
+      version: "advanced-projection-freshness.v1",
+    },
+    "provider-sessions.json": {
+      activeIssueId: stateStatus?.activeIssueId ?? null,
+      activeRunId: stateStatus?.activeRunId ?? null,
+      providerSummary: activeIssue?.latestRunId ? `run ${activeIssue.latestRunId}` : "no active provider session",
+      writebackSource: workspaceData.source,
+      version: "advanced-provider-session-summary.v1",
+    },
+    "role-policy-boundary.json": {
+      agentManualState,
+      boundary: [
+        "Advanced surface is read-only.",
+        "Role policy diagnostics do not grant write permission.",
+        "Command Surface must still pass Runtime API and Arbitration.",
+      ],
+      version: "advanced-role-policy-boundary.v1",
+    },
+    "runtime-status.json": {
+      auditStatus: stateStatus?.auditStatus ?? "unknown",
+      blockers: stateStatus?.blockers ?? [],
+      currentStage: stateStatus?.currentStage ?? "unknown",
+      health: stateStatus?.health ?? {},
+      issueStatusCounts: displayStatusColumns.map((column) => ({
+        count: issues.filter((issue) => issue.displayStatus === column.id).length,
+        id: column.id,
+        label: column.label,
+      })),
+      outputSource: outputBundle.source,
+      panelSource: projectPanelState.source,
+      version: "advanced-runtime-status.v1",
+    },
+  };
 }
 
 function JsonReader({
@@ -9199,6 +9309,7 @@ function advancedCategorySummary(categoryId: string) {
     audit: "展示审计索引和报告快照。这里不写处理结果。",
     initialization: "展示项目初始化摘要。这里不重跑初始化，不写旧示例数据。",
     panel: "展示项目现场读取结果和上下文包摘要。",
+    runtimeDiagnostics: "展示 projection freshness、runtime status、event replay、provider/session、role policy、missing facts 和 conflict diagnostics，只读排障用。",
     settings: "展示本地设置、文件阅读器和工作台数据源状态。",
     spec: "展示公开需求拆出的本地任务合同。普通页面只展示人能读懂的摘要。",
     state: "展示全局派生状态、门禁、阻断和下一步动作。",
@@ -9242,6 +9353,15 @@ function advancedFilesForCategory(
       { name: "context-packs/*.json", description: "上下文包" },
       { name: "diagnostics.json", description: "诊断快照" },
     ],
+    runtimeDiagnostics: [
+      { name: "projection-freshness.json", description: "Projection 更新时间、数据源和 stale 判断" },
+      { name: "runtime-status.json", description: "Runtime 阶段、健康、阻断和状态计数" },
+      { name: "event-replay-summary.json", description: "事件重放入口和投影重建提示" },
+      { name: "provider-sessions.json", description: "Provider / session / active run 摘要" },
+      { name: "role-policy-boundary.json", description: "角色策略和写入边界摘要" },
+      { name: "fact-diagnostics.json", description: "缺失事实和 stale projection 诊断" },
+      { name: "conflict-diagnostics.json", description: "冲突、缺失事件和状态不一致诊断" },
+    ],
     spec: [
       { name: "index.json", description: "规格、项目和任务索引" },
       { name: "issues/*.json", description: "任务合同来源" },
@@ -9267,6 +9387,16 @@ function advancedFilesForCategory(
     ],
   };
   const categoryFiles = files[categoryId] ?? files.state;
+  if (categoryId === "runtimeDiagnostics") {
+    const diagnostics =
+      categoryValue && typeof categoryValue === "object"
+        ? categoryValue as Record<string, unknown>
+        : {};
+    return categoryFiles.map((file) => ({
+      ...file,
+      value: diagnostics[file.name] ?? categoryValue,
+    }));
+  }
   if (categoryId !== "state") {
     return categoryFiles.map((file) => ({ ...file, value: categoryValue }));
   }
