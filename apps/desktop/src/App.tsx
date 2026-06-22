@@ -2446,16 +2446,23 @@ function ProjectHomePage({
           title: nextActionLabel,
         },
       ];
-  const commandEntries = [
+  const commandEntries: CommandSurfaceActionView[] = [
     {
+      commandStatus: activeIssue ? "rejected" : projectLoopState === "loading" ? "queued" : "pending",
+      commandType: "startWork",
       detail: "触发项目调度，只生成 Runtime API 动作，不直接改事实文件。",
       disabled: Boolean(activeIssue),
       id: "run-project-loop",
       label: "运行 Project Loop",
       loading: projectLoopState === "loading",
       onClick: onRunProjectLoop,
+      proposalRef: activeIssue ? "proposal-rejected-active-issue" : "proposal-start-project-loop",
+      runtimeApi: "RuntimeCommand -> ActionProposal -> Arbitration",
+      target: homeProjectProjection?.projectId ?? "project",
     },
     {
+      commandStatus: activeIssue ? "accepted" : "needs-human-decision",
+      commandType: "claimIssue",
       detail: activeIssue
         ? `打开 ${activeIssue.id} 的任务状态流、事件和交付槽位。`
         : "当前没有活跃任务，等待 Project Loop 调度。",
@@ -2464,14 +2471,22 @@ function ProjectHomePage({
       label: "查看当前任务",
       loading: false,
       onClick: onOpenTasks,
+      proposalRef: activeIssue ? `proposal-claim-${activeIssue.id}` : "proposal-wait-active-issue",
+      runtimeApi: "RuntimeCommand -> TaskWorkbenchView",
+      target: activeIssue?.id ?? "none",
     },
     {
+      commandStatus: "needs-human-decision",
+      commandType: "requestAudit",
       detail: "查看审计只读面，审计触发必须走独立命令入口。",
       disabled: false,
       id: "open-audit",
       label: "查看审计",
       loading: false,
       onClick: onOpenAudit,
+      proposalRef: "proposal-request-audit",
+      runtimeApi: "RuntimeCommand -> AuditSurfaceView",
+      target: activeIssue?.id ?? homeProjectProjection?.projectId ?? "project",
     },
   ];
 
@@ -2625,19 +2640,7 @@ function ProjectHomePage({
       <section className="v16-home-columns" aria-label="项目入口与最近活动">
         <ProjectHomeAgentEntryPanel activeOwnerLabel={nextOwnerLabel} />
         <Panel className="v16-home-column" title="Command Surface">
-          <div className="v16-project-command-list">
-            {commandEntries.map((entry) => (
-              <button
-                disabled={entry.disabled || entry.loading}
-                key={entry.id}
-                onClick={entry.onClick}
-                type="button"
-              >
-                <strong>{entry.loading ? "处理中" : entry.label}</strong>
-                <span>{entry.detail}</span>
-              </button>
-            ))}
-          </div>
+          <CommandSurfaceActionList actions={commandEntries} />
         </Panel>
       </section>
 
@@ -2700,6 +2703,128 @@ function ProjectHomeAgentEntryPanel({ activeOwnerLabel }: { activeOwnerLabel: st
   );
 }
 
+type CommandSurfaceStatus = "pending" | "accepted" | "rejected" | "queued" | "needs-human-decision";
+
+type CommandSurfaceActionView = {
+  commandStatus: CommandSurfaceStatus;
+  commandType: string;
+  detail: string;
+  disabled?: boolean;
+  id: string;
+  label: string;
+  loading?: boolean;
+  onClick?: () => void;
+  proposalRef: string;
+  runtimeApi: string;
+  target: string;
+};
+
+function CommandSurfaceActionList({ actions }: { actions: CommandSurfaceActionView[] }) {
+  return (
+    <div className="v16-command-surface-list" aria-label="Command Surface Runtime API Bridge">
+      {actions.map((action) => {
+        const disabled = Boolean(action.disabled || action.loading);
+        const content = (
+          <>
+            <div className="v16-command-surface-action-head">
+              <strong>{action.loading ? "处理中" : action.label}</strong>
+              <StatusBadge status={commandSurfaceStatusTone(action.commandStatus)}>
+                {commandSurfaceStatusLabel(action.commandStatus)}
+              </StatusBadge>
+            </div>
+            <span>{action.detail}</span>
+            <dl>
+              <div>
+                <dt>Command</dt>
+                <dd>{action.commandType}</dd>
+              </div>
+              <div>
+                <dt>Runtime API</dt>
+                <dd>{action.runtimeApi}</dd>
+              </div>
+              <div>
+                <dt>Action Proposal</dt>
+                <dd>{action.proposalRef}</dd>
+              </div>
+              <div>
+                <dt>Target</dt>
+                <dd>{action.target}</dd>
+              </div>
+            </dl>
+          </>
+        );
+        if (!action.onClick) {
+          return (
+            <article className="v16-command-surface-action" key={action.id}>
+              {content}
+            </article>
+          );
+        }
+        return (
+          <button
+            className="v16-command-surface-action"
+            disabled={disabled}
+            key={action.id}
+            onClick={action.onClick}
+            type="button"
+          >
+            {content}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function commandSurfaceStatusLabel(status: CommandSurfaceStatus) {
+  const labels: Record<CommandSurfaceStatus, string> = {
+    accepted: "已接受",
+    "needs-human-decision": "需人工确认",
+    pending: "待提交",
+    queued: "已排队",
+    rejected: "已拒绝",
+  };
+  return labels[status];
+}
+
+function commandSurfaceStatusTone(status: CommandSurfaceStatus) {
+  const tones: Record<CommandSurfaceStatus, StatusChipStatus> = {
+    accepted: "ready",
+    "needs-human-decision": "warning",
+    pending: "idle",
+    queued: "working",
+    rejected: "failed",
+  };
+  return tones[status];
+}
+
+function specCommandSurfaceActions(requirementId: string, currentState: string): CommandSurfaceActionView[] {
+  return [
+    {
+      commandStatus: currentState === "confirmed" || currentState === "materialized" ? "accepted" : "needs-human-decision",
+      commandType: "approveSpec",
+      detail: "确认规格必须先形成 Runtime Command，再由 Arbitration 决定是否接受。",
+      disabled: true,
+      id: `${requirementId}-approve-spec`,
+      label: "确认规格",
+      proposalRef: `proposal-approveSpec-${requirementId}`,
+      runtimeApi: "RuntimeCommand(approveSpec) -> ActionProposal -> Arbitration",
+      target: requirementId,
+    },
+    {
+      commandStatus: currentState === "materialized" ? "accepted" : "pending",
+      commandType: "createFollowUp",
+      detail: "物化后续任务必须先生成 proposal，不直接写 spec issue。",
+      disabled: true,
+      id: `${requirementId}-create-follow-up`,
+      label: "生成后续任务",
+      proposalRef: `proposal-createFollowUp-${requirementId}`,
+      runtimeApi: "RuntimeCommand(createFollowUp) -> createIssue proposal",
+      target: requirementId,
+    },
+  ];
+}
+
 function SpecWorkbenchPage({ state }: { state: SpecWorkbenchState }) {
   const view = state.view;
   const specLoop = view?.specLoop ?? null;
@@ -2751,6 +2876,7 @@ function SpecWorkbenchPage({ state }: { state: SpecWorkbenchState }) {
       .filter(Boolean)
       .join(" · "),
   );
+  const specCommandActions = specCommandSurfaceActions(selectedRequirementId, specLoop.currentState);
 
   return (
     <section className="v16-page v16-spec-page" data-agentflow-page="spec">
@@ -2818,6 +2944,7 @@ function SpecWorkbenchPage({ state }: { state: SpecWorkbenchState }) {
 
         <Panel className="v16-spec-side-panel" title="Authority / Action">
           <SectionList title="Authority Layers" items={authorityItems} />
+          <CommandSurfaceActionList actions={specCommandActions} />
           <SectionList title="Runtime Action Proposal" items={proposalItems} />
           <SectionList
             title="Traceability"
@@ -4032,6 +4159,7 @@ function TaskDetailReader({
             <TaskEvidenceGraph task={effectiveTask} projection={taskProjection} />
             <TaskAcceptanceDeliverySurface task={effectiveTask} projection={taskProjection} />
             <TaskAuditReadOnlySurface task={effectiveTask} projection={taskProjection} />
+            <TaskCommandSurface task={effectiveTask} projection={taskProjection} onOpenAudit={onOpenAudit} />
           </div>
           <aside className="v16-task-workspace-sidebar" aria-label="当前阶段摘要">
             <TaskFlowSidebar
@@ -4679,6 +4807,109 @@ function optionalAuditTriggerEvaluation(task: V1Issue, projection: TaskProjectio
     return "Done 后可选触发审计；没有审计也不阻断任务完成。";
   }
   return "等待任务完成后再评估是否需要审计。";
+}
+
+function TaskCommandSurface({
+  onOpenAudit,
+  projection,
+  task,
+}: {
+  onOpenAudit: () => void;
+  projection: TaskProjection | null;
+  task: V1Issue;
+}) {
+  const actions = taskCommandSurfaceActions(task, projection, onOpenAudit);
+
+  return (
+    <section className="v16-task-command-surface" aria-label="任务 Command Surface">
+      <div className="v16-task-command-surface-header">
+        <div>
+          <span>Command Surface / Runtime API</span>
+          <strong>UI action 先变成 Runtime Command，再进入 Action Proposal</strong>
+        </div>
+        <StatusBadge status="warning">只读桥接</StatusBadge>
+      </div>
+      <CommandSurfaceActionList actions={actions} />
+    </section>
+  );
+}
+
+function taskCommandSurfaceActions(
+  task: V1Issue,
+  projection: TaskProjection | null,
+  onOpenAudit: () => void,
+): CommandSurfaceActionView[] {
+  const state = projection?.displayStatus ?? task.displayStatus;
+  const target = task.id;
+  return [
+    {
+      commandStatus: state === "todo" ? "queued" : state === "backlog" ? "pending" : "accepted",
+      commandType: "startWork",
+      detail: "启动 Work Agent 执行前，必须先进入 Runtime API 和 Arbitration。",
+      disabled: state !== "backlog" && state !== "todo",
+      id: `${target}-start-work`,
+      label: "启动执行",
+      proposalRef: `proposal-startWork-${target}`,
+      runtimeApi: "RuntimeCommand(startWork) -> ActionProposal -> Arbitration",
+      target,
+    },
+    {
+      commandStatus: state === "in_review" ? "needs-human-decision" : "pending",
+      commandType: "requestFix",
+      detail: "请求返工必须保留 proposal 和 rejected/accepted 决策，不直接改 issue。",
+      disabled: state !== "in_review",
+      id: `${target}-request-fix`,
+      label: "请求修复",
+      proposalRef: `proposal-requestFix-${target}`,
+      runtimeApi: "RuntimeCommand(requestFix) -> ActionProposal -> Arbitration",
+      target,
+    },
+    {
+      commandStatus: state === "done" ? "accepted" : state === "in_review" ? "needs-human-decision" : "pending",
+      commandType: "acceptDelivery",
+      detail: "接受交付需要 Completion Commit 和公开交付记录，不由按钮直接写 Done。",
+      disabled: state !== "in_review" && state !== "done",
+      id: `${target}-accept-delivery`,
+      label: "接受交付",
+      proposalRef: `proposal-acceptDelivery-${target}`,
+      runtimeApi: "RuntimeCommand(acceptDelivery) -> ActionProposal -> Completion Gate",
+      target,
+    },
+    {
+      commandStatus: projection?.audit?.status && projection.audit.status !== "not-requested" ? "queued" : "pending",
+      commandType: "requestAudit",
+      detail: "审计请求进入独立 Audit Surface，不回写 Work Loop Done 主链。",
+      disabled: false,
+      id: `${target}-request-audit`,
+      label: "请求审计",
+      onClick: onOpenAudit,
+      proposalRef: `proposal-requestAudit-${target}`,
+      runtimeApi: "RuntimeCommand(requestAudit) -> AuditSurfaceView",
+      target,
+    },
+    {
+      commandStatus: state === "done" ? "needs-human-decision" : "rejected",
+      commandType: "reopenIssue",
+      detail: "重开任务必须走人工确认和 Arbitration，被拒绝时不改变事实。",
+      disabled: state !== "done",
+      id: `${target}-reopen-issue`,
+      label: "重开任务",
+      proposalRef: `proposal-reopenIssue-${target}`,
+      runtimeApi: "RuntimeCommand(reopenIssue) -> ActionProposal -> Arbitration",
+      target,
+    },
+    {
+      commandStatus: state === "done" || state === "in_review" ? "pending" : "rejected",
+      commandType: "createFollowUp",
+      detail: "后续任务只能生成 proposal，不直接写 spec issue。",
+      disabled: state !== "done" && state !== "in_review",
+      id: `${target}-create-follow-up`,
+      label: "创建后续任务",
+      proposalRef: `proposal-createFollowUp-${target}`,
+      runtimeApi: "RuntimeCommand(createFollowUp) -> ActionProposal -> Spec Workbench",
+      target,
+    },
+  ];
 }
 
 function buildProjectionTaskStatusTimeline(

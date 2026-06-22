@@ -836,6 +836,22 @@ mod tests {
     }
 
     #[test]
+    fn command_surface_aliases_map_to_supported_action_contracts() {
+        let cases = [
+            ("acceptDelivery", "markIssueDone"),
+            ("requestFix", "recordDecision"),
+            ("reopenIssue", "recordDecision"),
+            ("createFollowUp", "createIssue"),
+        ];
+
+        for (command_type, expected_action_type) in cases {
+            let proposal = map_command_to_action_proposal(&request(command_type)).unwrap();
+            assert_eq!(proposal.action_type, expected_action_type);
+            assert_eq!(proposal.idempotency_key, format!("idem-{command_type}"));
+        }
+    }
+
+    #[test]
     fn invalid_command_returns_invalid_command() {
         let dir = tempdir().unwrap();
         let response = execute_command_via_arbitration_with_context(

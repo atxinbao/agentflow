@@ -1337,6 +1337,88 @@
   overflow-wrap: anywhere;
 }
 
+.v16-command-surface-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.v16-command-surface-action {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--v16-border-soft);
+  border-radius: 6px;
+  background: var(--v16-surface-2);
+  color: var(--v16-text);
+  text-align: left;
+}
+
+button.v16-command-surface-action {
+  cursor: pointer;
+  font: inherit;
+}
+
+button.v16-command-surface-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--v16-accent) 38%, var(--v16-border));
+  background: color-mix(in srgb, var(--v16-accent-soft) 56%, var(--v16-surface-2));
+}
+
+.v16-command-surface-action:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.v16-command-surface-action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.v16-command-surface-action strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.v16-command-surface-action span {
+  color: var(--v16-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.v16-command-surface-action dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.v16-command-surface-action dl div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.v16-command-surface-action dt {
+  margin: 0;
+  color: var(--v16-muted);
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.2;
+}
+
+.v16-command-surface-action dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--v16-text);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .v16-current-task-card > span {
   color: var(--v16-accent);
   font-size: 11px;
@@ -2788,6 +2870,44 @@ button.v16-task-project-row:hover {
 
 .v16-task-audit-surface-grid .v16-section-list {
   background: var(--v16-surface-muted);
+}
+
+.v16-task-command-surface {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--v16-border-soft);
+  border-radius: 6px;
+  background: var(--v16-surface-muted);
+}
+
+.v16-task-command-surface-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.v16-task-command-surface-header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.v16-task-command-surface-header span {
+  color: var(--v16-muted);
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.3;
+}
+
+.v16-task-command-surface-header strong {
+  color: var(--v16-text);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.3;
 }
 
 .v16-task-workflow-summary {
