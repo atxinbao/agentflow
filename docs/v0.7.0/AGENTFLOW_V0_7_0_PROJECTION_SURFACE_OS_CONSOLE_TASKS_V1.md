@@ -228,6 +228,15 @@ Facts
 
 把任务页做成执行、验证、证据、验收和完成写入的主工作面。
 
+实现状态：
+
+- 已完成；
+- 任务页右侧 `执行与交付` 面板新增 `验收门` 和 `完成写回` 槽位；
+- Desktop TaskProjection 类型接入 `acceptance` 投影，展示 outcome、sub-gates、判定记录、evidence、closeout proof；
+- Browser Preview mock 补齐 pending / needs-human-decision / passed 三类验收状态；
+- Smoke 覆盖 Acceptance Gate、Completion Commit、交付槽位和审计独立入口；
+- 页面只读展示 Projection/View Model，不直接执行 Build Agent，不写任务 authority。
+
 范围：
 
 - 展示 issue tree；
