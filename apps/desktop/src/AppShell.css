@@ -2692,6 +2692,55 @@ button.v16-task-project-row:hover {
   line-height: 1.35;
 }
 
+.v16-task-acceptance-delivery {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--v16-border-soft);
+  border-radius: 6px;
+  background: var(--v16-surface-muted);
+}
+
+.v16-task-acceptance-delivery-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.v16-task-acceptance-delivery-header div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.v16-task-acceptance-delivery-header span {
+  color: var(--v16-muted);
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.3;
+}
+
+.v16-task-acceptance-delivery-header strong {
+  color: var(--v16-text);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
+.v16-task-acceptance-delivery-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.v16-task-acceptance-delivery-grid .v16-section-list {
+  background: var(--v16-surface);
+}
+
 .v16-task-workflow-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
@@ -3381,6 +3430,7 @@ button.v16-list-item {
 
   .v16-task-stage-grid,
   .v16-task-evidence-graph-grid,
+  .v16-task-acceptance-delivery-grid,
   .v16-task-execution-grid,
   .v16-task-artifact-columns,
   .v16-audit-surface-grid {
