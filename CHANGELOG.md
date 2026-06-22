@@ -6,6 +6,42 @@
 
 当前状态：暂无未发布变更。
 
+## 0.7.0 - 2026-06-22
+
+执行者：Codex
+
+`0.7.0 - Projection Surface & Project OS Console` 将 `v0.4.0` 到 `v0.6.1` 形成的 Runtime / Spec Loop / Work Loop / Acceptance / Delivery / Audit 事实链，整理成可读、只读、可回归验证的项目控制台。
+
+当前状态：Project OS Console release readiness 已完成，`v0.8.0` 可以基于该 Console 基线进入 Pack System。
+
+### Included
+
+- 定义 Projection Surface contract 和 Console information architecture，明确 Projection / View Model / Console 都不是 authority。
+- 增加 Projection Query API 和统一 read model，供 Desktop 读取 Project / Spec / Task / Audit / Delivery 状态。
+- 重构 Project Home、Spec Workbench、Task Workbench，形成项目阶段、需求链路、任务状态流和下一步入口。
+- 将 Event Timeline、Evidence Graph、Acceptance / Delivery、Audit read-only、Command Surface 纳入任务工作面。
+- 增加 Advanced Runtime Diagnostics，把 projection freshness、runtime status、event replay、provider sessions、role policy、missing facts、stale projection 和 conflict diagnostics 收进只读高级页面。
+- 增加 Desktop Projection View Models 和 Browser Preview 回归覆盖。
+- 增加 Project OS Console readiness evidence，证明软件开发场景可从 Project -> Spec -> Task -> Work -> Acceptance -> Delivery -> Audit read-only -> Command Surface 完成可读闭环。
+
+### Architecture
+
+- Console 只消费 Event Store / Spec Facts / Task Facts / Audit Facts 形成的 projection 和 view model。
+- UI 不直接写 `.agentflow/**`。
+- Command Surface 只进入 Runtime API / Action Proposal，不绕过 arbitration 或 authority boundary。
+- Audit Surface 只读独立审计事实，不默认参与任务 Done。
+- `docs/v0.7.0/**` 是 Project OS Console 的 release readiness baseline。
+
+### Validation
+
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `npm --prefix apps/desktop run build`
+- `npm --prefix apps/desktop run preview:smoke`
+- `npm --prefix apps/desktop run console:readiness`
+- `bash scripts/verify_release_gate.sh --release-version v0.7.0 --release-tag v0.7.0`
+- `release-gate` on PR / main for V070 closeout PRs
+
 ## 0.6.1 - 2026-06-22
 
 执行者：Codex

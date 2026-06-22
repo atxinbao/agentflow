@@ -152,7 +152,6 @@ V070-001 Projection Surface Contract and Console IA
 
 它不代表：
 
-- 已发布 `v0.7.0` tag；
 - 已进入行业 Pack / Surface Pack；
 - UI 可以直接写事实源；
 - Console 可以绕过 Runtime API。
