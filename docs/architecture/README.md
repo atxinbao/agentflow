@@ -29,6 +29,7 @@
 | [008-runtime-terminology-convergence-v1.md](008-runtime-terminology-convergence-v1.md) | 定义 Work Agent / Build Agent、workflow ref、event、projection 的统一术语规则 |
 | [009-runtime-foundation-closeout-baseline-v1.md](009-runtime-foundation-closeout-baseline-v1.md) | 定义 v0.4.0 Runtime Foundation 的正式 closeout baseline 与主链验证锚点 |
 | [010-work-loop-filesystem-contract-v1.md](010-work-loop-filesystem-contract-v1.md) | 定义 v0.6.0 Work Loop / CodeFlow 的文件合同、authority 和阶段路径 |
+| [011-projection-surface-console-ia-v1.md](011-projection-surface-console-ia-v1.md) | 定义 v0.7.0 Projection Surface、Project OS Console 信息架构、读写边界和命令回流 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -44,8 +45,9 @@
 8. [008-runtime-terminology-convergence-v1.md](008-runtime-terminology-convergence-v1.md)
 9. [009-runtime-foundation-closeout-baseline-v1.md](009-runtime-foundation-closeout-baseline-v1.md)
 10. [010-work-loop-filesystem-contract-v1.md](010-work-loop-filesystem-contract-v1.md)
-11. [current-module-boundaries.md](current-module-boundaries.md)
-12. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+11. [011-projection-surface-console-ia-v1.md](011-projection-surface-console-ia-v1.md)
+12. [current-module-boundaries.md](current-module-boundaries.md)
+13. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 
