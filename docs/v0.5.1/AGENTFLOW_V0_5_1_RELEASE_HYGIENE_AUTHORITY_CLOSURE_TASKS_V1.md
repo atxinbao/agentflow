@@ -2,7 +2,7 @@
 
 日期：2026-06-21
 执行者：Codex
-状态：Unreleased Remediation Plan / GitHub Issue Authority Active
+状态：Historical Remediation Plan / Folded Into v0.6.0 Release Path
 
 ## 1. Purpose
 
@@ -61,4 +61,6 @@ Release Metadata
 
 ## 6. Release Rule
 
-只有在 `V051-001` 到 `V051-007` 全部完成后，`v0.6.0` 才能从规划进入实现。
+历史规则要求 `V051-001` 到 `V051-007` 完成后，`v0.6.0` 才能从规划进入实现。
+
+当前事实是：`v0.6.0` 已经发布。本文档不再作为阻塞已发布版本的活跃 gate；遗留 release hygiene 和 authority closure 问题统一进入 `docs/v0.6.1/**`。

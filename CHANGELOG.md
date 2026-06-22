@@ -28,6 +28,46 @@
 
 - 待实现后补齐。
 
+## 0.6.0 - 2026-06-21
+
+执行者：Codex
+
+AgentFlow 0.6.0 将 `Spec Loop -> Work Loop` 的交接链路推进为受 Runtime 管控的执行闭环。这个版本保留为功能发布基线，但不作为 clean stable closeout；发布后发现的版本元数据、文档状态、release-gate 默认版本和 Acceptance Gate 收口问题进入 `v0.6.1` 修复链。
+
+### Included
+
+- Work Loop 文件合同和 CodeFlow 边界落地，确认后的 spec issue 可以被转换为 Work Command。
+- Work / Build Agent 的关键写动作进入 Action Proposal 和 Arbitration，不再直接写状态。
+- Issue preflight、lock / lease、dependency queue、work session、verification、evidence、Acceptance Gate 和 Completion Commit 主链完成。
+- Work Loop 事件和 Projection 可以重建执行状态，Projection 仍保持只读。
+- Done 写回和 optional audit trigger evaluation 分离，Done 不自动创建 Audit issue。
+- release-gate E2E 覆盖 requirement -> project -> task loop -> completion -> release -> audit request 的 runtime 链路。
+
+### Architecture
+
+- `docs/v0.6.0/**` 记录 Work Loop Handoff & Controlled Execution 的功能发布基线。
+- `.agentflow/spec/**` 继续作为 spec issue 和 project 合同事实源。
+- `.agentflow/events/**`、`.agentflow/tasks/**`、`.agentflow/projections/**` 承载执行事件、任务证据和只读投影。
+- Acceptance Gate 当前已经形成主链，但还需要在 `v0.6.1` 中细化为 verification / evidence / contract / state 四个子 gate。
+- Completion Commit 已进入主链，但 authority write order 和 release closeout 证明仍在 `v0.6.1` 中继续收紧。
+
+### Validation
+
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `npm --prefix apps/desktop run build`
+- `bash scripts/verify_release_gate.sh --release-version v0.6.0 --release-tag v0.6.0`
+- `release-gate` on `main`
+- `release-gate` on tag `v0.6.0`
+- GitHub Release `v0.6.0`
+
+### Carry-over to 0.6.1
+
+- Release metadata drift must be fixed across Cargo, Desktop package metadata, Tauri config, package lock and release-gate defaults.
+- `docs/v0.5.1/**` and `docs/v0.6.0/**` must no longer contradict the published `v0.6.0` fact.
+- release-gate must certify version consistency and release facts before future releases.
+- Acceptance Gate and Completion Commit must become explicit authority records.
+
 ## 0.5.0 - 2026-06-20
 
 执行者：Codex

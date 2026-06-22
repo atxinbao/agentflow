@@ -2,11 +2,11 @@
 
 日期：2026-06-21
 执行者：Codex
-状态：Unreleased Remediation Chain / 进入实现中 / v0.6.0 前置修复
+状态：Historical Remediation Baseline / Folded Into v0.6.0 Release Path
 
 ## 1. Purpose
 
-本目录收口 AgentFlow `v0.5.1` 的修复版本目标。
+本目录记录 AgentFlow `v0.5.1` 的修复版本目标和历史约束。
 
 `v0.5.1` 不是一个新产品方向版本，而是一个收口版本：
 
@@ -16,11 +16,13 @@
 -> 修复版本文档与版本事实不一致问题
 ```
 
-一句话：
+历史目标：
 
 ```text
 先把 v0.5.0 收干净，再进入 v0.6.0。
 ```
+
+`v0.6.0` 已经发布。本文档不再阻塞已发布事实；未完全收口的问题进入 `v0.6.1`。
 
 ## 2. Boundary
 
@@ -58,7 +60,7 @@
 
 ## 5. Completion Standard
 
-`v0.5.1` 完成时，必须满足：
+`v0.5.1` 作为历史修复链，要求满足：
 
 - release metadata 与 tag / GitHub Release / workspace version 一致；
 - release-gate 能覆盖 tag / release 场景；
@@ -66,11 +68,11 @@
 - runtime command / proposal / decision / accepted action 可持久化追溯；
 - preview artifact、authority artifact、derived projection 的边界可见；
 - `v0.4.0`、`v0.5.0`、`v0.5.1` 文档状态与实际版本事实一致；
-- 在 `v0.5.1` 未完成前，不进入 `v0.6.0` 实现。
+- 已发布的 `v0.6.0` 不再被本文档阻塞；未完成或重新暴露的问题必须进入 `v0.6.1`。
 
 ## 6. Relationship To v0.6.0
 
-`v0.6.0` 不能直接建立在 `v0.5.0` 之上。
+历史设计上，`v0.6.0` 不应直接建立在 `v0.5.0` 之上。
 
 必须先经过：
 
