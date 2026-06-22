@@ -39,7 +39,6 @@ goal_draft
 plan_draft
 confirmed
 working
-auditing
 delivering
 goal_recheck
 paused
@@ -234,10 +233,16 @@ handoff 必须成为 schema 显式能力，而不是 prompt 附属概念。
 
 必须定死：
 
-- Project Flow 负责“哪个阶段、哪条 issue、什么时候进入审计或交付”
+- Project Flow 负责“哪个阶段、哪条 issue、什么时候进入交付或目标回看”
 - Work Flow 负责“单条 issue 如何从 backlog 走到 done”
 
 Project Flow 不能代替 Work Flow 执行单任务。
+
+补充边界：
+
+- Audit Flow 是独立 Sidecar Loop，不在 Project 主链上阻断 Work Done、Delivery Package 或 Completion Commit。
+- Project Flow 可以展示 audit summary，但不能把 `audit.passed` 作为进入交付或完成的前置条件。
+- Audit Finding 只能回流为 Follow-up Proposal，不能直接修改 issue / project / delivery authority。
 Work Flow 不能自己决定下一条 issue。
 
 ## 不做事项

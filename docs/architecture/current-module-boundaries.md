@@ -628,12 +628,17 @@ docs/requirements/**
 - 保存 audit report、findings、checklist、evidence map、traceability
 - 输出项目级 audit review summary surface
 - 支撑独立 audit issue 和 human-via-agent 审计请求
+- 把 finding / evidence gap 转成 Follow-up Proposal，交回 Spec / Project 决策面
 
 不负责：
 
 - 修改源码
 - 修改 spec/task 运行产物
 - 创建任务
+- 阻断 Work Loop Done
+- 阻断 Delivery Package
+- 阻断 Completion Commit
+- 直接把 finding 写成新 issue authority
 
 实现位置：
 
