@@ -89,6 +89,7 @@ PROVIDER_SMOKE="${PROVIDER_SMOKE:-0}"
 PROVIDER_SMOKE_PROVIDER="${PROVIDER_SMOKE_PROVIDER:-codex}"
 PROVIDER_SMOKE_STATUS_PATH="$RUNTIME_DIR/provider-smoke-status.json"
 PROVIDER_SMOKE_ARTIFACT_PATH="$RUNTIME_DIR/provider-smoke-artifact.json"
+API_PLANE_MANIFEST_PATH="$RUNTIME_DIR/api-plane-manifest.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -309,6 +310,7 @@ runtime_artifacts = [
     {"path": "runtime/audit-index.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-index.json").is_file()},
     {"path": "runtime/provider-smoke-status.json", "exists": provider_smoke_status_path.is_file()},
     {"path": "runtime/provider-smoke-artifact.json", "exists": provider_smoke_artifact_path.is_file()},
+    {"path": "runtime/api-plane-manifest.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/api-plane-manifest.json").is_file()},
 ]
 
 checklist = [
@@ -801,6 +803,39 @@ run_provider_smoke_gate() {
   fi
 }
 
+run_api_plane_manifest_gate() {
+  record_stage "api-plane-manifest" "started" "$API_PLANE_MANIFEST_PATH"
+  "$BIN" api-plane manifest --output "$API_PLANE_MANIFEST_PATH"
+  python3 - "$API_PLANE_MANIFEST_PATH" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+if not path.is_file():
+    raise SystemExit(f"missing api plane manifest: {path}")
+payload = json.loads(path.read_text(encoding="utf-8"))
+if payload.get("version") != "agentflow-api-plane-manifest.v1":
+    raise SystemExit("api plane manifest version mismatch")
+required_categories = {
+    "runtime_commands",
+    "projection_queries",
+    "command_surface_actions",
+    "connector_actions",
+    "provider_actions",
+    "audit_actions",
+    "release_actions",
+}
+entries = payload.get("entries") or []
+categories = {entry.get("category") for entry in entries}
+missing = sorted(required_categories - categories)
+if missing:
+    raise SystemExit(f"api plane manifest missing categories: {missing}")
+allowed_boundaries = {"authority", "readonly", "command", "internal"}
+for entry in entries:
+    if entry.get("boundary") not in allowed_boundaries:
+        raise SystemExit(f"api plane entry has invalid boundary: {entry}")
+PY
+  record_stage "api-plane-manifest" "passed" "$(basename "$API_PLANE_MANIFEST_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -1141,6 +1176,7 @@ main() {
   verify_release_metadata "$WORKSPACE"
   verify_release_publication_facts "$WORKSPACE"
   run_provider_smoke_gate
+  run_api_plane_manifest_gate
   write_requirement
 
   local intake_json="$CLI_DIR/artifacts-intake.json"

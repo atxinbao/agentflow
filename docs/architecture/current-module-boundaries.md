@@ -85,6 +85,7 @@ docs/requirements/**
 
 - 提供 Desktop / CLI 的统一 Runtime Command API 边界
 - 提供 Runtime Query API，只读取 projection read models
+- 生成 Runtime / Projection / Command / Connector / Provider / Audit / Release API Plane manifest
 - 把正式命令映射为 `action proposal / arbitration / command response`
 - 收口 Project / Completion / Release 等 formal runtime 入口，避免 UI 和 CLI 直接依赖底层写实现
 
@@ -106,6 +107,7 @@ docs/requirements/**
 
 - `commands.rs` 是正式 command boundary。
 - `query.rs` 是 projection-only query boundary。
+- `api_plane.rs` 是 API Plane manifest 描述面。
 - `formal.rs` 当前仍是过渡层 wrapper；后续 formal runtime 写入口会继续收口到统一 command path。
 
 ## Requirement and Task Contract Layer

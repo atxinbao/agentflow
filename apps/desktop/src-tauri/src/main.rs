@@ -46,6 +46,7 @@ fn main() {
             commands::project_runtime::release_prepare,
             commands::project_runtime::release_confirm,
             commands::project_runtime::release_publish,
+            commands::runtime_api::load_api_plane_manifest,
             commands::projection::rebuild_task_projections,
             commands::projection::load_projection_issue_status_index,
             commands::projection::load_task_projection,
