@@ -315,6 +315,15 @@ try {
   assert.ok(appEntry.includes("证据链"));
   assert.ok(appEntry.includes("追溯关系"));
   assert.ok(appEntry.includes("AdvancedStateViewer"));
+  assert.ok(appEntry.includes("运行诊断"));
+  assert.ok(appEntry.includes("projection-freshness.json"));
+  assert.ok(appEntry.includes("runtime-status.json"));
+  assert.ok(appEntry.includes("event-replay-summary.json"));
+  assert.ok(appEntry.includes("provider-sessions.json"));
+  assert.ok(appEntry.includes("role-policy-boundary.json"));
+  assert.ok(appEntry.includes("fact-diagnostics.json"));
+  assert.ok(appEntry.includes("conflict-diagnostics.json"));
+  assert.ok(appEntry.includes("Advanced surface is read-only."));
   assert.ok(appShellCss.includes(".v16-status-bar"));
   assert.ok(appShellCss.includes(".v16-tasks-page"));
   assert.ok(appShellCss.includes(".v16-task-list-layout"));
