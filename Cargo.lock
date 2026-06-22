@@ -70,6 +70,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-capability-registry"
+version = "0.7.0"
+dependencies = [
+ "agentflow-mcp",
+ "agentflow-role-policy",
+ "agentflow-workflow-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "agentflow-cli"
 version = "0.7.0"
 dependencies = [
