@@ -136,6 +136,10 @@ try {
   assert.equal(doneProjection?.timeline.find((item) => item.state === "done")?.phase, "current");
   assert.equal(doneProjection?.timeline.find((item) => item.state === "done")?.events.length, 2);
   assert.equal(doneProjection?.timeline.find((item) => item.state === "in_review")?.phase, "past");
+  assert.equal(progressProjection?.acceptance?.outcome, "pending");
+  assert.equal(reviewProjection?.acceptance?.outcome, "needs-human-decision");
+  assert.equal(doneProjection?.acceptance?.passed, true);
+  assert.equal(doneProjection?.acceptance?.traceability.closeoutProofPath.includes("completion/commit.json"), true);
   assert.equal(projectProjection?.currentIssueId, "iss-progress");
   assert.equal(projectProjection?.stageLabel, "正在推进");
   assert.equal(projectProjection?.nextActionLabel, "继续当前任务");
@@ -272,6 +276,10 @@ try {
   assert.ok(appEntry.includes("当前还没有进入最终交付阶段"));
   assert.ok(appEntry.includes("运行 Project Loop"));
   assert.ok(appEntry.includes("执行与交付"));
+  assert.ok(appEntry.includes("验收门"));
+  assert.ok(appEntry.includes("完成写回"));
+  assert.ok(appEntry.includes("Acceptance Gate"));
+  assert.ok(appEntry.includes("Completion Commit"));
   assert.ok(appEntry.includes("交付槽位"));
   assert.ok(appEntry.includes("公开交付"));
   assert.ok(appEntry.includes("需求工作台"));

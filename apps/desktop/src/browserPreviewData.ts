@@ -830,6 +830,65 @@ export function createBrowserPreviewTaskProjection(
       evidenceGaps: [],
       repairRecommendations: [],
     },
+    acceptance: runId
+      ? {
+          outcome:
+            currentState === "done"
+              ? "passed"
+              : currentState === "in_review"
+                ? "needs-human-decision"
+                : currentState === "in_progress"
+                  ? "pending"
+                  : "not-started",
+          passed: currentState === "done",
+          summary:
+            currentState === "done"
+              ? "Acceptance Gate 已通过，Completion Commit 已写回 Done。"
+              : currentState === "in_review"
+                ? "验证证据已生成，等待 PR/MR 合并后完成写回。"
+                : "当前执行仍在生成验证证据，Acceptance Gate 尚未完成。",
+          failureReasons: [],
+          nextSteps:
+            currentState === "done"
+              ? ["保持审计独立，需要时从审计页发起核对。"]
+              : currentState === "in_review"
+                ? ["等待 PR/MR 合并证明。", "合并后写入 Completion Commit。"]
+                : ["完成本地验证。", "生成 evidence pack。"],
+          subGates: [
+            {
+              gate: "verification",
+              passed: currentState === "in_review" || currentState === "done",
+              failureReasons: [],
+              repairSuggestion: "先完成本地验证并记录验证日志。",
+            },
+            {
+              gate: "evidence",
+              passed: Boolean(runId),
+              failureReasons: [],
+              repairSuggestion: "补齐 evidence pack。",
+            },
+            {
+              gate: "closeout",
+              passed: currentState === "done",
+              failureReasons: currentState === "done" ? [] : ["Completion Commit 尚未写回。"],
+              repairSuggestion: "PR/MR 合并后写入 Completion Commit。",
+            },
+          ],
+          traceability: {
+            issueId,
+            runId,
+            acceptanceDecisionPath: `.agentflow/tasks/${issueId}/runs/${runId}/acceptance/decision.json`,
+            evidencePath: `.agentflow/tasks/${issueId}/evidence/evidence.json`,
+            validationPath: `.agentflow/tasks/${issueId}/runs/${runId}/verify/local.md`,
+            closeoutProofPath: `.agentflow/tasks/${issueId}/runs/${runId}/completion/commit.json`,
+            sessionId: `codex-${runId}`,
+            provider: "codex",
+            prUrl: currentState === "in_review" || currentState === "done" ? "https://github.com/example/agentflow/pull/100" : null,
+            mergeCommitSha: currentState === "done" ? "426b217f" : null,
+          },
+          checkedAt: previewTimestamp + 420,
+        }
+      : null,
     updatedAt: previewTimestamp + 360,
   };
 }

@@ -722,6 +722,37 @@ export type ProjectionAuditSummary = {
   repairRecommendations: string[];
 };
 
+export type ProjectionAcceptanceSubGateSummary = {
+  gate: string;
+  passed: boolean;
+  failureReasons: string[];
+  repairSuggestion: string;
+};
+
+export type ProjectionAcceptanceTraceabilitySummary = {
+  issueId: string;
+  runId: string;
+  acceptanceDecisionPath: string;
+  evidencePath: string;
+  validationPath: string;
+  closeoutProofPath: string;
+  sessionId?: string | null;
+  provider?: string | null;
+  prUrl?: string | null;
+  mergeCommitSha?: string | null;
+};
+
+export type ProjectionAcceptanceSummary = {
+  outcome: string;
+  passed: boolean;
+  summary: string;
+  failureReasons: string[];
+  nextSteps: string[];
+  subGates: ProjectionAcceptanceSubGateSummary[];
+  traceability: ProjectionAcceptanceTraceabilitySummary;
+  checkedAt: number;
+};
+
 export type TaskProjection = {
   version: string;
   issueId: string;
@@ -738,6 +769,7 @@ export type TaskProjection = {
   session: ProjectionSessionSummary;
   delivery: ProjectionDeliverySummary;
   audit: ProjectionAuditSummary;
+  acceptance?: ProjectionAcceptanceSummary | null;
   updatedAt: number;
 };
 

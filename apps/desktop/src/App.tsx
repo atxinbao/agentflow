@@ -4145,6 +4145,8 @@ function TaskFlowSidebar({
   const publicDeliveryItems = deliveryReleaseNoteItems(task, artifact, taskProjection);
   const verificationItems = taskVerificationEvidenceItems(executionProjection, deliveryProjection);
   const auditItems = taskAuditSummaryItems(task, taskProjection);
+  const acceptanceItems = taskAcceptanceGateItems(task, taskProjection, deliveryProjection);
+  const completionCommitItems = taskCompletionCommitItems(task, taskProjection, deliveryProjection);
 
   return (
     <div className="v16-task-side-rail">
@@ -4156,6 +4158,8 @@ function TaskFlowSidebar({
         <div className="v16-task-stage-grid v16-task-stage-grid-compact">
           <SectionList title="执行事实" items={executionProjection.summaryItems} />
           <SectionList title="验证与证据" items={verificationItems} />
+          <SectionList title="验收门" items={acceptanceItems} />
+          <SectionList title="完成写回" items={completionCommitItems} />
           <SectionList title="交付槽位" items={deliverySlotItems} />
           <SectionList title="公开交付" items={publicDeliveryItems} />
           <SectionList title="评审状态" items={reviewItems} />
@@ -7185,6 +7189,75 @@ function taskVerificationEvidenceItems(
   ];
 }
 
+function taskAcceptanceGateItems(
+  task: V1Issue,
+  projection: TaskProjection | null,
+  deliveryProjection: TaskDeliveryProjection,
+) {
+  const acceptance = projection?.acceptance ?? null;
+  if (!acceptance) {
+    return task.displayStatus === "in_review" || task.displayStatus === "done"
+      ? ["验收门：等待投影写入。", "任务已进入评审或完成，应该保留 Acceptance Gate 记录。"]
+      : [
+          "验收门：等待验证完成。",
+          deliveryProjection.evidencePath ? `证据路径：${deliveryProjection.evidencePath}` : "证据路径：未生成。",
+          "Audit 是独立验收入口，不参与任务 Done 默认判断。",
+        ];
+  }
+
+  const items = [
+    `结果：${acceptanceOutcomeLabelZh(acceptance.outcome, acceptance.passed)}`,
+    `摘要：${acceptance.summary}`,
+    acceptance.traceability.acceptanceDecisionPath
+      ? `判定记录：${acceptance.traceability.acceptanceDecisionPath}`
+      : "判定记录：未记录",
+    acceptance.traceability.evidencePath
+      ? `证据：${acceptance.traceability.evidencePath}`
+      : "证据：未记录",
+  ];
+
+  acceptance.subGates.slice(0, 4).forEach((gate) => {
+    items.push(`${acceptanceGateLabelZh(gate.gate)}：${gate.passed ? "通过" : "未通过"}`);
+    gate.failureReasons.slice(0, 2).forEach((reason) => items.push(`原因：${reason}`));
+  });
+  acceptance.nextSteps.slice(0, 3).forEach((step) => items.push(`下一步：${step}`));
+  return items;
+}
+
+function taskCompletionCommitItems(
+  task: V1Issue,
+  projection: TaskProjection | null,
+  deliveryProjection: TaskDeliveryProjection,
+) {
+  const acceptance = projection?.acceptance ?? null;
+  const session = projection?.session ?? null;
+  const publicDelivery = projection?.publicDelivery ?? null;
+  const commitPath = acceptance?.traceability.closeoutProofPath ?? null;
+  const mergeCommit =
+    acceptance?.traceability.mergeCommitSha
+    ?? publicDelivery?.mergeCommit
+    ?? null;
+  const prUrl =
+    acceptance?.traceability.prUrl
+    ?? deliveryProjection.prUrl
+    ?? publicDelivery?.prUrl
+    ?? null;
+  const writebackState = session?.writebackState ?? (task.displayStatus === "done" ? "done" : null);
+
+  return [
+    task.displayStatus === "done"
+      ? "Done 写回：已完成。"
+      : task.displayStatus === "in_review"
+        ? "Done 写回：等待 PR/MR 合并和 Completion Commit。"
+        : "Done 写回：尚未进入写回阶段。",
+    writebackState ? `写回状态：${writebackState}` : "写回状态：未记录",
+    commitPath ? `Completion Commit：${commitPath}` : "Completion Commit：未生成",
+    prUrl ? `PR/MR：${prUrl}` : "PR/MR：未记录",
+    mergeCommit ? `合并提交：${mergeCommit}` : "合并提交：未记录",
+    "Audit 独立触发，不作为 Done 写回的默认步骤。",
+  ];
+}
+
 function taskDeliverySlotItems(
   task: V1Issue,
   deliveryProjection: TaskDeliveryProjection,
@@ -8187,6 +8260,33 @@ function artifactStatusLabel(status?: string | null) {
     return "未记录";
   }
   return labels[status.toLowerCase()] ?? status;
+}
+
+function acceptanceOutcomeLabelZh(outcome?: string | null, passed?: boolean) {
+  if (passed) {
+    return "已通过";
+  }
+  const labels: Record<string, string> = {
+    accepted: "已接受",
+    failed: "未通过",
+    "needs-human-decision": "等待人工判断",
+    "not-started": "未开始",
+    passed: "已通过",
+    pending: "等待判定",
+    rejected: "已拒绝",
+  };
+  return outcome ? labels[outcome.toLowerCase()] ?? outcome : "未记录";
+}
+
+function acceptanceGateLabelZh(gate?: string | null) {
+  const labels: Record<string, string> = {
+    closeout: "完成收口",
+    delivery: "交付记录",
+    evidence: "证据包",
+    merge: "合并证明",
+    verification: "本地验证",
+  };
+  return gate ? labels[gate.toLowerCase()] ?? gate : "未记录";
 }
 
 function mcpProviderLabel(provider?: string | null) {
