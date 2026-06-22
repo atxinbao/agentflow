@@ -2037,7 +2037,7 @@ fn authoritative_state_from_event(event: &TaskEvent) -> Option<String> {
         | "issue.pr.created"
         | "issue.closeout.proof.recorded"
         | "issue.pr.merged" => Some("in_review".to_string()),
-        "issue.completed" => Some("done".to_string()),
+        "issue.completion.committed" | "issue.completed" => Some("done".to_string()),
         "issue.blocked" | "issue.validation.failed" => Some("blocked".to_string()),
         "issue.cancelled" => Some("cancel".to_string()),
         _ => None,
@@ -2100,6 +2100,9 @@ fn event_summary(event: &TaskEvent) -> String {
         "issue.acceptance.rejected" => "验收判定被拒绝，需先修复失败原因。".to_string(),
         "issue.acceptance.human-review-required" => {
             "验收判定需要人工判断，不能伪装成自动通过。".to_string()
+        }
+        "issue.completion.committed" => {
+            "Completion Commit 已写入，Done 写回只能由该事件触发。".to_string()
         }
         "issue.completed" => "任务 Done 写回完成。".to_string(),
         "issue.blocked" => "任务进入阻断状态。".to_string(),
