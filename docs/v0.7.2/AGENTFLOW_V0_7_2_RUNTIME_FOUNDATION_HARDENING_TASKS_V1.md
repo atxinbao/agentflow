@@ -35,7 +35,7 @@ Audit Sidecar
 | `V072-005` | Worker / Tool Capability Registry | P0 | V072-004 | done |
 | `V072-006` | Provider Smoke Gate Minimal | P0 | V072-005 | done |
 | `V072-007` | Connector / MCP Boundary Baseline | P1 | V072-005 | done |
-| `V072-008` | Runtime / Projection / Command API Plane Manifest | P1 | V072-004 | planned |
+| `V072-008` | Runtime / Projection / Command API Plane Manifest | P1 | V072-004 | done |
 | `V072-009` | Foundation Readiness Report | P1 | V072-001 ~ V072-008 | planned |
 | `V072-010` | Release Gate Foundation Coverage | P0 | V072-009 | planned |
 

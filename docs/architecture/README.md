@@ -36,6 +36,7 @@
 | [015-worker-tool-capability-registry-v1.md](015-worker-tool-capability-registry-v1.md) | 定义 worker / tool capability registry、health、command availability 和 disabled reason |
 | [016-provider-smoke-gate-v1.md](016-provider-smoke-gate-v1.md) | 定义 provider smoke gate 的最小 health / launch / session / terminal projection 证明 |
 | [017-connector-mcp-boundary-v1.md](017-connector-mcp-boundary-v1.md) | 定义 connector / MCP read-write capability、authority 边界和失败展示面 |
+| [018-api-plane-manifest-v1.md](018-api-plane-manifest-v1.md) | 定义 Runtime / Projection / Command API Plane manifest 和 release gate 检查 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -58,8 +59,9 @@
 15. [015-worker-tool-capability-registry-v1.md](015-worker-tool-capability-registry-v1.md)
 16. [016-provider-smoke-gate-v1.md](016-provider-smoke-gate-v1.md)
 17. [017-connector-mcp-boundary-v1.md](017-connector-mcp-boundary-v1.md)
-18. [current-module-boundaries.md](current-module-boundaries.md)
-19. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+18. [018-api-plane-manifest-v1.md](018-api-plane-manifest-v1.md)
+19. [current-module-boundaries.md](current-module-boundaries.md)
+20. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 

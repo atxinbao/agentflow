@@ -8,8 +8,8 @@ use active::{
     write_build_agent_closeout_proof,
 };
 use args::{
-    AgentDispatcherCommand, AuditCommand, BuildAgentCommand, Cli, Command, CompletionCommand,
-    ProjectCommand, ProjectionCommand, ReleaseCommand, TaskLoopCommand,
+    AgentDispatcherCommand, ApiPlaneCommand, AuditCommand, BuildAgentCommand, Cli, Command,
+    CompletionCommand, ProjectCommand, ProjectionCommand, ReleaseCommand, TaskLoopCommand,
 };
 use clap::Parser;
 use formal::{
@@ -256,6 +256,16 @@ fn main() -> anyhow::Result<()> {
             ProjectionCommand::Project { project_id } => {
                 let projection = agentflow_projection::load_project_projection(&cwd, &project_id)?;
                 println!("{}", serde_json::to_string_pretty(&projection)?);
+            }
+        },
+        Command::ApiPlane { command } => match command {
+            ApiPlaneCommand::Manifest { output } => {
+                let manifest = agentflow_runtime_api::api_plane_manifest();
+                if let Some(output) = output {
+                    agentflow_runtime_api::write_api_plane_manifest(output, &manifest)?;
+                } else {
+                    println!("{}", serde_json::to_string_pretty(&manifest)?);
+                }
             }
         },
         Command::Release { command } => match command {

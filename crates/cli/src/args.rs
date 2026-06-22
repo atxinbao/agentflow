@@ -41,6 +41,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: ProjectionCommand,
     },
+    ApiPlane {
+        #[command(subcommand)]
+        command: ApiPlaneCommand,
+    },
     Release {
         #[command(subcommand)]
         command: ReleaseCommand,
@@ -196,6 +200,14 @@ pub(crate) enum ProjectionCommand {
     Project {
         #[arg(long = "project-id")]
         project_id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum ApiPlaneCommand {
+    Manifest {
+        #[arg(long)]
+        output: Option<PathBuf>,
     },
 }
 

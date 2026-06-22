@@ -6,6 +6,7 @@
 //! runtime wrappers，但不应该继续直接依赖底层 spec / release / projection
 //! 写读实现。
 
+pub mod api_plane;
 pub mod commands;
 pub mod errors;
 pub mod formal;
@@ -16,6 +17,10 @@ pub mod responses;
 pub mod work_proposals;
 pub mod work_state;
 
+pub use api_plane::{
+    api_plane_manifest, write_api_plane_manifest, ApiPlaneAccess, ApiPlaneBoundary, ApiPlaneEntry,
+    ApiPlaneManifest, API_PLANE_MANIFEST_VERSION,
+};
 pub use commands::{
     execute_command_via_arbitration, execute_command_via_arbitration_with_context,
     validate_runtime_command, RuntimeCommandRequest,

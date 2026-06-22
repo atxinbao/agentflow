@@ -6270,6 +6270,18 @@ type AdvancedStateJsonFilesState = {
   source: DataSource;
 };
 
+type ApiPlaneManifestState = {
+  error: string | null;
+  manifest: unknown | null;
+  source: DataSource;
+};
+
+const initialApiPlaneManifestState: ApiPlaneManifestState = {
+  error: null,
+  manifest: null,
+  source: "idle",
+};
+
 const advancedStateFileNames = [
   "workflow.json",
   "gates.json",
@@ -6333,6 +6345,47 @@ function useAdvancedStateJsonFiles(
   }, [projectRoot, stateStatus?.updatedAt]);
 
   return stateJsonFilesState;
+}
+
+function useApiPlaneManifest(): ApiPlaneManifestState {
+  const [apiPlaneState, setApiPlaneState] =
+    useState<ApiPlaneManifestState>(initialApiPlaneManifestState);
+
+  useEffect(() => {
+    if (isBrowserPreviewRuntime()) {
+      setApiPlaneState({
+        error: null,
+        manifest: buildBrowserPreviewApiPlaneManifest(),
+        source: "preview",
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setApiPlaneState({ error: null, manifest: null, source: "loading" });
+
+    void invoke("load_api_plane_manifest")
+      .then((manifest) => {
+        if (!cancelled) {
+          setApiPlaneState({ error: null, manifest, source: "tauri" });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setApiPlaneState({
+            error: error instanceof Error ? error.message : String(error),
+            manifest: null,
+            source: "unavailable",
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return apiPlaneState;
 }
 
 async function loadAdvancedStateFiles(
@@ -6436,6 +6489,54 @@ function buildBrowserPreviewAdvancedStateFiles(
   };
 }
 
+function buildBrowserPreviewApiPlaneManifest() {
+  const entries = [
+    ["runtime.command.execute", "runtime_commands", "command"],
+    ["projection.task-workbench", "projection_queries", "readonly"],
+    ["command.surface.action-proposal", "command_surface_actions", "command"],
+    ["connector.github.pr-create", "connector_actions", "command"],
+    ["provider.codex.launch", "provider_actions", "command"],
+    ["audit.request-human", "audit_actions", "command"],
+    ["release.publish", "release_actions", "authority"],
+  ].map(([apiId, category, boundary]) => ({
+    access: category === "projection_queries" ? "sdk-candidate" : "local-only",
+    apiId,
+    boundary,
+    category,
+    commandOrFunction: apiId,
+    description: "Browser Preview API Plane fixture.",
+    label: apiId,
+    ownerModule: "browser-preview",
+    sourceCrate: "browser-preview",
+  }));
+  return {
+    boundaryRule:
+      "UI and connector outputs are not authority; write actions enter Runtime API / Command Surface first.",
+    categories: [
+      "runtime_commands",
+      "projection_queries",
+      "command_surface_actions",
+      "connector_actions",
+      "provider_actions",
+      "audit_actions",
+      "release_actions",
+    ].map((category) => {
+      const matching = entries.filter((entry) => entry.category === category);
+      return {
+        authority: matching.filter((entry) => entry.boundary === "authority").length,
+        category,
+        command: matching.filter((entry) => entry.boundary === "command").length,
+        internal: matching.filter((entry) => entry.boundary === "internal").length,
+        readonly: matching.filter((entry) => entry.boundary === "readonly").length,
+        total: matching.length,
+      };
+    }),
+    entries,
+    scope: "runtime/projection/command/connector/provider/audit/release",
+    version: "agentflow-api-plane-manifest.v1",
+  };
+}
+
 function AdvancedPage({
   agentManualState,
   inputSnapshotState,
@@ -6460,6 +6561,7 @@ function AdvancedPage({
   workspaceData: WorkspaceDataState;
 }) {
   const stateJsonFilesState = useAdvancedStateJsonFiles(projectRoot, stateStatusState.status);
+  const apiPlaneManifestState = useApiPlaneManifest();
   const runtimeDiagnostics = buildAdvancedRuntimeDiagnostics({
     agentManualState,
     issueStatusIndexState,
@@ -6471,6 +6573,7 @@ function AdvancedPage({
   const categories = [
     { id: "state", label: "状态", value: stateStatusState, files: advancedFilesForCategory("state", stateStatusState, stateJsonFilesState) },
     { id: "runtimeDiagnostics", label: "运行诊断", value: runtimeDiagnostics, files: advancedFilesForCategory("runtimeDiagnostics", runtimeDiagnostics) },
+    { id: "apiPlane", label: "API Plane", value: apiPlaneManifestState.manifest ?? apiPlaneManifestState, files: advancedFilesForCategory("apiPlane", apiPlaneManifestState) },
     { id: "agentRoles", label: "Agent 角色", value: agentRoleRulesDocument(), files: advancedFilesForCategory("agentRoles", agentRoleRulesDocument()) },
     { id: "initialization", label: "初始化", value: initializationState, files: advancedFilesForCategory("initialization", initializationState) },
     { id: "panel", label: "Panel", value: projectPanelState, files: advancedFilesForCategory("panel", projectPanelState) },
@@ -9306,6 +9409,7 @@ function titlebarStatusText(
 function advancedCategorySummary(categoryId: string) {
   const summaries: Record<string, string> = {
     agentRoles: "展示三个执行线程的角色边界和 roles.json 只读诊断规则。",
+    apiPlane: "展示 Runtime / Projection / Command / Connector / Provider / Audit / Release API Plane，只读查看边界。",
     audit: "展示审计索引和报告快照。这里不写处理结果。",
     initialization: "展示项目初始化摘要。这里不重跑初始化，不写旧示例数据。",
     panel: "展示项目现场读取结果和上下文包摘要。",
@@ -9324,6 +9428,11 @@ function advancedFilesForCategory(
   stateJsonFilesState?: AdvancedStateJsonFilesState,
 ): AdvancedJsonFile[] {
   const files: Record<string, AdvancedJsonFile[]> = {
+    apiPlane: [
+      { name: "api-plane-manifest.json", description: "API Plane manifest、范围和边界规则" },
+      { name: "api-plane-categories.json", description: "API 分类计数和 boundary 分布" },
+      { name: "api-plane-entries.json", description: "Runtime / Projection / Command / Connector API 清单" },
+    ],
     agentRoles: [
       {
         name: ".agentflow/define/agent/roles.json",
@@ -9387,6 +9496,25 @@ function advancedFilesForCategory(
     ],
   };
   const categoryFiles = files[categoryId] ?? files.state;
+  if (categoryId === "apiPlane") {
+    const apiPlaneState = categoryValue && typeof categoryValue === "object"
+      ? categoryValue as ApiPlaneManifestState
+      : initialApiPlaneManifestState;
+    const manifest = apiPlaneState.manifest && typeof apiPlaneState.manifest === "object"
+      ? apiPlaneState.manifest as Record<string, unknown>
+      : null;
+    const values: Record<string, unknown> = {
+      "api-plane-categories.json": manifest?.categories ?? [],
+      "api-plane-entries.json": manifest?.entries ?? [],
+      "api-plane-manifest.json": manifest ?? apiPlaneState,
+    };
+    return categoryFiles.map((file) => ({
+      ...file,
+      error: apiPlaneState.error,
+      loading: apiPlaneState.source === "loading",
+      value: values[file.name],
+    }));
+  }
   if (categoryId === "runtimeDiagnostics") {
     const diagnostics =
       categoryValue && typeof categoryValue === "object"
