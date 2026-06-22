@@ -27,14 +27,14 @@ pub use github::{check_github_provider, query_github_closeout_attestation};
 pub use gitlab::{check_gitlab_provider, query_gitlab_closeout_attestation};
 pub use model::{
     provider_capability_profile, McpCapability, McpCloseoutAttestation,
-    McpCloseoutIssueAttestation, McpLaunchMode, McpLaunchPlan, McpLaunchRequest, McpLogChunk,
-    McpProviderCapabilityProfile, McpProviderKind, McpProviderStatus, McpProviderStatusCode,
-    McpRegistry, McpRegistryEntry, McpSessionGovernanceFacts, McpSessionGovernancePolicy,
-    McpSessionSnapshot, McpSessionStatus, MCP_CLOSEOUT_ATTESTATION_VERSION,
-    MCP_DEFAULT_MAX_ATTEMPTS, MCP_DEFAULT_SESSION_TIMEOUT_SECONDS, MCP_LAUNCH_PLAN_VERSION,
-    MCP_LAUNCH_REQUEST_VERSION, MCP_LOG_CHUNK_VERSION, MCP_PROVIDER_CAPABILITY_PROFILE_VERSION,
-    MCP_PROVIDER_STATUS_VERSION, MCP_REGISTRY_VERSION, MCP_SESSION_GOVERNANCE_POLICY_VERSION,
-    MCP_SESSION_SNAPSHOT_VERSION,
+    McpCloseoutIssueAttestation, McpConnectorBoundary, McpLaunchMode, McpLaunchPlan,
+    McpLaunchRequest, McpLogChunk, McpProviderCapabilityProfile, McpProviderKind,
+    McpProviderStatus, McpProviderStatusCode, McpRegistry, McpRegistryEntry,
+    McpSessionGovernanceFacts, McpSessionGovernancePolicy, McpSessionSnapshot, McpSessionStatus,
+    MCP_CLOSEOUT_ATTESTATION_VERSION, MCP_CONNECTOR_BOUNDARY_VERSION, MCP_DEFAULT_MAX_ATTEMPTS,
+    MCP_DEFAULT_SESSION_TIMEOUT_SECONDS, MCP_LAUNCH_PLAN_VERSION, MCP_LAUNCH_REQUEST_VERSION,
+    MCP_LOG_CHUNK_VERSION, MCP_PROVIDER_CAPABILITY_PROFILE_VERSION, MCP_PROVIDER_STATUS_VERSION,
+    MCP_REGISTRY_VERSION, MCP_SESSION_GOVERNANCE_POLICY_VERSION, MCP_SESSION_SNAPSHOT_VERSION,
 };
 pub use provider::{run_command, CommandProbe, McpAgentProvider, McpProviderBridge};
 pub use smoke::{

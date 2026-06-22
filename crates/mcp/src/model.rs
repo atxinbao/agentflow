@@ -11,6 +11,7 @@ pub const MCP_LOG_CHUNK_VERSION: &str = "agentflow-mcp-log-chunk.v1";
 pub const MCP_PROVIDER_CAPABILITY_PROFILE_VERSION: &str = "agentflow-mcp-capability-profile.v1";
 pub const MCP_SESSION_GOVERNANCE_POLICY_VERSION: &str = "agentflow-mcp-session-policy.v1";
 pub const MCP_CLOSEOUT_ATTESTATION_VERSION: &str = "agentflow-mcp-closeout-attestation.v1";
+pub const MCP_CONNECTOR_BOUNDARY_VERSION: &str = "agentflow-mcp-connector-boundary.v1";
 pub const MCP_DEFAULT_SESSION_TIMEOUT_SECONDS: u64 = 60 * 60;
 pub const MCP_DEFAULT_MAX_ATTEMPTS: u32 = 3;
 
@@ -180,6 +181,36 @@ pub struct McpCloseoutAttestation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct McpConnectorBoundary {
+    pub version: String,
+    pub read_capabilities: Vec<String>,
+    pub write_capabilities: Vec<String>,
+    pub authority_write: bool,
+    pub runtime_command_required: bool,
+    pub output_channels: Vec<String>,
+    pub failure_surface: String,
+}
+
+impl McpConnectorBoundary {
+    pub fn new(
+        read_capabilities: Vec<String>,
+        write_capabilities: Vec<String>,
+        output_channels: Vec<String>,
+    ) -> Self {
+        Self {
+            version: MCP_CONNECTOR_BOUNDARY_VERSION.to_string(),
+            read_capabilities,
+            write_capabilities,
+            authority_write: false,
+            runtime_command_required: true,
+            output_channels,
+            failure_surface: "capability-registry.disabled-reason".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct McpProviderCapabilityProfile {
     pub version: String,
     pub provider: String,
@@ -188,6 +219,7 @@ pub struct McpProviderCapabilityProfile {
     pub supported_skill_packs: Vec<WorkflowSkillPack>,
     pub required_capabilities: Vec<String>,
     pub degraded_capabilities: Vec<String>,
+    pub connector_boundary: McpConnectorBoundary,
 }
 
 impl McpProviderCapabilityProfile {
@@ -217,6 +249,20 @@ pub fn provider_capability_profile(provider: &str) -> Option<McpProviderCapabili
                 "issue.close".to_string(),
                 "issue.closed_query".to_string(),
             ],
+            connector_boundary: McpConnectorBoundary::new(
+                vec![
+                    "repo.read".to_string(),
+                    "pull_request.merged_query".to_string(),
+                    "issue.closed_query".to_string(),
+                ],
+                vec![
+                    "pull_request.create".to_string(),
+                    "pull_request.ready".to_string(),
+                    "pull_request.auto_merge".to_string(),
+                    "issue.close".to_string(),
+                ],
+                vec!["evidence".to_string(), "external-fact".to_string()],
+            ),
         },
         McpProviderKind::Gitlab => McpProviderCapabilityProfile {
             version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
@@ -235,6 +281,20 @@ pub fn provider_capability_profile(provider: &str) -> Option<McpProviderCapabili
                 "issue.close".to_string(),
                 "issue.closed_query".to_string(),
             ],
+            connector_boundary: McpConnectorBoundary::new(
+                vec![
+                    "repo.read".to_string(),
+                    "merge_request.merged_query".to_string(),
+                    "issue.closed_query".to_string(),
+                ],
+                vec![
+                    "merge_request.create".to_string(),
+                    "merge_request.ready".to_string(),
+                    "merge_request.auto_merge".to_string(),
+                    "issue.close".to_string(),
+                ],
+                vec!["evidence".to_string(), "external-fact".to_string()],
+            ),
         },
         McpProviderKind::Codex => McpProviderCapabilityProfile {
             version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
@@ -259,6 +319,15 @@ pub fn provider_capability_profile(provider: &str) -> Option<McpProviderCapabili
                 "build_agent.complete".to_string(),
             ],
             degraded_capabilities: Vec::new(),
+            connector_boundary: McpConnectorBoundary::new(
+                vec![
+                    "session.poll".to_string(),
+                    "session.logs".to_string(),
+                    "session.cancel".to_string(),
+                ],
+                vec!["launch".to_string(), "build_agent.complete".to_string()],
+                vec!["context".to_string(), "evidence".to_string()],
+            ),
         },
         McpProviderKind::ClaudeCode => McpProviderCapabilityProfile {
             version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
@@ -283,6 +352,15 @@ pub fn provider_capability_profile(provider: &str) -> Option<McpProviderCapabili
                 "build_agent.complete".to_string(),
             ],
             degraded_capabilities: Vec::new(),
+            connector_boundary: McpConnectorBoundary::new(
+                vec![
+                    "session.poll".to_string(),
+                    "session.logs".to_string(),
+                    "session.cancel".to_string(),
+                ],
+                vec!["launch".to_string(), "build_agent.complete".to_string()],
+                vec!["context".to_string(), "evidence".to_string()],
+            ),
         },
         McpProviderKind::BrowserPreview => McpProviderCapabilityProfile {
             version: MCP_PROVIDER_CAPABILITY_PROFILE_VERSION.to_string(),
@@ -296,6 +374,16 @@ pub fn provider_capability_profile(provider: &str) -> Option<McpProviderCapabili
                 "browser_preview.console_logs".to_string(),
                 "browser_preview.screenshot".to_string(),
             ],
+            connector_boundary: McpConnectorBoundary::new(
+                vec![
+                    "browser_preview.smoke".to_string(),
+                    "browser_preview.dom_snapshot".to_string(),
+                    "browser_preview.console_logs".to_string(),
+                    "browser_preview.screenshot".to_string(),
+                ],
+                Vec::new(),
+                vec!["evidence".to_string(), "external-fact".to_string()],
+            ),
         },
     })
 }
@@ -776,6 +864,16 @@ mod tests {
         assert!(github.supports_role(WorkflowAgentRole::DeliveryAgent));
         assert!(github.supports_skill_pack(WorkflowSkillPack::DeliverySkills));
         assert!(!github.supports_role(WorkflowAgentRole::WorkAgent));
+        assert!(!github.connector_boundary.authority_write);
+        assert!(github.connector_boundary.runtime_command_required);
+        assert!(github
+            .connector_boundary
+            .output_channels
+            .contains(&"external-fact".to_string()));
+        assert!(github
+            .connector_boundary
+            .write_capabilities
+            .contains(&"pull_request.create".to_string()));
         assert!(github
             .degraded_capabilities
             .contains(&"issue.close".to_string()));
