@@ -1139,8 +1139,15 @@
   min-width: 0;
 }
 
+.v16-project-command-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
 .v16-current-task-card,
 .v16-home-empty,
+.v16-project-command-list button,
 .v16-activity-list button {
   display: grid;
   gap: 5px;
@@ -1154,18 +1161,26 @@
 }
 
 .v16-current-task-card,
+.v16-project-command-list button,
 .v16-activity-list button {
   cursor: pointer;
   font: inherit;
 }
 
 .v16-current-task-card:hover,
+.v16-project-command-list button:hover:not(:disabled),
 .v16-activity-list button:hover {
   border-color: color-mix(in srgb, var(--v16-accent) 38%, var(--v16-border));
   background: color-mix(in srgb, var(--v16-accent-soft) 56%, var(--v16-surface-2));
 }
 
+.v16-project-command-list button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
 .v16-home-empty span,
+.v16-project-command-list span,
 .v16-activity-list span,
 .v16-home-next-step {
   margin: 0;
@@ -1176,6 +1191,7 @@
 
 .v16-current-task-card strong,
 .v16-home-empty strong,
+.v16-project-command-list strong,
 .v16-activity-list strong {
   min-width: 0;
   overflow-wrap: anywhere;

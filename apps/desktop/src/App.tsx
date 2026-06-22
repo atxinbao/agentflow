@@ -2376,6 +2376,34 @@ function ProjectHomePage({
           title: nextActionLabel,
         },
       ];
+  const commandEntries = [
+    {
+      detail: "触发项目调度，只生成 Runtime API 动作，不直接改事实文件。",
+      disabled: Boolean(activeIssue),
+      id: "run-project-loop",
+      label: "运行 Project Loop",
+      loading: projectLoopState === "loading",
+      onClick: onRunProjectLoop,
+    },
+    {
+      detail: activeIssue
+        ? `打开 ${activeIssue.id} 的任务状态流、事件和交付槽位。`
+        : "当前没有活跃任务，等待 Project Loop 调度。",
+      disabled: !activeIssue,
+      id: "open-active-task",
+      label: "查看当前任务",
+      loading: false,
+      onClick: onOpenTasks,
+    },
+    {
+      detail: "查看审计只读面，审计触发必须走独立命令入口。",
+      disabled: false,
+      id: "open-audit",
+      label: "查看审计",
+      loading: false,
+      onClick: onOpenAudit,
+    },
+  ];
 
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
@@ -2526,6 +2554,24 @@ function ProjectHomePage({
 
       <section className="v16-home-columns" aria-label="项目入口与最近活动">
         <ProjectHomeAgentEntryPanel activeOwnerLabel={nextOwnerLabel} />
+        <Panel className="v16-home-column" title="Command Surface">
+          <div className="v16-project-command-list">
+            {commandEntries.map((entry) => (
+              <button
+                disabled={entry.disabled || entry.loading}
+                key={entry.id}
+                onClick={entry.onClick}
+                type="button"
+              >
+                <strong>{entry.loading ? "处理中" : entry.label}</strong>
+                <span>{entry.detail}</span>
+              </button>
+            ))}
+          </div>
+        </Panel>
+      </section>
+
+      <section className="v16-home-columns" aria-label="最近活动">
         <Panel className="v16-home-column" title="最近活动">
           <div className="v16-activity-list">
             {homeRecentActivities.map((activity) => (
@@ -2560,6 +2606,24 @@ function ProjectHomeAgentEntryPanel({ activeOwnerLabel }: { activeOwnerLabel: st
           <strong>需求助手</strong>
           <p>把当前想法整理成规格，确认边界、验收标准和任务拆解。</p>
           <small>适用：还没有确认需求、还没有生成任务、需要补规格。</small>
+        </article>
+        <article className={`v16-project-home-entry-card${activeOwnerLabel === "执行助手" ? " active" : ""}`}>
+          <span>Work Agent</span>
+          <strong>执行助手</strong>
+          <p>接住已确认的任务，按状态流推进执行、验证、评审和 Done 写回。</p>
+          <small>适用：任务进入 todo / in_progress / in_review。</small>
+        </article>
+        <article className={`v16-project-home-entry-card${activeOwnerLabel === "交付助手" ? " active" : ""}`}>
+          <span>Delivery Agent</span>
+          <strong>交付助手</strong>
+          <p>整理 PR/MR body、CHANGELOG、release notes 和公开交付记录。</p>
+          <small>适用：任务或项目需要公开交付收口。</small>
+        </article>
+        <article className={`v16-project-home-entry-card${activeOwnerLabel === "审计助手" ? " active" : ""}`}>
+          <span>Audit Agent</span>
+          <strong>审计助手</strong>
+          <p>只读核对证据、交付、追溯和 findings，不替代任务 Done 判断。</p>
+          <small>适用：需要独立验收或人工审计。</small>
         </article>
       </div>
     </Panel>
