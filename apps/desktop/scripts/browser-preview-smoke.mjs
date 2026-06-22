@@ -98,6 +98,7 @@ try {
   const reviewProjection = preview.createBrowserPreviewTaskProjection("iss-review", smokeRoot, "default");
   const doneProjection = preview.createBrowserPreviewTaskProjection("iss-done", smokeRoot, "default");
   const projectProjection = preview.createBrowserPreviewProjectProjection("project-browser-preview", smokeRoot, "default");
+  const specWorkbenchProjection = preview.createBrowserPreviewSpecWorkbenchProjection();
   const taskTree = viewModels.buildTaskProjectTreeViewModel({
     activeIssueId: "iss-progress",
     issues: inputSnapshot.issues,
@@ -148,6 +149,14 @@ try {
   assert.equal(projectProjection?.blockers.length, 0);
   assert.equal(projectProjection?.projectBrain.nextRecommendedActionLabel, "进入项目循环");
   assert.equal(projectProjection?.delivery?.currentIssueId, "iss-progress");
+  assert.equal(specWorkbenchProjection.requirements.length, 1);
+  assert.equal(specWorkbenchProjection.specLoop?.stages.length, 8);
+  assert.deepEqual(
+    specWorkbenchProjection.specLoop?.authorityLayers.map((entry) => entry.authorityLayer),
+    ["preview-artifact", "project-authority", "issue-authority"],
+  );
+  assert.equal(specWorkbenchProjection.preview?.issuePreview.length, 3);
+  assert.equal(specWorkbenchProjection.specLoop?.runtimeActionProposals.length, 1);
   assert.equal(
     taskProjections.some((task) => task.publicDelivery?.prUrl?.includes("/pull/100")),
     true,
@@ -219,6 +228,7 @@ try {
   assert.ok(appEntry.includes('data-agentflow-screen="login"'));
   assert.ok(appEntry.includes('data-agentflow-screen="first-run"'));
   assert.ok(appEntry.includes('data-agentflow-page="workbench"'));
+  assert.ok(appEntry.includes('data-agentflow-page="spec"'));
   assert.ok(appEntry.includes('data-agentflow-page="tasks"'));
   assert.ok(appEntry.includes('data-agentflow-page="files"'));
   assert.ok(appEntry.includes('data-agentflow-page="delivery"'));
@@ -249,17 +259,23 @@ try {
   assert.ok(appEntry.includes('aria-label="任务工作流"'));
   assert.ok(appEntry.includes('aria-label="任务状态流转"'));
   assert.ok(appEntry.includes('aria-label="当前阶段摘要"'));
-  assert.ok(appEntry.includes('aria-label="交付摘要"'));
-  assert.ok(appEntry.includes('ariaLabel="审计摘要"'));
+  assert.ok(appEntry.includes('aria-label="执行与交付"'));
+  assert.ok(appEntry.includes('aria-label="审计摘要与入口"'));
   assert.ok(appEntry.includes('aria-label="项目调度视图"'));
   assert.ok(appEntry.includes('aria-label="项目阶段摘要"'));
   assert.ok(appEntry.includes('aria-label="项目状态流"'));
   assert.ok(appEntry.includes('aria-label="项目交付摘要"'));
   assert.ok(appEntry.includes('aria-label="项目审计摘要"'));
-  assert.ok(appEntry.includes("状态流 / 事件流"));
+  assert.ok(appEntry.includes('aria-label="Spec Loop 阶段"'));
+  assert.ok(appEntry.includes('aria-label="预览与物化"'));
+  assert.ok(appEntry.includes("状态时间线 / 事件流"));
   assert.ok(appEntry.includes("当前还没有进入最终交付阶段"));
   assert.ok(appEntry.includes("运行 Project Loop"));
-  assert.ok(appEntry.includes("交付摘要"));
+  assert.ok(appEntry.includes("执行与交付"));
+  assert.ok(appEntry.includes("交付槽位"));
+  assert.ok(appEntry.includes("公开交付"));
+  assert.ok(appEntry.includes("需求工作台"));
+  assert.ok(appEntry.includes("Runtime Action Proposal"));
   assert.ok(appEntry.includes("证据链"));
   assert.ok(appEntry.includes("追溯关系"));
   assert.ok(appEntry.includes("AdvancedStateViewer"));
@@ -267,6 +283,8 @@ try {
   assert.ok(appShellCss.includes(".v16-tasks-page"));
   assert.ok(appShellCss.includes(".v16-task-list-layout"));
   assert.ok(appShellCss.includes(".v16-task-queue-row"));
+  assert.ok(appShellCss.includes(".v16-spec-layout"));
+  assert.ok(appShellCss.includes(".v16-spec-stage-row"));
   assert.ok(appShellCss.includes(".v16-files-page"));
   assert.ok(appShellCss.includes("@media (prefers-color-scheme: dark)"));
   assert.ok(projectLocalFilesPage.indexOf("<ProjectFileBrowser") < projectLocalFilesPage.indexOf("<article className=\"project-file-reader\""));
