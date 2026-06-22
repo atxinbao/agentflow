@@ -413,6 +413,30 @@ docs/requirements/**
 
 - `crates/schema-registry/src/**`
 
+### Simulation
+
+负责：
+
+- 生成 dry-run report；
+- simulate command；
+- simulate issue；
+- simulate completion；
+- 输出 expected events / rejected reasons / affected projections / gate impact；
+- 汇总 risk 和 conflict。
+
+不负责：
+
+- 执行 provider；
+- 写 `.agentflow/spec/**`；
+- 写 `.agentflow/tasks/**`；
+- 修改 event store；
+- 重建 projection；
+- 写真实 runtime decision。
+
+实现位置：
+
+- `crates/simulation/src/**`
+
 ### Event Store
 
 负责：
