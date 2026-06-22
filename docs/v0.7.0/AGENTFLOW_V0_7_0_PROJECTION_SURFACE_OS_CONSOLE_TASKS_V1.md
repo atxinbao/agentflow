@@ -411,6 +411,17 @@ Facts
 - 不做云端 command queue；
 - 不引入 Message Bus。
 
+实现状态：
+
+- 已完成；
+- Project Home `Command Surface` 改为统一 command action 列表，展示 `Command`、`Runtime API`、`Action Proposal`、`Target` 和状态；
+- Spec Workbench 侧栏新增 `approveSpec` / `createFollowUp` command action 展示；
+- Task detail 新增 `任务 Command Surface`，覆盖 `startWork`、`requestFix`、`acceptDelivery`、`requestAudit`、`reopenIssue`、`createFollowUp`；
+- command 状态支持 `pending`、`accepted`、`rejected`、`queued`、`needs-human-decision`；
+- Runtime API 补齐 alias：`acceptDelivery -> markIssueDone`、`requestFix/reopenIssue -> recordDecision`、`createFollowUp -> createIssue`；
+- Browser Preview smoke 覆盖 command surface、runtime API alias 和样式入口；
+- UI action 仍不直接写事实源，命令表面只展示 Runtime Command / Action Proposal 路由。
+
 ### V070-010 - Advanced Runtime Diagnostics Surface
 
 目标：

@@ -61,6 +61,8 @@ try {
     path.join(desktopRoot, "src/features/state/hooks/useStateStatus.ts"),
     "utf8",
   );
+  const runtimeApiMapping = readFileSync(path.join(desktopRoot, "../../crates/runtime-api/src/mapping.rs"), "utf8");
+  const runtimeApiCommands = readFileSync(path.join(desktopRoot, "../../crates/runtime-api/src/commands.rs"), "utf8");
   const projectLocalFilesPage = readFileSync(
     path.join(desktopRoot, "src/features/project-files/ProjectLocalFilesPage.tsx"),
     "utf8",
@@ -295,6 +297,17 @@ try {
   assert.ok(appEntry.includes("Audit Surface 不修改 Work Loop facts"));
   assert.ok(appEntry.includes("audit queued 不等于 audit passed"));
   assert.ok(appEntry.includes("Done 后 no audit 是合法状态"));
+  assert.ok(appEntry.includes('aria-label="Command Surface Runtime API Bridge"'));
+  assert.ok(appEntry.includes('aria-label="任务 Command Surface"'));
+  assert.ok(appEntry.includes("RuntimeCommand(approveSpec) -> ActionProposal -> Arbitration"));
+  assert.ok(appEntry.includes("RuntimeCommand(startWork) -> ActionProposal -> Arbitration"));
+  assert.ok(appEntry.includes("RuntimeCommand(requestAudit) -> AuditSurfaceView"));
+  assert.ok(appEntry.includes("RuntimeCommand(createFollowUp) -> createIssue proposal"));
+  assert.ok(appEntry.includes("needs-human-decision"));
+  assert.ok(runtimeApiMapping.includes('"acceptDelivery" => Some("markIssueDone")'));
+  assert.ok(runtimeApiMapping.includes('"requestFix" | "reopenIssue" => Some("recordDecision")'));
+  assert.ok(runtimeApiMapping.includes('"createIssue" | "createFollowUp" => Some("createIssue")'));
+  assert.ok(runtimeApiCommands.includes("command_surface_aliases_map_to_supported_action_contracts"));
   assert.ok(appEntry.includes("交付槽位"));
   assert.ok(appEntry.includes("公开交付"));
   assert.ok(appEntry.includes("需求工作台"));
@@ -312,6 +325,8 @@ try {
   assert.ok(appShellCss.includes(".v16-task-evidence-chain"));
   assert.ok(appShellCss.includes(".v16-task-acceptance-delivery"));
   assert.ok(appShellCss.includes(".v16-task-audit-surface"));
+  assert.ok(appShellCss.includes(".v16-command-surface-list"));
+  assert.ok(appShellCss.includes(".v16-task-command-surface"));
   assert.ok(appShellCss.includes(".v16-files-page"));
   assert.ok(appShellCss.includes("@media (prefers-color-scheme: dark)"));
   assert.ok(projectLocalFilesPage.indexOf("<ProjectFileBrowser") < projectLocalFilesPage.indexOf("<article className=\"project-file-reader\""));
