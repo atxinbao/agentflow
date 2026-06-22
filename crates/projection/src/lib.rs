@@ -27,12 +27,13 @@ pub use model::{
 pub use projector::rebuild_projections;
 pub use query::{
     get_audit_surface_view, get_delivery_package_view, get_project_home_view,
-    get_requirement_intake_view, get_runtime_health_view, get_spec_loop_view,
-    get_spec_preview_view, get_task_workbench_view, get_work_loop_run_view,
+    get_projection_surface_catalog, get_requirement_intake_view, get_runtime_health_view,
+    get_spec_loop_view, get_spec_preview_view, get_task_workbench_view, get_work_loop_run_view,
     get_work_loop_session_view, AuditSurfaceView, DeliveryPackageView, IssuePreviewItem,
     ProjectDependencyEdge, ProjectHomeView, ProjectRunSummary, ProjectionDefinitionVersions,
-    ProjectionFreshness, RequirementIntakeView, RuntimeEventRow, RuntimeHealthView, SpecLoopView,
-    SpecPreviewView, TaskWorkbenchView, ViewActionHint, WorkLoopEventView,
+    ProjectionFreshness, ProjectionSurfaceCatalogView, ProjectionSurfaceQueryView,
+    ProjectionSurfaceReadModelView, RequirementIntakeView, RuntimeEventRow, RuntimeHealthView,
+    SpecLoopView, SpecPreviewView, TaskWorkbenchView, ViewActionHint, WorkLoopEventView,
     WorkLoopEvidenceSummaryView, WorkLoopRunView, WorkLoopSessionView,
     PROJECTION_QUERY_SURFACE_VERSION,
 };

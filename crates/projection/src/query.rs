@@ -5,7 +5,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use agentflow_audit::{load_audit_report, load_audit_result_summary};
+use agentflow_audit::{load_audit_index, load_audit_report, load_audit_result_summary};
 use agentflow_event_store::{
     classify_task_event, map_task_event_to_runtime_event, replay_runtime_events,
     replay_task_events, ReplayFilter, TaskEvent,
@@ -24,8 +24,8 @@ use crate::model::{
     TaskTimelineItem,
 };
 use crate::storage::{
-    load_issue_status_index, load_project_projection, load_requirement_preview_projection,
-    load_spec_loop_projection, load_task_projection,
+    load_issue_status_index, load_project_projection, load_requirement_preview_index,
+    load_requirement_preview_projection, load_spec_loop_projection, load_task_projection,
 };
 
 pub const PROJECTION_QUERY_SURFACE_VERSION: &str = "projection-query-surface.v1";
@@ -431,12 +431,282 @@ pub struct RuntimeHealthView {
     pub freshness: ProjectionFreshness,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionSurfaceQueryView {
+    pub name: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionSurfaceReadModelView {
+    pub key: String,
+    pub kind: String,
+    pub object_type: String,
+    pub object_id: String,
+    pub title: String,
+    pub status: String,
+    pub query: ProjectionSurfaceQueryView,
+    pub projection_path: String,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+    pub authority: bool,
+    pub freshness: ProjectionFreshness,
+    #[serde(default)]
+    pub missing_facts: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionSurfaceCatalogView {
+    pub version: String,
+    pub query_surface_version: String,
+    #[serde(default)]
+    pub read_models: Vec<ProjectionSurfaceReadModelView>,
+    pub freshness: ProjectionFreshness,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ProjectionScope {
     RequirementPreview { project_id: String },
     Project { project_id: String },
     Issue { issue_id: String },
     Audit { source_issue_id: Option<String> },
+}
+
+pub fn get_projection_surface_catalog(
+    project_root: impl AsRef<Path>,
+) -> Result<ProjectionSurfaceCatalogView> {
+    let project_root = project_root.as_ref();
+    let mut warnings = Vec::new();
+    let mut read_models = Vec::new();
+    let mut project_ids = BTreeSet::new();
+
+    match load_requirement_preview_index(project_root) {
+        Ok(index) => {
+            for preview in index.previews {
+                project_ids.insert(preview.project_id.clone());
+                let freshness = explain_projection_staleness(
+                    project_root,
+                    ProjectionScope::RequirementPreview {
+                        project_id: preview.project_id.clone(),
+                    },
+                    "requirement-preview-projection.v1",
+                    preview.updated_at,
+                    None,
+                )?;
+                read_models.push(surface_read_model(
+                    "requirement-intake",
+                    "requirement",
+                    &preview.requirement_id,
+                    &format!("Requirement {}", preview.requirement_id),
+                    &preview.current_state,
+                    "get_requirement_intake_view",
+                    vec![preview.requirement_id.clone()],
+                    &preview.projection_path,
+                    vec![format!("docs/requirements/{}.md", preview.requirement_id)],
+                    freshness.clone(),
+                ));
+                read_models.push(surface_read_model(
+                    "spec-preview",
+                    "requirement",
+                    &preview.requirement_id,
+                    &format!("Spec Preview {}", preview.requirement_id),
+                    &preview.current_state,
+                    "get_spec_preview_view",
+                    vec![preview.requirement_id.clone()],
+                    &preview.projection_path,
+                    vec![preview.projection_path.clone()],
+                    freshness.clone(),
+                ));
+                read_models.push(surface_read_model(
+                    "spec-loop",
+                    "requirement",
+                    &preview.requirement_id,
+                    &format!("Spec Loop {}", preview.requirement_id),
+                    &preview.current_state,
+                    "get_spec_loop_view",
+                    vec![preview.requirement_id.clone()],
+                    &format!(
+                        ".agentflow/projections/spec-loops/{}.json",
+                        preview.requirement_id
+                    ),
+                    vec![preview.projection_path],
+                    freshness,
+                ));
+            }
+        }
+        Err(error) => warnings.push(format!("requirement-preview-index-missing: {error}")),
+    }
+
+    match load_issue_status_index(project_root) {
+        Ok(index) => {
+            for issue in index.issues {
+                if let Some(project_id) = issue.project_id.clone() {
+                    project_ids.insert(project_id);
+                }
+                let task_projection = load_task_projection(project_root, &issue.issue_id).ok();
+                let freshness = if let Some(task) = task_projection.as_ref() {
+                    let projection_cursor = task
+                        .timeline
+                        .iter()
+                        .flat_map(|item| item.events.iter().map(|event| event.event_id.clone()))
+                        .last();
+                    explain_projection_staleness(
+                        project_root,
+                        ProjectionScope::Issue {
+                            issue_id: issue.issue_id.clone(),
+                        },
+                        &task.version,
+                        task.updated_at,
+                        projection_cursor,
+                    )?
+                } else {
+                    missing_freshness("task-projection-missing")
+                };
+                let mut missing_facts = Vec::new();
+                if task_projection.is_none() {
+                    missing_facts.push(issue.projection_path.clone());
+                }
+                read_models.push(surface_read_model_with_missing(
+                    "task-workbench",
+                    "issue",
+                    &issue.issue_id,
+                    &issue.title,
+                    &issue.display_status,
+                    "get_task_workbench_view",
+                    vec![issue.issue_id.clone()],
+                    &issue.projection_path,
+                    vec![format!(".agentflow/spec/issues/{}.json", issue.issue_id)],
+                    freshness.clone(),
+                    missing_facts.clone(),
+                ));
+                read_models.push(surface_read_model_with_missing(
+                    "delivery-package",
+                    "issue",
+                    &issue.issue_id,
+                    &format!("Delivery {}", issue.title),
+                    task_projection
+                        .as_ref()
+                        .map(|task| task.delivery.status.as_str())
+                        .unwrap_or("missing"),
+                    "get_delivery_package_view",
+                    vec![issue.issue_id.clone()],
+                    &issue.projection_path,
+                    vec![format!(".agentflow/spec/issues/{}.json", issue.issue_id)],
+                    freshness,
+                    missing_facts,
+                ));
+            }
+        }
+        Err(error) => warnings.push(format!("issue-status-index-missing: {error}")),
+    }
+
+    for project_id in project_ids {
+        let project_projection = load_project_projection(project_root, &project_id).ok();
+        let (title, status, projection_path, freshness, missing_facts) =
+            if let Some(project) = project_projection.as_ref() {
+                (
+                    project.title.clone(),
+                    project.status.clone(),
+                    format!(
+                        ".agentflow/projections/projects/{}.json",
+                        project.project_id
+                    ),
+                    explain_projection_staleness(
+                        project_root,
+                        ProjectionScope::Project {
+                            project_id: project.project_id.clone(),
+                        },
+                        &project.version,
+                        project.updated_at,
+                        None,
+                    )?,
+                    Vec::new(),
+                )
+            } else {
+                (
+                    project_id.clone(),
+                    "missing".to_string(),
+                    format!(".agentflow/projections/projects/{}.json", project_id),
+                    missing_freshness("project-projection-missing"),
+                    vec![format!(
+                        ".agentflow/projections/projects/{}.json",
+                        project_id
+                    )],
+                )
+            };
+        read_models.push(surface_read_model_with_missing(
+            "project-home",
+            "project",
+            &project_id,
+            &title,
+            &status,
+            "get_project_home_view",
+            vec![project_id.clone()],
+            &projection_path,
+            vec![format!(".agentflow/spec/projects/{}.json", project_id)],
+            freshness.clone(),
+            missing_facts.clone(),
+        ));
+        read_models.push(surface_read_model_with_missing(
+            "runtime-health",
+            "project",
+            &project_id,
+            &format!("Runtime Health {title}"),
+            &status,
+            "get_runtime_health_view",
+            vec![project_id.clone()],
+            &projection_path,
+            vec![projection_path.clone()],
+            freshness,
+            missing_facts,
+        ));
+    }
+
+    match load_audit_index(project_root) {
+        Ok(index) => {
+            for audit in index.audits {
+                let freshness = explain_projection_staleness(
+                    project_root,
+                    ProjectionScope::Audit {
+                        source_issue_id: audit.source_issue_id.clone(),
+                    },
+                    "audit-result-summary.v1",
+                    audit.requested_at,
+                    None,
+                )?;
+                read_models.push(surface_read_model(
+                    "audit-surface",
+                    "audit",
+                    &audit.audit_id,
+                    &format!("Audit {}", audit.audit_id),
+                    audit.status.as_str(),
+                    "get_audit_surface_view",
+                    vec![audit.audit_id.clone()],
+                    &audit.audit_path,
+                    vec![audit.report_path],
+                    freshness,
+                ));
+            }
+        }
+        Err(error) => warnings.push(format!("audit-index-missing: {error}")),
+    }
+
+    read_models.sort_by(|left, right| left.key.cmp(&right.key));
+    let freshness = catalog_freshness(&read_models, warnings.clone());
+
+    Ok(ProjectionSurfaceCatalogView {
+        version: "projection-surface-catalog.v1".to_string(),
+        query_surface_version: PROJECTION_QUERY_SURFACE_VERSION.to_string(),
+        read_models,
+        freshness,
+        warnings,
+    })
 }
 
 pub fn get_requirement_intake_view(
@@ -1689,6 +1959,134 @@ fn hint(key: &str, label: &str, reason: &str) -> ViewActionHint {
     }
 }
 
+fn surface_read_model(
+    kind: &str,
+    object_type: &str,
+    object_id: &str,
+    title: &str,
+    status: &str,
+    query_name: &str,
+    query_args: Vec<String>,
+    projection_path: &str,
+    source_refs: Vec<String>,
+    freshness: ProjectionFreshness,
+) -> ProjectionSurfaceReadModelView {
+    surface_read_model_with_missing(
+        kind,
+        object_type,
+        object_id,
+        title,
+        status,
+        query_name,
+        query_args,
+        projection_path,
+        source_refs,
+        freshness,
+        Vec::new(),
+    )
+}
+
+fn surface_read_model_with_missing(
+    kind: &str,
+    object_type: &str,
+    object_id: &str,
+    title: &str,
+    status: &str,
+    query_name: &str,
+    query_args: Vec<String>,
+    projection_path: &str,
+    source_refs: Vec<String>,
+    freshness: ProjectionFreshness,
+    missing_facts: Vec<String>,
+) -> ProjectionSurfaceReadModelView {
+    ProjectionSurfaceReadModelView {
+        key: format!("{kind}:{object_type}:{object_id}"),
+        kind: kind.to_string(),
+        object_type: object_type.to_string(),
+        object_id: object_id.to_string(),
+        title: title.to_string(),
+        status: status.to_string(),
+        query: ProjectionSurfaceQueryView {
+            name: query_name.to_string(),
+            args: query_args,
+        },
+        projection_path: projection_path.to_string(),
+        source_refs,
+        authority: false,
+        freshness,
+        missing_facts,
+    }
+}
+
+fn catalog_freshness(
+    read_models: &[ProjectionSurfaceReadModelView],
+    warnings: Vec<String>,
+) -> ProjectionFreshness {
+    let last_rebuilt_at = read_models
+        .iter()
+        .map(|entry| entry.freshness.last_rebuilt_at)
+        .max()
+        .unwrap_or(0);
+    let incomplete = read_models
+        .iter()
+        .any(|entry| !entry.missing_facts.is_empty());
+    ProjectionFreshness {
+        projection_version: "projection-surface-catalog.v1".to_string(),
+        query_surface_version: PROJECTION_QUERY_SURFACE_VERSION.to_string(),
+        last_event_id: read_models
+            .iter()
+            .filter_map(|entry| entry.freshness.last_event_id.clone())
+            .last(),
+        last_event_type: read_models
+            .iter()
+            .filter_map(|entry| entry.freshness.last_event_type.clone())
+            .last(),
+        last_event_timestamp: read_models
+            .iter()
+            .filter_map(|entry| entry.freshness.last_event_timestamp)
+            .max(),
+        last_rebuilt_at,
+        staleness: if incomplete {
+            "incomplete".to_string()
+        } else if read_models.is_empty() {
+            "empty".to_string()
+        } else {
+            "current".to_string()
+        },
+        definition_versions: read_models
+            .iter()
+            .find_map(|entry| {
+                (entry.freshness.definition_versions.ontology_version != "unavailable")
+                    .then(|| entry.freshness.definition_versions.clone())
+            })
+            .unwrap_or_else(unavailable_definition_versions),
+        warnings,
+    }
+}
+
+fn missing_freshness(reason: &str) -> ProjectionFreshness {
+    ProjectionFreshness {
+        projection_version: "missing".to_string(),
+        query_surface_version: PROJECTION_QUERY_SURFACE_VERSION.to_string(),
+        last_event_id: None,
+        last_event_type: None,
+        last_event_timestamp: None,
+        last_rebuilt_at: 0,
+        staleness: "missing".to_string(),
+        definition_versions: unavailable_definition_versions(),
+        warnings: vec![reason.to_string()],
+    }
+}
+
+fn unavailable_definition_versions() -> ProjectionDefinitionVersions {
+    ProjectionDefinitionVersions {
+        ontology_version: "unavailable".to_string(),
+        action_contract_version: "unavailable".to_string(),
+        role_policy_version: "unavailable".to_string(),
+        state_machine_version: "unavailable".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2263,5 +2661,70 @@ mod tests {
                 && edge.relation == "runtime-action-proposal"
         }));
         assert_eq!(view.freshness.staleness, "current");
+    }
+
+    #[test]
+    fn projection_surface_catalog_lists_unified_console_read_models() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+
+        let requirement = dir.path().join("docs/requirements/042-catalog.md");
+        fs::create_dir_all(requirement.parent().unwrap()).unwrap();
+        fs::write(
+            &requirement,
+            "# Projection Catalog\n\n统一投影查询面和 Console read model。\n",
+        )
+        .unwrap();
+        requirement_preview_from_requirement(dir.path(), &requirement, Some("project-preview"))
+            .unwrap();
+        confirm_goal_draft_preview(dir.path(), "042-catalog", "goal-agent").unwrap();
+        confirm_plan_draft_preview(dir.path(), "042-catalog", "spec-agent").unwrap();
+        materialize_spec_from_requirement_preview(dir.path(), "042-catalog").unwrap();
+
+        rebuild_projections(dir.path()).unwrap();
+        let catalog = get_projection_surface_catalog(dir.path()).unwrap();
+
+        assert_eq!(catalog.version, "projection-surface-catalog.v1");
+        assert_eq!(
+            catalog.query_surface_version,
+            PROJECTION_QUERY_SURFACE_VERSION
+        );
+        for kind in [
+            "requirement-intake",
+            "spec-preview",
+            "spec-loop",
+            "project-home",
+            "task-workbench",
+            "delivery-package",
+            "runtime-health",
+        ] {
+            assert!(
+                catalog.read_models.iter().any(|entry| entry.kind == kind),
+                "missing read model kind `{kind}`"
+            );
+        }
+        assert!(catalog.read_models.iter().all(|entry| !entry.authority));
+        assert!(catalog
+            .read_models
+            .iter()
+            .any(|entry| entry.query.name == "get_task_workbench_view"
+                && entry.object_id == "AF-PROJ-001"));
+        assert!(catalog
+            .read_models
+            .iter()
+            .any(|entry| entry.query.name == "get_spec_loop_view"
+                && entry.object_id == "042-catalog"));
+        assert!(
+            catalog
+                .read_models
+                .iter()
+                .all(|entry| entry.freshness.query_surface_version
+                    == PROJECTION_QUERY_SURFACE_VERSION)
+        );
     }
 }
