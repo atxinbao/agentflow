@@ -9,6 +9,7 @@
 ### Added
 
 - 新增 `docs/v0.7.2/**`，固定 Runtime Foundation hardening 任务基线和 V072 issue 顺序。
+- 新增 `crates/message-bus` 和 Local Message Bus 架构文档，固定本地 runtime / projection / command / worker / audit channel，明确 bus 只做 fanout / refresh signal，Event Store 仍是 durable authority。
 - 新增 `crates/simulation` 和 Simulation Dry-run Runtime 架构文档，提供 command / issue / completion 的只读 dry-run 报告、expected events、rejected reasons、affected projections、risk / conflict 和 gate impact。
 - 新增 `crates/schema-registry` 和 schema migration 架构文档，提供当前 schema version 清单、legacy 检测、migration preview 和显式 apply 边界。
 - 新增 `docs/v0.7.1/**`，固定 `v0.7.0` release certification evidence，包括 PR / main / tag / release event gate run、artifact、release URL 和 source commit。

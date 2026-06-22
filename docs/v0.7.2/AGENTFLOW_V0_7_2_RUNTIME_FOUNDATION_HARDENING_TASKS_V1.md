@@ -30,8 +30,8 @@ Audit Sidecar
 | --- | --- | --- | --- | --- |
 | `V072-001` | Independent Audit Loop Extraction | P0 | none | done |
 | `V072-002` | Version & Migration Registry Baseline | P0 | none | done |
-| `V072-003` | Simulation Rules & Dry-run Runtime | P0 | V072-002 | in progress |
-| `V072-004` | Local Message Bus Contract | P0 | V072-001 | planned |
+| `V072-003` | Simulation Rules & Dry-run Runtime | P0 | V072-002 | done |
+| `V072-004` | Local Message Bus Contract | P0 | V072-001 | in progress |
 | `V072-005` | Worker / Tool Capability Registry | P0 | V072-004 | planned |
 | `V072-006` | Provider Smoke Gate Minimal | P0 | V072-005 | planned |
 | `V072-007` | Connector / MCP Boundary Baseline | P1 | V072-005 | planned |

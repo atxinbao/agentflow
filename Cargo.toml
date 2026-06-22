@@ -21,6 +21,7 @@ members = [
     "crates/projection",
     "crates/release",
     "crates/mcp",
+    "crates/message-bus",
     "crates/audit",
     "crates/state",
     "crates/acceptance",
