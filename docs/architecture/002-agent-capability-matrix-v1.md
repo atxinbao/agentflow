@@ -144,8 +144,8 @@ AgentFlow 只允许两种 handoff：
 
 - Goal Agent -> Spec Agent
 - Spec Agent -> Work Agent
-- Work Agent -> Audit Agent
-- Audit Agent -> Delivery Agent
+- Work Agent -> Delivery Agent
+- Delivery Agent -> Audit Agent（显式请求时）
 - Delivery Agent -> Goal Agent
 
 ### 2. Bounded Capability Call
@@ -164,8 +164,9 @@ AgentFlow 只允许两种 handoff：
 | --- | --- | --- | --- | --- |
 | Goal Agent | Spec Agent | ownership-transfer | goalRef、planRef、decisionRef、projectContext | 生成可确认合同草案 |
 | Spec Agent | Work Agent | ownership-transfer | specIssueRef、workflowRef、validationPlan、boundary | 启动单任务执行 |
-| Work Agent | Audit Agent | ownership-transfer | runRef、evidenceRef、validationRef、diffSummary | 进入审计 |
-| Audit Agent | Delivery Agent | ownership-transfer | auditResultRef、evidenceIndex、acceptedScope | 进入交付整理 |
+| Work Agent | Delivery Agent | ownership-transfer | runRef、evidenceRef、validationRef、diffSummary、publicRecordRef | 进入交付整理 |
+| Delivery Agent | Audit Agent | ownership-transfer | auditRequestRef、deliverySummaryRef、evidenceIndex | 显式进入独立审计 |
+| Audit Agent | Spec Agent | bounded-capability-call | findingRef、repairRecommendation、evidenceGap | 生成 Follow-up Proposal |
 | Delivery Agent | Goal Agent | ownership-transfer | deliverySummaryRef、completionHint、openRisks | 目标回看 |
 | 任意主角色 | Specialist | bounded-capability-call | scoped task、allowed files、expected output | 返回局部结果 |
 
@@ -176,8 +177,8 @@ AgentFlow 只允许两种 handoff：
 | Goal Agent | GOAL / PLAN / DECISIONS / Project Snapshot | projection、state |
 | Spec Agent | Goal / Plan / 项目上下文 / requirements | spec storage、panel summary |
 | Work Agent | SpecIssue、Panel Context、Validation Plan | panel、local shell、git、provider session |
-| Audit Agent | Work Result、Evidence、Validation、Goal / Spec | audit facts、projection、task artifacts |
-| Delivery Agent | Audit Result、Evidence Index、Project Context | release、projection、public delivery writer |
+| Audit Agent | Work Result、Evidence、Validation、Goal / Spec、Delivery Summary | audit facts、projection、task artifacts |
+| Delivery Agent | Work Result、Evidence Index、Project Context | release、projection、public delivery writer |
 
 ## Session 与 Provider 关系
 

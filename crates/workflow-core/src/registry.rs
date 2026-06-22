@@ -162,14 +162,12 @@ impl WorkflowRegistry {
             .with_guard("plan.contract.ready")
             .with_guard("project.confirmed")
             .with_guard("work.completed")
-            .with_guard("audit.completed")
             .with_guard("delivery.completed")
             .with_guard("goal.recheck.requested")
             .with_action("project.goal.capture")
             .with_action("project.plan.capture")
             .with_action("project.confirm.write")
             .with_action("project.loop.open")
-            .with_action("project.audit.open")
             .with_action("project.delivery.open")
             .with_action("project.goal_recheck.open")
             .with_action("project.accept.write")
@@ -370,11 +368,6 @@ spec:
       label: 执行中
       phase: current
       role: system
-    auditing:
-      label: 审计中
-      phase: current
-      role: audit-agent
-      skillPack: judgment-skills
     delivering:
       label: 交付中
       phase: current
@@ -442,29 +435,15 @@ spec:
         - work.completed
       actions:
         - project.loop.open
-    - id: working_to_auditing
+    - id: working_to_delivering
       from: working
-      to: auditing
-      on: project.audit.requested
+      to: delivering
+      on: work.completed
       handoff:
         fromRole: system
-        toRole: audit-agent
-        mode: ownership-transfer
-        payloadRef: auditEntryRef
-        expectedState: auditing
-      guards:
-        - audit.completed
-      actions:
-        - project.audit.open
-    - id: auditing_to_delivering
-      from: auditing
-      to: delivering
-      on: audit.passed
-      handoff:
-        fromRole: audit-agent
         toRole: delivery-agent
         mode: ownership-transfer
-        payloadRef: auditResultRef
+        payloadRef: workCompletionRef
         expectedState: delivering
       guards:
         - delivery.completed
@@ -719,6 +698,33 @@ mod tests {
         assert_eq!(project.flow_type.as_str(), "project");
         assert_eq!(audit.flow_type.as_str(), "audit");
         assert_eq!(delivery.flow_type.as_str(), "delivery");
+    }
+
+    #[test]
+    fn project_workflow_keeps_audit_out_of_main_chain() {
+        let project = canonical_workflow(WorkflowFlowType::Project);
+
+        assert!(!project.spec.states.contains_key("auditing"));
+        assert!(project
+            .spec
+            .transitions
+            .iter()
+            .all(|transition| transition.to != "auditing"
+                && !transition
+                    .from_states
+                    .iter()
+                    .any(|state| state == "auditing")
+                && !transition.on.starts_with("audit.")));
+        assert!(project.spec.transitions.iter().all(|transition| {
+            transition
+                .guards
+                .iter()
+                .all(|guard| !guard.name().starts_with("audit."))
+                && transition
+                    .actions
+                    .iter()
+                    .all(|action| !action.name().starts_with("project.audit"))
+        }));
     }
 
     #[test]

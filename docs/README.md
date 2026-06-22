@@ -18,6 +18,7 @@
 | `v0.6.1/` | v0.6.0 审计后续、release closeout、Acceptance Gate 修复链与发布认证 |
 | `v0.7.0/` | v0.7.0 Projection Surface 与 Project OS Console 开发前置规划 |
 | `v0.7.1/` | v0.7.x Console Release Certification 证据收口与真实 readiness gate 修复链 |
+| `v0.7.2/` | v0.7.2 Runtime Foundation hardening 任务基线 |
 | `requirements/` | 新需求文档入口，后续开发只从这里开始 |
 | `archive/2026-05-agentflow-legacy/` | 旧需求、旧规划、旧规格和旧验证摘要归档 |
 
@@ -31,15 +32,16 @@
 6. [v0.6.1/README.md](v0.6.1/README.md)
 7. [v0.7.0/README.md](v0.7.0/README.md)
 8. [v0.7.1/README.md](v0.7.1/README.md)
-9. [requirements/README.md](requirements/README.md)
-10. [requirements/next-requirements.md](requirements/next-requirements.md)
-11. [product/README.md](product/README.md)
-12. [product/design-system.md](product/design-system.md)
-13. [foundation/README.md](foundation/README.md)
-14. [architecture/README.md](architecture/README.md)
-15. [verification/058h-release-gate-e2e-v1.md](verification/058h-release-gate-e2e-v1.md)
-16. [verification/064-v0-3-1-release-gate-certification-v1.md](verification/064-v0-3-1-release-gate-certification-v1.md)
-17. [verification/history.md](verification/history.md)
+9. [v0.7.2/README.md](v0.7.2/README.md)
+10. [requirements/README.md](requirements/README.md)
+11. [requirements/next-requirements.md](requirements/next-requirements.md)
+12. [product/README.md](product/README.md)
+13. [product/design-system.md](product/design-system.md)
+14. [foundation/README.md](foundation/README.md)
+15. [architecture/README.md](architecture/README.md)
+16. [verification/058h-release-gate-e2e-v1.md](verification/058h-release-gate-e2e-v1.md)
+17. [verification/064-v0-3-1-release-gate-certification-v1.md](verification/064-v0-3-1-release-gate-certification-v1.md)
+18. [verification/history.md](verification/history.md)
 
 ## 规则
 
@@ -55,6 +57,7 @@
 - `v0.6.1/` 下文档记录 `v0.6.0` 发布审计后的修复链和发布认证，重点是 release closeout、Acceptance Gate、Completion Commit 和 Audit separation。
 - `v0.7.0/` 下文档记录 Projection Surface 与 Project OS Console 规划；进入实现前必须先完成 `v0.6.1` 验收闭环和发布收口。
 - `v0.7.1/` 下文档记录 `v0.7.0` 发布后的 Console release certification 证据收口和 readiness gate 修复链。
+- `v0.7.2/` 下文档记录 Runtime Foundation hardening 任务基线；优先收口 Audit sidecar、migration preview、simulation、message bus、provider smoke 和 release-gate foundation coverage。
 - 后续新开发需求仍然要进入 `requirements/`；新版本运行时事实源仍然以 `.agentflow/spec/**` 为准。
 - 根目录旧 `GOAL.md`、`ROADMAP.md` 和 `verification.md` 已退出入口；历史验证记录迁入 `verification/history.md`。
 - 根目录 `design.md` 只保留兼容入口；完整设计基线迁入 `product/design-system.md`。
