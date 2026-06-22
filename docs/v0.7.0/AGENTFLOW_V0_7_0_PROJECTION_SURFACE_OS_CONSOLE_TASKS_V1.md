@@ -114,6 +114,13 @@ Facts
 
 提供 Project OS Console 需要的统一只读查询模型。
 
+实现状态：
+
+- 已完成；
+- 新增 `get_projection_surface_catalog`，作为 Console 进入各类 Projection Read Model 的统一目录；
+- 目录覆盖 `requirement-intake`、`spec-preview`、`spec-loop`、`project-home`、`task-workbench`、`delivery-package`、`runtime-health`、`audit-surface`；
+- 每个 read model entry 都声明 query 名称、对象类型、对象 ID、projection path、source refs、freshness、missing facts，并保持 `authority=false`。
+
 范围：
 
 - 定义 project read model；
