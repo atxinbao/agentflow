@@ -4,10 +4,15 @@ use crate::commands::{
 use crate::errors::{RuntimeCommandError, RuntimeCommandErrorCode};
 use crate::responses::{RuntimeCommandResponse, RuntimeCommandValidationReport};
 use agentflow_action_contract::{ActionRef, ActionSourceSurface};
-use anyhow::Result;
+use anyhow::{Context, Result};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::BTreeSet, path::Path};
+use std::{
+    collections::BTreeSet,
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub type PackRegistryView = agentflow_pack::PackRegistry;
 pub type PackValidationArtifactView = agentflow_pack::PackValidationArtifact;
@@ -144,15 +149,16 @@ pub fn list_pack_commands(
     project_root: impl AsRef<Path>,
     pack_id: Option<&str>,
 ) -> Result<PackCommandListView> {
-    let _ = agentflow_pack::load_pack_registry(project_root)?;
+    let registry = agentflow_pack::load_pack_registry(project_root)?;
     let mut commands = Vec::new();
-    for bundle in built_in_pack_bundles() {
-        if pack_id.is_some_and(|requested| requested != bundle.pack_id) {
+    for entry in registry.entries.iter() {
+        if pack_id.is_some_and(|requested| requested != entry.pack_id) {
             continue;
         }
-        commands.extend(bundle.surface.command_entry_mappings.iter().map(|mapping| {
+        let surface = load_pack_surface_definition(entry)?;
+        commands.extend(surface.command_entry_mappings.iter().map(|mapping| {
             PackCommandEntryView {
-                pack_id: bundle.pack_id.to_string(),
+                pack_id: entry.pack_id.clone(),
                 command: mapping.command_type.clone(),
                 label: mapping.label.clone(),
                 page_id: mapping.page_id.clone(),
@@ -179,8 +185,7 @@ pub fn query_pack_surface_route(
     pack_id: &str,
     command: &str,
 ) -> Result<PackSurfaceRouteView> {
-    let _ = agentflow_pack::load_pack_registry(project_root)?;
-    resolve_pack_command(pack_id, command)
+    resolve_pack_command(project_root.as_ref(), pack_id, command)
         .map(|resolved| resolved.route)
         .map_err(anyhow::Error::msg)
 }
@@ -190,8 +195,7 @@ pub fn query_pack_capability_status(
     pack_id: &str,
     command: &str,
 ) -> Result<PackCapabilityStatusView> {
-    let _ = agentflow_pack::load_pack_registry(project_root)?;
-    resolve_pack_command(pack_id, command)
+    resolve_pack_command(project_root.as_ref(), pack_id, command)
         .map(|resolved| resolved.capability)
         .map_err(anyhow::Error::msg)
 }
@@ -200,10 +204,10 @@ pub fn validate_pack_command(
     project_root: impl AsRef<Path>,
     request: &PackCommandRequest,
 ) -> Result<PackCommandValidationReport> {
-    let _ = agentflow_pack::load_pack_registry(project_root)?;
+    let project_root = project_root.as_ref();
     let mut rejected_reasons = required_request_errors(request);
     let resolved = if rejected_reasons.is_empty() {
-        match resolve_pack_command(&request.pack_id, &request.command) {
+        match resolve_pack_command(project_root, &request.pack_id, &request.command) {
             Ok(resolved) => Some(resolved),
             Err(message) => {
                 rejected_reasons.push(pack_command_error(
@@ -319,8 +323,9 @@ pub fn pack_validation_artifact_read_receipt(
 }
 
 #[derive(Debug, Clone)]
-struct BuiltInPackBundle {
-    pack_id: &'static str,
+struct FileBackedPackBundle {
+    entry: agentflow_pack::PackRegistryEntry,
+    domain: agentflow_pack::PackDomainDefinition,
     surface: agentflow_pack::PackSurfaceDefinition,
     connector: agentflow_pack::PackConnectorDefinition,
 }
@@ -331,28 +336,17 @@ struct ResolvedPackCommand {
     capability: PackCapabilityStatusView,
 }
 
-fn built_in_pack_bundles() -> Vec<BuiltInPackBundle> {
-    vec![
-        BuiltInPackBundle {
-            pack_id: "software-dev",
-            surface: agentflow_pack::software_dev_surface_definition(),
-            connector: agentflow_pack::software_dev_connector_definition(),
-        },
-        BuiltInPackBundle {
-            pack_id: "ui-design",
-            surface: agentflow_pack::ui_design_surface_definition(),
-            connector: agentflow_pack::ui_design_connector_definition(),
-        },
-    ]
-}
-
-fn resolve_pack_command(pack_id: &str, command: &str) -> Result<ResolvedPackCommand, String> {
-    let bundle = built_in_pack_bundles()
-        .into_iter()
-        .find(|bundle| bundle.pack_id == pack_id)
-        .ok_or_else(|| {
-            format!("pack `{pack_id}` is not registered in the Runtime API command surface")
-        })?;
+fn resolve_pack_command(
+    project_root: &Path,
+    pack_id: &str,
+    command: &str,
+) -> Result<ResolvedPackCommand, String> {
+    let registry = agentflow_pack::load_pack_registry(project_root)
+        .map_err(|error| format!("pack registry unreadable: {error}"))?;
+    let entry = registry.pack(pack_id).cloned().ok_or_else(|| {
+        format!("pack `{pack_id}` is not registered in the Runtime API command surface")
+    })?;
+    let bundle = load_file_backed_pack_bundle(entry)?;
     let mapping = bundle
         .surface
         .command_entry_mappings
@@ -368,10 +362,14 @@ fn resolve_pack_command(pack_id: &str, command: &str) -> Result<ResolvedPackComm
             mapping.action_contract_ref
         )
     })?;
-    let target_object_type = target_object_type_for_runtime_command(runtime_command_type)
+    let action_semantic = bundle
+        .domain
+        .action_semantics
+        .iter()
+        .find(|semantic| semantic.action_type == runtime_command_type)
         .ok_or_else(|| {
             format!(
-                "pack command `{command}` maps to unsupported runtime command `{runtime_command_type}`"
+                "pack command `{command}` maps to runtime command `{runtime_command_type}` without domain action semantic"
             )
         })?;
     let provider_actions = bundle
@@ -413,10 +411,18 @@ fn resolve_pack_command(pack_id: &str, command: &str) -> Result<ResolvedPackComm
             route: format!("{:?}", mapping.route),
             action_contract_ref: mapping.action_contract_ref.clone(),
             runtime_command_type: runtime_command_type.to_string(),
-            target_object_type: target_object_type.to_string(),
+            target_object_type: action_semantic.target_object_type.clone(),
             source_refs: vec![
-                format!("pack:{pack_id}/surface"),
-                format!("pack:{pack_id}/connectors"),
+                bundle.entry.manifest_path.clone(),
+                definition_path_for_entry(&bundle.entry, &bundle.entry.domain_path)
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+                definition_path_for_entry(&bundle.entry, &bundle.entry.surface_path)
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+                definition_path_for_entry(&bundle.entry, &bundle.entry.connector_path)
+                    .to_string_lossy()
+                    .replace('\\', "/"),
             ],
         },
         capability: PackCapabilityStatusView {
@@ -432,6 +438,70 @@ fn resolve_pack_command(pack_id: &str, command: &str) -> Result<ResolvedPackComm
     })
 }
 
+fn load_file_backed_pack_bundle(
+    entry: agentflow_pack::PackRegistryEntry,
+) -> Result<FileBackedPackBundle, String> {
+    let domain = load_pack_domain_definition(&entry).map_err(|error| {
+        format!(
+            "pack `{}` domain definition unreadable: {error}",
+            entry.pack_id
+        )
+    })?;
+    let surface = load_pack_surface_definition(&entry).map_err(|error| {
+        format!(
+            "pack `{}` surface definition unreadable: {error}",
+            entry.pack_id
+        )
+    })?;
+    let connector = load_pack_connector_definition(&entry).map_err(|error| {
+        format!(
+            "pack `{}` connector definition unreadable: {error}",
+            entry.pack_id
+        )
+    })?;
+    Ok(FileBackedPackBundle {
+        entry,
+        domain,
+        surface,
+        connector,
+    })
+}
+
+fn load_pack_domain_definition(
+    entry: &agentflow_pack::PackRegistryEntry,
+) -> Result<agentflow_pack::PackDomainDefinition> {
+    load_pack_definition(definition_path_for_entry(entry, &entry.domain_path))
+}
+
+fn load_pack_surface_definition(
+    entry: &agentflow_pack::PackRegistryEntry,
+) -> Result<agentflow_pack::PackSurfaceDefinition> {
+    load_pack_definition(definition_path_for_entry(entry, &entry.surface_path))
+}
+
+fn load_pack_connector_definition(
+    entry: &agentflow_pack::PackRegistryEntry,
+) -> Result<agentflow_pack::PackConnectorDefinition> {
+    load_pack_definition(definition_path_for_entry(entry, &entry.connector_path))
+}
+
+fn load_pack_definition<T: DeserializeOwned>(path: PathBuf) -> Result<T> {
+    let payload = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    serde_json::from_str::<T>(&payload).with_context(|| format!("parse {}", path.display()))
+}
+
+fn definition_path_for_entry(
+    entry: &agentflow_pack::PackRegistryEntry,
+    relative_path: &str,
+) -> PathBuf {
+    let path = PathBuf::from(&entry.pack_root).join(relative_path);
+    if path.extension().is_some() {
+        path
+    } else {
+        path.join("definition.json")
+    }
+}
+
 fn runtime_command_type_for_action_contract(action_contract_ref: &str) -> Option<&'static str> {
     match action_contract_ref {
         "action-contract:spec.intake" => Some("submitRequirement"),
@@ -439,15 +509,6 @@ fn runtime_command_type_for_action_contract(action_contract_ref: &str) -> Option
         "action-contract:acceptance.evaluate" => Some("runValidation"),
         "action-contract:delivery.open" => Some("prepareDelivery"),
         "action-contract:audit.request" => Some("requestAudit"),
-        _ => None,
-    }
-}
-
-fn target_object_type_for_runtime_command(runtime_command_type: &str) -> Option<&'static str> {
-    match runtime_command_type {
-        "submitRequirement" => Some("Requirement"),
-        "startRun" | "requestAudit" => Some("Issue"),
-        "runValidation" | "prepareDelivery" => Some("Run"),
         _ => None,
     }
 }
@@ -515,6 +576,7 @@ mod tests {
     use crate::responses::RuntimeCommandStatus;
     use agentflow_action_contract::ActionSourceSurface;
     use serde_json::json;
+    use std::path::Path;
 
     #[test]
     fn runtime_reads_pack_registry_without_authority_write() {
@@ -596,6 +658,8 @@ mod tests {
     #[test]
     fn runtime_lists_built_in_pack_commands_without_authority_write() {
         let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
+        write_pack_bundle(dir.path(), "ui-design", "design.wireframe.generate");
 
         let view = list_pack_commands(dir.path(), None).unwrap();
 
@@ -615,6 +679,7 @@ mod tests {
     #[test]
     fn runtime_resolves_pack_route_and_capability_status() {
         let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
 
         let route =
             query_pack_surface_route(dir.path(), "software-dev", "work.issue.start").unwrap();
@@ -637,6 +702,7 @@ mod tests {
     #[test]
     fn runtime_validates_pack_command_through_action_contract() {
         let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
         let request = software_issue_start_request();
 
         let report = validate_pack_command(dir.path(), &request).unwrap();
@@ -658,6 +724,7 @@ mod tests {
     #[test]
     fn runtime_rejects_invalid_pack_command_with_readable_reason() {
         let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
         let mut request = software_issue_start_request();
         request.command = "work.issue.teleport".to_string();
 
@@ -671,8 +738,29 @@ mod tests {
     }
 
     #[test]
+    fn runtime_rejects_registered_pack_when_definition_file_is_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
+        std::fs::remove_file(
+            dir.path()
+                .join(".agentflow/packs/software-dev/surface/definition.json"),
+        )
+        .unwrap();
+        let request = software_issue_start_request();
+
+        let report = validate_pack_command(dir.path(), &request).unwrap();
+
+        assert!(!report.valid);
+        assert!(report.rejected_reasons.iter().any(|reason| {
+            reason.message.contains("surface definition unreadable")
+                && reason.message.contains("definition.json")
+        }));
+    }
+
+    #[test]
     fn runtime_dry_run_pack_command_does_not_write_or_execute() {
         let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
         let request = software_issue_start_request();
 
         let report = dry_run_pack_command(dir.path(), &request).unwrap();
@@ -682,18 +770,44 @@ mod tests {
         assert!(!report.writes_event_store);
         assert!(!report.executes_provider);
         assert!(report.would_submit_to_arbitration);
-        assert!(dir.path().join(".agentflow").exists() == false);
+        assert!(!dir.path().join(".agentflow/runtime/commands").exists());
     }
 
     #[test]
     fn runtime_submit_pack_action_uses_arbitration_entrypoint() {
         let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
         let request = software_issue_start_request();
 
         let response = submit_pack_action_proposal(dir.path(), &request).unwrap();
 
         assert_ne!(response.status, RuntimeCommandStatus::InvalidCommand);
         assert!(dir.path().join(".agentflow/runtime/commands").exists());
+    }
+
+    #[test]
+    fn runtime_resolves_custom_pack_command_from_registry_files() {
+        let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "custom-pack", "custom.issue.start");
+        let mut request = software_issue_start_request();
+        request.pack_id = "custom-pack".to_string();
+        request.command = "custom.issue.start".to_string();
+
+        let report = validate_pack_command(dir.path(), &request).unwrap();
+
+        assert!(report.valid);
+        let route = report.surface_route.unwrap();
+        assert_eq!(route.pack_id, "custom-pack");
+        assert_eq!(route.command, "custom.issue.start");
+        assert!(route
+            .source_refs
+            .iter()
+            .any(|source| source.ends_with("domain/definition.json")));
+        let capability = report.capability_status.unwrap();
+        assert!(capability
+            .required_capabilities
+            .contains(&"custom-pack.capability".to_string()));
+        assert!(capability.provider_ids.contains(&"github".to_string()));
     }
 
     fn software_issue_start_request() -> PackCommandRequest {
@@ -711,5 +825,62 @@ mod tests {
             idempotency_key: "pack-command-001".to_string(),
             created_at: "2026-06-23T00:00:00Z".to_string(),
         }
+    }
+
+    fn write_pack_bundle(root: &Path, pack_id: &str, command: &str) {
+        let pack_dir = root.join(".agentflow/packs").join(pack_id);
+        std::fs::create_dir_all(pack_dir.join("domain")).unwrap();
+        std::fs::create_dir_all(pack_dir.join("surface")).unwrap();
+        std::fs::create_dir_all(pack_dir.join("connectors")).unwrap();
+
+        let manifest = agentflow_pack::PackManifest {
+            version: agentflow_pack::PACK_MANIFEST_VERSION.to_string(),
+            pack_id: pack_id.to_string(),
+            name: format!("{pack_id} test pack"),
+            pack_type: agentflow_pack::PackType::Custom,
+            pack_version: "0.8.1".to_string(),
+            runtime_compatibility: ">=0.8.0".to_string(),
+            domain_path: "domain/".to_string(),
+            surface_path: "surface/".to_string(),
+            connector_path: "connectors/".to_string(),
+            required_capabilities: vec![format!("{pack_id}.capability")],
+            owned_object_types: vec!["Issue".to_string(), "Run".to_string()],
+            exposed_commands: vec![command.to_string()],
+            projection_entries: vec!["projection.task-workbench".to_string()],
+            migration_policy: agentflow_pack::PackMigrationPolicy::PreviewOnly,
+            validation_status: agentflow_pack::PackValidationStatus::Valid,
+        };
+        let mut domain = agentflow_pack::software_dev_domain_definition();
+        domain.pack_id = pack_id.to_string();
+        domain.domain_id = format!("{pack_id}-domain");
+        let mut surface = agentflow_pack::software_dev_surface_definition();
+        surface.pack_id = pack_id.to_string();
+        surface.surface_id = format!("{pack_id}-surface");
+        for mapping in surface.command_entry_mappings.iter_mut() {
+            if mapping.action_contract_ref == "action-contract:issue.start" {
+                mapping.command_type = command.to_string();
+            }
+        }
+        let mut connector = agentflow_pack::software_dev_connector_definition();
+        connector.pack_id = pack_id.to_string();
+        connector.connector_id = format!("{pack_id}-connectors");
+        if let Some(action) = connector
+            .connectors
+            .iter_mut()
+            .flat_map(|connector| connector.supported_actions.iter_mut())
+            .next()
+        {
+            action.command_type = command.to_string();
+            action.required_capability = format!("{pack_id}.capability");
+        }
+
+        write_json(pack_dir.join("pack.json"), &manifest);
+        write_json(pack_dir.join("domain/definition.json"), &domain);
+        write_json(pack_dir.join("surface/definition.json"), &surface);
+        write_json(pack_dir.join("connectors/definition.json"), &connector);
+    }
+
+    fn write_json(path: impl AsRef<Path>, value: &impl serde::Serialize) {
+        std::fs::write(path, serde_json::to_string_pretty(value).unwrap()).unwrap();
     }
 }
