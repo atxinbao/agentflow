@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::BTreeSet,
-    fs,
+    fmt, fs,
     path::{Path, PathBuf},
 };
 
@@ -117,6 +117,8 @@ pub struct PackCommandValidationReport {
     pub command_id: String,
     pub command: String,
     pub valid: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_stage: Option<String>,
     pub runtime_command: Option<RuntimeCommandRequest>,
     pub runtime_validation: Option<RuntimeCommandValidationReport>,
     pub surface_route: Option<PackSurfaceRouteView>,
@@ -213,13 +215,31 @@ pub fn validate_pack_command(
 ) -> Result<PackCommandValidationReport> {
     let project_root = project_root.as_ref();
     let mut rejected_reasons = required_request_errors(request);
+    let mut failure_stage = if rejected_reasons.is_empty() {
+        None
+    } else {
+        Some("schema".to_string())
+    };
+    if !rejected_reasons.is_empty() {
+        rejected_reasons = rejected_reasons
+            .into_iter()
+            .map(|error| {
+                RuntimeCommandError::new(
+                    error.code,
+                    pack_command_failure_message(request, failure_stage.as_deref(), error.message),
+                    error.path,
+                )
+            })
+            .collect();
+    }
     let resolved = if rejected_reasons.is_empty() {
         match resolve_pack_command(project_root, &request.pack_id, &request.command) {
             Ok(resolved) => Some(resolved),
-            Err(message) => {
+            Err(error) => {
+                set_failure_stage(&mut failure_stage, error.stage);
                 rejected_reasons.push(pack_command_error(
                     RuntimeCommandErrorCode::UnsupportedCommand,
-                    message,
+                    pack_command_failure_message(request, failure_stage.as_deref(), error.message),
                     Some("command"),
                 ));
                 None
@@ -234,15 +254,37 @@ pub fn validate_pack_command(
         .map(|resolved| runtime_command_from_pack_request(request, resolved));
     let runtime_validation = runtime_command.as_ref().map(validate_runtime_command);
     if let Some(validation) = runtime_validation.as_ref() {
-        rejected_reasons.extend(validation.errors.clone());
+        if !validation.errors.is_empty() {
+            set_failure_stage(&mut failure_stage, "surface-mapping");
+        }
+        rejected_reasons.extend(validation.errors.iter().cloned().map(|error| {
+            RuntimeCommandError::new(
+                error.code,
+                pack_command_failure_message(request, failure_stage.as_deref(), error.message),
+                error.path,
+            )
+        }));
     }
     if let Some(resolved) = resolved.as_ref() {
         if !resolved.capability.available {
+            set_failure_stage(
+                &mut failure_stage,
+                if resolved
+                    .capability
+                    .reason
+                    .contains("no connector capability mapping")
+                {
+                    "connector"
+                } else {
+                    "capability"
+                },
+            );
             rejected_reasons.push(pack_command_error(
                 RuntimeCommandErrorCode::MappingFailed,
-                format!(
-                    "pack command `{}` is unavailable: {}",
-                    request.command, resolved.capability.reason
+                pack_command_failure_message(
+                    request,
+                    failure_stage.as_deref(),
+                    format!("command unavailable: {}", resolved.capability.reason),
                 ),
                 Some("capabilityStatus"),
             ));
@@ -255,6 +297,7 @@ pub fn validate_pack_command(
         command_id: request.command_id.clone(),
         command: request.command.clone(),
         valid: rejected_reasons.is_empty(),
+        failure_stage,
         runtime_command,
         runtime_validation,
         surface_route: resolved.as_ref().map(|resolved| resolved.route.clone()),
@@ -361,30 +404,62 @@ struct ResolvedPackCommand {
     capability: PackCapabilityStatusView,
 }
 
+#[derive(Debug, Clone)]
+struct PackCommandResolveError {
+    stage: &'static str,
+    message: String,
+}
+
+impl fmt::Display for PackCommandResolveError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}: {}", self.stage, self.message)
+    }
+}
+
+fn pack_resolve_error(stage: &'static str, message: impl Into<String>) -> PackCommandResolveError {
+    PackCommandResolveError {
+        stage,
+        message: message.into(),
+    }
+}
+
 fn resolve_pack_command(
     project_root: &Path,
     pack_id: &str,
     command: &str,
-) -> Result<ResolvedPackCommand, String> {
-    let registry = agentflow_pack::load_pack_registry(project_root)
-        .map_err(|error| format!("pack registry unreadable: {error}"))?;
-    let entry = registry.pack(pack_id).cloned().ok_or_else(|| {
-        format!("pack `{pack_id}` is not registered in the Runtime API command surface")
+) -> Result<ResolvedPackCommand, PackCommandResolveError> {
+    let registry = agentflow_pack::load_pack_registry(project_root).map_err(|error| {
+        pack_resolve_error("read-model", format!("pack registry unreadable: {error}"))
     })?;
-    let bundle = load_file_backed_pack_bundle(entry)?;
+    let entry = registry.pack(pack_id).cloned().ok_or_else(|| {
+        pack_resolve_error(
+            "read-model",
+            format!("pack `{pack_id}` is not registered in the Runtime API command surface"),
+        )
+    })?;
+    let bundle = load_file_backed_pack_bundle(entry)
+        .map_err(|message| pack_resolve_error("read-model", message))?;
     let mapping = bundle
         .surface
         .command_entry_mappings
         .iter()
         .find(|mapping| mapping.command_type == command)
-        .ok_or_else(|| format!("pack command `{command}` is not exposed by pack `{pack_id}`"))?;
+        .ok_or_else(|| {
+            pack_resolve_error(
+                "surface-mapping",
+                format!("pack command `{command}` is not exposed by pack `{pack_id}`"),
+            )
+        })?;
     let runtime_command_type = runtime_command_type_for_action_contract(
         &mapping.action_contract_ref,
     )
     .ok_or_else(|| {
-        format!(
-            "pack command `{command}` uses unsupported action contract `{}`",
-            mapping.action_contract_ref
+        pack_resolve_error(
+            "surface-mapping",
+            format!(
+                "pack command `{command}` uses unsupported action contract `{}`",
+                mapping.action_contract_ref
+            ),
         )
     })?;
     let action_semantic = bundle
@@ -393,12 +468,19 @@ fn resolve_pack_command(
         .iter()
         .find(|semantic| semantic.action_type == runtime_command_type)
         .ok_or_else(|| {
-            format!(
-                "pack command `{command}` maps to runtime command `{runtime_command_type}` without domain action semantic"
+            pack_resolve_error(
+                "surface-mapping",
+                format!(
+                    "pack command `{command}` maps to runtime command `{runtime_command_type}` without domain action semantic"
+                ),
             )
         })?;
-    let capability_registry = load_project_capability_registry(project_root)
-        .map_err(|error| format!("capability registry unreadable: {error}"))?;
+    let capability_registry = load_project_capability_registry(project_root).map_err(|error| {
+        pack_resolve_error(
+            "capability",
+            format!("capability registry unreadable: {error}"),
+        )
+    })?;
     let connector_decisions =
         evaluate_pack_connector_commands(&capability_registry, &bundle.connector)
             .into_iter()
@@ -622,6 +704,26 @@ fn pack_command_error(
     path: Option<impl Into<String>>,
 ) -> RuntimeCommandError {
     RuntimeCommandError::new(code, message, path)
+}
+
+fn set_failure_stage(stage: &mut Option<String>, value: &'static str) {
+    if stage.is_none() {
+        *stage = Some(value.to_string());
+    }
+}
+
+fn pack_command_failure_message(
+    request: &PackCommandRequest,
+    stage: Option<&str>,
+    reason: impl Into<String>,
+) -> String {
+    format!(
+        "pack `{}` command `{}` failed at {}: {}",
+        request.pack_id,
+        request.command,
+        stage.unwrap_or("validation"),
+        reason.into()
+    )
 }
 
 fn invalid_pack_command_response(
@@ -860,10 +962,44 @@ mod tests {
         let report = validate_pack_command(dir.path(), &request).unwrap();
 
         assert!(!report.valid);
-        assert!(report
-            .rejected_reasons
-            .iter()
-            .any(|reason| reason.message.contains("work.issue.teleport")));
+        assert_eq!(report.failure_stage.as_deref(), Some("surface-mapping"));
+        assert!(report.rejected_reasons.iter().any(|reason| reason
+            .message
+            .contains("software-dev")
+            && reason.message.contains("work.issue.teleport")
+            && reason.message.contains("surface-mapping")));
+    }
+
+    #[test]
+    fn runtime_rejects_schema_failure_with_pack_and_command_context() {
+        let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
+        let mut request = software_issue_start_request();
+        request.command_id = "".to_string();
+
+        let report = validate_pack_command(dir.path(), &request).unwrap();
+
+        assert!(!report.valid);
+        assert_eq!(report.failure_stage.as_deref(), Some("schema"));
+        assert!(report.rejected_reasons.iter().any(|reason| {
+            reason.message.contains("software-dev")
+                && reason.message.contains("work.issue.start")
+                && reason.message.contains("schema")
+        }));
+    }
+
+    #[test]
+    fn runtime_submit_rejects_invalid_pack_command_without_runtime_write() {
+        let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
+        let mut request = software_issue_start_request();
+        request.command = "work.issue.teleport".to_string();
+
+        let response = submit_pack_action_proposal(dir.path(), &request).unwrap();
+
+        assert_eq!(response.status, RuntimeCommandStatus::InvalidCommand);
+        assert!(!response.rejected_reasons.is_empty());
+        assert!(!dir.path().join(".agentflow/runtime/commands").exists());
     }
 
     #[test]
