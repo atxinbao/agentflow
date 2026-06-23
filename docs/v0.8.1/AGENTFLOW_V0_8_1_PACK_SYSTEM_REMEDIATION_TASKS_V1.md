@@ -40,15 +40,15 @@ Release Gate 用失败夹具证明边界有效。
 
 | Issue | Title | Priority | Dependency | Status |
 | --- | --- | --- | --- | --- |
-| `V081-001` | Pack Registry File-backed Source of Truth | P0 | none | planned |
-| `V081-002` | Runtime Pack Command Resolver Uses Registry | P0 | V081-001 | planned |
-| `V081-003` | Projection Loads Pack-specific Definitions | P0 | V081-001 | planned |
-| `V081-004` | Capability Status Uses Capability Registry / Provider Smoke | P0 | V081-002 | planned |
-| `V081-005` | Pack Submit Rejection Boundary | P0 | V081-002 | planned |
-| `V081-006` | Release Summary Audit Sidecar Wording | P1 | none | planned |
-| `V081-007` | Pack Release Gate Negative Fixtures | P0 | V081-001, V081-002, V081-003, V081-004, V081-005 | planned |
-| `V081-008` | v0.8.1 Release Audit Certification | P0 | V081-001, V081-002, V081-003, V081-004, V081-005, V081-006, V081-007, V081-009 | planned |
-| `V081-009` | Project Structural Information Principle | P1 | none | planned |
+| `V081-001` | Pack Registry File-backed Source of Truth | P0 | none | done |
+| `V081-002` | Runtime Pack Command Resolver Uses Registry | P0 | V081-001 | done |
+| `V081-003` | Projection Loads Pack-specific Definitions | P0 | V081-001 | done |
+| `V081-004` | Capability Status Uses Capability Registry / Provider Smoke | P0 | V081-002 | done |
+| `V081-005` | Pack Submit Rejection Boundary | P0 | V081-002 | done |
+| `V081-006` | Release Summary Audit Sidecar Wording | P1 | none | done |
+| `V081-007` | Pack Release Gate Negative Fixtures | P0 | V081-001, V081-002, V081-003, V081-004, V081-005 | done |
+| `V081-008` | v0.8.1 Release Audit Certification | P0 | V081-001, V081-002, V081-003, V081-004, V081-005, V081-006, V081-007, V081-009 | done |
+| `V081-009` | Project Structural Information Principle | P1 | none | done |
 
 ## V081-001 Pack Registry File-backed Source of Truth
 
@@ -267,3 +267,15 @@ V081-001
 
 `V081-008` 必须最后执行。
 
+## Release Certification
+
+`V081-008` 的收口标准是 release gate 能同时证明：
+
+- Pack registry source 来自 file-backed / fixture-backed 输入；
+- command resolver 不再依赖 built-in Software Dev fallback；
+- Projection 读取 Pack-specific definitions；
+- capability / provider smoke 会影响 command availability；
+- invalid submit 在 Runtime authority 写入前被拒绝；
+- negative fixtures 覆盖失败阶段和原因；
+- Audit sidecar wording 不覆盖 release gate 主结论；
+- 未完成能力转入后续版本，不伪装为完成。
