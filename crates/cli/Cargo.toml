@@ -14,6 +14,7 @@ agentflow-agent-dispatcher = { path = "../agent-dispatcher" }
 agentflow-capability-registry = { path = "../capability-registry" }
 agentflow-event-store = { path = "../event-store" }
 agentflow-mcp = { path = "../mcp" }
+agentflow-pack = { path = "../pack" }
 agentflow-projection = { path = "../projection" }
 agentflow-release = { path = "../release" }
 agentflow-runtime-api = { path = "../runtime-api" }

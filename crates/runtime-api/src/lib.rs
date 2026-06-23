@@ -12,6 +12,7 @@ pub mod errors;
 pub mod formal;
 pub mod handoff;
 pub mod mapping;
+pub mod pack;
 pub mod query;
 pub mod responses;
 pub mod work_proposals;
@@ -34,6 +35,7 @@ pub use formal::{
 };
 pub use handoff::{write_work_command_handoff_from_spec_issue, WorkCommandHandoff};
 pub use mapping::{map_command_to_action_proposal, RuntimeQueryHint};
+pub use pack::{get_pack_registry, PackRegistryView};
 pub use query::{
     get_audit_surface_view, get_delivery_package_view, get_project_home_view,
     get_requirement_intake_view, get_runtime_health_view, get_spec_loop_view,

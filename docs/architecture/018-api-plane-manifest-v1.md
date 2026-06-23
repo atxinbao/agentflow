@@ -49,6 +49,7 @@ connector_actions
 provider_actions
 audit_actions
 release_actions
+pack_actions
 ```
 
 ## Boundary Markers
@@ -83,6 +84,9 @@ Manifest 是描述面，不是执行面。
 
 它不调用 provider，不写 authority，不替代 Event Store 或 Projection。
 
+Pack 相关 entry 只能描述 Pack registry / manifest validation 的只读入口。
+Pack entry 不能把 `.agentflow/packs/**` 变成 Runtime authority，也不能绕过 Command Surface。
+
 ## Non-goals
 
 本版本不做：
@@ -93,4 +97,3 @@ Manifest 是描述面，不是执行面。
 - API auth；
 - API gateway；
 - remote fleet。
-

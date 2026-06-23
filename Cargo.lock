@@ -89,6 +89,7 @@ dependencies = [
  "agentflow-capability-registry",
  "agentflow-event-store",
  "agentflow-mcp",
+ "agentflow-pack",
  "agentflow-projection",
  "agentflow-release",
  "agentflow-runtime-api",
@@ -196,6 +197,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentflow-pack"
+version = "0.7.2"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "agentflow-panel"
 version = "0.7.2"
 dependencies = [
@@ -276,6 +287,7 @@ dependencies = [
  "agentflow-event-store",
  "agentflow-object-state",
  "agentflow-ontology",
+ "agentflow-pack",
  "agentflow-projection",
  "agentflow-release",
  "agentflow-role-policy",

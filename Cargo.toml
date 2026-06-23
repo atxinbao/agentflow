@@ -23,6 +23,7 @@ members = [
     "crates/release",
     "crates/mcp",
     "crates/message-bus",
+    "crates/pack",
     "crates/audit",
     "crates/state",
     "crates/acceptance",
