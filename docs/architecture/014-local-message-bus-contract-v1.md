@@ -90,6 +90,44 @@ Projection 和 Console 可以通过 bus 收到 refresh signal。
 
 它不能携带或替代 authority payload。
 
+## Envelope Rule
+
+每一条 bus message 必须是可追踪 envelope，而不是裸 payload。
+
+必填字段：
+
+```text
+messageId
+correlationId
+idempotencyKey
+createdAt
+channel
+topic
+subjectType
+subjectId
+replaySource
+```
+
+如果 message 来自 Event Store replay，还必须保留：
+
+```text
+eventRef
+causationId
+```
+
+Live fanout message 也必须有真实 `createdAt`，不得使用 `0` 作为占位时间。
+
+## Trace Rule
+
+Message Bus 不制造新的事实链。
+
+它只做两种 trace：
+
+- Event Store replay message 继承原 event 的 `correlationId / causationId / idempotencyKey`；
+- live refresh message 生成只用于本地 fanout 的 `correlationId / idempotencyKey`。
+
+这保证 UI、worker、projection consumer 能定位消息来源，但不能把 bus message 当作 authority。
+
 ## Acceptance
 
 本边界成立时，应满足：
@@ -98,4 +136,5 @@ Projection 和 Console 可以通过 bus 收到 refresh signal。
 - Event Store 仍是事实源；
 - Projection refresh 可以通过 bus 触发；
 - Console 可以通过 bus 刷新；
-- bus replay 仍以 Event Store 为准。
+- bus replay 仍以 Event Store 为准；
+- 每条 bus envelope 都有唯一 message id、真实 timestamp 和 trace key。

@@ -163,6 +163,18 @@ pub struct SimulationGateImpact {
     pub reason: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SimulationCompletionCommitPreview {
+    pub issue_id: String,
+    pub run_id: String,
+    pub requires_validation_evidence: bool,
+    pub requires_delivery_artifacts: bool,
+    pub requires_merge_proof: bool,
+    #[serde(default)]
+    pub expected_event_chain: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SimulationReport {
@@ -188,6 +200,8 @@ pub struct SimulationReport {
     pub conflicts: Vec<SimulationConflict>,
     #[serde(default)]
     pub gate_impact: Vec<SimulationGateImpact>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_commit: Option<SimulationCompletionCommitPreview>,
     #[serde(default)]
     pub metadata: Value,
 }
@@ -214,6 +228,7 @@ impl SimulationReport {
             risk: SimulationRiskLevel::Low,
             conflicts: Vec::new(),
             gate_impact: Vec::new(),
+            completion_commit: None,
             metadata: json!({}),
         }
     }
@@ -336,8 +351,24 @@ pub fn simulate_completion(request: &SimulationCompletionRequest) -> SimulationR
     report.expected_events = vec![
         expected_event("validation.completed", Some("Run"), true),
         expected_event("delivery.prepared", Some("Issue"), true),
+        expected_event("completion.commit.requested", Some("Issue"), true),
+        expected_event("completion.commit.accepted", Some("Issue"), true),
         expected_event("issue.done.requested", Some("Issue"), true),
     ];
+    report.completion_commit = Some(SimulationCompletionCommitPreview {
+        issue_id: request.issue_id.clone(),
+        run_id: request.run_id.clone(),
+        requires_validation_evidence: true,
+        requires_delivery_artifacts: true,
+        requires_merge_proof: true,
+        expected_event_chain: vec![
+            "validation.completed".to_string(),
+            "delivery.prepared".to_string(),
+            "completion.commit.requested".to_string(),
+            "completion.commit.accepted".to_string(),
+            "issue.done.requested".to_string(),
+        ],
+    });
     report.affected_projections = vec![
         SimulationAffectedProjection {
             projection_id: "projection.task".to_string(),
@@ -655,6 +686,13 @@ mod tests {
             .affected_projections
             .iter()
             .any(|projection| projection.projection_id == "release.delivery-summary"));
+        let completion_commit = report.completion_commit.unwrap();
+        assert!(completion_commit.requires_validation_evidence);
+        assert!(completion_commit.requires_delivery_artifacts);
+        assert!(completion_commit.requires_merge_proof);
+        assert!(completion_commit
+            .expected_event_chain
+            .contains(&"completion.commit.accepted".to_string()));
     }
 
     #[test]

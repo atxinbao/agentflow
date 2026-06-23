@@ -21,20 +21,20 @@ v0.8.0 can start Pack System planning on top of this foundation
 
 | 判断 | 含义 |
 | --- | --- |
-| `completed` | 本阶段已经形成代码、文档或 release gate 可验证产物 |
-| `baseline` | 本阶段已经定义边界和最小实现，但不是完整产品化能力 |
-| `deferred` | 明确不进入 `v0.7.2`，需要后续单独授权 |
+| `completed` | 本阶段已经形成代码、文档和 release gate 可验证产物，可以作为后续版本的硬依赖 |
+| `baseline` | 本阶段已经定义边界和最小实现，但只允许作为后续设计输入，不能被表述为完整产品化能力 |
+| `deferred` | 明确不进入 `v0.7.2`，后续版本必须单独授权、单独验收，不能被 Pack System 默认继承为已完成 |
 | `v0.8.0 carryover` | 不是缺陷，但必须作为 `v0.8.0` Pack System 输入 |
 
 ## 3. Foundation Readiness Matrix
 
 | Foundation Area | Status | Evidence | v0.8.0 Carryover |
 | --- | --- | --- | --- |
-| Industry Input Boundary | `baseline` | `docs/architecture/current-module-boundaries.md` 固定 requirements / projects / spec / events / projections / tasks 的事实流；`docs/v0.7.2/README.md` 明确不进入行业壳 | Pack System 需要把行业输入映射成 Pack metadata，而不是直接写 Runtime facts |
-| Standardization Boundary | `baseline` | `crates/schema-registry`、`crates/simulation`、`crates/message-bus`、`crates/capability-registry`、`crates/runtime-api` 已形成标准化模块；架构文档 `012` 到 `018` 固定边界 | v0.8.0 需要为 Pack schema / Pack manifest / Pack projection 增加标准合同 |
+| Industry Input Boundary | `baseline` | `docs/architecture/current-module-boundaries.md` 固定 requirements / projects / spec / events / projections / tasks 的事实流；`docs/v0.7.2/README.md` 明确不进入行业壳 | 该 baseline 只证明行业输入不能直接写 Runtime facts；Pack System 仍需单独定义 Pack metadata 和 Pack validation |
+| Standardization Boundary | `baseline` | `crates/schema-registry`、`crates/simulation`、`crates/message-bus`、`crates/capability-registry`、`crates/runtime-api` 已形成标准化模块；架构文档 `012` 到 `018` 固定边界 | 该 baseline 只证明模块边界存在；v0.8.0 仍需要为 Pack schema / Pack manifest / Pack projection 增加标准合同 |
 | Runtime Core | `completed` | Audit sidecar、schema registry、simulation dry-run、message bus、capability registry、provider smoke、connector boundary、API Plane 都已进入代码或 release gate 路径 | Runtime Core 可作为 Pack runtime 的基础，但不能直接扩展成 Cloud Runtime |
 | Projection Surface Output | `completed` | Desktop Advanced 已能只读展示 API Plane；release gate 能生成 runtime artifacts；Projection Query API 已作为 Console 读面存在 | Pack Console 必须继续只读 projection，不得直接读写 authority |
-| Industry Products | `deferred` | `docs/v0.7.2/README.md` 和任务文档明确不做 Pack System、行业产品壳、remote fleet | v0.8.0 才能开始第一批 Pack / Industry Shell |
+| Industry Products | `deferred` | `docs/v0.7.2/README.md` 和任务文档明确不做 Pack System、行业产品壳、remote fleet | v0.8.0 才能开始第一批 Pack / Industry Shell；不能引用 v0.7.2 作为行业产品完成证据 |
 | Deployment / API Plane | `completed` | `agentflow api-plane manifest`、`runtime/api-plane-manifest.json`、Desktop Advanced API Plane、release gate manifest 检查 | SDK / Cloud API / remote API service 仍然 deferred |
 
 ## 4. Completed
@@ -64,7 +64,9 @@ v0.8.0 can start Pack System planning on top of this foundation
 - 当前 schema version 清单；
 - legacy / missing-version / unknown-schema 检测；
 - migration preview；
+- preview receipt；
 - explicit apply confirmation；
+- applied receipt；
 - preview 默认不写 authority。
 
 验证来源：
@@ -81,6 +83,7 @@ v0.8.0 can start Pack System planning on top of this foundation
 - rejected reasons；
 - affected projections；
 - gate impact；
+- completion commit preview；
 - risk / conflict 输出；
 - dry-run 不写 authority / event store / provider。
 
@@ -96,6 +99,7 @@ v0.8.0 can start Pack System planning on top of this foundation
 - runtime / projection / command / worker / audit channel；
 - 本地 fanout / refresh signal；
 - Event Store replay 到 bus envelope；
+- envelope 带 `messageId / correlationId / causationId / idempotencyKey / createdAt`；
 - bus 不保存 authority。
 
 验证来源：
@@ -110,6 +114,7 @@ v0.8.0 can start Pack System planning on top of this foundation
 - worker registry；
 - tool capability；
 - health / auth / disabled reason；
+- provider smoke artifact 消费路径；
 - Command Surface 可读取 capability decision。
 
 验证来源：
@@ -222,7 +227,21 @@ v0.8.0 can start Pack System planning on top of this foundation
 - Pack provider smoke 不能替代 runtime fixture gate；
 - Pack API 必须进入 API Plane manifest。
 
-## 8. Bottom-line Readiness
+## 8. Release Evidence Source Boundary
+
+`v0.7.2` 的 release evidence 分成公开交付源和 AgentFlow 事实源。
+
+| Source | 用途 | 是否为 AgentFlow authority |
+| --- | --- | --- |
+| GitHub source archive | 外部审阅当前提交的源码快照 | 否 |
+| PR / Release notes | 公开交付说明和变更摘要 | 否 |
+| `.agentflow/spec/**` | Spec / Project / Issue authority | 是 |
+| `.agentflow/events/**` | Runtime event authority | 是 |
+| `.agentflow/tasks/**` | Task evidence / run artifact authority | 是 |
+
+外部审计可以读取 GitHub archive 和 release notes，但不能把它们反向当成 `.agentflow/**` runtime fact。
+
+## 9. Bottom-line Readiness
 
 当前底层完成度判断：
 
@@ -231,14 +250,14 @@ Runtime foundation: ready
 Projection read surface: ready
 Command boundary: ready
 Connector/provider minimum boundary: ready
-Release gate foundation coverage: ready after V072-010 lands
+Release gate foundation coverage: ready
 Pack / Cloud / Industry productization: not started
 ```
 
 因此：
 
 ```text
-V072-009 = complete after this report lands
-V072-010 makes release gate prove this report and related foundation artifacts
-v0.8.0 can only start after V072-010 lands and release gate passes
+v0.7.2 Runtime Foundation = complete
+v0.8.0 can start Pack System on top of this foundation
+v0.8.0 must still implement Pack-specific schema, validation, projection, simulation, and readiness evidence
 ```

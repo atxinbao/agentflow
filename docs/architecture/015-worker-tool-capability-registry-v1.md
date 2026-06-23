@@ -142,10 +142,28 @@ V1 不做：
 - Worker Fleet；
 - 远程 worker 调度；
 - provider auth 管理；
-- provider smoke gate；
 - provider session launch；
 - Command Surface UI 改造；
 - Pack System；
 - Cloud Runtime。
 
-Provider smoke gate 由后续 `V072-006` 处理。
+## Provider Smoke Consumption
+
+Provider smoke gate 已作为 Capability Registry 的输入之一。
+
+Capability Registry 必须消费 provider smoke artifact：
+
+```text
+providerSmoke.outcome
+providerSmoke.reason
+providerSmoke.artifactPath
+providerSmoke.terminalProviderStateProjectable
+```
+
+规则：
+
+- `passed`：只证明 provider 最小 smoke 已通过，不能替代完整执行验证；
+- `skipped`：不自动阻断 command，但必须暴露 skip reason；
+- `failed`：对应 provider worker 进入 `failed`，相关 command disabled，并输出 disabled reason。
+
+这保证 provider smoke 状态能影响 Command Surface 可用性，但不会被误当作 authority fact。

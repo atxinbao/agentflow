@@ -106,6 +106,18 @@ Completion simulation 面向 done writeback 前检查。
 
 它不写 Done，也不写 release。
 
+它还必须输出 Completion Commit preview，用来说明 Done 写回前需要满足的链路：
+
+```text
+validation.completed
+delivery.prepared
+completion.commit.requested
+completion.commit.accepted
+issue.done.requested
+```
+
+Completion Commit preview 只描述会发生什么，不创建 commit、不写 event、不改变 issue 状态。
+
 ## Acceptance
 
 本边界成立时，应满足：
@@ -117,4 +129,5 @@ Completion simulation 面向 done writeback 前检查。
 - simulate 输出 rejected reasons；
 - simulate 输出 affected projections；
 - simulate 输出 risk / conflict；
-- simulate 输出 gate impact。
+- simulate 输出 gate impact；
+- completion simulation 输出 completion commit preview。
