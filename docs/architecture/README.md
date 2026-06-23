@@ -72,8 +72,9 @@
 22. [022-connector-pack-contract-v1.md](022-connector-pack-contract-v1.md)
 23. [023-pack-validation-migration-preview-v1.md](023-pack-validation-migration-preview-v1.md)
 24. [024-pack-simulation-dry-run-v1.md](024-pack-simulation-dry-run-v1.md)
-25. [current-module-boundaries.md](current-module-boundaries.md)
-26. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+25. [025-pack-aware-projection-read-models-v1.md](025-pack-aware-projection-read-models-v1.md)
+26. [current-module-boundaries.md](current-module-boundaries.md)
+27. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 

@@ -10,6 +10,13 @@ use agentflow_event_store::{
     classify_task_event, map_task_event_to_runtime_event, replay_runtime_events,
     replay_task_events, ReplayFilter, TaskEvent,
 };
+use agentflow_pack::{
+    software_dev_connector_definition, software_dev_domain_definition,
+    software_dev_surface_definition, ui_design_connector_definition, ui_design_domain_definition,
+    ui_design_surface_definition, validate_connector_definition, validate_domain_definition,
+    validate_surface_definition, PackConnectorDefinition, PackDomainDefinition, PackRegistryEntry,
+    PackSurfaceDefinition,
+};
 use agentflow_spec::{
     read_requirement_preview_runtime, read_spec_issue, read_spec_project, SpecIssue, SpecPriority,
     SpecRequiredAgentRole,
@@ -433,6 +440,104 @@ pub struct RuntimeHealthView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PackListItemView {
+    pub pack_id: String,
+    pub name: String,
+    pub pack_type: String,
+    pub pack_version: String,
+    pub registered: bool,
+    pub validation_status: String,
+    pub manifest_path: String,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackReadinessView {
+    pub pack_id: String,
+    pub status: String,
+    pub manifest_valid: bool,
+    pub domain_valid: bool,
+    pub surface_valid: bool,
+    pub connector_valid: bool,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackDomainObjectIndexItem {
+    pub pack_id: String,
+    pub object_type_id: String,
+    pub label: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackSurfacePageIndexItem {
+    pub pack_id: String,
+    pub page_id: String,
+    pub label: String,
+    pub page_kind: String,
+    pub view_model_ref: String,
+    #[serde(default)]
+    pub command_entry_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackConnectorCapabilityIndexItem {
+    pub pack_id: String,
+    pub connector_id: String,
+    pub provider_type: String,
+    pub action_id: String,
+    pub command_type: String,
+    pub required_capability: String,
+    pub writes_external: bool,
+    pub evidence_output: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackIndustryWorkbenchItem {
+    pub pack_id: String,
+    pub workbench_id: String,
+    pub page_id: String,
+    pub label: String,
+    pub primary_object_type: String,
+    pub timeline_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackIndustryWorkbenchView {
+    pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_pack_id: Option<String>,
+    #[serde(default)]
+    pub pack_list: Vec<PackListItemView>,
+    #[serde(default)]
+    pub pack_readiness: Vec<PackReadinessView>,
+    #[serde(default)]
+    pub domain_object_index: Vec<PackDomainObjectIndexItem>,
+    #[serde(default)]
+    pub surface_page_index: Vec<PackSurfacePageIndexItem>,
+    #[serde(default)]
+    pub connector_capability_index: Vec<PackConnectorCapabilityIndexItem>,
+    #[serde(default)]
+    pub industry_workbenches: Vec<PackIndustryWorkbenchItem>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+    pub authority: bool,
+    pub freshness: ProjectionFreshness,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectionSurfaceQueryView {
     pub name: String,
     #[serde(default)]
@@ -695,6 +800,26 @@ pub fn get_projection_surface_catalog(
             }
         }
         Err(error) => warnings.push(format!("audit-index-missing: {error}")),
+    }
+
+    match build_pack_bundles(project_root) {
+        Ok(bundles) => {
+            for bundle in bundles {
+                read_models.push(surface_read_model(
+                    "pack-industry-workbench",
+                    "pack",
+                    &bundle.pack_id,
+                    &format!("{} Pack Workbench", bundle.name),
+                    &bundle.readiness_status(),
+                    "get_pack_industry_workbench_view",
+                    vec![bundle.pack_id.clone()],
+                    &format!(".agentflow/projections/packs/{}.json", bundle.pack_id),
+                    bundle.source_refs(),
+                    missing_freshness("pack-projection-readonly-derived"),
+                ));
+            }
+        }
+        Err(error) => warnings.push(format!("pack-registry-unreadable: {error}")),
     }
 
     read_models.sort_by(|left, right| left.key.cmp(&right.key));
@@ -1330,6 +1455,274 @@ pub fn get_runtime_health_view(
         ),
         freshness,
     })
+}
+
+pub fn get_pack_industry_workbench_view(
+    project_root: impl AsRef<Path>,
+    pack_id: Option<&str>,
+) -> Result<PackIndustryWorkbenchView> {
+    let project_root = project_root.as_ref();
+    let bundles = build_pack_bundles(project_root)?;
+    let active_pack_id = match pack_id {
+        Some(pack_id) => Some(pack_id.to_string()),
+        None => bundles.first().map(|bundle| bundle.pack_id.clone()),
+    };
+
+    let mut warnings = Vec::new();
+    if bundles.is_empty() {
+        warnings.push("pack-not-found".to_string());
+    }
+
+    let mut pack_list = Vec::new();
+    let mut pack_readiness = Vec::new();
+    let mut domain_object_index = Vec::new();
+    let mut surface_page_index = Vec::new();
+    let mut connector_capability_index = Vec::new();
+    let mut industry_workbenches = Vec::new();
+    let mut source_refs = BTreeSet::new();
+
+    for bundle in &bundles {
+        for source_ref in bundle.source_refs() {
+            source_refs.insert(source_ref);
+        }
+        pack_list.push(PackListItemView {
+            pack_id: bundle.pack_id.clone(),
+            name: bundle.name.clone(),
+            pack_type: bundle.pack_type.clone(),
+            pack_version: bundle.pack_version.clone(),
+            registered: bundle.registered,
+            validation_status: bundle.readiness_status(),
+            manifest_path: bundle.manifest_path.clone(),
+            source_refs: bundle.source_refs(),
+        });
+        pack_readiness.push(PackReadinessView {
+            pack_id: bundle.pack_id.clone(),
+            status: bundle.readiness_status(),
+            manifest_valid: bundle.manifest_valid,
+            domain_valid: bundle.domain_valid,
+            surface_valid: bundle.surface_valid,
+            connector_valid: bundle.connector_valid,
+            warnings: bundle.warnings(),
+        });
+        if active_pack_id.as_ref() != Some(&bundle.pack_id) {
+            continue;
+        }
+        domain_object_index.extend(bundle.domain.object_types.iter().map(|object| {
+            PackDomainObjectIndexItem {
+                pack_id: bundle.pack_id.clone(),
+                object_type_id: object.object_type_id.clone(),
+                label: object.label.clone(),
+                description: object.description.clone(),
+            }
+        }));
+        surface_page_index.extend(bundle.surface.pages.iter().map(|page| {
+            PackSurfacePageIndexItem {
+                pack_id: bundle.pack_id.clone(),
+                page_id: page.page_id.clone(),
+                label: page.label.clone(),
+                page_kind: enum_label(&page.kind),
+                view_model_ref: page.view_model_ref.clone(),
+                command_entry_ids: page.command_entry_ids.clone(),
+            }
+        }));
+        connector_capability_index.extend(bundle.connector.connectors.iter().flat_map(
+            |connector| {
+                connector
+                    .supported_actions
+                    .iter()
+                    .map(|action| PackConnectorCapabilityIndexItem {
+                        pack_id: bundle.pack_id.clone(),
+                        connector_id: connector.connector_id.clone(),
+                        provider_type: enum_label(&connector.provider_type),
+                        action_id: action.action_id.clone(),
+                        command_type: action.command_type.clone(),
+                        required_capability: action.required_capability.clone(),
+                        writes_external: action.writes_external,
+                        evidence_output: action.evidence_output.clone(),
+                    })
+            },
+        ));
+        industry_workbenches.extend(bundle.surface.workbenches.iter().map(|workbench| {
+            PackIndustryWorkbenchItem {
+                pack_id: bundle.pack_id.clone(),
+                workbench_id: workbench.workbench_id.clone(),
+                page_id: workbench.page_id.clone(),
+                label: workbench.label.clone(),
+                primary_object_type: workbench.primary_object_type.clone(),
+                timeline_ref: workbench.timeline_ref.clone(),
+            }
+        }));
+    }
+
+    let mut freshness = missing_freshness("pack-projection-readonly-derived");
+    freshness.warnings.extend(warnings.clone());
+
+    Ok(PackIndustryWorkbenchView {
+        version: "pack-industry-workbench-view.v1".to_string(),
+        active_pack_id,
+        pack_list,
+        pack_readiness,
+        domain_object_index,
+        surface_page_index,
+        connector_capability_index,
+        industry_workbenches,
+        source_refs: source_refs.into_iter().collect(),
+        authority: false,
+        freshness,
+        warnings,
+    })
+}
+
+#[derive(Debug, Clone)]
+struct PackWorkbenchBundle {
+    pack_id: String,
+    name: String,
+    pack_type: String,
+    pack_version: String,
+    manifest_path: String,
+    registered: bool,
+    manifest_valid: bool,
+    domain_valid: bool,
+    surface_valid: bool,
+    connector_valid: bool,
+    domain: PackDomainDefinition,
+    surface: PackSurfaceDefinition,
+    connector: PackConnectorDefinition,
+}
+
+impl PackWorkbenchBundle {
+    fn readiness_status(&self) -> String {
+        if self.manifest_valid && self.domain_valid && self.surface_valid && self.connector_valid {
+            "ready".to_string()
+        } else {
+            "invalid".to_string()
+        }
+    }
+
+    fn source_refs(&self) -> Vec<String> {
+        let mut refs = vec![
+            format!("pack-builtin:{}", self.pack_id),
+            format!("pack-domain:{}", self.domain.domain_id),
+            format!("pack-surface:{}", self.surface.surface_id),
+            format!("pack-connector:{}", self.connector.connector_id),
+        ];
+        if self.registered {
+            refs.push(self.manifest_path.clone());
+        }
+        refs
+    }
+
+    fn warnings(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if !self.registered {
+            warnings.push("pack-manifest-not-registered".to_string());
+        }
+        if !self.manifest_valid {
+            warnings.push("pack-manifest-invalid".to_string());
+        }
+        if !self.domain_valid {
+            warnings.push("pack-domain-invalid".to_string());
+        }
+        if !self.surface_valid {
+            warnings.push("pack-surface-invalid".to_string());
+        }
+        if !self.connector_valid {
+            warnings.push("pack-connector-invalid".to_string());
+        }
+        warnings
+    }
+}
+
+fn build_pack_bundles(project_root: &Path) -> Result<Vec<PackWorkbenchBundle>> {
+    let registry = agentflow_pack::load_pack_registry(project_root)?;
+    let mut bundles = vec![
+        pack_bundle(
+            "software-dev",
+            "Software Dev",
+            "software-dev",
+            "0.8.0",
+            registry.pack("software-dev"),
+            software_dev_domain_definition(),
+            software_dev_surface_definition(),
+            software_dev_connector_definition(),
+        ),
+        pack_bundle(
+            "ui-design",
+            "UI Design",
+            "ui-design",
+            "0.8.0",
+            registry.pack("ui-design"),
+            ui_design_domain_definition(),
+            ui_design_surface_definition(),
+            ui_design_connector_definition(),
+        ),
+    ];
+
+    for entry in registry.entries {
+        if entry.pack_id == "software-dev" || entry.pack_id == "ui-design" {
+            continue;
+        }
+        bundles.push(pack_bundle(
+            &entry.pack_id,
+            &entry.name,
+            entry.pack_type.as_str(),
+            &entry.pack_version,
+            Some(&entry),
+            software_dev_domain_definition(),
+            software_dev_surface_definition(),
+            software_dev_connector_definition(),
+        ));
+    }
+
+    bundles.sort_by(|left, right| left.pack_id.cmp(&right.pack_id));
+    Ok(bundles)
+}
+
+fn pack_bundle(
+    pack_id: &str,
+    fallback_name: &str,
+    fallback_pack_type: &str,
+    fallback_pack_version: &str,
+    registry_entry: Option<&PackRegistryEntry>,
+    domain: PackDomainDefinition,
+    surface: PackSurfaceDefinition,
+    connector: PackConnectorDefinition,
+) -> PackWorkbenchBundle {
+    let domain_report = validate_domain_definition(&domain);
+    let surface_report = validate_surface_definition(&surface);
+    let connector_report = validate_connector_definition(&connector);
+    PackWorkbenchBundle {
+        pack_id: pack_id.to_string(),
+        name: registry_entry
+            .map(|entry| entry.name.clone())
+            .unwrap_or_else(|| fallback_name.to_string()),
+        pack_type: registry_entry
+            .map(|entry| entry.pack_type.as_str().to_string())
+            .unwrap_or_else(|| fallback_pack_type.to_string()),
+        pack_version: registry_entry
+            .map(|entry| entry.pack_version.clone())
+            .unwrap_or_else(|| fallback_pack_version.to_string()),
+        manifest_path: registry_entry
+            .map(|entry| entry.manifest_path.clone())
+            .unwrap_or_else(|| format!(".agentflow/packs/{pack_id}/pack.json")),
+        registered: registry_entry.is_some(),
+        manifest_valid: registry_entry
+            .map(|entry| entry.validation.valid)
+            .unwrap_or(true),
+        domain_valid: domain_report.valid,
+        surface_valid: surface_report.valid,
+        connector_valid: connector_report.valid,
+        domain,
+        surface,
+        connector,
+    }
+}
+
+fn enum_label<T: Serialize>(value: &T) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|value| value.as_str().map(ToString::to_string))
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 #[derive(Debug, Clone)]
@@ -2702,6 +3095,7 @@ mod tests {
             "task-workbench",
             "delivery-package",
             "runtime-health",
+            "pack-industry-workbench",
         ] {
             assert!(
                 catalog.read_models.iter().any(|entry| entry.kind == kind),
@@ -2726,5 +3120,60 @@ mod tests {
                 .all(|entry| entry.freshness.query_surface_version
                     == PROJECTION_QUERY_SURFACE_VERSION)
         );
+    }
+
+    #[test]
+    fn pack_industry_workbench_view_exposes_software_and_design_read_models() {
+        let dir = tempdir().unwrap();
+
+        let software = get_pack_industry_workbench_view(dir.path(), Some("software-dev")).unwrap();
+        let design = get_pack_industry_workbench_view(dir.path(), Some("ui-design")).unwrap();
+
+        assert!(!software.authority);
+        assert!(!design.authority);
+        assert_eq!(software.active_pack_id.as_deref(), Some("software-dev"));
+        assert_eq!(design.active_pack_id.as_deref(), Some("ui-design"));
+        assert!(software
+            .domain_object_index
+            .iter()
+            .any(|object| object.object_type_id == "Issue"));
+        assert!(design
+            .domain_object_index
+            .iter()
+            .any(|object| object.object_type_id == "Wireframe"));
+        assert!(software
+            .surface_page_index
+            .iter()
+            .any(|page| page.page_id == "task-workbench"));
+        assert!(design
+            .surface_page_index
+            .iter()
+            .any(|page| page.page_id == "wireframe-board"));
+        assert!(software
+            .connector_capability_index
+            .iter()
+            .any(|capability| capability.connector_id == "github"
+                && capability.action_id == "github.pull-request.create"));
+        assert!(design
+            .connector_capability_index
+            .iter()
+            .any(|capability| capability.connector_id == "figma"));
+        assert!(software
+            .pack_readiness
+            .iter()
+            .all(|readiness| readiness.status == "ready"));
+        assert!(design
+            .pack_readiness
+            .iter()
+            .all(|readiness| readiness.status == "ready"));
+
+        let default_view = get_pack_industry_workbench_view(dir.path(), None).unwrap();
+        assert_eq!(default_view.pack_list.len(), 2);
+        assert_eq!(default_view.pack_readiness.len(), 2);
+        assert_eq!(default_view.active_pack_id.as_deref(), Some("software-dev"));
+        assert!(default_view
+            .domain_object_index
+            .iter()
+            .all(|object| object.pack_id == "software-dev"));
     }
 }

@@ -176,6 +176,11 @@ pub fn api_plane_manifest() -> ApiPlaneManifest {
             "get_runtime_health_view",
             "Runtime health view",
         ),
+        projection_query(
+            "projection.pack-industry-workbench",
+            "get_pack_industry_workbench_view",
+            "Pack industry workbench view",
+        ),
         command_surface(
             "command.surface.action-proposal",
             "map_command_to_action_proposal",

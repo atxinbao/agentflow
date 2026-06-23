@@ -239,6 +239,7 @@ version = "0.7.2"
 dependencies = [
  "agentflow-audit",
  "agentflow-event-store",
+ "agentflow-pack",
  "agentflow-release",
  "agentflow-spec",
  "agentflow-task-artifacts",
