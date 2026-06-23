@@ -76,7 +76,7 @@ software-dev
   connector: git / github / codex / claude / browser-preview
 
 ui-design
-  object: ProductBrief / Prd / Direction / Wireframe / HiFi / DesignSystem / Handoff
+  object: ProductBrief / Direction / Wireframe / HiFi / DesignSystem / Handoff
   surface: design-home / brief-intake / direction-board / wireframe-board / hifi-review / handoff
   connector: figma / image-assets / frontend-repo / design-export / browser-preview
 ```

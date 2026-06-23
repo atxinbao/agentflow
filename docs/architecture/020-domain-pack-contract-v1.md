@@ -110,7 +110,6 @@ UI Design Pack 的初始对象世界：
 
 ```text
 ProductBrief
-Prd
 Direction
 Wireframe
 HiFi
@@ -124,10 +123,10 @@ Evidence
 
 ```text
 ProductBrief
--> Prd
 -> Direction
 -> Wireframe
 -> HiFi
+-> DesignSystem
 -> Handoff
 ```
 
@@ -164,4 +163,3 @@ validate_domain_definition()
 - 远程行业客户端；
 - 自动生成行业 UI；
 - 直接写 Runtime authority。
-
