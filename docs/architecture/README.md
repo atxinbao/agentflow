@@ -37,6 +37,7 @@
 | [016-provider-smoke-gate-v1.md](016-provider-smoke-gate-v1.md) | 定义 provider smoke gate 的最小 health / launch / session / terminal projection 证明 |
 | [017-connector-mcp-boundary-v1.md](017-connector-mcp-boundary-v1.md) | 定义 connector / MCP read-write capability、authority 边界和失败展示面 |
 | [018-api-plane-manifest-v1.md](018-api-plane-manifest-v1.md) | 定义 Runtime / Projection / Command API Plane manifest 和 release gate 检查 |
+| [019-pack-filesystem-contract-v1.md](019-pack-filesystem-contract-v1.md) | 定义 Pack System 文件系统位置、职责、authority 边界和 Runtime 入口 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -60,8 +61,9 @@
 16. [016-provider-smoke-gate-v1.md](016-provider-smoke-gate-v1.md)
 17. [017-connector-mcp-boundary-v1.md](017-connector-mcp-boundary-v1.md)
 18. [018-api-plane-manifest-v1.md](018-api-plane-manifest-v1.md)
-19. [current-module-boundaries.md](current-module-boundaries.md)
-20. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+19. [019-pack-filesystem-contract-v1.md](019-pack-filesystem-contract-v1.md)
+20. [current-module-boundaries.md](current-module-boundaries.md)
+21. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 
