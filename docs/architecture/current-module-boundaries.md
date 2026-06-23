@@ -63,7 +63,8 @@ docs/requirements/**
 - `V080-005` 建立 Surface Pack schema 和 built-in Software Dev / UI Design surface baseline。
 - `V080-006` 建立 Connector Pack schema、built-in connector baseline 和 capability registry availability mapping。
 - `V080-007` 建立 Pack validation artifact、version compatibility、API Plane mapping、migration preview 和 applied receipt boundary。
-- Pack simulation、Pack-aware projection 和 Pack-aware command surface 由后续 `V080-*` 任务实现。
+- `V080-008` 建立 Pack command dry-run、缺口识别、影响预览和 Software Dev / UI Design simulation 覆盖。
+- Pack-aware projection 和 Pack-aware command surface 由后续 `V080-*` 任务实现。
 
 架构文档：
 
@@ -72,6 +73,7 @@ docs/requirements/**
 - `docs/architecture/021-surface-pack-contract-v1.md`
 - `docs/architecture/022-connector-pack-contract-v1.md`
 - `docs/architecture/023-pack-validation-migration-preview-v1.md`
+- `docs/architecture/024-pack-simulation-dry-run-v1.md`
 
 实现位置：
 
@@ -84,6 +86,7 @@ docs/requirements/**
 - `crates/schema-registry/src/lib.rs`
 - `crates/runtime-api/src/pack.rs`
 - `crates/runtime-api/src/api_plane.rs`
+- `crates/simulation/src/lib.rs`
 
 ## Workspace and Desktop Entry
 

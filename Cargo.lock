@@ -329,6 +329,7 @@ dependencies = [
  "agentflow-action-contract",
  "agentflow-object-state",
  "agentflow-ontology",
+ "agentflow-pack",
  "agentflow-role-policy",
  "agentflow-runtime-api",
  "anyhow",
