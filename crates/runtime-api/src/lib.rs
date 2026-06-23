@@ -41,9 +41,9 @@ pub use pack::{
     PackValidationArtifactReadReceipt, PackValidationArtifactView,
 };
 pub use query::{
-    get_audit_surface_view, get_delivery_package_view, get_project_home_view,
-    get_requirement_intake_view, get_runtime_health_view, get_spec_loop_view,
-    get_spec_preview_view, get_task_workbench_view, get_work_loop_run_view,
+    get_audit_surface_view, get_delivery_package_view, get_pack_industry_workbench_view,
+    get_project_home_view, get_requirement_intake_view, get_runtime_health_view,
+    get_spec_loop_view, get_spec_preview_view, get_task_workbench_view, get_work_loop_run_view,
     get_work_loop_session_view, RUNTIME_QUERY_API_VERSION,
 };
 pub use responses::{
