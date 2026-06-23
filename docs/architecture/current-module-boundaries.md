@@ -60,17 +60,20 @@ docs/requirements/**
 - `V080-002` 只定义文件系统合同。
 - `V080-003` 建立 Pack manifest schema 和 local registry。
 - `V080-004` 建立 Domain Pack schema 和 built-in Software Dev / UI Design domain baseline。
-- Pack loader、Surface Pack、Connector Pack、validation、simulation 和 Pack-aware projection 由后续 `V080-*` 任务实现。
+- `V080-005` 建立 Surface Pack schema 和 built-in Software Dev / UI Design surface baseline。
+- Pack loader、Connector Pack、validation、simulation 和 Pack-aware projection 由后续 `V080-*` 任务实现。
 
 架构文档：
 
 - `docs/architecture/019-pack-filesystem-contract-v1.md`
 - `docs/architecture/020-domain-pack-contract-v1.md`
+- `docs/architecture/021-surface-pack-contract-v1.md`
 
 实现位置：
 
 - `crates/pack/src/lib.rs`
 - `crates/pack/src/domain.rs`
+- `crates/pack/src/surface.rs`
 
 ## Workspace and Desktop Entry
 

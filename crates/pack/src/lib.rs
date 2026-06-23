@@ -6,6 +6,7 @@
 //! state.
 
 pub mod domain;
+pub mod surface;
 
 use anyhow::{Context, Result};
 pub use domain::{
@@ -19,6 +20,13 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Path, PathBuf},
+};
+pub use surface::{
+    software_dev_surface_definition, ui_design_surface_definition, validate_surface_definition,
+    PackSurfaceDefinition, PackSurfaceValidationIssue, PackSurfaceValidationReport,
+    SurfaceCommandEntryMapping, SurfaceCommandRoute, SurfaceNavigationRule, SurfacePage,
+    SurfacePageKind, SurfaceReadModelDependency, SurfaceSidecar, SurfaceStatePolicy,
+    SurfaceViewModelMapping, SurfaceWorkbench, PACK_SURFACE_VERSION,
 };
 
 pub const PACK_MANIFEST_VERSION: &str = "agentflow-pack-manifest.v1";
