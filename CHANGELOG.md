@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.8.0 - 2026-06-23
+
+执行者：Codex
+
+`0.8.0 - Pack System and First Industry Shells` 将 AgentFlow 从单一软件开发项目控制台推进到 Pack 驱动的多行业项目运行基线。
+
+### Added
+
+- 新增 Pack filesystem contract、manifest schema、registry、validation、versioning 和 migration preview。
+- 新增 Domain Pack、Surface Pack、Connector Pack 分层，明确 Pack 只定义行业现场，不直接写 authority。
+- 新增 Pack simulation / dry-run，支持预览 Pack command 的影响，不写 `.agentflow/**` authority。
+- 新增 Pack-aware Projection read models、Pack-aware Command Surface 和 Runtime API Plane entry。
+- 新增 Software Dev Pack baseline，主链保持 Requirement -> Spec -> Issue -> Run -> Acceptance -> Delivery -> Release。
+- 新增 UI Design Pack baseline，主链覆盖 Product Brief -> Direction -> Wireframe -> HiFi -> Design System -> Handoff。
+- release-gate 增加 Pack System readiness certification，输出 pack registry、validation、simulation、projection readiness、API plane manifest、Software Dev readiness 和 UI Design readiness artifacts。
+
+### Architecture
+
+- Runtime Core 仍然是 Spec Loop、Work Loop、Arbitration、Event Store、Projection 的通用主链。
+- Pack 只能通过 Runtime API / Command Surface 接入，不能直接写 `.agentflow/spec/**`、`.agentflow/events/**` 或 `.agentflow/tasks/**`。
+- Software Dev Pack 中 Audit 仍是 sidecar，`Finding` 不阻断主链 release，只能回流为 follow-up proposal。
+- UI Design Pack 是 baseline readiness，不伪装成软件任务链，也不触发代码执行。
+
+### Validation
+
+- `cargo test --workspace`
+- `cargo fmt --all --check`
+- `npm --prefix apps/desktop run build`
+- `git diff --check`
+- `bash scripts/verify_release_gate.sh --artifact-dir /tmp/af-release-gate-test`
+- GitHub `release-gate` on V080 closeout PRs
+
 ## 0.7.2 - 2026-06-23
 
 执行者：Codex

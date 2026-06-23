@@ -79,19 +79,19 @@ Pack 只能在标准化边界上提供定义：
 
 | Issue | Title | Priority | Dependency | Status |
 | --- | --- | --- | --- | --- |
-| `V080-001` | Foundation Carryover Corrections | P0 | none | planned |
-| `V080-002` | Pack System Filesystem Contract | P0 | V080-001 | planned |
-| `V080-003` | Pack Manifest Schema and Registry | P0 | V080-002 | planned |
-| `V080-004` | Domain Pack Contract | P0 | V080-003 | planned |
-| `V080-005` | Surface Pack Contract | P0 | V080-003 | planned |
-| `V080-006` | Connector Pack Contract and Capability Mapping | P0 | V080-003 | planned |
-| `V080-007` | Pack Validation, Versioning, and Migration Preview | P0 | V080-004, V080-005, V080-006 | planned |
-| `V080-008` | Pack Simulation and Dry-run Integration | P0 | V080-007 | planned |
-| `V080-009` | Pack-aware Projection Read Models | P0 | V080-007 | planned |
-| `V080-010` | Pack-aware Command Surface and Runtime API Plane | P0 | V080-008, V080-009 | planned |
-| `V080-011` | Software Dev Pack Baseline | P1 | V080-010 | planned |
-| `V080-012` | UI Design Pack Baseline | P1 | V080-010 | planned |
-| `V080-013` | Pack Release Gate and Readiness Certification | P1 | V080-011, V080-012 | planned |
+| `V080-001` | Foundation Carryover Corrections | P0 | none | completed |
+| `V080-002` | Pack System Filesystem Contract | P0 | V080-001 | completed |
+| `V080-003` | Pack Manifest Schema and Registry | P0 | V080-002 | completed |
+| `V080-004` | Domain Pack Contract | P0 | V080-003 | completed |
+| `V080-005` | Surface Pack Contract | P0 | V080-003 | completed |
+| `V080-006` | Connector Pack Contract and Capability Mapping | P0 | V080-003 | completed |
+| `V080-007` | Pack Validation, Versioning, and Migration Preview | P0 | V080-004, V080-005, V080-006 | completed |
+| `V080-008` | Pack Simulation and Dry-run Integration | P0 | V080-007 | completed |
+| `V080-009` | Pack-aware Projection Read Models | P0 | V080-007 | completed |
+| `V080-010` | Pack-aware Command Surface and Runtime API Plane | P0 | V080-008, V080-009 | completed |
+| `V080-011` | Software Dev Pack Baseline | P1 | V080-010 | completed |
+| `V080-012` | UI Design Pack Baseline | P1 | V080-010 | completed |
+| `V080-013` | Pack Release Gate and Readiness Certification | P1 | V080-011, V080-012 | completed |
 
 ## V080-001 Foundation Carryover Corrections
 

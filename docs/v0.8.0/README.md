@@ -2,11 +2,11 @@
 
 日期：2026-06-23
 执行者：Codex
-状态：Pack System planning baseline / pre-implementation task document
+状态：Released Pack System baseline / release closeout record
 
 ## Purpose
 
-`v0.8.0` 的目标是把 AgentFlow 从“软件开发场景可用的 Project OS”推进到“可承载多个行业壳的 Pack System”。
+`v0.8.0` 已把 AgentFlow 从“软件开发场景可用的 Project OS”推进到“可承载多个行业壳的 Pack System”。
 
 一句话：
 
@@ -25,7 +25,7 @@ Runtime Core 不再硬编码行业现场。
 
 ## Scope
 
-`v0.8.0` 包含：
+`v0.8.0` 已完成：
 
 - Pack filesystem contract；
 - Pack manifest schema；
@@ -77,7 +77,7 @@ Audit 仍然是独立 sidecar flow，不进入 Software Dev Pack 的主业务链
 
 ## Industry Shell Pilot
 
-本版本用两个行业壳证明 Pack System：
+本版本用两个行业壳完成 Pack System 基线证明：
 
 | Industry Shell | Purpose | Boundary |
 | --- | --- | --- |
@@ -86,7 +86,7 @@ Audit 仍然是独立 sidecar flow，不进入 Software Dev Pack 的主业务链
 
 ## Completion Standard
 
-`v0.8.0` 完成时，必须满足：
+`v0.8.0` release closeout 已满足：
 
 - Pack manifest 可被机器读取；
 - Runtime 可以加载 Pack registry；
