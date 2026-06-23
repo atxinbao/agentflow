@@ -50,7 +50,7 @@ Message Bus = 到 decision gate 再判断是否需要。
 | Issue | Title | Priority | Dependency | Status |
 | --- | --- | --- | --- | --- |
 | `V090-001` | Local Runtime Boundary | P0 | v0.8.1 closeout | done |
-| `V090-002` | Cloud Runtime Boundary | P0 | V090-001 | planned |
+| `V090-002` | Cloud Runtime Boundary | P0 | V090-001 | done |
 | `V090-003` | Runtime API / SDK Contract Hardening | P0 | V090-001, V090-002 | planned |
 | `V090-004` | Event Replay and Projection Rebuild | P0 | V090-003 | planned |
 | `V090-005` | Ontology / Pack Migration Execution Model | P0 | V090-004 | planned |
