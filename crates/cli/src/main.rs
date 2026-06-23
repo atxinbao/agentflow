@@ -425,6 +425,12 @@ fn write_pack_release_gate_readiness(
 
     let api_manifest = agentflow_runtime_api::api_plane_manifest();
     let api_entries = agentflow_pack::pack_readiness_api_entries();
+    let pack_registry = agentflow_pack::load_pack_fixture_registry()?;
+    for required_pack_id in ["software-dev", "ui-design"] {
+        if pack_registry.pack(required_pack_id).is_none() {
+            anyhow::bail!("file-backed pack registry missing required pack: {required_pack_id}");
+        }
+    }
     let software =
         agentflow_pack::software_dev_pack_readiness_artifact(&api_entries, runtime_version);
     let design = agentflow_pack::ui_design_pack_readiness_artifact(&api_entries, runtime_version);
@@ -436,31 +442,7 @@ fn write_pack_release_gate_readiness(
     )?;
     write_json(output_dir.join("ui-design-pack-readiness.json"), &design)?;
 
-    let pack_registry_entries = pack_artifacts
-        .iter()
-        .map(|artifact| {
-            json!({
-                "packId": artifact.pack_id,
-                "source": "built-in",
-                "status": artifact.status,
-                "writesAuthority": artifact.writes_authority,
-                "canLoad": artifact.can_load,
-                "canValidate": artifact.can_validate,
-                "canProject": artifact.can_project,
-                "readinessPath": format!("{}-pack-readiness.json", artifact.pack_id),
-                "sourceRefs": artifact.source_refs,
-            })
-        })
-        .collect::<Vec<_>>();
-    write_json(
-        output_dir.join("pack-registry.json"),
-        &json!({
-            "version": "agentflow-pack-release-gate-registry.v1",
-            "source": "built-in-pack-baseline",
-            "writesAuthority": false,
-            "entries": pack_registry_entries,
-        }),
-    )?;
+    write_json(output_dir.join("pack-registry.json"), &pack_registry)?;
 
     let validation_entries = pack_artifacts
         .iter()

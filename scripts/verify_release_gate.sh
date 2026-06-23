@@ -1128,6 +1128,7 @@ projection = json.loads(projection_path.read_text(encoding="utf-8"))
 api_plane = json.loads(api_plane_path.read_text(encoding="utf-8"))
 software = json.loads(software_path.read_text(encoding="utf-8"))
 design = json.loads(design_path.read_text(encoding="utf-8"))
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
 
 if validation.get("status") != "passed":
     raise SystemExit("pack validation report did not pass")
@@ -1145,6 +1146,24 @@ if software.get("writesAuthority") is not False or design.get("writesAuthority")
     raise SystemExit("pack readiness artifacts must remain readonly")
 if "Finding" not in software.get("auditSidecarChain", []):
     raise SystemExit("software-dev readiness must document audit sidecar finding chain")
+
+if registry.get("version") != "agentflow-pack-registry.v1":
+    raise SystemExit("pack registry must use the file-backed registry schema")
+if registry.get("source") != "fixture-files":
+    raise SystemExit("pack registry must come from fixture-files, not built-in baseline")
+if registry.get("fallback") is not False:
+    raise SystemExit("pack registry fallback must be false")
+entries = {entry.get("packId"): entry for entry in registry.get("entries", [])}
+for pack_id in ["software-dev", "ui-design"]:
+    entry = entries.get(pack_id)
+    if entry is None:
+        raise SystemExit(f"pack registry missing {pack_id}")
+    if entry.get("source") != "fixture-files":
+        raise SystemExit(f"{pack_id} registry entry must come from fixture-files")
+    if entry.get("fallback") is not False:
+        raise SystemExit(f"{pack_id} registry entry fallback must be false")
+    if not entry.get("manifestPath"):
+        raise SystemExit(f"{pack_id} registry entry must include manifestPath")
 PY
   record_stage "pack.release-gate-readiness" "passed" "$(basename "$PACK_VALIDATION_REPORT_PATH")"
 }

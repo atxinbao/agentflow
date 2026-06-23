@@ -1,0 +1,38 @@
+{
+  "version": "agentflow-pack-manifest.v1",
+  "packId": "software-dev",
+  "name": "Software Dev Pack",
+  "packType": "software-dev",
+  "packVersion": "0.8.1",
+  "runtimeCompatibility": ">=0.8.0",
+  "domainPath": "domain/",
+  "surfacePath": "surface/",
+  "connectorPath": "connectors/",
+  "requiredCapabilities": [
+    "provider.codex.launch",
+    "provider.github.pr"
+  ],
+  "ownedObjectTypes": [
+    "Requirement",
+    "Spec",
+    "Issue",
+    "Run",
+    "Acceptance",
+    "Delivery",
+    "Release"
+  ],
+  "exposedCommands": [
+    "work.issue.start",
+    "work.issue.review",
+    "release.sync"
+  ],
+  "projectionEntries": [
+    "projection.project-home",
+    "projection.spec-workbench",
+    "projection.task-workbench",
+    "projection.delivery-summary",
+    "projection.audit-sidecar"
+  ],
+  "migrationPolicy": "preview-only",
+  "validationStatus": "valid"
+}
