@@ -13,6 +13,10 @@ use agentflow_action_contract::{
 };
 use agentflow_object_state::core_object_state_registry;
 use agentflow_ontology::core_ontology_registry;
+use agentflow_pack::{
+    ConnectorSupportedAction, DomainActionSemantic, PackConnectorDefinition, PackDomainDefinition,
+    PackSurfaceDefinition, PackValidationArtifact, SurfaceCommandEntryMapping,
+};
 use agentflow_role_policy::core_role_policy_registry;
 use agentflow_runtime_api::{
     map_command_to_action_proposal, validate_runtime_command, RuntimeCommandError,
@@ -30,6 +34,7 @@ pub enum SimulationKind {
     Command,
     Issue,
     Completion,
+    PackCommand,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -81,6 +86,21 @@ pub struct SimulationCompletionRequest {
     pub delivery_artifact_refs: Vec<String>,
     #[serde(default)]
     pub pr_or_mr_ref: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackCommandSimulationRequest {
+    pub simulation_id: String,
+    pub command: String,
+    pub target_object_type: String,
+    pub target_object_id: String,
+    pub actor_role: String,
+    pub validation: PackValidationArtifact,
+    pub domain: PackDomainDefinition,
+    pub surface: PackSurfaceDefinition,
+    pub connector: PackConnectorDefinition,
     pub created_at: String,
 }
 
@@ -414,6 +434,128 @@ pub fn simulate_completion(request: &SimulationCompletionRequest) -> SimulationR
     report
 }
 
+pub fn simulate_pack_command(request: &PackCommandSimulationRequest) -> SimulationReport {
+    let surface_mapping = request
+        .surface
+        .command_entry_mappings
+        .iter()
+        .find(|mapping| mapping.command_type == request.command);
+    let connector_action = connector_action_for_command(&request.connector, &request.command);
+    let domain_action = surface_mapping
+        .and_then(|mapping| action_type_from_contract_ref(&mapping.action_contract_ref))
+        .and_then(|action_type| domain_action_for_type(&request.domain, action_type));
+
+    let mut report = SimulationReport::readonly(
+        request.simulation_id.clone(),
+        SimulationKind::PackCommand,
+        SimulationDecision::Accepted,
+    );
+    report.expected_events = pack_expected_events(domain_action, &request.command);
+    report.affected_projections = pack_affected_projections(&request.surface, surface_mapping);
+    report.conflicts.push(SimulationConflict {
+        scope_key: Some(format!(
+            "pack:{}:{}:{}",
+            request.validation.pack_id, request.command, request.target_object_id
+        )),
+        status: "preview-only".to_string(),
+        blocking_ref: None,
+    });
+    report.gate_impact.push(SimulationGateImpact {
+        gate_id: "pack.validation.active".to_string(),
+        status: if request.validation.active {
+            "accepted".to_string()
+        } else {
+            "rejected".to_string()
+        },
+        reason: if request.validation.active {
+            "pack validation artifact allows simulation".to_string()
+        } else {
+            "pack validation artifact is not active".to_string()
+        },
+    });
+
+    if !request.validation.active {
+        report.decision = SimulationDecision::Rejected;
+        report.risk = SimulationRiskLevel::High;
+        for issue in &request.validation.issues {
+            report.rejected_reasons.push(simple_rejection(
+                "PackValidationFailed",
+                &format!("{}: {}", issue.field, issue.reason),
+            ));
+        }
+    }
+    if surface_mapping.is_none() {
+        report.decision = SimulationDecision::Rejected;
+        report.risk = SimulationRiskLevel::High;
+        report.rejected_reasons.push(simple_rejection(
+            "SurfaceMappingMissing",
+            "pack surface does not expose this command",
+        ));
+        report.gate_impact.push(SimulationGateImpact {
+            gate_id: "pack.surface.command-mapping".to_string(),
+            status: "rejected".to_string(),
+            reason: "missing surface command mapping".to_string(),
+        });
+    }
+    if surface_mapping.is_none() && connector_action.is_none() {
+        report.decision = SimulationDecision::Rejected;
+        report.risk = SimulationRiskLevel::High;
+        report.rejected_reasons.push(simple_rejection(
+            "ConnectorActionMissing",
+            "pack connector does not expose this command",
+        ));
+        report.gate_impact.push(SimulationGateImpact {
+            gate_id: "pack.connector.action".to_string(),
+            status: "rejected".to_string(),
+            reason: "missing connector action".to_string(),
+        });
+    }
+    if !request.validation.missing_read_models.is_empty() {
+        report.decision = SimulationDecision::Rejected;
+        report.risk = SimulationRiskLevel::High;
+        report.rejected_reasons.push(simple_rejection(
+            "ReadModelMissing",
+            "pack surface depends on missing read models",
+        ));
+        report.gate_impact.push(SimulationGateImpact {
+            gate_id: "pack.surface.read-models".to_string(),
+            status: "rejected".to_string(),
+            reason: format!(
+                "{} read model mapping(s) missing",
+                request.validation.missing_read_models.len()
+            ),
+        });
+    }
+
+    let required_capabilities = connector_action
+        .map(|action| vec![action.required_capability.clone()])
+        .unwrap_or_default();
+    let required_evidence = domain_action
+        .map(|action| action.required_evidence.clone())
+        .unwrap_or_default();
+    report.metadata = json!({
+        "command": request.command,
+        "targetObject": {
+            "objectType": request.target_object_type,
+            "id": request.target_object_id,
+        },
+        "actorRole": request.actor_role,
+        "packId": request.validation.pack_id,
+        "requiredCapabilities": required_capabilities,
+        "requiredEvidence": required_evidence,
+        "acceptanceImpact": {
+            "status": if report.decision == SimulationDecision::Accepted { "would-pass" } else { "would-reject" },
+            "reason": if report.decision == SimulationDecision::Accepted {
+                "pack command dry-run found surface, connector, read model, and validation coverage"
+            } else {
+                "pack command dry-run found missing validation, mapping, connector, or read model coverage"
+            },
+        },
+        "createdAt": request.created_at,
+    });
+    report
+}
+
 fn core_simulation_context() -> Result<ArbitrationContext> {
     let ontology = core_ontology_registry();
     let action_contract = core_action_contract_registry(&ontology);
@@ -431,6 +573,68 @@ fn core_simulation_context() -> Result<ArbitrationContext> {
         role_policy,
         object_state,
     ))
+}
+
+fn connector_action_for_command<'a>(
+    connector: &'a PackConnectorDefinition,
+    command: &str,
+) -> Option<&'a ConnectorSupportedAction> {
+    connector
+        .connectors
+        .iter()
+        .flat_map(|connector| connector.supported_actions.iter())
+        .find(|action| action.command_type == command)
+}
+
+fn domain_action_for_type<'a>(
+    domain: &'a PackDomainDefinition,
+    action_type: &str,
+) -> Option<&'a DomainActionSemantic> {
+    domain
+        .action_semantics
+        .iter()
+        .find(|action| action.action_type == action_type)
+}
+
+fn action_type_from_contract_ref(contract_ref: &str) -> Option<&str> {
+    contract_ref.strip_prefix("action-contract:")
+}
+
+fn pack_expected_events(
+    domain_action: Option<&DomainActionSemantic>,
+    command: &str,
+) -> Vec<SimulationExpectedEvent> {
+    let action_type = domain_action
+        .map(|action| action.action_type.as_str())
+        .unwrap_or(command);
+    let object_type = domain_action.map(|action| action.target_object_type.as_str());
+    vec![
+        expected_event(format!("pack.command.{command}.validated"), None, true),
+        expected_event(format!("{action_type}.proposed"), object_type, true),
+        expected_event(format!("{action_type}.accepted"), object_type, false),
+    ]
+}
+
+fn pack_affected_projections(
+    surface: &PackSurfaceDefinition,
+    surface_mapping: Option<&SurfaceCommandEntryMapping>,
+) -> Vec<SimulationAffectedProjection> {
+    let Some(surface_mapping) = surface_mapping else {
+        return Vec::new();
+    };
+    surface
+        .read_model_dependencies
+        .iter()
+        .filter(|dependency| dependency.page_id == surface_mapping.page_id)
+        .map(|dependency| SimulationAffectedProjection {
+            projection_id: dependency.projection_ref.clone(),
+            target_id: Some(surface_mapping.page_id.clone()),
+            reason: format!(
+                "pack command {} can affect page {}",
+                surface_mapping.command_type, surface_mapping.page_id
+            ),
+        })
+        .collect()
 }
 
 fn definition_versions(context: &ArbitrationContext) -> DefinitionVersions {
@@ -593,6 +797,14 @@ fn simple_rejection(code: &str, message: &str) -> SimulationRejectedReason {
 mod tests {
     use super::*;
     use agentflow_action_contract::{ActionRef, ActionSourceSurface};
+    use agentflow_pack::{
+        software_dev_connector_definition, software_dev_domain_definition,
+        software_dev_surface_definition, ui_design_connector_definition,
+        ui_design_domain_definition, ui_design_surface_definition, validate_pack_bundle,
+        PackConnectorDefinition, PackDomainDefinition, PackManifest, PackMigrationPolicy,
+        PackSurfaceDefinition, PackType, PackValidationArtifact, PackValidationStatus,
+        PACK_MANIFEST_VERSION,
+    };
     use serde_json::json;
     use tempfile::tempdir;
 
@@ -612,6 +824,84 @@ mod tests {
             idempotency_key: "cmd-001:simulate".to_string(),
             created_at: "2026-06-23T00:00:00Z".to_string(),
         }
+    }
+
+    fn pack_manifest(
+        pack_id: &str,
+        pack_type: PackType,
+        surface: &PackSurfaceDefinition,
+        connector: &PackConnectorDefinition,
+    ) -> PackManifest {
+        PackManifest {
+            version: PACK_MANIFEST_VERSION.to_string(),
+            pack_id: pack_id.to_string(),
+            name: pack_id.to_string(),
+            pack_type,
+            pack_version: "0.8.0".to_string(),
+            runtime_compatibility: ">=0.8.0".to_string(),
+            domain_path: "domain/".to_string(),
+            surface_path: "surface/".to_string(),
+            connector_path: "connectors/".to_string(),
+            required_capabilities: connector
+                .connectors
+                .iter()
+                .flat_map(|connector| connector.required_capabilities.clone())
+                .collect(),
+            owned_object_types: vec!["Issue".to_string()],
+            exposed_commands: surface
+                .command_entry_mappings
+                .iter()
+                .map(|mapping| mapping.command_type.clone())
+                .chain(connector.connectors.iter().flat_map(|connector| {
+                    connector
+                        .supported_actions
+                        .iter()
+                        .map(|action| action.command_type.clone())
+                }))
+                .collect(),
+            projection_entries: surface
+                .read_model_dependencies
+                .iter()
+                .map(|dependency| dependency.projection_ref.clone())
+                .collect(),
+            migration_policy: PackMigrationPolicy::PreviewOnly,
+            validation_status: PackValidationStatus::Draft,
+        }
+    }
+
+    fn pack_api_entries(
+        surface: &PackSurfaceDefinition,
+        connector: &PackConnectorDefinition,
+    ) -> Vec<String> {
+        surface
+            .command_entry_mappings
+            .iter()
+            .map(|mapping| mapping.command_type.clone())
+            .chain(connector.connectors.iter().flat_map(|connector| {
+                connector
+                    .supported_actions
+                    .iter()
+                    .map(|action| action.command_type.clone())
+            }))
+            .collect()
+    }
+
+    fn pack_validation(
+        pack_id: &str,
+        pack_type: PackType,
+        domain: &PackDomainDefinition,
+        surface: &PackSurfaceDefinition,
+        connector: &PackConnectorDefinition,
+    ) -> PackValidationArtifact {
+        let manifest = pack_manifest(pack_id, pack_type, surface, connector);
+        validate_pack_bundle(
+            &manifest,
+            domain,
+            surface,
+            connector,
+            &pack_api_entries(surface, connector),
+            "0.8.0",
+        )
     }
 
     #[test]
@@ -693,6 +983,124 @@ mod tests {
         assert!(completion_commit
             .expected_event_chain
             .contains(&"completion.commit.accepted".to_string()));
+    }
+
+    #[test]
+    fn pack_command_simulation_covers_software_dev_command_without_writes() {
+        let domain = software_dev_domain_definition();
+        let surface = software_dev_surface_definition();
+        let connector = software_dev_connector_definition();
+        let validation = pack_validation(
+            "software-dev",
+            PackType::SoftwareDev,
+            &domain,
+            &surface,
+            &connector,
+        );
+        let report = simulate_pack_command(&PackCommandSimulationRequest {
+            simulation_id: "sim-pack-software-001".to_string(),
+            command: "work.issue.start".to_string(),
+            target_object_type: "Issue".to_string(),
+            target_object_id: "AF-PACK-001".to_string(),
+            actor_role: "work-agent".to_string(),
+            validation,
+            domain,
+            surface,
+            connector,
+            created_at: "2026-06-23T00:00:00Z".to_string(),
+        });
+
+        assert_eq!(report.kind, SimulationKind::PackCommand);
+        assert_eq!(report.decision, SimulationDecision::Accepted);
+        assert!(!report.writes_authority);
+        assert!(!report.writes_event_store);
+        assert!(!report.executes_provider);
+        assert!(report
+            .expected_events
+            .iter()
+            .any(|event| event.event_type == "issue.start.proposed"));
+        assert!(report
+            .affected_projections
+            .iter()
+            .any(|projection| projection.projection_id == "projection.task-workbench"));
+        assert_eq!(report.metadata["requiredEvidence"][0], "validation");
+    }
+
+    #[test]
+    fn pack_command_simulation_covers_ui_design_command_without_provider_launch() {
+        let domain = ui_design_domain_definition();
+        let surface = ui_design_surface_definition();
+        let connector = ui_design_connector_definition();
+        let validation = pack_validation(
+            "ui-design",
+            PackType::UiDesign,
+            &domain,
+            &surface,
+            &connector,
+        );
+        let report = simulate_pack_command(&PackCommandSimulationRequest {
+            simulation_id: "sim-pack-design-001".to_string(),
+            command: "design.wireframe.generate".to_string(),
+            target_object_type: "Wireframe".to_string(),
+            target_object_id: "wireframe-001".to_string(),
+            actor_role: "work-agent".to_string(),
+            validation,
+            domain,
+            surface,
+            connector,
+            created_at: "2026-06-23T00:00:00Z".to_string(),
+        });
+
+        assert_eq!(report.decision, SimulationDecision::Accepted);
+        assert!(!report.executes_provider);
+        assert!(report
+            .expected_events
+            .iter()
+            .any(|event| event.event_type == "design.generate-wireframe.proposed"));
+    }
+
+    #[test]
+    fn pack_command_simulation_reports_missing_mappings_and_read_models() {
+        let domain = software_dev_domain_definition();
+        let surface = software_dev_surface_definition();
+        let connector = software_dev_connector_definition();
+        let mut manifest =
+            pack_manifest("software-dev", PackType::SoftwareDev, &surface, &connector);
+        manifest.projection_entries.clear();
+        let validation = validate_pack_bundle(
+            &manifest,
+            &domain,
+            &surface,
+            &connector,
+            &pack_api_entries(&surface, &connector),
+            "0.8.0",
+        );
+        let report = simulate_pack_command(&PackCommandSimulationRequest {
+            simulation_id: "sim-pack-missing-001".to_string(),
+            command: "unknown.command".to_string(),
+            target_object_type: "Issue".to_string(),
+            target_object_id: "AF-PACK-002".to_string(),
+            actor_role: "work-agent".to_string(),
+            validation,
+            domain,
+            surface,
+            connector,
+            created_at: "2026-06-23T00:00:00Z".to_string(),
+        });
+
+        assert_eq!(report.decision, SimulationDecision::Rejected);
+        assert!(report
+            .rejected_reasons
+            .iter()
+            .any(|reason| reason.code == "SurfaceMappingMissing"));
+        assert!(report
+            .rejected_reasons
+            .iter()
+            .any(|reason| reason.code == "ConnectorActionMissing"));
+        assert!(report
+            .rejected_reasons
+            .iter()
+            .any(|reason| reason.code == "ReadModelMissing"));
     }
 
     #[test]
