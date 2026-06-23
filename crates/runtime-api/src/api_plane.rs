@@ -254,11 +254,21 @@ pub fn api_plane_manifest() -> ApiPlaneManifest {
             "Record remote release",
         ),
         release_action("release.publish", "release_publish", "Publish release"),
+        pack_action(
+            "pack.registry.list",
+            "get_pack_registry",
+            "List local Pack registry",
+        ),
+        pack_action(
+            "pack.manifest.validate",
+            "validate_pack_manifest",
+            "Validate Pack manifest",
+        ),
     ];
     let categories = summarize_categories(&entries);
     ApiPlaneManifest {
         version: API_PLANE_MANIFEST_VERSION.to_string(),
-        scope: "runtime/projection/command/connector/provider/audit/release".to_string(),
+        scope: "runtime/projection/command/connector/provider/audit/release/pack".to_string(),
         boundary_rule: "UI and connector outputs are not authority; write actions enter Runtime API / Command Surface first.".to_string(),
         entries,
         categories,
@@ -375,6 +385,20 @@ fn release_action(api_id: &str, function: &str, label: &str) -> ApiPlaneEntry {
     )
 }
 
+fn pack_action(api_id: &str, function: &str, label: &str) -> ApiPlaneEntry {
+    ApiPlaneEntry::new(
+        api_id,
+        "pack_actions",
+        label,
+        ApiPlaneBoundary::Readonly,
+        ApiPlaneAccess::SdkCandidate,
+        "agentflow-pack",
+        "manifest/registry",
+        function,
+        "Pack definition read or validation entry; never writes runtime authority.",
+    )
+}
+
 fn summarize_categories(entries: &[ApiPlaneEntry]) -> Vec<ApiPlaneCategorySummary> {
     let mut categories = entries
         .iter()
@@ -427,6 +451,7 @@ mod tests {
             "provider_actions",
             "audit_actions",
             "release_actions",
+            "pack_actions",
         ];
 
         for category in required_categories {
@@ -448,6 +473,9 @@ mod tests {
         }));
         assert!(manifest.entries.iter().any(|entry| {
             entry.category == "release_actions" && entry.boundary == ApiPlaneBoundary::Authority
+        }));
+        assert!(manifest.entries.iter().any(|entry| {
+            entry.category == "pack_actions" && entry.boundary == ApiPlaneBoundary::Readonly
         }));
         assert!(manifest.entries.iter().all(|entry| matches!(
             entry.boundary,

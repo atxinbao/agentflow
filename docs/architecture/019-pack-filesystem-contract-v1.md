@@ -92,6 +92,9 @@ Pack 进入 Runtime 的唯一入口是 Runtime API / Command Surface。
 
 完整 schema 由后续 Pack Manifest、Domain Pack、Surface Pack、Connector Pack 任务分别定义。
 
+`V080-003` 开始，Pack manifest 和 local registry 使用 `agentflow-pack` crate 读取。
+该 crate 只能读取和校验 Pack definition，不能写 authority。
+
 ## Manifest Path
 
 Pack manifest 固定路径：
@@ -246,4 +249,3 @@ Pack loader silently mutates project state
 - Software Dev Pack 内容；
 - UI Design Pack 内容；
 - Pack marketplace。
-

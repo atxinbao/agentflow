@@ -9,8 +9,8 @@ use active::{
 };
 use args::{
     AgentDispatcherCommand, ApiPlaneCommand, AuditCommand, BuildAgentCommand,
-    CapabilityRegistryCommand, Cli, Command, CompletionCommand, ProjectCommand, ProjectionCommand,
-    ReleaseCommand, TaskLoopCommand,
+    CapabilityRegistryCommand, Cli, Command, CompletionCommand, PackCommand, ProjectCommand,
+    ProjectionCommand, ReleaseCommand, TaskLoopCommand,
 };
 use clap::Parser;
 use formal::{
@@ -280,6 +280,24 @@ fn main() -> anyhow::Result<()> {
                 } else {
                     println!("{}", serde_json::to_string_pretty(&registry)?);
                 }
+            }
+        },
+        Command::Pack { command } => match command {
+            PackCommand::Registry { output } => {
+                let registry = agentflow_runtime_api::get_pack_registry(&cwd)?;
+                if let Some(output) = output {
+                    if let Some(parent) = output.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    std::fs::write(output, serde_json::to_string_pretty(&registry)? + "\n")?;
+                } else {
+                    println!("{}", serde_json::to_string_pretty(&registry)?);
+                }
+            }
+            PackCommand::ValidateManifest { manifest_path } => {
+                let manifest = agentflow_pack::load_pack_manifest(manifest_path)?;
+                let report = agentflow_pack::validate_pack_manifest(&manifest);
+                println!("{}", serde_json::to_string_pretty(&report)?);
             }
         },
         Command::Release { command } => match command {

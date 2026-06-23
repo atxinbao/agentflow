@@ -49,6 +49,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: CapabilityRegistryCommand,
     },
+    Pack {
+        #[command(subcommand)]
+        command: PackCommand,
+    },
     Release {
         #[command(subcommand)]
         command: ReleaseCommand,
@@ -220,6 +224,18 @@ pub(crate) enum CapabilityRegistryCommand {
     Manifest {
         #[arg(long)]
         output: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum PackCommand {
+    Registry {
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    ValidateManifest {
+        #[arg(long = "manifest-path")]
+        manifest_path: PathBuf,
     },
 }
 

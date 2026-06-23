@@ -11,6 +11,7 @@ agentflow-audit = { path = "../audit" }
 agentflow-event-store = { path = "../event-store" }
 agentflow-object-state = { path = "../object-state" }
 agentflow-ontology = { path = "../ontology" }
+agentflow-pack = { path = "../pack" }
 agentflow-projection = { path = "../projection" }
 agentflow-release = { path = "../release" }
 agentflow-role-policy = { path = "../role-policy" }
