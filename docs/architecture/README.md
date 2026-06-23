@@ -39,6 +39,7 @@
 | [018-api-plane-manifest-v1.md](018-api-plane-manifest-v1.md) | 定义 Runtime / Projection / Command API Plane manifest 和 release gate 检查 |
 | [019-pack-filesystem-contract-v1.md](019-pack-filesystem-contract-v1.md) | 定义 Pack System 文件系统位置、职责、authority 边界和 Runtime 入口 |
 | [020-domain-pack-contract-v1.md](020-domain-pack-contract-v1.md) | 定义 Domain Pack 的对象、关系、状态、动作、验收、证据和审计提示边界 |
+| [021-surface-pack-contract-v1.md](021-surface-pack-contract-v1.md) | 定义 Surface Pack 的页面、工作台、视图模型、命令入口、状态和 sidecar 边界 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -64,8 +65,9 @@
 18. [018-api-plane-manifest-v1.md](018-api-plane-manifest-v1.md)
 19. [019-pack-filesystem-contract-v1.md](019-pack-filesystem-contract-v1.md)
 20. [020-domain-pack-contract-v1.md](020-domain-pack-contract-v1.md)
-21. [current-module-boundaries.md](current-module-boundaries.md)
-22. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+21. [021-surface-pack-contract-v1.md](021-surface-pack-contract-v1.md)
+22. [current-module-boundaries.md](current-module-boundaries.md)
+23. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 
