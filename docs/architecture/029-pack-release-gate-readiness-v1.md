@@ -82,6 +82,10 @@ Delivery -> OptionalAuditRequest -> AuditReport -> Finding -> FollowUpProposal
 
 发现问题时，sidecar 只生成 `FollowUpProposal`，不能把已完成的主链任务回滚成未完成。
 
+Release summary 必须把审计写成独立 `auditSidecar` 区块。`auditSidecar.status=failed`
+只表示旁路审计结果失败；除非 release policy 显式绑定，否则它不能覆盖 release
+gate 的主结论。
+
 ## CLI 入口
 
 Release gate 使用正式 CLI 入口生成 Pack artifact：
