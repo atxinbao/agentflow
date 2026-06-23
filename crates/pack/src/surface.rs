@@ -297,21 +297,38 @@ pub fn software_dev_surface_definition() -> PackSurfaceDefinition {
         surface_id: "software-dev-surface".to_string(),
         pages: vec![
             page("project-home", "Project Home", SurfacePageKind::Main),
-            page(
+            page_with_commands(
                 "spec-workbench",
                 "Spec Workbench",
                 SurfacePageKind::Workbench,
+                &["spec.intake.start"],
             ),
-            page(
+            page_with_commands(
                 "task-workbench",
                 "Task Workbench",
                 SurfacePageKind::Workbench,
+                &["work.issue.start"],
             ),
-            page("acceptance", "Acceptance", SurfacePageKind::Workbench),
-            page("delivery", "Delivery", SurfacePageKind::Detail),
+            page_with_commands(
+                "acceptance",
+                "Acceptance",
+                SurfacePageKind::Workbench,
+                &["acceptance.evaluate"],
+            ),
+            page_with_commands(
+                "delivery",
+                "Delivery",
+                SurfacePageKind::Detail,
+                &["delivery.open"],
+            ),
             page("event-timeline", "Event Timeline", SurfacePageKind::Detail),
             page("evidence-graph", "Evidence Graph", SurfacePageKind::Detail),
-            page("audit-surface", "Audit Surface", SurfacePageKind::Sidecar),
+            page_with_commands(
+                "audit-surface",
+                "Audit Surface",
+                SurfacePageKind::Sidecar,
+                &["audit.request.sidecar"],
+            ),
             page("finding-review", "Finding Review", SurfacePageKind::Sidecar),
             page(
                 "follow-up-proposal",
@@ -477,13 +494,25 @@ pub fn ui_design_surface_definition() -> PackSurfaceDefinition {
 }
 
 fn page(page_id: &str, label: &str, kind: SurfacePageKind) -> SurfacePage {
+    page_with_commands(page_id, label, kind, &[])
+}
+
+fn page_with_commands(
+    page_id: &str,
+    label: &str,
+    kind: SurfacePageKind,
+    command_entry_ids: &[&str],
+) -> SurfacePage {
     SurfacePage {
         page_id: page_id.to_string(),
         label: label.to_string(),
         description: format!("{label} surface"),
         kind,
         view_model_ref: format!("view-model:{page_id}"),
-        command_entry_ids: Vec::new(),
+        command_entry_ids: command_entry_ids
+            .iter()
+            .map(|value| (*value).to_string())
+            .collect(),
     }
 }
 
@@ -605,6 +634,41 @@ mod tests {
             .sidecar_surfaces
             .iter()
             .any(|sidecar| sidecar.page_id == "audit-surface" && !sidecar.blocks_main_chain));
+        assert!(audit_page
+            .command_entry_ids
+            .contains(&"audit.request.sidecar".to_string()));
+    }
+
+    #[test]
+    fn software_dev_pages_expose_main_chain_command_entries() {
+        let surface = software_dev_surface_definition();
+
+        assert!(validate_surface_definition(&surface).valid);
+        let task_page = surface
+            .pages
+            .iter()
+            .find(|page| page.page_id == "task-workbench")
+            .unwrap();
+        let acceptance_page = surface
+            .pages
+            .iter()
+            .find(|page| page.page_id == "acceptance")
+            .unwrap();
+        let delivery_page = surface
+            .pages
+            .iter()
+            .find(|page| page.page_id == "delivery")
+            .unwrap();
+
+        assert!(task_page
+            .command_entry_ids
+            .contains(&"work.issue.start".to_string()));
+        assert!(acceptance_page
+            .command_entry_ids
+            .contains(&"acceptance.evaluate".to_string()));
+        assert!(delivery_page
+            .command_entry_ids
+            .contains(&"delivery.open".to_string()));
     }
 
     #[test]

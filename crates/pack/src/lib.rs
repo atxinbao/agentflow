@@ -40,11 +40,12 @@ pub use surface::{
 pub use validation::{
     command_boundary_is_runtime_only, generate_pack_migration_preview,
     load_pack_validation_artifact, pack_migration_applied_receipt, pack_validation_artifact_path,
-    validate_pack_bundle, PackApiPlaneMapping, PackAppliedMigrationBoundary,
-    PackMigrationAppliedReceipt, PackMigrationApplyConfirmation, PackMigrationPreview,
-    PackMigrationPreviewReceipt, PackValidationArtifact, PackValidationIssue,
-    PackVersionCompatibility, PACK_MIGRATION_APPLIED_RECEIPT_VERSION,
-    PACK_MIGRATION_PREVIEW_RECEIPT_VERSION, PACK_MIGRATION_PREVIEW_VERSION,
+    software_dev_pack_readiness_artifact, validate_pack_bundle, PackApiPlaneMapping,
+    PackAppliedMigrationBoundary, PackMigrationAppliedReceipt, PackMigrationApplyConfirmation,
+    PackMigrationPreview, PackMigrationPreviewReceipt, PackReadinessArtifact,
+    PackValidationArtifact, PackValidationIssue, PackVersionCompatibility,
+    PACK_MIGRATION_APPLIED_RECEIPT_VERSION, PACK_MIGRATION_PREVIEW_RECEIPT_VERSION,
+    PACK_MIGRATION_PREVIEW_VERSION, PACK_READINESS_ARTIFACT_VERSION,
     PACK_VALIDATION_ARTIFACT_VERSION,
 };
 
