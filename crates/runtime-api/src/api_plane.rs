@@ -284,6 +284,41 @@ pub fn api_plane_manifest() -> ApiPlaneManifest {
             "generate_pack_migration_preview",
             "Generate Pack migration preview",
         ),
+        pack_command_readonly(
+            "pack.command.list",
+            "list_pack_commands",
+            "List Pack commands",
+        ),
+        pack_command_readonly(
+            "pack.command.validate",
+            "validate_pack_command",
+            "Validate Pack command",
+        ),
+        pack_command_readonly(
+            "pack.command.dry-run",
+            "dry_run_pack_command",
+            "Dry-run Pack command",
+        ),
+        pack_command(
+            "pack.command.submit-proposal",
+            "submit_pack_action_proposal",
+            "Submit Pack action proposal",
+        ),
+        pack_command_readonly(
+            "pack.capability.status",
+            "query_pack_capability_status",
+            "Query Pack capability status",
+        ),
+        pack_command_readonly(
+            "pack.surface.route",
+            "query_pack_surface_route",
+            "Query Pack surface route",
+        ),
+        pack_command_internal(
+            "pack.command.resolve-runtime",
+            "runtime_command_type_for_action_contract",
+            "Resolve Pack command runtime mapping",
+        ),
     ];
     let categories = summarize_categories(&entries);
     ApiPlaneManifest {
@@ -419,6 +454,48 @@ fn pack_action(api_id: &str, function: &str, label: &str) -> ApiPlaneEntry {
     )
 }
 
+fn pack_command_readonly(api_id: &str, function: &str, label: &str) -> ApiPlaneEntry {
+    ApiPlaneEntry::new(
+        api_id,
+        "pack_command_surface",
+        label,
+        ApiPlaneBoundary::Readonly,
+        ApiPlaneAccess::SdkCandidate,
+        "agentflow-runtime-api",
+        "pack",
+        function,
+        "Pack command read entry; resolves Pack definitions but never writes authority.",
+    )
+}
+
+fn pack_command(api_id: &str, function: &str, label: &str) -> ApiPlaneEntry {
+    ApiPlaneEntry::new(
+        api_id,
+        "pack_command_surface",
+        label,
+        ApiPlaneBoundary::Command,
+        ApiPlaneAccess::LocalOnly,
+        "agentflow-runtime-api",
+        "pack",
+        function,
+        "Pack command write entry; must map to Runtime Command then pass Action Contract and Arbitration.",
+    )
+}
+
+fn pack_command_internal(api_id: &str, function: &str, label: &str) -> ApiPlaneEntry {
+    ApiPlaneEntry::new(
+        api_id,
+        "pack_command_surface",
+        label,
+        ApiPlaneBoundary::Internal,
+        ApiPlaneAccess::Internal,
+        "agentflow-runtime-api",
+        "pack",
+        function,
+        "Internal Pack command helper; not a fact source and not a public API.",
+    )
+}
+
 fn summarize_categories(entries: &[ApiPlaneEntry]) -> Vec<ApiPlaneCategorySummary> {
     let mut categories = entries
         .iter()
@@ -472,6 +549,7 @@ mod tests {
             "audit_actions",
             "release_actions",
             "pack_actions",
+            "pack_command_surface",
         ];
 
         for category in required_categories {
@@ -496,6 +574,15 @@ mod tests {
         }));
         assert!(manifest.entries.iter().any(|entry| {
             entry.category == "pack_actions" && entry.boundary == ApiPlaneBoundary::Readonly
+        }));
+        assert!(manifest.entries.iter().any(|entry| {
+            entry.category == "pack_command_surface" && entry.boundary == ApiPlaneBoundary::Readonly
+        }));
+        assert!(manifest.entries.iter().any(|entry| {
+            entry.category == "pack_command_surface" && entry.boundary == ApiPlaneBoundary::Command
+        }));
+        assert!(manifest.entries.iter().any(|entry| {
+            entry.category == "pack_command_surface" && entry.boundary == ApiPlaneBoundary::Internal
         }));
         assert!(manifest.entries.iter().all(|entry| matches!(
             entry.boundary,

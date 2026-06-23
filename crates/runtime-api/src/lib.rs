@@ -36,9 +36,13 @@ pub use formal::{
 pub use handoff::{write_work_command_handoff_from_spec_issue, WorkCommandHandoff};
 pub use mapping::{map_command_to_action_proposal, RuntimeQueryHint};
 pub use pack::{
-    get_pack_registry, get_pack_validation_artifact, pack_registry_read_receipt,
-    pack_validation_artifact_read_receipt, PackRegistryReadReceipt, PackRegistryView,
-    PackValidationArtifactReadReceipt, PackValidationArtifactView,
+    dry_run_pack_command, get_pack_registry, get_pack_validation_artifact, list_pack_commands,
+    pack_registry_read_receipt, pack_validation_artifact_read_receipt,
+    query_pack_capability_status, query_pack_surface_route, submit_pack_action_proposal,
+    validate_pack_command, PackCapabilityStatusView, PackCommandDryRunReport, PackCommandEntryView,
+    PackCommandListView, PackCommandRequest, PackCommandValidationReport, PackRegistryReadReceipt,
+    PackRegistryView, PackSurfaceRouteView, PackValidationArtifactReadReceipt,
+    PackValidationArtifactView, PACK_COMMAND_SURFACE_VERSION,
 };
 pub use query::{
     get_audit_surface_view, get_delivery_package_view, get_pack_industry_workbench_view,

@@ -43,6 +43,8 @@
 | [022-connector-pack-contract-v1.md](022-connector-pack-contract-v1.md) | 定义 Connector Pack 的外部 provider、capability、smoke、evidence 和 command boundary |
 | [023-pack-validation-migration-preview-v1.md](023-pack-validation-migration-preview-v1.md) | 定义 Pack validation artifact、version compatibility、API Plane mapping 和 migration preview 边界 |
 | [024-pack-simulation-dry-run-v1.md](024-pack-simulation-dry-run-v1.md) | 定义 Pack command dry-run、缺口识别、影响预览和只读边界 |
+| [025-pack-aware-projection-read-models-v1.md](025-pack-aware-projection-read-models-v1.md) | 定义 Pack-aware projection read model、industry workbench view 和 readiness 读模型边界 |
+| [026-pack-command-surface-runtime-api-v1.md](026-pack-command-surface-runtime-api-v1.md) | 定义 Pack command 到 Runtime API、Action Contract、Arbitration 的映射与只读 / 命令边界 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -73,8 +75,9 @@
 23. [023-pack-validation-migration-preview-v1.md](023-pack-validation-migration-preview-v1.md)
 24. [024-pack-simulation-dry-run-v1.md](024-pack-simulation-dry-run-v1.md)
 25. [025-pack-aware-projection-read-models-v1.md](025-pack-aware-projection-read-models-v1.md)
-26. [current-module-boundaries.md](current-module-boundaries.md)
-27. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+26. [026-pack-command-surface-runtime-api-v1.md](026-pack-command-surface-runtime-api-v1.md)
+27. [current-module-boundaries.md](current-module-boundaries.md)
+28. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 
