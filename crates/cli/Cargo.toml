@@ -18,6 +18,7 @@ agentflow-pack = { path = "../pack" }
 agentflow-projection = { path = "../projection" }
 agentflow-release = { path = "../release" }
 agentflow-runtime-api = { path = "../runtime-api" }
+agentflow-simulation = { path = "../simulation" }
 agentflow-spec = { path = "../spec" }
 agentflow-state = { path = "../state" }
 agentflow-task-artifacts = { path = "../task-artifacts" }

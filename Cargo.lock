@@ -94,6 +94,7 @@ dependencies = [
  "agentflow-projection",
  "agentflow-release",
  "agentflow-runtime-api",
+ "agentflow-simulation",
  "agentflow-spec",
  "agentflow-state",
  "agentflow-task-artifacts",

@@ -94,6 +94,13 @@ CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
 FOUNDATION_READINESS_REPORT_PATH="$RUNTIME_DIR/foundation-readiness-report.md"
 FOUNDATION_COVERAGE_PATH="$RUNTIME_DIR/foundation-coverage.json"
+PACK_REGISTRY_PATH="$ARTIFACT_DIR/pack-registry.json"
+PACK_VALIDATION_REPORT_PATH="$ARTIFACT_DIR/pack-validation-report.json"
+PACK_SIMULATION_REPORT_PATH="$ARTIFACT_DIR/pack-simulation-report.json"
+PACK_PROJECTION_READINESS_PATH="$ARTIFACT_DIR/pack-projection-readiness.json"
+PACK_API_PLANE_MANIFEST_PATH="$ARTIFACT_DIR/pack-api-plane-manifest.json"
+SOFTWARE_DEV_PACK_READINESS_PATH="$ARTIFACT_DIR/software-dev-pack-readiness.json"
+UI_DESIGN_PACK_READINESS_PATH="$ARTIFACT_DIR/ui-design-pack-readiness.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -273,6 +280,7 @@ proof_chain = [
     {"stage": "release.version-metadata", "label": "Release Version Metadata"},
     {"stage": "release.changelog-entry", "label": "Release Changelog Entry"},
     {"stage": "release.github-release-fact", "label": "GitHub Release Fact"},
+    {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -326,7 +334,29 @@ runtime_artifacts = [
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/foundation-readiness-report.md", "exists": foundation_readiness_report_path.is_file()},
     {"path": "runtime/foundation-coverage.json", "exists": foundation_coverage_path.is_file()},
+    {"path": "pack-registry.json", "exists": pathlib.Path(summary_json_path.parent / "pack-registry.json").is_file()},
+    {"path": "pack-validation-report.json", "exists": pathlib.Path(summary_json_path.parent / "pack-validation-report.json").is_file()},
+    {"path": "pack-simulation-report.json", "exists": pathlib.Path(summary_json_path.parent / "pack-simulation-report.json").is_file()},
+    {"path": "pack-projection-readiness.json", "exists": pathlib.Path(summary_json_path.parent / "pack-projection-readiness.json").is_file()},
+    {"path": "pack-api-plane-manifest.json", "exists": pathlib.Path(summary_json_path.parent / "pack-api-plane-manifest.json").is_file()},
+    {"path": "software-dev-pack-readiness.json", "exists": pathlib.Path(summary_json_path.parent / "software-dev-pack-readiness.json").is_file()},
+    {"path": "ui-design-pack-readiness.json", "exists": pathlib.Path(summary_json_path.parent / "ui-design-pack-readiness.json").is_file()},
 ]
+
+pack_validation = load_json(pathlib.Path(summary_json_path.parent / "pack-validation-report.json")) or {}
+pack_simulation = load_json(pathlib.Path(summary_json_path.parent / "pack-simulation-report.json")) or {}
+pack_projection = load_json(pathlib.Path(summary_json_path.parent / "pack-projection-readiness.json")) or {}
+pack_api_plane = load_json(pathlib.Path(summary_json_path.parent / "pack-api-plane-manifest.json")) or {}
+software_readiness = load_json(pathlib.Path(summary_json_path.parent / "software-dev-pack-readiness.json")) or {}
+design_readiness = load_json(pathlib.Path(summary_json_path.parent / "ui-design-pack-readiness.json")) or {}
+pack_release_gate_passed = (
+    pack_validation.get("status") == "passed"
+    and pack_simulation.get("status") == "passed"
+    and pack_projection.get("status") == "passed"
+    and pack_api_plane.get("status") == "passed"
+    and software_readiness.get("status") == "completed"
+    and design_readiness.get("status") == "baseline"
+)
 
 checklist = [
     {
@@ -359,6 +389,11 @@ checklist = [
             foundation_coverage_path,
         ]),
     },
+    {
+        "id": "v080-pack-system-release-gate",
+        "label": "v0.8.0 Pack System release gate artifacts are present and ready",
+        "passed": pack_release_gate_passed,
+    },
 ]
 
 summary_payload = {
@@ -375,6 +410,13 @@ summary_payload = {
     "foundationReadinessReportPath": "runtime/foundation-readiness-report.md" if foundation_readiness_report_path.is_file() else None,
     "apiPlaneManifestPath": "runtime/api-plane-manifest.json" if api_plane_manifest_path.is_file() else None,
     "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
+    "packRegistryPath": "pack-registry.json" if pathlib.Path(summary_json_path.parent / "pack-registry.json").is_file() else None,
+    "packValidationReportPath": "pack-validation-report.json" if pathlib.Path(summary_json_path.parent / "pack-validation-report.json").is_file() else None,
+    "packSimulationReportPath": "pack-simulation-report.json" if pathlib.Path(summary_json_path.parent / "pack-simulation-report.json").is_file() else None,
+    "packProjectionReadinessPath": "pack-projection-readiness.json" if pathlib.Path(summary_json_path.parent / "pack-projection-readiness.json").is_file() else None,
+    "softwareDevPackReadinessPath": "software-dev-pack-readiness.json" if pathlib.Path(summary_json_path.parent / "software-dev-pack-readiness.json").is_file() else None,
+    "uiDesignPackReadinessPath": "ui-design-pack-readiness.json" if pathlib.Path(summary_json_path.parent / "ui-design-pack-readiness.json").is_file() else None,
+    "packReleaseGateStatus": "passed" if pack_release_gate_passed else "failed",
     "failedStage": current_stage if current_status == "failed" else None,
     "failureMessage": current_message if current_status == "failed" else None,
     "sourceCommitSha": source_commit_sha,
@@ -414,6 +456,9 @@ summary_lines = [
     f"- Foundation readiness report: `{'present' if foundation_readiness_report_path.is_file() else 'missing'}`",
     f"- API Plane manifest: `{'present' if api_plane_manifest_path.is_file() else 'missing'}`",
     f"- Capability registry: `{'present' if capability_registry_path.is_file() else 'missing'}`",
+    f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
+    f"- Software Dev Pack readiness: `{software_readiness.get('status') or 'missing'}`",
+    f"- UI Design Pack readiness: `{design_readiness.get('status') or 'missing'}`",
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
     f"- Source commit: `{source_commit_sha or 'n/a'}`",
@@ -1035,6 +1080,75 @@ PY
   record_stage "foundation-coverage" "passed" "$(basename "$FOUNDATION_COVERAGE_PATH")"
 }
 
+run_pack_release_gate() {
+  record_stage "pack.release-gate-readiness" "started" "$ARTIFACT_DIR"
+  if ! "$BIN" pack release-gate-readiness \
+    --output-dir "$ARTIFACT_DIR" \
+    --runtime-version "${RELEASE_VERSION#v}" \
+    >"$CLI_DIR/pack-release-gate-readiness.txt" 2>&1; then
+    fail_stage "pack.release-gate-readiness" "pack readiness artifact generation failed"
+  fi
+
+  python3 - \
+    "$PACK_REGISTRY_PATH" \
+    "$PACK_VALIDATION_REPORT_PATH" \
+    "$PACK_SIMULATION_REPORT_PATH" \
+    "$PACK_PROJECTION_READINESS_PATH" \
+    "$PACK_API_PLANE_MANIFEST_PATH" \
+    "$SOFTWARE_DEV_PACK_READINESS_PATH" \
+    "$UI_DESIGN_PACK_READINESS_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+registry_path = pathlib.Path(sys.argv[1])
+validation_path = pathlib.Path(sys.argv[2])
+simulation_path = pathlib.Path(sys.argv[3])
+projection_path = pathlib.Path(sys.argv[4])
+api_plane_path = pathlib.Path(sys.argv[5])
+software_path = pathlib.Path(sys.argv[6])
+design_path = pathlib.Path(sys.argv[7])
+
+required = [
+    registry_path,
+    validation_path,
+    simulation_path,
+    projection_path,
+    api_plane_path,
+    software_path,
+    design_path,
+]
+missing = [str(path) for path in required if not path.is_file()]
+if missing:
+    raise SystemExit(f"missing pack release gate artifacts: {missing}")
+
+validation = json.loads(validation_path.read_text(encoding="utf-8"))
+simulation = json.loads(simulation_path.read_text(encoding="utf-8"))
+projection = json.loads(projection_path.read_text(encoding="utf-8"))
+api_plane = json.loads(api_plane_path.read_text(encoding="utf-8"))
+software = json.loads(software_path.read_text(encoding="utf-8"))
+design = json.loads(design_path.read_text(encoding="utf-8"))
+
+if validation.get("status") != "passed":
+    raise SystemExit("pack validation report did not pass")
+if simulation.get("status") != "passed":
+    raise SystemExit("pack simulation report did not pass")
+if projection.get("status") != "passed":
+    raise SystemExit("pack projection readiness did not pass")
+if api_plane.get("status") != "passed":
+    raise SystemExit("pack api plane manifest did not pass")
+if software.get("status") != "completed":
+    raise SystemExit("software-dev pack readiness must be completed")
+if design.get("status") != "baseline":
+    raise SystemExit("ui-design pack readiness must be baseline")
+if software.get("writesAuthority") is not False or design.get("writesAuthority") is not False:
+    raise SystemExit("pack readiness artifacts must remain readonly")
+if "Finding" not in software.get("auditSidecarChain", []):
+    raise SystemExit("software-dev readiness must document audit sidecar finding chain")
+PY
+  record_stage "pack.release-gate-readiness" "passed" "$(basename "$PACK_VALIDATION_REPORT_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -1378,6 +1492,7 @@ main() {
   run_api_plane_manifest_gate
   run_capability_registry_gate
   run_foundation_coverage_gate
+  run_pack_release_gate
   write_requirement
 
   local intake_json="$CLI_DIR/artifacts-intake.json"

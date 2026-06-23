@@ -39,8 +39,9 @@ pub use surface::{
 };
 pub use validation::{
     command_boundary_is_runtime_only, generate_pack_migration_preview,
-    load_pack_validation_artifact, pack_migration_applied_receipt, pack_validation_artifact_path,
-    software_dev_pack_readiness_artifact, validate_pack_bundle, PackApiPlaneMapping,
+    load_pack_validation_artifact, pack_migration_applied_receipt, pack_readiness_api_entries,
+    pack_validation_artifact_path, software_dev_pack_readiness_artifact,
+    ui_design_pack_readiness_artifact, validate_pack_bundle, PackApiPlaneMapping,
     PackAppliedMigrationBoundary, PackMigrationAppliedReceipt, PackMigrationApplyConfirmation,
     PackMigrationPreview, PackMigrationPreviewReceipt, PackReadinessArtifact,
     PackValidationArtifact, PackValidationIssue, PackVersionCompatibility,

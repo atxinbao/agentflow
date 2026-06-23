@@ -233,6 +233,12 @@ pub(crate) enum PackCommand {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+    ReleaseGateReadiness {
+        #[arg(long = "output-dir")]
+        output_dir: PathBuf,
+        #[arg(long = "runtime-version")]
+        runtime_version: Option<String>,
+    },
     ValidateManifest {
         #[arg(long = "manifest-path")]
         manifest_path: PathBuf,
