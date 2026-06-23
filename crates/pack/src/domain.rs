@@ -239,41 +239,79 @@ pub fn software_dev_domain_definition() -> PackDomainDefinition {
             ("Spec", "已确认规格"),
             ("Issue", "可执行任务"),
             ("Run", "工作循环运行"),
+            ("Acceptance", "验收结论"),
+            ("Delivery", "交付记录"),
             ("PullRequest", "PR/MR 交付入口"),
             ("Release", "版本发布"),
             ("Evidence", "验证证据"),
+            ("Audit", "独立审计"),
             ("Finding", "审计发现"),
+            ("FollowUpProposal", "后续修复提案"),
         ]),
         link_types: vec![
             link("requirement-produces-spec", "Requirement", "Spec"),
             link("spec-produces-issue", "Spec", "Issue"),
             link("issue-produces-run", "Issue", "Run"),
+            link("run-produces-acceptance", "Run", "Acceptance"),
+            link("acceptance-produces-delivery", "Acceptance", "Delivery"),
             link("run-produces-evidence", "Run", "Evidence"),
             link("run-produces-pr", "Run", "PullRequest"),
-            link("release-includes-pr", "Release", "PullRequest"),
+            link("delivery-includes-pr", "Delivery", "PullRequest"),
+            link("release-includes-delivery", "Release", "Delivery"),
+            link("delivery-can-request-audit", "Delivery", "Audit"),
+            link("audit-produces-finding", "Audit", "Finding"),
+            link(
+                "finding-produces-follow-up-proposal",
+                "Finding",
+                "FollowUpProposal",
+            ),
         ],
-        state_machines: vec![DomainStateMachine {
-            object_type: "Issue".to_string(),
-            states: vec![
-                "backlog".to_string(),
-                "todo".to_string(),
-                "in_progress".to_string(),
-                "in_review".to_string(),
-                "done".to_string(),
-                "blocked".to_string(),
-                "cancel".to_string(),
-            ],
-            transitions: vec![
-                transition("backlog", "todo", "issue.prepare"),
-                transition("todo", "in_progress", "issue.start"),
-                transition("in_progress", "in_review", "issue.prepare-review"),
-                transition("in_review", "done", "issue.mark-done"),
-            ],
-        }],
+        state_machines: vec![
+            DomainStateMachine {
+                object_type: "Issue".to_string(),
+                states: vec![
+                    "backlog".to_string(),
+                    "todo".to_string(),
+                    "in_progress".to_string(),
+                    "in_review".to_string(),
+                    "done".to_string(),
+                    "blocked".to_string(),
+                    "cancel".to_string(),
+                ],
+                transitions: vec![
+                    transition("backlog", "todo", "activateIssue"),
+                    transition("todo", "in_progress", "startRun"),
+                    transition("in_progress", "in_review", "runValidation"),
+                    transition("in_review", "done", "markIssueDone"),
+                ],
+            },
+            DomainStateMachine {
+                object_type: "Audit".to_string(),
+                states: vec![
+                    "requested".to_string(),
+                    "in_progress".to_string(),
+                    "reported".to_string(),
+                    "closed".to_string(),
+                ],
+                transitions: vec![
+                    transition("requested", "in_progress", "requestAudit"),
+                    transition("in_progress", "reported", "createFinding"),
+                    transition("reported", "closed", "linkFixIssue"),
+                ],
+            },
+        ],
         action_semantics: vec![
-            action("issue.start", "Issue"),
-            action("issue.prepare-review", "Run"),
-            action("issue.mark-done", "Issue"),
+            action("submitRequirement", "Requirement"),
+            action("approveSpec", "Spec"),
+            action("createIssue", "Issue"),
+            action("activateIssue", "Issue"),
+            action("startRun", "Issue"),
+            action("runValidation", "Run"),
+            action("prepareDelivery", "Run"),
+            action("markIssueDone", "Issue"),
+            action("requestAudit", "Issue"),
+            action("createFinding", "Audit"),
+            action("linkFixIssue", "Finding"),
         ],
         acceptance_semantics: vec![DomainAcceptanceSemantic {
             acceptance_id: "software-dev.issue.done".to_string(),
@@ -450,6 +488,18 @@ mod tests {
             .object_types
             .iter()
             .any(|object| object.object_type_id == "Issue"));
+        assert!(software
+            .object_types
+            .iter()
+            .any(|object| object.object_type_id == "Acceptance"));
+        assert!(software
+            .object_types
+            .iter()
+            .any(|object| object.object_type_id == "Delivery"));
+        assert!(software
+            .link_types
+            .iter()
+            .any(|link| link.link_type_id == "finding-produces-follow-up-proposal"));
         assert!(!software
             .object_types
             .iter()

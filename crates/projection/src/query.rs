@@ -3137,6 +3137,14 @@ mod tests {
             .domain_object_index
             .iter()
             .any(|object| object.object_type_id == "Issue"));
+        assert!(software
+            .domain_object_index
+            .iter()
+            .any(|object| object.object_type_id == "Acceptance"));
+        assert!(software
+            .domain_object_index
+            .iter()
+            .any(|object| object.object_type_id == "Delivery"));
         assert!(design
             .domain_object_index
             .iter()
@@ -3145,6 +3153,10 @@ mod tests {
             .surface_page_index
             .iter()
             .any(|page| page.page_id == "task-workbench"));
+        assert!(software
+            .surface_page_index
+            .iter()
+            .any(|page| page.page_id == "audit-surface" && page.page_kind == "sidecar"));
         assert!(design
             .surface_page_index
             .iter()

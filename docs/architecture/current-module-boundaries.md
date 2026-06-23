@@ -66,6 +66,7 @@ docs/requirements/**
 - `V080-008` 建立 Pack command dry-run、缺口识别、影响预览和 Software Dev / UI Design simulation 覆盖。
 - `V080-009` 建立 Pack-aware projection read model，暴露 pack list、active pack、validation/readiness、domain object index、surface page index、connector capability index 和 industry workbench view。
 - `V080-010` 建立 Pack-aware command surface，支持 list / validate / dry-run / submit proposal / capability status / surface route，并强制写侧进入 Runtime API、Action Contract 和 Arbitration。
+- `V080-011` 建立 Software Dev Pack baseline，把软件开发现场表达为 Requirement -> Spec -> Issue -> Run -> Acceptance -> Delivery -> Release 主链，并保留 Audit / Finding / Follow-up Proposal 为独立 sidecar。
 
 架构文档：
 
@@ -77,6 +78,7 @@ docs/requirements/**
 - `docs/architecture/024-pack-simulation-dry-run-v1.md`
 - `docs/architecture/025-pack-aware-projection-read-models-v1.md`
 - `docs/architecture/026-pack-command-surface-runtime-api-v1.md`
+- `docs/architecture/027-software-dev-pack-baseline-v1.md`
 
 实现位置：
 

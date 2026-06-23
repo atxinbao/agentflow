@@ -1,8 +1,11 @@
 use crate::{
-    validate_connector_definition, validate_domain_definition, validate_pack_manifest,
-    validate_surface_definition, ConnectorCommandBoundary, PackConnectorDefinition,
-    PackConnectorValidationReport, PackDomainDefinition, PackDomainValidationReport, PackManifest,
-    PackManifestValidationReport, PackSurfaceDefinition, PackSurfaceValidationReport,
+    software_dev_connector_definition, software_dev_domain_definition,
+    software_dev_surface_definition, validate_connector_definition, validate_domain_definition,
+    validate_pack_manifest, validate_surface_definition, ConnectorCommandBoundary,
+    PackConnectorDefinition, PackConnectorValidationReport, PackDomainDefinition,
+    PackDomainValidationReport, PackManifest, PackManifestValidationReport, PackMigrationPolicy,
+    PackSurfaceDefinition, PackSurfaceValidationReport, PackType, PackValidationStatus,
+    PACK_MANIFEST_VERSION,
 };
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -18,6 +21,7 @@ pub const PACK_MIGRATION_PREVIEW_RECEIPT_VERSION: &str =
     "agentflow-pack-migration-preview-receipt.v1";
 pub const PACK_MIGRATION_APPLIED_RECEIPT_VERSION: &str =
     "agentflow-pack-migration-applied-receipt.v1";
+pub const PACK_READINESS_ARTIFACT_VERSION: &str = "agentflow-pack-readiness.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,6 +61,25 @@ pub struct PackVersionCompatibility {
 pub struct PackApiPlaneMapping {
     pub checked_entries: Vec<String>,
     pub missing_entries: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackReadinessArtifact {
+    pub version: String,
+    pub pack_id: String,
+    pub status: String,
+    pub writes_authority: bool,
+    pub can_load: bool,
+    pub can_validate: bool,
+    pub can_project: bool,
+    pub main_chain: Vec<String>,
+    pub audit_sidecar_chain: Vec<String>,
+    pub finding_policy: String,
+    pub validation: PackValidationArtifact,
+    pub projection_entries: Vec<String>,
+    pub source_refs: Vec<String>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -229,6 +252,77 @@ pub fn pack_validation_artifact_path(project_root: impl AsRef<Path>, pack_id: &s
         .join("validation/validation.json")
 }
 
+pub fn software_dev_pack_readiness_artifact(
+    api_plane_entries: &[String],
+    current_runtime_version: &str,
+) -> PackReadinessArtifact {
+    let domain = software_dev_domain_definition();
+    let surface = software_dev_surface_definition();
+    let connector = software_dev_connector_definition();
+    let manifest = software_dev_pack_manifest(&domain, &surface, &connector);
+    let validation = validate_pack_bundle(
+        &manifest,
+        &domain,
+        &surface,
+        &connector,
+        api_plane_entries,
+        current_runtime_version,
+    );
+    let can_load = !domain.object_types.is_empty()
+        && !surface.pages.is_empty()
+        && !connector.connectors.is_empty()
+        && !manifest.pack_id.is_empty();
+    let can_validate = validation.active;
+    let can_project = validation.active && validation.missing_read_models.is_empty();
+    let mut warnings = Vec::new();
+    if !can_validate {
+        warnings.push("software-dev-pack-validation-failed".to_string());
+    }
+    if !can_project {
+        warnings.push("software-dev-pack-projection-not-ready".to_string());
+    }
+
+    PackReadinessArtifact {
+        version: PACK_READINESS_ARTIFACT_VERSION.to_string(),
+        pack_id: manifest.pack_id,
+        status: if can_load && can_validate && can_project {
+            "ready".to_string()
+        } else {
+            "not-ready".to_string()
+        },
+        writes_authority: false,
+        can_load,
+        can_validate,
+        can_project,
+        main_chain: vec![
+            "Requirement".to_string(),
+            "Spec".to_string(),
+            "Issue".to_string(),
+            "Run".to_string(),
+            "Acceptance".to_string(),
+            "Delivery".to_string(),
+            "Release".to_string(),
+        ],
+        audit_sidecar_chain: vec![
+            "Delivery".to_string(),
+            "OptionalAuditRequest".to_string(),
+            "AuditReport".to_string(),
+            "Finding".to_string(),
+            "FollowUpProposal".to_string(),
+        ],
+        finding_policy: "finding-generates-follow-up-proposal-only".to_string(),
+        validation,
+        projection_entries: manifest_projection_entries(),
+        source_refs: vec![
+            "pack-builtin:software-dev/domain".to_string(),
+            "pack-builtin:software-dev/surface".to_string(),
+            "pack-builtin:software-dev/connectors".to_string(),
+            "projection.pack-industry-workbench".to_string(),
+        ],
+        warnings,
+    }
+}
+
 pub fn generate_pack_migration_preview(
     preview_id: impl Into<String>,
     pack_id: impl Into<String>,
@@ -295,6 +389,57 @@ fn version_compatibility(required: &str, current: &str) -> PackVersionCompatibil
         current_runtime: current.to_string(),
         compatible,
     }
+}
+
+fn software_dev_pack_manifest(
+    domain: &PackDomainDefinition,
+    surface: &PackSurfaceDefinition,
+    connector: &PackConnectorDefinition,
+) -> PackManifest {
+    PackManifest {
+        version: PACK_MANIFEST_VERSION.to_string(),
+        pack_id: "software-dev".to_string(),
+        name: "Software Dev".to_string(),
+        pack_type: PackType::SoftwareDev,
+        pack_version: "0.8.0".to_string(),
+        runtime_compatibility: ">=0.8.0".to_string(),
+        domain_path: "domain/".to_string(),
+        surface_path: "surface/".to_string(),
+        connector_path: "connectors/".to_string(),
+        required_capabilities: connector
+            .connectors
+            .iter()
+            .flat_map(|connector| connector.required_capabilities.clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect(),
+        owned_object_types: domain
+            .object_types
+            .iter()
+            .map(|object| object.object_type_id.clone())
+            .collect(),
+        exposed_commands: surface
+            .command_entry_mappings
+            .iter()
+            .map(|command| command.command_type.clone())
+            .collect(),
+        projection_entries: manifest_projection_entries(),
+        migration_policy: PackMigrationPolicy::PreviewOnly,
+        validation_status: PackValidationStatus::Valid,
+    }
+}
+
+fn manifest_projection_entries() -> Vec<String> {
+    vec![
+        "projection.project-home".to_string(),
+        "projection.spec-workbench".to_string(),
+        "projection.task-workbench".to_string(),
+        "projection.acceptance".to_string(),
+        "projection.delivery".to_string(),
+        "projection.event-timeline".to_string(),
+        "projection.evidence-graph".to_string(),
+        "projection.audit-surface".to_string(),
+    ]
 }
 
 fn version_at_least(current: &str, required_min: &str) -> bool {
@@ -392,8 +537,8 @@ pub fn command_boundary_is_runtime_only(boundary: &ConnectorCommandBoundary) -> 
 #[cfg(test)]
 mod tests {
     use super::{
-        generate_pack_migration_preview, pack_migration_applied_receipt, validate_pack_bundle,
-        PackMigrationApplyConfirmation,
+        generate_pack_migration_preview, pack_migration_applied_receipt,
+        software_dev_pack_readiness_artifact, validate_pack_bundle, PackMigrationApplyConfirmation,
     };
     use crate::{
         software_dev_connector_definition, software_dev_domain_definition,
@@ -462,6 +607,48 @@ mod tests {
         assert!(!artifact.writes_authority);
         assert!(artifact.issues.is_empty());
         assert!(artifact.version_compatibility.compatible);
+    }
+
+    #[test]
+    fn software_dev_readiness_artifact_proves_load_validate_and_project() {
+        let artifact = software_dev_pack_readiness_artifact(&api_entries(), "0.8.0");
+
+        assert_eq!(artifact.pack_id, "software-dev");
+        assert_eq!(artifact.status, "ready");
+        assert!(artifact.can_load);
+        assert!(artifact.can_validate);
+        assert!(artifact.can_project);
+        assert!(!artifact.writes_authority);
+        assert_eq!(
+            artifact.main_chain,
+            vec![
+                "Requirement".to_string(),
+                "Spec".to_string(),
+                "Issue".to_string(),
+                "Run".to_string(),
+                "Acceptance".to_string(),
+                "Delivery".to_string(),
+                "Release".to_string(),
+            ]
+        );
+        assert_eq!(
+            artifact.audit_sidecar_chain,
+            vec![
+                "Delivery".to_string(),
+                "OptionalAuditRequest".to_string(),
+                "AuditReport".to_string(),
+                "Finding".to_string(),
+                "FollowUpProposal".to_string(),
+            ]
+        );
+        assert_eq!(
+            artifact.finding_policy,
+            "finding-generates-follow-up-proposal-only"
+        );
+        assert!(artifact.validation.active);
+        assert!(artifact
+            .source_refs
+            .contains(&"projection.pack-industry-workbench".to_string()));
     }
 
     #[test]

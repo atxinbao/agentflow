@@ -597,7 +597,14 @@ fn domain_action_for_type<'a>(
 }
 
 fn action_type_from_contract_ref(contract_ref: &str) -> Option<&str> {
-    contract_ref.strip_prefix("action-contract:")
+    match contract_ref {
+        "action-contract:spec.intake" => Some("submitRequirement"),
+        "action-contract:issue.start" => Some("startRun"),
+        "action-contract:acceptance.evaluate" => Some("runValidation"),
+        "action-contract:delivery.open" => Some("prepareDelivery"),
+        "action-contract:audit.request" => Some("requestAudit"),
+        _ => contract_ref.strip_prefix("action-contract:"),
+    }
 }
 
 fn pack_expected_events(
@@ -1018,7 +1025,7 @@ mod tests {
         assert!(report
             .expected_events
             .iter()
-            .any(|event| event.event_type == "issue.start.proposed"));
+            .any(|event| event.event_type == "startRun.proposed"));
         assert!(report
             .affected_projections
             .iter()
