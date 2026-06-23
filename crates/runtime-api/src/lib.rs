@@ -35,7 +35,11 @@ pub use formal::{
 };
 pub use handoff::{write_work_command_handoff_from_spec_issue, WorkCommandHandoff};
 pub use mapping::{map_command_to_action_proposal, RuntimeQueryHint};
-pub use pack::{get_pack_registry, PackRegistryView};
+pub use pack::{
+    get_pack_registry, get_pack_validation_artifact, pack_registry_read_receipt,
+    pack_validation_artifact_read_receipt, PackRegistryReadReceipt, PackRegistryView,
+    PackValidationArtifactReadReceipt, PackValidationArtifactView,
+};
 pub use query::{
     get_audit_surface_view, get_delivery_package_view, get_project_home_view,
     get_requirement_intake_view, get_runtime_health_view, get_spec_loop_view,

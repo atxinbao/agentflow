@@ -8,6 +8,7 @@
 pub mod connector;
 pub mod domain;
 pub mod surface;
+pub mod validation;
 
 use anyhow::{Context, Result};
 pub use connector::{
@@ -35,6 +36,16 @@ pub use surface::{
     SurfaceCommandEntryMapping, SurfaceCommandRoute, SurfaceNavigationRule, SurfacePage,
     SurfacePageKind, SurfaceReadModelDependency, SurfaceSidecar, SurfaceStatePolicy,
     SurfaceViewModelMapping, SurfaceWorkbench, PACK_SURFACE_VERSION,
+};
+pub use validation::{
+    command_boundary_is_runtime_only, generate_pack_migration_preview,
+    load_pack_validation_artifact, pack_migration_applied_receipt, pack_validation_artifact_path,
+    validate_pack_bundle, PackApiPlaneMapping, PackAppliedMigrationBoundary,
+    PackMigrationAppliedReceipt, PackMigrationApplyConfirmation, PackMigrationPreview,
+    PackMigrationPreviewReceipt, PackValidationArtifact, PackValidationIssue,
+    PackVersionCompatibility, PACK_MIGRATION_APPLIED_RECEIPT_VERSION,
+    PACK_MIGRATION_PREVIEW_RECEIPT_VERSION, PACK_MIGRATION_PREVIEW_VERSION,
+    PACK_VALIDATION_ARTIFACT_VERSION,
 };
 
 pub const PACK_MANIFEST_VERSION: &str = "agentflow-pack-manifest.v1";

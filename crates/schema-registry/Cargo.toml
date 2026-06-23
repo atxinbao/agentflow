@@ -7,6 +7,7 @@ version.workspace = true
 [dependencies]
 agentflow-audit = { path = "../audit" }
 agentflow-event-store = { path = "../event-store" }
+agentflow-pack = { path = "../pack" }
 agentflow-projection = { path = "../projection" }
 agentflow-release = { path = "../release" }
 agentflow-runtime-api = { path = "../runtime-api" }
@@ -17,4 +18,3 @@ agentflow-workflow-core = { path = "../workflow-core" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-

@@ -264,6 +264,21 @@ pub fn api_plane_manifest() -> ApiPlaneManifest {
             "validate_pack_manifest",
             "Validate Pack manifest",
         ),
+        pack_action(
+            "pack.bundle.validate",
+            "validate_pack_bundle",
+            "Validate Pack bundle",
+        ),
+        pack_action(
+            "pack.validation.read",
+            "get_pack_validation_artifact",
+            "Read Pack validation artifact",
+        ),
+        pack_action(
+            "pack.migration.preview",
+            "generate_pack_migration_preview",
+            "Generate Pack migration preview",
+        ),
     ];
     let categories = summarize_categories(&entries);
     ApiPlaneManifest {
