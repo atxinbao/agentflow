@@ -25,6 +25,7 @@ pub enum SchemaAuthorityLayer {
     Audit,
     Release,
     RuntimeApi,
+    Pack,
     State,
     Workflow,
 }
@@ -39,6 +40,7 @@ impl SchemaAuthorityLayer {
             Self::Audit => "audit",
             Self::Release => "release",
             Self::RuntimeApi => "runtime-api",
+            Self::Pack => "pack",
             Self::State => "state",
             Self::Workflow => "workflow",
         }
@@ -274,6 +276,41 @@ pub fn core_schema_registry() -> SchemaRegistry {
                 MigrationStrategy::ExplicitApplyRequired,
             ),
             entry(
+                "pack.manifest",
+                agentflow_pack::PACK_MANIFEST_VERSION,
+                SchemaAuthorityLayer::Pack,
+                ".agentflow/packs/*/pack.json",
+                MigrationStrategy::PreviewOnly,
+            ),
+            entry(
+                "pack.domain",
+                agentflow_pack::PACK_DOMAIN_VERSION,
+                SchemaAuthorityLayer::Pack,
+                ".agentflow/packs/*/domain/*.json",
+                MigrationStrategy::PreviewOnly,
+            ),
+            entry(
+                "pack.surface",
+                agentflow_pack::PACK_SURFACE_VERSION,
+                SchemaAuthorityLayer::Pack,
+                ".agentflow/packs/*/surface/*.json",
+                MigrationStrategy::PreviewOnly,
+            ),
+            entry(
+                "pack.connector",
+                agentflow_pack::PACK_CONNECTOR_VERSION,
+                SchemaAuthorityLayer::Pack,
+                ".agentflow/packs/*/connectors/*.json",
+                MigrationStrategy::PreviewOnly,
+            ),
+            entry(
+                "pack.validation",
+                agentflow_pack::PACK_VALIDATION_ARTIFACT_VERSION,
+                SchemaAuthorityLayer::Pack,
+                ".agentflow/packs/*/validation/validation.json",
+                MigrationStrategy::PreviewOnly,
+            ),
+            entry(
                 "state.manifest",
                 agentflow_state::STATE_MANIFEST_VERSION,
                 SchemaAuthorityLayer::State,
@@ -455,6 +492,8 @@ mod tests {
         assert!(registry.find("event.task").is_some());
         assert!(registry.find("task.run").is_some());
         assert!(registry.find("projection.project").is_some());
+        assert!(registry.find("pack.manifest").is_some());
+        assert!(registry.find("pack.validation").is_some());
         assert!(registry
             .current_versions()
             .iter()

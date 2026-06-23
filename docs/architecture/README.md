@@ -41,6 +41,7 @@
 | [020-domain-pack-contract-v1.md](020-domain-pack-contract-v1.md) | 定义 Domain Pack 的对象、关系、状态、动作、验收、证据和审计提示边界 |
 | [021-surface-pack-contract-v1.md](021-surface-pack-contract-v1.md) | 定义 Surface Pack 的页面、工作台、视图模型、命令入口、状态和 sidecar 边界 |
 | [022-connector-pack-contract-v1.md](022-connector-pack-contract-v1.md) | 定义 Connector Pack 的外部 provider、capability、smoke、evidence 和 command boundary |
+| [023-pack-validation-migration-preview-v1.md](023-pack-validation-migration-preview-v1.md) | 定义 Pack validation artifact、version compatibility、API Plane mapping 和 migration preview 边界 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -68,8 +69,9 @@
 20. [020-domain-pack-contract-v1.md](020-domain-pack-contract-v1.md)
 21. [021-surface-pack-contract-v1.md](021-surface-pack-contract-v1.md)
 22. [022-connector-pack-contract-v1.md](022-connector-pack-contract-v1.md)
-23. [current-module-boundaries.md](current-module-boundaries.md)
-24. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+23. [023-pack-validation-migration-preview-v1.md](023-pack-validation-migration-preview-v1.md)
+24. [current-module-boundaries.md](current-module-boundaries.md)
+25. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 
