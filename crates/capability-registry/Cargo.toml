@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 agentflow-mcp = { path = "../mcp" }
+agentflow-pack = { path = "../pack" }
 agentflow-role-policy = { path = "../role-policy" }
 agentflow-workflow-core = { path = "../workflow-core" }
 serde = { workspace = true }
