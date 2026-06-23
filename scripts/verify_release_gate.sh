@@ -954,6 +954,21 @@ for worker in workers:
         raise SystemExit(f"worker grants authority write: {worker}")
     if boundary.get("runtimeCommandRequired") is not True:
         raise SystemExit(f"worker does not require runtime command: {worker}")
+disabled_capabilities = [
+    capability
+    for worker in workers
+    for capability in (worker.get("capabilities") or [])
+    if capability.get("available") is False
+]
+if not disabled_capabilities:
+    raise SystemExit("capability registry gate must cover at least one disabled capability")
+missing_reason = [
+    capability
+    for capability in disabled_capabilities
+    if not capability.get("disabledReason")
+]
+if missing_reason:
+    raise SystemExit(f"disabled capability is missing a reason: {missing_reason[0]}")
 PY
   record_stage "capability-registry" "passed" "$(basename "$CAPABILITY_REGISTRY_PATH")"
 }

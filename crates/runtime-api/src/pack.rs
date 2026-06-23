@@ -2,8 +2,15 @@ use crate::commands::{
     execute_command_via_arbitration, validate_runtime_command, RuntimeCommandRequest,
 };
 use crate::errors::{RuntimeCommandError, RuntimeCommandErrorCode};
-use crate::responses::{RuntimeCommandResponse, RuntimeCommandValidationReport};
+use crate::responses::{
+    RuntimeCommandDecision, RuntimeCommandResponse, RuntimeCommandStatus,
+    RuntimeCommandValidationReport, RUNTIME_COMMAND_API_VERSION,
+};
 use agentflow_action_contract::{ActionRef, ActionSourceSurface};
+use agentflow_capability_registry::{
+    evaluate_pack_connector_commands, CapabilityRegistry, PackConnectorCommandDecision,
+    WorkerHealth,
+};
 use anyhow::{Context, Result};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -229,6 +236,18 @@ pub fn validate_pack_command(
     if let Some(validation) = runtime_validation.as_ref() {
         rejected_reasons.extend(validation.errors.clone());
     }
+    if let Some(resolved) = resolved.as_ref() {
+        if !resolved.capability.available {
+            rejected_reasons.push(pack_command_error(
+                RuntimeCommandErrorCode::MappingFailed,
+                format!(
+                    "pack command `{}` is unavailable: {}",
+                    request.command, resolved.capability.reason
+                ),
+                Some("capabilityStatus"),
+            ));
+        }
+    }
 
     Ok(PackCommandValidationReport {
         version: PACK_COMMAND_SURFACE_VERSION.to_string(),
@@ -286,6 +305,12 @@ pub fn submit_pack_action_proposal(
 ) -> Result<RuntimeCommandResponse> {
     let root = project_root.as_ref();
     let validation = validate_pack_command(root, request)?;
+    if !validation.valid {
+        return Ok(invalid_pack_command_response(
+            request,
+            validation.rejected_reasons,
+        ));
+    }
     if let Some(runtime_command) = validation.runtime_command.as_ref() {
         execute_command_via_arbitration(root, runtime_command)
     } else {
@@ -372,35 +397,14 @@ fn resolve_pack_command(
                 "pack command `{command}` maps to runtime command `{runtime_command_type}` without domain action semantic"
             )
         })?;
-    let provider_actions = bundle
-        .connector
-        .connectors
-        .iter()
-        .flat_map(|connector| {
-            connector
-                .supported_actions
-                .iter()
-                .filter(move |action| action.command_type == command)
-                .map(move |action| {
-                    (
-                        connector.connector_id.clone(),
-                        action.required_capability.clone(),
-                    )
-                })
-        })
-        .collect::<Vec<_>>();
-    let required_capabilities = provider_actions
-        .iter()
-        .map(|(_, capability)| capability.clone())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let provider_ids = provider_actions
-        .iter()
-        .map(|(provider, _)| provider.clone())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
+    let capability_registry = load_project_capability_registry(project_root)
+        .map_err(|error| format!("capability registry unreadable: {error}"))?;
+    let connector_decisions =
+        evaluate_pack_connector_commands(&capability_registry, &bundle.connector)
+            .into_iter()
+            .filter(|decision| decision.command_type == command)
+            .collect::<Vec<_>>();
+    let capability = capability_status_from_decisions(pack_id, command, &connector_decisions);
 
     Ok(ResolvedPackCommand {
         route: PackSurfaceRouteView {
@@ -425,17 +429,72 @@ fn resolve_pack_command(
                     .replace('\\', "/"),
             ],
         },
-        capability: PackCapabilityStatusView {
-            version: PACK_COMMAND_SURFACE_VERSION.to_string(),
-            pack_id: pack_id.to_string(),
-            command: command.to_string(),
-            required_capabilities,
-            provider_ids,
-            command_boundary: "runtime-api/action-contract/arbitration".to_string(),
-            available: true,
-            reason: "pack command can enter Runtime API; provider execution still requires runtime preflight".to_string(),
-        },
+        capability,
     })
+}
+
+fn capability_status_from_decisions(
+    pack_id: &str,
+    command: &str,
+    decisions: &[PackConnectorCommandDecision],
+) -> PackCapabilityStatusView {
+    let required_capabilities = decisions
+        .iter()
+        .map(|decision| decision.required_capability.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let provider_ids = decisions
+        .iter()
+        .map(|decision| decision.connector_id.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let unavailable_reasons = decisions
+        .iter()
+        .filter_map(|decision| {
+            if decision.enabled && decision.health == WorkerHealth::Ready {
+                None
+            } else {
+                Some(decision.disabled_reason.clone().unwrap_or_else(|| {
+                    format!(
+                        "worker {} is not ready: {}",
+                        decision.worker_id,
+                        decision.health.as_str()
+                    )
+                }))
+            }
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let available = !decisions.is_empty() && unavailable_reasons.is_empty();
+    let reason = if decisions.is_empty() {
+        format!("pack command `{command}` has no connector capability mapping")
+    } else if available {
+        "pack command is available through capability registry and provider smoke state".to_string()
+    } else {
+        unavailable_reasons.join("; ")
+    };
+
+    PackCapabilityStatusView {
+        version: PACK_COMMAND_SURFACE_VERSION.to_string(),
+        pack_id: pack_id.to_string(),
+        command: command.to_string(),
+        required_capabilities,
+        provider_ids,
+        command_boundary: "runtime-api/action-contract/arbitration".to_string(),
+        available,
+        reason,
+    }
+}
+
+fn load_project_capability_registry(project_root: &Path) -> Result<CapabilityRegistry> {
+    let path = project_root.join(".agentflow/runtime/capability-registry.json");
+    if !path.is_file() {
+        return Ok(agentflow_capability_registry::default_capability_registry());
+    }
+    load_pack_definition(path)
 }
 
 fn load_file_backed_pack_bundle(
@@ -565,6 +624,24 @@ fn pack_command_error(
     RuntimeCommandError::new(code, message, path)
 }
 
+fn invalid_pack_command_response(
+    request: &PackCommandRequest,
+    rejected_reasons: Vec<RuntimeCommandError>,
+) -> RuntimeCommandResponse {
+    RuntimeCommandResponse {
+        version: RUNTIME_COMMAND_API_VERSION.to_string(),
+        command_id: request.command_id.clone(),
+        proposal_id: format!("proposal-{}", request.command_id),
+        status: RuntimeCommandStatus::InvalidCommand,
+        decision: RuntimeCommandDecision::InvalidCommand,
+        accepted_action_id: None,
+        rejected_reasons,
+        human_decision_request: None,
+        next_query_hint: None,
+        correlation_id: request.command_id.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -575,6 +652,10 @@ mod tests {
     };
     use crate::responses::RuntimeCommandStatus;
     use agentflow_action_contract::ActionSourceSurface;
+    use agentflow_capability_registry::{
+        CapabilityPolicy, CapabilityRegistry, WorkerBoundary, WorkerCapability, WorkerHealth,
+        WorkerKind, WorkerRegistryEntry, CAPABILITY_REGISTRY_VERSION,
+    };
     use serde_json::json;
     use std::path::Path;
 
@@ -722,6 +803,54 @@ mod tests {
     }
 
     #[test]
+    fn runtime_disables_pack_command_when_capability_is_disabled() {
+        let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
+        write_github_capability_registry(
+            dir.path(),
+            WorkerHealth::Ready,
+            "repo.read",
+            false,
+            CapabilityPolicy::Disabled,
+            Some("provider capability disabled by fixture"),
+        );
+        let request = software_issue_start_request();
+
+        let report = validate_pack_command(dir.path(), &request).unwrap();
+        let status = report.capability_status.unwrap();
+
+        assert!(!status.available);
+        assert!(status
+            .reason
+            .contains("provider capability disabled by fixture"));
+        assert!(!report.valid);
+        assert!(report
+            .rejected_reasons
+            .iter()
+            .any(|reason| reason.message.contains("unavailable")));
+    }
+
+    #[test]
+    fn runtime_reports_degraded_capability_as_unavailable_not_ready() {
+        let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
+        write_github_capability_registry(
+            dir.path(),
+            WorkerHealth::Degraded,
+            "repo.read",
+            true,
+            CapabilityPolicy::Allowed,
+            None,
+        );
+
+        let status =
+            query_pack_capability_status(dir.path(), "software-dev", "work.issue.start").unwrap();
+
+        assert!(!status.available);
+        assert!(status.reason.contains("degraded"));
+    }
+
+    #[test]
     fn runtime_rejects_invalid_pack_command_with_readable_reason() {
         let dir = tempfile::tempdir().unwrap();
         write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
@@ -864,20 +993,92 @@ mod tests {
         let mut connector = agentflow_pack::software_dev_connector_definition();
         connector.pack_id = pack_id.to_string();
         connector.connector_id = format!("{pack_id}-connectors");
-        if let Some(action) = connector
+        if let Some(github_connector) = connector
             .connectors
             .iter_mut()
-            .flat_map(|connector| connector.supported_actions.iter_mut())
-            .next()
+            .find(|connector| connector.connector_id == "github")
         {
-            action.command_type = command.to_string();
-            action.required_capability = format!("{pack_id}.capability");
+            let capability = capability_for_pack_command(pack_id, command);
+            github_connector
+                .required_capabilities
+                .push(capability.clone());
+            github_connector.required_capabilities.sort();
+            github_connector.required_capabilities.dedup();
+            github_connector
+                .supported_actions
+                .push(agentflow_pack::ConnectorSupportedAction {
+                    action_id: format!("{command}.capability"),
+                    label: command.to_string(),
+                    required_capability: capability,
+                    command_type: command.to_string(),
+                    writes_external: false,
+                    evidence_output: "connector.evidence".to_string(),
+                });
         }
 
         write_json(pack_dir.join("pack.json"), &manifest);
         write_json(pack_dir.join("domain/definition.json"), &domain);
         write_json(pack_dir.join("surface/definition.json"), &surface);
         write_json(pack_dir.join("connectors/definition.json"), &connector);
+        write_github_capability_registry(
+            root,
+            WorkerHealth::Ready,
+            &capability_for_pack_command(pack_id, command),
+            true,
+            CapabilityPolicy::Allowed,
+            None,
+        );
+    }
+
+    fn capability_for_pack_command(pack_id: &str, command: &str) -> String {
+        if pack_id == "software-dev" && command == "work.issue.start" {
+            "repo.read".to_string()
+        } else {
+            format!("{pack_id}.capability")
+        }
+    }
+
+    fn write_github_capability_registry(
+        root: &Path,
+        health: WorkerHealth,
+        capability_id: &str,
+        available: bool,
+        policy: CapabilityPolicy,
+        disabled_reason: Option<&str>,
+    ) {
+        let registry = CapabilityRegistry {
+            version: CAPABILITY_REGISTRY_VERSION.to_string(),
+            workers: vec![WorkerRegistryEntry {
+                worker_id: "github".to_string(),
+                title: "GitHub Connector".to_string(),
+                kind: WorkerKind::AgentProvider,
+                health,
+                requires_auth: false,
+                disabled_reason: None,
+                provider_smoke: None,
+                runtime_roles: Vec::new(),
+                skill_packs: Vec::new(),
+                tool_kinds: Vec::new(),
+                capabilities: vec![WorkerCapability {
+                    capability_id: capability_id.to_string(),
+                    label: capability_id.to_string(),
+                    command: capability_id.to_string(),
+                    required: true,
+                    available,
+                    requires_auth: false,
+                    policy,
+                    disabled_reason: disabled_reason.map(str::to_string),
+                }],
+                boundary: WorkerBoundary::connector(
+                    vec!["repo".to_string()],
+                    vec!["pull-request".to_string()],
+                    vec!["evidence".to_string()],
+                ),
+            }],
+        };
+        let path = root.join(".agentflow/runtime/capability-registry.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        write_json(path, &registry);
     }
 
     fn write_json(path: impl AsRef<Path>, value: &impl serde::Serialize) {
