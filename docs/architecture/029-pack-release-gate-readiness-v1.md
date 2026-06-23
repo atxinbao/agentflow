@@ -21,6 +21,7 @@ pack-validation-report.json
 pack-simulation-report.json
 pack-projection-readiness.json
 pack-api-plane-manifest.json
+pack-negative-fixtures.json
 software-dev-pack-readiness.json
 ui-design-pack-readiness.json
 ```
@@ -59,10 +60,37 @@ Pack readiness report 只能使用以下状态：
 - `pack-simulation-report.json.status == passed`
 - `pack-projection-readiness.json.status == passed`
 - `pack-api-plane-manifest.json.status == passed`
+- `pack-negative-fixtures.json.status == passed`
+- `pack-negative-fixtures.json.writesAuthority == false`
 - `software-dev-pack-readiness.json.status == completed`
 - `ui-design-pack-readiness.json.status == baseline`
 
 失败时不能发布 Pack System ready 结论。
+
+## Negative Fixtures
+
+Release gate 不能只验证 happy path。v0.8.1 开始必须生成
+`pack-negative-fixtures.json`，覆盖这些失败场景：
+
+- invalid Pack
+- missing read model
+- missing connector
+- disabled capability
+- invalid command submit
+- unexpected Software Dev fallback
+
+每个 fixture 必须写明：
+
+```text
+id
+stage
+reason
+writesAuthority=false
+passed
+```
+
+负向 fixture 只证明失败边界和拒绝原因，不写 Runtime authority，也不创建 Audit
+Issue。
 
 ## Software Dev Pack Audit Sidecar
 

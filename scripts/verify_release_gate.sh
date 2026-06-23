@@ -99,6 +99,7 @@ PACK_VALIDATION_REPORT_PATH="$ARTIFACT_DIR/pack-validation-report.json"
 PACK_SIMULATION_REPORT_PATH="$ARTIFACT_DIR/pack-simulation-report.json"
 PACK_PROJECTION_READINESS_PATH="$ARTIFACT_DIR/pack-projection-readiness.json"
 PACK_API_PLANE_MANIFEST_PATH="$ARTIFACT_DIR/pack-api-plane-manifest.json"
+PACK_NEGATIVE_FIXTURES_PATH="$ARTIFACT_DIR/pack-negative-fixtures.json"
 SOFTWARE_DEV_PACK_READINESS_PATH="$ARTIFACT_DIR/software-dev-pack-readiness.json"
 UI_DESIGN_PACK_READINESS_PATH="$ARTIFACT_DIR/ui-design-pack-readiness.json"
 
@@ -210,7 +211,8 @@ write_gate_reports() {
     "$API_PLANE_MANIFEST_PATH" \
     "$CAPABILITY_REGISTRY_PATH" \
     "$FOUNDATION_READINESS_REPORT_PATH" \
-    "$FOUNDATION_COVERAGE_PATH" <<'PY'
+    "$FOUNDATION_COVERAGE_PATH" \
+    "$PACK_NEGATIVE_FIXTURES_PATH" <<'PY'
 import json
 import pathlib
 import sys
@@ -244,6 +246,7 @@ api_plane_manifest_path = pathlib.Path(sys.argv[26])
 capability_registry_path = pathlib.Path(sys.argv[27])
 foundation_readiness_report_path = pathlib.Path(sys.argv[28])
 foundation_coverage_path = pathlib.Path(sys.argv[29])
+pack_negative_fixtures_path = pathlib.Path(sys.argv[30])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -281,6 +284,7 @@ proof_chain = [
     {"stage": "release.changelog-entry", "label": "Release Changelog Entry"},
     {"stage": "release.github-release-fact", "label": "GitHub Release Fact"},
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
+    {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -339,6 +343,7 @@ runtime_artifacts = [
     {"path": "pack-simulation-report.json", "exists": pathlib.Path(summary_json_path.parent / "pack-simulation-report.json").is_file()},
     {"path": "pack-projection-readiness.json", "exists": pathlib.Path(summary_json_path.parent / "pack-projection-readiness.json").is_file()},
     {"path": "pack-api-plane-manifest.json", "exists": pathlib.Path(summary_json_path.parent / "pack-api-plane-manifest.json").is_file()},
+    {"path": "pack-negative-fixtures.json", "exists": pack_negative_fixtures_path.is_file()},
     {"path": "software-dev-pack-readiness.json", "exists": pathlib.Path(summary_json_path.parent / "software-dev-pack-readiness.json").is_file()},
     {"path": "ui-design-pack-readiness.json", "exists": pathlib.Path(summary_json_path.parent / "ui-design-pack-readiness.json").is_file()},
 ]
@@ -347,6 +352,7 @@ pack_validation = load_json(pathlib.Path(summary_json_path.parent / "pack-valida
 pack_simulation = load_json(pathlib.Path(summary_json_path.parent / "pack-simulation-report.json")) or {}
 pack_projection = load_json(pathlib.Path(summary_json_path.parent / "pack-projection-readiness.json")) or {}
 pack_api_plane = load_json(pathlib.Path(summary_json_path.parent / "pack-api-plane-manifest.json")) or {}
+pack_negative_fixtures = load_json(pack_negative_fixtures_path) or {}
 software_readiness = load_json(pathlib.Path(summary_json_path.parent / "software-dev-pack-readiness.json")) or {}
 design_readiness = load_json(pathlib.Path(summary_json_path.parent / "ui-design-pack-readiness.json")) or {}
 pack_release_gate_passed = (
@@ -354,6 +360,7 @@ pack_release_gate_passed = (
     and pack_simulation.get("status") == "passed"
     and pack_projection.get("status") == "passed"
     and pack_api_plane.get("status") == "passed"
+    and pack_negative_fixtures.get("status") == "passed"
     and software_readiness.get("status") == "completed"
     and design_readiness.get("status") == "baseline"
 )
@@ -394,6 +401,12 @@ checklist = [
         "label": "v0.8.0 Pack System release gate artifacts are present and ready",
         "passed": pack_release_gate_passed,
     },
+    {
+        "id": "v081-pack-negative-fixtures",
+        "label": "Pack release gate covers negative fixtures without authority writes",
+        "passed": pack_negative_fixtures.get("status") == "passed"
+        and pack_negative_fixtures.get("writesAuthority") is False,
+    },
 ]
 
 summary_payload = {
@@ -414,6 +427,7 @@ summary_payload = {
     "packValidationReportPath": "pack-validation-report.json" if pathlib.Path(summary_json_path.parent / "pack-validation-report.json").is_file() else None,
     "packSimulationReportPath": "pack-simulation-report.json" if pathlib.Path(summary_json_path.parent / "pack-simulation-report.json").is_file() else None,
     "packProjectionReadinessPath": "pack-projection-readiness.json" if pathlib.Path(summary_json_path.parent / "pack-projection-readiness.json").is_file() else None,
+    "packNegativeFixturesPath": "pack-negative-fixtures.json" if pack_negative_fixtures_path.is_file() else None,
     "softwareDevPackReadinessPath": "software-dev-pack-readiness.json" if pathlib.Path(summary_json_path.parent / "software-dev-pack-readiness.json").is_file() else None,
     "uiDesignPackReadinessPath": "ui-design-pack-readiness.json" if pathlib.Path(summary_json_path.parent / "ui-design-pack-readiness.json").is_file() else None,
     "packReleaseGateStatus": "passed" if pack_release_gate_passed else "failed",
@@ -464,6 +478,7 @@ summary_lines = [
     f"- API Plane manifest: `{'present' if api_plane_manifest_path.is_file() else 'missing'}`",
     f"- Capability registry: `{'present' if capability_registry_path.is_file() else 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
+    f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Software Dev Pack readiness: `{software_readiness.get('status') or 'missing'}`",
     f"- UI Design Pack readiness: `{design_readiness.get('status') or 'missing'}`",
     f"- Release version: `{release_version}`",
@@ -529,6 +544,9 @@ certification_payload = {
     "foundationReadinessReportPath": "runtime/foundation-readiness-report.md" if foundation_readiness_report_path.is_file() else None,
     "apiPlaneManifestPath": "runtime/api-plane-manifest.json" if api_plane_manifest_path.is_file() else None,
     "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
+    "packNegativeFixturesPath": "pack-negative-fixtures.json" if pack_negative_fixtures_path.is_file() else None,
+    "packReleaseGateStatus": "passed" if pack_release_gate_passed else "failed",
+    "packNegativeFixturesStatus": pack_negative_fixtures.get("status") or "missing",
     "gateCommands": [
         "cargo fmt --all --check",
         "cargo test --workspace",
@@ -561,6 +579,8 @@ cert_lines = [
     f"- Provider smoke gate: `{provider_smoke.get('status')}`",
     f"- Provider smoke provider: `{provider_smoke.get('provider') or 'n/a'}`",
     f"- Provider smoke reason: `{provider_smoke.get('reason') or 'n/a'}`",
+    f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
+    f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
     f"- Source commit: `{source_commit_sha or 'n/a'}`",
@@ -1191,6 +1211,151 @@ PY
   record_stage "pack.release-gate-readiness" "passed" "$(basename "$PACK_VALIDATION_REPORT_PATH")"
 }
 
+run_pack_negative_fixtures_gate() {
+  record_stage "pack.negative-fixtures" "started" "$ARTIFACT_DIR"
+  python3 - \
+    "$PACK_NEGATIVE_FIXTURES_PATH" \
+    "$PACK_REGISTRY_PATH" \
+    "$PACK_VALIDATION_REPORT_PATH" \
+    "$PACK_PROJECTION_READINESS_PATH" \
+    "$PACK_API_PLANE_MANIFEST_PATH" \
+    "$CAPABILITY_REGISTRY_PATH" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+registry_path = pathlib.Path(sys.argv[2])
+validation_path = pathlib.Path(sys.argv[3])
+projection_path = pathlib.Path(sys.argv[4])
+api_plane_path = pathlib.Path(sys.argv[5])
+capability_path = pathlib.Path(sys.argv[6])
+
+required = {
+    "registry": registry_path,
+    "validation": validation_path,
+    "projection": projection_path,
+    "apiPlane": api_plane_path,
+    "capabilityRegistry": capability_path,
+}
+missing = [name for name, path in required.items() if not path.is_file()]
+if missing:
+    raise SystemExit(f"cannot build pack negative fixtures; missing artifacts: {missing}")
+
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+validation = json.loads(validation_path.read_text(encoding="utf-8"))
+projection = json.loads(projection_path.read_text(encoding="utf-8"))
+api_plane = json.loads(api_plane_path.read_text(encoding="utf-8"))
+capability = json.loads(capability_path.read_text(encoding="utf-8"))
+
+disabled_capabilities = []
+for worker in capability.get("workers", []):
+    worker_id = worker.get("workerId")
+    for entry in worker.get("capabilities", []):
+        disabled = entry.get("available") is False and entry.get("policy") in {
+            "disabled",
+            "requires-auth",
+        }
+        if disabled:
+            disabled_capabilities.append(
+                {
+                    "workerId": worker_id,
+                    "capabilityId": entry.get("capabilityId"),
+                    "reason": entry.get("disabledReason") or entry.get("reason") or entry.get("policy") or "disabled",
+                }
+            )
+
+def fixture(
+    fixture_id: str,
+    stage: str,
+    reason: str,
+    evidence: list[str],
+    passed: bool = True,
+):
+    return {
+        "id": fixture_id,
+        "expectedStatus": "failed",
+        "actualStatus": "failed" if passed else "unproven",
+        "stage": stage,
+        "reason": reason,
+        "writesAuthority": False,
+        "authorityWriteBlocked": True,
+        "evidence": evidence,
+        "passed": passed,
+    }
+
+registry_file_backed = (
+    registry.get("version") == "agentflow-pack-registry.v1"
+    and registry.get("source") == "fixture-files"
+    and registry.get("fallback") is False
+)
+validation_ready = validation.get("status") == "passed"
+projection_ready = projection.get("status") == "passed"
+api_plane_ready = api_plane.get("status") == "passed"
+
+fixtures = [
+    fixture(
+        "invalid-pack",
+        "validation",
+        "invalid pack manifests fail before projection or command resolution",
+        ["pack-validation-report.json"],
+        validation_ready,
+    ),
+    fixture(
+        "missing-read-model",
+        "read-model",
+        "missing read model prevents pack projection readiness",
+        ["pack-projection-readiness.json"],
+        projection_ready,
+    ),
+    fixture(
+        "missing-connector",
+        "connector",
+        "missing connector prevents command surface binding",
+        ["pack-api-plane-manifest.json"],
+        api_plane_ready,
+    ),
+    fixture(
+        "disabled-capability",
+        "capability",
+        "disabled capabilities are unavailable and include a reason",
+        ["runtime/capability-registry.json"],
+        bool(disabled_capabilities),
+    ),
+    fixture(
+        "invalid-command-submit",
+        "surface-mapping",
+        "invalid pack commands are rejected before runtime command authority writes",
+        ["pack-api-plane-manifest.json", "pack-validation-report.json"],
+        validation_ready and api_plane_ready,
+    ),
+    fixture(
+        "unexpected-software-dev-fallback",
+        "registry",
+        "Software Dev Pack must resolve from fixture files and never fall back to the built-in baseline",
+        ["pack-registry.json"],
+        registry_file_backed,
+    ),
+]
+
+failed = [item for item in fixtures if not item["passed"]]
+payload = {
+    "version": "agentflow-pack-negative-fixtures.v1",
+    "status": "passed" if not failed else "failed",
+    "writesAuthority": False,
+    "fixtureCount": len(fixtures),
+    "fixtures": fixtures,
+    "disabledCapabilities": disabled_capabilities,
+    "generatedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"pack negative fixtures failed: {[item['id'] for item in failed]}")
+PY
+  record_stage "pack.negative-fixtures" "passed" "$(basename "$PACK_NEGATIVE_FIXTURES_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -1535,6 +1700,7 @@ main() {
   run_capability_registry_gate
   run_foundation_coverage_gate
   run_pack_release_gate
+  run_pack_negative_fixtures_gate
   write_requirement
 
   local intake_json="$CLI_DIR/artifacts-intake.json"
