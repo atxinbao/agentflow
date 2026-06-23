@@ -5,10 +5,18 @@
 //! `.agentflow/**` authority, append events, launch providers, or mutate runtime
 //! state.
 
+pub mod connector;
 pub mod domain;
 pub mod surface;
 
 use anyhow::{Context, Result};
+pub use connector::{
+    software_dev_connector_definition, ui_design_connector_definition,
+    validate_connector_definition, ConnectorCommandBoundary, ConnectorEvidenceOutput,
+    ConnectorHealthSource, ConnectorSmokePolicy, ConnectorSupportedAction, PackConnector,
+    PackConnectorDefinition, PackConnectorProviderType, PackConnectorValidationIssue,
+    PackConnectorValidationReport, PACK_CONNECTOR_VERSION,
+};
 pub use domain::{
     software_dev_domain_definition, ui_design_domain_definition, validate_domain_definition,
     DomainAcceptanceSemantic, DomainActionSemantic, DomainAuditTriggerHint, DomainEvidencePolicy,

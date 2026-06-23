@@ -9,6 +9,7 @@ use agentflow_mcp::{
     provider_capability_profile, McpConnectorBoundary, McpProviderKind, McpProviderSmokeArtifact,
     McpProviderSmokeOutcome, McpProviderStatus, McpProviderStatusCode,
 };
+use agentflow_pack::{ConnectorCommandBoundary, PackConnectorDefinition};
 use agentflow_role_policy::ToolKind;
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowSkillPack};
 use serde::{Deserialize, Serialize};
@@ -255,6 +256,21 @@ pub struct CommandSurfaceDecision {
     pub disabled_reason: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackConnectorCommandDecision {
+    pub pack_id: String,
+    pub connector_id: String,
+    pub action_id: String,
+    pub worker_id: String,
+    pub command_type: String,
+    pub required_capability: String,
+    pub enabled: bool,
+    pub health: WorkerHealth,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disabled_reason: Option<String>,
+}
+
 pub fn build_capability_registry(provider_statuses: &[McpProviderStatus]) -> CapabilityRegistry {
     build_capability_registry_with_smoke(provider_statuses, &[])
 }
@@ -290,6 +306,11 @@ pub fn build_capability_registry_with_smoke(
                 McpProviderKind::Github,
                 statuses.get("github").copied(),
                 smoke.get("github").copied(),
+            ),
+            provider_worker(
+                McpProviderKind::BrowserPreview,
+                statuses.get("browser-preview").copied(),
+                smoke.get("browser-preview").copied(),
             ),
             mcp_connector_worker(),
             audit_worker(),
@@ -365,6 +386,45 @@ pub fn evaluate_command(
         },
         disabled_reason,
     }
+}
+
+pub fn evaluate_pack_connector_commands(
+    registry: &CapabilityRegistry,
+    definition: &PackConnectorDefinition,
+) -> Vec<PackConnectorCommandDecision> {
+    definition
+        .connectors
+        .iter()
+        .flat_map(|connector| {
+            connector.supported_actions.iter().map(|action| {
+                let worker_id = connector.provider_type.worker_id();
+                let decision = evaluate_command(registry, worker_id, &action.required_capability);
+                let boundary_reason = connector_boundary_reason(&connector.command_boundary);
+                let disabled_reason = decision.disabled_reason.or(boundary_reason);
+                PackConnectorCommandDecision {
+                    pack_id: definition.pack_id.clone(),
+                    connector_id: connector.connector_id.clone(),
+                    action_id: action.action_id.clone(),
+                    worker_id: worker_id.to_string(),
+                    command_type: action.command_type.clone(),
+                    required_capability: action.required_capability.clone(),
+                    enabled: disabled_reason.is_none() && decision.enabled,
+                    health: decision.health,
+                    disabled_reason,
+                }
+            })
+        })
+        .collect()
+}
+
+fn connector_boundary_reason(boundary: &ConnectorCommandBoundary) -> Option<String> {
+    if !boundary.runtime_command_required {
+        return Some("connector action must go through Runtime Command Surface".to_string());
+    }
+    if boundary.authority_write || boundary.output_authority {
+        return Some("connector output must not write AgentFlow authority".to_string());
+    }
+    None
 }
 
 fn provider_worker(
@@ -671,12 +731,13 @@ fn worker_disabled_reason(worker: &WorkerRegistryEntry) -> String {
 mod tests {
     use super::{
         build_capability_registry, build_capability_registry_with_smoke, evaluate_command,
-        WorkerHealth,
+        evaluate_pack_connector_commands, WorkerHealth,
     };
     use agentflow_mcp::{
         McpCapability, McpProviderKind, McpProviderSmokeArtifact, McpProviderSmokeOutcome,
         McpProviderStatus, McpProviderStatusCode, MCP_PROVIDER_SMOKE_ARTIFACT_VERSION,
     };
+    use agentflow_pack::software_dev_connector_definition;
 
     #[test]
     fn registry_lists_required_workers() {
@@ -692,6 +753,7 @@ mod tests {
         assert!(worker_ids.contains(&"local-shell-validator"));
         assert!(worker_ids.contains(&"git-provider"));
         assert!(worker_ids.contains(&"github"));
+        assert!(worker_ids.contains(&"browser-preview"));
         assert!(worker_ids.contains(&"mcp-connector"));
         assert!(worker_ids.contains(&"audit-worker"));
     }
@@ -825,6 +887,69 @@ mod tests {
         assert!(!decision.enabled);
         assert_eq!(
             decision.disabled_reason,
+            Some("provider codex smoke gate failed".to_string())
+        );
+    }
+
+    #[test]
+    fn pack_connector_requirements_map_to_command_availability() {
+        let mut github = McpProviderStatus::new(McpProviderKind::Github, 1);
+        github.status = McpProviderStatusCode::Ready;
+        github.authenticated = Some(true);
+        github.capabilities = vec![
+            McpCapability::new("repo.read", true),
+            McpCapability::new("pull_request.create", true),
+        ];
+        let registry = build_capability_registry(&[github]);
+        let pack = software_dev_connector_definition();
+        let decisions = evaluate_pack_connector_commands(&registry, &pack);
+
+        let pr_create = decisions
+            .iter()
+            .find(|decision| decision.action_id == "github.pull-request.create")
+            .unwrap();
+        assert!(pr_create.enabled);
+        assert_eq!(pr_create.worker_id, "github");
+        assert_eq!(pr_create.required_capability, "pull_request.create");
+    }
+
+    #[test]
+    fn provider_smoke_status_disables_pack_connector_command() {
+        let mut status = McpProviderStatus::new(McpProviderKind::Codex, 1);
+        status.status = McpProviderStatusCode::Ready;
+        status.capabilities = vec![
+            McpCapability::new("launch", true),
+            McpCapability::new("build_agent.complete", true),
+        ];
+        let smoke = McpProviderSmokeArtifact {
+            version: MCP_PROVIDER_SMOKE_ARTIFACT_VERSION.to_string(),
+            provider: "codex".to_string(),
+            outcome: McpProviderSmokeOutcome::Failed,
+            reason: "terminal provider state is not projectable".to_string(),
+            health: status.clone(),
+            launch_request_path: Some(".agentflow/tmp/provider-smoke-request.md".to_string()),
+            session_id: Some("session-smoke".to_string()),
+            session_snapshot_path: Some(
+                ".agentflow/state/mcp/sessions/session-smoke.json".to_string(),
+            ),
+            session_snapshot_readable: true,
+            terminal_status: None,
+            terminal_provider_state_projectable: false,
+            artifact_path: ".agentflow/state/mcp/provider-smoke/codex-1.json".to_string(),
+            created_at: 1,
+        };
+        let registry = build_capability_registry_with_smoke(&[status], &[smoke]);
+        let pack = software_dev_connector_definition();
+        let decisions = evaluate_pack_connector_commands(&registry, &pack);
+
+        let launch = decisions
+            .iter()
+            .find(|decision| decision.action_id == "codex.launch")
+            .unwrap();
+        assert!(!launch.enabled);
+        assert_eq!(launch.health, WorkerHealth::Failed);
+        assert_eq!(
+            launch.disabled_reason,
             Some("provider codex smoke gate failed".to_string())
         );
     }
