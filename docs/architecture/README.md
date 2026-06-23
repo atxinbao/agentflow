@@ -50,6 +50,7 @@
 | [029-pack-release-gate-readiness-v1.md](029-pack-release-gate-readiness-v1.md) | 定义 Pack System release gate readiness artifact、状态词、失败规则和 Audit sidecar 非阻断边界 |
 | [030-local-runtime-boundary-v1.md](030-local-runtime-boundary-v1.md) | 定义本地 Runtime 的 authority、API plane、worker 生命周期、Pack / Connector / Provider 和 resume 边界 |
 | [031-cloud-runtime-boundary-v1.md](031-cloud-runtime-boundary-v1.md) | 定义云端 Runtime 的 Runtime Core、API / SDK、行业客户端、Pack / Connector 和治理边界 |
+| [032-runtime-api-sdk-contract-v1.md](032-runtime-api-sdk-contract-v1.md) | 定义 Runtime API / SDK 的 command、query、event、Pack command 和 SDK 只读候选边界 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -86,8 +87,9 @@
 29. [029-pack-release-gate-readiness-v1.md](029-pack-release-gate-readiness-v1.md)
 30. [030-local-runtime-boundary-v1.md](030-local-runtime-boundary-v1.md)
 31. [031-cloud-runtime-boundary-v1.md](031-cloud-runtime-boundary-v1.md)
-32. [current-module-boundaries.md](current-module-boundaries.md)
-33. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+32. [032-runtime-api-sdk-contract-v1.md](032-runtime-api-sdk-contract-v1.md)
+33. [current-module-boundaries.md](current-module-boundaries.md)
+34. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 

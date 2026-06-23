@@ -44,12 +44,14 @@ Manifest 必须覆盖：
 ```text
 runtime_commands
 projection_queries
+event_api
 command_surface_actions
 connector_actions
 provider_actions
 audit_actions
 release_actions
 pack_actions
+pack_command_surface
 ```
 
 ## Boundary Markers
@@ -86,6 +88,23 @@ Manifest 是描述面，不是执行面。
 
 Pack 相关 entry 只能描述 Pack registry / manifest validation 的只读入口。
 Pack entry 不能把 `.agentflow/packs/**` 变成 Runtime authority，也不能绕过 Command Surface。
+
+SDK 相关 entry 必须遵守：
+
+```text
+sdk-candidate => readonly
+projection_queries => readonly
+event_api replay => readonly
+event_api append / claim => internal
+```
+
+也就是说，SDK 可以读取 Projection 和重放 Event receipt，但不能 append Event，也不能直接写 Runtime authority。
+
+完整 SDK contract 见：
+
+```text
+docs/architecture/032-runtime-api-sdk-contract-v1.md
+```
 
 ## Non-goals
 

@@ -22,10 +22,11 @@
 2. [../v0.8.1/README.md](../v0.8.1/README.md)
 3. [../v0.8.0/README.md](../v0.8.0/README.md)
 4. [../architecture/018-api-plane-manifest-v1.md](../architecture/018-api-plane-manifest-v1.md)
-5. [../architecture/012-schema-version-migration-registry-v1.md](../architecture/012-schema-version-migration-registry-v1.md)
-6. [../architecture/013-simulation-dry-run-runtime-v1.md](../architecture/013-simulation-dry-run-runtime-v1.md)
-7. [../architecture/014-local-message-bus-contract-v1.md](../architecture/014-local-message-bus-contract-v1.md)
-8. [../v0.4.0/AGENTFLOW_VERSION_ROADMAP_DRAFT_V1.md](../v0.4.0/AGENTFLOW_VERSION_ROADMAP_DRAFT_V1.md)
+5. [../architecture/032-runtime-api-sdk-contract-v1.md](../architecture/032-runtime-api-sdk-contract-v1.md)
+6. [../architecture/012-schema-version-migration-registry-v1.md](../architecture/012-schema-version-migration-registry-v1.md)
+7. [../architecture/013-simulation-dry-run-runtime-v1.md](../architecture/013-simulation-dry-run-runtime-v1.md)
+8. [../architecture/014-local-message-bus-contract-v1.md](../architecture/014-local-message-bus-contract-v1.md)
+9. [../v0.4.0/AGENTFLOW_VERSION_ROADMAP_DRAFT_V1.md](../v0.4.0/AGENTFLOW_VERSION_ROADMAP_DRAFT_V1.md)
 
 ## Scope
 
@@ -72,4 +73,3 @@ Governance owns policy and admission decisions.
 云端 Runtime 只能承载 Runtime Core 和 API plane，不能绑定某个行业 UI。
 
 本地 Runtime 可以承载完整 developer experience，但它仍然不能绕过 Runtime authority。
-

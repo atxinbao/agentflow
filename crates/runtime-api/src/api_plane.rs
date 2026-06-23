@@ -181,6 +181,26 @@ pub fn api_plane_manifest() -> ApiPlaneManifest {
             "get_pack_industry_workbench_view",
             "Pack industry workbench view",
         ),
+        event_api_readonly(
+            "event.runtime.replay",
+            "replay_runtime_events",
+            "Replay runtime event envelopes",
+        ),
+        event_api_readonly(
+            "event.task.replay",
+            "replay_task_events_from_cursor",
+            "Replay task events from cursor",
+        ),
+        event_api_internal(
+            "event.runtime.append-accepted-action",
+            "append_accepted_action_event",
+            "Append accepted runtime action event",
+        ),
+        event_api_internal(
+            "event.task.claim",
+            "claim_task_event",
+            "Claim task event for internal consumer",
+        ),
         command_surface(
             "command.surface.action-proposal",
             "map_command_to_action_proposal",
@@ -323,8 +343,8 @@ pub fn api_plane_manifest() -> ApiPlaneManifest {
     let categories = summarize_categories(&entries);
     ApiPlaneManifest {
         version: API_PLANE_MANIFEST_VERSION.to_string(),
-        scope: "runtime/projection/command/connector/provider/audit/release/pack".to_string(),
-        boundary_rule: "UI and connector outputs are not authority; write actions enter Runtime API / Command Surface first.".to_string(),
+        scope: "runtime/projection/event/command/connector/provider/audit/release/pack".to_string(),
+        boundary_rule: "SDK, UI, connector, provider, and Pack outputs are not authority; write actions enter Runtime API / Command Surface first, while SDK-visible query and event paths remain readonly.".to_string(),
         entries,
         categories,
     }
@@ -367,6 +387,34 @@ fn projection_query(api_id: &str, function: &str, label: &str) -> ApiPlaneEntry 
         "query",
         function,
         "Projection read model query; never writes authority.",
+    )
+}
+
+fn event_api_readonly(api_id: &str, function: &str, label: &str) -> ApiPlaneEntry {
+    ApiPlaneEntry::new(
+        api_id,
+        "event_api",
+        label,
+        ApiPlaneBoundary::Readonly,
+        ApiPlaneAccess::SdkCandidate,
+        "agentflow-event-store",
+        "runtime/storage",
+        function,
+        "Event read API; SDK may replay or inspect event receipts but cannot append authority facts.",
+    )
+}
+
+fn event_api_internal(api_id: &str, function: &str, label: &str) -> ApiPlaneEntry {
+    ApiPlaneEntry::new(
+        api_id,
+        "event_api",
+        label,
+        ApiPlaneBoundary::Internal,
+        ApiPlaneAccess::Internal,
+        "agentflow-event-store",
+        "runtime/storage",
+        function,
+        "Internal event write or claim API; only Runtime-controlled flows may call it.",
     )
 }
 
@@ -543,6 +591,7 @@ mod tests {
         let required_categories = [
             "runtime_commands",
             "projection_queries",
+            "event_api",
             "command_surface_actions",
             "connector_actions",
             "provider_actions",
@@ -570,6 +619,12 @@ mod tests {
             entry.category == "projection_queries" && entry.boundary == ApiPlaneBoundary::Readonly
         }));
         assert!(manifest.entries.iter().any(|entry| {
+            entry.category == "event_api" && entry.boundary == ApiPlaneBoundary::Readonly
+        }));
+        assert!(manifest.entries.iter().any(|entry| {
+            entry.category == "event_api" && entry.boundary == ApiPlaneBoundary::Internal
+        }));
+        assert!(manifest.entries.iter().any(|entry| {
             entry.category == "release_actions" && entry.boundary == ApiPlaneBoundary::Authority
         }));
         assert!(manifest.entries.iter().any(|entry| {
@@ -591,6 +646,60 @@ mod tests {
                 | ApiPlaneBoundary::Command
                 | ApiPlaneBoundary::Internal
         )));
+    }
+
+    #[test]
+    fn sdk_candidates_are_readonly_and_cannot_bypass_runtime_authority() {
+        let manifest = api_plane_manifest();
+
+        let sdk_entries = manifest
+            .entries
+            .iter()
+            .filter(|entry| entry.access == super::ApiPlaneAccess::SdkCandidate)
+            .collect::<Vec<_>>();
+        assert!(
+            !sdk_entries.is_empty(),
+            "manifest should expose readonly SDK candidate APIs"
+        );
+        assert!(sdk_entries.iter().all(|entry| {
+            entry.boundary == ApiPlaneBoundary::Readonly
+                && !matches!(
+                    entry.category.as_str(),
+                    "runtime_commands"
+                        | "command_surface_actions"
+                        | "connector_actions"
+                        | "provider_actions"
+                        | "release_actions"
+                )
+        }));
+    }
+
+    #[test]
+    fn manifest_covers_command_query_and_event_contract_paths() {
+        let manifest = api_plane_manifest();
+
+        let required_api_ids = [
+            "runtime.command.validate",
+            "runtime.command.execute",
+            "projection.task-workbench",
+            "projection.pack-industry-workbench",
+            "event.runtime.replay",
+            "event.task.replay",
+            "event.runtime.append-accepted-action",
+            "pack.command.list",
+            "pack.command.validate",
+            "pack.command.dry-run",
+            "pack.command.submit-proposal",
+            "pack.surface.route",
+            "pack.capability.status",
+        ];
+
+        for api_id in required_api_ids {
+            assert!(
+                manifest.entries.iter().any(|entry| entry.api_id == api_id),
+                "missing API Plane contract entry {api_id}"
+            );
+        }
     }
 
     #[test]

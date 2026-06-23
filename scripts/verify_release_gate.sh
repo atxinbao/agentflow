@@ -932,11 +932,14 @@ if payload.get("version") != "agentflow-api-plane-manifest.v1":
 required_categories = {
     "runtime_commands",
     "projection_queries",
+    "event_api",
     "command_surface_actions",
     "connector_actions",
     "provider_actions",
     "audit_actions",
     "release_actions",
+    "pack_actions",
+    "pack_command_surface",
 }
 entries = payload.get("entries") or []
 categories = {entry.get("category") for entry in entries}
@@ -947,6 +950,44 @@ allowed_boundaries = {"authority", "readonly", "command", "internal"}
 for entry in entries:
     if entry.get("boundary") not in allowed_boundaries:
         raise SystemExit(f"api plane entry has invalid boundary: {entry}")
+    if entry.get("category") == "projection_queries" and entry.get("boundary") != "readonly":
+        raise SystemExit(f"projection query must be readonly: {entry}")
+    if entry.get("access") == "sdk-candidate" and entry.get("boundary") != "readonly":
+        raise SystemExit(f"sdk candidate API must be readonly: {entry}")
+    if entry.get("access") == "sdk-candidate" and entry.get("category") in {
+        "runtime_commands",
+        "command_surface_actions",
+        "connector_actions",
+        "provider_actions",
+        "release_actions",
+    }:
+        raise SystemExit(f"sdk candidate cannot expose write-side API: {entry}")
+
+entry_ids = {entry.get("apiId") for entry in entries}
+required_entry_ids = {
+    "runtime.command.validate",
+    "runtime.command.execute",
+    "projection.task-workbench",
+    "projection.pack-industry-workbench",
+    "event.runtime.replay",
+    "event.task.replay",
+    "event.runtime.append-accepted-action",
+    "pack.command.list",
+    "pack.command.validate",
+    "pack.command.dry-run",
+    "pack.command.submit-proposal",
+    "pack.surface.route",
+    "pack.capability.status",
+}
+missing_entries = sorted(required_entry_ids - entry_ids)
+if missing_entries:
+    raise SystemExit(f"api plane manifest missing contract entries: {missing_entries}")
+
+event_entries = [entry for entry in entries if entry.get("category") == "event_api"]
+if not any(entry.get("boundary") == "readonly" for entry in event_entries):
+    raise SystemExit("event API must include a readonly replay path")
+if not any(entry.get("boundary") == "internal" for entry in event_entries):
+    raise SystemExit("event API must include an internal append/claim path")
 PY
   record_stage "api-plane-manifest" "passed" "$(basename "$API_PLANE_MANIFEST_PATH")"
 }
