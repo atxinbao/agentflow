@@ -65,7 +65,7 @@ docs/requirements/**
 - `V080-007` 建立 Pack validation artifact、version compatibility、API Plane mapping、migration preview 和 applied receipt boundary。
 - `V080-008` 建立 Pack command dry-run、缺口识别、影响预览和 Software Dev / UI Design simulation 覆盖。
 - `V080-009` 建立 Pack-aware projection read model，暴露 pack list、active pack、validation/readiness、domain object index、surface page index、connector capability index 和 industry workbench view。
-- Pack-aware command surface 由后续 `V080-*` 任务实现。
+- `V080-010` 建立 Pack-aware command surface，支持 list / validate / dry-run / submit proposal / capability status / surface route，并强制写侧进入 Runtime API、Action Contract 和 Arbitration。
 
 架构文档：
 
@@ -76,6 +76,7 @@ docs/requirements/**
 - `docs/architecture/023-pack-validation-migration-preview-v1.md`
 - `docs/architecture/024-pack-simulation-dry-run-v1.md`
 - `docs/architecture/025-pack-aware-projection-read-models-v1.md`
+- `docs/architecture/026-pack-command-surface-runtime-api-v1.md`
 
 实现位置：
 
