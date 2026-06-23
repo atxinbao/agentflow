@@ -515,7 +515,7 @@ fn built_in_pack_manifest(
         name: name.to_string(),
         pack_type,
         pack_version: "0.8.0".to_string(),
-        runtime_compatibility: ">=0.7.2".to_string(),
+        runtime_compatibility: ">=0.8.0".to_string(),
         domain_path: "domain/".to_string(),
         surface_path: "surface/".to_string(),
         connector_path: "connectors/".to_string(),
