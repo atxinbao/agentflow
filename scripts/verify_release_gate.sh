@@ -435,9 +435,16 @@ summary_payload = {
     "changelogPath": release.get("changelogPath"),
     "releaseNotesPath": release.get("releaseNotesPath"),
     "externalReviewPath": review.get("handoffPath"),
-    "auditStatus": audit.get("latestStatus"),
-    "auditReportPath": audit.get("latestReportPath"),
+    "auditSidecar": {
+        "status": audit.get("latestStatus") or "not-requested",
+        "reportPath": audit.get("latestReportPath"),
+        "releaseGateBlocking": False,
+        "boundary": "audit sidecar result is independent from release gate conclusion unless release policy explicitly binds it",
+        "softwareDevPackMainChain": False,
+    },
 }
+if summary_payload["auditSidecar"]["status"] == "failed" and summary_payload["status"] == "passed":
+    summary_payload["auditSidecar"]["interpretation"] = "sidecar audit failed; release gate conclusion remains passed because no release policy binding is active"
 summary_json_path.write_text(
     json.dumps(summary_payload, ensure_ascii=False, indent=2) + "\n",
     encoding="utf-8",
@@ -479,7 +486,8 @@ if summary_payload["releaseState"]:
         f"- Changelog: `{summary_payload['changelogPath']}`",
         f"- Release notes: `{summary_payload['releaseNotesPath']}`",
         f"- External review: `{summary_payload['externalReviewPath']}`",
-        f"- Audit status: `{summary_payload['auditStatus'] or 'not-requested'}`",
+        f"- Sidecar audit status: `{summary_payload['auditSidecar']['status']}`",
+        f"- Sidecar audit blocks release gate: `{summary_payload['auditSidecar']['releaseGateBlocking']}`",
     ])
 elif release_url:
     summary_lines.append(f"- Release URL: `{release_url}`")
