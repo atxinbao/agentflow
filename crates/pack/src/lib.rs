@@ -5,7 +5,16 @@
 //! `.agentflow/**` authority, append events, launch providers, or mutate runtime
 //! state.
 
+pub mod domain;
+
 use anyhow::{Context, Result};
+pub use domain::{
+    software_dev_domain_definition, ui_design_domain_definition, validate_domain_definition,
+    DomainAcceptanceSemantic, DomainActionSemantic, DomainAuditTriggerHint, DomainEvidencePolicy,
+    DomainLinkType, DomainMigrationCompatibility, DomainObjectType, DomainStateMachine,
+    DomainStateTransition, PackDomainDefinition, PackDomainValidationIssue,
+    PackDomainValidationReport, PACK_DOMAIN_VERSION,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
