@@ -8,6 +8,7 @@ version.workspace = true
 agentflow-action-arbitration = { path = "../action-arbitration" }
 agentflow-action-contract = { path = "../action-contract" }
 agentflow-audit = { path = "../audit" }
+agentflow-capability-registry = { path = "../capability-registry" }
 agentflow-event-store = { path = "../event-store" }
 agentflow-object-state = { path = "../object-state" }
 agentflow-ontology = { path = "../ontology" }
