@@ -5,6 +5,7 @@
 
 use std::collections::VecDeque;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use agentflow_event_store::{load_task_events, ReplayFilter, TaskEvent};
 use anyhow::Result;
@@ -48,6 +49,10 @@ pub enum MessageReplaySource {
 pub struct MessageBusEnvelope {
     pub version: String,
     pub message_id: String,
+    pub correlation_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub causation_id: Option<String>,
+    pub idempotency_key: String,
     pub channel: MessageBusChannel,
     pub topic: String,
     pub subject_type: String,
@@ -171,6 +176,12 @@ pub fn envelope_from_event(event: &TaskEvent, channel: MessageBusChannel) -> Mes
     MessageBusEnvelope {
         version: MESSAGE_BUS_ENVELOPE_VERSION.to_string(),
         message_id: format!("bus-{}", event.event_id),
+        correlation_id: event.correlation_id.clone(),
+        causation_id: event.causation_id.clone(),
+        idempotency_key: event
+            .idempotency_key
+            .clone()
+            .unwrap_or_else(|| format!("bus:event-store:{}", event.event_id)),
         channel,
         topic: event.event_type.clone(),
         subject_type: event.aggregate_type.clone(),
@@ -196,18 +207,31 @@ fn live_envelope(
 ) -> MessageBusEnvelope {
     let topic = topic.into();
     let subject_id = subject_id.into();
+    let now = unix_timestamp_seconds();
+    let channel_name = channel.as_str();
+    let idempotency_key = format!("bus:live:{channel_name}:{}:{subject_id}:{now}", topic);
     MessageBusEnvelope {
         version: MESSAGE_BUS_ENVELOPE_VERSION.to_string(),
-        message_id: format!("bus-live-{}-{}", topic, subject_id),
+        message_id: format!("bus-live-{channel_name}-{topic}-{subject_id}-{now}"),
+        correlation_id: format!("corr-bus-{subject_id}-{now}"),
+        causation_id: None,
+        idempotency_key,
         channel,
         topic,
         subject_type: subject_type.into(),
         subject_id,
         event_ref: None,
         replay_source: MessageReplaySource::LiveFanout,
-        created_at: 0,
+        created_at: now,
         payload,
     }
+}
+
+fn unix_timestamp_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 fn event_matches_filter(event: &TaskEvent, filter: &ReplayFilter) -> bool {
@@ -311,6 +335,10 @@ mod tests {
 
         assert_eq!(envelope.channel, MessageBusChannel::Projection);
         assert_eq!(envelope.replay_source, MessageReplaySource::LiveFanout);
+        assert_ne!(envelope.created_at, 0);
+        assert!(envelope.message_id.starts_with("bus-live-projection-"));
+        assert!(envelope.correlation_id.starts_with("corr-bus-"));
+        assert!(envelope.idempotency_key.starts_with("bus:live:projection:"));
         assert_eq!(bus.messages().len(), 1);
         assert!(!dir.path().join(".agentflow").exists());
     }
@@ -345,5 +373,8 @@ mod tests {
         );
         assert_eq!(messages[0].replay_source, MessageReplaySource::EventStore);
         assert_eq!(messages[0].topic, "issue.scheduled");
+        assert_eq!(messages[0].correlation_id, event.correlation_id);
+        assert_eq!(messages[0].causation_id, event.causation_id);
+        assert_eq!(messages[0].idempotency_key, "issue.scheduled:AF-BUS-003");
     }
 }

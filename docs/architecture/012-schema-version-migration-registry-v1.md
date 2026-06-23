@@ -86,6 +86,19 @@ Migration preview 是只读计划。
 
 Preview 不能修改 authority。
 
+Preview 还必须生成 preview receipt：
+
+```text
+receiptKind = preview
+writesAuthority = false
+proposedActionCount
+legacyCount
+missingVersionCount
+unknownSchemaCount
+```
+
+preview receipt 只证明“系统看到了什么、建议什么”，不代表已经迁移。
+
 ## Explicit Apply Boundary
 
 Migration apply 必须传入：
@@ -97,7 +110,16 @@ Migration apply 必须传入：
 
 如果没有显式确认，apply 必须失败。
 
-第一版 apply 只返回 receipt，不写 `.agentflow/**` authority。真正写 authority 的迁移必须由后续 issue 单独授权。
+第一版 apply 只返回 applied receipt，不写 `.agentflow/**` authority。真正写 authority 的迁移必须由后续 issue 单独授权。
+
+Applied receipt 必须和 preview receipt 区分：
+
+```text
+receiptKind = applied
+applied = true
+authorityWrites = []
+deferredActions = preview.proposedActions
+```
 
 ## Acceptance
 
@@ -108,5 +130,5 @@ Migration apply 必须传入：
 - 能生成 migration preview；
 - preview 默认不写 authority；
 - apply 没有显式确认会失败；
-- apply receipt 不包含自动 authority writes。
-
+- preview receipt 和 applied receipt 语义分离；
+- applied receipt 不包含自动 authority writes。

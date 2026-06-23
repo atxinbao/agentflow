@@ -6,8 +6,8 @@
 //! checks, manage authentication, write authority files, or append events.
 
 use agentflow_mcp::{
-    provider_capability_profile, McpConnectorBoundary, McpProviderKind, McpProviderStatus,
-    McpProviderStatusCode,
+    provider_capability_profile, McpConnectorBoundary, McpProviderKind, McpProviderSmokeArtifact,
+    McpProviderSmokeOutcome, McpProviderStatus, McpProviderStatusCode,
 };
 use agentflow_role_policy::ToolKind;
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowSkillPack};
@@ -108,6 +108,8 @@ pub struct WorkerRegistryEntry {
     pub requires_auth: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub disabled_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_smoke: Option<ProviderSmokeStatus>,
     #[serde(default)]
     pub runtime_roles: Vec<String>,
     #[serde(default)]
@@ -124,6 +126,28 @@ impl WorkerRegistryEntry {
         self.capabilities
             .iter()
             .find(|capability| capability.command == command || capability.capability_id == command)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderSmokeStatus {
+    pub outcome: String,
+    pub reason: String,
+    pub artifact_path: String,
+    pub terminal_provider_state_projectable: bool,
+    pub created_at: u64,
+}
+
+impl From<&McpProviderSmokeArtifact> for ProviderSmokeStatus {
+    fn from(value: &McpProviderSmokeArtifact) -> Self {
+        Self {
+            outcome: value.outcome.as_str().to_string(),
+            reason: value.reason.clone(),
+            artifact_path: value.artifact_path.clone(),
+            terminal_provider_state_projectable: value.terminal_provider_state_projectable,
+            created_at: value.created_at,
+        }
     }
 }
 
@@ -232,18 +256,41 @@ pub struct CommandSurfaceDecision {
 }
 
 pub fn build_capability_registry(provider_statuses: &[McpProviderStatus]) -> CapabilityRegistry {
+    build_capability_registry_with_smoke(provider_statuses, &[])
+}
+
+pub fn build_capability_registry_with_smoke(
+    provider_statuses: &[McpProviderStatus],
+    provider_smoke_artifacts: &[McpProviderSmokeArtifact],
+) -> CapabilityRegistry {
     let statuses = provider_statuses
         .iter()
         .map(|status| (status.provider.clone(), status))
         .collect::<BTreeMap<_, _>>();
+    let smoke = provider_smoke_artifacts
+        .iter()
+        .map(|artifact| (artifact.provider.clone(), artifact))
+        .collect::<BTreeMap<_, _>>();
     CapabilityRegistry {
         version: CAPABILITY_REGISTRY_VERSION.to_string(),
         workers: vec![
-            provider_worker(McpProviderKind::Codex, statuses.get("codex").copied()),
-            provider_worker(McpProviderKind::ClaudeCode, statuses.get("claude").copied()),
+            provider_worker(
+                McpProviderKind::Codex,
+                statuses.get("codex").copied(),
+                smoke.get("codex").copied(),
+            ),
+            provider_worker(
+                McpProviderKind::ClaudeCode,
+                statuses.get("claude").copied(),
+                smoke.get("claude").copied(),
+            ),
             local_shell_validator_worker(),
             git_provider_worker(),
-            provider_worker(McpProviderKind::Github, statuses.get("github").copied()),
+            provider_worker(
+                McpProviderKind::Github,
+                statuses.get("github").copied(),
+                smoke.get("github").copied(),
+            ),
             mcp_connector_worker(),
             audit_worker(),
         ],
@@ -323,13 +370,20 @@ pub fn evaluate_command(
 fn provider_worker(
     kind: McpProviderKind,
     status: Option<&McpProviderStatus>,
+    smoke: Option<&McpProviderSmokeArtifact>,
 ) -> WorkerRegistryEntry {
     let provider = kind.as_str();
     let profile = provider_capability_profile(provider)
         .expect("built-in provider kinds must have capability profiles");
-    let health = status
+    let mut health = status
         .map(|status| WorkerHealth::from(status.status.clone()))
         .unwrap_or(WorkerHealth::Unknown);
+    if smoke
+        .map(|artifact| artifact.outcome == McpProviderSmokeOutcome::Failed)
+        .unwrap_or(false)
+    {
+        health = WorkerHealth::Failed;
+    }
     let requires_auth = matches!(kind, McpProviderKind::Github | McpProviderKind::Gitlab)
         || status.and_then(|status| status.authenticated).is_some();
     let available_capabilities = status
@@ -343,12 +397,16 @@ fn provider_worker(
         })
         .unwrap_or_default();
     let provider_known_but_unchecked = status.is_none();
+    let smoke_failed = smoke
+        .map(|artifact| artifact.outcome == McpProviderSmokeOutcome::Failed)
+        .unwrap_or(false);
     let capabilities = profile
         .required_capabilities
         .iter()
         .chain(profile.degraded_capabilities.iter())
         .map(|capability_id| {
-            let available =
+            let available = !smoke_failed
+                &&
                 !provider_known_but_unchecked && available_capabilities.contains(capability_id);
             capability(
                 capability_id,
@@ -366,6 +424,8 @@ fn provider_worker(
                 },
                 if available {
                     None
+                } else if smoke_failed {
+                    Some(format!("provider {provider} smoke gate failed"))
                 } else if provider_known_but_unchecked {
                     Some(format!("provider {provider} health has not been checked"))
                 } else {
@@ -383,7 +443,11 @@ fn provider_worker(
         kind: WorkerKind::AgentProvider,
         health,
         requires_auth,
-        disabled_reason: status.and_then(|status| status.errors.first().cloned()),
+        disabled_reason: smoke
+            .filter(|artifact| artifact.outcome == McpProviderSmokeOutcome::Failed)
+            .map(|artifact| artifact.reason.clone())
+            .or_else(|| status.and_then(|status| status.errors.first().cloned())),
+        provider_smoke: smoke.map(ProviderSmokeStatus::from),
         runtime_roles: profile
             .supported_roles
             .iter()
@@ -519,6 +583,7 @@ fn static_worker(
         health: WorkerHealth::Ready,
         requires_auth: false,
         disabled_reason: None,
+        provider_smoke: None,
         runtime_roles: Vec::new(),
         skill_packs: Vec::new(),
         tool_kinds,
@@ -604,8 +669,14 @@ fn worker_disabled_reason(worker: &WorkerRegistryEntry) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_capability_registry, evaluate_command, WorkerHealth};
-    use agentflow_mcp::{McpCapability, McpProviderKind, McpProviderStatus, McpProviderStatusCode};
+    use super::{
+        build_capability_registry, build_capability_registry_with_smoke, evaluate_command,
+        WorkerHealth,
+    };
+    use agentflow_mcp::{
+        McpCapability, McpProviderKind, McpProviderSmokeArtifact, McpProviderSmokeOutcome,
+        McpProviderStatus, McpProviderStatusCode, MCP_PROVIDER_SMOKE_ARTIFACT_VERSION,
+    };
 
     #[test]
     fn registry_lists_required_workers() {
@@ -715,5 +786,46 @@ mod tests {
         assert!(decision.enabled);
         assert_eq!(decision.health, WorkerHealth::Ready);
         assert_eq!(decision.disabled_reason, None);
+    }
+
+    #[test]
+    fn provider_smoke_failure_disables_provider_command() {
+        let mut status = McpProviderStatus::new(McpProviderKind::Codex, 1);
+        status.status = McpProviderStatusCode::Ready;
+        status.capabilities = vec![McpCapability::new("launch", true)];
+        let smoke = McpProviderSmokeArtifact {
+            version: MCP_PROVIDER_SMOKE_ARTIFACT_VERSION.to_string(),
+            provider: "codex".to_string(),
+            outcome: McpProviderSmokeOutcome::Failed,
+            reason: "terminal provider state is not projectable".to_string(),
+            health: status.clone(),
+            launch_request_path: Some(".agentflow/tmp/provider-smoke-request.md".to_string()),
+            session_id: Some("session-smoke".to_string()),
+            session_snapshot_path: Some(
+                ".agentflow/state/mcp/sessions/session-smoke.json".to_string(),
+            ),
+            session_snapshot_readable: true,
+            terminal_status: None,
+            terminal_provider_state_projectable: false,
+            artifact_path: ".agentflow/state/mcp/provider-smoke/codex-1.json".to_string(),
+            created_at: 1,
+        };
+        let registry = build_capability_registry_with_smoke(&[status], &[smoke]);
+        let worker = registry.worker("codex").unwrap();
+        let decision = evaluate_command(&registry, "codex", "launch");
+
+        assert_eq!(worker.health, WorkerHealth::Failed);
+        assert_eq!(
+            worker
+                .provider_smoke
+                .as_ref()
+                .map(|smoke| smoke.outcome.as_str()),
+            Some("failed")
+        );
+        assert!(!decision.enabled);
+        assert_eq!(
+            decision.disabled_reason,
+            Some("provider codex smoke gate failed".to_string())
+        );
     }
 }

@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 pub const SCHEMA_REGISTRY_VERSION: &str = "agentflow-schema-registry.v1";
 pub const MIGRATION_PREVIEW_VERSION: &str = "agentflow-migration-preview.v1";
+pub const MIGRATION_PREVIEW_RECEIPT_VERSION: &str = "agentflow-migration-preview-receipt.v1";
 pub const MIGRATION_APPLY_RECEIPT_VERSION: &str = "agentflow-migration-apply-receipt.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,6 +138,26 @@ pub struct MigrationPreviewAction {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MigrationPreviewReceipt {
+    pub version: String,
+    pub preview_id: String,
+    pub receipt_kind: MigrationReceiptKind,
+    pub writes_authority: bool,
+    pub proposed_action_count: usize,
+    pub legacy_count: usize,
+    pub missing_version_count: usize,
+    pub unknown_schema_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MigrationReceiptKind {
+    Preview,
+    Applied,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MigrationApplyConfirmation {
     pub preview_id: String,
     pub confirmed: bool,
@@ -149,6 +170,7 @@ pub struct MigrationApplyConfirmation {
 pub struct MigrationApplyReceipt {
     pub version: String,
     pub preview_id: String,
+    pub receipt_kind: MigrationReceiptKind,
     pub applied: bool,
     pub authority_writes: Vec<String>,
     pub deferred_actions: Vec<MigrationPreviewAction>,
@@ -328,6 +350,31 @@ pub fn generate_migration_preview(
     }
 }
 
+pub fn migration_preview_receipt(preview: &MigrationPreview) -> MigrationPreviewReceipt {
+    MigrationPreviewReceipt {
+        version: MIGRATION_PREVIEW_RECEIPT_VERSION.to_string(),
+        preview_id: preview.preview_id.clone(),
+        receipt_kind: MigrationReceiptKind::Preview,
+        writes_authority: false,
+        proposed_action_count: preview.proposed_actions.len(),
+        legacy_count: preview
+            .detections
+            .iter()
+            .filter(|detection| detection.status == SchemaDetectionStatus::Legacy)
+            .count(),
+        missing_version_count: preview
+            .detections
+            .iter()
+            .filter(|detection| detection.status == SchemaDetectionStatus::MissingVersion)
+            .count(),
+        unknown_schema_count: preview
+            .detections
+            .iter()
+            .filter(|detection| detection.status == SchemaDetectionStatus::UnknownSchema)
+            .count(),
+    }
+}
+
 pub fn apply_migration_preview(
     preview: &MigrationPreview,
     confirmation: MigrationApplyConfirmation,
@@ -346,6 +393,7 @@ pub fn apply_migration_preview(
     Ok(MigrationApplyReceipt {
         version: MIGRATION_APPLY_RECEIPT_VERSION.to_string(),
         preview_id: preview.preview_id.clone(),
+        receipt_kind: MigrationReceiptKind::Applied,
         applied: true,
         authority_writes: Vec::new(),
         deferred_actions: preview.proposed_actions.clone(),
@@ -482,6 +530,11 @@ mod tests {
         assert_eq!(preview.mode, MigrationMode::Preview);
         assert!(!preview.writes_authority);
         assert_eq!(preview.proposed_actions.len(), 2);
+        let receipt = migration_preview_receipt(&preview);
+        assert_eq!(receipt.version, MIGRATION_PREVIEW_RECEIPT_VERSION);
+        assert_eq!(receipt.receipt_kind, MigrationReceiptKind::Preview);
+        assert!(!receipt.writes_authority);
+        assert_eq!(receipt.proposed_action_count, 2);
         assert!(preview
             .proposed_actions
             .iter()
@@ -534,6 +587,7 @@ mod tests {
         )
         .unwrap();
         assert!(receipt.applied);
+        assert_eq!(receipt.receipt_kind, MigrationReceiptKind::Applied);
         assert!(receipt.authority_writes.is_empty());
         assert_eq!(receipt.deferred_actions.len(), 1);
     }
