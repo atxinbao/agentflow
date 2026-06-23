@@ -409,23 +409,41 @@ pub fn ui_design_surface_definition() -> PackSurfaceDefinition {
         surface_id: "ui-design-surface".to_string(),
         pages: vec![
             page("design-home", "Design Home", SurfacePageKind::Main),
-            page("brief-intake", "Brief Intake", SurfacePageKind::Workbench),
-            page(
+            page_with_commands(
+                "brief-intake",
+                "Brief Intake",
+                SurfacePageKind::Workbench,
+                &["design.brief.capture"],
+            ),
+            page_with_commands(
                 "direction-board",
                 "Direction Board",
                 SurfacePageKind::Workbench,
+                &["design.direction.select"],
             ),
-            page(
+            page_with_commands(
                 "wireframe-board",
                 "Wireframe Board",
                 SurfacePageKind::Workbench,
+                &["design.wireframe.generate"],
             ),
-            page("hifi-review", "HiFi Review", SurfacePageKind::Workbench),
-            page("design-system", "Design System", SurfacePageKind::Detail),
-            page(
+            page_with_commands(
+                "hifi-review",
+                "HiFi Review",
+                SurfacePageKind::Workbench,
+                &["design.hifi.review"],
+            ),
+            page_with_commands(
+                "design-system",
+                "Design System",
+                SurfacePageKind::Detail,
+                &["design.system.bind"],
+            ),
+            page_with_commands(
                 "handoff-surface",
                 "Handoff Surface",
                 SurfacePageKind::Detail,
+                &["design.handoff.accept"],
             ),
         ],
         workbenches: vec![
@@ -466,6 +484,11 @@ pub fn ui_design_surface_definition() -> PackSurfaceDefinition {
                 "action-contract:design.hifi.review",
             ),
             command(
+                "design.system.bind",
+                "design-system",
+                "action-contract:design.system.bind",
+            ),
+            command(
                 "design.handoff.accept",
                 "handoff-surface",
                 "action-contract:design.accept-handoff",
@@ -485,7 +508,8 @@ pub fn ui_design_surface_definition() -> PackSurfaceDefinition {
             navigation("brief-intake", "direction-board", "brief-confirmed"),
             navigation("direction-board", "wireframe-board", "direction-selected"),
             navigation("wireframe-board", "hifi-review", "wireframe-approved"),
-            navigation("hifi-review", "handoff-surface", "hifi-accepted"),
+            navigation("hifi-review", "design-system", "hifi-accepted"),
+            navigation("design-system", "handoff-surface", "design-system-bound"),
         ],
         state_policy: state_policy(),
         sidecar_surfaces: Vec::new(),
@@ -684,10 +708,32 @@ mod tests {
             .pages
             .iter()
             .any(|page| page.page_id == "hifi-review"));
+        let design_system_page = surface
+            .pages
+            .iter()
+            .find(|page| page.page_id == "design-system")
+            .unwrap();
+        let handoff_page = surface
+            .pages
+            .iter()
+            .find(|page| page.page_id == "handoff-surface")
+            .unwrap();
+        assert!(design_system_page
+            .command_entry_ids
+            .contains(&"design.system.bind".to_string()));
+        assert!(handoff_page
+            .command_entry_ids
+            .contains(&"design.handoff.accept".to_string()));
         assert!(!surface
             .pages
             .iter()
             .any(|page| page.page_id == "task-workbench"));
+        assert!(surface.navigation_rules.iter().any(|rule| {
+            rule.from_page_id == "hifi-review" && rule.to_page_id == "design-system"
+        }));
+        assert!(surface.navigation_rules.iter().any(|rule| {
+            rule.from_page_id == "design-system" && rule.to_page_id == "handoff-surface"
+        }));
     }
 
     #[test]

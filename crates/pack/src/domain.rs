@@ -349,7 +349,6 @@ pub fn ui_design_domain_definition() -> PackDomainDefinition {
         domain_id: "ui-design-domain".to_string(),
         object_types: objects(&[
             ("ProductBrief", "产品简报"),
-            ("Prd", "产品需求文档"),
             ("Direction", "设计方向"),
             ("Wireframe", "线框稿"),
             ("HiFi", "高保真设计"),
@@ -359,11 +358,12 @@ pub fn ui_design_domain_definition() -> PackDomainDefinition {
             ("Evidence", "设计验证证据"),
         ]),
         link_types: vec![
-            link("brief-produces-prd", "ProductBrief", "Prd"),
-            link("prd-produces-direction", "Prd", "Direction"),
+            link("brief-produces-direction", "ProductBrief", "Direction"),
             link("direction-produces-wireframe", "Direction", "Wireframe"),
             link("wireframe-produces-hifi", "Wireframe", "HiFi"),
-            link("hifi-produces-handoff", "HiFi", "Handoff"),
+            link("hifi-produces-design-system", "HiFi", "DesignSystem"),
+            link("design-system-produces-handoff", "DesignSystem", "Handoff"),
+            link("handoff-produces-evidence", "Handoff", "Evidence"),
         ],
         state_machines: vec![DomainStateMachine {
             object_type: "Handoff".to_string(),
@@ -379,9 +379,20 @@ pub fn ui_design_domain_definition() -> PackDomainDefinition {
             ],
         }],
         action_semantics: vec![
-            action("design.generate-wireframe", "Wireframe"),
-            action("design.generate-hifi", "HiFi"),
-            action("design.accept-handoff", "Handoff"),
+            action_with_evidence("design.brief.capture", "ProductBrief", &["brief"]),
+            action_with_evidence("design.direction.select", "Direction", &["product-brief"]),
+            action_with_evidence("design.generate-wireframe", "Wireframe", &["direction"]),
+            action_with_evidence("design.hifi.review", "HiFi", &["wireframe"]),
+            action_with_evidence(
+                "design.system.bind",
+                "DesignSystem",
+                &["hifi", "design-system-ref"],
+            ),
+            action_with_evidence(
+                "design.accept-handoff",
+                "Handoff",
+                &["visual-preview", "design-system-ref", "handoff"],
+            ),
         ],
         acceptance_semantics: vec![DomainAcceptanceSemantic {
             acceptance_id: "ui-design.handoff.accepted".to_string(),
@@ -432,6 +443,14 @@ fn transition(from: &str, to: &str, action_type: &str) -> DomainStateTransition 
 }
 
 fn action(action_type: &str, target_object_type: &str) -> DomainActionSemantic {
+    action_with_evidence(action_type, target_object_type, &["validation"])
+}
+
+fn action_with_evidence(
+    action_type: &str,
+    target_object_type: &str,
+    required_evidence: &[&str],
+) -> DomainActionSemantic {
     DomainActionSemantic {
         action_type: action_type.to_string(),
         target_object_type: target_object_type.to_string(),
@@ -440,7 +459,10 @@ fn action(action_type: &str, target_object_type: &str) -> DomainActionSemantic {
         contract_ref: format!("action-contract:{action_type}"),
         arbitration_ref: format!("action-arbitration:{action_type}"),
         simulation_ref: format!("simulation:{action_type}"),
-        required_evidence: vec!["validation".to_string()],
+        required_evidence: required_evidence
+            .iter()
+            .map(|value| (*value).to_string())
+            .collect(),
     }
 }
 
@@ -508,10 +530,41 @@ mod tests {
             .object_types
             .iter()
             .any(|object| object.object_type_id == "Wireframe"));
+        assert!(design
+            .object_types
+            .iter()
+            .any(|object| object.object_type_id == "DesignSystem"));
         assert!(!design
             .object_types
             .iter()
             .any(|object| object.object_type_id == "Issue"));
+        assert!(!design
+            .object_types
+            .iter()
+            .any(|object| object.object_type_id == "Run"));
+        assert!(!design
+            .object_types
+            .iter()
+            .any(|object| object.object_type_id == "Prd"));
+        assert!(design
+            .link_types
+            .iter()
+            .any(|link| link.link_type_id == "design-system-produces-handoff"));
+        let handoff_action = design
+            .action_semantics
+            .iter()
+            .find(|action| action.action_type == "design.accept-handoff")
+            .unwrap();
+        assert!(handoff_action
+            .required_evidence
+            .contains(&"visual-preview".to_string()));
+        assert!(handoff_action
+            .required_evidence
+            .contains(&"design-system-ref".to_string()));
+        assert!(design
+            .evidence_policy
+            .required_evidence_kinds
+            .contains(&"handoff".to_string()));
     }
 
     #[test]

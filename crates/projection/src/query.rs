@@ -3149,6 +3149,14 @@ mod tests {
             .domain_object_index
             .iter()
             .any(|object| object.object_type_id == "Wireframe"));
+        assert!(design
+            .domain_object_index
+            .iter()
+            .any(|object| object.object_type_id == "DesignSystem"));
+        assert!(!design
+            .domain_object_index
+            .iter()
+            .any(|object| object.object_type_id == "Issue" || object.object_type_id == "Run"));
         assert!(software
             .surface_page_index
             .iter()
