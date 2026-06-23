@@ -10,7 +10,7 @@ pub mod domain;
 pub mod surface;
 pub mod validation;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 pub use connector::{
     software_dev_connector_definition, ui_design_connector_definition,
     validate_connector_definition, ConnectorCommandBoundary, ConnectorEvidenceOutput,
@@ -95,6 +95,14 @@ pub enum PackValidationStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PackRegistrySource {
+    ProjectFiles,
+    FixtureFiles,
+    BuiltInFallback,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackManifest {
     pub version: String,
@@ -141,6 +149,8 @@ pub struct PackRegistryEntry {
     pub name: String,
     pub pack_type: PackType,
     pub pack_version: String,
+    pub source: PackRegistrySource,
+    pub fallback: bool,
     pub manifest_path: String,
     pub pack_root: String,
     pub domain_path: String,
@@ -160,6 +170,8 @@ pub struct PackRegistryEntry {
 pub struct PackRegistry {
     pub version: String,
     pub root: String,
+    pub source: PackRegistrySource,
+    pub fallback: bool,
     pub writes_authority: bool,
     pub entries: Vec<PackRegistryEntry>,
 }
@@ -172,6 +184,10 @@ impl PackRegistry {
 
 pub fn pack_root(project_root: impl AsRef<Path>) -> PathBuf {
     project_root.as_ref().join(".agentflow/packs")
+}
+
+pub fn fixture_pack_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/packs")
 }
 
 pub fn load_pack_manifest(path: impl AsRef<Path>) -> Result<PackManifest> {
@@ -217,11 +233,37 @@ pub fn load_pack_registry(project_root: impl AsRef<Path>) -> Result<PackRegistry
         return Ok(PackRegistry {
             version: PACK_REGISTRY_VERSION.to_string(),
             root: normalize_path(&root),
+            source: PackRegistrySource::ProjectFiles,
+            fallback: false,
             writes_authority: false,
             entries: Vec::new(),
         });
     }
 
+    load_pack_registry_from_existing_root(root, PackRegistrySource::ProjectFiles, false)
+}
+
+pub fn load_pack_fixture_registry() -> Result<PackRegistry> {
+    load_pack_registry_from_root(fixture_pack_root(), PackRegistrySource::FixtureFiles, false)
+}
+
+pub fn load_pack_registry_from_root(
+    root: impl AsRef<Path>,
+    source: PackRegistrySource,
+    fallback: bool,
+) -> Result<PackRegistry> {
+    let root = root.as_ref().to_path_buf();
+    if !root.exists() {
+        bail!("pack registry root does not exist: {}", root.display());
+    }
+    load_pack_registry_from_existing_root(root, source, fallback)
+}
+
+fn load_pack_registry_from_existing_root(
+    root: PathBuf,
+    source: PackRegistrySource,
+    fallback: bool,
+) -> Result<PackRegistry> {
     let mut entries = Vec::new();
     for pack_dir in fs::read_dir(&root).with_context(|| format!("read {}", root.display()))? {
         let pack_dir = pack_dir?;
@@ -241,6 +283,8 @@ pub fn load_pack_registry(project_root: impl AsRef<Path>) -> Result<PackRegistry
             manifest_path,
             manifest,
             validation,
+            source.clone(),
+            fallback,
         ));
     }
     entries.sort_by(|left, right| left.pack_id.cmp(&right.pack_id));
@@ -248,6 +292,8 @@ pub fn load_pack_registry(project_root: impl AsRef<Path>) -> Result<PackRegistry
     Ok(PackRegistry {
         version: PACK_REGISTRY_VERSION.to_string(),
         root: normalize_path(&root),
+        source,
+        fallback,
         writes_authority: false,
         entries,
     })
@@ -258,12 +304,16 @@ fn registry_entry(
     manifest_path: PathBuf,
     manifest: PackManifest,
     validation: PackManifestValidationReport,
+    source: PackRegistrySource,
+    fallback: bool,
 ) -> PackRegistryEntry {
     PackRegistryEntry {
         pack_id: manifest.pack_id,
         name: manifest.name,
         pack_type: manifest.pack_type,
         pack_version: manifest.pack_version,
+        source,
+        fallback,
         manifest_path: normalize_path(&manifest_path),
         pack_root: normalize_path(&pack_root),
         domain_path: manifest.domain_path,
@@ -319,8 +369,9 @@ fn normalize_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_pack_registry, validate_pack_manifest, PackManifest, PackMigrationPolicy, PackType,
-        PackValidationStatus, PACK_MANIFEST_VERSION,
+        fixture_pack_root, load_pack_fixture_registry, load_pack_registry,
+        load_pack_registry_from_root, validate_pack_manifest, PackManifest, PackMigrationPolicy,
+        PackRegistrySource, PackType, PackValidationStatus, PACK_MANIFEST_VERSION,
     };
 
     fn manifest(pack_id: &str) -> PackManifest {
@@ -372,14 +423,46 @@ mod tests {
         let registry = load_pack_registry(dir.path()).unwrap();
 
         assert!(!registry.writes_authority);
+        assert_eq!(registry.source, PackRegistrySource::ProjectFiles);
+        assert!(!registry.fallback);
         assert_eq!(registry.entries.len(), 1);
         let entry = registry.pack("software-dev").unwrap();
+        assert_eq!(entry.source, PackRegistrySource::ProjectFiles);
+        assert!(!entry.fallback);
         assert_eq!(
             entry.manifest_path,
             normalize_for_test(pack_dir.join("pack.json"))
         );
         assert!(entry.validation.valid);
         assert_eq!(entry.required_capabilities, vec!["provider.codex.launch"]);
+    }
+
+    #[test]
+    fn fixture_registry_lists_release_gate_packs_without_fallback() {
+        let registry = load_pack_fixture_registry().unwrap();
+
+        assert_eq!(registry.source, PackRegistrySource::FixtureFiles);
+        assert!(!registry.fallback);
+        let software = registry.pack("software-dev").unwrap();
+        assert_eq!(software.source, PackRegistrySource::FixtureFiles);
+        assert!(!software.fallback);
+        assert_eq!(software.validation_status, PackValidationStatus::Valid);
+        let design = registry.pack("ui-design").unwrap();
+        assert_eq!(design.source, PackRegistrySource::FixtureFiles);
+        assert!(!design.fallback);
+        assert_eq!(design.validation_status, PackValidationStatus::Valid);
+    }
+
+    #[test]
+    fn missing_required_registry_root_is_an_error() {
+        let missing = fixture_pack_root().join("__missing__");
+
+        let error = load_pack_registry_from_root(missing, PackRegistrySource::FixtureFiles, false)
+            .unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("pack registry root does not exist"));
     }
 
     fn normalize_for_test(path: std::path::PathBuf) -> String {

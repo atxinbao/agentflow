@@ -9,6 +9,8 @@
 
 Pack 不能只在 crate 测试里证明可用。发布前必须生成一组可审计的 release gate artifact，说明当前版本内置 Pack 是否能加载、校验、投影、模拟，并且是否已经进入 API Plane。
 
+`pack-registry.json` 必须来自 file-backed registry 输入。v0.8.1 使用仓库内 Pack fixture 作为 release gate 的只读事实源；缺少 Pack 文件时 release gate 必须失败，不能静默回退到 built-in baseline。
+
 ## Release Gate 产物
 
 `scripts/verify_release_gate.sh` 必须输出这些文件：
@@ -50,6 +52,9 @@ Pack readiness report 只能使用以下状态：
 
 只要以下任一条件不满足，release gate 必须失败：
 
+- `pack-registry.json.source == fixture-files`
+- `pack-registry.json.fallback == false`
+- `pack-registry.json.entries[]` 必须包含 `software-dev` 和 `ui-design`
 - `pack-validation-report.json.status == passed`
 - `pack-simulation-report.json.status == passed`
 - `pack-projection-readiness.json.status == passed`
