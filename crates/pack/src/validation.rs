@@ -1,6 +1,7 @@
 use crate::{
     software_dev_connector_definition, software_dev_domain_definition,
-    software_dev_surface_definition, validate_connector_definition, validate_domain_definition,
+    software_dev_surface_definition, ui_design_connector_definition, ui_design_domain_definition,
+    ui_design_surface_definition, validate_connector_definition, validate_domain_definition,
     validate_pack_manifest, validate_surface_definition, ConnectorCommandBoundary,
     PackConnectorDefinition, PackConnectorValidationReport, PackDomainDefinition,
     PackDomainValidationReport, PackManifest, PackManifestValidationReport, PackMigrationPolicy,
@@ -259,7 +260,14 @@ pub fn software_dev_pack_readiness_artifact(
     let domain = software_dev_domain_definition();
     let surface = software_dev_surface_definition();
     let connector = software_dev_connector_definition();
-    let manifest = software_dev_pack_manifest(&domain, &surface, &connector);
+    let manifest = built_in_pack_manifest(
+        "software-dev",
+        "Software Dev",
+        PackType::SoftwareDev,
+        &domain,
+        &surface,
+        &connector,
+    );
     let validation = validate_pack_bundle(
         &manifest,
         &domain,
@@ -286,9 +294,9 @@ pub fn software_dev_pack_readiness_artifact(
         version: PACK_READINESS_ARTIFACT_VERSION.to_string(),
         pack_id: manifest.pack_id,
         status: if can_load && can_validate && can_project {
-            "ready".to_string()
+            "completed".to_string()
         } else {
-            "not-ready".to_string()
+            "deferred".to_string()
         },
         writes_authority: false,
         can_load,
@@ -321,6 +329,108 @@ pub fn software_dev_pack_readiness_artifact(
         ],
         warnings,
     }
+}
+
+pub fn ui_design_pack_readiness_artifact(
+    api_plane_entries: &[String],
+    current_runtime_version: &str,
+) -> PackReadinessArtifact {
+    let domain = ui_design_domain_definition();
+    let surface = ui_design_surface_definition();
+    let connector = ui_design_connector_definition();
+    let manifest = built_in_pack_manifest(
+        "ui-design",
+        "UI Design",
+        PackType::UiDesign,
+        &domain,
+        &surface,
+        &connector,
+    );
+    let validation = validate_pack_bundle(
+        &manifest,
+        &domain,
+        &surface,
+        &connector,
+        api_plane_entries,
+        current_runtime_version,
+    );
+    let can_load = !domain.object_types.is_empty()
+        && !surface.pages.is_empty()
+        && !connector.connectors.is_empty()
+        && !manifest.pack_id.is_empty();
+    let can_validate = validation.active;
+    let can_project = validation.active && validation.missing_read_models.is_empty();
+    let mut warnings = Vec::new();
+    if !can_validate {
+        warnings.push("ui-design-pack-validation-failed".to_string());
+    }
+    if !can_project {
+        warnings.push("ui-design-pack-projection-not-ready".to_string());
+    }
+
+    PackReadinessArtifact {
+        version: PACK_READINESS_ARTIFACT_VERSION.to_string(),
+        pack_id: manifest.pack_id,
+        status: if can_load && can_validate && can_project {
+            "baseline".to_string()
+        } else {
+            "deferred".to_string()
+        },
+        writes_authority: false,
+        can_load,
+        can_validate,
+        can_project,
+        main_chain: vec![
+            "ProductBrief".to_string(),
+            "Direction".to_string(),
+            "Wireframe".to_string(),
+            "HiFi".to_string(),
+            "DesignSystem".to_string(),
+            "Handoff".to_string(),
+        ],
+        audit_sidecar_chain: Vec::new(),
+        finding_policy: "not-applicable-ui-design-handoff-only".to_string(),
+        validation,
+        projection_entries: manifest_projection_entries(),
+        source_refs: vec![
+            "pack-builtin:ui-design/domain".to_string(),
+            "pack-builtin:ui-design/surface".to_string(),
+            "pack-builtin:ui-design/connectors".to_string(),
+            "projection.pack-industry-workbench".to_string(),
+        ],
+        warnings,
+    }
+}
+
+pub fn pack_readiness_api_entries() -> Vec<String> {
+    [
+        "spec.intake.start",
+        "work.issue.start",
+        "acceptance.evaluate",
+        "delivery.open",
+        "audit.request.sidecar",
+        "github.repo.read",
+        "github.pull-request.create",
+        "git.status",
+        "git.diff",
+        "work-agent.launch",
+        "work-agent.complete",
+        "browser-preview.smoke",
+        "figma.read",
+        "assets.read",
+        "frontend.status",
+        "frontend.diff",
+        "design-export.read",
+        "design.brief.capture",
+        "design.direction.select",
+        "design.wireframe.generate",
+        "design.hifi.review",
+        "design.system.bind",
+        "design.handoff.accept",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
 }
 
 pub fn generate_pack_migration_preview(
@@ -391,18 +501,21 @@ fn version_compatibility(required: &str, current: &str) -> PackVersionCompatibil
     }
 }
 
-fn software_dev_pack_manifest(
+fn built_in_pack_manifest(
+    pack_id: &str,
+    name: &str,
+    pack_type: PackType,
     domain: &PackDomainDefinition,
     surface: &PackSurfaceDefinition,
     connector: &PackConnectorDefinition,
 ) -> PackManifest {
     PackManifest {
         version: PACK_MANIFEST_VERSION.to_string(),
-        pack_id: "software-dev".to_string(),
-        name: "Software Dev".to_string(),
-        pack_type: PackType::SoftwareDev,
+        pack_id: pack_id.to_string(),
+        name: name.to_string(),
+        pack_type,
         pack_version: "0.8.0".to_string(),
-        runtime_compatibility: ">=0.8.0".to_string(),
+        runtime_compatibility: ">=0.7.2".to_string(),
         domain_path: "domain/".to_string(),
         surface_path: "surface/".to_string(),
         connector_path: "connectors/".to_string(),
@@ -439,6 +552,13 @@ fn manifest_projection_entries() -> Vec<String> {
         "projection.event-timeline".to_string(),
         "projection.evidence-graph".to_string(),
         "projection.audit-surface".to_string(),
+        "projection.design-home".to_string(),
+        "projection.brief-intake".to_string(),
+        "projection.direction-board".to_string(),
+        "projection.wireframe-board".to_string(),
+        "projection.hifi-review".to_string(),
+        "projection.design-system".to_string(),
+        "projection.handoff-surface".to_string(),
     ]
 }
 
@@ -538,7 +658,8 @@ pub fn command_boundary_is_runtime_only(boundary: &ConnectorCommandBoundary) -> 
 mod tests {
     use super::{
         generate_pack_migration_preview, pack_migration_applied_receipt,
-        software_dev_pack_readiness_artifact, validate_pack_bundle, PackMigrationApplyConfirmation,
+        pack_readiness_api_entries, software_dev_pack_readiness_artifact,
+        ui_design_pack_readiness_artifact, validate_pack_bundle, PackMigrationApplyConfirmation,
     };
     use crate::{
         software_dev_connector_definition, software_dev_domain_definition,
@@ -614,7 +735,7 @@ mod tests {
         let artifact = software_dev_pack_readiness_artifact(&api_entries(), "0.8.0");
 
         assert_eq!(artifact.pack_id, "software-dev");
-        assert_eq!(artifact.status, "ready");
+        assert_eq!(artifact.status, "completed");
         assert!(artifact.can_load);
         assert!(artifact.can_validate);
         assert!(artifact.can_project);
@@ -644,6 +765,38 @@ mod tests {
         assert_eq!(
             artifact.finding_policy,
             "finding-generates-follow-up-proposal-only"
+        );
+        assert!(artifact.validation.active);
+        assert!(artifact
+            .source_refs
+            .contains(&"projection.pack-industry-workbench".to_string()));
+    }
+
+    #[test]
+    fn ui_design_readiness_artifact_proves_design_baseline_without_task_chain() {
+        let artifact = ui_design_pack_readiness_artifact(&pack_readiness_api_entries(), "0.8.0");
+
+        assert_eq!(artifact.pack_id, "ui-design");
+        assert_eq!(artifact.status, "baseline");
+        assert!(artifact.can_load);
+        assert!(artifact.can_validate);
+        assert!(artifact.can_project);
+        assert!(!artifact.writes_authority);
+        assert_eq!(
+            artifact.main_chain,
+            vec![
+                "ProductBrief".to_string(),
+                "Direction".to_string(),
+                "Wireframe".to_string(),
+                "HiFi".to_string(),
+                "DesignSystem".to_string(),
+                "Handoff".to_string(),
+            ]
+        );
+        assert!(artifact.audit_sidecar_chain.is_empty());
+        assert_eq!(
+            artifact.finding_policy,
+            "not-applicable-ui-design-handoff-only"
         );
         assert!(artifact.validation.active);
         assert!(artifact

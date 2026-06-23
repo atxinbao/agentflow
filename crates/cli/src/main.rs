@@ -18,6 +18,8 @@ use formal::{
     project_confirm_plan, project_intake, project_materialize, project_preview_goal,
     release_confirm, release_prepare, release_publish, release_record_remote, release_record_tag,
 };
+use serde_json::json;
+use std::path::Path;
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -294,6 +296,20 @@ fn main() -> anyhow::Result<()> {
                     println!("{}", serde_json::to_string_pretty(&registry)?);
                 }
             }
+            PackCommand::ReleaseGateReadiness {
+                output_dir,
+                runtime_version,
+            } => {
+                write_pack_release_gate_readiness(
+                    &cwd,
+                    &output_dir,
+                    runtime_version
+                        .as_deref()
+                        .unwrap_or(env!("CARGO_PKG_VERSION")),
+                )?;
+                println!("pack release gate readiness: written");
+                println!("output: {}", output_dir.display());
+            }
             PackCommand::ValidateManifest { manifest_path } => {
                 let manifest = agentflow_pack::load_pack_manifest(manifest_path)?;
                 let report = agentflow_pack::validate_pack_manifest(&manifest);
@@ -397,5 +413,207 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn write_pack_release_gate_readiness(
+    project_root: &Path,
+    output_dir: &Path,
+    runtime_version: &str,
+) -> anyhow::Result<()> {
+    std::fs::create_dir_all(output_dir)?;
+
+    let api_manifest = agentflow_runtime_api::api_plane_manifest();
+    let api_entries = agentflow_pack::pack_readiness_api_entries();
+    let software =
+        agentflow_pack::software_dev_pack_readiness_artifact(&api_entries, runtime_version);
+    let design = agentflow_pack::ui_design_pack_readiness_artifact(&api_entries, runtime_version);
+    let pack_artifacts = [&software, &design];
+
+    write_json(
+        output_dir.join("software-dev-pack-readiness.json"),
+        &software,
+    )?;
+    write_json(output_dir.join("ui-design-pack-readiness.json"), &design)?;
+
+    let pack_registry_entries = pack_artifacts
+        .iter()
+        .map(|artifact| {
+            json!({
+                "packId": artifact.pack_id,
+                "source": "built-in",
+                "status": artifact.status,
+                "writesAuthority": artifact.writes_authority,
+                "canLoad": artifact.can_load,
+                "canValidate": artifact.can_validate,
+                "canProject": artifact.can_project,
+                "readinessPath": format!("{}-pack-readiness.json", artifact.pack_id),
+                "sourceRefs": artifact.source_refs,
+            })
+        })
+        .collect::<Vec<_>>();
+    write_json(
+        output_dir.join("pack-registry.json"),
+        &json!({
+            "version": "agentflow-pack-release-gate-registry.v1",
+            "source": "built-in-pack-baseline",
+            "writesAuthority": false,
+            "entries": pack_registry_entries,
+        }),
+    )?;
+
+    let validation_entries = pack_artifacts
+        .iter()
+        .map(|artifact| {
+            json!({
+                "packId": artifact.pack_id,
+                "status": artifact.status,
+                "validationActive": artifact.validation.active,
+                "issueCount": artifact.validation.issues.len(),
+                "missingReadModels": artifact.validation.missing_read_models,
+                "missingCommandMappings": artifact.validation.missing_command_mappings,
+                "warnings": artifact.warnings,
+            })
+        })
+        .collect::<Vec<_>>();
+    let validation_passed = pack_artifacts
+        .iter()
+        .all(|artifact| artifact.can_load && artifact.can_validate && artifact.can_project);
+    write_json(
+        output_dir.join("pack-validation-report.json"),
+        &json!({
+            "version": "agentflow-pack-release-gate-validation.v1",
+            "status": if validation_passed { "passed" } else { "failed" },
+            "statusVocabulary": ["completed", "baseline", "deferred", "carryover"],
+            "writesAuthority": false,
+            "packs": validation_entries,
+            "failureRule": "release gate must fail before publishing Pack System ready if any pack cannot load, validate, or project",
+        }),
+    )?;
+
+    let simulations = vec![
+        agentflow_simulation::simulate_pack_command(
+            &agentflow_simulation::PackCommandSimulationRequest {
+                simulation_id: "release-gate-pack-software-dev-001".to_string(),
+                command: "work.issue.start".to_string(),
+                target_object_type: "Issue".to_string(),
+                target_object_id: "AF-PACK-READY-001".to_string(),
+                actor_role: "work-agent".to_string(),
+                validation: software.validation.clone(),
+                domain: agentflow_pack::software_dev_domain_definition(),
+                surface: agentflow_pack::software_dev_surface_definition(),
+                connector: agentflow_pack::software_dev_connector_definition(),
+                created_at: "release-gate".to_string(),
+            },
+        ),
+        agentflow_simulation::simulate_pack_command(
+            &agentflow_simulation::PackCommandSimulationRequest {
+                simulation_id: "release-gate-pack-ui-design-001".to_string(),
+                command: "design.wireframe.generate".to_string(),
+                target_object_type: "Wireframe".to_string(),
+                target_object_id: "wireframe-pack-ready-001".to_string(),
+                actor_role: "work-agent".to_string(),
+                validation: design.validation.clone(),
+                domain: agentflow_pack::ui_design_domain_definition(),
+                surface: agentflow_pack::ui_design_surface_definition(),
+                connector: agentflow_pack::ui_design_connector_definition(),
+                created_at: "release-gate".to_string(),
+            },
+        ),
+    ];
+    let simulation_passed = simulations.iter().all(|report| {
+        report.decision == agentflow_simulation::SimulationDecision::Accepted
+            && !report.writes_authority
+            && !report.writes_event_store
+            && !report.executes_provider
+    });
+    write_json(
+        output_dir.join("pack-simulation-report.json"),
+        &json!({
+            "version": "agentflow-pack-release-gate-simulation.v1",
+            "status": if simulation_passed { "passed" } else { "failed" },
+            "writesAuthority": false,
+            "writesEventStore": false,
+            "executesProvider": false,
+            "reports": simulations,
+        }),
+    )?;
+
+    let software_projection =
+        agentflow_projection::get_pack_industry_workbench_view(project_root, Some("software-dev"))?;
+    let design_projection =
+        agentflow_projection::get_pack_industry_workbench_view(project_root, Some("ui-design"))?;
+    let projection_passed = software_projection.active_pack_id.as_deref() == Some("software-dev")
+        && design_projection.active_pack_id.as_deref() == Some("ui-design")
+        && !software_projection.pack_list.is_empty()
+        && !design_projection.pack_list.is_empty();
+    write_json(
+        output_dir.join("pack-projection-readiness.json"),
+        &json!({
+            "version": "agentflow-pack-release-gate-projection-readiness.v1",
+            "status": if projection_passed { "passed" } else { "failed" },
+            "writesAuthority": false,
+            "views": [
+                {
+                    "packId": "software-dev",
+                    "activePackId": software_projection.active_pack_id,
+                    "packCount": software_projection.pack_list.len(),
+                    "workbenchCount": software_projection.industry_workbenches.len(),
+                    "readiness": software_projection.pack_readiness,
+                },
+                {
+                    "packId": "ui-design",
+                    "activePackId": design_projection.active_pack_id,
+                    "packCount": design_projection.pack_list.len(),
+                    "workbenchCount": design_projection.industry_workbenches.len(),
+                    "readiness": design_projection.pack_readiness,
+                },
+            ],
+        }),
+    )?;
+
+    let pack_api_entries = api_manifest
+        .entries
+        .iter()
+        .filter(|entry| {
+            entry.category == "pack_actions"
+                || entry.category == "pack_command_surface"
+                || entry.api_id == "projection.pack-industry-workbench"
+        })
+        .collect::<Vec<_>>();
+    let api_plane_passed = pack_api_entries
+        .iter()
+        .any(|entry| entry.category == "pack_actions")
+        && pack_api_entries
+            .iter()
+            .any(|entry| entry.category == "pack_command_surface")
+        && pack_api_entries
+            .iter()
+            .any(|entry| entry.api_id == "projection.pack-industry-workbench");
+    write_json(
+        output_dir.join("pack-api-plane-manifest.json"),
+        &json!({
+            "version": "agentflow-pack-release-gate-api-plane.v1",
+            "status": if api_plane_passed { "passed" } else { "failed" },
+            "sourceManifestVersion": api_manifest.version,
+            "entries": pack_api_entries,
+        }),
+    )?;
+
+    if !(validation_passed && simulation_passed && projection_passed && api_plane_passed) {
+        anyhow::bail!(
+            "pack release gate readiness failed: validation={validation_passed}, simulation={simulation_passed}, projection={projection_passed}, apiPlane={api_plane_passed}"
+        );
+    }
+
+    Ok(())
+}
+
+fn write_json(path: impl AsRef<Path>, value: &impl serde::Serialize) -> anyhow::Result<()> {
+    let path = path.as_ref();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, serde_json::to_string_pretty(value)? + "\n")?;
     Ok(())
 }
