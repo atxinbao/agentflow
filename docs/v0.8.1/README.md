@@ -2,7 +2,7 @@
 
 日期：2026-06-23
 执行者：Codex
-状态：Planned remediation baseline
+状态：Release certification baseline
 
 ## Purpose
 
@@ -15,6 +15,14 @@
 ```
 
 `v0.8.1` 不改变 `v0.8.0` 的大方向，也不提前进入 Cloud Runtime。它只修复 Pack System 成为真实文件驱动 baseline 所需的缺口。
+
+当前收口结论：
+
+```text
+v0.8.1 = clean Pack System remediation release candidate
+```
+
+V081-001 到 V081-007 与 V081-009 已完成；V081-008 负责把这些修复汇总成 release certification。
 
 ## Reading Order
 
@@ -68,5 +76,4 @@ Invalid pack commands stop before submit.
 Audit sidecar wording cannot be confused with release failure.
 ```
 
-如果这些条件不能证明，`v0.8.1` 不能被标记为 clean remediation release。
-
+这些条件已经进入 release gate 证明链。`v0.8.1` 可以作为 Pack System 的 clean remediation release 发布。

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.8.1 - 2026-06-23
+
+执行者：Codex
+
+`0.8.1 - Pack System File-backed Remediation` 修复 `0.8.0` 发布后暴露的 Pack System 事实源、命令解析、投影、能力状态和 release certification 缺口。
+
+### Changed
+
+- Pack Registry 改为 file-backed / fixture-backed source of truth，release gate 会证明 registry 不来自 built-in fallback。
+- Runtime Pack Command Resolver 改为从 registry、domain、surface、connector 和 capability requirement 解析命令。
+- Projection 改为加载 Pack-specific definitions，避免 custom Pack 回退成 Software Dev baseline。
+- Pack command availability 接入 capability registry / provider smoke 状态，disabled capability 会给出不可用原因。
+- Release summary 中 Audit sidecar 与 release gate 主结论分离表达，避免把旁路审计失败误读成 release failed。
+
+### Fixed
+
+- invalid Pack command 会在 submit 前被拒绝，并输出包含 stage / reason / Pack / command 的 rejected validation report。
+- release gate 增加 Pack negative fixtures，覆盖 invalid Pack、missing read model、missing connector、disabled capability、invalid command submit 和 unexpected Software Dev fallback。
+- release certification artifact 覆盖 Pack registry source、resolver、projection、capability/provider smoke、invalid submit rejection、negative fixtures 和 audit sidecar wording。
+
+### Validation
+
+- `cargo test --workspace`
+- `cargo fmt --all --check`
+- `npm --prefix apps/desktop run build`
+- `git diff --check`
+- `bash scripts/verify_release_gate.sh --release-version v0.8.1 --release-tag v0.8.1`
+- GitHub `release-gate` on V081 remediation PRs
+
 ## 0.8.0 - 2026-06-23
 
 执行者：Codex

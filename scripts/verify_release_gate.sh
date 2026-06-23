@@ -398,7 +398,7 @@ checklist = [
     },
     {
         "id": "v080-pack-system-release-gate",
-        "label": "v0.8.0 Pack System release gate artifacts are present and ready",
+        "label": "Pack System release gate artifacts are present and ready",
         "passed": pack_release_gate_passed,
     },
     {
