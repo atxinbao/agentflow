@@ -100,6 +100,12 @@ PACK_SIMULATION_REPORT_PATH="$ARTIFACT_DIR/pack-simulation-report.json"
 PACK_PROJECTION_READINESS_PATH="$ARTIFACT_DIR/pack-projection-readiness.json"
 PACK_API_PLANE_MANIFEST_PATH="$ARTIFACT_DIR/pack-api-plane-manifest.json"
 PACK_NEGATIVE_FIXTURES_PATH="$ARTIFACT_DIR/pack-negative-fixtures.json"
+PACK_MIGRATION_PREVIEW_PATH="$ARTIFACT_DIR/pack-migration-preview.json"
+PACK_MIGRATION_UNCONFIRMED_APPLY_PATH="$ARTIFACT_DIR/pack-migration-unconfirmed-apply.json"
+PACK_MIGRATION_APPLIED_RECEIPT_PATH="$ARTIFACT_DIR/pack-migration-applied-receipt.json"
+PACK_MIGRATION_CANCEL_RECEIPT_PATH="$ARTIFACT_DIR/pack-migration-cancel-receipt.json"
+PACK_MIGRATION_ROLLBACK_RECEIPT_PATH="$ARTIFACT_DIR/pack-migration-rollback-receipt.json"
+PACK_MIGRATION_REPLAY_REPORT_PATH="$RUNTIME_DIR/pack-migration-replay-report.json"
 SOFTWARE_DEV_PACK_READINESS_PATH="$ARTIFACT_DIR/software-dev-pack-readiness.json"
 UI_DESIGN_PACK_READINESS_PATH="$ARTIFACT_DIR/ui-design-pack-readiness.json"
 EVENT_REPLAY_PROJECTION_REPORT_PATH="$RUNTIME_DIR/event-replay-projection-report.json"
@@ -287,6 +293,7 @@ proof_chain = [
     {"stage": "release.github-release-fact", "label": "GitHub Release Fact"},
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
+    {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -342,12 +349,18 @@ runtime_artifacts = [
     {"path": "runtime/foundation-coverage.json", "exists": foundation_coverage_path.is_file()},
     {"path": "runtime/event-replay-projection-report.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json").is_file()},
     {"path": "runtime/event-replay-projection-failure-report.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json").is_file()},
+    {"path": "runtime/pack-migration-replay-report.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/pack-migration-replay-report.json").is_file()},
     {"path": "pack-registry.json", "exists": pathlib.Path(summary_json_path.parent / "pack-registry.json").is_file()},
     {"path": "pack-validation-report.json", "exists": pathlib.Path(summary_json_path.parent / "pack-validation-report.json").is_file()},
     {"path": "pack-simulation-report.json", "exists": pathlib.Path(summary_json_path.parent / "pack-simulation-report.json").is_file()},
     {"path": "pack-projection-readiness.json", "exists": pathlib.Path(summary_json_path.parent / "pack-projection-readiness.json").is_file()},
     {"path": "pack-api-plane-manifest.json", "exists": pathlib.Path(summary_json_path.parent / "pack-api-plane-manifest.json").is_file()},
     {"path": "pack-negative-fixtures.json", "exists": pack_negative_fixtures_path.is_file()},
+    {"path": "pack-migration-preview.json", "exists": pathlib.Path(summary_json_path.parent / "pack-migration-preview.json").is_file()},
+    {"path": "pack-migration-unconfirmed-apply.json", "exists": pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json").is_file()},
+    {"path": "pack-migration-applied-receipt.json", "exists": pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json").is_file()},
+    {"path": "pack-migration-cancel-receipt.json", "exists": pathlib.Path(summary_json_path.parent / "pack-migration-cancel-receipt.json").is_file()},
+    {"path": "pack-migration-rollback-receipt.json", "exists": pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json").is_file()},
     {"path": "software-dev-pack-readiness.json", "exists": pathlib.Path(summary_json_path.parent / "software-dev-pack-readiness.json").is_file()},
     {"path": "ui-design-pack-readiness.json", "exists": pathlib.Path(summary_json_path.parent / "ui-design-pack-readiness.json").is_file()},
 ]
@@ -359,6 +372,11 @@ pack_api_plane = load_json(pathlib.Path(summary_json_path.parent / "pack-api-pla
 pack_negative_fixtures = load_json(pack_negative_fixtures_path) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
+pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
+pack_migration_applied = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json")) or {}
+pack_migration_cancel = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-cancel-receipt.json")) or {}
+pack_migration_rollback = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json")) or {}
+pack_migration_replay = load_json(pathlib.Path(summary_json_path.parent / "runtime/pack-migration-replay-report.json")) or {}
 software_readiness = load_json(pathlib.Path(summary_json_path.parent / "software-dev-pack-readiness.json")) or {}
 design_readiness = load_json(pathlib.Path(summary_json_path.parent / "ui-design-pack-readiness.json")) or {}
 pack_release_gate_passed = (
@@ -422,6 +440,16 @@ checklist = [
         and event_replay_projection_failure.get("status") == "failed"
         and bool(event_replay_projection_failure.get("failures")),
     },
+    {
+        "id": "v090-pack-migration-execution",
+        "label": "Pack migration apply requires confirmation and records cancel/rollback receipts",
+        "passed": pack_migration_unconfirmed.get("status") == "rejected"
+        and pack_migration_unconfirmed.get("writesAuthority") is False
+        and pack_migration_applied.get("applied") is True
+        and pack_migration_cancel.get("cancelled") is True
+        and pack_migration_rollback.get("rolledBack") is True
+        and pack_migration_replay.get("status") == "passed",
+    },
 ]
 
 summary_payload = {
@@ -445,6 +473,12 @@ summary_payload = {
     "packSimulationReportPath": "pack-simulation-report.json" if pathlib.Path(summary_json_path.parent / "pack-simulation-report.json").is_file() else None,
     "packProjectionReadinessPath": "pack-projection-readiness.json" if pathlib.Path(summary_json_path.parent / "pack-projection-readiness.json").is_file() else None,
     "packNegativeFixturesPath": "pack-negative-fixtures.json" if pack_negative_fixtures_path.is_file() else None,
+    "packMigrationPreviewPath": "pack-migration-preview.json" if pathlib.Path(summary_json_path.parent / "pack-migration-preview.json").is_file() else None,
+    "packMigrationUnconfirmedApplyPath": "pack-migration-unconfirmed-apply.json" if pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json").is_file() else None,
+    "packMigrationAppliedReceiptPath": "pack-migration-applied-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json").is_file() else None,
+    "packMigrationCancelReceiptPath": "pack-migration-cancel-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-cancel-receipt.json").is_file() else None,
+    "packMigrationRollbackReceiptPath": "pack-migration-rollback-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json").is_file() else None,
+    "packMigrationReplayReportPath": "runtime/pack-migration-replay-report.json" if pathlib.Path(summary_json_path.parent / "runtime/pack-migration-replay-report.json").is_file() else None,
     "softwareDevPackReadinessPath": "software-dev-pack-readiness.json" if pathlib.Path(summary_json_path.parent / "software-dev-pack-readiness.json").is_file() else None,
     "uiDesignPackReadinessPath": "ui-design-pack-readiness.json" if pathlib.Path(summary_json_path.parent / "ui-design-pack-readiness.json").is_file() else None,
     "packReleaseGateStatus": "passed" if pack_release_gate_passed else "failed",
@@ -496,6 +530,7 @@ summary_lines = [
     f"- Capability registry: `{'present' if capability_registry_path.is_file() else 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
+    f"- Pack migration execution: `{stage_status.get('pack.migration-execution') or 'missing'}`",
     f"- Software Dev Pack readiness: `{software_readiness.get('status') or 'missing'}`",
     f"- UI Design Pack readiness: `{design_readiness.get('status') or 'missing'}`",
     f"- Release version: `{release_version}`",
@@ -564,6 +599,9 @@ certification_payload = {
     "apiPlaneManifestPath": "runtime/api-plane-manifest.json" if api_plane_manifest_path.is_file() else None,
     "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
     "packNegativeFixturesPath": "pack-negative-fixtures.json" if pack_negative_fixtures_path.is_file() else None,
+    "packMigrationAppliedReceiptPath": "pack-migration-applied-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json").is_file() else None,
+    "packMigrationRollbackReceiptPath": "pack-migration-rollback-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json").is_file() else None,
+    "packMigrationReplayReportPath": "runtime/pack-migration-replay-report.json" if pathlib.Path(summary_json_path.parent / "runtime/pack-migration-replay-report.json").is_file() else None,
     "packReleaseGateStatus": "passed" if pack_release_gate_passed else "failed",
     "packNegativeFixturesStatus": pack_negative_fixtures.get("status") or "missing",
     "gateCommands": [
@@ -1479,6 +1517,128 @@ PY
   record_stage "pack.negative-fixtures" "passed" "$(basename "$PACK_NEGATIVE_FIXTURES_PATH")"
 }
 
+run_pack_migration_execution_gate() {
+  record_stage "pack.migration-execution" "started" "$ARTIFACT_DIR"
+
+  if ! "$BIN" pack migration-preview \
+    --preview-id release-gate-pack-migration-001 \
+    --pack-id software-dev \
+    --from-version 0.8.0 \
+    --to-version 0.8.1 \
+    --affected-object Issue \
+    --affected-object Run \
+    --affected-projection projection.task-workbench \
+    --affected-projection projection.event-timeline \
+    --output "$PACK_MIGRATION_PREVIEW_PATH" \
+    >"$CLI_DIR/pack-migration-preview.txt" 2>&1; then
+    fail_stage "pack.migration-execution" "migration preview generation failed"
+  fi
+
+  local unconfirmed_log="$CLI_DIR/pack-migration-unconfirmed-apply.txt"
+  if "$BIN" pack migration-apply \
+    --preview-path "$PACK_MIGRATION_PREVIEW_PATH" \
+    --reason "release gate intentionally omits explicit confirmation" \
+    --output "$PACK_MIGRATION_UNCONFIRMED_APPLY_PATH" \
+    >"$unconfirmed_log" 2>&1; then
+    fail_stage "pack.migration-execution" "migration apply succeeded without explicit confirmation"
+  fi
+  python3 - "$PACK_MIGRATION_UNCONFIRMED_APPLY_PATH" "$unconfirmed_log" <<'PY'
+import json
+import pathlib
+import sys
+
+out_path = pathlib.Path(sys.argv[1])
+log_path = pathlib.Path(sys.argv[2])
+message = log_path.read_text(encoding="utf-8")
+payload = {
+    "version": "agentflow-pack-migration-unconfirmed-apply.v1",
+    "status": "rejected",
+    "writesAuthority": False,
+    "reason": message.strip(),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if "explicit confirmed=true" not in message:
+    raise SystemExit("unconfirmed migration apply must fail with explicit confirmation reason")
+PY
+
+  if ! "$BIN" pack migration-apply \
+    --preview-path "$PACK_MIGRATION_PREVIEW_PATH" \
+    --confirmed \
+    --actor release-gate \
+    --reason "release gate explicitly confirms controlled pack migration" \
+    --output "$PACK_MIGRATION_APPLIED_RECEIPT_PATH" \
+    >"$CLI_DIR/pack-migration-apply.txt" 2>&1; then
+    fail_stage "pack.migration-execution" "confirmed migration apply failed"
+  fi
+
+  if ! "$BIN" pack migration-cancel \
+    --preview-path "$PACK_MIGRATION_PREVIEW_PATH" \
+    --actor release-gate \
+    --reason "release gate verifies cancel semantics" \
+    --output "$PACK_MIGRATION_CANCEL_RECEIPT_PATH" \
+    >"$CLI_DIR/pack-migration-cancel.txt" 2>&1; then
+    fail_stage "pack.migration-execution" "migration cancel receipt generation failed"
+  fi
+
+  if ! "$BIN" pack migration-rollback \
+    --applied-receipt-path "$PACK_MIGRATION_APPLIED_RECEIPT_PATH" \
+    --actor release-gate \
+    --reason "release gate verifies rollback semantics" \
+    --output "$PACK_MIGRATION_ROLLBACK_RECEIPT_PATH" \
+    >"$CLI_DIR/pack-migration-rollback.txt" 2>&1; then
+    fail_stage "pack.migration-execution" "migration rollback receipt generation failed"
+  fi
+
+  if ! (cd "$WORKSPACE" && "$BIN" projection replay-report --output "$PACK_MIGRATION_REPLAY_REPORT_PATH") \
+    >"$CLI_DIR/pack-migration-replay-report.txt" 2>&1; then
+    fail_stage "pack.migration-execution" "projection replay after migration receipt failed"
+  fi
+
+  python3 - \
+    "$PACK_MIGRATION_PREVIEW_PATH" \
+    "$PACK_MIGRATION_UNCONFIRMED_APPLY_PATH" \
+    "$PACK_MIGRATION_APPLIED_RECEIPT_PATH" \
+    "$PACK_MIGRATION_CANCEL_RECEIPT_PATH" \
+    "$PACK_MIGRATION_ROLLBACK_RECEIPT_PATH" \
+    "$PACK_MIGRATION_REPLAY_REPORT_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+preview = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+unconfirmed = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+applied = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
+cancel = json.loads(pathlib.Path(sys.argv[4]).read_text(encoding="utf-8"))
+rollback = json.loads(pathlib.Path(sys.argv[5]).read_text(encoding="utf-8"))
+replay = json.loads(pathlib.Path(sys.argv[6]).read_text(encoding="utf-8"))
+
+if preview.get("version") != "agentflow-pack-migration-preview.v1":
+    raise SystemExit("migration preview must use preview schema")
+if preview.get("writesAuthority") is not False:
+    raise SystemExit("migration preview must not write authority")
+if preview.get("requiredHumanConfirmation") is not True:
+    raise SystemExit("migration preview must require human confirmation")
+if unconfirmed.get("status") != "rejected" or unconfirmed.get("writesAuthority") is not False:
+    raise SystemExit("unconfirmed migration apply must be rejected without authority writes")
+if applied.get("version") != "agentflow-pack-migration-applied-receipt.v1":
+    raise SystemExit("applied migration must use applied receipt schema")
+if applied.get("applied") is not True or applied.get("writesAuthority") is not True:
+    raise SystemExit("confirmed migration apply must produce applied authority receipt")
+if cancel.get("version") == applied.get("version") or cancel.get("cancelled") is not True:
+    raise SystemExit("cancel receipt must be distinct from applied receipt")
+if cancel.get("writesAuthority") is not False:
+    raise SystemExit("cancel receipt must not write authority")
+if rollback.get("version") == applied.get("version") or rollback.get("rolledBack") is not True:
+    raise SystemExit("rollback receipt must be distinct from applied receipt")
+if rollback.get("writesAuthority") is not True:
+    raise SystemExit("rollback receipt must represent controlled authority reversal")
+if replay.get("status") != "passed" or replay.get("writesAuthority") is not False:
+    raise SystemExit("projection replay after migration receipt must pass without authority writes")
+PY
+
+  record_stage "pack.migration-execution" "passed" "$(basename "$PACK_MIGRATION_APPLIED_RECEIPT_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -1910,6 +2070,7 @@ main() {
     "9302"
 
   run_event_replay_projection_gate
+  run_pack_migration_execution_gate
 
   run_cli_json "completion.inspect" "$completion_inspect_json" \
     completion inspect --project-id "$project_id"

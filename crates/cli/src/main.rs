@@ -18,6 +18,7 @@ use formal::{
     project_confirm_plan, project_intake, project_materialize, project_preview_goal,
     release_confirm, release_prepare, release_publish, release_record_remote, release_record_tag,
 };
+use serde::de::DeserializeOwned;
 use serde_json::json;
 use std::{fs, path::Path};
 
@@ -328,6 +329,65 @@ fn main() -> anyhow::Result<()> {
                 let report = agentflow_pack::validate_pack_manifest(&manifest);
                 println!("{}", serde_json::to_string_pretty(&report)?);
             }
+            PackCommand::MigrationPreview {
+                preview_id,
+                pack_id,
+                from_version,
+                to_version,
+                affected_objects,
+                affected_projections,
+                output,
+            } => {
+                let preview = agentflow_pack::generate_pack_migration_preview(
+                    preview_id,
+                    pack_id,
+                    from_version,
+                    to_version,
+                    affected_objects,
+                    affected_projections,
+                );
+                write_or_print_json(output.as_deref(), &preview)?;
+            }
+            PackCommand::MigrationApply {
+                preview_path,
+                confirmed,
+                actor,
+                reason,
+                output,
+            } => {
+                let preview: agentflow_pack::PackMigrationPreview = read_json(&preview_path)?;
+                let receipt = agentflow_pack::pack_migration_applied_receipt(
+                    &preview,
+                    &agentflow_pack::PackMigrationApplyConfirmation {
+                        preview_id: preview.preview_id.clone(),
+                        confirmed,
+                        actor,
+                        reason,
+                    },
+                )?;
+                write_or_print_json(output.as_deref(), &receipt)?;
+            }
+            PackCommand::MigrationCancel {
+                preview_path,
+                actor,
+                reason,
+                output,
+            } => {
+                let preview: agentflow_pack::PackMigrationPreview = read_json(&preview_path)?;
+                let receipt = agentflow_pack::cancel_pack_migration(&preview, actor, reason)?;
+                write_or_print_json(output.as_deref(), &receipt)?;
+            }
+            PackCommand::MigrationRollback {
+                applied_receipt_path,
+                actor,
+                reason,
+                output,
+            } => {
+                let applied: agentflow_pack::PackMigrationAppliedReceipt =
+                    read_json(&applied_receipt_path)?;
+                let receipt = agentflow_pack::rollback_pack_migration(&applied, actor, reason)?;
+                write_or_print_json(output.as_deref(), &receipt)?;
+            }
         },
         Command::Release { command } => match command {
             ReleaseCommand::Prepare { project_id } => {
@@ -610,5 +670,20 @@ fn write_json(path: impl AsRef<Path>, value: &impl serde::Serialize) -> anyhow::
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(path, serde_json::to_string_pretty(value)? + "\n")?;
+    Ok(())
+}
+
+fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> anyhow::Result<T> {
+    let path = path.as_ref();
+    let payload = fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&payload)?)
+}
+
+fn write_or_print_json(output: Option<&Path>, value: &impl serde::Serialize) -> anyhow::Result<()> {
+    if let Some(output) = output {
+        write_json(output, value)?;
+    } else {
+        println!("{}", serde_json::to_string_pretty(value)?);
+    }
     Ok(())
 }

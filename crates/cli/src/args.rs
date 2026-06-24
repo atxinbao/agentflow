@@ -247,6 +247,54 @@ pub(crate) enum PackCommand {
         #[arg(long = "manifest-path")]
         manifest_path: PathBuf,
     },
+    MigrationPreview {
+        #[arg(long = "preview-id")]
+        preview_id: String,
+        #[arg(long = "pack-id")]
+        pack_id: String,
+        #[arg(long = "from-version")]
+        from_version: String,
+        #[arg(long = "to-version")]
+        to_version: String,
+        #[arg(long = "affected-object")]
+        affected_objects: Vec<String>,
+        #[arg(long = "affected-projection")]
+        affected_projections: Vec<String>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    MigrationApply {
+        #[arg(long = "preview-path")]
+        preview_path: PathBuf,
+        #[arg(long)]
+        confirmed: bool,
+        #[arg(long, default_value = "human-owner")]
+        actor: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    MigrationCancel {
+        #[arg(long = "preview-path")]
+        preview_path: PathBuf,
+        #[arg(long, default_value = "human-owner")]
+        actor: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    MigrationRollback {
+        #[arg(long = "applied-receipt-path")]
+        applied_receipt_path: PathBuf,
+        #[arg(long, default_value = "human-owner")]
+        actor: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

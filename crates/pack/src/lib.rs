@@ -38,16 +38,17 @@ pub use surface::{
     SurfaceViewModelMapping, SurfaceWorkbench, PACK_SURFACE_VERSION,
 };
 pub use validation::{
-    command_boundary_is_runtime_only, generate_pack_migration_preview,
+    cancel_pack_migration, command_boundary_is_runtime_only, generate_pack_migration_preview,
     load_pack_validation_artifact, pack_migration_applied_receipt, pack_readiness_api_entries,
-    pack_validation_artifact_path, software_dev_pack_readiness_artifact,
+    pack_validation_artifact_path, rollback_pack_migration, software_dev_pack_readiness_artifact,
     ui_design_pack_readiness_artifact, validate_pack_bundle, PackApiPlaneMapping,
     PackAppliedMigrationBoundary, PackMigrationAppliedReceipt, PackMigrationApplyConfirmation,
-    PackMigrationPreview, PackMigrationPreviewReceipt, PackReadinessArtifact,
-    PackValidationArtifact, PackValidationIssue, PackVersionCompatibility,
-    PACK_MIGRATION_APPLIED_RECEIPT_VERSION, PACK_MIGRATION_PREVIEW_RECEIPT_VERSION,
-    PACK_MIGRATION_PREVIEW_VERSION, PACK_READINESS_ARTIFACT_VERSION,
-    PACK_VALIDATION_ARTIFACT_VERSION,
+    PackMigrationCancelReceipt, PackMigrationPreview, PackMigrationPreviewReceipt,
+    PackMigrationRollbackReceipt, PackReadinessArtifact, PackValidationArtifact,
+    PackValidationIssue, PackVersionCompatibility, PACK_MIGRATION_APPLIED_RECEIPT_VERSION,
+    PACK_MIGRATION_CANCEL_RECEIPT_VERSION, PACK_MIGRATION_PREVIEW_RECEIPT_VERSION,
+    PACK_MIGRATION_PREVIEW_VERSION, PACK_MIGRATION_ROLLBACK_RECEIPT_VERSION,
+    PACK_READINESS_ARTIFACT_VERSION, PACK_VALIDATION_ARTIFACT_VERSION,
 };
 
 pub const PACK_MANIFEST_VERSION: &str = "agentflow-pack-manifest.v1";
