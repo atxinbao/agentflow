@@ -8,7 +8,7 @@ use crate::{
     PackSurfaceDefinition, PackSurfaceValidationReport, PackType, PackValidationStatus,
     PACK_MANIFEST_VERSION,
 };
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
@@ -22,6 +22,10 @@ pub const PACK_MIGRATION_PREVIEW_RECEIPT_VERSION: &str =
     "agentflow-pack-migration-preview-receipt.v1";
 pub const PACK_MIGRATION_APPLIED_RECEIPT_VERSION: &str =
     "agentflow-pack-migration-applied-receipt.v1";
+pub const PACK_MIGRATION_CANCEL_RECEIPT_VERSION: &str =
+    "agentflow-pack-migration-cancel-receipt.v1";
+pub const PACK_MIGRATION_ROLLBACK_RECEIPT_VERSION: &str =
+    "agentflow-pack-migration-rollback-receipt.v1";
 pub const PACK_READINESS_ARTIFACT_VERSION: &str = "agentflow-pack-readiness.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -138,6 +142,31 @@ pub struct PackMigrationAppliedReceipt {
     pub writes_authority: bool,
     pub actor: String,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackMigrationCancelReceipt {
+    pub version: String,
+    pub preview_id: String,
+    pub pack_id: String,
+    pub cancelled: bool,
+    pub writes_authority: bool,
+    pub actor: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackMigrationRollbackReceipt {
+    pub version: String,
+    pub preview_id: String,
+    pub pack_id: String,
+    pub rolled_back: bool,
+    pub writes_authority: bool,
+    pub actor: String,
+    pub reason: String,
+    pub applied_receipt_version: String,
 }
 
 pub fn validate_pack_bundle(
@@ -475,17 +504,87 @@ pub fn generate_pack_migration_preview(
 pub fn pack_migration_applied_receipt(
     preview: &PackMigrationPreview,
     confirmation: &PackMigrationApplyConfirmation,
-) -> PackMigrationAppliedReceipt {
-    let applied = confirmation.preview_id == preview.preview_id && confirmation.confirmed;
-    PackMigrationAppliedReceipt {
+) -> Result<PackMigrationAppliedReceipt> {
+    validate_migration_confirmation(preview, confirmation)?;
+    Ok(PackMigrationAppliedReceipt {
         version: PACK_MIGRATION_APPLIED_RECEIPT_VERSION.to_string(),
         preview_id: preview.preview_id.clone(),
         pack_id: preview.pack_id.clone(),
-        applied,
-        writes_authority: applied,
+        applied: true,
+        writes_authority: true,
         actor: confirmation.actor.clone(),
         reason: confirmation.reason.clone(),
+    })
+}
+
+pub fn cancel_pack_migration(
+    preview: &PackMigrationPreview,
+    actor: impl Into<String>,
+    reason: impl Into<String>,
+) -> Result<PackMigrationCancelReceipt> {
+    let actor = actor.into();
+    let reason = reason.into();
+    require_actor_and_reason(&actor, &reason)?;
+    Ok(PackMigrationCancelReceipt {
+        version: PACK_MIGRATION_CANCEL_RECEIPT_VERSION.to_string(),
+        preview_id: preview.preview_id.clone(),
+        pack_id: preview.pack_id.clone(),
+        cancelled: true,
+        writes_authority: false,
+        actor,
+        reason,
+    })
+}
+
+pub fn rollback_pack_migration(
+    applied: &PackMigrationAppliedReceipt,
+    actor: impl Into<String>,
+    reason: impl Into<String>,
+) -> Result<PackMigrationRollbackReceipt> {
+    let actor = actor.into();
+    let reason = reason.into();
+    require_actor_and_reason(&actor, &reason)?;
+    if !applied.applied {
+        bail!("cannot rollback a migration that was not applied");
     }
+    Ok(PackMigrationRollbackReceipt {
+        version: PACK_MIGRATION_ROLLBACK_RECEIPT_VERSION.to_string(),
+        preview_id: applied.preview_id.clone(),
+        pack_id: applied.pack_id.clone(),
+        rolled_back: true,
+        writes_authority: true,
+        actor,
+        reason,
+        applied_receipt_version: applied.version.clone(),
+    })
+}
+
+fn validate_migration_confirmation(
+    preview: &PackMigrationPreview,
+    confirmation: &PackMigrationApplyConfirmation,
+) -> Result<()> {
+    if confirmation.preview_id != preview.preview_id {
+        bail!(
+            "migration confirmation previewId `{}` does not match preview `{}`",
+            confirmation.preview_id,
+            preview.preview_id
+        );
+    }
+    if !confirmation.confirmed {
+        bail!("migration apply requires explicit confirmed=true");
+    }
+    require_actor_and_reason(&confirmation.actor, &confirmation.reason)?;
+    Ok(())
+}
+
+fn require_actor_and_reason(actor: &str, reason: &str) -> Result<()> {
+    if actor.trim().is_empty() {
+        bail!("migration receipt actor must not be empty");
+    }
+    if reason.trim().is_empty() {
+        bail!("migration receipt reason must not be empty");
+    }
+    Ok(())
 }
 
 fn version_compatibility(required: &str, current: &str) -> PackVersionCompatibility {
@@ -657,8 +756,8 @@ pub fn command_boundary_is_runtime_only(boundary: &ConnectorCommandBoundary) -> 
 #[cfg(test)]
 mod tests {
     use super::{
-        generate_pack_migration_preview, pack_migration_applied_receipt,
-        pack_readiness_api_entries, software_dev_pack_readiness_artifact,
+        cancel_pack_migration, generate_pack_migration_preview, pack_migration_applied_receipt,
+        pack_readiness_api_entries, rollback_pack_migration, software_dev_pack_readiness_artifact,
         ui_design_pack_readiness_artifact, validate_pack_bundle, PackMigrationApplyConfirmation,
     };
     use crate::{
@@ -880,6 +979,15 @@ mod tests {
                 reason: "not approved".to_string(),
             },
         );
+        let mismatched = pack_migration_applied_receipt(
+            &preview,
+            &PackMigrationApplyConfirmation {
+                preview_id: "preview-other".to_string(),
+                confirmed: true,
+                actor: "human-owner".to_string(),
+                reason: "approved".to_string(),
+            },
+        );
         let applied = pack_migration_applied_receipt(
             &preview,
             &PackMigrationApplyConfirmation {
@@ -888,11 +996,44 @@ mod tests {
                 actor: "human-owner".to_string(),
                 reason: "approved".to_string(),
             },
-        );
+        )
+        .unwrap();
 
-        assert!(!rejected.applied);
-        assert!(!rejected.writes_authority);
+        assert!(rejected.is_err());
+        assert!(mismatched.is_err());
         assert!(applied.applied);
         assert!(applied.writes_authority);
+    }
+
+    #[test]
+    fn migration_cancel_and_rollback_have_distinct_receipts() {
+        let preview = generate_pack_migration_preview(
+            "preview-001",
+            "software-dev",
+            "0.8.0",
+            "0.8.1",
+            vec!["Issue".to_string()],
+            vec!["projection.task-workbench".to_string()],
+        );
+        let cancel = cancel_pack_migration(&preview, "human-owner", "defer migration").unwrap();
+        let applied = pack_migration_applied_receipt(
+            &preview,
+            &PackMigrationApplyConfirmation {
+                preview_id: "preview-001".to_string(),
+                confirmed: true,
+                actor: "human-owner".to_string(),
+                reason: "approved".to_string(),
+            },
+        )
+        .unwrap();
+        let rollback =
+            rollback_pack_migration(&applied, "human-owner", "rollback after failure").unwrap();
+
+        assert!(cancel.cancelled);
+        assert!(!cancel.writes_authority);
+        assert!(rollback.rolled_back);
+        assert!(rollback.writes_authority);
+        assert_ne!(cancel.version, applied.version);
+        assert_ne!(rollback.version, applied.version);
     }
 }

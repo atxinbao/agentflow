@@ -52,6 +52,7 @@
 | [031-cloud-runtime-boundary-v1.md](031-cloud-runtime-boundary-v1.md) | 定义云端 Runtime 的 Runtime Core、API / SDK、行业客户端、Pack / Connector 和治理边界 |
 | [032-runtime-api-sdk-contract-v1.md](032-runtime-api-sdk-contract-v1.md) | 定义 Runtime API / SDK 的 command、query、event、Pack command 和 SDK 只读候选边界 |
 | [033-event-replay-projection-rebuild-v1.md](033-event-replay-projection-rebuild-v1.md) | 定义 Event Store replay、Projection rebuild、结构化 replay report 和 release gate happy / failure 路径 |
+| [034-pack-migration-execution-model-v1.md](034-pack-migration-execution-model-v1.md) | 定义 Pack / Ontology migration preview、confirmation、apply、cancel、rollback 和 replay gate 边界 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -90,8 +91,9 @@
 31. [031-cloud-runtime-boundary-v1.md](031-cloud-runtime-boundary-v1.md)
 32. [032-runtime-api-sdk-contract-v1.md](032-runtime-api-sdk-contract-v1.md)
 33. [033-event-replay-projection-rebuild-v1.md](033-event-replay-projection-rebuild-v1.md)
-34. [current-module-boundaries.md](current-module-boundaries.md)
-35. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+34. [034-pack-migration-execution-model-v1.md](034-pack-migration-execution-model-v1.md)
+35. [current-module-boundaries.md](current-module-boundaries.md)
+36. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 

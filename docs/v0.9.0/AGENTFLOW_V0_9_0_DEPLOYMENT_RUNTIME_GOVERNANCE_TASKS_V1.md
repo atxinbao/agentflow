@@ -53,7 +53,7 @@ Message Bus = 到 decision gate 再判断是否需要。
 | `V090-002` | Cloud Runtime Boundary | P0 | V090-001 | done |
 | `V090-003` | Runtime API / SDK Contract Hardening | P0 | V090-001, V090-002 | done |
 | `V090-004` | Event Replay and Projection Rebuild | P0 | V090-003 | done |
-| `V090-005` | Ontology / Pack Migration Execution Model | P0 | V090-004 | planned |
+| `V090-005` | Ontology / Pack Migration Execution Model | P0 | V090-004 | done |
 | `V090-006` | Simulation / Evaluation Layer | P0 | V090-003, V090-005 | planned |
 | `V090-007` | Runtime Governance Policy | P0 | V090-003, V090-006 | planned |
 | `V090-008` | Cross-process Scheduling Decision Gate | P1 | V090-007 | planned |
@@ -184,6 +184,14 @@ Message Bus = 到 decision gate 再判断是否需要。
 - applied receipt 与 preview receipt 明确区分；
 - rollback / cancel 语义可验证；
 - migration 后 replay / projection rebuild 可运行或给出结构化失败。
+
+### Closeout
+
+- `agentflow pack migration-preview` 生成只读 preview artifact；
+- `agentflow pack migration-apply` 缺少 `--confirmed` 时失败，不写 applied receipt；
+- confirmed apply 生成 `agentflow-pack-migration-applied-receipt.v1`；
+- cancel / rollback 分别生成独立 receipt，语义不混用；
+- release gate 已覆盖 migration preview、unconfirmed apply rejection、confirmed apply、cancel、rollback 和 migration 后 projection replay。
 
 ## V090-006 Simulation / Evaluation Layer
 
