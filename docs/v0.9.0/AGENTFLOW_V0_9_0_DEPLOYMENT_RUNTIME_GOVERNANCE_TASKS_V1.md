@@ -52,7 +52,7 @@ Message Bus = 到 decision gate 再判断是否需要。
 | `V090-001` | Local Runtime Boundary | P0 | v0.8.1 closeout | done |
 | `V090-002` | Cloud Runtime Boundary | P0 | V090-001 | done |
 | `V090-003` | Runtime API / SDK Contract Hardening | P0 | V090-001, V090-002 | done |
-| `V090-004` | Event Replay and Projection Rebuild | P0 | V090-003 | planned |
+| `V090-004` | Event Replay and Projection Rebuild | P0 | V090-003 | done |
 | `V090-005` | Ontology / Pack Migration Execution Model | P0 | V090-004 | planned |
 | `V090-006` | Simulation / Evaluation Layer | P0 | V090-003, V090-005 | planned |
 | `V090-007` | Runtime Governance Policy | P0 | V090-003, V090-006 | planned |
@@ -152,6 +152,14 @@ Message Bus = 到 decision gate 再判断是否需要。
 - Projection rebuild 不依赖旧缓存；
 - replay 失败产生结构化 report；
 - release gate 覆盖 replay happy path 和 failure path。
+
+### Closeout
+
+- `agentflow projection replay-report --output <path>` 生成 `projection-replay-report.v1`；
+- happy path 证明 Event Store replay 可以重建 task / project read model；
+- failure path 对损坏事件生成结构化失败报告；
+- release gate 已覆盖 replay happy path 和 failure path；
+- Projection 继续保持 readonly read model，不写 authority。
 
 ## V090-005 Ontology / Pack Migration Execution Model
 

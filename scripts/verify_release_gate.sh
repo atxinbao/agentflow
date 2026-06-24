@@ -102,6 +102,8 @@ PACK_API_PLANE_MANIFEST_PATH="$ARTIFACT_DIR/pack-api-plane-manifest.json"
 PACK_NEGATIVE_FIXTURES_PATH="$ARTIFACT_DIR/pack-negative-fixtures.json"
 SOFTWARE_DEV_PACK_READINESS_PATH="$ARTIFACT_DIR/software-dev-pack-readiness.json"
 UI_DESIGN_PACK_READINESS_PATH="$ARTIFACT_DIR/ui-design-pack-readiness.json"
+EVENT_REPLAY_PROJECTION_REPORT_PATH="$RUNTIME_DIR/event-replay-projection-report.json"
+EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH="$RUNTIME_DIR/event-replay-projection-failure-report.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -338,6 +340,8 @@ runtime_artifacts = [
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/foundation-readiness-report.md", "exists": foundation_readiness_report_path.is_file()},
     {"path": "runtime/foundation-coverage.json", "exists": foundation_coverage_path.is_file()},
+    {"path": "runtime/event-replay-projection-report.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json").is_file()},
+    {"path": "runtime/event-replay-projection-failure-report.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json").is_file()},
     {"path": "pack-registry.json", "exists": pathlib.Path(summary_json_path.parent / "pack-registry.json").is_file()},
     {"path": "pack-validation-report.json", "exists": pathlib.Path(summary_json_path.parent / "pack-validation-report.json").is_file()},
     {"path": "pack-simulation-report.json", "exists": pathlib.Path(summary_json_path.parent / "pack-simulation-report.json").is_file()},
@@ -353,6 +357,8 @@ pack_simulation = load_json(pathlib.Path(summary_json_path.parent / "pack-simula
 pack_projection = load_json(pathlib.Path(summary_json_path.parent / "pack-projection-readiness.json")) or {}
 pack_api_plane = load_json(pathlib.Path(summary_json_path.parent / "pack-api-plane-manifest.json")) or {}
 pack_negative_fixtures = load_json(pack_negative_fixtures_path) or {}
+event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
+event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 software_readiness = load_json(pathlib.Path(summary_json_path.parent / "software-dev-pack-readiness.json")) or {}
 design_readiness = load_json(pathlib.Path(summary_json_path.parent / "ui-design-pack-readiness.json")) or {}
 pack_release_gate_passed = (
@@ -407,6 +413,15 @@ checklist = [
         "passed": pack_negative_fixtures.get("status") == "passed"
         and pack_negative_fixtures.get("writesAuthority") is False,
     },
+    {
+        "id": "v090-event-replay-projection-rebuild",
+        "label": "Event replay rebuilds projections and records structured replay failures",
+        "passed": event_replay_projection.get("status") == "passed"
+        and event_replay_projection.get("eventCount", 0) > 0
+        and event_replay_projection.get("writesAuthority") is False
+        and event_replay_projection_failure.get("status") == "failed"
+        and bool(event_replay_projection_failure.get("failures")),
+    },
 ]
 
 summary_payload = {
@@ -421,6 +436,8 @@ summary_payload = {
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
     "foundationReadinessReportPath": "runtime/foundation-readiness-report.md" if foundation_readiness_report_path.is_file() else None,
+    "eventReplayProjectionReportPath": "runtime/event-replay-projection-report.json" if pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json").is_file() else None,
+    "eventReplayProjectionFailureReportPath": "runtime/event-replay-projection-failure-report.json" if pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json").is_file() else None,
     "apiPlaneManifestPath": "runtime/api-plane-manifest.json" if api_plane_manifest_path.is_file() else None,
     "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
     "packRegistryPath": "pack-registry.json" if pathlib.Path(summary_json_path.parent / "pack-registry.json").is_file() else None,
@@ -542,6 +559,8 @@ certification_payload = {
     "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage and remains required even when provider-smoke-gate is skipped or passed",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
     "foundationReadinessReportPath": "runtime/foundation-readiness-report.md" if foundation_readiness_report_path.is_file() else None,
+    "eventReplayProjectionReportPath": "runtime/event-replay-projection-report.json" if pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json").is_file() else None,
+    "eventReplayProjectionFailureReportPath": "runtime/event-replay-projection-failure-report.json" if pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json").is_file() else None,
     "apiPlaneManifestPath": "runtime/api-plane-manifest.json" if api_plane_manifest_path.is_file() else None,
     "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
     "packNegativeFixturesPath": "pack-negative-fixtures.json" if pack_negative_fixtures_path.is_file() else None,
@@ -878,6 +897,69 @@ else:
     raise SystemExit(f"unsupported projection verification record: {record_name}")
 PY
   record_stage "$record_name" "passed" "$(basename "$projection_path")"
+}
+
+run_event_replay_projection_gate() {
+  record_stage "event-replay-projection.happy" "started" "$EVENT_REPLAY_PROJECTION_REPORT_PATH"
+  run_cli_json "event-replay-projection.happy" "$CLI_DIR/event-replay-projection-happy.txt" \
+    projection replay-report --output "$EVENT_REPLAY_PROJECTION_REPORT_PATH"
+  if ! python3 - "$EVENT_REPLAY_PROJECTION_REPORT_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+if payload.get("status") != "passed":
+    raise SystemExit(f"expected replay report passed, got {payload.get('status')}")
+if payload.get("eventCount", 0) <= 0:
+    raise SystemExit("replay happy path must read at least one event")
+if payload.get("taskCount", 0) <= 0:
+    raise SystemExit("replay happy path must rebuild at least one task projection")
+if not payload.get("rebuiltPaths"):
+    raise SystemExit("replay happy path must list rebuilt projection paths")
+if payload.get("writesAuthority") is not False:
+    raise SystemExit("replay happy path must not write authority")
+if payload.get("projectionAuthority") is not False:
+    raise SystemExit("projection must not be authority")
+if payload.get("failures"):
+    raise SystemExit("replay happy path must not include failures")
+PY
+  then
+    fail_stage "event-replay-projection.happy" "happy path replay report is invalid"
+  fi
+
+  local failure_workspace="$TMP_DIR/event-replay-failure-workspace"
+  mkdir -p "$failure_workspace/.agentflow/events/task-events"
+  printf '{not-json\n' >"$failure_workspace/.agentflow/events/task-events/000001-corrupt.json"
+  record_stage "event-replay-projection.failure" "started" "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH"
+  if ! (cd "$failure_workspace" && "$BIN" projection replay-report --output "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH" >"$CLI_DIR/event-replay-projection-failure.txt" 2>&1); then
+    fail_stage "event-replay-projection.failure" "failure fixture command failed before report was written"
+  fi
+  if ! python3 - "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+if payload.get("status") != "failed":
+    raise SystemExit(f"expected replay report failed, got {payload.get('status')}")
+failures = payload.get("failures") or []
+if not failures:
+    raise SystemExit("failure replay report must include failures")
+if payload.get("writesAuthority") is not False:
+    raise SystemExit("failure replay report must not write authority")
+if payload.get("projectionAuthority") is not False:
+    raise SystemExit("projection must not be authority")
+message = failures[0].get("message") or ""
+if "parse" not in message:
+    raise SystemExit(f"failure replay report must preserve parse reason, got {message!r}")
+PY
+  then
+    fail_stage "event-replay-projection.failure" "failure path replay report is invalid"
+  fi
+  record_stage "event-replay-projection.failure" "passed" "$(basename "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH")"
 }
 
 run_provider_smoke_gate() {
@@ -1826,6 +1908,8 @@ main() {
     "apps/desktop/src/browserPreviewData.ts" \
     "// release-gate-e2e: ${issue2_id}" \
     "9302"
+
+  run_event_replay_projection_gate
 
   run_cli_json "completion.inspect" "$completion_inspect_json" \
     completion inspect --project-id "$project_id"

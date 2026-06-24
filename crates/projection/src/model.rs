@@ -491,6 +491,46 @@ pub struct ProjectionSummary {
     pub index_path: String,
 }
 
+pub const PROJECTION_REPLAY_REPORT_VERSION: &str = "projection-replay-report.v1";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProjectionReplayStatus {
+    Passed,
+    Failed,
+}
+
+impl ProjectionReplayStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Passed => "passed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionReplayFailure {
+    pub stage: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionReplayReport {
+    pub version: String,
+    pub status: ProjectionReplayStatus,
+    pub event_count: usize,
+    pub task_count: usize,
+    pub project_count: usize,
+    pub rebuilt_paths: Vec<String>,
+    pub failures: Vec<ProjectionReplayFailure>,
+    pub writes_authority: bool,
+    pub projection_authority: bool,
+    pub generated_at: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequirementPreviewProjection {
