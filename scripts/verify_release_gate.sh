@@ -388,6 +388,19 @@ pack_release_gate_passed = (
     and software_readiness.get("status") == "completed"
     and design_readiness.get("status") == "baseline"
 )
+pack_simulation_reports = pack_simulation.get("reports", [])
+pack_simulation_evaluation_passed = bool(pack_simulation_reports) and all(
+    report.get("writesAuthority") is False
+    and report.get("writesEventStore") is False
+    and report.get("executesProvider") is False
+    and bool(report.get("affectedObjects"))
+    and bool(report.get("requiredEvidence"))
+    and bool(report.get("stateTransitions"))
+    and bool(report.get("downstreamTriggers"))
+    and bool(report.get("conflicts"))
+    and bool(report.get("gateImpact"))
+    for report in pack_simulation_reports
+)
 
 checklist = [
     {
@@ -449,6 +462,11 @@ checklist = [
         and pack_migration_cancel.get("cancelled") is True
         and pack_migration_rollback.get("rolledBack") is True
         and pack_migration_replay.get("status") == "passed",
+    },
+    {
+        "id": "v090-simulation-evaluation-layer",
+        "label": "Simulation reports object impact, evidence needs, conflict preview, and state flow without writes",
+        "passed": pack_simulation_evaluation_passed,
     },
 ]
 
@@ -1338,6 +1356,28 @@ if validation.get("status") != "passed":
     raise SystemExit("pack validation report did not pass")
 if simulation.get("status") != "passed":
     raise SystemExit("pack simulation report did not pass")
+reports = simulation.get("reports", [])
+if not reports:
+    raise SystemExit("pack simulation report must include at least one dry-run report")
+for report in reports:
+    if report.get("writesAuthority") is not False:
+        raise SystemExit("pack simulation report must not write authority")
+    if report.get("writesEventStore") is not False:
+        raise SystemExit("pack simulation report must not write event store")
+    if report.get("executesProvider") is not False:
+        raise SystemExit("pack simulation report must not execute providers")
+    if not report.get("affectedObjects"):
+        raise SystemExit("pack simulation must explain affected objects")
+    if not report.get("requiredEvidence"):
+        raise SystemExit("pack simulation must preview required evidence")
+    if not report.get("stateTransitions"):
+        raise SystemExit("pack simulation must preview state transitions")
+    if not report.get("downstreamTriggers"):
+        raise SystemExit("pack simulation must preview downstream triggers")
+    if not report.get("conflicts"):
+        raise SystemExit("pack simulation must expose conflict preview")
+    if not report.get("gateImpact"):
+        raise SystemExit("pack simulation must expose gate impact")
 if projection.get("status") != "passed":
     raise SystemExit("pack projection readiness did not pass")
 if api_plane.get("status") != "passed":

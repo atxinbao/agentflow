@@ -216,6 +216,14 @@ Message Bus = 到 decision gate 再判断是否需要。
 - simulation 能暴露缺失证据和冲突；
 - release gate 覆盖至少一个 Pack command simulation。
 
+### Closeout
+
+- `SimulationReport` 已新增 `affectedObjects`、`requiredEvidence`、`stateTransitions`、`downstreamTriggers` 等结构化字段；
+- issue / completion / pack command simulation 已覆盖对象影响、证据需求、状态变化、下游触发、冲突和 gate impact；
+- Pack command release gate readiness 已要求 simulation report 具备上述结构化字段；
+- release certification checklist 已新增 `v090-simulation-evaluation-layer`；
+- 架构说明已记录到 `docs/architecture/035-simulation-evaluation-layer-v1.md`。
+
 ## V090-007 Runtime Governance Policy
 
 ### Scope
