@@ -19,7 +19,7 @@ use formal::{
     release_confirm, release_prepare, release_publish, release_record_remote, release_record_tag,
 };
 use serde_json::json;
-use std::path::Path;
+use std::{fs, path::Path};
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -251,6 +251,19 @@ fn main() -> anyhow::Result<()> {
                 println!("tasks: {}", summary.task_count);
                 println!("projects: {}", summary.project_count);
                 println!("index: {}", summary.index_path);
+            }
+            ProjectionCommand::ReplayReport { output } => {
+                let report = agentflow_projection::rebuild_projections_with_replay_report(&cwd)?;
+                let report_json = serde_json::to_string_pretty(&report)?;
+                if let Some(output) = output {
+                    if let Some(parent) = output.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    fs::write(&output, report_json + "\n")?;
+                    println!("{}", output.display());
+                } else {
+                    println!("{report_json}");
+                }
             }
             ProjectionCommand::Task { issue_id } => {
                 let projection = agentflow_projection::load_task_projection(&cwd, &issue_id)?;

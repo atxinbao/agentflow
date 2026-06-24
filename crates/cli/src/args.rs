@@ -201,6 +201,10 @@ pub(crate) enum AgentDispatcherCommand {
 #[derive(Debug, Subcommand)]
 pub(crate) enum ProjectionCommand {
     Rebuild,
+    ReplayReport {
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
     Task {
         #[arg(long = "issue-id")]
         issue_id: String,

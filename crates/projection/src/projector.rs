@@ -6,15 +6,16 @@ use crate::{
         ProjectProjection, ProjectReleaseProjection, ProjectionAcceptanceSubGateSummary,
         ProjectionAcceptanceSummary, ProjectionAcceptanceTraceabilitySummary,
         ProjectionAuditSummary, ProjectionDeliverySummary, ProjectionPhase,
-        ProjectionPublicDelivery, ProjectionRuntimeSummary, ProjectionSessionSummary,
+        ProjectionPublicDelivery, ProjectionReplayFailure, ProjectionReplayReport,
+        ProjectionReplayStatus, ProjectionRuntimeSummary, ProjectionSessionSummary,
         ProjectionSummary, RequirementPreviewIndex, RequirementPreviewIndexEntry,
         RequirementPreviewProjection, SpecLoopActionProposalProjection, SpecLoopProjection,
         SpecLoopStageProjection, SpecLoopTraceabilityEdge, TaskProjection, TaskTimelineEvent,
         TaskTimelineItem, COMPLETION_DECISION_INDEX_VERSION,
         COMPLETION_DECISION_PROJECTION_VERSION, ISSUE_STATUS_INDEX_VERSION,
-        PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
-        REQUIREMENT_PREVIEW_PROJECTION_VERSION, SPEC_LOOP_PROJECTION_VERSION,
-        TASK_PROJECTION_VERSION,
+        PROJECTION_REPLAY_REPORT_VERSION, PROJECT_PROJECTION_VERSION,
+        REQUIREMENT_PREVIEW_INDEX_VERSION, REQUIREMENT_PREVIEW_PROJECTION_VERSION,
+        SPEC_LOOP_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
     },
     storage::{
         write_completion_decision_index, write_completion_decision_projection,
@@ -46,6 +47,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fs,
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 const STATE_ORDER: [&str; 5] = ["backlog", "todo", "in_progress", "in_review", "done"];
@@ -218,6 +220,98 @@ pub fn rebuild_projections(project_root: impl AsRef<Path>) -> Result<ProjectionS
         project_count: projects.len(),
         index_path: ".agentflow/indexes/issue-status.json".to_string(),
     })
+}
+
+pub fn rebuild_projections_with_replay_report(
+    project_root: impl AsRef<Path>,
+) -> Result<ProjectionReplayReport> {
+    let root = canonical_project_root(project_root)?;
+    let report = match rebuild_projection_replay_report(&root) {
+        Ok(report) => report,
+        Err(error) => ProjectionReplayReport {
+            version: PROJECTION_REPLAY_REPORT_VERSION.to_string(),
+            status: ProjectionReplayStatus::Failed,
+            event_count: 0,
+            task_count: 0,
+            project_count: 0,
+            rebuilt_paths: Vec::new(),
+            failures: vec![ProjectionReplayFailure {
+                stage: "event-replay-projection-rebuild".to_string(),
+                message: error.to_string(),
+            }],
+            writes_authority: false,
+            projection_authority: false,
+            generated_at: unix_timestamp_seconds(),
+        },
+    };
+    write_projection_replay_report(&root, &report)?;
+    Ok(report)
+}
+
+fn rebuild_projection_replay_report(root: &Path) -> Result<ProjectionReplayReport> {
+    let event_count = load_task_events(root)?.len();
+    let summary = rebuild_projections(root)?;
+    let rebuilt_paths = projection_rebuilt_paths(root)?;
+    Ok(ProjectionReplayReport {
+        version: PROJECTION_REPLAY_REPORT_VERSION.to_string(),
+        status: ProjectionReplayStatus::Passed,
+        event_count,
+        task_count: summary.task_count,
+        project_count: summary.project_count,
+        rebuilt_paths,
+        failures: Vec::new(),
+        writes_authority: false,
+        projection_authority: false,
+        generated_at: unix_timestamp_seconds(),
+    })
+}
+
+fn projection_rebuilt_paths(root: &Path) -> Result<Vec<String>> {
+    let mut paths = Vec::new();
+    collect_projection_json_paths(root, &root.join(".agentflow/projections"), &mut paths)?;
+    collect_projection_json_paths(root, &root.join(".agentflow/indexes"), &mut paths)?;
+    paths.sort();
+    Ok(paths)
+}
+
+fn collect_projection_json_paths(
+    root: &Path,
+    directory: &Path,
+    paths: &mut Vec<String>,
+) -> Result<()> {
+    if !directory.is_dir() {
+        return Ok(());
+    }
+    let mut entries = fs::read_dir(directory)
+        .with_context(|| format!("read {}", directory.display()))?
+        .collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by_key(|entry| entry.path());
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_projection_json_paths(root, &path, paths)?;
+        } else if path.extension().and_then(|value| value.to_str()) == Some("json") {
+            paths.push(relative_projection_path(root, &path.display().to_string()));
+        }
+    }
+    Ok(())
+}
+
+fn write_projection_replay_report(root: &Path, report: &ProjectionReplayReport) -> Result<PathBuf> {
+    let path = root.join(".agentflow/projections/replay-report.json");
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    fs::write(&path, serde_json::to_string_pretty(report)? + "\n")
+        .with_context(|| format!("write {}", path.display()))?;
+    Ok(path)
+}
+
+fn unix_timestamp_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 fn project_requirement_preview(
@@ -2459,6 +2553,67 @@ mod tests {
         assert!(dir
             .path()
             .join(".agentflow/indexes/issue-status.json")
+            .is_file());
+    }
+
+    #[test]
+    fn replay_report_rebuilds_projection_without_cached_read_model() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow/projections/tasks")).unwrap();
+        fs::write(
+            dir.path()
+                .join(".agentflow/projections/tasks/AF-PROJ-001.json"),
+            "{\"stale\":true}\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.path().join(".agentflow/indexes")).unwrap();
+        fs::write(
+            dir.path().join(".agentflow/indexes/issue-status.json"),
+            "{\"stale\":true}\n",
+        )
+        .unwrap();
+
+        let report = rebuild_projections_with_replay_report(dir.path()).unwrap();
+        let projection = crate::storage::load_task_projection(dir.path(), "AF-PROJ-001").unwrap();
+
+        assert_eq!(report.status, ProjectionReplayStatus::Passed);
+        assert_eq!(report.event_count, 1);
+        assert_eq!(report.task_count, 1);
+        assert!(!report.rebuilt_paths.is_empty());
+        assert!(!report.writes_authority);
+        assert!(!report.projection_authority);
+        assert_eq!(projection.issue_id, "AF-PROJ-001");
+        assert!(dir
+            .path()
+            .join(".agentflow/projections/replay-report.json")
+            .is_file());
+    }
+
+    #[test]
+    fn replay_report_records_structured_failure_for_corrupt_event() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        let events_dir = dir.path().join(".agentflow/events/task-events");
+        fs::create_dir_all(&events_dir).unwrap();
+        fs::write(events_dir.join("000001-corrupt.json"), "{not-json\n").unwrap();
+
+        let report = rebuild_projections_with_replay_report(dir.path()).unwrap();
+
+        assert_eq!(report.status, ProjectionReplayStatus::Failed);
+        assert!(!report.failures.is_empty());
+        assert_eq!(report.failures[0].stage, "event-replay-projection-rebuild");
+        assert!(report.failures[0].message.contains("parse"));
+        assert!(!report.writes_authority);
+        assert!(!report.projection_authority);
+        assert!(dir
+            .path()
+            .join(".agentflow/projections/replay-report.json")
             .is_file());
     }
 
