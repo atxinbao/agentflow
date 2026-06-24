@@ -581,6 +581,13 @@ fn write_pack_release_gate_readiness(
             && !report.writes_authority
             && !report.writes_event_store
             && !report.executes_provider
+            && !report.affected_objects.is_empty()
+            && !report.required_evidence.is_empty()
+            && !report.state_transitions.is_empty()
+            && !report.downstream_triggers.is_empty()
+            && !report.conflicts.is_empty()
+            && !report.gate_impact.is_empty()
+            && !report.affected_projections.is_empty()
     });
     write_json(
         output_dir.join("pack-simulation-report.json"),

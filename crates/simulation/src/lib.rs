@@ -167,6 +167,47 @@ pub struct SimulationAffectedProjection {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SimulationAffectedObject {
+    pub object_type: String,
+    pub object_id: String,
+    pub impact: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_state: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SimulationRequiredEvidence {
+    pub evidence_type: String,
+    pub required: bool,
+    pub status: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SimulationStateTransition {
+    pub object_type: String,
+    pub object_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_state: Option<String>,
+    pub to_state: String,
+    pub trigger: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SimulationDownstreamTrigger {
+    pub trigger_id: String,
+    pub target: String,
+    pub status: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SimulationConflict {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope_key: Option<String>,
@@ -214,7 +255,15 @@ pub struct SimulationReport {
     #[serde(default)]
     pub rejected_reasons: Vec<SimulationRejectedReason>,
     #[serde(default)]
+    pub affected_objects: Vec<SimulationAffectedObject>,
+    #[serde(default)]
     pub affected_projections: Vec<SimulationAffectedProjection>,
+    #[serde(default)]
+    pub required_evidence: Vec<SimulationRequiredEvidence>,
+    #[serde(default)]
+    pub state_transitions: Vec<SimulationStateTransition>,
+    #[serde(default)]
+    pub downstream_triggers: Vec<SimulationDownstreamTrigger>,
     pub risk: SimulationRiskLevel,
     #[serde(default)]
     pub conflicts: Vec<SimulationConflict>,
@@ -244,7 +293,11 @@ impl SimulationReport {
             proposal: None,
             expected_events: Vec::new(),
             rejected_reasons: Vec::new(),
+            affected_objects: Vec::new(),
             affected_projections: Vec::new(),
+            required_evidence: Vec::new(),
+            state_transitions: Vec::new(),
+            downstream_triggers: Vec::new(),
             risk: SimulationRiskLevel::Low,
             conflicts: Vec::new(),
             gate_impact: Vec::new(),
@@ -265,6 +318,25 @@ pub fn simulate_command(request: &RuntimeCommandRequest) -> Result<SimulationRep
     report
         .affected_projections
         .push(affected_projection(runtime_hint(request)));
+    if let Some(target) = &request.target_object_ref {
+        report.affected_objects.push(affected_object(
+            &target.object_type,
+            &target.id,
+            format!(
+                "command {} would propose an action for this object",
+                request.command_type
+            ),
+            None,
+            Some("action-proposed"),
+        ));
+        report.state_transitions.push(state_transition(
+            &target.object_type,
+            &target.id,
+            None,
+            "action-proposed",
+            &request.command_type,
+        ));
+    }
 
     if !validation.valid {
         report.rejected_reasons = validation.errors.iter().map(Into::into).collect();
@@ -302,6 +374,22 @@ pub fn simulate_issue(request: &SimulationIssueRequest) -> SimulationReport {
         expected_event("task.context-pack.checked", Some("Issue"), true),
         expected_event("task.runtime-preflight.checked", Some("Issue"), true),
     ];
+    report.affected_objects = vec![affected_object(
+        "Issue",
+        &request.issue_id,
+        "issue launch simulation can move the task toward execution readiness",
+        Some("todo"),
+        Some("in_progress"),
+    )];
+    if let Some(project_id) = &request.project_id {
+        report.affected_objects.push(affected_object(
+            "Project",
+            project_id,
+            "issue schedulability can change project loop progress",
+            None,
+            Some("progress-updated"),
+        ));
+    }
     report.affected_projections = vec![
         SimulationAffectedProjection {
             projection_id: "projection.task".to_string(),
@@ -314,6 +402,45 @@ pub fn simulate_issue(request: &SimulationIssueRequest) -> SimulationReport {
             reason: "issue readiness can change project schedulability".to_string(),
         },
     ];
+    report.required_evidence = vec![
+        required_evidence(
+            "panel-context-pack",
+            true,
+            if request.context_pack_ready {
+                "available"
+            } else {
+                "missing"
+            },
+            "Build Agent needs a prepared project context before execution",
+        ),
+        required_evidence(
+            "workspace-clean-proof",
+            true,
+            if request.workspace_clean {
+                "available"
+            } else {
+                "missing"
+            },
+            "Runtime preflight must prove there are no uncommitted user changes",
+        ),
+    ];
+    report.state_transitions = vec![state_transition(
+        "Issue",
+        &request.issue_id,
+        Some("todo"),
+        "in_progress",
+        "runtime-preflight.passed",
+    )];
+    report.downstream_triggers = vec![downstream_trigger(
+        "build-agent.launch.requested",
+        &request.issue_id,
+        if request.context_pack_ready && request.workspace_clean {
+            "would-trigger"
+        } else {
+            "blocked"
+        },
+        "launch is only allowed after context pack and workspace preflight pass",
+    )];
 
     if !request.dependency_ids.is_empty() {
         report.risk = SimulationRiskLevel::Medium;
@@ -389,6 +516,22 @@ pub fn simulate_completion(request: &SimulationCompletionRequest) -> SimulationR
             "issue.done.requested".to_string(),
         ],
     });
+    report.affected_objects = vec![
+        affected_object(
+            "Issue",
+            &request.issue_id,
+            "completion simulation can move issue from review to done",
+            Some("in_review"),
+            Some("done"),
+        ),
+        affected_object(
+            "Run",
+            &request.run_id,
+            "completion simulation can close the active run",
+            Some("completed"),
+            Some("archived"),
+        ),
+    ];
     report.affected_projections = vec![
         SimulationAffectedProjection {
             projection_id: "projection.task".to_string(),
@@ -400,6 +543,59 @@ pub fn simulate_completion(request: &SimulationCompletionRequest) -> SimulationR
             target_id: Some(request.issue_id.clone()),
             reason: "completion can expose public delivery summary".to_string(),
         },
+    ];
+    report.required_evidence = vec![
+        required_evidence(
+            "validation-evidence",
+            true,
+            if request.validation_evidence_refs.is_empty() {
+                "missing"
+            } else {
+                "available"
+            },
+            "done writeback requires validation evidence",
+        ),
+        required_evidence(
+            "delivery-artifact",
+            true,
+            if request.delivery_artifact_refs.is_empty() {
+                "missing"
+            } else {
+                "available"
+            },
+            "done writeback requires delivery artifact references",
+        ),
+        required_evidence(
+            "merge-proof",
+            true,
+            if request.pr_or_mr_ref.is_some() {
+                "available"
+            } else {
+                "missing"
+            },
+            "done writeback should bind to PR/MR merge proof",
+        ),
+    ];
+    report.state_transitions = vec![state_transition(
+        "Issue",
+        &request.issue_id,
+        Some("in_review"),
+        "done",
+        "completion.commit.accepted",
+    )];
+    report.downstream_triggers = vec![
+        downstream_trigger(
+            "projection.rebuild.requested",
+            &request.issue_id,
+            "would-trigger",
+            "completion changes task and project read models",
+        ),
+        downstream_trigger(
+            "audit.trigger.evaluated",
+            &request.issue_id,
+            "would-evaluate",
+            "audit remains independent and must be evaluated after delivery",
+        ),
     ];
     if request.validation_evidence_refs.is_empty() {
         report.decision = SimulationDecision::Rejected;
@@ -451,6 +647,29 @@ pub fn simulate_pack_command(request: &PackCommandSimulationRequest) -> Simulati
         SimulationDecision::Accepted,
     );
     report.expected_events = pack_expected_events(domain_action, &request.command);
+    report.affected_objects = vec![
+        affected_object(
+            &request.target_object_type,
+            &request.target_object_id,
+            format!(
+                "pack command {} would propose a domain action for this object",
+                request.command
+            ),
+            None,
+            Some("action-proposed"),
+        ),
+        affected_object(
+            "Pack",
+            &request.validation.pack_id,
+            "pack validation and surface mappings are read to evaluate command impact",
+            Some(if request.validation.active {
+                "active"
+            } else {
+                "inactive"
+            }),
+            Some("unchanged"),
+        ),
+    ];
     report.affected_projections = pack_affected_projections(&request.surface, surface_mapping);
     report.conflicts.push(SimulationConflict {
         scope_key: Some(format!(
@@ -530,9 +749,61 @@ pub fn simulate_pack_command(request: &PackCommandSimulationRequest) -> Simulati
     let required_capabilities = connector_action
         .map(|action| vec![action.required_capability.clone()])
         .unwrap_or_default();
-    let required_evidence = domain_action
+    let required_evidence_names = domain_action
         .map(|action| action.required_evidence.clone())
         .unwrap_or_default();
+    report.required_evidence = required_evidence_names
+        .iter()
+        .map(|evidence| {
+            required_evidence(
+                evidence,
+                true,
+                "required-preview",
+                format!(
+                    "pack command {} declares this evidence requirement",
+                    request.command
+                ),
+            )
+        })
+        .collect();
+    if report.required_evidence.is_empty() {
+        report.required_evidence.push(required_evidence(
+            "pack-validation-artifact",
+            true,
+            if request.validation.active {
+                "available"
+            } else {
+                "missing"
+            },
+            "pack command simulation always depends on validation artifact state",
+        ));
+    }
+    report.state_transitions = vec![state_transition(
+        &request.target_object_type,
+        &request.target_object_id,
+        None,
+        "action-proposed",
+        &request.command,
+    )];
+    report.downstream_triggers = report
+        .expected_events
+        .iter()
+        .map(|event| {
+            downstream_trigger(
+                &event.event_type,
+                event
+                    .object_type
+                    .as_deref()
+                    .unwrap_or(&request.target_object_type),
+                if event.required {
+                    "would-trigger"
+                } else {
+                    "optional"
+                },
+                "simulation previews the event chain without appending events",
+            )
+        })
+        .collect();
     report.metadata = json!({
         "command": request.command,
         "targetObject": {
@@ -542,7 +813,7 @@ pub fn simulate_pack_command(request: &PackCommandSimulationRequest) -> Simulati
         "actorRole": request.actor_role,
         "packId": request.validation.pack_id,
         "requiredCapabilities": required_capabilities,
-        "requiredEvidence": required_evidence,
+        "requiredEvidence": required_evidence_names,
         "acceptanceImpact": {
             "status": if report.decision == SimulationDecision::Accepted { "would-pass" } else { "would-reject" },
             "reason": if report.decision == SimulationDecision::Accepted {
@@ -800,6 +1071,66 @@ fn simple_rejection(code: &str, message: &str) -> SimulationRejectedReason {
     }
 }
 
+fn affected_object(
+    object_type: &str,
+    object_id: &str,
+    impact: impl Into<String>,
+    current_state: Option<&str>,
+    next_state: Option<&str>,
+) -> SimulationAffectedObject {
+    SimulationAffectedObject {
+        object_type: object_type.to_string(),
+        object_id: object_id.to_string(),
+        impact: impact.into(),
+        current_state: current_state.map(str::to_string),
+        next_state: next_state.map(str::to_string),
+    }
+}
+
+fn required_evidence(
+    evidence_type: &str,
+    required: bool,
+    status: &str,
+    reason: impl Into<String>,
+) -> SimulationRequiredEvidence {
+    SimulationRequiredEvidence {
+        evidence_type: evidence_type.to_string(),
+        required,
+        status: status.to_string(),
+        reason: reason.into(),
+    }
+}
+
+fn state_transition(
+    object_type: &str,
+    object_id: &str,
+    from_state: Option<&str>,
+    to_state: &str,
+    trigger: &str,
+) -> SimulationStateTransition {
+    SimulationStateTransition {
+        object_type: object_type.to_string(),
+        object_id: object_id.to_string(),
+        from_state: from_state.map(str::to_string),
+        to_state: to_state.to_string(),
+        trigger: trigger.to_string(),
+    }
+}
+
+fn downstream_trigger(
+    trigger_id: &str,
+    target: &str,
+    status: &str,
+    reason: impl Into<String>,
+) -> SimulationDownstreamTrigger {
+    SimulationDownstreamTrigger {
+        trigger_id: trigger_id.to_string(),
+        target: target.to_string(),
+        status: status.to_string(),
+        reason: reason.into(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -963,6 +1294,26 @@ mod tests {
         assert!(report.gate_impact.iter().any(|gate| {
             gate.gate_id == "runtime.workspace.clean" && gate.status == "rejected"
         }));
+        assert!(report
+            .affected_objects
+            .iter()
+            .any(|object| object.object_type == "Issue" && object.object_id == "AF-SIM-002"));
+        assert!(report
+            .required_evidence
+            .iter()
+            .any(|evidence| evidence.evidence_type == "panel-context-pack"
+                && evidence.status == "missing"));
+        assert!(report
+            .state_transitions
+            .iter()
+            .any(|transition| transition.to_state == "in_progress"));
+        assert!(report
+            .downstream_triggers
+            .iter()
+            .any(
+                |trigger| trigger.trigger_id == "build-agent.launch.requested"
+                    && trigger.status == "blocked"
+            ));
     }
 
     #[test]
@@ -990,6 +1341,19 @@ mod tests {
         assert!(completion_commit
             .expected_event_chain
             .contains(&"completion.commit.accepted".to_string()));
+        assert!(report
+            .required_evidence
+            .iter()
+            .any(|evidence| evidence.evidence_type == "validation-evidence"
+                && evidence.status == "missing"));
+        assert!(report
+            .affected_objects
+            .iter()
+            .any(|object| object.object_type == "Run" && object.object_id == "run-001"));
+        assert!(report
+            .downstream_triggers
+            .iter()
+            .any(|trigger| trigger.trigger_id == "projection.rebuild.requested"));
     }
 
     #[test]
@@ -1030,6 +1394,24 @@ mod tests {
             .affected_projections
             .iter()
             .any(|projection| projection.projection_id == "projection.task-workbench"));
+        assert!(report
+            .affected_objects
+            .iter()
+            .any(|object| object.object_type == "Issue" && object.object_id == "AF-PACK-001"));
+        assert!(report
+            .required_evidence
+            .iter()
+            .any(|evidence| evidence.evidence_type == "validation"));
+        assert!(report
+            .state_transitions
+            .iter()
+            .any(|transition| transition.trigger == "work.issue.start"
+                && transition.to_state == "action-proposed"));
+        assert!(!report.downstream_triggers.is_empty());
+        assert!(report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.status == "preview-only"));
         assert_eq!(report.metadata["requiredEvidence"][0], "validation");
     }
 
