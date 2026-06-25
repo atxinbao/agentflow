@@ -57,8 +57,8 @@ Message Bus = 到 decision gate 再判断是否需要。
 | `V090-006` | Simulation / Evaluation Layer | P0 | V090-003, V090-005 | done |
 | `V090-007` | Runtime Governance Policy | P0 | V090-003, V090-006 | done |
 | `V090-008` | Cross-process Scheduling Decision Gate | P1 | V090-007 | done |
-| `V090-009` | Deployment Evidence and Rollback Model | P0 | V090-001, V090-002, V090-003, V090-004, V090-005, V090-006, V090-007 | planned |
-| `V090-010` | v0.9.0 Release Certification | P0 | V090-001, V090-002, V090-003, V090-004, V090-005, V090-006, V090-007, V090-008, V090-009 | planned |
+| `V090-009` | Deployment Evidence and Rollback Model | P0 | V090-001, V090-002, V090-003, V090-004, V090-005, V090-006, V090-007 | done |
+| `V090-010` | v0.9.0 Release Certification | P0 | V090-001, V090-002, V090-003, V090-004, V090-005, V090-006, V090-007, V090-008, V090-009 | done |
 
 ## V090-001 Local Runtime Boundary
 

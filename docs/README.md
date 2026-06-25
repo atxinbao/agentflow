@@ -21,7 +21,7 @@
 | `v0.7.2/` | v0.7.2 Runtime Foundation hardening 任务基线 |
 | `v0.8.0/` | v0.8.0 Pack System、Software Dev Pack 和 UI Design Pack 开发任务基线 |
 | `v0.8.1/` | v0.8.1 Pack System clean remediation release certification |
-| `v0.9.0/` | v0.9.0 Deployment Shape and Runtime Governance 开发任务基线 |
+| `v0.9.0/` | v0.9.0 Deployment Shape and Runtime Governance 已发布 closeout 基线 |
 | `requirements/` | 新需求文档入口，后续开发只从这里开始 |
 | `archive/2026-05-agentflow-legacy/` | 旧需求、旧规划、旧规格和旧验证摘要归档 |
 
@@ -66,7 +66,7 @@
 - `v0.7.2/` 下文档记录 Runtime Foundation hardening 任务基线；优先收口 Audit sidecar、migration preview、simulation、message bus、provider smoke 和 release-gate foundation coverage。
 - `v0.8.0/` 下文档记录 Pack System 和第一批行业壳任务基线；Software Dev Pack 的 Audit 必须保持 sidecar，不进入主业务链路。
 - `v0.8.1/` 下文档记录 `v0.8.0` 发布后的 Pack System clean remediation release certification；重点是 file-backed Pack source、registry-driven resolver、Pack-specific Projection、capability-aware availability、negative fixtures 和 release certification。
-- `v0.9.0/` 下文档记录 Deployment Shape and Runtime Governance 任务基线；重点是 local/cloud Runtime boundary、Runtime API / SDK、event replay、migration apply、simulation/evaluation、governance 和 deployment evidence。
+- `v0.9.0/` 下文档记录已发布的 Deployment Shape and Runtime Governance closeout 基线；重点是 local/cloud Runtime boundary、Runtime API / SDK、event replay、migration apply、simulation/evaluation、governance、deployment evidence 和 release certification coverage。
 - 后续新开发需求仍然要进入 `requirements/`；新版本运行时事实源仍然以 `.agentflow/spec/**` 为准。
 - 根目录旧 `GOAL.md`、`ROADMAP.md` 和 `verification.md` 已退出入口；历史验证记录迁入 `verification/history.md`。
 - 根目录 `design.md` 只保留兼容入口；完整设计基线迁入 `product/design-system.md`。
