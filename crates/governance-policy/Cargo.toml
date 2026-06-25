@@ -1,0 +1,14 @@
+[package]
+name = "agentflow-governance-policy"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+agentflow-capability-registry = { path = "../capability-registry" }
+agentflow-role-policy = { path = "../role-policy" }
+serde.workspace = true
+
+[dev-dependencies]
+agentflow-action-contract = { path = "../action-contract" }
+agentflow-ontology = { path = "../ontology" }

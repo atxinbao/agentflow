@@ -248,6 +248,15 @@ Message Bus = 到 decision gate 再判断是否需要。
 - disabled capability 和 failed provider smoke 能影响 Runtime admission；
 - audit sidecar 仍然独立，不回到主链。
 
+### Closeout
+
+- 新增 `crates/governance-policy`，以只读方式评估 role policy、capability policy 和 audit sidecar policy；
+- CLI 新增 `governance-policy evaluate`，可输出单次 runtime admission 决策；
+- Governance report 输出 `allowed` / `rejected` / `deferred`，并附带 trace evidence；
+- release gate 新增 `runtime/governance-policy.json`，覆盖 allow / defer / reject 三类决策；
+- release certification checklist 已新增 `v090-runtime-governance-policy`；
+- 架构说明已记录到 `docs/architecture/036-runtime-governance-policy-v1.md`。
+
 ## V090-008 Cross-process Scheduling Decision Gate
 
 ### Scope

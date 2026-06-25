@@ -54,6 +54,7 @@
 | [033-event-replay-projection-rebuild-v1.md](033-event-replay-projection-rebuild-v1.md) | 定义 Event Store replay、Projection rebuild、结构化 replay report 和 release gate happy / failure 路径 |
 | [034-pack-migration-execution-model-v1.md](034-pack-migration-execution-model-v1.md) | 定义 Pack / Ontology migration preview、confirmation、apply、cancel、rollback 和 replay gate 边界 |
 | [035-simulation-evaluation-layer-v1.md](035-simulation-evaluation-layer-v1.md) | 定义 Simulation report 的对象影响、证据需求、状态变化、冲突和 gate impact 合同 |
+| [036-runtime-governance-policy-v1.md](036-runtime-governance-policy-v1.md) | 定义 Runtime admission 前的 role / capability / provider / audit sidecar 治理决策 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -94,8 +95,9 @@
 33. [033-event-replay-projection-rebuild-v1.md](033-event-replay-projection-rebuild-v1.md)
 34. [034-pack-migration-execution-model-v1.md](034-pack-migration-execution-model-v1.md)
 35. [035-simulation-evaluation-layer-v1.md](035-simulation-evaluation-layer-v1.md)
-36. [current-module-boundaries.md](current-module-boundaries.md)
-37. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+36. [036-runtime-governance-policy-v1.md](036-runtime-governance-policy-v1.md)
+37. [current-module-boundaries.md](current-module-boundaries.md)
+38. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 

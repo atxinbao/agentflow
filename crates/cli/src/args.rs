@@ -49,6 +49,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: CapabilityRegistryCommand,
     },
+    GovernancePolicy {
+        #[command(subcommand)]
+        command: GovernancePolicyCommand,
+    },
     Pack {
         #[command(subcommand)]
         command: PackCommand,
@@ -226,6 +230,28 @@ pub(crate) enum ApiPlaneCommand {
 #[derive(Debug, Subcommand)]
 pub(crate) enum CapabilityRegistryCommand {
     Manifest {
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum GovernancePolicyCommand {
+    Evaluate {
+        #[arg(long)]
+        role: String,
+        #[arg(long = "action-type")]
+        action_type: String,
+        #[arg(long = "object-type")]
+        object_type: Option<String>,
+        #[arg(long = "worker-id")]
+        worker_id: String,
+        #[arg(long)]
+        command: String,
+        #[arg(long = "audit-sidecar-mode", default_value = "independent")]
+        audit_sidecar_mode: String,
+        #[arg(long = "capability-registry")]
+        capability_registry: Option<PathBuf>,
         #[arg(long)]
         output: Option<PathBuf>,
     },

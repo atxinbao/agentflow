@@ -18,6 +18,7 @@ members = [
     "crates/task-artifacts",
     "crates/task-loop",
     "crates/capability-registry",
+    "crates/governance-policy",
     "crates/agent-dispatcher",
     "crates/projection",
     "crates/release",

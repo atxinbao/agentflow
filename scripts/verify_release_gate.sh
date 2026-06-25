@@ -91,6 +91,7 @@ PROVIDER_SMOKE_STATUS_PATH="$RUNTIME_DIR/provider-smoke-status.json"
 PROVIDER_SMOKE_ARTIFACT_PATH="$RUNTIME_DIR/provider-smoke-artifact.json"
 API_PLANE_MANIFEST_PATH="$RUNTIME_DIR/api-plane-manifest.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
+GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
 FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
 FOUNDATION_READINESS_REPORT_PATH="$RUNTIME_DIR/foundation-readiness-report.md"
 FOUNDATION_COVERAGE_PATH="$RUNTIME_DIR/foundation-coverage.json"
@@ -220,7 +221,8 @@ write_gate_reports() {
     "$CAPABILITY_REGISTRY_PATH" \
     "$FOUNDATION_READINESS_REPORT_PATH" \
     "$FOUNDATION_COVERAGE_PATH" \
-    "$PACK_NEGATIVE_FIXTURES_PATH" <<'PY'
+    "$PACK_NEGATIVE_FIXTURES_PATH" \
+    "$GOVERNANCE_POLICY_PATH" <<'PY'
 import json
 import pathlib
 import sys
@@ -255,6 +257,7 @@ capability_registry_path = pathlib.Path(sys.argv[27])
 foundation_readiness_report_path = pathlib.Path(sys.argv[28])
 foundation_coverage_path = pathlib.Path(sys.argv[29])
 pack_negative_fixtures_path = pathlib.Path(sys.argv[30])
+governance_policy_path = pathlib.Path(sys.argv[31])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -345,6 +348,7 @@ runtime_artifacts = [
     {"path": "runtime/provider-smoke-artifact.json", "exists": provider_smoke_artifact_path.is_file()},
     {"path": "runtime/api-plane-manifest.json", "exists": api_plane_manifest_path.is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
+    {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/foundation-readiness-report.md", "exists": foundation_readiness_report_path.is_file()},
     {"path": "runtime/foundation-coverage.json", "exists": foundation_coverage_path.is_file()},
     {"path": "runtime/event-replay-projection-report.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json").is_file()},
@@ -370,6 +374,7 @@ pack_simulation = load_json(pathlib.Path(summary_json_path.parent / "pack-simula
 pack_projection = load_json(pathlib.Path(summary_json_path.parent / "pack-projection-readiness.json")) or {}
 pack_api_plane = load_json(pathlib.Path(summary_json_path.parent / "pack-api-plane-manifest.json")) or {}
 pack_negative_fixtures = load_json(pack_negative_fixtures_path) or {}
+governance_policy = load_json(governance_policy_path) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -400,6 +405,22 @@ pack_simulation_evaluation_passed = bool(pack_simulation_reports) and all(
     and bool(report.get("conflicts"))
     and bool(report.get("gateImpact"))
     for report in pack_simulation_reports
+)
+governance_reports = governance_policy.get("reports") or []
+governance_decisions = {report.get("decision") for report in governance_reports}
+governance_policy_passed = (
+    governance_policy.get("status") == "passed"
+    and governance_policy.get("version") == "agentflow-runtime-governance-policy-gate.v1"
+    and {"allowed", "deferred", "rejected"}.issubset(governance_decisions)
+    and all(report.get("trace") for report in governance_reports)
+    and any(
+        report.get("capabilityPolicy", {}).get("decision") in {"deferred", "rejected"}
+        for report in governance_reports
+    )
+    and any(
+        report.get("auditSidecarPolicy", {}).get("decision") == "rejected"
+        for report in governance_reports
+    )
 )
 
 checklist = [
@@ -468,6 +489,11 @@ checklist = [
         "label": "Simulation reports object impact, evidence needs, conflict preview, and state flow without writes",
         "passed": pack_simulation_evaluation_passed,
     },
+    {
+        "id": "v090-runtime-governance-policy",
+        "label": "Runtime governance emits allow, reject, and defer decisions with trace evidence",
+        "passed": governance_policy_passed,
+    },
 ]
 
 summary_payload = {
@@ -486,6 +512,8 @@ summary_payload = {
     "eventReplayProjectionFailureReportPath": "runtime/event-replay-projection-failure-report.json" if pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json").is_file() else None,
     "apiPlaneManifestPath": "runtime/api-plane-manifest.json" if api_plane_manifest_path.is_file() else None,
     "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
+    "governancePolicyPath": "runtime/governance-policy.json" if governance_policy_path.is_file() else None,
+    "governancePolicyStatus": governance_policy.get("status") or "missing",
     "packRegistryPath": "pack-registry.json" if pathlib.Path(summary_json_path.parent / "pack-registry.json").is_file() else None,
     "packValidationReportPath": "pack-validation-report.json" if pathlib.Path(summary_json_path.parent / "pack-validation-report.json").is_file() else None,
     "packSimulationReportPath": "pack-simulation-report.json" if pathlib.Path(summary_json_path.parent / "pack-simulation-report.json").is_file() else None,
@@ -546,6 +574,7 @@ summary_lines = [
     f"- Foundation readiness report: `{'present' if foundation_readiness_report_path.is_file() else 'missing'}`",
     f"- API Plane manifest: `{'present' if api_plane_manifest_path.is_file() else 'missing'}`",
     f"- Capability registry: `{'present' if capability_registry_path.is_file() else 'missing'}`",
+    f"- Governance policy: `{governance_policy.get('status') or 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Pack migration execution: `{stage_status.get('pack.migration-execution') or 'missing'}`",
@@ -616,6 +645,8 @@ certification_payload = {
     "eventReplayProjectionFailureReportPath": "runtime/event-replay-projection-failure-report.json" if pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json").is_file() else None,
     "apiPlaneManifestPath": "runtime/api-plane-manifest.json" if api_plane_manifest_path.is_file() else None,
     "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
+    "governancePolicyPath": "runtime/governance-policy.json" if governance_policy_path.is_file() else None,
+    "governancePolicyStatus": governance_policy.get("status") or "missing",
     "packNegativeFixturesPath": "pack-negative-fixtures.json" if pack_negative_fixtures_path.is_file() else None,
     "packMigrationAppliedReceiptPath": "pack-migration-applied-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json").is_file() else None,
     "packMigrationRollbackReceiptPath": "pack-migration-rollback-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json").is_file() else None,
@@ -1178,6 +1209,80 @@ if missing_reason:
     raise SystemExit(f"disabled capability is missing a reason: {missing_reason[0]}")
 PY
   record_stage "capability-registry" "passed" "$(basename "$CAPABILITY_REGISTRY_PATH")"
+}
+
+run_governance_policy_gate() {
+  record_stage "governance-policy" "started" "$GOVERNANCE_POLICY_PATH"
+
+  local allow_path="$RUNTIME_DIR/governance-policy-allow.json"
+  local defer_path="$RUNTIME_DIR/governance-policy-defer.json"
+  local reject_path="$RUNTIME_DIR/governance-policy-reject.json"
+
+  "$BIN" governance-policy evaluate \
+    --role work-agent \
+    --action-type startRun \
+    --object-type Issue \
+    --worker-id local-shell-validator \
+    --command validate.test \
+    --audit-sidecar-mode independent \
+    --capability-registry "$CAPABILITY_REGISTRY_PATH" \
+    --output "$allow_path"
+
+  "$BIN" governance-policy evaluate \
+    --role work-agent \
+    --action-type startRun \
+    --object-type Issue \
+    --worker-id github \
+    --command repo.read \
+    --audit-sidecar-mode not-requested \
+    --capability-registry "$CAPABILITY_REGISTRY_PATH" \
+    --output "$defer_path"
+
+  "$BIN" governance-policy evaluate \
+    --role human-owner \
+    --action-type requestAudit \
+    --object-type Issue \
+    --worker-id audit-worker \
+    --command audit.report \
+    --audit-sidecar-mode bound-to-main-chain \
+    --capability-registry "$CAPABILITY_REGISTRY_PATH" \
+    --output "$reject_path"
+
+  python3 - "$GOVERNANCE_POLICY_PATH" "$allow_path" "$defer_path" "$reject_path" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+reports = [
+    json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    for path in sys.argv[2:]
+]
+decisions = {report.get("decision") for report in reports}
+if not {"allowed", "deferred", "rejected"}.issubset(decisions):
+    raise SystemExit(f"governance policy gate did not cover all decisions: {sorted(decisions)}")
+if any(report.get("version") != "agentflow-governance-policy-report.v1" for report in reports):
+    raise SystemExit("governance policy report version mismatch")
+if any(not report.get("trace") for report in reports):
+    raise SystemExit("governance policy reports must include trace evidence")
+if not any(report.get("capabilityPolicy", {}).get("decision") == "deferred" for report in reports):
+    raise SystemExit("governance policy gate must cover provider/capability defer")
+if not any(report.get("auditSidecarPolicy", {}).get("decision") == "rejected" for report in reports):
+    raise SystemExit("governance policy gate must reject audit sidecar main-chain binding")
+
+payload = {
+    "version": "agentflow-runtime-governance-policy-gate.v1",
+    "status": "passed",
+    "writesAuthority": False,
+    "executesProvider": False,
+    "decisionCount": len(reports),
+    "reports": reports,
+    "generatedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  record_stage "governance-policy" "passed" "$(basename "$GOVERNANCE_POLICY_PATH")"
 }
 
 run_foundation_coverage_gate() {
@@ -2021,6 +2126,7 @@ main() {
   run_provider_smoke_gate
   run_api_plane_manifest_gate
   run_capability_registry_gate
+  run_governance_policy_gate
   run_foundation_coverage_gate
   run_pack_release_gate
   run_pack_negative_fixtures_gate
