@@ -93,6 +93,7 @@ API_PLANE_MANIFEST_PATH="$RUNTIME_DIR/api-plane-manifest.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
 SCHEDULING_DECISION_PATH="$RUNTIME_DIR/scheduling-decision.json"
+DEPLOYMENT_EVIDENCE_PATH="$RUNTIME_DIR/deployment-evidence.json"
 FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
 FOUNDATION_READINESS_REPORT_PATH="$RUNTIME_DIR/foundation-readiness-report.md"
 FOUNDATION_COVERAGE_PATH="$RUNTIME_DIR/foundation-coverage.json"
@@ -224,7 +225,8 @@ write_gate_reports() {
     "$FOUNDATION_COVERAGE_PATH" \
     "$PACK_NEGATIVE_FIXTURES_PATH" \
     "$GOVERNANCE_POLICY_PATH" \
-    "$SCHEDULING_DECISION_PATH" <<'PY'
+    "$SCHEDULING_DECISION_PATH" \
+    "$DEPLOYMENT_EVIDENCE_PATH" <<'PY'
 import json
 import pathlib
 import sys
@@ -261,6 +263,7 @@ foundation_coverage_path = pathlib.Path(sys.argv[29])
 pack_negative_fixtures_path = pathlib.Path(sys.argv[30])
 governance_policy_path = pathlib.Path(sys.argv[31])
 scheduling_decision_path = pathlib.Path(sys.argv[32])
+deployment_evidence_path = pathlib.Path(sys.argv[33])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -327,6 +330,7 @@ proof_chain = [
     {"stage": "release.record-tag", "label": "Release Tag Proof"},
     {"stage": "release.record-remote", "label": "Remote Release Proof"},
     {"stage": "release.publish", "label": "Release Publish"},
+    {"stage": "deployment-evidence", "label": "Deployment Evidence And Rollback Proof"},
     {"stage": "audit.request-human", "label": "Audit Request Human"},
     {"stage": "release.publish.refresh", "label": "Release Publish Refresh"},
 ]
@@ -353,6 +357,7 @@ runtime_artifacts = [
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/scheduling-decision.json", "exists": scheduling_decision_path.is_file()},
+    {"path": "runtime/deployment-evidence.json", "exists": deployment_evidence_path.is_file()},
     {"path": "runtime/foundation-readiness-report.md", "exists": foundation_readiness_report_path.is_file()},
     {"path": "runtime/foundation-coverage.json", "exists": foundation_coverage_path.is_file()},
     {"path": "runtime/event-replay-projection-report.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json").is_file()},
@@ -380,6 +385,7 @@ pack_api_plane = load_json(pathlib.Path(summary_json_path.parent / "pack-api-pla
 pack_negative_fixtures = load_json(pack_negative_fixtures_path) or {}
 governance_policy = load_json(governance_policy_path) or {}
 scheduling_decision = load_json(scheduling_decision_path) or {}
+deployment_evidence = load_json(deployment_evidence_path) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -438,6 +444,15 @@ scheduling_decision_passed = (
         bool(scheduling_decision.get("requiredContract"))
         or bool(scheduling_decision.get("alternativeMechanism"))
     )
+)
+deployment_evidence_passed = (
+    deployment_evidence.get("version") == "agentflow-deployment-evidence-report.v1"
+    and deployment_evidence.get("status") == "passed"
+    and deployment_evidence.get("writesAuthority") is False
+    and deployment_evidence.get("localDeployment", {}).get("status") == "ready"
+    and deployment_evidence.get("cloudDeployment", {}).get("status") == "ready"
+    and deployment_evidence.get("rollbackModel", {}).get("providerAgnostic") is True
+    and deployment_evidence.get("rollbackModel", {}).get("rollbackReceipt", {}).get("exists") is True
 )
 
 checklist = [
@@ -516,6 +531,11 @@ checklist = [
         "label": "Cross-process scheduling has an evidence-backed Message Bus go / no-go decision",
         "passed": scheduling_decision_passed,
     },
+    {
+        "id": "v090-deployment-evidence-rollback",
+        "label": "Deployment evidence links local/cloud shape with rollback proof",
+        "passed": deployment_evidence_passed,
+    },
 ]
 
 summary_payload = {
@@ -538,6 +558,9 @@ summary_payload = {
     "governancePolicyStatus": governance_policy.get("status") or "missing",
     "schedulingDecisionPath": "runtime/scheduling-decision.json" if scheduling_decision_path.is_file() else None,
     "schedulingDecision": scheduling_decision.get("decision") or "missing",
+    "deploymentEvidencePath": "runtime/deployment-evidence.json" if deployment_evidence_path.is_file() else None,
+    "deploymentEvidenceStatus": deployment_evidence.get("status") or "missing",
+    "rollbackTargetTag": (deployment_evidence.get("rollbackModel") or {}).get("targetTag"),
     "packRegistryPath": "pack-registry.json" if pathlib.Path(summary_json_path.parent / "pack-registry.json").is_file() else None,
     "packValidationReportPath": "pack-validation-report.json" if pathlib.Path(summary_json_path.parent / "pack-validation-report.json").is_file() else None,
     "packSimulationReportPath": "pack-simulation-report.json" if pathlib.Path(summary_json_path.parent / "pack-simulation-report.json").is_file() else None,
@@ -600,6 +623,7 @@ summary_lines = [
     f"- Capability registry: `{'present' if capability_registry_path.is_file() else 'missing'}`",
     f"- Governance policy: `{governance_policy.get('status') or 'missing'}`",
     f"- Scheduling decision: `{scheduling_decision.get('decision') or 'missing'}`",
+    f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Pack migration execution: `{stage_status.get('pack.migration-execution') or 'missing'}`",
@@ -674,6 +698,9 @@ certification_payload = {
     "governancePolicyStatus": governance_policy.get("status") or "missing",
     "schedulingDecisionPath": "runtime/scheduling-decision.json" if scheduling_decision_path.is_file() else None,
     "schedulingDecision": scheduling_decision.get("decision") or "missing",
+    "deploymentEvidencePath": "runtime/deployment-evidence.json" if deployment_evidence_path.is_file() else None,
+    "deploymentEvidenceStatus": deployment_evidence.get("status") or "missing",
+    "rollbackTargetTag": (deployment_evidence.get("rollbackModel") or {}).get("targetTag"),
     "packNegativeFixturesPath": "pack-negative-fixtures.json" if pack_negative_fixtures_path.is_file() else None,
     "packMigrationAppliedReceiptPath": "pack-migration-applied-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json").is_file() else None,
     "packMigrationRollbackReceiptPath": "pack-migration-rollback-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json").is_file() else None,
@@ -714,6 +741,8 @@ cert_lines = [
     f"- Provider smoke reason: `{provider_smoke.get('reason') or 'n/a'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
+    f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
+    f"- Rollback target: `{(deployment_evidence.get('rollbackModel') or {}).get('targetTag') or 'n/a'}`",
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
     f"- Source commit: `{source_commit_sha or 'n/a'}`",
@@ -1348,6 +1377,59 @@ if payload.get("messageBusPolicy", {}).get("durableReplaySource") != "event-stor
 PY
 
   record_stage "scheduling-decision" "passed" "$(basename "$SCHEDULING_DECISION_PATH")"
+}
+
+run_deployment_evidence_gate() {
+  record_stage "deployment-evidence" "started" "$DEPLOYMENT_EVIDENCE_PATH"
+
+  if ! "$BIN" release deployment-evidence \
+    --release-version "$RELEASE_VERSION" \
+    --release-tag "$RELEASE_TAG_NAME" \
+    --source-commit-sha "$SOURCE_COMMIT_SHA" \
+    --runtime-version "$RELEASE_VERSION" \
+    --release-facts-path "$RUNTIME_DIR/release-facts.json" \
+    --remote-release-proof-path "$RUNTIME_DIR/remote-release-proof.json" \
+    --pack-version-fingerprint-path "$PACK_REGISTRY_PATH" \
+    --event-store-fingerprint-path "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    --projection-rebuild-proof-path "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    --migration-receipt-path "$PACK_MIGRATION_APPLIED_RECEIPT_PATH" \
+    --rollback-receipt-path "$PACK_MIGRATION_ROLLBACK_RECEIPT_PATH" \
+    --failed-deployment-report-path "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH" \
+    --rollback-target-tag "$RELEASE_TAG_NAME" \
+    --rollback-target-commit-sha "$SOURCE_COMMIT_SHA" \
+    --output "$DEPLOYMENT_EVIDENCE_PATH" \
+    >"$CLI_DIR/deployment-evidence.txt" 2>&1; then
+    fail_stage "deployment-evidence" "deployment evidence generation failed"
+  fi
+
+  python3 - "$DEPLOYMENT_EVIDENCE_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+if payload.get("version") != "agentflow-deployment-evidence-report.v1":
+    raise SystemExit("deployment evidence report version mismatch")
+if payload.get("status") != "passed":
+    raise SystemExit(f"deployment evidence must pass, got {payload.get('status')}: {payload.get('missingEvidence')}")
+if payload.get("writesAuthority") is not False:
+    raise SystemExit("deployment evidence must not write authority")
+if payload.get("localDeployment", {}).get("status") != "ready":
+    raise SystemExit("local deployment evidence must be ready")
+if payload.get("cloudDeployment", {}).get("status") != "ready":
+    raise SystemExit("cloud deployment evidence must be ready")
+rollback = payload.get("rollbackModel") or {}
+if rollback.get("providerAgnostic") is not True:
+    raise SystemExit("rollback model must be provider agnostic")
+if not rollback.get("rollbackReceipt", {}).get("exists"):
+    raise SystemExit("rollback receipt must exist")
+for key in ["releaseFacts", "packVersionFingerprint", "eventStoreFingerprint", "projectionRebuildProof", "migrationReceipt"]:
+    if not payload.get(key, {}).get("exists"):
+        raise SystemExit(f"{key} evidence must exist")
+PY
+
+  record_stage "deployment-evidence" "passed" "$(basename "$DEPLOYMENT_EVIDENCE_PATH")"
 }
 
 run_foundation_coverage_gate() {
@@ -2348,6 +2430,7 @@ PY
     "$BIN" release summary
 
   collect_artifacts "$requirement_id" "$project_id" "$issue2_id" "$issue2_run"
+  run_deployment_evidence_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

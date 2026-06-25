@@ -518,6 +518,45 @@ fn main() -> anyhow::Result<()> {
                 println!("release notes: {}", paths.release_notes_path);
                 println!("entries: {}", summary.entries.len());
             }
+            ReleaseCommand::DeploymentEvidence {
+                release_version,
+                release_tag,
+                source_commit_sha,
+                runtime_version,
+                release_facts_path,
+                remote_release_proof_path,
+                config_fingerprint_path,
+                pack_version_fingerprint_path,
+                event_store_fingerprint_path,
+                projection_rebuild_proof_path,
+                migration_receipt_path,
+                rollback_receipt_path,
+                failed_deployment_report_path,
+                rollback_target_tag,
+                rollback_target_commit_sha,
+                output,
+            } => {
+                let report = agentflow_release::build_deployment_evidence_report(
+                    agentflow_release::DeploymentEvidenceInput {
+                        release_version,
+                        release_tag,
+                        source_commit_sha,
+                        runtime_version,
+                        release_facts_path,
+                        remote_release_proof_path,
+                        config_fingerprint_path,
+                        pack_version_fingerprint_path,
+                        event_store_fingerprint_path,
+                        projection_rebuild_proof_path,
+                        migration_receipt_path,
+                        rollback_receipt_path,
+                        failed_deployment_report_path,
+                        rollback_target_tag,
+                        rollback_target_commit_sha,
+                    },
+                )?;
+                write_or_print_json(output.as_deref(), &report)?;
+            }
         },
         Command::ProviderSmoke {
             provider,

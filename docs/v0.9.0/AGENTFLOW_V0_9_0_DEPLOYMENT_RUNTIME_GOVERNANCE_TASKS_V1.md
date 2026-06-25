@@ -315,6 +315,16 @@ Message Bus = 到 decision gate 再判断是否需要。
 - deployment evidence 能关联 Runtime API / Pack / Event Store / Projection；
 - release gate 覆盖 deployment evidence。
 
+### Closeout
+
+- 新增 `agentflow release deployment-evidence`，输出 `agentflow-deployment-evidence-report.v1`；
+- report 绑定 release facts、remote release proof、Pack fingerprint、event replay report、projection rebuild proof、migration receipt、rollback receipt 和 failed deployment report；
+- report 明确 `writesAuthority = false`；
+- local / cloud deployment shape 都必须有可读证据；
+- rollback model 为 provider-agnostic，不绑定云厂商；
+- release gate 生成 `runtime/deployment-evidence.json` 并纳入 summary / certification / checklist；
+- 架构说明已记录到 `docs/architecture/038-deployment-evidence-rollback-model-v1.md`。
+
 ## V090-010 v0.9.0 Release Certification
 
 ### Scope
