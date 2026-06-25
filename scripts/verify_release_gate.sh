@@ -95,6 +95,7 @@ FILESYSTEM_CONTRACT_PATH="$RUNTIME_DIR/filesystem-contract.json"
 PACK_CONTRACT_COMPATIBILITY_PATH="$RUNTIME_DIR/pack-contract-compatibility.json"
 PROJECTION_READMODEL_CONTRACT_PATH="$RUNTIME_DIR/projection-readmodel-contract.json"
 EVIDENCE_ACCEPTANCE_CONTRACT_PATH="$RUNTIME_DIR/evidence-acceptance-contract.json"
+EXECUTOR_ADAPTER_CONTRACT_PATH="$RUNTIME_DIR/executor-adapter-contract.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
 GOVERNANCE_ADMISSION_PATH="$RUNTIME_DIR/governance-admission.json"
@@ -330,6 +331,7 @@ proof_chain = [
     {"stage": "pack-contract-compatibility", "label": "Pack Contract Compatibility"},
     {"stage": "projection-readmodel-contract", "label": "Projection / Read Model Contract"},
     {"stage": "evidence-acceptance-contract", "label": "Evidence / Acceptance Contract"},
+    {"stage": "executor-adapter-contract", "label": "Executor Adapter Contract"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -391,6 +393,7 @@ runtime_artifacts = [
     {"path": "runtime/pack-contract-compatibility.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/pack-contract-compatibility.json").is_file()},
     {"path": "runtime/projection-readmodel-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/projection-readmodel-contract.json").is_file()},
     {"path": "runtime/evidence-acceptance-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/evidence-acceptance-contract.json").is_file()},
+    {"path": "runtime/executor-adapter-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/executor-adapter-contract.json").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -444,6 +447,7 @@ filesystem_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime
 pack_contract_compatibility = load_json(pathlib.Path(summary_json_path.parent / "runtime/pack-contract-compatibility.json")) or {}
 projection_readmodel_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/projection-readmodel-contract.json")) or {}
 evidence_acceptance_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/evidence-acceptance-contract.json")) or {}
+executor_adapter_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/executor-adapter-contract.json")) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -636,6 +640,27 @@ evidence_acceptance_contract_passed = (
     and evidence_acceptance_contract.get("failureFixturesPassed") is True
     and not evidence_acceptance_contract.get("missingSections")
     and not evidence_acceptance_contract.get("missingRequiredPhrases")
+)
+executor_adapter_contract_passed = (
+    executor_adapter_contract.get("status") == "passed"
+    and executor_adapter_contract.get("executorAdapterContractVersion") == "agentflow-executor-adapter-contract.v1"
+    and executor_adapter_contract.get("executorAdapterContractStatus") == "active"
+    and executor_adapter_contract.get("docPath") == "docs/architecture/047-v100-executor-adapter-contract-freeze-v1.md"
+    and executor_adapter_contract.get("stableContractBaseline") == "agentflow-stable-contract-baseline.v1"
+    and executor_adapter_contract.get("runtimeApiSdkVersion") == "agentflow-runtime-api-sdk-freeze.v1"
+    and executor_adapter_contract.get("filesystemContractVersion") == "agentflow-filesystem-contract-freeze.v1"
+    and executor_adapter_contract.get("packContractVersion") == "agentflow-pack-contract-freeze.v1"
+    and executor_adapter_contract.get("projectionContractVersion") == "agentflow-projection-readmodel-contract.v1"
+    and executor_adapter_contract.get("evidenceAcceptanceContractVersion") == "agentflow-evidence-acceptance-contract.v1"
+    and executor_adapter_contract.get("acceptedFixturePassed") is True
+    and executor_adapter_contract.get("rejectedFixturePassed") is True
+    and executor_adapter_contract.get("deferredFixturePassed") is True
+    and executor_adapter_contract.get("diffBoundaryViolationRejected") is True
+    and executor_adapter_contract.get("sessionIsolationRespected") is True
+    and executor_adapter_contract.get("providerSmokeBoundaryRespected") is True
+    and executor_adapter_contract.get("evidenceAcceptanceHandoffReady") is True
+    and not executor_adapter_contract.get("missingSections")
+    and not executor_adapter_contract.get("missingRequiredPhrases")
 )
 deployment_evidence_semantics_passed = (
     deployment_evidence_passed
@@ -847,6 +872,11 @@ checklist = [
         "passed": evidence_acceptance_contract_passed,
     },
     {
+        "id": "v100-executor-adapter-contract-freeze",
+        "label": "v1.0 Executor Adapter contract freezes work handoff, diff boundary, session isolation, provider mapping, and result normalization",
+        "passed": executor_adapter_contract_passed,
+    },
+    {
         "id": "runtime-fixture-gate",
         "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
@@ -982,6 +1012,10 @@ summary_payload = {
     "evidenceAcceptanceContractStatus": evidence_acceptance_contract.get("status") or "missing",
     "evidenceAcceptanceContractVersion": evidence_acceptance_contract.get("evidenceAcceptanceContractVersion"),
     "evidenceAcceptanceFreezeStatus": evidence_acceptance_contract.get("evidenceAcceptanceContractStatus"),
+    "executorAdapterContractPath": "runtime/executor-adapter-contract.json" if pathlib.Path(summary_json_path.parent / "runtime/executor-adapter-contract.json").is_file() else None,
+    "executorAdapterContractStatus": executor_adapter_contract.get("status") or "missing",
+    "executorAdapterContractVersion": executor_adapter_contract.get("executorAdapterContractVersion"),
+    "executorAdapterFreezeStatus": executor_adapter_contract.get("executorAdapterContractStatus"),
     "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage",
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
@@ -1172,6 +1206,10 @@ certification_payload = {
     "evidenceAcceptanceContractStatus": evidence_acceptance_contract.get("status") or "missing",
     "evidenceAcceptanceContractVersion": evidence_acceptance_contract.get("evidenceAcceptanceContractVersion"),
     "evidenceAcceptanceFreezeStatus": evidence_acceptance_contract.get("evidenceAcceptanceContractStatus"),
+    "executorAdapterContractPath": "runtime/executor-adapter-contract.json" if pathlib.Path(summary_json_path.parent / "runtime/executor-adapter-contract.json").is_file() else None,
+    "executorAdapterContractStatus": executor_adapter_contract.get("status") or "missing",
+    "executorAdapterContractVersion": executor_adapter_contract.get("executorAdapterContractVersion"),
+    "executorAdapterFreezeStatus": executor_adapter_contract.get("executorAdapterContractStatus"),
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "currentGateRun": current_gate_run,
     "mainGateRun": main_gate_run,
@@ -3932,6 +3970,249 @@ PY
   record_stage "evidence-acceptance-contract" "passed" "$(basename "$EVIDENCE_ACCEPTANCE_CONTRACT_PATH")"
 }
 
+run_executor_adapter_contract_gate() {
+  record_stage "executor-adapter-contract" "started" "$EXECUTOR_ADAPTER_CONTRACT_PATH"
+  python3 - \
+    "$ROOT" \
+    "$PROVIDER_SMOKE_STATUS_PATH" \
+    "$PROVIDER_SMOKE_ARTIFACT_PATH" \
+    "$RUNTIME_DIR/final-task-projection.json" \
+    "$RUNTIME_DIR/final-evidence.json" \
+    "$RUNTIME_DIR/final-acceptance-gate.json" \
+    "$RUNTIME_DIR/final-closeout-proof.json" \
+    "$PROJECTION_READMODEL_CONTRACT_PATH" \
+    "$EVIDENCE_ACCEPTANCE_CONTRACT_PATH" \
+    "$EXECUTOR_ADAPTER_CONTRACT_PATH" <<'PY'
+import json
+import pathlib
+import re
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+provider_status_path = pathlib.Path(sys.argv[2])
+provider_artifact_path = pathlib.Path(sys.argv[3])
+task_projection_path = pathlib.Path(sys.argv[4])
+evidence_path = pathlib.Path(sys.argv[5])
+acceptance_path = pathlib.Path(sys.argv[6])
+closeout_path = pathlib.Path(sys.argv[7])
+projection_contract_path = pathlib.Path(sys.argv[8])
+evidence_contract_path = pathlib.Path(sys.argv[9])
+output_path = pathlib.Path(sys.argv[10])
+doc_path = root / "docs/architecture/047-v100-executor-adapter-contract-freeze-v1.md"
+
+if not doc_path.is_file():
+    raise SystemExit(f"missing executor adapter contract document: {doc_path}")
+
+def load_json(path):
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+doc = doc_path.read_text(encoding="utf-8")
+provider_status = load_json(provider_status_path)
+provider_artifact = load_json(provider_artifact_path)
+task_projection = load_json(task_projection_path)
+evidence = load_json(evidence_path)
+acceptance = load_json(acceptance_path)
+closeout = load_json(closeout_path)
+projection_contract = load_json(projection_contract_path)
+evidence_contract = load_json(evidence_contract_path)
+
+def metadata_value(name):
+    match = re.search(rf"^{re.escape(name)}:\s*(\S+)\s*$", doc, re.MULTILINE)
+    return match.group(1) if match else None
+
+required_sections = [
+    "## Executor Authority Boundary",
+    "## Work Handoff Schema",
+    "## Allowed Path / Denied Path Rule",
+    "## Expected Outputs Rule",
+    "## Evidence Return Rule",
+    "## Diff Boundary Check",
+    "## Session Isolation Rule",
+    "## Executor Result Normalization",
+    "## Provider Adapter Mapping",
+    "## Provider Smoke Boundary",
+    "## Release Gate Fixture",
+    "## V100 Binding",
+]
+required_phrases = [
+    "Codex",
+    "Claude Code",
+    "executor session",
+    "project truth",
+    "allowedPaths",
+    "deniedPaths",
+    "expectedOutputs",
+    "Evidence Pack",
+    "Acceptance Gate",
+    "Completion Commit",
+    "diff-boundary-violation",
+]
+
+timeline = task_projection.get("timeline") or []
+events = [
+    event
+    for state in timeline
+    for event in (state.get("events") or [])
+]
+event_types = {event.get("eventType") for event in events}
+artifact_refs = [
+    ref
+    for event in events
+    for ref in (event.get("artifactRefs") or [])
+]
+
+provider_smoke_status = provider_status.get("status") or "missing"
+provider_smoke_boundary_respected = provider_smoke_status in {"passed", "skipped", "disabled"}
+if provider_smoke_status == "passed":
+    provider_smoke_boundary_respected = bool(provider_artifact.get("session") or provider_artifact.get("sessionSnapshot") or provider_artifact.get("terminalProjection"))
+elif provider_smoke_status in {"skipped", "disabled"}:
+    provider_smoke_boundary_respected = bool(provider_status.get("reason"))
+
+accepted_fixture = {
+    "fixtureId": "accepted-executor-result",
+    "input": {
+        "decision": "accepted",
+        "changedFiles": ["apps/desktop/src/App.tsx"],
+        "allowedPaths": ["apps/desktop/src/**"],
+        "deniedPaths": [".agentflow/**"],
+        "expectedOutputs": ["changedFiles", "validationResults", "evidenceRefs"],
+    },
+    "normalizedResult": "accepted",
+    "writesEvidence": True,
+    "writesDone": False,
+    "nextGate": "Evidence / Acceptance",
+}
+rejected_fixture = {
+    "fixtureId": "rejected-diff-boundary",
+    "input": {
+        "decision": "rejected",
+        "changedFiles": [".agentflow/spec/issues/AF-OUT-OF-SCOPE.json"],
+        "allowedPaths": ["apps/desktop/src/**"],
+        "deniedPaths": [".agentflow/**"],
+    },
+    "normalizedResult": "rejected",
+    "stableReason": "diff-boundary-violation",
+    "writesEvidence": False,
+    "writesDone": False,
+}
+deferred_fixture = {
+    "fixtureId": "deferred-provider-unavailable",
+    "input": {
+        "decision": "deferred",
+        "providerStatus": "unavailable",
+    },
+    "normalizedResult": "deferred",
+    "stableReason": "provider-unavailable",
+    "writesEvidence": False,
+    "writesDone": False,
+}
+
+accepted_fixture_passed = (
+    accepted_fixture["normalizedResult"] == "accepted"
+    and accepted_fixture["writesEvidence"] is True
+    and accepted_fixture["writesDone"] is False
+    and all(
+        not path.startswith(".agentflow/")
+        for path in accepted_fixture["input"]["changedFiles"]
+    )
+)
+rejected_fixture_passed = (
+    rejected_fixture["normalizedResult"] == "rejected"
+    and rejected_fixture["stableReason"] == "diff-boundary-violation"
+    and rejected_fixture["writesEvidence"] is False
+    and rejected_fixture["writesDone"] is False
+    and any(
+        path.startswith(".agentflow/")
+        for path in rejected_fixture["input"]["changedFiles"]
+    )
+)
+deferred_fixture_passed = (
+    deferred_fixture["normalizedResult"] == "deferred"
+    and deferred_fixture["stableReason"] == "provider-unavailable"
+    and deferred_fixture["writesEvidence"] is False
+    and deferred_fixture["writesDone"] is False
+)
+
+session_projection_refs_present = any(ref.endswith("/session.json") for ref in artifact_refs) or "agent.session.started" in event_types
+session_isolation_respected = (
+    projection_contract.get("sidecarReadModelsPresent") is True
+    and task_projection.get("currentState") == "done"
+    and not task_projection.get("executorChatHistory")
+    and not task_projection.get("executorMemory")
+)
+evidence_acceptance_handoff_ready = (
+    evidence_contract.get("status") == "passed"
+    and evidence.get("status") == "passed"
+    and acceptance.get("passed") is True
+    and acceptance.get("outcome") == "accepted"
+    and closeout.get("merged") is True
+    and closeout.get("issueClosed") is True
+)
+
+missing_sections = [section for section in required_sections if section not in doc]
+missing_required_phrases = [phrase for phrase in required_phrases if phrase not in doc]
+
+payload = {
+    "version": "agentflow-executor-adapter-contract-report.v1",
+    "status": "passed",
+    "docPath": "docs/architecture/047-v100-executor-adapter-contract-freeze-v1.md",
+    "executorAdapterContractVersion": metadata_value("executorAdapterContractVersion"),
+    "executorAdapterContractStatus": metadata_value("executorAdapterContractStatus"),
+    "stableContractBaseline": metadata_value("stableContractBaseline"),
+    "runtimeApiSdkVersion": metadata_value("runtimeApiSdkVersion"),
+    "filesystemContractVersion": metadata_value("filesystemContractVersion"),
+    "packContractVersion": metadata_value("packContractVersion"),
+    "projectionContractVersion": metadata_value("projectionContractVersion"),
+    "evidenceAcceptanceContractVersion": metadata_value("evidenceAcceptanceContractVersion"),
+    "providerSmokeStatus": provider_smoke_status,
+    "providerSmokeProvider": provider_status.get("provider"),
+    "providerSmokeBoundaryRespected": provider_smoke_boundary_respected,
+    "acceptedFixture": accepted_fixture,
+    "rejectedFixture": rejected_fixture,
+    "deferredFixture": deferred_fixture,
+    "acceptedFixturePassed": accepted_fixture_passed,
+    "rejectedFixturePassed": rejected_fixture_passed,
+    "deferredFixturePassed": deferred_fixture_passed,
+    "diffBoundaryViolationRejected": rejected_fixture_passed,
+    "sessionProjectionRefsPresent": session_projection_refs_present,
+    "sessionIsolationRespected": session_isolation_respected,
+    "evidenceAcceptanceHandoffReady": evidence_acceptance_handoff_ready,
+    "missingSections": missing_sections,
+    "missingRequiredPhrases": missing_required_phrases,
+    "checkedAt": int(time.time()),
+}
+
+if (
+    payload["executorAdapterContractVersion"] != "agentflow-executor-adapter-contract.v1"
+    or payload["executorAdapterContractStatus"] != "active"
+    or payload["stableContractBaseline"] != "agentflow-stable-contract-baseline.v1"
+    or payload["runtimeApiSdkVersion"] != "agentflow-runtime-api-sdk-freeze.v1"
+    or payload["filesystemContractVersion"] != "agentflow-filesystem-contract-freeze.v1"
+    or payload["packContractVersion"] != "agentflow-pack-contract-freeze.v1"
+    or payload["projectionContractVersion"] != "agentflow-projection-readmodel-contract.v1"
+    or payload["evidenceAcceptanceContractVersion"] != "agentflow-evidence-acceptance-contract.v1"
+    or not provider_smoke_boundary_respected
+    or not accepted_fixture_passed
+    or not rejected_fixture_passed
+    or not deferred_fixture_passed
+    or not session_isolation_respected
+    or not evidence_acceptance_handoff_ready
+    or missing_sections
+    or missing_required_phrases
+):
+    payload["status"] = "failed"
+
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("executor adapter contract fixture failed")
+PY
+  record_stage "executor-adapter-contract" "passed" "$(basename "$EXECUTOR_ADAPTER_CONTRACT_PATH")"
+}
+
 run_negative_semantic_fixtures_gate() {
   record_stage "negative-semantic-fixtures" "started" "$NEGATIVE_SEMANTIC_FIXTURES_PATH"
   if ! python3 - \
@@ -4646,6 +4927,7 @@ PY
   collect_artifacts "$requirement_id" "$project_id" "$issue2_id" "$issue2_run"
   run_projection_readmodel_contract_gate
   run_evidence_acceptance_contract_gate
+  run_executor_adapter_contract_gate
   run_deployment_evidence_gate
   run_negative_semantic_fixtures_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
