@@ -352,6 +352,16 @@ Message Bus = 到 decision gate 再判断是否需要。
 - Message Bus 是否进入后续版本必须有 decision record；
 - 不把 Projection、Connector 或行业 UI 提升为 authority。
 
+### Closeout
+
+- release certification 新增 `v090Coverage`，逐项覆盖 V090-001 到 V090-009；
+- release certification 新增 `v1PlanningReadiness` 和 `v1PlanningBlockers`；
+- 当前进入 v1.0 planning 的判定由 V090 coverage 全部通过决定；
+- Message Bus decision record 固定引用 `runtime/scheduling-decision.json`；
+- authority boundary certification 明确 Projection / Connector / industry UI 都不是 authority；
+- release gate certification checklist 新增 `v090-release-certification`；
+- 架构说明已记录到 `docs/architecture/039-v090-release-certification-v1.md`。
+
 ## Execution Order
 
 建议执行顺序：

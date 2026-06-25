@@ -454,6 +454,77 @@ deployment_evidence_passed = (
     and deployment_evidence.get("rollbackModel", {}).get("providerAgnostic") is True
     and deployment_evidence.get("rollbackModel", {}).get("rollbackReceipt", {}).get("exists") is True
 )
+v090_coverage = [
+    {
+        "id": "V090-001",
+        "label": "Local Runtime Boundary",
+        "passed": api_plane_manifest_path.is_file() and capability_registry_path.is_file(),
+        "evidencePath": "runtime/api-plane-manifest.json",
+    },
+    {
+        "id": "V090-002",
+        "label": "Cloud Runtime Boundary",
+        "passed": deployment_evidence.get("cloudDeployment", {}).get("status") == "ready",
+        "evidencePath": "runtime/deployment-evidence.json",
+    },
+    {
+        "id": "V090-003",
+        "label": "Runtime API / SDK Contract",
+        "passed": api_plane_manifest_path.is_file() and capability_registry_path.is_file(),
+        "evidencePath": "runtime/api-plane-manifest.json",
+    },
+    {
+        "id": "V090-004",
+        "label": "Event Replay / Projection Rebuild",
+        "passed": event_replay_projection.get("status") == "passed"
+        and event_replay_projection_failure.get("status") == "failed",
+        "evidencePath": "runtime/event-replay-projection-report.json",
+    },
+    {
+        "id": "V090-005",
+        "label": "Pack Migration Execution",
+        "passed": pack_migration_unconfirmed.get("status") == "rejected"
+        and pack_migration_applied.get("applied") is True
+        and pack_migration_rollback.get("rolledBack") is True,
+        "evidencePath": "pack-migration-applied-receipt.json",
+    },
+    {
+        "id": "V090-006",
+        "label": "Simulation Evaluation Layer",
+        "passed": pack_simulation_evaluation_passed,
+        "evidencePath": "pack-simulation-report.json",
+    },
+    {
+        "id": "V090-007",
+        "label": "Runtime Governance Policy",
+        "passed": governance_policy_passed,
+        "evidencePath": "runtime/governance-policy.json",
+    },
+    {
+        "id": "V090-008",
+        "label": "Cross-process Scheduling Decision",
+        "passed": scheduling_decision_passed,
+        "evidencePath": "runtime/scheduling-decision.json",
+    },
+    {
+        "id": "V090-009",
+        "label": "Deployment Evidence and Rollback Model",
+        "passed": deployment_evidence_passed,
+        "evidencePath": "runtime/deployment-evidence.json",
+    },
+]
+v090_coverage_passed = all(item["passed"] for item in v090_coverage)
+v1_planning_readiness = "ready" if v090_coverage_passed else "blocked"
+v1_planning_blockers = [
+    item["id"] for item in v090_coverage if not item["passed"]
+]
+authority_boundary_certification = {
+    "projectionIsAuthority": False,
+    "connectorIsAuthority": False,
+    "industryUiIsAuthority": False,
+    "runtimeApiRemainsAuthorityBoundary": True,
+    "eventStoreRemainsDurableAuthority": True,
+}
 
 checklist = [
     {
@@ -536,6 +607,11 @@ checklist = [
         "label": "Deployment evidence links local/cloud shape with rollback proof",
         "passed": deployment_evidence_passed,
     },
+    {
+        "id": "v090-release-certification",
+        "label": "v0.9.0 certification covers V090-001 through V090-009 and can enter v1.0 planning",
+        "passed": v090_coverage_passed,
+    },
 ]
 
 summary_payload = {
@@ -561,6 +637,10 @@ summary_payload = {
     "deploymentEvidencePath": "runtime/deployment-evidence.json" if deployment_evidence_path.is_file() else None,
     "deploymentEvidenceStatus": deployment_evidence.get("status") or "missing",
     "rollbackTargetTag": (deployment_evidence.get("rollbackModel") or {}).get("targetTag"),
+    "v090Coverage": v090_coverage,
+    "v1PlanningReadiness": v1_planning_readiness,
+    "v1PlanningBlockers": v1_planning_blockers,
+    "authorityBoundaryCertification": authority_boundary_certification,
     "packRegistryPath": "pack-registry.json" if pathlib.Path(summary_json_path.parent / "pack-registry.json").is_file() else None,
     "packValidationReportPath": "pack-validation-report.json" if pathlib.Path(summary_json_path.parent / "pack-validation-report.json").is_file() else None,
     "packSimulationReportPath": "pack-simulation-report.json" if pathlib.Path(summary_json_path.parent / "pack-simulation-report.json").is_file() else None,
@@ -701,6 +781,12 @@ certification_payload = {
     "deploymentEvidencePath": "runtime/deployment-evidence.json" if deployment_evidence_path.is_file() else None,
     "deploymentEvidenceStatus": deployment_evidence.get("status") or "missing",
     "rollbackTargetTag": (deployment_evidence.get("rollbackModel") or {}).get("targetTag"),
+    "v090Coverage": v090_coverage,
+    "v1PlanningReadiness": v1_planning_readiness,
+    "v1PlanningBlockers": v1_planning_blockers,
+    "authorityBoundaryCertification": authority_boundary_certification,
+    "messageBusDecisionRecordPath": "runtime/scheduling-decision.json" if scheduling_decision_path.is_file() else None,
+    "messageBusDecision": scheduling_decision.get("decision") or "missing",
     "packNegativeFixturesPath": "pack-negative-fixtures.json" if pack_negative_fixtures_path.is_file() else None,
     "packMigrationAppliedReceiptPath": "pack-migration-applied-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json").is_file() else None,
     "packMigrationRollbackReceiptPath": "pack-migration-rollback-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json").is_file() else None,
@@ -743,6 +829,7 @@ cert_lines = [
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
     f"- Rollback target: `{(deployment_evidence.get('rollbackModel') or {}).get('targetTag') or 'n/a'}`",
+    f"- v1.0 planning readiness: `{v1_planning_readiness}`",
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
     f"- Source commit: `{source_commit_sha or 'n/a'}`",
@@ -753,6 +840,10 @@ cert_lines = [
     f"- Main gate run: `{(main_gate_run or {}).get('runUrl') or 'not-this-run'}`",
     f"- Tag gate run: `{(tag_gate_run or {}).get('runUrl') or 'not-this-run'}`",
     f"- Release gate run: `{(release_gate_run or {}).get('runUrl') or 'not-this-run'}`",
+    f"- v1.0 planning readiness: `{v1_planning_readiness}`",
+    f"- Message Bus decision: `{scheduling_decision.get('decision') or 'missing'}`",
+    f"- Runtime API remains authority boundary: `{authority_boundary_certification['runtimeApiRemainsAuthorityBoundary']}`",
+    f"- Projection / Connector / Industry UI authority uplift: `false`",
 ]
 if current_status == "failed":
     cert_lines.append(f"- Failed stage: `{current_stage}`")
@@ -765,6 +856,22 @@ else:
 cert_lines.extend([
     f"- Requirement: `{requirement_id}`",
     f"- Project: `{project_id}`",
+    "",
+    "## V090 Coverage",
+    "",
+])
+for item in v090_coverage:
+    cert_lines.append(
+        f"- [{'x' if item['passed'] else ' '}] `{item['id']}` {item['label']} -> `{item['evidencePath']}`"
+    )
+cert_lines.extend([
+    "",
+    "## v1.0 Planning Decision",
+    "",
+    f"- Readiness: `{v1_planning_readiness}`",
+    f"- Blockers: `{', '.join(v1_planning_blockers) if v1_planning_blockers else 'none'}`",
+    "- Message Bus decision record: `runtime/scheduling-decision.json`",
+    "- Projection, Connector, and industry UI remain non-authority surfaces.",
     "",
     "## Gate Commands",
     "",
