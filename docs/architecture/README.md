@@ -59,6 +59,7 @@
 | [038-deployment-evidence-rollback-model-v1.md](038-deployment-evidence-rollback-model-v1.md) | 定义 local / cloud deployment shape、release evidence 和 provider-agnostic rollback proof |
 | [039-v090-release-certification-v1.md](039-v090-release-certification-v1.md) | 定义 v0.9.0 release certification、V090 coverage、v1 planning readiness 和 authority boundary |
 | [040-release-source-agent-entry-v1.md](040-release-source-agent-entry-v1.md) | 定义 release source 中的稳定 Agent entry、tracked docs 映射和 runtime-only 边界 |
+| [041-v100-stable-contract-baseline-v1.md](041-v100-stable-contract-baseline-v1.md) | 定义 v1.0 Stable Contract Baseline、stable / internal / experimental 边界和 release gate 元数据 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -104,8 +105,9 @@
 38. [038-deployment-evidence-rollback-model-v1.md](038-deployment-evidence-rollback-model-v1.md)
 39. [039-v090-release-certification-v1.md](039-v090-release-certification-v1.md)
 40. [040-release-source-agent-entry-v1.md](040-release-source-agent-entry-v1.md)
-41. [current-module-boundaries.md](current-module-boundaries.md)
-42. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+41. [041-v100-stable-contract-baseline-v1.md](041-v100-stable-contract-baseline-v1.md)
+42. [current-module-boundaries.md](current-module-boundaries.md)
+43. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 

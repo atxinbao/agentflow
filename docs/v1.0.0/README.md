@@ -51,6 +51,7 @@
 6. [../architecture/032-runtime-api-sdk-contract-v1.md](../architecture/032-runtime-api-sdk-contract-v1.md)
 7. [../architecture/036-runtime-governance-policy-v1.md](../architecture/036-runtime-governance-policy-v1.md)
 8. [../architecture/039-v090-release-certification-v1.md](../architecture/039-v090-release-certification-v1.md)
+9. [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md)
 
 ## Scope
 
