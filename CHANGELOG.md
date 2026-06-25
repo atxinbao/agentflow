@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.9.0 - 2026-06-25
+
+执行者：Codex
+
+`0.9.0 - Deployment Shape and Runtime Governance` 将 AgentFlow 从 Pack System remediation 基线推进到可部署、可重放、可迁移、可模拟、可治理的 Runtime 边界。
+
+### Added
+
+- 明确 Local Runtime Boundary 和 Cloud Runtime Boundary，固定 Runtime Core、API plane、Event Store、Projection、Pack、Connector 和行业 UI 的边界。
+- 补齐 Runtime API / SDK contract hardening，确认所有运行时写动作必须经过 command admission 和 authority boundary。
+- 增加 Event Replay / Projection Rebuild 证明，release gate 会输出 replay 与 projection rebuild 报告。
+- 增加 Ontology / Pack Migration execution model，覆盖 migration preview、explicit apply、cancel、rollback 和 replay receipt。
+- 增加 Simulation / Evaluation layer，确保 dry-run / simulation 只输出评估报告，不写 authority。
+- 增加 Runtime Governance Policy，统一 role、capability、provider、sidecar、connector 和 audit boundary 的准入判断。
+- 增加 Cross-process Scheduling Decision Gate，明确 Message Bus 当前结论为 `no-go`，不作为默认中心化架构。
+- 增加 Deployment Evidence and Rollback Model，release gate 输出 deployment evidence、rollback readiness 和 external review surface。
+- 增加 v0.9.0 release certification coverage，逐项证明 V090-001 到 V090-009，并给出 v1.0 planning readiness。
+
+### Architecture
+
+- Runtime Core owns command / event / state transitions。
+- Industry clients own surface and interaction。
+- Pack owns definitions。
+- Connector owns external integration。
+- Projection owns read-only views。
+- Governance owns policy and admission decisions。
+- Projection、Connector 和 industry UI 都不能升级为 authority。
+
+### Validation
+
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `npm --prefix apps/desktop run build`
+- `git diff --check`
+- `bash scripts/verify_release_gate.sh --release-version v0.9.0 --release-tag v0.9.0`
+- GitHub `release-gate` on V090 closeout PRs
+
 ## 0.8.1 - 2026-06-23
 
 执行者：Codex

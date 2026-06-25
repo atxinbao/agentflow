@@ -2,11 +2,11 @@
 
 日期：2026-06-23
 执行者：Codex
-状态：Planned development baseline
+状态：Released closeout baseline
 
 ## Purpose
 
-`v0.9.0` 目标是 Deployment Shape and Runtime Governance。
+`v0.9.0` 已完成 Deployment Shape and Runtime Governance 发布收口。
 
 一句话：
 
@@ -14,7 +14,7 @@
 让 AgentFlow Runtime 可以被清楚地部署、重放、迁移、模拟和治理。
 ```
 
-到 `v0.9.0`，AgentFlow 不再只是本地 Pack baseline。它需要明确本地 Runtime、云端 Runtime、Runtime API / SDK、Event Replay、Migration、Simulation、Governance 和部署证据模型。
+到 `v0.9.0`，AgentFlow 不再只是本地 Pack baseline。它已经明确本地 Runtime、云端 Runtime、Runtime API / SDK、Event Replay、Migration、Simulation、Governance 和部署证据模型。
 
 ## Reading Order
 
