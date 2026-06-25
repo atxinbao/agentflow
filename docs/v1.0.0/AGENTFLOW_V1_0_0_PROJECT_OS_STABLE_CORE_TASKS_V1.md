@@ -69,7 +69,7 @@ v1PlanningReadiness = ready
 | `V100-002` | Runtime API / SDK Freeze | P0 | V100-001 | done |
 | `V100-003` | AgentFlow Filesystem Contract Freeze | P0 | V100-001 | done |
 | `V100-004` | Pack Contract Freeze | P0 | V100-001, V100-003 | done |
-| `V100-005` | Projection / Read Model Stable Contract | P0 | V100-002, V100-004 | planned |
+| `V100-005` | Projection / Read Model Stable Contract | P0 | V100-002, V100-004 | done |
 | `V100-006` | Evidence + Acceptance Stable Contract | P0 | V100-002, V100-005 | planned |
 | `V100-007` | Executor Adapter Stable Contract | P0 | V100-002, V100-006 | planned |
 | `V100-008` | Replay / Migration / Upgrade Certification | P0 | V100-003, V100-004, V100-005, V100-006 | planned |
@@ -294,6 +294,13 @@ UI 不直接读 Event Store 写路径。
 - Industry Surface 只能消费 Projection / Read Model；
 - release gate 覆盖 projection rebuild compatibility fixture。
 
+### Closeout
+
+- [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md) 冻结 Projection API、Read Model、View Model、Rebuild、Freshness、Pack-specific projection、Evidence / Audit / Delivery sidecar read model 和 Industry Surface 只读边界；
+- release gate 增加 `projection-readmodel-contract` 阶段，并生成 `runtime/projection-readmodel-contract.json`；
+- release gate 会检查 projection replay happy / failure path、Query API readonly、Pack projection invalid / deferred、project / task / spec read model version、sidecar read model API 和 industry surface 只读规则；
+- 下游 `V100-006`、`V100-007`、`V100-008`、`V100-009`、`V100-010` 必须引用该 freeze 文档。
+
 ### Non-goals
 
 - 不做全新 UI 大改版；
@@ -309,6 +316,7 @@ UI 不直接读 Event Store 写路径。
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Evidence / Acceptance contract、Completion Commit 边界和 Audit sidecar 边界，并引用 [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md) 中的 Decision Output Contract 与 Error Model。
 必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md) 中的 `.agentflow/tasks/<issue-id>/evidence/**`、`.agentflow/release/**` 和 public record boundary。
 必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md) 中的 Pack evidence policy 边界，但 Done 仍由 Acceptance Gate 决定。
+必须引用 [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md) 中的 Evidence Graph / Audit Sidecar / Delivery Read Model，只能把验收事实投影给 UI，不能让 Projection 写完成 authority。
 
 主链：
 
@@ -359,6 +367,7 @@ Confirmed Work
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Executor Adapter contract 和 executor 不拥有 project truth 的规则，并引用 [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md) 中的 Command API 与 Governance Admission Rule。
 必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md) 中的 Connector Pack capability boundary。
+必须引用 [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md) 中的 Work loop session view 和 Runtime health view，只能把 executor session 暴露为 Projection read model。
 
 AgentFlow 管：
 
@@ -414,6 +423,7 @@ Executor 管：
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Breaking Change Rule、Deprecation Rule 和 Release Certification Rule。
 必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md) 中的 retired path 规则，证明迁移和 replay 不会恢复旧 `.agentflow/input/**`、`.agentflow/execute/**`、`.agentflow/output/**` 或 `.agentflow/goal-tree/**`。
 必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md) 中的 Pack migration receipt-only 和 rollback boundary。
+必须引用 [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md) 中的 Projection rebuild rule、freshness state 和 structured failure 规则。
 
 必须处理：
 
@@ -450,6 +460,7 @@ Executor 管：
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 stable / internal / experimental 边界，不能把 experimental Pack 能力伪装成 stable。
 必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md) 中的 Software Dev Pack stable baseline。
+必须引用 [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md) 中的 Pack-specific projection loading、Task Workbench view、Delivery read model 和 Audit sidecar read model。
 
 必须证明软件开发现场可闭环：
 
@@ -497,6 +508,7 @@ Requirement
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md)，并把 `stableContractVersion` / `stableContractStatus` 作为 release certification 的硬门禁。
 必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md)，并把 `filesystemContractVersion` / `filesystemContractStatus` / retired path 检查作为 release certification 的硬门禁。
 必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md)，并把 `packContractVersion` / `packContractStatus` / Pack compatibility 检查作为 release certification 的硬门禁。
+必须引用 [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md)，并把 `projectionContractVersion` / `projectionContractStatus` / Projection rebuild compatibility 检查作为 release certification 的硬门禁。
 
 必须输出：
 

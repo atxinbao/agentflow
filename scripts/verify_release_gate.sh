@@ -93,6 +93,7 @@ API_PLANE_MANIFEST_PATH="$RUNTIME_DIR/api-plane-manifest.json"
 RUNTIME_API_SDK_COMPATIBILITY_PATH="$RUNTIME_DIR/runtime-api-sdk-compatibility.json"
 FILESYSTEM_CONTRACT_PATH="$RUNTIME_DIR/filesystem-contract.json"
 PACK_CONTRACT_COMPATIBILITY_PATH="$RUNTIME_DIR/pack-contract-compatibility.json"
+PROJECTION_READMODEL_CONTRACT_PATH="$RUNTIME_DIR/projection-readmodel-contract.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
 GOVERNANCE_ADMISSION_PATH="$RUNTIME_DIR/governance-admission.json"
@@ -326,6 +327,7 @@ proof_chain = [
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
     {"stage": "pack-contract-compatibility", "label": "Pack Contract Compatibility"},
+    {"stage": "projection-readmodel-contract", "label": "Projection / Read Model Contract"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -384,6 +386,7 @@ runtime_artifacts = [
     {"path": "runtime/runtime-api-sdk-compatibility.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/runtime-api-sdk-compatibility.json").is_file()},
     {"path": "runtime/filesystem-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/filesystem-contract.json").is_file()},
     {"path": "runtime/pack-contract-compatibility.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/pack-contract-compatibility.json").is_file()},
+    {"path": "runtime/projection-readmodel-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/projection-readmodel-contract.json").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -435,6 +438,7 @@ stable_contract_baseline = load_json(pathlib.Path(summary_json_path.parent / "ru
 runtime_api_sdk_compatibility = load_json(pathlib.Path(summary_json_path.parent / "runtime/runtime-api-sdk-compatibility.json")) or {}
 filesystem_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/filesystem-contract.json")) or {}
 pack_contract_compatibility = load_json(pathlib.Path(summary_json_path.parent / "runtime/pack-contract-compatibility.json")) or {}
+projection_readmodel_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/projection-readmodel-contract.json")) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -583,6 +587,28 @@ pack_contract_compatibility_passed = (
     and pack_contract_compatibility.get("migrationReceiptOnly") is True
     and not pack_contract_compatibility.get("missingSections")
     and not pack_contract_compatibility.get("missingRequiredFixtures")
+)
+projection_readmodel_contract_passed = (
+    projection_readmodel_contract.get("status") == "passed"
+    and projection_readmodel_contract.get("projectionContractVersion") == "agentflow-projection-readmodel-contract.v1"
+    and projection_readmodel_contract.get("projectionContractStatus") == "active"
+    and projection_readmodel_contract.get("docPath") == "docs/architecture/045-v100-projection-readmodel-contract-freeze-v1.md"
+    and projection_readmodel_contract.get("stableContractBaseline") == "agentflow-stable-contract-baseline.v1"
+    and projection_readmodel_contract.get("runtimeApiSdkVersion") == "agentflow-runtime-api-sdk-freeze.v1"
+    and projection_readmodel_contract.get("filesystemContractVersion") == "agentflow-filesystem-contract-freeze.v1"
+    and projection_readmodel_contract.get("packContractVersion") == "agentflow-pack-contract-freeze.v1"
+    and projection_readmodel_contract.get("eventReplayStatus") == "passed"
+    and projection_readmodel_contract.get("eventReplayFailureStatus") == "failed"
+    and projection_readmodel_contract.get("eventReplayWritesAuthority") is False
+    and projection_readmodel_contract.get("eventReplayProjectionAuthority") is False
+    and projection_readmodel_contract.get("queryApiReadonly") is True
+    and projection_readmodel_contract.get("packProjectionStatus") == "passed"
+    and projection_readmodel_contract.get("packMissingDefinitionBehavior") in {"invalid", "deferred"}
+    and projection_readmodel_contract.get("industrySurfaceReadonly") is True
+    and projection_readmodel_contract.get("sidecarReadModelsPresent") is True
+    and not projection_readmodel_contract.get("missingSections")
+    and not projection_readmodel_contract.get("missingRequiredReadModels")
+    and not projection_readmodel_contract.get("missingProjectionPaths")
 )
 deployment_evidence_semantics_passed = (
     deployment_evidence_passed
@@ -784,6 +810,11 @@ checklist = [
         "passed": pack_contract_compatibility_passed,
     },
     {
+        "id": "v100-projection-readmodel-contract-freeze",
+        "label": "v1.0 Projection contract freezes read model, view model, rebuild, freshness, Pack-specific loading, and sidecar surfaces",
+        "passed": projection_readmodel_contract_passed,
+    },
+    {
         "id": "runtime-fixture-gate",
         "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
@@ -911,6 +942,10 @@ summary_payload = {
     "packContractCompatibilityStatus": pack_contract_compatibility.get("status") or "missing",
     "packContractVersion": pack_contract_compatibility.get("packContractVersion"),
     "packContractStatus": pack_contract_compatibility.get("packContractStatus"),
+    "projectionReadmodelContractPath": "runtime/projection-readmodel-contract.json" if pathlib.Path(summary_json_path.parent / "runtime/projection-readmodel-contract.json").is_file() else None,
+    "projectionReadmodelContractStatus": projection_readmodel_contract.get("status") or "missing",
+    "projectionContractVersion": projection_readmodel_contract.get("projectionContractVersion"),
+    "projectionContractStatus": projection_readmodel_contract.get("projectionContractStatus"),
     "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage",
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
@@ -1008,6 +1043,7 @@ summary_lines = [
     f"- Runtime API / SDK compatibility: `{runtime_api_sdk_compatibility.get('status') or 'missing'}`",
     f"- Filesystem contract: `{filesystem_contract.get('status') or 'missing'}`",
     f"- Pack contract compatibility: `{pack_contract_compatibility.get('status') or 'missing'}`",
+    f"- Projection / Read Model contract: `{projection_readmodel_contract.get('status') or 'missing'}`",
     "- Provider smoke boundary: `minimal provider health / launch / session / terminal projection; does not replace runtime fixture gate`",
     f"- Foundation coverage: `{'present' if foundation_coverage_path.is_file() else 'missing'}`",
     f"- Foundation readiness report: `{'present' if foundation_readiness_report_path.is_file() else 'missing'}`",
@@ -1091,6 +1127,10 @@ certification_payload = {
     "packContractCompatibilityStatus": pack_contract_compatibility.get("status") or "missing",
     "packContractVersion": pack_contract_compatibility.get("packContractVersion"),
     "packContractStatus": pack_contract_compatibility.get("packContractStatus"),
+    "projectionReadmodelContractPath": "runtime/projection-readmodel-contract.json" if pathlib.Path(summary_json_path.parent / "runtime/projection-readmodel-contract.json").is_file() else None,
+    "projectionReadmodelContractStatus": projection_readmodel_contract.get("status") or "missing",
+    "projectionContractVersion": projection_readmodel_contract.get("projectionContractVersion"),
+    "projectionContractStatus": projection_readmodel_contract.get("projectionContractStatus"),
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "currentGateRun": current_gate_run,
     "mainGateRun": main_gate_run,
@@ -1179,6 +1219,7 @@ cert_lines = [
     f"- Runtime API / SDK compatibility: `{runtime_api_sdk_compatibility.get('status') or 'missing'}`",
     f"- Filesystem contract: `{filesystem_contract.get('status') or 'missing'}`",
     f"- Pack contract compatibility: `{pack_contract_compatibility.get('status') or 'missing'}`",
+    f"- Projection / Read Model contract: `{projection_readmodel_contract.get('status') or 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
@@ -3371,6 +3412,242 @@ PY
   record_stage "pack-contract-compatibility" "passed" "$(basename "$PACK_CONTRACT_COMPATIBILITY_PATH")"
 }
 
+run_projection_readmodel_contract_gate() {
+  record_stage "projection-readmodel-contract" "started" "$PROJECTION_READMODEL_CONTRACT_PATH"
+  python3 - \
+    "$ROOT" \
+    "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH" \
+    "$PACK_PROJECTION_READINESS_PATH" \
+    "$API_PLANE_MANIFEST_PATH" \
+    "$RUNTIME_DIR/project-projection.json" \
+    "$RUNTIME_DIR/final-task-projection.json" \
+    "$RUNTIME_DIR/spec-loop-projection.json" \
+    "$PROJECTION_READMODEL_CONTRACT_PATH" <<'PY'
+import json
+import pathlib
+import re
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+event_replay_path = pathlib.Path(sys.argv[2])
+event_replay_failure_path = pathlib.Path(sys.argv[3])
+pack_projection_path = pathlib.Path(sys.argv[4])
+api_plane_path = pathlib.Path(sys.argv[5])
+project_projection_path = pathlib.Path(sys.argv[6])
+task_projection_path = pathlib.Path(sys.argv[7])
+spec_loop_projection_path = pathlib.Path(sys.argv[8])
+output_path = pathlib.Path(sys.argv[9])
+doc_path = root / "docs/architecture/045-v100-projection-readmodel-contract-freeze-v1.md"
+
+if not doc_path.is_file():
+    raise SystemExit(f"missing projection contract freeze document: {doc_path}")
+
+def load_json(path):
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+doc = doc_path.read_text(encoding="utf-8")
+event_replay = load_json(event_replay_path)
+event_replay_failure = load_json(event_replay_failure_path)
+pack_projection = load_json(pack_projection_path)
+api_plane = load_json(api_plane_path)
+project_projection = load_json(project_projection_path)
+task_projection = load_json(task_projection_path)
+spec_loop_projection = load_json(spec_loop_projection_path)
+
+def metadata_value(name):
+    match = re.search(rf"^{re.escape(name)}:\s*(\S+)\s*$", doc, re.MULTILINE)
+    return match.group(1) if match else None
+
+required_sections = [
+    "## Projection Authority Boundary",
+    "## Stable Projection Surfaces",
+    "## Read Model Schema",
+    "## View Model Schema",
+    "## Rebuild Rule",
+    "## Freshness State",
+    "## Pack Projection Rule",
+    "## Evidence / Audit / Delivery Read Models",
+    "## Industry Surface Rule",
+    "## Release Gate Fixture",
+]
+required_phrases = [
+    "Projection 不是 authority",
+    "Projection API",
+    "Read Model",
+    "View Model",
+    "Event Store",
+    "Pack-specific projection loading",
+    "Evidence Graph Read Model",
+    "Audit Sidecar Read Model",
+    "Delivery Read Model",
+    "Industry Surface",
+    "invalid",
+    "deferred",
+    "writesAuthority: false",
+    "projectionAuthority: false",
+]
+required_queries = {
+    "projection.project-home",
+    "projection.task-workbench",
+    "projection.work-loop-run",
+    "projection.work-loop-session",
+    "projection.audit-surface",
+    "projection.delivery-package",
+    "projection.runtime-health",
+    "projection.pack-industry-workbench",
+}
+required_rebuilt_prefixes = {
+    ".agentflow/projections/tasks/",
+    ".agentflow/projections/projects/",
+    ".agentflow/projections/spec-loops/",
+    ".agentflow/projections/requirements/",
+    ".agentflow/indexes/",
+}
+required_read_models = {
+    "project-projection",
+    "task-projection",
+    "spec-loop-projection",
+}
+
+api_entries = api_plane.get("entries") or []
+projection_entries = [entry for entry in api_entries if entry.get("category") == "projection_queries"]
+projection_api_ids = {entry.get("apiId") for entry in projection_entries}
+missing_required_queries = sorted(required_queries - projection_api_ids)
+query_api_readonly = (
+    bool(projection_entries)
+    and not missing_required_queries
+    and all(
+        entry.get("boundary") == "readonly"
+        and entry.get("ownerModule") == "query"
+        and "writes authority" in (entry.get("description") or "").lower()
+        for entry in projection_entries
+    )
+)
+category_rows = api_plane.get("categories") or []
+projection_category = next(
+    (row for row in category_rows if row.get("category") == "projection_queries"),
+    {},
+)
+industry_surface_readonly = (
+    query_api_readonly
+    and projection_category.get("authority", 0) == 0
+    and projection_category.get("command", 0) == 0
+    and projection_category.get("readonly", 0) == projection_category.get("total", len(projection_entries))
+)
+
+rebuilt_paths = event_replay.get("rebuiltPaths") or []
+missing_projection_paths = sorted(
+    prefix for prefix in required_rebuilt_prefixes
+    if not any(path.startswith(prefix) for path in rebuilt_paths)
+)
+pack_readiness_statuses = {
+    readiness.get("status")
+    for view in (pack_projection.get("views") or [])
+    for readiness in (view.get("readiness") or [])
+}
+pack_missing_definition_behavior = (
+    "invalid"
+    if "invalid" in pack_readiness_statuses
+    else "deferred"
+    if "deferred" in pack_readiness_statuses
+    else None
+)
+pack_projection_no_fallback = (
+    pack_projection.get("status") == "passed"
+    and pack_missing_definition_behavior in {"invalid", "deferred"}
+    and all((view.get("workbenchCount") or 0) == 0 for view in (pack_projection.get("views") or []))
+)
+read_model_versions = {
+    "project-projection": project_projection.get("version"),
+    "task-projection": task_projection.get("version"),
+    "spec-loop-projection": spec_loop_projection.get("version"),
+}
+missing_required_read_models = sorted(
+    key for key in required_read_models
+    if not read_model_versions.get(key)
+)
+task_timeline = task_projection.get("timeline") or []
+task_artifact_refs = [
+    ref
+    for state in task_timeline
+    for event in (state.get("events") or [])
+    for ref in (event.get("artifactRefs") or [])
+]
+evidence_graph_present = any("/evidence/" in ref or ref.endswith("evidence.json") for ref in task_artifact_refs)
+audit_read_model_present = "projection.audit-surface" in projection_api_ids and bool(project_projection.get("audit"))
+delivery_read_model_present = "projection.delivery-package" in projection_api_ids and bool(project_projection.get("delivery"))
+sidecar_read_models_present = evidence_graph_present and audit_read_model_present and delivery_read_model_present
+missing_sections = [section for section in required_sections if section not in doc]
+missing_required_phrases = [phrase for phrase in required_phrases if phrase not in doc]
+
+payload = {
+    "version": "agentflow-projection-readmodel-contract-report.v1",
+    "status": "passed",
+    "docPath": "docs/architecture/045-v100-projection-readmodel-contract-freeze-v1.md",
+    "projectionContractVersion": metadata_value("projectionContractVersion"),
+    "projectionContractStatus": metadata_value("projectionContractStatus"),
+    "stableContractBaseline": metadata_value("stableContractBaseline"),
+    "runtimeApiSdkVersion": metadata_value("runtimeApiSdkVersion"),
+    "filesystemContractVersion": metadata_value("filesystemContractVersion"),
+    "packContractVersion": metadata_value("packContractVersion"),
+    "eventReplayStatus": event_replay.get("status"),
+    "eventReplayFailureStatus": event_replay_failure.get("status"),
+    "eventReplayWritesAuthority": event_replay.get("writesAuthority"),
+    "eventReplayProjectionAuthority": event_replay.get("projectionAuthority"),
+    "rebuiltPathCount": len(rebuilt_paths),
+    "missingProjectionPaths": missing_projection_paths,
+    "queryApiReadonly": query_api_readonly,
+    "industrySurfaceReadonly": industry_surface_readonly,
+    "missingProjectionQueries": missing_required_queries,
+    "packProjectionStatus": pack_projection.get("status"),
+    "packMissingDefinitionBehavior": pack_missing_definition_behavior,
+    "packProjectionNoFallback": pack_projection_no_fallback,
+    "readModelVersions": read_model_versions,
+    "missingRequiredReadModels": missing_required_read_models,
+    "sidecarReadModelsPresent": sidecar_read_models_present,
+    "evidenceGraphPresent": evidence_graph_present,
+    "auditReadModelPresent": audit_read_model_present,
+    "deliveryReadModelPresent": delivery_read_model_present,
+    "missingSections": missing_sections,
+    "missingRequiredPhrases": missing_required_phrases,
+    "checkedAt": int(time.time()),
+}
+
+if (
+    payload["projectionContractVersion"] != "agentflow-projection-readmodel-contract.v1"
+    or payload["projectionContractStatus"] != "active"
+    or payload["stableContractBaseline"] != "agentflow-stable-contract-baseline.v1"
+    or payload["runtimeApiSdkVersion"] != "agentflow-runtime-api-sdk-freeze.v1"
+    or payload["filesystemContractVersion"] != "agentflow-filesystem-contract-freeze.v1"
+    or payload["packContractVersion"] != "agentflow-pack-contract-freeze.v1"
+    or event_replay.get("status") != "passed"
+    or event_replay_failure.get("status") != "failed"
+    or event_replay.get("writesAuthority") is not False
+    or event_replay.get("projectionAuthority") is not False
+    or not query_api_readonly
+    or not industry_surface_readonly
+    or pack_projection.get("status") != "passed"
+    or not pack_projection_no_fallback
+    or not sidecar_read_models_present
+    or missing_projection_paths
+    or missing_required_read_models
+    or missing_sections
+    or missing_required_phrases
+):
+    payload["status"] = "failed"
+
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("projection read model contract fixture failed")
+PY
+  record_stage "projection-readmodel-contract" "passed" "$(basename "$PROJECTION_READMODEL_CONTRACT_PATH")"
+}
+
 run_negative_semantic_fixtures_gate() {
   record_stage "negative-semantic-fixtures" "started" "$NEGATIVE_SEMANTIC_FIXTURES_PATH"
   if ! python3 - \
@@ -4082,6 +4359,7 @@ PY
     "$BIN" release summary
 
   collect_artifacts "$requirement_id" "$project_id" "$issue2_id" "$issue2_run"
+  run_projection_readmodel_contract_gate
   run_deployment_evidence_gate
   run_negative_semantic_fixtures_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
