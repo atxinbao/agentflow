@@ -57,6 +57,7 @@
 | [036-runtime-governance-policy-v1.md](036-runtime-governance-policy-v1.md) | 定义 Runtime admission 前的 role / capability / provider / audit sidecar 治理决策 |
 | [037-cross-process-scheduling-decision-gate-v1.md](037-cross-process-scheduling-decision-gate-v1.md) | 定义跨进程调度和 Message Bus 的 go / no-go 决策门、证据和替代机制 |
 | [038-deployment-evidence-rollback-model-v1.md](038-deployment-evidence-rollback-model-v1.md) | 定义 local / cloud deployment shape、release evidence 和 provider-agnostic rollback proof |
+| [039-v090-release-certification-v1.md](039-v090-release-certification-v1.md) | 定义 v0.9.0 release certification、V090 coverage、v1 planning readiness 和 authority boundary |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -100,8 +101,9 @@
 36. [036-runtime-governance-policy-v1.md](036-runtime-governance-policy-v1.md)
 37. [037-cross-process-scheduling-decision-gate-v1.md](037-cross-process-scheduling-decision-gate-v1.md)
 38. [038-deployment-evidence-rollback-model-v1.md](038-deployment-evidence-rollback-model-v1.md)
-39. [current-module-boundaries.md](current-module-boundaries.md)
-40. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+39. [039-v090-release-certification-v1.md](039-v090-release-certification-v1.md)
+40. [current-module-boundaries.md](current-module-boundaries.md)
+41. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 
