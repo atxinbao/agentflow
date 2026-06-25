@@ -95,6 +95,7 @@ GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
 GOVERNANCE_ADMISSION_PATH="$RUNTIME_DIR/governance-admission.json"
 SCHEDULING_DECISION_PATH="$RUNTIME_DIR/scheduling-decision.json"
 DEPLOYMENT_EVIDENCE_PATH="$RUNTIME_DIR/deployment-evidence.json"
+DEPLOYMENT_EVIDENCE_FAILURE_PATH="$RUNTIME_DIR/deployment-evidence-semantic-failure.json"
 FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
 FOUNDATION_READINESS_REPORT_PATH="$RUNTIME_DIR/foundation-readiness-report.md"
 FOUNDATION_COVERAGE_PATH="$RUNTIME_DIR/foundation-coverage.json"
@@ -368,6 +369,7 @@ runtime_artifacts = [
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
     {"path": "runtime/scheduling-decision.json", "exists": scheduling_decision_path.is_file()},
     {"path": "runtime/deployment-evidence.json", "exists": deployment_evidence_path.is_file()},
+    {"path": "runtime/deployment-evidence-semantic-failure.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json").is_file()},
     {"path": "runtime/foundation-readiness-report.md", "exists": foundation_readiness_report_path.is_file()},
     {"path": "runtime/foundation-coverage.json", "exists": foundation_coverage_path.is_file()},
     {"path": "runtime/event-replay-projection-report.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json").is_file()},
@@ -397,6 +399,7 @@ governance_policy = load_json(governance_policy_path) or {}
 governance_admission = load_json(governance_admission_path) or {}
 scheduling_decision = load_json(scheduling_decision_path) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
+deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
 source_agent_entry = load_json(source_agent_entry_path) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
@@ -482,6 +485,11 @@ deployment_evidence_passed = (
     and deployment_evidence.get("cloudDeployment", {}).get("status") == "ready"
     and deployment_evidence.get("rollbackModel", {}).get("providerAgnostic") is True
     and deployment_evidence.get("rollbackModel", {}).get("rollbackReceipt", {}).get("exists") is True
+    and not deployment_evidence.get("semanticFailures")
+    and deployment_evidence_failure.get("status") == "failed"
+    and {"remote-release-proof.tag", "artifact-manifest.sha-present"}.issubset(
+        set(deployment_evidence_failure.get("semanticFailures") or [])
+    )
 )
 v090_coverage = [
     {
@@ -650,6 +658,16 @@ checklist = [
         "passed": deployment_evidence_passed,
     },
     {
+        "id": "v091-deployment-evidence-semantics",
+        "label": "Deployment evidence validates release facts, remote proof, artifact manifest, and rollback semantics",
+        "passed": deployment_evidence_passed
+        and bool(deployment_evidence.get("semanticChecks"))
+        and deployment_evidence_failure.get("status") == "failed"
+        and {"remote-release-proof.tag", "artifact-manifest.sha-present"}.issubset(
+            set(deployment_evidence_failure.get("semanticFailures") or [])
+        ),
+    },
+    {
         "id": "v090-release-certification",
         "label": "v0.9.0 certification covers V090-001 through V090-009 and can enter v1.0 planning",
         "passed": v090_coverage_passed,
@@ -682,6 +700,8 @@ summary_payload = {
     "schedulingDecision": scheduling_decision.get("decision") or "missing",
     "deploymentEvidencePath": "runtime/deployment-evidence.json" if deployment_evidence_path.is_file() else None,
     "deploymentEvidenceStatus": deployment_evidence.get("status") or "missing",
+    "deploymentEvidenceSemanticFailurePath": "runtime/deployment-evidence-semantic-failure.json" if pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json").is_file() else None,
+    "deploymentEvidenceSemanticFailureStatus": deployment_evidence_failure.get("status") or "missing",
     "rollbackTargetTag": (deployment_evidence.get("rollbackModel") or {}).get("targetTag"),
     "v090Coverage": v090_coverage,
     "v1PlanningReadiness": v1_planning_readiness,
@@ -830,6 +850,8 @@ certification_payload = {
     "schedulingDecision": scheduling_decision.get("decision") or "missing",
     "deploymentEvidencePath": "runtime/deployment-evidence.json" if deployment_evidence_path.is_file() else None,
     "deploymentEvidenceStatus": deployment_evidence.get("status") or "missing",
+    "deploymentEvidenceSemanticFailurePath": "runtime/deployment-evidence-semantic-failure.json" if pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json").is_file() else None,
+    "deploymentEvidenceSemanticFailureStatus": deployment_evidence_failure.get("status") or "missing",
     "rollbackTargetTag": (deployment_evidence.get("rollbackModel") or {}).get("targetTag"),
     "v090Coverage": v090_coverage,
     "v1PlanningReadiness": v1_planning_readiness,
@@ -878,6 +900,7 @@ cert_lines = [
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
+    f"- Deployment semantic failure fixture: `{deployment_evidence_failure.get('status') or 'missing'}`",
     f"- Rollback target: `{(deployment_evidence.get('rollbackModel') or {}).get('targetTag') or 'n/a'}`",
     f"- v1.0 planning readiness: `{v1_planning_readiness}`",
     f"- Release version: `{release_version}`",
@@ -1743,10 +1766,16 @@ PY
 run_deployment_evidence_gate() {
   record_stage "deployment-evidence" "started" "$DEPLOYMENT_EVIDENCE_PATH"
 
+  local deployment_source_commit_sha
+  deployment_source_commit_sha="$(jq -r '.tagCommitSha // .remoteReleaseCommitSha // empty' "$RUNTIME_DIR/release-facts.json")"
+  if [[ -z "$deployment_source_commit_sha" ]]; then
+    fail_stage "deployment-evidence" "release facts missing tagCommitSha"
+  fi
+
   if ! "$BIN" release deployment-evidence \
     --release-version "$RELEASE_VERSION" \
     --release-tag "$RELEASE_TAG_NAME" \
-    --source-commit-sha "$SOURCE_COMMIT_SHA" \
+    --source-commit-sha "$deployment_source_commit_sha" \
     --runtime-version "$RELEASE_VERSION" \
     --release-facts-path "$RUNTIME_DIR/release-facts.json" \
     --remote-release-proof-path "$RUNTIME_DIR/remote-release-proof.json" \
@@ -1757,19 +1786,55 @@ run_deployment_evidence_gate() {
     --rollback-receipt-path "$PACK_MIGRATION_ROLLBACK_RECEIPT_PATH" \
     --failed-deployment-report-path "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH" \
     --rollback-target-tag "$RELEASE_TAG_NAME" \
-    --rollback-target-commit-sha "$SOURCE_COMMIT_SHA" \
+    --rollback-target-commit-sha "$deployment_source_commit_sha" \
     --output "$DEPLOYMENT_EVIDENCE_PATH" \
     >"$CLI_DIR/deployment-evidence.txt" 2>&1; then
     fail_stage "deployment-evidence" "deployment evidence generation failed"
   fi
 
-  python3 - "$DEPLOYMENT_EVIDENCE_PATH" <<'PY'
+  local semantic_failure_remote="$CLI_DIR/remote-release-proof-semantic-failure.json"
+  python3 - "$RUNTIME_DIR/remote-release-proof.json" "$semantic_failure_remote" <<'PY'
+import json
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1])
+target = pathlib.Path(sys.argv[2])
+payload = json.loads(source.read_text(encoding="utf-8"))
+payload["tagName"] = f"{payload.get('tagName')}-mismatch"
+payload.pop("artifactManifestSha256", None)
+target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+
+  if ! "$BIN" release deployment-evidence \
+    --release-version "$RELEASE_VERSION" \
+    --release-tag "$RELEASE_TAG_NAME" \
+    --source-commit-sha "$deployment_source_commit_sha" \
+    --runtime-version "$RELEASE_VERSION" \
+    --release-facts-path "$RUNTIME_DIR/release-facts.json" \
+    --remote-release-proof-path "$semantic_failure_remote" \
+    --pack-version-fingerprint-path "$PACK_REGISTRY_PATH" \
+    --event-store-fingerprint-path "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    --projection-rebuild-proof-path "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    --migration-receipt-path "$PACK_MIGRATION_APPLIED_RECEIPT_PATH" \
+    --rollback-receipt-path "$PACK_MIGRATION_ROLLBACK_RECEIPT_PATH" \
+    --failed-deployment-report-path "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH" \
+    --rollback-target-tag "$RELEASE_TAG_NAME" \
+    --rollback-target-commit-sha "$deployment_source_commit_sha" \
+    --output "$DEPLOYMENT_EVIDENCE_FAILURE_PATH" \
+    >"$CLI_DIR/deployment-evidence-semantic-failure.txt" 2>&1; then
+    fail_stage "deployment-evidence" "semantic failure fixture generation failed"
+  fi
+
+  python3 - "$DEPLOYMENT_EVIDENCE_PATH" "$DEPLOYMENT_EVIDENCE_FAILURE_PATH" <<'PY'
 import json
 import pathlib
 import sys
 
 path = pathlib.Path(sys.argv[1])
+failure_path = pathlib.Path(sys.argv[2])
 payload = json.loads(path.read_text(encoding="utf-8"))
+failure = json.loads(failure_path.read_text(encoding="utf-8"))
 if payload.get("version") != "agentflow-deployment-evidence-report.v1":
     raise SystemExit("deployment evidence report version mismatch")
 if payload.get("status") != "passed":
@@ -1785,9 +1850,39 @@ if rollback.get("providerAgnostic") is not True:
     raise SystemExit("rollback model must be provider agnostic")
 if not rollback.get("rollbackReceipt", {}).get("exists"):
     raise SystemExit("rollback receipt must exist")
+if payload.get("semanticFailures"):
+    raise SystemExit(f"deployment happy path must have no semantic failures: {payload.get('semanticFailures')}")
+required_checks = {
+    "release-facts.tag",
+    "release-facts.commit",
+    "remote-release-proof.tag",
+    "remote-release-proof.commit",
+    "remote-release-proof.url",
+    "artifact-manifest.path",
+    "artifact-manifest.sha256",
+    "rollback.target-tag",
+    "rollback.target-commit",
+    "pack-registry.version",
+    "event-replay-report.status",
+    "projection-rebuild-proof.status",
+    "migration-receipt.applied",
+    "rollback-receipt.rolledBack",
+}
+observed_checks = {check.get("checkId") for check in payload.get("semanticChecks") or []}
+missing_checks = sorted(required_checks - observed_checks)
+if missing_checks:
+    raise SystemExit(f"deployment semantic checks missing: {missing_checks}")
 for key in ["releaseFacts", "packVersionFingerprint", "eventStoreFingerprint", "projectionRebuildProof", "migrationReceipt"]:
     if not payload.get(key, {}).get("exists"):
         raise SystemExit(f"{key} evidence must exist")
+if failure.get("status") != "failed":
+    raise SystemExit("deployment semantic failure fixture must fail")
+failure_ids = set(failure.get("semanticFailures") or [])
+required_failures = {"remote-release-proof.tag", "artifact-manifest.sha-present"}
+if not required_failures.issubset(failure_ids):
+    raise SystemExit(f"semantic failure fixture missing failures: {sorted(required_failures - failure_ids)}")
+if failure.get("cloudDeployment", {}).get("status") == "ready":
+    raise SystemExit("cloud deployment must not be ready when semantic checks fail")
 PY
 
   record_stage "deployment-evidence" "passed" "$(basename "$DEPLOYMENT_EVIDENCE_PATH")"

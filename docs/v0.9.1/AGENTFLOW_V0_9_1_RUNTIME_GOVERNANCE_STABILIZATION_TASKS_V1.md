@@ -57,7 +57,7 @@ v0.9.0 的治理、部署证据、migration 和 Pack registry 是否已经真正
 | --- | --- | --- | --- | --- |
 | `V091-001` | Release Source Agent Entry Alignment | P0 | none | done |
 | `V091-002` | Runtime Governance Admission Integration | P0 | V091-001 | done |
-| `V091-003` | Deployment Evidence Semantic Certification | P0 | V091-001 | planned |
+| `V091-003` | Deployment Evidence Semantic Certification | P0 | V091-001 | done |
 | `V091-004` | Pack Migration Apply/Rollback Semantic Split | P0 | V091-003 | planned |
 | `V091-005` | Project Pack Registry Release Fixture | P1 | V091-001 | planned |
 | `V091-006` | Negative Semantic Release Fixtures | P0 | V091-002, V091-003, V091-004, V091-005 | planned |
@@ -166,6 +166,14 @@ v0.9.0 的治理、部署证据、migration 和 Pack registry 是否已经真正
 
 - 不绑定特定云厂商；
 - 不要求真实云部署，只要求 release proof 语义可验证。
+
+### Closeout
+
+- `DeploymentEvidenceReport` 增加 `semanticChecks` / `semanticFailures`，语义失败不再被隐藏在文件存在性检查之后；
+- release facts / remote release proof / artifact manifest / rollback target / pack registry / event replay / projection rebuild / migration / rollback receipt 全部进入语义校验；
+- `cloudDeployment.status = ready` 只有在远端证明和 artifact manifest 语义一致时成立；
+- release gate 新增 `runtime/deployment-evidence-semantic-failure.json`，覆盖 tag mismatch 和 artifact manifest sha 缺失负例；
+- `certification.json` 新增 `v091-deployment-evidence-semantics` checklist。
 
 ## V091-004 Pack Migration Apply/Rollback Semantic Split
 

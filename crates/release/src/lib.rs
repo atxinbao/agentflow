@@ -12,17 +12,17 @@ pub mod runtime;
 
 pub use deployment::{build_deployment_evidence_report, DeploymentEvidenceInput};
 pub use model::{
-    DeliverySummary, DeploymentArtifactRef, DeploymentEvidenceReport, DeploymentShapeEvidence,
-    ExternalReviewAuditSummary, ExternalReviewEvidenceEntry, ProjectDeliverySummary,
-    ProjectExternalReviewIndex, ProjectExternalReviewIndexEntry, ProjectExternalReviewSurface,
-    ProjectReleaseFacts, ProjectReleaseIndex, ProjectReleaseIndexEntry, PublicReleaseDocumentPaths,
-    PublicReleaseDocumentTarget, PublicReleaseEntry, PublicReleaseSummary, ReleaseTagProof,
-    RemoteReleaseProof, RollbackModel, CHANGELOG_TEMPLATE_VERSION, DELIVERY_SUMMARY_VERSION,
-    DEPLOYMENT_EVIDENCE_REPORT_VERSION, PROJECT_DELIVERY_SUMMARY_VERSION,
-    PROJECT_EXTERNAL_REVIEW_INDEX_VERSION, PROJECT_EXTERNAL_REVIEW_SURFACE_VERSION,
-    PROJECT_RELEASE_FACTS_VERSION, PROJECT_RELEASE_INDEX_VERSION, PUBLIC_RELEASE_SUMMARY_VERSION,
-    RELEASE_NOTES_TEMPLATE_VERSION, RELEASE_TAG_PROOF_VERSION, REMOTE_RELEASE_PROOF_VERSION,
-    TASK_PUBLIC_RECORD_TEMPLATE_VERSION,
+    DeliverySummary, DeploymentArtifactRef, DeploymentEvidenceReport, DeploymentSemanticCheck,
+    DeploymentShapeEvidence, ExternalReviewAuditSummary, ExternalReviewEvidenceEntry,
+    ProjectDeliverySummary, ProjectExternalReviewIndex, ProjectExternalReviewIndexEntry,
+    ProjectExternalReviewSurface, ProjectReleaseFacts, ProjectReleaseIndex,
+    ProjectReleaseIndexEntry, PublicReleaseDocumentPaths, PublicReleaseDocumentTarget,
+    PublicReleaseEntry, PublicReleaseSummary, ReleaseTagProof, RemoteReleaseProof, RollbackModel,
+    CHANGELOG_TEMPLATE_VERSION, DELIVERY_SUMMARY_VERSION, DEPLOYMENT_EVIDENCE_REPORT_VERSION,
+    PROJECT_DELIVERY_SUMMARY_VERSION, PROJECT_EXTERNAL_REVIEW_INDEX_VERSION,
+    PROJECT_EXTERNAL_REVIEW_SURFACE_VERSION, PROJECT_RELEASE_FACTS_VERSION,
+    PROJECT_RELEASE_INDEX_VERSION, PUBLIC_RELEASE_SUMMARY_VERSION, RELEASE_NOTES_TEMPLATE_VERSION,
+    RELEASE_TAG_PROOF_VERSION, REMOTE_RELEASE_PROOF_VERSION, TASK_PUBLIC_RECORD_TEMPLATE_VERSION,
 };
 pub use public_delivery::{
     collect_public_release_summary, collect_public_release_summary_for_project,
