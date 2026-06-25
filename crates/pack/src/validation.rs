@@ -134,12 +134,27 @@ pub struct PackMigrationApplyConfirmation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PackMigrationSemanticTarget {
+    pub version: String,
+    pub preview_id: String,
+    pub pack_id: String,
+    pub from_version: String,
+    pub to_version: String,
+    pub affected_objects: Vec<String>,
+    pub affected_projections: Vec<String>,
+    pub mutation_target: String,
+    pub authority_mutation: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackMigrationAppliedReceipt {
     pub version: String,
     pub preview_id: String,
     pub pack_id: String,
     pub applied: bool,
     pub writes_authority: bool,
+    pub semantic_target: PackMigrationSemanticTarget,
     pub actor: String,
     pub reason: String,
 }
@@ -164,6 +179,7 @@ pub struct PackMigrationRollbackReceipt {
     pub pack_id: String,
     pub rolled_back: bool,
     pub writes_authority: bool,
+    pub semantic_target: PackMigrationSemanticTarget,
     pub actor: String,
     pub reason: String,
     pub applied_receipt_version: String,
@@ -511,7 +527,8 @@ pub fn pack_migration_applied_receipt(
         preview_id: preview.preview_id.clone(),
         pack_id: preview.pack_id.clone(),
         applied: true,
-        writes_authority: true,
+        writes_authority: false,
+        semantic_target: migration_semantic_target(preview, "receipt-only-apply"),
         actor: confirmation.actor.clone(),
         reason: confirmation.reason.clone(),
     })
@@ -552,11 +569,32 @@ pub fn rollback_pack_migration(
         preview_id: applied.preview_id.clone(),
         pack_id: applied.pack_id.clone(),
         rolled_back: true,
-        writes_authority: true,
+        writes_authority: false,
+        semantic_target: PackMigrationSemanticTarget {
+            mutation_target: "receipt-only-rollback".to_string(),
+            ..applied.semantic_target.clone()
+        },
         actor,
         reason,
         applied_receipt_version: applied.version.clone(),
     })
+}
+
+fn migration_semantic_target(
+    preview: &PackMigrationPreview,
+    mutation_target: impl Into<String>,
+) -> PackMigrationSemanticTarget {
+    PackMigrationSemanticTarget {
+        version: "agentflow-pack-migration-semantic-target.v1".to_string(),
+        preview_id: preview.preview_id.clone(),
+        pack_id: preview.pack_id.clone(),
+        from_version: preview.from_version.clone(),
+        to_version: preview.to_version.clone(),
+        affected_objects: preview.affected_objects.clone(),
+        affected_projections: preview.affected_projections.clone(),
+        mutation_target: mutation_target.into(),
+        authority_mutation: false,
+    }
 }
 
 fn validate_migration_confirmation(
@@ -1002,7 +1040,14 @@ mod tests {
         assert!(rejected.is_err());
         assert!(mismatched.is_err());
         assert!(applied.applied);
-        assert!(applied.writes_authority);
+        assert!(!applied.writes_authority);
+        assert!(!applied.semantic_target.authority_mutation);
+        assert_eq!(
+            applied.semantic_target.mutation_target,
+            "receipt-only-apply"
+        );
+        assert_eq!(applied.semantic_target.from_version, "0.8.0");
+        assert_eq!(applied.semantic_target.to_version, "0.8.1");
     }
 
     #[test]
@@ -1032,7 +1077,12 @@ mod tests {
         assert!(cancel.cancelled);
         assert!(!cancel.writes_authority);
         assert!(rollback.rolled_back);
-        assert!(rollback.writes_authority);
+        assert!(!rollback.writes_authority);
+        assert!(!rollback.semantic_target.authority_mutation);
+        assert_eq!(
+            rollback.semantic_target.mutation_target,
+            "receipt-only-rollback"
+        );
         assert_ne!(cancel.version, applied.version);
         assert_ne!(rollback.version, applied.version);
     }

@@ -58,7 +58,7 @@ v0.9.0 的治理、部署证据、migration 和 Pack registry 是否已经真正
 | `V091-001` | Release Source Agent Entry Alignment | P0 | none | done |
 | `V091-002` | Runtime Governance Admission Integration | P0 | V091-001 | done |
 | `V091-003` | Deployment Evidence Semantic Certification | P0 | V091-001 | done |
-| `V091-004` | Pack Migration Apply/Rollback Semantic Split | P0 | V091-003 | planned |
+| `V091-004` | Pack Migration Apply/Rollback Semantic Split | P0 | V091-003 | done |
 | `V091-005` | Project Pack Registry Release Fixture | P1 | V091-001 | planned |
 | `V091-006` | Negative Semantic Release Fixtures | P0 | V091-002, V091-003, V091-004, V091-005 | planned |
 | `V091-007` | v0.9.1 Release Certification | P0 | V091-001, V091-002, V091-003, V091-004, V091-005, V091-006 | planned |
@@ -203,6 +203,15 @@ v0.9.0 的治理、部署证据、migration 和 Pack registry 是否已经真正
 
 - 不做复杂跨版本数据迁移框架；
 - 不隐式修改 Pack schema 或项目状态。
+
+### Closeout
+
+- `pack migration-apply --confirmed` 现在只生成 receipt-only applied receipt，`writesAuthority = false`；
+- applied receipt 增加 `semanticTarget`，明确 `mutationTarget = receipt-only-apply` 且 `authorityMutation = false`；
+- `pack migration-rollback` 同样只生成 receipt-only rollback receipt，`writesAuthority = false`；
+- rollback receipt 增加 `semanticTarget`，明确 `mutationTarget = receipt-only-rollback` 且 `authorityMutation = false`；
+- deployment evidence 会拒绝伪装成 authority mutation 的 migration / rollback receipt；
+- release gate 新增 `pack-migration-fake-authority-receipt.json` 负例，确保 fake authority receipt 不会被当成通过条件。
 
 ## V091-005 Project Pack Registry Release Fixture
 
