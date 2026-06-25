@@ -60,7 +60,7 @@ v0.9.0 的治理、部署证据、migration 和 Pack registry 是否已经真正
 | `V091-003` | Deployment Evidence Semantic Certification | P0 | V091-001 | done |
 | `V091-004` | Pack Migration Apply/Rollback Semantic Split | P0 | V091-003 | done |
 | `V091-005` | Project Pack Registry Release Fixture | P1 | V091-001 | done |
-| `V091-006` | Negative Semantic Release Fixtures | P0 | V091-002, V091-003, V091-004, V091-005 | planned |
+| `V091-006` | Negative Semantic Release Fixtures | P0 | V091-002, V091-003, V091-004, V091-005 | done |
 | `V091-007` | v0.9.1 Release Certification | P0 | V091-001, V091-002, V091-003, V091-004, V091-005, V091-006 | planned |
 
 ## V091-001 Release Source Agent Entry Alignment
@@ -276,6 +276,14 @@ Release gate 要创建并读取项目级 `.agentflow/packs/**` fixture，证明 
 
 - 不把 negative fixture 当成独立 Audit Agent 流程；
 - 不扩大到无关历史版本。
+
+### Closeout
+
+- release gate 新增 `negative-semantic-fixtures` 阶段，并输出 `runtime/negative-semantic-fixtures.json`；
+- 负向语义夹具覆盖 wrong release tag、wrong release commit、wrong remote release URL、missing artifact manifest sha256、disabled capability still executing、governance rejected command still producing proposal、fake migration receipt、empty project Pack registry reported as ready；
+- 每个 fixture 都包含 `stage`、`reason`、`evidencePath` 和 `writesAuthority = false`；
+- deployment evidence 现在额外输出 wrong commit、wrong URL、fake migration receipt 三个语义失败报告；
+- certification JSON / Markdown 会列出 negative semantic fixture coverage，任一 fixture 未通过都会阻断 release gate。
 
 ## V091-007 v0.9.1 Release Certification
 
