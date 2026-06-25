@@ -740,6 +740,7 @@ fn invalid_pack_command_response(
         rejected_reasons,
         human_decision_request: None,
         next_query_hint: None,
+        governance_admission: None,
         correlation_id: request.command_id.clone(),
     }
 }

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use agentflow_governance_policy::GovernancePolicyReport;
+
 use crate::errors::RuntimeCommandError;
 use crate::mapping::RuntimeQueryHint;
 
@@ -10,6 +12,7 @@ pub const RUNTIME_COMMAND_API_VERSION: &str = "agentflow-runtime-command-api.v1"
 pub enum RuntimeCommandStatus {
     Accepted,
     Rejected,
+    Deferred,
     HumanDecisionRequired,
     Queued,
     Superseded,
@@ -22,6 +25,7 @@ pub enum RuntimeCommandStatus {
 pub enum RuntimeCommandDecision {
     Accepted,
     Rejected,
+    Deferred,
     HumanDecisionRequired,
     Queued,
     Superseded,
@@ -68,5 +72,7 @@ pub struct RuntimeCommandResponse {
     pub human_decision_request: Option<RuntimeHumanDecisionRequest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_query_hint: Option<RuntimeQueryHint>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_admission: Option<GovernancePolicyReport>,
     pub correlation_id: String,
 }

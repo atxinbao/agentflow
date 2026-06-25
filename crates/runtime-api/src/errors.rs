@@ -12,6 +12,8 @@ pub enum RuntimeCommandErrorCode {
     ArbitrationSuperseded,
     ArbitrationCancelled,
     HumanDecisionRequired,
+    GovernanceRejected,
+    GovernanceDeferred,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
