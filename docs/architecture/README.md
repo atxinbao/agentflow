@@ -66,6 +66,7 @@
 | [045-v100-projection-readmodel-contract-freeze-v1.md](045-v100-projection-readmodel-contract-freeze-v1.md) | 定义 v1.0 Projection API、Read Model、View Model、rebuild、freshness、Pack-specific projection 和 sidecar read model 冻结合同 |
 | [046-v100-evidence-acceptance-contract-freeze-v1.md](046-v100-evidence-acceptance-contract-freeze-v1.md) | 定义 v1.0 Evidence Pack、Acceptance Gate、Completion Commit、failure reason、delivery record 和 Audit sidecar 冻结合同 |
 | [047-v100-executor-adapter-contract-freeze-v1.md](047-v100-executor-adapter-contract-freeze-v1.md) | 定义 v1.0 Executor Adapter、work handoff、diff boundary、session isolation、provider mapping 和 executor result 归一化冻结合同 |
+| [048-v100-replay-migration-upgrade-certification-v1.md](048-v100-replay-migration-upgrade-certification-v1.md) | 定义 v1.0 event replay、projection rebuild、Pack migration、retired path 和 upgrade certification 冻结合同 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -118,8 +119,9 @@
 45. [045-v100-projection-readmodel-contract-freeze-v1.md](045-v100-projection-readmodel-contract-freeze-v1.md)
 46. [046-v100-evidence-acceptance-contract-freeze-v1.md](046-v100-evidence-acceptance-contract-freeze-v1.md)
 47. [047-v100-executor-adapter-contract-freeze-v1.md](047-v100-executor-adapter-contract-freeze-v1.md)
-48. [current-module-boundaries.md](current-module-boundaries.md)
-49. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+48. [048-v100-replay-migration-upgrade-certification-v1.md](048-v100-replay-migration-upgrade-certification-v1.md)
+49. [current-module-boundaries.md](current-module-boundaries.md)
+50. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 

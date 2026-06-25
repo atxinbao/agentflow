@@ -58,6 +58,7 @@
 13. [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md)
 14. [../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md](../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md)
 15. [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md)
+16. [../architecture/048-v100-replay-migration-upgrade-certification-v1.md](../architecture/048-v100-replay-migration-upgrade-certification-v1.md)
 
 ## Scope
 
