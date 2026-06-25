@@ -336,6 +336,7 @@ proof_chain = [
     {"stage": "executor-adapter-contract", "label": "Executor Adapter Contract"},
     {"stage": "replay-migration-upgrade-certification", "label": "Replay / Migration / Upgrade Certification"},
     {"stage": "software-dev-pack-stable-baseline", "label": "Software Dev Pack Stable Baseline"},
+    {"stage": "v100-release-certification", "label": "v1.0.0 Release Certification"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -400,6 +401,7 @@ runtime_artifacts = [
     {"path": "runtime/executor-adapter-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/executor-adapter-contract.json").is_file()},
     {"path": "runtime/replay-migration-upgrade-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/replay-migration-upgrade-certification.json").is_file()},
     {"path": "runtime/software-dev-pack-stable-baseline.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/software-dev-pack-stable-baseline.json").is_file()},
+    {"path": "runtime/v100-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v100-release-certification.json").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -860,6 +862,126 @@ v1_planning_readiness = "ready" if v090_coverage_passed and v091_coverage_passed
 v1_planning_blockers = [
     item["id"] for item in [*v090_coverage, *v091_coverage] if not item["passed"]
 ]
+v100_coverage = [
+    {
+        "id": "V100-001",
+        "label": "Stable Contract Baseline",
+        "passed": stable_contract_baseline_passed,
+        "evidencePath": "runtime/stable-contract-baseline.json",
+    },
+    {
+        "id": "V100-002",
+        "label": "Runtime API / SDK Freeze",
+        "passed": runtime_api_sdk_compatibility_passed,
+        "evidencePath": "runtime/runtime-api-sdk-compatibility.json",
+    },
+    {
+        "id": "V100-003",
+        "label": "AgentFlow Filesystem Contract Freeze",
+        "passed": filesystem_contract_passed,
+        "evidencePath": "runtime/filesystem-contract.json",
+    },
+    {
+        "id": "V100-004",
+        "label": "Pack Contract Freeze",
+        "passed": pack_contract_compatibility_passed,
+        "evidencePath": "runtime/pack-contract-compatibility.json",
+    },
+    {
+        "id": "V100-005",
+        "label": "Projection / Read Model Stable Contract",
+        "passed": projection_readmodel_contract_passed,
+        "evidencePath": "runtime/projection-readmodel-contract.json",
+    },
+    {
+        "id": "V100-006",
+        "label": "Evidence + Acceptance Stable Contract",
+        "passed": evidence_acceptance_contract_passed,
+        "evidencePath": "runtime/evidence-acceptance-contract.json",
+    },
+    {
+        "id": "V100-007",
+        "label": "Executor Adapter Stable Contract",
+        "passed": executor_adapter_contract_passed,
+        "evidencePath": "runtime/executor-adapter-contract.json",
+    },
+    {
+        "id": "V100-008",
+        "label": "Replay / Migration / Upgrade Certification",
+        "passed": replay_migration_upgrade_certification_passed,
+        "evidencePath": "runtime/replay-migration-upgrade-certification.json",
+    },
+    {
+        "id": "V100-009",
+        "label": "Software Dev Pack Stable Baseline",
+        "passed": software_dev_pack_stable_baseline_passed,
+        "evidencePath": "runtime/software-dev-pack-stable-baseline.json",
+    },
+]
+v100_coverage_passed = all(item["passed"] for item in v100_coverage)
+v1_support_boundary = {
+    "version": "agentflow-v1-support-boundary.v1",
+    "stableCore": True,
+    "stableIndustryPacks": ["software-dev"],
+    "experimentalIndustryPacks": ["ui-design"],
+    "futurePackCompatibilityGuaranteed": False,
+    "auditSidecarIndependent": evidence_acceptance_contract.get("auditSidecarNonBlocking") is True
+    and software_dev_pack_stable_baseline.get("auditSidecarPassed") is True,
+    "executorRuntimeOwnsProjectTruth": False,
+    "githubIssueAuthority": False,
+    "projectionAuthority": False,
+    "connectorAuthority": False,
+    "industryUiAuthority": False,
+    "completionAuthority": "Acceptance Gate + Completion Commit",
+    "v1CompatibilityBoundaryClear": True,
+}
+v1_stable_core_blockers = []
+if v1_planning_readiness != "ready":
+    v1_stable_core_blockers.append("v1-planning-readiness")
+if not v100_coverage_passed:
+    v1_stable_core_blockers.extend(item["id"] for item in v100_coverage if not item["passed"])
+if not governance_admission_passed:
+    v1_stable_core_blockers.append("governance-admission-main-chain")
+if projection_readmodel_contract.get("eventReplayProjectionAuthority") is not False:
+    v1_stable_core_blockers.append("projection-authority-bypass")
+if projection_readmodel_contract.get("queryApiReadonly") is not True:
+    v1_stable_core_blockers.append("projection-query-api-readonly")
+if evidence_acceptance_contract.get("taskDoneFromCompletionCommit") is not True:
+    v1_stable_core_blockers.append("acceptance-done-decision")
+if evidence_acceptance_contract.get("auditSidecarNonBlocking") is not True:
+    v1_stable_core_blockers.append("audit-sidecar-main-chain")
+if executor_adapter_contract.get("sessionIsolationRespected") is not True:
+    v1_stable_core_blockers.append("executor-session-isolation")
+if not v1_support_boundary["v1CompatibilityBoundaryClear"]:
+    v1_stable_core_blockers.append("v1-compatibility-boundary")
+v1_stable_core = "ready" if not v1_stable_core_blockers else "blocked"
+v100_release_certification_path = summary_json_path.parent / "runtime/v100-release-certification.json"
+v100_release_certification_payload = {
+    "version": "agentflow-v100-release-certification.v1",
+    "status": "passed" if v1_stable_core == "ready" else "failed",
+    "releaseVersion": release_version,
+    "tagName": release_tag_name or release.get("tagName"),
+    "sourceCommitSha": source_commit_sha,
+    "v1StableCore": v1_stable_core,
+    "v1StableCoreBlockers": v1_stable_core_blockers,
+    "v1PlanningReadiness": v1_planning_readiness,
+    "v1PlanningBlockers": v1_planning_blockers,
+    "v100Coverage": v100_coverage,
+    "v100CoveragePassed": v100_coverage_passed,
+    "stableContractBaselineProof": "runtime/stable-contract-baseline.json",
+    "runtimeApiSdkCompatibilityProof": "runtime/runtime-api-sdk-compatibility.json",
+    "filesystemContractProof": "runtime/filesystem-contract.json",
+    "packContractProof": "runtime/pack-contract-compatibility.json",
+    "projectionReadmodelProof": "runtime/projection-readmodel-contract.json",
+    "evidenceAcceptanceProof": "runtime/evidence-acceptance-contract.json",
+    "executorAdapterProof": "runtime/executor-adapter-contract.json",
+    "replayMigrationUpgradeProof": "runtime/replay-migration-upgrade-certification.json",
+    "softwareDevPackStableProof": "runtime/software-dev-pack-stable-baseline.json",
+    "negativeFixtureCoverage": negative_semantic_fixtures.get("fixtures") or [],
+    "remainingRisks": [],
+    "deferredItems": [],
+    "v1SupportBoundary": v1_support_boundary,
+}
 remaining_risks = []
 deferred_items = []
 if v1_planning_readiness == "blocked":
@@ -868,6 +990,13 @@ if v1_planning_readiness == "blocked":
         "severity": "blocking",
         "summary": "v1.0 planning cannot start until all V090 and V091 release coverage items pass.",
         "blockers": v1_planning_blockers,
+    })
+if v1_stable_core == "blocked":
+    remaining_risks.append({
+        "id": "v1-stable-core-blocked",
+        "severity": "blocking",
+        "summary": "v1.0 stable core cannot be certified until all V100 coverage and authority boundaries pass.",
+        "blockers": v1_stable_core_blockers,
     })
 if provider_smoke.get("status") in {None, "missing", "skipped", "disabled"}:
     deferred_items.append({
@@ -881,6 +1010,12 @@ if scheduling_decision.get("decision") == "no-go":
         "blocking": False,
         "summary": "Cross-process Message Bus remains deferred; the release gate records the no-go decision as evidence.",
     })
+v100_release_certification_payload["remainingRisks"] = remaining_risks
+v100_release_certification_payload["deferredItems"] = deferred_items
+v100_release_certification_path.write_text(
+    json.dumps(v100_release_certification_payload, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
 authority_boundary_certification = {
     "projectionIsAuthority": False,
     "connectorIsAuthority": False,
@@ -939,6 +1074,11 @@ checklist = [
         "id": "v100-software-dev-pack-stable-baseline",
         "label": "v1.0 Software Dev Pack stable baseline proves stable manifest, read models, connectors, delivery, and Audit sidecar boundaries",
         "passed": software_dev_pack_stable_baseline_passed,
+    },
+    {
+        "id": "v100-release-certification",
+        "label": "v1.0 release certification reports v1StableCore ready and a clear v1 support boundary",
+        "passed": v1_stable_core == "ready" and v100_coverage_passed,
     },
     {
         "id": "runtime-fixture-gate",
@@ -1122,6 +1262,13 @@ summary_payload = {
     "v091CoveragePassed": v091_coverage_passed,
     "v1PlanningReadiness": v1_planning_readiness,
     "v1PlanningBlockers": v1_planning_blockers,
+    "v100Coverage": v100_coverage,
+    "v100CoveragePassed": v100_coverage_passed,
+    "v1StableCore": v1_stable_core,
+    "v1StableCoreBlockers": v1_stable_core_blockers,
+    "v1SupportBoundary": v1_support_boundary,
+    "v100ReleaseCertificationPath": "runtime/v100-release-certification.json" if v100_release_certification_path.is_file() else None,
+    "v100ReleaseCertificationStatus": v100_release_certification_payload["status"],
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1201,6 +1348,8 @@ summary_lines = [
     f"- Pack migration execution: `{stage_status.get('pack.migration-execution') or 'missing'}`",
     f"- Software Dev Pack readiness: `{software_readiness.get('status') or 'missing'}`",
     f"- UI Design Pack readiness: `{design_readiness.get('status') or 'missing'}`",
+    f"- v1.0 stable core: `{v1_stable_core}`",
+    f"- v1.0 support boundary: `{v1_support_boundary['version']}`",
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
     f"- Source commit: `{source_commit_sha or 'n/a'}`",
@@ -1326,6 +1475,13 @@ certification_payload = {
     "v091CoveragePassed": v091_coverage_passed,
     "v1PlanningReadiness": v1_planning_readiness,
     "v1PlanningBlockers": v1_planning_blockers,
+    "v100Coverage": v100_coverage,
+    "v100CoveragePassed": v100_coverage_passed,
+    "v1StableCore": v1_stable_core,
+    "v1StableCoreBlockers": v1_stable_core_blockers,
+    "v1SupportBoundary": v1_support_boundary,
+    "v100ReleaseCertificationPath": "runtime/v100-release-certification.json" if v100_release_certification_path.is_file() else None,
+    "v100ReleaseCertificationStatus": v100_release_certification_payload["status"],
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1377,6 +1533,10 @@ cert_lines = [
     f"- Projection / Read Model contract: `{projection_readmodel_contract.get('status') or 'missing'}`",
     f"- Evidence / Acceptance contract: `{evidence_acceptance_contract.get('status') or 'missing'}`",
     f"- Software Dev Pack stable baseline: `{software_dev_pack_stable_baseline.get('status') or 'missing'}`",
+    f"- Executor Adapter contract: `{executor_adapter_contract.get('status') or 'missing'}`",
+    f"- Replay / Migration / Upgrade certification: `{replay_migration_upgrade_certification.get('status') or 'missing'}`",
+    f"- v1.0 stable core: `{v1_stable_core}`",
+    f"- v1.0 support boundary: `{v1_support_boundary['version']}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
@@ -1429,12 +1589,31 @@ for item in v091_coverage:
     )
 cert_lines.extend([
     "",
+    "## V100 Coverage",
+    "",
+])
+for item in v100_coverage:
+    cert_lines.append(
+        f"- [{'x' if item['passed'] else ' '}] `{item['id']}` {item['label']} -> `{item['evidencePath']}`"
+    )
+cert_lines.extend([
+    "",
     "## v1.0 Planning Decision",
     "",
     f"- Readiness: `{v1_planning_readiness}`",
     f"- Blockers: `{', '.join(v1_planning_blockers) if v1_planning_blockers else 'none'}`",
     "- Message Bus decision record: `runtime/scheduling-decision.json`",
     "- Projection, Connector, and industry UI remain non-authority surfaces.",
+    "",
+    "## v1.0 Stable Core Decision",
+    "",
+    f"- Stable core: `{v1_stable_core}`",
+    f"- Blockers: `{', '.join(v1_stable_core_blockers) if v1_stable_core_blockers else 'none'}`",
+    f"- Support boundary: `{v1_support_boundary['version']}`",
+    f"- Stable industry Packs: `{', '.join(v1_support_boundary['stableIndustryPacks'])}`",
+    f"- Experimental industry Packs: `{', '.join(v1_support_boundary['experimentalIndustryPacks'])}`",
+    f"- Audit sidecar independent: `{v1_support_boundary['auditSidecarIndependent']}`",
+    f"- Executor runtime owns project truth: `{v1_support_boundary['executorRuntimeOwnsProjectTruth']}`",
     "",
     "## Remaining Risks And Deferred Items",
     "",
@@ -4941,6 +5120,42 @@ PY
   record_stage "negative-semantic-fixtures" "passed" "$(basename "$NEGATIVE_SEMANTIC_FIXTURES_PATH")"
 }
 
+run_v100_release_certification_gate() {
+  record_stage "v100-release-certification" "started" "runtime/v100-release-certification.json"
+  write_gate_reports
+  if ! python3 - "$SUMMARY_JSON_PATH" "$CERTIFICATION_JSON_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+summary_path = pathlib.Path(sys.argv[1])
+certification_path = pathlib.Path(sys.argv[2])
+
+summary = json.loads(summary_path.read_text(encoding="utf-8"))
+certification = json.loads(certification_path.read_text(encoding="utf-8"))
+
+if summary.get("v1StableCore") != "ready":
+    raise SystemExit(f"v1StableCore is {summary.get('v1StableCore')}")
+if summary.get("v100CoveragePassed") is not True:
+    raise SystemExit("v100 coverage is incomplete")
+if certification.get("v1StableCore") != "ready":
+    raise SystemExit("certification payload is not ready")
+support_boundary = certification.get("v1SupportBoundary") or {}
+if support_boundary.get("v1CompatibilityBoundaryClear") is not True:
+    raise SystemExit("v1 support boundary is unclear")
+if support_boundary.get("executorRuntimeOwnsProjectTruth") is not False:
+    raise SystemExit("executor runtime is treated as project truth")
+if support_boundary.get("auditSidecarIndependent") is not True:
+    raise SystemExit("audit sidecar is not independent")
+if support_boundary.get("projectionAuthority") is not False:
+    raise SystemExit("projection authority boundary is invalid")
+PY
+  then
+    fail_stage "v100-release-certification" "v1.0.0 stable core certification is blocked"
+  fi
+  record_stage "v100-release-certification" "passed" "v1StableCore=ready"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -5477,6 +5692,7 @@ PY
   run_software_dev_pack_stable_baseline_gate
   run_deployment_evidence_gate
   run_negative_semantic_fixtures_gate
+  run_v100_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.0.0 - 2026-06-25
+
+执行者：Codex
+
+`1.0.0 - Project OS Stable Core` 将 AgentFlow 从 Runtime / Pack / Governance 分阶段基线推进到 v1 稳定核心认证。
+
+### Added
+
+- 新增 v1 Stable Contract Baseline、Runtime API / SDK Freeze、Filesystem Contract Freeze、Pack Contract Freeze、Projection / Read Model Freeze、Evidence / Acceptance Freeze、Executor Adapter Freeze、Replay / Migration / Upgrade Certification 和 Software Dev Pack Stable Baseline 的 release-gate 认证链。
+- 新增 `runtime/v100-release-certification.json` 作为 v1.0.0 最终发布认证 artifact。
+- release gate 输出 `v100Coverage`、`v100CoveragePassed`、`v1StableCore`、`v1StableCoreBlockers` 和 `v1SupportBoundary`。
+- 明确 Software Dev Pack 是 v1 stable industry Pack，UI Design Pack 继续保持 experimental。
+
+### Changed
+
+- 版本元数据统一到 `1.0.0`，覆盖 Rust workspace、Desktop package、package-lock 和 Tauri 配置。
+- release certification 将 Governance admission、Projection authority boundary、Acceptance Done decision、Audit sidecar separation 和 Executor truth boundary 纳入硬门禁。
+- `docs/v1.0.0/` 从规划基线收口为 Project OS Stable Core release certification baseline。
+
+### Validation
+
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `npm --prefix apps/desktop run build`
+- `git diff --check`
+- `bash scripts/verify_release_gate.sh --release-version v1.0.0 --release-tag v1.0.0`
+
 ## 0.9.0 - 2026-06-25
 
 执行者：Codex
