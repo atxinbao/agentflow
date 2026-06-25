@@ -96,6 +96,10 @@ GOVERNANCE_ADMISSION_PATH="$RUNTIME_DIR/governance-admission.json"
 SCHEDULING_DECISION_PATH="$RUNTIME_DIR/scheduling-decision.json"
 DEPLOYMENT_EVIDENCE_PATH="$RUNTIME_DIR/deployment-evidence.json"
 DEPLOYMENT_EVIDENCE_FAILURE_PATH="$RUNTIME_DIR/deployment-evidence-semantic-failure.json"
+DEPLOYMENT_EVIDENCE_WRONG_COMMIT_PATH="$RUNTIME_DIR/deployment-evidence-wrong-commit.json"
+DEPLOYMENT_EVIDENCE_WRONG_URL_PATH="$RUNTIME_DIR/deployment-evidence-wrong-url.json"
+DEPLOYMENT_EVIDENCE_FAKE_MIGRATION_PATH="$RUNTIME_DIR/deployment-evidence-fake-migration-receipt.json"
+NEGATIVE_SEMANTIC_FIXTURES_PATH="$RUNTIME_DIR/negative-semantic-fixtures.json"
 FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
 FOUNDATION_READINESS_REPORT_PATH="$RUNTIME_DIR/foundation-readiness-report.md"
 FOUNDATION_COVERAGE_PATH="$RUNTIME_DIR/foundation-coverage.json"
@@ -232,7 +236,8 @@ write_gate_reports() {
     "$GOVERNANCE_ADMISSION_PATH" \
     "$SCHEDULING_DECISION_PATH" \
     "$DEPLOYMENT_EVIDENCE_PATH" \
-    "$SOURCE_AGENT_ENTRY_PATH" <<'PY'
+    "$SOURCE_AGENT_ENTRY_PATH" \
+    "$NEGATIVE_SEMANTIC_FIXTURES_PATH" <<'PY'
 import json
 import pathlib
 import sys
@@ -272,6 +277,7 @@ governance_admission_path = pathlib.Path(sys.argv[32])
 scheduling_decision_path = pathlib.Path(sys.argv[33])
 deployment_evidence_path = pathlib.Path(sys.argv[34])
 source_agent_entry_path = pathlib.Path(sys.argv[35])
+negative_semantic_fixtures_path = pathlib.Path(sys.argv[36])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -341,6 +347,7 @@ proof_chain = [
     {"stage": "release.publish", "label": "Release Publish"},
     {"stage": "governance-admission", "label": "Runtime Governance Admission"},
     {"stage": "deployment-evidence", "label": "Deployment Evidence And Rollback Proof"},
+    {"stage": "negative-semantic-fixtures", "label": "Negative Semantic Fixtures"},
     {"stage": "audit.request-human", "label": "Audit Request Human"},
     {"stage": "release.publish.refresh", "label": "Release Publish Refresh"},
 ]
@@ -371,6 +378,10 @@ runtime_artifacts = [
     {"path": "runtime/scheduling-decision.json", "exists": scheduling_decision_path.is_file()},
     {"path": "runtime/deployment-evidence.json", "exists": deployment_evidence_path.is_file()},
     {"path": "runtime/deployment-evidence-semantic-failure.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json").is_file()},
+    {"path": "runtime/deployment-evidence-wrong-commit.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json").is_file()},
+    {"path": "runtime/deployment-evidence-wrong-url.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-url.json").is_file()},
+    {"path": "runtime/deployment-evidence-fake-migration-receipt.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-fake-migration-receipt.json").is_file()},
+    {"path": "runtime/negative-semantic-fixtures.json", "exists": negative_semantic_fixtures_path.is_file()},
     {"path": "runtime/foundation-readiness-report.md", "exists": foundation_readiness_report_path.is_file()},
     {"path": "runtime/foundation-coverage.json", "exists": foundation_coverage_path.is_file()},
     {"path": "runtime/event-replay-projection-report.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json").is_file()},
@@ -402,6 +413,10 @@ governance_admission = load_json(governance_admission_path) or {}
 scheduling_decision = load_json(scheduling_decision_path) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
+deployment_evidence_wrong_commit = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json")) or {}
+deployment_evidence_wrong_url = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-url.json")) or {}
+deployment_evidence_fake_migration = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-fake-migration-receipt.json")) or {}
+negative_semantic_fixtures = load_json(negative_semantic_fixtures_path) or {}
 source_agent_entry = load_json(source_agent_entry_path) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
@@ -678,6 +693,14 @@ checklist = [
         ),
     },
     {
+        "id": "v091-negative-semantic-fixtures",
+        "label": "Release certification lists required negative semantic fixture coverage",
+        "passed": negative_semantic_fixtures.get("status") == "passed"
+        and negative_semantic_fixtures.get("writesAuthority") is False
+        and negative_semantic_fixtures.get("fixtureCount", 0) >= 8
+        and not negative_semantic_fixtures.get("failedFixtures"),
+    },
+    {
         "id": "v090-release-certification",
         "label": "v0.9.0 certification covers V090-001 through V090-009 and can enter v1.0 planning",
         "passed": v090_coverage_passed,
@@ -712,6 +735,15 @@ summary_payload = {
     "deploymentEvidenceStatus": deployment_evidence.get("status") or "missing",
     "deploymentEvidenceSemanticFailurePath": "runtime/deployment-evidence-semantic-failure.json" if pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json").is_file() else None,
     "deploymentEvidenceSemanticFailureStatus": deployment_evidence_failure.get("status") or "missing",
+    "deploymentEvidenceWrongCommitPath": "runtime/deployment-evidence-wrong-commit.json" if pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json").is_file() else None,
+    "deploymentEvidenceWrongCommitStatus": deployment_evidence_wrong_commit.get("status") or "missing",
+    "deploymentEvidenceWrongUrlPath": "runtime/deployment-evidence-wrong-url.json" if pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-url.json").is_file() else None,
+    "deploymentEvidenceWrongUrlStatus": deployment_evidence_wrong_url.get("status") or "missing",
+    "deploymentEvidenceFakeMigrationPath": "runtime/deployment-evidence-fake-migration-receipt.json" if pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-fake-migration-receipt.json").is_file() else None,
+    "deploymentEvidenceFakeMigrationStatus": deployment_evidence_fake_migration.get("status") or "missing",
+    "negativeSemanticFixturesPath": "runtime/negative-semantic-fixtures.json" if negative_semantic_fixtures_path.is_file() else None,
+    "negativeSemanticFixturesStatus": negative_semantic_fixtures.get("status") or "missing",
+    "negativeSemanticFixtureCoverage": negative_semantic_fixtures.get("fixtures") or [],
     "rollbackTargetTag": (deployment_evidence.get("rollbackModel") or {}).get("targetTag"),
     "v090Coverage": v090_coverage,
     "v1PlanningReadiness": v1_planning_readiness,
@@ -781,6 +813,7 @@ summary_lines = [
     f"- Governance policy: `{governance_policy.get('status') or 'missing'}`",
     f"- Scheduling decision: `{scheduling_decision.get('decision') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
+    f"- Negative semantic fixtures: `{negative_semantic_fixtures.get('status') or 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Pack migration execution: `{stage_status.get('pack.migration-execution') or 'missing'}`",
@@ -863,6 +896,15 @@ certification_payload = {
     "deploymentEvidenceStatus": deployment_evidence.get("status") or "missing",
     "deploymentEvidenceSemanticFailurePath": "runtime/deployment-evidence-semantic-failure.json" if pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json").is_file() else None,
     "deploymentEvidenceSemanticFailureStatus": deployment_evidence_failure.get("status") or "missing",
+    "deploymentEvidenceWrongCommitPath": "runtime/deployment-evidence-wrong-commit.json" if pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json").is_file() else None,
+    "deploymentEvidenceWrongCommitStatus": deployment_evidence_wrong_commit.get("status") or "missing",
+    "deploymentEvidenceWrongUrlPath": "runtime/deployment-evidence-wrong-url.json" if pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-url.json").is_file() else None,
+    "deploymentEvidenceWrongUrlStatus": deployment_evidence_wrong_url.get("status") or "missing",
+    "deploymentEvidenceFakeMigrationPath": "runtime/deployment-evidence-fake-migration-receipt.json" if pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-fake-migration-receipt.json").is_file() else None,
+    "deploymentEvidenceFakeMigrationStatus": deployment_evidence_fake_migration.get("status") or "missing",
+    "negativeSemanticFixturesPath": "runtime/negative-semantic-fixtures.json" if negative_semantic_fixtures_path.is_file() else None,
+    "negativeSemanticFixturesStatus": negative_semantic_fixtures.get("status") or "missing",
+    "negativeSemanticFixtureCoverage": negative_semantic_fixtures.get("fixtures") or [],
     "rollbackTargetTag": (deployment_evidence.get("rollbackModel") or {}).get("targetTag"),
     "v090Coverage": v090_coverage,
     "v1PlanningReadiness": v1_planning_readiness,
@@ -913,6 +955,7 @@ cert_lines = [
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
     f"- Deployment semantic failure fixture: `{deployment_evidence_failure.get('status') or 'missing'}`",
+    f"- Negative semantic fixtures: `{negative_semantic_fixtures.get('status') or 'missing'}`",
     f"- Rollback target: `{(deployment_evidence.get('rollbackModel') or {}).get('targetTag') or 'n/a'}`",
     f"- v1.0 planning readiness: `{v1_planning_readiness}`",
     f"- Release version: `{release_version}`",
@@ -957,6 +1000,16 @@ cert_lines.extend([
     f"- Blockers: `{', '.join(v1_planning_blockers) if v1_planning_blockers else 'none'}`",
     "- Message Bus decision record: `runtime/scheduling-decision.json`",
     "- Projection, Connector, and industry UI remain non-authority surfaces.",
+    "",
+    "## Negative Semantic Fixture Coverage",
+    "",
+])
+for item in negative_semantic_fixtures.get("fixtures") or []:
+    mark = "PASS" if item.get("passed") else "FAIL"
+    cert_lines.append(
+        f"- [{mark}] `{item.get('id')}` stage=`{item.get('stage')}` evidence=`{item.get('evidencePath')}`"
+    )
+cert_lines.extend([
     "",
     "## Gate Commands",
     "",
@@ -1838,15 +1891,114 @@ PY
     fail_stage "deployment-evidence" "semantic failure fixture generation failed"
   fi
 
-  python3 - "$DEPLOYMENT_EVIDENCE_PATH" "$DEPLOYMENT_EVIDENCE_FAILURE_PATH" <<'PY'
+  local wrong_commit_remote="$CLI_DIR/remote-release-proof-wrong-commit.json"
+  python3 - "$RUNTIME_DIR/remote-release-proof.json" "$wrong_commit_remote" <<'PY'
+import json
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1])
+target = pathlib.Path(sys.argv[2])
+payload = json.loads(source.read_text(encoding="utf-8"))
+payload["releaseCommitSha"] = "0000000000000000000000000000000000000000"
+payload["commitSha"] = "0000000000000000000000000000000000000000"
+target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+
+  if ! "$BIN" release deployment-evidence \
+    --release-version "$RELEASE_VERSION" \
+    --release-tag "$RELEASE_TAG_NAME" \
+    --source-commit-sha "$deployment_source_commit_sha" \
+    --runtime-version "$RELEASE_VERSION" \
+    --release-facts-path "$RUNTIME_DIR/release-facts.json" \
+    --remote-release-proof-path "$wrong_commit_remote" \
+    --pack-version-fingerprint-path "$PACK_REGISTRY_PATH" \
+    --event-store-fingerprint-path "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    --projection-rebuild-proof-path "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    --migration-receipt-path "$PACK_MIGRATION_APPLIED_RECEIPT_PATH" \
+    --rollback-receipt-path "$PACK_MIGRATION_ROLLBACK_RECEIPT_PATH" \
+    --failed-deployment-report-path "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH" \
+    --rollback-target-tag "$RELEASE_TAG_NAME" \
+    --rollback-target-commit-sha "$deployment_source_commit_sha" \
+    --output "$DEPLOYMENT_EVIDENCE_WRONG_COMMIT_PATH" \
+    >"$CLI_DIR/deployment-evidence-wrong-commit.txt" 2>&1; then
+    fail_stage "deployment-evidence" "wrong commit fixture generation failed"
+  fi
+
+  local wrong_url_remote="$CLI_DIR/remote-release-proof-wrong-url.json"
+  python3 - "$RUNTIME_DIR/remote-release-proof.json" "$wrong_url_remote" <<'PY'
+import json
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1])
+target = pathlib.Path(sys.argv[2])
+payload = json.loads(source.read_text(encoding="utf-8"))
+payload["releaseUrl"] = "https://example.invalid/agentflow/releases/tag/wrong-release"
+payload["url"] = "https://example.invalid/agentflow/releases/tag/wrong-release"
+target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+
+  if ! "$BIN" release deployment-evidence \
+    --release-version "$RELEASE_VERSION" \
+    --release-tag "$RELEASE_TAG_NAME" \
+    --source-commit-sha "$deployment_source_commit_sha" \
+    --runtime-version "$RELEASE_VERSION" \
+    --release-facts-path "$RUNTIME_DIR/release-facts.json" \
+    --remote-release-proof-path "$wrong_url_remote" \
+    --pack-version-fingerprint-path "$PACK_REGISTRY_PATH" \
+    --event-store-fingerprint-path "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    --projection-rebuild-proof-path "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    --migration-receipt-path "$PACK_MIGRATION_APPLIED_RECEIPT_PATH" \
+    --rollback-receipt-path "$PACK_MIGRATION_ROLLBACK_RECEIPT_PATH" \
+    --failed-deployment-report-path "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH" \
+    --rollback-target-tag "$RELEASE_TAG_NAME" \
+    --rollback-target-commit-sha "$deployment_source_commit_sha" \
+    --output "$DEPLOYMENT_EVIDENCE_WRONG_URL_PATH" \
+    >"$CLI_DIR/deployment-evidence-wrong-url.txt" 2>&1; then
+    fail_stage "deployment-evidence" "wrong URL fixture generation failed"
+  fi
+
+  if ! "$BIN" release deployment-evidence \
+    --release-version "$RELEASE_VERSION" \
+    --release-tag "$RELEASE_TAG_NAME" \
+    --source-commit-sha "$deployment_source_commit_sha" \
+    --runtime-version "$RELEASE_VERSION" \
+    --release-facts-path "$RUNTIME_DIR/release-facts.json" \
+    --remote-release-proof-path "$RUNTIME_DIR/remote-release-proof.json" \
+    --pack-version-fingerprint-path "$PACK_REGISTRY_PATH" \
+    --event-store-fingerprint-path "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    --projection-rebuild-proof-path "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    --migration-receipt-path "$PACK_MIGRATION_FAKE_AUTHORITY_RECEIPT_PATH" \
+    --rollback-receipt-path "$PACK_MIGRATION_ROLLBACK_RECEIPT_PATH" \
+    --failed-deployment-report-path "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH" \
+    --rollback-target-tag "$RELEASE_TAG_NAME" \
+    --rollback-target-commit-sha "$deployment_source_commit_sha" \
+    --output "$DEPLOYMENT_EVIDENCE_FAKE_MIGRATION_PATH" \
+    >"$CLI_DIR/deployment-evidence-fake-migration-receipt.txt" 2>&1; then
+    fail_stage "deployment-evidence" "fake migration receipt fixture generation failed"
+  fi
+
+  python3 - \
+    "$DEPLOYMENT_EVIDENCE_PATH" \
+    "$DEPLOYMENT_EVIDENCE_FAILURE_PATH" \
+    "$DEPLOYMENT_EVIDENCE_WRONG_COMMIT_PATH" \
+    "$DEPLOYMENT_EVIDENCE_WRONG_URL_PATH" \
+    "$DEPLOYMENT_EVIDENCE_FAKE_MIGRATION_PATH" <<'PY'
 import json
 import pathlib
 import sys
 
 path = pathlib.Path(sys.argv[1])
 failure_path = pathlib.Path(sys.argv[2])
+wrong_commit_path = pathlib.Path(sys.argv[3])
+wrong_url_path = pathlib.Path(sys.argv[4])
+fake_migration_path = pathlib.Path(sys.argv[5])
 payload = json.loads(path.read_text(encoding="utf-8"))
 failure = json.loads(failure_path.read_text(encoding="utf-8"))
+wrong_commit = json.loads(wrong_commit_path.read_text(encoding="utf-8"))
+wrong_url = json.loads(wrong_url_path.read_text(encoding="utf-8"))
+fake_migration = json.loads(fake_migration_path.read_text(encoding="utf-8"))
 if payload.get("version") != "agentflow-deployment-evidence-report.v1":
     raise SystemExit("deployment evidence report version mismatch")
 if payload.get("status") != "passed":
@@ -1901,6 +2053,18 @@ if not required_failures.issubset(failure_ids):
     raise SystemExit(f"semantic failure fixture missing failures: {sorted(required_failures - failure_ids)}")
 if failure.get("cloudDeployment", {}).get("status") == "ready":
     raise SystemExit("cloud deployment must not be ready when semantic checks fail")
+if wrong_commit.get("status") != "failed":
+    raise SystemExit("wrong commit fixture must fail")
+if "remote-release-proof.commit" not in set(wrong_commit.get("semanticFailures") or []):
+    raise SystemExit("wrong commit fixture must fail remote-release-proof.commit")
+if wrong_url.get("status") != "failed":
+    raise SystemExit("wrong URL fixture must fail")
+if "remote-release-proof.url" not in set(wrong_url.get("semanticFailures") or []):
+    raise SystemExit("wrong URL fixture must fail remote-release-proof.url")
+if fake_migration.get("status") != "failed":
+    raise SystemExit("fake migration receipt fixture must fail")
+if "migration-receipt.writesAuthority" not in set(fake_migration.get("semanticFailures") or []):
+    raise SystemExit("fake migration receipt fixture must fail migration-receipt.writesAuthority")
 PY
 
   record_stage "deployment-evidence" "passed" "$(basename "$DEPLOYMENT_EVIDENCE_PATH")"
@@ -2430,6 +2594,189 @@ PY
   record_stage "pack.migration-execution" "passed" "$(basename "$PACK_MIGRATION_APPLIED_RECEIPT_PATH")"
 }
 
+run_negative_semantic_fixtures_gate() {
+  record_stage "negative-semantic-fixtures" "started" "$NEGATIVE_SEMANTIC_FIXTURES_PATH"
+  if ! python3 - \
+    "$NEGATIVE_SEMANTIC_FIXTURES_PATH" \
+    "$DEPLOYMENT_EVIDENCE_FAILURE_PATH" \
+    "$DEPLOYMENT_EVIDENCE_WRONG_COMMIT_PATH" \
+    "$DEPLOYMENT_EVIDENCE_WRONG_URL_PATH" \
+    "$DEPLOYMENT_EVIDENCE_FAKE_MIGRATION_PATH" \
+    "$GOVERNANCE_ADMISSION_PATH" \
+    "$PACK_MIGRATION_FAKE_AUTHORITY_RECEIPT_PATH" \
+    "$PACK_NEGATIVE_FIXTURES_PATH" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+tag_and_sha_path = pathlib.Path(sys.argv[2])
+wrong_commit_path = pathlib.Path(sys.argv[3])
+wrong_url_path = pathlib.Path(sys.argv[4])
+fake_migration_evidence_path = pathlib.Path(sys.argv[5])
+governance_admission_path = pathlib.Path(sys.argv[6])
+fake_migration_receipt_path = pathlib.Path(sys.argv[7])
+pack_negative_path = pathlib.Path(sys.argv[8])
+
+required_paths = [
+    tag_and_sha_path,
+    wrong_commit_path,
+    wrong_url_path,
+    fake_migration_evidence_path,
+    governance_admission_path,
+    fake_migration_receipt_path,
+    pack_negative_path,
+]
+missing = [str(path) for path in required_paths if not path.is_file()]
+if missing:
+    raise SystemExit(f"negative semantic fixture inputs missing: {missing}")
+
+tag_and_sha = json.loads(tag_and_sha_path.read_text(encoding="utf-8"))
+wrong_commit = json.loads(wrong_commit_path.read_text(encoding="utf-8"))
+wrong_url = json.loads(wrong_url_path.read_text(encoding="utf-8"))
+fake_migration_evidence = json.loads(fake_migration_evidence_path.read_text(encoding="utf-8"))
+governance = json.loads(governance_admission_path.read_text(encoding="utf-8"))
+fake_migration_receipt = json.loads(fake_migration_receipt_path.read_text(encoding="utf-8"))
+pack_negative = json.loads(pack_negative_path.read_text(encoding="utf-8"))
+
+responses = {
+    response.get("commandId"): response
+    for response in governance.get("responses") or []
+}
+deferred = responses.get("cmd-governance-admission-defer") or {}
+rejected = responses.get("cmd-governance-admission-reject") or {}
+pack_fixtures = {
+    fixture.get("id"): fixture
+    for fixture in pack_negative.get("fixtures") or []
+}
+empty_project_pack = pack_fixtures.get("unexpected-project-pack-fallback") or {}
+
+def failures(payload):
+    return set(payload.get("semanticFailures") or [])
+
+def fixture(fixture_id, stage, reason, evidence_path, passed):
+    return {
+        "id": fixture_id,
+        "expectedStatus": "failed",
+        "actualStatus": "failed" if passed else "unproven",
+        "stage": stage,
+        "reason": reason,
+        "evidencePath": evidence_path,
+        "writesAuthority": False,
+        "authorityWriteBlocked": True,
+        "passed": passed,
+    }
+
+fixtures = [
+    fixture(
+        "wrong-release-tag",
+        "deployment-evidence",
+        "remote release proof tag mismatch must keep cloud deployment not ready",
+        "runtime/deployment-evidence-semantic-failure.json",
+        tag_and_sha.get("status") == "failed"
+        and "remote-release-proof.tag" in failures(tag_and_sha),
+    ),
+    fixture(
+        "wrong-release-commit",
+        "deployment-evidence",
+        "remote release proof commit mismatch must fail semantic certification",
+        "runtime/deployment-evidence-wrong-commit.json",
+        wrong_commit.get("status") == "failed"
+        and "remote-release-proof.commit" in failures(wrong_commit),
+    ),
+    fixture(
+        "wrong-remote-release-url",
+        "deployment-evidence",
+        "remote release URL mismatch must fail semantic certification",
+        "runtime/deployment-evidence-wrong-url.json",
+        wrong_url.get("status") == "failed"
+        and "remote-release-proof.url" in failures(wrong_url),
+    ),
+    fixture(
+        "missing-artifact-manifest-sha256",
+        "deployment-evidence",
+        "missing artifact manifest sha256 must fail semantic certification",
+        "runtime/deployment-evidence-semantic-failure.json",
+        tag_and_sha.get("status") == "failed"
+        and "artifact-manifest.sha-present" in failures(tag_and_sha),
+    ),
+    fixture(
+        "disabled-capability-still-executing",
+        "governance-admission",
+        "disabled or deferred capability must not enter proposal or provider execution",
+        "runtime/governance-admission.json",
+        governance.get("status") == "passed"
+        and deferred.get("status") == "deferred"
+        and governance.get("deferredWroteProposal") is False
+        and governance.get("executesProvider") is False,
+    ),
+    fixture(
+        "governance-rejected-command-producing-proposal",
+        "governance-admission",
+        "governance rejected command must not write proposal or accepted action facts",
+        "runtime/governance-admission.json",
+        governance.get("status") == "passed"
+        and rejected.get("status") == "rejected"
+        and governance.get("rejectedWroteProposal") is False
+        and governance.get("executesProvider") is False,
+    ),
+    fixture(
+        "fake-migration-receipt",
+        "deployment-evidence",
+        "fake migration receipt claiming authority writes must fail deployment evidence",
+        "runtime/deployment-evidence-fake-migration-receipt.json",
+        fake_migration_receipt.get("writesAuthority") is True
+        and fake_migration_evidence.get("status") == "failed"
+        and "migration-receipt.writesAuthority" in failures(fake_migration_evidence),
+    ),
+    fixture(
+        "empty-project-pack-registry-ready",
+        "pack.negative-fixtures",
+        "empty project Pack registry must not be reported as ready",
+        "pack-negative-fixtures.json",
+        pack_negative.get("status") == "passed"
+        and empty_project_pack.get("passed") is True
+        and empty_project_pack.get("writesAuthority") is False,
+    ),
+]
+
+failed = [item for item in fixtures if not item["passed"]]
+payload = {
+    "version": "agentflow-negative-semantic-fixtures.v1",
+    "status": "passed" if not failed else "failed",
+    "writesAuthority": False,
+    "fixtureCount": len(fixtures),
+    "fixtures": fixtures,
+    "failedFixtures": [item["id"] for item in failed],
+    "coverage": {
+        "deploymentEvidence": [
+            "wrong-release-tag",
+            "wrong-release-commit",
+            "wrong-remote-release-url",
+            "missing-artifact-manifest-sha256",
+            "fake-migration-receipt",
+        ],
+        "governanceAdmission": [
+            "disabled-capability-still-executing",
+            "governance-rejected-command-producing-proposal",
+        ],
+        "packRegistry": [
+            "empty-project-pack-registry-ready",
+        ],
+    },
+    "generatedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"negative semantic fixtures failed: {[item['id'] for item in failed]}")
+PY
+  then
+    fail_stage "negative-semantic-fixtures" "negative semantic fixture coverage failed"
+  fi
+  record_stage "negative-semantic-fixtures" "passed" "$(basename "$NEGATIVE_SEMANTIC_FIXTURES_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -2955,6 +3302,7 @@ PY
 
   collect_artifacts "$requirement_id" "$project_id" "$issue2_id" "$issue2_run"
   run_deployment_evidence_gate
+  run_negative_semantic_fixtures_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
