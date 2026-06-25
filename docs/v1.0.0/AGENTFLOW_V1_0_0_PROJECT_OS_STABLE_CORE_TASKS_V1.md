@@ -68,7 +68,7 @@ v1PlanningReadiness = ready
 | `V100-001` | Stable Contract Baseline | P0 | v0.9.1 certification ready | done |
 | `V100-002` | Runtime API / SDK Freeze | P0 | V100-001 | done |
 | `V100-003` | AgentFlow Filesystem Contract Freeze | P0 | V100-001 | done |
-| `V100-004` | Pack Contract Freeze | P0 | V100-001, V100-003 | planned |
+| `V100-004` | Pack Contract Freeze | P0 | V100-001, V100-003 | done |
 | `V100-005` | Projection / Read Model Stable Contract | P0 | V100-002, V100-004 | planned |
 | `V100-006` | Evidence + Acceptance Stable Contract | P0 | V100-002, V100-005 | planned |
 | `V100-007` | Executor Adapter Stable Contract | P0 | V100-002, V100-006 | planned |
@@ -245,6 +245,17 @@ v1PlanningReadiness = ready
 - 不承诺所有未来行业 Pack 已完成；
 - 不把 UI Design Pack 提升为 v1 默认稳定行业壳。
 
+### Closeout
+
+- Pack Contract Freeze 已落到 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md)；
+- 文档明确 `packContractVersion = agentflow-pack-contract-freeze.v1` 和 `packContractStatus = active`；
+- Pack manifest、Domain Pack、Surface Pack、Connector Pack、capability status、Runtime entry、migration、built-in baseline、compatibility promise 和 breaking change rule 已冻结；
+- `software-dev` 被定义为 v1 默认稳定行业壳，状态为 `completed`；
+- `ui-design` 被定义为 baseline 行业壳，状态为 `baseline`，不提升为 v1 默认稳定主链；
+- release gate 新增 `pack-contract-compatibility` stage，生成 `runtime/pack-contract-compatibility.json`；
+- release gate 会检查 file-backed Pack registry、Pack validation / simulation / projection / API plane、negative fixtures、disabled capability、invalid command submit、unexpected fallback 和 migration receipt-only 边界；
+- 下游 `V100-005`、`V100-006`、`V100-007`、`V100-008`、`V100-009`、`V100-010` 必须引用该 freeze 文档。
+
 ## V100-005 Projection / Read Model Stable Contract
 
 ### Scope
@@ -253,6 +264,7 @@ v1PlanningReadiness = ready
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Projection / Read Model stable contract 和 projection 只读边界，并引用 [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md) 中的 Query API 只读边界。
 必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md) 中的 `.agentflow/projections/**` 和 `.agentflow/indexes/**` 只读边界。
+必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md) 中的 Pack Surface / Domain readiness，但不能让 Pack 拥有 projection authority。
 
 原则：
 
@@ -296,6 +308,7 @@ UI 不直接读 Event Store 写路径。
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Evidence / Acceptance contract、Completion Commit 边界和 Audit sidecar 边界，并引用 [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md) 中的 Decision Output Contract 与 Error Model。
 必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md) 中的 `.agentflow/tasks/<issue-id>/evidence/**`、`.agentflow/release/**` 和 public record boundary。
+必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md) 中的 Pack evidence policy 边界，但 Done 仍由 Acceptance Gate 决定。
 
 主链：
 
@@ -345,6 +358,7 @@ Confirmed Work
 固化 Codex / Claude Code 等执行器适配合同。
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Executor Adapter contract 和 executor 不拥有 project truth 的规则，并引用 [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md) 中的 Command API 与 Governance Admission Rule。
+必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md) 中的 Connector Pack capability boundary。
 
 AgentFlow 管：
 
@@ -399,6 +413,7 @@ Executor 管：
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Breaking Change Rule、Deprecation Rule 和 Release Certification Rule。
 必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md) 中的 retired path 规则，证明迁移和 replay 不会恢复旧 `.agentflow/input/**`、`.agentflow/execute/**`、`.agentflow/output/**` 或 `.agentflow/goal-tree/**`。
+必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md) 中的 Pack migration receipt-only 和 rollback boundary。
 
 必须处理：
 
@@ -434,6 +449,7 @@ Executor 管：
 把 Software Dev Pack 作为 v1.0 默认稳定行业壳。
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 stable / internal / experimental 边界，不能把 experimental Pack 能力伪装成 stable。
+必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md) 中的 Software Dev Pack stable baseline。
 
 必须证明软件开发现场可闭环：
 
@@ -480,6 +496,7 @@ Requirement
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md)，并把 `stableContractVersion` / `stableContractStatus` 作为 release certification 的硬门禁。
 必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md)，并把 `filesystemContractVersion` / `filesystemContractStatus` / retired path 检查作为 release certification 的硬门禁。
+必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md)，并把 `packContractVersion` / `packContractStatus` / Pack compatibility 检查作为 release certification 的硬门禁。
 
 必须输出：
 
