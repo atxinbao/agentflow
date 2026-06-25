@@ -399,4 +399,38 @@ pub(crate) enum ReleaseCommand {
         )]
         release_notes_path: std::path::PathBuf,
     },
+    DeploymentEvidence {
+        #[arg(long = "release-version")]
+        release_version: String,
+        #[arg(long = "release-tag")]
+        release_tag: String,
+        #[arg(long = "source-commit-sha")]
+        source_commit_sha: String,
+        #[arg(long = "runtime-version")]
+        runtime_version: String,
+        #[arg(long = "release-facts-path")]
+        release_facts_path: PathBuf,
+        #[arg(long = "remote-release-proof-path")]
+        remote_release_proof_path: PathBuf,
+        #[arg(long = "config-fingerprint-path")]
+        config_fingerprint_path: Option<PathBuf>,
+        #[arg(long = "pack-version-fingerprint-path")]
+        pack_version_fingerprint_path: PathBuf,
+        #[arg(long = "event-store-fingerprint-path")]
+        event_store_fingerprint_path: PathBuf,
+        #[arg(long = "projection-rebuild-proof-path")]
+        projection_rebuild_proof_path: PathBuf,
+        #[arg(long = "migration-receipt-path")]
+        migration_receipt_path: PathBuf,
+        #[arg(long = "rollback-receipt-path")]
+        rollback_receipt_path: PathBuf,
+        #[arg(long = "failed-deployment-report-path")]
+        failed_deployment_report_path: Option<PathBuf>,
+        #[arg(long = "rollback-target-tag")]
+        rollback_target_tag: Option<String>,
+        #[arg(long = "rollback-target-commit-sha")]
+        rollback_target_commit_sha: Option<String>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }

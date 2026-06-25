@@ -13,6 +13,7 @@ pub const PROJECT_EXTERNAL_REVIEW_SURFACE_VERSION: &str = "project-external-revi
 pub const PROJECT_EXTERNAL_REVIEW_INDEX_VERSION: &str = "project-external-review-index.v1";
 pub const RELEASE_TAG_PROOF_VERSION: &str = "release-tag-proof.v1";
 pub const REMOTE_RELEASE_PROOF_VERSION: &str = "remote-release-proof.v1";
+pub const DEPLOYMENT_EVIDENCE_REPORT_VERSION: &str = "agentflow-deployment-evidence-report.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -210,6 +211,58 @@ pub struct RemoteReleaseProof {
     pub artifact_manifest_sha256: Option<String>,
     pub actor: String,
     pub recorded_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentArtifactRef {
+    pub label: String,
+    pub path: String,
+    pub exists: bool,
+    pub sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentShapeEvidence {
+    pub shape: String,
+    pub status: String,
+    pub evidence: Vec<DeploymentArtifactRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RollbackModel {
+    pub provider_agnostic: bool,
+    pub target_tag: String,
+    pub target_commit_sha: String,
+    pub rollback_receipt: DeploymentArtifactRef,
+    pub failed_deployment_report: Option<DeploymentArtifactRef>,
+    pub requires_human_confirmation: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentEvidenceReport {
+    pub version: String,
+    pub status: String,
+    pub release_version: String,
+    pub release_tag: String,
+    pub source_commit_sha: String,
+    pub runtime_version: String,
+    pub local_deployment: DeploymentShapeEvidence,
+    pub cloud_deployment: DeploymentShapeEvidence,
+    pub release_facts: DeploymentArtifactRef,
+    pub config_fingerprint: Option<DeploymentArtifactRef>,
+    pub pack_version_fingerprint: DeploymentArtifactRef,
+    pub event_store_fingerprint: DeploymentArtifactRef,
+    pub projection_rebuild_proof: DeploymentArtifactRef,
+    pub migration_receipt: DeploymentArtifactRef,
+    pub rollback_model: RollbackModel,
+    pub writes_authority: bool,
+    pub missing_evidence: Vec<String>,
+    pub generated_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

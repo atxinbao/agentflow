@@ -4,18 +4,21 @@
 //! documents such as CHANGELOG entries and release notes. It does not
 //! participate in the single-task loop and does not write task artifacts.
 
+pub mod deployment;
 pub mod model;
 pub mod public_delivery;
 pub mod review_surface;
 pub mod runtime;
 
+pub use deployment::{build_deployment_evidence_report, DeploymentEvidenceInput};
 pub use model::{
-    DeliverySummary, ExternalReviewAuditSummary, ExternalReviewEvidenceEntry,
-    ProjectDeliverySummary, ProjectExternalReviewIndex, ProjectExternalReviewIndexEntry,
-    ProjectExternalReviewSurface, ProjectReleaseFacts, ProjectReleaseIndex,
-    ProjectReleaseIndexEntry, PublicReleaseDocumentPaths, PublicReleaseDocumentTarget,
-    PublicReleaseEntry, PublicReleaseSummary, ReleaseTagProof, RemoteReleaseProof,
-    CHANGELOG_TEMPLATE_VERSION, DELIVERY_SUMMARY_VERSION, PROJECT_DELIVERY_SUMMARY_VERSION,
+    DeliverySummary, DeploymentArtifactRef, DeploymentEvidenceReport, DeploymentShapeEvidence,
+    ExternalReviewAuditSummary, ExternalReviewEvidenceEntry, ProjectDeliverySummary,
+    ProjectExternalReviewIndex, ProjectExternalReviewIndexEntry, ProjectExternalReviewSurface,
+    ProjectReleaseFacts, ProjectReleaseIndex, ProjectReleaseIndexEntry, PublicReleaseDocumentPaths,
+    PublicReleaseDocumentTarget, PublicReleaseEntry, PublicReleaseSummary, ReleaseTagProof,
+    RemoteReleaseProof, RollbackModel, CHANGELOG_TEMPLATE_VERSION, DELIVERY_SUMMARY_VERSION,
+    DEPLOYMENT_EVIDENCE_REPORT_VERSION, PROJECT_DELIVERY_SUMMARY_VERSION,
     PROJECT_EXTERNAL_REVIEW_INDEX_VERSION, PROJECT_EXTERNAL_REVIEW_SURFACE_VERSION,
     PROJECT_RELEASE_FACTS_VERSION, PROJECT_RELEASE_INDEX_VERSION, PUBLIC_RELEASE_SUMMARY_VERSION,
     RELEASE_NOTES_TEMPLATE_VERSION, RELEASE_TAG_PROOF_VERSION, REMOTE_RELEASE_PROOF_VERSION,
