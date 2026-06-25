@@ -232,6 +232,14 @@ pub struct DeploymentShapeEvidence {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DeploymentSemanticCheck {
+    pub check_id: String,
+    pub status: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RollbackModel {
     pub provider_agnostic: bool,
     pub target_tag: String,
@@ -262,6 +270,10 @@ pub struct DeploymentEvidenceReport {
     pub rollback_model: RollbackModel,
     pub writes_authority: bool,
     pub missing_evidence: Vec<String>,
+    #[serde(default)]
+    pub semantic_checks: Vec<DeploymentSemanticCheck>,
+    #[serde(default)]
+    pub semantic_failures: Vec<String>,
     pub generated_at: u64,
 }
 
