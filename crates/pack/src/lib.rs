@@ -44,11 +44,12 @@ pub use validation::{
     ui_design_pack_readiness_artifact, validate_pack_bundle, PackApiPlaneMapping,
     PackAppliedMigrationBoundary, PackMigrationAppliedReceipt, PackMigrationApplyConfirmation,
     PackMigrationCancelReceipt, PackMigrationPreview, PackMigrationPreviewReceipt,
-    PackMigrationRollbackReceipt, PackReadinessArtifact, PackValidationArtifact,
-    PackValidationIssue, PackVersionCompatibility, PACK_MIGRATION_APPLIED_RECEIPT_VERSION,
-    PACK_MIGRATION_CANCEL_RECEIPT_VERSION, PACK_MIGRATION_PREVIEW_RECEIPT_VERSION,
-    PACK_MIGRATION_PREVIEW_VERSION, PACK_MIGRATION_ROLLBACK_RECEIPT_VERSION,
-    PACK_READINESS_ARTIFACT_VERSION, PACK_VALIDATION_ARTIFACT_VERSION,
+    PackMigrationRollbackReceipt, PackMigrationSemanticTarget, PackReadinessArtifact,
+    PackValidationArtifact, PackValidationIssue, PackVersionCompatibility,
+    PACK_MIGRATION_APPLIED_RECEIPT_VERSION, PACK_MIGRATION_CANCEL_RECEIPT_VERSION,
+    PACK_MIGRATION_PREVIEW_RECEIPT_VERSION, PACK_MIGRATION_PREVIEW_VERSION,
+    PACK_MIGRATION_ROLLBACK_RECEIPT_VERSION, PACK_READINESS_ARTIFACT_VERSION,
+    PACK_VALIDATION_ARTIFACT_VERSION,
 };
 
 pub const PACK_MANIFEST_VERSION: &str = "agentflow-pack-manifest.v1";

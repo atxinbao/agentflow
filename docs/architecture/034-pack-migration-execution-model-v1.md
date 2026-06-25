@@ -56,14 +56,19 @@ Applied Receipt -> Rollback Receipt
 
 ### Applied Receipt
 
-用途：证明 migration 已经在明确 confirmation 后进入 apply。
+用途：证明 migration 已经在明确 confirmation 后生成 apply receipt。
+
+注意：当前版本没有真实 authority mutation。Apply receipt 是执行意图和确认留痕，不等于已经修改权威事实源。
 
 要求：
 
 - 必须绑定同一个 `previewId`
 - 必须有 `confirmed = true`
 - 必须有 actor 和 reason
-- `writesAuthority = true`
+- `writesAuthority = false`
+- 必须包含 `semanticTarget`
+- `semanticTarget.mutationTarget = receipt-only-apply`
+- `semanticTarget.authorityMutation = false`
 - schema 与 preview receipt 不同
 
 ### Cancel Receipt
@@ -78,13 +83,18 @@ Applied Receipt -> Rollback Receipt
 
 ### Rollback Receipt
 
-用途：证明已 apply 的 migration 被回滚。
+用途：证明已生成 apply receipt 的 migration 产生 rollback receipt。
+
+注意：当前版本没有真实 rollback mutation。Rollback receipt 是回滚意图和处理留痕，不等于已经回滚权威事实源。
 
 要求：
 
 - 必须基于 applied receipt
 - 必须有 actor 和 reason
-- `writesAuthority = true`
+- `writesAuthority = false`
+- 必须包含 `semanticTarget`
+- `semanticTarget.mutationTarget = receipt-only-rollback`
+- `semanticTarget.authorityMutation = false`
 - 必须保留 applied receipt version
 
 ## 5. CLI Surface
@@ -133,4 +143,3 @@ Projection 仍然是 read model，不写 authority。
 - `crates/cli` 提供 migration CLI。
 - `scripts/verify_release_gate.sh` 生成 migration artifacts。
 - `summary.json` / `certification.json` 暴露 migration release gate 结果。
-

@@ -108,6 +108,7 @@ PACK_NEGATIVE_FIXTURES_PATH="$ARTIFACT_DIR/pack-negative-fixtures.json"
 PACK_MIGRATION_PREVIEW_PATH="$ARTIFACT_DIR/pack-migration-preview.json"
 PACK_MIGRATION_UNCONFIRMED_APPLY_PATH="$ARTIFACT_DIR/pack-migration-unconfirmed-apply.json"
 PACK_MIGRATION_APPLIED_RECEIPT_PATH="$ARTIFACT_DIR/pack-migration-applied-receipt.json"
+PACK_MIGRATION_FAKE_AUTHORITY_RECEIPT_PATH="$ARTIFACT_DIR/pack-migration-fake-authority-receipt.json"
 PACK_MIGRATION_CANCEL_RECEIPT_PATH="$ARTIFACT_DIR/pack-migration-cancel-receipt.json"
 PACK_MIGRATION_ROLLBACK_RECEIPT_PATH="$ARTIFACT_DIR/pack-migration-rollback-receipt.json"
 PACK_MIGRATION_REPLAY_REPORT_PATH="$RUNTIME_DIR/pack-migration-replay-report.json"
@@ -384,6 +385,7 @@ runtime_artifacts = [
     {"path": "pack-migration-preview.json", "exists": pathlib.Path(summary_json_path.parent / "pack-migration-preview.json").is_file()},
     {"path": "pack-migration-unconfirmed-apply.json", "exists": pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json").is_file()},
     {"path": "pack-migration-applied-receipt.json", "exists": pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json").is_file()},
+    {"path": "pack-migration-fake-authority-receipt.json", "exists": pathlib.Path(summary_json_path.parent / "pack-migration-fake-authority-receipt.json").is_file()},
     {"path": "pack-migration-cancel-receipt.json", "exists": pathlib.Path(summary_json_path.parent / "pack-migration-cancel-receipt.json").is_file()},
     {"path": "pack-migration-rollback-receipt.json", "exists": pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json").is_file()},
     {"path": "software-dev-pack-readiness.json", "exists": pathlib.Path(summary_json_path.parent / "software-dev-pack-readiness.json").is_file()},
@@ -405,6 +407,7 @@ event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "run
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
 pack_migration_applied = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json")) or {}
+pack_migration_fake_authority = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-fake-authority-receipt.json")) or {}
 pack_migration_cancel = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-cancel-receipt.json")) or {}
 pack_migration_rollback = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json")) or {}
 pack_migration_replay = load_json(pathlib.Path(summary_json_path.parent / "runtime/pack-migration-replay-report.json")) or {}
@@ -628,8 +631,15 @@ checklist = [
         "passed": pack_migration_unconfirmed.get("status") == "rejected"
         and pack_migration_unconfirmed.get("writesAuthority") is False
         and pack_migration_applied.get("applied") is True
+        and pack_migration_applied.get("writesAuthority") is False
+        and (pack_migration_applied.get("semanticTarget") or {}).get("mutationTarget") == "receipt-only-apply"
+        and (pack_migration_applied.get("semanticTarget") or {}).get("authorityMutation") is False
+        and pack_migration_fake_authority.get("writesAuthority") is True
         and pack_migration_cancel.get("cancelled") is True
         and pack_migration_rollback.get("rolledBack") is True
+        and pack_migration_rollback.get("writesAuthority") is False
+        and (pack_migration_rollback.get("semanticTarget") or {}).get("mutationTarget") == "receipt-only-rollback"
+        and (pack_migration_rollback.get("semanticTarget") or {}).get("authorityMutation") is False
         and pack_migration_replay.get("status") == "passed",
     },
     {
@@ -715,6 +725,7 @@ summary_payload = {
     "packMigrationPreviewPath": "pack-migration-preview.json" if pathlib.Path(summary_json_path.parent / "pack-migration-preview.json").is_file() else None,
     "packMigrationUnconfirmedApplyPath": "pack-migration-unconfirmed-apply.json" if pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json").is_file() else None,
     "packMigrationAppliedReceiptPath": "pack-migration-applied-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json").is_file() else None,
+    "packMigrationFakeAuthorityReceiptPath": "pack-migration-fake-authority-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-fake-authority-receipt.json").is_file() else None,
     "packMigrationCancelReceiptPath": "pack-migration-cancel-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-cancel-receipt.json").is_file() else None,
     "packMigrationRollbackReceiptPath": "pack-migration-rollback-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json").is_file() else None,
     "packMigrationReplayReportPath": "runtime/pack-migration-replay-report.json" if pathlib.Path(summary_json_path.parent / "runtime/pack-migration-replay-report.json").is_file() else None,
@@ -861,6 +872,7 @@ certification_payload = {
     "messageBusDecision": scheduling_decision.get("decision") or "missing",
     "packNegativeFixturesPath": "pack-negative-fixtures.json" if pack_negative_fixtures_path.is_file() else None,
     "packMigrationAppliedReceiptPath": "pack-migration-applied-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json").is_file() else None,
+    "packMigrationFakeAuthorityReceiptPath": "pack-migration-fake-authority-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-fake-authority-receipt.json").is_file() else None,
     "packMigrationRollbackReceiptPath": "pack-migration-rollback-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json").is_file() else None,
     "packMigrationReplayReportPath": "runtime/pack-migration-replay-report.json" if pathlib.Path(summary_json_path.parent / "runtime/pack-migration-replay-report.json").is_file() else None,
     "packReleaseGateStatus": "passed" if pack_release_gate_passed else "failed",
@@ -1866,7 +1878,13 @@ required_checks = {
     "event-replay-report.status",
     "projection-rebuild-proof.status",
     "migration-receipt.applied",
+    "migration-receipt.writesAuthority",
+    "migration-receipt.semanticTarget.authorityMutation",
+    "migration-receipt.semanticTarget.mutationTarget",
     "rollback-receipt.rolledBack",
+    "rollback-receipt.writesAuthority",
+    "rollback-receipt.semanticTarget.authorityMutation",
+    "rollback-receipt.semanticTarget.mutationTarget",
 }
 observed_checks = {check.get("checkId") for check in payload.get("semanticChecks") or []}
 missing_checks = sorted(required_checks - observed_checks)
@@ -2319,6 +2337,20 @@ PY
     fail_stage "pack.migration-execution" "confirmed migration apply failed"
   fi
 
+  python3 - "$PACK_MIGRATION_APPLIED_RECEIPT_PATH" "$PACK_MIGRATION_FAKE_AUTHORITY_RECEIPT_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1])
+target = pathlib.Path(sys.argv[2])
+payload = json.loads(source.read_text(encoding="utf-8"))
+payload["writesAuthority"] = True
+payload.setdefault("semanticTarget", {})["authorityMutation"] = True
+payload["semanticTarget"]["mutationTarget"] = "fake-authority-apply"
+target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+
   if ! "$BIN" pack migration-cancel \
     --preview-path "$PACK_MIGRATION_PREVIEW_PATH" \
     --actor release-gate \
@@ -2346,6 +2378,7 @@ PY
     "$PACK_MIGRATION_PREVIEW_PATH" \
     "$PACK_MIGRATION_UNCONFIRMED_APPLY_PATH" \
     "$PACK_MIGRATION_APPLIED_RECEIPT_PATH" \
+    "$PACK_MIGRATION_FAKE_AUTHORITY_RECEIPT_PATH" \
     "$PACK_MIGRATION_CANCEL_RECEIPT_PATH" \
     "$PACK_MIGRATION_ROLLBACK_RECEIPT_PATH" \
     "$PACK_MIGRATION_REPLAY_REPORT_PATH" <<'PY'
@@ -2356,9 +2389,10 @@ import sys
 preview = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 unconfirmed = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
 applied = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
-cancel = json.loads(pathlib.Path(sys.argv[4]).read_text(encoding="utf-8"))
-rollback = json.loads(pathlib.Path(sys.argv[5]).read_text(encoding="utf-8"))
-replay = json.loads(pathlib.Path(sys.argv[6]).read_text(encoding="utf-8"))
+fake_authority = json.loads(pathlib.Path(sys.argv[4]).read_text(encoding="utf-8"))
+cancel = json.loads(pathlib.Path(sys.argv[5]).read_text(encoding="utf-8"))
+rollback = json.loads(pathlib.Path(sys.argv[6]).read_text(encoding="utf-8"))
+replay = json.loads(pathlib.Path(sys.argv[7]).read_text(encoding="utf-8"))
 
 if preview.get("version") != "agentflow-pack-migration-preview.v1":
     raise SystemExit("migration preview must use preview schema")
@@ -2370,16 +2404,24 @@ if unconfirmed.get("status") != "rejected" or unconfirmed.get("writesAuthority")
     raise SystemExit("unconfirmed migration apply must be rejected without authority writes")
 if applied.get("version") != "agentflow-pack-migration-applied-receipt.v1":
     raise SystemExit("applied migration must use applied receipt schema")
-if applied.get("applied") is not True or applied.get("writesAuthority") is not True:
-    raise SystemExit("confirmed migration apply must produce applied authority receipt")
+if applied.get("applied") is not True or applied.get("writesAuthority") is not False:
+    raise SystemExit("confirmed migration apply must produce receipt-only applied receipt")
+target = applied.get("semanticTarget") or {}
+if target.get("mutationTarget") != "receipt-only-apply" or target.get("authorityMutation") is not False:
+    raise SystemExit("applied migration receipt must carry receipt-only semantic target")
+if fake_authority.get("writesAuthority") is not True:
+    raise SystemExit("fake authority fixture must explicitly claim authority writes")
 if cancel.get("version") == applied.get("version") or cancel.get("cancelled") is not True:
     raise SystemExit("cancel receipt must be distinct from applied receipt")
 if cancel.get("writesAuthority") is not False:
     raise SystemExit("cancel receipt must not write authority")
 if rollback.get("version") == applied.get("version") or rollback.get("rolledBack") is not True:
     raise SystemExit("rollback receipt must be distinct from applied receipt")
-if rollback.get("writesAuthority") is not True:
-    raise SystemExit("rollback receipt must represent controlled authority reversal")
+if rollback.get("writesAuthority") is not False:
+    raise SystemExit("rollback receipt must be receipt-only")
+rollback_target = rollback.get("semanticTarget") or {}
+if rollback_target.get("mutationTarget") != "receipt-only-rollback" or rollback_target.get("authorityMutation") is not False:
+    raise SystemExit("rollback receipt must carry receipt-only semantic target")
 if replay.get("status") != "passed" or replay.get("writesAuthority") is not False:
     raise SystemExit("projection replay after migration receipt must pass without authority writes")
 PY

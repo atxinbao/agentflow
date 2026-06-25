@@ -425,11 +425,63 @@ fn deployment_semantic_checks(
     )?;
     check_json_bool(
         &mut checks,
+        "migration-receipt",
+        migration_receipt,
+        "agentflow-pack-migration-applied-receipt.v1",
+        "writesAuthority",
+        false,
+    )?;
+    check_json_nested_bool(
+        &mut checks,
+        "migration-receipt",
+        migration_receipt,
+        "agentflow-pack-migration-applied-receipt.v1",
+        "semanticTarget",
+        "authorityMutation",
+        false,
+    )?;
+    check_json_nested_string(
+        &mut checks,
+        "migration-receipt",
+        migration_receipt,
+        "agentflow-pack-migration-applied-receipt.v1",
+        "semanticTarget",
+        "mutationTarget",
+        "receipt-only-apply",
+    )?;
+    check_json_bool(
+        &mut checks,
         "rollback-receipt",
         rollback_receipt,
         "agentflow-pack-migration-rollback-receipt.v1",
         "rolledBack",
         true,
+    )?;
+    check_json_bool(
+        &mut checks,
+        "rollback-receipt",
+        rollback_receipt,
+        "agentflow-pack-migration-rollback-receipt.v1",
+        "writesAuthority",
+        false,
+    )?;
+    check_json_nested_bool(
+        &mut checks,
+        "rollback-receipt",
+        rollback_receipt,
+        "agentflow-pack-migration-rollback-receipt.v1",
+        "semanticTarget",
+        "authorityMutation",
+        false,
+    )?;
+    check_json_nested_string(
+        &mut checks,
+        "rollback-receipt",
+        rollback_receipt,
+        "agentflow-pack-migration-rollback-receipt.v1",
+        "semanticTarget",
+        "mutationTarget",
+        "receipt-only-rollback",
     )?;
     if let Some(report) = failed_deployment_report {
         check_json_status(
@@ -564,6 +616,88 @@ fn check_json_bool(
         &format!("{check_id}.{field}"),
         value.get(field).and_then(Value::as_bool) == Some(expected),
         &format!("expected `{field}` to be `{expected}`"),
+    );
+    Ok(())
+}
+
+fn check_json_nested_bool(
+    checks: &mut Vec<DeploymentSemanticCheck>,
+    check_id: &str,
+    artifact: &DeploymentArtifactRef,
+    expected_version: &str,
+    object_field: &str,
+    field: &str,
+    expected: bool,
+) -> Result<()> {
+    if !artifact.exists {
+        check(
+            checks,
+            &format!("{check_id}.exists"),
+            false,
+            "semantic artifact is missing",
+        );
+        return Ok(());
+    }
+    let value = read_artifact_value(artifact)?;
+    check_eq(
+        checks,
+        &format!("{check_id}.version"),
+        value
+            .get("version")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        expected_version,
+    );
+    check(
+        checks,
+        &format!("{check_id}.{object_field}.{field}"),
+        value
+            .get(object_field)
+            .and_then(|object| object.get(field))
+            .and_then(Value::as_bool)
+            == Some(expected),
+        &format!("expected `{object_field}.{field}` to be `{expected}`"),
+    );
+    Ok(())
+}
+
+fn check_json_nested_string(
+    checks: &mut Vec<DeploymentSemanticCheck>,
+    check_id: &str,
+    artifact: &DeploymentArtifactRef,
+    expected_version: &str,
+    object_field: &str,
+    field: &str,
+    expected: &str,
+) -> Result<()> {
+    if !artifact.exists {
+        check(
+            checks,
+            &format!("{check_id}.exists"),
+            false,
+            "semantic artifact is missing",
+        );
+        return Ok(());
+    }
+    let value = read_artifact_value(artifact)?;
+    check_eq(
+        checks,
+        &format!("{check_id}.version"),
+        value
+            .get("version")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        expected_version,
+    );
+    check_eq(
+        checks,
+        &format!("{check_id}.{object_field}.{field}"),
+        value
+            .get(object_field)
+            .and_then(|object| object.get(field))
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        expected,
     );
     Ok(())
 }
@@ -705,6 +839,30 @@ mod tests {
             .contains(&"rollback.target-tag".to_string()));
     }
 
+    #[test]
+    fn deployment_evidence_fails_when_migration_receipt_claims_authority_write() {
+        let dir = tempdir().unwrap();
+        let fixtures = write_semantic_fixtures(dir.path());
+        let mut migration: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&fixtures.migration).unwrap()).unwrap();
+        migration["writesAuthority"] = serde_json::json!(true);
+        migration["semanticTarget"]["authorityMutation"] = serde_json::json!(true);
+        fs::write(
+            &fixtures.migration,
+            serde_json::to_string_pretty(&migration).unwrap() + "\n",
+        )
+        .unwrap();
+
+        let report = report_from_fixtures(fixtures, "v0.9.0", "abc123", None, None);
+        assert_eq!(report.status, "failed");
+        assert!(report
+            .semantic_failures
+            .contains(&"migration-receipt.writesAuthority".to_string()));
+        assert!(report
+            .semantic_failures
+            .contains(&"migration-receipt.semanticTarget.authorityMutation".to_string()));
+    }
+
     struct SemanticFixtures {
         release_facts: PathBuf,
         remote_release: PathBuf,
@@ -819,7 +977,18 @@ mod tests {
                 &serde_json::json!({
                     "version": "agentflow-pack-migration-applied-receipt.v1",
                     "applied": true,
-                    "writesAuthority": true
+                    "writesAuthority": false,
+                    "semanticTarget": {
+                        "version": "agentflow-pack-migration-semantic-target.v1",
+                        "previewId": "preview-001",
+                        "packId": "software-dev",
+                        "fromVersion": "0.8.0",
+                        "toVersion": "0.8.1",
+                        "affectedObjects": ["Issue"],
+                        "affectedProjections": ["projection.task-workbench"],
+                        "mutationTarget": "receipt-only-apply",
+                        "authorityMutation": false
+                    }
                 }),
             ),
             rollback: write_json_fixture(
@@ -828,7 +997,18 @@ mod tests {
                 &serde_json::json!({
                     "version": "agentflow-pack-migration-rollback-receipt.v1",
                     "rolledBack": true,
-                    "writesAuthority": true
+                    "writesAuthority": false,
+                    "semanticTarget": {
+                        "version": "agentflow-pack-migration-semantic-target.v1",
+                        "previewId": "preview-001",
+                        "packId": "software-dev",
+                        "fromVersion": "0.8.0",
+                        "toVersion": "0.8.1",
+                        "affectedObjects": ["Issue"],
+                        "affectedProjections": ["projection.task-workbench"],
+                        "mutationTarget": "receipt-only-rollback",
+                        "authorityMutation": false
+                    }
                 }),
             ),
         }
