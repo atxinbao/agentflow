@@ -91,6 +91,7 @@ PROVIDER_SMOKE_STATUS_PATH="$RUNTIME_DIR/provider-smoke-status.json"
 PROVIDER_SMOKE_ARTIFACT_PATH="$RUNTIME_DIR/provider-smoke-artifact.json"
 API_PLANE_MANIFEST_PATH="$RUNTIME_DIR/api-plane-manifest.json"
 RUNTIME_API_SDK_COMPATIBILITY_PATH="$RUNTIME_DIR/runtime-api-sdk-compatibility.json"
+FILESYSTEM_CONTRACT_PATH="$RUNTIME_DIR/filesystem-contract.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
 GOVERNANCE_ADMISSION_PATH="$RUNTIME_DIR/governance-admission.json"
@@ -316,6 +317,7 @@ proof_chain = [
     {"stage": "source.agent-entry", "label": "Release Source Agent Entry"},
     {"stage": "stable.contract-baseline", "label": "Stable Contract Baseline"},
     {"stage": "runtime-api-sdk-compatibility", "label": "Runtime API / SDK Compatibility"},
+    {"stage": "filesystem-contract", "label": "AgentFlow Filesystem Contract"},
     {"stage": "release.version-metadata", "label": "Release Version Metadata"},
     {"stage": "release.changelog-entry", "label": "Release Changelog Entry"},
     {"stage": "release.github-release-fact", "label": "GitHub Release Fact"},
@@ -378,6 +380,7 @@ runtime_artifacts = [
     {"path": "runtime/provider-smoke-artifact.json", "exists": provider_smoke_artifact_path.is_file()},
     {"path": "runtime/api-plane-manifest.json", "exists": api_plane_manifest_path.is_file()},
     {"path": "runtime/runtime-api-sdk-compatibility.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/runtime-api-sdk-compatibility.json").is_file()},
+    {"path": "runtime/filesystem-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/filesystem-contract.json").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -427,6 +430,7 @@ negative_semantic_fixtures = load_json(negative_semantic_fixtures_path) or {}
 source_agent_entry = load_json(source_agent_entry_path) or {}
 stable_contract_baseline = load_json(pathlib.Path(summary_json_path.parent / "runtime/stable-contract-baseline.json")) or {}
 runtime_api_sdk_compatibility = load_json(pathlib.Path(summary_json_path.parent / "runtime/runtime-api-sdk-compatibility.json")) or {}
+filesystem_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/filesystem-contract.json")) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -545,6 +549,18 @@ runtime_api_sdk_compatibility_passed = (
     and runtime_api_sdk_compatibility.get("sdkCandidateReadonly") is True
     and not runtime_api_sdk_compatibility.get("missingSections")
     and not runtime_api_sdk_compatibility.get("missingManifestEntries")
+)
+filesystem_contract_passed = (
+    filesystem_contract.get("status") == "passed"
+    and filesystem_contract.get("filesystemContractVersion") == "agentflow-filesystem-contract-freeze.v1"
+    and filesystem_contract.get("filesystemContractStatus") == "active"
+    and filesystem_contract.get("docPath") == "docs/architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md"
+    and filesystem_contract.get("stableContractBaseline") == "agentflow-stable-contract-baseline.v1"
+    and filesystem_contract.get("sourceArchiveIncludesRuntimeState") is False
+    and not filesystem_contract.get("missingSections")
+    and not filesystem_contract.get("missingStablePaths")
+    and not filesystem_contract.get("missingAuthorityClasses")
+    and not filesystem_contract.get("retiredPathViolations")
 )
 deployment_evidence_semantics_passed = (
     deployment_evidence_passed
@@ -736,6 +752,11 @@ checklist = [
         "passed": runtime_api_sdk_compatibility_passed,
     },
     {
+        "id": "v100-filesystem-contract-freeze",
+        "label": "v1.0 .agentflow filesystem contract freezes authority, projection, cache, public record, and retired path boundaries",
+        "passed": filesystem_contract_passed,
+    },
+    {
         "id": "runtime-fixture-gate",
         "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
@@ -855,6 +876,10 @@ summary_payload = {
     "runtimeApiSdkCompatibilityStatus": runtime_api_sdk_compatibility.get("status") or "missing",
     "runtimeApiSdkContractVersion": runtime_api_sdk_compatibility.get("runtimeApiSdkContractVersion"),
     "runtimeApiSdkContractStatus": runtime_api_sdk_compatibility.get("runtimeApiSdkContractStatus"),
+    "filesystemContractPath": "runtime/filesystem-contract.json" if pathlib.Path(summary_json_path.parent / "runtime/filesystem-contract.json").is_file() else None,
+    "filesystemContractStatus": filesystem_contract.get("status") or "missing",
+    "filesystemContractVersion": filesystem_contract.get("filesystemContractVersion"),
+    "filesystemContractFreezeStatus": filesystem_contract.get("filesystemContractStatus"),
     "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage",
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
@@ -950,6 +975,7 @@ summary_lines = [
     f"- Provider smoke reason: `{provider_smoke.get('reason') or 'n/a'}`",
     f"- Stable contract baseline: `{stable_contract_baseline.get('status') or 'missing'}`",
     f"- Runtime API / SDK compatibility: `{runtime_api_sdk_compatibility.get('status') or 'missing'}`",
+    f"- Filesystem contract: `{filesystem_contract.get('status') or 'missing'}`",
     "- Provider smoke boundary: `minimal provider health / launch / session / terminal projection; does not replace runtime fixture gate`",
     f"- Foundation coverage: `{'present' if foundation_coverage_path.is_file() else 'missing'}`",
     f"- Foundation readiness report: `{'present' if foundation_readiness_report_path.is_file() else 'missing'}`",
@@ -1025,6 +1051,10 @@ certification_payload = {
     "runtimeApiSdkCompatibilityStatus": runtime_api_sdk_compatibility.get("status") or "missing",
     "runtimeApiSdkContractVersion": runtime_api_sdk_compatibility.get("runtimeApiSdkContractVersion"),
     "runtimeApiSdkContractStatus": runtime_api_sdk_compatibility.get("runtimeApiSdkContractStatus"),
+    "filesystemContractPath": "runtime/filesystem-contract.json" if pathlib.Path(summary_json_path.parent / "runtime/filesystem-contract.json").is_file() else None,
+    "filesystemContractStatus": filesystem_contract.get("status") or "missing",
+    "filesystemContractVersion": filesystem_contract.get("filesystemContractVersion"),
+    "filesystemContractFreezeStatus": filesystem_contract.get("filesystemContractStatus"),
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "currentGateRun": current_gate_run,
     "mainGateRun": main_gate_run,
@@ -1111,6 +1141,7 @@ cert_lines = [
     f"- Provider smoke reason: `{provider_smoke.get('reason') or 'n/a'}`",
     f"- Stable contract baseline: `{stable_contract_baseline.get('status') or 'missing'}`",
     f"- Runtime API / SDK compatibility: `{runtime_api_sdk_compatibility.get('status') or 'missing'}`",
+    f"- Filesystem contract: `{filesystem_contract.get('status') or 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
@@ -1904,6 +1935,152 @@ if payload["status"] != "passed":
     raise SystemExit("runtime api sdk compatibility fixture failed")
 PY
   record_stage "runtime-api-sdk-compatibility" "passed" "$(basename "$RUNTIME_API_SDK_COMPATIBILITY_PATH")"
+}
+
+run_filesystem_contract_gate() {
+  local workspace_root="$1"
+  record_stage "filesystem-contract" "started" "$FILESYSTEM_CONTRACT_PATH"
+  python3 - "$ROOT" "$workspace_root" "$FILESYSTEM_CONTRACT_PATH" <<'PY'
+import json
+import pathlib
+import re
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+workspace = pathlib.Path(sys.argv[2])
+output_path = pathlib.Path(sys.argv[3])
+doc_path = root / "docs/architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md"
+
+if not doc_path.is_file():
+    raise SystemExit(f"missing filesystem contract freeze document: {doc_path}")
+
+doc = doc_path.read_text(encoding="utf-8")
+
+def metadata_value(name):
+    match = re.search(rf"^{re.escape(name)}:\s*(\S+)\s*$", doc, re.MULTILINE)
+    return match.group(1) if match else None
+
+required_sections = [
+    "## Stable Path Contract",
+    "## Authority Classes",
+    "## Public Record Boundary",
+    "## Release Source Archive Boundary",
+    "## Retired Paths",
+    "## Runtime Write Rules",
+    "## Version Rule",
+    "## Release Gate Fixture",
+]
+stable_paths = [
+    ".agentflow/project/**",
+    ".agentflow/spec/requirements/<requirement-id>/**",
+    ".agentflow/spec/projects/<project-id>.json",
+    ".agentflow/spec/issues/<issue-id>.json",
+    ".agentflow/spec/completions/<project-id>.json",
+    ".agentflow/runtime/commands/<command-id>.json",
+    ".agentflow/runtime/proposals/<proposal-id>.json",
+    ".agentflow/runtime/decisions/<proposal-id>.json",
+    ".agentflow/runtime/actions/<accepted-action-id>.json",
+    ".agentflow/packs/<pack-id>/**",
+    ".agentflow/tasks/<issue-id>/work-loop-contract.json",
+    ".agentflow/tasks/<issue-id>/runs/<run-id>/run.json",
+    ".agentflow/tasks/<issue-id>/runs/<run-id>/preflight/preflight.json",
+    ".agentflow/tasks/<issue-id>/runs/<run-id>/launch/**",
+    ".agentflow/tasks/<issue-id>/runs/<run-id>/commands/**",
+    ".agentflow/tasks/<issue-id>/runs/<run-id>/checkpoints/**",
+    ".agentflow/tasks/<issue-id>/runs/<run-id>/review/**",
+    ".agentflow/tasks/<issue-id>/evidence/**",
+    ".agentflow/events/**",
+    ".agentflow/projections/**",
+    ".agentflow/indexes/**",
+    ".agentflow/release/**",
+    ".agentflow/audit/**",
+    ".agentflow/tmp/**",
+]
+authority_classes = [
+    "### Authority",
+    "### Definition",
+    "### Derived / Transport",
+    "### Projection",
+    "### Sidecar Authority",
+    "### Local Cache",
+]
+retired_paths = [
+    ".agentflow/input/**",
+    ".agentflow/execute/**",
+    ".agentflow/output/**",
+    ".agentflow/goal-tree/**",
+    ".agentflow/define/goals/**",
+    ".agentflow/define/milestones/**",
+    ".agentflow/define/issues/**",
+]
+retired_checks = [
+    ".agentflow/input",
+    ".agentflow/execute",
+    ".agentflow/output",
+    ".agentflow/goal-tree",
+    ".agentflow/define/goals",
+    ".agentflow/define/milestones",
+    ".agentflow/define/issues",
+]
+source_archive_runtime_markers = [
+    ".agentflow/tasks/**",
+    ".agentflow/events/**",
+    ".agentflow/projections/**",
+    ".agentflow/tmp/**",
+]
+
+missing_sections = [section for section in required_sections if section not in doc]
+missing_stable_paths = [path for path in stable_paths if path not in doc]
+missing_authority_classes = [item for item in authority_classes if item not in doc]
+missing_retired_paths = [path for path in retired_paths if path not in doc]
+retired_path_violations = [
+    path
+    for path in retired_checks
+    if (workspace / path).exists()
+]
+source_archive_includes_runtime_state = not all(marker in doc for marker in source_archive_runtime_markers)
+
+payload = {
+    "version": "agentflow-filesystem-contract-certification.v1",
+    "status": "passed",
+    "docPath": "docs/architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md",
+    "filesystemContractVersion": metadata_value("filesystemContractVersion"),
+    "filesystemContractStatus": metadata_value("filesystemContractStatus"),
+    "stableContractBaseline": metadata_value("stableContractBaseline"),
+    "requiredSections": required_sections,
+    "missingSections": missing_sections,
+    "stablePaths": stable_paths,
+    "missingStablePaths": missing_stable_paths,
+    "authorityClasses": [item.removeprefix("### ") for item in authority_classes],
+    "missingAuthorityClasses": missing_authority_classes,
+    "retiredPaths": retired_paths,
+    "missingRetiredPaths": missing_retired_paths,
+    "retiredPathViolations": retired_path_violations,
+    "sourceArchiveIncludesRuntimeState": source_archive_includes_runtime_state,
+    "localRuntimeStateExcludedFromSourceArchive": not source_archive_includes_runtime_state,
+    "checkedAt": int(time.time()),
+}
+
+if (
+    payload["filesystemContractVersion"] != "agentflow-filesystem-contract-freeze.v1"
+    or payload["filesystemContractStatus"] != "active"
+    or payload["stableContractBaseline"] != "agentflow-stable-contract-baseline.v1"
+    or missing_sections
+    or missing_stable_paths
+    or missing_authority_classes
+    or missing_retired_paths
+    or retired_path_violations
+    or source_archive_includes_runtime_state
+):
+    payload["status"] = "failed"
+
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("filesystem contract fixture failed")
+PY
+  record_stage "filesystem-contract" "passed" "$(basename "$FILESYSTEM_CONTRACT_PATH")"
 }
 
 run_capability_registry_gate() {
@@ -3518,6 +3695,7 @@ main() {
   run_provider_smoke_gate
   run_api_plane_manifest_gate
   run_runtime_api_sdk_compatibility_gate
+  run_filesystem_contract_gate "$WORKSPACE"
   run_capability_registry_gate
   run_governance_policy_gate
   run_governance_admission_gate
