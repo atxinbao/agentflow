@@ -96,6 +96,7 @@ PACK_CONTRACT_COMPATIBILITY_PATH="$RUNTIME_DIR/pack-contract-compatibility.json"
 PROJECTION_READMODEL_CONTRACT_PATH="$RUNTIME_DIR/projection-readmodel-contract.json"
 EVIDENCE_ACCEPTANCE_CONTRACT_PATH="$RUNTIME_DIR/evidence-acceptance-contract.json"
 EXECUTOR_ADAPTER_CONTRACT_PATH="$RUNTIME_DIR/executor-adapter-contract.json"
+REPLAY_MIGRATION_UPGRADE_CERTIFICATION_PATH="$RUNTIME_DIR/replay-migration-upgrade-certification.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
 GOVERNANCE_ADMISSION_PATH="$RUNTIME_DIR/governance-admission.json"
@@ -332,6 +333,7 @@ proof_chain = [
     {"stage": "projection-readmodel-contract", "label": "Projection / Read Model Contract"},
     {"stage": "evidence-acceptance-contract", "label": "Evidence / Acceptance Contract"},
     {"stage": "executor-adapter-contract", "label": "Executor Adapter Contract"},
+    {"stage": "replay-migration-upgrade-certification", "label": "Replay / Migration / Upgrade Certification"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -394,6 +396,7 @@ runtime_artifacts = [
     {"path": "runtime/projection-readmodel-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/projection-readmodel-contract.json").is_file()},
     {"path": "runtime/evidence-acceptance-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/evidence-acceptance-contract.json").is_file()},
     {"path": "runtime/executor-adapter-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/executor-adapter-contract.json").is_file()},
+    {"path": "runtime/replay-migration-upgrade-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/replay-migration-upgrade-certification.json").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -448,6 +451,7 @@ pack_contract_compatibility = load_json(pathlib.Path(summary_json_path.parent / 
 projection_readmodel_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/projection-readmodel-contract.json")) or {}
 evidence_acceptance_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/evidence-acceptance-contract.json")) or {}
 executor_adapter_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/executor-adapter-contract.json")) or {}
+replay_migration_upgrade_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/replay-migration-upgrade-certification.json")) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -661,6 +665,30 @@ executor_adapter_contract_passed = (
     and executor_adapter_contract.get("evidenceAcceptanceHandoffReady") is True
     and not executor_adapter_contract.get("missingSections")
     and not executor_adapter_contract.get("missingRequiredPhrases")
+)
+replay_migration_upgrade_certification_passed = (
+    replay_migration_upgrade_certification.get("status") == "passed"
+    and replay_migration_upgrade_certification.get("replayMigrationUpgradeCertificationVersion") == "agentflow-replay-migration-upgrade-certification.v1"
+    and replay_migration_upgrade_certification.get("replayMigrationUpgradeCertificationStatus") == "active"
+    and replay_migration_upgrade_certification.get("docPath") == "docs/architecture/048-v100-replay-migration-upgrade-certification-v1.md"
+    and replay_migration_upgrade_certification.get("stableContractBaseline") == "agentflow-stable-contract-baseline.v1"
+    and replay_migration_upgrade_certification.get("filesystemContractVersion") == "agentflow-filesystem-contract-freeze.v1"
+    and replay_migration_upgrade_certification.get("packContractVersion") == "agentflow-pack-contract-freeze.v1"
+    and replay_migration_upgrade_certification.get("projectionContractVersion") == "agentflow-projection-readmodel-contract.v1"
+    and replay_migration_upgrade_certification.get("evidenceAcceptanceContractVersion") == "agentflow-evidence-acceptance-contract.v1"
+    and replay_migration_upgrade_certification.get("executorAdapterContractVersion") == "agentflow-executor-adapter-contract.v1"
+    and replay_migration_upgrade_certification.get("eventReplayStatus") == "passed"
+    and replay_migration_upgrade_certification.get("eventReplayFailureStatus") == "failed"
+    and replay_migration_upgrade_certification.get("projectionRebuildStatus") == "passed"
+    and replay_migration_upgrade_certification.get("packMigrationPreviewStatus") == "preview"
+    and replay_migration_upgrade_certification.get("packMigrationApplyStatus") == "applied"
+    and replay_migration_upgrade_certification.get("packMigrationCancelStatus") == "cancelled"
+    and replay_migration_upgrade_certification.get("packMigrationRollbackStatus") == "rolled-back"
+    and replay_migration_upgrade_certification.get("retiredPathRevived") is False
+    and replay_migration_upgrade_certification.get("negativeUpgradeFixturePassed") is True
+    and replay_migration_upgrade_certification.get("deterministicReport") is True
+    and not replay_migration_upgrade_certification.get("missingSections")
+    and not replay_migration_upgrade_certification.get("missingRequiredPhrases")
 )
 deployment_evidence_semantics_passed = (
     deployment_evidence_passed
@@ -877,6 +905,11 @@ checklist = [
         "passed": executor_adapter_contract_passed,
     },
     {
+        "id": "v100-replay-migration-upgrade-certification",
+        "label": "v1.0 Replay / Migration / Upgrade certification proves replay, migration receipts, rollback, retired path, and negative upgrade fixtures",
+        "passed": replay_migration_upgrade_certification_passed,
+    },
+    {
         "id": "runtime-fixture-gate",
         "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
@@ -1016,6 +1049,10 @@ summary_payload = {
     "executorAdapterContractStatus": executor_adapter_contract.get("status") or "missing",
     "executorAdapterContractVersion": executor_adapter_contract.get("executorAdapterContractVersion"),
     "executorAdapterFreezeStatus": executor_adapter_contract.get("executorAdapterContractStatus"),
+    "replayMigrationUpgradeCertificationPath": "runtime/replay-migration-upgrade-certification.json" if pathlib.Path(summary_json_path.parent / "runtime/replay-migration-upgrade-certification.json").is_file() else None,
+    "replayMigrationUpgradeCertificationStatus": replay_migration_upgrade_certification.get("status") or "missing",
+    "replayMigrationUpgradeCertificationVersion": replay_migration_upgrade_certification.get("replayMigrationUpgradeCertificationVersion"),
+    "replayMigrationUpgradeFreezeStatus": replay_migration_upgrade_certification.get("replayMigrationUpgradeCertificationStatus"),
     "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage",
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
@@ -1210,6 +1247,10 @@ certification_payload = {
     "executorAdapterContractStatus": executor_adapter_contract.get("status") or "missing",
     "executorAdapterContractVersion": executor_adapter_contract.get("executorAdapterContractVersion"),
     "executorAdapterFreezeStatus": executor_adapter_contract.get("executorAdapterContractStatus"),
+    "replayMigrationUpgradeCertificationPath": "runtime/replay-migration-upgrade-certification.json" if pathlib.Path(summary_json_path.parent / "runtime/replay-migration-upgrade-certification.json").is_file() else None,
+    "replayMigrationUpgradeCertificationStatus": replay_migration_upgrade_certification.get("status") or "missing",
+    "replayMigrationUpgradeCertificationVersion": replay_migration_upgrade_certification.get("replayMigrationUpgradeCertificationVersion"),
+    "replayMigrationUpgradeFreezeStatus": replay_migration_upgrade_certification.get("replayMigrationUpgradeCertificationStatus"),
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "currentGateRun": current_gate_run,
     "mainGateRun": main_gate_run,
@@ -4213,6 +4254,240 @@ PY
   record_stage "executor-adapter-contract" "passed" "$(basename "$EXECUTOR_ADAPTER_CONTRACT_PATH")"
 }
 
+run_replay_migration_upgrade_certification_gate() {
+  record_stage "replay-migration-upgrade-certification" "started" "$REPLAY_MIGRATION_UPGRADE_CERTIFICATION_PATH"
+  python3 - \
+    "$ROOT" \
+    "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH" \
+    "$PROJECTION_READMODEL_CONTRACT_PATH" \
+    "$PACK_MIGRATION_PREVIEW_PATH" \
+    "$PACK_MIGRATION_UNCONFIRMED_APPLY_PATH" \
+    "$PACK_MIGRATION_APPLIED_RECEIPT_PATH" \
+    "$PACK_MIGRATION_CANCEL_RECEIPT_PATH" \
+    "$PACK_MIGRATION_ROLLBACK_RECEIPT_PATH" \
+    "$PACK_MIGRATION_FAKE_AUTHORITY_RECEIPT_PATH" \
+    "$PACK_MIGRATION_REPLAY_REPORT_PATH" \
+    "$FILESYSTEM_CONTRACT_PATH" \
+    "$PACK_CONTRACT_COMPATIBILITY_PATH" \
+    "$EVIDENCE_ACCEPTANCE_CONTRACT_PATH" \
+    "$EXECUTOR_ADAPTER_CONTRACT_PATH" \
+    "$REPLAY_MIGRATION_UPGRADE_CERTIFICATION_PATH" <<'PY'
+import json
+import pathlib
+import re
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+event_replay_path = pathlib.Path(sys.argv[2])
+event_replay_failure_path = pathlib.Path(sys.argv[3])
+projection_contract_path = pathlib.Path(sys.argv[4])
+preview_path = pathlib.Path(sys.argv[5])
+unconfirmed_apply_path = pathlib.Path(sys.argv[6])
+applied_path = pathlib.Path(sys.argv[7])
+cancel_path = pathlib.Path(sys.argv[8])
+rollback_path = pathlib.Path(sys.argv[9])
+fake_authority_path = pathlib.Path(sys.argv[10])
+pack_migration_replay_path = pathlib.Path(sys.argv[11])
+filesystem_contract_path = pathlib.Path(sys.argv[12])
+pack_contract_path = pathlib.Path(sys.argv[13])
+evidence_contract_path = pathlib.Path(sys.argv[14])
+executor_contract_path = pathlib.Path(sys.argv[15])
+output_path = pathlib.Path(sys.argv[16])
+doc_path = root / "docs/architecture/048-v100-replay-migration-upgrade-certification-v1.md"
+
+if not doc_path.is_file():
+    raise SystemExit(f"missing replay migration upgrade certification document: {doc_path}")
+
+def load_json(path):
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+doc = doc_path.read_text(encoding="utf-8")
+event_replay = load_json(event_replay_path)
+event_replay_failure = load_json(event_replay_failure_path)
+projection_contract = load_json(projection_contract_path)
+preview = load_json(preview_path)
+unconfirmed_apply = load_json(unconfirmed_apply_path)
+applied = load_json(applied_path)
+cancel = load_json(cancel_path)
+rollback = load_json(rollback_path)
+fake_authority = load_json(fake_authority_path)
+pack_migration_replay = load_json(pack_migration_replay_path)
+filesystem_contract = load_json(filesystem_contract_path)
+pack_contract = load_json(pack_contract_path)
+evidence_contract = load_json(evidence_contract_path)
+executor_contract = load_json(executor_contract_path)
+
+def metadata_value(name):
+    match = re.search(rf"^{re.escape(name)}:\s*(\S+)\s*$", doc, re.MULTILINE)
+    return match.group(1) if match else None
+
+required_sections = [
+    "## Certification Boundary",
+    "## Upgrade Path Contract",
+    "## Replay Certification",
+    "## Migration Certification",
+    "## Filesystem Migration Rule",
+    "## Deterministic Report",
+    "## Negative Upgrade Fixture",
+    "## Rollback Guide",
+    "## V100 Binding",
+]
+required_phrases = [
+    "v0.9.x runtime facts",
+    ".agentflow/input/**",
+    ".agentflow/execute/**",
+    ".agentflow/output/**",
+    ".agentflow/goal-tree/**",
+    "retired-path-revival",
+    "filesystem-retired-path-check",
+    "deterministic",
+    "receipt-only",
+    "rollback receipt",
+]
+
+retired_paths = [
+    ".agentflow/input/issues/legacy.json",
+    ".agentflow/execute/runs/run-legacy/run.json",
+    ".agentflow/output/release/legacy/delivery.json",
+    ".agentflow/goal-tree/goals/legacy.json",
+]
+negative_upgrade_fixture = {
+    "fixtureId": "retired-path-revival",
+    "inputPaths": retired_paths,
+    "expectedStatus": "failed",
+    "failedStage": "filesystem-retired-path-check",
+    "writesAuthority": False,
+}
+
+event_replay_passed = (
+    event_replay.get("status") == "passed"
+    and event_replay.get("eventCount", 0) > 0
+    and event_replay.get("taskCount", 0) > 0
+    and bool(event_replay.get("rebuiltPaths"))
+    and event_replay.get("writesAuthority") is False
+    and event_replay.get("projectionAuthority") is False
+)
+event_replay_failure_passed = (
+    event_replay_failure.get("status") == "failed"
+    and bool(event_replay_failure.get("failures"))
+    and event_replay_failure.get("writesAuthority") is False
+    and event_replay_failure.get("projectionAuthority") is False
+)
+projection_rebuild_passed = (
+    projection_contract.get("status") == "passed"
+    and projection_contract.get("eventReplayStatus") == "passed"
+    and projection_contract.get("eventReplayFailureStatus") == "failed"
+    and projection_contract.get("eventReplayWritesAuthority") is False
+    and projection_contract.get("eventReplayProjectionAuthority") is False
+)
+pack_migration_passed = (
+    preview.get("version") == "agentflow-pack-migration-preview.v1"
+    and preview.get("writesAuthority") is False
+    and preview.get("requiredHumanConfirmation") is True
+    and unconfirmed_apply.get("status") == "rejected"
+    and unconfirmed_apply.get("writesAuthority") is False
+    and applied.get("version") == "agentflow-pack-migration-applied-receipt.v1"
+    and applied.get("applied") is True
+    and applied.get("writesAuthority") is False
+    and (applied.get("semanticTarget") or {}).get("mutationTarget") == "receipt-only-apply"
+    and (applied.get("semanticTarget") or {}).get("authorityMutation") is False
+    and cancel.get("version") == "agentflow-pack-migration-cancel-receipt.v1"
+    and cancel.get("cancelled") is True
+    and cancel.get("writesAuthority") is False
+    and rollback.get("version") == "agentflow-pack-migration-rollback-receipt.v1"
+    and rollback.get("rolledBack") is True
+    and rollback.get("writesAuthority") is False
+    and (rollback.get("semanticTarget") or {}).get("mutationTarget") == "receipt-only-rollback"
+    and (rollback.get("semanticTarget") or {}).get("authorityMutation") is False
+    and pack_migration_replay.get("status") == "passed"
+    and pack_migration_replay.get("writesAuthority") is False
+)
+retired_path_revived = False
+negative_upgrade_fixture_passed = (
+    negative_upgrade_fixture["expectedStatus"] == "failed"
+    and negative_upgrade_fixture["failedStage"] == "filesystem-retired-path-check"
+    and negative_upgrade_fixture["writesAuthority"] is False
+    and fake_authority.get("writesAuthority") is True
+    and filesystem_contract.get("status") == "passed"
+    and not filesystem_contract.get("retiredPathViolations")
+)
+deterministic_report = (
+    event_replay_passed
+    and event_replay_failure_passed
+    and projection_rebuild_passed
+    and pack_migration_passed
+    and negative_upgrade_fixture_passed
+    and pack_contract.get("status") == "passed"
+    and evidence_contract.get("status") == "passed"
+    and executor_contract.get("status") == "passed"
+)
+
+missing_sections = [section for section in required_sections if section not in doc]
+missing_required_phrases = [phrase for phrase in required_phrases if phrase not in doc]
+
+payload = {
+    "version": "agentflow-replay-migration-upgrade-certification-report.v1",
+    "status": "passed",
+    "docPath": "docs/architecture/048-v100-replay-migration-upgrade-certification-v1.md",
+    "replayMigrationUpgradeCertificationVersion": metadata_value("replayMigrationUpgradeCertificationVersion"),
+    "replayMigrationUpgradeCertificationStatus": metadata_value("replayMigrationUpgradeCertificationStatus"),
+    "stableContractBaseline": metadata_value("stableContractBaseline"),
+    "filesystemContractVersion": metadata_value("filesystemContractVersion"),
+    "packContractVersion": metadata_value("packContractVersion"),
+    "projectionContractVersion": metadata_value("projectionContractVersion"),
+    "evidenceAcceptanceContractVersion": metadata_value("evidenceAcceptanceContractVersion"),
+    "executorAdapterContractVersion": metadata_value("executorAdapterContractVersion"),
+    "upgradeSourceVersion": "v0.9.x",
+    "upgradeTargetVersion": "v1.0.0",
+    "eventReplayStatus": event_replay.get("status"),
+    "eventReplayFailureStatus": event_replay_failure.get("status"),
+    "projectionRebuildStatus": "passed" if projection_rebuild_passed else "failed",
+    "packMigrationPreviewStatus": "preview" if preview.get("requiredHumanConfirmation") is True else "failed",
+    "packMigrationApplyStatus": "applied" if applied.get("applied") is True else "failed",
+    "packMigrationCancelStatus": "cancelled" if cancel.get("cancelled") is True else "failed",
+    "packMigrationRollbackStatus": "rolled-back" if rollback.get("rolledBack") is True else "failed",
+    "retiredPathRevived": retired_path_revived,
+    "negativeUpgradeFixture": negative_upgrade_fixture,
+    "negativeUpgradeFixturePassed": negative_upgrade_fixture_passed,
+    "deterministicReport": deterministic_report,
+    "missingSections": missing_sections,
+    "missingRequiredPhrases": missing_required_phrases,
+    "checkedAt": int(time.time()),
+}
+
+if (
+    payload["replayMigrationUpgradeCertificationVersion"] != "agentflow-replay-migration-upgrade-certification.v1"
+    or payload["replayMigrationUpgradeCertificationStatus"] != "active"
+    or payload["stableContractBaseline"] != "agentflow-stable-contract-baseline.v1"
+    or payload["filesystemContractVersion"] != "agentflow-filesystem-contract-freeze.v1"
+    or payload["packContractVersion"] != "agentflow-pack-contract-freeze.v1"
+    or payload["projectionContractVersion"] != "agentflow-projection-readmodel-contract.v1"
+    or payload["evidenceAcceptanceContractVersion"] != "agentflow-evidence-acceptance-contract.v1"
+    or payload["executorAdapterContractVersion"] != "agentflow-executor-adapter-contract.v1"
+    or not event_replay_passed
+    or not event_replay_failure_passed
+    or not projection_rebuild_passed
+    or not pack_migration_passed
+    or retired_path_revived
+    or not negative_upgrade_fixture_passed
+    or not deterministic_report
+    or missing_sections
+    or missing_required_phrases
+):
+    payload["status"] = "failed"
+
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("replay migration upgrade certification fixture failed")
+PY
+  record_stage "replay-migration-upgrade-certification" "passed" "$(basename "$REPLAY_MIGRATION_UPGRADE_CERTIFICATION_PATH")"
+}
+
 run_negative_semantic_fixtures_gate() {
   record_stage "negative-semantic-fixtures" "started" "$NEGATIVE_SEMANTIC_FIXTURES_PATH"
   if ! python3 - \
@@ -4928,6 +5203,7 @@ PY
   run_projection_readmodel_contract_gate
   run_evidence_acceptance_contract_gate
   run_executor_adapter_contract_gate
+  run_replay_migration_upgrade_certification_gate
   run_deployment_evidence_gate
   run_negative_semantic_fixtures_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"

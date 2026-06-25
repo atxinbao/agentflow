@@ -477,6 +477,16 @@ Executor 管：
 - 不做复杂数据库迁移平台；
 - 不隐藏破坏性变更。
 
+### Closeout
+
+- [../architecture/048-v100-replay-migration-upgrade-certification-v1.md](../architecture/048-v100-replay-migration-upgrade-certification-v1.md) 冻结 event replay、projection rebuild、Pack migration、retired path、negative fixture 和 deterministic upgrade certification 合同；
+- 文档明确 `replayMigrationUpgradeCertificationVersion = agentflow-replay-migration-upgrade-certification.v1` 和 `replayMigrationUpgradeCertificationStatus = active`；
+- upgrade path 明确覆盖 `v0.9.x runtime facts -> v1.0 filesystem contract check -> event replay -> projection rebuild -> Pack migration receipt check -> negative fixture check -> upgrade certification report`；
+- retired path `.agentflow/input/**`、`.agentflow/execute/**`、`.agentflow/output/**`、`.agentflow/goal-tree/**` 不得被 migration、replay 或 fallback 恢复为 authority；
+- release gate 新增 `replay-migration-upgrade-certification` stage，生成 `runtime/replay-migration-upgrade-certification.json`；
+- release gate 会检查 event replay happy / failure、projection rebuild、Pack migration preview / apply / cancel / rollback、fake authority receipt、retired path negative fixture 和 deterministic report；
+- 下游 `V100-009`、`V100-010` 必须引用该 certification 文档。
+
 ## V100-009 Software Dev Pack Stable Baseline
 
 ### Scope
@@ -488,6 +498,7 @@ Executor 管：
 必须引用 [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md) 中的 Pack-specific projection loading、Task Workbench view、Delivery read model 和 Audit sidecar read model。
 必须引用 [../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md](../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md) 中的 Evidence / Acceptance / Completion / Delivery / Audit sidecar 边界。
 必须引用 [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md) 中的软件开发 executor handoff、Git / GitHub / Codex / Claude Code provider mapping 和 diff boundary 规则。
+必须引用 [../architecture/048-v100-replay-migration-upgrade-certification-v1.md](../architecture/048-v100-replay-migration-upgrade-certification-v1.md) 中的 upgrade path、retired path negative fixture 和 migration / replay certification 规则。
 
 必须证明软件开发现场可闭环：
 
@@ -538,6 +549,7 @@ Requirement
 必须引用 [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md)，并把 `projectionContractVersion` / `projectionContractStatus` / Projection rebuild compatibility 检查作为 release certification 的硬门禁。
 必须引用 [../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md](../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md)，并把 `evidenceAcceptanceContractVersion` / `evidenceAcceptanceContractStatus` / Acceptance Gate compatibility 检查作为 release certification 的硬门禁。
 必须引用 [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md)，并把 `executorAdapterContractVersion` / `executorAdapterContractStatus` / Executor result compatibility 检查作为 release certification 的硬门禁。
+必须引用 [../architecture/048-v100-replay-migration-upgrade-certification-v1.md](../architecture/048-v100-replay-migration-upgrade-certification-v1.md)，并把 `replayMigrationUpgradeCertificationVersion` / `replayMigrationUpgradeCertificationStatus` / upgrade compatibility 检查作为 release certification 的硬门禁。
 
 必须输出：
 
