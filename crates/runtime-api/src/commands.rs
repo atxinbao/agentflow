@@ -12,7 +12,15 @@ use agentflow_action_arbitration::{
     PendingProposal,
 };
 use agentflow_action_contract::{core_action_contract_registry, ActionRef, ActionSourceSurface};
+use agentflow_capability_registry::{
+    build_capability_registry_with_smoke, default_capability_registry, CapabilityRegistry,
+};
 use agentflow_event_store::{append_accepted_action_event, AcceptedActionAppendContext, TaskEvent};
+use agentflow_governance_policy::{
+    evaluate_runtime_governance, AuditSidecarMode, GovernanceDecision, GovernancePolicyReport,
+    GovernancePolicyRequest,
+};
+use agentflow_mcp::{McpProviderSmokeArtifact, McpProviderStatus};
 use agentflow_object_state::core_object_state_registry;
 use agentflow_ontology::core_ontology_registry;
 use agentflow_role_policy::core_role_policy_registry;
@@ -157,6 +165,7 @@ pub fn execute_command_via_arbitration_with_context(
             rejected_reasons: validation.errors,
             human_decision_request: None,
             next_query_hint,
+            governance_admission: None,
             correlation_id: request.command_id.clone(),
         };
         write_runtime_decision_fact(
@@ -174,6 +183,28 @@ pub fn execute_command_via_arbitration_with_context(
     }
 
     let proposal = map_command_to_action_proposal(request)?;
+    let governance_admission = evaluate_runtime_command_governance(request, &proposal, context);
+    if governance_admission.decision != GovernanceDecision::Allowed {
+        let response = response_from_governance_admission(
+            request,
+            &proposal.proposal_id,
+            &governance_admission,
+            next_query_hint,
+        );
+        write_runtime_decision_fact(
+            root,
+            &build_runtime_decision_fact(
+                request,
+                response.proposal_id.as_str(),
+                None,
+                &response,
+                None,
+                recorded_at,
+            ),
+        )?;
+        return Ok(response);
+    }
+
     write_runtime_proposal_fact(
         root,
         &RuntimeProposalFact {
@@ -224,12 +255,13 @@ pub fn execute_command_via_arbitration_with_context(
     };
 
     let decision = arbitrate_action(&arbitration_request, context);
-    let response = response_from_arbitration_decision(
+    let mut response = response_from_arbitration_decision(
         request,
         &proposal.proposal_id,
         &decision,
         next_query_hint,
     );
+    response.governance_admission = Some(governance_admission);
 
     let mut accepted_action_event = None;
     if let Some(accepted_action) = decision.accepted_action.as_ref() {
@@ -360,6 +392,7 @@ fn response_from_arbitration_decision(
             rejected_reasons: Vec::new(),
             human_decision_request: None,
             next_query_hint,
+            governance_admission: None,
             correlation_id: request.command_id.clone(),
         },
         ArbitrationDecisionStatus::HumanDecisionRequired => RuntimeCommandResponse {
@@ -378,6 +411,7 @@ fn response_from_arbitration_decision(
                 }
             }),
             next_query_hint,
+            governance_admission: None,
             correlation_id: request.command_id.clone(),
         },
         ArbitrationDecisionStatus::Queued => RuntimeCommandResponse {
@@ -400,6 +434,7 @@ fn response_from_arbitration_decision(
                 .collect(),
             human_decision_request: None,
             next_query_hint,
+            governance_admission: None,
             correlation_id: request.command_id.clone(),
         },
         ArbitrationDecisionStatus::Superseded => RuntimeCommandResponse {
@@ -422,6 +457,7 @@ fn response_from_arbitration_decision(
                 .collect(),
             human_decision_request: None,
             next_query_hint,
+            governance_admission: None,
             correlation_id: request.command_id.clone(),
         },
         ArbitrationDecisionStatus::Cancelled => RuntimeCommandResponse {
@@ -444,6 +480,7 @@ fn response_from_arbitration_decision(
                 .collect(),
             human_decision_request: None,
             next_query_hint,
+            governance_admission: None,
             correlation_id: request.command_id.clone(),
         },
         ArbitrationDecisionStatus::Rejected | ArbitrationDecisionStatus::ConflictDetected => {
@@ -467,9 +504,135 @@ fn response_from_arbitration_decision(
                     .collect(),
                 human_decision_request: None,
                 next_query_hint,
+                governance_admission: None,
                 correlation_id: request.command_id.clone(),
             }
         }
+    }
+}
+
+fn evaluate_runtime_command_governance(
+    request: &RuntimeCommandRequest,
+    proposal: &agentflow_action_contract::ActionProposal,
+    context: &ArbitrationContext,
+) -> GovernancePolicyReport {
+    let capability_registry = capability_registry_for_runtime_command(request);
+    evaluate_runtime_governance(
+        &context.role_policy_registry,
+        &capability_registry,
+        GovernancePolicyRequest {
+            actor_role: request.actor_role.clone(),
+            action_type: proposal.action_type.clone(),
+            object_type: proposal
+                .target_object_ref
+                .as_ref()
+                .map(|target| target.object_type.clone()),
+            worker_id: governance_worker_id(request),
+            command: governance_command(request),
+            audit_sidecar_mode: governance_audit_sidecar_mode(request),
+        },
+    )
+}
+
+fn response_from_governance_admission(
+    request: &RuntimeCommandRequest,
+    proposal_id: &str,
+    report: &GovernancePolicyReport,
+    next_query_hint: Option<crate::mapping::RuntimeQueryHint>,
+) -> RuntimeCommandResponse {
+    let (status, decision, code) = match report.decision {
+        GovernanceDecision::Rejected => (
+            RuntimeCommandStatus::Rejected,
+            RuntimeCommandDecision::Rejected,
+            RuntimeCommandErrorCode::GovernanceRejected,
+        ),
+        GovernanceDecision::Deferred => (
+            RuntimeCommandStatus::Deferred,
+            RuntimeCommandDecision::Deferred,
+            RuntimeCommandErrorCode::GovernanceDeferred,
+        ),
+        GovernanceDecision::Allowed => (
+            RuntimeCommandStatus::Accepted,
+            RuntimeCommandDecision::Accepted,
+            RuntimeCommandErrorCode::GovernanceRejected,
+        ),
+    };
+    let stage = report
+        .trace
+        .iter()
+        .find(|entry| entry.decision == report.decision)
+        .or_else(|| report.trace.first());
+    let stage_name = stage
+        .map(|entry| entry.stage.clone())
+        .unwrap_or_else(|| "governance-admission".to_string());
+    let reason = stage
+        .map(|entry| entry.reason.clone())
+        .unwrap_or_else(|| "runtime governance admission did not allow this command".to_string());
+
+    RuntimeCommandResponse {
+        version: RUNTIME_COMMAND_API_VERSION.to_string(),
+        command_id: request.command_id.clone(),
+        proposal_id: proposal_id.to_string(),
+        status,
+        decision,
+        accepted_action_id: None,
+        rejected_reasons: vec![RuntimeCommandError::new(
+            code,
+            format!(
+                "governance admission {} at {}: {}",
+                report.decision.as_str(),
+                stage_name,
+                reason
+            ),
+            Some(format!("governance.{stage_name}")),
+        )],
+        human_decision_request: None,
+        next_query_hint,
+        governance_admission: Some(report.clone()),
+        correlation_id: request.command_id.clone(),
+    }
+}
+
+fn capability_registry_for_runtime_command(request: &RuntimeCommandRequest) -> CapabilityRegistry {
+    let statuses = request
+        .input
+        .get("governanceProviderStatuses")
+        .and_then(|value| serde_json::from_value::<Vec<McpProviderStatus>>(value.clone()).ok())
+        .unwrap_or_default();
+    let smoke = request
+        .input
+        .get("governanceProviderSmokeArtifacts")
+        .and_then(|value| {
+            serde_json::from_value::<Vec<McpProviderSmokeArtifact>>(value.clone()).ok()
+        })
+        .unwrap_or_default();
+    if statuses.is_empty() && smoke.is_empty() {
+        default_capability_registry()
+    } else {
+        build_capability_registry_with_smoke(&statuses, &smoke)
+    }
+}
+
+fn governance_worker_id(request: &RuntimeCommandRequest) -> String {
+    value_string(&request.input, "governanceWorkerId")
+        .or_else(|| value_string(&request.input, "workerId"))
+        .unwrap_or_else(|| "local-shell-validator".to_string())
+}
+
+fn governance_command(request: &RuntimeCommandRequest) -> String {
+    value_string(&request.input, "governanceCommand")
+        .or_else(|| value_string(&request.input, "workerCommand"))
+        .unwrap_or_else(|| "validate.build".to_string())
+}
+
+fn governance_audit_sidecar_mode(request: &RuntimeCommandRequest) -> AuditSidecarMode {
+    match value_string(&request.input, "auditSidecarMode")
+        .unwrap_or_default()
+        .as_str()
+    {
+        "independent" => AuditSidecarMode::Independent,
+        "bound-to-main-chain" => AuditSidecarMode::BoundToMainChain,
+        _ => AuditSidecarMode::NotRequested,
     }
 }
 
@@ -520,6 +683,10 @@ fn build_runtime_decision_fact(
                 target_id: hint.target_id.clone(),
                 reason: hint.reason.clone(),
             }),
+        governance_admission: response
+            .governance_admission
+            .as_ref()
+            .and_then(|report| serde_json::to_value(report).ok()),
         correlation_id: response.correlation_id.clone(),
         would_emit_events: accepted_action_event
             .as_ref()
@@ -746,6 +913,7 @@ fn runtime_command_status_str(status: &RuntimeCommandStatus) -> &'static str {
     match status {
         RuntimeCommandStatus::Accepted => "accepted",
         RuntimeCommandStatus::Rejected => "rejected",
+        RuntimeCommandStatus::Deferred => "deferred",
         RuntimeCommandStatus::HumanDecisionRequired => "human-decision-required",
         RuntimeCommandStatus::Queued => "queued",
         RuntimeCommandStatus::Superseded => "superseded",
@@ -758,6 +926,7 @@ fn runtime_command_decision_str(decision: &RuntimeCommandDecision) -> &'static s
     match decision {
         RuntimeCommandDecision::Accepted => "accepted",
         RuntimeCommandDecision::Rejected => "rejected",
+        RuntimeCommandDecision::Deferred => "deferred",
         RuntimeCommandDecision::HumanDecisionRequired => "human-decision-required",
         RuntimeCommandDecision::Queued => "queued",
         RuntimeCommandDecision::Superseded => "superseded",
@@ -799,8 +968,9 @@ mod tests {
     use agentflow_event_store::{claim_task_event, EventActor, TaskEventDraft};
     use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
     use agentflow_workflow_runtime::{
-        load_runtime_accepted_action_fact, load_runtime_command_fact, load_runtime_decision_fact,
-        load_runtime_proposal_fact, write_runtime_accepted_action_fact, RuntimeAcceptedActionFact,
+        load_runtime_accepted_action_fact, load_runtime_accepted_action_facts,
+        load_runtime_command_fact, load_runtime_decision_fact, load_runtime_proposal_fact,
+        load_runtime_proposal_facts, write_runtime_accepted_action_fact, RuntimeAcceptedActionFact,
         RUNTIME_ACCEPTED_ACTION_FACT_VERSION,
     };
 
@@ -824,6 +994,27 @@ mod tests {
             evidence_refs: Vec::new(),
             artifact_refs: Vec::new(),
             idempotency_key: format!("idem-{command_type}"),
+            created_at: "2026-06-20T00:00:00Z".to_string(),
+        }
+    }
+
+    fn project_request(command_id: &str) -> RuntimeCommandRequest {
+        RuntimeCommandRequest {
+            command_id: command_id.to_string(),
+            command_type: "createProject".to_string(),
+            source_surface: ActionSourceSurface::Agent,
+            actor_role: "spec-agent".to_string(),
+            target_object_ref: Some(target_ref("Spec", "spec-001")),
+            input: json!({
+                "projectId": "project-001",
+                "projectTitle": "Governance Admission Project"
+            }),
+            evidence_refs: vec![
+                "approved-spec-1".to_string(),
+                "human-confirmation-1".to_string(),
+            ],
+            artifact_refs: vec![".agentflow/spec/requirements/req-001/preview.json".to_string()],
+            idempotency_key: format!("spec:req-001:project:project-001:{command_id}"),
             created_at: "2026-06-20T00:00:00Z".to_string(),
         }
     }
@@ -864,6 +1055,135 @@ mod tests {
         assert!(!response.rejected_reasons.is_empty());
         let decision = load_runtime_decision_fact(dir.path(), &response.proposal_id).unwrap();
         assert_eq!(decision.status, "invalid-command");
+    }
+
+    #[test]
+    fn governance_rejects_before_writing_proposal_or_accepted_action() {
+        let dir = tempdir().unwrap();
+        let mut request = project_request("cmd-governance-reject");
+        request.input["auditSidecarMode"] = json!("bound-to-main-chain");
+
+        let response = execute_command_via_arbitration_with_context(
+            dir.path(),
+            &request,
+            &build_core_arbitration_context().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(response.status, RuntimeCommandStatus::Rejected);
+        assert_eq!(
+            response
+                .governance_admission
+                .as_ref()
+                .unwrap()
+                .decision
+                .as_str(),
+            "rejected"
+        );
+        assert!(load_runtime_command_fact(dir.path(), &request.command_id).is_ok());
+        assert!(load_runtime_proposal_facts(dir.path()).unwrap().is_empty());
+        assert!(load_runtime_accepted_action_facts(dir.path())
+            .unwrap()
+            .is_empty());
+        let decision = load_runtime_decision_fact(dir.path(), &response.proposal_id).unwrap();
+        assert_eq!(decision.status, "rejected");
+        assert!(decision.governance_admission.is_some());
+        assert!(decision
+            .rejected_reasons
+            .iter()
+            .any(|reason| reason.contains("audit-sidecar-policy")));
+    }
+
+    #[test]
+    fn governance_defers_before_writing_proposal_or_accepted_action() {
+        let dir = tempdir().unwrap();
+        let mut request = project_request("cmd-governance-defer");
+        request.input["governanceWorkerId"] = json!("github");
+        request.input["governanceCommand"] = json!("repo.read");
+
+        let response = execute_command_via_arbitration_with_context(
+            dir.path(),
+            &request,
+            &build_core_arbitration_context().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(response.status, RuntimeCommandStatus::Deferred);
+        assert_eq!(
+            response
+                .governance_admission
+                .as_ref()
+                .unwrap()
+                .decision
+                .as_str(),
+            "deferred"
+        );
+        assert!(load_runtime_proposal_facts(dir.path()).unwrap().is_empty());
+        assert!(load_runtime_accepted_action_facts(dir.path())
+            .unwrap()
+            .is_empty());
+        let decision = load_runtime_decision_fact(dir.path(), &response.proposal_id).unwrap();
+        assert_eq!(decision.status, "deferred");
+        assert!(decision.governance_admission.is_some());
+    }
+
+    #[test]
+    fn governance_rejects_failed_provider_smoke_before_arbitration() {
+        let dir = tempdir().unwrap();
+        let mut request = project_request("cmd-governance-smoke-reject");
+        let provider_status = json!({
+            "version": "agentflow-mcp-provider.v1",
+            "provider": "codex",
+            "kind": "codex",
+            "status": "ready",
+            "capabilities": [
+                { "name": "launch", "available": true, "detail": null },
+                { "name": "codex.exec", "available": true, "detail": null }
+            ],
+            "cli": "codex",
+            "installed": true,
+            "authenticated": null,
+            "repoPermissionChecked": false,
+            "repoPermission": null,
+            "checkedAt": 1,
+            "errors": [],
+            "warnings": []
+        });
+        request.input["governanceWorkerId"] = json!("codex");
+        request.input["governanceCommand"] = json!("launch");
+        request.input["governanceProviderStatuses"] = json!([provider_status.clone()]);
+        request.input["governanceProviderSmokeArtifacts"] = json!([{
+            "version": "agentflow-mcp-provider-smoke.v1",
+            "provider": "codex",
+            "outcome": "failed",
+            "reason": "provider codex smoke gate failed",
+            "health": provider_status,
+            "launchRequestPath": null,
+            "sessionId": null,
+            "sessionSnapshotPath": null,
+            "sessionSnapshotReadable": false,
+            "terminalStatus": null,
+            "terminalProviderStateProjectable": false,
+            "artifactPath": ".agentflow/state/mcp/provider-smoke/codex.json",
+            "createdAt": 1
+        }]);
+
+        let response = execute_command_via_arbitration_with_context(
+            dir.path(),
+            &request,
+            &build_core_arbitration_context().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(response.status, RuntimeCommandStatus::Rejected);
+        assert!(response
+            .governance_admission
+            .as_ref()
+            .unwrap()
+            .capability_policy
+            .reason
+            .contains("smoke gate failed"));
+        assert!(load_runtime_proposal_facts(dir.path()).unwrap().is_empty());
+        assert!(load_runtime_accepted_action_facts(dir.path())
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

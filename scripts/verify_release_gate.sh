@@ -92,6 +92,7 @@ PROVIDER_SMOKE_ARTIFACT_PATH="$RUNTIME_DIR/provider-smoke-artifact.json"
 API_PLANE_MANIFEST_PATH="$RUNTIME_DIR/api-plane-manifest.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
+GOVERNANCE_ADMISSION_PATH="$RUNTIME_DIR/governance-admission.json"
 SCHEDULING_DECISION_PATH="$RUNTIME_DIR/scheduling-decision.json"
 DEPLOYMENT_EVIDENCE_PATH="$RUNTIME_DIR/deployment-evidence.json"
 FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
@@ -226,6 +227,7 @@ write_gate_reports() {
     "$FOUNDATION_COVERAGE_PATH" \
     "$PACK_NEGATIVE_FIXTURES_PATH" \
     "$GOVERNANCE_POLICY_PATH" \
+    "$GOVERNANCE_ADMISSION_PATH" \
     "$SCHEDULING_DECISION_PATH" \
     "$DEPLOYMENT_EVIDENCE_PATH" \
     "$SOURCE_AGENT_ENTRY_PATH" <<'PY'
@@ -264,9 +266,10 @@ foundation_readiness_report_path = pathlib.Path(sys.argv[28])
 foundation_coverage_path = pathlib.Path(sys.argv[29])
 pack_negative_fixtures_path = pathlib.Path(sys.argv[30])
 governance_policy_path = pathlib.Path(sys.argv[31])
-scheduling_decision_path = pathlib.Path(sys.argv[32])
-deployment_evidence_path = pathlib.Path(sys.argv[33])
-source_agent_entry_path = pathlib.Path(sys.argv[34])
+governance_admission_path = pathlib.Path(sys.argv[32])
+scheduling_decision_path = pathlib.Path(sys.argv[33])
+deployment_evidence_path = pathlib.Path(sys.argv[34])
+source_agent_entry_path = pathlib.Path(sys.argv[35])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -334,6 +337,7 @@ proof_chain = [
     {"stage": "release.record-tag", "label": "Release Tag Proof"},
     {"stage": "release.record-remote", "label": "Remote Release Proof"},
     {"stage": "release.publish", "label": "Release Publish"},
+    {"stage": "governance-admission", "label": "Runtime Governance Admission"},
     {"stage": "deployment-evidence", "label": "Deployment Evidence And Rollback Proof"},
     {"stage": "audit.request-human", "label": "Audit Request Human"},
     {"stage": "release.publish.refresh", "label": "Release Publish Refresh"},
@@ -361,6 +365,7 @@ runtime_artifacts = [
     {"path": "runtime/api-plane-manifest.json", "exists": api_plane_manifest_path.is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
+    {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
     {"path": "runtime/scheduling-decision.json", "exists": scheduling_decision_path.is_file()},
     {"path": "runtime/deployment-evidence.json", "exists": deployment_evidence_path.is_file()},
     {"path": "runtime/foundation-readiness-report.md", "exists": foundation_readiness_report_path.is_file()},
@@ -389,6 +394,7 @@ pack_projection = load_json(pathlib.Path(summary_json_path.parent / "pack-projec
 pack_api_plane = load_json(pathlib.Path(summary_json_path.parent / "pack-api-plane-manifest.json")) or {}
 pack_negative_fixtures = load_json(pack_negative_fixtures_path) or {}
 governance_policy = load_json(governance_policy_path) or {}
+governance_admission = load_json(governance_admission_path) or {}
 scheduling_decision = load_json(scheduling_decision_path) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 source_agent_entry = load_json(source_agent_entry_path) or {}
@@ -437,6 +443,23 @@ governance_policy_passed = (
     and any(
         report.get("auditSidecarPolicy", {}).get("decision") == "rejected"
         for report in governance_reports
+    )
+)
+governance_admission_responses = governance_admission.get("responses") or []
+governance_admission_decisions = {
+    (response.get("governanceAdmission") or {}).get("decision")
+    for response in governance_admission_responses
+}
+governance_admission_passed = (
+    governance_admission.get("status") == "passed"
+    and governance_admission.get("version") == "agentflow-runtime-governance-admission-gate.v1"
+    and {"allowed", "deferred", "rejected"}.issubset(governance_admission_decisions)
+    and governance_admission.get("allowedEnteredProposal") is True
+    and governance_admission.get("deferredWroteProposal") is False
+    and governance_admission.get("rejectedWroteProposal") is False
+    and all(
+        (response.get("governanceAdmission") or {}).get("trace")
+        for response in governance_admission_responses
     )
 )
 scheduling_decision_passed = (
@@ -612,6 +635,11 @@ checklist = [
         "passed": governance_policy_passed,
     },
     {
+        "id": "v091-runtime-governance-admission",
+        "label": "Runtime command admission blocks reject/defer before proposal facts",
+        "passed": governance_admission_passed,
+    },
+    {
         "id": "v090-cross-process-scheduling-decision",
         "label": "Cross-process scheduling has an evidence-backed Message Bus go / no-go decision",
         "passed": scheduling_decision_passed,
@@ -648,6 +676,8 @@ summary_payload = {
     "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
     "governancePolicyPath": "runtime/governance-policy.json" if governance_policy_path.is_file() else None,
     "governancePolicyStatus": governance_policy.get("status") or "missing",
+    "governanceAdmissionPath": "runtime/governance-admission.json" if governance_admission_path.is_file() else None,
+    "governanceAdmissionStatus": governance_admission.get("status") or "missing",
     "schedulingDecisionPath": "runtime/scheduling-decision.json" if scheduling_decision_path.is_file() else None,
     "schedulingDecision": scheduling_decision.get("decision") or "missing",
     "deploymentEvidencePath": "runtime/deployment-evidence.json" if deployment_evidence_path.is_file() else None,
@@ -794,6 +824,8 @@ certification_payload = {
     "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
     "governancePolicyPath": "runtime/governance-policy.json" if governance_policy_path.is_file() else None,
     "governancePolicyStatus": governance_policy.get("status") or "missing",
+    "governanceAdmissionPath": "runtime/governance-admission.json" if governance_admission_path.is_file() else None,
+    "governanceAdmissionStatus": governance_admission.get("status") or "missing",
     "schedulingDecisionPath": "runtime/scheduling-decision.json" if scheduling_decision_path.is_file() else None,
     "schedulingDecision": scheduling_decision.get("decision") or "missing",
     "deploymentEvidencePath": "runtime/deployment-evidence.json" if deployment_evidence_path.is_file() else None,
@@ -1534,6 +1566,140 @@ payload = {
 out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
   record_stage "governance-policy" "passed" "$(basename "$GOVERNANCE_POLICY_PATH")"
+}
+
+run_governance_admission_gate() {
+  record_stage "governance-admission" "started" "$GOVERNANCE_ADMISSION_PATH"
+
+  local allow_request="$CLI_DIR/governance-admission-allow-request.json"
+  local defer_request="$CLI_DIR/governance-admission-defer-request.json"
+  local reject_request="$CLI_DIR/governance-admission-reject-request.json"
+  local allow_response="$RUNTIME_DIR/governance-admission-allow.json"
+  local defer_response="$RUNTIME_DIR/governance-admission-defer.json"
+  local reject_response="$RUNTIME_DIR/governance-admission-reject.json"
+
+  python3 - "$allow_request" "$defer_request" "$reject_request" <<'PY'
+import json
+import pathlib
+import sys
+
+allow_request = pathlib.Path(sys.argv[1])
+defer_request = pathlib.Path(sys.argv[2])
+reject_request = pathlib.Path(sys.argv[3])
+
+base = {
+    "commandType": "createProject",
+    "sourceSurface": "agent",
+    "actorRole": "spec-agent",
+    "targetObjectRef": {"objectType": "Spec", "id": "spec-governance-001"},
+    "input": {
+        "projectId": "project-governance-001",
+        "projectTitle": "Governance Admission Fixture"
+    },
+    "evidenceRefs": ["approved-spec-1", "human-confirmation-1"],
+    "artifactRefs": [".agentflow/spec/requirements/req-governance/preview.json"],
+    "createdAt": "2026-06-25T00:00:00Z",
+}
+
+def write(path, command_id, input_patch):
+    payload = dict(base)
+    payload["commandId"] = command_id
+    payload["idempotencyKey"] = f"release-gate:{command_id}"
+    payload["input"] = dict(base["input"])
+    payload["input"].update(input_patch)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+write(allow_request, "cmd-governance-admission-allow", {})
+write(defer_request, "cmd-governance-admission-defer", {
+    "governanceWorkerId": "github",
+    "governanceCommand": "repo.read",
+})
+write(reject_request, "cmd-governance-admission-reject", {
+    "auditSidecarMode": "bound-to-main-chain",
+})
+PY
+
+  (
+    cd "$WORKSPACE"
+    "$BIN" runtime-command execute --request "$allow_request" --output "$allow_response"
+    "$BIN" runtime-command execute --request "$defer_request" --output "$defer_response"
+    "$BIN" runtime-command execute --request "$reject_request" --output "$reject_response"
+  )
+
+  python3 - "$GOVERNANCE_ADMISSION_PATH" "$WORKSPACE" "$allow_response" "$defer_response" "$reject_response" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+workspace = pathlib.Path(sys.argv[2])
+responses = [
+    json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    for path in sys.argv[3:]
+]
+by_command = {response.get("commandId"): response for response in responses}
+
+required = {
+    "cmd-governance-admission-allow",
+    "cmd-governance-admission-defer",
+    "cmd-governance-admission-reject",
+}
+if set(by_command) != required:
+    raise SystemExit(f"governance admission commands mismatch: {sorted(by_command)}")
+
+allow = by_command["cmd-governance-admission-allow"]
+defer = by_command["cmd-governance-admission-defer"]
+reject = by_command["cmd-governance-admission-reject"]
+
+def decision(response):
+    return (response.get("governanceAdmission") or {}).get("decision")
+
+if decision(allow) != "allowed":
+    raise SystemExit(f"allowed fixture did not pass governance: {decision(allow)}")
+if decision(defer) != "deferred" or defer.get("status") != "deferred":
+    raise SystemExit(f"defer fixture did not defer: {defer}")
+if decision(reject) != "rejected" or reject.get("status") != "rejected":
+    raise SystemExit(f"reject fixture did not reject: {reject}")
+
+proposal_dir = workspace / ".agentflow/runtime/proposals"
+action_dir = workspace / ".agentflow/runtime/actions"
+allow_proposal = proposal_dir / "proposal-cmd-governance-admission-allow.json"
+defer_proposal = proposal_dir / "proposal-cmd-governance-admission-defer.json"
+reject_proposal = proposal_dir / "proposal-cmd-governance-admission-reject.json"
+if not allow_proposal.is_file():
+    raise SystemExit("allowed governance command must enter proposal/arbitration")
+if defer_proposal.exists():
+    raise SystemExit("deferred governance command must not write a proposal fact")
+if reject_proposal.exists():
+    raise SystemExit("rejected governance command must not write a proposal fact")
+if action_dir.is_dir():
+    blocked_ids = {"cmd-governance-admission-defer", "cmd-governance-admission-reject"}
+    for path in action_dir.glob("*.json"):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if payload.get("commandId") in blocked_ids:
+            raise SystemExit(f"blocked governance command wrote accepted action: {path}")
+
+trace_ok = all((response.get("governanceAdmission") or {}).get("trace") for response in responses)
+if not trace_ok:
+    raise SystemExit("governance admission responses must include trace evidence")
+
+payload = {
+    "version": "agentflow-runtime-governance-admission-gate.v1",
+    "status": "passed",
+    "writesAuthority": False,
+    "executesProvider": False,
+    "fixtureCount": len(responses),
+    "allowedEnteredProposal": True,
+    "deferredWroteProposal": False,
+    "rejectedWroteProposal": False,
+    "responses": responses,
+    "generatedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+
+  record_stage "governance-admission" "passed" "$(basename "$GOVERNANCE_ADMISSION_PATH")"
 }
 
 run_scheduling_decision_gate() {
@@ -2470,6 +2636,7 @@ main() {
   run_api_plane_manifest_gate
   run_capability_registry_gate
   run_governance_policy_gate
+  run_governance_admission_gate
   run_scheduling_decision_gate
   run_foundation_coverage_gate
   run_pack_release_gate

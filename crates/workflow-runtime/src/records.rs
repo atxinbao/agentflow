@@ -96,6 +96,8 @@ pub struct RuntimeDecisionFact {
     pub human_decision_request: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_query_hint: Option<RuntimeQueryHintFact>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_admission: Option<Value>,
     pub correlation_id: String,
     #[serde(default)]
     pub would_emit_events: Vec<String>,

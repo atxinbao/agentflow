@@ -500,6 +500,7 @@ fn build_action_proposal_bridge_record(
             proposal_id: arbitration.proposal_id,
             status: match arbitration.status.as_str() {
                 "accepted" => RuntimeCommandStatus::Accepted,
+                "deferred" => RuntimeCommandStatus::Deferred,
                 "human-decision-required" => RuntimeCommandStatus::HumanDecisionRequired,
                 "queued" => RuntimeCommandStatus::Queued,
                 "superseded" => RuntimeCommandStatus::Superseded,
@@ -509,6 +510,7 @@ fn build_action_proposal_bridge_record(
             },
             decision: match arbitration.decision.as_str() {
                 "accepted" => crate::responses::RuntimeCommandDecision::Accepted,
+                "deferred" => crate::responses::RuntimeCommandDecision::Deferred,
                 "human-decision-required" => {
                     crate::responses::RuntimeCommandDecision::HumanDecisionRequired
                 }
@@ -544,6 +546,9 @@ fn build_action_proposal_bridge_record(
                     reason: hint.reason,
                 }
             }),
+            governance_admission: arbitration
+                .governance_admission
+                .and_then(|value| serde_json::from_value(value).ok()),
             correlation_id: arbitration.correlation_id,
         },
     })
@@ -810,6 +815,7 @@ fn runtime_command_status_str(status: &RuntimeCommandStatus) -> &'static str {
     match status {
         RuntimeCommandStatus::Accepted => "accepted",
         RuntimeCommandStatus::Rejected => "rejected",
+        RuntimeCommandStatus::Deferred => "deferred",
         RuntimeCommandStatus::HumanDecisionRequired => "human-decision-required",
         RuntimeCommandStatus::Queued => "queued",
         RuntimeCommandStatus::Superseded => "superseded",

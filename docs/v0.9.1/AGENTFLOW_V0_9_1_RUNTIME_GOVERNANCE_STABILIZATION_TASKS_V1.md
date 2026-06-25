@@ -56,7 +56,7 @@ v0.9.0 的治理、部署证据、migration 和 Pack registry 是否已经真正
 | Issue | Title | Priority | Dependency | Status |
 | --- | --- | --- | --- | --- |
 | `V091-001` | Release Source Agent Entry Alignment | P0 | none | done |
-| `V091-002` | Runtime Governance Admission Integration | P0 | V091-001 | planned |
+| `V091-002` | Runtime Governance Admission Integration | P0 | V091-001 | done |
 | `V091-003` | Deployment Evidence Semantic Certification | P0 | V091-001 | planned |
 | `V091-004` | Pack Migration Apply/Rollback Semantic Split | P0 | V091-003 | planned |
 | `V091-005` | Project Pack Registry Release Fixture | P1 | V091-001 | planned |
@@ -123,6 +123,14 @@ v0.9.0 的治理、部署证据、migration 和 Pack registry 是否已经真正
 - Runtime response 能说明 governance decision、stage 和 reason；
 - release gate 增加 governance admission happy / reject / defer fixtures；
 - `governance-policy evaluate` 保留为诊断命令，但不再是唯一治理入口。
+
+### Closeout
+
+- `execute_command_via_arbitration` 已在写入 proposal fact 前执行 Runtime Governance admission。
+- Governance `rejected` / `deferred` 路径只写 command fact 和 decision fact，不写 proposal fact，不写 accepted action fact。
+- `RuntimeCommandResponse` 和 `RuntimeDecisionFact` 已携带 `governanceAdmission` 报告，包含 decision、stage trace 和 reason。
+- 新增 `runtime-command execute` CLI，用于 release gate 走真实 Runtime command path，而不是只跑 `governance-policy evaluate` 诊断命令。
+- release gate 新增 `governance-admission` 阶段，并输出 `runtime/governance-admission.json`，覆盖 allowed / deferred / rejected 三类 fixture。
 
 ### Non-goals
 

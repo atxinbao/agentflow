@@ -305,6 +305,8 @@ dependencies = [
  "agentflow-audit",
  "agentflow-capability-registry",
  "agentflow-event-store",
+ "agentflow-governance-policy",
+ "agentflow-mcp",
  "agentflow-object-state",
  "agentflow-ontology",
  "agentflow-pack",

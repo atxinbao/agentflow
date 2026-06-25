@@ -53,6 +53,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: GovernancePolicyCommand,
     },
+    RuntimeCommand {
+        #[command(subcommand)]
+        command: RuntimeCommandCli,
+    },
     MessageBus {
         #[command(subcommand)]
         command: MessageBusCommand,
@@ -256,6 +260,16 @@ pub(crate) enum GovernancePolicyCommand {
         audit_sidecar_mode: String,
         #[arg(long = "capability-registry")]
         capability_registry: Option<PathBuf>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum RuntimeCommandCli {
+    Execute {
+        #[arg(long)]
+        request: PathBuf,
         #[arg(long)]
         output: Option<PathBuf>,
     },

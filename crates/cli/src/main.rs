@@ -11,7 +11,7 @@ use args::{
     AgentDispatcherCommand, ApiPlaneCommand, AuditCommand, BuildAgentCommand,
     CapabilityRegistryCommand, Cli, Command, CompletionCommand, GovernancePolicyCommand,
     MessageBusCommand, PackCommand, ProjectCommand, ProjectionCommand, ReleaseCommand,
-    TaskLoopCommand,
+    RuntimeCommandCli, TaskLoopCommand,
 };
 use clap::Parser;
 use formal::{
@@ -334,6 +334,14 @@ fn main() -> anyhow::Result<()> {
                     },
                 );
                 write_or_print_json(output.as_deref(), &report)?;
+            }
+        },
+        Command::RuntimeCommand { command } => match command {
+            RuntimeCommandCli::Execute { request, output } => {
+                let command = read_json::<agentflow_runtime_api::RuntimeCommandRequest>(request)?;
+                let response =
+                    agentflow_runtime_api::execute_command_via_arbitration(&cwd, &command)?;
+                write_or_print_json(output.as_deref(), &response)?;
             }
         },
         Command::MessageBus { command } => match command {
