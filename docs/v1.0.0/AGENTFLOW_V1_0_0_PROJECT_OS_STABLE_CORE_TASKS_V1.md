@@ -426,6 +426,17 @@ Executor 管：
 - 不保证所有第三方 executor 行为完全一致；
 - 不把 executor 的 chat history 当成项目事实。
 
+### Closeout
+
+- [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md) 冻结 Executor Adapter、work handoff、allowed / denied path、expected outputs、Evidence return、diff boundary、session isolation、provider mapping 和 executor result 归一化合同；
+- 文档明确 `executorAdapterContractVersion = agentflow-executor-adapter-contract.v1` 和 `executorAdapterContractStatus = active`；
+- AgentFlow / executor 权威边界已固定：AgentFlow 管任务合同、证据、验收和完成写回，executor 只负责实际执行；
+- Codex / Claude Code handoff 必须映射到同一 AgentFlow task contract；
+- executor session、chat history、memory 和 provider-local 状态不得成为 project truth；
+- release gate 新增 `executor-adapter-contract` stage，生成 `runtime/executor-adapter-contract.json`；
+- release gate 覆盖 accepted、rejected、deferred executor result fixtures，并验证越界 diff 不写 Evidence / Done；
+- 下游 `V100-008`、`V100-009`、`V100-010` 必须引用该 freeze 文档。
+
 ## V100-008 Replay / Migration / Upgrade Certification
 
 ### Scope
@@ -437,6 +448,7 @@ Executor 管：
 必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md) 中的 Pack migration receipt-only 和 rollback boundary。
 必须引用 [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md) 中的 Projection rebuild rule、freshness state 和 structured failure 规则。
 必须引用 [../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md](../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md) 中的 Evidence Pack、Acceptance Gate、Completion Commit 和 failure reason 规则。
+必须引用 [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md) 中的 executor session isolation、result normalization 和 rejected executor result 不写 authority 规则。
 
 必须处理：
 
@@ -475,6 +487,7 @@ Executor 管：
 必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md) 中的 Software Dev Pack stable baseline。
 必须引用 [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md) 中的 Pack-specific projection loading、Task Workbench view、Delivery read model 和 Audit sidecar read model。
 必须引用 [../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md](../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md) 中的 Evidence / Acceptance / Completion / Delivery / Audit sidecar 边界。
+必须引用 [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md) 中的软件开发 executor handoff、Git / GitHub / Codex / Claude Code provider mapping 和 diff boundary 规则。
 
 必须证明软件开发现场可闭环：
 
@@ -524,6 +537,7 @@ Requirement
 必须引用 [../architecture/044-v100-pack-contract-freeze-v1.md](../architecture/044-v100-pack-contract-freeze-v1.md)，并把 `packContractVersion` / `packContractStatus` / Pack compatibility 检查作为 release certification 的硬门禁。
 必须引用 [../architecture/045-v100-projection-readmodel-contract-freeze-v1.md](../architecture/045-v100-projection-readmodel-contract-freeze-v1.md)，并把 `projectionContractVersion` / `projectionContractStatus` / Projection rebuild compatibility 检查作为 release certification 的硬门禁。
 必须引用 [../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md](../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md)，并把 `evidenceAcceptanceContractVersion` / `evidenceAcceptanceContractStatus` / Acceptance Gate compatibility 检查作为 release certification 的硬门禁。
+必须引用 [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md)，并把 `executorAdapterContractVersion` / `executorAdapterContractStatus` / Executor result compatibility 检查作为 release certification 的硬门禁。
 
 必须输出：
 
