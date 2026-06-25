@@ -2,7 +2,7 @@
 
 日期：2026-06-25
 执行者：Codex
-状态：Planned stable-core baseline
+状态：Stable-core release certification baseline
 
 ## Purpose
 
@@ -60,6 +60,7 @@
 15. [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md)
 16. [../architecture/048-v100-replay-migration-upgrade-certification-v1.md](../architecture/048-v100-replay-migration-upgrade-certification-v1.md)
 17. [../architecture/049-v100-software-dev-pack-stable-baseline-v1.md](../architecture/049-v100-software-dev-pack-stable-baseline-v1.md)
+18. [../architecture/050-v100-release-certification-v1.md](../architecture/050-v100-release-certification-v1.md)
 
 ## Scope
 

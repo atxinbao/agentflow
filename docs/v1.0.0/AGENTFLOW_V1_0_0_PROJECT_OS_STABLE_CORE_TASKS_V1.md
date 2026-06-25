@@ -71,10 +71,10 @@ v1PlanningReadiness = ready
 | `V100-004` | Pack Contract Freeze | P0 | V100-001, V100-003 | done |
 | `V100-005` | Projection / Read Model Stable Contract | P0 | V100-002, V100-004 | done |
 | `V100-006` | Evidence + Acceptance Stable Contract | P0 | V100-002, V100-005 | done |
-| `V100-007` | Executor Adapter Stable Contract | P0 | V100-002, V100-006 | planned |
-| `V100-008` | Replay / Migration / Upgrade Certification | P0 | V100-003, V100-004, V100-005, V100-006 | planned |
-| `V100-009` | Software Dev Pack Stable Baseline | P1 | V100-004, V100-005, V100-006, V100-007 | planned |
-| `V100-010` | v1.0.0 Release Certification | P0 | V100-001, V100-002, V100-003, V100-004, V100-005, V100-006, V100-007, V100-008, V100-009 | planned |
+| `V100-007` | Executor Adapter Stable Contract | P0 | V100-002, V100-006 | done |
+| `V100-008` | Replay / Migration / Upgrade Certification | P0 | V100-003, V100-004, V100-005, V100-006 | done |
+| `V100-009` | Software Dev Pack Stable Baseline | P1 | V100-004, V100-005, V100-006, V100-007 | done |
+| `V100-010` | v1.0.0 Release Certification | P0 | V100-001, V100-002, V100-003, V100-004, V100-005, V100-006, V100-007, V100-008, V100-009 | done |
 
 ## V100-001 Stable Contract Baseline
 
@@ -594,6 +594,16 @@ Requirement
 - 不承诺长期商业 SLA；
 - 不承诺所有 future Pack 兼容；
 - 不把 v1.0.0 当成行业市场发布。
+
+### V100-010 Closeout
+
+- [../architecture/050-v100-release-certification-v1.md](../architecture/050-v100-release-certification-v1.md) 定义最终 release certification、`v1StableCore` 和 v1 support boundary；
+- release gate 生成 `runtime/v100-release-certification.json`；
+- release certification summary 暴露 `v100Coverage` / `v100CoveragePassed` / `v1StableCore` / `v1SupportBoundary`；
+- release gate 增加 `v100-release-certification` 阶段，若 `v1StableCore != ready` 直接阻断；
+- v1 stable core 明确 Software Dev Pack 是唯一 stable industry Pack，UI Design Pack 保持 experimental；
+- Audit 继续作为 independent sidecar，不进入主业务链；
+- executor runtime 继续作为执行层，不拥有 project truth。
 
 ## Execution Order
 

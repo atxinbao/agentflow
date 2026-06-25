@@ -72,7 +72,7 @@
 - `v0.8.1/` 下文档记录 `v0.8.0` 发布后的 Pack System clean remediation release certification；重点是 file-backed Pack source、registry-driven resolver、Pack-specific Projection、capability-aware availability、negative fixtures 和 release certification。
 - `v0.9.0/` 下文档记录已发布的 Deployment Shape and Runtime Governance closeout 基线；重点是 local/cloud Runtime boundary、Runtime API / SDK、event replay、migration apply、simulation/evaluation、governance、deployment evidence 和 release certification coverage。
 - `v0.9.1/` 下文档记录 `v0.9.0` 发布审计后的稳定化修复任务；重点是 Governance admission 接入、Deployment Evidence 语义证明、Pack migration 语义拆分、project Pack registry fixture、negative semantic fixtures 和 release source Agent entry 自洽。
-- `v1.0.0/` 下文档记录 Project OS Stable Core 开发前置规划；进入执行前必须先通过 `v0.9.1` release certification，并得到 `v1PlanningReadiness = ready`。
+- `v1.0.0/` 下文档记录 Project OS Stable Core 稳定核心认证基线；最终 release gate 必须输出 `v1StableCore = ready` 和明确的 v1 support boundary。
 - 后续新开发需求仍然要进入 `requirements/`；新版本运行时事实源仍然以 `.agentflow/spec/**` 为准。
 - 根目录旧 `GOAL.md`、`ROADMAP.md` 和 `verification.md` 已退出入口；历史验证记录迁入 `verification/history.md`。
 - 根目录 `design.md` 只保留兼容入口；完整设计基线迁入 `product/design-system.md`。
