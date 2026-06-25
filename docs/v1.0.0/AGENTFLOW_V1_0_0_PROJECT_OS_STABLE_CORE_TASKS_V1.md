@@ -67,7 +67,7 @@ v1PlanningReadiness = ready
 | --- | --- | --- | --- | --- |
 | `V100-001` | Stable Contract Baseline | P0 | v0.9.1 certification ready | done |
 | `V100-002` | Runtime API / SDK Freeze | P0 | V100-001 | done |
-| `V100-003` | AgentFlow Filesystem Contract Freeze | P0 | V100-001 | planned |
+| `V100-003` | AgentFlow Filesystem Contract Freeze | P0 | V100-001 | done |
 | `V100-004` | Pack Contract Freeze | P0 | V100-001, V100-003 | planned |
 | `V100-005` | Projection / Read Model Stable Contract | P0 | V100-002, V100-004 | planned |
 | `V100-006` | Evidence + Acceptance Stable Contract | P0 | V100-002, V100-005 | planned |
@@ -198,6 +198,16 @@ v1PlanningReadiness = ready
 - 不把所有本地运行事实提交到 git；
 - 不恢复 retired `.agentflow/input/**`、`.agentflow/output/**`、`.agentflow/goal-tree/**`。
 
+### Closeout
+
+- Filesystem Contract Freeze 已落到 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md)；
+- 文档明确 `filesystemContractVersion = agentflow-filesystem-contract-freeze.v1` 和 `filesystemContractStatus = active`；
+- `.agentflow/project/**`、`.agentflow/spec/**`、`.agentflow/runtime/**`、`.agentflow/packs/**`、`.agentflow/tasks/**`、`.agentflow/events/**`、`.agentflow/projections/**`、`.agentflow/indexes/**`、`.agentflow/release/**`、`.agentflow/audit/**`、`.agentflow/tmp/**` 的 owner、读写规则、authority level 和 version rule 已冻结；
+- retired path 明确包括 `.agentflow/input/**`、`.agentflow/execute/**`、`.agentflow/output/**`、`.agentflow/goal-tree/**`、`.agentflow/define/goals/**`、`.agentflow/define/milestones/**`、`.agentflow/define/issues/**`；
+- release gate 新增 `filesystem-contract` stage，生成 `runtime/filesystem-contract.json`；
+- release gate 会检查 filesystem freeze metadata、required stable paths、authority classes、retired path 重新写入和 source archive / local runtime state 边界；
+- 下游 `V100-004`、`V100-005`、`V100-006`、`V100-008`、`V100-010` 必须引用该 freeze 文档。
+
 ## V100-004 Pack Contract Freeze
 
 ### Scope
@@ -205,6 +215,7 @@ v1PlanningReadiness = ready
 冻结 Domain Pack / Surface Pack / Connector Pack 的 schema、version、capability、migration 规则。
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Pack contract、Compatibility Promise 和 Breaking Change Rule。
+必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md) 中的 `.agentflow/packs/**` definition 边界。
 
 必须处理：
 
@@ -241,6 +252,7 @@ v1PlanningReadiness = ready
 固化 Projection API、Read Model、View Model。
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Projection / Read Model stable contract 和 projection 只读边界，并引用 [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md) 中的 Query API 只读边界。
+必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md) 中的 `.agentflow/projections/**` 和 `.agentflow/indexes/**` 只读边界。
 
 原则：
 
@@ -283,6 +295,7 @@ UI 不直接读 Event Store 写路径。
 把验证、证据、验收、完成写入做成稳定闭环。
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Evidence / Acceptance contract、Completion Commit 边界和 Audit sidecar 边界，并引用 [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md) 中的 Decision Output Contract 与 Error Model。
+必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md) 中的 `.agentflow/tasks/<issue-id>/evidence/**`、`.agentflow/release/**` 和 public record boundary。
 
 主链：
 
@@ -385,6 +398,7 @@ Executor 管：
 证明 event replay、projection rebuild、Pack migration、旧版本升级路径可复跑。
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Breaking Change Rule、Deprecation Rule 和 Release Certification Rule。
+必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md) 中的 retired path 规则，证明迁移和 replay 不会恢复旧 `.agentflow/input/**`、`.agentflow/execute/**`、`.agentflow/output/**` 或 `.agentflow/goal-tree/**`。
 
 必须处理：
 
@@ -465,6 +479,7 @@ Requirement
 最终发布认证。
 
 必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md)，并把 `stableContractVersion` / `stableContractStatus` 作为 release certification 的硬门禁。
+必须引用 [../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md](../architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md)，并把 `filesystemContractVersion` / `filesystemContractStatus` / retired path 检查作为 release certification 的硬门禁。
 
 必须输出：
 

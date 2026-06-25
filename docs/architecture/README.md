@@ -61,6 +61,7 @@
 | [040-release-source-agent-entry-v1.md](040-release-source-agent-entry-v1.md) | 定义 release source 中的稳定 Agent entry、tracked docs 映射和 runtime-only 边界 |
 | [041-v100-stable-contract-baseline-v1.md](041-v100-stable-contract-baseline-v1.md) | 定义 v1.0 Stable Contract Baseline、stable / internal / experimental 边界和 release gate 元数据 |
 | [042-v100-runtime-api-sdk-freeze-v1.md](042-v100-runtime-api-sdk-freeze-v1.md) | 定义 v1.0 Runtime API / SDK 的 command、query、event、decision、error 与治理准入冻结合同 |
+| [043-v100-agentflow-filesystem-contract-freeze-v1.md](043-v100-agentflow-filesystem-contract-freeze-v1.md) | 定义 v1.0 `.agentflow/` 文件系统 authority、projection、local cache、public record 和 retired path 冻结合同 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -108,8 +109,9 @@
 40. [040-release-source-agent-entry-v1.md](040-release-source-agent-entry-v1.md)
 41. [041-v100-stable-contract-baseline-v1.md](041-v100-stable-contract-baseline-v1.md)
 42. [042-v100-runtime-api-sdk-freeze-v1.md](042-v100-runtime-api-sdk-freeze-v1.md)
-43. [current-module-boundaries.md](current-module-boundaries.md)
-44. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+43. [043-v100-agentflow-filesystem-contract-freeze-v1.md](043-v100-agentflow-filesystem-contract-freeze-v1.md)
+44. [current-module-boundaries.md](current-module-boundaries.md)
+45. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 
