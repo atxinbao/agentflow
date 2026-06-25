@@ -407,6 +407,7 @@ pack_validation = load_json(pathlib.Path(summary_json_path.parent / "pack-valida
 pack_simulation = load_json(pathlib.Path(summary_json_path.parent / "pack-simulation-report.json")) or {}
 pack_projection = load_json(pathlib.Path(summary_json_path.parent / "pack-projection-readiness.json")) or {}
 pack_api_plane = load_json(pathlib.Path(summary_json_path.parent / "pack-api-plane-manifest.json")) or {}
+pack_registry = load_json(pathlib.Path(summary_json_path.parent / "pack-registry.json")) or {}
 pack_negative_fixtures = load_json(pack_negative_fixtures_path) or {}
 governance_policy = load_json(governance_policy_path) or {}
 governance_admission = load_json(governance_admission_path) or {}
@@ -509,6 +510,53 @@ deployment_evidence_passed = (
         set(deployment_evidence_failure.get("semanticFailures") or [])
     )
 )
+source_agent_entry_passed = (
+    source_agent_entry.get("status") == "passed"
+    and bool(source_agent_entry.get("entryPath"))
+    and all(item.get("exists") for item in source_agent_entry.get("trackedDocs", []))
+    and not source_agent_entry.get("trackedRuntimePaths")
+)
+deployment_evidence_semantics_passed = (
+    deployment_evidence_passed
+    and bool(deployment_evidence.get("semanticChecks"))
+    and deployment_evidence_wrong_commit.get("status") == "failed"
+    and deployment_evidence_wrong_url.get("status") == "failed"
+    and deployment_evidence_fake_migration.get("status") == "failed"
+)
+pack_migration_semantic_split_passed = (
+    pack_migration_unconfirmed.get("status") == "rejected"
+    and pack_migration_unconfirmed.get("writesAuthority") is False
+    and pack_migration_applied.get("applied") is True
+    and pack_migration_applied.get("writesAuthority") is False
+    and (pack_migration_applied.get("semanticTarget") or {}).get("mutationTarget") == "receipt-only-apply"
+    and (pack_migration_applied.get("semanticTarget") or {}).get("authorityMutation") is False
+    and pack_migration_fake_authority.get("writesAuthority") is True
+    and pack_migration_cancel.get("cancelled") is True
+    and pack_migration_rollback.get("rolledBack") is True
+    and pack_migration_rollback.get("writesAuthority") is False
+    and (pack_migration_rollback.get("semanticTarget") or {}).get("mutationTarget") == "receipt-only-rollback"
+    and (pack_migration_rollback.get("semanticTarget") or {}).get("authorityMutation") is False
+    and pack_migration_replay.get("status") == "passed"
+)
+project_pack_registry_passed = (
+    pack_registry.get("version") == "agentflow-pack-registry.v1"
+    and pack_registry.get("source") == "project-files"
+    and pack_registry.get("fallback") is False
+    and {entry.get("packId") for entry in pack_registry.get("entries", [])} >= {"software-dev", "ui-design"}
+    and all(
+        entry.get("source") == "project-files"
+        and entry.get("fallback") is False
+        and bool(entry.get("manifestPath"))
+        for entry in pack_registry.get("entries", [])
+        if entry.get("packId") in {"software-dev", "ui-design"}
+    )
+)
+negative_semantic_fixtures_passed = (
+    negative_semantic_fixtures.get("status") == "passed"
+    and negative_semantic_fixtures.get("writesAuthority") is False
+    and negative_semantic_fixtures.get("fixtureCount", 0) >= 8
+    and not negative_semantic_fixtures.get("failedFixtures")
+)
 v090_coverage = [
     {
         "id": "V090-001",
@@ -569,10 +617,70 @@ v090_coverage = [
     },
 ]
 v090_coverage_passed = all(item["passed"] for item in v090_coverage)
-v1_planning_readiness = "ready" if v090_coverage_passed else "blocked"
-v1_planning_blockers = [
-    item["id"] for item in v090_coverage if not item["passed"]
+v091_coverage = [
+    {
+        "id": "V091-001",
+        "label": "Release Source Agent Entry Alignment",
+        "passed": source_agent_entry_passed,
+        "evidencePath": "runtime/source-agent-entry.json",
+    },
+    {
+        "id": "V091-002",
+        "label": "Runtime Governance Admission Integration",
+        "passed": governance_admission_passed,
+        "evidencePath": "runtime/governance-admission.json",
+    },
+    {
+        "id": "V091-003",
+        "label": "Deployment Evidence Semantic Certification",
+        "passed": deployment_evidence_semantics_passed,
+        "evidencePath": "runtime/deployment-evidence.json",
+    },
+    {
+        "id": "V091-004",
+        "label": "Pack Migration Apply/Rollback Semantic Split",
+        "passed": pack_migration_semantic_split_passed,
+        "evidencePath": "pack-migration-applied-receipt.json",
+    },
+    {
+        "id": "V091-005",
+        "label": "Project Pack Registry Release Fixture",
+        "passed": project_pack_registry_passed,
+        "evidencePath": "pack-registry.json",
+    },
+    {
+        "id": "V091-006",
+        "label": "Negative Semantic Release Fixtures",
+        "passed": negative_semantic_fixtures_passed,
+        "evidencePath": "runtime/negative-semantic-fixtures.json",
+    },
 ]
+v091_coverage_passed = all(item["passed"] for item in v091_coverage)
+v1_planning_readiness = "ready" if v090_coverage_passed and v091_coverage_passed else "blocked"
+v1_planning_blockers = [
+    item["id"] for item in [*v090_coverage, *v091_coverage] if not item["passed"]
+]
+remaining_risks = []
+deferred_items = []
+if v1_planning_readiness == "blocked":
+    remaining_risks.append({
+        "id": "v1-planning-blocked",
+        "severity": "blocking",
+        "summary": "v1.0 planning cannot start until all V090 and V091 release coverage items pass.",
+        "blockers": v1_planning_blockers,
+    })
+if provider_smoke.get("status") in {None, "missing", "skipped", "disabled"}:
+    deferred_items.append({
+        "id": "provider-smoke-live-session",
+        "blocking": False,
+        "summary": "Live provider smoke remains optional and does not replace runtime fixture certification.",
+    })
+if scheduling_decision.get("decision") == "no-go":
+    deferred_items.append({
+        "id": "cross-process-message-bus",
+        "blocking": False,
+        "summary": "Cross-process Message Bus remains deferred; the release gate records the no-go decision as evidence.",
+    })
 authority_boundary_certification = {
     "projectionIsAuthority": False,
     "connectorIsAuthority": False,
@@ -585,10 +693,7 @@ checklist = [
     {
         "id": "v091-source-agent-entry",
         "label": "release source archive includes a tracked Agent entry and excludes runtime-only facts",
-        "passed": source_agent_entry.get("status") == "passed"
-        and bool(source_agent_entry.get("entryPath"))
-        and all(item.get("exists") for item in source_agent_entry.get("trackedDocs", []))
-        and not source_agent_entry.get("trackedRuntimePaths"),
+        "passed": source_agent_entry_passed,
     },
     {
         "id": "runtime-fixture-gate",
@@ -643,19 +748,7 @@ checklist = [
     {
         "id": "v090-pack-migration-execution",
         "label": "Pack migration apply requires confirmation and records cancel/rollback receipts",
-        "passed": pack_migration_unconfirmed.get("status") == "rejected"
-        and pack_migration_unconfirmed.get("writesAuthority") is False
-        and pack_migration_applied.get("applied") is True
-        and pack_migration_applied.get("writesAuthority") is False
-        and (pack_migration_applied.get("semanticTarget") or {}).get("mutationTarget") == "receipt-only-apply"
-        and (pack_migration_applied.get("semanticTarget") or {}).get("authorityMutation") is False
-        and pack_migration_fake_authority.get("writesAuthority") is True
-        and pack_migration_cancel.get("cancelled") is True
-        and pack_migration_rollback.get("rolledBack") is True
-        and pack_migration_rollback.get("writesAuthority") is False
-        and (pack_migration_rollback.get("semanticTarget") or {}).get("mutationTarget") == "receipt-only-rollback"
-        and (pack_migration_rollback.get("semanticTarget") or {}).get("authorityMutation") is False
-        and pack_migration_replay.get("status") == "passed",
+        "passed": pack_migration_semantic_split_passed,
     },
     {
         "id": "v090-simulation-evaluation-layer",
@@ -685,25 +778,22 @@ checklist = [
     {
         "id": "v091-deployment-evidence-semantics",
         "label": "Deployment evidence validates release facts, remote proof, artifact manifest, and rollback semantics",
-        "passed": deployment_evidence_passed
-        and bool(deployment_evidence.get("semanticChecks"))
-        and deployment_evidence_failure.get("status") == "failed"
-        and {"remote-release-proof.tag", "artifact-manifest.sha-present"}.issubset(
-            set(deployment_evidence_failure.get("semanticFailures") or [])
-        ),
+        "passed": deployment_evidence_semantics_passed,
     },
     {
         "id": "v091-negative-semantic-fixtures",
         "label": "Release certification lists required negative semantic fixture coverage",
-        "passed": negative_semantic_fixtures.get("status") == "passed"
-        and negative_semantic_fixtures.get("writesAuthority") is False
-        and negative_semantic_fixtures.get("fixtureCount", 0) >= 8
-        and not negative_semantic_fixtures.get("failedFixtures"),
+        "passed": negative_semantic_fixtures_passed,
     },
     {
         "id": "v090-release-certification",
         "label": "v0.9.0 certification covers V090-001 through V090-009 and can enter v1.0 planning",
         "passed": v090_coverage_passed,
+    },
+    {
+        "id": "v091-release-certification",
+        "label": "v0.9.1 certification covers V091-001 through V091-006 before v1.0 planning",
+        "passed": v091_coverage_passed,
     },
 ]
 
@@ -746,8 +836,13 @@ summary_payload = {
     "negativeSemanticFixtureCoverage": negative_semantic_fixtures.get("fixtures") or [],
     "rollbackTargetTag": (deployment_evidence.get("rollbackModel") or {}).get("targetTag"),
     "v090Coverage": v090_coverage,
+    "v090CoveragePassed": v090_coverage_passed,
+    "v091Coverage": v091_coverage,
+    "v091CoveragePassed": v091_coverage_passed,
     "v1PlanningReadiness": v1_planning_readiness,
     "v1PlanningBlockers": v1_planning_blockers,
+    "remainingRisks": remaining_risks,
+    "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
     "packRegistryPath": "pack-registry.json" if pathlib.Path(summary_json_path.parent / "pack-registry.json").is_file() else None,
     "packValidationReportPath": "pack-validation-report.json" if pathlib.Path(summary_json_path.parent / "pack-validation-report.json").is_file() else None,
@@ -907,8 +1002,13 @@ certification_payload = {
     "negativeSemanticFixtureCoverage": negative_semantic_fixtures.get("fixtures") or [],
     "rollbackTargetTag": (deployment_evidence.get("rollbackModel") or {}).get("targetTag"),
     "v090Coverage": v090_coverage,
+    "v090CoveragePassed": v090_coverage_passed,
+    "v091Coverage": v091_coverage,
+    "v091CoveragePassed": v091_coverage_passed,
     "v1PlanningReadiness": v1_planning_readiness,
     "v1PlanningBlockers": v1_planning_blockers,
+    "remainingRisks": remaining_risks,
+    "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
     "messageBusDecisionRecordPath": "runtime/scheduling-decision.json" if scheduling_decision_path.is_file() else None,
     "messageBusDecision": scheduling_decision.get("decision") or "missing",
@@ -994,12 +1094,40 @@ for item in v090_coverage:
     )
 cert_lines.extend([
     "",
+    "## V091 Coverage",
+    "",
+])
+for item in v091_coverage:
+    cert_lines.append(
+        f"- [{'x' if item['passed'] else ' '}] `{item['id']}` {item['label']} -> `{item['evidencePath']}`"
+    )
+cert_lines.extend([
+    "",
     "## v1.0 Planning Decision",
     "",
     f"- Readiness: `{v1_planning_readiness}`",
     f"- Blockers: `{', '.join(v1_planning_blockers) if v1_planning_blockers else 'none'}`",
     "- Message Bus decision record: `runtime/scheduling-decision.json`",
     "- Projection, Connector, and industry UI remain non-authority surfaces.",
+    "",
+    "## Remaining Risks And Deferred Items",
+    "",
+])
+if remaining_risks:
+    for item in remaining_risks:
+        cert_lines.append(
+            f"- Risk `{item['id']}` severity=`{item['severity']}` blockers=`{', '.join(item.get('blockers') or [])}`: {item['summary']}"
+        )
+else:
+    cert_lines.append("- Remaining risks: `none`")
+if deferred_items:
+    for item in deferred_items:
+        cert_lines.append(
+            f"- Deferred `{item['id']}` blocking=`{item['blocking']}`: {item['summary']}"
+        )
+else:
+    cert_lines.append("- Deferred items: `none`")
+cert_lines.extend([
     "",
     "## Negative Semantic Fixture Coverage",
     "",
