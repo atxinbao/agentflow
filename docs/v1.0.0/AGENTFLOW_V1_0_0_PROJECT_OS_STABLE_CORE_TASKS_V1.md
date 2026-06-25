@@ -500,6 +500,8 @@ Executor 管：
 必须引用 [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md) 中的软件开发 executor handoff、Git / GitHub / Codex / Claude Code provider mapping 和 diff boundary 规则。
 必须引用 [../architecture/048-v100-replay-migration-upgrade-certification-v1.md](../architecture/048-v100-replay-migration-upgrade-certification-v1.md) 中的 upgrade path、retired path negative fixture 和 migration / replay certification 规则。
 
+本任务已落成 [../architecture/049-v100-software-dev-pack-stable-baseline-v1.md](../architecture/049-v100-software-dev-pack-stable-baseline-v1.md)，并把 `runtime/software-dev-pack-stable-baseline.json` 作为 release gate 硬门禁。
+
 必须证明软件开发现场可闭环：
 
 ```text
@@ -531,6 +533,13 @@ Requirement
 - Delivery 和 Audit sidecar 的边界可验证；
 - 至少一条 Software Dev fixture 从 intake 到 Done 可复跑。
 
+### V100-009 Closeout
+
+- [../architecture/049-v100-software-dev-pack-stable-baseline-v1.md](../architecture/049-v100-software-dev-pack-stable-baseline-v1.md) 冻结 Software Dev Pack stable baseline、read model、connector baseline、runtime fixture、Delivery 和 Audit sidecar 边界；
+- release gate 生成 `runtime/software-dev-pack-stable-baseline.json`；
+- release certification summary 暴露 `softwareDevPackStableBaselineVersion` / `softwareDevPackStableBaselineStatus`；
+- 下游 `V100-010` 必须引用该 stable baseline artifact。
+
 ### Non-goals
 
 - 不把 UI Design Pack 作为 v1 stable 要求；
@@ -550,6 +559,7 @@ Requirement
 必须引用 [../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md](../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md)，并把 `evidenceAcceptanceContractVersion` / `evidenceAcceptanceContractStatus` / Acceptance Gate compatibility 检查作为 release certification 的硬门禁。
 必须引用 [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md)，并把 `executorAdapterContractVersion` / `executorAdapterContractStatus` / Executor result compatibility 检查作为 release certification 的硬门禁。
 必须引用 [../architecture/048-v100-replay-migration-upgrade-certification-v1.md](../architecture/048-v100-replay-migration-upgrade-certification-v1.md)，并把 `replayMigrationUpgradeCertificationVersion` / `replayMigrationUpgradeCertificationStatus` / upgrade compatibility 检查作为 release certification 的硬门禁。
+必须引用 [../architecture/049-v100-software-dev-pack-stable-baseline-v1.md](../architecture/049-v100-software-dev-pack-stable-baseline-v1.md)，并把 `softwareDevPackStableBaselineVersion` / `softwareDevPackStableBaselineStatus` / Software Dev stable Pack proof 检查作为 release certification 的硬门禁。
 
 必须输出：
 

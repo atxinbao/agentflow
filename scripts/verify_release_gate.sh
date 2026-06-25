@@ -97,6 +97,7 @@ PROJECTION_READMODEL_CONTRACT_PATH="$RUNTIME_DIR/projection-readmodel-contract.j
 EVIDENCE_ACCEPTANCE_CONTRACT_PATH="$RUNTIME_DIR/evidence-acceptance-contract.json"
 EXECUTOR_ADAPTER_CONTRACT_PATH="$RUNTIME_DIR/executor-adapter-contract.json"
 REPLAY_MIGRATION_UPGRADE_CERTIFICATION_PATH="$RUNTIME_DIR/replay-migration-upgrade-certification.json"
+SOFTWARE_DEV_PACK_STABLE_BASELINE_PATH="$RUNTIME_DIR/software-dev-pack-stable-baseline.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
 GOVERNANCE_ADMISSION_PATH="$RUNTIME_DIR/governance-admission.json"
@@ -334,6 +335,7 @@ proof_chain = [
     {"stage": "evidence-acceptance-contract", "label": "Evidence / Acceptance Contract"},
     {"stage": "executor-adapter-contract", "label": "Executor Adapter Contract"},
     {"stage": "replay-migration-upgrade-certification", "label": "Replay / Migration / Upgrade Certification"},
+    {"stage": "software-dev-pack-stable-baseline", "label": "Software Dev Pack Stable Baseline"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -397,6 +399,7 @@ runtime_artifacts = [
     {"path": "runtime/evidence-acceptance-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/evidence-acceptance-contract.json").is_file()},
     {"path": "runtime/executor-adapter-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/executor-adapter-contract.json").is_file()},
     {"path": "runtime/replay-migration-upgrade-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/replay-migration-upgrade-certification.json").is_file()},
+    {"path": "runtime/software-dev-pack-stable-baseline.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/software-dev-pack-stable-baseline.json").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -452,6 +455,7 @@ projection_readmodel_contract = load_json(pathlib.Path(summary_json_path.parent 
 evidence_acceptance_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/evidence-acceptance-contract.json")) or {}
 executor_adapter_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/executor-adapter-contract.json")) or {}
 replay_migration_upgrade_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/replay-migration-upgrade-certification.json")) or {}
+software_dev_pack_stable_baseline = load_json(pathlib.Path(summary_json_path.parent / "runtime/software-dev-pack-stable-baseline.json")) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -690,6 +694,28 @@ replay_migration_upgrade_certification_passed = (
     and not replay_migration_upgrade_certification.get("missingSections")
     and not replay_migration_upgrade_certification.get("missingRequiredPhrases")
 )
+software_dev_pack_stable_baseline_passed = (
+    software_dev_pack_stable_baseline.get("status") == "passed"
+    and software_dev_pack_stable_baseline.get("softwareDevPackStableBaselineVersion") == "agentflow-software-dev-pack-stable-baseline.v1"
+    and software_dev_pack_stable_baseline.get("softwareDevPackStableBaselineStatus") == "active"
+    and software_dev_pack_stable_baseline.get("docPath") == "docs/architecture/049-v100-software-dev-pack-stable-baseline-v1.md"
+    and software_dev_pack_stable_baseline.get("stableContractBaseline") == "agentflow-stable-contract-baseline.v1"
+    and software_dev_pack_stable_baseline.get("packContractVersion") == "agentflow-pack-contract-freeze.v1"
+    and software_dev_pack_stable_baseline.get("projectionContractVersion") == "agentflow-projection-readmodel-contract.v1"
+    and software_dev_pack_stable_baseline.get("evidenceAcceptanceContractVersion") == "agentflow-evidence-acceptance-contract.v1"
+    and software_dev_pack_stable_baseline.get("executorAdapterContractVersion") == "agentflow-executor-adapter-contract.v1"
+    and software_dev_pack_stable_baseline.get("replayMigrationUpgradeCertificationVersion") == "agentflow-replay-migration-upgrade-certification.v1"
+    and software_dev_pack_stable_baseline.get("stableManifestPassed") is True
+    and software_dev_pack_stable_baseline.get("readModelBoundaryPassed") is True
+    and software_dev_pack_stable_baseline.get("connectorBaselinePassed") is True
+    and software_dev_pack_stable_baseline.get("runtimeFixturePassed") is True
+    and software_dev_pack_stable_baseline.get("deliveryBoundaryPassed") is True
+    and software_dev_pack_stable_baseline.get("auditSidecarPassed") is True
+    and software_dev_pack_stable_baseline.get("githubIssueAuthority") is False
+    and software_dev_pack_stable_baseline.get("uiDesignPromotedToStable") is False
+    and not software_dev_pack_stable_baseline.get("missingSections")
+    and not software_dev_pack_stable_baseline.get("missingRequiredPhrases")
+)
 deployment_evidence_semantics_passed = (
     deployment_evidence_passed
     and bool(deployment_evidence.get("semanticChecks"))
@@ -910,6 +936,11 @@ checklist = [
         "passed": replay_migration_upgrade_certification_passed,
     },
     {
+        "id": "v100-software-dev-pack-stable-baseline",
+        "label": "v1.0 Software Dev Pack stable baseline proves stable manifest, read models, connectors, delivery, and Audit sidecar boundaries",
+        "passed": software_dev_pack_stable_baseline_passed,
+    },
+    {
         "id": "runtime-fixture-gate",
         "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
@@ -1053,6 +1084,10 @@ summary_payload = {
     "replayMigrationUpgradeCertificationStatus": replay_migration_upgrade_certification.get("status") or "missing",
     "replayMigrationUpgradeCertificationVersion": replay_migration_upgrade_certification.get("replayMigrationUpgradeCertificationVersion"),
     "replayMigrationUpgradeFreezeStatus": replay_migration_upgrade_certification.get("replayMigrationUpgradeCertificationStatus"),
+    "softwareDevPackStableBaselinePath": "runtime/software-dev-pack-stable-baseline.json" if pathlib.Path(summary_json_path.parent / "runtime/software-dev-pack-stable-baseline.json").is_file() else None,
+    "softwareDevPackStableBaselineStatus": software_dev_pack_stable_baseline.get("status") or "missing",
+    "softwareDevPackStableBaselineVersion": software_dev_pack_stable_baseline.get("softwareDevPackStableBaselineVersion"),
+    "softwareDevPackStableBaselineFreezeStatus": software_dev_pack_stable_baseline.get("softwareDevPackStableBaselineStatus"),
     "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage",
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
@@ -1341,6 +1376,7 @@ cert_lines = [
     f"- Pack contract compatibility: `{pack_contract_compatibility.get('status') or 'missing'}`",
     f"- Projection / Read Model contract: `{projection_readmodel_contract.get('status') or 'missing'}`",
     f"- Evidence / Acceptance contract: `{evidence_acceptance_contract.get('status') or 'missing'}`",
+    f"- Software Dev Pack stable baseline: `{software_dev_pack_stable_baseline.get('status') or 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
@@ -4488,6 +4524,240 @@ PY
   record_stage "replay-migration-upgrade-certification" "passed" "$(basename "$REPLAY_MIGRATION_UPGRADE_CERTIFICATION_PATH")"
 }
 
+run_software_dev_pack_stable_baseline_gate() {
+  record_stage "software-dev-pack-stable-baseline" "started" "$SOFTWARE_DEV_PACK_STABLE_BASELINE_PATH"
+  python3 - \
+    "$ROOT" \
+    "$PACK_REGISTRY_PATH" \
+    "$PACK_VALIDATION_REPORT_PATH" \
+    "$PACK_SIMULATION_REPORT_PATH" \
+    "$PACK_PROJECTION_READINESS_PATH" \
+    "$PACK_API_PLANE_MANIFEST_PATH" \
+    "$SOFTWARE_DEV_PACK_READINESS_PATH" \
+    "$UI_DESIGN_PACK_READINESS_PATH" \
+    "$PACK_CONTRACT_COMPATIBILITY_PATH" \
+    "$PROJECTION_READMODEL_CONTRACT_PATH" \
+    "$EVIDENCE_ACCEPTANCE_CONTRACT_PATH" \
+    "$EXECUTOR_ADAPTER_CONTRACT_PATH" \
+    "$REPLAY_MIGRATION_UPGRADE_CERTIFICATION_PATH" \
+    "$SOFTWARE_DEV_PACK_STABLE_BASELINE_PATH" <<'PY'
+import json
+import pathlib
+import re
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+registry_path = pathlib.Path(sys.argv[2])
+validation_path = pathlib.Path(sys.argv[3])
+simulation_path = pathlib.Path(sys.argv[4])
+projection_path = pathlib.Path(sys.argv[5])
+api_plane_path = pathlib.Path(sys.argv[6])
+software_path = pathlib.Path(sys.argv[7])
+design_path = pathlib.Path(sys.argv[8])
+pack_contract_path = pathlib.Path(sys.argv[9])
+projection_contract_path = pathlib.Path(sys.argv[10])
+evidence_contract_path = pathlib.Path(sys.argv[11])
+executor_contract_path = pathlib.Path(sys.argv[12])
+replay_certification_path = pathlib.Path(sys.argv[13])
+output_path = pathlib.Path(sys.argv[14])
+doc_path = root / "docs/architecture/049-v100-software-dev-pack-stable-baseline-v1.md"
+
+if not doc_path.is_file():
+    raise SystemExit(f"missing software dev stable baseline document: {doc_path}")
+
+def load_json(path):
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+doc = doc_path.read_text(encoding="utf-8")
+registry = load_json(registry_path)
+validation = load_json(validation_path)
+simulation = load_json(simulation_path)
+projection = load_json(projection_path)
+api_plane = load_json(api_plane_path)
+software = load_json(software_path)
+design = load_json(design_path)
+pack_contract = load_json(pack_contract_path)
+projection_contract = load_json(projection_contract_path)
+evidence_contract = load_json(evidence_contract_path)
+executor_contract = load_json(executor_contract_path)
+replay_certification = load_json(replay_certification_path)
+
+def metadata_value(name):
+    match = re.search(rf"^{re.escape(name)}:\s*(\S+)\s*$", doc, re.MULTILINE)
+    return match.group(1) if match else None
+
+required_sections = [
+    "## 1. Certification Goal",
+    "## 2. Stable Pack Boundary",
+    "## 3. Stable Manifest Requirement",
+    "## 4. Read Model Requirement",
+    "## 5. Connector Baseline",
+    "## 6. Runtime Fixture Requirement",
+    "## 7. Audit Sidecar Requirement",
+    "## 8. V100 Binding",
+]
+required_phrases = [
+    "Requirement",
+    "Spec",
+    "Issue",
+    "Run",
+    "Evidence",
+    "Acceptance",
+    "Delivery",
+    "Release",
+    "Optional Audit Request",
+    "Finding",
+    "Follow-up Proposal",
+    "GitHub issue",
+    "authority",
+    "sidecar",
+    "runtime/software-dev-pack-stable-baseline.json",
+]
+
+entries = {entry.get("packId"): entry for entry in registry.get("entries", [])}
+software_entry = entries.get("software-dev") or {}
+software_main_chain = software.get("mainChain") or []
+software_sidecar_chain = software.get("auditSidecarChain") or []
+software_source_refs = software.get("sourceRefs") or []
+software_projection_entries = software.get("projectionEntries") or []
+simulation_reports = simulation.get("reports") or []
+
+stable_manifest_passed = (
+    registry.get("version") == "agentflow-pack-registry.v1"
+    and registry.get("source") == "project-files"
+    and registry.get("fallback") is False
+    and software_entry.get("source") == "project-files"
+    and software_entry.get("fallback") is False
+    and bool(software_entry.get("manifestPath"))
+    and validation.get("status") == "passed"
+    and simulation.get("status") == "passed"
+    and projection.get("status") == "passed"
+    and api_plane.get("status") == "passed"
+    and software.get("status") == "completed"
+    and design.get("status") == "baseline"
+    and software.get("writesAuthority") is False
+    and design.get("writesAuthority") is False
+)
+read_model_boundary_passed = (
+    "projection.pack-industry-workbench" in software_source_refs
+    and bool(software_projection_entries)
+    and projection_contract.get("status") == "passed"
+    and projection_contract.get("queryApiReadonly") is True
+    and projection_contract.get("sidecarReadModelsPresent") is True
+    and projection_contract.get("industrySurfaceReadonly") is True
+)
+connector_baseline = ["GitHub", "Git", "Codex", "Claude", "Browser Preview"]
+connector_baseline_passed = (
+    executor_contract.get("status") == "passed"
+    and executor_contract.get("sessionIsolationRespected") is True
+    and executor_contract.get("diffBoundaryViolationRejected") is True
+    and executor_contract.get("providerSmokeBoundaryRespected") is True
+    and all(name in doc for name in connector_baseline)
+)
+runtime_fixture_passed = (
+    evidence_contract.get("status") == "passed"
+    and evidence_contract.get("taskDoneFromCompletionCommit") is True
+    and evidence_contract.get("closeoutProofMerged") is True
+    and evidence_contract.get("deliveryReadModelReady") is True
+    and replay_certification.get("status") == "passed"
+    and simulation_reports
+    and all(report.get("writesAuthority") is False for report in simulation_reports)
+    and all(report.get("executesProvider") is False for report in simulation_reports)
+)
+delivery_boundary_passed = (
+    "Delivery" in software_main_chain
+    and evidence_contract.get("deliveryReadModelReady") is True
+    and evidence_contract.get("auditSidecarNonBlocking") is True
+)
+audit_sidecar_passed = (
+    "OptionalAuditRequest" in software_sidecar_chain
+    and "AuditReport" in software_sidecar_chain
+    and "Finding" in software_sidecar_chain
+    and "FollowUpProposal" in software_sidecar_chain
+    and software.get("findingPolicy") == "finding-generates-follow-up-proposal-only"
+    and evidence_contract.get("auditSidecarNonBlocking") is True
+)
+main_chain_passed = all(
+    item in software_main_chain
+    for item in ["Requirement", "Spec", "Issue", "Run", "Acceptance", "Delivery", "Release"]
+)
+downstream_contracts_passed = (
+    pack_contract.get("status") == "passed"
+    and projection_contract.get("status") == "passed"
+    and evidence_contract.get("status") == "passed"
+    and executor_contract.get("status") == "passed"
+    and replay_certification.get("status") == "passed"
+)
+missing_sections = [section for section in required_sections if section not in doc]
+missing_required_phrases = [phrase for phrase in required_phrases if phrase not in doc]
+
+payload = {
+    "version": "agentflow-software-dev-pack-stable-baseline-report.v1",
+    "status": "passed",
+    "docPath": "docs/architecture/049-v100-software-dev-pack-stable-baseline-v1.md",
+    "softwareDevPackStableBaselineVersion": metadata_value("softwareDevPackStableBaselineVersion"),
+    "softwareDevPackStableBaselineStatus": metadata_value("softwareDevPackStableBaselineStatus"),
+    "stableContractBaseline": metadata_value("stableContractBaseline"),
+    "packContractVersion": metadata_value("packContractVersion"),
+    "projectionContractVersion": metadata_value("projectionContractVersion"),
+    "evidenceAcceptanceContractVersion": metadata_value("evidenceAcceptanceContractVersion"),
+    "executorAdapterContractVersion": metadata_value("executorAdapterContractVersion"),
+    "replayMigrationUpgradeCertificationVersion": metadata_value("replayMigrationUpgradeCertificationVersion"),
+    "stableManifestPassed": stable_manifest_passed,
+    "readModelBoundaryPassed": read_model_boundary_passed,
+    "connectorBaselinePassed": connector_baseline_passed,
+    "runtimeFixturePassed": runtime_fixture_passed,
+    "deliveryBoundaryPassed": delivery_boundary_passed,
+    "auditSidecarPassed": audit_sidecar_passed,
+    "mainChainPassed": main_chain_passed,
+    "downstreamContractsPassed": downstream_contracts_passed,
+    "githubIssueAuthority": False,
+    "uiDesignPromotedToStable": False,
+    "softwareDevPackId": software.get("packId"),
+    "softwareDevPackStatus": software.get("status"),
+    "softwareDevMainChain": software_main_chain,
+    "softwareDevAuditSidecarChain": software_sidecar_chain,
+    "softwareDevConnectorBaseline": connector_baseline,
+    "softwareDevManifestPath": software_entry.get("manifestPath"),
+    "softwareDevProjectionEntries": software_projection_entries,
+    "missingSections": missing_sections,
+    "missingRequiredPhrases": missing_required_phrases,
+    "checkedAt": int(time.time()),
+}
+
+if (
+    payload["softwareDevPackStableBaselineVersion"] != "agentflow-software-dev-pack-stable-baseline.v1"
+    or payload["softwareDevPackStableBaselineStatus"] != "active"
+    or payload["stableContractBaseline"] != "agentflow-stable-contract-baseline.v1"
+    or payload["packContractVersion"] != "agentflow-pack-contract-freeze.v1"
+    or payload["projectionContractVersion"] != "agentflow-projection-readmodel-contract.v1"
+    or payload["evidenceAcceptanceContractVersion"] != "agentflow-evidence-acceptance-contract.v1"
+    or payload["executorAdapterContractVersion"] != "agentflow-executor-adapter-contract.v1"
+    or payload["replayMigrationUpgradeCertificationVersion"] != "agentflow-replay-migration-upgrade-certification.v1"
+    or not stable_manifest_passed
+    or not read_model_boundary_passed
+    or not connector_baseline_passed
+    or not runtime_fixture_passed
+    or not delivery_boundary_passed
+    or not audit_sidecar_passed
+    or not main_chain_passed
+    or not downstream_contracts_passed
+    or missing_sections
+    or missing_required_phrases
+):
+    payload["status"] = "failed"
+
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("software dev pack stable baseline fixture failed")
+PY
+  record_stage "software-dev-pack-stable-baseline" "passed" "$(basename "$SOFTWARE_DEV_PACK_STABLE_BASELINE_PATH")"
+}
+
 run_negative_semantic_fixtures_gate() {
   record_stage "negative-semantic-fixtures" "started" "$NEGATIVE_SEMANTIC_FIXTURES_PATH"
   if ! python3 - \
@@ -5204,6 +5474,7 @@ PY
   run_evidence_acceptance_contract_gate
   run_executor_adapter_contract_gate
   run_replay_migration_upgrade_certification_gate
+  run_software_dev_pack_stable_baseline_gate
   run_deployment_evidence_gate
   run_negative_semantic_fixtures_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
