@@ -65,7 +65,7 @@ v1PlanningReadiness = ready
 
 | Issue | Title | Priority | Dependency | Status |
 | --- | --- | --- | --- | --- |
-| `V100-001` | Stable Contract Baseline | P0 | v0.9.1 certification ready | planned |
+| `V100-001` | Stable Contract Baseline | P0 | v0.9.1 certification ready | done |
 | `V100-002` | Runtime API / SDK Freeze | P0 | V100-001 | planned |
 | `V100-003` | AgentFlow Filesystem Contract Freeze | P0 | V100-001 | planned |
 | `V100-004` | Pack Contract Freeze | P0 | V100-001, V100-003 | planned |
@@ -108,11 +108,21 @@ v1PlanningReadiness = ready
 - 不承诺所有历史草案兼容；
 - 不把内部函数、临时 CLI 输出、debug fixture 全部变成 stable API。
 
+### Closeout
+
+- Stable Contract Baseline 已落到 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md)；
+- baseline 明确 `stableContractVersion = agentflow-stable-contract-baseline.v1` 和 `stableContractStatus = active`；
+- baseline 将 v1 contract 分为 stable public contracts、internal implementation details、experimental contracts 三类；
+- release gate 新增 `stable.contract-baseline` stage，缺少 baseline 或 metadata 不一致时阻断；
+- 后续 `V100-002` 到 `V100-010` 必须引用该 baseline，不能绕过 stable / internal / experimental 边界。
+
 ## V100-002 Runtime API / SDK Freeze
 
 ### Scope
 
 冻结 command / query / event API。
+
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Stable Public Contracts 与 Version Field Rule。
 
 必须处理：
 
@@ -147,6 +157,8 @@ v1PlanningReadiness = ready
 ### Scope
 
 固化 `.agentflow/` 文件系统协议。
+
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Stable Public Contracts、Deprecation Rule 和 retired path 规则。
 
 必须处理：
 
@@ -183,6 +195,8 @@ v1PlanningReadiness = ready
 
 冻结 Domain Pack / Surface Pack / Connector Pack 的 schema、version、capability、migration 规则。
 
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Pack contract、Compatibility Promise 和 Breaking Change Rule。
+
 必须处理：
 
 - Pack manifest；
@@ -216,6 +230,8 @@ v1PlanningReadiness = ready
 ### Scope
 
 固化 Projection API、Read Model、View Model。
+
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Projection / Read Model stable contract 和 projection 只读边界。
 
 原则：
 
@@ -256,6 +272,8 @@ UI 不直接读 Event Store 写路径。
 ### Scope
 
 把验证、证据、验收、完成写入做成稳定闭环。
+
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Evidence / Acceptance contract、Completion Commit 边界和 Audit sidecar 边界。
 
 主链：
 
@@ -303,6 +321,8 @@ Confirmed Work
 ### Scope
 
 固化 Codex / Claude Code 等执行器适配合同。
+
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Executor Adapter contract 和 executor 不拥有 project truth 的规则。
 
 AgentFlow 管：
 
@@ -355,6 +375,8 @@ Executor 管：
 
 证明 event replay、projection rebuild、Pack migration、旧版本升级路径可复跑。
 
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Breaking Change Rule、Deprecation Rule 和 Release Certification Rule。
+
 必须处理：
 
 - event replay；
@@ -387,6 +409,8 @@ Executor 管：
 ### Scope
 
 把 Software Dev Pack 作为 v1.0 默认稳定行业壳。
+
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 stable / internal / experimental 边界，不能把 experimental Pack 能力伪装成 stable。
 
 必须证明软件开发现场可闭环：
 
@@ -430,6 +454,8 @@ Requirement
 ### Scope
 
 最终发布认证。
+
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md)，并把 `stableContractVersion` / `stableContractStatus` 作为 release certification 的硬门禁。
 
 必须输出：
 

@@ -121,6 +121,7 @@ UI_DESIGN_PACK_READINESS_PATH="$ARTIFACT_DIR/ui-design-pack-readiness.json"
 EVENT_REPLAY_PROJECTION_REPORT_PATH="$RUNTIME_DIR/event-replay-projection-report.json"
 EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH="$RUNTIME_DIR/event-replay-projection-failure-report.json"
 SOURCE_AGENT_ENTRY_PATH="$RUNTIME_DIR/source-agent-entry.json"
+STABLE_CONTRACT_BASELINE_PATH="$RUNTIME_DIR/stable-contract-baseline.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -312,6 +313,7 @@ for entry in stage_log:
 
 proof_chain = [
     {"stage": "source.agent-entry", "label": "Release Source Agent Entry"},
+    {"stage": "stable.contract-baseline", "label": "Stable Contract Baseline"},
     {"stage": "release.version-metadata", "label": "Release Version Metadata"},
     {"stage": "release.changelog-entry", "label": "Release Changelog Entry"},
     {"stage": "release.github-release-fact", "label": "GitHub Release Fact"},
@@ -362,6 +364,7 @@ public_artifacts = [
 ]
 runtime_artifacts = [
     {"path": "runtime/source-agent-entry.json", "exists": source_agent_entry_path.is_file()},
+    {"path": "runtime/stable-contract-baseline.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/stable-contract-baseline.json").is_file()},
     {"path": "runtime/spec-loop-manifest.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/spec-loop-manifest.json").is_file()},
     {"path": "runtime/spec-loop-projection.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/spec-loop-projection.json").is_file()},
     {"path": "runtime/release-facts.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-facts.json").is_file()},
@@ -419,6 +422,7 @@ deployment_evidence_wrong_url = load_json(pathlib.Path(summary_json_path.parent 
 deployment_evidence_fake_migration = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-fake-migration-receipt.json")) or {}
 negative_semantic_fixtures = load_json(negative_semantic_fixtures_path) or {}
 source_agent_entry = load_json(source_agent_entry_path) or {}
+stable_contract_baseline = load_json(pathlib.Path(summary_json_path.parent / "runtime/stable-contract-baseline.json")) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -515,6 +519,13 @@ source_agent_entry_passed = (
     and bool(source_agent_entry.get("entryPath"))
     and all(item.get("exists") for item in source_agent_entry.get("trackedDocs", []))
     and not source_agent_entry.get("trackedRuntimePaths")
+)
+stable_contract_baseline_passed = (
+    stable_contract_baseline.get("status") == "passed"
+    and stable_contract_baseline.get("stableContractVersion") == "agentflow-stable-contract-baseline.v1"
+    and stable_contract_baseline.get("stableContractStatus") == "active"
+    and stable_contract_baseline.get("docPath") == "docs/architecture/041-v100-stable-contract-baseline-v1.md"
+    and not stable_contract_baseline.get("missingSections")
 )
 deployment_evidence_semantics_passed = (
     deployment_evidence_passed
@@ -696,6 +707,11 @@ checklist = [
         "passed": source_agent_entry_passed,
     },
     {
+        "id": "v100-stable-contract-baseline",
+        "label": "v1.0 stable contract baseline metadata and required sections are present",
+        "passed": stable_contract_baseline_passed,
+    },
+    {
         "id": "runtime-fixture-gate",
         "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
@@ -807,6 +823,10 @@ summary_payload = {
     "providerSmokeArtifactPath": provider_smoke.get("artifactPath"),
     "sourceAgentEntryPath": "runtime/source-agent-entry.json" if source_agent_entry_path.is_file() else None,
     "sourceAgentEntryStatus": source_agent_entry.get("status") or "missing",
+    "stableContractBaselinePath": "runtime/stable-contract-baseline.json" if pathlib.Path(summary_json_path.parent / "runtime/stable-contract-baseline.json").is_file() else None,
+    "stableContractBaselineStatus": stable_contract_baseline.get("status") or "missing",
+    "stableContractVersion": stable_contract_baseline.get("stableContractVersion"),
+    "stableContractStatus": stable_contract_baseline.get("stableContractStatus"),
     "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage",
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
@@ -900,6 +920,7 @@ summary_lines = [
     f"- Provider smoke gate: `{provider_smoke.get('status')}`",
     f"- Provider smoke provider: `{provider_smoke.get('provider') or 'n/a'}`",
     f"- Provider smoke reason: `{provider_smoke.get('reason') or 'n/a'}`",
+    f"- Stable contract baseline: `{stable_contract_baseline.get('status') or 'missing'}`",
     "- Provider smoke boundary: `minimal provider health / launch / session / terminal projection; does not replace runtime fixture gate`",
     f"- Foundation coverage: `{'present' if foundation_coverage_path.is_file() else 'missing'}`",
     f"- Foundation readiness report: `{'present' if foundation_readiness_report_path.is_file() else 'missing'}`",
@@ -967,6 +988,10 @@ certification_payload = {
     "providerSmokeArtifactPath": provider_smoke.get("artifactPath"),
     "sourceAgentEntryPath": "runtime/source-agent-entry.json" if source_agent_entry_path.is_file() else None,
     "sourceAgentEntryStatus": source_agent_entry.get("status") or "missing",
+    "stableContractBaselinePath": "runtime/stable-contract-baseline.json" if pathlib.Path(summary_json_path.parent / "runtime/stable-contract-baseline.json").is_file() else None,
+    "stableContractBaselineStatus": stable_contract_baseline.get("status") or "missing",
+    "stableContractVersion": stable_contract_baseline.get("stableContractVersion"),
+    "stableContractStatus": stable_contract_baseline.get("stableContractStatus"),
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "currentGateRun": current_gate_run,
     "mainGateRun": main_gate_run,
@@ -1051,6 +1076,7 @@ cert_lines = [
     f"- Provider smoke gate: `{provider_smoke.get('status')}`",
     f"- Provider smoke provider: `{provider_smoke.get('provider') or 'n/a'}`",
     f"- Provider smoke reason: `{provider_smoke.get('reason') or 'n/a'}`",
+    f"- Stable contract baseline: `{stable_contract_baseline.get('status') or 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
@@ -1233,6 +1259,69 @@ PY
     fail_stage "release.version-metadata" "release metadata does not match $RELEASE_VERSION"
   fi
   record_stage "release.version-metadata" "passed" "$RELEASE_VERSION"
+}
+
+verify_stable_contract_baseline() {
+  local metadata_root="$1"
+  if ! python3 - "$metadata_root/docs/architecture/041-v100-stable-contract-baseline-v1.md" "$STABLE_CONTRACT_BASELINE_PATH" <<'PY'
+import json
+import pathlib
+import re
+import sys
+import time
+
+doc_path = pathlib.Path(sys.argv[1])
+out_path = pathlib.Path(sys.argv[2])
+relative_path = "docs/architecture/041-v100-stable-contract-baseline-v1.md"
+required_sections = [
+    "Stable Public Contracts",
+    "Internal Implementation Details",
+    "Experimental Contracts",
+    "Compatibility Promise",
+    "Breaking Change Rule",
+    "Deprecation Rule",
+    "Version Field Rule",
+    "Release Certification Rule",
+]
+
+if not doc_path.is_file():
+    raise SystemExit("stable contract baseline document missing")
+
+text = doc_path.read_text(encoding="utf-8")
+version_match = re.search(r"^stableContractVersion:\s*(\S+)\s*$", text, re.MULTILINE)
+status_match = re.search(r"^stableContractStatus:\s*(\S+)\s*$", text, re.MULTILINE)
+stable_contract_version = version_match.group(1) if version_match else None
+stable_contract_status = status_match.group(1) if status_match else None
+missing_sections = [
+    section for section in required_sections if f"## {section}" not in text
+]
+payload = {
+    "version": "agentflow-stable-contract-baseline-certification.v1",
+    "status": "passed",
+    "docPath": relative_path,
+    "stableContractVersion": stable_contract_version,
+    "stableContractStatus": stable_contract_status,
+    "requiredSections": required_sections,
+    "missingSections": missing_sections,
+    "checkedAt": int(time.time()),
+}
+if stable_contract_version != "agentflow-stable-contract-baseline.v1":
+    payload["status"] = "failed"
+    payload["failureReason"] = "stableContractVersion mismatch"
+if stable_contract_status != "active":
+    payload["status"] = "failed"
+    payload["failureReason"] = "stableContractStatus mismatch"
+if missing_sections:
+    payload["status"] = "failed"
+    payload["failureReason"] = "required baseline sections missing"
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit(payload["failureReason"])
+PY
+  then
+    fail_stage "stable.contract-baseline" "stable contract baseline metadata is missing or invalid"
+  fi
+  record_stage "stable.contract-baseline" "passed" "041-v100-stable-contract-baseline-v1.md"
 }
 
 verify_release_publication_facts() {
@@ -3266,6 +3355,7 @@ main() {
   prepare_workspace
   prepare_project_pack_fixtures
   run_source_agent_entry_gate
+  verify_stable_contract_baseline "$WORKSPACE"
   verify_release_metadata "$WORKSPACE"
   verify_release_publication_facts "$WORKSPACE"
   run_provider_smoke_gate
