@@ -59,6 +59,7 @@
 14. [../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md](../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md)
 15. [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md)
 16. [../architecture/048-v100-replay-migration-upgrade-certification-v1.md](../architecture/048-v100-replay-migration-upgrade-certification-v1.md)
+17. [../architecture/049-v100-software-dev-pack-stable-baseline-v1.md](../architecture/049-v100-software-dev-pack-stable-baseline-v1.md)
 
 ## Scope
 
