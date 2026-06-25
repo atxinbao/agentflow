@@ -85,14 +85,18 @@ dependencies = [
 name = "agentflow-cli"
 version = "0.8.1"
 dependencies = [
+ "agentflow-action-contract",
  "agentflow-agent-dispatcher",
  "agentflow-audit",
  "agentflow-capability-registry",
  "agentflow-event-store",
+ "agentflow-governance-policy",
  "agentflow-mcp",
+ "agentflow-ontology",
  "agentflow-pack",
  "agentflow-projection",
  "agentflow-release",
+ "agentflow-role-policy",
  "agentflow-runtime-api",
  "agentflow-simulation",
  "agentflow-spec",
@@ -149,6 +153,17 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "agentflow-governance-policy"
+version = "0.8.1"
+dependencies = [
+ "agentflow-action-contract",
+ "agentflow-capability-registry",
+ "agentflow-ontology",
+ "agentflow-role-policy",
+ "serde",
 ]
 
 [[package]]

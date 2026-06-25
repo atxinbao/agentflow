@@ -9,8 +9,8 @@ use active::{
 };
 use args::{
     AgentDispatcherCommand, ApiPlaneCommand, AuditCommand, BuildAgentCommand,
-    CapabilityRegistryCommand, Cli, Command, CompletionCommand, PackCommand, ProjectCommand,
-    ProjectionCommand, ReleaseCommand, TaskLoopCommand,
+    CapabilityRegistryCommand, Cli, Command, CompletionCommand, GovernancePolicyCommand,
+    PackCommand, ProjectCommand, ProjectionCommand, ReleaseCommand, TaskLoopCommand,
 };
 use clap::Parser;
 use formal::{
@@ -296,6 +296,43 @@ fn main() -> anyhow::Result<()> {
                 } else {
                     println!("{}", serde_json::to_string_pretty(&registry)?);
                 }
+            }
+        },
+        Command::GovernancePolicy { command } => match command {
+            GovernancePolicyCommand::Evaluate {
+                role,
+                action_type,
+                object_type,
+                worker_id,
+                command,
+                audit_sidecar_mode,
+                capability_registry,
+                output,
+            } => {
+                let ontology = agentflow_ontology::core_ontology_registry();
+                let action_registry =
+                    agentflow_action_contract::core_action_contract_registry(&ontology);
+                let role_registry =
+                    agentflow_role_policy::core_role_policy_registry(&ontology, &action_registry);
+                let capability_registry = if let Some(path) = capability_registry {
+                    read_json(path)?
+                } else {
+                    agentflow_capability_registry::default_capability_registry()
+                };
+                let audit_sidecar_mode = parse_audit_sidecar_mode(&audit_sidecar_mode)?;
+                let report = agentflow_governance_policy::evaluate_runtime_governance(
+                    &role_registry,
+                    &capability_registry,
+                    agentflow_governance_policy::GovernancePolicyRequest {
+                        actor_role: role,
+                        action_type,
+                        object_type,
+                        worker_id,
+                        command,
+                        audit_sidecar_mode,
+                    },
+                );
+                write_or_print_json(output.as_deref(), &report)?;
             }
         },
         Command::Pack { command } => match command {
@@ -684,6 +721,21 @@ fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> anyhow::Result<T> {
     let path = path.as_ref();
     let payload = fs::read_to_string(path)?;
     Ok(serde_json::from_str(&payload)?)
+}
+
+fn parse_audit_sidecar_mode(
+    value: &str,
+) -> anyhow::Result<agentflow_governance_policy::AuditSidecarMode> {
+    match value {
+        "independent" => Ok(agentflow_governance_policy::AuditSidecarMode::Independent),
+        "not-requested" => Ok(agentflow_governance_policy::AuditSidecarMode::NotRequested),
+        "bound-to-main-chain" => {
+            Ok(agentflow_governance_policy::AuditSidecarMode::BoundToMainChain)
+        }
+        _ => anyhow::bail!(
+            "unsupported audit sidecar mode `{value}`; expected independent, not-requested, or bound-to-main-chain"
+        ),
+    }
 }
 
 fn write_or_print_json(output: Option<&Path>, value: &impl serde::Serialize) -> anyhow::Result<()> {

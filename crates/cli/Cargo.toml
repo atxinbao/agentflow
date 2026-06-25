@@ -11,12 +11,16 @@ path = "src/main.rs"
 [dependencies]
 agentflow-audit = { path = "../audit" }
 agentflow-agent-dispatcher = { path = "../agent-dispatcher" }
+agentflow-action-contract = { path = "../action-contract" }
 agentflow-capability-registry = { path = "../capability-registry" }
 agentflow-event-store = { path = "../event-store" }
+agentflow-governance-policy = { path = "../governance-policy" }
 agentflow-mcp = { path = "../mcp" }
+agentflow-ontology = { path = "../ontology" }
 agentflow-pack = { path = "../pack" }
 agentflow-projection = { path = "../projection" }
 agentflow-release = { path = "../release" }
+agentflow-role-policy = { path = "../role-policy" }
 agentflow-runtime-api = { path = "../runtime-api" }
 agentflow-simulation = { path = "../simulation" }
 agentflow-spec = { path = "../spec" }
