@@ -63,6 +63,7 @@
 | [042-v100-runtime-api-sdk-freeze-v1.md](042-v100-runtime-api-sdk-freeze-v1.md) | 定义 v1.0 Runtime API / SDK 的 command、query、event、decision、error 与治理准入冻结合同 |
 | [043-v100-agentflow-filesystem-contract-freeze-v1.md](043-v100-agentflow-filesystem-contract-freeze-v1.md) | 定义 v1.0 `.agentflow/` 文件系统 authority、projection、local cache、public record 和 retired path 冻结合同 |
 | [044-v100-pack-contract-freeze-v1.md](044-v100-pack-contract-freeze-v1.md) | 定义 v1.0 Pack manifest、Domain、Surface、Connector、capability、migration 与 release gate compatibility 冻结合同 |
+| [045-v100-projection-readmodel-contract-freeze-v1.md](045-v100-projection-readmodel-contract-freeze-v1.md) | 定义 v1.0 Projection API、Read Model、View Model、rebuild、freshness、Pack-specific projection 和 sidecar read model 冻结合同 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 
@@ -112,8 +113,9 @@
 42. [042-v100-runtime-api-sdk-freeze-v1.md](042-v100-runtime-api-sdk-freeze-v1.md)
 43. [043-v100-agentflow-filesystem-contract-freeze-v1.md](043-v100-agentflow-filesystem-contract-freeze-v1.md)
 44. [044-v100-pack-contract-freeze-v1.md](044-v100-pack-contract-freeze-v1.md)
-45. [current-module-boundaries.md](current-module-boundaries.md)
-46. [mcp-provider-adapter.md](mcp-provider-adapter.md)
+45. [045-v100-projection-readmodel-contract-freeze-v1.md](045-v100-projection-readmodel-contract-freeze-v1.md)
+46. [current-module-boundaries.md](current-module-boundaries.md)
+47. [mcp-provider-adapter.md](mcp-provider-adapter.md)
 
 ## 规则
 
