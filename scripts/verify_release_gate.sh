@@ -92,6 +92,7 @@ PROVIDER_SMOKE_ARTIFACT_PATH="$RUNTIME_DIR/provider-smoke-artifact.json"
 API_PLANE_MANIFEST_PATH="$RUNTIME_DIR/api-plane-manifest.json"
 RUNTIME_API_SDK_COMPATIBILITY_PATH="$RUNTIME_DIR/runtime-api-sdk-compatibility.json"
 FILESYSTEM_CONTRACT_PATH="$RUNTIME_DIR/filesystem-contract.json"
+PACK_CONTRACT_COMPATIBILITY_PATH="$RUNTIME_DIR/pack-contract-compatibility.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
 GOVERNANCE_ADMISSION_PATH="$RUNTIME_DIR/governance-admission.json"
@@ -324,6 +325,7 @@ proof_chain = [
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
+    {"stage": "pack-contract-compatibility", "label": "Pack Contract Compatibility"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -381,6 +383,7 @@ runtime_artifacts = [
     {"path": "runtime/api-plane-manifest.json", "exists": api_plane_manifest_path.is_file()},
     {"path": "runtime/runtime-api-sdk-compatibility.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/runtime-api-sdk-compatibility.json").is_file()},
     {"path": "runtime/filesystem-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/filesystem-contract.json").is_file()},
+    {"path": "runtime/pack-contract-compatibility.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/pack-contract-compatibility.json").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -431,6 +434,7 @@ source_agent_entry = load_json(source_agent_entry_path) or {}
 stable_contract_baseline = load_json(pathlib.Path(summary_json_path.parent / "runtime/stable-contract-baseline.json")) or {}
 runtime_api_sdk_compatibility = load_json(pathlib.Path(summary_json_path.parent / "runtime/runtime-api-sdk-compatibility.json")) or {}
 filesystem_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/filesystem-contract.json")) or {}
+pack_contract_compatibility = load_json(pathlib.Path(summary_json_path.parent / "runtime/pack-contract-compatibility.json")) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -561,6 +565,24 @@ filesystem_contract_passed = (
     and not filesystem_contract.get("missingStablePaths")
     and not filesystem_contract.get("missingAuthorityClasses")
     and not filesystem_contract.get("retiredPathViolations")
+)
+pack_contract_compatibility_passed = (
+    pack_contract_compatibility.get("status") == "passed"
+    and pack_contract_compatibility.get("packContractVersion") == "agentflow-pack-contract-freeze.v1"
+    and pack_contract_compatibility.get("packContractStatus") == "active"
+    and pack_contract_compatibility.get("docPath") == "docs/architecture/044-v100-pack-contract-freeze-v1.md"
+    and pack_contract_compatibility.get("stableContractBaseline") == "agentflow-stable-contract-baseline.v1"
+    and pack_contract_compatibility.get("filesystemContractVersion") == "agentflow-filesystem-contract-freeze.v1"
+    and pack_contract_compatibility.get("registrySource") == "project-files"
+    and pack_contract_compatibility.get("registryFallback") is False
+    and pack_contract_compatibility.get("validationStatus") == "passed"
+    and pack_contract_compatibility.get("simulationStatus") == "passed"
+    and pack_contract_compatibility.get("projectionReadinessStatus") == "passed"
+    and pack_contract_compatibility.get("apiPlaneStatus") == "passed"
+    and pack_contract_compatibility.get("negativeFixturesStatus") == "passed"
+    and pack_contract_compatibility.get("migrationReceiptOnly") is True
+    and not pack_contract_compatibility.get("missingSections")
+    and not pack_contract_compatibility.get("missingRequiredFixtures")
 )
 deployment_evidence_semantics_passed = (
     deployment_evidence_passed
@@ -757,6 +779,11 @@ checklist = [
         "passed": filesystem_contract_passed,
     },
     {
+        "id": "v100-pack-contract-freeze",
+        "label": "v1.0 Pack contract freezes manifest, domain, surface, connector, capability, migration, and compatibility boundaries",
+        "passed": pack_contract_compatibility_passed,
+    },
+    {
         "id": "runtime-fixture-gate",
         "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
@@ -880,6 +907,10 @@ summary_payload = {
     "filesystemContractStatus": filesystem_contract.get("status") or "missing",
     "filesystemContractVersion": filesystem_contract.get("filesystemContractVersion"),
     "filesystemContractFreezeStatus": filesystem_contract.get("filesystemContractStatus"),
+    "packContractCompatibilityPath": "runtime/pack-contract-compatibility.json" if pathlib.Path(summary_json_path.parent / "runtime/pack-contract-compatibility.json").is_file() else None,
+    "packContractCompatibilityStatus": pack_contract_compatibility.get("status") or "missing",
+    "packContractVersion": pack_contract_compatibility.get("packContractVersion"),
+    "packContractStatus": pack_contract_compatibility.get("packContractStatus"),
     "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage",
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
@@ -976,6 +1007,7 @@ summary_lines = [
     f"- Stable contract baseline: `{stable_contract_baseline.get('status') or 'missing'}`",
     f"- Runtime API / SDK compatibility: `{runtime_api_sdk_compatibility.get('status') or 'missing'}`",
     f"- Filesystem contract: `{filesystem_contract.get('status') or 'missing'}`",
+    f"- Pack contract compatibility: `{pack_contract_compatibility.get('status') or 'missing'}`",
     "- Provider smoke boundary: `minimal provider health / launch / session / terminal projection; does not replace runtime fixture gate`",
     f"- Foundation coverage: `{'present' if foundation_coverage_path.is_file() else 'missing'}`",
     f"- Foundation readiness report: `{'present' if foundation_readiness_report_path.is_file() else 'missing'}`",
@@ -1055,6 +1087,10 @@ certification_payload = {
     "filesystemContractStatus": filesystem_contract.get("status") or "missing",
     "filesystemContractVersion": filesystem_contract.get("filesystemContractVersion"),
     "filesystemContractFreezeStatus": filesystem_contract.get("filesystemContractStatus"),
+    "packContractCompatibilityPath": "runtime/pack-contract-compatibility.json" if pathlib.Path(summary_json_path.parent / "runtime/pack-contract-compatibility.json").is_file() else None,
+    "packContractCompatibilityStatus": pack_contract_compatibility.get("status") or "missing",
+    "packContractVersion": pack_contract_compatibility.get("packContractVersion"),
+    "packContractStatus": pack_contract_compatibility.get("packContractStatus"),
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "currentGateRun": current_gate_run,
     "mainGateRun": main_gate_run,
@@ -1142,6 +1178,7 @@ cert_lines = [
     f"- Stable contract baseline: `{stable_contract_baseline.get('status') or 'missing'}`",
     f"- Runtime API / SDK compatibility: `{runtime_api_sdk_compatibility.get('status') or 'missing'}`",
     f"- Filesystem contract: `{filesystem_contract.get('status') or 'missing'}`",
+    f"- Pack contract compatibility: `{pack_contract_compatibility.get('status') or 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
@@ -3145,6 +3182,195 @@ PY
   record_stage "pack.migration-execution" "passed" "$(basename "$PACK_MIGRATION_APPLIED_RECEIPT_PATH")"
 }
 
+run_pack_contract_compatibility_gate() {
+  record_stage "pack-contract-compatibility" "started" "$PACK_CONTRACT_COMPATIBILITY_PATH"
+  python3 - \
+    "$ROOT" \
+    "$PACK_REGISTRY_PATH" \
+    "$PACK_VALIDATION_REPORT_PATH" \
+    "$PACK_SIMULATION_REPORT_PATH" \
+    "$PACK_PROJECTION_READINESS_PATH" \
+    "$PACK_API_PLANE_MANIFEST_PATH" \
+    "$PACK_NEGATIVE_FIXTURES_PATH" \
+    "$PACK_MIGRATION_APPLIED_RECEIPT_PATH" \
+    "$PACK_MIGRATION_FAKE_AUTHORITY_RECEIPT_PATH" \
+    "$PACK_MIGRATION_ROLLBACK_RECEIPT_PATH" \
+    "$PACK_CONTRACT_COMPATIBILITY_PATH" <<'PY'
+import json
+import pathlib
+import re
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+registry_path = pathlib.Path(sys.argv[2])
+validation_path = pathlib.Path(sys.argv[3])
+simulation_path = pathlib.Path(sys.argv[4])
+projection_path = pathlib.Path(sys.argv[5])
+api_plane_path = pathlib.Path(sys.argv[6])
+negative_path = pathlib.Path(sys.argv[7])
+applied_receipt_path = pathlib.Path(sys.argv[8])
+fake_authority_path = pathlib.Path(sys.argv[9])
+rollback_receipt_path = pathlib.Path(sys.argv[10])
+output_path = pathlib.Path(sys.argv[11])
+doc_path = root / "docs/architecture/044-v100-pack-contract-freeze-v1.md"
+
+if not doc_path.is_file():
+    raise SystemExit(f"missing pack contract freeze document: {doc_path}")
+
+def load_json(path):
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+doc = doc_path.read_text(encoding="utf-8")
+registry = load_json(registry_path)
+validation = load_json(validation_path)
+simulation = load_json(simulation_path)
+projection = load_json(projection_path)
+api_plane = load_json(api_plane_path)
+negative = load_json(negative_path)
+applied = load_json(applied_receipt_path)
+fake_authority = load_json(fake_authority_path)
+rollback = load_json(rollback_receipt_path)
+
+def metadata_value(name):
+    match = re.search(rf"^{re.escape(name)}:\s*(\S+)\s*$", doc, re.MULTILINE)
+    return match.group(1) if match else None
+
+required_sections = [
+    "## Stable Pack Surfaces",
+    "## Manifest Contract",
+    "## Domain Contract",
+    "## Surface Contract",
+    "## Connector Contract",
+    "## Capability Status Rule",
+    "## Runtime Entry Rule",
+    "## Migration Rule",
+    "## Built-in Pack Baseline",
+    "## Compatibility Promise",
+    "## Breaking Change Rule",
+    "## Release Gate Fixture",
+]
+required_fixtures = {
+    "invalid-pack",
+    "missing-read-model",
+    "missing-connector",
+    "disabled-capability",
+    "invalid-command-submit",
+    "unexpected-project-pack-fallback",
+}
+required_pack_ids = {"software-dev", "ui-design"}
+
+registry_entries = registry.get("entries") or []
+registry_pack_ids = {entry.get("packId") for entry in registry_entries}
+file_backed_registry = (
+    registry.get("version") == "agentflow-pack-registry.v1"
+    and registry.get("source") == "project-files"
+    and registry.get("fallback") is False
+    and required_pack_ids.issubset(registry_pack_ids)
+    and all(
+        entry.get("source") == "project-files"
+        and entry.get("fallback") is False
+        and bool(entry.get("manifestPath"))
+        for entry in registry_entries
+        if entry.get("packId") in required_pack_ids
+    )
+)
+negative_fixtures = negative.get("fixtures") or []
+observed_fixture_ids = {fixture.get("id") for fixture in negative_fixtures}
+missing_required_fixtures = sorted(required_fixtures - observed_fixture_ids)
+negative_fixtures_passed = (
+    negative.get("status") == "passed"
+    and negative.get("writesAuthority") is False
+    and not missing_required_fixtures
+    and all(
+        fixture.get("passed") is True
+        and fixture.get("writesAuthority") is False
+        and fixture.get("authorityWriteBlocked") is True
+        for fixture in negative_fixtures
+        if fixture.get("id") in required_fixtures
+    )
+)
+migration_receipt_only = (
+    applied.get("applied") is True
+    and applied.get("writesAuthority") is False
+    and (applied.get("semanticTarget") or {}).get("mutationTarget") == "receipt-only-apply"
+    and (applied.get("semanticTarget") or {}).get("authorityMutation") is False
+    and fake_authority.get("writesAuthority") is True
+    and rollback.get("rolledBack") is True
+    and rollback.get("writesAuthority") is False
+    and (rollback.get("semanticTarget") or {}).get("mutationTarget") == "receipt-only-rollback"
+    and (rollback.get("semanticTarget") or {}).get("authorityMutation") is False
+)
+missing_sections = [section for section in required_sections if section not in doc]
+required_phrases = [
+    "Pack 不是 Runtime authority",
+    "Pack definition",
+    "Runtime API / Command Surface",
+    "Action Proposal",
+    "Arbitration / Governance",
+    "Event Store",
+    "Projection",
+    "disabled capability",
+    "invalid command submit",
+    "unexpected fallback",
+    "receipt-only apply",
+    "receipt-only rollback",
+]
+missing_required_phrases = [phrase for phrase in required_phrases if phrase not in doc]
+
+payload = {
+    "version": "agentflow-pack-contract-compatibility.v1",
+    "status": "passed",
+    "docPath": "docs/architecture/044-v100-pack-contract-freeze-v1.md",
+    "packContractVersion": metadata_value("packContractVersion"),
+    "packContractStatus": metadata_value("packContractStatus"),
+    "stableContractBaseline": metadata_value("stableContractBaseline"),
+    "filesystemContractVersion": metadata_value("filesystemContractVersion"),
+    "registrySource": registry.get("source"),
+    "registryFallback": registry.get("fallback"),
+    "registryPackIds": sorted(pack_id for pack_id in registry_pack_ids if pack_id),
+    "fileBackedRegistry": file_backed_registry,
+    "validationStatus": validation.get("status"),
+    "simulationStatus": simulation.get("status"),
+    "projectionReadinessStatus": projection.get("status"),
+    "apiPlaneStatus": api_plane.get("status"),
+    "negativeFixturesStatus": negative.get("status"),
+    "missingSections": missing_sections,
+    "missingRequiredPhrases": missing_required_phrases,
+    "requiredFixtures": sorted(required_fixtures),
+    "missingRequiredFixtures": missing_required_fixtures,
+    "negativeFixturesPassed": negative_fixtures_passed,
+    "migrationReceiptOnly": migration_receipt_only,
+    "checkedAt": int(time.time()),
+}
+
+if (
+    payload["packContractVersion"] != "agentflow-pack-contract-freeze.v1"
+    or payload["packContractStatus"] != "active"
+    or payload["stableContractBaseline"] != "agentflow-stable-contract-baseline.v1"
+    or payload["filesystemContractVersion"] != "agentflow-filesystem-contract-freeze.v1"
+    or not file_backed_registry
+    or validation.get("status") != "passed"
+    or simulation.get("status") != "passed"
+    or projection.get("status") != "passed"
+    or api_plane.get("status") != "passed"
+    or not negative_fixtures_passed
+    or not migration_receipt_only
+    or missing_sections
+    or missing_required_phrases
+):
+    payload["status"] = "failed"
+
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("pack contract compatibility fixture failed")
+PY
+  record_stage "pack-contract-compatibility" "passed" "$(basename "$PACK_CONTRACT_COMPATIBILITY_PATH")"
+}
+
 run_negative_semantic_fixtures_gate() {
   record_stage "negative-semantic-fixtures" "started" "$NEGATIVE_SEMANTIC_FIXTURES_PATH"
   if ! python3 - \
@@ -3790,6 +4016,7 @@ main() {
 
   run_event_replay_projection_gate
   run_pack_migration_execution_gate
+  run_pack_contract_compatibility_gate
 
   run_cli_json "completion.inspect" "$completion_inspect_json" \
     completion inspect --project-id "$project_id"
