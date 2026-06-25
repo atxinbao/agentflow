@@ -90,6 +90,7 @@ PROVIDER_SMOKE_PROVIDER="${PROVIDER_SMOKE_PROVIDER:-codex}"
 PROVIDER_SMOKE_STATUS_PATH="$RUNTIME_DIR/provider-smoke-status.json"
 PROVIDER_SMOKE_ARTIFACT_PATH="$RUNTIME_DIR/provider-smoke-artifact.json"
 API_PLANE_MANIFEST_PATH="$RUNTIME_DIR/api-plane-manifest.json"
+RUNTIME_API_SDK_COMPATIBILITY_PATH="$RUNTIME_DIR/runtime-api-sdk-compatibility.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
 GOVERNANCE_ADMISSION_PATH="$RUNTIME_DIR/governance-admission.json"
@@ -314,6 +315,7 @@ for entry in stage_log:
 proof_chain = [
     {"stage": "source.agent-entry", "label": "Release Source Agent Entry"},
     {"stage": "stable.contract-baseline", "label": "Stable Contract Baseline"},
+    {"stage": "runtime-api-sdk-compatibility", "label": "Runtime API / SDK Compatibility"},
     {"stage": "release.version-metadata", "label": "Release Version Metadata"},
     {"stage": "release.changelog-entry", "label": "Release Changelog Entry"},
     {"stage": "release.github-release-fact", "label": "GitHub Release Fact"},
@@ -375,6 +377,7 @@ runtime_artifacts = [
     {"path": "runtime/provider-smoke-status.json", "exists": provider_smoke_status_path.is_file()},
     {"path": "runtime/provider-smoke-artifact.json", "exists": provider_smoke_artifact_path.is_file()},
     {"path": "runtime/api-plane-manifest.json", "exists": api_plane_manifest_path.is_file()},
+    {"path": "runtime/runtime-api-sdk-compatibility.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/runtime-api-sdk-compatibility.json").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -423,6 +426,7 @@ deployment_evidence_fake_migration = load_json(pathlib.Path(summary_json_path.pa
 negative_semantic_fixtures = load_json(negative_semantic_fixtures_path) or {}
 source_agent_entry = load_json(source_agent_entry_path) or {}
 stable_contract_baseline = load_json(pathlib.Path(summary_json_path.parent / "runtime/stable-contract-baseline.json")) or {}
+runtime_api_sdk_compatibility = load_json(pathlib.Path(summary_json_path.parent / "runtime/runtime-api-sdk-compatibility.json")) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -526,6 +530,21 @@ stable_contract_baseline_passed = (
     and stable_contract_baseline.get("stableContractStatus") == "active"
     and stable_contract_baseline.get("docPath") == "docs/architecture/041-v100-stable-contract-baseline-v1.md"
     and not stable_contract_baseline.get("missingSections")
+)
+runtime_api_sdk_compatibility_passed = (
+    runtime_api_sdk_compatibility.get("status") == "passed"
+    and runtime_api_sdk_compatibility.get("runtimeApiSdkContractVersion") == "agentflow-runtime-api-sdk-freeze.v1"
+    and runtime_api_sdk_compatibility.get("runtimeApiSdkContractStatus") == "active"
+    and runtime_api_sdk_compatibility.get("docPath") == "docs/architecture/042-v100-runtime-api-sdk-freeze-v1.md"
+    and runtime_api_sdk_compatibility.get("stableContractBaseline") == "agentflow-stable-contract-baseline.v1"
+    and runtime_api_sdk_compatibility.get("commandPathRequiresGovernanceAdmission") is True
+    and runtime_api_sdk_compatibility.get("rejectedWritesProposal") is False
+    and runtime_api_sdk_compatibility.get("deferredWritesProposal") is False
+    and runtime_api_sdk_compatibility.get("rejectedWritesAcceptedEvent") is False
+    and runtime_api_sdk_compatibility.get("deferredWritesAcceptedEvent") is False
+    and runtime_api_sdk_compatibility.get("sdkCandidateReadonly") is True
+    and not runtime_api_sdk_compatibility.get("missingSections")
+    and not runtime_api_sdk_compatibility.get("missingManifestEntries")
 )
 deployment_evidence_semantics_passed = (
     deployment_evidence_passed
@@ -712,6 +731,11 @@ checklist = [
         "passed": stable_contract_baseline_passed,
     },
     {
+        "id": "v100-runtime-api-sdk-freeze",
+        "label": "v1.0 Runtime API / SDK contract freezes command, query, event, decision, error, and governance semantics",
+        "passed": runtime_api_sdk_compatibility_passed,
+    },
+    {
         "id": "runtime-fixture-gate",
         "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
@@ -827,6 +851,10 @@ summary_payload = {
     "stableContractBaselineStatus": stable_contract_baseline.get("status") or "missing",
     "stableContractVersion": stable_contract_baseline.get("stableContractVersion"),
     "stableContractStatus": stable_contract_baseline.get("stableContractStatus"),
+    "runtimeApiSdkCompatibilityPath": "runtime/runtime-api-sdk-compatibility.json" if pathlib.Path(summary_json_path.parent / "runtime/runtime-api-sdk-compatibility.json").is_file() else None,
+    "runtimeApiSdkCompatibilityStatus": runtime_api_sdk_compatibility.get("status") or "missing",
+    "runtimeApiSdkContractVersion": runtime_api_sdk_compatibility.get("runtimeApiSdkContractVersion"),
+    "runtimeApiSdkContractStatus": runtime_api_sdk_compatibility.get("runtimeApiSdkContractStatus"),
     "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage",
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
@@ -921,6 +949,7 @@ summary_lines = [
     f"- Provider smoke provider: `{provider_smoke.get('provider') or 'n/a'}`",
     f"- Provider smoke reason: `{provider_smoke.get('reason') or 'n/a'}`",
     f"- Stable contract baseline: `{stable_contract_baseline.get('status') or 'missing'}`",
+    f"- Runtime API / SDK compatibility: `{runtime_api_sdk_compatibility.get('status') or 'missing'}`",
     "- Provider smoke boundary: `minimal provider health / launch / session / terminal projection; does not replace runtime fixture gate`",
     f"- Foundation coverage: `{'present' if foundation_coverage_path.is_file() else 'missing'}`",
     f"- Foundation readiness report: `{'present' if foundation_readiness_report_path.is_file() else 'missing'}`",
@@ -992,6 +1021,10 @@ certification_payload = {
     "stableContractBaselineStatus": stable_contract_baseline.get("status") or "missing",
     "stableContractVersion": stable_contract_baseline.get("stableContractVersion"),
     "stableContractStatus": stable_contract_baseline.get("stableContractStatus"),
+    "runtimeApiSdkCompatibilityPath": "runtime/runtime-api-sdk-compatibility.json" if pathlib.Path(summary_json_path.parent / "runtime/runtime-api-sdk-compatibility.json").is_file() else None,
+    "runtimeApiSdkCompatibilityStatus": runtime_api_sdk_compatibility.get("status") or "missing",
+    "runtimeApiSdkContractVersion": runtime_api_sdk_compatibility.get("runtimeApiSdkContractVersion"),
+    "runtimeApiSdkContractStatus": runtime_api_sdk_compatibility.get("runtimeApiSdkContractStatus"),
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "currentGateRun": current_gate_run,
     "mainGateRun": main_gate_run,
@@ -1077,6 +1110,7 @@ cert_lines = [
     f"- Provider smoke provider: `{provider_smoke.get('provider') or 'n/a'}`",
     f"- Provider smoke reason: `{provider_smoke.get('reason') or 'n/a'}`",
     f"- Stable contract baseline: `{stable_contract_baseline.get('status') or 'missing'}`",
+    f"- Runtime API / SDK compatibility: `{runtime_api_sdk_compatibility.get('status') or 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
@@ -1747,6 +1781,129 @@ if not any(entry.get("boundary") == "internal" for entry in event_entries):
     raise SystemExit("event API must include an internal append/claim path")
 PY
   record_stage "api-plane-manifest" "passed" "$(basename "$API_PLANE_MANIFEST_PATH")"
+}
+
+run_runtime_api_sdk_compatibility_gate() {
+  record_stage "runtime-api-sdk-compatibility" "started" "$RUNTIME_API_SDK_COMPATIBILITY_PATH"
+  python3 - "$ROOT" "$API_PLANE_MANIFEST_PATH" "$RUNTIME_API_SDK_COMPATIBILITY_PATH" <<'PY'
+import json
+import pathlib
+import re
+import sys
+
+root = pathlib.Path(sys.argv[1])
+manifest_path = pathlib.Path(sys.argv[2])
+output_path = pathlib.Path(sys.argv[3])
+doc_path = root / "docs/architecture/042-v100-runtime-api-sdk-freeze-v1.md"
+
+if not manifest_path.is_file():
+    raise SystemExit(f"missing api plane manifest: {manifest_path}")
+if not doc_path.is_file():
+    raise SystemExit(f"missing runtime api sdk freeze document: {doc_path}")
+
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+doc = doc_path.read_text(encoding="utf-8")
+
+def metadata_value(name: str) -> str | None:
+    match = re.search(rf"^{re.escape(name)}:\s*(\S+)\s*$", doc, re.MULTILINE)
+    return match.group(1) if match else None
+
+required_sections = [
+    "## Stable API Planes",
+    "## Command Input Contract",
+    "## Query Input Contract",
+    "## Event Output Contract",
+    "## Decision Output Contract",
+    "## Error Model",
+    "## Governance Admission Rule",
+    "## Runtime API And CLI Relationship",
+    "## Minimal SDK Surface",
+    "## Compatibility Fixture",
+]
+missing_sections = [section for section in required_sections if section not in doc]
+entries = manifest.get("entries") or []
+entry_ids = {entry.get("apiId") for entry in entries}
+required_entries = {
+    "runtime.command.validate",
+    "runtime.command.execute",
+    "projection.task-workbench",
+    "projection.pack-industry-workbench",
+    "event.runtime.replay",
+    "event.task.replay",
+    "event.runtime.append-accepted-action",
+    "event.task.claim",
+    "pack.command.list",
+    "pack.command.validate",
+    "pack.command.dry-run",
+    "pack.command.submit-proposal",
+    "pack.capability.status",
+    "pack.surface.route",
+}
+missing_manifest_entries = sorted(required_entries - entry_ids)
+sdk_candidate_violations = [
+    entry
+    for entry in entries
+    if entry.get("access") == "sdk-candidate" and entry.get("boundary") != "readonly"
+]
+
+status_semantics = {
+    "accepted": {"writesProposal": True, "writesAcceptedEvent": True},
+    "rejected": {"writesProposal": False, "writesAcceptedEvent": False},
+    "deferred": {"writesProposal": False, "writesAcceptedEvent": False},
+    "failed": {"writesProposal": False, "writesAcceptedEvent": False},
+}
+example_coverage = {
+    "command": '"commandId"' in doc and '"commandType"' in doc,
+    "query": '"queryId"' in doc and '"queryType"' in doc,
+    "event": '"events"' in doc and '"eventType"' in doc,
+}
+error_model_fields = ["code", "stage", "reason", "evidencePath"]
+error_model_complete = all(f'"{field}"' in doc for field in error_model_fields)
+
+payload = {
+    "version": "agentflow-runtime-api-sdk-compatibility.v1",
+    "status": "passed",
+    "docPath": "docs/architecture/042-v100-runtime-api-sdk-freeze-v1.md",
+    "runtimeApiSdkContractVersion": metadata_value("runtimeApiSdkContractVersion"),
+    "runtimeApiSdkContractStatus": metadata_value("runtimeApiSdkContractStatus"),
+    "stableContractBaseline": metadata_value("stableContractBaseline"),
+    "manifestPath": "runtime/api-plane-manifest.json",
+    "manifestVersion": manifest.get("version"),
+    "commandPathRequiresGovernanceAdmission": "-> governance admission" in doc,
+    "rejectedWritesProposal": status_semantics["rejected"]["writesProposal"],
+    "deferredWritesProposal": status_semantics["deferred"]["writesProposal"],
+    "rejectedWritesAcceptedEvent": status_semantics["rejected"]["writesAcceptedEvent"],
+    "deferredWritesAcceptedEvent": status_semantics["deferred"]["writesAcceptedEvent"],
+    "sdkCandidateReadonly": not sdk_candidate_violations,
+    "sdkCandidateViolationCount": len(sdk_candidate_violations),
+    "missingSections": missing_sections,
+    "missingManifestEntries": missing_manifest_entries,
+    "errorModelFields": error_model_fields,
+    "errorModelComplete": error_model_complete,
+    "sdkExampleCoverage": example_coverage,
+    "stableStatuses": sorted(status_semantics.keys()),
+}
+
+if (
+    payload["runtimeApiSdkContractVersion"] != "agentflow-runtime-api-sdk-freeze.v1"
+    or payload["runtimeApiSdkContractStatus"] != "active"
+    or payload["stableContractBaseline"] != "agentflow-stable-contract-baseline.v1"
+    or manifest.get("version") != "agentflow-api-plane-manifest.v1"
+    or missing_sections
+    or missing_manifest_entries
+    or sdk_candidate_violations
+    or not payload["commandPathRequiresGovernanceAdmission"]
+    or not error_model_complete
+    or not all(example_coverage.values())
+):
+    payload["status"] = "failed"
+
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("runtime api sdk compatibility fixture failed")
+PY
+  record_stage "runtime-api-sdk-compatibility" "passed" "$(basename "$RUNTIME_API_SDK_COMPATIBILITY_PATH")"
 }
 
 run_capability_registry_gate() {
@@ -3360,6 +3517,7 @@ main() {
   verify_release_publication_facts "$WORKSPACE"
   run_provider_smoke_gate
   run_api_plane_manifest_gate
+  run_runtime_api_sdk_compatibility_gate
   run_capability_registry_gate
   run_governance_policy_gate
   run_governance_admission_gate
