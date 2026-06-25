@@ -66,7 +66,7 @@ v1PlanningReadiness = ready
 | Issue | Title | Priority | Dependency | Status |
 | --- | --- | --- | --- | --- |
 | `V100-001` | Stable Contract Baseline | P0 | v0.9.1 certification ready | done |
-| `V100-002` | Runtime API / SDK Freeze | P0 | V100-001 | planned |
+| `V100-002` | Runtime API / SDK Freeze | P0 | V100-001 | done |
 | `V100-003` | AgentFlow Filesystem Contract Freeze | P0 | V100-001 | planned |
 | `V100-004` | Pack Contract Freeze | P0 | V100-001, V100-003 | planned |
 | `V100-005` | Projection / Read Model Stable Contract | P0 | V100-002, V100-004 | planned |
@@ -152,6 +152,15 @@ v1PlanningReadiness = ready
 - 不做多语言 SDK 全量实现；
 - 不绑定特定云 API 网关。
 
+### Closeout
+
+- Runtime API / SDK Freeze 已落到 [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md)；
+- 文档明确 `runtimeApiSdkContractVersion = agentflow-runtime-api-sdk-freeze.v1` 和 `runtimeApiSdkContractStatus = active`；
+- command、query、event、decision、error、governance admission、CLI / SDK relationship 和 minimal SDK surface 已冻结；
+- release gate 新增 `runtime-api-sdk-compatibility` stage，生成 `runtime/runtime-api-sdk-compatibility.json`；
+- compatibility fixture 会检查 command / query / event 三条路径、SDK readonly guard、rejected / deferred 不写 proposal / accepted event、错误模型和 SDK 示例覆盖；
+- 下游 `V100-005`、`V100-006`、`V100-007`、`V100-010` 必须引用该 freeze 文档。
+
 ## V100-003 AgentFlow Filesystem Contract Freeze
 
 ### Scope
@@ -231,7 +240,7 @@ v1PlanningReadiness = ready
 
 固化 Projection API、Read Model、View Model。
 
-必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Projection / Read Model stable contract 和 projection 只读边界。
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Projection / Read Model stable contract 和 projection 只读边界，并引用 [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md) 中的 Query API 只读边界。
 
 原则：
 
@@ -273,7 +282,7 @@ UI 不直接读 Event Store 写路径。
 
 把验证、证据、验收、完成写入做成稳定闭环。
 
-必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Evidence / Acceptance contract、Completion Commit 边界和 Audit sidecar 边界。
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Evidence / Acceptance contract、Completion Commit 边界和 Audit sidecar 边界，并引用 [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md) 中的 Decision Output Contract 与 Error Model。
 
 主链：
 
@@ -322,7 +331,7 @@ Confirmed Work
 
 固化 Codex / Claude Code 等执行器适配合同。
 
-必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Executor Adapter contract 和 executor 不拥有 project truth 的规则。
+必须引用 [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md) 中的 Executor Adapter contract 和 executor 不拥有 project truth 的规则，并引用 [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md) 中的 Command API 与 Governance Admission Rule。
 
 AgentFlow 管：
 
@@ -471,6 +480,7 @@ Requirement
 - negative fixture coverage；
 - remaining risk / deferred list；
 - v1 support boundary。
+- Runtime API / SDK compatibility fixture。
 
 ### Acceptance
 
