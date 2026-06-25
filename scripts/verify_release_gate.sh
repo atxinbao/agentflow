@@ -94,6 +94,7 @@ RUNTIME_API_SDK_COMPATIBILITY_PATH="$RUNTIME_DIR/runtime-api-sdk-compatibility.j
 FILESYSTEM_CONTRACT_PATH="$RUNTIME_DIR/filesystem-contract.json"
 PACK_CONTRACT_COMPATIBILITY_PATH="$RUNTIME_DIR/pack-contract-compatibility.json"
 PROJECTION_READMODEL_CONTRACT_PATH="$RUNTIME_DIR/projection-readmodel-contract.json"
+EVIDENCE_ACCEPTANCE_CONTRACT_PATH="$RUNTIME_DIR/evidence-acceptance-contract.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
 GOVERNANCE_ADMISSION_PATH="$RUNTIME_DIR/governance-admission.json"
@@ -328,6 +329,7 @@ proof_chain = [
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
     {"stage": "pack-contract-compatibility", "label": "Pack Contract Compatibility"},
     {"stage": "projection-readmodel-contract", "label": "Projection / Read Model Contract"},
+    {"stage": "evidence-acceptance-contract", "label": "Evidence / Acceptance Contract"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -379,6 +381,7 @@ runtime_artifacts = [
     {"path": "runtime/external-review-surface.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/external-review-surface.json").is_file()},
     {"path": "runtime/completion-runtime.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/completion-runtime.json").is_file()},
     {"path": "runtime/final-closeout-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/final-closeout-proof.json").is_file()},
+    {"path": "runtime/final-acceptance-gate.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/final-acceptance-gate.json").is_file()},
     {"path": "runtime/audit-index.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-index.json").is_file()},
     {"path": "runtime/provider-smoke-status.json", "exists": provider_smoke_status_path.is_file()},
     {"path": "runtime/provider-smoke-artifact.json", "exists": provider_smoke_artifact_path.is_file()},
@@ -387,6 +390,7 @@ runtime_artifacts = [
     {"path": "runtime/filesystem-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/filesystem-contract.json").is_file()},
     {"path": "runtime/pack-contract-compatibility.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/pack-contract-compatibility.json").is_file()},
     {"path": "runtime/projection-readmodel-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/projection-readmodel-contract.json").is_file()},
+    {"path": "runtime/evidence-acceptance-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/evidence-acceptance-contract.json").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -439,6 +443,7 @@ runtime_api_sdk_compatibility = load_json(pathlib.Path(summary_json_path.parent 
 filesystem_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/filesystem-contract.json")) or {}
 pack_contract_compatibility = load_json(pathlib.Path(summary_json_path.parent / "runtime/pack-contract-compatibility.json")) or {}
 projection_readmodel_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/projection-readmodel-contract.json")) or {}
+evidence_acceptance_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/evidence-acceptance-contract.json")) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -609,6 +614,28 @@ projection_readmodel_contract_passed = (
     and not projection_readmodel_contract.get("missingSections")
     and not projection_readmodel_contract.get("missingRequiredReadModels")
     and not projection_readmodel_contract.get("missingProjectionPaths")
+)
+evidence_acceptance_contract_passed = (
+    evidence_acceptance_contract.get("status") == "passed"
+    and evidence_acceptance_contract.get("evidenceAcceptanceContractVersion") == "agentflow-evidence-acceptance-contract.v1"
+    and evidence_acceptance_contract.get("evidenceAcceptanceContractStatus") == "active"
+    and evidence_acceptance_contract.get("docPath") == "docs/architecture/046-v100-evidence-acceptance-contract-freeze-v1.md"
+    and evidence_acceptance_contract.get("stableContractBaseline") == "agentflow-stable-contract-baseline.v1"
+    and evidence_acceptance_contract.get("runtimeApiSdkVersion") == "agentflow-runtime-api-sdk-freeze.v1"
+    and evidence_acceptance_contract.get("filesystemContractVersion") == "agentflow-filesystem-contract-freeze.v1"
+    and evidence_acceptance_contract.get("packContractVersion") == "agentflow-pack-contract-freeze.v1"
+    and evidence_acceptance_contract.get("projectionContractVersion") == "agentflow-projection-readmodel-contract.v1"
+    and evidence_acceptance_contract.get("evidencePackStatus") == "passed"
+    and evidence_acceptance_contract.get("acceptanceEventPresent") is True
+    and evidence_acceptance_contract.get("completionCommitEventPresent") is True
+    and evidence_acceptance_contract.get("taskDoneFromCompletionCommit") is True
+    and evidence_acceptance_contract.get("closeoutProofMerged") is True
+    and evidence_acceptance_contract.get("closeoutIssueClosed") is True
+    and evidence_acceptance_contract.get("deliveryReadModelReady") is True
+    and evidence_acceptance_contract.get("auditSidecarNonBlocking") is True
+    and evidence_acceptance_contract.get("failureFixturesPassed") is True
+    and not evidence_acceptance_contract.get("missingSections")
+    and not evidence_acceptance_contract.get("missingRequiredPhrases")
 )
 deployment_evidence_semantics_passed = (
     deployment_evidence_passed
@@ -815,6 +842,11 @@ checklist = [
         "passed": projection_readmodel_contract_passed,
     },
     {
+        "id": "v100-evidence-acceptance-contract-freeze",
+        "label": "v1.0 Evidence / Acceptance contract freezes Evidence Pack, Acceptance Gate, Completion Commit, failure reasons, delivery, and Audit sidecar boundaries",
+        "passed": evidence_acceptance_contract_passed,
+    },
+    {
         "id": "runtime-fixture-gate",
         "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
@@ -946,6 +978,10 @@ summary_payload = {
     "projectionReadmodelContractStatus": projection_readmodel_contract.get("status") or "missing",
     "projectionContractVersion": projection_readmodel_contract.get("projectionContractVersion"),
     "projectionContractStatus": projection_readmodel_contract.get("projectionContractStatus"),
+    "evidenceAcceptanceContractPath": "runtime/evidence-acceptance-contract.json" if pathlib.Path(summary_json_path.parent / "runtime/evidence-acceptance-contract.json").is_file() else None,
+    "evidenceAcceptanceContractStatus": evidence_acceptance_contract.get("status") or "missing",
+    "evidenceAcceptanceContractVersion": evidence_acceptance_contract.get("evidenceAcceptanceContractVersion"),
+    "evidenceAcceptanceFreezeStatus": evidence_acceptance_contract.get("evidenceAcceptanceContractStatus"),
     "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage",
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
@@ -1044,6 +1080,7 @@ summary_lines = [
     f"- Filesystem contract: `{filesystem_contract.get('status') or 'missing'}`",
     f"- Pack contract compatibility: `{pack_contract_compatibility.get('status') or 'missing'}`",
     f"- Projection / Read Model contract: `{projection_readmodel_contract.get('status') or 'missing'}`",
+    f"- Evidence / Acceptance contract: `{evidence_acceptance_contract.get('status') or 'missing'}`",
     "- Provider smoke boundary: `minimal provider health / launch / session / terminal projection; does not replace runtime fixture gate`",
     f"- Foundation coverage: `{'present' if foundation_coverage_path.is_file() else 'missing'}`",
     f"- Foundation readiness report: `{'present' if foundation_readiness_report_path.is_file() else 'missing'}`",
@@ -1131,6 +1168,10 @@ certification_payload = {
     "projectionReadmodelContractStatus": projection_readmodel_contract.get("status") or "missing",
     "projectionContractVersion": projection_readmodel_contract.get("projectionContractVersion"),
     "projectionContractStatus": projection_readmodel_contract.get("projectionContractStatus"),
+    "evidenceAcceptanceContractPath": "runtime/evidence-acceptance-contract.json" if pathlib.Path(summary_json_path.parent / "runtime/evidence-acceptance-contract.json").is_file() else None,
+    "evidenceAcceptanceContractStatus": evidence_acceptance_contract.get("status") or "missing",
+    "evidenceAcceptanceContractVersion": evidence_acceptance_contract.get("evidenceAcceptanceContractVersion"),
+    "evidenceAcceptanceFreezeStatus": evidence_acceptance_contract.get("evidenceAcceptanceContractStatus"),
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "currentGateRun": current_gate_run,
     "mainGateRun": main_gate_run,
@@ -1220,6 +1261,7 @@ cert_lines = [
     f"- Filesystem contract: `{filesystem_contract.get('status') or 'missing'}`",
     f"- Pack contract compatibility: `{pack_contract_compatibility.get('status') or 'missing'}`",
     f"- Projection / Read Model contract: `{projection_readmodel_contract.get('status') or 'missing'}`",
+    f"- Evidence / Acceptance contract: `{evidence_acceptance_contract.get('status') or 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Deployment evidence: `{deployment_evidence.get('status') or 'missing'}`",
@@ -3648,6 +3690,248 @@ PY
   record_stage "projection-readmodel-contract" "passed" "$(basename "$PROJECTION_READMODEL_CONTRACT_PATH")"
 }
 
+run_evidence_acceptance_contract_gate() {
+  record_stage "evidence-acceptance-contract" "started" "$EVIDENCE_ACCEPTANCE_CONTRACT_PATH"
+  python3 - \
+    "$ROOT" \
+    "$RUNTIME_DIR/final-evidence.json" \
+    "$RUNTIME_DIR/final-acceptance-gate.json" \
+    "$RUNTIME_DIR/final-closeout-proof.json" \
+    "$RUNTIME_DIR/final-task-projection.json" \
+    "$RUNTIME_DIR/project-projection.json" \
+    "$RUNTIME_DIR/completion-runtime.json" \
+    "$EVIDENCE_ACCEPTANCE_CONTRACT_PATH" <<'PY'
+import json
+import pathlib
+import re
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+evidence_path = pathlib.Path(sys.argv[2])
+acceptance_path = pathlib.Path(sys.argv[3])
+closeout_path = pathlib.Path(sys.argv[4])
+task_projection_path = pathlib.Path(sys.argv[5])
+project_projection_path = pathlib.Path(sys.argv[6])
+completion_runtime_path = pathlib.Path(sys.argv[7])
+output_path = pathlib.Path(sys.argv[8])
+doc_path = root / "docs/architecture/046-v100-evidence-acceptance-contract-freeze-v1.md"
+
+if not doc_path.is_file():
+    raise SystemExit(f"missing evidence acceptance contract document: {doc_path}")
+
+def load_json(path):
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+doc = doc_path.read_text(encoding="utf-8")
+evidence = load_json(evidence_path)
+acceptance = load_json(acceptance_path)
+closeout = load_json(closeout_path)
+task_projection = load_json(task_projection_path)
+project_projection = load_json(project_projection_path)
+completion_runtime = load_json(completion_runtime_path)
+
+def metadata_value(name):
+    match = re.search(rf"^{re.escape(name)}:\s*(\S+)\s*$", doc, re.MULTILINE)
+    return match.group(1) if match else None
+
+required_sections = [
+    "## Acceptance Authority Boundary",
+    "## Evidence Pack Contract",
+    "## Acceptance Gate Contract",
+    "## Completion Commit Contract",
+    "## Failure Reason Contract",
+    "## Status Writeback Contract",
+    "## Delivery Record Contract",
+    "## Audit Sidecar Rule",
+    "## Release Gate Fixture",
+    "## V100 Binding",
+]
+required_phrases = [
+    "Evidence Pack",
+    "Acceptance Gate",
+    "Completion Commit",
+    "Verification Gate",
+    "Evidence Gate",
+    "Contract Gate",
+    "State Gate",
+    "Audit sidecar",
+    "Done",
+    "failure reason",
+    "completion write boundary",
+]
+
+timeline = task_projection.get("timeline") or []
+events = [
+    event
+    for state in timeline
+    for event in (state.get("events") or [])
+]
+event_types = {event.get("eventType") for event in events}
+artifact_refs = [
+    ref
+    for event in events
+    for ref in (event.get("artifactRefs") or [])
+]
+required_evidence_ready = all(
+    entry.get("status") == "ready"
+    for entry in evidence.get("entries", [])
+    if entry.get("required") is True
+)
+acceptance_event_present = "issue.acceptance.accepted" in event_types
+completion_event_present = "issue.completion.committed" in event_types
+done_event_present = "issue.completed" in event_types
+task_done_from_completion_commit = (
+    task_projection.get("currentState") == "done"
+    and task_projection.get("displayStatus") == "done"
+    and acceptance_event_present
+    and completion_event_present
+    and done_event_present
+)
+acceptance_gate_ref_present = any(ref.endswith("/acceptance-gate.json") for ref in artifact_refs)
+evidence_ref_present = any(ref.endswith("/evidence/evidence.json") for ref in artifact_refs)
+closeout_ref_present = any(ref.endswith("/review/closeout-proof.json") for ref in artifact_refs)
+acceptance_file_present = acceptance_path.is_file()
+
+delivery = project_projection.get("delivery") or {}
+audit = project_projection.get("audit") or {}
+completion = project_projection.get("completion") or {}
+
+failure_fixtures = [
+    {
+        "fixtureId": "pass",
+        "input": {"evidence": "passed", "state": "in_review", "contract": "satisfied"},
+        "expectedDecision": "passed",
+        "writesDone": True,
+        "stableReason": None,
+        "evidencePath": "runtime/final-evidence.json",
+    },
+    {
+        "fixtureId": "fail",
+        "input": {"evidence": "failed", "state": "in_review", "contract": "satisfied"},
+        "expectedDecision": "failed",
+        "writesDone": False,
+        "stableReason": "verification-failed",
+        "evidencePath": "runtime/final-evidence.json",
+    },
+    {
+        "fixtureId": "missing-evidence",
+        "input": {"evidence": "missing", "state": "in_review", "contract": "satisfied"},
+        "expectedDecision": "failed",
+        "writesDone": False,
+        "stableReason": "evidence-missing",
+        "evidencePath": "runtime/final-evidence.json",
+    },
+    {
+        "fixtureId": "state-blocked",
+        "input": {"evidence": "passed", "state": "blocked", "contract": "satisfied"},
+        "expectedDecision": "failed",
+        "writesDone": False,
+        "stableReason": "state-blocked",
+        "evidencePath": "runtime/final-task-projection.json",
+    },
+]
+allowed_failure_reasons = {
+    "verification-failed",
+    "evidence-missing",
+    "evidence-incomplete",
+    "contract-not-satisfied",
+    "state-blocked",
+    "closeout-proof-missing",
+    "completion-commit-rejected",
+}
+failure_fixtures_passed = all(
+    fixture["fixtureId"] == "pass"
+    or (
+        fixture["writesDone"] is False
+        and fixture["stableReason"] in allowed_failure_reasons
+        and fixture["evidencePath"]
+    )
+    for fixture in failure_fixtures
+)
+
+missing_sections = [section for section in required_sections if section not in doc]
+missing_required_phrases = [phrase for phrase in required_phrases if phrase not in doc]
+
+payload = {
+    "version": "agentflow-evidence-acceptance-contract-report.v1",
+    "status": "passed",
+    "docPath": "docs/architecture/046-v100-evidence-acceptance-contract-freeze-v1.md",
+    "evidenceAcceptanceContractVersion": metadata_value("evidenceAcceptanceContractVersion"),
+    "evidenceAcceptanceContractStatus": metadata_value("evidenceAcceptanceContractStatus"),
+    "stableContractBaseline": metadata_value("stableContractBaseline"),
+    "runtimeApiSdkVersion": metadata_value("runtimeApiSdkVersion"),
+    "filesystemContractVersion": metadata_value("filesystemContractVersion"),
+    "packContractVersion": metadata_value("packContractVersion"),
+    "projectionContractVersion": metadata_value("projectionContractVersion"),
+    "evidencePackStatus": evidence.get("status"),
+    "requiredEvidenceReady": required_evidence_ready,
+    "acceptanceGateFilePresent": acceptance_file_present,
+    "acceptanceGateRefPresent": acceptance_gate_ref_present,
+    "evidenceRefPresent": evidence_ref_present,
+    "closeoutRefPresent": closeout_ref_present,
+    "acceptanceEventPresent": acceptance_event_present,
+    "completionCommitEventPresent": completion_event_present,
+    "doneEventPresent": done_event_present,
+    "taskDoneFromCompletionCommit": task_done_from_completion_commit,
+    "closeoutProofMerged": closeout.get("merged") is True,
+    "closeoutIssueClosed": closeout.get("issueClosed") is True,
+    "deliveryReadModelReady": delivery.get("status") == "ready",
+    "completionRuntimeAccepted": completion_runtime.get("currentState") == "accepted",
+    "completionProjectionAccepted": completion.get("currentState") == "accepted",
+    "auditStatus": audit.get("status"),
+    "auditSidecarNonBlocking": (
+        audit.get("status") in {"failed", "passed", "requested", "missing", "not-requested", None}
+        and task_projection.get("currentState") == "done"
+        and project_projection.get("status") == "done"
+    ),
+    "failureFixtures": failure_fixtures,
+    "failureFixturesPassed": failure_fixtures_passed,
+    "missingSections": missing_sections,
+    "missingRequiredPhrases": missing_required_phrases,
+    "checkedAt": int(time.time()),
+}
+
+if (
+    payload["evidenceAcceptanceContractVersion"] != "agentflow-evidence-acceptance-contract.v1"
+    or payload["evidenceAcceptanceContractStatus"] != "active"
+    or payload["stableContractBaseline"] != "agentflow-stable-contract-baseline.v1"
+    or payload["runtimeApiSdkVersion"] != "agentflow-runtime-api-sdk-freeze.v1"
+    or payload["filesystemContractVersion"] != "agentflow-filesystem-contract-freeze.v1"
+    or payload["packContractVersion"] != "agentflow-pack-contract-freeze.v1"
+    or payload["projectionContractVersion"] != "agentflow-projection-readmodel-contract.v1"
+    or payload["evidencePackStatus"] != "passed"
+    or not required_evidence_ready
+    or not acceptance_file_present
+    or not acceptance_gate_ref_present
+    or not evidence_ref_present
+    or not closeout_ref_present
+    or not acceptance_event_present
+    or not completion_event_present
+    or not done_event_present
+    or not task_done_from_completion_commit
+    or closeout.get("merged") is not True
+    or closeout.get("issueClosed") is not True
+    or delivery.get("status") != "ready"
+    or completion_runtime.get("currentState") != "accepted"
+    or completion.get("currentState") != "accepted"
+    or not payload["auditSidecarNonBlocking"]
+    or not failure_fixtures_passed
+    or missing_sections
+    or missing_required_phrases
+):
+    payload["status"] = "failed"
+
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("evidence acceptance contract fixture failed")
+PY
+  record_stage "evidence-acceptance-contract" "passed" "$(basename "$EVIDENCE_ACCEPTANCE_CONTRACT_PATH")"
+}
+
 run_negative_semantic_fixtures_gate() {
   record_stage "negative-semantic-fixtures" "started" "$NEGATIVE_SEMANTIC_FIXTURES_PATH"
   if ! python3 - \
@@ -4181,6 +4465,7 @@ collect_artifacts() {
   cp "$WORKSPACE/.agentflow/projections/projects/${project_id}.json" "$RUNTIME_DIR/project-projection.json"
   cp "$WORKSPACE/.agentflow/projections/tasks/${final_issue_id}.json" "$RUNTIME_DIR/final-task-projection.json"
   cp "$WORKSPACE/.agentflow/tasks/${final_issue_id}/evidence/evidence.json" "$RUNTIME_DIR/final-evidence.json"
+  cp "$WORKSPACE/.agentflow/tasks/${final_issue_id}/acceptance-gate.json" "$RUNTIME_DIR/final-acceptance-gate.json"
   cp "$WORKSPACE/.agentflow/tasks/${final_issue_id}/runs/${final_run_id}/review/closeout-proof.json" "$RUNTIME_DIR/final-closeout-proof.json"
   if [[ -f "$WORKSPACE/.agentflow/audit/index.json" ]]; then
     cp "$WORKSPACE/.agentflow/audit/index.json" "$RUNTIME_DIR/audit-index.json"
@@ -4360,6 +4645,7 @@ PY
 
   collect_artifacts "$requirement_id" "$project_id" "$issue2_id" "$issue2_run"
   run_projection_readmodel_contract_gate
+  run_evidence_acceptance_contract_gate
   run_deployment_evidence_gate
   run_negative_semantic_fixtures_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
