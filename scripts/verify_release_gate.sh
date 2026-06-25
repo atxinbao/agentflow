@@ -2030,9 +2030,9 @@ PY
 
 run_pack_release_gate() {
   record_stage "pack.release-gate-readiness" "started" "$ARTIFACT_DIR"
-  if ! "$BIN" pack release-gate-readiness \
+  if ! (cd "$WORKSPACE" && "$BIN" pack release-gate-readiness \
     --output-dir "$ARTIFACT_DIR" \
-    --runtime-version "${RELEASE_VERSION#v}" \
+    --runtime-version "${RELEASE_VERSION#v}") \
     >"$CLI_DIR/pack-release-gate-readiness.txt" 2>&1; then
     fail_stage "pack.release-gate-readiness" "pack readiness artifact generation failed"
   fi
@@ -2119,8 +2119,8 @@ if "Finding" not in software.get("auditSidecarChain", []):
 
 if registry.get("version") != "agentflow-pack-registry.v1":
     raise SystemExit("pack registry must use the file-backed registry schema")
-if registry.get("source") != "fixture-files":
-    raise SystemExit("pack registry must come from fixture-files, not built-in baseline")
+if registry.get("source") != "project-files":
+    raise SystemExit("pack registry must come from project-files, not crate fixtures or built-in baseline")
 if registry.get("fallback") is not False:
     raise SystemExit("pack registry fallback must be false")
 entries = {entry.get("packId"): entry for entry in registry.get("entries", [])}
@@ -2128,8 +2128,8 @@ for pack_id in ["software-dev", "ui-design"]:
     entry = entries.get(pack_id)
     if entry is None:
         raise SystemExit(f"pack registry missing {pack_id}")
-    if entry.get("source") != "fixture-files":
-        raise SystemExit(f"{pack_id} registry entry must come from fixture-files")
+    if entry.get("source") != "project-files":
+        raise SystemExit(f"{pack_id} registry entry must come from project-files")
     if entry.get("fallback") is not False:
         raise SystemExit(f"{pack_id} registry entry fallback must be false")
     if not entry.get("manifestPath"):
@@ -2212,10 +2212,11 @@ def fixture(
         "passed": passed,
     }
 
-registry_file_backed = (
+registry_project_backed = (
     registry.get("version") == "agentflow-pack-registry.v1"
-    and registry.get("source") == "fixture-files"
+    and registry.get("source") == "project-files"
     and registry.get("fallback") is False
+    and {entry.get("packId") for entry in registry.get("entries", [])} >= {"software-dev", "ui-design"}
 )
 validation_ready = validation.get("status") == "passed"
 projection_ready = projection.get("status") == "passed"
@@ -2258,11 +2259,11 @@ fixtures = [
         validation_ready and api_plane_ready,
     ),
     fixture(
-        "unexpected-software-dev-fallback",
+        "unexpected-project-pack-fallback",
         "registry",
-        "Software Dev Pack must resolve from fixture files and never fall back to the built-in baseline",
+        "Software Dev and UI Design packs must resolve from project files and never fall back to crate fixtures or built-in baselines",
         ["pack-registry.json"],
-        registry_file_backed,
+        registry_project_backed,
     ),
 ]
 
@@ -2437,6 +2438,28 @@ prepare_workspace() {
   git -C "$WORKSPACE" checkout -B "$BOOTSTRAP_BRANCH" >/dev/null
   export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
   record_stage "workspace.prepare" "passed" "$WORKSPACE"
+}
+
+prepare_project_pack_fixtures() {
+  record_stage "pack.project-fixtures" "started" "$WORKSPACE/.agentflow/packs"
+  python3 - "$WORKSPACE" <<'PY'
+import pathlib
+import shutil
+import sys
+
+workspace = pathlib.Path(sys.argv[1])
+source_root = workspace / "crates/pack/fixtures/packs"
+target_root = workspace / ".agentflow/packs"
+if not source_root.is_dir():
+    raise SystemExit(f"missing crate pack fixtures: {source_root}")
+target_root.mkdir(parents=True, exist_ok=True)
+for pack_id in ["software-dev", "ui-design"]:
+    source = source_root / pack_id / "pack.json"
+    target_dir = target_root / pack_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target_dir / "pack.json")
+PY
+  record_stage "pack.project-fixtures" "passed" ".agentflow/packs/software-dev, .agentflow/packs/ui-design"
 }
 
 write_requirement() {
@@ -2766,6 +2789,7 @@ collect_artifacts() {
 main() {
   write_status "running" "workspace.prepare" "preparing release gate workspace"
   prepare_workspace
+  prepare_project_pack_fixtures
   run_source_agent_entry_gate
   verify_release_metadata "$WORKSPACE"
   verify_release_publication_facts "$WORKSPACE"

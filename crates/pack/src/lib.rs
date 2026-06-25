@@ -440,6 +440,21 @@ mod tests {
     }
 
     #[test]
+    fn empty_project_pack_registry_does_not_fallback_to_fixture_packs() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".agentflow/packs")).unwrap();
+
+        let registry = load_pack_registry(dir.path()).unwrap();
+
+        assert_eq!(registry.source, PackRegistrySource::ProjectFiles);
+        assert!(!registry.fallback);
+        assert!(!registry.writes_authority);
+        assert!(registry.entries.is_empty());
+        assert!(registry.pack("software-dev").is_none());
+        assert!(registry.pack("ui-design").is_none());
+    }
+
+    #[test]
     fn fixture_registry_lists_release_gate_packs_without_fallback() {
         let registry = load_pack_fixture_registry().unwrap();
 

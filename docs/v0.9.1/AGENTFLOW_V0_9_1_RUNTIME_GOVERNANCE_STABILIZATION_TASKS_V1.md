@@ -59,7 +59,7 @@ v0.9.0 的治理、部署证据、migration 和 Pack registry 是否已经真正
 | `V091-002` | Runtime Governance Admission Integration | P0 | V091-001 | done |
 | `V091-003` | Deployment Evidence Semantic Certification | P0 | V091-001 | done |
 | `V091-004` | Pack Migration Apply/Rollback Semantic Split | P0 | V091-003 | done |
-| `V091-005` | Project Pack Registry Release Fixture | P1 | V091-001 | planned |
+| `V091-005` | Project Pack Registry Release Fixture | P1 | V091-001 | done |
 | `V091-006` | Negative Semantic Release Fixtures | P0 | V091-002, V091-003, V091-004, V091-005 | planned |
 | `V091-007` | v0.9.1 Release Certification | P0 | V091-001, V091-002, V091-003, V091-004, V091-005, V091-006 | planned |
 
@@ -238,6 +238,14 @@ Release gate 要创建并读取项目级 `.agentflow/packs/**` fixture，证明 
 
 - 不要求把真实用户项目 Pack 提交到仓库；
 - 不实现 Pack marketplace。
+
+### Closeout
+
+- release gate workspace 现在会创建项目级 `.agentflow/packs/software-dev/pack.json` 和 `.agentflow/packs/ui-design/pack.json`；
+- `pack release-gate-readiness` 改为从当前 project root 读取 `load_pack_registry(project_root)`；
+- `pack-registry.json.source = project-files`，不再以 `fixture-files` 作为 release gate 通过条件；
+- 空 `.agentflow/packs` 只会得到 project-files empty registry，不会 fallback 到 crate fixtures；
+- release gate 仍保留 crate fixture 作为种子来源，但最终证明的是 project Pack path。
 
 ## V091-006 Negative Semantic Release Fixtures
 

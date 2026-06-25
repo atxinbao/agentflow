@@ -606,10 +606,13 @@ fn write_pack_release_gate_readiness(
 
     let api_manifest = agentflow_runtime_api::api_plane_manifest();
     let api_entries = agentflow_pack::pack_readiness_api_entries();
-    let pack_registry = agentflow_pack::load_pack_fixture_registry()?;
+    let pack_registry = agentflow_pack::load_pack_registry(project_root)?;
+    if pack_registry.source != agentflow_pack::PackRegistrySource::ProjectFiles {
+        anyhow::bail!("pack registry must be read from project files");
+    }
     for required_pack_id in ["software-dev", "ui-design"] {
         if pack_registry.pack(required_pack_id).is_none() {
-            anyhow::bail!("file-backed pack registry missing required pack: {required_pack_id}");
+            anyhow::bail!("project pack registry missing required pack: {required_pack_id}");
         }
     }
     let software =
