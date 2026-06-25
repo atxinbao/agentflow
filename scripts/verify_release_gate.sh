@@ -113,6 +113,7 @@ SOFTWARE_DEV_PACK_READINESS_PATH="$ARTIFACT_DIR/software-dev-pack-readiness.json
 UI_DESIGN_PACK_READINESS_PATH="$ARTIFACT_DIR/ui-design-pack-readiness.json"
 EVENT_REPLAY_PROJECTION_REPORT_PATH="$RUNTIME_DIR/event-replay-projection-report.json"
 EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH="$RUNTIME_DIR/event-replay-projection-failure-report.json"
+SOURCE_AGENT_ENTRY_PATH="$RUNTIME_DIR/source-agent-entry.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -226,7 +227,8 @@ write_gate_reports() {
     "$PACK_NEGATIVE_FIXTURES_PATH" \
     "$GOVERNANCE_POLICY_PATH" \
     "$SCHEDULING_DECISION_PATH" \
-    "$DEPLOYMENT_EVIDENCE_PATH" <<'PY'
+    "$DEPLOYMENT_EVIDENCE_PATH" \
+    "$SOURCE_AGENT_ENTRY_PATH" <<'PY'
 import json
 import pathlib
 import sys
@@ -264,6 +266,7 @@ pack_negative_fixtures_path = pathlib.Path(sys.argv[30])
 governance_policy_path = pathlib.Path(sys.argv[31])
 scheduling_decision_path = pathlib.Path(sys.argv[32])
 deployment_evidence_path = pathlib.Path(sys.argv[33])
+source_agent_entry_path = pathlib.Path(sys.argv[34])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -297,6 +300,7 @@ for entry in stage_log:
     stage_detail[entry["stage"]] = entry.get("detail")
 
 proof_chain = [
+    {"stage": "source.agent-entry", "label": "Release Source Agent Entry"},
     {"stage": "release.version-metadata", "label": "Release Version Metadata"},
     {"stage": "release.changelog-entry", "label": "Release Changelog Entry"},
     {"stage": "release.github-release-fact", "label": "GitHub Release Fact"},
@@ -344,6 +348,7 @@ public_artifacts = [
     {"path": "public/external-review.md", "exists": pathlib.Path(summary_json_path.parent / "public/external-review.md").is_file()},
 ]
 runtime_artifacts = [
+    {"path": "runtime/source-agent-entry.json", "exists": source_agent_entry_path.is_file()},
     {"path": "runtime/spec-loop-manifest.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/spec-loop-manifest.json").is_file()},
     {"path": "runtime/spec-loop-projection.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/spec-loop-projection.json").is_file()},
     {"path": "runtime/release-facts.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-facts.json").is_file()},
@@ -386,6 +391,7 @@ pack_negative_fixtures = load_json(pack_negative_fixtures_path) or {}
 governance_policy = load_json(governance_policy_path) or {}
 scheduling_decision = load_json(scheduling_decision_path) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
+source_agent_entry = load_json(source_agent_entry_path) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -528,6 +534,14 @@ authority_boundary_certification = {
 
 checklist = [
     {
+        "id": "v091-source-agent-entry",
+        "label": "release source archive includes a tracked Agent entry and excludes runtime-only facts",
+        "passed": source_agent_entry.get("status") == "passed"
+        and bool(source_agent_entry.get("entryPath"))
+        and all(item.get("exists") for item in source_agent_entry.get("trackedDocs", []))
+        and not source_agent_entry.get("trackedRuntimePaths"),
+    },
+    {
         "id": "runtime-fixture-gate",
         "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
@@ -622,6 +636,8 @@ summary_payload = {
     "providerSmokeProvider": provider_smoke.get("provider"),
     "providerSmokeReason": provider_smoke.get("reason"),
     "providerSmokeArtifactPath": provider_smoke.get("artifactPath"),
+    "sourceAgentEntryPath": "runtime/source-agent-entry.json" if source_agent_entry_path.is_file() else None,
+    "sourceAgentEntryStatus": source_agent_entry.get("status") or "missing",
     "runtimeFixtureBoundary": "runtime-fixture-gate proves AgentFlow local runtime workflow coverage",
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "foundationCoveragePath": "runtime/foundation-coverage.json" if foundation_coverage_path.is_file() else None,
@@ -760,6 +776,8 @@ certification_payload = {
     "providerSmokeProvider": provider_smoke.get("provider"),
     "providerSmokeReason": provider_smoke.get("reason"),
     "providerSmokeArtifactPath": provider_smoke.get("artifactPath"),
+    "sourceAgentEntryPath": "runtime/source-agent-entry.json" if source_agent_entry_path.is_file() else None,
+    "sourceAgentEntryStatus": source_agent_entry.get("status") or "missing",
     "providerSmokeBoundary": "provider-smoke-gate proves minimal provider health, launch request, session snapshot, and terminal projection without replacing runtime fixture coverage",
     "currentGateRun": current_gate_run,
     "mainGateRun": main_gate_run,
@@ -1029,6 +1047,76 @@ PY
   else
     record_stage "release.github-release-fact" "passed" "not required before release publication"
   fi
+}
+
+run_source_agent_entry_gate() {
+  record_stage "source.agent-entry" "started" "$SOURCE_AGENT_ENTRY_PATH"
+  if ! python3 - "$WORKSPACE" "$SOURCE_AGENT_ENTRY_PATH" <<'PY'
+import json
+import pathlib
+import subprocess
+import sys
+
+root = pathlib.Path(sys.argv[1])
+out_path = pathlib.Path(sys.argv[2])
+
+entry_path = root / "AGENTS.md"
+tracked_docs = [
+    "docs/product/README.md",
+    "docs/foundation/README.md",
+    "docs/architecture/README.md",
+    "docs/architecture/current-module-boundaries.md",
+    "docs/v0.9.1/README.md",
+]
+runtime_only_paths = [
+    ".agentflow/runs",
+    ".agentflow/tmp",
+    ".agentflow/tasks",
+    ".agentflow/index.sqlite",
+]
+
+if not entry_path.is_file():
+    raise SystemExit("release source missing AGENTS.md")
+
+entry_text = entry_path.read_text(encoding="utf-8")
+doc_results = []
+missing_docs = []
+for doc in tracked_docs:
+    exists = (root / doc).is_file()
+    mentioned = doc in entry_text
+    doc_results.append({"path": doc, "exists": exists, "mentionedByEntry": mentioned})
+    if not exists or not mentioned:
+        missing_docs.append(doc)
+if missing_docs:
+    raise SystemExit(f"AGENTS.md missing tracked doc references: {', '.join(missing_docs)}")
+
+tracked_runtime = subprocess.check_output(
+    ["git", "-C", str(root), "ls-files", "--", *runtime_only_paths],
+    text=True,
+).splitlines()
+if tracked_runtime:
+    raise SystemExit(f"runtime-only paths are tracked: {', '.join(tracked_runtime)}")
+
+payload = {
+    "version": "agentflow-source-agent-entry.v1",
+    "status": "passed",
+    "entryPath": "AGENTS.md",
+    "trackedDocs": doc_results,
+    "trackedRuntimePaths": tracked_runtime,
+    "runtimeOnlyPaths": runtime_only_paths,
+    "defineAgentBoundary": {
+        "path": ".agentflow/define/agent/**",
+        "releaseSourceAuthority": False,
+        "runtimeMaterializedManual": True,
+        "trackedEquivalent": "AGENTS.md + docs/product + docs/foundation + docs/architecture",
+    },
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  then
+    fail_stage "source.agent-entry" "release source Agent entry is not aligned"
+  fi
+  record_stage "source.agent-entry" "passed" "$(basename "$SOURCE_AGENT_ENTRY_PATH")"
 }
 
 run_cli_json() {
@@ -2375,6 +2463,7 @@ collect_artifacts() {
 main() {
   write_status "running" "workspace.prepare" "preparing release gate workspace"
   prepare_workspace
+  run_source_agent_entry_gate
   verify_release_metadata "$WORKSPACE"
   verify_release_publication_facts "$WORKSPACE"
   run_provider_smoke_gate

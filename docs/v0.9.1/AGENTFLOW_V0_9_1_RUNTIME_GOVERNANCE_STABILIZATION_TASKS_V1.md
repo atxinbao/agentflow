@@ -55,7 +55,7 @@ v0.9.0 的治理、部署证据、migration 和 Pack registry 是否已经真正
 
 | Issue | Title | Priority | Dependency | Status |
 | --- | --- | --- | --- | --- |
-| `V091-001` | Release Source Agent Entry Alignment | P0 | none | planned |
+| `V091-001` | Release Source Agent Entry Alignment | P0 | none | done |
 | `V091-002` | Runtime Governance Admission Integration | P0 | V091-001 | planned |
 | `V091-003` | Deployment Evidence Semantic Certification | P0 | V091-001 | planned |
 | `V091-004` | Pack Migration Apply/Rollback Semantic Split | P0 | V091-003 | planned |
@@ -85,6 +85,13 @@ v0.9.0 的治理、部署证据、migration 和 Pack registry 是否已经真正
 - Agent entry 指向的手册路径存在，或明确指向 tracked docs 等价入口；
 - `.agentflow/runs/**`、`.agentflow/tmp/**`、本地数据库和 runtime artifacts 仍然不进入发布源码；
 - release gate 覆盖 Agent entry source alignment。
+
+### Closeout
+
+- 根目录 `AGENTS.md` 已退出 `.gitignore`，作为 release source 中的稳定 Agent entry。
+- `AGENTS.md` 指向 tracked docs，而不是要求 release source 携带本地 `.agentflow/define/agent/**`。
+- `docs/architecture/040-release-source-agent-entry-v1.md` 记录 source entry 和 runtime-only 边界。
+- release gate 新增 `source.agent-entry` 阶段，并输出 `runtime/source-agent-entry.json`。
 
 ### Non-goals
 
@@ -301,4 +308,3 @@ Project OS Stable Core
 - Pack migration 不混淆 receipt 和真实 mutation；
 - release source archive 的 Agent entry 自洽；
 - release gate 有完整 negative semantic fixtures。
-
