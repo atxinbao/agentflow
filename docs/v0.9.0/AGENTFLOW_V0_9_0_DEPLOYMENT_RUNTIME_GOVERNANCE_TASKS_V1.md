@@ -54,9 +54,9 @@ Message Bus = 到 decision gate 再判断是否需要。
 | `V090-003` | Runtime API / SDK Contract Hardening | P0 | V090-001, V090-002 | done |
 | `V090-004` | Event Replay and Projection Rebuild | P0 | V090-003 | done |
 | `V090-005` | Ontology / Pack Migration Execution Model | P0 | V090-004 | done |
-| `V090-006` | Simulation / Evaluation Layer | P0 | V090-003, V090-005 | planned |
-| `V090-007` | Runtime Governance Policy | P0 | V090-003, V090-006 | planned |
-| `V090-008` | Cross-process Scheduling Decision Gate | P1 | V090-007 | planned |
+| `V090-006` | Simulation / Evaluation Layer | P0 | V090-003, V090-005 | done |
+| `V090-007` | Runtime Governance Policy | P0 | V090-003, V090-006 | done |
+| `V090-008` | Cross-process Scheduling Decision Gate | P1 | V090-007 | done |
 | `V090-009` | Deployment Evidence and Rollback Model | P0 | V090-001, V090-002, V090-003, V090-004, V090-005, V090-006, V090-007 | planned |
 | `V090-010` | v0.9.0 Release Certification | P0 | V090-001, V090-002, V090-003, V090-004, V090-005, V090-006, V090-007, V090-008, V090-009 | planned |
 
@@ -280,6 +280,15 @@ Message Bus = 到 decision gate 再判断是否需要。
 - decision 有证据，不是架构偏好；
 - no-go 时明确替代机制；
 - go 时只定义 contract，不直接扩大实现范围。
+
+### Closeout
+
+- 新增 `agentflow message-bus decision`，输出 `agentflow-scheduling-decision-report.v1`；
+- 当前 v0.9.0 决策为 `no-go`：不引入中心化 Message Bus；
+- report 明确 `writesAuthority = false`、`expandsImplementationScope = false`；
+- no-go 替代机制为 Runtime API + Event Store + local in-memory fanout / refresh；
+- release gate 生成 `runtime/scheduling-decision.json` 并纳入 certification checklist；
+- 架构说明已记录到 `docs/architecture/037-cross-process-scheduling-decision-gate-v1.md`。
 
 ## V090-009 Deployment Evidence and Rollback Model
 

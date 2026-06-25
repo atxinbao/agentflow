@@ -55,6 +55,7 @@
 | [034-pack-migration-execution-model-v1.md](034-pack-migration-execution-model-v1.md) | 定义 Pack / Ontology migration preview、confirmation、apply、cancel、rollback 和 replay gate 边界 |
 | [035-simulation-evaluation-layer-v1.md](035-simulation-evaluation-layer-v1.md) | 定义 Simulation report 的对象影响、证据需求、状态变化、冲突和 gate impact 合同 |
 | [036-runtime-governance-policy-v1.md](036-runtime-governance-policy-v1.md) | 定义 Runtime admission 前的 role / capability / provider / audit sidecar 治理决策 |
+| [037-cross-process-scheduling-decision-gate-v1.md](037-cross-process-scheduling-decision-gate-v1.md) | 定义跨进程调度和 Message Bus 的 go / no-go 决策门、证据和替代机制 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 

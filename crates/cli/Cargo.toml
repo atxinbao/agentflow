@@ -15,6 +15,7 @@ agentflow-action-contract = { path = "../action-contract" }
 agentflow-capability-registry = { path = "../capability-registry" }
 agentflow-event-store = { path = "../event-store" }
 agentflow-governance-policy = { path = "../governance-policy" }
+agentflow-message-bus = { path = "../message-bus" }
 agentflow-mcp = { path = "../mcp" }
 agentflow-ontology = { path = "../ontology" }
 agentflow-pack = { path = "../pack" }

@@ -92,6 +92,7 @@ dependencies = [
  "agentflow-event-store",
  "agentflow-governance-policy",
  "agentflow-mcp",
+ "agentflow-message-bus",
  "agentflow-ontology",
  "agentflow-pack",
  "agentflow-projection",

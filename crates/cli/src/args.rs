@@ -53,6 +53,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: GovernancePolicyCommand,
     },
+    MessageBus {
+        #[command(subcommand)]
+        command: MessageBusCommand,
+    },
     Pack {
         #[command(subcommand)]
         command: PackCommand,
@@ -252,6 +256,26 @@ pub(crate) enum GovernancePolicyCommand {
         audit_sidecar_mode: String,
         #[arg(long = "capability-registry")]
         capability_registry: Option<PathBuf>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum MessageBusCommand {
+    Decision {
+        #[arg(long = "local-runtime-sufficient", default_value_t = true)]
+        local_runtime_sufficient: bool,
+        #[arg(long = "cross-process-worker-required", default_value_t = false)]
+        cross_process_worker_required: bool,
+        #[arg(long = "cloud-fanout-required", default_value_t = false)]
+        cloud_fanout_required: bool,
+        #[arg(long = "event-subscription-required", default_value_t = false)]
+        event_subscription_required: bool,
+        #[arg(long = "durable-queue-required", default_value_t = false)]
+        durable_queue_required: bool,
+        #[arg(long)]
+        evidence: Vec<String>,
         #[arg(long)]
         output: Option<PathBuf>,
     },

@@ -92,6 +92,7 @@ PROVIDER_SMOKE_ARTIFACT_PATH="$RUNTIME_DIR/provider-smoke-artifact.json"
 API_PLANE_MANIFEST_PATH="$RUNTIME_DIR/api-plane-manifest.json"
 CAPABILITY_REGISTRY_PATH="$RUNTIME_DIR/capability-registry.json"
 GOVERNANCE_POLICY_PATH="$RUNTIME_DIR/governance-policy.json"
+SCHEDULING_DECISION_PATH="$RUNTIME_DIR/scheduling-decision.json"
 FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
 FOUNDATION_READINESS_REPORT_PATH="$RUNTIME_DIR/foundation-readiness-report.md"
 FOUNDATION_COVERAGE_PATH="$RUNTIME_DIR/foundation-coverage.json"
@@ -222,7 +223,8 @@ write_gate_reports() {
     "$FOUNDATION_READINESS_REPORT_PATH" \
     "$FOUNDATION_COVERAGE_PATH" \
     "$PACK_NEGATIVE_FIXTURES_PATH" \
-    "$GOVERNANCE_POLICY_PATH" <<'PY'
+    "$GOVERNANCE_POLICY_PATH" \
+    "$SCHEDULING_DECISION_PATH" <<'PY'
 import json
 import pathlib
 import sys
@@ -258,6 +260,7 @@ foundation_readiness_report_path = pathlib.Path(sys.argv[28])
 foundation_coverage_path = pathlib.Path(sys.argv[29])
 pack_negative_fixtures_path = pathlib.Path(sys.argv[30])
 governance_policy_path = pathlib.Path(sys.argv[31])
+scheduling_decision_path = pathlib.Path(sys.argv[32])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -349,6 +352,7 @@ runtime_artifacts = [
     {"path": "runtime/api-plane-manifest.json", "exists": api_plane_manifest_path.is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
+    {"path": "runtime/scheduling-decision.json", "exists": scheduling_decision_path.is_file()},
     {"path": "runtime/foundation-readiness-report.md", "exists": foundation_readiness_report_path.is_file()},
     {"path": "runtime/foundation-coverage.json", "exists": foundation_coverage_path.is_file()},
     {"path": "runtime/event-replay-projection-report.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json").is_file()},
@@ -375,6 +379,7 @@ pack_projection = load_json(pathlib.Path(summary_json_path.parent / "pack-projec
 pack_api_plane = load_json(pathlib.Path(summary_json_path.parent / "pack-api-plane-manifest.json")) or {}
 pack_negative_fixtures = load_json(pack_negative_fixtures_path) or {}
 governance_policy = load_json(governance_policy_path) or {}
+scheduling_decision = load_json(scheduling_decision_path) or {}
 event_replay_projection = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-report.json")) or {}
 event_replay_projection_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/event-replay-projection-failure-report.json")) or {}
 pack_migration_unconfirmed = load_json(pathlib.Path(summary_json_path.parent / "pack-migration-unconfirmed-apply.json")) or {}
@@ -420,6 +425,18 @@ governance_policy_passed = (
     and any(
         report.get("auditSidecarPolicy", {}).get("decision") == "rejected"
         for report in governance_reports
+    )
+)
+scheduling_decision_passed = (
+    scheduling_decision.get("version") == "agentflow-scheduling-decision-report.v1"
+    and scheduling_decision.get("status") == "passed"
+    and scheduling_decision.get("decision") in {"go", "no-go", "defer"}
+    and scheduling_decision.get("writesAuthority") is False
+    and scheduling_decision.get("expandsImplementationScope") is False
+    and bool(scheduling_decision.get("evidence"))
+    and (
+        bool(scheduling_decision.get("requiredContract"))
+        or bool(scheduling_decision.get("alternativeMechanism"))
     )
 )
 
@@ -494,6 +511,11 @@ checklist = [
         "label": "Runtime governance emits allow, reject, and defer decisions with trace evidence",
         "passed": governance_policy_passed,
     },
+    {
+        "id": "v090-cross-process-scheduling-decision",
+        "label": "Cross-process scheduling has an evidence-backed Message Bus go / no-go decision",
+        "passed": scheduling_decision_passed,
+    },
 ]
 
 summary_payload = {
@@ -514,6 +536,8 @@ summary_payload = {
     "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
     "governancePolicyPath": "runtime/governance-policy.json" if governance_policy_path.is_file() else None,
     "governancePolicyStatus": governance_policy.get("status") or "missing",
+    "schedulingDecisionPath": "runtime/scheduling-decision.json" if scheduling_decision_path.is_file() else None,
+    "schedulingDecision": scheduling_decision.get("decision") or "missing",
     "packRegistryPath": "pack-registry.json" if pathlib.Path(summary_json_path.parent / "pack-registry.json").is_file() else None,
     "packValidationReportPath": "pack-validation-report.json" if pathlib.Path(summary_json_path.parent / "pack-validation-report.json").is_file() else None,
     "packSimulationReportPath": "pack-simulation-report.json" if pathlib.Path(summary_json_path.parent / "pack-simulation-report.json").is_file() else None,
@@ -575,6 +599,7 @@ summary_lines = [
     f"- API Plane manifest: `{'present' if api_plane_manifest_path.is_file() else 'missing'}`",
     f"- Capability registry: `{'present' if capability_registry_path.is_file() else 'missing'}`",
     f"- Governance policy: `{governance_policy.get('status') or 'missing'}`",
+    f"- Scheduling decision: `{scheduling_decision.get('decision') or 'missing'}`",
     f"- Pack release gate: `{'passed' if pack_release_gate_passed else 'failed'}`",
     f"- Pack negative fixtures: `{pack_negative_fixtures.get('status') or 'missing'}`",
     f"- Pack migration execution: `{stage_status.get('pack.migration-execution') or 'missing'}`",
@@ -647,6 +672,8 @@ certification_payload = {
     "capabilityRegistryPath": "runtime/capability-registry.json" if capability_registry_path.is_file() else None,
     "governancePolicyPath": "runtime/governance-policy.json" if governance_policy_path.is_file() else None,
     "governancePolicyStatus": governance_policy.get("status") or "missing",
+    "schedulingDecisionPath": "runtime/scheduling-decision.json" if scheduling_decision_path.is_file() else None,
+    "schedulingDecision": scheduling_decision.get("decision") or "missing",
     "packNegativeFixturesPath": "pack-negative-fixtures.json" if pack_negative_fixtures_path.is_file() else None,
     "packMigrationAppliedReceiptPath": "pack-migration-applied-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-applied-receipt.json").is_file() else None,
     "packMigrationRollbackReceiptPath": "pack-migration-rollback-receipt.json" if pathlib.Path(summary_json_path.parent / "pack-migration-rollback-receipt.json").is_file() else None,
@@ -1283,6 +1310,44 @@ payload = {
 out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
   record_stage "governance-policy" "passed" "$(basename "$GOVERNANCE_POLICY_PATH")"
+}
+
+run_scheduling_decision_gate() {
+  record_stage "scheduling-decision" "started" "$SCHEDULING_DECISION_PATH"
+
+  "$BIN" message-bus decision \
+    --local-runtime-sufficient \
+    --evidence "Runtime API remains the command admission boundary for v0.9.0" \
+    --evidence "Event Store remains the durable replay source" \
+    --evidence "Local Message Bus currently covers fanout / refresh signals only" \
+    --output "$SCHEDULING_DECISION_PATH"
+
+  python3 - "$SCHEDULING_DECISION_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+if payload.get("version") != "agentflow-scheduling-decision-report.v1":
+    raise SystemExit("scheduling decision report version mismatch")
+if payload.get("status") != "passed":
+    raise SystemExit("scheduling decision report must pass")
+if payload.get("decision") != "no-go":
+    raise SystemExit(f"release gate expected no-go for centralized Message Bus, got {payload.get('decision')}")
+if payload.get("writesAuthority") is not False:
+    raise SystemExit("scheduling decision must not write authority")
+if payload.get("expandsImplementationScope") is not False:
+    raise SystemExit("scheduling decision must not expand implementation scope")
+if not payload.get("evidence"):
+    raise SystemExit("scheduling decision must include evidence")
+if not payload.get("alternativeMechanism"):
+    raise SystemExit("no-go scheduling decision must include an alternative mechanism")
+if payload.get("messageBusPolicy", {}).get("durableReplaySource") != "event-store":
+    raise SystemExit("Message Bus durable replay source must remain event-store")
+PY
+
+  record_stage "scheduling-decision" "passed" "$(basename "$SCHEDULING_DECISION_PATH")"
 }
 
 run_foundation_coverage_gate() {
@@ -2127,6 +2192,7 @@ main() {
   run_api_plane_manifest_gate
   run_capability_registry_gate
   run_governance_policy_gate
+  run_scheduling_decision_gate
   run_foundation_coverage_gate
   run_pack_release_gate
   run_pack_negative_fixtures_gate

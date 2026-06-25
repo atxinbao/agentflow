@@ -14,6 +14,7 @@ use serde_json::{json, Value};
 
 pub const MESSAGE_BUS_ENVELOPE_VERSION: &str = "agentflow-message-bus-envelope.v1";
 pub const MESSAGE_BUS_POLICY_VERSION: &str = "agentflow-message-bus-policy.v1";
+pub const SCHEDULING_DECISION_REPORT_VERSION: &str = "agentflow-scheduling-decision-report.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -87,6 +88,156 @@ pub fn local_message_bus_policy() -> MessageBusAuthorityPolicy {
             MessageBusChannel::Audit,
         ],
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SchedulingDecision {
+    Go,
+    NoGo,
+    Defer,
+}
+
+impl SchedulingDecision {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Go => "go",
+            Self::NoGo => "no-go",
+            Self::Defer => "defer",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchedulingDecisionRequest {
+    pub local_runtime_sufficient: bool,
+    pub cross_process_worker_required: bool,
+    pub cloud_fanout_required: bool,
+    pub event_subscription_required: bool,
+    pub durable_queue_required: bool,
+    #[serde(default)]
+    pub evidence: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchedulingDecisionReport {
+    pub version: String,
+    pub status: String,
+    pub decision: SchedulingDecision,
+    pub decision_label: String,
+    pub rationale: String,
+    pub evidence: Vec<String>,
+    pub required_contract: Vec<String>,
+    pub alternative_mechanism: Vec<String>,
+    pub message_bus_policy: MessageBusAuthorityPolicy,
+    pub writes_authority: bool,
+    pub expands_implementation_scope: bool,
+    pub generated_at: u64,
+}
+
+pub fn evaluate_cross_process_scheduling(
+    request: SchedulingDecisionRequest,
+) -> SchedulingDecisionReport {
+    let hard_cross_process_need = request.cross_process_worker_required
+        || request.cloud_fanout_required
+        || request.durable_queue_required;
+    let decision = if hard_cross_process_need {
+        SchedulingDecision::Go
+    } else if !request.local_runtime_sufficient || request.event_subscription_required {
+        SchedulingDecision::Defer
+    } else {
+        SchedulingDecision::NoGo
+    };
+    let evidence = scheduling_evidence(&request, &decision);
+    let required_contract = match decision {
+        SchedulingDecision::Go => vec![
+            "message envelope: id, correlation, causation, idempotency, subject, topic".to_string(),
+            "ordering: per aggregate ordering is required; global ordering is not assumed"
+                .to_string(),
+            "retry: retries must be idempotent and must not write authority facts".to_string(),
+            "replay: durable replay source remains event-store".to_string(),
+        ],
+        SchedulingDecision::NoGo => Vec::new(),
+        SchedulingDecision::Defer => vec![
+            "collect cross-process worker evidence before promoting Message Bus".to_string(),
+            "collect cloud fanout evidence before adding queue semantics".to_string(),
+        ],
+    };
+    let alternative_mechanism = match decision {
+        SchedulingDecision::Go => vec![
+            "define contract only in this issue; do not expand runtime implementation".to_string(),
+        ],
+        SchedulingDecision::NoGo => vec![
+            "keep Runtime API as command admission boundary".to_string(),
+            "keep Event Store as durable authority and replay source".to_string(),
+            "keep local in-memory Message Bus for fanout / refresh signals only".to_string(),
+            "use Projection rebuild for read model refresh".to_string(),
+        ],
+        SchedulingDecision::Defer => vec![
+            "continue with synchronous Runtime API calls".to_string(),
+            "continue with local fanout / refresh signals".to_string(),
+            "defer cross-process scheduling until a real worker or cloud fanout requirement appears"
+                .to_string(),
+        ],
+    };
+    let rationale = match decision {
+        SchedulingDecision::Go => {
+            "cross-process or durable queue evidence is present; define the contract without expanding implementation scope"
+        }
+        SchedulingDecision::NoGo => {
+            "current synchronous Runtime plus local fanout is sufficient; a centralized Message Bus would add authority and ordering risk without evidence"
+        }
+        SchedulingDecision::Defer => {
+            "the current evidence is not strong enough for implementation; keep the existing alternative and collect more runtime facts"
+        }
+    }
+    .to_string();
+
+    SchedulingDecisionReport {
+        version: SCHEDULING_DECISION_REPORT_VERSION.to_string(),
+        status: "passed".to_string(),
+        decision_label: decision.as_str().to_string(),
+        decision,
+        rationale,
+        evidence,
+        required_contract,
+        alternative_mechanism,
+        message_bus_policy: local_message_bus_policy(),
+        writes_authority: false,
+        expands_implementation_scope: false,
+        generated_at: unix_timestamp_seconds(),
+    }
+}
+
+fn scheduling_evidence(
+    request: &SchedulingDecisionRequest,
+    decision: &SchedulingDecision,
+) -> Vec<String> {
+    let mut evidence = request.evidence.clone();
+    evidence.push(format!(
+        "localRuntimeSufficient={}",
+        request.local_runtime_sufficient
+    ));
+    evidence.push(format!(
+        "crossProcessWorkerRequired={}",
+        request.cross_process_worker_required
+    ));
+    evidence.push(format!(
+        "cloudFanoutRequired={}",
+        request.cloud_fanout_required
+    ));
+    evidence.push(format!(
+        "eventSubscriptionRequired={}",
+        request.event_subscription_required
+    ));
+    evidence.push(format!(
+        "durableQueueRequired={}",
+        request.durable_queue_required
+    ));
+    evidence.push(format!("decision={}", decision.as_str()));
+    evidence
 }
 
 #[derive(Debug, Default, Clone)]
@@ -376,5 +527,68 @@ mod tests {
         assert_eq!(messages[0].correlation_id, event.correlation_id);
         assert_eq!(messages[0].causation_id, event.causation_id);
         assert_eq!(messages[0].idempotency_key, "issue.scheduled:AF-BUS-003");
+    }
+
+    #[test]
+    fn scheduling_decision_no_go_when_local_runtime_is_sufficient() {
+        let report = evaluate_cross_process_scheduling(SchedulingDecisionRequest {
+            local_runtime_sufficient: true,
+            cross_process_worker_required: false,
+            cloud_fanout_required: false,
+            event_subscription_required: false,
+            durable_queue_required: false,
+            evidence: vec!["runtime-api remains synchronous".to_string()],
+        });
+
+        assert_eq!(report.decision, SchedulingDecision::NoGo);
+        assert_eq!(report.decision_label, "no-go");
+        assert!(!report.writes_authority);
+        assert!(!report.expands_implementation_scope);
+        assert!(report.required_contract.is_empty());
+        assert!(report
+            .alternative_mechanism
+            .iter()
+            .any(|item| item.contains("Event Store")));
+    }
+
+    #[test]
+    fn scheduling_decision_go_only_defines_contract_when_cross_process_is_required() {
+        let report = evaluate_cross_process_scheduling(SchedulingDecisionRequest {
+            local_runtime_sufficient: false,
+            cross_process_worker_required: true,
+            cloud_fanout_required: false,
+            event_subscription_required: false,
+            durable_queue_required: true,
+            evidence: vec!["external worker fleet requires queued launch".to_string()],
+        });
+
+        assert_eq!(report.decision, SchedulingDecision::Go);
+        assert!(!report.expands_implementation_scope);
+        assert!(report
+            .required_contract
+            .iter()
+            .any(|item| item.contains("idempotency")));
+        assert_eq!(
+            report.message_bus_policy.durable_replay_source,
+            "event-store"
+        );
+    }
+
+    #[test]
+    fn scheduling_decision_defers_when_evidence_is_incomplete() {
+        let report = evaluate_cross_process_scheduling(SchedulingDecisionRequest {
+            local_runtime_sufficient: false,
+            cross_process_worker_required: false,
+            cloud_fanout_required: false,
+            event_subscription_required: true,
+            durable_queue_required: false,
+            evidence: Vec::new(),
+        });
+
+        assert_eq!(report.decision, SchedulingDecision::Defer);
+        assert!(report
+            .alternative_mechanism
+            .iter()
+            .any(|item| item.contains("synchronous Runtime API")));
     }
 }

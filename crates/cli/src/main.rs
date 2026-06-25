@@ -10,7 +10,8 @@ use active::{
 use args::{
     AgentDispatcherCommand, ApiPlaneCommand, AuditCommand, BuildAgentCommand,
     CapabilityRegistryCommand, Cli, Command, CompletionCommand, GovernancePolicyCommand,
-    PackCommand, ProjectCommand, ProjectionCommand, ReleaseCommand, TaskLoopCommand,
+    MessageBusCommand, PackCommand, ProjectCommand, ProjectionCommand, ReleaseCommand,
+    TaskLoopCommand,
 };
 use clap::Parser;
 use formal::{
@@ -330,6 +331,29 @@ fn main() -> anyhow::Result<()> {
                         worker_id,
                         command,
                         audit_sidecar_mode,
+                    },
+                );
+                write_or_print_json(output.as_deref(), &report)?;
+            }
+        },
+        Command::MessageBus { command } => match command {
+            MessageBusCommand::Decision {
+                local_runtime_sufficient,
+                cross_process_worker_required,
+                cloud_fanout_required,
+                event_subscription_required,
+                durable_queue_required,
+                evidence,
+                output,
+            } => {
+                let report = agentflow_message_bus::evaluate_cross_process_scheduling(
+                    agentflow_message_bus::SchedulingDecisionRequest {
+                        local_runtime_sufficient,
+                        cross_process_worker_required,
+                        cloud_fanout_required,
+                        event_subscription_required,
+                        durable_queue_required,
+                        evidence,
                     },
                 );
                 write_or_print_json(output.as_deref(), &report)?;
