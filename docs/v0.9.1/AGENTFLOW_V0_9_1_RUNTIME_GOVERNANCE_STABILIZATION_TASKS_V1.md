@@ -61,7 +61,7 @@ v0.9.0 的治理、部署证据、migration 和 Pack registry 是否已经真正
 | `V091-004` | Pack Migration Apply/Rollback Semantic Split | P0 | V091-003 | done |
 | `V091-005` | Project Pack Registry Release Fixture | P1 | V091-001 | done |
 | `V091-006` | Negative Semantic Release Fixtures | P0 | V091-002, V091-003, V091-004, V091-005 | done |
-| `V091-007` | v0.9.1 Release Certification | P0 | V091-001, V091-002, V091-003, V091-004, V091-005, V091-006 | planned |
+| `V091-007` | v0.9.1 Release Certification | P0 | V091-001, V091-002, V091-003, V091-004, V091-005, V091-006 | done |
 
 ## V091-001 Release Source Agent Entry Alignment
 
@@ -316,6 +316,13 @@ Release gate 要创建并读取项目级 `.agentflow/packs/**` fixture，证明 
 - 不替代独立 Audit Agent 流程；
 - 不跳过 `v0.9.1` 直接进入 `v1.0.0`；
 - 不把 release certification 当成人工审计报告。
+
+### Closeout
+
+- release certification 现在输出 `v091Coverage` / `v091CoveragePassed`，逐项覆盖 `V091-001` 到 `V091-006`；
+- `v1PlanningReadiness` 同时依赖 `v090CoveragePassed` 和 `v091CoveragePassed`，任一版本覆盖项失败都会进入 `blocked`；
+- certification JSON / Markdown 会输出 remaining risks 和 deferred items，避免把 provider smoke / Message Bus 延后项误判为 release 事实完成；
+- `V091-007` 作为 `v0.9.1` 收口任务，只证明 release gate 覆盖完整，不替代后续独立审计。
 
 ## Execution Order
 
