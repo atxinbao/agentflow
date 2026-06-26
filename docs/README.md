@@ -33,6 +33,9 @@ Industry AgentFlow Product
 
 | 路径 | 作用 |
 | --- | --- |
+| `../README.md` | 根目录总目标入口 |
+| `../CHANGELOG.md` | 当前 changelog 指针，完整历史已归档 |
+| `../AGENTS.md` | release source archive 中的 Agent 入口 |
 | `product/` | 当前产品目标和产品边界；Software Dev 是当前商业产品主线 |
 | `foundation/` | AI OS Project Core 的底层通用能力和 filesystem-first 边界 |
 | `architecture/` | v1.x 当前稳定架构合同和运行时边界 |
@@ -57,7 +60,8 @@ Industry AgentFlow Product
 11. [v1.0.1/README.md](v1.0.1/README.md)
 12. [requirements/README.md](requirements/README.md)
 13. [verification/README.md](verification/README.md)
-14. [archive/2026-06-current-baseline-history/README.md](archive/2026-06-current-baseline-history/README.md)
+14. [../CHANGELOG.md](../CHANGELOG.md)
+15. [archive/2026-06-current-baseline-history/README.md](archive/2026-06-current-baseline-history/README.md)
 
 ## 规则
 
@@ -70,6 +74,7 @@ Industry AgentFlow Product
 - `docs/v1.0.1/**` 是当前发布基线；更早版本文档已移入历史归档。
 - `docs/archive/**` 只作为历史参考，不自动生成 issue、SPEC、实现任务或 `.agentflow/**` 事实。
 - 后续新开发必须先进入 confirmed Spec Bundle，再派生 `.agentflow/spec/**` 执行合同。
+- 根目录 Markdown 只保留总目标、Agent 入口、设计兼容入口和当前 changelog 指针。
 
 ## 历史归档
 
@@ -87,5 +92,6 @@ docs/archive/2026-06-current-baseline-history/
 - 旧 foundation 切片；
 - v0.x / pre-v1 architecture 文档；
 - 旧 verification gate 文档。
+- 完整历史 changelog。
 
 这些文档保留上下文价值，但不再作为当前开发入口。

@@ -37,7 +37,7 @@ AgentFlow Software Dev Product
 
 | 文档 | 作用 |
 | --- | --- |
-| [006-spec-driven-software-dev-product-goal-v1.md](006-spec-driven-software-dev-product-goal-v1.md) | 固定当前商业产品目标：Spec-Driven Software Dev Workflow |
+| [006-spec-driven-software-dev-product-goal-v1.md](006-spec-driven-software-dev-product-goal-v1.md) | 当前项目 goal：Spec-Driven Software Dev Workflow |
 | [design-system.md](design-system.md) | 定义当前桌面客户端设计基线和前端 Foundation 规则 |
 
 ## Historical Product Docs
