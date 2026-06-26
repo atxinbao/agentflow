@@ -29,15 +29,15 @@
 ## Reading Order
 
 1. [AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md](AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md)
-2. [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md)
-3. [../archive/2026-06-current-baseline-history/versions/v1.0.0/README.md](../archive/2026-06-current-baseline-history/versions/v1.0.0/README.md)
-4. [../architecture/040-release-source-agent-entry-v1.md](../architecture/040-release-source-agent-entry-v1.md)
-5. [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md)
-6. [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md)
-7. [../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md](../architecture/046-v100-evidence-acceptance-contract-freeze-v1.md)
-8. [../architecture/047-v100-executor-adapter-contract-freeze-v1.md](../architecture/047-v100-executor-adapter-contract-freeze-v1.md)
-9. [../architecture/049-v100-software-dev-pack-stable-baseline-v1.md](../architecture/049-v100-software-dev-pack-stable-baseline-v1.md)
-10. [../architecture/050-v100-release-certification-v1.md](../architecture/050-v100-release-certification-v1.md)
+2. [../../core/architecture/041-v100-stable-contract-baseline-v1.md](../../core/architecture/041-v100-stable-contract-baseline-v1.md)
+3. [../../archive/2026-06-current-baseline-history/versions/v1.0.0/README.md](../../archive/2026-06-current-baseline-history/versions/v1.0.0/README.md)
+4. [../../core/architecture/040-release-source-agent-entry-v1.md](../../core/architecture/040-release-source-agent-entry-v1.md)
+5. [../../core/architecture/041-v100-stable-contract-baseline-v1.md](../../core/architecture/041-v100-stable-contract-baseline-v1.md)
+6. [../../core/architecture/042-v100-runtime-api-sdk-freeze-v1.md](../../core/architecture/042-v100-runtime-api-sdk-freeze-v1.md)
+7. [../../core/architecture/046-v100-evidence-acceptance-contract-freeze-v1.md](../../core/architecture/046-v100-evidence-acceptance-contract-freeze-v1.md)
+8. [../../core/architecture/047-v100-executor-adapter-contract-freeze-v1.md](../../core/architecture/047-v100-executor-adapter-contract-freeze-v1.md)
+9. [../../core/architecture/049-v100-software-dev-pack-stable-baseline-v1.md](../../core/architecture/049-v100-software-dev-pack-stable-baseline-v1.md)
+10. [../../core/architecture/050-v100-release-certification-v1.md](../../core/architecture/050-v100-release-certification-v1.md)
 
 ## Scope
 

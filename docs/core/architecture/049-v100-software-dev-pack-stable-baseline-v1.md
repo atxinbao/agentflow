@@ -9,7 +9,7 @@
 documentId: agentflow-v100-software-dev-pack-stable-baseline-v1
 softwareDevPackStableBaselineVersion: agentflow-software-dev-pack-stable-baseline.v1
 softwareDevPackStableBaselineStatus: active
-authority: docs/architecture/049-v100-software-dev-pack-stable-baseline-v1.md
+authority: docs/core/architecture/049-v100-software-dev-pack-stable-baseline-v1.md
 stableContractBaseline: agentflow-stable-contract-baseline.v1
 packContractVersion: agentflow-pack-contract-freeze.v1
 projectionContractVersion: agentflow-projection-readmodel-contract.v1
@@ -17,12 +17,12 @@ evidenceAcceptanceContractVersion: agentflow-evidence-acceptance-contract.v1
 executorAdapterContractVersion: agentflow-executor-adapter-contract.v1
 replayMigrationUpgradeCertificationVersion: agentflow-replay-migration-upgrade-certification.v1
 dependsOn:
-  - docs/architecture/041-v100-stable-contract-baseline-v1.md
-  - docs/architecture/044-v100-pack-contract-freeze-v1.md
-  - docs/architecture/045-v100-projection-readmodel-contract-freeze-v1.md
-  - docs/architecture/046-v100-evidence-acceptance-contract-freeze-v1.md
-  - docs/architecture/047-v100-executor-adapter-contract-freeze-v1.md
-  - docs/architecture/048-v100-replay-migration-upgrade-certification-v1.md
+  - docs/core/architecture/041-v100-stable-contract-baseline-v1.md
+  - docs/core/architecture/044-v100-pack-contract-freeze-v1.md
+  - docs/core/architecture/045-v100-projection-readmodel-contract-freeze-v1.md
+  - docs/core/architecture/046-v100-evidence-acceptance-contract-freeze-v1.md
+  - docs/core/architecture/047-v100-executor-adapter-contract-freeze-v1.md
+  - docs/core/architecture/048-v100-replay-migration-upgrade-certification-v1.md
 runtimeArtifact: runtime/software-dev-pack-stable-baseline.json
 ```
 

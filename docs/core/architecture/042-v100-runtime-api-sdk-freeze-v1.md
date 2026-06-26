@@ -7,7 +7,7 @@
 runtimeApiSdkContractVersion: agentflow-runtime-api-sdk-freeze.v1
 runtimeApiSdkContractStatus: active
 stableContractBaseline: agentflow-stable-contract-baseline.v1
-authority: docs/architecture/042-v100-runtime-api-sdk-freeze-v1.md
+authority: docs/core/architecture/042-v100-runtime-api-sdk-freeze-v1.md
 ```
 
 ## Purpose

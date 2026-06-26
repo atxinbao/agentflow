@@ -7,7 +7,7 @@
 filesystemContractVersion: agentflow-filesystem-contract-freeze.v1
 filesystemContractStatus: active
 stableContractBaseline: agentflow-stable-contract-baseline.v1
-authority: docs/architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md
+authority: docs/core/architecture/043-v100-agentflow-filesystem-contract-freeze-v1.md
 ```
 
 ## Purpose
@@ -165,8 +165,8 @@ Release source archive 必须包含可追溯的 Agent entry 和公开文档。
 必须包含：
 
 - `AGENTS.md` 或等价 tracked Agent entry；
-- `docs/architecture/**`；
-- `docs/foundation/**`；
+- `docs/core/architecture/**`；
+- `docs/core/**`；
 - `docs/product/**`；
 - `docs/requirements/**`；
 - `docs/v*/**`；

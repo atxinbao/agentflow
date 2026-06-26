@@ -11,7 +11,7 @@ filesystemContractVersion: agentflow-filesystem-contract-freeze.v1
 packContractVersion: agentflow-pack-contract-freeze.v1  
 projectionContractVersion: agentflow-projection-readmodel-contract.v1  
 evidenceAcceptanceContractVersion: agentflow-evidence-acceptance-contract.v1  
-authority: docs/architecture/047-v100-executor-adapter-contract-freeze-v1.md
+authority: docs/core/architecture/047-v100-executor-adapter-contract-freeze-v1.md
 
 ## Purpose
 

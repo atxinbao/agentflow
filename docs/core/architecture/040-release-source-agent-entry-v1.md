@@ -32,13 +32,14 @@ runtime facts 提交进源码包。
 | Path | Role |
 | --- | --- |
 | `docs/product/README.md` | 产品方向 |
-| `docs/foundation/README.md` | 领域基础 |
-| `docs/architecture/README.md` | 技术底座入口 |
-| `docs/architecture/current-module-boundaries.md` | 当前模块边界事实 |
+| `docs/core/README.md` | 领域基础 |
+| `docs/industries/software-dev/README.md` | 当前 Software Dev 行业产品合同 |
+| `docs/core/architecture/README.md` | 技术底座入口 |
+| `docs/core/architecture/current-module-boundaries.md` | 当前模块边界事实 |
 | `docs/product/006-spec-driven-software-dev-product-goal-v1.md` | 当前产品目标 |
-| `docs/foundation/021-ai-os-project-core-capabilities-v1.md` | 当前 AI OS Project Core 能力定义 |
-| `docs/v1.0.1/README.md` | 当前 release hardening baseline |
-| `docs/architecture/050-v100-release-certification-v1.md` | v1 release certification 边界 |
+| `docs/core/021-ai-os-project-core-capabilities-v1.md` | 当前 AI OS Project Core 能力定义 |
+| `docs/releases/v1.0.1/README.md` | 当前 release hardening baseline |
+| `docs/core/architecture/050-v100-release-certification-v1.md` | v1 release certification 边界 |
 | `docs/archive/2026-06-current-baseline-history/README.md` | 历史文档入口 |
 
 这些文件是 release source 可读入口。它们可以被 GitHub source archive、

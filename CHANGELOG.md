@@ -7,8 +7,8 @@
 
 当前发布基线：
 
-- [docs/v1.0.1/README.md](docs/v1.0.1/README.md)
-- [docs/v1.0.1/AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md](docs/v1.0.1/AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md)
+- [docs/releases/v1.0.1/README.md](docs/releases/v1.0.1/README.md)
+- [docs/releases/v1.0.1/AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md](docs/releases/v1.0.1/AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md)
 
 ## Historical Changelog
 

@@ -11,7 +11,7 @@ packContractVersion: agentflow-pack-contract-freeze.v1
 projectionContractVersion: agentflow-projection-readmodel-contract.v1  
 evidenceAcceptanceContractVersion: agentflow-evidence-acceptance-contract.v1  
 executorAdapterContractVersion: agentflow-executor-adapter-contract.v1  
-authority: docs/architecture/048-v100-replay-migration-upgrade-certification-v1.md
+authority: docs/core/architecture/048-v100-replay-migration-upgrade-certification-v1.md
 
 ## Purpose
 
@@ -34,8 +34,8 @@ Negative fixtures prove wrong paths fail at the correct stage.
 - [045-v100-projection-readmodel-contract-freeze-v1.md](045-v100-projection-readmodel-contract-freeze-v1.md)
 - [046-v100-evidence-acceptance-contract-freeze-v1.md](046-v100-evidence-acceptance-contract-freeze-v1.md)
 - [047-v100-executor-adapter-contract-freeze-v1.md](047-v100-executor-adapter-contract-freeze-v1.md)
-- [033-event-replay-projection-rebuild-v1.md](../archive/2026-06-current-baseline-history/architecture/033-event-replay-projection-rebuild-v1.md)
-- [034-pack-migration-execution-model-v1.md](../archive/2026-06-current-baseline-history/architecture/034-pack-migration-execution-model-v1.md)
+- [033-event-replay-projection-rebuild-v1.md](../../archive/2026-06-current-baseline-history/architecture/033-event-replay-projection-rebuild-v1.md)
+- [034-pack-migration-execution-model-v1.md](../../archive/2026-06-current-baseline-history/architecture/034-pack-migration-execution-model-v1.md)
 
 ## Certification Boundary
 

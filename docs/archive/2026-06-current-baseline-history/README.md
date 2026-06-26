@@ -30,7 +30,7 @@ AI OS Project
 | `product/` | 旧 Project Operating Model 文档 |
 | `foundation/` | 旧 foundation 能力切片 |
 | `architecture/` | v0.x / pre-v1 architecture 文档 |
-| `verification/` | 旧 verification gate 文档 |
+| `verification/` | 旧 verification gate 文档和历史验证记录 |
 
 ## Rules
 

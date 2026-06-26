@@ -5,7 +5,7 @@
 
 ## Purpose
 
-`docs/architecture/` 保存当前 v1.x 稳定架构合同和运行时边界。
+`docs/core/architecture/` 保存当前 v1.x 稳定架构合同和运行时边界。
 
 更早的 v0.x / pre-v1 architecture 文档已经移入历史归档：
 
@@ -53,7 +53,7 @@ AgentFlow AI OS Project
 
 ## Rules
 
-- `docs/architecture/` 只定义当前稳定架构合同，不直接授权实现。
+- `docs/core/architecture/` 只定义当前稳定架构合同，不直接授权实现。
 - 从 architecture 进入开发前，必须先转成 `docs/requirements/**` 下的 confirmed Spec Bundle。
 - GitHub issues、PR、provider session 和外部工具状态不能成为 AgentFlow authority。
 - Audit 继续作为 sidecar，不进入 Software Dev 主业务链路。

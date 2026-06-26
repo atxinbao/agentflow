@@ -7,7 +7,7 @@
 stableContractVersion: agentflow-stable-contract-baseline.v1
 stableContractStatus: active
 releaseLine: v1.0.0
-authority: docs/architecture/041-v100-stable-contract-baseline-v1.md
+authority: docs/core/architecture/041-v100-stable-contract-baseline-v1.md
 ```
 
 ## Purpose

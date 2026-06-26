@@ -10,7 +10,7 @@ runtimeApiSdkVersion: agentflow-runtime-api-sdk-freeze.v1
 filesystemContractVersion: agentflow-filesystem-contract-freeze.v1  
 packContractVersion: agentflow-pack-contract-freeze.v1  
 projectionContractVersion: agentflow-projection-readmodel-contract.v1  
-authority: docs/architecture/046-v100-evidence-acceptance-contract-freeze-v1.md
+authority: docs/core/architecture/046-v100-evidence-acceptance-contract-freeze-v1.md
 
 ## Purpose
 
@@ -32,7 +32,7 @@ Audit sidecar reviews after the main chain and does not own Done.
 - [043-v100-agentflow-filesystem-contract-freeze-v1.md](043-v100-agentflow-filesystem-contract-freeze-v1.md)
 - [044-v100-pack-contract-freeze-v1.md](044-v100-pack-contract-freeze-v1.md)
 - [045-v100-projection-readmodel-contract-freeze-v1.md](045-v100-projection-readmodel-contract-freeze-v1.md)
-- [010-work-loop-filesystem-contract-v1.md](../archive/2026-06-current-baseline-history/architecture/010-work-loop-filesystem-contract-v1.md)
+- [010-work-loop-filesystem-contract-v1.md](../../archive/2026-06-current-baseline-history/architecture/010-work-loop-filesystem-contract-v1.md)
 
 ## Acceptance Authority Boundary
 

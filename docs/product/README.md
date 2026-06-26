@@ -39,6 +39,7 @@ AgentFlow Software Dev Product
 | --- | --- |
 | [006-spec-driven-software-dev-product-goal-v1.md](006-spec-driven-software-dev-product-goal-v1.md) | 当前项目 goal：Spec-Driven Software Dev Workflow |
 | [design-system.md](design-system.md) | 定义当前桌面客户端设计基线和前端 Foundation 规则 |
+| [../industries/software-dev/README.md](../industries/software-dev/README.md) | Software Dev 行业产品合同 |
 
 ## Historical Product Docs
 
@@ -55,6 +56,7 @@ docs/archive/2026-06-current-baseline-history/product/
 AgentFlow 当前做：
 
 - Software Dev 的 Spec-Driven Workflow；
+- Software Dev 的行业产品合同；
 - 用 Spec Bundle 统领 PRD、技术方案、issues、证据、验收、交付和反馈；
 - 用 Core Runtime 约束 Agent 执行；
 - 用 Software Dev Pack 定义行业对象、页面和连接器。

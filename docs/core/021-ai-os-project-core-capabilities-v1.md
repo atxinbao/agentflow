@@ -2,7 +2,7 @@
 
 创建日期：2026-06-26
 执行者：Codex
-状态：Foundation design draft / 非执行需求
+状态：Core design draft / 非执行需求
 
 ## Purpose
 
@@ -77,9 +77,9 @@ Industry AgentFlow Product
 本文基于以下项目基线：
 
 - `docs/product/006-spec-driven-software-dev-product-goal-v1.md`
-- `docs/foundation/agentflow-filesystem-workflow-architecture-v1.md`
-- `docs/architecture/049-v100-software-dev-pack-stable-baseline-v1.md`
-- `docs/architecture/052-v101-software-dev-pack-usage-baseline-v1.md`
+- `docs/core/agentflow-filesystem-workflow-architecture-v1.md`
+- `docs/core/architecture/049-v100-software-dev-pack-stable-baseline-v1.md`
+- `docs/core/architecture/052-v101-software-dev-pack-usage-baseline-v1.md`
 
 参考方法：
 
