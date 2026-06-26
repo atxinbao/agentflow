@@ -24,7 +24,7 @@
 | `v0.9.0/` | v0.9.0 Deployment Shape and Runtime Governance 已发布 closeout 基线 |
 | `v0.9.1/` | v0.9.1 Runtime Governance Stabilization 修复任务基线 |
 | `v1.0.0/` | v1.0.0 Project OS Stable Core 开发前置规划 |
-| `v1.0.1/` | v1.0.1 Release Hardening and Operational Certification 补丁任务基线 |
+| `v1.0.1/` | v1.0.1 Release Hardening and Operational Certification 补丁 closeout 基线 |
 | `requirements/` | 新需求文档入口，后续开发只从这里开始 |
 | `archive/2026-05-agentflow-legacy/` | 旧需求、旧规划、旧规格和旧验证摘要归档 |
 
@@ -75,7 +75,7 @@
 - `v0.9.0/` 下文档记录已发布的 Deployment Shape and Runtime Governance closeout 基线；重点是 local/cloud Runtime boundary、Runtime API / SDK、event replay、migration apply、simulation/evaluation、governance、deployment evidence 和 release certification coverage。
 - `v0.9.1/` 下文档记录 `v0.9.0` 发布审计后的稳定化修复任务；重点是 Governance admission 接入、Deployment Evidence 语义证明、Pack migration 语义拆分、project Pack registry fixture、negative semantic fixtures 和 release source Agent entry 自洽。
 - `v1.0.0/` 下文档记录 Project OS Stable Core 稳定核心认证基线；最终 release gate 必须输出 `v1StableCore = ready` 和明确的 v1 support boundary。
-- `v1.0.1/` 下文档记录 `v1.0.0` 发布后的 release hardening 和 operational certification 补丁任务；重点是 source Agent entry v1 对齐、tag/release event certification、provenance manifest、clean-room test reproducibility、Audit sidecar policy、provider smoke optional proof、Message Bus no-go ADR、Software Dev Pack usage baseline 和 trusted governance telemetry source。
+- `v1.0.1/` 下文档记录 `v1.0.0` 发布后的 release hardening 和 operational certification 补丁 closeout；重点是 source Agent entry v1 对齐、tag/release event certification、provenance manifest、clean-room test reproducibility、Audit sidecar policy、provider smoke optional proof、Message Bus no-go ADR、Software Dev Pack usage baseline、trusted governance telemetry source 和 v101 release certification。
 - 后续新开发需求仍然要进入 `requirements/`；新版本运行时事实源仍然以 `.agentflow/spec/**` 为准。
 - 根目录旧 `GOAL.md`、`ROADMAP.md` 和 `verification.md` 已退出入口；历史验证记录迁入 `verification/history.md`。
 - 根目录 `design.md` 只保留兼容入口；完整设计基线迁入 `product/design-system.md`。

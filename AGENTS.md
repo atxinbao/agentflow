@@ -15,7 +15,9 @@ documents instead of local runtime facts.
 - Domain foundation: `docs/foundation/README.md`
 - Technical architecture: `docs/architecture/README.md`
 - Current module boundaries: `docs/architecture/current-module-boundaries.md`
-- Current stabilization plan: `docs/v0.9.1/README.md`
+- Current stable baseline: `docs/v1.0.0/README.md`
+- Current hardening plan: `docs/v1.0.1/README.md`
+- Release certification boundary: `docs/architecture/050-v100-release-certification-v1.md`
 
 ## Runtime Boundary
 
@@ -31,4 +33,3 @@ authority. Do not commit these local runtime records as release source:
 Stable agent roles and operating rules belong in tracked documentation. Local
 materialized agent manuals under `.agentflow/define/agent/**` are runtime
 outputs and must not replace this source entry.
-

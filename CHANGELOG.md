@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.0.1 - 2026-06-26
+
+执行者：Codex
+
+`1.0.1 - Release Hardening and Operational Certification` 是 `1.0.0` 之后的补丁版本。它不扩展产品功能，只补齐 v1 stable core 的发布证据、可复现性和运行可见性。
+
+### Added
+
+- 新增 `runtime/release-provenance.json`，记录 release version、tag、source commit、release URL、gate run、artifact manifest、certification artifact、release notes 和 tag signature 状态。
+- 新增 `runtime/clean-room-test-proof.json`，证明 release gate 使用隔离 `CARGO_TARGET_DIR`，避免依赖人工 `cargo clean -p agentflow-pack`。
+- 新增 `runtime/audit-sidecar-policy.json`，明确 Audit sidecar 不进入主发布链，严格模式与非严格模式的阻断语义分开表达。
+- 新增 `runtime/provider-smoke-proof.json`，让 provider smoke 的 passed / failed / skipped / not configured 都有结构化 proof。
+- 新增 `runtime/software-dev-pack-usage-baseline.json`，证明 Software Dev Pack 的真实使用链路仍以 Requirement、Spec、Issue、Run、Evidence、Acceptance、Delivery、Done 为主线。
+- 新增 `runtime/trusted-governance-telemetry.json`，禁止 Runtime governance 从任意 request input 读取 provider capability 事实。
+- 新增 `runtime/v101-release-certification.json`，作为 v1.0.1 最终发布认证 artifact。
+- 新增 Message Bus no-go ADR 和 Software Dev Pack usage baseline 架构文档。
+
+### Changed
+
+- 版本元数据统一到 `1.0.1`，覆盖 Rust workspace、Desktop package、package-lock 和 Tauri 配置。
+- 根目录 `AGENTS.md` 不再把 `docs/v0.9.1/README.md` 当作当前稳定入口，改为指向 v1 stable core、v1.0.1 hardening 和 release certification boundary。
+- release gate 区分 PR / main / tag / release context：PR/main 可以记录 pending tag，tag/release 必须校验 tag commit 与 source commit 一致。
+- provider smoke optional 不再被误读为 ready；只有真实 passed 才能写成 capability ready。
+
+### Validation
+
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `npm --prefix apps/desktop run build`
+- `git diff --check`
+- `bash scripts/verify_release_gate.sh --release-version v1.0.1 --release-tag v1.0.1`
+
 ## 1.0.0 - 2026-06-25
 
 执行者：Codex

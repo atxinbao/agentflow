@@ -35,7 +35,9 @@ runtime facts 提交进源码包。
 | `docs/foundation/README.md` | 领域基础 |
 | `docs/architecture/README.md` | 技术底座入口 |
 | `docs/architecture/current-module-boundaries.md` | 当前模块边界事实 |
-| `docs/v0.9.1/README.md` | 当前稳定化版本入口 |
+| `docs/v1.0.0/README.md` | 当前稳定核心入口 |
+| `docs/v1.0.1/README.md` | 当前补丁硬化入口 |
+| `docs/architecture/050-v100-release-certification-v1.md` | v1 release certification 边界 |
 
 这些文件是 release source 可读入口。它们可以被 GitHub source archive、
 tag checkout 和本地 checkout 直接读取。
@@ -70,8 +72,9 @@ release gate 必须验证：
 
 1. `AGENTS.md` 存在于 release source checkout。
 2. `AGENTS.md` 指向的 tracked docs 存在。
-3. runtime-only paths 没有被 Git 跟踪。
-4. gate 输出 `runtime/source-agent-entry.json` 作为证明。
+3. `AGENTS.md` 不再把 `docs/v0.9.1/README.md` 当成当前稳定入口。
+4. runtime-only paths 没有被 Git 跟踪。
+5. gate 输出 `runtime/source-agent-entry.json` 作为证明。
 
 失败时，release gate 应停在 `source.agent-entry` 阶段。
 
@@ -80,4 +83,3 @@ release gate 必须验证：
 - 不把 `.agentflow/tasks/**`、run、evidence、local DB 或 tmp 文件提交进源码包。
 - 不把 `.agentflow/define/agent/**` 升级成 release source authority。
 - 不新增另一套 Agent role 文档源。
-
