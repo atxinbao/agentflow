@@ -41,8 +41,16 @@ docs/delivery      记录交付结果
 
 ## Current Industry
 
-当前行业合同：
+当前商业产品只聚焦 Software Dev，但 Software Dev Pack 是 AgentFlow App 的内置能力，不是用户项目文档。
 
-- [industry/software-dev/README.md](industry/software-dev/README.md)
+用户新建项目时，`docs/project/**` 不生成 `industry/` 目录，也不复制 Pack 本体。
 
-未来新增行业时，必须先在 `docs/project/industry/<industry>/` 定义人类可读合同，再考虑 `.agentflow/packs/<industry>/` 的机器可执行合同。
+项目运行态只记录当前启用的 Pack 引用，例如：
+
+```text
+.agentflow/project/active-pack.json
+```
+
+Pack registry、Pack source、Pack upgrade 和 role / skill binding 规则见：
+
+- [../architecture/builtin-pack-registry.md](../architecture/builtin-pack-registry.md)

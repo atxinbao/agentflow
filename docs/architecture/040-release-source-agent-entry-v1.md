@@ -33,7 +33,7 @@ runtime facts 提交进源码包。
 | --- | --- |
 | `docs/project/README.md` | 产品方向 |
 | `docs/architecture/README.md` | 领域基础 |
-| `docs/project/industry/software-dev/README.md` | 当前 Software Dev 行业产品合同 |
+| `docs/architecture/builtin-pack-registry.md` | App 内置 Pack Registry 与用户项目引用边界 |
 | `docs/architecture/README.md` | 技术底座入口 |
 | `docs/architecture/current-module-boundaries.md` | 当前模块边界事实 |
 | `docs/project/goal.md` | 当前产品目标 |

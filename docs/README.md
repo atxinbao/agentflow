@@ -19,7 +19,7 @@ docs/
 
 | 路径 | 作用 |
 | --- | --- |
-| [project/README.md](project/README.md) | 项目目标、上下文、术语、行业合同和历史上下文 |
+| [project/README.md](project/README.md) | 项目目标、上下文、术语和历史上下文 |
 | [requirements/README.md](requirements/README.md) | confirmed Spec Bundle 公共记录入口 |
 | [architecture/README.md](architecture/README.md) | AI OS Project Core、filesystem-first 边界和 v1.x 稳定架构合同 |
 | [delivery/README.md](delivery/README.md) | 当前 release baseline、交付记录和发布认证入口 |
@@ -29,8 +29,8 @@ docs/
 1. [../README.md](../README.md)
 2. [project/goal.md](project/goal.md)
 3. [project/context.md](project/context.md)
-4. [project/industry/software-dev/README.md](project/industry/software-dev/README.md)
-5. [architecture/021-ai-os-project-core-capabilities-v1.md](architecture/021-ai-os-project-core-capabilities-v1.md)
+4. [architecture/021-ai-os-project-core-capabilities-v1.md](architecture/021-ai-os-project-core-capabilities-v1.md)
+5. [architecture/builtin-pack-registry.md](architecture/builtin-pack-registry.md)
 6. [architecture/041-v100-stable-contract-baseline-v1.md](architecture/041-v100-stable-contract-baseline-v1.md)
 7. [delivery/releases/v1.0.1/README.md](delivery/releases/v1.0.1/README.md)
 8. [requirements/README.md](requirements/README.md)
@@ -42,6 +42,7 @@ docs/
 - `docs/requirements/**` 只保存 confirmed Spec Bundle。
 - `docs/architecture/**` 保存长期架构、Core 能力和稳定合同，不直接授权实现。
 - `docs/delivery/**` 记录 release、handoff、decision record 和交付结果。
+- 内置 Pack 是 App 能力，不进入 `docs/project/**`；项目只记录当前启用的 Pack 引用。
 - 后续新开发必须先进入 confirmed Spec Bundle，再派生 `.agentflow/spec/**` 执行合同。
 
 历史文档只保留在 [project/history/](project/history/README.md)，不作为新建项目默认目录。

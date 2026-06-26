@@ -12,7 +12,7 @@ It points agents to tracked documentation. It is not a local runtime fact file.
 
 1. Project goal: `docs/project/goal.md`
 2. Core capabilities: `docs/architecture/021-ai-os-project-core-capabilities-v1.md`
-3. Current industry product: `docs/project/industry/software-dev/README.md`
+3. Built-in Pack registry boundary: `docs/architecture/builtin-pack-registry.md`
 4. Docs map: `docs/README.md`
 5. Architecture contracts: `docs/architecture/README.md`
 6. Current release baseline: `docs/delivery/releases/v1.0.1/README.md`
@@ -22,7 +22,7 @@ It points agents to tracked documentation. It is not a local runtime fact file.
 
 - `docs/project/**` defines product direction.
 - `docs/architecture/**` defines AI OS Project core capabilities.
-- `docs/project/industry/**` defines industry product contracts.
+- Built-in Pack definitions are App internal capabilities, not `docs/project/**` authority.
 - `docs/requirements/**` stores confirmed Spec Bundles.
 - `.agentflow/spec/**` is the execution contract fact source.
 - `.agentflow/events/**` is the task event stream.

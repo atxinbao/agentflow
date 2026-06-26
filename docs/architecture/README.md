@@ -19,9 +19,12 @@ docs/architecture
 
 ## Core Architecture
 
+Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pack-registry.md) 为准。旧合同中的项目级 Pack 路径保留为历史实现语义，不作为新建项目可见目录。
+
 | 文档 | 作用 |
 | --- | --- |
 | [021-ai-os-project-core-capabilities-v1.md](021-ai-os-project-core-capabilities-v1.md) | AI OS Project Core 通用能力 |
+| [builtin-pack-registry.md](builtin-pack-registry.md) | App 内置 Pack Registry 与用户项目引用边界 |
 | [agentflow-filesystem-workflow-architecture-v1.md](agentflow-filesystem-workflow-architecture-v1.md) | filesystem-first workflow 架构 |
 | [stable-contracts.md](stable-contracts.md) | v1.x 稳定架构合同索引 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前模块边界 |

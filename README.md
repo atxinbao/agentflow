@@ -31,13 +31,15 @@ AgentFlow Software Dev Product
 + Software Dev Connector Pack
 ```
 
+这些 Pack 是 AgentFlow App 的内置能力，不是用户项目里的可见文档目录。用户项目只记录当前启用的 Pack 引用和运行事实。
+
 ## Canonical Entries
 
 | 入口 | 作用 |
 | --- | --- |
 | [docs/project/goal.md](docs/project/goal.md) | 当前项目总目标 |
 | [docs/architecture/021-ai-os-project-core-capabilities-v1.md](docs/architecture/021-ai-os-project-core-capabilities-v1.md) | AI OS Project 底层通用能力 |
-| [docs/project/industry/software-dev/README.md](docs/project/industry/software-dev/README.md) | 当前行业产品合同 |
+| [docs/architecture/builtin-pack-registry.md](docs/architecture/builtin-pack-registry.md) | App 内置 Pack Registry 边界 |
 | [docs/README.md](docs/README.md) | 当前文档地图 |
 | [docs/delivery/releases/v1.0.1/README.md](docs/delivery/releases/v1.0.1/README.md) | 当前发布基线 |
 | [CHANGELOG.md](CHANGELOG.md) | 当前 changelog 指针 |
@@ -48,7 +50,7 @@ AgentFlow Software Dev Product
 - `.agentflow/` 面向 Agent、Runtime、Projection、Decision Gate 和 Audit Agent。
 - `docs/project/**` 定义产品目标和产品边界。
 - `docs/architecture/**` 定义底层能力，不直接授权实现。
-- `docs/project/industry/**` 定义行业产品合同，不直接授权实现。
+- 内置 Pack 由 AgentFlow App 管理，不写入 `docs/project/**`。
 - `docs/requirements/**` 只保存后续 confirmed Spec Bundle。
 - `.agentflow/spec/**` 才是执行合同事实源。
 - Audit 是独立 sidecar，不回到主业务链。

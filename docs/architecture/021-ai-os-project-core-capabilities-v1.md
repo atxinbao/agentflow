@@ -407,6 +407,9 @@ Projection 只读，不是 authority。
 
 行业能力通过 Pack 接到底层 Core。
 
+Pack 本体属于 AgentFlow App 的内置能力，不属于用户项目的 `docs/project/**`。
+用户项目只保存当前启用 Pack 的引用和运行事实。
+
 ```text
 Industry AgentFlow Product
 = Domain Pack + Surface Pack + Connector Pack
