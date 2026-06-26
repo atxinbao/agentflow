@@ -15,7 +15,7 @@ It points agents to tracked documentation. It is not a local runtime fact file.
 3. Built-in Pack registry boundary: `docs/architecture/builtin-pack-registry.md`
 4. Docs map: `docs/README.md`
 5. Architecture contracts: `docs/architecture/README.md`
-6. Current release baseline: `docs/delivery/releases/v1.0.1/README.md`
+6. Current release baseline: `docs/delivery/releases/v1.0.2/README.md`
 7. Historical archive: `docs/project/history/2026-06-current-baseline-history/README.md`
 
 ## Authority Boundary

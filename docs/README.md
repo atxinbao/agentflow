@@ -32,7 +32,7 @@ docs/
 4. [architecture/021-ai-os-project-core-capabilities-v1.md](architecture/021-ai-os-project-core-capabilities-v1.md)
 5. [architecture/builtin-pack-registry.md](architecture/builtin-pack-registry.md)
 6. [architecture/041-v100-stable-contract-baseline-v1.md](architecture/041-v100-stable-contract-baseline-v1.md)
-7. [delivery/releases/v1.0.1/README.md](delivery/releases/v1.0.1/README.md)
+7. [delivery/releases/v1.0.2/README.md](delivery/releases/v1.0.2/README.md)
 8. [requirements/README.md](requirements/README.md)
 9. [../CHANGELOG.md](../CHANGELOG.md)
 

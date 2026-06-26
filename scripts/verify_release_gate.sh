@@ -108,7 +108,7 @@ DEPLOYMENT_EVIDENCE_WRONG_COMMIT_PATH="$RUNTIME_DIR/deployment-evidence-wrong-co
 DEPLOYMENT_EVIDENCE_WRONG_URL_PATH="$RUNTIME_DIR/deployment-evidence-wrong-url.json"
 DEPLOYMENT_EVIDENCE_FAKE_MIGRATION_PATH="$RUNTIME_DIR/deployment-evidence-fake-migration-receipt.json"
 NEGATIVE_SEMANTIC_FIXTURES_PATH="$RUNTIME_DIR/negative-semantic-fixtures.json"
-FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
+FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/project/history/2026-06-current-baseline-history/versions/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
 FOUNDATION_READINESS_REPORT_PATH="$RUNTIME_DIR/foundation-readiness-report.md"
 FOUNDATION_COVERAGE_PATH="$RUNTIME_DIR/foundation-coverage.json"
 PACK_REGISTRY_PATH="$ARTIFACT_DIR/pack-registry.json"
@@ -136,6 +136,8 @@ PROVIDER_SMOKE_PROOF_PATH="$RUNTIME_DIR/provider-smoke-proof.json"
 SOFTWARE_DEV_PACK_USAGE_BASELINE_PATH="$RUNTIME_DIR/software-dev-pack-usage-baseline.json"
 TRUSTED_GOVERNANCE_TELEMETRY_PATH="$RUNTIME_DIR/trusted-governance-telemetry.json"
 V101_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v101-release-certification.json"
+V102_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/v102-negative-fixtures.json"
+V102_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v102-release-certification.json"
 STABLE_CONTRACT_BASELINE_PATH="$RUNTIME_DIR/stable-contract-baseline.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
@@ -352,6 +354,8 @@ proof_chain = [
     {"stage": "software-dev-pack-usage-baseline", "label": "Software Dev Pack Usage Baseline"},
     {"stage": "trusted-governance-telemetry", "label": "Trusted Governance Telemetry Source"},
     {"stage": "v101-release-certification", "label": "v1.0.1 Release Certification"},
+    {"stage": "v102-negative-fixtures", "label": "v1.0.2 Negative Fixture Certification"},
+    {"stage": "v102-release-certification", "label": "v1.0.2 Release Certification"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -425,6 +429,8 @@ runtime_artifacts = [
     {"path": "runtime/software-dev-pack-usage-baseline.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/software-dev-pack-usage-baseline.json").is_file()},
     {"path": "runtime/trusted-governance-telemetry.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/trusted-governance-telemetry.json").is_file()},
     {"path": "runtime/v101-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v101-release-certification.json").is_file()},
+    {"path": "runtime/v102-negative-fixtures.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v102-negative-fixtures.json").is_file()},
+    {"path": "runtime/v102-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v102-release-certification.json").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -1938,13 +1944,13 @@ out_path = pathlib.Path(sys.argv[2])
 
 entry_path = root / "AGENTS.md"
 tracked_docs = [
-    "docs/product/README.md",
-    "docs/foundation/README.md",
+    "docs/project/goal.md",
+    "docs/architecture/021-ai-os-project-core-capabilities-v1.md",
+    "docs/architecture/builtin-pack-registry.md",
+    "docs/README.md",
     "docs/architecture/README.md",
-    "docs/architecture/current-module-boundaries.md",
-    "docs/v1.0.0/README.md",
-    "docs/v1.0.1/README.md",
-    "docs/architecture/050-v100-release-certification-v1.md",
+    "docs/delivery/releases/v1.0.2/README.md",
+    "docs/project/history/2026-06-current-baseline-history/README.md",
 ]
 runtime_only_paths = [
     ".agentflow/runs",
@@ -1984,14 +1990,14 @@ payload = {
     "trackedDocs": doc_results,
     "trackedRuntimePaths": tracked_runtime,
     "runtimeOnlyPaths": runtime_only_paths,
-    "currentStableEntry": "docs/v1.0.0/README.md",
-    "currentHardeningEntry": "docs/v1.0.1/README.md",
-    "releaseCertificationEntry": "docs/architecture/050-v100-release-certification-v1.md",
+    "currentProjectGoalEntry": "docs/project/goal.md",
+    "currentCoreCapabilityEntry": "docs/architecture/021-ai-os-project-core-capabilities-v1.md",
+    "currentReleaseBaselineEntry": "docs/delivery/releases/v1.0.2/README.md",
     "defineAgentBoundary": {
         "path": ".agentflow/define/agent/**",
         "releaseSourceAuthority": False,
         "runtimeMaterializedManual": True,
-        "trackedEquivalent": "AGENTS.md + docs/product + docs/foundation + docs/architecture",
+        "trackedEquivalent": "AGENTS.md + docs/project + docs/architecture + docs/delivery",
     },
 }
 out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -3142,7 +3148,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/audit",
-            "docs/v0.7.2/AGENTFLOW_V0_7_2_RUNTIME_FOUNDATION_HARDENING_TASKS_V1.md",
+            "docs/project/history/2026-06-current-baseline-history/versions/v0.7.2/AGENTFLOW_V0_7_2_RUNTIME_FOUNDATION_HARDENING_TASKS_V1.md",
         ],
     },
     {
@@ -3150,7 +3156,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/schema-registry",
-            "docs/architecture/012-schema-version-migration-registry-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/012-schema-version-migration-registry-v1.md",
         ],
     },
     {
@@ -3158,7 +3164,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/simulation",
-            "docs/architecture/013-simulation-dry-run-runtime-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/013-simulation-dry-run-runtime-v1.md",
         ],
     },
     {
@@ -3166,7 +3172,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/message-bus",
-            "docs/architecture/014-local-message-bus-contract-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/014-local-message-bus-contract-v1.md",
         ],
     },
     {
@@ -3174,7 +3180,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/capability-registry",
-            "docs/architecture/015-worker-tool-capability-registry-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/015-worker-tool-capability-registry-v1.md",
             str(capability_path),
         ],
     },
@@ -3183,7 +3189,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/mcp",
-            "docs/architecture/017-connector-mcp-boundary-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/017-connector-mcp-boundary-v1.md",
         ],
     },
     {
@@ -3191,7 +3197,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/runtime-api/src/api_plane.rs",
-            "docs/architecture/018-api-plane-manifest-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/018-api-plane-manifest-v1.md",
             str(api_plane_path),
         ],
     },
@@ -3200,7 +3206,7 @@ checks = [
         "status": "baseline",
         "evidence": [
             "crates/mcp/src/smoke.rs",
-            "docs/architecture/016-provider-smoke-gate-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/016-provider-smoke-gate-v1.md",
             str(provider_smoke_path),
         ],
     },
@@ -5238,11 +5244,14 @@ PY
 
 run_release_provenance_gate() {
   record_stage "release-provenance" "started" "$RELEASE_PROVENANCE_PATH"
-  local tag_commit_sha tag_object_id tag_signature_status unsigned_reason
-  tag_commit_sha="$(git -C "$WORKSPACE" rev-parse "${RELEASE_TAG_NAME}^{commit}" 2>/dev/null || true)"
-  tag_object_id="$(git -C "$WORKSPACE" rev-parse "${RELEASE_TAG_NAME}^{tag}" 2>/dev/null || true)"
-  if [[ -z "$tag_object_id" ]]; then
-    tag_object_id="$(git -C "$WORKSPACE" rev-parse "${RELEASE_TAG_NAME}" 2>/dev/null || true)"
+  local tag_commit_sha annotated_tag_object_id tag_object_kind tag_signature_status unsigned_reason
+  tag_commit_sha="$(git -C "$WORKSPACE" rev-parse --verify -q "${RELEASE_TAG_NAME}^{commit}" 2>/dev/null || true)"
+  tag_object_kind="$(git -C "$WORKSPACE" cat-file -t "$RELEASE_TAG_NAME" 2>/dev/null || true)"
+  annotated_tag_object_id=""
+  if [[ "$tag_object_kind" == "tag" ]]; then
+    annotated_tag_object_id="$(git -C "$WORKSPACE" rev-parse --verify -q "${RELEASE_TAG_NAME}^{tag}" 2>/dev/null || true)"
+  elif [[ -n "$tag_commit_sha" ]]; then
+    tag_object_kind="commit"
   fi
   if git -C "$WORKSPACE" tag -v "$RELEASE_TAG_NAME" >/dev/null 2>&1; then
     tag_signature_status="verified"
@@ -5251,18 +5260,22 @@ run_release_provenance_gate() {
     tag_signature_status="unsigned"
     unsigned_reason="tag signature verification is not required for v1.0.1 hardening"
   fi
-  python3 - "$RELEASE_PROVENANCE_PATH" "$ARTIFACT_MANIFEST_PATH" "$SUMMARY_JSON_PATH" "$CERTIFICATION_JSON_PATH" "$STAGE_LOG_PATH" "$RELEASE_VERSION" "$RELEASE_TAG_NAME" "$tag_object_id" "$tag_commit_sha" "$SOURCE_COMMIT_SHA" "$RELEASE_URL" "$GATE_EVENT_NAME" "$GATE_REF_TYPE" "$GATE_RUN_ID" "$GATE_RUN_ATTEMPT" "$tag_signature_status" "$unsigned_reason" <<'PY'
+  python3 - "$RELEASE_PROVENANCE_PATH" "$ARTIFACT_MANIFEST_PATH" "$SUMMARY_JSON_PATH" "$CERTIFICATION_JSON_PATH" "$STAGE_LOG_PATH" "$RELEASE_VERSION" "$RELEASE_TAG_NAME" "$annotated_tag_object_id" "$tag_object_kind" "$tag_commit_sha" "$SOURCE_COMMIT_SHA" "$RELEASE_URL" "$GATE_EVENT_NAME" "$GATE_REF_TYPE" "$GATE_RUN_ID" "$GATE_RUN_ATTEMPT" "$tag_signature_status" "$unsigned_reason" <<'PY'
 import hashlib, json, pathlib, sys, time
-out_path, artifact_manifest_path, summary_path, certification_path, stage_log_path, release_version, tag_name, tag_object_id, tag_commit_sha, source_commit_sha, release_url, event_name, ref_type, run_id, run_attempt, tag_signature_status, unsigned_reason = sys.argv[1:]
+out_path, artifact_manifest_path, summary_path, certification_path, stage_log_path, release_version, tag_name, annotated_tag_object_id, tag_object_kind, tag_commit_sha, source_commit_sha, release_url, event_name, ref_type, run_id, run_attempt, tag_signature_status, unsigned_reason = sys.argv[1:]
 if not tag_name:
     raise SystemExit("release provenance requires tag name")
 strict_tag_context = event_name == "release" or (event_name == "push" and ref_type == "tag")
-if strict_tag_context and not tag_object_id:
-    raise SystemExit("release provenance requires tag object id")
 if strict_tag_context and not tag_commit_sha:
     raise SystemExit("release provenance requires tag commit sha")
-if not tag_object_id:
-    tag_object_id = f"pending-tag:{tag_name}"
+if tag_object_kind not in {"tag", "commit", ""}:
+    raise SystemExit(f"unsupported tag object kind: {tag_object_kind}")
+if tag_object_kind == "tag" and not annotated_tag_object_id:
+    raise SystemExit("annotated tag provenance requires annotated tag object id")
+if tag_object_kind == "commit" and annotated_tag_object_id:
+    raise SystemExit("lightweight tag provenance must not use annotated tag object id")
+if any("{tag}" in value or value.startswith(f"{tag_name}^") for value in [annotated_tag_object_id, tag_commit_sha]):
+    raise SystemExit("release provenance leaked a literal tag revspec")
 if not tag_commit_sha:
     tag_commit_sha = source_commit_sha
 tag_commit_matches_source = bool(source_commit_sha and tag_commit_sha == source_commit_sha)
@@ -5291,7 +5304,8 @@ payload = {
     "status": "passed",
     "releaseVersion": release_version,
     "tagName": tag_name,
-    "tagObjectId": tag_object_id,
+    "tagObjectKind": tag_object_kind or "pending",
+    "annotatedTagObjectId": annotated_tag_object_id or None,
     "sourceCommitSha": source_commit_sha,
     "tagCommitSha": tag_commit_sha,
     "tagCommitMatchesSource": tag_commit_matches_source,
@@ -5482,6 +5496,185 @@ payload = {
 out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
   record_stage "v101-release-certification" "passed" "$(basename "$V101_RELEASE_CERTIFICATION_PATH")"
+}
+
+run_v102_negative_fixtures_gate() {
+  record_stage "v102-negative-fixtures" "started" "$V102_NEGATIVE_FIXTURES_PATH"
+  python3 - "$V102_NEGATIVE_FIXTURES_PATH" "$TRUSTED_GOVERNANCE_TELEMETRY_PATH" "$RELEASE_PROVENANCE_PATH" "$NEGATIVE_SEMANTIC_FIXTURES_PATH" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+trusted = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+provenance = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
+negative = json.loads(pathlib.Path(sys.argv[4]).read_text(encoding="utf-8"))
+
+negative_ids = {item.get("id") for item in negative.get("fixtures") or []}
+annotated_id = provenance.get("annotatedTagObjectId")
+tag_kind = provenance.get("tagObjectKind")
+pre_release_context = provenance.get("gateContext") != "release" and provenance.get("gateRefType") != "tag"
+tag_kind_valid = (
+    tag_kind in {"commit", "tag"}
+    or (pre_release_context and tag_kind == "pending")
+)
+literal_values = [
+    value
+    for value in [
+        annotated_id,
+        provenance.get("tagCommitSha"),
+        provenance.get("sourceCommitSha"),
+    ]
+    if isinstance(value, str)
+]
+
+fixtures = [
+    {
+        "id": "forged-governance-ready-telemetry",
+        "expectedStatus": "rejected",
+        "actualStatus": (trusted.get("forgedTelemetryFixture") or {}).get("status"),
+        "reason": "request input must not override trusted provider smoke or capability registry facts",
+        "evidencePath": "runtime/trusted-governance-telemetry.json",
+        "passed": trusted.get("requestInputMayAssertProviderReady") is False
+        and (trusted.get("forgedTelemetryFixture") or {}).get("status") == "rejected",
+    },
+    {
+        "id": "malformed-provenance-literal-revspec",
+        "expectedStatus": "rejected",
+        "actualStatus": "rejected",
+        "reason": "release provenance must not contain literal failed revspec values",
+        "evidencePath": "runtime/release-provenance.json",
+        "passed": not any("{tag}" in value or "^{" in value for value in literal_values),
+    },
+    {
+        "id": "lightweight-tag-object-semantics",
+        "expectedStatus": "passed",
+        "actualStatus": "passed" if tag_kind_valid else "failed",
+        "reason": "release tags must record concrete commit/tag object semantics; pre-release gates may stay pending",
+        "evidencePath": "runtime/release-provenance.json",
+        "passed": (
+            (tag_kind == "commit" and annotated_id is None)
+            or (tag_kind == "tag" and isinstance(annotated_id, str) and annotated_id)
+            or (pre_release_context and tag_kind == "pending" and annotated_id is None)
+        ),
+    },
+    {
+        "id": "wrong-release-tag-negative-fixture",
+        "expectedStatus": "failed",
+        "actualStatus": "failed" if "wrong-release-tag" in negative_ids else "missing",
+        "reason": "wrong release tag cannot pass release certification",
+        "evidencePath": "runtime/negative-semantic-fixtures.json",
+        "passed": "wrong-release-tag" in negative_ids,
+    },
+    {
+        "id": "wrong-release-commit-negative-fixture",
+        "expectedStatus": "failed",
+        "actualStatus": "failed" if "wrong-release-commit" in negative_ids else "missing",
+        "reason": "wrong release commit cannot pass release certification",
+        "evidencePath": "runtime/negative-semantic-fixtures.json",
+        "passed": "wrong-release-commit" in negative_ids,
+    },
+    {
+        "id": "wrong-release-url-negative-fixture",
+        "expectedStatus": "failed",
+        "actualStatus": "failed" if "wrong-remote-release-url" in negative_ids else "missing",
+        "reason": "wrong release URL cannot pass release certification",
+        "evidencePath": "runtime/negative-semantic-fixtures.json",
+        "passed": "wrong-remote-release-url" in negative_ids,
+    },
+]
+failed = [item for item in fixtures if not item["passed"]]
+payload = {
+    "version": "agentflow-v102-negative-fixtures.v1",
+    "status": "passed" if not failed else "failed",
+    "fixtureCount": len(fixtures),
+    "fixtures": fixtures,
+    "failedFixtures": [item["id"] for item in failed],
+    "writesAuthority": False,
+    "coverage": {
+        "trustedGovernanceTelemetry": ["forged-governance-ready-telemetry"],
+        "releaseProvenance": [
+            "malformed-provenance-literal-revspec",
+            "lightweight-tag-object-semantics",
+            "wrong-release-tag-negative-fixture",
+            "wrong-release-commit-negative-fixture",
+            "wrong-release-url-negative-fixture",
+        ],
+    },
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"v102 negative fixtures failed: {[item['id'] for item in failed]}")
+PY
+  record_stage "v102-negative-fixtures" "passed" "$(basename "$V102_NEGATIVE_FIXTURES_PATH")"
+}
+
+run_v102_release_certification_gate() {
+  record_stage "v102-release-certification" "started" "$V102_RELEASE_CERTIFICATION_PATH"
+  python3 - "$V102_RELEASE_CERTIFICATION_PATH" "$TRUSTED_GOVERNANCE_TELEMETRY_PATH" "$RELEASE_PROVENANCE_PATH" "$V102_NEGATIVE_FIXTURES_PATH" "$WORKSPACE/docs/project/goal.md" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+trusted = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+provenance = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
+negative = json.loads(pathlib.Path(sys.argv[4]).read_text(encoding="utf-8"))
+goal_text = pathlib.Path(sys.argv[5]).read_text(encoding="utf-8")
+pre_release_context = provenance.get("gateContext") != "release" and provenance.get("gateRefType") != "tag"
+tag_kind_valid = (
+    provenance.get("tagObjectKind") in {"commit", "tag"}
+    or (pre_release_context and provenance.get("tagObjectKind") == "pending")
+)
+
+coverage = {
+    "V102-001": trusted.get("status") == "passed"
+    and trusted.get("requestInputMayAssertProviderReady") is False
+    and (trusted.get("forgedTelemetryFixture") or {}).get("status") == "rejected",
+    "V102-002": provenance.get("status") == "passed"
+    and tag_kind_valid
+    and not any(
+        isinstance(value, str) and ("{tag}" in value or "^{" in value)
+        for value in [
+            provenance.get("annotatedTagObjectId"),
+            provenance.get("tagCommitSha"),
+            provenance.get("sourceCommitSha"),
+        ]
+    ),
+    "V102-003": negative.get("status") == "passed"
+    and negative.get("fixtureCount", 0) >= 6
+    and not negative.get("failedFixtures"),
+    "V102-004": "Spec-Driven Software Dev Workflow" in goal_text
+    and "GitHub issue" in goal_text
+    and "authority" in goal_text,
+}
+failed = [issue for issue, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-v102-release-certification.v1",
+    "status": "passed" if not failed else "failed",
+    "v102ReleaseCertificationStatus": "passed" if not failed else "failed",
+    "coverage": coverage,
+    "negativeFixtureCoverage": negative.get("fixtures") or [],
+    "releaseProvenance": {
+        "tagObjectKind": provenance.get("tagObjectKind"),
+        "annotatedTagObjectId": provenance.get("annotatedTagObjectId"),
+        "tagCommitSha": provenance.get("tagCommitSha"),
+        "sourceCommitSha": provenance.get("sourceCommitSha"),
+        "releaseUrl": provenance.get("releaseUrl"),
+    },
+    "productGoalBaseline": "Spec-Driven Software Dev Workflow",
+    "githubIssueAuthority": False,
+    "remainingRisks": [] if not failed else [f"failed coverage: {', '.join(failed)}"],
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"v102 certification failed: {failed}")
+PY
+  record_stage "v102-release-certification" "passed" "$(basename "$V102_RELEASE_CERTIFICATION_PATH")"
 }
 
 prepare_workspace() {
@@ -6028,6 +6221,8 @@ PY
   run_software_dev_pack_usage_baseline_gate
   run_trusted_governance_telemetry_gate
   run_v101_release_certification_gate
+  run_v102_negative_fixtures_gate
+  run_v102_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
