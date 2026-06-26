@@ -35,22 +35,22 @@ AgentFlow Software Dev Product
 
 | 入口 | 作用 |
 | --- | --- |
-| [docs/product/006-spec-driven-software-dev-product-goal-v1.md](docs/product/006-spec-driven-software-dev-product-goal-v1.md) | 当前项目总目标 |
-| [docs/core/021-ai-os-project-core-capabilities-v1.md](docs/core/021-ai-os-project-core-capabilities-v1.md) | AI OS Project 底层通用能力 |
-| [docs/industries/software-dev/README.md](docs/industries/software-dev/README.md) | 当前行业产品合同 |
+| [docs/project/goal.md](docs/project/goal.md) | 当前项目总目标 |
+| [docs/architecture/021-ai-os-project-core-capabilities-v1.md](docs/architecture/021-ai-os-project-core-capabilities-v1.md) | AI OS Project 底层通用能力 |
+| [docs/project/industry/software-dev/README.md](docs/project/industry/software-dev/README.md) | 当前行业产品合同 |
 | [docs/README.md](docs/README.md) | 当前文档地图 |
-| [docs/releases/v1.0.1/README.md](docs/releases/v1.0.1/README.md) | 当前发布基线 |
+| [docs/delivery/releases/v1.0.1/README.md](docs/delivery/releases/v1.0.1/README.md) | 当前发布基线 |
 | [CHANGELOG.md](CHANGELOG.md) | 当前 changelog 指针 |
 
 ## Current Boundary
 
 - `docs/` 面向人类团队、第三方集成方和 Spec Builder。
 - `.agentflow/` 面向 Agent、Runtime、Projection、Decision Gate 和 Audit Agent。
-- `docs/product/**` 定义产品目标和产品边界。
-- `docs/core/**` 定义底层能力，不直接授权实现。
-- `docs/industries/**` 定义行业产品合同，不直接授权实现。
+- `docs/project/**` 定义产品目标和产品边界。
+- `docs/architecture/**` 定义底层能力，不直接授权实现。
+- `docs/project/industry/**` 定义行业产品合同，不直接授权实现。
 - `docs/requirements/**` 只保存后续 confirmed Spec Bundle。
 - `.agentflow/spec/**` 才是执行合同事实源。
 - Audit 是独立 sidecar，不回到主业务链。
 
-历史文档已归档到 [docs/archive/2026-06-current-baseline-history/](docs/archive/2026-06-current-baseline-history/)。
+历史文档已归档到 [docs/project/history/2026-06-current-baseline-history/](docs/project/history/2026-06-current-baseline-history/)。

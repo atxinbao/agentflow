@@ -12,7 +12,7 @@
 归档位置：
 
 ```text
-docs/archive/2026-06-current-baseline-history/requirements/
+docs/project/history/2026-06-current-baseline-history/requirements/
 ```
 
 ## Current Rule

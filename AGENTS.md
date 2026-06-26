@@ -10,19 +10,19 @@ It points agents to tracked documentation. It is not a local runtime fact file.
 
 ## Read First
 
-1. Project goal: `docs/product/006-spec-driven-software-dev-product-goal-v1.md`
-2. Core capabilities: `docs/core/021-ai-os-project-core-capabilities-v1.md`
-3. Current industry product: `docs/industries/software-dev/README.md`
+1. Project goal: `docs/project/goal.md`
+2. Core capabilities: `docs/architecture/021-ai-os-project-core-capabilities-v1.md`
+3. Current industry product: `docs/project/industry/software-dev/README.md`
 4. Docs map: `docs/README.md`
-5. Architecture contracts: `docs/core/architecture/README.md`
-6. Current release baseline: `docs/releases/v1.0.1/README.md`
-7. Historical archive: `docs/archive/2026-06-current-baseline-history/README.md`
+5. Architecture contracts: `docs/architecture/README.md`
+6. Current release baseline: `docs/delivery/releases/v1.0.1/README.md`
+7. Historical archive: `docs/project/history/2026-06-current-baseline-history/README.md`
 
 ## Authority Boundary
 
-- `docs/product/**` defines product direction.
-- `docs/core/**` defines AI OS Project core capabilities.
-- `docs/industries/**` defines industry product contracts.
+- `docs/project/**` defines product direction.
+- `docs/architecture/**` defines AI OS Project core capabilities.
+- `docs/project/industry/**` defines industry product contracts.
 - `docs/requirements/**` stores confirmed Spec Bundles.
 - `.agentflow/spec/**` is the execution contract fact source.
 - `.agentflow/events/**` is the task event stream.

@@ -1,0 +1,52 @@
+# Architecture
+
+更新日期：2026-06-26
+执行者：Codex
+
+## Purpose
+
+本目录沉淀 AgentFlow 的长期架构、Core 能力和稳定合同。
+
+```text
+docs/architecture
+= AI OS Project Core
++ filesystem-first workflow
++ v1.x stable contracts
++ module boundaries
++ design system
++ provider / connector boundaries
+```
+
+## Core Architecture
+
+| 文档 | 作用 |
+| --- | --- |
+| [021-ai-os-project-core-capabilities-v1.md](021-ai-os-project-core-capabilities-v1.md) | AI OS Project Core 通用能力 |
+| [agentflow-filesystem-workflow-architecture-v1.md](agentflow-filesystem-workflow-architecture-v1.md) | filesystem-first workflow 架构 |
+| [stable-contracts.md](stable-contracts.md) | v1.x 稳定架构合同索引 |
+| [current-module-boundaries.md](current-module-boundaries.md) | 当前模块边界 |
+| [mcp-provider-adapter.md](mcp-provider-adapter.md) | MCP / provider 适配边界 |
+| [design-system.md](design-system.md) | 当前设计系统和桌面客户端设计基线 |
+
+## Stable Contracts
+
+| 文档 | 作用 |
+| --- | --- |
+| [041-v100-stable-contract-baseline-v1.md](041-v100-stable-contract-baseline-v1.md) | v1.0 stable contract baseline |
+| [042-v100-runtime-api-sdk-freeze-v1.md](042-v100-runtime-api-sdk-freeze-v1.md) | Runtime API / SDK freeze |
+| [043-v100-agentflow-filesystem-contract-freeze-v1.md](043-v100-agentflow-filesystem-contract-freeze-v1.md) | AgentFlow filesystem contract freeze |
+| [044-v100-pack-contract-freeze-v1.md](044-v100-pack-contract-freeze-v1.md) | Pack contract freeze |
+| [045-v100-projection-readmodel-contract-freeze-v1.md](045-v100-projection-readmodel-contract-freeze-v1.md) | Projection / read model contract |
+| [046-v100-evidence-acceptance-contract-freeze-v1.md](046-v100-evidence-acceptance-contract-freeze-v1.md) | Evidence / decision contract |
+| [047-v100-executor-adapter-contract-freeze-v1.md](047-v100-executor-adapter-contract-freeze-v1.md) | Executor adapter contract |
+| [048-v100-replay-migration-upgrade-certification-v1.md](048-v100-replay-migration-upgrade-certification-v1.md) | Replay / migration / upgrade certification |
+| [049-v100-software-dev-pack-stable-baseline-v1.md](049-v100-software-dev-pack-stable-baseline-v1.md) | Software Dev Pack stable baseline |
+| [050-v100-release-certification-v1.md](050-v100-release-certification-v1.md) | v1.0 release certification |
+| [051-v101-message-bus-no-go-adr-v1.md](051-v101-message-bus-no-go-adr-v1.md) | Message Bus no-go ADR |
+| [052-v101-software-dev-pack-usage-baseline-v1.md](052-v101-software-dev-pack-usage-baseline-v1.md) | Software Dev Pack usage baseline |
+
+## Rules
+
+- `docs/architecture/**` 不直接授权实现。
+- 临时技术方案先属于 confirmed Spec Bundle。
+- 只有长期有效的架构决策、边界、合同和 ADR 才沉淀到这里。
