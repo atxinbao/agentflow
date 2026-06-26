@@ -38,6 +38,7 @@ AgentFlow Software Dev Product
 | 入口 | 作用 |
 | --- | --- |
 | [docs/project/goal.md](docs/project/goal.md) | 当前项目总目标 |
+| [docs/project/roadmap.md](docs/project/roadmap.md) | 从目标到版本阶段的路线图 |
 | [docs/architecture/021-ai-os-project-core-capabilities-v1.md](docs/architecture/021-ai-os-project-core-capabilities-v1.md) | AI OS Project 底层通用能力 |
 | [docs/architecture/builtin-pack-registry.md](docs/architecture/builtin-pack-registry.md) | App 内置 Pack Registry 边界 |
 | [docs/README.md](docs/README.md) | 当前文档地图 |
@@ -49,6 +50,7 @@ AgentFlow Software Dev Product
 - `docs/` 面向人类团队、第三方集成方和 Spec Builder。
 - `.agentflow/` 面向 Agent、Runtime、Projection、Decision Gate 和 Audit Agent。
 - `docs/project/**` 定义产品目标和产品边界。
+- `docs/project/roadmap.md` 定义版本路线图，不直接授权实现。
 - `docs/architecture/**` 定义底层能力，不直接授权实现。
 - 内置 Pack 由 AgentFlow App 管理，不写入 `docs/project/**`。
 - `docs/requirements/**` 只保存后续 confirmed Spec Bundle。

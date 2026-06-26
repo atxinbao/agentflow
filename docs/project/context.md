@@ -39,6 +39,9 @@ docs/architecture  沉淀长期架构
 docs/delivery      记录交付结果
 ```
 
+`docs/project/roadmap.md` 位于 `goal.md` 和 `docs/requirements/**` 之间。
+它定义版本阶段和 loop 推进顺序，但不直接授权执行。
+
 ## Current Industry
 
 当前商业产品只聚焦 Software Dev，但 Software Dev Pack 是 AgentFlow App 的内置能力，不是用户项目文档。

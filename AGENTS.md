@@ -11,16 +11,18 @@ It points agents to tracked documentation. It is not a local runtime fact file.
 ## Read First
 
 1. Project goal: `docs/project/goal.md`
-2. Core capabilities: `docs/architecture/021-ai-os-project-core-capabilities-v1.md`
-3. Built-in Pack registry boundary: `docs/architecture/builtin-pack-registry.md`
-4. Docs map: `docs/README.md`
-5. Architecture contracts: `docs/architecture/README.md`
-6. Current release baseline: `docs/delivery/releases/v1.0.1/README.md`
-7. Historical archive: `docs/project/history/2026-06-current-baseline-history/README.md`
+2. Project roadmap: `docs/project/roadmap.md`
+3. Core capabilities: `docs/architecture/021-ai-os-project-core-capabilities-v1.md`
+4. Built-in Pack registry boundary: `docs/architecture/builtin-pack-registry.md`
+5. Docs map: `docs/README.md`
+6. Architecture contracts: `docs/architecture/README.md`
+7. Current release baseline: `docs/delivery/releases/v1.0.1/README.md`
+8. Historical archive: `docs/project/history/2026-06-current-baseline-history/README.md`
 
 ## Authority Boundary
 
 - `docs/project/**` defines product direction.
+- `docs/project/roadmap.md` defines the version route from goal to requirements, not executable issues.
 - `docs/architecture/**` defines AI OS Project core capabilities.
 - Built-in Pack definitions are App internal capabilities, not `docs/project/**` authority.
 - `docs/requirements/**` stores confirmed Spec Bundles.
