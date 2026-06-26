@@ -21,8 +21,8 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.0.1/README.md](releases/v1.0.1/README.md) | 当前发布基线：Release Hardening and Operational Certification |
-| [releases/v1.0.1/AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md](releases/v1.0.1/AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md) | v1.0.1 hardening tasks |
+| [releases/v1.0.2/README.md](releases/v1.0.2/README.md) | 当前发布基线：Release Audit Fixes |
+| [releases/v1.0.2/AGENTFLOW_V1_0_2_RELEASE_AUDIT_FIXES_TASKS_V1.md](releases/v1.0.2/AGENTFLOW_V1_0_2_RELEASE_AUDIT_FIXES_TASKS_V1.md) | v1.0.2 release audit fix tasks |
 
 ## Historical Delivery
 

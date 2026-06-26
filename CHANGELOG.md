@@ -7,8 +7,17 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.0.1/README.md](docs/delivery/releases/v1.0.1/README.md)
-- [docs/delivery/releases/v1.0.1/AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md](docs/delivery/releases/v1.0.1/AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md)
+- [docs/delivery/releases/v1.0.2/README.md](docs/delivery/releases/v1.0.2/README.md)
+- [docs/delivery/releases/v1.0.2/AGENTFLOW_V1_0_2_RELEASE_AUDIT_FIXES_TASKS_V1.md](docs/delivery/releases/v1.0.2/AGENTFLOW_V1_0_2_RELEASE_AUDIT_FIXES_TASKS_V1.md)
+
+## v1.0.2 - 2026-06-26
+
+Release audit fix baseline:
+
+- runtime governance telemetry now ignores request-input provider-ready claims;
+- release provenance distinguishes lightweight and annotated tag semantics;
+- release certification records V102 negative fixture coverage;
+- product goal baseline is Spec-Driven Software Dev Workflow.
 
 ## Historical Changelog
 
