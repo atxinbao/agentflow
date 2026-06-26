@@ -7,7 +7,7 @@
 
 | 路径 | 作用 |
 | --- | --- |
-| `product/` | AgentFlow Project Operating Model 产品设计基线 |
+| `product/` | AgentFlow Project Operating Model 产品设计基线；当前产品目标是 Spec-Driven Software Dev Workflow |
 | `foundation/` | 下一代 Project Operating Model 的基础能力需求 |
 | `architecture/` | AgentFlow 底层技术蓝图、模块边界与运行时模型 |
 | `verification/` | Gate、E2E 证据链和正式验证入口说明 |
