@@ -69,6 +69,8 @@
 | [048-v100-replay-migration-upgrade-certification-v1.md](048-v100-replay-migration-upgrade-certification-v1.md) | 定义 v1.0 event replay、projection rebuild、Pack migration、retired path 和 upgrade certification 冻结合同 |
 | [049-v100-software-dev-pack-stable-baseline-v1.md](049-v100-software-dev-pack-stable-baseline-v1.md) | 定义 v1.0 Software Dev Pack stable baseline、read model、connector、delivery 和 Audit sidecar 认证合同 |
 | [050-v100-release-certification-v1.md](050-v100-release-certification-v1.md) | 定义 v1.0 final release certification、v1StableCore、support boundary 和 V100 coverage 认证合同 |
+| [051-v101-message-bus-no-go-adr-v1.md](051-v101-message-bus-no-go-adr-v1.md) | 定义 v1.0.1 cross-process Message Bus no-go ADR、go criteria 和非 authority 边界 |
+| [052-v101-software-dev-pack-usage-baseline-v1.md](052-v101-software-dev-pack-usage-baseline-v1.md) | 定义 v1.0.1 Software Dev Pack usage flow、authority 边界和 release gate 绑定 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前 crates 和目录边界的事实快照 |
 | [mcp-provider-adapter.md](mcp-provider-adapter.md) | 外部 provider / MCP 适配层边界 |
 

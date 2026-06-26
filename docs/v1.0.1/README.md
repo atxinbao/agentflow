@@ -2,7 +2,7 @@
 
 日期：2026-06-26
 执行者：Codex
-状态：Planned hardening baseline
+状态：Release hardening closeout baseline
 
 ## Purpose
 
@@ -53,6 +53,20 @@
 - 补 Software Dev Pack usage baseline；
 - 收敛 Runtime governance telemetry source；
 - 输出 `v1.0.1` release certification。
+
+## Closeout Proof
+
+`v1.0.1` 的 closeout 由 release gate 生成以下 runtime artifacts：
+
+- `runtime/release-provenance.json`
+- `runtime/clean-room-test-proof.json`
+- `runtime/audit-sidecar-policy.json`
+- `runtime/provider-smoke-proof.json`
+- `runtime/software-dev-pack-usage-baseline.json`
+- `runtime/trusted-governance-telemetry.json`
+- `runtime/v101-release-certification.json`
+
+这些 artifact 是发布认证证据，不是新的产品能力。
 
 ## Non-goals
 
