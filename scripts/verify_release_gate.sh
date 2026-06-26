@@ -1938,13 +1938,19 @@ out_path = pathlib.Path(sys.argv[2])
 
 entry_path = root / "AGENTS.md"
 tracked_docs = [
-    "docs/product/README.md",
-    "docs/foundation/README.md",
+    "docs/project/README.md",
+    "docs/project/goal.md",
+    "docs/project/roadmap.md",
+    "docs/project/context.md",
+    "docs/README.md",
     "docs/architecture/README.md",
     "docs/architecture/current-module-boundaries.md",
-    "docs/v1.0.0/README.md",
-    "docs/v1.0.1/README.md",
+    "docs/architecture/021-ai-os-project-core-capabilities-v1.md",
+    "docs/architecture/builtin-pack-registry.md",
+    "docs/architecture/041-v100-stable-contract-baseline-v1.md",
     "docs/architecture/050-v100-release-certification-v1.md",
+    "docs/delivery/releases/v1.0.1/README.md",
+    "docs/project/history/2026-06-current-baseline-history/README.md",
 ]
 runtime_only_paths = [
     ".agentflow/runs",
@@ -1984,14 +1990,14 @@ payload = {
     "trackedDocs": doc_results,
     "trackedRuntimePaths": tracked_runtime,
     "runtimeOnlyPaths": runtime_only_paths,
-    "currentStableEntry": "docs/v1.0.0/README.md",
-    "currentHardeningEntry": "docs/v1.0.1/README.md",
+    "currentStableEntry": "docs/architecture/041-v100-stable-contract-baseline-v1.md",
+    "currentHardeningEntry": "docs/delivery/releases/v1.0.1/README.md",
     "releaseCertificationEntry": "docs/architecture/050-v100-release-certification-v1.md",
     "defineAgentBoundary": {
         "path": ".agentflow/define/agent/**",
         "releaseSourceAuthority": False,
         "runtimeMaterializedManual": True,
-        "trackedEquivalent": "AGENTS.md + docs/product + docs/foundation + docs/architecture",
+        "trackedEquivalent": "AGENTS.md + docs/project + docs/architecture + docs/delivery",
     },
 }
 out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
