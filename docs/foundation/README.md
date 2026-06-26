@@ -52,6 +52,7 @@ docs/requirements/
 | [018-project-status-mutation-writer-v1.md](018-project-status-mutation-writer-v1.md) | 定义项目状态写入器的幂等、证据和回滚边界 |
 | [019-project-terminal-boundaries-v1.md](019-project-terminal-boundaries-v1.md) | 一次性定义项目终态后的归档、保留、取消、重开和后续项目边界 |
 | [020-project-structural-information-principle-v1.md](020-project-structural-information-principle-v1.md) | 定义项目结构信息晋升原则、六个轻量质量维度和 Spec / Evidence / Pack / Simulation / Acceptance / Governance 应用边界 |
+| [021-ai-os-project-core-capabilities-v1.md](021-ai-os-project-core-capabilities-v1.md) | 定义 AgentFlow 作为 AI OS Project 的 6 个 Kernel、12 个通用能力、docs/ 与 .agentflow/ 平面边界和行业 Pack 接入方式 |
 | [agentflow-filesystem-workflow-architecture-v1.md](agentflow-filesystem-workflow-architecture-v1.md) | 定义 AgentFlow filesystem-first workflow 架构基准、CodeFlow / DesignFlow 分层和未来 Eve adapter 边界 |
 
 ## Rules
