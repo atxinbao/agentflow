@@ -108,7 +108,7 @@ DEPLOYMENT_EVIDENCE_WRONG_COMMIT_PATH="$RUNTIME_DIR/deployment-evidence-wrong-co
 DEPLOYMENT_EVIDENCE_WRONG_URL_PATH="$RUNTIME_DIR/deployment-evidence-wrong-url.json"
 DEPLOYMENT_EVIDENCE_FAKE_MIGRATION_PATH="$RUNTIME_DIR/deployment-evidence-fake-migration-receipt.json"
 NEGATIVE_SEMANTIC_FIXTURES_PATH="$RUNTIME_DIR/negative-semantic-fixtures.json"
-FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
+FOUNDATION_READINESS_REPORT_SOURCE="$ROOT/docs/project/history/2026-06-current-baseline-history/versions/v0.7.2/AGENTFLOW_V0_7_2_FOUNDATION_READINESS_REPORT_V1.md"
 FOUNDATION_READINESS_REPORT_PATH="$RUNTIME_DIR/foundation-readiness-report.md"
 FOUNDATION_COVERAGE_PATH="$RUNTIME_DIR/foundation-coverage.json"
 PACK_REGISTRY_PATH="$ARTIFACT_DIR/pack-registry.json"
@@ -3148,7 +3148,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/audit",
-            "docs/v0.7.2/AGENTFLOW_V0_7_2_RUNTIME_FOUNDATION_HARDENING_TASKS_V1.md",
+            "docs/project/history/2026-06-current-baseline-history/versions/v0.7.2/AGENTFLOW_V0_7_2_RUNTIME_FOUNDATION_HARDENING_TASKS_V1.md",
         ],
     },
     {
@@ -3156,7 +3156,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/schema-registry",
-            "docs/architecture/012-schema-version-migration-registry-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/012-schema-version-migration-registry-v1.md",
         ],
     },
     {
@@ -3164,7 +3164,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/simulation",
-            "docs/architecture/013-simulation-dry-run-runtime-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/013-simulation-dry-run-runtime-v1.md",
         ],
     },
     {
@@ -3172,7 +3172,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/message-bus",
-            "docs/architecture/014-local-message-bus-contract-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/014-local-message-bus-contract-v1.md",
         ],
     },
     {
@@ -3180,7 +3180,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/capability-registry",
-            "docs/architecture/015-worker-tool-capability-registry-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/015-worker-tool-capability-registry-v1.md",
             str(capability_path),
         ],
     },
@@ -3189,7 +3189,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/mcp",
-            "docs/architecture/017-connector-mcp-boundary-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/017-connector-mcp-boundary-v1.md",
         ],
     },
     {
@@ -3197,7 +3197,7 @@ checks = [
         "status": "completed",
         "evidence": [
             "crates/runtime-api/src/api_plane.rs",
-            "docs/architecture/018-api-plane-manifest-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/018-api-plane-manifest-v1.md",
             str(api_plane_path),
         ],
     },
@@ -3206,7 +3206,7 @@ checks = [
         "status": "baseline",
         "evidence": [
             "crates/mcp/src/smoke.rs",
-            "docs/architecture/016-provider-smoke-gate-v1.md",
+            "docs/project/history/2026-06-current-baseline-history/architecture/016-provider-smoke-gate-v1.md",
             str(provider_smoke_path),
         ],
     },
