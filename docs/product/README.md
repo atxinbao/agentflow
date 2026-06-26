@@ -9,6 +9,14 @@
 
 AgentFlow 是项目目标驱动的 Agent 交付系统。用户入口不是单个任务，也不是工作流画布，而是一个 Project。Project 可以很大，例如一个完整电商 APP；也可以很小，例如一个前端 BUG 修复。无论大小，AgentFlow 都从项目目标、计划、执行、审计和交付的角度组织工作。
 
+当前产品目标已收敛为：
+
+```text
+AgentFlow = Spec-Driven Software Dev Workflow
+```
+
+底层 Project OS 能力继续作为技术底座，但当前商业产品主线只聚焦 Software Dev。
+
 ## Core Principle
 
 ```text
@@ -31,6 +39,21 @@ Add Project
 -> Audit
 -> Delivery
 -> Goal Recheck
+```
+
+当前 Software Dev 产品主线：
+
+```text
+Intent
+-> Spec Bundle
+-> Route
+-> Domain-specific Plan / Tasks / Artifacts
+-> Agent Execution
+-> Evidence
+-> Acceptance
+-> Delivery
+-> Feedback
+-> Spec Evolution
 ```
 
 ## Agent Roles
@@ -56,6 +79,7 @@ Specialist Agent 不是固定顶层角色，而是按需加载的专家能力，
 | [003-goal-plan-document-model-v1.md](003-goal-plan-document-model-v1.md) | 定义 GOAL.md / PLAN.md / DECISIONS.md |
 | [004-requirement-to-goal-flow-v1.md](004-requirement-to-goal-flow-v1.md) | 定义用户输入如何转成项目目标 |
 | [005-goal-to-project-loop-flow-v1.md](005-goal-to-project-loop-flow-v1.md) | 定义目标和计划确认后如何进入项目循环 |
+| [006-spec-driven-software-dev-product-goal-v1.md](006-spec-driven-software-dev-product-goal-v1.md) | 固定当前商业产品目标：Spec-Driven Software Dev Workflow |
 | [design-system.md](design-system.md) | 定义当前桌面客户端设计基线和前端 Foundation 规则 |
 
 ## Relationship To Requirements
@@ -73,6 +97,9 @@ AgentFlow 不做：
 - 不从任务开始定义产品。
 - 不把 Project 降级成任务列表。
 - 不把 Workflow 画布作为主入口。
+- 不把 Agent Runner 作为产品核心。
+- 不把 Spec 文档生成器作为产品核心。
+- 不把多行业平台作为当前商业产品目标。
 - 不把 Goal / Plan 当成一次性文档。
 - 不让 Work Agent 修改项目目标。
 - 不让 Audit Agent 执行任务。
@@ -81,6 +108,7 @@ AgentFlow 不做：
 
 AgentFlow 要做：
 
+- 用 Spec 驱动 Software Dev 工作流。
 - 从 Project 管理项目目标和交付过程。
 - 用 Goal Agent 持续校准方向。
 - 用 Spec Agent 把目标转为计划和任务合同。
