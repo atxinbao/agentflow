@@ -8,11 +8,13 @@
 本文从以下产品设计和运行时基线派生：
 
 - [../product/README.md](../product/README.md)
-- [../product/001-project-agent-role-model-v1.md](../product/001-project-agent-role-model-v1.md)
-- [../product/002-project-lifecycle-v1.md](../product/002-project-lifecycle-v1.md)
-- [../product/003-goal-plan-document-model-v1.md](../product/003-goal-plan-document-model-v1.md)
-- [../architecture/009-runtime-foundation-closeout-baseline-v1.md](../architecture/009-runtime-foundation-closeout-baseline-v1.md)
-- [../v0.5.0/AGENTFLOW_V0_5_0_SPEC_LOOP_PRODUCTIZATION_TASKS_V1.md](../v0.5.0/AGENTFLOW_V0_5_0_SPEC_LOOP_PRODUCTIZATION_TASKS_V1.md)
+- [../product/006-spec-driven-software-dev-product-goal-v1.md](../product/006-spec-driven-software-dev-product-goal-v1.md)
+- [021-ai-os-project-core-capabilities-v1.md](021-ai-os-project-core-capabilities-v1.md)
+- [../archive/2026-06-current-baseline-history/product/001-project-agent-role-model-v1.md](../archive/2026-06-current-baseline-history/product/001-project-agent-role-model-v1.md)
+- [../archive/2026-06-current-baseline-history/product/002-project-lifecycle-v1.md](../archive/2026-06-current-baseline-history/product/002-project-lifecycle-v1.md)
+- [../archive/2026-06-current-baseline-history/product/003-goal-plan-document-model-v1.md](../archive/2026-06-current-baseline-history/product/003-goal-plan-document-model-v1.md)
+- [../archive/2026-06-current-baseline-history/architecture/009-runtime-foundation-closeout-baseline-v1.md](../archive/2026-06-current-baseline-history/architecture/009-runtime-foundation-closeout-baseline-v1.md)
+- [../archive/2026-06-current-baseline-history/versions/v0.5.0/AGENTFLOW_V0_5_0_SPEC_LOOP_PRODUCTIZATION_TASKS_V1.md](../archive/2026-06-current-baseline-history/versions/v0.5.0/AGENTFLOW_V0_5_0_SPEC_LOOP_PRODUCTIZATION_TASKS_V1.md)
 
 外部参考：
 

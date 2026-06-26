@@ -29,8 +29,8 @@
 ## Reading Order
 
 1. [AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md](AGENTFLOW_V1_0_1_RELEASE_HARDENING_TASKS_V1.md)
-2. [../v1.0.0/README.md](../v1.0.0/README.md)
-3. [../v1.0.0/AGENTFLOW_V1_0_0_PROJECT_OS_STABLE_CORE_TASKS_V1.md](../v1.0.0/AGENTFLOW_V1_0_0_PROJECT_OS_STABLE_CORE_TASKS_V1.md)
+2. [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md)
+3. [../archive/2026-06-current-baseline-history/versions/v1.0.0/README.md](../archive/2026-06-current-baseline-history/versions/v1.0.0/README.md)
 4. [../architecture/040-release-source-agent-entry-v1.md](../architecture/040-release-source-agent-entry-v1.md)
 5. [../architecture/041-v100-stable-contract-baseline-v1.md](../architecture/041-v100-stable-contract-baseline-v1.md)
 6. [../architecture/042-v100-runtime-api-sdk-freeze-v1.md](../architecture/042-v100-runtime-api-sdk-freeze-v1.md)

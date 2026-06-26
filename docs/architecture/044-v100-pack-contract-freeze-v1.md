@@ -30,12 +30,12 @@ Projection 提供读模型。
 
 - [041-v100-stable-contract-baseline-v1.md](041-v100-stable-contract-baseline-v1.md)
 - [043-v100-agentflow-filesystem-contract-freeze-v1.md](043-v100-agentflow-filesystem-contract-freeze-v1.md)
-- [019-pack-filesystem-contract-v1.md](019-pack-filesystem-contract-v1.md)
-- [020-domain-pack-contract-v1.md](020-domain-pack-contract-v1.md)
-- [021-surface-pack-contract-v1.md](021-surface-pack-contract-v1.md)
-- [022-connector-pack-contract-v1.md](022-connector-pack-contract-v1.md)
-- [023-pack-validation-migration-preview-v1.md](023-pack-validation-migration-preview-v1.md)
-- [029-pack-release-gate-readiness-v1.md](029-pack-release-gate-readiness-v1.md)
+- [019-pack-filesystem-contract-v1.md](../archive/2026-06-current-baseline-history/architecture/019-pack-filesystem-contract-v1.md)
+- [020-domain-pack-contract-v1.md](../archive/2026-06-current-baseline-history/architecture/020-domain-pack-contract-v1.md)
+- [021-surface-pack-contract-v1.md](../archive/2026-06-current-baseline-history/architecture/021-surface-pack-contract-v1.md)
+- [022-connector-pack-contract-v1.md](../archive/2026-06-current-baseline-history/architecture/022-connector-pack-contract-v1.md)
+- [023-pack-validation-migration-preview-v1.md](../archive/2026-06-current-baseline-history/architecture/023-pack-validation-migration-preview-v1.md)
+- [029-pack-release-gate-readiness-v1.md](../archive/2026-06-current-baseline-history/architecture/029-pack-release-gate-readiness-v1.md)
 
 ## Stable Pack Surfaces
 

@@ -1,130 +1,58 @@
 # Requirements
 
-创建日期：2026-06-01
-更新日期：2026-06-19
+更新日期：2026-06-26
 执行者：Codex
 
-## 目的
+## Purpose
 
-这里是 AgentFlow 后续开发的唯一需求入口。
+本目录是后续 confirmed Spec Bundle 的公共记录入口。
 
-旧文档已经归档到 `docs/archive/2026-05-agentflow-legacy/`，不再自动影响新需求。
+旧模式下的 flat requirement records 已经归档，不再作为当前开发入口。
 
-## 使用方式
+归档位置：
 
-1. 把新的产品需求写入本目录。
-2. 每个需求文档必须说明：
-   - 用户目标
-   - 页面或功能范围
-   - 数据来源
-   - 不做什么
-   - 验收标准
-   - 验证命令
-3. 开发切片只能从本目录的需求文档派生。
+```text
+docs/archive/2026-06-current-baseline-history/requirements/
+```
 
-## 当前入口
+## Current Rule
 
-- [001-add-local-project.md](001-add-local-project.md)
-- [003-project-file-reader-v1-completion.md](003-project-file-reader-v1-completion.md)
-- [004-legacy-cleanup-and-new-module-split.md](004-legacy-cleanup-and-new-module-split.md)
-- [005-legacy-and-degraded-code-removal.md](005-legacy-and-degraded-code-removal.md)
-- [006-legacy-cli-retirement-and-archive-pruning.md](006-legacy-cli-retirement-and-archive-pruning.md)
-- [007-goal-tree-v1.md](007-goal-tree-v1.md)
-- [007-1-goal-tree-agent-only-boundary-fix.md](007-1-goal-tree-agent-only-boundary-fix.md)
-- [008-agent-working-manual-bootstrap-v1.md](008-agent-working-manual-bootstrap-v1.md)
-- [008-1-agent-working-manual-health-polish.md](008-1-agent-working-manual-health-polish.md)
-- [008-2-requirement-intake-filter-skill-v1.md](008-2-requirement-intake-filter-skill-v1.md)
-- [008-3-agentflow-workflow-directory-blueprint-v1-final.md](008-3-agentflow-workflow-directory-blueprint-v1-final.md)
-- [008-4-project-panel-v1.md](008-4-project-panel-v1.md)
-- [008-4-1-project-panel-finalization-and-graph-removal-v1.md](008-4-1-project-panel-finalization-and-graph-removal-v1.md)
-- [008-4-2-agentflow-workspace-ownership-guard-v1.md](008-4-2-agentflow-workspace-ownership-guard-v1.md)
-- [009-input-model-v1.md](009-input-model-v1.md)
-- [010-execute-patch-checkpoint-v1.md](010-execute-patch-checkpoint-v1.md)
-- [010-2-agent-role-consolidation-v2.md](010-2-agent-role-consolidation-v2.md)
-- [011-output-evidence-delivery-audit-v1.md](011-output-evidence-delivery-audit-v1.md)
-- [012-human-triggered-audit-report-v1.md](012-human-triggered-audit-report-v1.md)
-- [012-1-desktop-human-audit-entry-polish.md](012-1-desktop-human-audit-entry-polish.md)
-- [013-workflow-state-gate-orchestration-v1.md](013-workflow-state-gate-orchestration-v1.md)
-- [013-1-browser-preview-verification-polish.md](013-1-browser-preview-verification-polish.md)
-- [013-2-browser-preview-smoke-script.md](013-2-browser-preview-smoke-script.md)
-- [014-agentflow-end-to-end-workflow-acceptance-v1.md](014-agentflow-end-to-end-workflow-acceptance-v1.md)
-- [014-1-014-2-agent-locale-and-voice-style-policy-v1.md](014-1-014-2-agent-locale-and-voice-style-policy-v1.md)
-- [015-human-agent-guided-experience-v1.md](015-human-agent-guided-experience-v1.md)
-- [016-desktop-design-system-v1.md](016-desktop-design-system-v1.md)
-- [017-agentflow-unified-ux-spec-v16-pr33-merged.md](017-agentflow-unified-ux-spec-v16-pr33-merged.md)
-- [018-agentflow-code-cleanup-rust-workspace.md](018-agentflow-code-cleanup-rust-workspace.md)
-- [019-agentflow-issue-status-enhancement.md](019-agentflow-issue-status-enhancement.md)
-- [021-agentflow-frontend-interaction-ux-v1.md](021-agentflow-frontend-interaction-ux-v1.md)
-- [022-agentflow-local-agents-management-v1.md](022-agentflow-local-agents-management-v1.md)
-- [023-agentflow-github-code-latest-svg-page-repair-v1.md](023-agentflow-github-code-latest-svg-page-repair-v1.md)
-- [024-agentflow-project-tree-multi-project-navigation-v1.md](024-agentflow-project-tree-multi-project-navigation-v1.md)
-- [025-agentflow-base-release-initialization-v1.md](025-agentflow-base-release-initialization-v1.md)
-- [026-agentflow-release-audit-trigger-rules-v1.md](026-agentflow-release-audit-trigger-rules-v1.md)
-- [027-agentflow-agent-role-descriptor-and-issue-guard-v1.md](027-agentflow-agent-role-descriptor-and-issue-guard-v1.md)
-- [028-agentflow-codex-role-usage-guide-v1.md](028-agentflow-codex-role-usage-guide-v1.md)
-- [029-agentflow-dogfood-cutover-cleanup-and-start-v1.md](029-agentflow-dogfood-cutover-cleanup-and-start-v1.md) = dogfood cutover baseline
-- [031-agentflow-initialization-rules-and-issue-metadata-hardening-v1.md](031-agentflow-initialization-rules-and-issue-metadata-hardening-v1.md) = initialization and issue metadata hardening baseline
-- [032-agentflow-build-agent-execution-loop-v1.md](032-agentflow-build-agent-execution-loop-v1.md) = Build Agent execution loop baseline
-- [033-agentflow-v0.2.0-project-loop-issue-loop-mvp-v1.md](033-agentflow-v0.2.0-project-loop-issue-loop-mvp-v1.md) = project loop / issue loop MVP baseline
-- [034-agentflow-task-workflow-yaml-runtime-v1.md](034-agentflow-task-workflow-yaml-runtime-v1.md) = task workflow YAML runtime architecture baseline
-- [035-agentflow-output-release-retirement-v1.md](035-agentflow-output-release-retirement-v1.md) = output release retirement and public delivery boundary
-- [036-agentflow-bottom-module-retirement-v1.md](036-agentflow-bottom-module-retirement-v1.md) = bottom module retirement and legacy crate cleanup
-- [037-agentflow-task-center-build-loop-roadmap-v1.md](037-agentflow-task-center-build-loop-roadmap-v1.md) = task center, build loop, project loop, delivery and audit roadmap
-- [038-agentflow-project-operating-system-runtime-foundation-v1.md](038-agentflow-project-operating-system-runtime-foundation-v1.md) = project operating system runtime foundation baseline
-- [038-1-agentflow-project-operating-system-runtime-foundation-project-and-issues-v1.md](038-1-agentflow-project-operating-system-runtime-foundation-project-and-issues-v1.md) = project + issues preview split for runtime foundation
-- [039-055-agentflow-post-foundation-roadmap-v1.md](039-055-agentflow-post-foundation-roadmap-v1.md) = post-foundation roadmap covering 039-055 issues
-- [039-project-brain-runtime-entry-v1.md](039-project-brain-runtime-entry-v1.md) = project brain runtime entry
-- [040-requirement-to-goal-plan-preview-runtime-v1.md](040-requirement-to-goal-plan-preview-runtime-v1.md) = requirement to goal / plan preview runtime
-- [041-goal-recheck-and-completion-decision-runtime-v1.md](041-goal-recheck-and-completion-decision-runtime-v1.md) = goal recheck and completion decision runtime
-- [042-task-page-productization-v1.md](042-task-page-productization-v1.md) = task page productization
-- [043-project-page-productization-v1.md](043-project-page-productization-v1.md) = project page productization
-- [044-task-tree-and-sequence-ux-v1.md](044-task-tree-and-sequence-ux-v1.md) = task tree and sequence UX
-- [045-work-loop-hardening-v1.md](045-work-loop-hardening-v1.md) = work loop hardening
-- [046-audit-flow-productization-v1.md](046-audit-flow-productization-v1.md) = audit flow productization
-- [047-delivery-flow-productization-v1.md](047-delivery-flow-productization-v1.md) = delivery flow productization
-- [048-project-completion-runtime-v1.md](048-project-completion-runtime-v1.md) = project completion runtime
-- [049-codex-provider-hardening-v1.md](049-codex-provider-hardening-v1.md) = Codex provider hardening
-- [050-claude-code-provider-v1.md](050-claude-code-provider-v1.md) = Claude Code provider
-- [051-provider-capability-matrix-v1.md](051-provider-capability-matrix-v1.md) = provider capability matrix
-- [052-agent-session-governance-v1.md](052-agent-session-governance-v1.md) = agent session governance
-- [053-public-delivery-standardization-v1.md](053-public-delivery-standardization-v1.md) = public delivery standardization
-- [054-release-runtime-v1.md](054-release-runtime-v1.md) = release runtime
-- [055-external-audit-and-review-surface-v1.md](055-external-audit-and-review-surface-v1.md) = external audit and review surface
-- [056-work-loop-sequencing-and-closeout-gates-v1.md](056-work-loop-sequencing-and-closeout-gates-v1.md) = strict sequencing and closeout gates after v0.3.0 audit
-- [057-v0-3-0-pre-release-audit-rebaseline-v1.md](057-v0-3-0-pre-release-audit-rebaseline-v1.md) = v0.3.0 pre-release audit rebaseline after 056A/056B/056C
-- [058-v0-3-0-stable-gate-remediation-v1.md](058-v0-3-0-stable-gate-remediation-v1.md) = stable gate remediation package replacing the old raw audit order
-- [059-agentflow-desktop-frontend-information-architecture-v1.md](059-agentflow-desktop-frontend-information-architecture-v1.md) = desktop frontend information architecture baseline
-- [060-task-page-state-timeline-and-event-stream-v1.md](060-task-page-state-timeline-and-event-stream-v1.md) = task page state timeline and event stream
-- [061-task-page-execution-and-delivery-convergence-v1.md](061-task-page-execution-and-delivery-convergence-v1.md) = task page execution and delivery convergence
-- [062-project-home-and-next-step-surface-v1.md](062-project-home-and-next-step-surface-v1.md) = project home and next-step surface
-- [063-audit-page-independent-acceptance-surface-v1.md](063-audit-page-independent-acceptance-surface-v1.md) = audit page as independent acceptance surface
-- [next-requirements.md](next-requirements.md)
+新需求不能直接写成零散 issue。
 
-## Dogfood Cutover 基线
+后续应该使用 Spec-Driven 结构：
 
-- [024-agentflow-project-tree-multi-project-navigation-v1.md](024-agentflow-project-tree-multi-project-navigation-v1.md) = current base workspace baseline
-- [025-agentflow-base-release-initialization-v1.md](025-agentflow-base-release-initialization-v1.md) = current base release initialization baseline
-- [026-agentflow-release-audit-trigger-rules-v1.md](026-agentflow-release-audit-trigger-rules-v1.md) = current release audit trigger baseline
-- [027-agentflow-agent-role-descriptor-and-issue-guard-v1.md](027-agentflow-agent-role-descriptor-and-issue-guard-v1.md) = current role guard baseline
-- [028-agentflow-codex-role-usage-guide-v1.md](028-agentflow-codex-role-usage-guide-v1.md) = current Codex role usage baseline
-- [029-agentflow-dogfood-cutover-cleanup-and-start-v1.md](029-agentflow-dogfood-cutover-cleanup-and-start-v1.md) = dogfood cutover baseline
-- [031-agentflow-initialization-rules-and-issue-metadata-hardening-v1.md](031-agentflow-initialization-rules-and-issue-metadata-hardening-v1.md) = current initialization and issue metadata baseline
+```text
+docs/requirements/
+  <spec-id>/
+    spec-bundle.md
+    issue-preview.md
+    decision.md
+    delivery.md
+```
 
-## 历史设计参考
+其中 `spec-bundle.md` 至少包含：
 
-- [015-human-agent-guided-experience-v1.md](015-human-agent-guided-experience-v1.md) = historical design reference / pre-base requirement / superseded by dogfood workflow
-- [017-agentflow-unified-ux-spec-v16-pr33-merged.md](017-agentflow-unified-ux-spec-v16-pr33-merged.md) = historical design reference / pre-base requirement / superseded by dogfood workflow
-- [018-agentflow-code-cleanup-rust-workspace.md](018-agentflow-code-cleanup-rust-workspace.md) = pre-base cleanup reference / superseded by dogfood workflow
-- [019-agentflow-issue-status-enhancement.md](019-agentflow-issue-status-enhancement.md) = pre-base status reference / superseded by dogfood workflow
-- [021-agentflow-frontend-interaction-ux-v1.md](021-agentflow-frontend-interaction-ux-v1.md) = historical design reference / pre-base requirement / superseded by dogfood workflow
-- [023-agentflow-github-code-latest-svg-page-repair-v1.md](023-agentflow-github-code-latest-svg-page-repair-v1.md) = historical design reference / pre-base requirement / superseded by dogfood workflow
+- Intent Slice；
+- Domain Slice；
+- Product Slice；
+- Plan Slice；
+- Task Slice；
+- Decision Slice；
+- Delivery Slice；
+- Feedback Slice。
 
-## 不继承内容
+## Authority Boundary
 
-以下内容不从旧文档继承，除非新需求重新明确：
+`docs/requirements/**` 是人类可读的 confirmed Spec Bundle 记录。
 
-- 旧 Workflow Control 流程
-- 旧 Product Feature 流程
-- 旧 Project Closure / Audit / Docs Refresh
-- 旧 GoalLoop / Eligibility / Lease / Evidence 自动推进
-- 旧 Desktop 页面职责收敛方案
+`.agentflow/spec/**` 是从 confirmed Spec Bundle 派生出来的机器可执行合同。
+
+GitHub issue 只能是外部 planning mirror，不能替代 AgentFlow authority。
+
+## Non-goals
+
+- 不恢复旧 flat requirements 列表；
+- 不从历史归档自动派生新 issue；
+- 不直接写 `.agentflow/spec/**`；
+- 不跳过 Spec confirmation；
+- 不把 GitHub issues 作为需求事实源。

@@ -29,7 +29,7 @@ Desktop、CLI、行业 Surface 和 SDK 只能消费 Projection / Read Model，�
 - [042-v100-runtime-api-sdk-freeze-v1.md](042-v100-runtime-api-sdk-freeze-v1.md)
 - [043-v100-agentflow-filesystem-contract-freeze-v1.md](043-v100-agentflow-filesystem-contract-freeze-v1.md)
 - [044-v100-pack-contract-freeze-v1.md](044-v100-pack-contract-freeze-v1.md)
-- [025-pack-aware-projection-read-models-v1.md](025-pack-aware-projection-read-models-v1.md)
+- [025-pack-aware-projection-read-models-v1.md](../archive/2026-06-current-baseline-history/architecture/025-pack-aware-projection-read-models-v1.md)
 
 ## Projection Authority Boundary
 

@@ -15,9 +15,11 @@ documents instead of local runtime facts.
 - Domain foundation: `docs/foundation/README.md`
 - Technical architecture: `docs/architecture/README.md`
 - Current module boundaries: `docs/architecture/current-module-boundaries.md`
-- Current stable baseline: `docs/v1.0.0/README.md`
-- Current hardening plan: `docs/v1.0.1/README.md`
+- Current product goal: `docs/product/006-spec-driven-software-dev-product-goal-v1.md`
+- Current core capabilities: `docs/foundation/021-ai-os-project-core-capabilities-v1.md`
+- Current release baseline: `docs/v1.0.1/README.md`
 - Release certification boundary: `docs/architecture/050-v100-release-certification-v1.md`
+- Historical docs: `docs/archive/2026-06-current-baseline-history/README.md`
 
 ## Runtime Boundary
 
