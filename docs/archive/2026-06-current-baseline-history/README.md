@@ -24,6 +24,7 @@ AI OS Project
 | 路径 | 内容 |
 | --- | --- |
 | `CHANGELOG.md` | v0.8.1 到 v1.0.1 的完整历史 changelog |
+| `design.md` | 历史根目录设计兼容入口 |
 | `versions/` | v0.4.0 到 v1.0.0 的版本计划、发布审计和 closeout 文档 |
 | `requirements/` | 旧 flat requirement records 和 next requirements |
 | `product/` | 旧 Project Operating Model 文档 |

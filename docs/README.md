@@ -74,7 +74,7 @@ Industry AgentFlow Product
 - `docs/v1.0.1/**` 是当前发布基线；更早版本文档已移入历史归档。
 - `docs/archive/**` 只作为历史参考，不自动生成 issue、SPEC、实现任务或 `.agentflow/**` 事实。
 - 后续新开发必须先进入 confirmed Spec Bundle，再派生 `.agentflow/spec/**` 执行合同。
-- 根目录 Markdown 只保留总目标、Agent 入口、设计兼容入口和当前 changelog 指针。
+- 根目录 Markdown 只保留总目标、Agent 入口和当前 changelog 指针。
 
 ## 历史归档
 
@@ -93,5 +93,6 @@ docs/archive/2026-06-current-baseline-history/
 - v0.x / pre-v1 architecture 文档；
 - 旧 verification gate 文档。
 - 完整历史 changelog。
+- 历史根目录 `design.md` 兼容入口。
 
 这些文档保留上下文价值，但不再作为当前开发入口。
