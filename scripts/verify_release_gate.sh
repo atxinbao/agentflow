@@ -1882,7 +1882,7 @@ expected = sys.argv[2]
 if not path.is_file():
     raise SystemExit(1)
 text = path.read_text(encoding="utf-8")
-heading = re.compile(rf"^##\s+(?:\[)?{re.escape(expected)}(?:\])?(?:\s|$)", re.MULTILINE)
+heading = re.compile(rf"^##\s+(?:\[)?v?{re.escape(expected)}(?:\])?(?:\s|$)", re.MULTILINE)
 if not heading.search(text):
     raise SystemExit(1)
 PY
