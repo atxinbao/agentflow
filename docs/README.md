@@ -8,7 +8,7 @@
 | 路径 | 作用 |
 | --- | --- |
 | `product/` | AgentFlow Project Operating Model 产品设计基线；当前产品目标是 Spec-Driven Software Dev Workflow |
-| `foundation/` | 下一代 Project Operating Model 的基础能力需求；包含 AI OS Project Core 的通用 Kernel 能力定义 |
+| `foundation/` | 下一代 Project Operating Model 的基础能力需求；包含 `AI OS Project = Core Runtime + Industry AgentFlow Product` 的底层框架定义 |
 | `architecture/` | AgentFlow 底层技术蓝图、模块边界与运行时模型 |
 | `verification/` | Gate、E2E 证据链和正式验证入口说明 |
 | `v0.4.0/` | v0.4.0 Definition-driven Runtime Foundation 已发布版本基线与 closeout 文档 |
@@ -60,7 +60,7 @@
 - `archive/` 下文档不作为后续开发依据。
 - `product/` 下文档作为产品模型和项目设计基线，不直接等同于实现任务。
 - `foundation/` 下文档作为下一代基础能力需求，不混入当前版本迭代队列。
-- `foundation/021-ai-os-project-core-capabilities-v1.md` 定义 AgentFlow Core 的 6 个 Kernel、12 个通用能力、`docs/` 与 `.agentflow/` 的职责边界，以及行业 Pack 接入方式；它不自动授权实现。
+- `foundation/021-ai-os-project-core-capabilities-v1.md` 定义 `AI OS Project = Core Runtime + Industry AgentFlow Product` 的底层框架，明确 6 个 Kernel、12 个通用能力、`docs/` 与 `.agentflow/` 的职责边界，以及行业 Pack 接入方式；它不自动授权实现。
 - `architecture/` 下文档作为底层技术蓝图、authority 边界和运行时模型，不直接等同于实现任务。
 - `verification/` 下文档定义正式 gate、E2E 证据链和可复跑验证入口。
 - `v0.4.0/` 下文档记录已发布版本的技术基线与 closeout 事实，不再视为未执行草案。
