@@ -166,8 +166,8 @@ Release source archive 必须包含可追溯的 Agent entry 和公开文档。
 
 - `AGENTS.md` 或等价 tracked Agent entry；
 - `docs/architecture/**`；
-- `docs/foundation/**`；
-- `docs/product/**`；
+- `docs/architecture/**`；
+- `docs/project/**`；
 - `docs/requirements/**`；
 - `docs/v*/**`；
 - `CHANGELOG.md`；

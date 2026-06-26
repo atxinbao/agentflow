@@ -72,17 +72,17 @@ docs/requirements/**
 
 架构文档：
 
-- `docs/architecture/019-pack-filesystem-contract-v1.md`
-- `docs/architecture/020-domain-pack-contract-v1.md`
-- `docs/architecture/021-surface-pack-contract-v1.md`
-- `docs/architecture/022-connector-pack-contract-v1.md`
-- `docs/architecture/023-pack-validation-migration-preview-v1.md`
-- `docs/architecture/024-pack-simulation-dry-run-v1.md`
-- `docs/architecture/025-pack-aware-projection-read-models-v1.md`
-- `docs/architecture/026-pack-command-surface-runtime-api-v1.md`
-- `docs/architecture/027-software-dev-pack-baseline-v1.md`
-- `docs/architecture/028-ui-design-pack-baseline-v1.md`
-- `docs/architecture/029-pack-release-gate-readiness-v1.md`
+- `docs/project/history/2026-06-current-baseline-history/architecture/019-pack-filesystem-contract-v1.md`
+- `docs/project/history/2026-06-current-baseline-history/architecture/020-domain-pack-contract-v1.md`
+- `docs/project/history/2026-06-current-baseline-history/architecture/021-surface-pack-contract-v1.md`
+- `docs/project/history/2026-06-current-baseline-history/architecture/022-connector-pack-contract-v1.md`
+- `docs/project/history/2026-06-current-baseline-history/architecture/023-pack-validation-migration-preview-v1.md`
+- `docs/project/history/2026-06-current-baseline-history/architecture/024-pack-simulation-dry-run-v1.md`
+- `docs/project/history/2026-06-current-baseline-history/architecture/025-pack-aware-projection-read-models-v1.md`
+- `docs/project/history/2026-06-current-baseline-history/architecture/026-pack-command-surface-runtime-api-v1.md`
+- `docs/project/history/2026-06-current-baseline-history/architecture/027-software-dev-pack-baseline-v1.md`
+- `docs/project/history/2026-06-current-baseline-history/architecture/028-ui-design-pack-baseline-v1.md`
+- `docs/project/history/2026-06-current-baseline-history/architecture/029-pack-release-gate-readiness-v1.md`
 
 实现位置：
 
@@ -328,8 +328,8 @@ docs/requirements/**
 
 实现位置：
 
-- `docs/product/**`
-- `docs/foundation/**`
+- `docs/project/**`
+- `docs/architecture/**`
 - `crates/spec/src/model.rs`
 - `crates/spec/src/storage.rs`
 

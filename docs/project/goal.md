@@ -49,7 +49,7 @@ Spec-Driven Software Dev Workflow
 - Spec 约束计划和任务拆分；
 - Spec 约束 Agent 执行边界；
 - Spec 约束验证和证据；
-- Spec 约束 Acceptance；
+- Spec 约束 Decision；
 - Spec 约束 Delivery；
 - Spec 约束 Feedback 如何回流到下一轮工作。
 
@@ -64,7 +64,7 @@ Intent
 -> Domain-specific Plan / Tasks / Artifacts
 -> Agent Execution
 -> Evidence
--> Acceptance
+-> Decision
 -> Delivery
 -> Feedback
 -> Spec Evolution
@@ -82,7 +82,7 @@ Build Agent 按任务执行。
 
 系统自动收集 Evidence。
 
-Acceptance Gate 根据 Spec 判断能不能 Done。
+Decision Gate 根据 Spec 判断能不能 Done。
 
 Delivery 输出 PR、release、changelog 或 handoff。
 
@@ -128,7 +128,7 @@ Spec Bundle
 │   ├── forbidden paths
 │   └── execution pipeline
 │
-├── Acceptance Slice
+├── Decision Slice
 │   ├── acceptance criteria
 │   ├── validation commands
 │   ├── evidence policy
@@ -174,7 +174,7 @@ Architecture Plan
 Issue
 Run
 Evidence
-Acceptance
+Decision
 PR
 Release
 Audit Finding
@@ -198,7 +198,7 @@ Software Dev Surface Pack 应优先围绕：
 - Project Home；
 - Task Workbench；
 - Evidence Graph；
-- Acceptance Gate；
+- Decision Gate；
 - Delivery Surface；
 - Feedback Loop；
 - Audit Sidecar Surface。
@@ -215,13 +215,13 @@ AgentFlow 可以有多个 Agent role，但任何 Agent 都不能越过 Spec：
 - Architecture / Specialist Agent 补充 Plan Slice；
 - Build Agent 执行 Task Slice；
 - Verification Agent 或验证流程生成 Evidence；
-- Acceptance Gate 判断 Done；
+- Decision Gate 判断 Done；
 - Delivery Agent 整理交付；
 - Audit Agent 独立复查，不进入主链。
 
 Agent role 不拥有项目事实。
 
-项目事实来自 Spec、Event、Evidence、Acceptance 和 Delivery 记录。
+项目事实来自 Spec、Event、Evidence、Decision 和 Delivery 记录。
 
 ## Output Closed Loop
 
@@ -245,7 +245,7 @@ Feedback
 
 只有 Artifact 没有 Evidence，不算完成。
 
-只有 Evidence 没有 Acceptance，不算 Done。
+只有 Evidence 没有 Decision，不算 Done。
 
 只有 Delivery 没有 Feedback，不算闭环。
 
@@ -292,7 +292,7 @@ Route
 Plan / Tasks / Artifacts
 Agent Execution
 Evidence
-Acceptance
+Decision
 Delivery
 Feedback
 Spec Evolution
