@@ -2004,7 +2004,7 @@ tracked_docs = [
     "docs/architecture/builtin-pack-registry.md",
     "docs/architecture/041-v100-stable-contract-baseline-v1.md",
     "docs/architecture/050-v100-release-certification-v1.md",
-    "docs/delivery/releases/v1.0.2/README.md",
+    "docs/delivery/releases/v1.0.3/README.md",
     "docs/project/history/2026-06-current-baseline-history/README.md",
 ]
 runtime_only_paths = [
@@ -2049,7 +2049,7 @@ payload = {
     "currentProjectRoadmapEntry": "docs/project/roadmap.md",
     "currentCoreCapabilityEntry": "docs/architecture/021-ai-os-project-core-capabilities-v1.md",
     "currentStableEntry": "docs/architecture/041-v100-stable-contract-baseline-v1.md",
-    "currentReleaseBaselineEntry": "docs/delivery/releases/v1.0.2/README.md",
+    "currentReleaseBaselineEntry": "docs/delivery/releases/v1.0.3/README.md",
     "releaseCertificationEntry": "docs/architecture/050-v100-release-certification-v1.md",
     "defineAgentBoundary": {
         "path": ".agentflow/define/agent/**",

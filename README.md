@@ -1,6 +1,6 @@
 # AgentFlow
 
-更新日期：2026-06-26
+更新日期：2026-06-28
 执行者：Codex
 
 ## Project Goal
@@ -42,7 +42,7 @@ AgentFlow Software Dev Product
 | [docs/architecture/021-ai-os-project-core-capabilities-v1.md](docs/architecture/021-ai-os-project-core-capabilities-v1.md) | AI OS Project 底层通用能力 |
 | [docs/architecture/builtin-pack-registry.md](docs/architecture/builtin-pack-registry.md) | App 内置 Pack Registry 边界 |
 | [docs/README.md](docs/README.md) | 当前文档地图 |
-| [docs/delivery/releases/v1.0.1/README.md](docs/delivery/releases/v1.0.1/README.md) | 当前发布基线 |
+| [docs/delivery/releases/v1.0.3/README.md](docs/delivery/releases/v1.0.3/README.md) | 当前发布基线 |
 | [CHANGELOG.md](CHANGELOG.md) | 当前 changelog 指针 |
 
 ## Current Boundary
