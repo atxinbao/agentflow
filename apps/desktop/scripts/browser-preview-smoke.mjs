@@ -11,7 +11,7 @@ const smokeRoot = mkdtempSync(path.join(tmpdir(), "agentflow-browser-preview-smo
 const server = await createServer({
   root: desktopRoot,
   configFile: path.join(desktopRoot, "vite.config.ts"),
-  logLevel: "error",
+  logLevel: "silent",
   server: { middlewareMode: true },
   appType: "custom",
 });
