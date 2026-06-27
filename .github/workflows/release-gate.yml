@@ -46,7 +46,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
 
@@ -76,10 +76,12 @@ jobs:
           fi
 
           artifact_dir="artifacts/release-gate-${release_tag}-e2e"
+          certification_dir="artifacts/release-gate-${release_tag}-certification"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "release_version=$release_tag" >> "$GITHUB_OUTPUT"
           echo "release_url=$release_url" >> "$GITHUB_OUTPUT"
           echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
+          echo "certification_dir=$certification_dir" >> "$GITHUB_OUTPUT"
 
       - name: Rust format check
         run: cargo fmt --all --check
@@ -163,10 +165,55 @@ jobs:
             fi
           done
 
-      - name: Upload gate artifacts
+      - name: Prepare certification artifact
+        if: always()
+        run: |
+          artifact_dir="${{ steps.release_meta.outputs.artifact_dir }}"
+          certification_dir="${{ steps.release_meta.outputs.certification_dir }}"
+          rm -rf "$certification_dir"
+          mkdir -p "$certification_dir/runtime"
+
+          for file in \
+            status.json \
+            summary.json \
+            summary.md \
+            certification.json \
+            certification.md \
+            artifact-manifest.json \
+            stage-log.jsonl \
+            browser-preview-smoke.status.json \
+            console-readiness.status.json
+          do
+            if [ -f "$artifact_dir/$file" ]; then
+              cp "$artifact_dir/$file" "$certification_dir/$file"
+            fi
+          done
+
+          if [ -d "$artifact_dir/runtime" ]; then
+            find "$artifact_dir/runtime" -maxdepth 1 -type f \( \
+              -name '*certification*.json' \
+              -o -name '*provenance*.json' \
+              -o -name '*boundary*.json' \
+              -o -name '*baseline*.json' \
+              -o -name '*negative*.json' \
+              -o -name '*governance*.json' \
+              -o -name '*roadmap*.json' \
+              -o -name '*artifact*.json' \
+            \) -exec cp {} "$certification_dir/runtime/" \;
+          fi
+
+      - name: Upload certification artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-gate-${{ steps.release_meta.outputs.release_version }}
+          name: release-gate-certification-${{ steps.release_meta.outputs.release_version }}
+          path: ${{ steps.release_meta.outputs.certification_dir }}
+          if-no-files-found: error
+
+      - name: Upload full gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-full-${{ steps.release_meta.outputs.release_version }}
           path: ${{ steps.release_meta.outputs.artifact_dir }}
           if-no-files-found: warn
