@@ -1,6 +1,6 @@
 # Architecture Docs
 
-更新日期：2026-06-26
+更新日期：2026-06-28
 执行者：Codex
 
 ## Purpose
@@ -17,8 +17,8 @@ docs/project/history/2026-06-current-baseline-history/architecture/
 
 ```text
 AgentFlow AI OS Project
-= Spec-Driven Core Runtime
-+ Industry AgentFlow Product
+= Core OS Runtime
++ Industry AgentFlow App
 ```
 
 ## Current Architecture Baseline

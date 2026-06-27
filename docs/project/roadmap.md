@@ -1,11 +1,11 @@
 # Project Roadmap
 
-更新日期：2026-06-26
+更新日期：2026-06-28
 执行者：Codex
 
 ## Purpose
 
-本文定义 AgentFlow 从当前产品目标走到可用商业产品的版本路线图。
+本文定义 AgentFlow 从当前目标走到可用产品的版本路线图。
 
 `goal.md` 回答：
 
@@ -17,27 +17,57 @@ AgentFlow 要成为什么？
 
 ```text
 为了达到这个目标，需要分几个阶段完成？
-每个阶段解决什么能力？
-什么时候可以拆成 confirmed Spec 和 tasks？
+每个阶段解决什么 Core OS 能力？
+什么时候用 Software Dev Reference App 做认证？
 ```
 
 本文不是执行任务，不直接授权写源码，也不直接生成 `.agentflow/spec/**`。
 
 ## Current Goal
 
-当前目标已经固定为：
+当前目标已经修正为：
 
 ```text
-AgentFlow = Spec-Driven Software Dev Workflow
+AgentFlow = Spec-Driven AI OS Project
 ```
 
 一句话：
 
 ```text
 Agent 只是执行器，Spec 才是方向盘。
+Core OS 提供底层能力，行业是运行在 Core 上的 App。
 ```
 
-AgentFlow 当前商业产品只聚焦 Software Dev。底层 AI OS Project 能力保留通用性，但后续版本必须优先服务软件开发主链。
+AgentFlow 后续版本必须先把 Core OS Runtime 的通用能力稳住。Software Dev 是第一个官方 Reference App，用来证明 Core 可运行，不得被写死进 Core。
+
+## System Formula
+
+AgentFlow 的系统公式是：
+
+```text
+AgentFlow AI OS Project
+= Core OS Runtime
++ Industry AgentFlow App
+```
+
+其中：
+
+```text
+Core OS Runtime
+= Spec Kernel
++ Ontology Kernel
++ Runtime Kernel
++ Evidence Kernel
++ Decision Kernel
++ Projection Kernel
+```
+
+```text
+Industry AgentFlow App
+= Domain Pack
++ Surface Pack
++ Connector Pack
+```
 
 ## Planning Chain
 
@@ -85,18 +115,24 @@ Loop 之间不能互相越权：
 
 ## Roadmap Summary
 
-`v1.0.2` 完成后，后续版本不直接进入 `v1.1.0`。先用 `v1.0.3` 到 `v1.0.9` 把 Software Dev 的 Spec-Driven Workflow 闭环补完整。
+`v1.0.2` 完成后，后续版本不直接进入 `v1.1.0`。
+
+`v1.0.3` 到 `v1.0.8` 先完成 Core OS Runtime 的 6 个 Kernel。
+
+`v1.0.9` 再用 Software Dev Reference App 做端到端认证。
+
+`v1.1.0` 才进入 Software Dev Product Beta。
 
 | Version | Goal | Primary loop / kernel |
 | --- | --- | --- |
 | `v1.0.2` | Release hardening closeout | Release / Governance |
-| `v1.0.3` | Spec Kernel / Spec Bundle Workspace | Spec Loop |
-| `v1.0.4` | Software Dev Ontology Kernel | Project Loop / Ontology |
-| `v1.0.5` | Runtime Execution Loop | Issue Loop / Runtime |
-| `v1.0.6` | Evidence Kernel | Issue Loop / Evidence |
-| `v1.0.7` | Decision Kernel | Issue Loop / Decision |
-| `v1.0.8` | Projection / Product Surface | Projection |
-| `v1.0.9` | End-to-end Software Dev Workflow Certification | Project Loop / Delivery |
+| `v1.0.3` | Core Spec Kernel / Spec Bundle Workspace | Spec Loop |
+| `v1.0.4` | Core Ontology Kernel | Ontology / Pack boundary |
+| `v1.0.5` | Core Runtime Kernel | Runtime / Issue Loop |
+| `v1.0.6` | Core Evidence Kernel | Evidence |
+| `v1.0.7` | Core Decision Kernel | Decision |
+| `v1.0.8` | Core Projection Kernel | Projection |
+| `v1.0.9` | Software Dev Reference App Certification | Project Loop / Delivery |
 | `v1.1.0` | Software Dev Product Beta | Product release |
 
 ## Version Intent
@@ -111,11 +147,11 @@ Loop 之间不能互相越权：
 - product goal baseline；
 - v1.0.2 release certification。
 
-`v1.0.2` 是进入产品闭环开发前的稳定地基。
+`v1.0.2` 是进入 Core Kernel 收敛前的稳定地基。
 
-### v1.0.3 - Spec Kernel / Spec Bundle Workspace
+### v1.0.3 - Core Spec Kernel / Spec Bundle Workspace
 
-把人类意图变成可确认、可执行的 Spec Bundle。
+把人类意图变成可确认、可物化、可派生任务的 Spec Bundle。
 
 核心问题：
 
@@ -125,103 +161,123 @@ Loop 之间不能互相越权：
 
 本版应该定义：
 
-- Spec Bundle contract；
+- Core Spec Bundle contract；
 - intent intake；
 - route policy；
-- PRD / Architecture Plan / Task Slice 的关系；
-- issue derivation rule；
+- slice contract；
 - confirmation / materialization boundary；
+- app-specific slice mapping boundary；
 - Spec Bundle projection。
+
+本版必须避免把 Software Dev 的 `Issue / PR / Release / Patch` 写死进 Spec Kernel。Software Dev 只能作为 fixture 或 Reference App mapping。
 
 `v1.0.3` 后续再单独拆 tasks。本文不提前拆 `V103-*`。
 
-### v1.0.4 - Software Dev Ontology Kernel
+### v1.0.4 - Core Ontology Kernel
 
-把 Spec Bundle 映射到 Software Dev 项目世界。
+把 Spec Bundle 映射到行业无关的项目世界。
 
-核心对象：
+Core 对象应优先收敛为：
+
+```text
+Object
+Link
+Action
+State
+Capability
+Artifact
+Evidence
+Decision
+Projection
+```
+
+Software Dev 对象应通过 Domain Pack 映射：
 
 ```text
 Requirement
-Goal / PRD
 Spec
-Architecture Plan
 Issue
 Run
-Evidence
-Decision
 PR
 Release
 Feedback
 ```
 
-本版目标是让 AgentFlow 清楚知道项目里有什么对象、对象之间如何连接、生命周期如何推进。
+本版目标是让 Core 知道项目世界如何定义，但不把某个行业的对象固定成唯一内核。
 
-### v1.0.5 - Runtime Execution Loop
+### v1.0.5 - Core Runtime Kernel
 
-把 confirmed Spec Issue 变成受控执行。
+把 confirmed Spec / Task 变成受控执行。
 
 本版目标：
 
-- Work Handoff；
-- Runtime Admission；
+- Runtime command；
+- Runtime admission；
 - Action Proposal；
+- Arbitration；
 - allowed / forbidden surface；
 - retry / cancel / failed / blocked；
 - executor adapter closeout；
-- Issue Loop 状态写回。
+- task / run 状态写回。
 
-### v1.0.6 - Evidence Kernel
+Runtime command 解析必须逐步从 hardcoded command mapping 迁移到 Core contract + App Pack mapping。
+
+### v1.0.6 - Core Evidence Kernel
 
 把执行结果变成可追踪证据。
 
 本版目标：
 
 - Evidence Pack schema；
-- diff / test log / build log / screenshot / PR / release note；
-- evidence trace to Spec / Issue / Run；
+- artifact / log / screenshot / external proof / provenance；
+- evidence trace to Spec / Task / Run；
 - missing evidence handling；
 - evidence completeness policy。
 
-### v1.0.7 - Decision Kernel
+Software Dev 的 diff / test log / build log / PR link 只是 Evidence 的一种行业映射。
 
-把 Evidence 和 Spec 合同变成 Done 判定。
+### v1.0.7 - Core Decision Kernel
+
+把 Evidence 和 Spec 合同变成完成判定。
 
 本版目标：
 
-- acceptance decision model；
+- decision model；
+- accepted / rejected / deferred / blocked；
 - failure reason；
-- needs-fix / rejected / deferred；
+- needs-fix；
 - completion commit；
 - delivery readiness；
-- Audit sidecar trigger evaluation。
+- audit sidecar trigger evaluation。
 
 Audit 仍然是独立 sidecar，不回到主业务链。
 
-### v1.0.8 - Projection / Product Surface
+### v1.0.8 - Core Projection Kernel
 
-把 Spec、任务、证据、Decision 和 Delivery 展示给人类。
+把 Spec、任务、证据、Decision 和 Delivery 投影给人类和系统读取。
 
 本版目标：
 
-- Project Home；
-- Spec Workbench；
-- Task Workbench；
-- Evidence Graph；
-- Decision Gate view；
-- Delivery Surface；
-- Feedback Surface。
+- projection API；
+- read model；
+- view model；
+- pack-specific projection mapping；
+- invalid / missing app definition handling；
+- feedback surface projection。
 
 Projection 只读，不是 authority。
 
-### v1.0.9 - End-to-end Software Dev Workflow Certification
+Industry Surface 只能消费 Projection，不能直接读取或修改 Core authority facts。
 
-证明 Software Dev 主链完整可跑：
+### v1.0.9 - Software Dev Reference App Certification
+
+证明 Software Dev Reference App 可以在 Core OS Runtime 上跑完整闭环：
 
 ```text
 Intent
 -> Spec Bundle
--> Plan / Issues
+-> Software Dev Domain Mapping
+-> Issues / Runs
 -> Agent Execution
 -> Evidence
 -> Decision
@@ -230,7 +286,7 @@ Intent
 -> Spec Evolution
 ```
 
-本版目标是 release certification，不扩新行业，不做 marketplace，不引入默认 Message Bus。
+本版目标是 certification，不扩新行业，不做 marketplace，不引入默认 Message Bus。
 
 ### v1.1.0 - Software Dev Product Beta
 
@@ -258,27 +314,4 @@ roadmap version intent
 -> Issue Loop execution
 ```
 
-GitHub issues 可以作为临时 planning mirror，但不能成为 AgentFlow authority。
-
-## Non-goals
-
-当前路线图不做：
-
-- 新行业壳；
-- Pack marketplace；
-- 多租户云平台；
-- 默认中心化 Message Bus；
-- 把 Audit 放回主业务链；
-- 把 GitHub issues 作为 authority；
-- 把 executor session 当成项目事实源；
-- 在 `roadmap.md` 中提前拆 `v1.0.3` tasks。
-
-## Update Rule
-
-`roadmap.md` 可以随着项目推进更新，但必须满足：
-
-- 更新必须服务 `Spec-Driven Software Dev Workflow` 目标；
-- 更新不能绕过 confirmed Spec；
-- 版本范围变化必须说明原因；
-- 已进入 `.agentflow/spec/**` 的执行合同不能被 roadmap 静默改写；
-- Feedback 进入 roadmap 前必须经过确认。
+GitHub issues 可以作为外部同步视图，但不能成为 AgentFlow authority。
