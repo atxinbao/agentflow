@@ -1,6 +1,6 @@
 # Delivery
 
-更新日期：2026-06-26
+更新日期：2026-06-28
 执行者：Codex
 
 ## Purpose
@@ -21,8 +21,8 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.0.2/README.md](releases/v1.0.2/README.md) | 当前发布基线：Release Audit Fixes |
-| [releases/v1.0.2/AGENTFLOW_V1_0_2_RELEASE_AUDIT_FIXES_TASKS_V1.md](releases/v1.0.2/AGENTFLOW_V1_0_2_RELEASE_AUDIT_FIXES_TASKS_V1.md) | v1.0.2 release audit fix tasks |
+| [releases/v1.0.3/README.md](releases/v1.0.3/README.md) | 当前发布基线：Core 4-D Spec Intake |
+| [releases/v1.0.3/AGENTFLOW_V1_0_3_CORE_4D_SPEC_INTAKE_TASKS_V1.md](releases/v1.0.3/AGENTFLOW_V1_0_3_CORE_4D_SPEC_INTAKE_TASKS_V1.md) | v1.0.3 Core 4-D Spec Intake tasks |
 
 ## Historical Delivery
 

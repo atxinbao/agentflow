@@ -1,14 +1,24 @@
 # Changelog
 
-更新日期：2026-06-26
+更新日期：2026-06-28
 执行者：Codex
 
 ## Current Baseline
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.0.2/README.md](docs/delivery/releases/v1.0.2/README.md)
-- [docs/delivery/releases/v1.0.2/AGENTFLOW_V1_0_2_RELEASE_AUDIT_FIXES_TASKS_V1.md](docs/delivery/releases/v1.0.2/AGENTFLOW_V1_0_2_RELEASE_AUDIT_FIXES_TASKS_V1.md)
+- [docs/delivery/releases/v1.0.3/README.md](docs/delivery/releases/v1.0.3/README.md)
+- [docs/delivery/releases/v1.0.3/AGENTFLOW_V1_0_3_CORE_4D_SPEC_INTAKE_TASKS_V1.md](docs/delivery/releases/v1.0.3/AGENTFLOW_V1_0_3_CORE_4D_SPEC_INTAKE_TASKS_V1.md)
+
+## v1.0.3 - 2026-06-28
+
+Core 4-D Spec Intake baseline:
+
+- confirmed Core 4-D intake contract for Deconstruct / Diagnose / Develop / Deliver;
+- added Core Spec Bundle slices across Intent, Domain, Goal, Plan, Task, Decision, Output and Feedback;
+- certified cross-industry reference mappings for Software Dev, UI Design and Video Production;
+- extended release gate coverage with `v103-release-fix-certification` and `core-4d-spec-intake` artifacts;
+- preserved `v1.0.2` release audit certification while advancing the Core Spec Kernel roadmap.
 
 ## v1.0.2 - 2026-06-26
 
