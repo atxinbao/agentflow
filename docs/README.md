@@ -19,7 +19,7 @@ docs/
 
 | 路径 | 作用 |
 | --- | --- |
-| [project/README.md](project/README.md) | 项目目标、上下文、术语和历史上下文 |
+| [project/README.md](project/README.md) | 项目目标、路线图、上下文、术语和历史上下文 |
 | [requirements/README.md](requirements/README.md) | confirmed Spec Bundle 公共记录入口 |
 | [architecture/README.md](architecture/README.md) | AI OS Project Core、filesystem-first 边界和 v1.x 稳定架构合同 |
 | [delivery/README.md](delivery/README.md) | 当前 release baseline、交付记录和发布认证入口 |
@@ -28,17 +28,19 @@ docs/
 
 1. [../README.md](../README.md)
 2. [project/goal.md](project/goal.md)
-3. [project/context.md](project/context.md)
-4. [architecture/021-ai-os-project-core-capabilities-v1.md](architecture/021-ai-os-project-core-capabilities-v1.md)
-5. [architecture/builtin-pack-registry.md](architecture/builtin-pack-registry.md)
-6. [architecture/041-v100-stable-contract-baseline-v1.md](architecture/041-v100-stable-contract-baseline-v1.md)
-7. [delivery/releases/v1.0.2/README.md](delivery/releases/v1.0.2/README.md)
-8. [requirements/README.md](requirements/README.md)
-9. [../CHANGELOG.md](../CHANGELOG.md)
+3. [project/roadmap.md](project/roadmap.md)
+4. [project/context.md](project/context.md)
+5. [architecture/021-ai-os-project-core-capabilities-v1.md](architecture/021-ai-os-project-core-capabilities-v1.md)
+6. [architecture/builtin-pack-registry.md](architecture/builtin-pack-registry.md)
+7. [architecture/041-v100-stable-contract-baseline-v1.md](architecture/041-v100-stable-contract-baseline-v1.md)
+8. [delivery/releases/v1.0.2/README.md](delivery/releases/v1.0.2/README.md)
+9. [requirements/README.md](requirements/README.md)
+10. [../CHANGELOG.md](../CHANGELOG.md)
 
 ## Rules
 
 - `docs/project/**` 定义项目，不直接授权实现。
+- `docs/project/roadmap.md` 定义目标到版本的路线，不直接拆 task。
 - `docs/requirements/**` 只保存 confirmed Spec Bundle。
 - `docs/architecture/**` 保存长期架构、Core 能力和稳定合同，不直接授权实现。
 - `docs/delivery/**` 记录 release、handoff、decision record 和交付结果。

@@ -32,12 +32,15 @@ runtime facts 提交进源码包。
 | Path | Role |
 | --- | --- |
 | `docs/project/README.md` | 产品方向 |
+| `docs/project/goal.md` | 当前产品目标 |
+| `docs/project/roadmap.md` | 当前版本路线图 |
+| `docs/project/context.md` | 当前项目上下文 |
+| `docs/README.md` | 当前文档地图 |
 | `docs/architecture/README.md` | 领域基础 |
 | `docs/architecture/builtin-pack-registry.md` | App 内置 Pack Registry 与用户项目引用边界 |
-| `docs/architecture/README.md` | 技术底座入口 |
 | `docs/architecture/current-module-boundaries.md` | 当前模块边界事实 |
-| `docs/project/goal.md` | 当前产品目标 |
 | `docs/architecture/021-ai-os-project-core-capabilities-v1.md` | 当前 AI OS Project Core 能力定义 |
+| `docs/architecture/041-v100-stable-contract-baseline-v1.md` | 当前 stable contract baseline |
 | `docs/delivery/releases/v1.0.1/README.md` | 当前 release hardening baseline |
 | `docs/architecture/050-v100-release-certification-v1.md` | v1 release certification 边界 |
 | `docs/project/history/2026-06-current-baseline-history/README.md` | 历史文档入口 |
