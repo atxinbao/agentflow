@@ -144,6 +144,7 @@ RELEASE_ARTIFACT_BOUNDARY_PATH="$RUNTIME_DIR/release-artifact-boundary.json"
 PROJECT_ROADMAP_BASELINE_PATH="$RUNTIME_DIR/project-roadmap-baseline.json"
 V103_RELEASE_FIX_CERTIFICATION_PATH="$RUNTIME_DIR/v103-release-fix-certification.json"
 STABLE_CONTRACT_BASELINE_PATH="$RUNTIME_DIR/stable-contract-baseline.json"
+CORE_4D_SPEC_INTAKE_PATH="$RUNTIME_DIR/core-4d-spec-intake.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -373,6 +374,7 @@ proof_chain = [
     {"stage": "release-artifact-boundary", "label": "Release Artifact Boundary"},
     {"stage": "project-roadmap-baseline", "label": "Project Roadmap Baseline"},
     {"stage": "v103-release-fix-certification", "label": "v1.0.3 Release Fix Certification"},
+    {"stage": "core-4d-spec-intake", "label": "Core 4-D Spec Intake"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -5985,6 +5987,123 @@ PY
   record_stage "v103-release-fix-certification" "passed" "$(basename "$V103_RELEASE_FIX_CERTIFICATION_PATH")"
 }
 
+run_core_4d_spec_intake_gate() {
+  record_stage "core-4d-spec-intake" "started" "$CORE_4D_SPEC_INTAKE_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-4d-spec-intake-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-spec core_4d --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-4d-spec-intake" "agentflow-spec Core 4-D contract tests failed"
+  fi
+  python3 - "$CORE_4D_SPEC_INTAKE_PATH" "$WORKSPACE/docs/requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md" "$WORKSPACE/docs/architecture/053-core-4d-spec-intake-kernel-v1.md" "$WORKSPACE/crates/spec/src/core_intake.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+spec_path = pathlib.Path(sys.argv[2])
+architecture_path = pathlib.Path(sys.argv[3])
+source_path = pathlib.Path(sys.argv[4])
+test_log_path = pathlib.Path(sys.argv[5])
+
+spec_text = spec_path.read_text(encoding="utf-8")
+architecture_text = architecture_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+
+required_doc_terms = [
+    "Deconstruct -> Diagnose -> Develop -> Deliver",
+    "Intent",
+    "Domain",
+    "Goal",
+    "Plan",
+    "Task",
+    "Decision",
+    "Output",
+    "Feedback",
+    "clarify",
+    "research",
+    "define",
+    "plan",
+    "task",
+    "decide",
+    "deliver",
+    "evolve",
+    "Draft",
+    "Preview",
+    "Confirmed",
+    "Materialized",
+    "Software Dev",
+    "UI Design",
+    "Video Production",
+]
+missing_doc_terms = [
+    term for term in required_doc_terms
+    if term not in spec_text or term not in architecture_text
+]
+
+required_source_terms = [
+    "CORE_4D_SPEC_INTAKE_VERSION",
+    "Core4DPhase",
+    "CoreIntakeRoute",
+    "CoreSpecBundleSlice",
+    "CoreArtifactBoundary",
+    "core_4d_spec_intake_contract",
+    "validate_core_4d_spec_intake_contract",
+    "software-dev",
+    "ui-design",
+    "video-production",
+]
+missing_source_terms = [term for term in required_source_terms if term not in source_text]
+
+core_forbidden_terms = [
+    "bug",
+    "feature",
+    "pr",
+    "release",
+    "patch",
+    "test-log",
+    "repository",
+    "github-issue",
+]
+coverage = {
+    "V018-001-core-4d-contract": not missing_doc_terms
+    and not missing_source_terms
+    and "Core 4-D Spec Intake" in architecture_text,
+    "V018-002-intent-packet": "intent packet" in spec_text.lower()
+    and "raw-human-request" in source_text,
+    "V018-003-gap-route-policy": all(route in source_text for route in ["Clarify", "Research", "Define", "Plan", "Task", "Decide", "Deliver", "Evolve"]),
+    "V018-004-clarify-interaction": "human decision gap" in spec_text
+    and "ask-bounded-question" in source_text,
+    "V018-005-research-evidence": "fact gap" in spec_text
+    and "collect-evidence" in source_text,
+    "V018-006-spec-bundle-slices": all(slice_name in source_text for slice_name in ["Intent", "Domain", "Goal", "Plan", "Task", "Decision", "Output", "Feedback"]),
+    "V018-007-industry-mapping": all(industry in source_text for industry in ["software-dev", "ui-design", "video-production"]),
+    "V018-008-materialization-boundary": all(boundary in source_text for boundary in ["Draft", "Preview", "Confirmed", "Materialized"]),
+    "V018-009-cross-industry-fixtures": all(industry in spec_text for industry in ["Software Dev", "UI Design", "Video Production"]),
+    "V018-010-release-certification": test_log_path.is_file()
+    and "forbidden_core_terms: vec![" in source_text
+    and "forbidden industry term" in source_text,
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-4d-spec-intake-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "specBundlePath": "docs/requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md",
+    "architecturePath": "docs/architecture/053-core-4d-spec-intake-kernel-v1.md",
+    "rustContractPath": "crates/spec/src/core_intake.rs",
+    "rustTestLogPath": "runtime/core-4d-spec-intake-rust-test.log",
+    "coreForbiddenTerms": core_forbidden_terms,
+    "referenceMappings": ["software-dev", "ui-design", "video-production"],
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core 4-D spec intake coverage failed: {failed}")
+PY
+  record_stage "core-4d-spec-intake" "passed" "$(basename "$CORE_4D_SPEC_INTAKE_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -6535,6 +6654,7 @@ PY
   run_release_artifact_boundary_gate
   run_project_roadmap_baseline_gate
   run_v103_release_fix_certification_gate
+  run_core_4d_spec_intake_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
