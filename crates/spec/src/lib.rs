@@ -4,9 +4,15 @@
 //! `docs/requirements/<requirement-id>.md` -> `.agentflow/spec/**`.
 //! It does not execute tasks and does not update runtime state.
 
+pub mod core_intake;
 pub mod model;
 pub mod storage;
 
+pub use core_intake::{
+    core_4d_spec_intake_contract, validate_core_4d_spec_intake_contract, Core4DPhase,
+    Core4DSpecIntakeContract, Core4DStageContract, CoreArtifactBoundary, CoreGapRoute,
+    CoreIntakeRoute, CoreSpecBundleSlice, IndustryMappingFixture, CORE_4D_SPEC_INTAKE_VERSION,
+};
 pub use model::{
     CompletionDecisionFacts, CompletionDecisionOutcome, CompletionDecisionRecord,
     CompletionDecisionRuntime, CompletionDecisionState, GoalDraftPreview, GoalDraftStatus,

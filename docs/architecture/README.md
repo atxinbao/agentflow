@@ -47,6 +47,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [050-v100-release-certification-v1.md](050-v100-release-certification-v1.md) | v1.0 release certification |
 | [051-v101-message-bus-no-go-adr-v1.md](051-v101-message-bus-no-go-adr-v1.md) | Message Bus no-go ADR |
 | [052-v101-software-dev-pack-usage-baseline-v1.md](052-v101-software-dev-pack-usage-baseline-v1.md) | Software Dev Pack usage baseline |
+| [053-core-4d-spec-intake-kernel-v1.md](053-core-4d-spec-intake-kernel-v1.md) | Core 4-D Spec Intake Kernel |
 
 ## Rules
 

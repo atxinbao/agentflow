@@ -49,6 +49,12 @@ docs/requirements/
 
 GitHub issue 只能是外部 planning mirror，不能替代 AgentFlow authority。
 
+## Current Confirmed Bundles
+
+| Bundle | Purpose |
+| --- | --- |
+| [v0.18.0-core-4d-spec-intake/spec-bundle.md](v0.18.0-core-4d-spec-intake/spec-bundle.md) | Core 4-D Spec Intake Kernel |
+
 ## Non-goals
 
 - 不恢复旧 flat requirements 列表；
