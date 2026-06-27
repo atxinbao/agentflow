@@ -8,13 +8,13 @@
 
 本文定义 AgentFlow 作为 AI OS Project 的底层通用能力。
 
-当前产品目标已经收敛为：
+当前项目目标已经修正为：
 
 ```text
-AgentFlow = Spec-Driven Software Dev Workflow
+AgentFlow = Spec-Driven AI OS Project
 ```
 
-但底层能力不能只为 Software Dev 写死。AgentFlow Core 应该是一套可被不同行业壳复用的项目运行时能力。
+Software Dev 是第一个官方 Reference App，不是 Core OS 的内核目标。AgentFlow Core 应该是一套可被不同行业 App 复用的项目运行时能力。
 
 ## Bottom Framework Formula
 
@@ -22,15 +22,15 @@ AgentFlow 的底层框架用这个公式表达：
 
 ```text
 AI OS Project
-= Core Runtime
-+ Industry AgentFlow Product
+= Core OS Runtime
++ Industry AgentFlow App
 ```
 
 展开后：
 
 ```text
 AI OS Project
-= Core Runtime
+= Core OS Runtime
 + (Domain Pack + Surface Pack + Connector Pack)
 ```
 
@@ -38,14 +38,14 @@ AgentFlow 的完整表达是：
 
 ```text
 AgentFlow AI OS Project
-= Spec-Driven Core Runtime
-+ Industry AgentFlow Product
+= Core OS Runtime
++ Industry AgentFlow App
 ```
 
 其中：
 
 ```text
-Spec-Driven Core Runtime
+Core OS Runtime
 = Spec Kernel
 + Ontology Kernel
 + Runtime Kernel
@@ -55,7 +55,7 @@ Spec-Driven Core Runtime
 ```
 
 ```text
-Industry AgentFlow Product
+Industry AgentFlow App
 = Domain Pack
 + Surface Pack
 + Connector Pack
@@ -411,7 +411,7 @@ Pack 本体属于 AgentFlow App 的内置能力，不属于用户项目的 `docs
 用户项目只保存当前启用 Pack 的引用和运行事实。
 
 ```text
-Industry AgentFlow Product
+Industry AgentFlow App
 = Domain Pack + Surface Pack + Connector Pack
 ```
 
@@ -453,7 +453,7 @@ Connector Pack 不能直接写 authority facts。
 
 ## Software Dev First Product Mapping
 
-当前商业产品只聚焦 Software Dev。
+Software Dev 是第一个官方 Reference App。
 
 Software Dev 应该使用底层 Core，而不是绕过底层 Core。
 

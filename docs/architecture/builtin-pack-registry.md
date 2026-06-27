@@ -1,6 +1,6 @@
 # Built-in Pack Registry
 
-更新日期：2026-06-26
+更新日期：2026-06-28
 执行者：Codex
 
 ## Purpose
@@ -21,14 +21,14 @@ AgentFlow 的上层公式仍然是：
 
 ```text
 AgentFlow AI OS Project
-= Spec-Driven Core Runtime
-+ Industry AgentFlow Product
+= Core OS Runtime
++ Industry AgentFlow App
 ```
 
 其中：
 
 ```text
-Industry AgentFlow Product
+Industry AgentFlow App
 = Domain Pack
 + Surface Pack
 + Connector Pack
@@ -122,7 +122,7 @@ docs/delivery      记录交付结果
 
 ## Role And Skill Binding
 
-Agent 角色和技能由当前启用的 Pack、Core Runtime 规则和 AgentFlow role policy 共同决定。
+Agent 角色和技能由当前启用的 Pack、Core OS Runtime 规则和 AgentFlow role policy 共同决定。
 
 稳定边界：
 
@@ -140,9 +140,9 @@ Agent 角色和技能由当前启用的 Pack、Core Runtime 规则和 AgentFlow 
 - Pack upgrade 必须可验证、可回滚或可取消。
 - 缺失 Pack 定义时，Projection 必须显示 `invalid` 或 `deferred`，不能静默 fallback。
 
-## Software Dev Baseline
+## Software Dev Reference App Baseline
 
-当前商业产品只聚焦 Software Dev。
+Software Dev 是第一个官方 Reference App。
 
 Software Dev Pack 应作为 App 内置 Pack 提供：
 
@@ -158,4 +158,4 @@ Audit 仍然是独立 sidecar，不进入 Software Dev 主业务链。
 - 不把 `docs/project/**` 变成 Pack authoring surface。
 - 不把 `.agentflow/project/active-pack.json` 变成 Pack manifest。
 - 不把 Pack registry 变成 GitHub issues 或外部工具状态。
-- 不让 Pack 绕过 Spec-Driven Core Runtime。
+- 不让 Pack 绕过 Core OS Runtime。

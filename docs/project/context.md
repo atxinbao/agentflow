@@ -1,21 +1,21 @@
 # Project Context
 
-更新日期：2026-06-26
+更新日期：2026-06-28
 执行者：Codex
 
 ## Current Positioning
 
-AgentFlow 是 Spec-Driven Software Dev Workflow。
+AgentFlow 是 Spec-Driven AI OS Project。
 
 它的产品公式是：
 
 ```text
 AgentFlow AI OS Project
-= Spec-Driven Core Runtime
-+ Industry AgentFlow Product
+= Core OS Runtime
++ Industry AgentFlow App
 ```
 
-当前商业产品只聚焦 Software Dev。
+当前优先目标是稳住 Core OS Runtime。Software Dev 是第一个官方 Reference App，用来认证 Core 的真实闭环。
 
 ## Directory Planes
 
@@ -42,9 +42,9 @@ docs/delivery      记录交付结果
 `docs/project/roadmap.md` 位于 `goal.md` 和 `docs/requirements/**` 之间。
 它定义版本阶段和 loop 推进顺序，但不直接授权执行。
 
-## Current Industry
+## Current Reference App
 
-当前商业产品只聚焦 Software Dev，但 Software Dev Pack 是 AgentFlow App 的内置能力，不是用户项目文档。
+当前第一个 Reference App 是 Software Dev，但 Software Dev Pack 是 AgentFlow App 的内置能力，不是用户项目文档。
 
 用户新建项目时，`docs/project/**` 不生成 `industry/` 目录，也不复制 Pack 本体。
 

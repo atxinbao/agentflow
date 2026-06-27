@@ -1,6 +1,6 @@
 # Project
 
-更新日期：2026-06-26
+更新日期：2026-06-28
 执行者：Codex
 
 ## Purpose
@@ -20,7 +20,7 @@ docs/project
 
 | 文档 | 作用 |
 | --- | --- |
-| [goal.md](goal.md) | 项目总目标：Spec-Driven Software Dev Workflow |
+| [goal.md](goal.md) | 项目总目标：Spec-Driven AI OS Project |
 | [roadmap.md](roadmap.md) | 从项目目标拆出的版本路线图和 loop 推进顺序 |
 | [context.md](context.md) | 当前项目背景、范围、目录平面和行业主线 |
 | [glossary.md](glossary.md) | 项目术语表 |

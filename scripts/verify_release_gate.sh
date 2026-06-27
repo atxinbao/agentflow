@@ -5805,8 +5805,10 @@ coverage = {
     "V102-003": negative.get("status") == "passed"
     and negative.get("fixtureCount", 0) >= 6
     and not negative.get("failedFixtures"),
-    "V102-004": "Spec-Driven Software Dev Workflow" in goal_text
-    and "GitHub issue" in goal_text
+    "V102-004": "Spec-Driven AI OS Project" in goal_text
+    and "Core OS Runtime" in goal_text
+    and "Software Dev 是第一个官方 Reference App" in goal_text
+    and "GitHub issues" in goal_text
     and "authority" in goal_text,
 }
 failed = [issue for issue, passed in coverage.items() if not passed]
@@ -5823,7 +5825,9 @@ payload = {
         "sourceCommitSha": provenance.get("sourceCommitSha"),
         "releaseUrl": provenance.get("releaseUrl"),
     },
-    "productGoalBaseline": "Spec-Driven Software Dev Workflow",
+    "productGoalBaseline": "Spec-Driven AI OS Project",
+    "coreRuntimeBaseline": "Core OS Runtime",
+    "referenceAppBaseline": "Software Dev Reference App",
     "githubIssueAuthority": False,
     "remainingRisks": [] if not failed else [f"failed coverage: {', '.join(failed)}"],
     "checkedAt": int(time.time()),
@@ -5879,10 +5883,12 @@ roadmap_path = pathlib.Path(sys.argv[3])
 goal_text = goal_path.read_text(encoding="utf-8")
 roadmap_text = roadmap_path.read_text(encoding="utf-8")
 required_goal_terms = [
-    "Spec-Driven Software Dev Workflow",
+    "Spec-Driven AI OS Project",
+    "Core OS Runtime",
+    "Industry AgentFlow App",
     "Agent 只是执行器",
     "Spec 才是方向盘",
-    "Software Dev",
+    "Software Dev 是第一个官方 Reference App",
 ]
 required_roadmap_terms = [
     "docs/project/goal.md",
@@ -5896,7 +5902,9 @@ required_roadmap_terms = [
     "Issue Loop",
     "Feedback Loop",
     "v1.0.3",
-    "Spec Kernel / Spec Bundle Workspace",
+    "Core Spec Kernel / Spec Bundle Workspace",
+    "v1.0.9",
+    "Software Dev Reference App Certification",
 ]
 missing_goal = [term for term in required_goal_terms if term not in goal_text]
 missing_roadmap = [term for term in required_roadmap_terms if term not in roadmap_text]
@@ -5907,8 +5915,9 @@ payload = {
     "status": "passed",
     "goalPath": "docs/project/goal.md",
     "roadmapPath": "docs/project/roadmap.md",
-    "productGoal": "Spec-Driven Software Dev Workflow",
-    "activeCommercialTarget": "Software Dev",
+    "productGoal": "Spec-Driven AI OS Project",
+    "coreRuntime": "Core OS Runtime",
+    "referenceApp": "Software Dev Reference App",
     "planningChain": [
         "docs/project/goal.md",
         "docs/project/roadmap.md",
@@ -5919,7 +5928,9 @@ payload = {
     ],
     "loops": ["Project Loop", "Spec Loop", "Issue Loop", "Feedback Loop"],
     "nextVersion": "v1.0.3",
-    "nextVersionGoal": "Spec Kernel / Spec Bundle Workspace",
+    "nextVersionGoal": "Core Spec Kernel / Spec Bundle Workspace",
+    "certificationVersion": "v1.0.9",
+    "certificationGoal": "Software Dev Reference App Certification",
     "checkedAt": int(time.time()),
 }
 out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
