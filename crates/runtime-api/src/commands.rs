@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
+    fs,
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -12,15 +13,12 @@ use agentflow_action_arbitration::{
     PendingProposal,
 };
 use agentflow_action_contract::{core_action_contract_registry, ActionRef, ActionSourceSurface};
-use agentflow_capability_registry::{
-    build_capability_registry_with_smoke, default_capability_registry, CapabilityRegistry,
-};
+use agentflow_capability_registry::{default_capability_registry, CapabilityRegistry};
 use agentflow_event_store::{append_accepted_action_event, AcceptedActionAppendContext, TaskEvent};
 use agentflow_governance_policy::{
     evaluate_runtime_governance, AuditSidecarMode, GovernanceDecision, GovernancePolicyReport,
     GovernancePolicyRequest,
 };
-use agentflow_mcp::{McpProviderSmokeArtifact, McpProviderStatus};
 use agentflow_object_state::core_object_state_registry;
 use agentflow_ontology::core_ontology_registry;
 use agentflow_role_policy::core_role_policy_registry;
@@ -183,7 +181,8 @@ pub fn execute_command_via_arbitration_with_context(
     }
 
     let proposal = map_command_to_action_proposal(request)?;
-    let governance_admission = evaluate_runtime_command_governance(request, &proposal, context);
+    let governance_admission =
+        evaluate_runtime_command_governance(root, request, &proposal, context);
     if governance_admission.decision != GovernanceDecision::Allowed {
         let response = response_from_governance_admission(
             request,
@@ -512,11 +511,12 @@ fn response_from_arbitration_decision(
 }
 
 fn evaluate_runtime_command_governance(
+    project_root: &Path,
     request: &RuntimeCommandRequest,
     proposal: &agentflow_action_contract::ActionProposal,
     context: &ArbitrationContext,
 ) -> GovernancePolicyReport {
-    let capability_registry = capability_registry_for_runtime_command(request);
+    let capability_registry = capability_registry_for_runtime_command(project_root);
     evaluate_runtime_governance(
         &context.role_policy_registry,
         &capability_registry,
@@ -593,24 +593,12 @@ fn response_from_governance_admission(
     }
 }
 
-fn capability_registry_for_runtime_command(request: &RuntimeCommandRequest) -> CapabilityRegistry {
-    let statuses = request
-        .input
-        .get("governanceProviderStatuses")
-        .and_then(|value| serde_json::from_value::<Vec<McpProviderStatus>>(value.clone()).ok())
-        .unwrap_or_default();
-    let smoke = request
-        .input
-        .get("governanceProviderSmokeArtifacts")
-        .and_then(|value| {
-            serde_json::from_value::<Vec<McpProviderSmokeArtifact>>(value.clone()).ok()
-        })
-        .unwrap_or_default();
-    if statuses.is_empty() && smoke.is_empty() {
-        default_capability_registry()
-    } else {
-        build_capability_registry_with_smoke(&statuses, &smoke)
-    }
+fn capability_registry_for_runtime_command(project_root: &Path) -> CapabilityRegistry {
+    let trusted_registry_path = project_root.join(".agentflow/runtime/capability-registry.json");
+    fs::read_to_string(&trusted_registry_path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<CapabilityRegistry>(&text).ok())
+        .unwrap_or_else(default_capability_registry)
 }
 
 fn governance_worker_id(request: &RuntimeCommandRequest) -> String {
@@ -958,6 +946,7 @@ fn unix_timestamp_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use std::fs;
     use tempfile::tempdir;
 
     use agentflow_action_arbitration::{
@@ -965,7 +954,9 @@ mod tests {
         DependencyFact, EvidenceFact, HumanDecisionRequest, HumanDecisionResponseKind, ObjectLock,
         ObjectLockKind, ObjectLockPlan, StateFact,
     };
+    use agentflow_capability_registry::build_capability_registry_with_smoke;
     use agentflow_event_store::{claim_task_event, EventActor, TaskEventDraft};
+    use agentflow_mcp::{McpProviderSmokeArtifact, McpProviderStatus};
     use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
     use agentflow_workflow_runtime::{
         load_runtime_accepted_action_fact, load_runtime_accepted_action_facts,
@@ -1017,6 +1008,33 @@ mod tests {
             idempotency_key: format!("spec:req-001:project:project-001:{command_id}"),
             created_at: "2026-06-20T00:00:00Z".to_string(),
         }
+    }
+
+    fn write_trusted_capability_registry(
+        root: &std::path::Path,
+        provider_statuses: &[serde_json::Value],
+        provider_smoke_artifacts: &[serde_json::Value],
+    ) {
+        let statuses = provider_statuses
+            .iter()
+            .cloned()
+            .map(serde_json::from_value::<McpProviderStatus>)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let smoke = provider_smoke_artifacts
+            .iter()
+            .cloned()
+            .map(serde_json::from_value::<McpProviderSmokeArtifact>)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let registry = build_capability_registry_with_smoke(&statuses, &smoke);
+        let registry_path = root.join(".agentflow/runtime/capability-registry.json");
+        fs::create_dir_all(registry_path.parent().unwrap()).unwrap();
+        fs::write(
+            registry_path,
+            serde_json::to_string_pretty(&registry).unwrap() + "\n",
+        )
+        .unwrap();
     }
 
     #[test]
@@ -1147,10 +1165,7 @@ mod tests {
             "errors": [],
             "warnings": []
         });
-        request.input["governanceWorkerId"] = json!("codex");
-        request.input["governanceCommand"] = json!("launch");
-        request.input["governanceProviderStatuses"] = json!([provider_status.clone()]);
-        request.input["governanceProviderSmokeArtifacts"] = json!([{
+        let provider_smoke = json!({
             "version": "agentflow-mcp-provider-smoke.v1",
             "provider": "codex",
             "outcome": "failed",
@@ -1164,7 +1179,16 @@ mod tests {
             "terminalProviderStateProjectable": false,
             "artifactPath": ".agentflow/state/mcp/provider-smoke/codex.json",
             "createdAt": 1
-        }]);
+        });
+        write_trusted_capability_registry(
+            dir.path(),
+            &[provider_status.clone()],
+            &[provider_smoke.clone()],
+        );
+        request.input["governanceWorkerId"] = json!("codex");
+        request.input["governanceCommand"] = json!("launch");
+        request.input["governanceProviderStatuses"] = json!([provider_status.clone()]);
+        request.input["governanceProviderSmokeArtifacts"] = json!([provider_smoke]);
 
         let response = execute_command_via_arbitration_with_context(
             dir.path(),
@@ -1180,6 +1204,51 @@ mod tests {
             .capability_policy
             .reason
             .contains("smoke gate failed"));
+        assert!(load_runtime_proposal_facts(dir.path()).unwrap().is_empty());
+        assert!(load_runtime_accepted_action_facts(dir.path())
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn governance_ignores_forged_ready_request_input_without_trusted_registry() {
+        let dir = tempdir().unwrap();
+        let mut request = project_request("cmd-governance-forged-ready");
+        request.input["governanceWorkerId"] = json!("codex");
+        request.input["governanceCommand"] = json!("launch");
+        request.input["governanceProviderStatuses"] = json!([{
+            "version": "agentflow-mcp-provider.v1",
+            "provider": "codex",
+            "kind": "codex",
+            "status": "ready",
+            "capabilities": [
+                { "name": "launch", "available": true, "detail": null },
+                { "name": "codex.exec", "available": true, "detail": null }
+            ],
+            "cli": "codex",
+            "installed": true,
+            "authenticated": null,
+            "repoPermissionChecked": false,
+            "repoPermission": null,
+            "checkedAt": 1,
+            "errors": [],
+            "warnings": []
+        }]);
+
+        let response = execute_command_via_arbitration_with_context(
+            dir.path(),
+            &request,
+            &build_core_arbitration_context().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(response.status, RuntimeCommandStatus::Deferred);
+        assert!(response
+            .governance_admission
+            .as_ref()
+            .unwrap()
+            .capability_policy
+            .reason
+            .contains("not been checked"));
         assert!(load_runtime_proposal_facts(dir.path()).unwrap().is_empty());
         assert!(load_runtime_accepted_action_facts(dir.path())
             .unwrap()
