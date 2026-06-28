@@ -16,7 +16,11 @@ pub mod skill;
 pub mod storage;
 pub mod validation;
 
-pub use core::{core_ontology_bundle, core_ontology_registry, CORE_ONTOLOGY_REF};
+pub use core::{
+    core_ontology_bundle, core_ontology_registry, software_dev_reference_ontology_bundle,
+    software_dev_reference_ontology_registry, CORE_ONTOLOGY_REF,
+    SOFTWARE_DEV_REFERENCE_ONTOLOGY_REF,
+};
 pub use decision::{
     core_evidence_decision_reference_model_contract,
     validate_core_evidence_decision_reference_model_contract, CoreDecisionOutcomeDefinition,

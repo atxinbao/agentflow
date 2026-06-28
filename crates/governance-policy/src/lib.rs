@@ -276,7 +276,7 @@ mod tests {
     use agentflow_role_policy::core_role_policy_registry;
 
     fn role_registry() -> RolePolicyRegistry {
-        let ontology = agentflow_ontology::core_ontology_registry();
+        let ontology = agentflow_ontology::software_dev_reference_ontology_registry();
         let actions = agentflow_action_contract::core_action_contract_registry(&ontology);
         core_role_policy_registry(&ontology, &actions)
     }

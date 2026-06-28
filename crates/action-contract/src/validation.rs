@@ -540,7 +540,7 @@ fn validate_input_schema(
 
 #[cfg(test)]
 mod tests {
-    use agentflow_ontology::core_ontology_registry;
+    use agentflow_ontology::software_dev_reference_ontology_registry;
     use serde_json::json;
 
     use crate::core::core_action_contract_bundle;
@@ -550,20 +550,20 @@ mod tests {
     use super::{validate_action_contract_bundle, validate_action_proposal};
 
     fn registry() -> ActionContractRegistry {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         ActionContractRegistry::load_bundle(core_action_contract_bundle(), &ontology).unwrap()
     }
 
     #[test]
     fn core_action_contract_bundle_validates() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let report = validate_action_contract_bundle(&core_action_contract_bundle(), &ontology);
         assert!(report.valid, "{:?}", report.errors);
     }
 
     #[test]
     fn unknown_action_type_fails() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let registry = registry();
         let proposal = ActionProposal {
             proposal_id: "proposal-1".into(),
@@ -595,7 +595,7 @@ mod tests {
 
     #[test]
     fn retired_contract_rejects_proposal() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let mut bundle = core_action_contract_bundle();
         bundle
             .contracts
@@ -637,7 +637,7 @@ mod tests {
 
     #[test]
     fn proposal_with_missing_required_input_fails() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let registry = registry();
         let proposal = ActionProposal {
             proposal_id: "proposal-1".into(),
@@ -668,7 +668,7 @@ mod tests {
 
     #[test]
     fn proposal_with_unknown_target_object_type_fails() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let registry = registry();
         let proposal = ActionProposal {
             proposal_id: "proposal-1".into(),
@@ -699,7 +699,7 @@ mod tests {
 
     #[test]
     fn invalid_expected_link_type_fails_bundle_validation() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let mut bundle = core_action_contract_bundle();
         bundle
             .contracts
@@ -717,7 +717,7 @@ mod tests {
 
     #[test]
     fn approve_spec_requires_human_confirmation() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let registry = registry();
         let proposal = ActionProposal {
             proposal_id: "proposal-1".into(),
@@ -748,7 +748,7 @@ mod tests {
 
     #[test]
     fn mark_issue_done_requires_verification_and_artifact_evidence() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let registry = registry();
         let proposal = ActionProposal {
             proposal_id: "proposal-1".into(),
@@ -817,7 +817,7 @@ mod tests {
 
     #[test]
     fn work_package_target_is_rejected_in_mvp() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let mut bundle = core_action_contract_bundle();
         bundle.action_types[0].target_object_type = Some("WorkPackage".into());
         let report = validate_action_contract_bundle(&bundle, &ontology);
@@ -829,7 +829,7 @@ mod tests {
 
     #[test]
     fn idempotency_key_shape_is_required() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let registry = registry();
         let proposal = ActionProposal {
             proposal_id: "proposal-1".into(),
@@ -860,7 +860,7 @@ mod tests {
 
     #[test]
     fn contract_version_mismatch_returns_validation_error() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let registry = registry();
         let proposal = ActionProposal {
             proposal_id: "proposal-1".into(),

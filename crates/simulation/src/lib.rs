@@ -12,7 +12,7 @@ use agentflow_action_contract::{
     core_action_contract_registry, ActionContract, ActionExpectedEvent, ActionProposal,
 };
 use agentflow_object_state::core_object_state_registry;
-use agentflow_ontology::core_ontology_registry;
+use agentflow_ontology::software_dev_reference_ontology_registry;
 use agentflow_pack::{
     ConnectorSupportedAction, DomainActionSemantic, PackConnectorDefinition, PackDomainDefinition,
     PackSurfaceDefinition, PackValidationArtifact, SurfaceCommandEntryMapping,
@@ -828,7 +828,7 @@ pub fn simulate_pack_command(request: &PackCommandSimulationRequest) -> Simulati
 }
 
 fn core_simulation_context() -> Result<ArbitrationContext> {
-    let ontology = core_ontology_registry();
+    let ontology = software_dev_reference_ontology_registry();
     let action_contract = core_action_contract_registry(&ontology);
     let role_policy = core_role_policy_registry(&ontology, &action_contract);
     let object_state =

@@ -20,7 +20,8 @@ mod tests {
     use agentflow_audit::AuditStatus;
     use agentflow_object_state::{core_object_state_bundle, validate_object_state_bundle};
     use agentflow_ontology::{
-        core_ontology_bundle, core_ontology_registry, validate_ontology_bundle,
+        software_dev_reference_ontology_bundle, software_dev_reference_ontology_registry,
+        validate_ontology_bundle,
     };
     use agentflow_projection::{
         get_spec_loop_view, load_project_projection, load_task_projection, rebuild_projections,
@@ -109,11 +110,11 @@ mod tests {
 
     #[test]
     fn runtime_foundation_main_chain_closeout_is_verifiable() -> anyhow::Result<()> {
-        let ontology_bundle = core_ontology_bundle();
+        let ontology_bundle = software_dev_reference_ontology_bundle();
         let ontology_report = validate_ontology_bundle(&ontology_bundle);
         assert!(ontology_report.valid, "{:?}", ontology_report.errors);
 
-        let ontology_registry = core_ontology_registry();
+        let ontology_registry = software_dev_reference_ontology_registry();
         let action_bundle = core_action_contract_bundle();
         let action_report = validate_action_contract_bundle(&action_bundle, &ontology_registry);
         assert!(action_report.valid, "{:?}", action_report.errors);

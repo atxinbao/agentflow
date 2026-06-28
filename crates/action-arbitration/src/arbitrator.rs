@@ -640,7 +640,7 @@ mod tests {
         core_action_contract_registry, ActionProposal, ActionRef, ActionSourceSurface,
     };
     use agentflow_object_state::core_object_state_registry;
-    use agentflow_ontology::core_ontology_registry;
+    use agentflow_ontology::software_dev_reference_ontology_registry;
     use agentflow_role_policy::core_role_policy_registry;
 
     use crate::model::{
@@ -1235,7 +1235,7 @@ mod tests {
     }
 
     fn core_context() -> ArbitrationContext {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let roles = core_role_policy_registry(&ontology, &actions);
         let states = core_object_state_registry(&ontology, &actions).unwrap();

@@ -184,7 +184,7 @@ Object
 Link
 Action
 State
-Capability
+Skill
 Artifact
 Evidence
 Decision
