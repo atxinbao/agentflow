@@ -289,6 +289,27 @@ pub fn update_task_run_status(
     Ok(run)
 }
 
+pub fn commit_task_run_writeback(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+    status: TaskRunStatus,
+    writeback_state: impl Into<String>,
+    terminal_reason: Option<String>,
+    last_error: Option<String>,
+) -> Result<TaskRun> {
+    let root = canonicalize_project_root(project_root)?;
+    let path = task_run_dir_under_root(&root, issue_id, run_id)?.join("run.json");
+    let mut run: TaskRun = read_json(&path)?;
+    run.status = status;
+    run.writeback_state = Some(writeback_state.into());
+    run.terminal_reason = terminal_reason;
+    run.last_error = last_error;
+    run.updated_at = unix_timestamp_seconds();
+    write_json(&path, &run)?;
+    Ok(run)
+}
+
 pub fn sync_task_session(
     project_root: impl AsRef<Path>,
     issue_id: &str,

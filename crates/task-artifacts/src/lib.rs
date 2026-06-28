@@ -25,9 +25,9 @@ pub use model::{
     TASK_WORK_SESSION_VERSION, WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
 };
 pub use storage::{
-    checkpoint_replay_cursor, create_task_run, latest_task_run_checkpoint,
-    load_task_acceptance_gate_decision, load_task_changed_files, load_task_evidence,
-    load_task_executor_closeout, load_task_preflight_decision, load_task_run,
+    checkpoint_replay_cursor, commit_task_run_writeback, create_task_run,
+    latest_task_run_checkpoint, load_task_acceptance_gate_decision, load_task_changed_files,
+    load_task_evidence, load_task_executor_closeout, load_task_preflight_decision, load_task_run,
     load_task_run_checkpoints, load_task_session_evidence, load_task_session_history_record,
     load_task_session_recovery_summary, load_task_validation, load_work_loop_filesystem_contract,
     prepare_task_artifact_workspace, sync_task_session, task_acceptance_gate_path,

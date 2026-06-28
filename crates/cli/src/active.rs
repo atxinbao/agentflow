@@ -15,14 +15,14 @@ use agentflow_runtime_api::{
 };
 use agentflow_spec::{read_spec_issue, update_spec_issue_status, SpecIssueStatus};
 use agentflow_task_artifacts::{
-    load_task_changed_files, load_task_evidence, load_task_executor_closeout, load_task_run,
-    load_task_validation, task_acceptance_gate_path, task_changed_files_path, task_evidence_dir,
-    task_executor_closeout_path, task_run_dir, update_task_run_status,
-    write_task_acceptance_gate_decision, write_task_changed_files, write_task_command_record,
-    write_task_evidence, write_task_executor_closeout, write_task_validation_with_assessment,
-    TaskAcceptanceGateDecision, TaskAcceptanceGateKind, TaskAcceptanceOutcome,
-    TaskAcceptanceSubGateDecision, TaskAcceptanceTraceability, TaskChangedFile,
-    TaskChangedFileSource, TaskCommandInput, TaskEvidence, TaskEvidenceEntry,
+    commit_task_run_writeback, load_task_changed_files, load_task_evidence,
+    load_task_executor_closeout, load_task_run, load_task_validation, task_acceptance_gate_path,
+    task_changed_files_path, task_evidence_dir, task_executor_closeout_path, task_run_dir,
+    update_task_run_status, write_task_acceptance_gate_decision, write_task_changed_files,
+    write_task_command_record, write_task_evidence, write_task_executor_closeout,
+    write_task_validation_with_assessment, TaskAcceptanceGateDecision, TaskAcceptanceGateKind,
+    TaskAcceptanceOutcome, TaskAcceptanceSubGateDecision, TaskAcceptanceTraceability,
+    TaskChangedFile, TaskChangedFileSource, TaskCommandInput, TaskEvidence, TaskEvidenceEntry,
     TaskEvidenceEntryStatus, TaskExecutorCloseout, TaskExecutorCoreRefs, TaskExecutorResultStatus,
     TaskExecutorWorkHandoff, TaskRun, TaskRunStatus,
 };
@@ -161,13 +161,27 @@ pub(crate) fn complete_build_agent_issue_from_request(
             &gate_decision,
             &proof_path,
         )?;
+        let failure_summary = if gate_decision.failure_reasons.is_empty() {
+            gate_decision.summary.clone()
+        } else {
+            gate_decision.failure_reasons.join("; ")
+        };
+        let _ = commit_task_run_writeback(
+            root,
+            &review.issue_id,
+            &review.run_id,
+            TaskRunStatus::Completed,
+            format!("acceptance-{}", gate_decision.outcome.as_str()),
+            Some("acceptance-gate-failed".to_string()),
+            Some(failure_summary.clone()),
+        )?;
         let _ = agentflow_projection::rebuild_projections(root)?;
         agentflow_state::refresh_state(root)?;
         anyhow::bail!(
             "build agent completion requires acceptance gate to pass for {} {}: {}",
             review.issue_id,
             review.run_id,
-            gate_decision.failure_reasons.join("; ")
+            failure_summary
         );
     }
     let _ = assert_issue_mark_done_allowed(root, &issue.issue_id, &issue.status)?;
@@ -223,6 +237,8 @@ pub(crate) fn complete_build_agent_issue_from_request(
                 "issueClosedAt": proof.get("issueClosedAt").cloned().unwrap_or(serde_json::Value::Null),
                 "evidenceHeadSha": proof.get("evidenceHeadSha").cloned().unwrap_or(serde_json::Value::Null),
                 "evidenceHash": proof.get("evidenceHash").cloned().unwrap_or(serde_json::Value::Null),
+                "writebackState": "completion-committed",
+                "terminalReason": "completion-accepted",
             }),
             artifact_refs: vec![
                 task_evidence_path(&review.issue_id),
@@ -233,6 +249,15 @@ pub(crate) fn complete_build_agent_issue_from_request(
                 issue.issue_id, review.run_id
             )),
         },
+    )?;
+    let _ = commit_task_run_writeback(
+        root,
+        &review.issue_id,
+        &review.run_id,
+        TaskRunStatus::Completed,
+        "completion-committed",
+        Some("completion-accepted".to_string()),
+        None,
     )?;
     let _ = update_spec_issue_status(root, &issue.issue_id, SpecIssueStatus::Done)?;
     let _ = append_optional_audit_trigger_evaluation(
@@ -2934,8 +2959,23 @@ mod tests {
         let done_projection =
             agentflow_projection::load_task_projection(dir.path(), "AF-001").unwrap();
         assert_eq!(done_projection.current_state, "done");
+        assert_eq!(
+            done_projection.session.writeback_state.as_deref(),
+            Some("completion-committed")
+        );
         let done_issue = agentflow_spec::read_spec_issue(dir.path(), "AF-001").unwrap();
         assert_eq!(done_issue.status, agentflow_spec::SpecIssueStatus::Done);
+        let done_run = load_task_run(dir.path(), "AF-001", &started.run_id).unwrap();
+        assert_eq!(done_run.status, TaskRunStatus::Completed);
+        assert_eq!(
+            done_run.writeback_state.as_deref(),
+            Some("completion-committed")
+        );
+        assert_eq!(
+            done_run.terminal_reason.as_deref(),
+            Some("completion-accepted")
+        );
+        assert_eq!(done_run.last_error, None);
         assert_eq!(
             done_projection.public_delivery.pr_url.as_deref(),
             Some("https://github.com/atxinbao/agentflow/pull/1")
@@ -3479,6 +3519,21 @@ mod tests {
             .next_steps
             .iter()
             .any(|item| item.contains("补齐验证证据")));
+        let rejected_run = load_task_run(dir.path(), "AF-001", &started.run_id).unwrap();
+        assert_eq!(rejected_run.status, TaskRunStatus::Completed);
+        assert_eq!(
+            rejected_run.writeback_state.as_deref(),
+            Some("acceptance-rejected")
+        );
+        assert_eq!(
+            rejected_run.terminal_reason.as_deref(),
+            Some("acceptance-gate-failed")
+        );
+        assert!(rejected_run
+            .last_error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("closeout proof"));
         let events = agentflow_event_store::replay_task_events(
             dir.path(),
             agentflow_event_store::ReplayFilter::issue("AF-001"),
