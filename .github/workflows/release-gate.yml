@@ -236,7 +236,8 @@ jobs:
             runtime/core-evidence-decision-reference-model.json \
             runtime/core-evidence-decision-reference-model-rust-test.log \
             runtime/core-file-backed-ontology-registry.json \
-            runtime/core-file-backed-ontology-registry-rust-test.log
+            runtime/core-file-backed-ontology-registry-rust-test.log \
+            runtime/v104-release-certification.json
           do
             if [ ! -f "$certification_dir/$primary_proof" ]; then
               echo "missing certification primary proof: $primary_proof" >&2

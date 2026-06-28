@@ -7,8 +7,18 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.0.3/README.md](docs/delivery/releases/v1.0.3/README.md)
-- [docs/delivery/releases/v1.0.3/AGENTFLOW_V1_0_3_CORE_4D_SPEC_INTAKE_TASKS_V1.md](docs/delivery/releases/v1.0.3/AGENTFLOW_V1_0_3_CORE_4D_SPEC_INTAKE_TASKS_V1.md)
+- [docs/delivery/releases/v1.0.4/README.md](docs/delivery/releases/v1.0.4/README.md)
+- [docs/delivery/releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md)
+
+## v1.0.4 - 2026-06-28
+
+Core Ontology Kernel baseline:
+
+- defined Core Ontology Kernel, Object / Link Schema, Action / State Semantics, Skill Registry, and Evidence / Decision Reference Model;
+- added file-backed Core ontology registry and read-only projection contract;
+- extended release gate coverage with `core-ontology-kernel`, `core-object-link-schema`, `core-action-state-semantics`, `core-skill-registry`, `core-evidence-decision-reference-model`, `core-file-backed-ontology-registry`, and `v104-release-certification` artifacts;
+- kept Software Dev terminology as Reference App mapping only, not Core authority;
+- advanced workspace and desktop version metadata to `1.0.4`.
 
 ## v1.0.3 - 2026-06-28
 
