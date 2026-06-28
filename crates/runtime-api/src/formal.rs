@@ -443,10 +443,16 @@ fn insert_materialization_confirmation_facts(
     {
         let evidence_ref =
             materialization_confirmation_evidence_ref(requirement_id, preview.revision);
-        context.insert_evidence(EvidenceFact {
+        for evidence_ref in [
             evidence_ref,
-            evidence_type: "humanConfirmation".to_string(),
-        });
+            materialization_decision_ref(requirement_id, preview.revision),
+            materialization_evidence_ref(requirement_id, preview.revision),
+        ] {
+            context.insert_evidence(EvidenceFact {
+                evidence_ref,
+                evidence_type: "humanConfirmation".to_string(),
+            });
+        }
     }
 }
 
@@ -690,10 +696,7 @@ fn build_create_project_runtime_command(
             "projectId": project.project_id.clone(),
             "projectTitle": project.title.clone(),
         }),
-        evidence_refs: vec![materialization_confirmation_evidence_ref(
-            requirement_id,
-            preview_revision,
-        )],
+        evidence_refs: materialization_admission_evidence_refs(requirement_id, preview_revision),
         artifact_refs: vec![
             project.source_requirement_path.clone(),
             format!(".agentflow/spec/requirements/{requirement_id}/preview.json"),
@@ -735,10 +738,7 @@ fn build_create_issue_runtime_command(
             "issueId": issue.issue_id.clone(),
             "title": issue.title.clone(),
         }),
-        evidence_refs: vec![materialization_confirmation_evidence_ref(
-            requirement_id,
-            preview_revision,
-        )],
+        evidence_refs: materialization_admission_evidence_refs(requirement_id, preview_revision),
         artifact_refs: vec![
             issue.source_requirement_path.clone(),
             format!(".agentflow/spec/requirements/{requirement_id}/preview.json"),
@@ -759,6 +759,25 @@ fn materialization_confirmation_evidence_ref(
     preview_revision: u32,
 ) -> String {
     format!("confirmation:{requirement_id}:preview-r{preview_revision}")
+}
+
+fn materialization_decision_ref(requirement_id: &str, preview_revision: u32) -> String {
+    format!("DecisionRef:confirmation:{requirement_id}:preview-r{preview_revision}")
+}
+
+fn materialization_evidence_ref(requirement_id: &str, preview_revision: u32) -> String {
+    format!("EvidenceRef:confirmation:{requirement_id}:preview-r{preview_revision}")
+}
+
+fn materialization_admission_evidence_refs(
+    requirement_id: &str,
+    preview_revision: u32,
+) -> Vec<String> {
+    vec![
+        materialization_confirmation_evidence_ref(requirement_id, preview_revision),
+        materialization_decision_ref(requirement_id, preview_revision),
+        materialization_evidence_ref(requirement_id, preview_revision),
+    ]
 }
 
 fn build_materialization_report(

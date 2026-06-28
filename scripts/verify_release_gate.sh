@@ -2800,8 +2800,8 @@ base = {
         "projectId": "project-governance-001",
         "projectTitle": "Governance Admission Fixture"
     },
-    "evidenceRefs": ["approved-spec-1", "human-confirmation-1"],
-    "artifactRefs": [".agentflow/spec/requirements/req-governance/preview.json"],
+    "evidenceRefs": ["DecisionRef:approved-spec-1", "EvidenceRef:human-confirmation-1"],
+    "artifactRefs": ["ArtifactRef:.agentflow/spec/requirements/req-governance/preview.json"],
     "createdAt": "2026-06-25T00:00:00Z",
 }
 

@@ -7,6 +7,7 @@
 use agentflow_capability_registry::{
     evaluate_command, CapabilityPolicy, CapabilityRegistry, CommandSurfaceDecision, WorkerHealth,
 };
+use agentflow_ontology::{core_skill_registry_contract, CoreSkillDefinition};
 use agentflow_role_policy::{RoleCapabilityDecision, RolePolicyRegistry};
 use serde::{Deserialize, Serialize};
 
@@ -52,7 +53,23 @@ pub struct GovernancePolicyRequest {
     pub actor_role: String,
     pub action_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generic_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub object_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_surface: Option<String>,
+    #[serde(default)]
+    pub tool_scopes: Vec<String>,
+    #[serde(default)]
+    pub connector_scopes: Vec<String>,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    #[serde(default)]
+    pub artifact_refs: Vec<String>,
+    #[serde(default)]
+    pub expected_outputs: Vec<String>,
     pub worker_id: String,
     pub command: String,
     pub audit_sidecar_mode: AuditSidecarMode,
@@ -99,6 +116,27 @@ pub struct GovernanceCapabilityDecision {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GovernanceSkillRegistryDecision {
+    pub decision: GovernanceDecision,
+    pub skill_ref: Option<String>,
+    pub skill_id: Option<String>,
+    pub owner_role: Option<String>,
+    pub generic_action: Option<String>,
+    pub reason: String,
+    #[serde(default)]
+    pub missing_evidence: Vec<String>,
+    #[serde(default)]
+    pub forbidden_tool_scopes: Vec<String>,
+    #[serde(default)]
+    pub forbidden_connector_scopes: Vec<String>,
+    #[serde(default)]
+    pub expected_outputs: Vec<String>,
+    #[serde(default)]
+    pub allowed_surfaces: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GovernanceAuditSidecarDecision {
     pub decision: GovernanceDecision,
     pub mode: AuditSidecarMode,
@@ -114,6 +152,7 @@ pub struct GovernancePolicyReport {
     pub runtime_admission: bool,
     pub request: GovernancePolicyRequest,
     pub role_policy: GovernanceRoleDecision,
+    pub skill_registry_policy: GovernanceSkillRegistryDecision,
     pub capability_policy: GovernanceCapabilityDecision,
     pub audit_sidecar_policy: GovernanceAuditSidecarDecision,
     #[serde(default)]
@@ -131,6 +170,7 @@ pub fn evaluate_runtime_governance(
         request.object_type.as_deref(),
     );
     let role_policy = role_decision(role_raw);
+    let skill_registry_policy = skill_registry_decision(&request);
     let capability_raw =
         evaluate_command(capability_registry, &request.worker_id, &request.command);
     let capability_policy = capability_decision(capability_registry, capability_raw);
@@ -138,6 +178,7 @@ pub fn evaluate_runtime_governance(
 
     let decision = role_policy
         .decision
+        .merge(skill_registry_policy.decision)
         .merge(capability_policy.decision)
         .merge(audit_sidecar_policy.decision);
     let runtime_admission = decision == GovernanceDecision::Allowed;
@@ -155,6 +196,16 @@ pub fn evaluate_runtime_governance(
             evidence: vec!["capability-registry".to_string()],
         },
         GovernanceTraceEntry {
+            stage: "core-skill-registry".to_string(),
+            decision: skill_registry_policy.decision,
+            reason: skill_registry_policy.reason.clone(),
+            evidence: skill_registry_policy
+                .skill_id
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+        },
+        GovernanceTraceEntry {
             stage: "audit-sidecar-policy".to_string(),
             decision: audit_sidecar_policy.decision,
             reason: audit_sidecar_policy.reason.clone(),
@@ -168,10 +219,349 @@ pub fn evaluate_runtime_governance(
         runtime_admission,
         request,
         role_policy,
+        skill_registry_policy,
         capability_policy,
         audit_sidecar_policy,
         trace,
     }
+}
+
+fn skill_registry_decision(request: &GovernancePolicyRequest) -> GovernanceSkillRegistryDecision {
+    let generic_action = request
+        .generic_action
+        .clone()
+        .unwrap_or_else(|| runtime_action_to_generic_action(&request.action_type).to_string());
+    let Some(actor_role) = normalize_role(&request.actor_role) else {
+        return GovernanceSkillRegistryDecision {
+            decision: GovernanceDecision::Rejected,
+            skill_ref: request.skill_ref.clone(),
+            skill_id: None,
+            owner_role: None,
+            generic_action: Some(generic_action),
+            reason: "unknownActorRole".to_string(),
+            missing_evidence: Vec::new(),
+            forbidden_tool_scopes: Vec::new(),
+            forbidden_connector_scopes: Vec::new(),
+            expected_outputs: Vec::new(),
+            allowed_surfaces: Vec::new(),
+        };
+    };
+    let Some(skill_ref) = request
+        .skill_ref
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return GovernanceSkillRegistryDecision {
+            decision: GovernanceDecision::Rejected,
+            skill_ref: request.skill_ref.clone(),
+            skill_id: None,
+            owner_role: Some(actor_role),
+            generic_action: Some(generic_action),
+            reason: "missingSkillRef".to_string(),
+            missing_evidence: Vec::new(),
+            forbidden_tool_scopes: Vec::new(),
+            forbidden_connector_scopes: Vec::new(),
+            expected_outputs: Vec::new(),
+            allowed_surfaces: Vec::new(),
+        };
+    };
+    let registry = core_skill_registry_contract();
+    let parsed = parse_skill_ref(skill_ref);
+    if parsed
+        .role
+        .as_deref()
+        .is_some_and(|role| role != actor_role)
+    {
+        return GovernanceSkillRegistryDecision {
+            decision: GovernanceDecision::Rejected,
+            skill_ref: request.skill_ref.clone(),
+            skill_id: parsed.skill_token,
+            owner_role: Some(actor_role),
+            generic_action: Some(generic_action),
+            reason: "skillOwnerMismatch".to_string(),
+            missing_evidence: Vec::new(),
+            forbidden_tool_scopes: Vec::new(),
+            forbidden_connector_scopes: Vec::new(),
+            expected_outputs: Vec::new(),
+            allowed_surfaces: Vec::new(),
+        };
+    }
+    let Some(skill) = resolve_core_skill(&registry.skills, &actor_role, &generic_action, &parsed)
+    else {
+        return GovernanceSkillRegistryDecision {
+            decision: GovernanceDecision::Rejected,
+            skill_ref: request.skill_ref.clone(),
+            skill_id: parsed.skill_token,
+            owner_role: Some(actor_role),
+            generic_action: Some(generic_action),
+            reason: "missingCoreSkill".to_string(),
+            missing_evidence: Vec::new(),
+            forbidden_tool_scopes: Vec::new(),
+            forbidden_connector_scopes: Vec::new(),
+            expected_outputs: Vec::new(),
+            allowed_surfaces: Vec::new(),
+        };
+    };
+    if normalize_role(&skill.owner_role).as_deref() != Some(actor_role.as_str()) {
+        return GovernanceSkillRegistryDecision {
+            decision: GovernanceDecision::Rejected,
+            skill_ref: request.skill_ref.clone(),
+            skill_id: Some(skill.skill_id.clone()),
+            owner_role: Some(skill.owner_role.clone()),
+            generic_action: Some(generic_action),
+            reason: "skillNotOwnedByActorRole".to_string(),
+            missing_evidence: Vec::new(),
+            forbidden_tool_scopes: Vec::new(),
+            forbidden_connector_scopes: Vec::new(),
+            expected_outputs: skill.expected_outputs.clone(),
+            allowed_surfaces: allowed_surfaces(&actor_role),
+        };
+    }
+    if !skill
+        .allowed_actions
+        .iter()
+        .any(|value| value == &generic_action)
+    {
+        return GovernanceSkillRegistryDecision {
+            decision: GovernanceDecision::Rejected,
+            skill_ref: request.skill_ref.clone(),
+            skill_id: Some(skill.skill_id.clone()),
+            owner_role: Some(skill.owner_role.clone()),
+            generic_action: Some(generic_action),
+            reason: "actionNotAllowedBySkill".to_string(),
+            missing_evidence: Vec::new(),
+            forbidden_tool_scopes: Vec::new(),
+            forbidden_connector_scopes: Vec::new(),
+            expected_outputs: skill.expected_outputs.clone(),
+            allowed_surfaces: allowed_surfaces(&actor_role),
+        };
+    }
+    if let Some(object_type) = request.object_type.as_deref() {
+        if !is_core_object_type(object_type) {
+            return GovernanceSkillRegistryDecision {
+                decision: GovernanceDecision::Rejected,
+                skill_ref: request.skill_ref.clone(),
+                skill_id: Some(skill.skill_id.clone()),
+                owner_role: Some(skill.owner_role.clone()),
+                generic_action: Some(generic_action),
+                reason: "invalidObjectType".to_string(),
+                missing_evidence: Vec::new(),
+                forbidden_tool_scopes: Vec::new(),
+                forbidden_connector_scopes: Vec::new(),
+                expected_outputs: skill.expected_outputs.clone(),
+                allowed_surfaces: allowed_surfaces(&actor_role),
+            };
+        }
+    }
+    let allowed_surfaces = allowed_surfaces(&actor_role);
+    if let Some(surface) = request.source_surface.as_deref() {
+        if !allowed_surfaces.iter().any(|allowed| allowed == surface) {
+            return GovernanceSkillRegistryDecision {
+                decision: GovernanceDecision::Rejected,
+                skill_ref: request.skill_ref.clone(),
+                skill_id: Some(skill.skill_id.clone()),
+                owner_role: Some(skill.owner_role.clone()),
+                generic_action: Some(generic_action),
+                reason: "sourceSurfaceNotAllowed".to_string(),
+                missing_evidence: Vec::new(),
+                forbidden_tool_scopes: Vec::new(),
+                forbidden_connector_scopes: Vec::new(),
+                expected_outputs: skill.expected_outputs.clone(),
+                allowed_surfaces,
+            };
+        }
+    }
+    let forbidden_tool_scopes = forbidden_scopes(&request.tool_scopes, &skill.allowed_tool_scopes);
+    let forbidden_connector_scopes =
+        forbidden_scopes(&request.connector_scopes, &skill.allowed_connector_scopes);
+    if !forbidden_tool_scopes.is_empty() || !forbidden_connector_scopes.is_empty() {
+        return GovernanceSkillRegistryDecision {
+            decision: GovernanceDecision::Rejected,
+            skill_ref: request.skill_ref.clone(),
+            skill_id: Some(skill.skill_id.clone()),
+            owner_role: Some(skill.owner_role.clone()),
+            generic_action: Some(generic_action),
+            reason: "scopeNotAllowedBySkill".to_string(),
+            missing_evidence: Vec::new(),
+            forbidden_tool_scopes,
+            forbidden_connector_scopes,
+            expected_outputs: skill.expected_outputs.clone(),
+            allowed_surfaces,
+        };
+    }
+    let missing_evidence = missing_required_evidence(request, skill);
+    if !missing_evidence.is_empty() {
+        return GovernanceSkillRegistryDecision {
+            decision: GovernanceDecision::Deferred,
+            skill_ref: request.skill_ref.clone(),
+            skill_id: Some(skill.skill_id.clone()),
+            owner_role: Some(skill.owner_role.clone()),
+            generic_action: Some(generic_action),
+            reason: "missingRequiredEvidence".to_string(),
+            missing_evidence,
+            forbidden_tool_scopes: Vec::new(),
+            forbidden_connector_scopes: Vec::new(),
+            expected_outputs: skill.expected_outputs.clone(),
+            allowed_surfaces,
+        };
+    }
+
+    GovernanceSkillRegistryDecision {
+        decision: GovernanceDecision::Allowed,
+        skill_ref: request.skill_ref.clone(),
+        skill_id: Some(skill.skill_id.clone()),
+        owner_role: Some(skill.owner_role.clone()),
+        generic_action: Some(generic_action),
+        reason: "coreSkillRegistryAllowed".to_string(),
+        missing_evidence: Vec::new(),
+        forbidden_tool_scopes: Vec::new(),
+        forbidden_connector_scopes: Vec::new(),
+        expected_outputs: skill.expected_outputs.clone(),
+        allowed_surfaces,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedSkillRef {
+    role: Option<String>,
+    skill_token: Option<String>,
+}
+
+fn parse_skill_ref(value: &str) -> ParsedSkillRef {
+    let parts = value
+        .split(':')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    match parts.as_slice() {
+        ["core", role, token, ..] => ParsedSkillRef {
+            role: normalize_role(role),
+            skill_token: Some((*token).to_string()),
+        },
+        ["core", token] => ParsedSkillRef {
+            role: None,
+            skill_token: Some((*token).to_string()),
+        },
+        [role, token] => ParsedSkillRef {
+            role: normalize_role(role),
+            skill_token: Some((*token).to_string()),
+        },
+        [token] => ParsedSkillRef {
+            role: None,
+            skill_token: Some((*token).to_string()),
+        },
+        _ => ParsedSkillRef {
+            role: None,
+            skill_token: None,
+        },
+    }
+}
+
+fn resolve_core_skill<'a>(
+    skills: &'a [CoreSkillDefinition],
+    actor_role: &str,
+    generic_action: &str,
+    parsed: &ParsedSkillRef,
+) -> Option<&'a CoreSkillDefinition> {
+    if let Some(token) = parsed.skill_token.as_deref() {
+        if let Some(skill) = skills.iter().find(|skill| skill.skill_id == token) {
+            return Some(skill);
+        }
+    }
+    skills.iter().find(|skill| {
+        normalize_role(&skill.owner_role).as_deref() == Some(actor_role)
+            && skill
+                .allowed_actions
+                .iter()
+                .any(|allowed| allowed == generic_action)
+    })
+}
+
+fn normalize_role(value: &str) -> Option<String> {
+    match value.trim() {
+        "GoalAgent" | "goal-agent" => Some("goal-agent".to_string()),
+        "SpecAgent" | "spec-agent" => Some("spec-agent".to_string()),
+        "WorkAgent" | "work-agent" | "BuildAgent" | "build-agent" => Some("work-agent".to_string()),
+        "AuditAgent" | "audit-agent" => Some("audit-agent".to_string()),
+        "DeliveryAgent" | "delivery-agent" => Some("delivery-agent".to_string()),
+        "HumanOwner" | "human-owner" => Some("human-owner".to_string()),
+        _ => None,
+    }
+}
+
+fn runtime_action_to_generic_action(action_type: &str) -> &'static str {
+    match action_type {
+        "submitRequirement"
+        | "normalizeRequirement"
+        | "classifyRequirement"
+        | "draftSpec"
+        | "approveSpec"
+        | "createProject"
+        | "createIssue" => "acceptObject",
+        "activateIssue" | "claimIssue" | "startRun" => "startObject",
+        "writePatch" | "runValidation" | "submitEvidence" => "attachEvidence",
+        "prepareDelivery" | "submitArtifact" => "attachArtifact",
+        "markIssueDone" => "submitForReview",
+        "recordDecision" => "completeObject",
+        "requestAudit" => "submitForReview",
+        "createFinding" => "blockObject",
+        "linkFixIssue" => "supersedeObject",
+        _ => "unlisted-action",
+    }
+}
+
+fn is_core_object_type(value: &str) -> bool {
+    matches!(
+        value,
+        "Requirement"
+            | "Spec"
+            | "Project"
+            | "Issue"
+            | "Run"
+            | "Evidence"
+            | "Artifact"
+            | "Decision"
+            | "Audit"
+            | "Finding"
+    )
+}
+
+fn allowed_surfaces(role: &str) -> Vec<String> {
+    let values: &[&str] = match role {
+        "work-agent" | "delivery-agent" | "audit-agent" => &["agent", "cli", "sdk", "system"],
+        "human-owner" => &["conversation", "desktop", "cli", "sdk", "system"],
+        _ => &["conversation", "desktop", "agent", "cli", "sdk", "system"],
+    };
+    values.iter().map(|value| (*value).to_string()).collect()
+}
+
+fn forbidden_scopes(requested: &[String], allowed: &[String]) -> Vec<String> {
+    requested
+        .iter()
+        .filter(|scope| !allowed.iter().any(|allowed| allowed == *scope))
+        .cloned()
+        .collect()
+}
+
+fn missing_required_evidence(
+    request: &GovernancePolicyRequest,
+    skill: &CoreSkillDefinition,
+) -> Vec<String> {
+    let refs = request
+        .evidence_refs
+        .iter()
+        .chain(request.artifact_refs.iter())
+        .map(|value| value.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    skill
+        .required_evidence
+        .iter()
+        .filter(|required| {
+            let required = required.to_ascii_lowercase();
+            !refs.iter().any(|value| value.contains(&required))
+        })
+        .cloned()
+        .collect()
 }
 
 fn role_decision(decision: RoleCapabilityDecision) -> GovernanceRoleDecision {
@@ -343,7 +733,15 @@ mod tests {
         GovernancePolicyRequest {
             actor_role: "work-agent".to_string(),
             action_type: "startRun".to_string(),
+            generic_action: Some("startObject".to_string()),
             object_type: Some("Issue".to_string()),
+            skill_ref: Some("core:work-agent:work-execution-skill".to_string()),
+            source_surface: Some("agent".to_string()),
+            tool_scopes: Vec::new(),
+            connector_scopes: Vec::new(),
+            evidence_refs: vec!["EvidenceRef:issue-ready".to_string()],
+            artifact_refs: vec!["ArtifactRef:context-pack".to_string()],
+            expected_outputs: Vec::new(),
             worker_id: worker_id.to_string(),
             command: command.to_string(),
             audit_sidecar_mode: AuditSidecarMode::Independent,
@@ -360,7 +758,11 @@ mod tests {
 
         assert_eq!(report.decision, GovernanceDecision::Allowed);
         assert!(report.runtime_admission);
-        assert_eq!(report.trace.len(), 3);
+        assert_eq!(report.trace.len(), 4);
+        assert_eq!(
+            report.skill_registry_policy.skill_id.as_deref(),
+            Some("work-execution-skill")
+        );
     }
 
     #[test]
@@ -373,6 +775,65 @@ mod tests {
 
         assert_eq!(report.decision, GovernanceDecision::Rejected);
         assert_eq!(report.role_policy.reason, "actionNotAllowedForRole");
+        assert!(!report.runtime_admission);
+    }
+
+    #[test]
+    fn governance_rejects_missing_skill_ref() {
+        let mut request = request("local-shell-validator", "local.test");
+        request.skill_ref = None;
+
+        let report = evaluate_runtime_governance(&role_registry(), &ready_registry(), request);
+
+        assert_eq!(report.decision, GovernanceDecision::Rejected);
+        assert_eq!(report.skill_registry_policy.reason, "missingSkillRef");
+        assert!(!report.runtime_admission);
+    }
+
+    #[test]
+    fn governance_rejects_unauthorized_skill_owner() {
+        let mut request = request("local-shell-validator", "local.test");
+        request.skill_ref = Some("core:audit-agent:work-execution-skill".to_string());
+
+        let report = evaluate_runtime_governance(&role_registry(), &ready_registry(), request);
+
+        assert_eq!(report.decision, GovernanceDecision::Rejected);
+        assert_eq!(report.skill_registry_policy.reason, "skillOwnerMismatch");
+        assert!(!report.runtime_admission);
+    }
+
+    #[test]
+    fn governance_defers_missing_skill_evidence() {
+        let mut request = request("local-shell-validator", "local.test");
+        request.evidence_refs = Vec::new();
+        request.artifact_refs = Vec::new();
+
+        let report = evaluate_runtime_governance(&role_registry(), &ready_registry(), request);
+
+        assert_eq!(report.decision, GovernanceDecision::Deferred);
+        assert_eq!(
+            report.skill_registry_policy.reason,
+            "missingRequiredEvidence"
+        );
+        assert!(report
+            .skill_registry_policy
+            .missing_evidence
+            .contains(&"EvidenceRef".to_string()));
+        assert!(!report.runtime_admission);
+    }
+
+    #[test]
+    fn governance_rejects_forbidden_skill_surface() {
+        let mut request = request("local-shell-validator", "local.test");
+        request.source_surface = Some("desktop".to_string());
+
+        let report = evaluate_runtime_governance(&role_registry(), &ready_registry(), request);
+
+        assert_eq!(report.decision, GovernanceDecision::Rejected);
+        assert_eq!(
+            report.skill_registry_policy.reason,
+            "sourceSurfaceNotAllowed"
+        );
         assert!(!report.runtime_admission);
     }
 

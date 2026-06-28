@@ -6,9 +6,9 @@ version.workspace = true
 
 [dependencies]
 agentflow-capability-registry = { path = "../capability-registry" }
+agentflow-ontology = { path = "../ontology" }
 agentflow-role-policy = { path = "../role-policy" }
 serde.workspace = true
 
 [dev-dependencies]
 agentflow-action-contract = { path = "../action-contract" }
-agentflow-ontology = { path = "../ontology" }
