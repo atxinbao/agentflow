@@ -7,21 +7,26 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.0.4/README.md](docs/delivery/releases/v1.0.4/README.md)
-- [docs/delivery/releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md)
-
-下一版计划：
-
 - [docs/delivery/releases/v1.0.5/README.md](docs/delivery/releases/v1.0.5/README.md)
 - [docs/delivery/releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md)
 
+下一版计划：
+
+- v1.0.6 Evidence Kernel。
+
 ## Unreleased
 
-v1.0.5 Core Runtime Kernel planning:
+下一版保留给 Evidence Kernel，不在本次 release 中认证。
 
-- added v1.0.5 release planning baseline;
-- defined Core Runtime command, admission, Action Proposal, Arbitration, executor closeout and state writeback boundaries;
-- preserved Software Dev as Reference App mapping only, not Core Runtime authority.
+## v1.0.5 - 2026-06-28
+
+Core Runtime Kernel baseline:
+
+- connected Core Runtime command, Runtime Admission, Action Proposal, Arbitration, executor closeout and task / run state writeback to the Core Ontology Kernel;
+- certified Software Dev as Reference App mapping only, not Core Runtime authority;
+- added release-gate artifacts `core-runtime-kernel`, `core-runtime-admission`, `core-runtime-arbitration`, `core-runtime-negative-fixtures`, and `v105-release-certification`;
+- covered positive and negative fixtures for command, admission, proposal, arbitration, file-backed registry loader, executor closeout, state writeback and Software Dev reference mapping;
+- advanced workspace and desktop version metadata to `1.0.5`.
 
 ## v1.0.4 - 2026-06-28
 

@@ -155,6 +155,10 @@ CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH="$RUNTIME_DIR/core-evidence-decision
 CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
 V104_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v104-release-certification.json"
 CORE_RUNTIME_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/core-runtime-negative-fixtures.json"
+CORE_RUNTIME_KERNEL_PATH="$RUNTIME_DIR/core-runtime-kernel.json"
+CORE_RUNTIME_ADMISSION_PATH="$RUNTIME_DIR/core-runtime-admission.json"
+CORE_RUNTIME_ARBITRATION_PATH="$RUNTIME_DIR/core-runtime-arbitration.json"
+V105_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v105-release-certification.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -395,6 +399,10 @@ proof_chain = [
     {"stage": "core-file-backed-ontology-registry", "label": "Core File-backed Ontology Registry"},
     {"stage": "v104-release-certification", "label": "v1.0.4 Release Certification"},
     {"stage": "core-runtime-negative-fixtures", "label": "Core Runtime Negative Fixtures"},
+    {"stage": "core-runtime-kernel", "label": "Core Runtime Kernel"},
+    {"stage": "core-runtime-admission", "label": "Core Runtime Admission"},
+    {"stage": "core-runtime-arbitration", "label": "Core Runtime Arbitration"},
+    {"stage": "v105-release-certification", "label": "v1.0.5 Release Certification"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -475,6 +483,10 @@ runtime_artifacts = [
     {"path": "runtime/project-roadmap-baseline.json", "exists": project_roadmap_baseline_path.is_file()},
     {"path": "runtime/v103-release-fix-certification.json", "exists": v103_release_fix_certification_path.is_file()},
     {"path": "runtime/core-runtime-negative-fixtures.json", "exists": core_runtime_negative_fixtures_path.is_file()},
+    {"path": "runtime/core-runtime-kernel.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-runtime-kernel.json").is_file()},
+    {"path": "runtime/core-runtime-admission.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-runtime-admission.json").is_file()},
+    {"path": "runtime/core-runtime-arbitration.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-runtime-arbitration.json").is_file()},
+    {"path": "runtime/v105-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v105-release-certification.json").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -527,6 +539,10 @@ release_artifact_boundary = load_json(release_artifact_boundary_path) or {}
 project_roadmap_baseline = load_json(project_roadmap_baseline_path) or {}
 v103_release_fix_certification = load_json(v103_release_fix_certification_path) or {}
 core_runtime_negative_fixtures = load_json(core_runtime_negative_fixtures_path) or {}
+core_runtime_kernel = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-runtime-kernel.json")) or {}
+core_runtime_admission = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-runtime-admission.json")) or {}
+core_runtime_arbitration = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-runtime-arbitration.json")) or {}
+v105_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v105-release-certification.json")) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
 deployment_evidence_wrong_commit = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json")) or {}
@@ -1382,6 +1398,15 @@ summary_payload = {
     "coreRuntimeNegativeFixturesStatus": core_runtime_negative_fixtures.get("status") or "missing",
     "coreRuntimeNegativeFixtureCoverage": core_runtime_negative_fixtures.get("fixtures") or [],
     "softwareDevReferenceWorkflowStatus": (core_runtime_negative_fixtures.get("positiveWorkflow") or {}).get("status") or "missing",
+    "coreRuntimeKernelPath": "runtime/core-runtime-kernel.json" if core_runtime_kernel else None,
+    "coreRuntimeKernelStatus": core_runtime_kernel.get("status") or "missing",
+    "coreRuntimeAdmissionPath": "runtime/core-runtime-admission.json" if core_runtime_admission else None,
+    "coreRuntimeAdmissionStatus": core_runtime_admission.get("status") or "missing",
+    "coreRuntimeArbitrationPath": "runtime/core-runtime-arbitration.json" if core_runtime_arbitration else None,
+    "coreRuntimeArbitrationStatus": core_runtime_arbitration.get("status") or "missing",
+    "v105ReleaseCertificationPath": "runtime/v105-release-certification.json" if v105_release_certification else None,
+    "v105ReleaseCertificationStatus": v105_release_certification.get("status") or "missing",
+    "v105Coverage": v105_release_certification.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1462,6 +1487,10 @@ summary_lines = [
     f"- Software Dev Pack readiness: `{software_readiness.get('status') or 'missing'}`",
     f"- UI Design Pack readiness: `{design_readiness.get('status') or 'missing'}`",
     f"- v1.0 stable core: `{v1_stable_core}`",
+    f"- Core Runtime Kernel: `{core_runtime_kernel.get('status') or 'missing'}`",
+    f"- Core Runtime Admission: `{core_runtime_admission.get('status') or 'missing'}`",
+    f"- Core Runtime Arbitration: `{core_runtime_arbitration.get('status') or 'missing'}`",
+    f"- v1.0.5 release certification: `{v105_release_certification.get('status') or 'missing'}`",
     f"- v1.0 support boundary: `{v1_support_boundary['version']}`",
     f"- Release version: `{release_version}`",
     f"- Tag name: `{release_tag_name or release.get('tagName') or 'n/a'}`",
@@ -1623,6 +1652,15 @@ certification_payload = {
     "coreRuntimeNegativeFixturesStatus": core_runtime_negative_fixtures.get("status") or "missing",
     "coreRuntimeNegativeFixtureCoverage": core_runtime_negative_fixtures.get("fixtures") or [],
     "softwareDevReferenceWorkflowStatus": (core_runtime_negative_fixtures.get("positiveWorkflow") or {}).get("status") or "missing",
+    "coreRuntimeKernelPath": "runtime/core-runtime-kernel.json" if core_runtime_kernel else None,
+    "coreRuntimeKernelStatus": core_runtime_kernel.get("status") or "missing",
+    "coreRuntimeAdmissionPath": "runtime/core-runtime-admission.json" if core_runtime_admission else None,
+    "coreRuntimeAdmissionStatus": core_runtime_admission.get("status") or "missing",
+    "coreRuntimeArbitrationPath": "runtime/core-runtime-arbitration.json" if core_runtime_arbitration else None,
+    "coreRuntimeArbitrationStatus": core_runtime_arbitration.get("status") or "missing",
+    "v105ReleaseCertificationPath": "runtime/v105-release-certification.json" if v105_release_certification else None,
+    "v105ReleaseCertificationStatus": v105_release_certification.get("status") or "missing",
+    "v105Coverage": v105_release_certification.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -2034,7 +2072,7 @@ tracked_docs = [
     "docs/architecture/builtin-pack-registry.md",
     "docs/architecture/041-v100-stable-contract-baseline-v1.md",
     "docs/architecture/050-v100-release-certification-v1.md",
-    "docs/delivery/releases/v1.0.4/README.md",
+    "docs/delivery/releases/v1.0.5/README.md",
     "docs/project/history/2026-06-current-baseline-history/README.md",
 ]
 runtime_only_paths = [
@@ -2079,7 +2117,7 @@ payload = {
     "currentProjectRoadmapEntry": "docs/project/roadmap.md",
     "currentCoreCapabilityEntry": "docs/architecture/021-ai-os-project-core-capabilities-v1.md",
     "currentStableEntry": "docs/architecture/041-v100-stable-contract-baseline-v1.md",
-    "currentReleaseBaselineEntry": "docs/delivery/releases/v1.0.4/README.md",
+    "currentReleaseBaselineEntry": "docs/delivery/releases/v1.0.5/README.md",
     "releaseCertificationEntry": "docs/architecture/050-v100-release-certification-v1.md",
     "defineAgentBoundary": {
         "path": ".agentflow/define/agent/**",
@@ -6822,6 +6860,7 @@ run_v104_release_certification_gate() {
     "$RELEASE_VERSION" \
     "$WORKSPACE/Cargo.toml" \
     "$WORKSPACE/apps/desktop/package.json" \
+    "$WORKSPACE/apps/desktop/package-lock.json" \
     "$WORKSPACE/apps/desktop/src-tauri/tauri.conf.json" \
     "$ROOT/CHANGELOG.md" \
     "$WORKSPACE/docs/delivery/releases/v1.0.4/README.md" \
@@ -6842,16 +6881,18 @@ out_path = pathlib.Path(sys.argv[1])
 release_version = sys.argv[2]
 cargo_path = pathlib.Path(sys.argv[3])
 desktop_package_path = pathlib.Path(sys.argv[4])
-tauri_config_path = pathlib.Path(sys.argv[5])
-changelog_path = pathlib.Path(sys.argv[6])
-release_readme_path = pathlib.Path(sys.argv[7])
-release_tasks_path = pathlib.Path(sys.argv[8])
-artifact_paths = [pathlib.Path(value) for value in sys.argv[9:]]
+desktop_package_lock_path = pathlib.Path(sys.argv[5])
+tauri_config_path = pathlib.Path(sys.argv[6])
+changelog_path = pathlib.Path(sys.argv[7])
+release_readme_path = pathlib.Path(sys.argv[8])
+release_tasks_path = pathlib.Path(sys.argv[9])
+artifact_paths = [pathlib.Path(value) for value in sys.argv[10:]]
 
 expected_version = "1.0.4"
 expected_tag = "v1.0.4"
 cargo = tomllib.loads(cargo_path.read_text(encoding="utf-8"))
 desktop_package = json.loads(desktop_package_path.read_text(encoding="utf-8"))
+desktop_package_lock = json.loads(desktop_package_lock_path.read_text(encoding="utf-8"))
 tauri_config = json.loads(tauri_config_path.read_text(encoding="utf-8"))
 changelog_text = changelog_path.read_text(encoding="utf-8")
 release_readme_text = release_readme_path.read_text(encoding="utf-8")
@@ -6862,14 +6903,20 @@ artifact_statuses = {
     artifact_paths[index].name: artifact.get("status")
     for index, artifact in enumerate(artifacts)
 }
+def version_tuple(value: str):
+    return tuple(int(part) for part in value.removeprefix("v").split("."))
+
+current_workspace_version = cargo["workspace"]["package"]["version"]
+current_desktop_version = desktop_package.get("version")
+current_tauri_version = tauri_config.get("version")
 changelog_has_v104 = "v1.0.4" in changelog_text
 changelog_has_kernel = "Core Ontology Kernel" in changelog_text
 changelog_has_certification = "v104-release-certification" in changelog_text
 coverage = {
-    "release-version-is-v104": release_version == expected_tag,
-    "cargo-workspace-version-is-104": cargo["workspace"]["package"]["version"] == expected_version,
-    "desktop-package-version-is-104": desktop_package.get("version") == expected_version,
-    "tauri-version-is-104": tauri_config.get("version") == expected_version,
+    "release-version-keeps-v104-baseline-in-range": version_tuple(release_version) >= version_tuple(expected_tag),
+    "cargo-workspace-version-not-older-than-104": version_tuple(current_workspace_version) >= version_tuple(expected_version),
+    "desktop-package-version-not-older-than-104": version_tuple(current_desktop_version) >= version_tuple(expected_version),
+    "tauri-version-not-older-than-104": version_tuple(current_tauri_version) >= version_tuple(expected_version),
     "changelog-has-v104-entry": changelog_has_v104
     and changelog_has_kernel
     and changelog_has_certification,
@@ -6895,7 +6942,9 @@ payload = {
     "version": "agentflow-v104-release-certification.v1",
     "status": "passed" if not failed else "failed",
     "releaseVersion": expected_tag,
+    "currentReleaseVersion": release_version,
     "workspaceVersion": expected_version,
+    "currentWorkspaceVersion": current_workspace_version,
     "changelogPath": str(changelog_path),
     "changelogPreview": changelog_text[:200],
     "changelogFacts": {
@@ -7098,6 +7147,314 @@ if failed:
 PY
 
   record_stage "core-runtime-negative-fixtures" "passed" "$(basename "$CORE_RUNTIME_NEGATIVE_FIXTURES_PATH")"
+}
+
+run_core_runtime_kernel_gate() {
+  record_stage "core-runtime-kernel" "started" "$CORE_RUNTIME_KERNEL_PATH"
+  local runtime_api_test_log="$RUNTIME_DIR/core-runtime-kernel-runtime-api-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-runtime-api --quiet >"$runtime_api_test_log" 2>&1); then
+    fail_stage "core-runtime-kernel" "agentflow-runtime-api kernel coverage failed"
+  fi
+
+  python3 - \
+    "$CORE_RUNTIME_KERNEL_PATH" \
+    "$WORKSPACE/crates/runtime-api/src/commands.rs" \
+    "$WORKSPACE/crates/runtime-api/src/mapping.rs" \
+    "$WORKSPACE/crates/runtime-api/src/formal.rs" \
+    "$WORKSPACE/crates/task-artifacts/src/storage.rs" \
+    "$WORKSPACE/crates/ontology/src/file_registry.rs" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.5/README.md" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md" \
+    "$runtime_api_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+commands_path = pathlib.Path(sys.argv[2])
+mapping_path = pathlib.Path(sys.argv[3])
+formal_path = pathlib.Path(sys.argv[4])
+task_artifacts_path = pathlib.Path(sys.argv[5])
+registry_path = pathlib.Path(sys.argv[6])
+readme_path = pathlib.Path(sys.argv[7])
+tasks_path = pathlib.Path(sys.argv[8])
+test_log_path = pathlib.Path(sys.argv[9])
+
+commands = commands_path.read_text(encoding="utf-8")
+mapping = mapping_path.read_text(encoding="utf-8")
+formal = formal_path.read_text(encoding="utf-8")
+task_artifacts = task_artifacts_path.read_text(encoding="utf-8")
+registry = registry_path.read_text(encoding="utf-8")
+release_text = readme_path.read_text(encoding="utf-8") + "\n" + tasks_path.read_text(encoding="utf-8")
+
+required_flow = [
+    "Runtime Command",
+    "Runtime Admission",
+    "Action Proposal",
+    "Arbitration",
+    "Executor Adapter Closeout",
+    "Completion Commit / State Writeback",
+]
+coverage = {
+    "release-doc-defines-runtime-flow": all(item in release_text for item in required_flow),
+    "software-dev-reference-not-core-authority": "Software Dev 是 reference certification，不是 Core authority" in release_text
+    or "Software Dev Reference App mapping is not Core Runtime authority" in release_text,
+    "runtime-command-api-present": "RuntimeCommandRequest" in commands
+    and "validate_runtime_command" in commands,
+    "admission-before-proposal": "evaluate_runtime_command_governance" in commands
+    and "write_runtime_proposal_fact" in commands,
+    "proposal-materialization-uses-core-mapping": "materialize_core_action_proposal_with_registry" in commands
+    and "load_core_file_backed_ontology_registry_projection" in mapping,
+    "formal-bridge-records-command-proposal-arbitration": "ActionProposalBridgeRecord" in formal
+    and "arbitration" in formal,
+    "executor-closeout-and-state-writeback-present": "write_task_executor_closeout" in task_artifacts
+    and "commit_writeback_records_terminal_state_and_reason" in task_artifacts,
+    "file-backed-registry-runtime-loader-present": "load_core_file_backed_ontology_registry_projection" in registry
+    and "diagnose_core_file_backed_ontology_registry_projection_contract" in registry,
+    "rust-runtime-api-tests-passed": test_log_path.is_file(),
+}
+failed = [key for key, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-runtime-kernel.v1",
+    "status": "passed" if not failed else "failed",
+    "runtimeFlow": required_flow,
+    "softwareDevReferenceBoundary": "reference-certification-not-core-authority",
+    "rustTestLogPath": "runtime/core-runtime-kernel-runtime-api-test.log",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core runtime kernel coverage failed: {failed}")
+PY
+  record_stage "core-runtime-kernel" "passed" "$(basename "$CORE_RUNTIME_KERNEL_PATH")"
+}
+
+run_core_runtime_admission_gate() {
+  record_stage "core-runtime-admission" "started" "$CORE_RUNTIME_ADMISSION_PATH"
+  local admission_test_log="$RUNTIME_DIR/core-runtime-admission-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-runtime-api governance_ --quiet >"$admission_test_log" 2>&1); then
+    fail_stage "core-runtime-admission" "agentflow-runtime-api admission coverage failed"
+  fi
+
+  python3 - \
+    "$CORE_RUNTIME_ADMISSION_PATH" \
+    "$WORKSPACE/crates/runtime-api/src/commands.rs" \
+    "$admission_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+commands_path = pathlib.Path(sys.argv[2])
+test_log_path = pathlib.Path(sys.argv[3])
+source = commands_path.read_text(encoding="utf-8")
+markers = {
+    "reject-before-writing-proposal": "governance_rejects_before_writing_proposal_or_accepted_action",
+    "defer-before-writing-proposal": "governance_defers_before_writing_proposal_or_accepted_action",
+    "missing-skill-rejected": "governance_rejects_missing_skill_before_writing_proposal",
+    "unauthorized-skill-owner-rejected": "governance_rejects_unauthorized_skill_owner_before_writing_proposal",
+    "invalid-target-object-rejected": "governance_rejects_invalid_target_object_before_writing_proposal",
+    "forbidden-surface-rejected": "governance_rejects_forbidden_surface_before_writing_proposal",
+    "missing-required-evidence-deferred": "governance_defers_missing_required_evidence_before_writing_proposal",
+    "forged-provider-telemetry-ignored": "governance_ignores_forged_ready_request_input_without_trusted_registry",
+}
+marker_results = {key: marker in source for key, marker in markers.items()}
+coverage = {
+    "all-admission-negative-fixtures-present": all(marker_results.values()),
+    "runtime-proposal-not-written-on-reject-or-defer": source.count("load_runtime_proposal_facts(dir.path()).unwrap().is_empty()") >= 7,
+    "rust-admission-tests-passed": test_log_path.is_file(),
+}
+failed = [key for key, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-runtime-admission.v1",
+    "status": "passed" if not failed else "failed",
+    "admissionBoundary": "rejected-or-deferred-commands-must-not-write-proposal-or-accepted-action",
+    "markerResults": marker_results,
+    "rustTestLogPath": "runtime/core-runtime-admission-rust-test.log",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core runtime admission coverage failed: {failed}")
+PY
+  record_stage "core-runtime-admission" "passed" "$(basename "$CORE_RUNTIME_ADMISSION_PATH")"
+}
+
+run_core_runtime_arbitration_gate() {
+  record_stage "core-runtime-arbitration" "started" "$CORE_RUNTIME_ARBITRATION_PATH"
+  local arbitration_test_log="$RUNTIME_DIR/core-runtime-arbitration-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-action-arbitration --quiet >"$arbitration_test_log" 2>&1); then
+    fail_stage "core-runtime-arbitration" "agentflow-action-arbitration coverage failed"
+  fi
+
+  python3 - \
+    "$CORE_RUNTIME_ARBITRATION_PATH" \
+    "$WORKSPACE/crates/action-arbitration/src/arbitrator.rs" \
+    "$arbitration_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+source_path = pathlib.Path(sys.argv[2])
+test_log_path = pathlib.Path(sys.argv[3])
+source = source_path.read_text(encoding="utf-8")
+markers = {
+    "accepted-proposal": "valid_proposal_returns_accepted",
+    "unadmitted-proposal-rejected": "required_core_admission_rejects_unadmitted_proposal",
+    "semantic-mismatch-rejected": "required_core_admission_rejects_semantic_mismatch",
+    "unknown-action-rejected": "unknown_action_returns_rejected",
+    "missing-evidence-rejected": "missing_evidence_returns_rejected",
+    "unmet-dependency-rejected": "unmet_dependency_returns_rejected",
+    "active-write-lock-queued": "active_write_lock_returns_queued",
+    "human-decision-queue": "waiting_human_decision_on_same_scope_queues_current_request",
+    "issue-done-does-not-auto-audit": "issue_done_does_not_create_audit_accepted_action",
+}
+marker_results = {key: marker in source for key, marker in markers.items()}
+coverage = {
+    "accepted-rejected-and-queued-paths-covered": all(marker_results.values()),
+    "stable-rejection-reasons-present": "rejected_action_includes_stable_reason" in source,
+    "accepted-action-causation-present": "accepted_action_includes_causation_proposal_id" in source,
+    "rust-arbitration-tests-passed": test_log_path.is_file(),
+}
+failed = [key for key, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-runtime-arbitration.v1",
+    "status": "passed" if not failed else "failed",
+    "arbitrationBoundary": "only-admitted-action-proposals-can-be-accepted",
+    "markerResults": marker_results,
+    "rustTestLogPath": "runtime/core-runtime-arbitration-rust-test.log",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core runtime arbitration coverage failed: {failed}")
+PY
+  record_stage "core-runtime-arbitration" "passed" "$(basename "$CORE_RUNTIME_ARBITRATION_PATH")"
+}
+
+run_v105_release_certification_gate() {
+  record_stage "v105-release-certification" "started" "$V105_RELEASE_CERTIFICATION_PATH"
+  python3 - \
+    "$V105_RELEASE_CERTIFICATION_PATH" \
+    "$RELEASE_VERSION" \
+    "$WORKSPACE/Cargo.toml" \
+    "$WORKSPACE/apps/desktop/package.json" \
+    "$WORKSPACE/apps/desktop/package-lock.json" \
+    "$WORKSPACE/apps/desktop/src-tauri/tauri.conf.json" \
+    "$ROOT/CHANGELOG.md" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.5/README.md" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md" \
+    "$CORE_RUNTIME_KERNEL_PATH" \
+    "$CORE_RUNTIME_ADMISSION_PATH" \
+    "$CORE_RUNTIME_ARBITRATION_PATH" \
+    "$CORE_RUNTIME_NEGATIVE_FIXTURES_PATH" \
+    "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH" <<'PY'
+import json
+import pathlib
+import sys
+import time
+import tomllib
+
+out_path = pathlib.Path(sys.argv[1])
+release_version = sys.argv[2]
+cargo_path = pathlib.Path(sys.argv[3])
+desktop_package_path = pathlib.Path(sys.argv[4])
+desktop_package_lock_path = pathlib.Path(sys.argv[5])
+tauri_config_path = pathlib.Path(sys.argv[6])
+changelog_path = pathlib.Path(sys.argv[7])
+release_readme_path = pathlib.Path(sys.argv[8])
+release_tasks_path = pathlib.Path(sys.argv[9])
+artifact_paths = [pathlib.Path(value) for value in sys.argv[10:]]
+
+expected_version = "1.0.5"
+expected_tag = "v1.0.5"
+cargo = tomllib.loads(cargo_path.read_text(encoding="utf-8"))
+desktop_package = json.loads(desktop_package_path.read_text(encoding="utf-8"))
+desktop_package_lock = json.loads(desktop_package_lock_path.read_text(encoding="utf-8"))
+tauri_config = json.loads(tauri_config_path.read_text(encoding="utf-8"))
+changelog_text = changelog_path.read_text(encoding="utf-8")
+release_readme_text = release_readme_path.read_text(encoding="utf-8")
+release_tasks_text = release_tasks_path.read_text(encoding="utf-8")
+artifacts = [json.loads(path.read_text(encoding="utf-8")) for path in artifact_paths]
+artifact_statuses = {
+    artifact_paths[index].name: artifact.get("status")
+    for index, artifact in enumerate(artifacts)
+}
+negative_artifact = artifacts[3]
+kernel_artifact = artifacts[0]
+admission_artifact = artifacts[1]
+arbitration_artifact = artifacts[2]
+registry_artifact = artifacts[4]
+coverage = {
+    "release-version-is-v105": release_version == expected_tag,
+    "cargo-workspace-version-is-105": cargo["workspace"]["package"]["version"] == expected_version,
+    "desktop-package-version-is-105": desktop_package.get("version") == expected_version,
+    "desktop-package-lock-version-is-105": desktop_package_lock.get("version") == expected_version
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") == expected_version,
+    "tauri-version-is-105": tauri_config.get("version") == expected_version,
+    "changelog-has-v105-entry": "## v1.0.5 - 2026-06-28" in changelog_text
+    and "Core Runtime Kernel baseline" in changelog_text
+    and "v105-release-certification" in changelog_text,
+    "delivery-readme-release-baseline": "Core Runtime Kernel release baseline" in release_readme_text
+    and "Software Dev 是 reference certification，不是 Core authority" in release_readme_text,
+    "delivery-tasks-release-public-record": "release public record" in release_tasks_text
+    and "V105-010 Release Certification" in release_tasks_text
+    and "runtime/v105-release-certification.json" in release_tasks_text,
+    "all-v105-artifacts-passed": all(status == "passed" for status in artifact_statuses.values()),
+    "negative-fixtures-include-eight-cases": len(negative_artifact.get("fixtures") or []) == 8
+    and all(item.get("passed") is True for item in negative_artifact.get("fixtures") or []),
+    "positive-reference-workflow-passed": (negative_artifact.get("positiveWorkflow") or {}).get("status") == "passed",
+    "kernel-runtime-flow-certified": len(kernel_artifact.get("runtimeFlow") or []) == 6,
+    "admission-boundary-certified": admission_artifact.get("admissionBoundary") == "rejected-or-deferred-commands-must-not-write-proposal-or-accepted-action",
+    "arbitration-boundary-certified": arbitration_artifact.get("arbitrationBoundary") == "only-admitted-action-proposals-can-be-accepted",
+    "file-backed-registry-loader-certified": registry_artifact.get("registrySourceCount") == 5
+    and registry_artifact.get("projectionEntryCount") == 5,
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-v105-release-certification.v1",
+    "status": "passed" if not failed else "failed",
+    "releaseVersion": expected_tag,
+    "workspaceVersion": expected_version,
+    "certifiedArtifacts": artifact_statuses,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "releaseBaseline": "docs/delivery/releases/v1.0.5/README.md",
+    "releaseTasks": "docs/delivery/releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md",
+    "remainingRisks": [
+        {
+            "id": "v106-evidence-kernel",
+            "summary": "Evidence Kernel completeness is intentionally deferred to v1.0.6.",
+            "blocking": False,
+        },
+        {
+            "id": "v107-decision-kernel",
+            "summary": "Decision Kernel completeness is intentionally deferred to v1.0.7.",
+            "blocking": False,
+        },
+        {
+            "id": "v108-projection-kernel",
+            "summary": "Projection Kernel completeness is intentionally deferred to v1.0.8.",
+            "blocking": False,
+        },
+    ],
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"v1.0.5 release certification failed: {failed}")
+PY
+  record_stage "v105-release-certification" "passed" "$(basename "$V105_RELEASE_CERTIFICATION_PATH")"
 }
 
 prepare_workspace() {
@@ -7659,6 +8016,10 @@ PY
   run_core_file_backed_ontology_registry_gate
   run_v104_release_certification_gate
   run_core_runtime_negative_fixtures_gate
+  run_core_runtime_kernel_gate
+  run_core_runtime_admission_gate
+  run_core_runtime_arbitration_gate
+  run_v105_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
