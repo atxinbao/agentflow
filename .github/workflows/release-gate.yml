@@ -203,6 +203,8 @@ jobs:
               -o -name 'core-4d-spec-intake-rust-test.log' \
               -o -name 'core-4d-spec-intake-positive-rust-test.log' \
               -o -name 'core-4d-spec-intake-negative-rust-test.log' \
+              -o -name 'core-ontology-kernel.json' \
+              -o -name 'core-ontology-kernel-rust-test.log' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
 
@@ -212,7 +214,9 @@ jobs:
             runtime/core-4d-spec-intake-positive-certification.json \
             runtime/core-4d-spec-intake-positive-rust-test.log \
             runtime/core-4d-spec-intake-negative-certification.json \
-            runtime/core-4d-spec-intake-negative-rust-test.log
+            runtime/core-4d-spec-intake-negative-rust-test.log \
+            runtime/core-ontology-kernel.json \
+            runtime/core-ontology-kernel-rust-test.log
           do
             if [ ! -f "$certification_dir/$primary_proof" ]; then
               echo "missing certification primary proof: $primary_proof" >&2

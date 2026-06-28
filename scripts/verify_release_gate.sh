@@ -147,6 +147,7 @@ STABLE_CONTRACT_BASELINE_PATH="$RUNTIME_DIR/stable-contract-baseline.json"
 CORE_4D_SPEC_INTAKE_PATH="$RUNTIME_DIR/core-4d-spec-intake.json"
 CORE_4D_SPEC_INTAKE_POSITIVE_CERTIFICATION_PATH="$RUNTIME_DIR/core-4d-spec-intake-positive-certification.json"
 CORE_4D_SPEC_INTAKE_NEGATIVE_CERTIFICATION_PATH="$RUNTIME_DIR/core-4d-spec-intake-negative-certification.json"
+CORE_ONTOLOGY_KERNEL_PATH="$RUNTIME_DIR/core-ontology-kernel.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -377,6 +378,7 @@ proof_chain = [
     {"stage": "project-roadmap-baseline", "label": "Project Roadmap Baseline"},
     {"stage": "v103-release-fix-certification", "label": "v1.0.3 Release Fix Certification"},
     {"stage": "core-4d-spec-intake", "label": "Core 4-D Spec Intake"},
+    {"stage": "core-ontology-kernel", "label": "Core Ontology Kernel"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -6158,6 +6160,92 @@ PY
   record_stage "core-4d-spec-intake" "passed" "$(basename "$CORE_4D_SPEC_INTAKE_PATH")"
 }
 
+run_core_ontology_kernel_gate() {
+  record_stage "core-ontology-kernel" "started" "$CORE_ONTOLOGY_KERNEL_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-ontology-kernel-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_ontology_kernel --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-ontology-kernel" "agentflow-ontology Core Ontology Kernel tests failed"
+  fi
+  python3 - "$CORE_ONTOLOGY_KERNEL_PATH" "$WORKSPACE/docs/architecture/054-core-ontology-kernel-contract-v1.md" "$WORKSPACE/crates/ontology/src/kernel.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+test_log_path = pathlib.Path(sys.argv[4])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+required_elements = [
+    "Object",
+    "Link",
+    "Action",
+    "State",
+    "Skill",
+    "Evidence",
+    "Decision",
+    "Artifact",
+    "Route",
+    "Spec Bundle",
+    "Projection",
+]
+forbidden_terms = [
+    "bug",
+    "feature",
+    "issue",
+    "pr",
+    "pull-request",
+    "release",
+    "repository",
+    "repository-patch",
+    "test-log",
+    "github-issue",
+]
+missing_doc_terms = [term for term in required_elements if term not in doc_text]
+missing_source_terms = [
+    term for term in [
+        "CORE_ONTOLOGY_KERNEL_VERSION",
+        "CoreOntologyKernelContract",
+        "core_ontology_kernel_contract",
+        "validate_core_ontology_kernel_contract",
+        "CoreOntologyElement::Object",
+        "CoreOntologyElement::Projection",
+    ]
+    if term not in source_text
+]
+coverage = {
+    "kernel-version-defined": "agentflow-core-ontology-kernel.v1" in source_text,
+    "required-elements-documented": not missing_doc_terms,
+    "required-elements-implemented": not missing_source_terms,
+    "reference-mappings-not-core-authority": "not Core authority" in doc_text and "not Core authority" in source_text,
+    "forbidden-terms-listed": all(term in doc_text and term in source_text for term in forbidden_terms),
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-ontology-kernel-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-ontology-kernel.v1",
+    "architecturePath": "docs/architecture/054-core-ontology-kernel-contract-v1.md",
+    "rustContractPath": "crates/ontology/src/kernel.rs",
+    "rustTestLogPath": "runtime/core-ontology-kernel-rust-test.log",
+    "requiredElements": required_elements,
+    "forbiddenCoreTerms": forbidden_terms,
+    "referenceMappingBoundary": "reference-app-only-not-core-authority",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core ontology kernel coverage failed: {failed}")
+PY
+  record_stage "core-ontology-kernel" "passed" "$(basename "$CORE_ONTOLOGY_KERNEL_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -6709,6 +6797,7 @@ PY
   run_project_roadmap_baseline_gate
   run_v103_release_fix_certification_gate
   run_core_4d_spec_intake_gate
+  run_core_ontology_kernel_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
