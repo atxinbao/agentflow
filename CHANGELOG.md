@@ -10,6 +10,19 @@
 - [docs/delivery/releases/v1.0.4/README.md](docs/delivery/releases/v1.0.4/README.md)
 - [docs/delivery/releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md)
 
+下一版计划：
+
+- [docs/delivery/releases/v1.0.5/README.md](docs/delivery/releases/v1.0.5/README.md)
+- [docs/delivery/releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md)
+
+## Unreleased
+
+v1.0.5 Core Runtime Kernel planning:
+
+- added v1.0.5 release planning baseline;
+- defined Core Runtime command, admission, Action Proposal, Arbitration, executor closeout and state writeback boundaries;
+- preserved Software Dev as Reference App mapping only, not Core Runtime authority.
+
 ## v1.0.4 - 2026-06-28
 
 Core Ontology Kernel baseline:
