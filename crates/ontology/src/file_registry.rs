@@ -1,11 +1,33 @@
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    fmt, fs,
+    path::{Path, PathBuf},
+};
 
 use crate::decision::CORE_EVIDENCE_DECISION_MODEL_VERSION;
-use crate::kernel::CORE_ONTOLOGY_KERNEL_VERSION;
+use crate::decision::{
+    core_evidence_decision_reference_model_contract,
+    validate_core_evidence_decision_reference_model_contract,
+    CoreEvidenceDecisionReferenceModelContract,
+};
+use crate::kernel::{
+    core_ontology_kernel_contract, validate_core_ontology_kernel_contract,
+    CoreOntologyKernelContract, CORE_ONTOLOGY_KERNEL_VERSION,
+};
 use crate::schema::CORE_OBJECT_LINK_SCHEMA_VERSION;
-use crate::semantics::CORE_ACTION_STATE_SEMANTICS_VERSION;
-use crate::skill::CORE_SKILL_REGISTRY_VERSION;
+use crate::schema::{
+    core_object_link_schema_contract, validate_core_object_link_schema_contract,
+    CoreObjectLinkSchemaContract,
+};
+use crate::semantics::{
+    core_action_state_semantics_contract, validate_core_action_state_semantics_contract,
+    CoreActionStateSemanticsContract, CORE_ACTION_STATE_SEMANTICS_VERSION,
+};
+use crate::skill::{
+    core_skill_registry_contract, validate_core_skill_registry_contract, CoreSkillRegistryContract,
+    CORE_SKILL_REGISTRY_VERSION,
+};
 
 pub const CORE_FILE_BACKED_ONTOLOGY_REGISTRY_VERSION: &str =
     "agentflow-core-file-backed-ontology-registry.v1";
@@ -42,6 +64,100 @@ pub struct CoreFileBackedOntologyRegistryProjectionContract {
     pub registry_sources: Vec<CoreOntologyRegistrySourceDefinition>,
     pub projection_entries: Vec<CoreOntologyProjectionEntryDefinition>,
     pub forbidden_core_terms: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreOntologyRegistryPollutionDiagnostic {
+    pub field: String,
+    pub original_text: String,
+    pub normalized_term: String,
+    pub mapping_boundary: String,
+    pub allowed_as_reference_mapping: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoadedCoreOntologyRegistrySource {
+    pub source_id: String,
+    pub relative_path: String,
+    pub contract_version: String,
+    pub read_model_kind: String,
+    pub source_fingerprint: String,
+    pub byte_len: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreFileBackedOntologyRuntimeProjection {
+    pub version: String,
+    pub status: String,
+    pub registry_sources: Vec<LoadedCoreOntologyRegistrySource>,
+    pub projection_entries: Vec<CoreOntologyProjectionEntryDefinition>,
+    pub pollution_diagnostics: Vec<CoreOntologyRegistryPollutionDiagnostic>,
+    pub core_ontology_kernel: CoreOntologyKernelContract,
+    pub core_object_link_schema: CoreObjectLinkSchemaContract,
+    pub core_action_state_semantics: CoreActionStateSemanticsContract,
+    pub core_skill_registry: CoreSkillRegistryContract,
+    pub core_evidence_decision_reference_model: CoreEvidenceDecisionReferenceModelContract,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreFileBackedOntologyRegistryLoadError {
+    pub code: String,
+    pub message: String,
+    #[serde(default)]
+    pub diagnostics: Vec<CoreOntologyRegistryPollutionDiagnostic>,
+}
+
+impl fmt::Display for CoreFileBackedOntologyRegistryLoadError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for CoreFileBackedOntologyRegistryLoadError {}
+
+#[derive(Debug, Default)]
+pub struct CoreFileBackedOntologyRuntimeLoader {
+    cached: Option<CoreFileBackedOntologyRuntimeProjection>,
+    cached_root: Option<PathBuf>,
+    cached_fingerprints: Vec<String>,
+}
+
+impl CoreFileBackedOntologyRuntimeLoader {
+    pub fn load(
+        &mut self,
+        project_root: impl AsRef<Path>,
+    ) -> Result<CoreFileBackedOntologyRuntimeProjection, CoreFileBackedOntologyRegistryLoadError>
+    {
+        let root = resolve_registry_root(
+            project_root.as_ref(),
+            &core_file_backed_ontology_registry_projection_contract(),
+        );
+        let contract = core_file_backed_ontology_registry_projection_contract();
+        let source_fingerprints = read_registry_source_fingerprints(&root, &contract)?;
+
+        if self.cached_root.as_deref() == Some(root.as_path())
+            && self.cached_fingerprints == source_fingerprints
+        {
+            if let Some(cached) = &self.cached {
+                return Ok(cached.clone());
+            }
+        }
+
+        let loaded =
+            load_core_file_backed_ontology_registry_projection_with_contract(&root, &contract)?;
+        self.cached_root = Some(root);
+        self.cached_fingerprints = loaded
+            .registry_sources
+            .iter()
+            .map(|source| source.source_fingerprint.clone())
+            .collect();
+        self.cached = Some(loaded.clone());
+        Ok(loaded)
+    }
 }
 
 pub fn core_file_backed_ontology_registry_projection_contract(
@@ -145,6 +261,67 @@ pub fn core_file_backed_ontology_registry_projection_contract(
             "github-issue".to_string(),
         ],
     }
+}
+
+pub fn load_core_file_backed_ontology_registry_projection(
+    project_root: impl AsRef<Path>,
+) -> Result<CoreFileBackedOntologyRuntimeProjection, CoreFileBackedOntologyRegistryLoadError> {
+    load_core_file_backed_ontology_registry_projection_with_contract(
+        project_root,
+        &core_file_backed_ontology_registry_projection_contract(),
+    )
+}
+
+pub fn load_core_file_backed_ontology_registry_projection_with_contract(
+    project_root: impl AsRef<Path>,
+    contract: &CoreFileBackedOntologyRegistryProjectionContract,
+) -> Result<CoreFileBackedOntologyRuntimeProjection, CoreFileBackedOntologyRegistryLoadError> {
+    if let Err(errors) = validate_core_file_backed_ontology_registry_projection_contract(contract) {
+        return Err(load_error(
+            "invalid-contract",
+            errors.join("; "),
+            Vec::new(),
+        ));
+    }
+
+    let root = resolve_registry_root(project_root.as_ref(), contract);
+    let loaded_sources = load_registry_sources(&root, contract)?;
+    let core_ontology_kernel = core_ontology_kernel_contract();
+    let core_object_link_schema = core_object_link_schema_contract();
+    let core_action_state_semantics = core_action_state_semantics_contract();
+    let core_skill_registry = core_skill_registry_contract();
+    let core_evidence_decision_reference_model = core_evidence_decision_reference_model_contract();
+
+    validate_typed_core_contracts(
+        &core_ontology_kernel,
+        &core_object_link_schema,
+        &core_action_state_semantics,
+        &core_skill_registry,
+        &core_evidence_decision_reference_model,
+    )?;
+
+    let pollution_diagnostics =
+        diagnose_core_file_backed_ontology_registry_projection_contract(contract);
+    if !pollution_diagnostics.is_empty() {
+        return Err(load_error(
+            "forbidden-core-term",
+            "file-backed ontology registry contains forbidden Core authority terms",
+            pollution_diagnostics,
+        ));
+    }
+
+    Ok(CoreFileBackedOntologyRuntimeProjection {
+        version: contract.version.clone(),
+        status: contract.status.clone(),
+        registry_sources: loaded_sources,
+        projection_entries: contract.projection_entries.clone(),
+        pollution_diagnostics: Vec::new(),
+        core_ontology_kernel,
+        core_object_link_schema,
+        core_action_state_semantics,
+        core_skill_registry,
+        core_evidence_decision_reference_model,
+    })
 }
 
 pub fn validate_core_file_backed_ontology_registry_projection_contract(
@@ -260,42 +437,11 @@ pub fn validate_core_file_backed_ontology_registry_projection_contract(
         }
     }
 
-    let core_surface = contract
-        .registry_sources
-        .iter()
-        .flat_map(|source| {
-            [
-                source.source_id.clone(),
-                source.relative_path.clone(),
-                source.contract_version.clone(),
-                source.read_model_kind.clone(),
-                source.authority_boundary.clone(),
-            ]
-        })
-        .chain(contract.projection_entries.iter().flat_map(|projection| {
-            [
-                projection.projection_id.clone(),
-                projection.source_id.clone(),
-                projection.projection_kind.clone(),
-                projection.query_surfaces.join(" "),
-                projection.refresh_rule.clone(),
-            ]
-        }))
-        .chain([
-            contract.authority.clone(),
-            contract.storage_boundary.clone(),
-            contract.projection_boundary.clone(),
-        ])
-        .collect::<Vec<_>>();
-    for term in &contract.forbidden_core_terms {
-        if core_surface
-            .iter()
-            .any(|value| contains_forbidden_core_term(value, term))
-        {
-            errors.push(format!(
-                "forbidden industry term `{term}` appears in Core file-backed ontology registry"
-            ));
-        }
+    for diagnostic in diagnose_core_file_backed_ontology_registry_projection_contract(contract) {
+        errors.push(format!(
+            "forbidden industry term `{}` appears in `{}` as `{}`",
+            diagnostic.normalized_term, diagnostic.field, diagnostic.original_text
+        ));
     }
 
     if errors.is_empty() {
@@ -303,6 +449,82 @@ pub fn validate_core_file_backed_ontology_registry_projection_contract(
     } else {
         Err(errors)
     }
+}
+
+pub fn diagnose_core_file_backed_ontology_registry_projection_contract(
+    contract: &CoreFileBackedOntologyRegistryProjectionContract,
+) -> Vec<CoreOntologyRegistryPollutionDiagnostic> {
+    let mut diagnostics = Vec::new();
+
+    for (index, source) in contract.registry_sources.iter().enumerate() {
+        push_pollution_diagnostics(
+            &format!("registrySources[{index}].sourceId"),
+            &source.source_id,
+            contract,
+            &mut diagnostics,
+        );
+        push_pollution_diagnostics(
+            &format!("registrySources[{index}].relativePath"),
+            &source.relative_path,
+            contract,
+            &mut diagnostics,
+        );
+        push_pollution_diagnostics(
+            &format!("registrySources[{index}].readModelKind"),
+            &source.read_model_kind,
+            contract,
+            &mut diagnostics,
+        );
+    }
+    for (index, projection) in contract.projection_entries.iter().enumerate() {
+        push_pollution_diagnostics(
+            &format!("projectionEntries[{index}].projectionId"),
+            &projection.projection_id,
+            contract,
+            &mut diagnostics,
+        );
+        push_pollution_diagnostics(
+            &format!("projectionEntries[{index}].sourceId"),
+            &projection.source_id,
+            contract,
+            &mut diagnostics,
+        );
+        push_pollution_diagnostics(
+            &format!("projectionEntries[{index}].projectionKind"),
+            &projection.projection_kind,
+            contract,
+            &mut diagnostics,
+        );
+        for (surface_index, query_surface) in projection.query_surfaces.iter().enumerate() {
+            push_pollution_diagnostics(
+                &format!("projectionEntries[{index}].querySurfaces[{surface_index}]"),
+                query_surface,
+                contract,
+                &mut diagnostics,
+            );
+        }
+        push_pollution_diagnostics(
+            &format!("projectionEntries[{index}].refreshRule"),
+            &projection.refresh_rule,
+            contract,
+            &mut diagnostics,
+        );
+    }
+    push_pollution_diagnostics("authority", &contract.authority, contract, &mut diagnostics);
+    push_pollution_diagnostics(
+        "storageBoundary",
+        &contract.storage_boundary,
+        contract,
+        &mut diagnostics,
+    );
+    push_pollution_diagnostics(
+        "projectionBoundary",
+        &contract.projection_boundary,
+        contract,
+        &mut diagnostics,
+    );
+
+    diagnostics
 }
 
 fn source(
@@ -355,6 +577,27 @@ fn contains_forbidden_core_term(value: &str, term: &str) -> bool {
     normalized_compact(value).contains(&normalized_term)
 }
 
+fn push_pollution_diagnostics(
+    field: &str,
+    value: &str,
+    contract: &CoreFileBackedOntologyRegistryProjectionContract,
+    diagnostics: &mut Vec<CoreOntologyRegistryPollutionDiagnostic>,
+) {
+    for term in &contract.forbidden_core_terms {
+        if contains_forbidden_core_term(value, term) {
+            diagnostics.push(CoreOntologyRegistryPollutionDiagnostic {
+                field: field.to_string(),
+                original_text: value.to_string(),
+                normalized_term: normalized_compact(term),
+                mapping_boundary:
+                    "allowed only as Reference App mapping; mappings are not Core authority"
+                        .to_string(),
+                allowed_as_reference_mapping: true,
+            });
+        }
+    }
+}
+
 fn normalized_compact(value: &str) -> String {
     value
         .chars()
@@ -382,9 +625,191 @@ fn tokenized(value: &str) -> Vec<String> {
     tokens
 }
 
+fn load_registry_sources(
+    project_root: &Path,
+    contract: &CoreFileBackedOntologyRegistryProjectionContract,
+) -> Result<Vec<LoadedCoreOntologyRegistrySource>, CoreFileBackedOntologyRegistryLoadError> {
+    contract
+        .registry_sources
+        .iter()
+        .map(|source| load_registry_source(project_root, source))
+        .collect()
+}
+
+fn resolve_registry_root(
+    requested_root: &Path,
+    contract: &CoreFileBackedOntologyRegistryProjectionContract,
+) -> PathBuf {
+    if all_registry_sources_exist(requested_root, contract) {
+        return requested_root.to_path_buf();
+    }
+
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if all_registry_sources_exist(&source_root, contract) {
+        return source_root;
+    }
+
+    requested_root.to_path_buf()
+}
+
+fn all_registry_sources_exist(
+    root: &Path,
+    contract: &CoreFileBackedOntologyRegistryProjectionContract,
+) -> bool {
+    contract.registry_sources.iter().all(|source| {
+        let relative_path = Path::new(&source.relative_path);
+        !relative_path.is_absolute()
+            && !source.relative_path.contains("..")
+            && root.join(relative_path).is_file()
+    })
+}
+
+fn load_registry_source(
+    project_root: &Path,
+    source: &CoreOntologyRegistrySourceDefinition,
+) -> Result<LoadedCoreOntologyRegistrySource, CoreFileBackedOntologyRegistryLoadError> {
+    let relative_path = Path::new(&source.relative_path);
+    if relative_path.is_absolute()
+        || source.relative_path.contains("..")
+        || source.relative_path.trim().is_empty()
+    {
+        return Err(load_error(
+            "invalid-source-path",
+            format!(
+                "registry source `{}` must use a stable relative path",
+                source.source_id
+            ),
+            Vec::new(),
+        ));
+    }
+
+    let source_path = project_root.join(relative_path);
+    let content = fs::read_to_string(&source_path).map_err(|error| {
+        load_error(
+            "missing-source",
+            format!(
+                "registry source `{}` could not be read at `{}`: {error}",
+                source.source_id, source.relative_path
+            ),
+            Vec::new(),
+        )
+    })?;
+
+    if !content.contains(&source.contract_version) {
+        return Err(load_error(
+            "malformed-contract",
+            format!(
+                "registry source `{}` does not declare contract version `{}`",
+                source.source_id, source.contract_version
+            ),
+            Vec::new(),
+        ));
+    }
+    if !content.contains("not Core authority") && !content.contains("不是 Core authority") {
+        return Err(load_error(
+            "malformed-contract",
+            format!(
+                "registry source `{}` must preserve Reference App mapping boundary",
+                source.source_id
+            ),
+            Vec::new(),
+        ));
+    }
+
+    Ok(LoadedCoreOntologyRegistrySource {
+        source_id: source.source_id.clone(),
+        relative_path: source.relative_path.clone(),
+        contract_version: source.contract_version.clone(),
+        read_model_kind: source.read_model_kind.clone(),
+        source_fingerprint: source_fingerprint(&content),
+        byte_len: content.len(),
+    })
+}
+
+fn read_registry_source_fingerprints(
+    project_root: &Path,
+    contract: &CoreFileBackedOntologyRegistryProjectionContract,
+) -> Result<Vec<String>, CoreFileBackedOntologyRegistryLoadError> {
+    contract
+        .registry_sources
+        .iter()
+        .map(|source| {
+            let content =
+                fs::read_to_string(project_root.join(&source.relative_path)).map_err(|error| {
+                    load_error(
+                        "missing-source",
+                        format!(
+                            "registry source `{}` could not be read at `{}`: {error}",
+                            source.source_id, source.relative_path
+                        ),
+                        Vec::new(),
+                    )
+                })?;
+            Ok(source_fingerprint(&content))
+        })
+        .collect()
+}
+
+fn source_fingerprint(content: &str) -> String {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in content.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("fnv1a64:{hash:016x}:{}", content.len())
+}
+
+fn validate_typed_core_contracts(
+    kernel: &CoreOntologyKernelContract,
+    schema: &CoreObjectLinkSchemaContract,
+    semantics: &CoreActionStateSemanticsContract,
+    skills: &CoreSkillRegistryContract,
+    decisions: &CoreEvidenceDecisionReferenceModelContract,
+) -> Result<(), CoreFileBackedOntologyRegistryLoadError> {
+    let mut errors = Vec::new();
+    if let Err(report) = validate_core_ontology_kernel_contract(kernel) {
+        errors.extend(report);
+    }
+    if let Err(report) = validate_core_object_link_schema_contract(schema) {
+        errors.extend(report);
+    }
+    if let Err(report) = validate_core_action_state_semantics_contract(semantics) {
+        errors.extend(report);
+    }
+    if let Err(report) = validate_core_skill_registry_contract(skills) {
+        errors.extend(report);
+    }
+    if let Err(report) = validate_core_evidence_decision_reference_model_contract(decisions) {
+        errors.extend(report);
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(load_error(
+            "malformed-core-contract",
+            errors.join("; "),
+            Vec::new(),
+        ))
+    }
+}
+
+fn load_error(
+    code: impl Into<String>,
+    message: impl Into<String>,
+    diagnostics: Vec<CoreOntologyRegistryPollutionDiagnostic>,
+) -> CoreFileBackedOntologyRegistryLoadError {
+    CoreFileBackedOntologyRegistryLoadError {
+        code: code.into(),
+        message: message.into(),
+        diagnostics,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
     #[test]
     fn core_file_backed_ontology_registry_contract_validates() {
@@ -427,6 +852,74 @@ mod tests {
 
         let errors =
             validate_core_file_backed_ontology_registry_projection_contract(&contract).unwrap_err();
-        assert!(errors.iter().any(|error| error.contains("github-issue")));
+        assert!(errors.iter().any(|error| error.contains("githubissue")));
+        let diagnostics =
+            diagnose_core_file_backed_ontology_registry_projection_contract(&contract);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.original_text == "githubIssueQuery"
+                && diagnostic.normalized_term == "githubissue"
+                && diagnostic.allowed_as_reference_mapping
+        }));
+    }
+
+    #[test]
+    fn core_file_backed_ontology_runtime_loader_reads_sources() {
+        let projection = load_core_file_backed_ontology_registry_projection(".").unwrap();
+
+        assert_eq!(projection.registry_sources.len(), 5);
+        assert_eq!(projection.projection_entries.len(), 5);
+        assert!(projection
+            .registry_sources
+            .iter()
+            .all(|source| source.source_fingerprint.starts_with("fnv1a64:")));
+        assert!(projection
+            .core_action_state_semantics
+            .actions
+            .iter()
+            .any(|action| action.action_type == "startObject"));
+    }
+
+    #[test]
+    fn core_file_backed_ontology_runtime_loader_caches_by_source_fingerprint() {
+        let mut loader = CoreFileBackedOntologyRuntimeLoader::default();
+
+        let first = loader.load(".").unwrap();
+        let second = loader.load(".").unwrap();
+
+        assert_eq!(
+            first.registry_sources[0].source_fingerprint,
+            second.registry_sources[0].source_fingerprint
+        );
+    }
+
+    #[test]
+    fn core_file_backed_ontology_runtime_loader_rejects_missing_source() {
+        let mut contract = core_file_backed_ontology_registry_projection_contract();
+        contract.registry_sources[0].relative_path = "docs/architecture/missing.md".to_string();
+
+        let error =
+            load_core_file_backed_ontology_registry_projection_with_contract(".", &contract)
+                .unwrap_err();
+        assert_eq!(error.code, "missing-source");
+    }
+
+    #[test]
+    fn core_file_backed_ontology_runtime_loader_rejects_malformed_contract() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("contract.md");
+        let mut file = fs::File::create(&path).unwrap();
+        writeln!(
+            file,
+            "# Broken\n\nThis file preserves mappings are not Core authority but omits version."
+        )
+        .unwrap();
+
+        let mut contract = core_file_backed_ontology_registry_projection_contract();
+        contract.registry_sources[0].relative_path = "contract.md".to_string();
+
+        let error =
+            load_core_file_backed_ontology_registry_projection_with_contract(dir.path(), &contract)
+                .unwrap_err();
+        assert_eq!(error.code, "malformed-contract");
     }
 }

@@ -4,6 +4,12 @@ use anyhow::Result;
 
 pub const RUNTIME_QUERY_API_VERSION: &str = "agentflow-runtime-query-api.v1";
 
+pub fn get_core_file_backed_ontology_registry_view(
+    project_root: impl AsRef<Path>,
+) -> Result<agentflow_ontology::CoreFileBackedOntologyRuntimeProjection> {
+    Ok(agentflow_ontology::load_core_file_backed_ontology_registry_projection(project_root)?)
+}
+
 pub fn get_requirement_intake_view(
     project_root: impl AsRef<Path>,
     requirement_id: &str,
@@ -84,7 +90,20 @@ pub fn get_runtime_health_view(
 
 #[cfg(test)]
 mod tests {
-    use super::get_pack_industry_workbench_view;
+    use super::{get_core_file_backed_ontology_registry_view, get_pack_industry_workbench_view};
+
+    #[test]
+    fn runtime_api_reads_file_backed_core_ontology_registry() {
+        let view = get_core_file_backed_ontology_registry_view(".").unwrap();
+
+        assert_eq!(view.registry_sources.len(), 5);
+        assert_eq!(view.projection_entries.len(), 5);
+        assert!(view
+            .core_action_state_semantics
+            .actions
+            .iter()
+            .any(|action| action.action_type == "startObject"));
+    }
 
     #[test]
     fn runtime_api_reads_pack_industry_workbench() {
