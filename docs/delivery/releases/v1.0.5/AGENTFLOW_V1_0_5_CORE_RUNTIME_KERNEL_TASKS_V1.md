@@ -12,7 +12,7 @@
 ## Authority Boundary
 
 - GitHub issues 是 planning mirror；
-- `docs/delivery/releases/v1.0.5/**` 是本版本 release planning public record；
+- `docs/delivery/releases/v1.0.5/**` 是本版本 release public record；
 - `docs/architecture/054` 到 `docs/architecture/059` 是上游 Core Ontology 合同；
 - `crates/ontology/src/**` 是 Core Ontology Rust 合同实现；
 - Runtime contracts 必须消费 Core authority；
@@ -38,7 +38,7 @@ Runtime 只能在 admission 和 arbitration 通过后推进执行。Rejected、d
 
 ### V105-001 Core Runtime Kernel Contract
 
-状态：planned
+状态：done
 
 目标：
 
@@ -51,7 +51,7 @@ Runtime 只能在 admission 和 arbitration 通过后推进执行。Rejected、d
 
 ### V105-002 Replace Hardcoded Command Mapping with Core + App Pack Mapping
 
-状态：planned
+状态：done
 
 目标：
 
@@ -64,7 +64,7 @@ Runtime 只能在 admission 和 arbitration 通过后推进执行。Rejected、d
 
 ### V105-003 Runtime Admission Uses Core Skill Registry
 
-状态：planned
+状态：done
 
 目标：
 
@@ -77,7 +77,7 @@ Runtime 只能在 admission 和 arbitration 通过后推进执行。Rejected、d
 
 ### V105-004 Core Action Proposal Materialization
 
-状态：planned
+状态：done
 
 目标：
 
@@ -90,7 +90,7 @@ Runtime 只能在 admission 和 arbitration 通过后推进执行。Rejected、d
 
 ### V105-005 Arbitration Uses Core Action State Semantics
 
-状态：planned
+状态：done
 
 目标：
 
@@ -103,7 +103,7 @@ Runtime 只能在 admission 和 arbitration 通过后推进执行。Rejected、d
 
 ### V105-006 File-backed Ontology Registry Runtime Loader
 
-状态：planned
+状态：done
 
 目标：
 
@@ -116,7 +116,7 @@ Runtime 只能在 admission 和 arbitration 通过后推进执行。Rejected、d
 
 ### V105-007 Executor Adapter Closeout Integration
 
-状态：planned
+状态：done
 
 目标：
 
@@ -129,7 +129,7 @@ Runtime 只能在 admission 和 arbitration 通过后推进执行。Rejected、d
 
 ### V105-008 Task Run State Writeback Authority
 
-状态：planned
+状态：done
 
 目标：
 
@@ -142,7 +142,7 @@ Runtime 只能在 admission 和 arbitration 通过后推进执行。Rejected、d
 
 ### V105-009 Negative Runtime Fixtures and Software Dev Reference Mapping
 
-状态：planned
+状态：done
 
 目标：
 
@@ -154,7 +154,7 @@ Runtime 只能在 admission 和 arbitration 通过后推进执行。Rejected、d
 
 ### V105-010 Release Certification
 
-状态：planned
+状态：done
 
 目标：
 

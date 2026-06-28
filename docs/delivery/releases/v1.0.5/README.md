@@ -5,9 +5,11 @@
 
 ## Status
 
-`v1.0.5` 是 `v1.0.4` Core Ontology Kernel 之后的 Core Runtime Kernel planning baseline。
+`v1.0.5` 是 `v1.0.4` Core Ontology Kernel 之后的 Core Runtime Kernel release baseline。
 
-本版本不启动 `v1.1` 产品功能，不把 Software Dev Reference App 的行业词汇写入 Core Runtime authority。它的目标是把 `v1.0.4` 定义出来的 Object、Link、Action、State、Skill、Evidence、Decision 和 Registry 合同接入 Runtime command、admission、Action Proposal、Arbitration、executor closeout 和 task / run state writeback。
+本版本不启动 `v1.1` 产品功能，不把 Software Dev Reference App 的行业词汇写入 Core Runtime authority。它已把 `v1.0.4` 定义出来的 Object、Link、Action、State、Skill、Evidence、Decision 和 Registry 合同接入 Runtime command、admission、Action Proposal、Arbitration、executor closeout 和 task / run state writeback。
+
+Release notes 必须明确：Software Dev 是 reference certification，不是 Core authority。
 
 ## Core Runtime Boundary
 
