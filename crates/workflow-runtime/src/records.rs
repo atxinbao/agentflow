@@ -78,6 +78,12 @@ pub struct RuntimeProposalFact {
     pub reason: Option<String>,
     #[serde(default)]
     pub expected_effects: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub core_action_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub core_target_object_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_mapping: Option<Value>,
     pub ontology_version: String,
     pub contract_version: String,
     pub created_at: String,

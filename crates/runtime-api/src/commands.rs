@@ -34,8 +34,9 @@ use agentflow_workflow_runtime::{
 
 use crate::errors::{RuntimeCommandError, RuntimeCommandErrorCode};
 use crate::mapping::{
-    map_command_to_action_proposal, missing_field_error, runtime_query_hint_for_command,
-    source_surface_label, unsupported_command_error,
+    map_command_to_action_proposal, materialize_core_action_proposal, missing_field_error,
+    runtime_query_hint_for_command, source_surface_label, unsupported_command_error,
+    validate_core_action_proposal_materialization,
 };
 use crate::responses::{
     RuntimeCommandDecision, RuntimeCommandResponse, RuntimeCommandStatus,
@@ -132,7 +133,12 @@ pub fn validate_runtime_command(request: &RuntimeCommandRequest) -> RuntimeComma
     }
 
     let normalized_action_type = match map_command_to_action_proposal(request) {
-        Ok(proposal) => Some(proposal.action_type),
+        Ok(proposal) => {
+            errors.extend(validate_core_action_proposal_materialization(
+                request, &proposal,
+            ));
+            Some(proposal.action_type)
+        }
         Err(_) => {
             errors.push(unsupported_command_error(request));
             None
@@ -255,6 +261,7 @@ pub fn execute_command_via_arbitration_with_context(
         return Ok(response);
     }
 
+    let core_materialization = materialize_core_action_proposal(request, &proposal).ok();
     write_runtime_proposal_fact(
         root,
         &RuntimeProposalFact {
@@ -270,6 +277,15 @@ pub fn execute_command_via_arbitration_with_context(
             artifact_refs: proposal.artifact_refs.clone(),
             reason: proposal.reason.clone(),
             expected_effects: proposal.expected_effects.clone(),
+            core_action_type: core_materialization
+                .as_ref()
+                .map(|materialization| materialization.core_action_type.clone()),
+            core_target_object_type: core_materialization
+                .as_ref()
+                .map(|materialization| materialization.core_target_object_type.clone()),
+            reference_mapping: core_materialization.as_ref().and_then(|materialization| {
+                serde_json::to_value(&materialization.reference_mapping).ok()
+            }),
             ontology_version: proposal.ontology_version.clone(),
             contract_version: proposal.contract_version.clone(),
             created_at: proposal.created_at.clone(),
@@ -1071,8 +1087,8 @@ mod tests {
         response_from_arbitration_decision, validate_runtime_command, RuntimeCommandRequest,
     };
     use crate::mapping::{
-        action_contract_ref_for_action_type, core_runtime_route, target_ref,
-        CORE_RUNTIME_COMMAND_TYPE,
+        action_contract_ref_for_action_type, core_runtime_route, materialize_core_action_proposal,
+        target_ref, CORE_RUNTIME_COMMAND_TYPE,
     };
     use crate::responses::RuntimeCommandStatus;
     use agentflow_action_contract::ActionSourceSurface;
@@ -1196,6 +1212,85 @@ mod tests {
         let proposal = map_command_to_action_proposal(&request("submitRequirement")).unwrap();
         assert_eq!(proposal.action_type, "submitRequirement");
         assert_eq!(proposal.idempotency_key, "idem-submitRequirement");
+    }
+
+    #[test]
+    fn core_action_proposal_materialization_uses_reference_mapping() {
+        let request = work_run_request("cmd-core-materialized");
+        let proposal = map_command_to_action_proposal(&request).unwrap();
+        let materialization = materialize_core_action_proposal(&request, &proposal).unwrap();
+
+        assert_eq!(materialization.core_action_type, "startObject");
+        assert_eq!(materialization.core_target_object_type, "ExecutionObject");
+        assert_eq!(
+            materialization.reference_mapping.app_action_type,
+            "startRun"
+        );
+        assert_eq!(
+            materialization.reference_mapping.app_target_object_type,
+            "Issue"
+        );
+        assert!(materialization
+            .reference_mapping
+            .source_refs
+            .iter()
+            .any(|value| value == "action-contract:issue.start"));
+    }
+
+    #[test]
+    fn runtime_validation_rejects_missing_reference_mapping() {
+        let mut request = work_run_request("cmd-missing-reference-mapping");
+        request.route = None;
+
+        let report = validate_runtime_command(&request);
+
+        assert!(!report.valid);
+        assert!(report.errors.iter().any(|error| {
+            error.message.contains("Core route action contract")
+                || error.message.contains("missing reference mapping")
+        }));
+    }
+
+    #[test]
+    fn runtime_validation_rejects_polluted_core_target_as_app_mapping() {
+        let mut request = work_run_request("cmd-polluted-core-target");
+        request.route = Some(core_runtime_route(
+            "core:issue.start",
+            "action-contract:issue.start",
+            Some("ExecutionObject"),
+        ));
+        request.target_object_ref = Some(target_ref("ExecutionObject", "execution-001"));
+
+        let report = validate_runtime_command(&request);
+
+        assert!(!report.valid);
+        assert!(report
+            .errors
+            .iter()
+            .any(|error| error.message.contains("polluted Core proposal")));
+    }
+
+    #[test]
+    fn runtime_proposal_fact_records_core_mapping_fields() {
+        let dir = tempdir().unwrap();
+        let request = project_request("cmd-core-proposal-fact");
+
+        let response = execute_command_via_arbitration_with_context(
+            dir.path(),
+            &request,
+            &build_core_arbitration_context().unwrap(),
+        )
+        .unwrap();
+        let proposal = load_runtime_proposal_fact(dir.path(), &response.proposal_id).unwrap();
+
+        assert_eq!(proposal.core_action_type.as_deref(), Some("routeObject"));
+        assert_eq!(
+            proposal.core_target_object_type.as_deref(),
+            Some("IntentObject")
+        );
+        let mapping = proposal.reference_mapping.unwrap();
+        assert_eq!(mapping["appActionType"], "createProject");
+        assert_eq!(mapping["appTargetObjectType"], "Spec");
     }
 
     #[test]
