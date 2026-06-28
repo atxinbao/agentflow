@@ -35,7 +35,7 @@ use agentflow_workflow_runtime::{
 use crate::errors::{RuntimeCommandError, RuntimeCommandErrorCode};
 use crate::mapping::{
     map_command_to_action_proposal, missing_field_error, runtime_query_hint_for_command,
-    unsupported_command_error,
+    source_surface_label, unsupported_command_error,
 };
 use crate::responses::{
     RuntimeCommandDecision, RuntimeCommandResponse, RuntimeCommandStatus,
@@ -574,10 +574,24 @@ fn evaluate_runtime_command_governance(
         GovernancePolicyRequest {
             actor_role: request.actor_role.clone(),
             action_type: proposal.action_type.clone(),
+            generic_action: Some(
+                runtime_action_to_generic_action(&proposal.action_type).to_string(),
+            ),
             object_type: proposal
                 .target_object_ref
                 .as_ref()
                 .map(|target| target.object_type.clone()),
+            skill_ref: request.skill_ref.clone(),
+            source_surface: Some(source_surface_label(&request.source_surface).to_string()),
+            tool_scopes: value_string_array(&request.input, "toolScopes"),
+            connector_scopes: value_string_array(&request.input, "connectorScopes"),
+            evidence_refs: request.evidence_refs.clone(),
+            artifact_refs: request.artifact_refs.clone(),
+            expected_outputs: request
+                .expected_outputs
+                .iter()
+                .map(|output| output.output_type.clone())
+                .collect(),
             worker_id: governance_worker_id(request),
             command: governance_command(request),
             audit_sidecar_mode: governance_audit_sidecar_mode(request),
@@ -948,6 +962,41 @@ fn value_string(input: &Value, key: &str) -> Option<String> {
     input.get(key).and_then(Value::as_str).map(str::to_string)
 }
 
+fn value_string_array(input: &Value, key: &str) -> Vec<String> {
+    input
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_action_to_generic_action(action_type: &str) -> &'static str {
+    match action_type {
+        "submitRequirement"
+        | "normalizeRequirement"
+        | "classifyRequirement"
+        | "draftSpec"
+        | "approveSpec"
+        | "createProject"
+        | "createIssue" => "acceptObject",
+        "activateIssue" | "claimIssue" | "startRun" => "startObject",
+        "writePatch" | "runValidation" | "submitEvidence" => "attachEvidence",
+        "prepareDelivery" | "submitArtifact" => "attachArtifact",
+        "markIssueDone" => "submitForReview",
+        "recordDecision" => "completeObject",
+        "requestAudit" => "submitForReview",
+        "createFinding" => "blockObject",
+        "linkFixIssue" => "supersedeObject",
+        _ => "unlisted-action",
+    }
+}
+
 fn runtime_command_status_str(status: &RuntimeCommandStatus) -> &'static str {
     match status {
         RuntimeCommandStatus::Accepted => "accepted",
@@ -1075,13 +1124,42 @@ mod tests {
                 "projectTitle": "Governance Admission Project"
             }),
             evidence_refs: vec![
-                "approved-spec-1".to_string(),
-                "human-confirmation-1".to_string(),
+                "DecisionRef:approved-spec-1".to_string(),
+                "EvidenceRef:human-confirmation-1".to_string(),
             ],
-            artifact_refs: vec![".agentflow/spec/requirements/req-001/preview.json".to_string()],
+            artifact_refs: vec![
+                "ArtifactRef:.agentflow/spec/requirements/req-001/preview.json".to_string(),
+            ],
             expected_outputs: Vec::new(),
             evidence_policy: None,
             idempotency_key: format!("spec:req-001:project:project-001:{command_id}"),
+            created_at: "2026-06-20T00:00:00Z".to_string(),
+        }
+    }
+
+    fn work_run_request(command_id: &str) -> RuntimeCommandRequest {
+        RuntimeCommandRequest {
+            command_id: command_id.to_string(),
+            command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+            route: Some(core_runtime_route(
+                "core:issue.start",
+                "action-contract:issue.start",
+                Some("Issue"),
+            )),
+            source_surface: ActionSourceSurface::Agent,
+            actor_role: "work-agent".to_string(),
+            skill_ref: Some("core:work-agent:work-execution-skill".to_string()),
+            target_object_ref: Some(target_ref("Issue", "AF-653")),
+            input: json!({
+                "runId": "run-653",
+                "governanceWorkerId": "local-shell-validator",
+                "governanceCommand": "local.test"
+            }),
+            evidence_refs: vec!["EvidenceRef:issue-ready".to_string()],
+            artifact_refs: vec!["ArtifactRef:context-pack".to_string()],
+            expected_outputs: Vec::new(),
+            evidence_policy: None,
+            idempotency_key: format!("work:AF-653:start:{command_id}"),
             created_at: "2026-06-20T00:00:00Z".to_string(),
         }
     }
@@ -1220,6 +1298,123 @@ mod tests {
         let decision = load_runtime_decision_fact(dir.path(), &response.proposal_id).unwrap();
         assert_eq!(decision.status, "deferred");
         assert!(decision.governance_admission.is_some());
+    }
+
+    #[test]
+    fn governance_rejects_missing_skill_before_writing_proposal() {
+        let dir = tempdir().unwrap();
+        let mut request = work_run_request("cmd-missing-skill");
+        request.skill_ref = None;
+
+        let response = execute_command_via_arbitration_with_context(
+            dir.path(),
+            &request,
+            &build_core_arbitration_context().unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(response.status, RuntimeCommandStatus::Rejected);
+        let report = response.governance_admission.as_ref().unwrap();
+        assert_eq!(report.skill_registry_policy.reason, "missingSkillRef");
+        assert!(load_runtime_proposal_facts(dir.path()).unwrap().is_empty());
+        assert!(load_runtime_accepted_action_facts(dir.path())
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn governance_rejects_unauthorized_skill_owner_before_writing_proposal() {
+        let dir = tempdir().unwrap();
+        let mut request = work_run_request("cmd-wrong-skill-owner");
+        request.skill_ref = Some("core:audit-agent:work-execution-skill".to_string());
+
+        let response = execute_command_via_arbitration_with_context(
+            dir.path(),
+            &request,
+            &build_core_arbitration_context().unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(response.status, RuntimeCommandStatus::Rejected);
+        let report = response.governance_admission.as_ref().unwrap();
+        assert_eq!(report.skill_registry_policy.reason, "skillOwnerMismatch");
+        assert!(load_runtime_proposal_facts(dir.path()).unwrap().is_empty());
+        assert!(load_runtime_accepted_action_facts(dir.path())
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn governance_rejects_invalid_target_object_before_writing_proposal() {
+        let dir = tempdir().unwrap();
+        let mut request = work_run_request("cmd-invalid-object");
+        request.target_object_ref = Some(target_ref("Ghost", "AF-653"));
+
+        let response = execute_command_via_arbitration_with_context(
+            dir.path(),
+            &request,
+            &build_core_arbitration_context().unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(response.status, RuntimeCommandStatus::Rejected);
+        let report = response.governance_admission.as_ref().unwrap();
+        assert_eq!(report.skill_registry_policy.reason, "invalidObjectType");
+        assert!(load_runtime_proposal_facts(dir.path()).unwrap().is_empty());
+        assert!(load_runtime_accepted_action_facts(dir.path())
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn governance_rejects_forbidden_surface_before_writing_proposal() {
+        let dir = tempdir().unwrap();
+        let mut request = work_run_request("cmd-forbidden-surface");
+        request.source_surface = ActionSourceSurface::Desktop;
+
+        let response = execute_command_via_arbitration_with_context(
+            dir.path(),
+            &request,
+            &build_core_arbitration_context().unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(response.status, RuntimeCommandStatus::Rejected);
+        let report = response.governance_admission.as_ref().unwrap();
+        assert_eq!(
+            report.skill_registry_policy.reason,
+            "sourceSurfaceNotAllowed"
+        );
+        assert!(load_runtime_proposal_facts(dir.path()).unwrap().is_empty());
+        assert!(load_runtime_accepted_action_facts(dir.path())
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn governance_defers_missing_required_evidence_before_writing_proposal() {
+        let dir = tempdir().unwrap();
+        let mut request = work_run_request("cmd-missing-evidence");
+        request.evidence_refs = Vec::new();
+        request.artifact_refs = Vec::new();
+
+        let response = execute_command_via_arbitration_with_context(
+            dir.path(),
+            &request,
+            &build_core_arbitration_context().unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(response.status, RuntimeCommandStatus::Deferred);
+        let report = response.governance_admission.as_ref().unwrap();
+        assert_eq!(
+            report.skill_registry_policy.reason,
+            "missingRequiredEvidence"
+        );
+        assert!(load_runtime_proposal_facts(dir.path()).unwrap().is_empty());
+        assert!(load_runtime_accepted_action_facts(dir.path())
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -1428,9 +1623,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let mut request = request("submitEvidence");
         request.actor_role = "work-agent".to_string();
+        request.skill_ref = Some("core:work-agent:work-execution-skill".to_string());
+        request.source_surface = ActionSourceSurface::Agent;
         request.target_object_ref = Some(target_ref("Run", "run-001"));
         request.input = json!({ "evidenceSummary": "构建日志" });
-        request.evidence_refs = vec!["missing-log".to_string()];
+        request.evidence_refs = vec!["EvidenceRef:missing-log".to_string()];
+        request.artifact_refs = vec!["ArtifactRef:patch-summary".to_string()];
 
         let mut context = build_core_arbitration_context().unwrap();
         context.insert_state(StateFact {
@@ -1471,16 +1669,17 @@ mod tests {
         let dir = tempdir().unwrap();
         let mut request = request("recordDecision");
         request.actor_role = "human-owner".to_string();
+        request.skill_ref = Some("core:human-owner:human-decision-skill".to_string());
         request.input = json!({
             "outcome": "approve",
             "targetObjectType": "Spec",
             "targetObjectId": "AF-325"
         });
-        request.evidence_refs = vec!["human-confirmation-1".to_string()];
+        request.evidence_refs = vec!["DecisionRef:human-confirmation-1".to_string()];
 
         let mut context = build_core_arbitration_context().unwrap();
         context.insert_evidence(EvidenceFact {
-            evidence_ref: "human-confirmation-1".to_string(),
+            evidence_ref: "DecisionRef:human-confirmation-1".to_string(),
             evidence_type: "humanConfirmation".to_string(),
         });
 
@@ -1509,10 +1708,12 @@ mod tests {
                 "projectTitle": "Project Runtime Records"
             }),
             evidence_refs: vec![
-                "approved-spec-1".to_string(),
-                "human-confirmation-1".to_string(),
+                "DecisionRef:approved-spec-1".to_string(),
+                "EvidenceRef:human-confirmation-1".to_string(),
             ],
-            artifact_refs: vec![".agentflow/spec/requirements/req-001/preview.json".to_string()],
+            artifact_refs: vec![
+                "ArtifactRef:.agentflow/spec/requirements/req-001/preview.json".to_string(),
+            ],
             expected_outputs: Vec::new(),
             evidence_policy: None,
             idempotency_key: "spec:req-001:project:project-001:createProject:2026-06-20T00:00:00Z"
@@ -1527,11 +1728,11 @@ mod tests {
             state_id: "approved".to_string(),
         });
         context.insert_evidence(EvidenceFact {
-            evidence_ref: "approved-spec-1".to_string(),
+            evidence_ref: "DecisionRef:approved-spec-1".to_string(),
             evidence_type: "approvedSpecAvailable".to_string(),
         });
         context.insert_evidence(EvidenceFact {
-            evidence_ref: "human-confirmation-1".to_string(),
+            evidence_ref: "EvidenceRef:human-confirmation-1".to_string(),
             evidence_type: "humanConfirmation".to_string(),
         });
 
@@ -1625,8 +1826,8 @@ mod tests {
                 from_state: Some("approved".to_string()),
                 to_state: Some("projectCreated".to_string()),
                 evidence_refs: vec![
-                    "approved-spec-1".to_string(),
-                    "human-confirmation-1".to_string(),
+                    "DecisionRef:approved-spec-1".to_string(),
+                    "EvidenceRef:human-confirmation-1".to_string(),
                 ],
                 artifact_refs: Vec::new(),
                 expected_events: vec!["ProjectCreated".to_string()],
@@ -1674,10 +1875,12 @@ mod tests {
                 "projectTitle": "Locked Project"
             }),
             evidence_refs: vec![
-                "approved-spec-1".to_string(),
-                "human-confirmation-1".to_string(),
+                "DecisionRef:approved-spec-1".to_string(),
+                "EvidenceRef:human-confirmation-1".to_string(),
             ],
-            artifact_refs: Vec::new(),
+            artifact_refs: vec![
+                "ArtifactRef:.agentflow/spec/requirements/req-001/preview.json".to_string(),
+            ],
             expected_outputs: Vec::new(),
             evidence_policy: None,
             idempotency_key: "spec:spec-001:project:project-002:createProject:2026-06-21T00:05:00Z"
@@ -1692,11 +1895,11 @@ mod tests {
             state_id: "approved".to_string(),
         });
         second_context.insert_evidence(EvidenceFact {
-            evidence_ref: "approved-spec-1".to_string(),
+            evidence_ref: "DecisionRef:approved-spec-1".to_string(),
             evidence_type: "approvedSpecAvailable".to_string(),
         });
         second_context.insert_evidence(EvidenceFact {
-            evidence_ref: "human-confirmation-1".to_string(),
+            evidence_ref: "EvidenceRef:human-confirmation-1".to_string(),
             evidence_type: "humanConfirmation".to_string(),
         });
         for lock in project_context.object_locks {
