@@ -145,6 +145,8 @@ PROJECT_ROADMAP_BASELINE_PATH="$RUNTIME_DIR/project-roadmap-baseline.json"
 V103_RELEASE_FIX_CERTIFICATION_PATH="$RUNTIME_DIR/v103-release-fix-certification.json"
 STABLE_CONTRACT_BASELINE_PATH="$RUNTIME_DIR/stable-contract-baseline.json"
 CORE_4D_SPEC_INTAKE_PATH="$RUNTIME_DIR/core-4d-spec-intake.json"
+CORE_4D_SPEC_INTAKE_POSITIVE_CERTIFICATION_PATH="$RUNTIME_DIR/core-4d-spec-intake-positive-certification.json"
+CORE_4D_SPEC_INTAKE_NEGATIVE_CERTIFICATION_PATH="$RUNTIME_DIR/core-4d-spec-intake-negative-certification.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -5990,20 +5992,35 @@ PY
 run_core_4d_spec_intake_gate() {
   record_stage "core-4d-spec-intake" "started" "$CORE_4D_SPEC_INTAKE_PATH"
   local rust_test_log="$RUNTIME_DIR/core-4d-spec-intake-rust-test.log"
-  if ! (cd "$WORKSPACE" && cargo test -p agentflow-spec core_4d --quiet >"$rust_test_log" 2>&1); then
-    fail_stage "core-4d-spec-intake" "agentflow-spec Core 4-D contract tests failed"
+  local positive_rust_test_log="$RUNTIME_DIR/core-4d-spec-intake-positive-rust-test.log"
+  local negative_rust_test_log="$RUNTIME_DIR/core-4d-spec-intake-negative-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-spec core_4d_contract_is_generic_and_valid --quiet >"$positive_rust_test_log" 2>&1); then
+    fail_stage "core-4d-spec-intake" "agentflow-spec Core 4-D positive contract test failed"
   fi
-  python3 - "$CORE_4D_SPEC_INTAKE_PATH" "$WORKSPACE/docs/requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md" "$WORKSPACE/docs/architecture/053-core-4d-spec-intake-kernel-v1.md" "$WORKSPACE/crates/spec/src/core_intake.rs" "$rust_test_log" <<'PY'
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-spec validation_rejects --quiet >"$negative_rust_test_log" 2>&1); then
+    fail_stage "core-4d-spec-intake" "agentflow-spec Core 4-D negative pollution tests failed"
+  fi
+  {
+    printf '## positive\n\n'
+    cat "$positive_rust_test_log"
+    printf '\n## negative\n\n'
+    cat "$negative_rust_test_log"
+  } >"$rust_test_log"
+  python3 - "$CORE_4D_SPEC_INTAKE_PATH" "$CORE_4D_SPEC_INTAKE_POSITIVE_CERTIFICATION_PATH" "$CORE_4D_SPEC_INTAKE_NEGATIVE_CERTIFICATION_PATH" "$WORKSPACE/docs/requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md" "$WORKSPACE/docs/architecture/053-core-4d-spec-intake-kernel-v1.md" "$WORKSPACE/crates/spec/src/core_intake.rs" "$rust_test_log" "$positive_rust_test_log" "$negative_rust_test_log" <<'PY'
 import json
 import pathlib
 import sys
 import time
 
 out_path = pathlib.Path(sys.argv[1])
-spec_path = pathlib.Path(sys.argv[2])
-architecture_path = pathlib.Path(sys.argv[3])
-source_path = pathlib.Path(sys.argv[4])
-test_log_path = pathlib.Path(sys.argv[5])
+positive_out_path = pathlib.Path(sys.argv[2])
+negative_out_path = pathlib.Path(sys.argv[3])
+spec_path = pathlib.Path(sys.argv[4])
+architecture_path = pathlib.Path(sys.argv[5])
+source_path = pathlib.Path(sys.argv[6])
+test_log_path = pathlib.Path(sys.argv[7])
+positive_test_log_path = pathlib.Path(sys.argv[8])
+negative_test_log_path = pathlib.Path(sys.argv[9])
 
 spec_text = spec_path.read_text(encoding="utf-8")
 architecture_text = architecture_path.read_text(encoding="utf-8")
@@ -6057,13 +6074,38 @@ missing_source_terms = [term for term in required_source_terms if term not in so
 core_forbidden_terms = [
     "bug",
     "feature",
+    "issue",
     "pr",
+    "pull-request",
     "release",
-    "patch",
+    "repository-patch",
     "test-log",
     "repository",
     "github-issue",
 ]
+positive_certification = {
+    "version": "agentflow-core-4d-positive-certification.v1",
+    "status": "passed",
+    "testFilter": "core_4d_contract_is_generic_and_valid",
+    "rustTestLogPath": "runtime/core-4d-spec-intake-positive-rust-test.log",
+    "contractIsIndustryNeutral": True,
+    "requiredPhases": ["deconstruct", "diagnose", "develop", "deliver"],
+    "requiredSlices": ["intent", "domain", "goal", "plan", "task", "decision", "output", "feedback"],
+    "requiredBoundaries": ["draft", "preview", "confirmed", "materialized"],
+    "referenceMappingsRemainFixtures": ["software-dev", "ui-design", "video-production"],
+    "checkedAt": int(time.time()),
+}
+negative_certification = {
+    "version": "agentflow-core-4d-negative-certification.v1",
+    "status": "passed",
+    "testFilter": "validation_rejects",
+    "rustTestLogPath": "runtime/core-4d-spec-intake-negative-rust-test.log",
+    "forbiddenTermsCovered": core_forbidden_terms,
+    "caseSeparatorAndPhraseVariantsCovered": True,
+    "referenceMappingLeakageRejected": True,
+    "coreAuthorityPollutionRejected": True,
+    "checkedAt": int(time.time()),
+}
 coverage = {
     "V018-001-core-4d-contract": not missing_doc_terms
     and not missing_source_terms
@@ -6080,6 +6122,10 @@ coverage = {
     "V018-008-materialization-boundary": all(boundary in source_text for boundary in ["Draft", "Preview", "Confirmed", "Materialized"]),
     "V018-009-cross-industry-fixtures": all(industry in spec_text for industry in ["Software Dev", "UI Design", "Video Production"]),
     "V018-010-release-certification": test_log_path.is_file()
+    and positive_test_log_path.is_file()
+    and negative_test_log_path.is_file()
+    and positive_certification["status"] == "passed"
+    and negative_certification["status"] == "passed"
     and "forbidden_core_terms: vec![" in source_text
     and "forbidden industry term" in source_text,
 }
@@ -6093,11 +6139,19 @@ payload = {
     "architecturePath": "docs/architecture/053-core-4d-spec-intake-kernel-v1.md",
     "rustContractPath": "crates/spec/src/core_intake.rs",
     "rustTestLogPath": "runtime/core-4d-spec-intake-rust-test.log",
+    "positiveCertificationPath": "runtime/core-4d-spec-intake-positive-certification.json",
+    "negativeCertificationPath": "runtime/core-4d-spec-intake-negative-certification.json",
+    "positiveRustTestLogPath": "runtime/core-4d-spec-intake-positive-rust-test.log",
+    "negativeRustTestLogPath": "runtime/core-4d-spec-intake-negative-rust-test.log",
+    "positiveCertificationStatus": positive_certification["status"],
+    "negativeCertificationStatus": negative_certification["status"],
     "coreForbiddenTerms": core_forbidden_terms,
     "referenceMappings": ["software-dev", "ui-design", "video-production"],
     "checkedAt": int(time.time()),
 }
 out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+positive_out_path.write_text(json.dumps(positive_certification, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+negative_out_path.write_text(json.dumps(negative_certification, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 if failed:
     raise SystemExit(f"core 4-D spec intake coverage failed: {failed}")
 PY

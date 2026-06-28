@@ -201,12 +201,18 @@ jobs:
               -o -name '*artifact*.json' \
               -o -name 'core-4d-spec-intake.json' \
               -o -name 'core-4d-spec-intake-rust-test.log' \
+              -o -name 'core-4d-spec-intake-positive-rust-test.log' \
+              -o -name 'core-4d-spec-intake-negative-rust-test.log' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
 
           for primary_proof in \
             runtime/core-4d-spec-intake.json \
-            runtime/core-4d-spec-intake-rust-test.log
+            runtime/core-4d-spec-intake-rust-test.log \
+            runtime/core-4d-spec-intake-positive-certification.json \
+            runtime/core-4d-spec-intake-positive-rust-test.log \
+            runtime/core-4d-spec-intake-negative-certification.json \
+            runtime/core-4d-spec-intake-negative-rust-test.log
           do
             if [ ! -f "$certification_dir/$primary_proof" ]; then
               echo "missing certification primary proof: $primary_proof" >&2
