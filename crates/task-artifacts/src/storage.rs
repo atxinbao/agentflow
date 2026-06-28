@@ -1849,6 +1849,45 @@ mod tests {
     }
 
     #[test]
+    fn commit_writeback_records_terminal_state_and_reason() {
+        let dir = tempdir().unwrap();
+        create_task_run(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            "work-agent.issue-loop@v1",
+            None,
+        )
+        .unwrap();
+
+        let updated = commit_task_run_writeback(
+            dir.path(),
+            "AF-TASK-001",
+            "run-001",
+            TaskRunStatus::Completed,
+            "completion-committed",
+            Some("accepted closeout proof".to_string()),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(updated.status, TaskRunStatus::Completed);
+        assert_eq!(
+            updated.writeback_state.as_deref(),
+            Some("completion-committed")
+        );
+        assert_eq!(
+            updated.terminal_reason.as_deref(),
+            Some("accepted closeout proof")
+        );
+        assert!(updated.last_error.is_none());
+
+        let loaded = load_task_run(dir.path(), "AF-TASK-001", "run-001").unwrap();
+        assert_eq!(loaded.writeback_state, updated.writeback_state);
+        assert_eq!(loaded.terminal_reason, updated.terminal_reason);
+    }
+
+    #[test]
     fn syncs_durable_work_session_and_preserves_retry_history() {
         let dir = tempdir().unwrap();
         create_task_run(

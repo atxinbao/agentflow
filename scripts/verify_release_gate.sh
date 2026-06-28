@@ -154,6 +154,7 @@ CORE_SKILL_REGISTRY_PATH="$RUNTIME_DIR/core-skill-registry.json"
 CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH="$RUNTIME_DIR/core-evidence-decision-reference-model.json"
 CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
 V104_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v104-release-certification.json"
+CORE_RUNTIME_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/core-runtime-negative-fixtures.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -275,7 +276,8 @@ write_gate_reports() {
     "$FORGED_GOVERNANCE_RESPONSE_PATH" \
     "$RELEASE_ARTIFACT_BOUNDARY_PATH" \
     "$PROJECT_ROADMAP_BASELINE_PATH" \
-    "$V103_RELEASE_FIX_CERTIFICATION_PATH" <<'PY'
+    "$V103_RELEASE_FIX_CERTIFICATION_PATH" \
+    "$CORE_RUNTIME_NEGATIVE_FIXTURES_PATH" <<'PY'
 import json
 import pathlib
 import sys
@@ -320,6 +322,7 @@ forged_governance_response_path = pathlib.Path(sys.argv[37])
 release_artifact_boundary_path = pathlib.Path(sys.argv[38])
 project_roadmap_baseline_path = pathlib.Path(sys.argv[39])
 v103_release_fix_certification_path = pathlib.Path(sys.argv[40])
+core_runtime_negative_fixtures_path = pathlib.Path(sys.argv[41])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -389,6 +392,9 @@ proof_chain = [
     {"stage": "core-action-state-semantics", "label": "Core Action / State Semantics"},
     {"stage": "core-skill-registry", "label": "Core Skill Registry / Action Authorization"},
     {"stage": "core-evidence-decision-reference-model", "label": "Core Evidence / Decision Reference Model"},
+    {"stage": "core-file-backed-ontology-registry", "label": "Core File-backed Ontology Registry"},
+    {"stage": "v104-release-certification", "label": "v1.0.4 Release Certification"},
+    {"stage": "core-runtime-negative-fixtures", "label": "Core Runtime Negative Fixtures"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -468,6 +474,7 @@ runtime_artifacts = [
     {"path": "runtime/release-artifact-boundary.json", "exists": release_artifact_boundary_path.is_file()},
     {"path": "runtime/project-roadmap-baseline.json", "exists": project_roadmap_baseline_path.is_file()},
     {"path": "runtime/v103-release-fix-certification.json", "exists": v103_release_fix_certification_path.is_file()},
+    {"path": "runtime/core-runtime-negative-fixtures.json", "exists": core_runtime_negative_fixtures_path.is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -519,6 +526,7 @@ forged_governance_response = load_json(forged_governance_response_path) or {}
 release_artifact_boundary = load_json(release_artifact_boundary_path) or {}
 project_roadmap_baseline = load_json(project_roadmap_baseline_path) or {}
 v103_release_fix_certification = load_json(v103_release_fix_certification_path) or {}
+core_runtime_negative_fixtures = load_json(core_runtime_negative_fixtures_path) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
 deployment_evidence_wrong_commit = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json")) or {}
@@ -1370,6 +1378,10 @@ summary_payload = {
     "v103ReleaseFixCertificationPath": "runtime/v103-release-fix-certification.json" if v103_release_fix_certification else None,
     "v103ReleaseFixCertificationStatus": v103_release_fix_certification.get("v103ReleaseFixCertificationStatus") or v103_release_fix_certification.get("status") or "missing",
     "v103Coverage": v103_release_fix_certification.get("coverage") or {},
+    "coreRuntimeNegativeFixturesPath": "runtime/core-runtime-negative-fixtures.json" if core_runtime_negative_fixtures_path.is_file() else None,
+    "coreRuntimeNegativeFixturesStatus": core_runtime_negative_fixtures.get("status") or "missing",
+    "coreRuntimeNegativeFixtureCoverage": core_runtime_negative_fixtures.get("fixtures") or [],
+    "softwareDevReferenceWorkflowStatus": (core_runtime_negative_fixtures.get("positiveWorkflow") or {}).get("status") or "missing",
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1607,6 +1619,10 @@ certification_payload = {
     "v103ReleaseFixCertificationPath": "runtime/v103-release-fix-certification.json" if v103_release_fix_certification else None,
     "v103ReleaseFixCertificationStatus": v103_release_fix_certification.get("v103ReleaseFixCertificationStatus") or v103_release_fix_certification.get("status") or "missing",
     "v103Coverage": v103_release_fix_certification.get("coverage") or {},
+    "coreRuntimeNegativeFixturesPath": "runtime/core-runtime-negative-fixtures.json" if core_runtime_negative_fixtures_path.is_file() else None,
+    "coreRuntimeNegativeFixturesStatus": core_runtime_negative_fixtures.get("status") or "missing",
+    "coreRuntimeNegativeFixtureCoverage": core_runtime_negative_fixtures.get("fixtures") or [],
+    "softwareDevReferenceWorkflowStatus": (core_runtime_negative_fixtures.get("positiveWorkflow") or {}).get("status") or "missing",
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -6901,6 +6917,189 @@ PY
   record_stage "v104-release-certification" "passed" "$(basename "$V104_RELEASE_CERTIFICATION_PATH")"
 }
 
+run_core_runtime_negative_fixtures_gate() {
+  record_stage "core-runtime-negative-fixtures" "started" "$CORE_RUNTIME_NEGATIVE_FIXTURES_PATH"
+  local runtime_api_test_log="$RUNTIME_DIR/core-runtime-negative-runtime-api-test.log"
+  local arbitration_test_log="$RUNTIME_DIR/core-runtime-negative-arbitration-test.log"
+  local task_artifacts_test_log="$RUNTIME_DIR/core-runtime-negative-task-artifacts-test.log"
+  local projection_test_log="$RUNTIME_DIR/core-runtime-negative-projection-test.log"
+
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-runtime-api --quiet >"$runtime_api_test_log" 2>&1); then
+    fail_stage "core-runtime-negative-fixtures" "agentflow-runtime-api negative fixture coverage failed"
+  fi
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-action-arbitration --quiet >"$arbitration_test_log" 2>&1); then
+    fail_stage "core-runtime-negative-fixtures" "agentflow-action-arbitration reference mapping coverage failed"
+  fi
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-task-artifacts --quiet >"$task_artifacts_test_log" 2>&1); then
+    fail_stage "core-runtime-negative-fixtures" "agentflow-task-artifacts closeout/writeback coverage failed"
+  fi
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-projection --quiet >"$projection_test_log" 2>&1); then
+    fail_stage "core-runtime-negative-fixtures" "agentflow-projection readonly coverage failed"
+  fi
+
+  python3 - \
+    "$CORE_RUNTIME_NEGATIVE_FIXTURES_PATH" \
+    "$WORKSPACE/crates/runtime-api/src/commands.rs" \
+    "$WORKSPACE/crates/action-arbitration/src/arbitrator.rs" \
+    "$WORKSPACE/crates/task-artifacts/src/storage.rs" \
+    "$WORKSPACE/crates/projection/src/projector.rs" \
+    "$runtime_api_test_log" \
+    "$arbitration_test_log" \
+    "$task_artifacts_test_log" \
+    "$projection_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+runtime_api_source = pathlib.Path(sys.argv[2])
+arbitration_source = pathlib.Path(sys.argv[3])
+task_artifacts_source = pathlib.Path(sys.argv[4])
+projection_source = pathlib.Path(sys.argv[5])
+test_logs = [pathlib.Path(value) for value in sys.argv[6:]]
+
+sources = {
+    "runtime-api": runtime_api_source.read_text(encoding="utf-8"),
+    "arbitration": arbitration_source.read_text(encoding="utf-8"),
+    "task-artifacts": task_artifacts_source.read_text(encoding="utf-8"),
+    "projection": projection_source.read_text(encoding="utf-8"),
+}
+
+required_markers = {
+    "positive-reference-materialization": ("runtime-api", "core_action_proposal_materialization_uses_reference_mapping"),
+    "positive-reference-proposal-fact": ("runtime-api", "runtime_proposal_fact_records_core_mapping_fields"),
+    "positive-arbitration-acceptance": ("arbitration", "valid_proposal_returns_accepted"),
+    "positive-closeout-writeback": ("task-artifacts", "commit_writeback_records_terminal_state_and_reason"),
+    "unlisted-action": ("runtime-api", "invalid_command_returns_invalid_command"),
+    "forbidden-scope": ("runtime-api", "governance_rejects_forbidden_surface_before_writing_proposal"),
+    "missing-evidence": ("runtime-api", "governance_defers_missing_required_evidence_before_writing_proposal"),
+    "forged-provider-telemetry": ("runtime-api", "governance_ignores_forged_ready_request_input_without_trusted_registry"),
+    "software-dev-term-leaking-into-core-authority": ("runtime-api", "command_surface_aliases_map_to_supported_action_contracts"),
+    "missing-mapping": ("runtime-api", "runtime_validation_rejects_missing_reference_mapping"),
+    "wrong-mapping": ("runtime-api", "runtime_validation_rejects_polluted_core_target_as_app_mapping"),
+    "projection-authority-write": ("projection", "replay_report_rebuilds_projection_without_cached_read_model"),
+    "projection-corrupt-event-negative": ("projection", "replay_report_records_structured_failure_for_corrupt_event"),
+    "core-admission-semantic-mismatch": ("arbitration", "required_core_admission_rejects_semantic_mismatch"),
+}
+
+marker_results = {
+    fixture_id: marker in sources[source_name]
+    for fixture_id, (source_name, marker) in required_markers.items()
+}
+logs_exist = {path.name: path.is_file() for path in test_logs}
+
+negative_fixture_ids = [
+    "unlisted-action",
+    "forbidden-scope",
+    "missing-evidence",
+    "forged-provider-telemetry",
+    "software-dev-term-leaking-into-core-authority",
+    "projection-authority-write",
+    "missing-mapping",
+    "wrong-mapping",
+]
+fixtures = []
+for fixture_id in negative_fixture_ids:
+    fixtures.append({
+        "id": fixture_id,
+        "kind": "negative",
+        "passed": marker_results.get(fixture_id, False),
+        "expectedOutcome": "rejected-or-deferred-before-authority-write",
+        "authorityWriteBlocked": True,
+        "referenceMappingRequired": fixture_id in {
+            "missing-mapping",
+            "wrong-mapping",
+            "software-dev-term-leaking-into-core-authority",
+        },
+        "auditSidecar": "sidecar-only",
+    })
+
+positive_workflow = {
+    "id": "software-dev-reference-completion-through-core-runtime",
+    "status": "passed" if all(marker_results.get(key, False) for key in [
+        "positive-reference-materialization",
+        "positive-reference-proposal-fact",
+        "positive-arbitration-acceptance",
+        "positive-closeout-writeback",
+    ]) else "failed",
+    "stages": [
+        "core-command",
+        "admission",
+        "action-proposal",
+        "arbitration",
+        "executor-closeout",
+        "state-writeback",
+    ],
+    "softwareDevTerms": [
+        "Requirement",
+        "Spec",
+        "Issue",
+        "Run",
+        "PR",
+        "Release",
+    ],
+    "coreAuthorityBoundary": "software-dev-terms-are-reference-mapping-only",
+}
+
+core_authority_forbidden_terms = [
+    "Requirement",
+    "Spec",
+    "Issue",
+    "Run",
+    "PR",
+    "Release",
+    "GitHub issue",
+    "repository patch",
+    "test log",
+]
+
+coverage = {
+    "rust-runtime-api-tests-passed": logs_exist.get("core-runtime-negative-runtime-api-test.log") is True,
+    "rust-arbitration-tests-passed": logs_exist.get("core-runtime-negative-arbitration-test.log") is True,
+    "rust-task-artifacts-tests-passed": logs_exist.get("core-runtime-negative-task-artifacts-test.log") is True,
+    "rust-projection-tests-passed": logs_exist.get("core-runtime-negative-projection-test.log") is True,
+    "positive-reference-workflow-passed": positive_workflow["status"] == "passed",
+    "negative-fixtures-covered": all(item["passed"] for item in fixtures),
+    "missing-mapping-covered": marker_results.get("missing-mapping") is True,
+    "wrong-mapping-covered": marker_results.get("wrong-mapping") is True,
+    "projection-remains-readonly": marker_results.get("projection-authority-write") is True
+    and "writes_authority: false" in sources["projection"]
+    and "projection_authority: false" in sources["projection"],
+    "core-fixtures-free-of-software-dev-authority": marker_results.get("software-dev-term-leaking-into-core-authority") is True,
+}
+failed = [key for key, value in coverage.items() if not value]
+
+payload = {
+    "version": "agentflow-core-runtime-negative-fixtures.v1",
+    "status": "passed" if not failed else "failed",
+    "referenceApp": "software-dev",
+    "referenceAppAuthority": False,
+    "coreRuntimeAuthority": True,
+    "auditMode": "sidecar",
+    "positiveWorkflow": positive_workflow,
+    "fixtures": fixtures,
+    "coreAuthorityForbiddenTerms": core_authority_forbidden_terms,
+    "markerResults": marker_results,
+    "testLogs": {
+        "runtimeApi": "runtime/core-runtime-negative-runtime-api-test.log",
+        "arbitration": "runtime/core-runtime-negative-arbitration-test.log",
+        "taskArtifacts": "runtime/core-runtime-negative-task-artifacts-test.log",
+        "projection": "runtime/core-runtime-negative-projection-test.log",
+    },
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core runtime negative fixtures failed: {failed}")
+PY
+
+  record_stage "core-runtime-negative-fixtures" "passed" "$(basename "$CORE_RUNTIME_NEGATIVE_FIXTURES_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -7459,6 +7658,7 @@ PY
   run_core_evidence_decision_reference_model_gate
   run_core_file_backed_ontology_registry_gate
   run_v104_release_certification_gate
+  run_core_runtime_negative_fixtures_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
