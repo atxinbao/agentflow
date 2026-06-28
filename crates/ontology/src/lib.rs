@@ -29,9 +29,15 @@ pub use decision::{
 };
 pub use file_registry::{
     core_file_backed_ontology_registry_projection_contract,
+    diagnose_core_file_backed_ontology_registry_projection_contract,
+    load_core_file_backed_ontology_registry_projection,
+    load_core_file_backed_ontology_registry_projection_with_contract,
     validate_core_file_backed_ontology_registry_projection_contract,
-    CoreFileBackedOntologyRegistryProjectionContract, CoreOntologyProjectionEntryDefinition,
-    CoreOntologyRegistrySourceDefinition, CORE_FILE_BACKED_ONTOLOGY_REGISTRY_VERSION,
+    CoreFileBackedOntologyRegistryLoadError, CoreFileBackedOntologyRegistryProjectionContract,
+    CoreFileBackedOntologyRuntimeLoader, CoreFileBackedOntologyRuntimeProjection,
+    CoreOntologyProjectionEntryDefinition, CoreOntologyRegistryPollutionDiagnostic,
+    CoreOntologyRegistrySourceDefinition, LoadedCoreOntologyRegistrySource,
+    CORE_FILE_BACKED_ONTOLOGY_REGISTRY_VERSION,
 };
 pub use kernel::{
     core_ontology_kernel_contract, validate_core_ontology_kernel_contract, CoreOntologyElement,

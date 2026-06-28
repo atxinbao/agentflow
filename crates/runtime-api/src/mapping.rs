@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use agentflow_action_contract::{core_action_contract_registry, ActionSourceSurface};
 use agentflow_action_contract::{ActionProposal, ActionRef};
 use agentflow_ontology::{
-    core_action_state_semantics_contract, core_object_link_schema_contract,
-    software_dev_reference_ontology_registry,
+    load_core_file_backed_ontology_registry_projection, software_dev_reference_ontology_registry,
+    CoreFileBackedOntologyRuntimeProjection,
 };
 
 use crate::commands::{RuntimeCommandRequest, RuntimeCommandRoute};
@@ -94,6 +94,15 @@ pub fn materialize_core_action_proposal(
     request: &RuntimeCommandRequest,
     proposal: &ActionProposal,
 ) -> Result<RuntimeActionProposalMaterialization> {
+    let registry = load_core_file_backed_ontology_registry_projection(".")?;
+    materialize_core_action_proposal_with_registry(request, proposal, &registry)
+}
+
+pub fn materialize_core_action_proposal_with_registry(
+    request: &RuntimeCommandRequest,
+    proposal: &ActionProposal,
+    registry: &CoreFileBackedOntologyRuntimeProjection,
+) -> Result<RuntimeActionProposalMaterialization> {
     let route = request.route.as_ref().ok_or_else(|| {
         anyhow!(
             "missing reference mapping: route.actionContractRef is required for Core proposal materialization"
@@ -112,14 +121,14 @@ pub fn materialize_core_action_proposal(
                 proposal.action_type
             )
         })?;
-    let semantics = core_action_state_semantics_contract();
-    let core_action = semantics
+    let core_action = registry
+        .core_action_state_semantics
         .actions
         .iter()
         .find(|action| action.action_type == core_action_type)
         .ok_or_else(|| anyhow!("unknown Core action `{core_action_type}`"))?;
-    let schema = core_object_link_schema_contract();
-    if !schema
+    if !registry
+        .core_object_link_schema
         .object_schemas
         .iter()
         .any(|object| object.object_type == core_action.target_object_type)
@@ -159,7 +168,8 @@ pub fn materialize_core_action_proposal(
         core_target_object_type: core_action.target_object_type.clone(),
         core_required_state: core_action.required_state.clone(),
         core_resulting_state: core_action.resulting_state.clone(),
-        core_required_evidence: semantics
+        core_required_evidence: registry
+            .core_action_state_semantics
             .transitions
             .iter()
             .filter(|transition| transition.action_type == core_action.action_type)

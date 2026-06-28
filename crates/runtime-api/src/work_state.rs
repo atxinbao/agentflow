@@ -10,14 +10,16 @@ use agentflow_action_arbitration::{
 };
 use agentflow_action_contract::{core_action_contract_registry, ActionRef, ActionSourceSurface};
 use agentflow_object_state::core_object_state_registry;
-use agentflow_ontology::software_dev_reference_ontology_registry;
+use agentflow_ontology::{
+    load_core_file_backed_ontology_registry_projection, software_dev_reference_ontology_registry,
+};
 use agentflow_spec::SpecIssueStatus;
 use agentflow_task_artifacts::TaskRunStatus;
 
 use crate::commands::{build_project_arbitration_context, RuntimeCommandRequest};
 use crate::mapping::{
     action_contract_ref_for_action_type, core_runtime_route, map_command_to_action_proposal,
-    materialize_core_action_proposal, CORE_RUNTIME_COMMAND_TYPE,
+    materialize_core_action_proposal_with_registry, CORE_RUNTIME_COMMAND_TYPE,
 };
 
 pub fn issue_surface_state_id(status: &SpecIssueStatus) -> &'static str {
@@ -115,7 +117,8 @@ fn arbitrate_issue_action(
     input: Value,
     evidence_types: &[&str],
 ) -> Result<String> {
-    let mut context = build_project_arbitration_context(project_root)?;
+    let root = project_root.as_ref();
+    let mut context = build_project_arbitration_context(root)?;
     context.insert_state(StateFact {
         object_type: "Issue".to_string(),
         object_id: issue_id.to_string(),
@@ -159,7 +162,9 @@ fn arbitrate_issue_action(
         created_at: unix_timestamp_seconds().to_string(),
     };
     let proposal = map_command_to_action_proposal(&request)?;
-    let core_materialization = materialize_core_action_proposal(&request, &proposal)?;
+    let core_registry = load_core_file_backed_ontology_registry_projection(root)?;
+    let core_materialization =
+        materialize_core_action_proposal_with_registry(&request, &proposal, &core_registry)?;
     let arbitration_request = ArbitrationRequest {
         request_id: request.command_id.clone(),
         proposal,

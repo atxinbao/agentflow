@@ -20,7 +20,9 @@ use agentflow_governance_policy::{
     GovernancePolicyRequest,
 };
 use agentflow_object_state::core_object_state_registry;
-use agentflow_ontology::software_dev_reference_ontology_registry;
+use agentflow_ontology::{
+    load_core_file_backed_ontology_registry_projection, software_dev_reference_ontology_registry,
+};
 use agentflow_role_policy::core_role_policy_registry;
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use agentflow_workflow_runtime::{
@@ -34,9 +36,9 @@ use agentflow_workflow_runtime::{
 
 use crate::errors::{RuntimeCommandError, RuntimeCommandErrorCode};
 use crate::mapping::{
-    map_command_to_action_proposal, materialize_core_action_proposal, missing_field_error,
-    runtime_query_hint_for_command, source_surface_label, unsupported_command_error,
-    validate_core_action_proposal_materialization,
+    map_command_to_action_proposal, materialize_core_action_proposal_with_registry,
+    missing_field_error, runtime_query_hint_for_command, source_surface_label,
+    unsupported_command_error, validate_core_action_proposal_materialization,
 };
 use crate::responses::{
     RuntimeCommandDecision, RuntimeCommandResponse, RuntimeCommandStatus,
@@ -261,7 +263,9 @@ pub fn execute_command_via_arbitration_with_context(
         return Ok(response);
     }
 
-    let core_materialization = materialize_core_action_proposal(request, &proposal)?;
+    let core_registry = load_core_file_backed_ontology_registry_projection(root)?;
+    let core_materialization =
+        materialize_core_action_proposal_with_registry(request, &proposal, &core_registry)?;
     write_runtime_proposal_fact(
         root,
         &RuntimeProposalFact {
