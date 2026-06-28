@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use agentflow_action_contract::{core_action_contract_registry, ActionSourceSurface};
 use agentflow_action_contract::{ActionProposal, ActionRef};
-use agentflow_ontology::core_ontology_registry;
+use agentflow_ontology::software_dev_reference_ontology_registry;
 
 use crate::commands::RuntimeCommandRequest;
 use crate::errors::{RuntimeCommandError, RuntimeCommandErrorCode};
@@ -18,7 +18,7 @@ pub struct RuntimeQueryHint {
 }
 
 pub fn map_command_to_action_proposal(request: &RuntimeCommandRequest) -> Result<ActionProposal> {
-    let ontology = core_ontology_registry();
+    let ontology = software_dev_reference_ontology_registry();
     let contracts = core_action_contract_registry(&ontology);
     let action_type = canonical_action_type(&request.command_type).ok_or_else(|| {
         anyhow!(

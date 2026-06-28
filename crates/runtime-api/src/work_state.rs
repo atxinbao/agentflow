@@ -10,7 +10,7 @@ use agentflow_action_arbitration::{
 };
 use agentflow_action_contract::{core_action_contract_registry, ActionRef, ActionSourceSurface};
 use agentflow_object_state::core_object_state_registry;
-use agentflow_ontology::core_ontology_registry;
+use agentflow_ontology::software_dev_reference_ontology_registry;
 use agentflow_spec::SpecIssueStatus;
 use agentflow_task_artifacts::TaskRunStatus;
 
@@ -170,7 +170,7 @@ fn resolve_object_transition(
     current_state: &str,
     action_type: &str,
 ) -> Result<String> {
-    let ontology = core_ontology_registry();
+    let ontology = software_dev_reference_ontology_registry();
     let contracts = core_action_contract_registry(&ontology);
     let registry = core_object_state_registry(&ontology, &contracts)
         .map_err(|report| anyhow!("load core object state registry: {:?}", report))?;

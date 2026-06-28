@@ -5,15 +5,74 @@ use crate::model::{
     ONTOLOGY_RECORD_VERSION,
 };
 use crate::registry::OntologyRegistry;
+use crate::schema::core_object_link_schema_contract;
 
 pub const CORE_ONTOLOGY_ID: &str = "agentflow.core";
 pub const CORE_ONTOLOGY_NAMESPACE: &str = "agentflow.core";
 pub const CORE_ONTOLOGY_VERSION: &str = "v1-draft";
 pub const CORE_ONTOLOGY_REF: &str = "agentflow.core@v1-draft";
+pub const SOFTWARE_DEV_REFERENCE_ONTOLOGY_ID: &str = "agentflow.reference.software-dev";
+pub const SOFTWARE_DEV_REFERENCE_ONTOLOGY_NAMESPACE: &str = "agentflow.reference.software-dev";
+pub const SOFTWARE_DEV_REFERENCE_ONTOLOGY_VERSION: &str = "v1-draft";
+pub const SOFTWARE_DEV_REFERENCE_ONTOLOGY_REF: &str = "agentflow.reference.software-dev@v1-draft";
 const CORE_OWNER: &str = "agentflow";
 const CORE_TIMESTAMP: &str = "2026-06-20T00:00:00Z";
 
 pub fn core_ontology_bundle() -> OntologyBundle {
+    let schema_contract = core_object_link_schema_contract();
+    let object_types = schema_contract
+        .object_schemas
+        .iter()
+        .map(|schema| {
+            object_type(
+                &schema.object_type,
+                &schema.object_type,
+                &schema.description,
+                schema
+                    .required_fields
+                    .iter()
+                    .map(|field| {
+                        property(
+                            field,
+                            OntologyPropertyValueType::String,
+                            true,
+                            "Core object authority field.",
+                        )
+                    })
+                    .collect(),
+                schema
+                    .allowed_link_types
+                    .iter()
+                    .map(String::as_str)
+                    .collect(),
+                vec!["coreProjection"],
+            )
+        })
+        .collect();
+    let link_types = schema_contract
+        .link_schemas
+        .iter()
+        .map(|schema| {
+            link_type(
+                &schema.link_type,
+                &schema.source_object_type,
+                &schema.target_object_type,
+                cardinality_from_schema(&schema.cardinality),
+                &schema.description,
+            )
+        })
+        .collect();
+
+    build_ontology_bundle(
+        CORE_ONTOLOGY_ID,
+        CORE_ONTOLOGY_NAMESPACE,
+        CORE_ONTOLOGY_VERSION,
+        object_types,
+        link_types,
+    )
+}
+
+pub fn software_dev_reference_ontology_bundle() -> OntologyBundle {
     let object_types = vec![
         object_type(
             "Requirement",
@@ -385,37 +444,68 @@ pub fn core_ontology_bundle() -> OntologyBundle {
         ),
     ];
 
-    let definition_records = object_types
-        .iter()
-        .map(|definition| definition_record(&definition.id, DefinitionKind::ObjectType))
-        .chain(
-            link_types
-                .iter()
-                .map(|definition| definition_record(&definition.id, DefinitionKind::LinkType)),
-        )
-        .collect();
-
-    OntologyBundle {
-        version: ONTOLOGY_BUNDLE_VERSION.into(),
-        ontology_id: CORE_ONTOLOGY_ID.into(),
-        namespace: CORE_ONTOLOGY_NAMESPACE.into(),
-        definition_version: CORE_ONTOLOGY_VERSION.into(),
-        status: DefinitionStatus::Draft,
+    build_ontology_bundle(
+        SOFTWARE_DEV_REFERENCE_ONTOLOGY_ID,
+        SOFTWARE_DEV_REFERENCE_ONTOLOGY_NAMESPACE,
+        SOFTWARE_DEV_REFERENCE_ONTOLOGY_VERSION,
         object_types,
         link_types,
-        definition_records,
-        compatibility: Some(OntologyCompatibility {
-            replay_from_version: CORE_ONTOLOGY_VERSION.into(),
-        }),
-        migration: Some(OntologyMigration {
-            strategy: "explicit".into(),
-        }),
-    }
+    )
 }
 
 pub fn core_ontology_registry() -> OntologyRegistry {
     OntologyRegistry::load_bundle(core_ontology_bundle())
         .expect("built-in core ontology must validate")
+}
+
+pub fn software_dev_reference_ontology_registry() -> OntologyRegistry {
+    OntologyRegistry::load_bundle(software_dev_reference_ontology_bundle())
+        .expect("built-in Software Dev reference ontology must validate")
+}
+
+fn build_ontology_bundle(
+    ontology_id: &str,
+    namespace: &str,
+    definition_version: &str,
+    object_types: Vec<ObjectTypeDefinition>,
+    link_types: Vec<LinkTypeDefinition>,
+) -> OntologyBundle {
+    let definition_records = object_types
+        .iter()
+        .map(|definition| {
+            definition_record(
+                &definition.id,
+                DefinitionKind::ObjectType,
+                namespace,
+                definition_version,
+            )
+        })
+        .chain(link_types.iter().map(|definition| {
+            definition_record(
+                &definition.id,
+                DefinitionKind::LinkType,
+                namespace,
+                definition_version,
+            )
+        }))
+        .collect();
+
+    OntologyBundle {
+        version: ONTOLOGY_BUNDLE_VERSION.into(),
+        ontology_id: ontology_id.into(),
+        namespace: namespace.into(),
+        definition_version: definition_version.into(),
+        status: DefinitionStatus::Draft,
+        object_types,
+        link_types,
+        definition_records,
+        compatibility: Some(OntologyCompatibility {
+            replay_from_version: definition_version.into(),
+        }),
+        migration: Some(OntologyMigration {
+            strategy: "explicit".into(),
+        }),
+    }
 }
 
 fn object_type(
@@ -462,6 +552,16 @@ fn link_type(
     }
 }
 
+fn cardinality_from_schema(value: &str) -> Cardinality {
+    match value {
+        "one-to-one" => Cardinality::OneToOne,
+        "one-to-many" => Cardinality::OneToMany,
+        "many-to-one" => Cardinality::ManyToOne,
+        "many-to-many" => Cardinality::ManyToMany,
+        _ => Cardinality::ManyToMany,
+    }
+}
+
 fn property(
     name: &str,
     value_type: OntologyPropertyValueType,
@@ -476,13 +576,18 @@ fn property(
     }
 }
 
-fn definition_record(id: &str, kind: DefinitionKind) -> OntologyDefinitionRecord {
+fn definition_record(
+    id: &str,
+    kind: DefinitionKind,
+    namespace: &str,
+    definition_version: &str,
+) -> OntologyDefinitionRecord {
     OntologyDefinitionRecord {
         version: ONTOLOGY_RECORD_VERSION.into(),
         id: id.into(),
-        namespace: CORE_ONTOLOGY_NAMESPACE.into(),
+        namespace: namespace.into(),
         kind,
-        definition_version: CORE_ONTOLOGY_VERSION.into(),
+        definition_version: definition_version.into(),
         status: DefinitionStatus::Draft,
         owner: CORE_OWNER.into(),
         created_at: CORE_TIMESTAMP.into(),

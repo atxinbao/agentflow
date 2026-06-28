@@ -20,7 +20,7 @@ use agentflow_governance_policy::{
     GovernancePolicyRequest,
 };
 use agentflow_object_state::core_object_state_registry;
-use agentflow_ontology::core_ontology_registry;
+use agentflow_ontology::software_dev_reference_ontology_registry;
 use agentflow_role_policy::core_role_policy_registry;
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
 use agentflow_workflow_runtime::{
@@ -297,7 +297,7 @@ pub fn execute_command_via_arbitration_with_context(
 }
 
 pub(crate) fn build_core_arbitration_context() -> Result<ArbitrationContext> {
-    let ontology = core_ontology_registry();
+    let ontology = software_dev_reference_ontology_registry();
     let contracts = core_action_contract_registry(&ontology);
     let role_policy = core_role_policy_registry(&ontology, &contracts);
     let object_state = core_object_state_registry(&ontology, &contracts)

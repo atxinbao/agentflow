@@ -281,7 +281,7 @@ fn ensure_product_role_binding(
 #[cfg(test)]
 mod tests {
     use agentflow_action_contract::core_action_contract_registry;
-    use agentflow_ontology::core_ontology_registry;
+    use agentflow_ontology::software_dev_reference_ontology_registry;
 
     use crate::core::core_role_policy_bundle;
     use crate::model::{RoleActionCapability, RuntimeAgentRole};
@@ -293,7 +293,7 @@ mod tests {
         agentflow_ontology::OntologyRegistry,
         agentflow_action_contract::ActionContractRegistry,
     ) {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let action_registry = core_action_contract_registry(&ontology);
         (ontology, action_registry)
     }

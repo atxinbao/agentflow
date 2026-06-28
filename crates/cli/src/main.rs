@@ -310,7 +310,7 @@ fn main() -> anyhow::Result<()> {
                 capability_registry,
                 output,
             } => {
-                let ontology = agentflow_ontology::core_ontology_registry();
+                let ontology = agentflow_ontology::software_dev_reference_ontology_registry();
                 let action_registry =
                     agentflow_action_contract::core_action_contract_registry(&ontology);
                 let role_registry =

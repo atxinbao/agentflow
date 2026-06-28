@@ -294,7 +294,7 @@ fn build_definition_index(bundle: &OntologyBundle) -> DefinitionIndex<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::core_ontology_bundle;
+    use crate::core::{core_ontology_bundle, software_dev_reference_ontology_bundle};
     use crate::model::{DefinitionKind, DefinitionStatus, OntologyDefinitionRecord};
     use crate::registry::OntologyRegistry;
 
@@ -399,33 +399,45 @@ mod tests {
     }
 
     #[test]
-    fn project_contains_issue_validates() {
+    fn goal_contains_plan_validates() {
         let registry = OntologyRegistry::load_bundle(core_ontology_bundle()).unwrap();
+        registry
+            .validate_link_endpoint("contains", "GoalObject", "PlanObject")
+            .unwrap();
+    }
+
+    #[test]
+    fn execution_executes_work_validates() {
+        let registry = OntologyRegistry::load_bundle(core_ontology_bundle()).unwrap();
+        registry
+            .validate_link_endpoint("executes", "ExecutionObject", "WorkObject")
+            .unwrap();
+    }
+
+    #[test]
+    fn review_requires_follow_up_work_validates() {
+        let registry = OntologyRegistry::load_bundle(core_ontology_bundle()).unwrap();
+        registry
+            .validate_link_endpoint("requiresFollowUp", "ReviewObject", "WorkObject")
+            .unwrap();
+    }
+
+    #[test]
+    fn core_bundle_does_not_include_software_dev_objects() {
+        let registry = OntologyRegistry::load_bundle(core_ontology_bundle()).unwrap();
+        assert!(registry.get_object_type("Issue").is_none());
+        assert!(registry.get_object_type("Run").is_none());
+        assert!(registry.get_object_type("Finding").is_none());
+        assert!(registry.get_object_type("WorkObject").is_some());
+    }
+
+    #[test]
+    fn software_dev_reference_project_contains_issue_validates() {
+        let registry =
+            OntologyRegistry::load_bundle(software_dev_reference_ontology_bundle()).unwrap();
         registry
             .validate_link_endpoint("contains", "Project", "Issue")
             .unwrap();
-    }
-
-    #[test]
-    fn run_executes_issue_validates() {
-        let registry = OntologyRegistry::load_bundle(core_ontology_bundle()).unwrap();
-        registry
-            .validate_link_endpoint("executes", "Run", "Issue")
-            .unwrap();
-    }
-
-    #[test]
-    fn finding_requires_fix_issue_validates() {
-        let registry = OntologyRegistry::load_bundle(core_ontology_bundle()).unwrap();
-        registry
-            .validate_link_endpoint("requiresFix", "Finding", "Issue")
-            .unwrap();
-    }
-
-    #[test]
-    fn missing_work_package_does_not_fail_mvp_bundle() {
-        let registry = OntologyRegistry::load_bundle(core_ontology_bundle()).unwrap();
-        assert!(registry.get_object_type("WorkPackage").is_none());
         assert!(registry.get_object_type("Project").is_some());
     }
 }

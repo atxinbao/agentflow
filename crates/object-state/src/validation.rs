@@ -546,7 +546,7 @@ fn resolve_known_contract_action_type<'a>(
 #[cfg(test)]
 mod tests {
     use agentflow_action_contract::{core_action_contract_bundle, core_action_contract_registry};
-    use agentflow_ontology::core_ontology_registry;
+    use agentflow_ontology::software_dev_reference_ontology_registry;
 
     use crate::core::core_object_state_bundle;
     use crate::model::ObjectStateMachineStatus;
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn core_object_state_bundle_validates() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
 
         let report = validate_object_state_bundle(&core_object_state_bundle(), &ontology, &actions);
@@ -563,7 +563,7 @@ mod tests {
 
     #[test]
     fn unknown_object_type_fails() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let mut bundle = core_object_state_bundle();
         bundle.state_machines[0].object_type = "Unknown".into();
@@ -578,7 +578,7 @@ mod tests {
 
     #[test]
     fn transition_with_missing_state_fails() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let mut bundle = core_object_state_bundle();
         bundle.state_machines[2].transitions[0].to_state = "missing".into();
@@ -593,7 +593,7 @@ mod tests {
 
     #[test]
     fn link_effect_unknown_link_type_fails() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let mut bundle = core_object_state_bundle();
         bundle.state_machines[5].transitions[0].link_effects = vec!["unknownLink".into()];
@@ -608,7 +608,7 @@ mod tests {
 
     #[test]
     fn mark_issue_done_must_keep_known_required_evidence() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let mut bundle = core_object_state_bundle();
         let transition = bundle
@@ -629,7 +629,7 @@ mod tests {
 
     #[test]
     fn unknown_transition_action_warns_for_draft_bundle() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let mut bundle = core_object_state_bundle();
         bundle.state_machines[0].transitions[0].action_type = "futureAction".into();

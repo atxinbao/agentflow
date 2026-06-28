@@ -162,13 +162,13 @@ fn transition_matches_action(transition: &StateTransitionDefinition, action_type
 #[cfg(test)]
 mod tests {
     use agentflow_action_contract::core_action_contract_registry;
-    use agentflow_ontology::core_ontology_registry;
+    use agentflow_ontology::software_dev_reference_ontology_registry;
 
     use crate::core::core_object_state_registry;
 
     #[test]
     fn legacy_issue_status_maps_to_review_ready() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let registry = core_object_state_registry(&ontology, &actions).unwrap();
 
@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn issue_done_does_not_allow_request_audit() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let registry = core_object_state_registry(&ontology, &actions).unwrap();
 
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn run_completed_does_not_imply_issue_done() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let registry = core_object_state_registry(&ontology, &actions).unwrap();
 
@@ -198,7 +198,7 @@ mod tests {
 
     #[test]
     fn finding_fix_required_can_link_fix_issue() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let registry = core_object_state_registry(&ontology, &actions).unwrap();
 
@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn spec_approved_allows_create_project() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let registry = core_object_state_registry(&ontology, &actions).unwrap();
 
@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn project_planned_allows_create_issue() {
-        let ontology = core_ontology_registry();
+        let ontology = software_dev_reference_ontology_registry();
         let actions = core_action_contract_registry(&ontology);
         let registry = core_object_state_registry(&ontology, &actions).unwrap();
 
