@@ -152,6 +152,7 @@ CORE_OBJECT_LINK_SCHEMA_PATH="$RUNTIME_DIR/core-object-link-schema.json"
 CORE_ACTION_STATE_SEMANTICS_PATH="$RUNTIME_DIR/core-action-state-semantics.json"
 CORE_SKILL_REGISTRY_PATH="$RUNTIME_DIR/core-skill-registry.json"
 CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH="$RUNTIME_DIR/core-evidence-decision-reference-model.json"
+CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -6661,6 +6662,130 @@ PY
   record_stage "core-evidence-decision-reference-model" "passed" "$(basename "$CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH")"
 }
 
+run_core_file_backed_ontology_registry_gate() {
+  record_stage "core-file-backed-ontology-registry" "started" "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-file-backed-ontology-registry-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_file_backed_ontology_registry --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-file-backed-ontology-registry" "agentflow-ontology Core File-backed Ontology Registry tests failed"
+  fi
+  python3 - "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH" "$WORKSPACE/docs/architecture/059-core-file-backed-ontology-registry-projection-v1.md" "$WORKSPACE/crates/ontology/src/file_registry.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+test_log_path = pathlib.Path(sys.argv[4])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+required_sources = [
+    "core-ontology-kernel",
+    "core-object-link-schema",
+    "core-action-state-semantics",
+    "core-skill-registry",
+    "core-evidence-decision-reference-model",
+]
+required_paths = [
+    "docs/architecture/054-core-ontology-kernel-contract-v1.md",
+    "docs/architecture/055-core-object-link-schema-v1.md",
+    "docs/architecture/056-core-action-state-semantics-v1.md",
+    "docs/architecture/057-core-skill-registry-action-authorization-v1.md",
+    "docs/architecture/058-core-evidence-decision-reference-model-v1.md",
+]
+required_projections = [
+    "core-kernel-map",
+    "core-object-link-catalog",
+    "core-action-state-catalog",
+    "core-skill-capability-catalog",
+    "core-evidence-decision-catalog",
+]
+required_surfaces = [
+    "coreElementCatalog",
+    "coreBoundaryMap",
+    "objectCatalog",
+    "linkCatalog",
+    "relationshipQuery",
+    "actionCatalog",
+    "stateCatalog",
+    "transitionQuery",
+    "skillCatalog",
+    "authorizationQuery",
+    "capabilityMatrix",
+    "evidenceCatalog",
+    "decisionCatalog",
+    "outcomeQuery",
+]
+required_source_fields = [
+    "source_id",
+    "relative_path",
+    "contract_version",
+    "read_model_kind",
+    "authority_boundary",
+    "projection_id",
+    "projection_kind",
+    "query_surfaces",
+    "minimum_record_count",
+]
+forbidden_terms = [
+    "bug",
+    "feature",
+    "issue",
+    "pr",
+    "pull-request",
+    "release",
+    "repository",
+    "repository-patch",
+    "test-log",
+    "github-issue",
+]
+coverage = {
+    "registry-version-defined": "agentflow-core-file-backed-ontology-registry.v1" in source_text,
+    "sources-documented": all(item in doc_text for item in required_sources),
+    "sources-implemented": all(item in source_text for item in required_sources),
+    "source-paths-documented": all(item in doc_text for item in required_paths),
+    "source-paths-implemented": all(item in source_text for item in required_paths),
+    "projections-documented": all(item in doc_text for item in required_projections),
+    "projections-implemented": all(item in source_text for item in required_projections),
+    "query-surfaces-documented": all(item in doc_text for item in required_surfaces),
+    "query-surfaces-implemented": all(item in source_text for item in required_surfaces),
+    "fields-implemented": all(item in source_text for item in required_source_fields),
+    "projection-not-source-authority": "do not replace source contracts" in doc_text and "do not replace source contracts" in source_text,
+    "reference-mappings-not-core-authority": "not Core authority" in doc_text and "not Core authority" in source_text,
+    "forbidden-terms-listed": all(term in doc_text and term in source_text for term in forbidden_terms),
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-file-backed-ontology-registry-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-file-backed-ontology-registry.v1",
+    "architecturePath": "docs/architecture/059-core-file-backed-ontology-registry-projection-v1.md",
+    "rustContractPath": "crates/ontology/src/file_registry.rs",
+    "rustTestLogPath": "runtime/core-file-backed-ontology-registry-rust-test.log",
+    "registrySourceCount": len(required_sources),
+    "projectionEntryCount": len(required_projections),
+    "querySurfaceCount": len(required_surfaces),
+    "requiredSources": required_sources,
+    "requiredPaths": required_paths,
+    "requiredProjections": required_projections,
+    "requiredQuerySurfaces": required_surfaces,
+    "forbiddenCoreTerms": forbidden_terms,
+    "referenceMappingBoundary": "reference-app-only-not-core-authority",
+    "projectionBoundary": "read-only-projection-not-source-authority",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core file-backed ontology registry coverage failed: {failed}")
+PY
+  record_stage "core-file-backed-ontology-registry" "passed" "$(basename "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -7217,6 +7342,7 @@ PY
   run_core_action_state_semantics_gate
   run_core_skill_registry_gate
   run_core_evidence_decision_reference_model_gate
+  run_core_file_backed_ontology_registry_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
