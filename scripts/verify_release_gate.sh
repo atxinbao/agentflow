@@ -151,6 +151,7 @@ CORE_ONTOLOGY_KERNEL_PATH="$RUNTIME_DIR/core-ontology-kernel.json"
 CORE_OBJECT_LINK_SCHEMA_PATH="$RUNTIME_DIR/core-object-link-schema.json"
 CORE_ACTION_STATE_SEMANTICS_PATH="$RUNTIME_DIR/core-action-state-semantics.json"
 CORE_SKILL_REGISTRY_PATH="$RUNTIME_DIR/core-skill-registry.json"
+CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH="$RUNTIME_DIR/core-evidence-decision-reference-model.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -385,6 +386,7 @@ proof_chain = [
     {"stage": "core-object-link-schema", "label": "Core Object / Link Schema"},
     {"stage": "core-action-state-semantics", "label": "Core Action / State Semantics"},
     {"stage": "core-skill-registry", "label": "Core Skill Registry / Action Authorization"},
+    {"stage": "core-evidence-decision-reference-model", "label": "Core Evidence / Decision Reference Model"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -6565,6 +6567,100 @@ PY
   record_stage "core-skill-registry" "passed" "$(basename "$CORE_SKILL_REGISTRY_PATH")"
 }
 
+run_core_evidence_decision_reference_model_gate() {
+  record_stage "core-evidence-decision-reference-model" "started" "$CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-evidence-decision-reference-model-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_evidence_decision --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-evidence-decision-reference-model" "agentflow-ontology Core Evidence / Decision Reference Model tests failed"
+  fi
+  python3 - "$CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH" "$WORKSPACE/docs/architecture/058-core-evidence-decision-reference-model-v1.md" "$WORKSPACE/crates/ontology/src/decision.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+test_log_path = pathlib.Path(sys.argv[4])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+required_evidence = [
+    "intentEvidence",
+    "decisionEvidence",
+    "progressEvidence",
+    "artifactEvidence",
+    "reviewEvidence",
+]
+required_decisions = [
+    "boundaryDecision",
+    "routeDecision",
+    "completionDecision",
+]
+required_outcomes = [
+    "accepted",
+    "rejected",
+    "needsMoreInput",
+    "routeSelected",
+    "routeDeferred",
+    "replacementSelected",
+    "completed",
+    "followUpRequired",
+    "blocked",
+    "cancelled",
+]
+forbidden_terms = [
+    "bug",
+    "feature",
+    "issue",
+    "pr",
+    "pull-request",
+    "release",
+    "repository",
+    "repository-patch",
+    "test-log",
+    "github-issue",
+]
+coverage = {
+    "reference-model-version-defined": "agentflow-core-evidence-decision-reference-model.v1" in source_text,
+    "evidence-documented": all(item in doc_text for item in required_evidence),
+    "evidence-implemented": all(item in source_text for item in required_evidence),
+    "decisions-documented": all(item in doc_text for item in required_decisions),
+    "decisions-implemented": all(item in source_text for item in required_decisions),
+    "outcomes-documented": all(item in doc_text for item in required_outcomes),
+    "outcomes-implemented": all(item in source_text for item in required_outcomes),
+    "reference-mappings-not-core-authority": "not Core authority" in doc_text and "not Core authority" in source_text,
+    "forbidden-terms-listed": all(term in doc_text and term in source_text for term in forbidden_terms),
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-evidence-decision-reference-model-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-evidence-decision-reference-model.v1",
+    "architecturePath": "docs/architecture/058-core-evidence-decision-reference-model-v1.md",
+    "rustContractPath": "crates/ontology/src/decision.rs",
+    "rustTestLogPath": "runtime/core-evidence-decision-reference-model-rust-test.log",
+    "evidenceReferenceCount": len(required_evidence),
+    "decisionReferenceCount": len(required_decisions),
+    "outcomeCount": len(required_outcomes),
+    "requiredEvidence": required_evidence,
+    "requiredDecisions": required_decisions,
+    "requiredOutcomes": required_outcomes,
+    "forbiddenCoreTerms": forbidden_terms,
+    "referenceMappingBoundary": "reference-app-only-not-core-authority",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core evidence/decision reference model coverage failed: {failed}")
+PY
+  record_stage "core-evidence-decision-reference-model" "passed" "$(basename "$CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -7120,6 +7216,7 @@ PY
   run_core_object_link_schema_gate
   run_core_action_state_semantics_gate
   run_core_skill_registry_gate
+  run_core_evidence_decision_reference_model_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
