@@ -312,9 +312,11 @@ pub fn core_4d_spec_intake_contract() -> Core4DSpecIntakeContract {
         forbidden_core_terms: vec![
             "bug".to_string(),
             "feature".to_string(),
+            "issue".to_string(),
             "pr".to_string(),
+            "pull-request".to_string(),
             "release".to_string(),
-            "patch".to_string(),
+            "repository-patch".to_string(),
             "test-log".to_string(),
             "repository".to_string(),
             "github-issue".to_string(),
@@ -398,6 +400,7 @@ pub fn validate_core_4d_spec_intake_contract(
                         .iter()
                         .map(|route| route.as_str().to_string())
                         .collect(),
+                    vec![stage.authority_boundary.as_str().to_string()],
                     stage.forbidden_behaviors.clone(),
                 ]
                 .concat()
@@ -410,6 +413,7 @@ pub fn validate_core_4d_spec_intake_contract(
                 vec![
                     route.route.as_str().to_string(),
                     route.trigger.clone(),
+                    route.output_boundary.as_str().to_string(),
                     route.next_step.clone(),
                 ]
             })
@@ -419,13 +423,45 @@ pub fn validate_core_4d_spec_intake_contract(
             .iter()
             .map(|slice| slice.as_str().to_string())
             .collect::<Vec<_>>(),
+        contract
+            .boundaries
+            .iter()
+            .map(|boundary| boundary.as_str().to_string())
+            .collect::<Vec<_>>(),
     ]
     .concat();
 
     for term in &contract.forbidden_core_terms {
-        if core_surface.iter().any(|value| value == term) {
+        if core_surface
+            .iter()
+            .any(|value| contains_forbidden_core_term(value, term))
+        {
             errors.push(format!(
                 "forbidden industry term `{term}` appears in Core authority"
+            ));
+        }
+    }
+
+    let reference_mapping_surface = contract
+        .reference_mappings
+        .iter()
+        .flat_map(|mapping| {
+            [
+                mapping.industry.clone(),
+                mapping.mapped_object.clone(),
+                mapping.mapped_action.clone(),
+                mapping.mapped_evidence.clone(),
+                mapping.mapped_decision.clone(),
+            ]
+        })
+        .collect::<Vec<_>>();
+    for mapping_value in reference_mapping_surface {
+        if core_surface
+            .iter()
+            .any(|value| normalized_compact(value) == normalized_compact(&mapping_value))
+        {
+            errors.push(format!(
+                "reference mapping term `{mapping_value}` leaked into Core authority"
             ));
         }
     }
@@ -446,6 +482,48 @@ pub fn validate_core_4d_spec_intake_contract(
     } else {
         Err(errors)
     }
+}
+
+fn contains_forbidden_core_term(value: &str, term: &str) -> bool {
+    let normalized_term = normalized_compact(term);
+    if normalized_term.is_empty() {
+        return false;
+    }
+
+    if normalized_term.len() <= 2 {
+        return tokenized(value)
+            .iter()
+            .any(|token| token == &normalized_term);
+    }
+
+    normalized_compact(value).contains(&normalized_term)
+}
+
+fn normalized_compact(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .flat_map(|character| character.to_lowercase())
+        .collect()
+}
+
+fn tokenized(value: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+
+    for character in value.chars() {
+        if character.is_ascii_alphanumeric() {
+            current.extend(character.to_lowercase());
+        } else if !current.is_empty() {
+            tokens.push(std::mem::take(&mut current));
+        }
+    }
+
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    tokens
 }
 
 #[cfg(test)]
@@ -471,5 +549,40 @@ mod tests {
         contract.routes[0].trigger = "github-issue".to_string();
         let errors = validate_core_4d_spec_intake_contract(&contract).unwrap_err();
         assert!(errors.iter().any(|error| error.contains("github-issue")));
+    }
+
+    #[test]
+    fn validation_rejects_case_separator_and_phrase_variants() {
+        let mut contract = core_4d_spec_intake_contract();
+        contract.phases[0]
+            .forbidden_behaviors
+            .push("require Pull_Request approval".to_string());
+        contract.phases[1]
+            .input_refs
+            .push("GitHubIssue".to_string());
+        contract.phases[2].output_refs.push("testLog".to_string());
+        contract.routes[0].next_step = "create repository patch".to_string();
+
+        let errors = validate_core_4d_spec_intake_contract(&contract).unwrap_err();
+        assert!(errors.iter().any(|error| error.contains("pull-request")));
+        assert!(errors.iter().any(|error| error.contains("github-issue")));
+        assert!(errors.iter().any(|error| error.contains("test-log")));
+        assert!(errors.iter().any(|error| error.contains("repository")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("repository-patch")));
+    }
+
+    #[test]
+    fn validation_rejects_reference_mapping_leakage_into_core_authority() {
+        let mut contract = core_4d_spec_intake_contract();
+        contract.phases[0]
+            .output_refs
+            .push("implement-change".to_string());
+
+        let errors = validate_core_4d_spec_intake_contract(&contract).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("implement-change")));
     }
 }
