@@ -10,6 +10,7 @@ pub mod model;
 pub mod registry;
 pub mod schema;
 pub mod semantics;
+pub mod skill;
 pub mod storage;
 pub mod validation;
 
@@ -34,6 +35,10 @@ pub use semantics::{
     core_action_state_semantics_contract, validate_core_action_state_semantics_contract,
     CoreActionSemanticDefinition, CoreActionStateSemanticsContract, CoreStateSemanticDefinition,
     CoreStateTransitionDefinition, CORE_ACTION_STATE_SEMANTICS_VERSION,
+};
+pub use skill::{
+    core_skill_registry_contract, validate_core_skill_registry_contract, CoreSkillDefinition,
+    CoreSkillRegistryContract, CORE_SKILL_REGISTRY_VERSION,
 };
 pub use storage::{read_ontology_bundle, write_ontology_bundle};
 pub use validation::{validate_link, validate_ontology_bundle};
