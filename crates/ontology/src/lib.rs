@@ -6,6 +6,7 @@
 
 pub mod core;
 pub mod decision;
+pub mod file_registry;
 pub mod kernel;
 pub mod model;
 pub mod registry;
@@ -21,6 +22,12 @@ pub use decision::{
     validate_core_evidence_decision_reference_model_contract, CoreDecisionOutcomeDefinition,
     CoreDecisionReferenceDefinition, CoreEvidenceDecisionReferenceModelContract,
     CoreEvidenceReferenceDefinition, CORE_EVIDENCE_DECISION_MODEL_VERSION,
+};
+pub use file_registry::{
+    core_file_backed_ontology_registry_projection_contract,
+    validate_core_file_backed_ontology_registry_projection_contract,
+    CoreFileBackedOntologyRegistryProjectionContract, CoreOntologyProjectionEntryDefinition,
+    CoreOntologyRegistrySourceDefinition, CORE_FILE_BACKED_ONTOLOGY_REGISTRY_VERSION,
 };
 pub use kernel::{
     core_ontology_kernel_contract, validate_core_ontology_kernel_contract, CoreOntologyElement,

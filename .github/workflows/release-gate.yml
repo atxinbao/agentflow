@@ -213,6 +213,8 @@ jobs:
               -o -name 'core-skill-registry-rust-test.log' \
               -o -name 'core-evidence-decision-reference-model.json' \
               -o -name 'core-evidence-decision-reference-model-rust-test.log' \
+              -o -name 'core-file-backed-ontology-registry.json' \
+              -o -name 'core-file-backed-ontology-registry-rust-test.log' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
 
@@ -232,7 +234,9 @@ jobs:
             runtime/core-skill-registry.json \
             runtime/core-skill-registry-rust-test.log \
             runtime/core-evidence-decision-reference-model.json \
-            runtime/core-evidence-decision-reference-model-rust-test.log
+            runtime/core-evidence-decision-reference-model-rust-test.log \
+            runtime/core-file-backed-ontology-registry.json \
+            runtime/core-file-backed-ontology-registry-rust-test.log
           do
             if [ ! -f "$certification_dir/$primary_proof" ]; then
               echo "missing certification primary proof: $primary_proof" >&2

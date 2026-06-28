@@ -53,6 +53,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [056-core-action-state-semantics-v1.md](056-core-action-state-semantics-v1.md) | Core Action / State Semantics |
 | [057-core-skill-registry-action-authorization-v1.md](057-core-skill-registry-action-authorization-v1.md) | Core Skill Registry / Action Authorization |
 | [058-core-evidence-decision-reference-model-v1.md](058-core-evidence-decision-reference-model-v1.md) | Core Evidence / Decision Reference Model |
+| [059-core-file-backed-ontology-registry-projection-v1.md](059-core-file-backed-ontology-registry-projection-v1.md) | Core File-backed Ontology Registry / Projection |
 
 ## Rules
 
