@@ -357,19 +357,17 @@ pub fn submit_pack_action_proposal(
     if let Some(runtime_command) = validation.runtime_command.as_ref() {
         execute_command_via_arbitration(root, runtime_command)
     } else {
-        let runtime_command = RuntimeCommandRequest {
-            command_id: request.command_id.clone(),
-            command_type: request.command.clone(),
-            source_surface: request.source_surface.clone(),
-            actor_role: request.actor_role.clone(),
-            target_object_ref: None,
-            input: request.input.clone(),
-            evidence_refs: request.evidence_refs.clone(),
-            artifact_refs: request.artifact_refs.clone(),
-            idempotency_key: request.idempotency_key.clone(),
-            created_at: request.created_at.clone(),
-        };
-        execute_command_via_arbitration(root, &runtime_command)
+        Ok(invalid_pack_command_response(
+            request,
+            vec![RuntimeCommandError::new(
+                RuntimeCommandErrorCode::UnsupportedCommand,
+                format!(
+                    "pack command `{}` did not produce a Core runtime route",
+                    request.command
+                ),
+                Some("command"),
+            )],
+        ))
     }
 }
 
@@ -462,16 +460,27 @@ fn resolve_pack_command(
             ),
         )
     })?;
+    let action_type =
+        crate::mapping::action_type_for_action_contract_ref(&mapping.action_contract_ref)
+            .ok_or_else(|| {
+                pack_resolve_error(
+                    "surface-mapping",
+                    format!(
+                        "pack command `{command}` uses unsupported action contract `{}`",
+                        mapping.action_contract_ref
+                    ),
+                )
+            })?;
     let action_semantic = bundle
         .domain
         .action_semantics
         .iter()
-        .find(|semantic| semantic.action_type == runtime_command_type)
+        .find(|semantic| semantic.action_type == action_type)
         .ok_or_else(|| {
             pack_resolve_error(
                 "surface-mapping",
                 format!(
-                    "pack command `{command}` maps to runtime command `{runtime_command_type}` without domain action semantic"
+                    "pack command `{command}` maps to action `{action_type}` without domain action semantic"
                 ),
             )
         })?;
@@ -644,14 +653,8 @@ fn definition_path_for_entry(
 }
 
 fn runtime_command_type_for_action_contract(action_contract_ref: &str) -> Option<&'static str> {
-    match action_contract_ref {
-        "action-contract:spec.intake" => Some("submitRequirement"),
-        "action-contract:issue.start" => Some("startRun"),
-        "action-contract:acceptance.evaluate" => Some("runValidation"),
-        "action-contract:delivery.open" => Some("prepareDelivery"),
-        "action-contract:audit.request" => Some("requestAudit"),
-        _ => None,
-    }
+    crate::mapping::action_type_for_action_contract_ref(action_contract_ref)
+        .map(|_| crate::mapping::CORE_RUNTIME_COMMAND_TYPE)
 }
 
 fn runtime_command_from_pack_request(
@@ -661,8 +664,15 @@ fn runtime_command_from_pack_request(
     RuntimeCommandRequest {
         command_id: request.command_id.clone(),
         command_type: resolved.route.runtime_command_type.clone(),
+        route: Some(crate::mapping::pack_runtime_route(
+            request.pack_id.clone(),
+            request.command.clone(),
+            resolved.route.action_contract_ref.clone(),
+            request.target_object_type.clone(),
+        )),
         source_surface: request.source_surface.clone(),
         actor_role: request.actor_role.clone(),
+        skill_ref: Some(format!("pack:{}:{}", request.pack_id, request.command)),
         target_object_ref: Some(ActionRef {
             object_type: request.target_object_type.clone(),
             id: request.target_object_id.clone(),
@@ -670,6 +680,8 @@ fn runtime_command_from_pack_request(
         input: request.input.clone(),
         evidence_refs: request.evidence_refs.clone(),
         artifact_refs: request.artifact_refs.clone(),
+        expected_outputs: Vec::new(),
+        evidence_policy: None,
         idempotency_key: request.idempotency_key.clone(),
         created_at: request.created_at.clone(),
     }
@@ -870,7 +882,10 @@ mod tests {
         let status =
             query_pack_capability_status(dir.path(), "software-dev", "work.issue.start").unwrap();
 
-        assert_eq!(route.runtime_command_type, "startRun");
+        assert_eq!(
+            route.runtime_command_type,
+            crate::mapping::CORE_RUNTIME_COMMAND_TYPE
+        );
         assert_eq!(route.target_object_type, "Issue");
         assert!(route
             .source_refs
@@ -893,7 +908,14 @@ mod tests {
 
         assert!(report.valid);
         let runtime_command = report.runtime_command.unwrap();
-        assert_eq!(runtime_command.command_type, "startRun");
+        assert_eq!(
+            runtime_command.command_type,
+            crate::mapping::CORE_RUNTIME_COMMAND_TYPE
+        );
+        let route = runtime_command.route.as_ref().unwrap();
+        assert_eq!(route.action_contract_ref, "action-contract:issue.start");
+        assert_eq!(route.pack_id.as_deref(), Some("software-dev"));
+        assert_eq!(route.pack_command.as_deref(), Some("work.issue.start"));
         assert_eq!(runtime_command.actor_role, "work-agent");
         assert_eq!(
             runtime_command.target_object_ref.unwrap().object_type,

@@ -24,7 +24,8 @@ pub use api_plane::{
 };
 pub use commands::{
     execute_command_via_arbitration, execute_command_via_arbitration_with_context,
-    validate_runtime_command, RuntimeCommandRequest,
+    validate_runtime_command, RuntimeCommandRequest, RuntimeCommandRoute, RuntimeEvidencePolicyRef,
+    RuntimeExpectedOutputRef,
 };
 pub use errors::{RuntimeCommandError, RuntimeCommandErrorCode};
 pub use formal::{
@@ -34,7 +35,11 @@ pub use formal::{
     ProjectMaterializationResult,
 };
 pub use handoff::{write_work_command_handoff_from_spec_issue, WorkCommandHandoff};
-pub use mapping::{map_command_to_action_proposal, RuntimeQueryHint};
+pub use mapping::{
+    action_contract_ref_for_action_type, action_type_for_action_contract_ref, core_runtime_route,
+    map_command_to_action_proposal, pack_runtime_route, RuntimeQueryHint,
+    CORE_RUNTIME_COMMAND_TYPE,
+};
 pub use pack::{
     dry_run_pack_command, get_pack_registry, get_pack_validation_artifact, list_pack_commands,
     pack_registry_read_receipt, pack_validation_artifact_read_receipt,

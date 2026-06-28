@@ -15,7 +15,10 @@ use agentflow_spec::SpecIssueStatus;
 use agentflow_task_artifacts::TaskRunStatus;
 
 use crate::commands::{build_project_arbitration_context, RuntimeCommandRequest};
-use crate::mapping::map_command_to_action_proposal;
+use crate::mapping::{
+    action_contract_ref_for_action_type, core_runtime_route, map_command_to_action_proposal,
+    CORE_RUNTIME_COMMAND_TYPE,
+};
 
 pub fn issue_surface_state_id(status: &SpecIssueStatus) -> &'static str {
     match status {
@@ -133,9 +136,13 @@ fn arbitrate_issue_action(
 
     let request = RuntimeCommandRequest {
         command_id: format!("state-guard-{issue_id}-{command_type}"),
-        command_type: command_type.to_string(),
+        command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+        route: action_contract_ref_for_action_type(command_type).map(|contract_ref| {
+            core_runtime_route(format!("core:{command_type}"), contract_ref, Some("Issue"))
+        }),
         source_surface: ActionSourceSurface::System,
         actor_role: "work-agent".to_string(),
+        skill_ref: Some(format!("core:work-agent:{command_type}")),
         target_object_ref: Some(ActionRef {
             object_type: "Issue".to_string(),
             id: issue_id.to_string(),
@@ -143,6 +150,8 @@ fn arbitrate_issue_action(
         input,
         evidence_refs,
         artifact_refs: Vec::new(),
+        expected_outputs: Vec::new(),
+        evidence_policy: None,
         idempotency_key: format!(
             "system:work-agent:{command_type}:Issue:{issue_id}:{}",
             status.as_str()

@@ -1,6 +1,9 @@
 use crate::commands::{build_core_arbitration_context, RuntimeCommandRequest};
 use crate::handoff::WorkCommandHandoff;
-use crate::mapping::map_command_to_action_proposal;
+use crate::mapping::{
+    action_contract_ref_for_action_type, core_runtime_route, map_command_to_action_proposal,
+    CORE_RUNTIME_COMMAND_TYPE,
+};
 use agentflow_action_contract::{
     validate_action_proposal, ActionProposal, ActionProposalValidationReport, ActionRef,
     ActionSourceSurface,
@@ -382,9 +385,17 @@ fn command_request(
 ) -> RuntimeCommandRequest {
     RuntimeCommandRequest {
         command_id,
-        command_type: command_type.to_string(),
+        command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+        route: action_contract_ref_for_action_type(command_type).map(|contract_ref| {
+            core_runtime_route(
+                format!("core:{command_type}"),
+                contract_ref,
+                Some(object_type),
+            )
+        }),
         source_surface: ActionSourceSurface::Agent,
         actor_role: "work-agent".to_string(),
+        skill_ref: Some(format!("core:work-agent:{command_type}")),
         target_object_ref: Some(ActionRef {
             object_type: object_type.to_string(),
             id: object_id.to_string(),
@@ -392,6 +403,8 @@ fn command_request(
         input,
         evidence_refs,
         artifact_refs,
+        expected_outputs: Vec::new(),
+        evidence_policy: None,
         idempotency_key: format!("agent:work-agent:{command_type}:{object_id}:{run_id}"),
         created_at: unix_timestamp_seconds().to_string(),
     }

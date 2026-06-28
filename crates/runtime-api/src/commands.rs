@@ -47,8 +47,12 @@ use crate::responses::{
 pub struct RuntimeCommandRequest {
     pub command_id: String,
     pub command_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route: Option<RuntimeCommandRoute>,
     pub source_surface: ActionSourceSurface,
     pub actor_role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_object_ref: Option<ActionRef>,
     pub input: Value,
@@ -56,8 +60,41 @@ pub struct RuntimeCommandRequest {
     pub evidence_refs: Vec<String>,
     #[serde(default)]
     pub artifact_refs: Vec<String>,
+    #[serde(default)]
+    pub expected_outputs: Vec<RuntimeExpectedOutputRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_policy: Option<RuntimeEvidencePolicyRef>,
     pub idempotency_key: String,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeCommandRoute {
+    pub route_id: String,
+    pub action_contract_ref: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_object_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_command: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeExpectedOutputRef {
+    pub output_type: String,
+    pub reference: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeEvidencePolicyRef {
+    pub policy_id: String,
+    #[serde(default)]
+    pub required_evidence: Vec<String>,
+    pub missing_evidence_behavior: String,
 }
 
 pub fn validate_runtime_command(request: &RuntimeCommandRequest) -> RuntimeCommandValidationReport {
@@ -139,12 +176,26 @@ pub fn execute_command_via_arbitration_with_context(
             version: RUNTIME_COMMAND_FACT_VERSION.to_string(),
             command_id: request.command_id.clone(),
             command_type: request.command_type.clone(),
+            route: request
+                .route
+                .as_ref()
+                .and_then(|route| serde_json::to_value(route).ok()),
             source_surface: request.source_surface.clone(),
             actor_role: request.actor_role.clone(),
+            skill_ref: request.skill_ref.clone(),
             target_object_ref: request.target_object_ref.clone(),
             input: request.input.clone(),
             evidence_refs: request.evidence_refs.clone(),
             artifact_refs: request.artifact_refs.clone(),
+            expected_outputs: request
+                .expected_outputs
+                .iter()
+                .filter_map(|output| serde_json::to_value(output).ok())
+                .collect(),
+            evidence_policy: request
+                .evidence_policy
+                .as_ref()
+                .and_then(|policy| serde_json::to_value(policy).ok()),
             idempotency_key: request.idempotency_key.clone(),
             created_at: request.created_at.clone(),
             recorded_at,
@@ -970,31 +1021,54 @@ mod tests {
         execute_command_via_arbitration_with_context, map_command_to_action_proposal,
         response_from_arbitration_decision, validate_runtime_command, RuntimeCommandRequest,
     };
-    use crate::mapping::target_ref;
+    use crate::mapping::{
+        action_contract_ref_for_action_type, core_runtime_route, target_ref,
+        CORE_RUNTIME_COMMAND_TYPE,
+    };
     use crate::responses::RuntimeCommandStatus;
     use agentflow_action_contract::ActionSourceSurface;
 
     fn request(command_type: &str) -> RuntimeCommandRequest {
         RuntimeCommandRequest {
             command_id: format!("cmd-{command_type}"),
-            command_type: command_type.to_string(),
+            command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+            route: action_contract_ref_for_action_type(command_type).map(|contract_ref| {
+                core_runtime_route(format!("core:{command_type}"), contract_ref, None::<String>)
+            }),
             source_surface: ActionSourceSurface::Desktop,
             actor_role: "spec-agent".to_string(),
+            skill_ref: Some(format!("core:spec-agent:{command_type}")),
             target_object_ref: None,
             input: json!({ "summary": "整理需求", "requestType": "feature" }),
             evidence_refs: Vec::new(),
             artifact_refs: Vec::new(),
+            expected_outputs: Vec::new(),
+            evidence_policy: None,
             idempotency_key: format!("idem-{command_type}"),
             created_at: "2026-06-20T00:00:00Z".to_string(),
         }
     }
 
+    fn legacy_request(command_type: &str) -> RuntimeCommandRequest {
+        let mut value = request(command_type);
+        value.command_type = command_type.to_string();
+        value.route = None;
+        value.skill_ref = None;
+        value
+    }
+
     fn project_request(command_id: &str) -> RuntimeCommandRequest {
         RuntimeCommandRequest {
             command_id: command_id.to_string(),
-            command_type: "createProject".to_string(),
+            command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+            route: Some(core_runtime_route(
+                "core:project.create",
+                "action-contract:project.create",
+                Some("Spec"),
+            )),
             source_surface: ActionSourceSurface::Agent,
             actor_role: "spec-agent".to_string(),
+            skill_ref: Some("core:spec-agent:project.create".to_string()),
             target_object_ref: Some(target_ref("Spec", "spec-001")),
             input: json!({
                 "projectId": "project-001",
@@ -1005,6 +1079,8 @@ mod tests {
                 "human-confirmation-1".to_string(),
             ],
             artifact_refs: vec![".agentflow/spec/requirements/req-001/preview.json".to_string()],
+            expected_outputs: Vec::new(),
+            evidence_policy: None,
             idempotency_key: format!("spec:req-001:project:project-001:{command_id}"),
             created_at: "2026-06-20T00:00:00Z".to_string(),
         }
@@ -1046,17 +1122,20 @@ mod tests {
 
     #[test]
     fn command_surface_aliases_map_to_supported_action_contracts() {
-        let cases = [
-            ("acceptDelivery", "markIssueDone"),
-            ("requestFix", "recordDecision"),
-            ("reopenIssue", "recordDecision"),
-            ("createFollowUp", "createIssue"),
-        ];
-
-        for (command_type, expected_action_type) in cases {
-            let proposal = map_command_to_action_proposal(&request(command_type)).unwrap();
-            assert_eq!(proposal.action_type, expected_action_type);
-            assert_eq!(proposal.idempotency_key, format!("idem-{command_type}"));
+        for command_type in [
+            "submitRequirement",
+            "createIssue",
+            "markIssueDone",
+            "requestAudit",
+            "acceptDelivery",
+            "createFollowUp",
+        ] {
+            let report = validate_runtime_command(&legacy_request(command_type));
+            assert!(!report.valid, "{command_type} must not be Core authority");
+            assert!(report
+                .errors
+                .iter()
+                .any(|error| error.message.contains("Core route action contract")));
         }
     }
 
@@ -1415,9 +1494,15 @@ mod tests {
         let dir = tempdir().unwrap();
         let request = RuntimeCommandRequest {
             command_id: "cmd-create-project-runtime-records".to_string(),
-            command_type: "createProject".to_string(),
+            command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+            route: Some(core_runtime_route(
+                "core:project.create",
+                "action-contract:project.create",
+                Some("Spec"),
+            )),
             source_surface: ActionSourceSurface::Agent,
             actor_role: "spec-agent".to_string(),
+            skill_ref: Some("core:spec-agent:project.create".to_string()),
             target_object_ref: Some(target_ref("Spec", "spec-001")),
             input: json!({
                 "projectId": "project-001",
@@ -1428,6 +1513,8 @@ mod tests {
                 "human-confirmation-1".to_string(),
             ],
             artifact_refs: vec![".agentflow/spec/requirements/req-001/preview.json".to_string()],
+            expected_outputs: Vec::new(),
+            evidence_policy: None,
             idempotency_key: "spec:req-001:project:project-001:createProject:2026-06-20T00:00:00Z"
                 .to_string(),
             created_at: "2026-06-20T00:00:00Z".to_string(),
@@ -1572,9 +1659,15 @@ mod tests {
 
         let request = RuntimeCommandRequest {
             command_id: "cmd-create-project-lock-2".to_string(),
-            command_type: "createProject".to_string(),
+            command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+            route: Some(core_runtime_route(
+                "core:project.create",
+                "action-contract:project.create",
+                Some("Spec"),
+            )),
             source_surface: ActionSourceSurface::Agent,
             actor_role: "spec-agent".to_string(),
+            skill_ref: Some("core:spec-agent:project.create".to_string()),
             target_object_ref: Some(target_ref("Spec", "spec-001")),
             input: json!({
                 "projectId": "project-002",
@@ -1585,6 +1678,8 @@ mod tests {
                 "human-confirmation-1".to_string(),
             ],
             artifact_refs: Vec::new(),
+            expected_outputs: Vec::new(),
+            evidence_policy: None,
             idempotency_key: "spec:spec-001:project:project-002:createProject:2026-06-21T00:05:00Z"
                 .to_string(),
             created_at: "2026-06-21T00:05:00Z".to_string(),
