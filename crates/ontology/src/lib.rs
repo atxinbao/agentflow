@@ -8,6 +8,7 @@ pub mod core;
 pub mod kernel;
 pub mod model;
 pub mod registry;
+pub mod schema;
 pub mod storage;
 pub mod validation;
 
@@ -23,5 +24,10 @@ pub use model::{
     OntologyValidationError, OntologyValidationReport,
 };
 pub use registry::OntologyRegistry;
+pub use schema::{
+    core_object_link_schema_contract, validate_core_object_link_schema_contract,
+    CoreLinkSchemaDefinition, CoreObjectLinkSchemaContract, CoreObjectSchemaDefinition,
+    CORE_OBJECT_LINK_SCHEMA_VERSION,
+};
 pub use storage::{read_ontology_bundle, write_ontology_bundle};
 pub use validation::{validate_link, validate_ontology_bundle};
