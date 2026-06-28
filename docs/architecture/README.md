@@ -50,6 +50,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [053-core-4d-spec-intake-kernel-v1.md](053-core-4d-spec-intake-kernel-v1.md) | Core 4-D Spec Intake Kernel |
 | [054-core-ontology-kernel-contract-v1.md](054-core-ontology-kernel-contract-v1.md) | Core Ontology Kernel Contract |
 | [055-core-object-link-schema-v1.md](055-core-object-link-schema-v1.md) | Core Object / Link Schema |
+| [056-core-action-state-semantics-v1.md](056-core-action-state-semantics-v1.md) | Core Action / State Semantics |
 
 ## Rules
 
