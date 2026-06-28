@@ -1703,6 +1703,30 @@ fn build_session_summary(state_events: &[(String, TaskEvent)]) -> ProjectionSess
                     summary.created_at = Some(event.timestamp);
                 }
             }
+            "issue.completed" => {
+                if event.payload.get("writebackState").is_some() {
+                    summary.writeback_state = event
+                        .payload
+                        .get("writebackState")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("terminalReason").is_some() {
+                    summary.terminal_reason = event
+                        .payload
+                        .get("terminalReason")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                if event.payload.get("lastError").is_some() {
+                    summary.last_error = event
+                        .payload
+                        .get("lastError")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                }
+                summary.updated_at = Some(event.timestamp);
+            }
             _ => {}
         }
     }
