@@ -15,14 +15,16 @@ use agentflow_runtime_api::{
 };
 use agentflow_spec::{read_spec_issue, update_spec_issue_status, SpecIssueStatus};
 use agentflow_task_artifacts::{
-    load_task_changed_files, load_task_evidence, load_task_run, load_task_validation,
-    task_acceptance_gate_path, task_changed_files_path, task_evidence_dir, task_run_dir,
-    update_task_run_status, write_task_acceptance_gate_decision, write_task_changed_files,
-    write_task_command_record, write_task_evidence, write_task_validation_with_assessment,
+    load_task_changed_files, load_task_evidence, load_task_executor_closeout, load_task_run,
+    load_task_validation, task_acceptance_gate_path, task_changed_files_path, task_evidence_dir,
+    task_executor_closeout_path, task_run_dir, update_task_run_status,
+    write_task_acceptance_gate_decision, write_task_changed_files, write_task_command_record,
+    write_task_evidence, write_task_executor_closeout, write_task_validation_with_assessment,
     TaskAcceptanceGateDecision, TaskAcceptanceGateKind, TaskAcceptanceOutcome,
     TaskAcceptanceSubGateDecision, TaskAcceptanceTraceability, TaskChangedFile,
     TaskChangedFileSource, TaskCommandInput, TaskEvidence, TaskEvidenceEntry,
-    TaskEvidenceEntryStatus, TaskRun, TaskRunStatus,
+    TaskEvidenceEntryStatus, TaskExecutorCloseout, TaskExecutorCoreRefs, TaskExecutorResultStatus,
+    TaskExecutorWorkHandoff, TaskRun, TaskRunStatus,
 };
 use agentflow_task_loop::{AgentLaunchPayload, TaskLoop, TaskLoopLaunch, AGENT_LAUNCH_REQUESTED};
 use agentflow_workflow_core::{WorkflowAgentRole, WorkflowFlowType};
@@ -714,6 +716,8 @@ fn write_build_agent_closeout_proof_from_attestation(
         .clone()
         .ok_or_else(|| anyhow::anyhow!("closeout proof requires evidence head commit"))?;
     let evidence_hash = sha256_hex(&serde_json::to_vec(&evidence)?);
+    let executor_closeout_path = task_executor_closeout_path(root, &issue.issue_id, run_id)?;
+    let executor_closeout_ref = relative_path(root, &executor_closeout_path);
     ensure_attested_url_matches_repository(
         &provider_name,
         &repository_full_name,
@@ -765,10 +769,36 @@ fn write_build_agent_closeout_proof_from_attestation(
             "issueClosedAt": &closed_at,
             "evidenceHeadSha": &evidence_head_sha,
             "evidenceHash": &evidence_hash,
+            "executorCloseoutPath": &executor_closeout_ref,
             "issues": &issues,
             "queriedAt": queried_at,
             "publicDeliveryWritten": false,
         }),
+    )?;
+    let executor_closeout = write_executor_closeout_from_current_facts(
+        root,
+        issue,
+        run_id,
+        &run,
+        &evidence,
+        &proof_path,
+        if merged && issue_closed {
+            TaskExecutorResultStatus::Accepted
+        } else {
+            TaskExecutorResultStatus::Deferred
+        },
+        if merged && issue_closed {
+            None
+        } else {
+            Some("provider closeout is not ready for writeback".to_string())
+        },
+        if !merged {
+            Some("wait-for-provider-merge".to_string())
+        } else if !issue_closed {
+            Some("wait-for-provider-issue-close".to_string())
+        } else {
+            None
+        },
     )?;
     append_task_event_once(
         root,
@@ -810,11 +840,19 @@ fn write_build_agent_closeout_proof_from_attestation(
                 "issueClosedAt": &closed_at,
                 "evidenceHeadSha": &evidence_head_sha,
                 "evidenceHash": &evidence_hash,
+                "executorCloseoutPath": &executor_closeout_ref,
+                "executorCloseout": {
+                    "resultStatus": executor_closeout.result_status.as_str(),
+                    "canWriteback": executor_closeout.can_writeback,
+                    "failureReason": executor_closeout.failure_reason,
+                    "continuationRequest": executor_closeout.continuation_request,
+                    "normalizedCoreRefs": executor_closeout.normalized_core_refs,
+                },
                 "issues": &issues,
                 "queriedAt": queried_at,
                 "publicDeliveryWritten": false,
             }),
-            artifact_refs: vec![relative_path(root, &proof_path)],
+            artifact_refs: vec![relative_path(root, &proof_path), executor_closeout_ref],
             idempotency_key: Some(format!(
                 "issue.closeout-proof.recorded:{}:{run_id}",
                 issue.issue_id
@@ -855,6 +893,129 @@ fn read_closeout_attestation(attestation_path: &Path) -> Result<McpCloseoutAttes
         .with_context(|| format!("read closeout attestation {}", attestation_path.display()))?;
     serde_json::from_str(&raw)
         .with_context(|| format!("parse closeout attestation {}", attestation_path.display()))
+}
+
+fn write_executor_closeout_from_current_facts(
+    root: &Path,
+    issue: &agentflow_spec::SpecIssue,
+    run_id: &str,
+    run: &TaskRun,
+    evidence: &TaskEvidence,
+    _proof_path: &Path,
+    result_status: TaskExecutorResultStatus,
+    failure_reason: Option<String>,
+    continuation_request: Option<String>,
+) -> Result<TaskExecutorCloseout> {
+    let changed_files = load_task_changed_files(root, &issue.issue_id, run_id)?;
+    let validation_path = resolve_output_path(
+        issue.expected_outputs.validation_result_path.as_deref(),
+        &issue.issue_id,
+        run_id,
+        "validation.json",
+    );
+    let changed_files_path = resolve_output_path(
+        issue.expected_outputs.changed_files_path.as_deref(),
+        &issue.issue_id,
+        run_id,
+        "changed-files.json",
+    );
+    let proof_ref = resolve_output_path(
+        issue.expected_outputs.closeout_proof_path.as_deref(),
+        &issue.issue_id,
+        run_id,
+        "review/closeout-proof.json",
+    );
+    let executor_closeout_ref = format!(
+        ".agentflow/tasks/{}/runs/{}/review/executor-closeout.json",
+        issue.issue_id, run_id
+    );
+    let mut evidence_refs = vec![
+        task_evidence_path(&issue.issue_id),
+        validation_path.clone(),
+        changed_files_path.clone(),
+    ];
+    for entry in &evidence.entries {
+        evidence_refs.extend(entry.refs.clone());
+    }
+    evidence_refs = dedupe_preserve_order(evidence_refs);
+    let mut artifacts = vec![
+        relative_task_run_path(&issue.issue_id, run_id),
+        changed_files_path,
+        validation_path,
+        proof_ref.clone(),
+        executor_closeout_ref.clone(),
+    ];
+    if let Some(path) = run.log_path.clone() {
+        artifacts.push(path);
+    }
+    if let Some(path) = run.last_message_path.clone() {
+        artifacts.push(path);
+    }
+    if let Some(path) = run.exit_proof_path.clone() {
+        artifacts.push(path);
+    }
+    artifacts = dedupe_preserve_order(artifacts);
+    let decision_ref = format!(
+        "DecisionRef:executor-closeout:{}:{}:{}",
+        issue.issue_id,
+        run_id,
+        result_status.as_str()
+    );
+    let closeout = TaskExecutorCloseout {
+        version: String::new(),
+        issue_id: issue.issue_id.clone(),
+        run_id: run_id.to_string(),
+        work_handoff: TaskExecutorWorkHandoff {
+            role: issue.required_agent_role.provider_role_alias().to_string(),
+            skill: issue.required_agent_role.default_skill_pack().as_str().to_string(),
+            allowed_surface: issue.allowed_paths.clone(),
+            expected_outputs: vec![
+                issue.expected_outputs.task_run_dir.replace("<run-id>", run_id),
+                issue.expected_outputs.evidence_path.clone(),
+                issue
+                    .expected_outputs
+                    .changed_files_path
+                    .clone()
+                    .unwrap_or_default()
+                    .replace("<run-id>", run_id),
+                issue
+                    .expected_outputs
+                    .validation_result_path
+                    .clone()
+                    .unwrap_or_default()
+                    .replace("<run-id>", run_id),
+                issue
+                    .expected_outputs
+                    .closeout_proof_path
+                    .clone()
+                    .unwrap_or_default()
+                    .replace("<run-id>", run_id),
+            ]
+            .into_iter()
+            .filter(|value| !value.trim().is_empty())
+            .collect(),
+            evidence_policy: "validation, implementation summary, executor closeout, and provider closeout proof are required before writeback".to_string(),
+            forbidden_scope: issue.forbidden_paths.clone(),
+        },
+        changed_files: changed_files.files,
+        logs: [run.log_path.clone(), run.last_message_path.clone(), run.exit_proof_path.clone()]
+            .into_iter()
+            .flatten()
+            .collect(),
+        artifacts: artifacts.clone(),
+        evidence_refs: evidence_refs.clone(),
+        can_writeback: result_status == TaskExecutorResultStatus::Accepted,
+        result_status,
+        failure_reason,
+        continuation_request,
+        normalized_core_refs: TaskExecutorCoreRefs {
+            evidence_refs,
+            artifact_refs: artifacts,
+            decision_refs: vec![decision_ref],
+        },
+        generated_at: current_unix_timestamp(),
+    };
+    write_task_executor_closeout(root, &issue.issue_id, &closeout)
 }
 
 fn ensure_review_prepared(
@@ -1561,6 +1722,10 @@ fn build_acceptance_gate_decision(
         run_id,
         "review/closeout-proof.json",
     );
+    let expected_executor_closeout_path = format!(
+        ".agentflow/tasks/{}/runs/{}/review/executor-closeout.json",
+        issue.issue_id, run_id
+    );
     let proof_path = closeout_proof_path(root, &issue.issue_id, run_id);
     let proof_ref = expected_closeout_proof_path.clone();
     let _ = task_acceptance_gate_path(root, &issue.issue_id)?;
@@ -1675,15 +1840,21 @@ fn build_acceptance_gate_decision(
         });
     }
 
-    let required_evidence_types = entries
-        .iter()
-        .filter(|entry| entry.required)
-        .map(|entry| entry.evidence_type.clone())
-        .collect::<Vec<_>>();
     let mut verification_failures = Vec::new();
     let mut evidence_failures = Vec::new();
     let mut contract_failures = Vec::new();
     let mut state_failures = Vec::new();
+    let (executor_closeout_entry, executor_failures, executor_outputs) =
+        evaluate_executor_closeout_for_acceptance(
+            root,
+            issue,
+            run_id,
+            &expected_validation_path,
+            &expected_changed_files_path,
+            &expected_executor_closeout_path,
+            &proof_ref,
+        )?;
+    entries.push(executor_closeout_entry);
     if !validation.passed {
         verification_failures.push("failed validation cannot enter Done".to_string());
     }
@@ -1796,6 +1967,7 @@ fn build_acceptance_gate_decision(
                 expected_validation_path.clone(),
                 expected_changed_files_path.clone(),
                 expected_closeout_proof_path.clone(),
+                expected_executor_closeout_path.clone(),
             ],
             vec![
                 evidence.validation_path.clone(),
@@ -1805,9 +1977,21 @@ fn build_acceptance_gate_decision(
                     .unwrap_or_else(|| "<missing>".to_string()),
                 task_evidence_path(&issue.issue_id),
                 proof_ref.clone(),
+                expected_executor_closeout_path.clone(),
             ],
             contract_failures,
             "修正 issue expectedOutputs 或实际产物路径，保证任务合同与写入位置一致。",
+        ),
+        build_acceptance_sub_gate(
+            TaskAcceptanceGateKind::ExecutorCloseout,
+            vec![
+                expected_changed_files_path.clone(),
+                task_evidence_path(&issue.issue_id),
+                proof_ref.clone(),
+            ],
+            executor_outputs,
+            executor_failures,
+            "补齐 executor closeout，确保 resultStatus=accepted、diff 在范围内，并包含 Core Evidence / Artifact / Decision 引用。",
         ),
         build_acceptance_sub_gate(
             TaskAcceptanceGateKind::State,
@@ -1881,6 +2065,11 @@ fn build_acceptance_gate_decision(
         pr_url,
         merge_commit_sha,
     };
+    let required_evidence_types = entries
+        .iter()
+        .filter(|entry| entry.required)
+        .map(|entry| entry.evidence_type.clone())
+        .collect::<Vec<_>>();
 
     Ok(TaskAcceptanceGateDecision {
         version: String::new(),
@@ -1898,6 +2087,158 @@ fn build_acceptance_gate_decision(
         traceability,
         checked_at: current_unix_timestamp(),
     })
+}
+
+fn evaluate_executor_closeout_for_acceptance(
+    root: &Path,
+    issue: &agentflow_spec::SpecIssue,
+    run_id: &str,
+    expected_validation_path: &str,
+    expected_changed_files_path: &str,
+    expected_executor_closeout_path: &str,
+    proof_ref: &str,
+) -> Result<(TaskEvidenceEntry, Vec<String>, Vec<String>)> {
+    let mut failures = Vec::new();
+    let mut outputs = vec![expected_executor_closeout_path.to_string()];
+    let mut refs = vec![expected_executor_closeout_path.to_string()];
+    let closeout_path = task_executor_closeout_path(root, &issue.issue_id, run_id)?;
+    let closeout_exists = closeout_path.is_file();
+    let loaded = load_task_executor_closeout(root, &issue.issue_id, run_id);
+    match loaded {
+        Ok(closeout) => {
+            outputs.extend(closeout.normalized_core_refs.evidence_refs.clone());
+            outputs.extend(closeout.normalized_core_refs.artifact_refs.clone());
+            outputs.extend(closeout.normalized_core_refs.decision_refs.clone());
+            outputs = dedupe_preserve_order(outputs);
+            refs = outputs.clone();
+            if closeout.result_status != TaskExecutorResultStatus::Accepted {
+                failures.push(format!(
+                    "executor closeout result must be accepted, found {}",
+                    closeout.result_status.as_str()
+                ));
+            }
+            if !closeout.can_writeback {
+                failures.push("executor closeout canWriteback must be true".to_string());
+            }
+            if let Some(failure_reason) = closeout
+                .failure_reason
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
+                failures.push(format!(
+                    "executor closeout has failureReason: {failure_reason}",
+                ));
+            }
+            if closeout.evidence_refs.is_empty() {
+                failures.push("executor closeout missing evidenceRefs".to_string());
+            }
+            if closeout.artifacts.is_empty() {
+                failures.push("executor closeout missing artifacts".to_string());
+            }
+            if closeout.normalized_core_refs.evidence_refs.is_empty() {
+                failures
+                    .push("executor closeout missing normalized Core evidence refs".to_string());
+            }
+            if closeout.normalized_core_refs.artifact_refs.is_empty() {
+                failures
+                    .push("executor closeout missing normalized Core artifact refs".to_string());
+            }
+            if closeout.normalized_core_refs.decision_refs.is_empty() {
+                failures
+                    .push("executor closeout missing normalized Core decision refs".to_string());
+            }
+            for required_ref in [
+                task_evidence_path(&issue.issue_id),
+                expected_validation_path.to_string(),
+                expected_changed_files_path.to_string(),
+            ] {
+                if !closeout
+                    .normalized_core_refs
+                    .evidence_refs
+                    .iter()
+                    .any(|item| item == &required_ref)
+                {
+                    failures.push(format!(
+                        "executor closeout missing Core evidence ref: {required_ref}"
+                    ));
+                }
+            }
+            for required_ref in [
+                expected_changed_files_path.to_string(),
+                proof_ref.to_string(),
+                expected_executor_closeout_path.to_string(),
+            ] {
+                if !closeout
+                    .normalized_core_refs
+                    .artifact_refs
+                    .iter()
+                    .any(|item| item == &required_ref)
+                {
+                    failures.push(format!(
+                        "executor closeout missing Core artifact ref: {required_ref}"
+                    ));
+                }
+            }
+            let boundary_failures =
+                validate_changed_file_boundaries(issue, &closeout.changed_files)?;
+            failures.extend(
+                boundary_failures
+                    .into_iter()
+                    .map(|failure| format!("executor closeout diff boundary failure: {failure}")),
+            );
+            if let Ok(record) = load_task_changed_files(root, &issue.issue_id, run_id) {
+                let closeout_paths = closeout
+                    .changed_files
+                    .iter()
+                    .map(|file| file.path.clone())
+                    .collect::<BTreeSet<_>>();
+                let record_paths = record
+                    .files
+                    .iter()
+                    .map(|file| file.path.clone())
+                    .collect::<BTreeSet<_>>();
+                if closeout_paths != record_paths {
+                    failures.push(
+                        "executor closeout changedFiles must match trusted changed-files record"
+                            .to_string(),
+                    );
+                }
+            } else {
+                failures
+                    .push("executor closeout cannot load trusted changed-files record".to_string());
+            }
+        }
+        Err(error) => {
+            failures.push(format!("executor closeout is missing or invalid: {error}"));
+        }
+    }
+    let status = if failures.is_empty() {
+        TaskEvidenceEntryStatus::Ready
+    } else if closeout_exists {
+        TaskEvidenceEntryStatus::Failed
+    } else {
+        TaskEvidenceEntryStatus::Missing
+    };
+    let summary = if failures.is_empty() {
+        "Executor closeout 已归一化为 Core Evidence / Artifact / Decision 输入。".to_string()
+    } else if closeout_exists {
+        "Executor closeout 已存在，但不能进入写回。".to_string()
+    } else {
+        "缺少 executor closeout。".to_string()
+    };
+    Ok((
+        TaskEvidenceEntry {
+            evidence_type: "executorCloseout".to_string(),
+            required: true,
+            status,
+            summary,
+            refs,
+            manual_reason: None,
+            manual_risk: None,
+        },
+        failures,
+        outputs,
+    ))
 }
 
 fn build_acceptance_sub_gate(
@@ -2003,6 +2344,10 @@ fn task_evidence_path(issue_id: &str) -> String {
     format!(".agentflow/tasks/{issue_id}/evidence/evidence.json")
 }
 
+fn relative_task_run_path(issue_id: &str, run_id: &str) -> String {
+    format!(".agentflow/tasks/{issue_id}/runs/{run_id}/run.json")
+}
+
 fn task_acceptance_gate_ref(issue_id: &str) -> String {
     format!(".agentflow/tasks/{issue_id}/acceptance-gate.json")
 }
@@ -2018,6 +2363,20 @@ fn relative_path(root: &Path, path: &Path) -> String {
         .unwrap_or(path)
         .display()
         .to_string()
+}
+
+fn dedupe_preserve_order(values: Vec<String>) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    let mut out = Vec::new();
+    for value in values {
+        if value.trim().is_empty() {
+            continue;
+        }
+        if seen.insert(value.clone()) {
+            out.push(value);
+        }
+    }
+    out
 }
 
 fn write_json(path: &Path, value: &serde_json::Value) -> Result<()> {
@@ -2140,7 +2499,8 @@ mod tests {
     };
     use agentflow_task_artifacts::{
         load_task_acceptance_gate_decision, load_task_changed_files, load_task_evidence,
-        load_task_run, TaskAcceptanceOutcome, TaskChangedFileSource, TaskRunStatus,
+        load_task_executor_closeout, load_task_run, task_executor_closeout_path,
+        TaskAcceptanceOutcome, TaskChangedFileSource, TaskExecutorResultStatus, TaskRunStatus,
     };
     use anyhow::Result;
     use std::{
@@ -2502,7 +2862,7 @@ mod tests {
             .next_steps
             .iter()
             .any(|step| step.contains("Completion Commit")));
-        assert_eq!(gate.sub_gates.len(), 4);
+        assert_eq!(gate.sub_gates.len(), 5);
         assert!(gate.sub_gates.iter().all(|item| item.passed));
         assert!(gate
             .sub_gates
@@ -2519,6 +2879,10 @@ mod tests {
         assert!(gate
             .sub_gates
             .iter()
+            .any(|item| item.gate.as_str() == "executor_closeout"));
+        assert!(gate
+            .sub_gates
+            .iter()
             .any(|item| item.gate.as_str() == "state"));
         assert!(gate
             .required_evidence_types
@@ -2532,6 +2896,32 @@ mod tests {
             .required_evidence_types
             .iter()
             .any(|item| item == "implementationSummary"));
+        assert!(gate
+            .required_evidence_types
+            .iter()
+            .any(|item| item == "executorCloseout"));
+        let executor_closeout =
+            load_task_executor_closeout(dir.path(), "AF-001", &started.run_id).unwrap();
+        assert_eq!(
+            executor_closeout.result_status,
+            TaskExecutorResultStatus::Accepted
+        );
+        assert!(executor_closeout.can_writeback);
+        assert!(executor_closeout
+            .normalized_core_refs
+            .evidence_refs
+            .iter()
+            .any(|item| item == ".agentflow/tasks/AF-001/evidence/evidence.json"));
+        assert!(executor_closeout
+            .normalized_core_refs
+            .artifact_refs
+            .iter()
+            .any(|item| item.ends_with("/review/closeout-proof.json")));
+        assert!(executor_closeout
+            .normalized_core_refs
+            .decision_refs
+            .iter()
+            .any(|item| item.contains("executor-closeout:AF-001:run-001:accepted")));
         assert_eq!(
             std::fs::canonicalize(&outcome.closeout_proof_path).unwrap(),
             std::fs::canonicalize(
@@ -3106,6 +3496,139 @@ mod tests {
         assert!(!events
             .iter()
             .any(|event| event.event_type == "issue.audit.evaluated"));
+    }
+
+    #[test]
+    fn build_agent_complete_rejects_non_accepted_executor_closeout() {
+        let dir = tempdir().unwrap();
+        write_spec_project_fixture(dir.path(), "proj-001", "AF-001");
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"before\" }\n",
+        );
+        init_git_repo(dir.path());
+        let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"after\" }\n",
+        );
+        let request_path = write_completion_request(dir.path(), "AF-001", &started.run_id);
+        prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
+        let issue = agentflow_spec::read_spec_issue(dir.path(), "AF-001").unwrap();
+        write_build_agent_closeout_proof_from_attestation(
+            dir.path(),
+            &issue,
+            &started.run_id,
+            "auto-merge-if-eligible",
+            trusted_closeout(
+                dir.path(),
+                "github",
+                "https://github.com/atxinbao/agentflow/pull/9",
+                started.branch_name.as_deref().unwrap(),
+                true,
+                "9",
+                true,
+                Some("2026-06-19T11:20:09Z"),
+            ),
+        )
+        .unwrap();
+        let closeout_path =
+            task_executor_closeout_path(dir.path(), "AF-001", &started.run_id).unwrap();
+        let mut closeout: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&closeout_path).unwrap()).unwrap();
+        closeout["resultStatus"] = serde_json::json!("failed");
+        closeout["canWriteback"] = serde_json::json!(false);
+        closeout["failureReason"] = serde_json::json!("executor failed after provider merge");
+        std::fs::write(
+            &closeout_path,
+            serde_json::to_string_pretty(&closeout).unwrap() + "\n",
+        )
+        .unwrap();
+
+        let err = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap_err();
+
+        assert!(err.to_string().contains("acceptance gate"));
+        let gate = load_task_acceptance_gate_decision(dir.path(), "AF-001").unwrap();
+        assert!(!gate.passed);
+        assert!(gate.blockers.iter().any(|item| {
+            item.contains("executor_closeout gate") && item.contains("result must be accepted")
+        }));
+        assert_eq!(
+            agentflow_spec::read_spec_issue(dir.path(), "AF-001")
+                .unwrap()
+                .status,
+            agentflow_spec::SpecIssueStatus::InReview
+        );
+    }
+
+    #[test]
+    fn build_agent_complete_rejects_out_of_scope_executor_closeout_diff() {
+        let dir = tempdir().unwrap();
+        write_spec_project_fixture(dir.path(), "proj-001", "AF-001");
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"before\" }\n",
+        );
+        init_git_repo(dir.path());
+        let started = start_build_agent_issue(dir.path(), "AF-001").unwrap();
+        write_running_session_snapshot(
+            dir.path(),
+            "AF-001",
+            &started.run_id,
+            started.branch_name.as_deref().unwrap(),
+        );
+        write_file(
+            dir.path().join("src/lib.rs"),
+            "pub fn status() -> &'static str { \"after\" }\n",
+        );
+        let request_path = write_completion_request(dir.path(), "AF-001", &started.run_id);
+        prepare_build_agent_review_from_request(dir.path(), &request_path).unwrap();
+        let issue = agentflow_spec::read_spec_issue(dir.path(), "AF-001").unwrap();
+        write_build_agent_closeout_proof_from_attestation(
+            dir.path(),
+            &issue,
+            &started.run_id,
+            "auto-merge-if-eligible",
+            trusted_closeout(
+                dir.path(),
+                "github",
+                "https://github.com/atxinbao/agentflow/pull/10",
+                started.branch_name.as_deref().unwrap(),
+                true,
+                "10",
+                true,
+                Some("2026-06-19T11:20:10Z"),
+            ),
+        )
+        .unwrap();
+        let closeout_path =
+            task_executor_closeout_path(dir.path(), "AF-001", &started.run_id).unwrap();
+        let mut closeout: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&closeout_path).unwrap()).unwrap();
+        closeout["changedFiles"][0]["path"] = serde_json::json!("README.md");
+        std::fs::write(
+            &closeout_path,
+            serde_json::to_string_pretty(&closeout).unwrap() + "\n",
+        )
+        .unwrap();
+
+        let err = complete_build_agent_issue_from_request(dir.path(), &request_path).unwrap_err();
+
+        assert!(err.to_string().contains("acceptance gate"));
+        let gate = load_task_acceptance_gate_decision(dir.path(), "AF-001").unwrap();
+        assert!(!gate.passed);
+        assert!(gate.blockers.iter().any(|item| {
+            item.contains("executor_closeout gate") && item.contains("超出允许路径：README.md")
+        }));
+        assert!(gate.blockers.iter().any(|item| {
+            item.contains("executor_closeout gate") && item.contains("changedFiles must match")
+        }));
     }
 
     #[test]

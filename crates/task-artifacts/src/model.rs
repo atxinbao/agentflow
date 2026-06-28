@@ -6,6 +6,7 @@ pub const TASK_COMMAND_VERSION: &str = "task-command.v1";
 pub const TASK_CHANGED_FILES_VERSION: &str = "task-changed-files.v1";
 pub const TASK_VALIDATION_VERSION: &str = "task-validation.v1";
 pub const TASK_EVIDENCE_VERSION: &str = "task-evidence.v1";
+pub const TASK_EXECUTOR_CLOSEOUT_VERSION: &str = "task-executor-closeout.v1";
 pub const TASK_ACCEPTANCE_GATE_VERSION: &str = "task-acceptance-gate.v1";
 pub const TASK_PREFLIGHT_VERSION: &str = "task-preflight.v1";
 pub const TASK_RUN_CHECKPOINT_VERSION: &str = "task-run-checkpoint.v1";
@@ -418,11 +419,72 @@ pub struct TaskEvidenceEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum TaskExecutorResultStatus {
+    Accepted,
+    Rejected,
+    Deferred,
+    Failed,
+}
+
+impl TaskExecutorResultStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::Rejected => "rejected",
+            Self::Deferred => "deferred",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskExecutorWorkHandoff {
+    pub role: String,
+    pub skill: String,
+    pub allowed_surface: Vec<String>,
+    pub expected_outputs: Vec<String>,
+    pub evidence_policy: String,
+    pub forbidden_scope: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskExecutorCoreRefs {
+    pub evidence_refs: Vec<String>,
+    pub artifact_refs: Vec<String>,
+    pub decision_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskExecutorCloseout {
+    pub version: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub work_handoff: TaskExecutorWorkHandoff,
+    pub changed_files: Vec<TaskChangedFile>,
+    pub logs: Vec<String>,
+    pub artifacts: Vec<String>,
+    pub evidence_refs: Vec<String>,
+    pub result_status: TaskExecutorResultStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation_request: Option<String>,
+    pub normalized_core_refs: TaskExecutorCoreRefs,
+    pub can_writeback: bool,
+    pub generated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TaskAcceptanceGateKind {
     Verification,
     Evidence,
     Contract,
     State,
+    ExecutorCloseout,
 }
 
 impl TaskAcceptanceGateKind {
@@ -432,6 +494,7 @@ impl TaskAcceptanceGateKind {
             Self::Evidence => "evidence",
             Self::Contract => "contract",
             Self::State => "state",
+            Self::ExecutorCloseout => "executor_closeout",
         }
     }
 }

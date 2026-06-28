@@ -1,15 +1,15 @@
 use crate::model::{
     TaskAcceptanceGateDecision, TaskChangedFile, TaskChangedFilesRecord, TaskCommandInput,
     TaskCommandRecord, TaskEvidence, TaskEvidenceEntry, TaskEvidenceEntryStatus,
-    TaskPreflightDecision, TaskRun, TaskRunCheckpoint, TaskRunStatus, TaskValidationRecord,
-    TaskWorkSessionEvidence, TaskWorkSessionRecord, TaskWorkSessionRecoverySummary,
-    TaskWorkSessionStatus, WorkLoopArtifactClass, WorkLoopArtifactContract,
-    WorkLoopFilesystemContract, WorkLoopRoleAlias, WorkLoopStage, WorkLoopStageContract,
-    TASK_ACCEPTANCE_GATE_VERSION, TASK_CHANGED_FILES_VERSION, TASK_COMMAND_VERSION,
-    TASK_EVIDENCE_VERSION, TASK_PREFLIGHT_VERSION, TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION,
-    TASK_VALIDATION_VERSION, TASK_WORK_SESSION_EVIDENCE_VERSION,
-    TASK_WORK_SESSION_RECOVERY_VERSION, TASK_WORK_SESSION_VERSION,
-    WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
+    TaskExecutorCloseout, TaskPreflightDecision, TaskRun, TaskRunCheckpoint, TaskRunStatus,
+    TaskValidationRecord, TaskWorkSessionEvidence, TaskWorkSessionRecord,
+    TaskWorkSessionRecoverySummary, TaskWorkSessionStatus, WorkLoopArtifactClass,
+    WorkLoopArtifactContract, WorkLoopFilesystemContract, WorkLoopRoleAlias, WorkLoopStage,
+    WorkLoopStageContract, TASK_ACCEPTANCE_GATE_VERSION, TASK_CHANGED_FILES_VERSION,
+    TASK_COMMAND_VERSION, TASK_EVIDENCE_VERSION, TASK_EXECUTOR_CLOSEOUT_VERSION,
+    TASK_PREFLIGHT_VERSION, TASK_RUN_CHECKPOINT_VERSION, TASK_RUN_VERSION, TASK_VALIDATION_VERSION,
+    TASK_WORK_SESSION_EVIDENCE_VERSION, TASK_WORK_SESSION_RECOVERY_VERSION,
+    TASK_WORK_SESSION_VERSION, WORK_LOOP_FILESYSTEM_CONTRACT_VERSION,
 };
 use agentflow_event_store::TaskReplayCursor;
 use agentflow_workflow_core::{
@@ -54,6 +54,16 @@ pub fn task_acceptance_gate_path(
 ) -> Result<PathBuf> {
     let root = canonicalize_project_root(project_root)?;
     Ok(task_issue_dir(&root, issue_id)?.join("acceptance-gate.json"))
+}
+
+pub fn task_executor_closeout_path(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<PathBuf> {
+    Ok(task_run_dir(project_root, issue_id, run_id)?
+        .join("review")
+        .join("executor-closeout.json"))
 }
 
 pub fn task_changed_files_path(
@@ -836,6 +846,40 @@ pub fn load_task_acceptance_gate_decision(
     read_json(task_acceptance_gate_path(&root, issue_id)?)
 }
 
+pub fn write_task_executor_closeout(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    closeout: &TaskExecutorCloseout,
+) -> Result<TaskExecutorCloseout> {
+    let root = canonicalize_project_root(project_root)?;
+    let issue_id = IssueId::parse(issue_id)?;
+    let run_id = RunId::parse(&closeout.run_id)?;
+    if closeout.issue_id != issue_id.as_str() {
+        anyhow::bail!(
+            "executor closeout issueId mismatch: path {}, payload {}",
+            issue_id.as_str(),
+            closeout.issue_id
+        );
+    }
+    let path = task_executor_closeout_path(&root, issue_id.as_str(), run_id.as_str())?;
+    if let Some(parent) = path.parent() {
+        ensure_directory(parent)?;
+    }
+    let mut stored = closeout.clone();
+    stored.version = TASK_EXECUTOR_CLOSEOUT_VERSION.to_string();
+    write_json(&path, &stored)?;
+    Ok(stored)
+}
+
+pub fn load_task_executor_closeout(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<TaskExecutorCloseout> {
+    let root = canonicalize_project_root(project_root)?;
+    read_json(task_executor_closeout_path(&root, issue_id, run_id)?)
+}
+
 pub fn load_task_changed_files(
     project_root: impl AsRef<Path>,
     issue_id: &str,
@@ -1163,6 +1207,28 @@ fn build_work_loop_filesystem_contract(
             traces_to: vec!["issue".to_string(), "run".to_string()],
         },
         WorkLoopArtifactContract {
+            key: "executor_closeout".to_string(),
+            stage: WorkLoopStage::Delivery,
+            class: WorkLoopArtifactClass::Authority,
+            location_ref: normalize_relative_path_string(
+                PathBuf::from(".agentflow")
+                    .join("tasks")
+                    .join(issue_id)
+                    .join("runs")
+                    .join(run_id)
+                    .join("review")
+                    .join("executor-closeout.json"),
+            )?,
+            description:
+                "Executor closeout 将外部执行输出归一化为 Evidence / Artifact / Decision 输入。"
+                    .to_string(),
+            traces_to: vec![
+                "issue".to_string(),
+                "run".to_string(),
+                "task_evidence".to_string(),
+            ],
+        },
+        WorkLoopArtifactContract {
             key: "task_projection".to_string(),
             stage: WorkLoopStage::Delivery,
             class: WorkLoopArtifactClass::ReadModel,
@@ -1272,7 +1338,11 @@ fn build_work_loop_filesystem_contract(
         WorkLoopStageContract {
             stage: WorkLoopStage::Delivery,
             issue_statuses: vec!["in_review".to_string(), "done".to_string()],
-            inputs: vec!["task_evidence".to_string(), "task_projection".to_string()],
+            inputs: vec![
+                "task_evidence".to_string(),
+                "executor_closeout".to_string(),
+                "task_projection".to_string(),
+            ],
             outputs: vec![
                 "public_pr_record".to_string(),
                 "public_changelog_record".to_string(),
