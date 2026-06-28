@@ -355,6 +355,7 @@ pub fn simulate_command(request: &RuntimeCommandRequest) -> Result<SimulationRep
     let arbitration_request = ArbitrationRequest {
         request_id: format!("simulate-{}", request.command_id),
         proposal: proposal.clone(),
+        core_admission: None,
         definition_versions: definition_versions(&context),
         requested_at: request.created_at.clone(),
     };

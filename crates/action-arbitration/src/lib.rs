@@ -19,9 +19,9 @@ pub use arbitrator::{
 pub use locks::{default_lock_kind_for_object, LockDecision};
 pub use model::{
     AcceptedAction, ArbitrationContext, ArbitrationDecision, ArbitrationDecisionStatus,
-    ArbitrationRequest, DefinitionVersions, DependencyFact, EvidenceFact, HumanDecisionRequest,
-    HumanDecisionResponseKind, ObjectLock, ObjectLockKind, ObjectLockPlan, ObjectRefKey,
-    PendingProposal, StateFact, ACTION_ARBITRATION_VERSION,
+    ArbitrationRequest, CoreActionStateAdmission, DefinitionVersions, DependencyFact, EvidenceFact,
+    HumanDecisionRequest, HumanDecisionResponseKind, ObjectLock, ObjectLockKind, ObjectLockPlan,
+    ObjectRefKey, PendingProposal, StateFact, ACTION_ARBITRATION_VERSION,
 };
 pub use reasons::{RejectionReason, RejectionReasonCode};
 pub use report::RejectionExplanation;

@@ -22,8 +22,26 @@ pub struct DefinitionVersions {
 pub struct ArbitrationRequest {
     pub request_id: String,
     pub proposal: ActionProposal,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub core_admission: Option<CoreActionStateAdmission>,
     pub definition_versions: DefinitionVersions,
     pub requested_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreActionStateAdmission {
+    pub core_action_type: String,
+    pub core_target_object_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resulting_state: Option<String>,
+    #[serde(default)]
+    pub required_evidence: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_event: Option<String>,
+    pub reference_mapping_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -283,6 +301,7 @@ pub struct ArbitrationContext {
     pub dependency_index: BTreeMap<String, DependencyFact>,
     pub object_locks: Vec<ObjectLock>,
     pub pending_proposals: Vec<PendingProposal>,
+    pub require_core_admission: bool,
 }
 
 impl ArbitrationContext {
@@ -302,7 +321,12 @@ impl ArbitrationContext {
             dependency_index: BTreeMap::new(),
             object_locks: Vec::new(),
             pending_proposals: Vec::new(),
+            require_core_admission: false,
         }
+    }
+
+    pub fn require_core_action_admission(&mut self) {
+        self.require_core_admission = true;
     }
 
     pub fn insert_state(&mut self, fact: StateFact) {
