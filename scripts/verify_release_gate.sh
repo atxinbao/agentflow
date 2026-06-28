@@ -149,6 +149,7 @@ CORE_4D_SPEC_INTAKE_POSITIVE_CERTIFICATION_PATH="$RUNTIME_DIR/core-4d-spec-intak
 CORE_4D_SPEC_INTAKE_NEGATIVE_CERTIFICATION_PATH="$RUNTIME_DIR/core-4d-spec-intake-negative-certification.json"
 CORE_ONTOLOGY_KERNEL_PATH="$RUNTIME_DIR/core-ontology-kernel.json"
 CORE_OBJECT_LINK_SCHEMA_PATH="$RUNTIME_DIR/core-object-link-schema.json"
+CORE_ACTION_STATE_SEMANTICS_PATH="$RUNTIME_DIR/core-action-state-semantics.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -381,6 +382,7 @@ proof_chain = [
     {"stage": "core-4d-spec-intake", "label": "Core 4-D Spec Intake"},
     {"stage": "core-ontology-kernel", "label": "Core Ontology Kernel"},
     {"stage": "core-object-link-schema", "label": "Core Object / Link Schema"},
+    {"stage": "core-action-state-semantics", "label": "Core Action / State Semantics"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -6341,6 +6343,116 @@ PY
   record_stage "core-object-link-schema" "passed" "$(basename "$CORE_OBJECT_LINK_SCHEMA_PATH")"
 }
 
+run_core_action_state_semantics_gate() {
+  record_stage "core-action-state-semantics" "started" "$CORE_ACTION_STATE_SEMANTICS_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-action-state-semantics-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_action_state_semantics --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-action-state-semantics" "agentflow-ontology Core Action / State Semantics tests failed"
+  fi
+  python3 - "$CORE_ACTION_STATE_SEMANTICS_PATH" "$WORKSPACE/docs/architecture/056-core-action-state-semantics-v1.md" "$WORKSPACE/crates/ontology/src/semantics.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+test_log_path = pathlib.Path(sys.argv[4])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+required_actions = [
+    "captureObject",
+    "normalizeObject",
+    "routeObject",
+    "acceptObject",
+    "startObject",
+    "attachEvidence",
+    "attachArtifact",
+    "submitForReview",
+    "completeObject",
+    "blockObject",
+    "cancelObject",
+    "supersedeObject",
+]
+required_states = [
+    "captured",
+    "understood",
+    "planned",
+    "ready",
+    "active",
+    "reviewing",
+    "completed",
+    "blocked",
+    "cancelled",
+    "superseded",
+]
+required_transitions = [
+    "capture",
+    "normalize",
+    "route",
+    "accept",
+    "start",
+    "attach-evidence",
+    "attach-artifact",
+    "submit-review",
+    "complete",
+    "block",
+    "cancel",
+    "supersede",
+]
+forbidden_terms = [
+    "bug",
+    "feature",
+    "issue",
+    "pr",
+    "pull-request",
+    "release",
+    "repository",
+    "repository-patch",
+    "test-log",
+    "github-issue",
+]
+coverage = {
+    "semantics-version-defined": "agentflow-core-action-state-semantics.v1" in source_text,
+    "actions-documented": all(item in doc_text for item in required_actions),
+    "actions-implemented": all(item in source_text for item in required_actions),
+    "states-documented": all(item in doc_text for item in required_states),
+    "states-implemented": all(item in source_text for item in required_states),
+    "transitions-documented": all(item in doc_text for item in required_transitions),
+    "transitions-implemented": all(item in source_text for item in required_transitions),
+    "reference-mappings-not-core-authority": "not Core authority" in doc_text and "not Core authority" in source_text,
+    "forbidden-terms-listed": all(term in doc_text and term in source_text for term in forbidden_terms),
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-action-state-semantics-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-action-state-semantics.v1",
+    "architecturePath": "docs/architecture/056-core-action-state-semantics-v1.md",
+    "rustContractPath": "crates/ontology/src/semantics.rs",
+    "rustTestLogPath": "runtime/core-action-state-semantics-rust-test.log",
+    "actionCount": len(required_actions),
+    "stateCount": len(required_states),
+    "transitionCount": len(required_transitions),
+    "requiredActions": required_actions,
+    "requiredStates": required_states,
+    "requiredTransitions": required_transitions,
+    "forbiddenCoreTerms": forbidden_terms,
+    "referenceMappingBoundary": "reference-app-only-not-core-authority",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core action/state semantics coverage failed: {failed}")
+PY
+  record_stage "core-action-state-semantics" "passed" "$(basename "$CORE_ACTION_STATE_SEMANTICS_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -6894,6 +7006,7 @@ PY
   run_core_4d_spec_intake_gate
   run_core_ontology_kernel_gate
   run_core_object_link_schema_gate
+  run_core_action_state_semantics_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
