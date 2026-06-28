@@ -24,6 +24,13 @@ docs/delivery
 | [releases/v1.0.4/README.md](releases/v1.0.4/README.md) | 当前发布基线：Core Ontology Kernel |
 | [releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md](releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md) | v1.0.4 Core Ontology Kernel tasks |
 
+## Next Release Planning
+
+| 路径 | 作用 |
+| --- | --- |
+| [releases/v1.0.5/README.md](releases/v1.0.5/README.md) | 下一版计划：Core Runtime Kernel |
+| [releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md](releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md) | v1.0.5 Core Runtime Kernel tasks |
+
 ## Historical Delivery
 
 更早版本记录已放入：
