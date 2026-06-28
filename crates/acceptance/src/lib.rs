@@ -29,9 +29,10 @@ mod tests {
     use agentflow_release::load_delivery_summary;
     use agentflow_role_policy::{core_role_policy_bundle, validate_role_policy_bundle};
     use agentflow_runtime_api::{
-        execute_command_via_arbitration, get_project_home_view, get_runtime_health_view,
-        get_task_workbench_view, project_confirm_goal, project_confirm_plan, project_intake,
-        project_materialize, RuntimeCommandRequest, RuntimeCommandStatus,
+        core_runtime_route, execute_command_via_arbitration, get_project_home_view,
+        get_runtime_health_view, get_task_workbench_view, project_confirm_goal,
+        project_confirm_plan, project_intake, project_materialize, RuntimeCommandRequest,
+        RuntimeCommandStatus, CORE_RUNTIME_COMMAND_TYPE,
     };
     use agentflow_state::{WorkflowAuditStatus, WorkflowStage};
     use agentflow_task_loop::TaskLoop;
@@ -136,9 +137,15 @@ mod tests {
             runtime_dir.path(),
             &RuntimeCommandRequest {
                 command_id: "cmd-foundation-submit".to_string(),
-                command_type: "submitRequirement".to_string(),
+                command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+                route: Some(core_runtime_route(
+                    "core:requirement.submit",
+                    "action-contract:requirement.submit",
+                    None::<String>,
+                )),
                 source_surface: ActionSourceSurface::Desktop,
                 actor_role: "spec-agent".to_string(),
+                skill_ref: Some("core:spec-agent:requirement.submit".to_string()),
                 target_object_ref: None,
                 input: json!({
                     "summary": "收口 Runtime Foundation closeout baseline",
@@ -146,6 +153,8 @@ mod tests {
                 }),
                 evidence_refs: Vec::new(),
                 artifact_refs: Vec::new(),
+                expected_outputs: Vec::new(),
+                evidence_policy: None,
                 idempotency_key: "idem-foundation-submit".to_string(),
                 created_at: "2026-06-20T00:00:00Z".to_string(),
             },

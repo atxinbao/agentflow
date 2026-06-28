@@ -1143,15 +1143,22 @@ mod tests {
         PackSurfaceDefinition, PackType, PackValidationArtifact, PackValidationStatus,
         PACK_MANIFEST_VERSION,
     };
+    use agentflow_runtime_api::{
+        action_contract_ref_for_action_type, core_runtime_route, CORE_RUNTIME_COMMAND_TYPE,
+    };
     use serde_json::json;
     use tempfile::tempdir;
 
     fn valid_command(command_type: &str) -> RuntimeCommandRequest {
         RuntimeCommandRequest {
             command_id: "cmd-001".to_string(),
-            command_type: command_type.to_string(),
+            command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+            route: action_contract_ref_for_action_type(command_type).map(|contract_ref| {
+                core_runtime_route(format!("core:{command_type}"), contract_ref, Some("Issue"))
+            }),
             source_surface: ActionSourceSurface::Cli,
             actor_role: "build-agent".to_string(),
+            skill_ref: Some(format!("core:build-agent:{command_type}")),
             target_object_ref: Some(ActionRef {
                 object_type: "Issue".to_string(),
                 id: "AF-SIM-001".to_string(),
@@ -1159,6 +1166,8 @@ mod tests {
             input: json!({"note": "simulate only"}),
             evidence_refs: Vec::new(),
             artifact_refs: Vec::new(),
+            expected_outputs: Vec::new(),
+            evidence_policy: None,
             idempotency_key: "cmd-001:simulate".to_string(),
             created_at: "2026-06-23T00:00:00Z".to_string(),
         }

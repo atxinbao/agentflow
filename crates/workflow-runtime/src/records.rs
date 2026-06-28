@@ -35,8 +35,12 @@ pub struct RuntimeCommandFact {
     pub version: String,
     pub command_id: String,
     pub command_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route: Option<Value>,
     pub source_surface: ActionSourceSurface,
     pub actor_role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_object_ref: Option<ActionRef>,
     pub input: Value,
@@ -44,6 +48,10 @@ pub struct RuntimeCommandFact {
     pub evidence_refs: Vec<String>,
     #[serde(default)]
     pub artifact_refs: Vec<String>,
+    #[serde(default)]
+    pub expected_outputs: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_policy: Option<Value>,
     pub idempotency_key: String,
     pub created_at: String,
     pub recorded_at: u64,

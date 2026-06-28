@@ -9,7 +9,9 @@ use crate::commands::{
     build_core_arbitration_context, execute_command_via_arbitration_with_context,
     RuntimeCommandRequest,
 };
-use crate::mapping::map_command_to_action_proposal;
+use crate::mapping::{
+    core_runtime_route, map_command_to_action_proposal, CORE_RUNTIME_COMMAND_TYPE,
+};
 use crate::responses::{RuntimeCommandResponse, RuntimeCommandStatus};
 use agentflow_action_arbitration::{ArbitrationContext, EvidenceFact, StateFact};
 use agentflow_action_contract::{ActionProposal, ActionRef, ActionSourceSurface};
@@ -671,9 +673,15 @@ fn build_create_project_runtime_command(
 ) -> RuntimeCommandRequest {
     RuntimeCommandRequest {
         command_id: format!("cmd-create-project-{}", project.project_id),
-        command_type: "createProject".to_string(),
+        command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+        route: Some(core_runtime_route(
+            "core:project.create",
+            "action-contract:project.create",
+            Some("Spec"),
+        )),
         source_surface: ActionSourceSurface::Agent,
         actor_role: "spec-agent".to_string(),
+        skill_ref: Some("core:spec-agent:project.create".to_string()),
         target_object_ref: Some(ActionRef {
             object_type: "Spec".to_string(),
             id: source_spec_id.to_string(),
@@ -691,6 +699,8 @@ fn build_create_project_runtime_command(
             format!(".agentflow/spec/requirements/{requirement_id}/preview.json"),
             project.system.path.clone(),
         ],
+        expected_outputs: Vec::new(),
+        evidence_policy: None,
         idempotency_key: format!(
             "spec:{requirement_id}:project:{}:createProject:{}",
             project.project_id, project.system.updated_at
@@ -708,9 +718,15 @@ fn build_create_issue_runtime_command(
 ) -> RuntimeCommandRequest {
     RuntimeCommandRequest {
         command_id: format!("cmd-create-issue-{}", issue.issue_id),
-        command_type: "createIssue".to_string(),
+        command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+        route: Some(core_runtime_route(
+            "core:issue.create",
+            "action-contract:issue.create",
+            Some("Project"),
+        )),
         source_surface: ActionSourceSurface::Agent,
         actor_role: "spec-agent".to_string(),
+        skill_ref: Some("core:spec-agent:issue.create".to_string()),
         target_object_ref: Some(ActionRef {
             object_type: "Project".to_string(),
             id: project.project_id.clone(),
@@ -728,6 +744,8 @@ fn build_create_issue_runtime_command(
             format!(".agentflow/spec/requirements/{requirement_id}/preview.json"),
             issue.system.path.clone(),
         ],
+        expected_outputs: Vec::new(),
+        evidence_policy: None,
         idempotency_key: format!(
             "spec:{requirement_id}:issue:{}:createIssue:{ordinal}",
             issue.issue_id
@@ -921,7 +939,11 @@ mod tests {
         assert_eq!(result.rejected_count, 0);
 
         let project_record = &result.action_proposal_bridge[0];
-        assert_eq!(project_record.command.command_type, "createProject");
+        assert_eq!(
+            project_record.command.command_type,
+            crate::mapping::CORE_RUNTIME_COMMAND_TYPE
+        );
+        assert_eq!(project_record.proposal.action_type, "createProject");
         assert_eq!(project_record.binding.target_object_type, "Spec");
         assert_eq!(project_record.binding.actor_role, "spec-agent");
         assert_eq!(project_record.binding.runtime_role, "spec-agent");
@@ -940,7 +962,11 @@ mod tests {
         );
 
         let first_issue_record = &result.action_proposal_bridge[1];
-        assert_eq!(first_issue_record.command.command_type, "createIssue");
+        assert_eq!(
+            first_issue_record.command.command_type,
+            crate::mapping::CORE_RUNTIME_COMMAND_TYPE
+        );
+        assert_eq!(first_issue_record.proposal.action_type, "createIssue");
         assert_eq!(first_issue_record.binding.target_object_type, "Project");
         assert_eq!(
             first_issue_record.binding.handoff_rule.as_deref(),

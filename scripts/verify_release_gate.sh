@@ -2786,9 +2786,15 @@ defer_request = pathlib.Path(sys.argv[2])
 reject_request = pathlib.Path(sys.argv[3])
 
 base = {
-    "commandType": "createProject",
+    "commandType": "core.action.invoke",
+    "route": {
+        "routeId": "core:project.create",
+        "actionContractRef": "action-contract:project.create",
+        "targetObjectType": "Spec",
+    },
     "sourceSurface": "agent",
     "actorRole": "spec-agent",
+    "skillRef": "core:spec-agent:project.create",
     "targetObjectRef": {"objectType": "Spec", "id": "spec-governance-001"},
     "input": {
         "projectId": "project-governance-001",
@@ -5510,9 +5516,15 @@ import sys
 out_path = pathlib.Path(sys.argv[1])
 payload = {
     "commandId": "cmd-forged-governance-ready-release-gate",
-    "commandType": "createProject",
+    "commandType": "core.action.invoke",
+    "route": {
+        "routeId": "core:project.create",
+        "actionContractRef": "action-contract:project.create",
+        "targetObjectType": "Spec",
+    },
     "sourceSurface": "agent",
     "actorRole": "spec-agent",
+    "skillRef": "core:spec-agent:project.create",
     "targetObjectRef": {"objectType": "Spec", "id": "spec-forged-governance"},
     "input": {
         "projectId": "project-forged-governance",

@@ -1,4 +1,5 @@
 use crate::commands::{validate_runtime_command, RuntimeCommandRequest};
+use crate::mapping::{core_runtime_route, CORE_RUNTIME_COMMAND_TYPE};
 use agentflow_action_contract::{ActionRef, ActionSourceSurface};
 use agentflow_spec::{SpecExpectedOutputs, SpecIssue, SpecIssueCategory, SpecRequiredAgentRole};
 use agentflow_task_artifacts::write_work_loop_filesystem_contract;
@@ -51,9 +52,15 @@ pub fn write_work_command_handoff_from_spec_issue(
     let command_id = format!("start-run-{}-{run_id}", issue.issue_id);
     let command_request = RuntimeCommandRequest {
         command_id: command_id.clone(),
-        command_type: "startRun".to_string(),
+        command_type: CORE_RUNTIME_COMMAND_TYPE.to_string(),
+        route: Some(core_runtime_route(
+            "core:issue.start",
+            "action-contract:issue.start",
+            Some("Issue"),
+        )),
         source_surface: ActionSourceSurface::System,
         actor_role: "work-agent".to_string(),
+        skill_ref: Some("core:work-agent:issue.start".to_string()),
         target_object_ref: Some(ActionRef {
             object_type: "Issue".to_string(),
             id: issue.issue_id.clone(),
@@ -81,6 +88,8 @@ pub fn write_work_command_handoff_from_spec_issue(
             issue.system.path.clone(),
             work_loop_contract.contract_path.clone(),
         ],
+        expected_outputs: Vec::new(),
+        evidence_policy: None,
         idempotency_key: format!("spec-issue:{}:start-run:{run_id}", issue.issue_id),
         created_at: unix_timestamp_seconds().to_string(),
     };
@@ -89,12 +98,26 @@ pub fn write_work_command_handoff_from_spec_issue(
         version: RUNTIME_COMMAND_FACT_VERSION.to_string(),
         command_id: command_request.command_id.clone(),
         command_type: command_request.command_type.clone(),
+        route: command_request
+            .route
+            .as_ref()
+            .and_then(|route| serde_json::to_value(route).ok()),
         source_surface: command_request.source_surface.clone(),
         actor_role: command_request.actor_role.clone(),
+        skill_ref: command_request.skill_ref.clone(),
         target_object_ref: command_request.target_object_ref.clone(),
         input: command_request.input.clone(),
         evidence_refs: command_request.evidence_refs.clone(),
         artifact_refs: command_request.artifact_refs.clone(),
+        expected_outputs: command_request
+            .expected_outputs
+            .iter()
+            .filter_map(|output| serde_json::to_value(output).ok())
+            .collect(),
+        evidence_policy: command_request
+            .evidence_policy
+            .as_ref()
+            .and_then(|policy| serde_json::to_value(policy).ok()),
         idempotency_key: command_request.idempotency_key.clone(),
         created_at: command_request.created_at.clone(),
         recorded_at: unix_timestamp_seconds(),
@@ -271,7 +294,14 @@ mod tests {
 
         let command =
             load_runtime_command_fact(dir.path(), "start-run-AF-WORK-001-run-001").unwrap();
-        assert_eq!(command.command_type, "startRun");
+        assert_eq!(
+            command.command_type,
+            crate::mapping::CORE_RUNTIME_COMMAND_TYPE
+        );
+        assert_eq!(
+            command.validation.normalized_action_type.as_deref(),
+            Some("startRun")
+        );
         assert_eq!(command.actor_role, "work-agent");
         assert_eq!(
             command

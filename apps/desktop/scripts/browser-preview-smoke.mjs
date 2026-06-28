@@ -355,9 +355,10 @@ try {
   assert.ok(appEntry.includes("RuntimeCommand(requestAudit) -> AuditSurfaceView"));
   assert.ok(appEntry.includes("RuntimeCommand(createFollowUp) -> createIssue proposal"));
   assert.ok(appEntry.includes("needs-human-decision"));
-  assert.ok(runtimeApiMapping.includes('"acceptDelivery" => Some("markIssueDone")'));
-  assert.ok(runtimeApiMapping.includes('"requestFix" | "reopenIssue" => Some("recordDecision")'));
-  assert.ok(runtimeApiMapping.includes('"createIssue" | "createFollowUp" => Some("createIssue")'));
+  assert.ok(runtimeApiMapping.includes('CORE_RUNTIME_COMMAND_TYPE: &str = "core.action.invoke"'));
+  assert.ok(runtimeApiMapping.includes('"action-contract:issue.done" => Some("markIssueDone")'));
+  assert.ok(runtimeApiMapping.includes('"action-contract:decision.record" => Some("recordDecision")'));
+  assert.ok(runtimeApiMapping.includes('"action-contract:issue.create" => Some("createIssue")'));
   assert.ok(runtimeApiCommands.includes("command_surface_aliases_map_to_supported_action_contracts"));
   assert.ok(appEntry.includes("交付槽位"));
   assert.ok(appEntry.includes("公开交付"));
