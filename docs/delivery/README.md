@@ -21,8 +21,8 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.0.3/README.md](releases/v1.0.3/README.md) | 当前发布基线：Core 4-D Spec Intake |
-| [releases/v1.0.3/AGENTFLOW_V1_0_3_CORE_4D_SPEC_INTAKE_TASKS_V1.md](releases/v1.0.3/AGENTFLOW_V1_0_3_CORE_4D_SPEC_INTAKE_TASKS_V1.md) | v1.0.3 Core 4-D Spec Intake tasks |
+| [releases/v1.0.4/README.md](releases/v1.0.4/README.md) | 当前发布基线：Core Ontology Kernel |
+| [releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md](releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md) | v1.0.4 Core Ontology Kernel tasks |
 
 ## Historical Delivery
 

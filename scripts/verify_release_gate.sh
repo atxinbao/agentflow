@@ -153,6 +153,7 @@ CORE_ACTION_STATE_SEMANTICS_PATH="$RUNTIME_DIR/core-action-state-semantics.json"
 CORE_SKILL_REGISTRY_PATH="$RUNTIME_DIR/core-skill-registry.json"
 CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH="$RUNTIME_DIR/core-evidence-decision-reference-model.json"
 CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
+V104_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v104-release-certification.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -2017,7 +2018,7 @@ tracked_docs = [
     "docs/architecture/builtin-pack-registry.md",
     "docs/architecture/041-v100-stable-contract-baseline-v1.md",
     "docs/architecture/050-v100-release-certification-v1.md",
-    "docs/delivery/releases/v1.0.3/README.md",
+    "docs/delivery/releases/v1.0.4/README.md",
     "docs/project/history/2026-06-current-baseline-history/README.md",
 ]
 runtime_only_paths = [
@@ -2062,7 +2063,7 @@ payload = {
     "currentProjectRoadmapEntry": "docs/project/roadmap.md",
     "currentCoreCapabilityEntry": "docs/architecture/021-ai-os-project-core-capabilities-v1.md",
     "currentStableEntry": "docs/architecture/041-v100-stable-contract-baseline-v1.md",
-    "currentReleaseBaselineEntry": "docs/delivery/releases/v1.0.3/README.md",
+    "currentReleaseBaselineEntry": "docs/delivery/releases/v1.0.4/README.md",
     "releaseCertificationEntry": "docs/architecture/050-v100-release-certification-v1.md",
     "defineAgentBoundary": {
         "path": ".agentflow/define/agent/**",
@@ -6786,6 +6787,108 @@ PY
   record_stage "core-file-backed-ontology-registry" "passed" "$(basename "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH")"
 }
 
+run_v104_release_certification_gate() {
+  record_stage "v104-release-certification" "started" "$V104_RELEASE_CERTIFICATION_PATH"
+  python3 - \
+    "$V104_RELEASE_CERTIFICATION_PATH" \
+    "$RELEASE_VERSION" \
+    "$WORKSPACE/Cargo.toml" \
+    "$WORKSPACE/apps/desktop/package.json" \
+    "$WORKSPACE/apps/desktop/src-tauri/tauri.conf.json" \
+    "$ROOT/CHANGELOG.md" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.4/README.md" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md" \
+    "$CORE_ONTOLOGY_KERNEL_PATH" \
+    "$CORE_OBJECT_LINK_SCHEMA_PATH" \
+    "$CORE_ACTION_STATE_SEMANTICS_PATH" \
+    "$CORE_SKILL_REGISTRY_PATH" \
+    "$CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH" \
+    "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH" <<'PY'
+import json
+import pathlib
+import sys
+import time
+import tomllib
+
+out_path = pathlib.Path(sys.argv[1])
+release_version = sys.argv[2]
+cargo_path = pathlib.Path(sys.argv[3])
+desktop_package_path = pathlib.Path(sys.argv[4])
+tauri_config_path = pathlib.Path(sys.argv[5])
+changelog_path = pathlib.Path(sys.argv[6])
+release_readme_path = pathlib.Path(sys.argv[7])
+release_tasks_path = pathlib.Path(sys.argv[8])
+artifact_paths = [pathlib.Path(value) for value in sys.argv[9:]]
+
+expected_version = "1.0.4"
+expected_tag = "v1.0.4"
+cargo = tomllib.loads(cargo_path.read_text(encoding="utf-8"))
+desktop_package = json.loads(desktop_package_path.read_text(encoding="utf-8"))
+tauri_config = json.loads(tauri_config_path.read_text(encoding="utf-8"))
+changelog_text = changelog_path.read_text(encoding="utf-8")
+release_readme_text = release_readme_path.read_text(encoding="utf-8")
+release_tasks_text = release_tasks_path.read_text(encoding="utf-8")
+artifacts = [json.loads(path.read_text(encoding="utf-8")) for path in artifact_paths]
+
+artifact_statuses = {
+    artifact_paths[index].name: artifact.get("status")
+    for index, artifact in enumerate(artifacts)
+}
+changelog_has_v104 = "v1.0.4" in changelog_text
+changelog_has_kernel = "Core Ontology Kernel" in changelog_text
+changelog_has_certification = "v104-release-certification" in changelog_text
+coverage = {
+    "release-version-is-v104": release_version == expected_tag,
+    "cargo-workspace-version-is-104": cargo["workspace"]["package"]["version"] == expected_version,
+    "desktop-package-version-is-104": desktop_package.get("version") == expected_version,
+    "tauri-version-is-104": tauri_config.get("version") == expected_version,
+    "changelog-has-v104-entry": changelog_has_v104
+    and changelog_has_kernel
+    and changelog_has_certification,
+    "delivery-readme-has-v104-baseline": "AgentFlow v1.0.4 Core Ontology Kernel" in release_readme_text
+    and "Core Ontology Kernel baseline" in release_readme_text,
+    "delivery-tasks-has-v104-closeout": "V104-010 Release Certification" in release_tasks_text
+    and "runtime/v104-release-certification.json" in release_tasks_text,
+    "core-ontology-artifacts-passed": all(status == "passed" for status in artifact_statuses.values()),
+    "object-link-count-certified": artifacts[1].get("objectCount") == 11
+    and artifacts[1].get("linkCount") == 12,
+    "action-state-count-certified": artifacts[2].get("actionCount") == 12
+    and artifacts[2].get("stateCount") == 10
+    and artifacts[2].get("transitionCount") == 12,
+    "skill-count-certified": artifacts[3].get("skillCount") == 6,
+    "evidence-decision-count-certified": artifacts[4].get("evidenceReferenceCount") == 5
+    and artifacts[4].get("decisionReferenceCount") == 3
+    and artifacts[4].get("outcomeCount") == 10,
+    "file-backed-registry-certified": artifacts[5].get("registrySourceCount") == 5
+    and artifacts[5].get("projectionEntryCount") == 5,
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-v104-release-certification.v1",
+    "status": "passed" if not failed else "failed",
+    "releaseVersion": expected_tag,
+    "workspaceVersion": expected_version,
+    "changelogPath": str(changelog_path),
+    "changelogPreview": changelog_text[:200],
+    "changelogFacts": {
+        "hasV104": changelog_has_v104,
+        "hasCoreOntologyKernel": changelog_has_kernel,
+        "hasV104ReleaseCertification": changelog_has_certification,
+    },
+    "certifiedArtifacts": artifact_statuses,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "releaseBaseline": "docs/delivery/releases/v1.0.4/README.md",
+    "releaseTasks": "docs/delivery/releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md",
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"v1.0.4 release certification failed: {failed}")
+PY
+  record_stage "v104-release-certification" "passed" "$(basename "$V104_RELEASE_CERTIFICATION_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -7343,6 +7446,7 @@ PY
   run_core_skill_registry_gate
   run_core_evidence_decision_reference_model_gate
   run_core_file_backed_ontology_registry_gate
+  run_v104_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
