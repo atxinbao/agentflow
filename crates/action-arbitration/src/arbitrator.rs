@@ -9,8 +9,8 @@ use serde_json::Value;
 use crate::locks::{check_object_lock as check_lock, default_lock_kind_for_object};
 use crate::model::{
     AcceptedAction, ArbitrationContext, ArbitrationDecision, ArbitrationDecisionStatus,
-    ArbitrationRequest, HumanDecisionRequest, HumanDecisionResponseKind, ObjectLock,
-    ObjectLockPlan,
+    ArbitrationRequest, CoreActionStateAdmission, HumanDecisionRequest, HumanDecisionResponseKind,
+    ObjectLock, ObjectLockPlan,
 };
 use crate::reasons::{RejectionReason, RejectionReasonCode};
 use crate::report::RejectionExplanation;
@@ -51,6 +51,12 @@ pub fn arbitrate_action(
     let proposal = proposal_report
         .normalized_proposal
         .expect("valid proposal should keep normalized copy");
+    if context.require_core_admission {
+        if let Some(reasons) = validate_core_action_state_admission(request.core_admission.as_ref())
+        {
+            return ArbitrationDecision::rejected(request, reasons);
+        }
+    }
     let contract = context
         .action_contract_registry
         .get_action_contract(&proposal.action_type, &proposal.contract_version)
@@ -292,6 +298,119 @@ pub fn arbitrate_action(
         lock_plan: lock_plan.clone(),
         would_emit_events: collect_expected_events(contract, &transition.emitted_events),
         created_at: request.requested_at.clone(),
+    }
+}
+
+fn validate_core_action_state_admission(
+    admission: Option<&CoreActionStateAdmission>,
+) -> Option<Vec<RejectionReason>> {
+    let Some(admission) = admission else {
+        return Some(vec![RejectionReason::new(
+            RejectionReasonCode::InvalidActionProposal,
+            "action proposal was not admitted by Core action/state semantics",
+            Some("missingCoreActionStateAdmission".to_string()),
+        )]);
+    };
+
+    let semantics = agentflow_ontology::core_action_state_semantics_contract();
+    let Some(action) = semantics
+        .actions
+        .iter()
+        .find(|action| action.action_type == admission.core_action_type)
+    else {
+        return Some(vec![RejectionReason::new(
+            RejectionReasonCode::UnknownActionType,
+            format!(
+                "Core action `{}` is not registered in action/state semantics",
+                admission.core_action_type
+            ),
+            Some("unknownCoreAction".to_string()),
+        )]);
+    };
+
+    let mut reasons = Vec::new();
+    if admission.reference_mapping_id.trim().is_empty() {
+        reasons.push(RejectionReason::new(
+            RejectionReasonCode::InvalidActionProposal,
+            "Core admission is missing a reference mapping id",
+            Some("missingReferenceMapping".to_string()),
+        ));
+    }
+    if admission.core_target_object_type != action.target_object_type {
+        reasons.push(RejectionReason::new(
+            RejectionReasonCode::InvalidObjectState,
+            format!(
+                "Core action `{}` targets `{}`, but admission targets `{}`",
+                action.action_type, action.target_object_type, admission.core_target_object_type
+            ),
+            Some("coreTargetObjectMismatch".to_string()),
+        ));
+    }
+    if admission.required_state != action.required_state {
+        reasons.push(RejectionReason::new(
+            RejectionReasonCode::InvalidObjectState,
+            format!(
+                "Core action `{}` requires state `{:?}`, but admission requires `{:?}`",
+                action.action_type, action.required_state, admission.required_state
+            ),
+            Some("coreRequiredStateMismatch".to_string()),
+        ));
+    }
+    if admission.resulting_state != action.resulting_state {
+        reasons.push(RejectionReason::new(
+            RejectionReasonCode::InvalidObjectState,
+            format!(
+                "Core action `{}` results in state `{:?}`, but admission results in `{:?}`",
+                action.action_type, action.resulting_state, admission.resulting_state
+            ),
+            Some("coreResultingStateMismatch".to_string()),
+        ));
+    }
+    if let Some(expected_event) = &admission.expected_event {
+        if expected_event != &action.emitted_event {
+            reasons.push(RejectionReason::new(
+                RejectionReasonCode::InvalidActionProposal,
+                format!(
+                    "Core action `{}` emits `{}`, but admission expects `{expected_event}`",
+                    action.action_type, action.emitted_event
+                ),
+                Some("coreExpectedEventMismatch".to_string()),
+            ));
+        }
+    } else {
+        reasons.push(RejectionReason::new(
+            RejectionReasonCode::InvalidActionProposal,
+            "Core admission is missing the expected event",
+            Some("missingCoreExpectedEvent".to_string()),
+        ));
+    }
+
+    let transitions = semantics
+        .transitions
+        .iter()
+        .filter(|transition| transition.action_type == admission.core_action_type)
+        .flat_map(|transition| transition.required_evidence.iter().cloned())
+        .collect::<BTreeSet<_>>();
+    let admitted_evidence = admission
+        .required_evidence
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if admitted_evidence != transitions {
+        reasons.push(RejectionReason::new(
+            RejectionReasonCode::MissingRequiredEvidence,
+            format!(
+                "Core action `{}` evidence expectation mismatch",
+                admission.core_action_type
+            ),
+            Some("coreRequiredEvidenceMismatch".to_string()),
+        ));
+    }
+
+    if reasons.is_empty() {
+        None
+    } else {
+        Some(reasons)
     }
 }
 
@@ -644,8 +763,9 @@ mod tests {
     use agentflow_role_policy::core_role_policy_registry;
 
     use crate::model::{
-        ArbitrationContext, ArbitrationDecisionStatus, ArbitrationRequest, DefinitionVersions,
-        DependencyFact, EvidenceFact, ObjectLock, ObjectLockKind, StateFact,
+        ArbitrationContext, ArbitrationDecisionStatus, ArbitrationRequest,
+        CoreActionStateAdmission, DefinitionVersions, DependencyFact, EvidenceFact, ObjectLock,
+        ObjectLockKind, StateFact,
     };
     use crate::reasons::RejectionReasonCode;
 
@@ -686,6 +806,84 @@ mod tests {
             .expected_events
             .iter()
             .any(|event| event == "IssueMarkedDone"));
+    }
+
+    #[test]
+    fn required_core_admission_rejects_unadmitted_proposal() {
+        let mut context = core_context();
+        context.require_core_action_admission();
+        context.insert_state(StateFact {
+            object_type: "Issue".into(),
+            object_id: "ISS-1".into(),
+            state_id: "reviewReady".into(),
+        });
+        context.insert_evidence(evidence("artifact-1", "implementationSummary"));
+        context.insert_evidence(evidence("log-1", "verificationLog"));
+        context.insert_evidence(evidence("artifact-2", "artifactSummary"));
+
+        let request = request(
+            proposal(
+                "markIssueDone",
+                "BuildAgent",
+                Some(ActionRef {
+                    object_type: "Issue".into(),
+                    id: "ISS-1".into(),
+                }),
+                vec!["artifact-1", "log-1", "artifact-2"],
+            ),
+            "req-core-admission-missing",
+        );
+
+        let decision = arbitrate_action(&request, &context);
+        assert_eq!(decision.status, ArbitrationDecisionStatus::Rejected);
+        assert_eq!(
+            decision.rejected_reasons[0].detail.as_deref(),
+            Some("missingCoreActionStateAdmission")
+        );
+    }
+
+    #[test]
+    fn required_core_admission_rejects_semantic_mismatch() {
+        let mut context = core_context();
+        context.require_core_action_admission();
+        context.insert_state(StateFact {
+            object_type: "Issue".into(),
+            object_id: "ISS-1".into(),
+            state_id: "reviewReady".into(),
+        });
+        context.insert_evidence(evidence("artifact-1", "implementationSummary"));
+        context.insert_evidence(evidence("log-1", "verificationLog"));
+        context.insert_evidence(evidence("artifact-2", "artifactSummary"));
+
+        let mut request = request(
+            proposal(
+                "markIssueDone",
+                "BuildAgent",
+                Some(ActionRef {
+                    object_type: "Issue".into(),
+                    id: "ISS-1".into(),
+                }),
+                vec!["artifact-1", "log-1", "artifact-2"],
+            ),
+            "req-core-admission-mismatch",
+        );
+        request.core_admission = Some(CoreActionStateAdmission {
+            core_action_type: "completeObject".into(),
+            core_target_object_type: "DecisionObject".into(),
+            required_state: Some("active".into()),
+            resulting_state: Some("completed".into()),
+            required_evidence: vec!["EvidenceRef".into(), "DecisionRef".into()],
+            expected_event: Some("ObjectCompleted".into()),
+            reference_mapping_id:
+                "reference-mapping:software-dev-reference:action-contract:issue.done".into(),
+        });
+
+        let decision = arbitrate_action(&request, &context);
+        assert_eq!(decision.status, ArbitrationDecisionStatus::Rejected);
+        assert!(decision
+            .rejected_reasons
+            .iter()
+            .any(|reason| { reason.detail.as_deref() == Some("coreRequiredStateMismatch") }));
     }
 
     #[test]
@@ -1246,6 +1444,7 @@ mod tests {
         ArbitrationRequest {
             request_id: request_id.into(),
             proposal,
+            core_admission: None,
             definition_versions: DefinitionVersions {
                 ontology_version: "v1-draft".into(),
                 contract_version: "v1-draft".into(),

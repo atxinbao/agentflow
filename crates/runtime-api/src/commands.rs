@@ -9,8 +9,8 @@ use std::{
 
 use agentflow_action_arbitration::{
     arbitrate_action, proposal_conflict_scope_key, AcceptedAction, ArbitrationContext,
-    ArbitrationDecision, ArbitrationDecisionStatus, ArbitrationRequest, DefinitionVersions,
-    PendingProposal,
+    ArbitrationDecision, ArbitrationDecisionStatus, ArbitrationRequest, CoreActionStateAdmission,
+    DefinitionVersions, PendingProposal,
 };
 use agentflow_action_contract::{core_action_contract_registry, ActionRef, ActionSourceSurface};
 use agentflow_capability_registry::{default_capability_registry, CapabilityRegistry};
@@ -261,7 +261,7 @@ pub fn execute_command_via_arbitration_with_context(
         return Ok(response);
     }
 
-    let core_materialization = materialize_core_action_proposal(request, &proposal).ok();
+    let core_materialization = materialize_core_action_proposal(request, &proposal)?;
     write_runtime_proposal_fact(
         root,
         &RuntimeProposalFact {
@@ -277,15 +277,9 @@ pub fn execute_command_via_arbitration_with_context(
             artifact_refs: proposal.artifact_refs.clone(),
             reason: proposal.reason.clone(),
             expected_effects: proposal.expected_effects.clone(),
-            core_action_type: core_materialization
-                .as_ref()
-                .map(|materialization| materialization.core_action_type.clone()),
-            core_target_object_type: core_materialization
-                .as_ref()
-                .map(|materialization| materialization.core_target_object_type.clone()),
-            reference_mapping: core_materialization.as_ref().and_then(|materialization| {
-                serde_json::to_value(&materialization.reference_mapping).ok()
-            }),
+            core_action_type: Some(core_materialization.core_action_type.clone()),
+            core_target_object_type: Some(core_materialization.core_target_object_type.clone()),
+            reference_mapping: serde_json::to_value(&core_materialization.reference_mapping).ok(),
             ontology_version: proposal.ontology_version.clone(),
             contract_version: proposal.contract_version.clone(),
             created_at: proposal.created_at.clone(),
@@ -295,6 +289,15 @@ pub fn execute_command_via_arbitration_with_context(
     let arbitration_request = ArbitrationRequest {
         request_id: request.command_id.clone(),
         proposal: proposal.clone(),
+        core_admission: Some(CoreActionStateAdmission {
+            core_action_type: core_materialization.core_action_type.clone(),
+            core_target_object_type: core_materialization.core_target_object_type.clone(),
+            required_state: core_materialization.core_required_state.clone(),
+            resulting_state: core_materialization.core_resulting_state.clone(),
+            required_evidence: core_materialization.core_required_evidence.clone(),
+            expected_event: core_materialization.core_expected_event.clone(),
+            reference_mapping_id: core_materialization.reference_mapping.mapping_id.clone(),
+        }),
         definition_versions: DefinitionVersions {
             ontology_version: context
                 .ontology_registry
@@ -369,12 +372,9 @@ pub(crate) fn build_core_arbitration_context() -> Result<ArbitrationContext> {
     let role_policy = core_role_policy_registry(&ontology, &contracts);
     let object_state = core_object_state_registry(&ontology, &contracts)
         .map_err(|report| anyhow::anyhow!("load core object state registry: {:?}", report))?;
-    Ok(ArbitrationContext::new(
-        ontology,
-        contracts,
-        role_policy,
-        object_state,
-    ))
+    let mut context = ArbitrationContext::new(ontology, contracts, role_policy, object_state);
+    context.require_core_action_admission();
+    Ok(context)
 }
 
 pub(crate) fn build_project_arbitration_context(
@@ -1002,10 +1002,10 @@ fn runtime_action_to_generic_action(action_type: &str) -> &'static str {
         | "createProject"
         | "createIssue" => "acceptObject",
         "activateIssue" | "claimIssue" | "startRun" => "startObject",
-        "writePatch" | "runValidation" | "submitEvidence" => "attachEvidence",
+        "writePatch" => "attachArtifact",
+        "runValidation" | "submitEvidence" => "attachEvidence",
         "prepareDelivery" | "submitArtifact" => "attachArtifact",
-        "markIssueDone" => "submitForReview",
-        "recordDecision" => "completeObject",
+        "markIssueDone" | "recordDecision" => "completeObject",
         "requestAudit" => "submitForReview",
         "createFinding" => "blockObject",
         "linkFixIssue" => "supersedeObject",

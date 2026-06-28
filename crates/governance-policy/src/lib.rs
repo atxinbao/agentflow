@@ -499,10 +499,10 @@ fn runtime_action_to_generic_action(action_type: &str) -> &'static str {
         | "createProject"
         | "createIssue" => "acceptObject",
         "activateIssue" | "claimIssue" | "startRun" => "startObject",
-        "writePatch" | "runValidation" | "submitEvidence" => "attachEvidence",
+        "writePatch" => "attachArtifact",
+        "runValidation" | "submitEvidence" => "attachEvidence",
         "prepareDelivery" | "submitArtifact" => "attachArtifact",
-        "markIssueDone" => "submitForReview",
-        "recordDecision" => "completeObject",
+        "markIssueDone" | "recordDecision" => "completeObject",
         "requestAudit" => "submitForReview",
         "createFinding" => "blockObject",
         "linkFixIssue" => "supersedeObject",
@@ -762,6 +762,18 @@ mod tests {
         assert_eq!(
             report.skill_registry_policy.skill_id.as_deref(),
             Some("work-execution-skill")
+        );
+    }
+
+    #[test]
+    fn runtime_action_mapping_keeps_done_separate_from_review() {
+        assert_eq!(
+            runtime_action_to_generic_action("markIssueDone"),
+            "completeObject"
+        );
+        assert_eq!(
+            runtime_action_to_generic_action("requestAudit"),
+            "submitForReview"
         );
     }
 

@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use agentflow_action_arbitration::{
     arbitrate_action, ArbitrationDecision, ArbitrationDecisionStatus, ArbitrationRequest,
-    DefinitionVersions, EvidenceFact, StateFact,
+    CoreActionStateAdmission, DefinitionVersions, EvidenceFact, StateFact,
 };
 use agentflow_action_contract::{core_action_contract_registry, ActionRef, ActionSourceSurface};
 use agentflow_object_state::core_object_state_registry;
@@ -17,7 +17,7 @@ use agentflow_task_artifacts::TaskRunStatus;
 use crate::commands::{build_project_arbitration_context, RuntimeCommandRequest};
 use crate::mapping::{
     action_contract_ref_for_action_type, core_runtime_route, map_command_to_action_proposal,
-    CORE_RUNTIME_COMMAND_TYPE,
+    materialize_core_action_proposal, CORE_RUNTIME_COMMAND_TYPE,
 };
 
 pub fn issue_surface_state_id(status: &SpecIssueStatus) -> &'static str {
@@ -159,9 +159,19 @@ fn arbitrate_issue_action(
         created_at: unix_timestamp_seconds().to_string(),
     };
     let proposal = map_command_to_action_proposal(&request)?;
+    let core_materialization = materialize_core_action_proposal(&request, &proposal)?;
     let arbitration_request = ArbitrationRequest {
         request_id: request.command_id.clone(),
         proposal,
+        core_admission: Some(CoreActionStateAdmission {
+            core_action_type: core_materialization.core_action_type.clone(),
+            core_target_object_type: core_materialization.core_target_object_type.clone(),
+            required_state: core_materialization.core_required_state.clone(),
+            resulting_state: core_materialization.core_resulting_state.clone(),
+            required_evidence: core_materialization.core_required_evidence.clone(),
+            expected_event: core_materialization.core_expected_event.clone(),
+            reference_mapping_id: core_materialization.reference_mapping.mapping_id.clone(),
+        }),
         definition_versions: definition_versions(&context),
         requested_at: request.created_at.clone(),
     };
