@@ -8,6 +8,7 @@ pub const CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_VERSION: &str =
     "agentflow-core-evidence-source-type-registry.v1";
 pub const CORE_EVIDENCE_CAPTURE_RECEIPT_VERSION: &str =
     "agentflow-core-evidence-capture-receipt.v1";
+pub const CORE_EXTERNAL_PROOF_RECEIPT_VERSION: &str = "agentflow-core-external-proof-receipt.v1";
 pub const CORE_EVIDENCE_AUTHORITY_TRACE_VERSION: &str =
     "agentflow-core-evidence-authority-trace.v1";
 pub const CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION: &str =
@@ -151,6 +152,43 @@ pub struct CoreEvidenceRetentionHint {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoreEvidenceCaptureReceiptNegativeFixtureResult {
+    pub fixture_id: String,
+    pub status: String,
+    pub expected_reason: String,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreExternalProofReceipt {
+    pub version: String,
+    pub receipt_id: String,
+    pub status: String,
+    pub provider: String,
+    pub url: String,
+    pub external_id: String,
+    pub proof_kind: String,
+    pub observed_commit: String,
+    pub observed_tag: String,
+    pub observed_version: String,
+    pub observed_at: String,
+    pub digest: Option<CoreEvidenceDigest>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreExternalProofExpectation {
+    pub provider: String,
+    pub url_prefix: String,
+    pub expected_commit: String,
+    pub expected_tag: String,
+    pub expected_version: String,
+    pub expected_digest: Option<CoreEvidenceDigest>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreExternalProofNegativeFixtureResult {
     pub fixture_id: String,
     pub status: String,
     pub expected_reason: String,
@@ -357,6 +395,173 @@ pub fn external_core_evidence_reference_receipt(
         source_type: source_type.into(),
         retention_hint,
     }
+}
+
+pub fn canonical_core_external_proof_receipt_fixture() -> CoreExternalProofReceipt {
+    CoreExternalProofReceipt {
+        version: CORE_EXTERNAL_PROOF_RECEIPT_VERSION.to_string(),
+        receipt_id: "external-proof-core-001".to_string(),
+        status: "observed".to_string(),
+        provider: "generic-git-provider".to_string(),
+        url: "https://example.invalid/agentflow/proofs/v1.0.6/run-001".to_string(),
+        external_id: "external-proof:run-001".to_string(),
+        proof_kind: "remote-artifact-reference".to_string(),
+        observed_commit: "0123456789abcdef0123456789abcdef01234567".to_string(),
+        observed_tag: "v1.0.6".to_string(),
+        observed_version: "v1.0.6".to_string(),
+        observed_at: "2026-06-29T00:00:01Z".to_string(),
+        digest: Some(CoreEvidenceDigest {
+            algorithm: "sha256".to_string(),
+            value: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        }),
+    }
+}
+
+pub fn canonical_core_external_proof_expectation_fixture() -> CoreExternalProofExpectation {
+    CoreExternalProofExpectation {
+        provider: "generic-git-provider".to_string(),
+        url_prefix: "https://example.invalid/agentflow/proofs/".to_string(),
+        expected_commit: "0123456789abcdef0123456789abcdef01234567".to_string(),
+        expected_tag: "v1.0.6".to_string(),
+        expected_version: "v1.0.6".to_string(),
+        expected_digest: Some(CoreEvidenceDigest {
+            algorithm: "sha256".to_string(),
+            value: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        }),
+    }
+}
+
+pub fn validate_core_external_proof_receipt(
+    receipt: &CoreExternalProofReceipt,
+    expectation: &CoreExternalProofExpectation,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if receipt.version != CORE_EXTERNAL_PROOF_RECEIPT_VERSION {
+        errors.push(reason("external-proof-version-mismatch"));
+    }
+    match receipt.status.as_str() {
+        "observed" => {}
+        "stale" => errors.push(reason("external-proof-url-stale")),
+        _ => errors.push(reason("external-proof-status-unsupported")),
+    }
+    if receipt.provider.trim().is_empty() {
+        errors.push(reason("external-proof-provider-missing"));
+    }
+    if receipt.provider != expectation.provider {
+        errors.push(reason("external-proof-provider-mismatch"));
+    }
+    if receipt.url.trim().is_empty() {
+        errors.push(reason("external-proof-url-missing"));
+    }
+    if !expectation.url_prefix.trim().is_empty()
+        && !receipt.url.starts_with(&expectation.url_prefix)
+    {
+        errors.push(reason("external-proof-url-untrusted"));
+    }
+    if receipt.external_id.trim().is_empty() {
+        errors.push(reason("external-proof-id-missing"));
+    }
+    if receipt.proof_kind.trim().is_empty() {
+        errors.push(reason("external-proof-kind-missing"));
+    }
+    if receipt.observed_at.trim().is_empty() {
+        errors.push(reason("external-proof-observed-at-missing"));
+    }
+    validate_commit_ref(
+        "external-proof-observed-commit",
+        &receipt.observed_commit,
+        &mut errors,
+    );
+    validate_tag_ref(
+        "external-proof-observed-tag",
+        &receipt.observed_tag,
+        &mut errors,
+    );
+    if receipt.observed_version.trim().is_empty() {
+        errors.push(reason("external-proof-observed-version-missing"));
+    }
+
+    if receipt.observed_commit != expectation.expected_commit {
+        errors.push(reason("external-proof-commit-mismatch"));
+    }
+    if receipt.observed_tag != expectation.expected_tag {
+        errors.push(reason("external-proof-tag-mismatch"));
+    }
+    if receipt.observed_version != expectation.expected_version {
+        errors.push(reason("external-proof-version-ref-mismatch"));
+    }
+    if let Some(expected_digest) = &expectation.expected_digest {
+        match &receipt.digest {
+            Some(observed_digest) => {
+                validate_digest("external-proof-digest", observed_digest, &mut errors);
+                if observed_digest != expected_digest {
+                    errors.push(reason("external-proof-digest-mismatch"));
+                }
+            }
+            None => errors.push(reason("external-proof-digest-missing")),
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        errors.sort();
+        errors.dedup();
+        Err(errors)
+    }
+}
+
+pub fn core_external_proof_negative_fixtures() -> Vec<CoreExternalProofNegativeFixtureResult> {
+    let expectation = canonical_core_external_proof_expectation_fixture();
+    let fixtures = vec![
+        ("wrong-tag", "external-proof-tag-mismatch", {
+            let mut receipt = canonical_core_external_proof_receipt_fixture();
+            receipt.observed_tag = "v1.0.5".to_string();
+            receipt
+        }),
+        ("wrong-commit", "external-proof-commit-mismatch", {
+            let mut receipt = canonical_core_external_proof_receipt_fixture();
+            receipt.observed_commit = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string();
+            receipt
+        }),
+        ("stale-url", "external-proof-url-stale", {
+            let mut receipt = canonical_core_external_proof_receipt_fixture();
+            receipt.status = "stale".to_string();
+            receipt
+        }),
+        (
+            "mismatched-artifact-digest",
+            "external-proof-digest-mismatch",
+            {
+                let mut receipt = canonical_core_external_proof_receipt_fixture();
+                receipt.digest = Some(CoreEvidenceDigest {
+                    algorithm: "sha256".to_string(),
+                    value: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                        .to_string(),
+                });
+                receipt
+            },
+        ),
+    ];
+
+    fixtures
+        .into_iter()
+        .map(|(fixture_id, expected_reason, receipt)| {
+            let reasons = validate_core_external_proof_receipt(&receipt, &expectation)
+                .expect_err("negative fixture must fail");
+            CoreExternalProofNegativeFixtureResult {
+                fixture_id: fixture_id.to_string(),
+                status: if reasons.iter().any(|reason| reason == expected_reason) {
+                    "passed".to_string()
+                } else {
+                    "failed".to_string()
+                },
+                expected_reason: expected_reason.to_string(),
+                reasons,
+            }
+        })
+        .collect()
 }
 
 pub fn validate_core_evidence_capture_receipt(
@@ -1536,6 +1741,18 @@ fn validate_sha256_string(path: &str, value: &str, errors: &mut Vec<String>) {
     }
 }
 
+fn validate_commit_ref(path: &str, value: &str, errors: &mut Vec<String>) {
+    if value.len() != 40 || !value.chars().all(|character| character.is_ascii_hexdigit()) {
+        errors.push(reason(&format!("{path}-invalid")));
+    }
+}
+
+fn validate_tag_ref(path: &str, value: &str, errors: &mut Vec<String>) {
+    if !value.starts_with('v') || value.len() < 2 {
+        errors.push(reason(&format!("{path}-invalid")));
+    }
+}
+
 fn validate_source_type_known(source_type: &str, errors: &mut Vec<String>) {
     let registry = core_evidence_source_type_registry_contract();
     if registry
@@ -1817,6 +2034,47 @@ mod tests {
             );
             assert!(fixture.reasons.contains(&fixture.expected_reason));
         }
+    }
+
+    #[test]
+    fn core_external_proof_receipt_validates_observed_provenance() {
+        let receipt = canonical_core_external_proof_receipt_fixture();
+        let expectation = canonical_core_external_proof_expectation_fixture();
+
+        validate_core_external_proof_receipt(&receipt, &expectation).unwrap();
+        assert_eq!(receipt.version, CORE_EXTERNAL_PROOF_RECEIPT_VERSION);
+        assert_eq!(receipt.provider, "generic-git-provider");
+        assert_eq!(receipt.observed_tag, "v1.0.6");
+    }
+
+    #[test]
+    fn core_external_proof_negative_fixtures_fail_with_stable_reasons() {
+        let fixtures = core_external_proof_negative_fixtures();
+        assert_eq!(fixtures.len(), 4);
+        for fixture in fixtures {
+            assert_eq!(
+                fixture.status, "passed",
+                "fixture {} failed with {:?}",
+                fixture.fixture_id, fixture.reasons
+            );
+            assert!(fixture.reasons.contains(&fixture.expected_reason));
+        }
+    }
+
+    #[test]
+    fn core_external_proof_rejects_wrong_tag_and_commit() {
+        let expectation = canonical_core_external_proof_expectation_fixture();
+        let mut receipt = canonical_core_external_proof_receipt_fixture();
+        receipt.observed_tag = "v0.0.0".to_string();
+        receipt.observed_commit = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string();
+
+        let errors = validate_core_external_proof_receipt(&receipt, &expectation).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error == "external-proof-tag-mismatch"));
+        assert!(errors
+            .iter()
+            .any(|error| error == "external-proof-commit-mismatch"));
     }
 
     #[test]
