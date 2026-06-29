@@ -158,6 +158,7 @@ CORE_EVIDENCE_CAPTURE_RECEIPTS_PATH="$RUNTIME_DIR/core-evidence-capture-receipts
 CORE_EVIDENCE_AUTHORITY_TRACE_LINKS_PATH="$RUNTIME_DIR/core-evidence-authority-trace-links.json"
 CORE_EVIDENCE_COMPLETENESS_POLICY_PATH="$RUNTIME_DIR/core-evidence-completeness-policy.json"
 CORE_MISSING_EVIDENCE_HANDLING_PATH="$RUNTIME_DIR/core-missing-evidence-handling.json"
+CORE_EXTERNAL_PROOF_PROVENANCE_PATH="$RUNTIME_DIR/core-external-proof-provenance.json"
 CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
 V104_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v104-release-certification.json"
 CORE_RUNTIME_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/core-runtime-negative-fixtures.json"
@@ -408,6 +409,7 @@ proof_chain = [
     {"stage": "core-evidence-authority-trace-links", "label": "Core Evidence Authority Trace Links"},
     {"stage": "core-evidence-completeness-policy", "label": "Core Evidence Completeness Policy"},
     {"stage": "core-missing-evidence-handling", "label": "Core Missing Evidence Handling"},
+    {"stage": "core-external-proof-provenance", "label": "Core External Proof Provenance"},
     {"stage": "core-file-backed-ontology-registry", "label": "Core File-backed Ontology Registry"},
     {"stage": "v104-release-certification", "label": "v1.0.4 Release Certification"},
     {"stage": "core-runtime-negative-fixtures", "label": "Core Runtime Negative Fixtures"},
@@ -7216,6 +7218,92 @@ PY
   record_stage "core-missing-evidence-handling" "passed" "$(basename "$CORE_MISSING_EVIDENCE_HANDLING_PATH")"
 }
 
+run_core_external_proof_provenance_gate() {
+  record_stage "core-external-proof-provenance" "started" "$CORE_EXTERNAL_PROOF_PROVENANCE_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-external-proof-provenance-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_external_proof --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-external-proof-provenance" "agentflow-ontology Core External Proof Provenance tests failed"
+  fi
+  python3 - "$CORE_EXTERNAL_PROOF_PROVENANCE_PATH" "$WORKSPACE/docs/architecture/066-core-external-proof-provenance-v1.md" "$WORKSPACE/crates/ontology/src/evidence.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+test_log_path = pathlib.Path(sys.argv[4])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+receipt_fields = [
+    "provider",
+    "url",
+    "externalId",
+    "proofKind",
+    "observedCommit",
+    "observedTag",
+    "observedVersion",
+    "observedAt",
+    "digest",
+]
+implemented_fields = [
+    "provider",
+    "url",
+    "external_id",
+    "proof_kind",
+    "observed_commit",
+    "observed_tag",
+    "observed_version",
+    "observed_at",
+    "digest",
+]
+negative_fixtures = ["wrong tag", "wrong commit", "stale URL", "mismatched artifact digest"]
+implemented_fixture_ids = ["wrong-tag", "wrong-commit", "stale-url", "mismatched-artifact-digest"]
+stable_reasons = [
+    "external-proof-tag-mismatch",
+    "external-proof-commit-mismatch",
+    "external-proof-url-stale",
+    "external-proof-digest-mismatch",
+]
+coverage = {
+    "receipt-version-defined": "agentflow-core-external-proof-receipt.v1" in source_text
+    and "agentflow-core-external-proof-receipt.v1" in doc_text,
+    "receipt-fields-documented": all(field in doc_text for field in receipt_fields),
+    "receipt-fields-implemented": all(field in source_text for field in implemented_fields),
+    "negative-fixtures-documented": all(item in doc_text for item in negative_fixtures),
+    "negative-fixtures-implemented": all(item in source_text for item in implemented_fixture_ids),
+    "stable-reasons-documented": all(reason in doc_text for reason in stable_reasons),
+    "stable-reasons-implemented": all(reason in source_text for reason in stable_reasons),
+    "provider-boundary-documented": "不把 GitHub 作为唯一外部 proof provider" in doc_text,
+    "no-live-network-required": "live network call" in doc_text,
+    "validator-implemented": "validate_core_external_proof_receipt" in source_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-external-proof-provenance-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-external-proof-receipt.v1",
+    "architecturePath": "docs/architecture/066-core-external-proof-provenance-v1.md",
+    "rustContractPath": "crates/ontology/src/evidence.rs",
+    "rustTestLogPath": "runtime/core-external-proof-provenance-rust-test.log",
+    "receiptFields": receipt_fields,
+    "negativeFixtures": negative_fixtures,
+    "stableReasons": stable_reasons,
+    "providerBoundary": "external proof provider is not fixed to one vendor",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core external proof provenance coverage failed: {failed}")
+PY
+  record_stage "core-external-proof-provenance" "passed" "$(basename "$CORE_EXTERNAL_PROOF_PROVENANCE_PATH")"
+}
+
 run_core_file_backed_ontology_registry_gate() {
   record_stage "core-file-backed-ontology-registry" "started" "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH"
   local rust_test_log="$RUNTIME_DIR/core-file-backed-ontology-registry-rust-test.log"
@@ -8646,6 +8734,7 @@ PY
   run_core_evidence_authority_trace_links_gate
   run_core_evidence_completeness_policy_gate
   run_core_missing_evidence_handling_gate
+  run_core_external_proof_provenance_gate
   run_core_file_backed_ontology_registry_gate
   run_v104_release_certification_gate
   run_core_runtime_negative_fixtures_gate
