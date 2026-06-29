@@ -64,6 +64,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [067-software-dev-reference-evidence-mapping-v1.md](067-software-dev-reference-evidence-mapping-v1.md) | Software Dev Reference Evidence Mapping |
 | [068-evidence-projection-read-model-v1.md](068-evidence-projection-read-model-v1.md) | Evidence Projection Read Model |
 | [069-release-provenance-tag-policy-v1.md](069-release-provenance-tag-policy-v1.md) | Release Provenance Tag Policy |
+| [070-core-decision-model-contract-v1.md](070-core-decision-model-contract-v1.md) | Core Decision Model Contract |
 
 ## Rules
 

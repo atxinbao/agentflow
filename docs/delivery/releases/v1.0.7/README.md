@@ -35,6 +35,7 @@ v1.0.6 Evidence Kernel
 - [AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md](AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md)
 - [../../../architecture/058-core-evidence-decision-reference-model-v1.md](../../../architecture/058-core-evidence-decision-reference-model-v1.md)
 - [../../../architecture/069-release-provenance-tag-policy-v1.md](../../../architecture/069-release-provenance-tag-policy-v1.md)
+- [../../../architecture/070-core-decision-model-contract-v1.md](../../../architecture/070-core-decision-model-contract-v1.md)
 - [../v1.0.6/README.md](../v1.0.6/README.md)
 
 ## Non-goals
@@ -44,4 +45,3 @@ v1.0.6 Evidence Kernel
 - 不把 provider CLI session 当成项目事实源；
 - 不把 Audit 移入默认主业务链；
 - 不认证 Projection Kernel 完整性。
-

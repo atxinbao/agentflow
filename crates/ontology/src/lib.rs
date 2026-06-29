@@ -23,10 +23,15 @@ pub use core::{
     SOFTWARE_DEV_REFERENCE_ONTOLOGY_REF,
 };
 pub use decision::{
-    core_evidence_decision_reference_model_contract,
-    validate_core_evidence_decision_reference_model_contract, CoreDecisionOutcomeDefinition,
-    CoreDecisionReferenceDefinition, CoreEvidenceDecisionReferenceModelContract,
-    CoreEvidenceReferenceDefinition, CORE_EVIDENCE_DECISION_MODEL_VERSION,
+    canonical_core_decision_record_fixture, core_decision_model_contract,
+    core_evidence_decision_reference_model_contract, validate_core_decision_model_contract,
+    validate_core_decision_record, validate_core_evidence_decision_reference_model_contract,
+    CoreDecisionInputs, CoreDecisionKernelOutcome, CoreDecisionModelContract,
+    CoreDecisionOutcomeDefinition, CoreDecisionReadableFact, CoreDecisionReason,
+    CoreDecisionRecord, CoreDecisionReferenceDefinition, CoreDecisionSubjectRef,
+    CoreDecisionWriteAuthority, CoreDecisionWriteRef, CoreEvidenceDecisionReferenceModelContract,
+    CoreEvidenceReferenceDefinition, CORE_DECISION_MODEL_CONTRACT_VERSION,
+    CORE_EVIDENCE_DECISION_MODEL_VERSION,
 };
 pub use evidence::{
     canonical_core_evidence_authority_trace_fixture,
