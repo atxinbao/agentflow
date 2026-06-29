@@ -1,6 +1,6 @@
 # Delivery
 
-更新日期：2026-06-28
+更新日期：2026-06-29
 执行者：Codex
 
 ## Purpose
@@ -21,15 +21,14 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.0.4/README.md](releases/v1.0.4/README.md) | 当前发布基线：Core Ontology Kernel |
-| [releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md](releases/v1.0.4/AGENTFLOW_V1_0_4_CORE_ONTOLOGY_KERNEL_TASKS_V1.md) | v1.0.4 Core Ontology Kernel tasks |
+| [releases/v1.0.6/README.md](releases/v1.0.6/README.md) | 当前发布基线：Core Evidence Kernel |
+| [releases/v1.0.6/AGENTFLOW_V1_0_6_CORE_EVIDENCE_KERNEL_TASKS_V1.md](releases/v1.0.6/AGENTFLOW_V1_0_6_CORE_EVIDENCE_KERNEL_TASKS_V1.md) | v1.0.6 Core Evidence Kernel tasks |
 
 ## Next Release Planning
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.0.5/README.md](releases/v1.0.5/README.md) | 下一版计划：Core Runtime Kernel |
-| [releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md](releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md) | v1.0.5 Core Runtime Kernel tasks |
+| `v1.0.7` | 下一版计划：Core Decision Kernel |
 
 ## Historical Delivery
 
