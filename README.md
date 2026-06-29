@@ -1,6 +1,6 @@
 # AgentFlow
 
-更新日期：2026-06-28
+更新日期：2026-06-29
 执行者：Codex
 
 ## Project Goal
@@ -8,30 +8,49 @@
 AgentFlow 的总目标是：
 
 ```text
-AgentFlow = Spec-Driven Software Dev Workflow
+AgentFlow = Spec-Driven AI OS Project
 ```
 
-AgentFlow 不是 Agent Runner，也不是 Spec 文档生成器。AgentFlow 要做的是让软件开发团队把意图变成可确认的 Spec Bundle，再由 Spec 派生计划、任务、执行、证据、判定、交付和反馈。
+一句话：
+
+```text
+Agent 只是执行器，Spec 才是方向盘。
+```
+
+AgentFlow 不是单一行业工具，不是 Agent Runner，也不是 Spec 文档生成器。AgentFlow 要做的是让团队用 Spec 驱动项目对象、动作、证据、验收、交付、反馈和投影，最终形成可控、可追踪、可验收、可交付的 AI 项目操作系统。
 
 ## System Formula
 
 ```text
 AgentFlow AI OS Project
-= Spec-Driven Core Runtime
-+ Industry AgentFlow Product
+= Core OS Runtime
++ Industry AgentFlow App
 ```
 
-当前商业产品主线只聚焦 Software Dev：
+其中：
 
 ```text
-AgentFlow Software Dev Product
-= Core Runtime
-+ Software Dev Domain Pack
-+ Software Dev Surface Pack
-+ Software Dev Connector Pack
+Core OS Runtime
+= Spec Kernel
++ Ontology Kernel
++ Runtime Kernel
++ Evidence Kernel
++ Decision Kernel
++ Projection Kernel
 ```
 
-这些 Pack 是 AgentFlow App 的内置能力，不是用户项目里的可见文档目录。用户项目只记录当前启用的 Pack 引用和运行事实。
+```text
+Industry AgentFlow App
+= Domain Pack
++ Surface Pack
++ Connector Pack
+```
+
+Core OS Runtime 提供通用项目运行能力。Industry AgentFlow App 定义具体行业的对象、页面、工具和交付方式。
+
+Software Dev 是第一个官方 Reference App，用来证明 Core OS Runtime 可以跑完整闭环；它不是 Core OS 的内核目标，也不能把 `Issue / PR / Release / Patch` 等行业词汇写死进 Core。
+
+这些 Pack 是 AgentFlow App 的内置能力，不是用户项目里的可见文档目录。用户项目只记录当前启用的 Pack 引用、confirmed Spec Bundle、执行合同、运行事实、证据和投影。
 
 ## Canonical Entries
 
@@ -42,7 +61,7 @@ AgentFlow Software Dev Product
 | [docs/architecture/021-ai-os-project-core-capabilities-v1.md](docs/architecture/021-ai-os-project-core-capabilities-v1.md) | AI OS Project 底层通用能力 |
 | [docs/architecture/builtin-pack-registry.md](docs/architecture/builtin-pack-registry.md) | App 内置 Pack Registry 边界 |
 | [docs/README.md](docs/README.md) | 当前文档地图 |
-| [docs/delivery/releases/v1.0.4/README.md](docs/delivery/releases/v1.0.4/README.md) | 当前发布基线 |
+| [docs/delivery/releases/v1.0.5/README.md](docs/delivery/releases/v1.0.5/README.md) | 当前发布基线 |
 | [CHANGELOG.md](CHANGELOG.md) | 当前 changelog 指针 |
 
 ## Current Boundary
