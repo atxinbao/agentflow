@@ -356,9 +356,14 @@ try {
   assert.ok(appEntry.includes("RuntimeCommand(createFollowUp) -> createIssue proposal"));
   assert.ok(appEntry.includes("needs-human-decision"));
   assert.ok(runtimeApiMapping.includes('CORE_RUNTIME_COMMAND_TYPE: &str = "core.action.invoke"'));
-  assert.ok(runtimeApiMapping.includes('"action-contract:issue.done" => Some("markIssueDone")'));
-  assert.ok(runtimeApiMapping.includes('"action-contract:decision.record" => Some("recordDecision")'));
-  assert.ok(runtimeApiMapping.includes('"action-contract:issue.create" => Some("createIssue")'));
+  assert.ok(runtimeApiMapping.includes("software_dev_reference_mapping_catalog"));
+  assert.ok(runtimeApiMapping.includes('action_contract_ref: "action-contract:issue.done"'));
+  assert.ok(runtimeApiMapping.includes('app_action_type: "markIssueDone"'));
+  assert.ok(runtimeApiMapping.includes('action_contract_ref: "action-contract:decision.record"'));
+  assert.ok(runtimeApiMapping.includes('app_action_type: "recordDecision"'));
+  assert.ok(runtimeApiMapping.includes('action_contract_ref: "action-contract:issue.create"'));
+  assert.ok(runtimeApiMapping.includes('app_action_type: "createIssue"'));
+  assert.ok(runtimeApiMapping.includes('format!("mapping-catalog:{}", mapping.pack_id)'));
   assert.ok(runtimeApiCommands.includes("command_surface_aliases_map_to_supported_action_contracts"));
   assert.ok(appEntry.includes("交付槽位"));
   assert.ok(appEntry.includes("公开交付"));

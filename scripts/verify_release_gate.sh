@@ -6996,8 +6996,10 @@ run_core_runtime_negative_fixtures_gate() {
     "$arbitration_test_log" \
     "$task_artifacts_test_log" \
     "$projection_test_log" <<'PY'
+import hashlib
 import json
 import pathlib
+import re
 import sys
 import time
 
@@ -7036,7 +7038,38 @@ marker_results = {
     fixture_id: marker in sources[source_name]
     for fixture_id, (source_name, marker) in required_markers.items()
 }
-logs_exist = {path.name: path.is_file() for path in test_logs}
+source_log_paths = {
+    "runtime-api": test_logs[0],
+    "arbitration": test_logs[1],
+    "task-artifacts": test_logs[2],
+    "projection": test_logs[3],
+}
+
+def test_log_proof(source_name, path):
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    results = [
+        (int(passed), int(failed))
+        for passed, failed in re.findall(r"test result: ok\. (\d+) passed; (\d+) failed", text)
+    ]
+    passed_count = sum(passed for passed, _ in results)
+    failed_count = sum(failed for _, failed in results)
+    running_count = sum(int(value) for value in re.findall(r"running (\d+) tests", text))
+    status = "passed" if path.is_file() and passed_count > 0 and failed_count == 0 else "failed"
+    return {
+        "source": source_name,
+        "path": f"runtime/{path.name}",
+        "status": status,
+        "runningCount": running_count,
+        "passedCount": passed_count,
+        "failedCount": failed_count,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None,
+        "bytes": path.stat().st_size if path.is_file() else 0,
+    }
+
+test_log_proofs = {
+    source_name: test_log_proof(source_name, path)
+    for source_name, path in source_log_paths.items()
+}
 
 negative_fixture_ids = [
     "unlisted-action",
@@ -7050,12 +7083,18 @@ negative_fixture_ids = [
 ]
 fixtures = []
 for fixture_id in negative_fixture_ids:
+    source_name, _ = required_markers[fixture_id]
+    proof = test_log_proofs[source_name]
     fixtures.append({
         "id": fixture_id,
         "kind": "negative",
-        "passed": marker_results.get(fixture_id, False),
+        "passed": marker_results.get(fixture_id, False) and proof["status"] == "passed",
         "expectedOutcome": "rejected-or-deferred-before-authority-write",
         "authorityWriteBlocked": True,
+        "sourceMarkerFound": marker_results.get(fixture_id, False),
+        "testLogProof": proof,
+        "evidenceMode": "rust-test-log-plus-fixture-marker",
+        "markerOnly": False,
         "referenceMappingRequired": fixture_id in {
             "missing-mapping",
             "wrong-mapping",
@@ -7071,7 +7110,7 @@ positive_workflow = {
         "positive-reference-proposal-fact",
         "positive-arbitration-acceptance",
         "positive-closeout-writeback",
-    ]) else "failed",
+    ]) and all(proof["status"] == "passed" for proof in test_log_proofs.values()) else "failed",
     "stages": [
         "core-command",
         "admission",
@@ -7104,12 +7143,17 @@ core_authority_forbidden_terms = [
 ]
 
 coverage = {
-    "rust-runtime-api-tests-passed": logs_exist.get("core-runtime-negative-runtime-api-test.log") is True,
-    "rust-arbitration-tests-passed": logs_exist.get("core-runtime-negative-arbitration-test.log") is True,
-    "rust-task-artifacts-tests-passed": logs_exist.get("core-runtime-negative-task-artifacts-test.log") is True,
-    "rust-projection-tests-passed": logs_exist.get("core-runtime-negative-projection-test.log") is True,
+    "rust-runtime-api-tests-passed": test_log_proofs["runtime-api"]["status"] == "passed",
+    "rust-arbitration-tests-passed": test_log_proofs["arbitration"]["status"] == "passed",
+    "rust-task-artifacts-tests-passed": test_log_proofs["task-artifacts"]["status"] == "passed",
+    "rust-projection-tests-passed": test_log_proofs["projection"]["status"] == "passed",
     "positive-reference-workflow-passed": positive_workflow["status"] == "passed",
     "negative-fixtures-covered": all(item["passed"] for item in fixtures),
+    "negative-fixtures-have-runtime-test-proof": all(
+        item["testLogProof"]["status"] == "passed" and item["testLogProof"]["passedCount"] > 0
+        for item in fixtures
+    ),
+    "negative-fixtures-are-not-marker-only": all(item["markerOnly"] is False for item in fixtures),
     "missing-mapping-covered": marker_results.get("missing-mapping") is True,
     "wrong-mapping-covered": marker_results.get("wrong-mapping") is True,
     "projection-remains-readonly": marker_results.get("projection-authority-write") is True
@@ -7130,6 +7174,7 @@ payload = {
     "fixtures": fixtures,
     "coreAuthorityForbiddenTerms": core_authority_forbidden_terms,
     "markerResults": marker_results,
+    "testExecutionEvidence": list(test_log_proofs.values()),
     "testLogs": {
         "runtimeApi": "runtime/core-runtime-negative-runtime-api-test.log",
         "arbitration": "runtime/core-runtime-negative-arbitration-test.log",
@@ -7354,27 +7399,63 @@ run_v105_release_certification_gate() {
     "$ROOT/CHANGELOG.md" \
     "$WORKSPACE/docs/delivery/releases/v1.0.5/README.md" \
     "$WORKSPACE/docs/delivery/releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md" \
+    "$ARTIFACT_MANIFEST_PATH" \
+    "$RELEASE_URL" \
+    "$GATE_EVENT_NAME" \
+    "$GATE_REF_TYPE" \
+    "$GATE_REF_NAME" \
+    "$GATE_RUN_ID" \
+    "$GATE_RUN_ATTEMPT" \
+    "$GATE_REPOSITORY" \
+    "$GATE_SERVER_URL" \
+    "$SOURCE_COMMIT_SHA" \
+    "$RELEASE_TAG_NAME" \
     "$CORE_RUNTIME_KERNEL_PATH" \
     "$CORE_RUNTIME_ADMISSION_PATH" \
     "$CORE_RUNTIME_ARBITRATION_PATH" \
     "$CORE_RUNTIME_NEGATIVE_FIXTURES_PATH" \
     "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH" <<'PY'
+import hashlib
 import json
 import pathlib
 import sys
 import time
 import tomllib
 
-out_path = pathlib.Path(sys.argv[1])
-release_version = sys.argv[2]
-cargo_path = pathlib.Path(sys.argv[3])
-desktop_package_path = pathlib.Path(sys.argv[4])
-desktop_package_lock_path = pathlib.Path(sys.argv[5])
-tauri_config_path = pathlib.Path(sys.argv[6])
-changelog_path = pathlib.Path(sys.argv[7])
-release_readme_path = pathlib.Path(sys.argv[8])
-release_tasks_path = pathlib.Path(sys.argv[9])
-artifact_paths = [pathlib.Path(value) for value in sys.argv[10:]]
+(
+    out_path_raw,
+    release_version,
+    cargo_path_raw,
+    desktop_package_path_raw,
+    desktop_package_lock_path_raw,
+    tauri_config_path_raw,
+    changelog_path_raw,
+    release_readme_path_raw,
+    release_tasks_path_raw,
+    artifact_manifest_path_raw,
+    release_url,
+    gate_event_name,
+    gate_ref_type,
+    gate_ref_name,
+    gate_run_id,
+    gate_run_attempt,
+    gate_repository,
+    gate_server_url,
+    source_commit_sha,
+    release_tag_name,
+    *artifact_path_values,
+) = sys.argv[1:]
+
+out_path = pathlib.Path(out_path_raw)
+cargo_path = pathlib.Path(cargo_path_raw)
+desktop_package_path = pathlib.Path(desktop_package_path_raw)
+desktop_package_lock_path = pathlib.Path(desktop_package_lock_path_raw)
+tauri_config_path = pathlib.Path(tauri_config_path_raw)
+changelog_path = pathlib.Path(changelog_path_raw)
+release_readme_path = pathlib.Path(release_readme_path_raw)
+release_tasks_path = pathlib.Path(release_tasks_path_raw)
+artifact_manifest_path = pathlib.Path(artifact_manifest_path_raw)
+artifact_paths = [pathlib.Path(value) for value in artifact_path_values]
 
 expected_version = "1.0.5"
 expected_tag = "v1.0.5"
@@ -7389,6 +7470,53 @@ artifacts = [json.loads(path.read_text(encoding="utf-8")) for path in artifact_p
 artifact_statuses = {
     artifact_paths[index].name: artifact.get("status")
     for index, artifact in enumerate(artifacts)
+}
+certified_artifact_hashes = []
+for path in artifact_paths:
+    certified_artifact_hashes.append({
+        "path": f"runtime/{path.name}",
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "bytes": path.stat().st_size,
+    })
+artifact_manifest_sha256 = (
+    hashlib.sha256(artifact_manifest_path.read_bytes()).hexdigest()
+    if artifact_manifest_path.is_file()
+    else None
+)
+certification_digest = hashlib.sha256(json.dumps(
+    {
+        "releaseVersion": release_version,
+        "artifactManifestSha256": artifact_manifest_sha256,
+        "certifiedArtifactHashes": certified_artifact_hashes,
+    },
+    sort_keys=True,
+).encode("utf-8")).hexdigest()
+gate_run_url = (
+    f"{gate_server_url.rstrip('/')}/{gate_repository}/actions/runs/{gate_run_id}"
+    if gate_server_url and gate_repository and gate_run_id
+    else None
+)
+artifact_name = f"release-gate-certification-{release_version}"
+event_evidence = {
+    "eventName": gate_event_name,
+    "refType": gate_ref_type or None,
+    "refName": gate_ref_name or None,
+    "runId": gate_run_id or None,
+    "runAttempt": gate_run_attempt or None,
+    "runUrl": gate_run_url,
+    "repository": gate_repository,
+    "sourceCommitSha": source_commit_sha,
+    "releaseTagName": release_tag_name,
+    "releaseUrl": release_url,
+    "certificationArtifactName": artifact_name,
+    "certificationArtifactId": artifact_name,
+    "certificationArtifactIdKind": "github-upload-artifact-name",
+    "certificationArtifactNumericId": None,
+    "certificationArtifactNumericIdSource": "assigned-by-github-actions-after-upload",
+    "certificationArtifactDigest": certification_digest,
+    "certificationArtifactDigestSource": "v105-certified-runtime-artifact-hashes",
+    "artifactManifestPath": "artifact-manifest.json",
+    "artifactManifestSha256": artifact_manifest_sha256,
 }
 negative_artifact = artifacts[3]
 kernel_artifact = artifacts[0]
@@ -7411,6 +7539,16 @@ coverage = {
     and "V105-010 Release Certification" in release_tasks_text
     and "runtime/v105-release-certification.json" in release_tasks_text,
     "all-v105-artifacts-passed": all(status == "passed" for status in artifact_statuses.values()),
+    "certified-artifact-hashes-present": len(certified_artifact_hashes) == len(artifact_paths)
+    and all(item.get("sha256") and item.get("bytes", 0) > 0 for item in certified_artifact_hashes),
+    "artifact-manifest-digest-present": artifact_manifest_sha256 is not None,
+    "certification-artifact-digest-present": len(certification_digest) == 64,
+    "certification-artifact-id-present": bool(event_evidence["certificationArtifactId"]),
+    "release-event-evidence-recorded": bool(event_evidence["eventName"])
+    and bool(event_evidence["sourceCommitSha"])
+    and bool(event_evidence["releaseTagName"]),
+    "release-run-id-bound-for-ci": gate_event_name == "local" or bool(event_evidence["runId"]),
+    "release-run-url-bound-for-ci": gate_event_name == "local" or bool(event_evidence["runUrl"]),
     "negative-fixtures-include-eight-cases": len(negative_artifact.get("fixtures") or []) == 8
     and all(item.get("passed") is True for item in negative_artifact.get("fixtures") or []),
     "positive-reference-workflow-passed": (negative_artifact.get("positiveWorkflow") or {}).get("status") == "passed",
@@ -7427,6 +7565,8 @@ payload = {
     "releaseVersion": expected_tag,
     "workspaceVersion": expected_version,
     "certifiedArtifacts": artifact_statuses,
+    "certifiedArtifactHashes": certified_artifact_hashes,
+    "eventEvidence": event_evidence,
     "coverage": coverage,
     "failedCoverage": failed,
     "releaseBaseline": "docs/delivery/releases/v1.0.5/README.md",

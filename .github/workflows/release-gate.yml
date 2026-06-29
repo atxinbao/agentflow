@@ -215,6 +215,18 @@ jobs:
               -o -name 'core-evidence-decision-reference-model-rust-test.log' \
               -o -name 'core-file-backed-ontology-registry.json' \
               -o -name 'core-file-backed-ontology-registry-rust-test.log' \
+              -o -name 'core-runtime-negative-fixtures.json' \
+              -o -name 'core-runtime-negative-runtime-api-test.log' \
+              -o -name 'core-runtime-negative-arbitration-test.log' \
+              -o -name 'core-runtime-negative-task-artifacts-test.log' \
+              -o -name 'core-runtime-negative-projection-test.log' \
+              -o -name 'core-runtime-kernel.json' \
+              -o -name 'core-runtime-kernel-runtime-api-test.log' \
+              -o -name 'core-runtime-admission.json' \
+              -o -name 'core-runtime-admission-rust-test.log' \
+              -o -name 'core-runtime-arbitration.json' \
+              -o -name 'core-runtime-arbitration-rust-test.log' \
+              -o -name 'v105-release-certification.json' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
 
@@ -237,7 +249,19 @@ jobs:
             runtime/core-evidence-decision-reference-model-rust-test.log \
             runtime/core-file-backed-ontology-registry.json \
             runtime/core-file-backed-ontology-registry-rust-test.log \
-            runtime/v104-release-certification.json
+            runtime/v104-release-certification.json \
+            runtime/core-runtime-negative-fixtures.json \
+            runtime/core-runtime-negative-runtime-api-test.log \
+            runtime/core-runtime-negative-arbitration-test.log \
+            runtime/core-runtime-negative-task-artifacts-test.log \
+            runtime/core-runtime-negative-projection-test.log \
+            runtime/core-runtime-kernel.json \
+            runtime/core-runtime-kernel-runtime-api-test.log \
+            runtime/core-runtime-admission.json \
+            runtime/core-runtime-admission-rust-test.log \
+            runtime/core-runtime-arbitration.json \
+            runtime/core-runtime-arbitration-rust-test.log \
+            runtime/v105-release-certification.json
           do
             if [ ! -f "$certification_dir/$primary_proof" ]; then
               echo "missing certification primary proof: $primary_proof" >&2
