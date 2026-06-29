@@ -62,7 +62,7 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-003 Decision Input Binding
 
-状态：in-progress
+状态：done
 
 目标：
 
@@ -78,12 +78,15 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-004 Decision Outcomes and State Transition Semantics
 
-状态：planned
+状态：in-progress
 
 目标：
 
-- 定义 accepted / rejected / deferred / blocked 等 outcome；
+- 定义 accepted / rejected / deferred / blocked / needs-fix outcome；
 - 绑定 Core Action / State Semantics；
+- 明确 Decision outcome 不能直接写 completed；
+- 定义每个 outcome 的 allowed source states、allowed next states 和 reason shape；
+- 对应 release-gate artifact：`runtime/core-decision-outcome-transitions.json`；
 - 对应 GitHub issue：#696。
 
 依赖：#694、#695。

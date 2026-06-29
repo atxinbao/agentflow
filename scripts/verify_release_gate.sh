@@ -172,6 +172,7 @@ V106_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v106-release-certification.json"
 V107_RELEASE_PROVENANCE_HANDOFF_PATH="$RUNTIME_DIR/v107-release-provenance-handoff.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
 CORE_DECISION_INPUT_BINDING_PATH="$RUNTIME_DIR/core-decision-input-binding.json"
+CORE_DECISION_OUTCOME_TRANSITIONS_PATH="$RUNTIME_DIR/core-decision-outcome-transitions.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -429,6 +430,7 @@ proof_chain = [
     {"stage": "v107-release-provenance-handoff", "label": "v1.0.7 Release Provenance Handoff"},
     {"stage": "core-decision-model-contract", "label": "Core Decision Model Contract"},
     {"stage": "core-decision-input-binding", "label": "Core Decision Input Binding"},
+    {"stage": "core-decision-outcome-transitions", "label": "Core Decision Outcome Transitions"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -499,6 +501,7 @@ runtime_artifacts = [
     {"path": "runtime/v107-release-provenance-handoff.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json").is_file()},
     {"path": "runtime/core-decision-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json").is_file()},
     {"path": "runtime/core-decision-input-binding.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json").is_file()},
+    {"path": "runtime/core-decision-outcome-transitions.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json").is_file()},
     {"path": "runtime/clean-room-test-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/clean-room-test-proof.json").is_file()},
     {"path": "runtime/audit-sidecar-policy.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-sidecar-policy.json").is_file()},
     {"path": "runtime/provider-smoke-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/provider-smoke-proof.json").is_file()},
@@ -578,6 +581,7 @@ v106_release_certification = load_json(pathlib.Path(summary_json_path.parent / "
 v107_release_provenance_handoff = load_json(pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json")) or {}
 core_decision_model_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json")) or {}
 core_decision_input_binding = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json")) or {}
+core_decision_outcome_transitions = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json")) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
 deployment_evidence_wrong_commit = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json")) or {}
@@ -1454,6 +1458,9 @@ summary_payload = {
     "coreDecisionInputBindingPath": "runtime/core-decision-input-binding.json" if core_decision_input_binding else None,
     "coreDecisionInputBindingStatus": core_decision_input_binding.get("status") or "missing",
     "coreDecisionInputBindingCoverage": core_decision_input_binding.get("coverage") or {},
+    "coreDecisionOutcomeTransitionsPath": "runtime/core-decision-outcome-transitions.json" if core_decision_outcome_transitions else None,
+    "coreDecisionOutcomeTransitionsStatus": core_decision_outcome_transitions.get("status") or "missing",
+    "coreDecisionOutcomeTransitionsCoverage": core_decision_outcome_transitions.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1721,6 +1728,9 @@ certification_payload = {
     "coreDecisionInputBindingPath": "runtime/core-decision-input-binding.json" if core_decision_input_binding else None,
     "coreDecisionInputBindingStatus": core_decision_input_binding.get("status") or "missing",
     "coreDecisionInputBindingCoverage": core_decision_input_binding.get("coverage") or {},
+    "coreDecisionOutcomeTransitionsPath": "runtime/core-decision-outcome-transitions.json" if core_decision_outcome_transitions else None,
+    "coreDecisionOutcomeTransitionsStatus": core_decision_outcome_transitions.get("status") or "missing",
+    "coreDecisionOutcomeTransitionsCoverage": core_decision_outcome_transitions.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -8807,7 +8817,7 @@ forbidden_writes = [
     "provider-session-record",
     "audit-sidecar-record",
 ]
-outcomes = ["accepted", "rejected", "deferred", "blocked", "cancelled"]
+outcomes = ["accepted", "rejected", "deferred", "blocked", "needs-fix"]
 forbidden_terms = [
     "bug",
     "feature",
@@ -8956,6 +8966,91 @@ if failed:
     raise SystemExit(f"core decision input binding coverage failed: {failed}")
 PY
   record_stage "core-decision-input-binding" "passed" "$(basename "$CORE_DECISION_INPUT_BINDING_PATH")"
+}
+
+run_core_decision_outcome_transitions_gate() {
+  record_stage "core-decision-outcome-transitions" "started" "$CORE_DECISION_OUTCOME_TRANSITIONS_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-decision-outcome-transitions-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_decision --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-decision-outcome-transitions" "agentflow-ontology Core Decision Outcome tests failed"
+  fi
+  python3 - \
+    "$CORE_DECISION_OUTCOME_TRANSITIONS_PATH" \
+    "$WORKSPACE/docs/architecture/072-core-decision-outcome-transition-semantics-v1.md" \
+    "$WORKSPACE/docs/architecture/070-core-decision-model-contract-v1.md" \
+    "$WORKSPACE/crates/ontology/src/decision.rs" \
+    "$WORKSPACE/crates/ontology/src/semantics.rs" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md" \
+    "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+model_doc_path = pathlib.Path(sys.argv[3])
+decision_source_path = pathlib.Path(sys.argv[4])
+semantics_source_path = pathlib.Path(sys.argv[5])
+tasks_path = pathlib.Path(sys.argv[6])
+test_log_path = pathlib.Path(sys.argv[7])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+model_doc_text = model_doc_path.read_text(encoding="utf-8")
+decision_source = decision_source_path.read_text(encoding="utf-8")
+semantics_source = semantics_source_path.read_text(encoding="utf-8")
+tasks_text = tasks_path.read_text(encoding="utf-8")
+outcomes = ["accepted", "rejected", "deferred", "blocked", "needs-fix"]
+state_names = ["captured", "understood", "planned", "ready", "active", "reviewing", "blocked", "cancelled"]
+reason_fields = ["reasonCode", "message", "evidenceRefs", "blocking"]
+negative_fixtures = [
+    "core_decision_transition_rejects_completion_write",
+    "core_decision_transition_rejects_unknown_outcome",
+    "core_decision_transition_rejects_missing_reason",
+]
+coverage = {
+    "contract-version-defined": "agentflow-core-decision-outcome-transition.v1" in decision_source
+    and "agentflow-core-decision-outcome-transition.v1" in doc_text,
+    "rust-contract-implemented": "CoreDecisionOutcomeTransitionContract" in decision_source
+    and "CoreDecisionTransitionAttempt" in decision_source
+    and "validate_core_decision_outcome_transition_contract" in decision_source
+    and "validate_core_decision_transition_attempt" in decision_source,
+    "canonical-outcomes-documented": all(outcome in doc_text for outcome in outcomes)
+    and all(outcome in model_doc_text for outcome in outcomes),
+    "canonical-outcomes-implemented": all(outcome in decision_source for outcome in outcomes),
+    "state-semantics-bound": all(state in semantics_source for state in state_names)
+    and "CoreActionStateSemanticsContract" in decision_source,
+    "completion-state-excluded": "completed" in doc_text
+    and "must not write completion state" in decision_source,
+    "reason-shape-documented": all(field in doc_text for field in reason_fields),
+    "reason-shape-implemented": all(field in decision_source for field in reason_fields),
+    "positive-fixture-implemented": "canonical_core_decision_transition_attempt_fixture" in decision_source,
+    "negative-fixtures-implemented": all(item in decision_source for item in negative_fixtures),
+    "release-task-binds-issue-696": "#696" in tasks_text
+    and "V107-004 Decision Outcomes and State Transition Semantics" in tasks_text
+    and "runtime/core-decision-outcome-transitions.json" in tasks_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-decision-outcome-transitions-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-decision-outcome-transition.v1",
+    "architecturePath": "docs/architecture/072-core-decision-outcome-transition-semantics-v1.md",
+    "rustContractPath": "crates/ontology/src/decision.rs",
+    "rustTestLogPath": "runtime/core-decision-outcome-transitions-rust-test.log",
+    "outcomes": outcomes,
+    "stateNames": state_names,
+    "reasonFields": reason_fields,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core decision outcome transitions coverage failed: {failed}")
+PY
+  record_stage "core-decision-outcome-transitions" "passed" "$(basename "$CORE_DECISION_OUTCOME_TRANSITIONS_PATH")"
 }
 
 prepare_workspace() {
@@ -9534,6 +9629,7 @@ PY
   run_v107_release_provenance_handoff_gate
   run_core_decision_model_contract_gate
   run_core_decision_input_binding_gate
+  run_core_decision_outcome_transitions_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

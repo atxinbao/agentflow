@@ -1,9 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+use crate::semantics::CoreActionStateSemanticsContract;
+
 pub const CORE_DECISION_MODEL_CONTRACT_VERSION: &str = "agentflow-core-decision-model.v1";
 pub const CORE_DECISION_INPUT_BINDING_CONTRACT_VERSION: &str =
     "agentflow-core-decision-input-binding.v1";
+pub const CORE_DECISION_OUTCOME_TRANSITION_CONTRACT_VERSION: &str =
+    "agentflow-core-decision-outcome-transition.v1";
 pub const CORE_EVIDENCE_DECISION_MODEL_VERSION: &str =
     "agentflow-core-evidence-decision-reference-model.v1";
 
@@ -136,6 +140,47 @@ pub struct CoreDecisionBoundAuthorityRef {
     pub stale: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionOutcomeTransitionContract {
+    pub version: String,
+    pub status: String,
+    pub authority: String,
+    pub outcomes: Vec<CoreDecisionOutcomeTransition>,
+    pub reason_shape: CoreDecisionReasonShape,
+    pub illegal_transition_policy: String,
+    pub forbidden_core_terms: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionOutcomeTransition {
+    pub outcome: String,
+    pub meaning: String,
+    pub terminal: bool,
+    pub allowed_from_states: Vec<String>,
+    pub allowed_next_states: Vec<String>,
+    pub required_reason_fields: Vec<String>,
+    pub required_evidence_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionReasonShape {
+    pub required_fields: Vec<String>,
+    pub machine_readable_reason_code: bool,
+    pub evidence_refs_required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionTransitionAttempt {
+    pub outcome: String,
+    pub from_state: String,
+    pub requested_next_state: String,
+    pub reasons: Vec<CoreDecisionReason>,
+}
+
 pub fn core_decision_model_contract() -> CoreDecisionModelContract {
     CoreDecisionModelContract {
         version: CORE_DECISION_MODEL_CONTRACT_VERSION.to_string(),
@@ -207,7 +252,11 @@ pub fn core_decision_model_contract() -> CoreDecisionModelContract {
                 "the subject cannot continue until blocking reasons are resolved",
                 false,
             ),
-            decision_outcome("cancelled", "the subject was intentionally stopped", true),
+            decision_outcome(
+                "needs-fix",
+                "the subject requires additional work before another decision",
+                false,
+            ),
         ],
         forbidden_core_terms: vec![
             "bug".to_string(),
@@ -260,6 +309,78 @@ pub fn core_decision_input_binding_contract() -> CoreDecisionInputBindingContrac
     }
 }
 
+pub fn core_decision_outcome_transition_contract() -> CoreDecisionOutcomeTransitionContract {
+    CoreDecisionOutcomeTransitionContract {
+        version: CORE_DECISION_OUTCOME_TRANSITION_CONTRACT_VERSION.to_string(),
+        status: "active".to_string(),
+        authority:
+            "Core Decision outcomes describe allowed state routes without writing completion state."
+                .to_string(),
+        outcomes: vec![
+            outcome_transition(
+                "accepted",
+                "authority inputs allow the subject to continue",
+                false,
+                vec!["planned", "reviewing"],
+                vec!["ready"],
+                vec!["EvidenceRef", "DecisionRef"],
+            ),
+            outcome_transition(
+                "rejected",
+                "authority inputs contradict the subject boundary",
+                true,
+                vec!["captured", "understood", "planned", "ready", "reviewing"],
+                vec!["cancelled"],
+                vec!["DecisionRef"],
+            ),
+            outcome_transition(
+                "deferred",
+                "authority inputs are not complete enough to choose a final route",
+                false,
+                vec!["captured", "understood", "planned", "ready"],
+                vec!["planned", "blocked"],
+                vec!["EvidenceRef", "DecisionRef"],
+            ),
+            outcome_transition(
+                "blocked",
+                "an external blocker prevents progress",
+                false,
+                vec![
+                    "captured",
+                    "understood",
+                    "planned",
+                    "ready",
+                    "active",
+                    "reviewing",
+                ],
+                vec!["blocked"],
+                vec!["DecisionRef"],
+            ),
+            outcome_transition(
+                "needs-fix",
+                "the subject needs additional work before another review or decision",
+                false,
+                vec!["active", "reviewing"],
+                vec!["active"],
+                vec!["EvidenceRef", "DecisionRef"],
+            ),
+        ],
+        reason_shape: CoreDecisionReasonShape {
+            required_fields: vec![
+                "reasonCode".to_string(),
+                "message".to_string(),
+                "evidenceRefs".to_string(),
+                "blocking".to_string(),
+            ],
+            machine_readable_reason_code: true,
+            evidence_refs_required: true,
+        },
+        illegal_transition_policy:
+            "Illegal outcome transitions must fail before any state authority write.".to_string(),
+        forbidden_core_terms: core_decision_model_contract().forbidden_core_terms,
+    }
+}
+
 pub fn canonical_core_decision_record_fixture() -> CoreDecisionRecord {
     CoreDecisionRecord {
         version: CORE_DECISION_MODEL_CONTRACT_VERSION.to_string(),
@@ -295,6 +416,20 @@ pub fn canonical_core_decision_record_fixture() -> CoreDecisionRecord {
                 authority_boundary: "event-store".to_string(),
             },
         ],
+    }
+}
+
+pub fn canonical_core_decision_transition_attempt_fixture() -> CoreDecisionTransitionAttempt {
+    CoreDecisionTransitionAttempt {
+        outcome: "accepted".to_string(),
+        from_state: "planned".to_string(),
+        requested_next_state: "ready".to_string(),
+        reasons: vec![CoreDecisionReason {
+            reason_code: "authority-inputs-consistent".to_string(),
+            message: "authority inputs allow the next route".to_string(),
+            evidence_refs: vec!["evidence:core-proof-pack".to_string()],
+            blocking: false,
+        }],
     }
 }
 
@@ -420,7 +555,7 @@ pub fn validate_core_decision_model_contract(
         .iter()
         .map(|outcome| outcome.outcome.as_str())
         .collect();
-    for outcome in ["accepted", "rejected", "deferred", "blocked", "cancelled"] {
+    for outcome in ["accepted", "rejected", "deferred", "blocked", "needs-fix"] {
         if !outcomes.contains(outcome) {
             errors.push(format!("decision model missing outcome `{outcome}`"));
         }
@@ -518,6 +653,122 @@ pub fn validate_core_decision_input_binding_contract(
     }
 }
 
+pub fn validate_core_decision_outcome_transition_contract(
+    contract: &CoreDecisionOutcomeTransitionContract,
+    semantics: &CoreActionStateSemanticsContract,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if contract.version != CORE_DECISION_OUTCOME_TRANSITION_CONTRACT_VERSION {
+        errors.push(format!(
+            "decision outcome transition version must be `{}`",
+            CORE_DECISION_OUTCOME_TRANSITION_CONTRACT_VERSION
+        ));
+    }
+    if contract.status != "active" {
+        errors.push("decision outcome transition status must be active".to_string());
+    }
+
+    let outcomes: BTreeSet<_> = contract
+        .outcomes
+        .iter()
+        .map(|outcome| outcome.outcome.as_str())
+        .collect();
+    for required_outcome in ["accepted", "rejected", "deferred", "blocked", "needs-fix"] {
+        if !outcomes.contains(required_outcome) {
+            errors.push(format!(
+                "decision outcome transition missing outcome `{required_outcome}`"
+            ));
+        }
+    }
+
+    let state_ids: BTreeSet<_> = semantics
+        .states
+        .iter()
+        .map(|state| state.state_id.as_str())
+        .collect();
+    for outcome in &contract.outcomes {
+        if outcome.allowed_from_states.is_empty() {
+            errors.push(format!(
+                "decision outcome `{}` must declare allowed source states",
+                outcome.outcome
+            ));
+        }
+        if outcome.allowed_next_states.is_empty() {
+            errors.push(format!(
+                "decision outcome `{}` must declare allowed next states",
+                outcome.outcome
+            ));
+        }
+        for from_state in &outcome.allowed_from_states {
+            if !state_ids.contains(from_state.as_str()) {
+                errors.push(format!(
+                    "decision outcome `{}` references unknown source state `{from_state}`",
+                    outcome.outcome
+                ));
+            }
+        }
+        for next_state in &outcome.allowed_next_states {
+            if !state_ids.contains(next_state.as_str()) {
+                errors.push(format!(
+                    "decision outcome `{}` references unknown next state `{next_state}`",
+                    outcome.outcome
+                ));
+            }
+            if next_state == "completed" {
+                errors.push(format!(
+                    "decision outcome `{}` must not write completion state",
+                    outcome.outcome
+                ));
+            }
+        }
+        for required_field in ["reasonCode", "message", "evidenceRefs", "blocking"] {
+            if !outcome
+                .required_reason_fields
+                .iter()
+                .any(|field| field == required_field)
+            {
+                errors.push(format!(
+                    "decision outcome `{}` missing reason field `{required_field}`",
+                    outcome.outcome
+                ));
+            }
+        }
+    }
+
+    for required_field in ["reasonCode", "message", "evidenceRefs", "blocking"] {
+        if !contract
+            .reason_shape
+            .required_fields
+            .iter()
+            .any(|field| field == required_field)
+        {
+            errors.push(format!(
+                "decision outcome reason shape missing `{required_field}`"
+            ));
+        }
+    }
+    if !contract.reason_shape.machine_readable_reason_code {
+        errors.push("decision outcome reason code must be machine readable".to_string());
+    }
+    if !contract.reason_shape.evidence_refs_required {
+        errors.push("decision outcome reasons must require evidence refs".to_string());
+    }
+
+    validate_no_forbidden_terms(
+        "Core decision outcome transition contract",
+        &contract.forbidden_core_terms,
+        core_decision_outcome_transition_contract_surface(contract),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 pub fn validate_core_decision_record(
     contract: &CoreDecisionModelContract,
     record: &CoreDecisionRecord,
@@ -594,6 +845,76 @@ pub fn validate_core_decision_record(
         "Core decision record",
         &contract.forbidden_core_terms,
         core_decision_record_surface(record),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+pub fn validate_core_decision_transition_attempt(
+    contract: &CoreDecisionOutcomeTransitionContract,
+    attempt: &CoreDecisionTransitionAttempt,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    let Some(outcome) = contract
+        .outcomes
+        .iter()
+        .find(|outcome| outcome.outcome == attempt.outcome)
+    else {
+        errors.push(format!(
+            "decision transition outcome `{}` is not in contract",
+            attempt.outcome
+        ));
+        return Err(errors);
+    };
+
+    if !outcome
+        .allowed_from_states
+        .iter()
+        .any(|state| state == &attempt.from_state)
+    {
+        errors.push(format!(
+            "decision transition outcome `{}` cannot start from `{}`",
+            attempt.outcome, attempt.from_state
+        ));
+    }
+    if !outcome
+        .allowed_next_states
+        .iter()
+        .any(|state| state == &attempt.requested_next_state)
+    {
+        errors.push(format!(
+            "decision transition outcome `{}` cannot route to `{}`",
+            attempt.outcome, attempt.requested_next_state
+        ));
+    }
+    if attempt.requested_next_state == "completed" {
+        errors.push("decision transition must not write completion state".to_string());
+    }
+    if attempt.reasons.is_empty() {
+        errors.push("decision transition reasons are required".to_string());
+    }
+    for reason in &attempt.reasons {
+        if reason.reason_code.trim().is_empty() {
+            errors.push("decision transition reason code is required".to_string());
+        }
+        if reason.message.trim().is_empty() {
+            errors.push("decision transition reason message is required".to_string());
+        }
+        if reason.evidence_refs.is_empty() {
+            errors.push("decision transition reason evidence refs are required".to_string());
+        }
+    }
+
+    validate_no_forbidden_terms(
+        "Core decision transition attempt",
+        &contract.forbidden_core_terms,
+        core_decision_transition_attempt_surface(attempt),
         &mut errors,
     );
 
@@ -1045,6 +1366,39 @@ fn decision_outcome(outcome: &str, meaning: &str, terminal: bool) -> CoreDecisio
     }
 }
 
+fn outcome_transition(
+    outcome: &str,
+    meaning: &str,
+    terminal: bool,
+    allowed_from_states: Vec<&str>,
+    allowed_next_states: Vec<&str>,
+    required_evidence_refs: Vec<&str>,
+) -> CoreDecisionOutcomeTransition {
+    CoreDecisionOutcomeTransition {
+        outcome: outcome.to_string(),
+        meaning: meaning.to_string(),
+        terminal,
+        allowed_from_states: allowed_from_states
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+        allowed_next_states: allowed_next_states
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+        required_reason_fields: vec![
+            "reasonCode".to_string(),
+            "message".to_string(),
+            "evidenceRefs".to_string(),
+            "blocking".to_string(),
+        ],
+        required_evidence_refs: required_evidence_refs
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+    }
+}
+
 fn bound_authority_ref(
     ref_kind: &str,
     ref_id: &str,
@@ -1128,6 +1482,36 @@ fn core_decision_input_binding_contract_surface(
     .collect()
 }
 
+fn core_decision_outcome_transition_contract_surface(
+    contract: &CoreDecisionOutcomeTransitionContract,
+) -> Vec<String> {
+    [
+        contract.version.clone(),
+        contract.status.clone(),
+        contract.authority.clone(),
+        contract.reason_shape.required_fields.join(" "),
+        contract
+            .reason_shape
+            .machine_readable_reason_code
+            .to_string(),
+        contract.reason_shape.evidence_refs_required.to_string(),
+        contract.illegal_transition_policy.clone(),
+    ]
+    .into_iter()
+    .chain(contract.outcomes.iter().flat_map(|outcome| {
+        [
+            outcome.outcome.clone(),
+            outcome.meaning.clone(),
+            outcome.terminal.to_string(),
+            outcome.allowed_from_states.join(" "),
+            outcome.allowed_next_states.join(" "),
+            outcome.required_reason_fields.join(" "),
+            outcome.required_evidence_refs.join(" "),
+        ]
+    }))
+    .collect()
+}
+
 fn core_decision_record_surface(record: &CoreDecisionRecord) -> Vec<String> {
     [
         record.version.clone(),
@@ -1156,6 +1540,26 @@ fn core_decision_record_surface(record: &CoreDecisionRecord) -> Vec<String> {
             write.write_kind.clone(),
             write.target_ref.clone(),
             write.authority_boundary.clone(),
+        ]
+    }))
+    .collect()
+}
+
+fn core_decision_transition_attempt_surface(
+    attempt: &CoreDecisionTransitionAttempt,
+) -> Vec<String> {
+    [
+        attempt.outcome.clone(),
+        attempt.from_state.clone(),
+        attempt.requested_next_state.clone(),
+    ]
+    .into_iter()
+    .chain(attempt.reasons.iter().flat_map(|reason| {
+        [
+            reason.reason_code.clone(),
+            reason.message.clone(),
+            reason.evidence_refs.join(" "),
+            reason.blocking.to_string(),
         ]
     }))
     .collect()
@@ -1423,6 +1827,7 @@ fn tokenized(value: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::semantics::core_action_state_semantics_contract;
 
     #[test]
     fn core_decision_model_contract_validates() {
@@ -1437,6 +1842,10 @@ mod tests {
             .readable_authority_facts
             .iter()
             .any(|fact| fact.fact_kind == "evidence"));
+        assert!(contract
+            .outcomes
+            .iter()
+            .any(|outcome| outcome.outcome == "needs-fix"));
     }
 
     #[test]
@@ -1470,6 +1879,65 @@ mod tests {
 
         let errors = validate_core_decision_record(&contract, &record).unwrap_err();
         assert!(errors.iter().any(|error| error.contains("github-issue")));
+    }
+
+    #[test]
+    fn core_decision_outcome_transition_contract_validates() {
+        let contract = core_decision_outcome_transition_contract();
+        let semantics = core_action_state_semantics_contract();
+        validate_core_decision_outcome_transition_contract(&contract, &semantics).unwrap();
+        assert!(contract
+            .outcomes
+            .iter()
+            .any(|outcome| outcome.outcome == "needs-fix"));
+        assert!(contract.outcomes.iter().all(|outcome| !outcome
+            .allowed_next_states
+            .contains(&"completed".to_string())));
+    }
+
+    #[test]
+    fn core_decision_transition_attempt_fixture_validates() {
+        let contract = core_decision_outcome_transition_contract();
+        let attempt = canonical_core_decision_transition_attempt_fixture();
+        validate_core_decision_transition_attempt(&contract, &attempt).unwrap();
+        assert_eq!(attempt.outcome, "accepted");
+        assert_eq!(attempt.requested_next_state, "ready");
+    }
+
+    #[test]
+    fn core_decision_transition_rejects_completion_write() {
+        let contract = core_decision_outcome_transition_contract();
+        let mut attempt = canonical_core_decision_transition_attempt_fixture();
+        attempt.requested_next_state = "completed".to_string();
+
+        let errors = validate_core_decision_transition_attempt(&contract, &attempt).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("must not write completion state")));
+    }
+
+    #[test]
+    fn core_decision_transition_rejects_unknown_outcome() {
+        let contract = core_decision_outcome_transition_contract();
+        let mut attempt = canonical_core_decision_transition_attempt_fixture();
+        attempt.outcome = "unknown".to_string();
+
+        let errors = validate_core_decision_transition_attempt(&contract, &attempt).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("is not in contract")));
+    }
+
+    #[test]
+    fn core_decision_transition_rejects_missing_reason() {
+        let contract = core_decision_outcome_transition_contract();
+        let mut attempt = canonical_core_decision_transition_attempt_fixture();
+        attempt.reasons.clear();
+
+        let errors = validate_core_decision_transition_attempt(&contract, &attempt).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("reasons are required")));
     }
 
     #[test]

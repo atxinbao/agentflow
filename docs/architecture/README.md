@@ -66,6 +66,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [069-release-provenance-tag-policy-v1.md](069-release-provenance-tag-policy-v1.md) | Release Provenance Tag Policy |
 | [070-core-decision-model-contract-v1.md](070-core-decision-model-contract-v1.md) | Core Decision Model Contract |
 | [071-core-decision-input-binding-v1.md](071-core-decision-input-binding-v1.md) | Core Decision Input Binding |
+| [072-core-decision-outcome-transition-semantics-v1.md](072-core-decision-outcome-transition-semantics-v1.md) | Core Decision Outcome Transition Semantics |
 
 ## Rules
 
