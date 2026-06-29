@@ -57,6 +57,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [060-core-evidence-pack-schema-v1.md](060-core-evidence-pack-schema-v1.md) | Core Evidence Pack Schema |
 | [061-core-evidence-source-type-registry-v1.md](061-core-evidence-source-type-registry-v1.md) | Core Evidence Source Type Registry |
 | [062-core-evidence-capture-receipts-v1.md](062-core-evidence-capture-receipts-v1.md) | Core Evidence Capture Receipts |
+| [063-core-evidence-authority-trace-links-v1.md](063-core-evidence-authority-trace-links-v1.md) | Core Evidence Authority Trace Links |
 
 ## Rules
 

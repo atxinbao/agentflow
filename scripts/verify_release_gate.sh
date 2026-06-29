@@ -155,6 +155,7 @@ CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH="$RUNTIME_DIR/core-evidence-decision
 CORE_EVIDENCE_PACK_SCHEMA_PATH="$RUNTIME_DIR/core-evidence-pack-schema.json"
 CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_PATH="$RUNTIME_DIR/core-evidence-source-type-registry.json"
 CORE_EVIDENCE_CAPTURE_RECEIPTS_PATH="$RUNTIME_DIR/core-evidence-capture-receipts.json"
+CORE_EVIDENCE_AUTHORITY_TRACE_LINKS_PATH="$RUNTIME_DIR/core-evidence-authority-trace-links.json"
 CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
 V104_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v104-release-certification.json"
 CORE_RUNTIME_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/core-runtime-negative-fixtures.json"
@@ -402,6 +403,7 @@ proof_chain = [
     {"stage": "core-evidence-pack-schema", "label": "Core Evidence Pack Schema"},
     {"stage": "core-evidence-source-type-registry", "label": "Core Evidence Source Type Registry"},
     {"stage": "core-evidence-capture-receipts", "label": "Core Evidence Capture Receipts"},
+    {"stage": "core-evidence-authority-trace-links", "label": "Core Evidence Authority Trace Links"},
     {"stage": "core-file-backed-ontology-registry", "label": "Core File-backed Ontology Registry"},
     {"stage": "v104-release-certification", "label": "v1.0.4 Release Certification"},
     {"stage": "core-runtime-negative-fixtures", "label": "Core Runtime Negative Fixtures"},
@@ -7001,6 +7003,83 @@ PY
   record_stage "core-evidence-capture-receipts" "passed" "$(basename "$CORE_EVIDENCE_CAPTURE_RECEIPTS_PATH")"
 }
 
+run_core_evidence_authority_trace_links_gate() {
+  record_stage "core-evidence-authority-trace-links" "started" "$CORE_EVIDENCE_AUTHORITY_TRACE_LINKS_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-evidence-authority-trace-links-rust-test.log"
+  local event_store_test_log="$RUNTIME_DIR/core-evidence-authority-trace-links-event-store-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_evidence_authority_trace --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-evidence-authority-trace-links" "agentflow-ontology Core Evidence Authority Trace tests failed"
+  fi
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-event-store evidence_collected --quiet >"$event_store_test_log" 2>&1); then
+    fail_stage "core-evidence-authority-trace-links" "agentflow-event-store Evidence Collected tests failed"
+  fi
+  python3 - "$CORE_EVIDENCE_AUTHORITY_TRACE_LINKS_PATH" "$WORKSPACE/docs/architecture/063-core-evidence-authority-trace-links-v1.md" "$WORKSPACE/crates/ontology/src/evidence.rs" "$WORKSPACE/crates/event-store/src/model.rs" "$rust_test_log" "$event_store_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+evidence_source_path = pathlib.Path(sys.argv[3])
+event_source_path = pathlib.Path(sys.argv[4])
+rust_test_log_path = pathlib.Path(sys.argv[5])
+event_store_test_log_path = pathlib.Path(sys.argv[6])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+evidence_source_text = evidence_source_path.read_text(encoding="utf-8")
+event_source_text = event_source_path.read_text(encoding="utf-8")
+authority_kinds = [
+    "SpecBundle",
+    "Task",
+    "Run",
+    "ActionProposal",
+    "AcceptedAction",
+]
+stable_reasons = [
+    "evidence-trace-orphaned",
+    "evidence-trace-authority-kind-missing:ActionProposal",
+    "evidence-collection-event-link-missing",
+]
+coverage = {
+    "trace-version-defined": "agentflow-core-evidence-authority-trace.v1" in evidence_source_text
+    and "agentflow-core-evidence-authority-trace.v1" in doc_text,
+    "authority-kinds-documented": all(kind in doc_text for kind in authority_kinds),
+    "authority-kinds-implemented": all(kind in evidence_source_text for kind in authority_kinds),
+    "orphan-reason-documented": "evidence-trace-orphaned" in doc_text,
+    "orphan-reason-implemented": "evidence-trace-orphaned" in evidence_source_text,
+    "stable-negative-reasons-implemented": all(reason in evidence_source_text for reason in stable_reasons),
+    "collection-event-documented": "evidence.collected" in doc_text,
+    "collection-event-implemented": "evidence.collected" in event_source_text,
+    "event-payload-trace-fields-implemented": all(field in event_source_text for field in ["evidence_id", "receipt_id", "spec_refs", "task_refs", "run_refs", "action_refs", "receipt_ref"]),
+    "projection-not-authority": "Projection" in doc_text and "authority" in doc_text,
+    "ontology-rust-contract-tests-passed": rust_test_log_path.is_file(),
+    "event-store-rust-contract-tests-passed": event_store_test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-evidence-authority-trace-links-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-evidence-authority-trace.v1",
+    "architecturePath": "docs/architecture/063-core-evidence-authority-trace-links-v1.md",
+    "rustContractPath": "crates/ontology/src/evidence.rs",
+    "eventStoreContractPath": "crates/event-store/src/model.rs",
+    "rustTestLogPath": "runtime/core-evidence-authority-trace-links-rust-test.log",
+    "eventStoreRustTestLogPath": "runtime/core-evidence-authority-trace-links-event-store-rust-test.log",
+    "authorityKinds": authority_kinds,
+    "eventType": "evidence.collected",
+    "stableNegativeReasons": stable_reasons,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core evidence authority trace links coverage failed: {failed}")
+PY
+  record_stage "core-evidence-authority-trace-links" "passed" "$(basename "$CORE_EVIDENCE_AUTHORITY_TRACE_LINKS_PATH")"
+}
+
 run_core_file_backed_ontology_registry_gate() {
   record_stage "core-file-backed-ontology-registry" "started" "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH"
   local rust_test_log="$RUNTIME_DIR/core-file-backed-ontology-registry-rust-test.log"
@@ -8428,6 +8507,7 @@ PY
   run_core_evidence_pack_schema_gate
   run_core_evidence_source_type_registry_gate
   run_core_evidence_capture_receipts_gate
+  run_core_evidence_authority_trace_links_gate
   run_core_file_backed_ontology_registry_gate
   run_v104_release_certification_gate
   run_core_runtime_negative_fixtures_gate
