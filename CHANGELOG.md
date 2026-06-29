@@ -7,22 +7,35 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.0.6/README.md](docs/delivery/releases/v1.0.6/README.md)
-- [docs/delivery/releases/v1.0.6/AGENTFLOW_V1_0_6_CORE_EVIDENCE_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.6/AGENTFLOW_V1_0_6_CORE_EVIDENCE_KERNEL_TASKS_V1.md)
+- [docs/delivery/releases/v1.0.7/README.md](docs/delivery/releases/v1.0.7/README.md)
+- [docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md)
 
 下一版计划：
 
-- v1.0.7 Decision Kernel。
+- v1.0.8 Projection Kernel。
 
 ## Unreleased
 
-下一版保留给 Decision Kernel，不在本次 release 中认证。
+下一版保留给 Projection Kernel，不在本次 release 中认证。
 
-Planned v1.0.7 foundation:
+Planned v1.0.8 foundation:
 
-- add Release Provenance Tag Policy and Evidence Handoff as the Decision Kernel preflight;
-- require `runtime/v107-release-provenance-handoff.json` to name v1.0.6 Evidence Kernel handoff artifacts and expose tag verification policy;
-- keep unsigned tags warning-only-visible for v1.0.x, never silently ignored.
+- rebuild full Projection Kernel over stable Core facts;
+- keep Decision Projection read model read-only until Projection Kernel certification;
+- preserve Decision Kernel authority boundary while adding broader projection refresh / replay coverage.
+
+## v1.0.7 - 2026-06-29
+
+Core Decision Kernel baseline:
+
+- defined release provenance tag policy and v1.0.6 Evidence Kernel handoff;
+- added Core Decision Model, Decision Input Binding, Outcome Transition Semantics and Failure Reason / Remediation contracts;
+- connected Evidence-to-Decision Gate so missing / invalid / wrong evidence cannot become accepted-ready;
+- protected Completion Commit authority so projection, provider session, delivery context and audit sidecar cannot write completion authority;
+- defined Delivery Readiness and optional Audit Sidecar Trigger as a separate evaluation, not the default Done chain;
+- added Decision Projection Read Model with negative fixtures for missing evidence, fake evidence, wrong state, projection-as-authority and audit-chain pollution;
+- added release-gate artifacts through `runtime/core-decision-projection-read-model.json` and `runtime/v107-release-certification.json`;
+- advanced workspace and desktop version metadata to `1.0.7`.
 
 ## v1.0.6 - 2026-06-29
 

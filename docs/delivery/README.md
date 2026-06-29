@@ -21,15 +21,14 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.0.6/README.md](releases/v1.0.6/README.md) | 当前发布基线：Core Evidence Kernel |
-| [releases/v1.0.6/AGENTFLOW_V1_0_6_CORE_EVIDENCE_KERNEL_TASKS_V1.md](releases/v1.0.6/AGENTFLOW_V1_0_6_CORE_EVIDENCE_KERNEL_TASKS_V1.md) | v1.0.6 Core Evidence Kernel tasks |
+| [releases/v1.0.7/README.md](releases/v1.0.7/README.md) | 当前发布基线：Core Decision Kernel |
+| [releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md](releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md) | v1.0.7 Decision Kernel tasks |
 
 ## Next Release Planning
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.0.7/README.md](releases/v1.0.7/README.md) | 下一版计划：Core Decision Kernel |
-| [releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md](releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md) | v1.0.7 Decision Kernel tasks |
+| `v1.0.8` | 下一版计划：Projection Kernel |
 
 ## Historical Delivery
 
