@@ -37,6 +37,7 @@ v1.0.6 Evidence Kernel
 - [../../../architecture/069-release-provenance-tag-policy-v1.md](../../../architecture/069-release-provenance-tag-policy-v1.md)
 - [../../../architecture/070-core-decision-model-contract-v1.md](../../../architecture/070-core-decision-model-contract-v1.md)
 - [../../../architecture/071-core-decision-input-binding-v1.md](../../../architecture/071-core-decision-input-binding-v1.md)
+- [../../../architecture/072-core-decision-outcome-transition-semantics-v1.md](../../../architecture/072-core-decision-outcome-transition-semantics-v1.md)
 - [../v1.0.6/README.md](../v1.0.6/README.md)
 
 ## Non-goals

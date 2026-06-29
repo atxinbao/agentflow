@@ -101,7 +101,7 @@ accepted
 rejected
 deferred
 blocked
-cancelled
+needs-fix
 ```
 
 这些 outcome 是 Core 判断结果，不是 Software Dev 行业状态。
@@ -158,4 +158,3 @@ runtime/core-decision-model-contract-rust-test.log
 - Software Dev 词汇没有污染 Core Decision Model；
 - canonical Decision record fixture 能通过验证；
 - unknown outcome / forbidden term fixture 会失败。
-
