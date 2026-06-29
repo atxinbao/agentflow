@@ -153,6 +153,7 @@ CORE_ACTION_STATE_SEMANTICS_PATH="$RUNTIME_DIR/core-action-state-semantics.json"
 CORE_SKILL_REGISTRY_PATH="$RUNTIME_DIR/core-skill-registry.json"
 CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH="$RUNTIME_DIR/core-evidence-decision-reference-model.json"
 CORE_EVIDENCE_PACK_SCHEMA_PATH="$RUNTIME_DIR/core-evidence-pack-schema.json"
+CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_PATH="$RUNTIME_DIR/core-evidence-source-type-registry.json"
 CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
 V104_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v104-release-certification.json"
 CORE_RUNTIME_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/core-runtime-negative-fixtures.json"
@@ -6834,6 +6835,86 @@ PY
   record_stage "core-evidence-pack-schema" "passed" "$(basename "$CORE_EVIDENCE_PACK_SCHEMA_PATH")"
 }
 
+run_core_evidence_source_type_registry_gate() {
+  record_stage "core-evidence-source-type-registry" "started" "$CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-evidence-source-type-registry-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_evidence_source_type --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-evidence-source-type-registry" "agentflow-ontology Core Evidence Source Type Registry tests failed"
+  fi
+  python3 - "$CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_PATH" "$WORKSPACE/docs/architecture/061-core-evidence-source-type-registry-v1.md" "$WORKSPACE/crates/ontology/src/evidence.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+test_log_path = pathlib.Path(sys.argv[4])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+source_types = [
+    "artifact",
+    "log",
+    "screenshot",
+    "external-proof",
+    "command-output",
+    "diff",
+    "provenance",
+    "human-confirmation",
+]
+source_statuses = [
+    "collected",
+    "missing",
+    "invalid",
+    "deferred",
+    "superseded",
+]
+reference_examples = {
+    "changed-content-proof": "diff",
+    "local-command-proof": "command-output",
+    "ui-proof": "screenshot",
+    "merge-proof": "external-proof",
+}
+coverage = {
+    "registry-version-defined": "agentflow-core-evidence-source-type-registry.v1" in source_text
+    and "agentflow-core-evidence-source-type-registry.v1" in doc_text,
+    "source-types-documented": all(source_type in doc_text for source_type in source_types),
+    "source-types-implemented": all(source_type in source_text for source_type in source_types),
+    "source-statuses-documented": all(status in doc_text for status in source_statuses),
+    "source-statuses-implemented": all(status in source_text for status in source_statuses),
+    "unknown-source-type-stable-reason-documented": "source-type-unknown" in doc_text,
+    "unknown-source-type-stable-reason-implemented": "source-type-unknown" in source_text,
+    "reference-examples-documented": all(example in doc_text and target in doc_text for example, target in reference_examples.items()),
+    "reference-examples-implemented": all(example in source_text and target in source_text for example, target in reference_examples.items()),
+    "reference-examples-not-core-authority": "not Core authority" in doc_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-evidence-source-type-registry-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-evidence-source-type-registry.v1",
+    "architecturePath": "docs/architecture/061-core-evidence-source-type-registry-v1.md",
+    "rustContractPath": "crates/ontology/src/evidence.rs",
+    "rustTestLogPath": "runtime/core-evidence-source-type-registry-rust-test.log",
+    "sourceTypes": source_types,
+    "sourceStatuses": source_statuses,
+    "unknownSourceTypeReason": "source-type-unknown",
+    "referenceExamples": reference_examples,
+    "referenceMappingBoundary": "reference-app-only-not-core-authority",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core evidence source type registry coverage failed: {failed}")
+PY
+  record_stage "core-evidence-source-type-registry" "passed" "$(basename "$CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_PATH")"
+}
+
 run_core_file_backed_ontology_registry_gate() {
   record_stage "core-file-backed-ontology-registry" "started" "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH"
   local rust_test_log="$RUNTIME_DIR/core-file-backed-ontology-registry-rust-test.log"
@@ -8259,6 +8340,7 @@ PY
   run_core_skill_registry_gate
   run_core_evidence_decision_reference_model_gate
   run_core_evidence_pack_schema_gate
+  run_core_evidence_source_type_registry_gate
   run_core_file_backed_ontology_registry_gate
   run_v104_release_certification_gate
   run_core_runtime_negative_fixtures_gate
