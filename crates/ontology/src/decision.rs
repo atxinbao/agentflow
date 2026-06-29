@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+use crate::evidence::{
+    CoreEvidenceCompletenessEvaluation, CoreMissingEvidenceReport,
+    CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION,
+};
 use crate::semantics::CoreActionStateSemanticsContract;
 
 pub const CORE_DECISION_MODEL_CONTRACT_VERSION: &str = "agentflow-core-decision-model.v1";
@@ -10,6 +14,8 @@ pub const CORE_DECISION_OUTCOME_TRANSITION_CONTRACT_VERSION: &str =
     "agentflow-core-decision-outcome-transition.v1";
 pub const CORE_DECISION_FAILURE_REASON_CONTRACT_VERSION: &str =
     "agentflow-core-decision-failure-reason.v1";
+pub const CORE_EVIDENCE_TO_DECISION_GATE_CONTRACT_VERSION: &str =
+    "agentflow-core-evidence-to-decision-gate.v1";
 pub const CORE_EVIDENCE_DECISION_MODEL_VERSION: &str =
     "agentflow-core-evidence-decision-reference-model.v1";
 
@@ -217,6 +223,40 @@ pub struct CoreDecisionFailureReason {
     pub blocking: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceToDecisionGateContract {
+    pub version: String,
+    pub status: String,
+    pub authority: String,
+    pub consumes_evidence_kernel_versions: Vec<String>,
+    pub gate_rules: Vec<CoreEvidenceToDecisionGateRule>,
+    pub required_failure_reason_fields: Vec<String>,
+    pub forbidden_core_terms: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceToDecisionGateRule {
+    pub evidence_outcome: String,
+    pub decision_outcome: String,
+    pub reason_code: Option<String>,
+    pub remediation_route: Option<String>,
+    pub retry_eligible: bool,
+    pub blocking: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceToDecisionGateResult {
+    pub version: String,
+    pub evidence_outcome: String,
+    pub decision_outcome: String,
+    pub accepted_ready: bool,
+    pub evidence_refs: Vec<String>,
+    pub failure_reason: Option<CoreDecisionFailureReason>,
+}
+
 pub fn core_decision_model_contract() -> CoreDecisionModelContract {
     CoreDecisionModelContract {
         version: CORE_DECISION_MODEL_CONTRACT_VERSION.to_string(),
@@ -375,6 +415,76 @@ pub fn canonical_core_decision_failure_reason_fixture() -> CoreDecisionFailureRe
         retry_eligible: true,
         blocking: true,
     }
+}
+
+pub fn core_evidence_to_decision_gate_contract() -> CoreEvidenceToDecisionGateContract {
+    CoreEvidenceToDecisionGateContract {
+        version: CORE_EVIDENCE_TO_DECISION_GATE_CONTRACT_VERSION.to_string(),
+        status: "active".to_string(),
+        authority:
+            "Core Evidence-to-Decision Gate converts evidence completeness into decision outcomes."
+                .to_string(),
+        consumes_evidence_kernel_versions: vec![
+            CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION.to_string()
+        ],
+        gate_rules: vec![
+            evidence_to_decision_rule("complete", "accepted", None, None, false, false),
+            evidence_to_decision_rule(
+                "incomplete",
+                "deferred",
+                Some("evidence-missing"),
+                Some("collect-evidence"),
+                true,
+                true,
+            ),
+            evidence_to_decision_rule(
+                "deferred",
+                "deferred",
+                Some("evidence-deferred"),
+                Some("wait-for-authority"),
+                true,
+                true,
+            ),
+            evidence_to_decision_rule(
+                "invalid",
+                "rejected",
+                Some("evidence-invalid"),
+                Some("collect-evidence"),
+                true,
+                true,
+            ),
+        ],
+        required_failure_reason_fields: vec![
+            "reasonCode".to_string(),
+            "message".to_string(),
+            "authorityRefs".to_string(),
+            "missingEvidenceRefs".to_string(),
+            "remediationRoute".to_string(),
+            "retryEligible".to_string(),
+            "blocking".to_string(),
+        ],
+        forbidden_core_terms: core_decision_model_contract().forbidden_core_terms,
+    }
+}
+
+pub fn canonical_core_evidence_to_decision_gate_result_fixture() -> CoreEvidenceToDecisionGateResult
+{
+    let evaluation = CoreEvidenceCompletenessEvaluation {
+        version: CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION.to_string(),
+        policy_id: "policy:core-evidence-completeness".to_string(),
+        outcome: "complete".to_string(),
+        reasons: Vec::new(),
+        satisfied_groups: vec!["required-local-artifact".to_string()],
+        missing_groups: Vec::new(),
+        deferred_groups: Vec::new(),
+        invalid_evidence_ids: Vec::new(),
+    };
+
+    evaluate_core_evidence_to_decision_gate(
+        &core_evidence_to_decision_gate_contract(),
+        &evaluation,
+        &[],
+    )
 }
 
 pub fn core_decision_input_binding_contract() -> CoreDecisionInputBindingContract {
@@ -1063,6 +1173,336 @@ pub fn validate_core_decision_failure_reason(
     }
 }
 
+pub fn validate_core_evidence_to_decision_gate_contract(
+    contract: &CoreEvidenceToDecisionGateContract,
+    outcome_contract: &CoreDecisionOutcomeTransitionContract,
+    failure_contract: &CoreDecisionFailureReasonContract,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if contract.version != CORE_EVIDENCE_TO_DECISION_GATE_CONTRACT_VERSION {
+        errors.push(format!(
+            "evidence-to-decision gate version must be `{}`",
+            CORE_EVIDENCE_TO_DECISION_GATE_CONTRACT_VERSION
+        ));
+    }
+    if contract.status != "active" {
+        errors.push("evidence-to-decision gate status must be active".to_string());
+    }
+    if !contract
+        .consumes_evidence_kernel_versions
+        .iter()
+        .any(|version| version == CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION)
+    {
+        errors.push(format!(
+            "evidence-to-decision gate must consume `{}`",
+            CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION
+        ));
+    }
+
+    let evidence_outcomes: BTreeSet<_> = contract
+        .gate_rules
+        .iter()
+        .map(|rule| rule.evidence_outcome.as_str())
+        .collect();
+    for outcome in ["complete", "incomplete", "deferred", "invalid"] {
+        if !evidence_outcomes.contains(outcome) {
+            errors.push(format!(
+                "evidence-to-decision gate missing evidence outcome `{outcome}`"
+            ));
+        }
+    }
+
+    let decision_outcomes: BTreeSet<_> = outcome_contract
+        .outcomes
+        .iter()
+        .map(|outcome| outcome.outcome.as_str())
+        .collect();
+    let remediation_routes: BTreeSet<_> = failure_contract
+        .remediation_routes
+        .iter()
+        .map(|route| route.route.as_str())
+        .collect();
+    for rule in &contract.gate_rules {
+        if !decision_outcomes.contains(rule.decision_outcome.as_str()) {
+            errors.push(format!(
+                "evidence-to-decision rule `{}` references unknown decision outcome `{}`",
+                rule.evidence_outcome, rule.decision_outcome
+            ));
+        }
+        if rule.evidence_outcome == "complete" {
+            if rule.decision_outcome != "accepted" {
+                errors.push("complete evidence must map to accepted".to_string());
+            }
+            if rule.reason_code.is_some() || rule.remediation_route.is_some() || rule.blocking {
+                errors.push("complete evidence must not require failure remediation".to_string());
+            }
+        } else {
+            if rule.decision_outcome == "accepted" {
+                errors.push(format!(
+                    "non-complete evidence outcome `{}` must not map to accepted",
+                    rule.evidence_outcome
+                ));
+            }
+            if rule.reason_code.as_deref().unwrap_or_default().is_empty() {
+                errors.push(format!(
+                    "evidence-to-decision rule `{}` requires a reason code",
+                    rule.evidence_outcome
+                ));
+            }
+            let Some(route) = rule.remediation_route.as_deref() else {
+                errors.push(format!(
+                    "evidence-to-decision rule `{}` requires a remediation route",
+                    rule.evidence_outcome
+                ));
+                continue;
+            };
+            if !remediation_routes.contains(route) {
+                errors.push(format!(
+                    "evidence-to-decision rule `{}` references unknown remediation route `{route}`",
+                    rule.evidence_outcome
+                ));
+            }
+        }
+    }
+
+    for field in [
+        "reasonCode",
+        "message",
+        "authorityRefs",
+        "missingEvidenceRefs",
+        "remediationRoute",
+        "retryEligible",
+        "blocking",
+    ] {
+        if !contract
+            .required_failure_reason_fields
+            .iter()
+            .any(|required| required == field)
+        {
+            errors.push(format!(
+                "evidence-to-decision gate missing failure reason field `{field}`"
+            ));
+        }
+    }
+
+    validate_no_forbidden_terms(
+        "Core evidence-to-decision gate contract",
+        &contract.forbidden_core_terms,
+        core_evidence_to_decision_gate_contract_surface(contract),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+pub fn evaluate_core_evidence_to_decision_gate(
+    contract: &CoreEvidenceToDecisionGateContract,
+    evaluation: &CoreEvidenceCompletenessEvaluation,
+    missing_reports: &[CoreMissingEvidenceReport],
+) -> CoreEvidenceToDecisionGateResult {
+    let rule = contract
+        .gate_rules
+        .iter()
+        .find(|rule| rule.evidence_outcome == evaluation.outcome)
+        .cloned()
+        .unwrap_or_else(|| {
+            evidence_to_decision_rule(
+                "invalid",
+                "rejected",
+                Some("evidence-outcome-unknown"),
+                Some("collect-evidence"),
+                true,
+                true,
+            )
+        });
+    let mut reason_code = rule
+        .reason_code
+        .clone()
+        .unwrap_or_else(|| "evidence-complete".to_string());
+    let mut remediation_route = rule
+        .remediation_route
+        .clone()
+        .unwrap_or_else(|| "retry-decision".to_string());
+    let mut decision_outcome = rule.decision_outcome.clone();
+
+    if evaluation
+        .reasons
+        .iter()
+        .chain(
+            missing_reports
+                .iter()
+                .flat_map(|report| report.reasons.iter()),
+        )
+        .any(|reason| reason.contains("authority-mismatch") || reason.contains("wrong-subject"))
+    {
+        reason_code = "authority-mismatch".to_string();
+        remediation_route = "revise-subject".to_string();
+        decision_outcome = "rejected".to_string();
+    } else if evaluation
+        .reasons
+        .iter()
+        .chain(
+            missing_reports
+                .iter()
+                .flat_map(|report| report.reasons.iter()),
+        )
+        .any(|reason| reason.contains("fake") || reason.contains("invalid"))
+    {
+        reason_code = "evidence-invalid".to_string();
+        remediation_route = "collect-evidence".to_string();
+        decision_outcome = "rejected".to_string();
+    }
+
+    let mut evidence_refs = evaluation
+        .satisfied_groups
+        .iter()
+        .map(|group| format!("EvidenceRef:{group}"))
+        .collect::<Vec<_>>();
+    evidence_refs.extend(
+        missing_reports
+            .iter()
+            .filter_map(|report| report.evidence_ref.clone()),
+    );
+    if evidence_refs.is_empty() {
+        evidence_refs.push(format!("EvidenceEvaluation:{}", evaluation.policy_id));
+    }
+    evidence_refs.sort();
+    evidence_refs.dedup();
+
+    let accepted_ready = evaluation.outcome == "complete" && decision_outcome == "accepted";
+    let failure_reason = if accepted_ready {
+        None
+    } else {
+        let mut missing_refs = evaluation
+            .missing_groups
+            .iter()
+            .chain(evaluation.deferred_groups.iter())
+            .map(|group| format!("EvidenceRef:{group}"))
+            .collect::<Vec<_>>();
+        missing_refs.extend(
+            evaluation
+                .invalid_evidence_ids
+                .iter()
+                .map(|id| format!("EvidenceRef:{id}")),
+        );
+        missing_refs.extend(
+            missing_reports
+                .iter()
+                .map(|report| format!("EvidenceRef:{}", report.report_id)),
+        );
+        if missing_refs.is_empty() {
+            missing_refs.push(format!("EvidenceEvaluation:{}", evaluation.policy_id));
+        }
+        missing_refs.sort();
+        missing_refs.dedup();
+
+        Some(CoreDecisionFailureReason {
+            outcome: decision_outcome.clone(),
+            reason_code,
+            message: format!(
+                "evidence completeness outcome `{}` cannot be accepted-ready",
+                evaluation.outcome
+            ),
+            authority_refs: vec![format!("EvidencePolicyRef:{}", evaluation.policy_id)],
+            missing_evidence_refs: missing_refs,
+            remediation_route,
+            retry_eligible: rule.retry_eligible,
+            blocking: rule.blocking,
+        })
+    };
+
+    CoreEvidenceToDecisionGateResult {
+        version: CORE_EVIDENCE_TO_DECISION_GATE_CONTRACT_VERSION.to_string(),
+        evidence_outcome: evaluation.outcome.clone(),
+        decision_outcome,
+        accepted_ready,
+        evidence_refs,
+        failure_reason,
+    }
+}
+
+pub fn validate_core_evidence_to_decision_gate_result(
+    contract: &CoreEvidenceToDecisionGateContract,
+    failure_contract: &CoreDecisionFailureReasonContract,
+    result: &CoreEvidenceToDecisionGateResult,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if result.version != CORE_EVIDENCE_TO_DECISION_GATE_CONTRACT_VERSION {
+        errors.push(format!(
+            "evidence-to-decision result version must be `{}`",
+            CORE_EVIDENCE_TO_DECISION_GATE_CONTRACT_VERSION
+        ));
+    }
+    let Some(rule) = contract
+        .gate_rules
+        .iter()
+        .find(|rule| rule.evidence_outcome == result.evidence_outcome)
+    else {
+        errors.push(format!(
+            "evidence-to-decision result references unknown evidence outcome `{}`",
+            result.evidence_outcome
+        ));
+        return Err(errors);
+    };
+    if result.evidence_refs.is_empty() {
+        errors.push("evidence-to-decision result evidence refs are required".to_string());
+    }
+    if result.decision_outcome == "completed" {
+        errors.push("evidence-to-decision result must not write completed".to_string());
+    }
+    if result.evidence_outcome == "complete" {
+        if result.decision_outcome != "accepted" || !result.accepted_ready {
+            errors.push("complete evidence must produce accepted-ready decision".to_string());
+        }
+        if result.failure_reason.is_some() {
+            errors.push("accepted-ready decision must not contain failure reason".to_string());
+        }
+    } else {
+        if result.accepted_ready || result.decision_outcome == "accepted" {
+            errors.push("non-complete evidence must not produce accepted-ready".to_string());
+        }
+        let Some(failure_reason) = &result.failure_reason else {
+            errors.push("non-complete evidence requires structured failure reason".to_string());
+            return Err(errors);
+        };
+        if failure_reason.outcome != result.decision_outcome {
+            errors.push("failure reason outcome must match decision outcome".to_string());
+        }
+        if rule.decision_outcome != result.decision_outcome
+            && failure_reason.reason_code != "authority-mismatch"
+        {
+            errors.push(format!(
+                "evidence outcome `{}` must map to `{}` unless authority mismatch overrides it",
+                result.evidence_outcome, rule.decision_outcome
+            ));
+        }
+        if let Err(reason_errors) =
+            validate_core_decision_failure_reason(failure_contract, failure_reason)
+        {
+            errors.extend(reason_errors);
+        }
+    }
+
+    validate_no_forbidden_terms(
+        "Core evidence-to-decision gate result",
+        &contract.forbidden_core_terms,
+        core_evidence_to_decision_gate_result_surface(result),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 pub fn validate_core_decision_record(
     contract: &CoreDecisionModelContract,
     record: &CoreDecisionRecord,
@@ -1705,6 +2145,24 @@ fn remediation_route(
     }
 }
 
+fn evidence_to_decision_rule(
+    evidence_outcome: &str,
+    decision_outcome: &str,
+    reason_code: Option<&str>,
+    remediation_route: Option<&str>,
+    retry_eligible: bool,
+    blocking: bool,
+) -> CoreEvidenceToDecisionGateRule {
+    CoreEvidenceToDecisionGateRule {
+        evidence_outcome: evidence_outcome.to_string(),
+        decision_outcome: decision_outcome.to_string(),
+        reason_code: reason_code.map(str::to_string),
+        remediation_route: remediation_route.map(str::to_string),
+        retry_eligible,
+        blocking,
+    }
+}
+
 fn bound_authority_ref(
     ref_kind: &str,
     ref_id: &str,
@@ -1840,6 +2298,30 @@ fn core_decision_failure_reason_contract_surface(
     .collect()
 }
 
+fn core_evidence_to_decision_gate_contract_surface(
+    contract: &CoreEvidenceToDecisionGateContract,
+) -> Vec<String> {
+    [
+        contract.version.clone(),
+        contract.status.clone(),
+        contract.authority.clone(),
+        contract.consumes_evidence_kernel_versions.join(" "),
+        contract.required_failure_reason_fields.join(" "),
+    ]
+    .into_iter()
+    .chain(contract.gate_rules.iter().flat_map(|rule| {
+        [
+            rule.evidence_outcome.clone(),
+            rule.decision_outcome.clone(),
+            rule.reason_code.clone().unwrap_or_default(),
+            rule.remediation_route.clone().unwrap_or_default(),
+            rule.retry_eligible.to_string(),
+            rule.blocking.to_string(),
+        ]
+    }))
+    .collect()
+}
+
 fn core_decision_record_surface(record: &CoreDecisionRecord) -> Vec<String> {
     [
         record.version.clone(),
@@ -1884,6 +2366,26 @@ fn core_decision_failure_reason_surface(reason: &CoreDecisionFailureReason) -> V
         reason.retry_eligible.to_string(),
         reason.blocking.to_string(),
     ]
+}
+
+fn core_evidence_to_decision_gate_result_surface(
+    result: &CoreEvidenceToDecisionGateResult,
+) -> Vec<String> {
+    [
+        result.version.clone(),
+        result.evidence_outcome.clone(),
+        result.decision_outcome.clone(),
+        result.accepted_ready.to_string(),
+        result.evidence_refs.join(" "),
+    ]
+    .into_iter()
+    .chain(
+        result
+            .failure_reason
+            .iter()
+            .flat_map(|reason| core_decision_failure_reason_surface(reason).into_iter()),
+    )
+    .collect()
 }
 
 fn core_decision_transition_attempt_surface(
@@ -2373,6 +2875,108 @@ mod tests {
     }
 
     #[test]
+    fn core_evidence_to_decision_gate_contract_validates() {
+        let contract = core_evidence_to_decision_gate_contract();
+        let outcome_contract = core_decision_outcome_transition_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        validate_core_evidence_to_decision_gate_contract(
+            &contract,
+            &outcome_contract,
+            &failure_contract,
+        )
+        .unwrap();
+        assert!(contract
+            .consumes_evidence_kernel_versions
+            .iter()
+            .any(|version| version == CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION));
+        assert!(contract
+            .gate_rules
+            .iter()
+            .any(|rule| rule.evidence_outcome == "invalid"));
+    }
+
+    #[test]
+    fn core_evidence_to_decision_gate_accepts_complete_evidence() {
+        let gate_contract = core_evidence_to_decision_gate_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let result = canonical_core_evidence_to_decision_gate_result_fixture();
+        validate_core_evidence_to_decision_gate_result(&gate_contract, &failure_contract, &result)
+            .unwrap();
+        assert_eq!(result.decision_outcome, "accepted");
+        assert!(result.accepted_ready);
+        assert!(result.failure_reason.is_none());
+    }
+
+    #[test]
+    fn core_evidence_to_decision_gate_defers_missing_evidence() {
+        let gate_contract = core_evidence_to_decision_gate_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let evaluation = evidence_evaluation_fixture("incomplete");
+        let result = evaluate_core_evidence_to_decision_gate(&gate_contract, &evaluation, &[]);
+        validate_core_evidence_to_decision_gate_result(&gate_contract, &failure_contract, &result)
+            .unwrap();
+        let reason = result.failure_reason.unwrap();
+        assert_eq!(result.decision_outcome, "deferred");
+        assert_eq!(reason.reason_code, "evidence-missing");
+        assert_eq!(reason.remediation_route, "collect-evidence");
+    }
+
+    #[test]
+    fn core_evidence_to_decision_gate_rejects_invalid_evidence() {
+        let gate_contract = core_evidence_to_decision_gate_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let evaluation = evidence_evaluation_fixture("invalid");
+        let result = evaluate_core_evidence_to_decision_gate(&gate_contract, &evaluation, &[]);
+        validate_core_evidence_to_decision_gate_result(&gate_contract, &failure_contract, &result)
+            .unwrap();
+        let reason = result.failure_reason.unwrap();
+        assert_eq!(result.decision_outcome, "rejected");
+        assert_eq!(reason.reason_code, "evidence-invalid");
+        assert!(!reason.missing_evidence_refs.is_empty());
+    }
+
+    #[test]
+    fn core_evidence_to_decision_gate_rejects_authority_mismatch() {
+        let gate_contract = core_evidence_to_decision_gate_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let mut evaluation = evidence_evaluation_fixture("incomplete");
+        evaluation
+            .reasons
+            .push("authority-mismatch:subject".to_string());
+        let result = evaluate_core_evidence_to_decision_gate(&gate_contract, &evaluation, &[]);
+        validate_core_evidence_to_decision_gate_result(&gate_contract, &failure_contract, &result)
+            .unwrap();
+        let reason = result.failure_reason.unwrap();
+        assert_eq!(result.decision_outcome, "rejected");
+        assert_eq!(reason.reason_code, "authority-mismatch");
+        assert_eq!(reason.remediation_route, "revise-subject");
+    }
+
+    #[test]
+    fn core_evidence_to_decision_gate_rejects_noncomplete_accepted_ready() {
+        let gate_contract = core_evidence_to_decision_gate_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let result = CoreEvidenceToDecisionGateResult {
+            version: CORE_EVIDENCE_TO_DECISION_GATE_CONTRACT_VERSION.to_string(),
+            evidence_outcome: "incomplete".to_string(),
+            decision_outcome: "accepted".to_string(),
+            accepted_ready: true,
+            evidence_refs: vec!["EvidenceEvaluation:policy".to_string()],
+            failure_reason: None,
+        };
+
+        let errors = validate_core_evidence_to_decision_gate_result(
+            &gate_contract,
+            &failure_contract,
+            &result,
+        )
+        .unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("must not produce accepted-ready")));
+    }
+
+    #[test]
     fn core_decision_input_binding_contract_validates() {
         let contract = core_decision_input_binding_contract();
         validate_core_decision_input_binding_contract(&contract).unwrap();
@@ -2495,5 +3099,40 @@ mod tests {
         let errors =
             validate_core_evidence_decision_reference_model_contract(&contract).unwrap_err();
         assert!(errors.iter().any(|error| error.contains("test-log")));
+    }
+
+    fn evidence_evaluation_fixture(outcome: &str) -> CoreEvidenceCompletenessEvaluation {
+        match outcome {
+            "incomplete" => CoreEvidenceCompletenessEvaluation {
+                version: CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION.to_string(),
+                policy_id: "policy:core-evidence-completeness".to_string(),
+                outcome: "incomplete".to_string(),
+                reasons: vec!["evidence-required-missing:required-local-artifact".to_string()],
+                satisfied_groups: Vec::new(),
+                missing_groups: vec!["required-local-artifact".to_string()],
+                deferred_groups: Vec::new(),
+                invalid_evidence_ids: Vec::new(),
+            },
+            "invalid" => CoreEvidenceCompletenessEvaluation {
+                version: CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION.to_string(),
+                policy_id: "policy:core-evidence-completeness".to_string(),
+                outcome: "invalid".to_string(),
+                reasons: vec!["evidence-invalid:evidence-fake-proof".to_string()],
+                satisfied_groups: Vec::new(),
+                missing_groups: Vec::new(),
+                deferred_groups: Vec::new(),
+                invalid_evidence_ids: vec!["evidence-fake-proof".to_string()],
+            },
+            _ => CoreEvidenceCompletenessEvaluation {
+                version: CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION.to_string(),
+                policy_id: "policy:core-evidence-completeness".to_string(),
+                outcome: "complete".to_string(),
+                reasons: Vec::new(),
+                satisfied_groups: vec!["required-local-artifact".to_string()],
+                missing_groups: Vec::new(),
+                deferred_groups: Vec::new(),
+                invalid_evidence_ids: Vec::new(),
+            },
+        }
     }
 }

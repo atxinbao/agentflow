@@ -93,7 +93,7 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-005 Failure Reason and Remediation Contract
 
-状态：in-progress
+状态：done
 
 目标：
 
@@ -109,12 +109,16 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-006 Evidence-to-Decision Gate
 
-状态：planned
+状态：in-progress
 
 目标：
 
 - 把 Evidence Completeness 输出接入 Decision Gate；
 - missing / invalid evidence 不能被判断为 Done；
+- `complete` evidence 才能得到 `accepted-ready`；
+- missing evidence 生成 `deferred` + structured failure reason；
+- fake / invalid / wrong-subject evidence 生成 `rejected` + structured failure reason；
+- 对应 release-gate artifact：`runtime/core-evidence-to-decision-gate.json`；
 - 对应 GitHub issue：#698。
 
 依赖：#695、#696、#697。
