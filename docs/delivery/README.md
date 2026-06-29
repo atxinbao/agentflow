@@ -28,7 +28,8 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| `v1.0.7` | 下一版计划：Core Decision Kernel |
+| [releases/v1.0.7/README.md](releases/v1.0.7/README.md) | 下一版计划：Core Decision Kernel |
+| [releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md](releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md) | v1.0.7 Decision Kernel tasks |
 
 ## Historical Delivery
 

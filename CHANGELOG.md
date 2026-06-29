@@ -18,6 +18,12 @@
 
 下一版保留给 Decision Kernel，不在本次 release 中认证。
 
+Planned v1.0.7 foundation:
+
+- add Release Provenance Tag Policy and Evidence Handoff as the Decision Kernel preflight;
+- require `runtime/v107-release-provenance-handoff.json` to name v1.0.6 Evidence Kernel handoff artifacts and expose tag verification policy;
+- keep unsigned tags warning-only-visible for v1.0.x, never silently ignored.
+
 ## v1.0.6 - 2026-06-29
 
 Core Evidence Kernel baseline:

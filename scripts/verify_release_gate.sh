@@ -169,6 +169,7 @@ CORE_RUNTIME_ADMISSION_PATH="$RUNTIME_DIR/core-runtime-admission.json"
 CORE_RUNTIME_ARBITRATION_PATH="$RUNTIME_DIR/core-runtime-arbitration.json"
 V105_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v105-release-certification.json"
 V106_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v106-release-certification.json"
+V107_RELEASE_PROVENANCE_HANDOFF_PATH="$RUNTIME_DIR/v107-release-provenance-handoff.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -423,6 +424,7 @@ proof_chain = [
     {"stage": "core-runtime-arbitration", "label": "Core Runtime Arbitration"},
     {"stage": "v105-release-certification", "label": "v1.0.5 Release Certification"},
     {"stage": "v106-release-certification", "label": "v1.0.6 Release Certification"},
+    {"stage": "v107-release-provenance-handoff", "label": "v1.0.7 Release Provenance Handoff"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -490,6 +492,7 @@ runtime_artifacts = [
     {"path": "runtime/software-dev-pack-stable-baseline.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/software-dev-pack-stable-baseline.json").is_file()},
     {"path": "runtime/v100-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v100-release-certification.json").is_file()},
     {"path": "runtime/release-provenance.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-provenance.json").is_file()},
+    {"path": "runtime/v107-release-provenance-handoff.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json").is_file()},
     {"path": "runtime/clean-room-test-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/clean-room-test-proof.json").is_file()},
     {"path": "runtime/audit-sidecar-policy.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-sidecar-policy.json").is_file()},
     {"path": "runtime/provider-smoke-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/provider-smoke-proof.json").is_file()},
@@ -566,6 +569,7 @@ core_runtime_admission = load_json(pathlib.Path(summary_json_path.parent / "runt
 core_runtime_arbitration = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-runtime-arbitration.json")) or {}
 v105_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v105-release-certification.json")) or {}
 v106_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v106-release-certification.json")) or {}
+v107_release_provenance_handoff = load_json(pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json")) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
 deployment_evidence_wrong_commit = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json")) or {}
@@ -1433,6 +1437,9 @@ summary_payload = {
     "v106ReleaseCertificationPath": "runtime/v106-release-certification.json" if v106_release_certification else None,
     "v106ReleaseCertificationStatus": v106_release_certification.get("status") or "missing",
     "v106Coverage": v106_release_certification.get("coverage") or {},
+    "v107ReleaseProvenanceHandoffPath": "runtime/v107-release-provenance-handoff.json" if v107_release_provenance_handoff else None,
+    "v107ReleaseProvenanceHandoffStatus": v107_release_provenance_handoff.get("status") or "missing",
+    "v107ReleaseProvenanceHandoffCoverage": v107_release_provenance_handoff.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1691,6 +1698,9 @@ certification_payload = {
     "v106ReleaseCertificationPath": "runtime/v106-release-certification.json" if v106_release_certification else None,
     "v106ReleaseCertificationStatus": v106_release_certification.get("status") or "missing",
     "v106Coverage": v106_release_certification.get("coverage") or {},
+    "v107ReleaseProvenanceHandoffPath": "runtime/v107-release-provenance-handoff.json" if v107_release_provenance_handoff else None,
+    "v107ReleaseProvenanceHandoffStatus": v107_release_provenance_handoff.get("status") or "missing",
+    "v107ReleaseProvenanceHandoffCoverage": v107_release_provenance_handoff.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -5420,7 +5430,7 @@ run_release_provenance_gate() {
     unsigned_reason=""
   else
     tag_signature_status="unsigned"
-    unsigned_reason="tag signature verification is not required for v1.0.1 hardening"
+    unsigned_reason="v1.0.x policy treats unsigned tags as warning-only-visible"
   fi
   python3 - "$RELEASE_PROVENANCE_PATH" "$ARTIFACT_MANIFEST_PATH" "$SUMMARY_JSON_PATH" "$CERTIFICATION_JSON_PATH" "$STAGE_LOG_PATH" "$RELEASE_VERSION" "$RELEASE_TAG_NAME" "$annotated_tag_object_id" "$tag_object_kind" "$tag_commit_sha" "$SOURCE_COMMIT_SHA" "$RELEASE_URL" "$GATE_EVENT_NAME" "$GATE_REF_TYPE" "$GATE_RUN_ID" "$GATE_RUN_ATTEMPT" "$tag_signature_status" "$unsigned_reason" <<'PY'
 import hashlib, json, pathlib, sys, time
@@ -8559,6 +8569,177 @@ PY
   record_stage "v106-release-certification" "passed" "$(basename "$V106_RELEASE_CERTIFICATION_PATH")"
 }
 
+run_v107_release_provenance_handoff_gate() {
+  record_stage "v107-release-provenance-handoff" "started" "$V107_RELEASE_PROVENANCE_HANDOFF_PATH"
+  python3 - \
+    "$V107_RELEASE_PROVENANCE_HANDOFF_PATH" \
+    "$RELEASE_PROVENANCE_PATH" \
+    "$V106_RELEASE_CERTIFICATION_PATH" \
+    "$WORKSPACE/docs/architecture/069-release-provenance-tag-policy-v1.md" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md" \
+    "$RELEASE_VERSION" \
+    "$RELEASE_TAG_NAME" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+import time
+
+(
+    out_path,
+    release_provenance_path,
+    v106_certification_path,
+    policy_doc_path,
+    release_tasks_path,
+    release_version,
+    release_tag_name,
+) = sys.argv[1:]
+out_path = pathlib.Path(out_path)
+release_provenance_path = pathlib.Path(release_provenance_path)
+v106_certification_path = pathlib.Path(v106_certification_path)
+policy_doc_path = pathlib.Path(policy_doc_path)
+release_tasks_path = pathlib.Path(release_tasks_path)
+
+def load_json(path: pathlib.Path):
+    if not path.is_file():
+        raise SystemExit(f"missing required v107 handoff input: {path}")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+release_provenance = load_json(release_provenance_path)
+v106_certification = load_json(v106_certification_path)
+policy_doc = policy_doc_path.read_text(encoding="utf-8")
+release_tasks = release_tasks_path.read_text(encoding="utf-8")
+
+required_v106_artifacts = [
+    "core-evidence-pack-schema.json",
+    "core-evidence-source-type-registry.json",
+    "core-evidence-capture-receipts.json",
+    "core-evidence-authority-trace-links.json",
+    "core-evidence-completeness-policy.json",
+    "core-missing-evidence-handling.json",
+    "core-external-proof-provenance.json",
+    "software-dev-reference-evidence-mapping.json",
+    "evidence-projection-read-model.json",
+]
+certified_artifacts = v106_certification.get("certifiedArtifacts") or {}
+certified_hashes = v106_certification.get("certifiedArtifactHashes") or []
+certified_hash_paths = {item.get("path") for item in certified_hashes}
+event_evidence = v106_certification.get("eventEvidence") or {}
+
+tag_signature_status = release_provenance.get("tagSignatureStatus")
+unsigned_reason = release_provenance.get("unsignedReason")
+tag_object_kind = release_provenance.get("tagObjectKind")
+artifact_hashes = release_provenance.get("artifactHashes") or []
+blocking_failures = [
+    "tag-commit-mismatch",
+    "missing-tag-commit-in-release-context",
+    "literal-revspec-leaked",
+    "release-url-not-bound-to-tag",
+    "missing-artifact-digest",
+    "missing-v106-certified-artifact",
+]
+warning_statuses = [
+    "tag-signature-unsigned",
+    "tag-object-kind-lightweight",
+]
+tag_policy = {
+    "version": "agentflow-release-provenance-tag-policy.v1",
+    "allowedTagObjectKinds": ["tag", "commit", "pending"],
+    "signedAnnotatedTagBehavior": "passed",
+    "unsignedAnnotatedTagBehavior": "warning-only-visible",
+    "lightweightTagBehavior": "warning-only-visible",
+    "silentUnsignedAllowed": False,
+    "blockingFailures": blocking_failures,
+    "warningStatuses": warning_statuses,
+}
+
+coverage = {
+    "policy-doc-exists": policy_doc_path.is_file(),
+    "policy-doc-defines-warning-only-unsigned": "warning-only-visible" in policy_doc
+    and "不能静默忽略" in policy_doc,
+    "policy-doc-defines-blocking-failures": all(item in policy_doc for item in [
+        "tag commit mismatch",
+        "missing tag commit",
+        "literal revspec",
+        "release URL not bound to tag",
+    ]),
+    "release-tasks-bind-issue-693": "#693" in release_tasks
+    and "V107-001 Release Provenance Tag Policy" in release_tasks,
+    "release-provenance-structural-tag-status": bool(tag_signature_status)
+    and bool(tag_object_kind)
+    and "tagCommitSha" in release_provenance
+    and "sourceCommitSha" in release_provenance,
+    "unsigned-tag-visible-if-present": tag_signature_status != "unsigned"
+    or bool(unsigned_reason),
+    "artifact-manifest-digest-present": bool(release_provenance.get("artifactManifestSha256")),
+    "release-provenance-artifact-hashes-present": bool(artifact_hashes)
+    and all(item.get("sha256") and item.get("bytes", 0) > 0 for item in artifact_hashes),
+    "v106-release-certification-passed": v106_certification.get("status") == "passed",
+    "v106-release-version-bound": v106_certification.get("releaseVersion") == "v1.0.6",
+    "v106-event-evidence-bound": bool(event_evidence.get("releaseTagName"))
+    and bool(event_evidence.get("sourceCommitSha")),
+    "v106-handoff-artifacts-named": all(name in certified_artifacts for name in required_v106_artifacts),
+    "v106-handoff-artifacts-passed": all(
+        certified_artifacts.get(name) == "passed" for name in required_v106_artifacts
+    ),
+    "v106-certified-digests-present": all(
+        f"runtime/{name}" in certified_hash_paths for name in required_v106_artifacts
+    )
+    and all(item.get("sha256") and item.get("bytes", 0) > 0 for item in certified_hashes),
+    "no-decision-outcome-semantics": "不定义 Decision outcome" in policy_doc
+    and "不启动 Decision outcome" in release_tasks,
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-v107-release-provenance-handoff.v1",
+    "status": "passed" if not failed else "failed",
+    "targetVersion": "v1.0.7",
+    "currentReleaseGateVersion": release_version,
+    "currentReleaseTagName": release_tag_name,
+    "sourceEvidenceKernelVersion": "v1.0.6",
+    "policyPath": "docs/architecture/069-release-provenance-tag-policy-v1.md",
+    "releaseTasksPath": "docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md",
+    "tagPolicy": tag_policy,
+    "observedReleaseProvenance": {
+        "status": release_provenance.get("status"),
+        "tagName": release_provenance.get("tagName"),
+        "tagObjectKind": tag_object_kind,
+        "annotatedTagObjectId": release_provenance.get("annotatedTagObjectId"),
+        "tagCommitSha": release_provenance.get("tagCommitSha"),
+        "sourceCommitSha": release_provenance.get("sourceCommitSha"),
+        "tagCommitMatchesSource": release_provenance.get("tagCommitMatchesSource"),
+        "tagSignatureStatus": tag_signature_status,
+        "unsignedReason": unsigned_reason,
+        "artifactManifestSha256": release_provenance.get("artifactManifestSha256"),
+        "gateRunIds": release_provenance.get("gateRunIds") or [],
+    },
+    "evidenceKernelHandoff": {
+        "certificationArtifact": "runtime/v106-release-certification.json",
+        "certificationStatus": v106_certification.get("status"),
+        "requiredArtifacts": [
+            {
+                "id": name,
+                "runtimePath": f"runtime/{name}",
+                "status": certified_artifacts.get(name),
+                "digestPresent": f"runtime/{name}" in certified_hash_paths,
+            }
+            for name in required_v106_artifacts
+        ],
+        "certifiedArtifactHashes": certified_hashes,
+        "eventEvidence": event_evidence,
+    },
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out = pathlib.Path(out_path)
+out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"v107 release provenance handoff failed: {failed}")
+PY
+  record_stage "v107-release-provenance-handoff" "passed" "$(basename "$V107_RELEASE_PROVENANCE_HANDOFF_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -9132,6 +9313,7 @@ PY
   run_core_runtime_arbitration_gate
   run_v105_release_certification_gate
   run_v106_release_certification_gate
+  run_v107_release_provenance_handoff_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
