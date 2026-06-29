@@ -16,6 +16,8 @@ pub const CORE_DECISION_FAILURE_REASON_CONTRACT_VERSION: &str =
     "agentflow-core-decision-failure-reason.v1";
 pub const CORE_EVIDENCE_TO_DECISION_GATE_CONTRACT_VERSION: &str =
     "agentflow-core-evidence-to-decision-gate.v1";
+pub const CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION: &str =
+    "agentflow-core-completion-commit-authority.v1";
 pub const CORE_EVIDENCE_DECISION_MODEL_VERSION: &str =
     "agentflow-core-evidence-decision-reference-model.v1";
 
@@ -257,6 +259,50 @@ pub struct CoreEvidenceToDecisionGateResult {
     pub failure_reason: Option<CoreDecisionFailureReason>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreCompletionCommitAuthorityContract {
+    pub version: String,
+    pub status: String,
+    pub authority: String,
+    pub required_prior_outcome: String,
+    pub completion_event_type: String,
+    pub allowed_terminal_state: String,
+    pub required_authority_refs: Vec<String>,
+    pub allowed_writer_kinds: Vec<String>,
+    pub forbidden_writer_kinds: Vec<String>,
+    pub forbidden_write_kinds: Vec<String>,
+    pub event_store_authority: String,
+    pub projection_policy: String,
+    pub forbidden_core_terms: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreCompletionCommitAttempt {
+    pub version: String,
+    pub subject_ref: String,
+    pub prior_decision_ref: String,
+    pub prior_decision_outcome: String,
+    pub requested_event_type: String,
+    pub requested_state: String,
+    pub writer_kind: String,
+    pub write_refs: Vec<CoreDecisionWriteRef>,
+    pub evidence_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreCompletionCommitAuthorityResult {
+    pub version: String,
+    pub allowed: bool,
+    pub event_type: Option<String>,
+    pub resulting_state: Option<String>,
+    pub authority_event_ref: Option<String>,
+    pub projection_refresh_allowed: bool,
+    pub failure_reason: Option<CoreDecisionFailureReason>,
+}
+
 pub fn core_decision_model_contract() -> CoreDecisionModelContract {
     CoreDecisionModelContract {
         version: CORE_DECISION_MODEL_CONTRACT_VERSION.to_string(),
@@ -485,6 +531,60 @@ pub fn canonical_core_evidence_to_decision_gate_result_fixture() -> CoreEvidence
         &evaluation,
         &[],
     )
+}
+
+pub fn core_completion_commit_authority_contract() -> CoreCompletionCommitAuthorityContract {
+    CoreCompletionCommitAuthorityContract {
+        version: CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION.to_string(),
+        status: "active".to_string(),
+        authority: "Completion Commit appends the terminal authority event only after an accepted Decision."
+            .to_string(),
+        required_prior_outcome: "accepted".to_string(),
+        completion_event_type: "subject.completion.committed".to_string(),
+        allowed_terminal_state: "completed".to_string(),
+        required_authority_refs: vec![
+            "DecisionRef".to_string(),
+            "EvidenceRef".to_string(),
+            "RuntimeStateRef".to_string(),
+        ],
+        allowed_writer_kinds: vec!["event-store".to_string(), "runtime-kernel".to_string()],
+        forbidden_writer_kinds: vec![
+            "projection".to_string(),
+            "provider-session".to_string(),
+            "delivery-context".to_string(),
+            "audit-sidecar".to_string(),
+        ],
+        forbidden_write_kinds: vec![
+            "projection-read-model".to_string(),
+            "provider-session-record".to_string(),
+            "delivery-record".to_string(),
+            "audit-sidecar-record".to_string(),
+        ],
+        event_store_authority: "Event Store is the append-only authority for completion facts."
+            .to_string(),
+        projection_policy:
+            "Projection may refresh after the completion event, but projection must never commit terminal authority."
+                .to_string(),
+        forbidden_core_terms: core_decision_model_contract().forbidden_core_terms,
+    }
+}
+
+pub fn canonical_core_completion_commit_attempt_fixture() -> CoreCompletionCommitAttempt {
+    CoreCompletionCommitAttempt {
+        version: CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION.to_string(),
+        subject_ref: "subject:core-completion".to_string(),
+        prior_decision_ref: "DecisionRef:decision-core-accepted-001".to_string(),
+        prior_decision_outcome: "accepted".to_string(),
+        requested_event_type: "subject.completion.committed".to_string(),
+        requested_state: "completed".to_string(),
+        writer_kind: "event-store".to_string(),
+        write_refs: vec![CoreDecisionWriteRef {
+            write_kind: "completion-event".to_string(),
+            target_ref: "EventRef:completion-commit-001".to_string(),
+            authority_boundary: "event-store".to_string(),
+        }],
+        evidence_refs: vec!["EvidenceRef:accepted-proof-pack".to_string()],
+    }
 }
 
 pub fn core_decision_input_binding_contract() -> CoreDecisionInputBindingContract {
@@ -1503,6 +1603,217 @@ pub fn validate_core_evidence_to_decision_gate_result(
     }
 }
 
+pub fn validate_core_completion_commit_authority_contract(
+    contract: &CoreCompletionCommitAuthorityContract,
+    outcome_contract: &CoreDecisionOutcomeTransitionContract,
+    failure_contract: &CoreDecisionFailureReasonContract,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if contract.version != CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION {
+        errors.push(format!(
+            "completion commit authority version must be `{}`",
+            CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION
+        ));
+    }
+    if contract.status != "active" {
+        errors.push("completion commit authority status must be active".to_string());
+    }
+    if contract.required_prior_outcome != "accepted" {
+        errors.push("completion commit requires accepted prior decision".to_string());
+    }
+    if !outcome_contract
+        .outcomes
+        .iter()
+        .any(|outcome| outcome.outcome == contract.required_prior_outcome)
+    {
+        errors.push(format!(
+            "completion commit prior outcome `{}` is not a decision outcome",
+            contract.required_prior_outcome
+        ));
+    }
+    if contract.completion_event_type != "subject.completion.committed" {
+        errors.push(
+            "completion commit authority must append subject.completion.committed".to_string(),
+        );
+    }
+    if contract.allowed_terminal_state != "completed" {
+        errors.push("completion commit terminal state must be completed".to_string());
+    }
+
+    for required_ref in ["DecisionRef", "EvidenceRef", "RuntimeStateRef"] {
+        if !contract
+            .required_authority_refs
+            .iter()
+            .any(|item| item == required_ref)
+        {
+            errors.push(format!(
+                "completion commit authority missing required ref `{required_ref}`"
+            ));
+        }
+    }
+    if !contract
+        .allowed_writer_kinds
+        .iter()
+        .any(|writer| writer == "event-store")
+    {
+        errors.push("completion commit authority must allow event-store writer".to_string());
+    }
+    for forbidden_writer in [
+        "projection",
+        "provider-session",
+        "delivery-context",
+        "audit-sidecar",
+    ] {
+        if !contract
+            .forbidden_writer_kinds
+            .iter()
+            .any(|writer| writer == forbidden_writer)
+        {
+            errors.push(format!(
+                "completion commit authority missing forbidden writer `{forbidden_writer}`"
+            ));
+        }
+    }
+    for forbidden_write in [
+        "projection-read-model",
+        "provider-session-record",
+        "delivery-record",
+        "audit-sidecar-record",
+    ] {
+        if !contract
+            .forbidden_write_kinds
+            .iter()
+            .any(|write| write == forbidden_write)
+        {
+            errors.push(format!(
+                "completion commit authority missing forbidden write `{forbidden_write}`"
+            ));
+        }
+    }
+    if !failure_contract
+        .applies_to_outcomes
+        .iter()
+        .any(|outcome| outcome == "blocked")
+    {
+        errors.push(
+            "completion commit authority requires blocked failure reason support".to_string(),
+        );
+    }
+    if !contract.event_store_authority.contains("Event Store") {
+        errors.push("completion commit authority must name Event Store authority".to_string());
+    }
+    if !contract.projection_policy.contains("must never commit") {
+        errors.push("completion commit authority must keep projection read-only".to_string());
+    }
+
+    validate_no_forbidden_terms(
+        "Core completion commit authority contract",
+        &contract.forbidden_core_terms,
+        core_completion_commit_authority_contract_surface(contract),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+pub fn evaluate_core_completion_commit_authority(
+    contract: &CoreCompletionCommitAuthorityContract,
+    attempt: &CoreCompletionCommitAttempt,
+) -> CoreCompletionCommitAuthorityResult {
+    let failure_reason = completion_commit_failure_reason(contract, attempt);
+    if let Some(failure_reason) = failure_reason {
+        return CoreCompletionCommitAuthorityResult {
+            version: CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION.to_string(),
+            allowed: false,
+            event_type: None,
+            resulting_state: None,
+            authority_event_ref: None,
+            projection_refresh_allowed: false,
+            failure_reason: Some(failure_reason),
+        };
+    }
+
+    CoreCompletionCommitAuthorityResult {
+        version: CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION.to_string(),
+        allowed: true,
+        event_type: Some(contract.completion_event_type.clone()),
+        resulting_state: Some(contract.allowed_terminal_state.clone()),
+        authority_event_ref: Some(format!("EventRef:completion:{}", attempt.subject_ref)),
+        projection_refresh_allowed: true,
+        failure_reason: None,
+    }
+}
+
+pub fn validate_core_completion_commit_authority_result(
+    contract: &CoreCompletionCommitAuthorityContract,
+    failure_contract: &CoreDecisionFailureReasonContract,
+    result: &CoreCompletionCommitAuthorityResult,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if result.version != CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION {
+        errors.push(format!(
+            "completion commit result version must be `{}`",
+            CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION
+        ));
+    }
+    if result.allowed {
+        if result.event_type.as_deref() != Some(contract.completion_event_type.as_str()) {
+            errors.push("allowed completion commit must name completion event".to_string());
+        }
+        if result.resulting_state.as_deref() != Some(contract.allowed_terminal_state.as_str()) {
+            errors.push("allowed completion commit must name completed state".to_string());
+        }
+        if result.authority_event_ref.is_none() {
+            errors.push("allowed completion commit requires authority event ref".to_string());
+        }
+        if !result.projection_refresh_allowed {
+            errors.push("allowed completion commit may refresh projection after event".to_string());
+        }
+        if result.failure_reason.is_some() {
+            errors.push("allowed completion commit must not include failure reason".to_string());
+        }
+    } else {
+        if result.event_type.is_some()
+            || result.resulting_state.is_some()
+            || result.authority_event_ref.is_some()
+            || result.projection_refresh_allowed
+        {
+            errors.push("denied completion commit must not expose committed authority".to_string());
+        }
+        let Some(failure_reason) = &result.failure_reason else {
+            errors.push("denied completion commit requires failure reason".to_string());
+            return Err(errors);
+        };
+        if failure_reason.outcome == "accepted" {
+            errors.push("completion commit failure reason must not be accepted".to_string());
+        }
+        if let Err(reason_errors) =
+            validate_core_decision_failure_reason(failure_contract, failure_reason)
+        {
+            errors.extend(reason_errors);
+        }
+    }
+
+    validate_no_forbidden_terms(
+        "Core completion commit authority result",
+        &contract.forbidden_core_terms,
+        core_completion_commit_authority_result_surface(result),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 pub fn validate_core_decision_record(
     contract: &CoreDecisionModelContract,
     record: &CoreDecisionRecord,
@@ -2322,6 +2633,27 @@ fn core_evidence_to_decision_gate_contract_surface(
     .collect()
 }
 
+fn core_completion_commit_authority_contract_surface(
+    contract: &CoreCompletionCommitAuthorityContract,
+) -> Vec<String> {
+    [
+        contract.version.clone(),
+        contract.status.clone(),
+        contract.authority.clone(),
+        contract.required_prior_outcome.clone(),
+        contract.completion_event_type.clone(),
+        contract.allowed_terminal_state.clone(),
+        contract.required_authority_refs.join(" "),
+        contract.allowed_writer_kinds.join(" "),
+        contract.forbidden_writer_kinds.join(" "),
+        contract.forbidden_write_kinds.join(" "),
+        contract.event_store_authority.clone(),
+        contract.projection_policy.clone(),
+    ]
+    .into_iter()
+    .collect()
+}
+
 fn core_decision_record_surface(record: &CoreDecisionRecord) -> Vec<String> {
     [
         record.version.clone(),
@@ -2388,6 +2720,27 @@ fn core_evidence_to_decision_gate_result_surface(
     .collect()
 }
 
+fn core_completion_commit_authority_result_surface(
+    result: &CoreCompletionCommitAuthorityResult,
+) -> Vec<String> {
+    [
+        result.version.clone(),
+        result.allowed.to_string(),
+        result.event_type.clone().unwrap_or_default(),
+        result.resulting_state.clone().unwrap_or_default(),
+        result.authority_event_ref.clone().unwrap_or_default(),
+        result.projection_refresh_allowed.to_string(),
+    ]
+    .into_iter()
+    .chain(
+        result
+            .failure_reason
+            .iter()
+            .flat_map(|reason| core_decision_failure_reason_surface(reason).into_iter()),
+    )
+    .collect()
+}
+
 fn core_decision_transition_attempt_surface(
     attempt: &CoreDecisionTransitionAttempt,
 ) -> Vec<String> {
@@ -2406,6 +2759,160 @@ fn core_decision_transition_attempt_surface(
         ]
     }))
     .collect()
+}
+
+fn completion_commit_failure_reason(
+    contract: &CoreCompletionCommitAuthorityContract,
+    attempt: &CoreCompletionCommitAttempt,
+) -> Option<CoreDecisionFailureReason> {
+    if attempt.version != CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION {
+        return Some(completion_commit_reason(
+            "blocked",
+            "completion-contract-version-mismatch",
+            "completion attempt uses the wrong contract version",
+            attempt,
+            "retry-decision",
+            true,
+            true,
+        ));
+    }
+    if attempt.prior_decision_ref.trim().is_empty() {
+        return Some(completion_commit_reason(
+            "blocked",
+            "completion-decision-ref-missing",
+            "completion attempt requires a prior DecisionRef",
+            attempt,
+            "wait-for-authority",
+            true,
+            true,
+        ));
+    }
+    if attempt.prior_decision_outcome != contract.required_prior_outcome {
+        return Some(completion_commit_reason(
+            "blocked",
+            "completion-decision-not-accepted",
+            "completion commit requires an accepted prior decision",
+            attempt,
+            "retry-decision",
+            true,
+            true,
+        ));
+    }
+    if attempt.requested_event_type != contract.completion_event_type {
+        return Some(completion_commit_reason(
+            "blocked",
+            "completion-event-type-invalid",
+            "completion attempt requested an invalid event type",
+            attempt,
+            "retry-decision",
+            true,
+            true,
+        ));
+    }
+    if attempt.requested_state != contract.allowed_terminal_state {
+        return Some(completion_commit_reason(
+            "blocked",
+            "completion-state-invalid",
+            "completion attempt requested an invalid terminal state",
+            attempt,
+            "retry-decision",
+            true,
+            true,
+        ));
+    }
+    if !contract
+        .allowed_writer_kinds
+        .iter()
+        .any(|writer| writer == &attempt.writer_kind)
+    {
+        return Some(completion_commit_reason(
+            "blocked",
+            "completion-writer-forbidden",
+            "completion attempt writer is not an authority writer",
+            attempt,
+            "revise-subject",
+            true,
+            true,
+        ));
+    }
+    if contract
+        .forbidden_writer_kinds
+        .iter()
+        .any(|writer| writer == &attempt.writer_kind)
+    {
+        return Some(completion_commit_reason(
+            "blocked",
+            "completion-writer-forbidden",
+            "completion attempt writer is forbidden",
+            attempt,
+            "revise-subject",
+            true,
+            true,
+        ));
+    }
+    if attempt.write_refs.iter().any(|write| {
+        contract
+            .forbidden_write_kinds
+            .iter()
+            .any(|forbidden| forbidden == &write.write_kind)
+    }) {
+        return Some(completion_commit_reason(
+            "blocked",
+            "completion-write-kind-forbidden",
+            "completion attempt includes a forbidden write kind",
+            attempt,
+            "revise-subject",
+            true,
+            true,
+        ));
+    }
+    if attempt.evidence_refs.is_empty() {
+        return Some(completion_commit_reason(
+            "blocked",
+            "completion-evidence-ref-missing",
+            "completion attempt requires evidence references",
+            attempt,
+            "collect-evidence",
+            true,
+            true,
+        ));
+    }
+    None
+}
+
+fn completion_commit_reason(
+    outcome: &str,
+    reason_code: &str,
+    message: &str,
+    attempt: &CoreCompletionCommitAttempt,
+    remediation_route: &str,
+    retry_eligible: bool,
+    blocking: bool,
+) -> CoreDecisionFailureReason {
+    let mut authority_refs = vec![attempt.subject_ref.clone()];
+    if !attempt.prior_decision_ref.trim().is_empty() {
+        authority_refs.push(attempt.prior_decision_ref.clone());
+    }
+    authority_refs.sort();
+    authority_refs.dedup();
+
+    let mut missing_evidence_refs = attempt.evidence_refs.clone();
+    if missing_evidence_refs.is_empty() {
+        missing_evidence_refs.push(format!("DecisionRef:{}", attempt.prior_decision_outcome));
+    }
+    missing_evidence_refs.sort();
+    missing_evidence_refs.dedup();
+
+    CoreDecisionFailureReason {
+        outcome: outcome.to_string(),
+        reason_code: reason_code.to_string(),
+        message: message.to_string(),
+        authority_refs,
+        missing_evidence_refs,
+        remediation_route: remediation_route.to_string(),
+        retry_eligible,
+        blocking,
+    }
 }
 
 fn core_decision_input_binding_surface(binding: &CoreDecisionInputBinding) -> Vec<String> {
@@ -2974,6 +3481,149 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.contains("must not produce accepted-ready")));
+    }
+
+    #[test]
+    fn core_completion_commit_authority_contract_validates() {
+        let contract = core_completion_commit_authority_contract();
+        let outcome_contract = core_decision_outcome_transition_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        validate_core_completion_commit_authority_contract(
+            &contract,
+            &outcome_contract,
+            &failure_contract,
+        )
+        .unwrap();
+        assert_eq!(
+            contract.version,
+            CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION
+        );
+        assert_eq!(contract.required_prior_outcome, "accepted");
+        assert!(contract
+            .forbidden_writer_kinds
+            .iter()
+            .any(|writer| writer == "projection"));
+    }
+
+    #[test]
+    fn core_completion_commit_authority_allows_accepted_decision() {
+        let contract = core_completion_commit_authority_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let attempt = canonical_core_completion_commit_attempt_fixture();
+        let result = evaluate_core_completion_commit_authority(&contract, &attempt);
+
+        validate_core_completion_commit_authority_result(&contract, &failure_contract, &result)
+            .unwrap();
+        assert!(result.allowed);
+        assert_eq!(
+            result.event_type.as_deref(),
+            Some("subject.completion.committed")
+        );
+        assert_eq!(result.resulting_state.as_deref(), Some("completed"));
+        assert!(result.projection_refresh_allowed);
+        assert!(result.failure_reason.is_none());
+    }
+
+    #[test]
+    fn core_completion_commit_authority_rejects_rejected_decision() {
+        let contract = core_completion_commit_authority_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let mut attempt = canonical_core_completion_commit_attempt_fixture();
+        attempt.prior_decision_outcome = "rejected".to_string();
+        let result = evaluate_core_completion_commit_authority(&contract, &attempt);
+
+        validate_core_completion_commit_authority_result(&contract, &failure_contract, &result)
+            .unwrap();
+        let reason = result.failure_reason.unwrap();
+        assert!(!result.allowed);
+        assert_eq!(reason.reason_code, "completion-decision-not-accepted");
+        assert_eq!(reason.remediation_route, "retry-decision");
+    }
+
+    #[test]
+    fn core_completion_commit_authority_rejects_deferred_decision() {
+        let contract = core_completion_commit_authority_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let mut attempt = canonical_core_completion_commit_attempt_fixture();
+        attempt.prior_decision_outcome = "deferred".to_string();
+        let result = evaluate_core_completion_commit_authority(&contract, &attempt);
+
+        validate_core_completion_commit_authority_result(&contract, &failure_contract, &result)
+            .unwrap();
+        assert!(!result.allowed);
+        assert_eq!(
+            result.failure_reason.unwrap().reason_code,
+            "completion-decision-not-accepted"
+        );
+    }
+
+    #[test]
+    fn core_completion_commit_authority_rejects_blocked_decision() {
+        let contract = core_completion_commit_authority_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let mut attempt = canonical_core_completion_commit_attempt_fixture();
+        attempt.prior_decision_outcome = "blocked".to_string();
+        let result = evaluate_core_completion_commit_authority(&contract, &attempt);
+
+        validate_core_completion_commit_authority_result(&contract, &failure_contract, &result)
+            .unwrap();
+        assert!(!result.allowed);
+        assert!(result.event_type.is_none());
+        assert!(result.authority_event_ref.is_none());
+    }
+
+    #[test]
+    fn core_completion_commit_authority_rejects_projection_writer() {
+        let contract = core_completion_commit_authority_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let mut attempt = canonical_core_completion_commit_attempt_fixture();
+        attempt.writer_kind = "projection".to_string();
+        let result = evaluate_core_completion_commit_authority(&contract, &attempt);
+
+        validate_core_completion_commit_authority_result(&contract, &failure_contract, &result)
+            .unwrap();
+        let reason = result.failure_reason.unwrap();
+        assert!(!result.allowed);
+        assert_eq!(reason.reason_code, "completion-writer-forbidden");
+        assert_eq!(reason.remediation_route, "revise-subject");
+    }
+
+    #[test]
+    fn core_completion_commit_authority_rejects_projection_write_attempt() {
+        let contract = core_completion_commit_authority_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let mut attempt = canonical_core_completion_commit_attempt_fixture();
+        attempt.write_refs.push(CoreDecisionWriteRef {
+            write_kind: "projection-read-model".to_string(),
+            target_ref: "ProjectionRef:completion-summary".to_string(),
+            authority_boundary: "projection".to_string(),
+        });
+        let result = evaluate_core_completion_commit_authority(&contract, &attempt);
+
+        validate_core_completion_commit_authority_result(&contract, &failure_contract, &result)
+            .unwrap();
+        assert!(!result.allowed);
+        assert_eq!(
+            result.failure_reason.unwrap().reason_code,
+            "completion-write-kind-forbidden"
+        );
+    }
+
+    #[test]
+    fn core_completion_commit_authority_requires_decision_ref() {
+        let contract = core_completion_commit_authority_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let mut attempt = canonical_core_completion_commit_attempt_fixture();
+        attempt.prior_decision_ref.clear();
+        let result = evaluate_core_completion_commit_authority(&contract, &attempt);
+
+        validate_core_completion_commit_authority_result(&contract, &failure_contract, &result)
+            .unwrap();
+        assert!(!result.allowed);
+        assert_eq!(
+            result.failure_reason.unwrap().reason_code,
+            "completion-decision-ref-missing"
+        );
     }
 
     #[test]

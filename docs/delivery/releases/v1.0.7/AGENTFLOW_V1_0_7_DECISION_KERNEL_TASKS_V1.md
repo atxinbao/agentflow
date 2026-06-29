@@ -109,7 +109,7 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-006 Evidence-to-Decision Gate
 
-状态：in-progress
+状态：done
 
 目标：
 
@@ -125,12 +125,13 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-007 Completion Commit Authority Boundary
 
-状态：planned
+状态：in-progress
 
 目标：
 
 - 定义 Completion Commit 写入边界；
 - Decision 可以授权 completion，但不能让 projection 或 provider session 写 authority；
+- 对应 release-gate artifact：`runtime/core-completion-commit-authority.json`；
 - 对应 GitHub issue：#699。
 
 依赖：#696、#698。
