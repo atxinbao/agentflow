@@ -154,6 +154,7 @@ CORE_SKILL_REGISTRY_PATH="$RUNTIME_DIR/core-skill-registry.json"
 CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH="$RUNTIME_DIR/core-evidence-decision-reference-model.json"
 CORE_EVIDENCE_PACK_SCHEMA_PATH="$RUNTIME_DIR/core-evidence-pack-schema.json"
 CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_PATH="$RUNTIME_DIR/core-evidence-source-type-registry.json"
+CORE_EVIDENCE_CAPTURE_RECEIPTS_PATH="$RUNTIME_DIR/core-evidence-capture-receipts.json"
 CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
 V104_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v104-release-certification.json"
 CORE_RUNTIME_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/core-runtime-negative-fixtures.json"
@@ -398,6 +399,9 @@ proof_chain = [
     {"stage": "core-action-state-semantics", "label": "Core Action / State Semantics"},
     {"stage": "core-skill-registry", "label": "Core Skill Registry / Action Authorization"},
     {"stage": "core-evidence-decision-reference-model", "label": "Core Evidence / Decision Reference Model"},
+    {"stage": "core-evidence-pack-schema", "label": "Core Evidence Pack Schema"},
+    {"stage": "core-evidence-source-type-registry", "label": "Core Evidence Source Type Registry"},
+    {"stage": "core-evidence-capture-receipts", "label": "Core Evidence Capture Receipts"},
     {"stage": "core-file-backed-ontology-registry", "label": "Core File-backed Ontology Registry"},
     {"stage": "v104-release-certification", "label": "v1.0.4 Release Certification"},
     {"stage": "core-runtime-negative-fixtures", "label": "Core Runtime Negative Fixtures"},
@@ -6915,6 +6919,88 @@ PY
   record_stage "core-evidence-source-type-registry" "passed" "$(basename "$CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_PATH")"
 }
 
+run_core_evidence_capture_receipts_gate() {
+  record_stage "core-evidence-capture-receipts" "started" "$CORE_EVIDENCE_CAPTURE_RECEIPTS_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-evidence-capture-receipts-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_evidence_capture_receipt --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-evidence-capture-receipts" "agentflow-ontology Core Evidence Capture Receipt tests failed"
+  fi
+  python3 - "$CORE_EVIDENCE_CAPTURE_RECEIPTS_PATH" "$WORKSPACE/docs/architecture/062-core-evidence-capture-receipts-v1.md" "$WORKSPACE/crates/ontology/src/evidence.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+test_log_path = pathlib.Path(sys.argv[4])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+receipt_fields = [
+    "version",
+    "receiptId",
+    "status",
+    "location",
+    "byteCount",
+    "sha256",
+    "capturedAt",
+    "producer",
+    "sourceType",
+    "retentionHint",
+]
+location_fields = [
+    "local-path",
+    "external-uri",
+    "local-artifact",
+    "external-reference",
+]
+stable_reasons = [
+    "receipt-sha256-missing",
+    "receipt-artifact-empty",
+    "receipt-sha256-mismatch",
+    "receipt-stale",
+]
+coverage = {
+    "receipt-version-defined": "agentflow-core-evidence-capture-receipt.v1" in source_text
+    and "agentflow-core-evidence-capture-receipt.v1" in doc_text,
+    "receipt-fields-documented": all(field in doc_text for field in receipt_fields),
+    "receipt-fields-implemented": all(field.replace("Id", "_id").replace("Count", "_count").replace("At", "_at").replace("Type", "_type").replace("Hint", "_hint") in source_text or field in source_text for field in receipt_fields),
+    "location-boundary-documented": all(field in doc_text for field in location_fields),
+    "location-boundary-implemented": all(field in source_text for field in location_fields),
+    "local-file-capture-implemented": "capture_core_evidence_receipt_for_local_file" in source_text,
+    "external-reference-capture-implemented": "external_core_evidence_reference_receipt" in source_text,
+    "sha256-validation-implemented": "receipt-sha256-mismatch" in source_text,
+    "negative-fixtures-implemented": "core_evidence_capture_receipt_negative_fixtures" in source_text,
+    "stable-negative-reasons-documented": all(reason in doc_text for reason in stable_reasons),
+    "stable-negative-reasons-implemented": all(reason in source_text for reason in stable_reasons),
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-evidence-capture-receipts-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-evidence-capture-receipt.v1",
+    "architecturePath": "docs/architecture/062-core-evidence-capture-receipts-v1.md",
+    "rustContractPath": "crates/ontology/src/evidence.rs",
+    "rustTestLogPath": "runtime/core-evidence-capture-receipts-rust-test.log",
+    "receiptFields": receipt_fields,
+    "locationBoundary": location_fields,
+    "stableNegativeReasons": stable_reasons,
+    "localArtifactAuthority": "local-artifact",
+    "externalReferenceAuthority": "external-reference",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core evidence capture receipts coverage failed: {failed}")
+PY
+  record_stage "core-evidence-capture-receipts" "passed" "$(basename "$CORE_EVIDENCE_CAPTURE_RECEIPTS_PATH")"
+}
+
 run_core_file_backed_ontology_registry_gate() {
   record_stage "core-file-backed-ontology-registry" "started" "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH"
   local rust_test_log="$RUNTIME_DIR/core-file-backed-ontology-registry-rust-test.log"
@@ -8341,6 +8427,7 @@ PY
   run_core_evidence_decision_reference_model_gate
   run_core_evidence_pack_schema_gate
   run_core_evidence_source_type_registry_gate
+  run_core_evidence_capture_receipts_gate
   run_core_file_backed_ontology_registry_gate
   run_v104_release_certification_gate
   run_core_runtime_negative_fixtures_gate

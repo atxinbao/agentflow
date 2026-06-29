@@ -56,6 +56,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [059-core-file-backed-ontology-registry-projection-v1.md](059-core-file-backed-ontology-registry-projection-v1.md) | Core File-backed Ontology Registry / Projection |
 | [060-core-evidence-pack-schema-v1.md](060-core-evidence-pack-schema-v1.md) | Core Evidence Pack Schema |
 | [061-core-evidence-source-type-registry-v1.md](061-core-evidence-source-type-registry-v1.md) | Core Evidence Source Type Registry |
+| [062-core-evidence-capture-receipts-v1.md](062-core-evidence-capture-receipts-v1.md) | Core Evidence Capture Receipts |
 
 ## Rules
 

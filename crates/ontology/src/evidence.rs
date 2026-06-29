@@ -1,8 +1,13 @@
+use std::{fs, path::Path};
+
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 pub const CORE_EVIDENCE_PACK_SCHEMA_VERSION: &str = "agentflow-core-evidence-pack.v1";
 pub const CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_VERSION: &str =
     "agentflow-core-evidence-source-type-registry.v1";
+pub const CORE_EVIDENCE_CAPTURE_RECEIPT_VERSION: &str =
+    "agentflow-core-evidence-capture-receipt.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -107,6 +112,46 @@ pub struct CoreEvidenceSourceTypeRegistryContract {
     pub reference_app_examples: Vec<CoreEvidenceReferenceAppSourceExample>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceCaptureReceipt {
+    pub version: String,
+    pub receipt_id: String,
+    pub status: String,
+    pub location: CoreEvidenceCaptureLocation,
+    pub byte_count: u64,
+    pub sha256: String,
+    pub captured_at: String,
+    pub producer: CoreEvidenceProducerRef,
+    pub source_type: String,
+    pub retention_hint: CoreEvidenceRetentionHint,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceCaptureLocation {
+    pub location_kind: String,
+    pub path: Option<String>,
+    pub uri: Option<String>,
+    pub authority: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceRetentionHint {
+    pub retention_class: String,
+    pub expires_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceCaptureReceiptNegativeFixtureResult {
+    pub fixture_id: String,
+    pub status: String,
+    pub expected_reason: String,
+    pub reasons: Vec<String>,
+}
+
 pub fn canonical_core_evidence_pack_fixture() -> CoreEvidencePack {
     CoreEvidencePack {
         version: CORE_EVIDENCE_PACK_SCHEMA_VERSION.to_string(),
@@ -148,6 +193,245 @@ pub fn canonical_core_evidence_pack_fixture() -> CoreEvidencePack {
             run_refs: vec!["run:core-evidence-pack".to_string()],
             action_refs: vec!["action:attach-evidence".to_string()],
             decision_refs: vec!["decision:accept-evidence".to_string()],
+        },
+    }
+}
+
+pub fn capture_core_evidence_receipt_for_local_file(
+    path: &Path,
+    receipt_id: impl Into<String>,
+    producer: CoreEvidenceProducerRef,
+    source_type: impl Into<String>,
+    captured_at: impl Into<String>,
+    retention_hint: CoreEvidenceRetentionHint,
+) -> anyhow::Result<CoreEvidenceCaptureReceipt> {
+    let bytes = fs::read(path)?;
+    let receipt = CoreEvidenceCaptureReceipt {
+        version: CORE_EVIDENCE_CAPTURE_RECEIPT_VERSION.to_string(),
+        receipt_id: receipt_id.into(),
+        status: "collected".to_string(),
+        location: CoreEvidenceCaptureLocation {
+            location_kind: "local-path".to_string(),
+            path: Some(path.to_string_lossy().to_string()),
+            uri: None,
+            authority: "local-artifact".to_string(),
+        },
+        byte_count: bytes.len() as u64,
+        sha256: sha256_hex(&bytes),
+        captured_at: captured_at.into(),
+        producer,
+        source_type: source_type.into(),
+        retention_hint,
+    };
+    validate_core_evidence_capture_receipt(&receipt, Some(&bytes)).map_err(|errors| {
+        anyhow::anyhow!("invalid evidence capture receipt: {}", errors.join(","))
+    })?;
+    Ok(receipt)
+}
+
+pub fn external_core_evidence_reference_receipt(
+    uri: impl Into<String>,
+    receipt_id: impl Into<String>,
+    producer: CoreEvidenceProducerRef,
+    source_type: impl Into<String>,
+    sha256: impl Into<String>,
+    captured_at: impl Into<String>,
+    retention_hint: CoreEvidenceRetentionHint,
+) -> CoreEvidenceCaptureReceipt {
+    CoreEvidenceCaptureReceipt {
+        version: CORE_EVIDENCE_CAPTURE_RECEIPT_VERSION.to_string(),
+        receipt_id: receipt_id.into(),
+        status: "collected".to_string(),
+        location: CoreEvidenceCaptureLocation {
+            location_kind: "external-uri".to_string(),
+            path: None,
+            uri: Some(uri.into()),
+            authority: "external-reference".to_string(),
+        },
+        byte_count: 0,
+        sha256: sha256.into(),
+        captured_at: captured_at.into(),
+        producer,
+        source_type: source_type.into(),
+        retention_hint,
+    }
+}
+
+pub fn validate_core_evidence_capture_receipt(
+    receipt: &CoreEvidenceCaptureReceipt,
+    expected_bytes: Option<&[u8]>,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if receipt.version != CORE_EVIDENCE_CAPTURE_RECEIPT_VERSION {
+        errors.push(reason("receipt-version-mismatch"));
+    }
+    if receipt.receipt_id.trim().is_empty() {
+        errors.push(reason("receipt-id-missing"));
+    }
+    if receipt.status != "collected" {
+        errors.push(reason("receipt-status-unsupported"));
+    }
+    if receipt.captured_at.trim().is_empty() {
+        errors.push(reason("receipt-captured-at-missing"));
+    }
+    if let Some(expires_at) = &receipt.retention_hint.expires_at {
+        if expires_at <= &receipt.captured_at {
+            errors.push(reason("receipt-stale"));
+        }
+    }
+    if receipt.retention_hint.retention_class.trim().is_empty() {
+        errors.push(reason("receipt-retention-class-missing"));
+    }
+    if receipt.producer.actor_ref.trim().is_empty() {
+        errors.push(reason("receipt-producer-actor-ref-missing"));
+    }
+    if receipt.producer.role_ref.trim().is_empty() {
+        errors.push(reason("receipt-producer-role-ref-missing"));
+    }
+    if receipt.source_type.trim().is_empty() {
+        errors.push(reason("receipt-source-type-missing"));
+    }
+    validate_source_type_known(&receipt.source_type, &mut errors);
+    validate_sha256_string("receipt-sha256", &receipt.sha256, &mut errors);
+
+    match receipt.location.location_kind.as_str() {
+        "local-path" => {
+            if receipt
+                .location
+                .path
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+            {
+                errors.push(reason("receipt-local-path-missing"));
+            }
+            if receipt.location.uri.is_some() {
+                errors.push(reason("receipt-local-uri-not-allowed"));
+            }
+            if receipt.location.authority != "local-artifact" {
+                errors.push(reason("receipt-local-authority-invalid"));
+            }
+            if receipt.byte_count == 0 {
+                errors.push(reason("receipt-artifact-empty"));
+            }
+            if let Some(bytes) = expected_bytes {
+                if bytes.is_empty() {
+                    errors.push(reason("receipt-artifact-empty"));
+                }
+                if receipt.byte_count != bytes.len() as u64 {
+                    errors.push(reason("receipt-byte-count-mismatch"));
+                }
+                if receipt.sha256 != sha256_hex(bytes) {
+                    errors.push(reason("receipt-sha256-mismatch"));
+                }
+            }
+        }
+        "external-uri" => {
+            if receipt
+                .location
+                .uri
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+            {
+                errors.push(reason("receipt-external-uri-missing"));
+            }
+            if receipt.location.path.is_some() {
+                errors.push(reason("receipt-external-path-not-allowed"));
+            }
+            if receipt.location.authority != "external-reference" {
+                errors.push(reason("receipt-external-authority-invalid"));
+            }
+            if expected_bytes.is_some() {
+                errors.push(reason("receipt-external-bytes-not-local-authority"));
+            }
+        }
+        _ => errors.push(reason("receipt-location-kind-unsupported")),
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        errors.sort();
+        errors.dedup();
+        Err(errors)
+    }
+}
+
+pub fn core_evidence_capture_receipt_negative_fixtures(
+) -> Vec<CoreEvidenceCaptureReceiptNegativeFixtureResult> {
+    let bytes = b"canonical evidence bytes";
+    let fixtures = vec![
+        ("missing-digest", "receipt-sha256-missing", {
+            let mut receipt = canonical_core_evidence_capture_receipt_fixture(bytes);
+            receipt.sha256.clear();
+            (receipt, Some(bytes.as_slice()))
+        }),
+        ("empty-artifact", "receipt-artifact-empty", {
+            let mut receipt = canonical_core_evidence_capture_receipt_fixture(b"");
+            receipt.byte_count = 0;
+            (receipt, Some(&[] as &[u8]))
+        }),
+        ("wrong-digest", "receipt-sha256-mismatch", {
+            let mut receipt = canonical_core_evidence_capture_receipt_fixture(bytes);
+            receipt.sha256 =
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string();
+            (receipt, Some(bytes.as_slice()))
+        }),
+        ("stale-receipt", "receipt-stale", {
+            let mut receipt = canonical_core_evidence_capture_receipt_fixture(bytes);
+            receipt.retention_hint.expires_at = Some("2026-06-29T00:00:00Z".to_string());
+            receipt.captured_at = "2026-06-29T00:00:01Z".to_string();
+            (receipt, Some(bytes.as_slice()))
+        }),
+    ];
+
+    fixtures
+        .into_iter()
+        .map(|(fixture_id, expected_reason, (receipt, expected_bytes))| {
+            let reasons =
+                validate_core_evidence_capture_receipt(&receipt, expected_bytes).unwrap_err();
+            CoreEvidenceCaptureReceiptNegativeFixtureResult {
+                fixture_id: fixture_id.to_string(),
+                status: if reasons.iter().any(|reason| reason == expected_reason) {
+                    "passed".to_string()
+                } else {
+                    "failed".to_string()
+                },
+                expected_reason: expected_reason.to_string(),
+                reasons,
+            }
+        })
+        .collect()
+}
+
+pub fn canonical_core_evidence_capture_receipt_fixture(bytes: &[u8]) -> CoreEvidenceCaptureReceipt {
+    CoreEvidenceCaptureReceipt {
+        version: CORE_EVIDENCE_CAPTURE_RECEIPT_VERSION.to_string(),
+        receipt_id: "receipt-core-canonical-001".to_string(),
+        status: "collected".to_string(),
+        location: CoreEvidenceCaptureLocation {
+            location_kind: "local-path".to_string(),
+            path: Some(".agentflow/tasks/task-core/evidence/evidence.log".to_string()),
+            uri: None,
+            authority: "local-artifact".to_string(),
+        },
+        byte_count: bytes.len() as u64,
+        sha256: sha256_hex(bytes),
+        captured_at: "2026-06-29T00:00:01Z".to_string(),
+        producer: CoreEvidenceProducerRef {
+            actor_ref: "actor:work-agent".to_string(),
+            role_ref: "role:work".to_string(),
+            tool_ref: Some("tool:evidence-capture".to_string()),
+            produced_at: "2026-06-29T00:00:01Z".to_string(),
+        },
+        source_type: "artifact".to_string(),
+        retention_hint: CoreEvidenceRetentionHint {
+            retention_class: "release-certification".to_string(),
+            expires_at: Some("2026-12-31T00:00:00Z".to_string()),
         },
     }
 }
@@ -521,14 +805,36 @@ fn validate_digest(path: &str, digest: &CoreEvidenceDigest, errors: &mut Vec<Str
     if digest.algorithm != "sha256" {
         errors.push(reason(&format!("{path}-algorithm-unsupported")));
     }
-    if digest.value.len() != 64
-        || !digest
-            .value
-            .chars()
-            .all(|character| character.is_ascii_hexdigit())
-    {
+    if !is_valid_sha256_hex(&digest.value) {
         errors.push(reason(&format!("{path}-value-invalid")));
     }
+}
+
+fn validate_sha256_string(path: &str, value: &str, errors: &mut Vec<String>) {
+    if value.trim().is_empty() {
+        errors.push(reason(&format!("{path}-missing")));
+    } else if !is_valid_sha256_hex(value) {
+        errors.push(reason(&format!("{path}-invalid")));
+    }
+}
+
+fn validate_source_type_known(source_type: &str, errors: &mut Vec<String>) {
+    let registry = core_evidence_source_type_registry_contract();
+    if registry
+        .source_types
+        .iter()
+        .all(|definition| definition.source_type != source_type)
+    {
+        errors.push(reason("receipt-source-type-unknown"));
+    }
+}
+
+fn is_valid_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.chars().all(|character| character.is_ascii_hexdigit())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
 }
 
 fn validate_trace_refs(trace_refs: &CoreEvidenceTraceRefs, errors: &mut Vec<String>) {
@@ -710,6 +1016,88 @@ mod tests {
         for example in &registry.reference_app_examples {
             assert_eq!(example.status, "reference-only");
             assert!(source_types.contains(example.source_type.as_str()));
+        }
+    }
+
+    #[test]
+    fn core_evidence_capture_receipt_can_be_generated_for_local_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let artifact_path = temp_dir.path().join("artifact.log");
+        std::fs::write(&artifact_path, b"receipt bytes").unwrap();
+
+        let receipt = capture_core_evidence_receipt_for_local_file(
+            &artifact_path,
+            "receipt-local-001",
+            CoreEvidenceProducerRef {
+                actor_ref: "actor:work-agent".to_string(),
+                role_ref: "role:work".to_string(),
+                tool_ref: Some("tool:evidence-capture".to_string()),
+                produced_at: "2026-06-29T00:00:01Z".to_string(),
+            },
+            "artifact",
+            "2026-06-29T00:00:01Z",
+            CoreEvidenceRetentionHint {
+                retention_class: "release-certification".to_string(),
+                expires_at: Some("2026-12-31T00:00:00Z".to_string()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(receipt.version, CORE_EVIDENCE_CAPTURE_RECEIPT_VERSION);
+        assert_eq!(receipt.byte_count, 13);
+        assert_eq!(receipt.sha256.len(), 64);
+        assert_eq!(receipt.location.authority, "local-artifact");
+    }
+
+    #[test]
+    fn core_evidence_capture_receipt_rejects_digest_mismatch() {
+        let bytes = b"receipt bytes";
+        let mut receipt = canonical_core_evidence_capture_receipt_fixture(bytes);
+        receipt.sha256 =
+            "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string();
+
+        let errors = validate_core_evidence_capture_receipt(&receipt, Some(bytes)).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error == "receipt-sha256-mismatch"));
+    }
+
+    #[test]
+    fn core_evidence_capture_receipt_allows_external_reference_without_local_bytes() {
+        let receipt = external_core_evidence_reference_receipt(
+            "https://example.invalid/proof/123",
+            "receipt-external-001",
+            CoreEvidenceProducerRef {
+                actor_ref: "actor:work-agent".to_string(),
+                role_ref: "role:work".to_string(),
+                tool_ref: Some("tool:evidence-capture".to_string()),
+                produced_at: "2026-06-29T00:00:01Z".to_string(),
+            },
+            "external-proof",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "2026-06-29T00:00:01Z",
+            CoreEvidenceRetentionHint {
+                retention_class: "external-reference".to_string(),
+                expires_at: Some("2026-12-31T00:00:00Z".to_string()),
+            },
+        );
+
+        validate_core_evidence_capture_receipt(&receipt, None).unwrap();
+        assert_eq!(receipt.location.authority, "external-reference");
+        assert_eq!(receipt.byte_count, 0);
+    }
+
+    #[test]
+    fn core_evidence_capture_receipt_negative_fixtures_fail_with_stable_reasons() {
+        let fixtures = core_evidence_capture_receipt_negative_fixtures();
+        assert_eq!(fixtures.len(), 4);
+        for fixture in fixtures {
+            assert_eq!(
+                fixture.status, "passed",
+                "fixture {} failed with {:?}",
+                fixture.fixture_id, fixture.reasons
+            );
+            assert!(fixture.reasons.contains(&fixture.expected_reason));
         }
     }
 }
