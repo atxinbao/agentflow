@@ -222,6 +222,8 @@ jobs:
               -o -name 'core-evidence-authority-trace-links.json' \
               -o -name 'core-evidence-authority-trace-links-rust-test.log' \
               -o -name 'core-evidence-authority-trace-links-event-store-rust-test.log' \
+              -o -name 'core-evidence-completeness-policy.json' \
+              -o -name 'core-evidence-completeness-policy-rust-test.log' \
               -o -name 'core-file-backed-ontology-registry.json' \
               -o -name 'core-file-backed-ontology-registry-rust-test.log' \
               -o -name 'core-runtime-negative-fixtures.json' \
@@ -265,6 +267,8 @@ jobs:
             runtime/core-evidence-authority-trace-links.json \
             runtime/core-evidence-authority-trace-links-rust-test.log \
             runtime/core-evidence-authority-trace-links-event-store-rust-test.log \
+            runtime/core-evidence-completeness-policy.json \
+            runtime/core-evidence-completeness-policy-rust-test.log \
             runtime/core-file-backed-ontology-registry.json \
             runtime/core-file-backed-ontology-registry-rust-test.log \
             runtime/v104-release-certification.json \
