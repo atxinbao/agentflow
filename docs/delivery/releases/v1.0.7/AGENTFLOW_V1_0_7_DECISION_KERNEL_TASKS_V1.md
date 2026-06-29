@@ -32,7 +32,7 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-001 Release Provenance Tag Policy and Evidence Handoff Fix
 
-状态：in-progress
+状态：done
 
 目标：
 
@@ -47,13 +47,15 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-002 Core Decision Model Contract
 
-状态：planned
+状态：in-progress
 
 目标：
 
 - 定义行业无关 Decision 模型；
 - 明确 Decision 能读取哪些 authority facts；
 - 排除 Software Dev 行业词汇进入 Core authority；
+- 定义 `decisionId`、`version`、`decidedAt`、`subject`、`inputs`、`outcome`、`reasons`、`writes` 稳定字段；
+- 对应 release-gate artifact：`runtime/core-decision-model-contract.json`；
 - 对应 GitHub issue：#694。
 
 依赖：#693。

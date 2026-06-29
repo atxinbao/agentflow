@@ -170,6 +170,7 @@ CORE_RUNTIME_ARBITRATION_PATH="$RUNTIME_DIR/core-runtime-arbitration.json"
 V105_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v105-release-certification.json"
 V106_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v106-release-certification.json"
 V107_RELEASE_PROVENANCE_HANDOFF_PATH="$RUNTIME_DIR/v107-release-provenance-handoff.json"
+CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -425,6 +426,7 @@ proof_chain = [
     {"stage": "v105-release-certification", "label": "v1.0.5 Release Certification"},
     {"stage": "v106-release-certification", "label": "v1.0.6 Release Certification"},
     {"stage": "v107-release-provenance-handoff", "label": "v1.0.7 Release Provenance Handoff"},
+    {"stage": "core-decision-model-contract", "label": "Core Decision Model Contract"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -493,6 +495,7 @@ runtime_artifacts = [
     {"path": "runtime/v100-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v100-release-certification.json").is_file()},
     {"path": "runtime/release-provenance.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-provenance.json").is_file()},
     {"path": "runtime/v107-release-provenance-handoff.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json").is_file()},
+    {"path": "runtime/core-decision-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json").is_file()},
     {"path": "runtime/clean-room-test-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/clean-room-test-proof.json").is_file()},
     {"path": "runtime/audit-sidecar-policy.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-sidecar-policy.json").is_file()},
     {"path": "runtime/provider-smoke-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/provider-smoke-proof.json").is_file()},
@@ -570,6 +573,7 @@ core_runtime_arbitration = load_json(pathlib.Path(summary_json_path.parent / "ru
 v105_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v105-release-certification.json")) or {}
 v106_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v106-release-certification.json")) or {}
 v107_release_provenance_handoff = load_json(pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json")) or {}
+core_decision_model_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json")) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
 deployment_evidence_wrong_commit = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json")) or {}
@@ -1440,6 +1444,9 @@ summary_payload = {
     "v107ReleaseProvenanceHandoffPath": "runtime/v107-release-provenance-handoff.json" if v107_release_provenance_handoff else None,
     "v107ReleaseProvenanceHandoffStatus": v107_release_provenance_handoff.get("status") or "missing",
     "v107ReleaseProvenanceHandoffCoverage": v107_release_provenance_handoff.get("coverage") or {},
+    "coreDecisionModelContractPath": "runtime/core-decision-model-contract.json" if core_decision_model_contract else None,
+    "coreDecisionModelContractStatus": core_decision_model_contract.get("status") or "missing",
+    "coreDecisionModelContractCoverage": core_decision_model_contract.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1701,6 +1708,9 @@ certification_payload = {
     "v107ReleaseProvenanceHandoffPath": "runtime/v107-release-provenance-handoff.json" if v107_release_provenance_handoff else None,
     "v107ReleaseProvenanceHandoffStatus": v107_release_provenance_handoff.get("status") or "missing",
     "v107ReleaseProvenanceHandoffCoverage": v107_release_provenance_handoff.get("coverage") or {},
+    "coreDecisionModelContractPath": "runtime/core-decision-model-contract.json" if core_decision_model_contract else None,
+    "coreDecisionModelContractStatus": core_decision_model_contract.get("status") or "missing",
+    "coreDecisionModelContractCoverage": core_decision_model_contract.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -8740,6 +8750,116 @@ PY
   record_stage "v107-release-provenance-handoff" "passed" "$(basename "$V107_RELEASE_PROVENANCE_HANDOFF_PATH")"
 }
 
+run_core_decision_model_contract_gate() {
+  record_stage "core-decision-model-contract" "started" "$CORE_DECISION_MODEL_CONTRACT_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-decision-model-contract-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_decision --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-decision-model-contract" "agentflow-ontology Core Decision Model tests failed"
+  fi
+  python3 - \
+    "$CORE_DECISION_MODEL_CONTRACT_PATH" \
+    "$WORKSPACE/docs/architecture/070-core-decision-model-contract-v1.md" \
+    "$WORKSPACE/crates/ontology/src/decision.rs" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md" \
+    "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+tasks_path = pathlib.Path(sys.argv[4])
+test_log_path = pathlib.Path(sys.argv[5])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+tasks_text = tasks_path.read_text(encoding="utf-8")
+required_fields = [
+    "version",
+    "decisionId",
+    "decidedAt",
+    "decidedBy",
+    "subject",
+    "inputs",
+    "outcome",
+    "reasons",
+    "writes",
+]
+readable_facts = ["spec", "runtimeState", "evidence"]
+allowed_writes = ["decision-record", "decision-event"]
+forbidden_writes = [
+    "spec-authority",
+    "runtime-state-authority",
+    "evidence-authority",
+    "projection-read-model",
+    "provider-session-record",
+    "audit-sidecar-record",
+]
+outcomes = ["accepted", "rejected", "deferred", "blocked", "cancelled"]
+forbidden_terms = [
+    "bug",
+    "feature",
+    "issue",
+    "pr",
+    "pull-request",
+    "release",
+    "repository",
+    "repository-patch",
+    "test-log",
+    "github-issue",
+]
+coverage = {
+    "contract-version-defined": "agentflow-core-decision-model.v1" in source_text
+    and "agentflow-core-decision-model.v1" in doc_text,
+    "rust-contract-implemented": "CoreDecisionModelContract" in source_text
+    and "CoreDecisionRecord" in source_text
+    and "validate_core_decision_model_contract" in source_text
+    and "validate_core_decision_record" in source_text,
+    "required-fields-documented": all(field in doc_text for field in required_fields),
+    "required-fields-implemented": all(field in source_text for field in required_fields),
+    "readable-authority-facts-documented": all(fact in doc_text for fact in readable_facts),
+    "readable-authority-facts-implemented": all(fact in source_text for fact in readable_facts),
+    "write-authority-documented": all(item in doc_text for item in allowed_writes + forbidden_writes),
+    "write-authority-implemented": all(item in source_text for item in allowed_writes + forbidden_writes),
+    "outcomes-documented": all(item in doc_text for item in outcomes),
+    "outcomes-implemented": all(item in source_text for item in outcomes),
+    "forbidden-terms-documented": all(item in doc_text for item in forbidden_terms),
+    "forbidden-terms-implemented": all(item in source_text for item in forbidden_terms),
+    "canonical-record-fixture-implemented": "canonical_core_decision_record_fixture" in source_text,
+    "negative-fixtures-implemented": "core_decision_record_rejects_unknown_outcome" in source_text
+    and "core_decision_record_rejects_forbidden_industry_term" in source_text,
+    "release-task-binds-issue-694": "#694" in tasks_text
+    and "V107-002 Core Decision Model Contract" in tasks_text
+    and "runtime/core-decision-model-contract.json" in tasks_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-decision-model-contract-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-decision-model.v1",
+    "architecturePath": "docs/architecture/070-core-decision-model-contract-v1.md",
+    "rustContractPath": "crates/ontology/src/decision.rs",
+    "rustTestLogPath": "runtime/core-decision-model-contract-rust-test.log",
+    "requiredRecordFields": required_fields,
+    "readableAuthorityFacts": readable_facts,
+    "allowedWrites": allowed_writes,
+    "forbiddenWrites": forbidden_writes,
+    "outcomes": outcomes,
+    "forbiddenCoreTerms": forbidden_terms,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core decision model contract coverage failed: {failed}")
+PY
+  record_stage "core-decision-model-contract" "passed" "$(basename "$CORE_DECISION_MODEL_CONTRACT_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -9314,6 +9434,7 @@ PY
   run_v105_release_certification_gate
   run_v106_release_certification_gate
   run_v107_release_provenance_handoff_gate
+  run_core_decision_model_contract_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
