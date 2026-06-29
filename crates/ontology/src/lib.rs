@@ -29,13 +29,18 @@ pub use decision::{
     CoreEvidenceReferenceDefinition, CORE_EVIDENCE_DECISION_MODEL_VERSION,
 };
 pub use evidence::{
-    canonical_core_evidence_pack_fixture, core_evidence_pack_negative_fixtures,
-    core_evidence_source_type_registry_contract, validate_core_evidence_pack_schema,
-    validate_core_evidence_pack_source_type, validate_core_evidence_source_type_registry_contract,
-    CoreEvidenceArtifactRef, CoreEvidenceDigest, CoreEvidencePack,
+    canonical_core_evidence_capture_receipt_fixture, canonical_core_evidence_pack_fixture,
+    capture_core_evidence_receipt_for_local_file, core_evidence_capture_receipt_negative_fixtures,
+    core_evidence_pack_negative_fixtures, core_evidence_source_type_registry_contract,
+    external_core_evidence_reference_receipt, validate_core_evidence_capture_receipt,
+    validate_core_evidence_pack_schema, validate_core_evidence_pack_source_type,
+    validate_core_evidence_source_type_registry_contract, CoreEvidenceArtifactRef,
+    CoreEvidenceCaptureLocation, CoreEvidenceCaptureReceipt,
+    CoreEvidenceCaptureReceiptNegativeFixtureResult, CoreEvidenceDigest, CoreEvidencePack,
     CoreEvidencePackNegativeFixtureResult, CoreEvidenceProducerRef, CoreEvidenceProvenance,
-    CoreEvidenceReferenceAppSourceExample, CoreEvidenceSourceTypeDefinition,
-    CoreEvidenceSourceTypeRegistryContract, CoreEvidenceSubjectRef, CoreEvidenceTraceRefs,
+    CoreEvidenceReferenceAppSourceExample, CoreEvidenceRetentionHint,
+    CoreEvidenceSourceTypeDefinition, CoreEvidenceSourceTypeRegistryContract,
+    CoreEvidenceSubjectRef, CoreEvidenceTraceRefs, CORE_EVIDENCE_CAPTURE_RECEIPT_VERSION,
     CORE_EVIDENCE_PACK_SCHEMA_VERSION, CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_VERSION,
 };
 pub use file_registry::{
