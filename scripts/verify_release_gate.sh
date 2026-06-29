@@ -152,6 +152,7 @@ CORE_OBJECT_LINK_SCHEMA_PATH="$RUNTIME_DIR/core-object-link-schema.json"
 CORE_ACTION_STATE_SEMANTICS_PATH="$RUNTIME_DIR/core-action-state-semantics.json"
 CORE_SKILL_REGISTRY_PATH="$RUNTIME_DIR/core-skill-registry.json"
 CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH="$RUNTIME_DIR/core-evidence-decision-reference-model.json"
+CORE_EVIDENCE_PACK_SCHEMA_PATH="$RUNTIME_DIR/core-evidence-pack-schema.json"
 CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
 V104_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v104-release-certification.json"
 CORE_RUNTIME_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/core-runtime-negative-fixtures.json"
@@ -6729,6 +6730,110 @@ PY
   record_stage "core-evidence-decision-reference-model" "passed" "$(basename "$CORE_EVIDENCE_DECISION_REFERENCE_MODEL_PATH")"
 }
 
+run_core_evidence_pack_schema_gate() {
+  record_stage "core-evidence-pack-schema" "started" "$CORE_EVIDENCE_PACK_SCHEMA_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-evidence-pack-schema-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_evidence_pack_schema --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-evidence-pack-schema" "agentflow-ontology Core Evidence Pack Schema tests failed"
+  fi
+  python3 - "$CORE_EVIDENCE_PACK_SCHEMA_PATH" "$WORKSPACE/docs/architecture/060-core-evidence-pack-schema-v1.md" "$WORKSPACE/crates/ontology/src/evidence.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+test_log_path = pathlib.Path(sys.argv[4])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+schema_fields = [
+    "version",
+    "evidenceId",
+    "status",
+    "producer",
+    "subject",
+    "sourceType",
+    "digest",
+    "artifactRefs",
+    "provenance",
+    "traceRefs",
+]
+trace_fields = [
+    "specRefs",
+    "goalRefs",
+    "taskRefs",
+    "runRefs",
+    "actionRefs",
+    "decisionRefs",
+]
+stable_reasons = [
+    "evidence-id-missing",
+    "source-type-missing",
+    "digest-value-invalid",
+    "digest-algorithm-unsupported",
+    "artifact-refs-missing",
+    "provenance-capture-ref-missing",
+    "trace-spec-refs-missing",
+    "forbidden-core-term:github-issue",
+]
+forbidden_terms = [
+    "bug",
+    "feature",
+    "issue",
+    "pr",
+    "pull-request",
+    "release",
+    "repository",
+    "repository-patch",
+    "test-log",
+    "github-issue",
+]
+coverage = {
+    "schema-version-defined": "agentflow-core-evidence-pack.v1" in source_text
+    and "agentflow-core-evidence-pack.v1" in doc_text,
+    "schema-fields-documented": all(field in doc_text for field in schema_fields),
+    "schema-fields-implemented": all(field.replace("Id", "_id").replace("Type", "_type").replace("Refs", "_refs") in source_text or field in source_text for field in schema_fields),
+    "trace-fields-documented": all(field in doc_text for field in trace_fields),
+    "trace-fields-implemented": all(field.replace("Refs", "_refs") in source_text or field in source_text for field in trace_fields),
+    "canonical-fixture-implemented": "canonical_core_evidence_pack_fixture" in source_text,
+    "negative-fixtures-implemented": "core_evidence_pack_negative_fixtures" in source_text,
+    "stable-negative-reasons-documented": all(reason in doc_text for reason in stable_reasons),
+    "stable-negative-reasons-implemented": all(reason in source_text for reason in stable_reasons),
+    "audit-sidecar-boundary-documented": "sidecar evidence consumer" in doc_text
+    and "main-chain authority" in doc_text,
+    "software-dev-mapping-not-core-authority": "not Core authority" in doc_text,
+    "forbidden-terms-listed": all(term in source_text for term in forbidden_terms),
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-evidence-pack-schema-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-evidence-pack.v1",
+    "architecturePath": "docs/architecture/060-core-evidence-pack-schema-v1.md",
+    "rustContractPath": "crates/ontology/src/evidence.rs",
+    "rustTestLogPath": "runtime/core-evidence-pack-schema-rust-test.log",
+    "schemaFields": schema_fields,
+    "traceFields": trace_fields,
+    "stableNegativeReasons": stable_reasons,
+    "canonicalFixture": "canonical_core_evidence_pack_fixture",
+    "negativeFixtureCount": len(stable_reasons),
+    "industryNeutralBoundary": "software-dev-mappings-are-reference-only",
+    "auditBoundary": "audit-sidecar-evidence-consumer-not-main-chain-authority",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core evidence pack schema coverage failed: {failed}")
+PY
+  record_stage "core-evidence-pack-schema" "passed" "$(basename "$CORE_EVIDENCE_PACK_SCHEMA_PATH")"
+}
+
 run_core_file_backed_ontology_registry_gate() {
   record_stage "core-file-backed-ontology-registry" "started" "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH"
   local rust_test_log="$RUNTIME_DIR/core-file-backed-ontology-registry-rust-test.log"
@@ -8153,6 +8258,7 @@ PY
   run_core_action_state_semantics_gate
   run_core_skill_registry_gate
   run_core_evidence_decision_reference_model_gate
+  run_core_evidence_pack_schema_gate
   run_core_file_backed_ontology_registry_gate
   run_v104_release_certification_gate
   run_core_runtime_negative_fixtures_gate

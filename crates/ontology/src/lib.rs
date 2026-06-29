@@ -6,6 +6,7 @@
 
 pub mod core;
 pub mod decision;
+pub mod evidence;
 pub mod file_registry;
 pub mod kernel;
 pub mod model;
@@ -26,6 +27,13 @@ pub use decision::{
     validate_core_evidence_decision_reference_model_contract, CoreDecisionOutcomeDefinition,
     CoreDecisionReferenceDefinition, CoreEvidenceDecisionReferenceModelContract,
     CoreEvidenceReferenceDefinition, CORE_EVIDENCE_DECISION_MODEL_VERSION,
+};
+pub use evidence::{
+    canonical_core_evidence_pack_fixture, core_evidence_pack_negative_fixtures,
+    validate_core_evidence_pack_schema, CoreEvidenceArtifactRef, CoreEvidenceDigest,
+    CoreEvidencePack, CoreEvidencePackNegativeFixtureResult, CoreEvidenceProducerRef,
+    CoreEvidenceProvenance, CoreEvidenceSubjectRef, CoreEvidenceTraceRefs,
+    CORE_EVIDENCE_PACK_SCHEMA_VERSION,
 };
 pub use file_registry::{
     core_file_backed_ontology_registry_projection_contract,
