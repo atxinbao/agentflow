@@ -156,6 +156,7 @@ CORE_EVIDENCE_PACK_SCHEMA_PATH="$RUNTIME_DIR/core-evidence-pack-schema.json"
 CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_PATH="$RUNTIME_DIR/core-evidence-source-type-registry.json"
 CORE_EVIDENCE_CAPTURE_RECEIPTS_PATH="$RUNTIME_DIR/core-evidence-capture-receipts.json"
 CORE_EVIDENCE_AUTHORITY_TRACE_LINKS_PATH="$RUNTIME_DIR/core-evidence-authority-trace-links.json"
+CORE_EVIDENCE_COMPLETENESS_POLICY_PATH="$RUNTIME_DIR/core-evidence-completeness-policy.json"
 CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
 V104_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v104-release-certification.json"
 CORE_RUNTIME_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/core-runtime-negative-fixtures.json"
@@ -404,6 +405,7 @@ proof_chain = [
     {"stage": "core-evidence-source-type-registry", "label": "Core Evidence Source Type Registry"},
     {"stage": "core-evidence-capture-receipts", "label": "Core Evidence Capture Receipts"},
     {"stage": "core-evidence-authority-trace-links", "label": "Core Evidence Authority Trace Links"},
+    {"stage": "core-evidence-completeness-policy", "label": "Core Evidence Completeness Policy"},
     {"stage": "core-file-backed-ontology-registry", "label": "Core File-backed Ontology Registry"},
     {"stage": "v104-release-certification", "label": "v1.0.4 Release Certification"},
     {"stage": "core-runtime-negative-fixtures", "label": "Core Runtime Negative Fixtures"},
@@ -7080,6 +7082,69 @@ PY
   record_stage "core-evidence-authority-trace-links" "passed" "$(basename "$CORE_EVIDENCE_AUTHORITY_TRACE_LINKS_PATH")"
 }
 
+run_core_evidence_completeness_policy_gate() {
+  record_stage "core-evidence-completeness-policy" "started" "$CORE_EVIDENCE_COMPLETENESS_POLICY_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-evidence-completeness-policy-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_evidence_completeness_policy --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-evidence-completeness-policy" "agentflow-ontology Core Evidence Completeness Policy tests failed"
+  fi
+  python3 - "$CORE_EVIDENCE_COMPLETENESS_POLICY_PATH" "$WORKSPACE/docs/architecture/064-core-evidence-completeness-policy-v1.md" "$WORKSPACE/crates/ontology/src/evidence.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+test_log_path = pathlib.Path(sys.argv[4])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+group_kinds = ["required", "optional", "alternative", "deferred"]
+outcomes = ["complete", "incomplete", "deferred", "invalid"]
+stable_reasons = [
+    "evidence-required-missing",
+    "evidence-alternative-missing",
+    "evidence-deferred",
+    "evidence-invalid",
+]
+coverage = {
+    "policy-version-defined": "agentflow-core-evidence-completeness-policy.v1" in source_text
+    and "agentflow-core-evidence-completeness-policy.v1" in doc_text,
+    "group-kinds-documented": all(kind in doc_text for kind in group_kinds),
+    "group-kinds-implemented": all(kind in source_text for kind in group_kinds),
+    "outcomes-documented": all(outcome in doc_text for outcome in outcomes),
+    "outcomes-implemented": all(outcome in source_text for outcome in outcomes),
+    "stable-reasons-documented": all(reason in doc_text for reason in stable_reasons),
+    "stable-reasons-implemented": all(reason in source_text for reason in stable_reasons),
+    "decision-kernel-boundary-documented": "Decision Kernel" in doc_text and "不写 completed state" in doc_text,
+    "policy-evaluator-implemented": "evaluate_core_evidence_completeness_policy" in source_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-evidence-completeness-policy-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-evidence-completeness-policy.v1",
+    "architecturePath": "docs/architecture/064-core-evidence-completeness-policy-v1.md",
+    "rustContractPath": "crates/ontology/src/evidence.rs",
+    "rustTestLogPath": "runtime/core-evidence-completeness-policy-rust-test.log",
+    "groupKinds": group_kinds,
+    "outcomes": outcomes,
+    "stableReasons": stable_reasons,
+    "doneBoundary": "policy-does-not-write-completed-state",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core evidence completeness policy coverage failed: {failed}")
+PY
+  record_stage "core-evidence-completeness-policy" "passed" "$(basename "$CORE_EVIDENCE_COMPLETENESS_POLICY_PATH")"
+}
+
 run_core_file_backed_ontology_registry_gate() {
   record_stage "core-file-backed-ontology-registry" "started" "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH"
   local rust_test_log="$RUNTIME_DIR/core-file-backed-ontology-registry-rust-test.log"
@@ -8508,6 +8573,7 @@ PY
   run_core_evidence_source_type_registry_gate
   run_core_evidence_capture_receipts_gate
   run_core_evidence_authority_trace_links_gate
+  run_core_evidence_completeness_policy_gate
   run_core_file_backed_ontology_registry_gate
   run_v104_release_certification_gate
   run_core_runtime_negative_fixtures_gate

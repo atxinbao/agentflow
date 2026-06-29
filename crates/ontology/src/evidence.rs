@@ -10,6 +10,8 @@ pub const CORE_EVIDENCE_CAPTURE_RECEIPT_VERSION: &str =
     "agentflow-core-evidence-capture-receipt.v1";
 pub const CORE_EVIDENCE_AUTHORITY_TRACE_VERSION: &str =
     "agentflow-core-evidence-authority-trace.v1";
+pub const CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION: &str =
+    "agentflow-core-evidence-completeness-policy.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -190,6 +192,40 @@ pub struct CoreEvidenceAuthorityTraceNegativeFixtureResult {
     pub status: String,
     pub expected_reason: String,
     pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceCompletenessPolicy {
+    pub version: String,
+    pub policy_id: String,
+    pub status: String,
+    pub route_ref: String,
+    pub action_ref: String,
+    pub requirement_groups: Vec<CoreEvidenceRequirementGroup>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceRequirementGroup {
+    pub group_id: String,
+    pub group_kind: String,
+    pub accepted_source_types: Vec<String>,
+    pub min_collected: usize,
+    pub deferred_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceCompletenessEvaluation {
+    pub version: String,
+    pub policy_id: String,
+    pub outcome: String,
+    pub reasons: Vec<String>,
+    pub satisfied_groups: Vec<String>,
+    pub missing_groups: Vec<String>,
+    pub deferred_groups: Vec<String>,
+    pub invalid_evidence_ids: Vec<String>,
 }
 
 pub fn canonical_core_evidence_pack_fixture() -> CoreEvidencePack {
@@ -675,6 +711,188 @@ fn authority_fact(
         fact_ref: fact_ref.to_string(),
         authority_path: authority_path.to_string(),
     }
+}
+
+pub fn canonical_core_evidence_completeness_policy_fixture() -> CoreEvidenceCompletenessPolicy {
+    CoreEvidenceCompletenessPolicy {
+        version: CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION.to_string(),
+        policy_id: "policy:core-evidence-completeness".to_string(),
+        status: "active".to_string(),
+        route_ref: "route:work".to_string(),
+        action_ref: "action:attach-evidence".to_string(),
+        requirement_groups: vec![
+            CoreEvidenceRequirementGroup {
+                group_id: "required-local-artifact".to_string(),
+                group_kind: "required".to_string(),
+                accepted_source_types: vec!["artifact".to_string(), "command-output".to_string()],
+                min_collected: 1,
+                deferred_reason: None,
+            },
+            CoreEvidenceRequirementGroup {
+                group_id: "optional-ui-proof".to_string(),
+                group_kind: "optional".to_string(),
+                accepted_source_types: vec!["screenshot".to_string()],
+                min_collected: 1,
+                deferred_reason: None,
+            },
+            CoreEvidenceRequirementGroup {
+                group_id: "alternative-review-proof".to_string(),
+                group_kind: "alternative".to_string(),
+                accepted_source_types: vec![
+                    "human-confirmation".to_string(),
+                    "external-proof".to_string(),
+                ],
+                min_collected: 1,
+                deferred_reason: None,
+            },
+            CoreEvidenceRequirementGroup {
+                group_id: "deferred-long-retention".to_string(),
+                group_kind: "deferred".to_string(),
+                accepted_source_types: vec!["provenance".to_string()],
+                min_collected: 1,
+                deferred_reason: Some("deferred-by-policy".to_string()),
+            },
+        ],
+    }
+}
+
+pub fn evaluate_core_evidence_completeness_policy(
+    policy: &CoreEvidenceCompletenessPolicy,
+    packs: &[CoreEvidencePack],
+) -> CoreEvidenceCompletenessEvaluation {
+    let mut reasons = Vec::new();
+    let mut satisfied_groups = Vec::new();
+    let mut missing_groups = Vec::new();
+    let mut deferred_groups = Vec::new();
+    let mut invalid_evidence_ids = Vec::new();
+
+    if policy.version != CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION {
+        reasons.push(reason("evidence-policy-version-mismatch"));
+    }
+    if policy.status != "active" {
+        reasons.push(reason("evidence-policy-status-unsupported"));
+    }
+    if policy.requirement_groups.is_empty() {
+        reasons.push(reason("evidence-policy-groups-missing"));
+    }
+
+    for pack in packs {
+        if validate_core_evidence_pack_schema(pack).is_err() {
+            invalid_evidence_ids.push(pack.evidence_id.clone());
+            reasons.push(reason(&format!("evidence-invalid:{}", pack.evidence_id)));
+        }
+    }
+
+    for group in &policy.requirement_groups {
+        if group.group_id.trim().is_empty()
+            || group.accepted_source_types.is_empty()
+            || group.min_collected == 0
+        {
+            reasons.push(reason("evidence-policy-group-invalid"));
+            continue;
+        }
+        let collected = packs
+            .iter()
+            .filter(|pack| {
+                pack.status == "collected"
+                    && group
+                        .accepted_source_types
+                        .iter()
+                        .any(|source_type| source_type == &pack.source_type)
+                    && validate_core_evidence_pack_schema(pack).is_ok()
+            })
+            .count();
+
+        match group.group_kind.as_str() {
+            "required" => {
+                if collected >= group.min_collected {
+                    satisfied_groups.push(group.group_id.clone());
+                } else {
+                    missing_groups.push(group.group_id.clone());
+                    reasons.push(reason(&format!(
+                        "evidence-required-missing:{}",
+                        group.group_id
+                    )));
+                }
+            }
+            "optional" => {
+                if collected >= group.min_collected {
+                    satisfied_groups.push(group.group_id.clone());
+                }
+            }
+            "alternative" => {
+                if collected >= group.min_collected {
+                    satisfied_groups.push(group.group_id.clone());
+                } else {
+                    missing_groups.push(group.group_id.clone());
+                    reasons.push(reason(&format!(
+                        "evidence-alternative-missing:{}",
+                        group.group_id
+                    )));
+                }
+            }
+            "deferred" => {
+                if collected >= group.min_collected {
+                    satisfied_groups.push(group.group_id.clone());
+                } else {
+                    deferred_groups.push(group.group_id.clone());
+                    reasons.push(reason(&format!("evidence-deferred:{}", group.group_id)));
+                }
+            }
+            _ => reasons.push(reason(&format!(
+                "evidence-policy-group-kind-unsupported:{}",
+                group.group_kind
+            ))),
+        }
+    }
+
+    reasons.sort();
+    reasons.dedup();
+    satisfied_groups.sort();
+    satisfied_groups.dedup();
+    missing_groups.sort();
+    missing_groups.dedup();
+    deferred_groups.sort();
+    deferred_groups.dedup();
+    invalid_evidence_ids.sort();
+    invalid_evidence_ids.dedup();
+
+    let outcome = if !invalid_evidence_ids.is_empty()
+        || reasons
+            .iter()
+            .any(|reason| reason.starts_with("evidence-policy-"))
+    {
+        "invalid"
+    } else if !missing_groups.is_empty() {
+        "incomplete"
+    } else if !deferred_groups.is_empty() {
+        "deferred"
+    } else {
+        "complete"
+    };
+
+    CoreEvidenceCompletenessEvaluation {
+        version: CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION.to_string(),
+        policy_id: policy.policy_id.clone(),
+        outcome: outcome.to_string(),
+        reasons,
+        satisfied_groups,
+        missing_groups,
+        deferred_groups,
+        invalid_evidence_ids,
+    }
+}
+
+pub fn core_evidence_completeness_policy_sample_packs() -> Vec<CoreEvidencePack> {
+    let mut artifact = canonical_core_evidence_pack_fixture();
+    artifact.evidence_id = "evidence-required-artifact".to_string();
+    artifact.source_type = "artifact".to_string();
+
+    let mut confirmation = canonical_core_evidence_pack_fixture();
+    confirmation.evidence_id = "evidence-alternative-confirmation".to_string();
+    confirmation.source_type = "human-confirmation".to_string();
+
+    vec![artifact, confirmation]
 }
 
 pub fn core_evidence_source_type_registry_contract() -> CoreEvidenceSourceTypeRegistryContract {
@@ -1386,5 +1604,62 @@ mod tests {
             );
             assert!(fixture.reasons.contains(&fixture.expected_reason));
         }
+    }
+
+    #[test]
+    fn core_evidence_completeness_policy_evaluates_complete_sample() {
+        let mut policy = canonical_core_evidence_completeness_policy_fixture();
+        policy
+            .requirement_groups
+            .retain(|group| group.group_kind != "deferred");
+        let packs = core_evidence_completeness_policy_sample_packs();
+
+        let evaluation = evaluate_core_evidence_completeness_policy(&policy, &packs);
+        assert_eq!(evaluation.outcome, "complete");
+        assert!(evaluation
+            .satisfied_groups
+            .contains(&"required-local-artifact".to_string()));
+        assert!(evaluation
+            .satisfied_groups
+            .contains(&"alternative-review-proof".to_string()));
+    }
+
+    #[test]
+    fn core_evidence_completeness_policy_rejects_missing_required_evidence() {
+        let policy = canonical_core_evidence_completeness_policy_fixture();
+        let packs = vec![];
+
+        let evaluation = evaluate_core_evidence_completeness_policy(&policy, &packs);
+        assert_eq!(evaluation.outcome, "incomplete");
+        assert!(evaluation
+            .reasons
+            .contains(&"evidence-required-missing:required-local-artifact".to_string()));
+    }
+
+    #[test]
+    fn core_evidence_completeness_policy_keeps_deferred_outcome_distinct() {
+        let policy = canonical_core_evidence_completeness_policy_fixture();
+        let packs = core_evidence_completeness_policy_sample_packs();
+
+        let evaluation = evaluate_core_evidence_completeness_policy(&policy, &packs);
+        assert_eq!(evaluation.outcome, "deferred");
+        assert!(evaluation
+            .reasons
+            .contains(&"evidence-deferred:deferred-long-retention".to_string()));
+    }
+
+    #[test]
+    fn core_evidence_completeness_policy_rejects_invalid_evidence() {
+        let policy = canonical_core_evidence_completeness_policy_fixture();
+        let mut invalid_pack = canonical_core_evidence_pack_fixture();
+        invalid_pack.evidence_id = "evidence-invalid-digest".to_string();
+        invalid_pack.digest.value.clear();
+        let packs = vec![invalid_pack];
+
+        let evaluation = evaluate_core_evidence_completeness_policy(&policy, &packs);
+        assert_eq!(evaluation.outcome, "invalid");
+        assert!(evaluation
+            .reasons
+            .contains(&"evidence-invalid:evidence-invalid-digest".to_string()));
     }
 }
