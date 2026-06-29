@@ -12,6 +12,13 @@ use agentflow_event_store::{
     classify_task_event, map_task_event_to_runtime_event, replay_runtime_events,
     replay_task_events, ReplayFilter, TaskEvent,
 };
+use agentflow_ontology::{
+    core_missing_evidence_reports_for_completeness_policy,
+    evaluate_core_evidence_completeness_policy,
+    software_dev_reference_evidence_completeness_policy,
+    software_dev_reference_evidence_fixture_packs, CoreEvidenceCompletenessEvaluation,
+    CoreEvidenceCompletenessPolicy, CoreEvidencePack, CoreEvidenceTraceRefs,
+};
 use agentflow_pack::{
     software_dev_connector_definition, software_dev_domain_definition,
     software_dev_surface_definition, ui_design_connector_definition, ui_design_domain_definition,
@@ -38,6 +45,7 @@ use crate::storage::{
 };
 
 pub const PROJECTION_QUERY_SURFACE_VERSION: &str = "projection-query-surface.v1";
+pub const EVIDENCE_KERNEL_READ_MODEL_VERSION: &str = "evidence-kernel-read-model.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -121,6 +129,67 @@ pub struct WorkLoopEvidenceSummaryView {
     pub session_refs: Vec<String>,
     #[serde(default)]
     pub delivery_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceSourceSummaryView {
+    pub evidence_id: String,
+    pub source_type: String,
+    pub status: String,
+    pub subject_ref: String,
+    pub producer_role: String,
+    pub artifact_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceMissingReasonView {
+    pub report_id: String,
+    pub source_type: String,
+    pub outcome: String,
+    pub current_state: String,
+    pub expected_proof: String,
+    pub remediation_hint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_ref: Option<String>,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceCompletenessReadModelView {
+    pub policy_id: String,
+    pub outcome: String,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+    #[serde(default)]
+    pub satisfied_groups: Vec<String>,
+    #[serde(default)]
+    pub missing_groups: Vec<String>,
+    #[serde(default)]
+    pub deferred_groups: Vec<String>,
+    #[serde(default)]
+    pub invalid_evidence_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceKernelReadModelView {
+    pub version: String,
+    pub status: String,
+    pub policy_id: String,
+    pub authority: bool,
+    pub readonly: bool,
+    #[serde(default)]
+    pub source_summaries: Vec<EvidenceSourceSummaryView>,
+    #[serde(default)]
+    pub trace_refs: Vec<String>,
+    #[serde(default)]
+    pub missing_reasons: Vec<EvidenceMissingReasonView>,
+    pub completeness: EvidenceCompletenessReadModelView,
+    pub freshness: ProjectionFreshness,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -824,6 +893,22 @@ pub fn get_projection_surface_catalog(
         Err(error) => warnings.push(format!("pack-registry-unreadable: {error}")),
     }
 
+    read_models.push(surface_read_model(
+        "evidence-kernel",
+        "core",
+        "core-evidence",
+        "Evidence Kernel",
+        "readonly",
+        "get_evidence_kernel_view",
+        Vec::new(),
+        ".agentflow/projections/evidence/core-evidence.json",
+        vec![
+            "crates/ontology/src/evidence.rs".to_string(),
+            "docs/architecture/068-evidence-projection-read-model-v1.md".to_string(),
+        ],
+        evidence_kernel_freshness(),
+    ));
+
     read_models.sort_by(|left, right| left.key.cmp(&right.key));
     let freshness = catalog_freshness(&read_models, warnings.clone());
 
@@ -834,6 +919,90 @@ pub fn get_projection_surface_catalog(
         freshness,
         warnings,
     })
+}
+
+pub fn get_evidence_kernel_view(
+    project_root: impl AsRef<Path>,
+) -> Result<EvidenceKernelReadModelView> {
+    let _ = project_root.as_ref();
+    let policy = software_dev_reference_evidence_completeness_policy();
+    let packs = software_dev_reference_evidence_fixture_packs();
+    Ok(project_evidence_kernel_read_model(&policy, &packs))
+}
+
+pub fn project_evidence_kernel_read_model(
+    policy: &CoreEvidenceCompletenessPolicy,
+    packs: &[CoreEvidencePack],
+) -> EvidenceKernelReadModelView {
+    let evaluation = evaluate_core_evidence_completeness_policy(policy, packs);
+    let missing_reports = core_missing_evidence_reports_for_completeness_policy(policy, packs);
+    let status = evidence_projection_status(&evaluation);
+    let source_summaries = packs
+        .iter()
+        .map(|pack| EvidenceSourceSummaryView {
+            evidence_id: pack.evidence_id.clone(),
+            source_type: pack.source_type.clone(),
+            status: pack.status.clone(),
+            subject_ref: pack.subject.subject_ref.clone(),
+            producer_role: pack.producer.role_ref.clone(),
+            artifact_count: pack.artifact_refs.len(),
+        })
+        .collect::<Vec<_>>();
+    let trace_refs = packs
+        .iter()
+        .flat_map(|pack| evidence_trace_refs(&pack.trace_refs))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let missing_reasons = missing_reports
+        .into_iter()
+        .map(|report| EvidenceMissingReasonView {
+            report_id: report.report_id,
+            source_type: report.source_type,
+            outcome: report.outcome,
+            current_state: report.current_state,
+            expected_proof: report.expected_proof,
+            remediation_hint: report.remediation_hint,
+            evidence_ref: report.evidence_ref,
+            reasons: report.reasons,
+        })
+        .collect::<Vec<_>>();
+
+    EvidenceKernelReadModelView {
+        version: EVIDENCE_KERNEL_READ_MODEL_VERSION.to_string(),
+        status,
+        policy_id: policy.policy_id.clone(),
+        authority: false,
+        readonly: true,
+        source_summaries,
+        trace_refs,
+        missing_reasons,
+        completeness: EvidenceCompletenessReadModelView {
+            policy_id: evaluation.policy_id,
+            outcome: evaluation.outcome,
+            reasons: evaluation.reasons,
+            satisfied_groups: evaluation.satisfied_groups,
+            missing_groups: evaluation.missing_groups,
+            deferred_groups: evaluation.deferred_groups,
+            invalid_evidence_ids: evaluation.invalid_evidence_ids,
+        },
+        freshness: evidence_kernel_freshness(),
+    }
+}
+
+pub fn evidence_kernel_invalid_missing_projection_fixtures() -> Vec<EvidenceKernelReadModelView> {
+    let policy = software_dev_reference_evidence_completeness_policy();
+    let mut invalid_pack = software_dev_reference_evidence_fixture_packs()
+        .into_iter()
+        .next()
+        .expect("software dev reference fixture must exist");
+    invalid_pack.evidence_id = "evidence-reference-invalid-digest".to_string();
+    invalid_pack.digest.value.clear();
+
+    vec![
+        project_evidence_kernel_read_model(&policy, &[]),
+        project_evidence_kernel_read_model(&policy, &[invalid_pack]),
+    ]
 }
 
 pub fn get_requirement_intake_view(
@@ -2281,6 +2450,48 @@ fn task_allowed_actions(projection: &TaskProjection) -> Vec<ViewActionHint> {
     }
 }
 
+fn evidence_projection_status(evaluation: &CoreEvidenceCompletenessEvaluation) -> String {
+    match evaluation.outcome.as_str() {
+        "complete" => "passed",
+        "invalid" => "invalid",
+        "deferred" | "incomplete" => "deferred",
+        _ => "invalid",
+    }
+    .to_string()
+}
+
+fn evidence_trace_refs(trace_refs: &CoreEvidenceTraceRefs) -> Vec<String> {
+    trace_refs
+        .spec_refs
+        .iter()
+        .chain(trace_refs.goal_refs.iter())
+        .chain(trace_refs.task_refs.iter())
+        .chain(trace_refs.run_refs.iter())
+        .chain(trace_refs.action_refs.iter())
+        .chain(trace_refs.decision_refs.iter())
+        .cloned()
+        .collect()
+}
+
+fn evidence_kernel_freshness() -> ProjectionFreshness {
+    ProjectionFreshness {
+        projection_version: EVIDENCE_KERNEL_READ_MODEL_VERSION.to_string(),
+        query_surface_version: PROJECTION_QUERY_SURFACE_VERSION.to_string(),
+        last_event_id: None,
+        last_event_type: None,
+        last_event_timestamp: None,
+        last_rebuilt_at: 0,
+        staleness: "readonly-derived".to_string(),
+        definition_versions: ProjectionDefinitionVersions {
+            ontology_version: "agentflow-core-evidence-pack.v1".to_string(),
+            action_contract_version: "agentflow-core-evidence-completeness-policy.v1".to_string(),
+            role_policy_version: "not-applicable".to_string(),
+            state_machine_version: "not-applicable".to_string(),
+        },
+        warnings: Vec::new(),
+    }
+}
+
 fn delivery_allowed_actions(projection: &TaskProjection) -> Vec<ViewActionHint> {
     match projection.delivery.status.as_str() {
         "ready" | "published" => vec![hint(
@@ -3162,6 +3373,7 @@ mod tests {
             "project-home",
             "task-workbench",
             "delivery-package",
+            "evidence-kernel",
             "runtime-health",
             "pack-industry-workbench",
         ] {
@@ -3188,6 +3400,77 @@ mod tests {
                 .all(|entry| entry.freshness.query_surface_version
                     == PROJECTION_QUERY_SURFACE_VERSION)
         );
+    }
+
+    #[test]
+    fn evidence_kernel_read_model_projects_complete_fixture_without_authority() {
+        let policy = agentflow_ontology::software_dev_reference_evidence_completeness_policy();
+        let packs = agentflow_ontology::software_dev_reference_evidence_fixture_packs();
+        let view = project_evidence_kernel_read_model(&policy, &packs);
+
+        assert_eq!(view.version, EVIDENCE_KERNEL_READ_MODEL_VERSION);
+        assert_eq!(view.status, "passed");
+        assert_eq!(view.completeness.outcome, "complete");
+        assert!(!view.authority);
+        assert!(view.readonly);
+        assert_eq!(view.source_summaries.len(), 6);
+        assert!(view
+            .source_summaries
+            .iter()
+            .any(|source| source.source_type == "external-proof"));
+        assert!(!view.trace_refs.is_empty());
+        assert!(view.missing_reasons.is_empty());
+    }
+
+    #[test]
+    fn evidence_kernel_read_model_keeps_missing_and_invalid_out_of_passed_state() {
+        let fixtures = evidence_kernel_invalid_missing_projection_fixtures();
+        let missing = fixtures
+            .iter()
+            .find(|view| view.status == "deferred")
+            .expect("missing evidence fixture should be deferred");
+        let invalid = fixtures
+            .iter()
+            .find(|view| view.status == "invalid")
+            .expect("invalid evidence fixture should be invalid");
+
+        assert_ne!(missing.status, "passed");
+        assert_ne!(invalid.status, "passed");
+        assert_eq!(missing.completeness.outcome, "incomplete");
+        assert_eq!(invalid.completeness.outcome, "invalid");
+        assert!(missing
+            .missing_reasons
+            .iter()
+            .flat_map(|reason| reason.reasons.iter())
+            .any(|reason| reason.starts_with("evidence-required-missing")));
+        assert!(invalid
+            .missing_reasons
+            .iter()
+            .flat_map(|reason| reason.reasons.iter())
+            .any(|reason| reason.starts_with("evidence-missing-digest")
+                || reason.starts_with("evidence-invalid")));
+    }
+
+    #[test]
+    fn projection_surface_catalog_exposes_evidence_kernel_as_readonly_model() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        rebuild_projections(dir.path()).unwrap();
+        let catalog = get_projection_surface_catalog(dir.path()).unwrap();
+
+        let evidence_entry = catalog
+            .read_models
+            .iter()
+            .find(|entry| entry.kind == "evidence-kernel")
+            .expect("catalog should include evidence kernel read model");
+        assert_eq!(evidence_entry.query.name, "get_evidence_kernel_view");
+        assert_eq!(evidence_entry.object_type, "core");
+        assert!(!evidence_entry.authority);
+        assert!(evidence_entry.missing_facts.is_empty());
+
+        let evidence_view = get_evidence_kernel_view(dir.path()).unwrap();
+        assert_eq!(evidence_view.status, "passed");
+        assert!(!evidence_view.authority);
     }
 
     #[test]

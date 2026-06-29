@@ -62,6 +62,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [065-core-missing-evidence-handling-v1.md](065-core-missing-evidence-handling-v1.md) | Core Missing Evidence Handling |
 | [066-core-external-proof-provenance-v1.md](066-core-external-proof-provenance-v1.md) | Core External Proof Provenance |
 | [067-software-dev-reference-evidence-mapping-v1.md](067-software-dev-reference-evidence-mapping-v1.md) | Software Dev Reference Evidence Mapping |
+| [068-evidence-projection-read-model-v1.md](068-evidence-projection-read-model-v1.md) | Evidence Projection Read Model |
 
 ## Rules
 

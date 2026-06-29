@@ -257,6 +257,7 @@ version = "1.0.5"
 dependencies = [
  "agentflow-audit",
  "agentflow-event-store",
+ "agentflow-ontology",
  "agentflow-pack",
  "agentflow-release",
  "agentflow-spec",
