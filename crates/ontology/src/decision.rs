@@ -18,6 +18,8 @@ pub const CORE_EVIDENCE_TO_DECISION_GATE_CONTRACT_VERSION: &str =
     "agentflow-core-evidence-to-decision-gate.v1";
 pub const CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION: &str =
     "agentflow-core-completion-commit-authority.v1";
+pub const CORE_DELIVERY_READINESS_AUDIT_TRIGGER_CONTRACT_VERSION: &str =
+    "agentflow-core-delivery-readiness-audit-trigger.v1";
 pub const CORE_EVIDENCE_DECISION_MODEL_VERSION: &str =
     "agentflow-core-evidence-decision-reference-model.v1";
 
@@ -303,6 +305,65 @@ pub struct CoreCompletionCommitAuthorityResult {
     pub failure_reason: Option<CoreDecisionFailureReason>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDeliveryReadinessAuditTriggerContract {
+    pub version: String,
+    pub status: String,
+    pub authority: String,
+    pub required_completion_event_type: String,
+    pub readiness_rules: Vec<CoreDeliveryReadinessRule>,
+    pub audit_trigger_policy: CoreOptionalAuditTriggerPolicy,
+    pub forbidden_authority_writers: Vec<String>,
+    pub forbidden_core_terms: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDeliveryReadinessRule {
+    pub readiness_outcome: String,
+    pub delivery_ready: bool,
+    pub required_refs: Vec<String>,
+    pub meaning: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreOptionalAuditTriggerPolicy {
+    pub default_audit_required: bool,
+    pub explicit_policy_required: bool,
+    pub sidecar_event_type: String,
+    pub sidecar_queue_target: String,
+    pub policy_bound_audit_may_block_done: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDeliveryReadinessInput {
+    pub version: String,
+    pub subject_ref: String,
+    pub completion_event_ref: String,
+    pub completion_event_type: String,
+    pub evidence_refs: Vec<String>,
+    pub public_record_refs: Vec<String>,
+    pub explicit_audit_required: bool,
+    pub audit_policy_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDeliveryReadinessAuditTriggerResult {
+    pub version: String,
+    pub delivery_ready: bool,
+    pub readiness_outcome: String,
+    pub public_record_refs: Vec<String>,
+    pub audit_sidecar_queued: bool,
+    pub audit_sidecar_event_type: Option<String>,
+    pub audit_sidecar_target: Option<String>,
+    pub done_blocked_by_audit: bool,
+    pub failure_reason: Option<CoreDecisionFailureReason>,
+}
+
 pub fn core_decision_model_contract() -> CoreDecisionModelContract {
     CoreDecisionModelContract {
         version: CORE_DECISION_MODEL_CONTRACT_VERSION.to_string(),
@@ -584,6 +645,70 @@ pub fn canonical_core_completion_commit_attempt_fixture() -> CoreCompletionCommi
             authority_boundary: "event-store".to_string(),
         }],
         evidence_refs: vec!["EvidenceRef:accepted-proof-pack".to_string()],
+    }
+}
+
+pub fn core_delivery_readiness_audit_trigger_contract() -> CoreDeliveryReadinessAuditTriggerContract
+{
+    CoreDeliveryReadinessAuditTriggerContract {
+        version: CORE_DELIVERY_READINESS_AUDIT_TRIGGER_CONTRACT_VERSION.to_string(),
+        status: "active".to_string(),
+        authority:
+            "Delivery Readiness reads completion and public record facts, then evaluates optional audit sidecar routing."
+                .to_string(),
+        required_completion_event_type: "subject.completion.committed".to_string(),
+        readiness_rules: vec![
+            delivery_readiness_rule(
+                "ready",
+                true,
+                vec!["CompletionEventRef", "EvidenceRef", "PublicRecordRef"],
+                "completion event, evidence, and public record are present",
+            ),
+            delivery_readiness_rule(
+                "waiting-for-public-record",
+                false,
+                vec!["CompletionEventRef", "EvidenceRef"],
+                "completion and evidence exist, but public record is still missing",
+            ),
+            delivery_readiness_rule(
+                "evidence-missing",
+                false,
+                vec!["CompletionEventRef"],
+                "completion exists, but evidence references are missing",
+            ),
+            delivery_readiness_rule(
+                "completion-missing",
+                false,
+                vec![],
+                "completion event is missing or not authoritative",
+            ),
+        ],
+        audit_trigger_policy: CoreOptionalAuditTriggerPolicy {
+            default_audit_required: false,
+            explicit_policy_required: true,
+            sidecar_event_type: "subject.audit-sidecar.evaluation-queued".to_string(),
+            sidecar_queue_target: "audit-sidecar".to_string(),
+            policy_bound_audit_may_block_done: true,
+        },
+        forbidden_authority_writers: vec![
+            "audit-sidecar".to_string(),
+            "projection".to_string(),
+            "provider-session".to_string(),
+        ],
+        forbidden_core_terms: core_decision_model_contract().forbidden_core_terms,
+    }
+}
+
+pub fn canonical_core_delivery_readiness_input_fixture() -> CoreDeliveryReadinessInput {
+    CoreDeliveryReadinessInput {
+        version: CORE_DELIVERY_READINESS_AUDIT_TRIGGER_CONTRACT_VERSION.to_string(),
+        subject_ref: "subject:core-delivery".to_string(),
+        completion_event_ref: "EventRef:completion:subject:core-delivery".to_string(),
+        completion_event_type: "subject.completion.committed".to_string(),
+        evidence_refs: vec!["EvidenceRef:accepted-proof-pack".to_string()],
+        public_record_refs: vec!["PublicRecordRef:delivery-summary".to_string()],
+        explicit_audit_required: false,
+        audit_policy_ref: None,
     }
 }
 
@@ -1814,6 +1939,211 @@ pub fn validate_core_completion_commit_authority_result(
     }
 }
 
+pub fn validate_core_delivery_readiness_audit_trigger_contract(
+    contract: &CoreDeliveryReadinessAuditTriggerContract,
+    failure_contract: &CoreDecisionFailureReasonContract,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if contract.version != CORE_DELIVERY_READINESS_AUDIT_TRIGGER_CONTRACT_VERSION {
+        errors.push(format!(
+            "delivery readiness audit trigger version must be `{}`",
+            CORE_DELIVERY_READINESS_AUDIT_TRIGGER_CONTRACT_VERSION
+        ));
+    }
+    if contract.status != "active" {
+        errors.push("delivery readiness audit trigger status must be active".to_string());
+    }
+    if contract.required_completion_event_type != "subject.completion.committed" {
+        errors.push("delivery readiness must consume subject.completion.committed".to_string());
+    }
+
+    let outcomes: BTreeSet<_> = contract
+        .readiness_rules
+        .iter()
+        .map(|rule| rule.readiness_outcome.as_str())
+        .collect();
+    for required in [
+        "ready",
+        "waiting-for-public-record",
+        "evidence-missing",
+        "completion-missing",
+    ] {
+        if !outcomes.contains(required) {
+            errors.push(format!("delivery readiness missing outcome `{required}`"));
+        }
+    }
+    if !contract.readiness_rules.iter().any(|rule| {
+        rule.readiness_outcome == "ready"
+            && rule.delivery_ready
+            && rule
+                .required_refs
+                .iter()
+                .any(|item| item == "PublicRecordRef")
+    }) {
+        errors.push("delivery readiness ready outcome must require public record".to_string());
+    }
+    if contract.audit_trigger_policy.default_audit_required {
+        errors.push("audit sidecar must not be required by default".to_string());
+    }
+    if !contract.audit_trigger_policy.explicit_policy_required {
+        errors.push("audit sidecar trigger requires explicit policy".to_string());
+    }
+    if contract.audit_trigger_policy.sidecar_event_type != "subject.audit-sidecar.evaluation-queued"
+    {
+        errors.push("audit sidecar event type is invalid".to_string());
+    }
+    if contract.audit_trigger_policy.sidecar_queue_target != "audit-sidecar" {
+        errors.push("audit sidecar queue target is invalid".to_string());
+    }
+    for writer in ["audit-sidecar", "projection", "provider-session"] {
+        if !contract
+            .forbidden_authority_writers
+            .iter()
+            .any(|forbidden| forbidden == writer)
+        {
+            errors.push(format!(
+                "delivery readiness missing forbidden authority writer `{writer}`"
+            ));
+        }
+    }
+    if !failure_contract
+        .applies_to_outcomes
+        .iter()
+        .any(|outcome| outcome == "blocked")
+    {
+        errors.push("delivery readiness requires blocked failure reason support".to_string());
+    }
+
+    validate_no_forbidden_terms(
+        "Core delivery readiness audit trigger contract",
+        &contract.forbidden_core_terms,
+        core_delivery_readiness_audit_trigger_contract_surface(contract),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+pub fn evaluate_core_delivery_readiness_audit_trigger(
+    contract: &CoreDeliveryReadinessAuditTriggerContract,
+    input: &CoreDeliveryReadinessInput,
+) -> CoreDeliveryReadinessAuditTriggerResult {
+    let readiness_outcome = if input.completion_event_ref.trim().is_empty()
+        || input.completion_event_type != contract.required_completion_event_type
+    {
+        "completion-missing"
+    } else if input.evidence_refs.is_empty() {
+        "evidence-missing"
+    } else if input.public_record_refs.is_empty() {
+        "waiting-for-public-record"
+    } else {
+        "ready"
+    };
+    let delivery_ready = readiness_outcome == "ready";
+    let audit_sidecar_queued =
+        input.explicit_audit_required && input.audit_policy_ref.as_deref().is_some();
+    let done_blocked_by_audit = audit_sidecar_queued
+        && contract
+            .audit_trigger_policy
+            .policy_bound_audit_may_block_done;
+    let failure_reason = if delivery_ready && !input.explicit_audit_required {
+        None
+    } else if delivery_ready && audit_sidecar_queued {
+        None
+    } else {
+        Some(delivery_readiness_failure_reason(readiness_outcome, input))
+    };
+
+    CoreDeliveryReadinessAuditTriggerResult {
+        version: CORE_DELIVERY_READINESS_AUDIT_TRIGGER_CONTRACT_VERSION.to_string(),
+        delivery_ready,
+        readiness_outcome: readiness_outcome.to_string(),
+        public_record_refs: input.public_record_refs.clone(),
+        audit_sidecar_queued,
+        audit_sidecar_event_type: audit_sidecar_queued
+            .then(|| contract.audit_trigger_policy.sidecar_event_type.clone()),
+        audit_sidecar_target: audit_sidecar_queued
+            .then(|| contract.audit_trigger_policy.sidecar_queue_target.clone()),
+        done_blocked_by_audit,
+        failure_reason,
+    }
+}
+
+pub fn validate_core_delivery_readiness_audit_trigger_result(
+    contract: &CoreDeliveryReadinessAuditTriggerContract,
+    failure_contract: &CoreDecisionFailureReasonContract,
+    result: &CoreDeliveryReadinessAuditTriggerResult,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if result.version != CORE_DELIVERY_READINESS_AUDIT_TRIGGER_CONTRACT_VERSION {
+        errors.push(format!(
+            "delivery readiness result version must be `{}`",
+            CORE_DELIVERY_READINESS_AUDIT_TRIGGER_CONTRACT_VERSION
+        ));
+    }
+    let Some(rule) = contract
+        .readiness_rules
+        .iter()
+        .find(|rule| rule.readiness_outcome == result.readiness_outcome)
+    else {
+        errors.push(format!(
+            "delivery readiness result references unknown outcome `{}`",
+            result.readiness_outcome
+        ));
+        return Err(errors);
+    };
+    if result.delivery_ready != rule.delivery_ready {
+        errors.push("delivery readiness result does not match rule".to_string());
+    }
+    if result.delivery_ready && result.public_record_refs.is_empty() {
+        errors.push("delivery ready result requires public record refs".to_string());
+    }
+    if result.audit_sidecar_queued {
+        if result.audit_sidecar_event_type.as_deref()
+            != Some(contract.audit_trigger_policy.sidecar_event_type.as_str())
+        {
+            errors.push("audit sidecar queued result must include sidecar event type".to_string());
+        }
+        if result.audit_sidecar_target.as_deref()
+            != Some(contract.audit_trigger_policy.sidecar_queue_target.as_str())
+        {
+            errors.push("audit sidecar queued result must include sidecar target".to_string());
+        }
+    } else if result.done_blocked_by_audit {
+        errors.push("audit cannot block done when sidecar is not queued".to_string());
+    }
+    if !result.delivery_ready {
+        let Some(failure_reason) = &result.failure_reason else {
+            errors.push("not-ready delivery result requires failure reason".to_string());
+            return Err(errors);
+        };
+        if let Err(reason_errors) =
+            validate_core_decision_failure_reason(failure_contract, failure_reason)
+        {
+            errors.extend(reason_errors);
+        }
+    }
+
+    validate_no_forbidden_terms(
+        "Core delivery readiness audit trigger result",
+        &contract.forbidden_core_terms,
+        core_delivery_readiness_audit_trigger_result_surface(result),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 pub fn validate_core_decision_record(
     contract: &CoreDecisionModelContract,
     record: &CoreDecisionRecord,
@@ -2654,6 +2984,42 @@ fn core_completion_commit_authority_contract_surface(
     .collect()
 }
 
+fn core_delivery_readiness_audit_trigger_contract_surface(
+    contract: &CoreDeliveryReadinessAuditTriggerContract,
+) -> Vec<String> {
+    [
+        contract.version.clone(),
+        contract.status.clone(),
+        contract.authority.clone(),
+        contract.required_completion_event_type.clone(),
+        contract
+            .audit_trigger_policy
+            .default_audit_required
+            .to_string(),
+        contract
+            .audit_trigger_policy
+            .explicit_policy_required
+            .to_string(),
+        contract.audit_trigger_policy.sidecar_event_type.clone(),
+        contract.audit_trigger_policy.sidecar_queue_target.clone(),
+        contract
+            .audit_trigger_policy
+            .policy_bound_audit_may_block_done
+            .to_string(),
+        contract.forbidden_authority_writers.join(" "),
+    ]
+    .into_iter()
+    .chain(contract.readiness_rules.iter().flat_map(|rule| {
+        [
+            rule.readiness_outcome.clone(),
+            rule.delivery_ready.to_string(),
+            rule.required_refs.join(" "),
+            rule.meaning.clone(),
+        ]
+    }))
+    .collect()
+}
+
 fn core_decision_record_surface(record: &CoreDecisionRecord) -> Vec<String> {
     [
         record.version.clone(),
@@ -2741,6 +3107,29 @@ fn core_completion_commit_authority_result_surface(
     .collect()
 }
 
+fn core_delivery_readiness_audit_trigger_result_surface(
+    result: &CoreDeliveryReadinessAuditTriggerResult,
+) -> Vec<String> {
+    [
+        result.version.clone(),
+        result.delivery_ready.to_string(),
+        result.readiness_outcome.clone(),
+        result.public_record_refs.join(" "),
+        result.audit_sidecar_queued.to_string(),
+        result.audit_sidecar_event_type.clone().unwrap_or_default(),
+        result.audit_sidecar_target.clone().unwrap_or_default(),
+        result.done_blocked_by_audit.to_string(),
+    ]
+    .into_iter()
+    .chain(
+        result
+            .failure_reason
+            .iter()
+            .flat_map(|reason| core_decision_failure_reason_surface(reason).into_iter()),
+    )
+    .collect()
+}
+
 fn core_decision_transition_attempt_surface(
     attempt: &CoreDecisionTransitionAttempt,
 ) -> Vec<String> {
@@ -2759,6 +3148,75 @@ fn core_decision_transition_attempt_surface(
         ]
     }))
     .collect()
+}
+
+fn delivery_readiness_rule(
+    readiness_outcome: &str,
+    delivery_ready: bool,
+    required_refs: Vec<&str>,
+    meaning: &str,
+) -> CoreDeliveryReadinessRule {
+    CoreDeliveryReadinessRule {
+        readiness_outcome: readiness_outcome.to_string(),
+        delivery_ready,
+        required_refs: required_refs.into_iter().map(str::to_string).collect(),
+        meaning: meaning.to_string(),
+    }
+}
+
+fn delivery_readiness_failure_reason(
+    readiness_outcome: &str,
+    input: &CoreDeliveryReadinessInput,
+) -> CoreDecisionFailureReason {
+    let (reason_code, message, remediation_route) = match readiness_outcome {
+        "completion-missing" => (
+            "delivery-completion-missing",
+            "delivery readiness requires a completion event",
+            "wait-for-authority",
+        ),
+        "evidence-missing" => (
+            "delivery-evidence-missing",
+            "delivery readiness requires evidence references",
+            "collect-evidence",
+        ),
+        "waiting-for-public-record" => (
+            "delivery-public-record-missing",
+            "delivery readiness requires a public record reference",
+            "collect-evidence",
+        ),
+        _ => (
+            "delivery-readiness-not-ready",
+            "delivery readiness is not ready",
+            "retry-decision",
+        ),
+    };
+    let mut authority_refs = vec![input.subject_ref.clone()];
+    if !input.completion_event_ref.trim().is_empty() {
+        authority_refs.push(input.completion_event_ref.clone());
+    }
+    if let Some(policy_ref) = &input.audit_policy_ref {
+        authority_refs.push(policy_ref.clone());
+    }
+    authority_refs.sort();
+    authority_refs.dedup();
+
+    let mut missing_evidence_refs = input.evidence_refs.clone();
+    if missing_evidence_refs.is_empty() {
+        missing_evidence_refs.push(format!("DeliveryReadiness:{readiness_outcome}"));
+    }
+    missing_evidence_refs.sort();
+    missing_evidence_refs.dedup();
+
+    CoreDecisionFailureReason {
+        outcome: "blocked".to_string(),
+        reason_code: reason_code.to_string(),
+        message: message.to_string(),
+        authority_refs,
+        missing_evidence_refs,
+        remediation_route: remediation_route.to_string(),
+        retry_eligible: true,
+        blocking: true,
+    }
 }
 
 fn completion_commit_failure_reason(
@@ -3624,6 +4082,156 @@ mod tests {
             result.failure_reason.unwrap().reason_code,
             "completion-decision-ref-missing"
         );
+    }
+
+    #[test]
+    fn core_delivery_readiness_audit_trigger_contract_validates() {
+        let contract = core_delivery_readiness_audit_trigger_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        validate_core_delivery_readiness_audit_trigger_contract(&contract, &failure_contract)
+            .unwrap();
+        assert_eq!(
+            contract.version,
+            CORE_DELIVERY_READINESS_AUDIT_TRIGGER_CONTRACT_VERSION
+        );
+        assert!(!contract.audit_trigger_policy.default_audit_required);
+        assert!(contract.audit_trigger_policy.explicit_policy_required);
+    }
+
+    #[test]
+    fn core_delivery_readiness_ready_does_not_queue_audit_by_default() {
+        let contract = core_delivery_readiness_audit_trigger_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let input = canonical_core_delivery_readiness_input_fixture();
+        let result = evaluate_core_delivery_readiness_audit_trigger(&contract, &input);
+
+        validate_core_delivery_readiness_audit_trigger_result(
+            &contract,
+            &failure_contract,
+            &result,
+        )
+        .unwrap();
+        assert!(result.delivery_ready);
+        assert_eq!(result.readiness_outcome, "ready");
+        assert!(!result.audit_sidecar_queued);
+        assert!(!result.done_blocked_by_audit);
+        assert!(result.failure_reason.is_none());
+    }
+
+    #[test]
+    fn core_delivery_readiness_explicit_policy_queues_audit_sidecar() {
+        let contract = core_delivery_readiness_audit_trigger_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let mut input = canonical_core_delivery_readiness_input_fixture();
+        input.explicit_audit_required = true;
+        input.audit_policy_ref = Some("AuditPolicyRef:human-review-required".to_string());
+        let result = evaluate_core_delivery_readiness_audit_trigger(&contract, &input);
+
+        validate_core_delivery_readiness_audit_trigger_result(
+            &contract,
+            &failure_contract,
+            &result,
+        )
+        .unwrap();
+        assert!(result.delivery_ready);
+        assert!(result.audit_sidecar_queued);
+        assert_eq!(
+            result.audit_sidecar_event_type.as_deref(),
+            Some("subject.audit-sidecar.evaluation-queued")
+        );
+        assert_eq!(
+            result.audit_sidecar_target.as_deref(),
+            Some("audit-sidecar")
+        );
+        assert!(result.done_blocked_by_audit);
+    }
+
+    #[test]
+    fn core_delivery_readiness_missing_public_record_is_not_ready() {
+        let contract = core_delivery_readiness_audit_trigger_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let mut input = canonical_core_delivery_readiness_input_fixture();
+        input.public_record_refs.clear();
+        let result = evaluate_core_delivery_readiness_audit_trigger(&contract, &input);
+
+        validate_core_delivery_readiness_audit_trigger_result(
+            &contract,
+            &failure_contract,
+            &result,
+        )
+        .unwrap();
+        let reason = result.failure_reason.unwrap();
+        assert!(!result.delivery_ready);
+        assert_eq!(result.readiness_outcome, "waiting-for-public-record");
+        assert_eq!(reason.reason_code, "delivery-public-record-missing");
+        assert!(!result.audit_sidecar_queued);
+    }
+
+    #[test]
+    fn core_delivery_readiness_missing_evidence_is_not_ready() {
+        let contract = core_delivery_readiness_audit_trigger_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let mut input = canonical_core_delivery_readiness_input_fixture();
+        input.evidence_refs.clear();
+        let result = evaluate_core_delivery_readiness_audit_trigger(&contract, &input);
+
+        validate_core_delivery_readiness_audit_trigger_result(
+            &contract,
+            &failure_contract,
+            &result,
+        )
+        .unwrap();
+        let reason = result.failure_reason.unwrap();
+        assert!(!result.delivery_ready);
+        assert_eq!(result.readiness_outcome, "evidence-missing");
+        assert_eq!(reason.reason_code, "delivery-evidence-missing");
+    }
+
+    #[test]
+    fn core_delivery_readiness_missing_completion_is_not_ready() {
+        let contract = core_delivery_readiness_audit_trigger_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let mut input = canonical_core_delivery_readiness_input_fixture();
+        input.completion_event_ref.clear();
+        let result = evaluate_core_delivery_readiness_audit_trigger(&contract, &input);
+
+        validate_core_delivery_readiness_audit_trigger_result(
+            &contract,
+            &failure_contract,
+            &result,
+        )
+        .unwrap();
+        let reason = result.failure_reason.unwrap();
+        assert!(!result.delivery_ready);
+        assert_eq!(result.readiness_outcome, "completion-missing");
+        assert_eq!(reason.reason_code, "delivery-completion-missing");
+    }
+
+    #[test]
+    fn core_delivery_readiness_rejects_audit_block_without_sidecar_queue() {
+        let contract = core_delivery_readiness_audit_trigger_contract();
+        let failure_contract = core_decision_failure_reason_contract();
+        let result = CoreDeliveryReadinessAuditTriggerResult {
+            version: CORE_DELIVERY_READINESS_AUDIT_TRIGGER_CONTRACT_VERSION.to_string(),
+            delivery_ready: true,
+            readiness_outcome: "ready".to_string(),
+            public_record_refs: vec!["PublicRecordRef:delivery-summary".to_string()],
+            audit_sidecar_queued: false,
+            audit_sidecar_event_type: None,
+            audit_sidecar_target: None,
+            done_blocked_by_audit: true,
+            failure_reason: None,
+        };
+
+        let errors = validate_core_delivery_readiness_audit_trigger_result(
+            &contract,
+            &failure_contract,
+            &result,
+        )
+        .unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("audit cannot block done")));
     }
 
     #[test]

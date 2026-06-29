@@ -125,7 +125,7 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-007 Completion Commit Authority Boundary
 
-状态：in-progress
+状态：done
 
 目标：
 
@@ -138,12 +138,13 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-008 Delivery Readiness and Optional Audit Trigger Evaluation
 
-状态：planned
+状态：in-progress
 
 目标：
 
 - 定义 delivery readiness；
 - audit trigger 是 optional sidecar evaluation；
+- 对应 release-gate artifact：`runtime/core-delivery-readiness-audit-trigger.json`；
 - 对应 GitHub issue：#700。
 
 依赖：#697、#699。
