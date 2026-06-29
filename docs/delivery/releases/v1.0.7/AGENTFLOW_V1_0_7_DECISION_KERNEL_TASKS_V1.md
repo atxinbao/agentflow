@@ -138,7 +138,7 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-008 Delivery Readiness and Optional Audit Trigger Evaluation
 
-状态：in-progress
+状态：done
 
 目标：
 
@@ -151,12 +151,15 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-009 Decision Projection Read Model and Negative Fixtures
 
-状态：planned
+状态：done
 
 目标：
 
 - 定义 Decision read model；
 - projection 只能读取和解释，不写回 authority；
+- 展示 decision status、failure reasons、evidence refs、delivery readiness 和 audit sidecar trigger result；
+- missing evidence、fake evidence、wrong state、projection-as-authority、audit-chain pollution 必须作为负向夹具失败；
+- 对应 release-gate artifact：`runtime/core-decision-projection-read-model.json`；
 - 对应 GitHub issue：#701。
 
 依赖：#696、#697、#698、#699、#700。
@@ -195,6 +198,14 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ```text
 runtime/v107-release-provenance-handoff.json
+runtime/core-decision-model-contract.json
+runtime/core-decision-input-binding.json
+runtime/core-decision-outcome-transitions.json
+runtime/core-decision-failure-reason-remediation.json
+runtime/core-evidence-to-decision-gate.json
+runtime/core-completion-commit-authority.json
+runtime/core-delivery-readiness-audit-trigger.json
+runtime/core-decision-projection-read-model.json
 ```
 
 后续 issue 会继续增加 Decision Kernel artifacts。

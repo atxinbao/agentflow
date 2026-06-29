@@ -20,6 +20,8 @@ pub const CORE_COMPLETION_COMMIT_AUTHORITY_CONTRACT_VERSION: &str =
     "agentflow-core-completion-commit-authority.v1";
 pub const CORE_DELIVERY_READINESS_AUDIT_TRIGGER_CONTRACT_VERSION: &str =
     "agentflow-core-delivery-readiness-audit-trigger.v1";
+pub const CORE_DECISION_PROJECTION_READ_MODEL_CONTRACT_VERSION: &str =
+    "agentflow-core-decision-projection-read-model.v1";
 pub const CORE_EVIDENCE_DECISION_MODEL_VERSION: &str =
     "agentflow-core-evidence-decision-reference-model.v1";
 
@@ -362,6 +364,69 @@ pub struct CoreDeliveryReadinessAuditTriggerResult {
     pub audit_sidecar_target: Option<String>,
     pub done_blocked_by_audit: bool,
     pub failure_reason: Option<CoreDecisionFailureReason>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionProjectionReadModelContract {
+    pub version: String,
+    pub status: String,
+    pub authority: String,
+    pub readable_source_kinds: Vec<String>,
+    pub required_projection_fields: Vec<String>,
+    pub forbidden_authority_source_kinds: Vec<String>,
+    pub forbidden_write_kinds: Vec<String>,
+    pub audit_sidecar_policy: String,
+    pub forbidden_core_terms: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionProjectionSourceRef {
+    pub source_kind: String,
+    pub source_ref: String,
+    pub authority: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionProjectionBuildRequest {
+    pub version: String,
+    pub projection_id: String,
+    pub subject_ref: String,
+    pub decision_ref: String,
+    pub decision_result: CoreEvidenceToDecisionGateResult,
+    pub delivery_result: CoreDeliveryReadinessAuditTriggerResult,
+    pub source_refs: Vec<CoreDecisionProjectionSourceRef>,
+    pub runtime_state: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionProjectionAuditSidecarView {
+    pub queued: bool,
+    pub event_type: Option<String>,
+    pub target: Option<String>,
+    pub done_blocked_by_audit: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionProjectionReadModel {
+    pub version: String,
+    pub projection_id: String,
+    pub subject_ref: String,
+    pub decision_ref: String,
+    pub decision_status: String,
+    pub reason_codes: Vec<String>,
+    pub evidence_refs: Vec<String>,
+    pub delivery_ready: bool,
+    pub readiness_outcome: String,
+    pub audit_sidecar: CoreDecisionProjectionAuditSidecarView,
+    pub runtime_state: String,
+    pub source_refs: Vec<CoreDecisionProjectionSourceRef>,
+    pub authority_boundary: String,
+    pub write_authority_allowed: bool,
 }
 
 pub fn core_decision_model_contract() -> CoreDecisionModelContract {
@@ -709,6 +774,137 @@ pub fn canonical_core_delivery_readiness_input_fixture() -> CoreDeliveryReadines
         public_record_refs: vec!["PublicRecordRef:delivery-summary".to_string()],
         explicit_audit_required: false,
         audit_policy_ref: None,
+    }
+}
+
+pub fn core_decision_projection_read_model_contract() -> CoreDecisionProjectionReadModelContract {
+    CoreDecisionProjectionReadModelContract {
+        version: CORE_DECISION_PROJECTION_READ_MODEL_CONTRACT_VERSION.to_string(),
+        status: "active".to_string(),
+        authority:
+            "Decision Projection is a read-only model over Decision, evidence, delivery readiness, and optional audit sidecar facts."
+                .to_string(),
+        readable_source_kinds: vec![
+            "DecisionRef".to_string(),
+            "EvidenceRef".to_string(),
+            "DeliveryReadinessRef".to_string(),
+            "CompletionEventRef".to_string(),
+            "AuditSidecarTriggerRef".to_string(),
+        ],
+        required_projection_fields: vec![
+            "version".to_string(),
+            "projectionId".to_string(),
+            "subjectRef".to_string(),
+            "decisionRef".to_string(),
+            "decisionStatus".to_string(),
+            "reasonCodes".to_string(),
+            "evidenceRefs".to_string(),
+            "deliveryReady".to_string(),
+            "readinessOutcome".to_string(),
+            "auditSidecar".to_string(),
+            "runtimeState".to_string(),
+            "sourceRefs".to_string(),
+            "authorityBoundary".to_string(),
+            "writeAuthorityAllowed".to_string(),
+        ],
+        forbidden_authority_source_kinds: vec![
+            "ProjectionRef".to_string(),
+            "ProviderSessionRef".to_string(),
+            "AuditSidecarRef".to_string(),
+        ],
+        forbidden_write_kinds: vec![
+            "decision-record".to_string(),
+            "completion-event".to_string(),
+            "delivery-record".to_string(),
+            "audit-sidecar-record".to_string(),
+            "projection-as-authority".to_string(),
+        ],
+        audit_sidecar_policy:
+            "Audit sidecar result may be surfaced, but it must not rewrite decision status or completion authority."
+                .to_string(),
+        forbidden_core_terms: core_decision_model_contract().forbidden_core_terms,
+    }
+}
+
+pub fn canonical_core_decision_projection_build_request_fixture(
+) -> CoreDecisionProjectionBuildRequest {
+    let decision_result = canonical_core_evidence_to_decision_gate_result_fixture();
+    let delivery_input = canonical_core_delivery_readiness_input_fixture();
+    let delivery_result = evaluate_core_delivery_readiness_audit_trigger(
+        &core_delivery_readiness_audit_trigger_contract(),
+        &delivery_input,
+    );
+
+    CoreDecisionProjectionBuildRequest {
+        version: CORE_DECISION_PROJECTION_READ_MODEL_CONTRACT_VERSION.to_string(),
+        projection_id: "ProjectionRef:decision-read-model:core-001".to_string(),
+        subject_ref: delivery_input.subject_ref,
+        decision_ref: "DecisionRef:decision-core-accepted-001".to_string(),
+        decision_result,
+        delivery_result,
+        source_refs: vec![
+            projection_source_ref(
+                "DecisionRef",
+                "DecisionRef:decision-core-accepted-001",
+                true,
+            ),
+            projection_source_ref("EvidenceRef", "EvidenceRef:accepted-proof-pack", true),
+            projection_source_ref(
+                "DeliveryReadinessRef",
+                "DeliveryReadinessRef:core-delivery-ready",
+                true,
+            ),
+            projection_source_ref(
+                "CompletionEventRef",
+                "EventRef:completion:subject:core-delivery",
+                true,
+            ),
+        ],
+        runtime_state: "completed".to_string(),
+    }
+}
+
+pub fn project_core_decision_read_model(
+    _contract: &CoreDecisionProjectionReadModelContract,
+    request: &CoreDecisionProjectionBuildRequest,
+) -> CoreDecisionProjectionReadModel {
+    let mut reason_codes = request
+        .decision_result
+        .failure_reason
+        .iter()
+        .map(|reason| reason.reason_code.clone())
+        .collect::<Vec<_>>();
+    if let Some(failure_reason) = &request.delivery_result.failure_reason {
+        reason_codes.push(failure_reason.reason_code.clone());
+    }
+    reason_codes.sort();
+    reason_codes.dedup();
+
+    let mut evidence_refs = request.decision_result.evidence_refs.clone();
+    evidence_refs.extend(request.delivery_result.public_record_refs.clone());
+    evidence_refs.sort();
+    evidence_refs.dedup();
+
+    CoreDecisionProjectionReadModel {
+        version: CORE_DECISION_PROJECTION_READ_MODEL_CONTRACT_VERSION.to_string(),
+        projection_id: request.projection_id.clone(),
+        subject_ref: request.subject_ref.clone(),
+        decision_ref: request.decision_ref.clone(),
+        decision_status: request.decision_result.decision_outcome.clone(),
+        reason_codes,
+        evidence_refs,
+        delivery_ready: request.delivery_result.delivery_ready,
+        readiness_outcome: request.delivery_result.readiness_outcome.clone(),
+        audit_sidecar: CoreDecisionProjectionAuditSidecarView {
+            queued: request.delivery_result.audit_sidecar_queued,
+            event_type: request.delivery_result.audit_sidecar_event_type.clone(),
+            target: request.delivery_result.audit_sidecar_target.clone(),
+            done_blocked_by_audit: request.delivery_result.done_blocked_by_audit,
+        },
+        runtime_state: request.runtime_state.clone(),
+        source_refs: request.source_refs.clone(),
+        authority_boundary: "read-only-projection".to_string(),
+        write_authority_allowed: false,
     }
 }
 
@@ -2144,6 +2340,230 @@ pub fn validate_core_delivery_readiness_audit_trigger_result(
     }
 }
 
+pub fn validate_core_decision_projection_read_model_contract(
+    contract: &CoreDecisionProjectionReadModelContract,
+    outcome_contract: &CoreDecisionOutcomeTransitionContract,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if contract.version != CORE_DECISION_PROJECTION_READ_MODEL_CONTRACT_VERSION {
+        errors.push(format!(
+            "decision projection read model version must be `{}`",
+            CORE_DECISION_PROJECTION_READ_MODEL_CONTRACT_VERSION
+        ));
+    }
+    if contract.status != "active" {
+        errors.push("decision projection read model contract status must be active".to_string());
+    }
+    for source_kind in [
+        "DecisionRef",
+        "EvidenceRef",
+        "DeliveryReadinessRef",
+        "CompletionEventRef",
+        "AuditSidecarTriggerRef",
+    ] {
+        if !contract
+            .readable_source_kinds
+            .iter()
+            .any(|item| item == source_kind)
+        {
+            errors.push(format!(
+                "decision projection contract missing readable source `{source_kind}`"
+            ));
+        }
+    }
+    for field in [
+        "decisionStatus",
+        "reasonCodes",
+        "evidenceRefs",
+        "deliveryReady",
+        "readinessOutcome",
+        "auditSidecar",
+        "sourceRefs",
+        "authorityBoundary",
+        "writeAuthorityAllowed",
+    ] {
+        if !contract
+            .required_projection_fields
+            .iter()
+            .any(|item| item == field)
+        {
+            errors.push(format!(
+                "decision projection contract missing projection field `{field}`"
+            ));
+        }
+    }
+    for forbidden in ["ProjectionRef", "ProviderSessionRef", "AuditSidecarRef"] {
+        if !contract
+            .forbidden_authority_source_kinds
+            .iter()
+            .any(|item| item == forbidden)
+        {
+            errors.push(format!(
+                "decision projection contract missing forbidden authority source `{forbidden}`"
+            ));
+        }
+    }
+    for forbidden in [
+        "decision-record",
+        "completion-event",
+        "delivery-record",
+        "audit-sidecar-record",
+        "projection-as-authority",
+    ] {
+        if !contract
+            .forbidden_write_kinds
+            .iter()
+            .any(|item| item == forbidden)
+        {
+            errors.push(format!(
+                "decision projection contract missing forbidden write `{forbidden}`"
+            ));
+        }
+    }
+    let decision_outcomes: BTreeSet<_> = outcome_contract
+        .outcomes
+        .iter()
+        .map(|outcome| outcome.outcome.as_str())
+        .collect();
+    for outcome in ["accepted", "rejected", "deferred", "blocked", "needs-fix"] {
+        if !decision_outcomes.contains(outcome) {
+            errors.push(format!(
+                "decision projection requires outcome `{outcome}` to exist"
+            ));
+        }
+    }
+    if !contract
+        .audit_sidecar_policy
+        .contains("must not rewrite decision")
+    {
+        errors.push(
+            "decision projection audit sidecar policy must forbid decision rewrites".to_string(),
+        );
+    }
+
+    validate_no_forbidden_terms(
+        "Core decision projection read model contract",
+        &contract.forbidden_core_terms,
+        core_decision_projection_read_model_contract_surface(contract),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+pub fn validate_core_decision_projection_read_model(
+    contract: &CoreDecisionProjectionReadModelContract,
+    request: &CoreDecisionProjectionBuildRequest,
+    model: &CoreDecisionProjectionReadModel,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if request.version != CORE_DECISION_PROJECTION_READ_MODEL_CONTRACT_VERSION {
+        errors.push(format!(
+            "decision projection build request version must be `{}`",
+            CORE_DECISION_PROJECTION_READ_MODEL_CONTRACT_VERSION
+        ));
+    }
+    if model.version != CORE_DECISION_PROJECTION_READ_MODEL_CONTRACT_VERSION {
+        errors.push(format!(
+            "decision projection read model version must be `{}`",
+            CORE_DECISION_PROJECTION_READ_MODEL_CONTRACT_VERSION
+        ));
+    }
+    if model.projection_id.trim().is_empty()
+        || model.subject_ref.trim().is_empty()
+        || model.decision_ref.trim().is_empty()
+    {
+        errors.push("decision projection identifiers are required".to_string());
+    }
+    if model.projection_id != request.projection_id
+        || model.subject_ref != request.subject_ref
+        || model.decision_ref != request.decision_ref
+    {
+        errors.push("decision projection read model must match its build request".to_string());
+    }
+    if model.decision_status != request.decision_result.decision_outcome {
+        errors.push("decision projection must not rewrite decision status".to_string());
+    }
+    if model.delivery_ready != request.delivery_result.delivery_ready
+        || model.readiness_outcome != request.delivery_result.readiness_outcome
+    {
+        errors.push("decision projection must not rewrite delivery readiness".to_string());
+    }
+    if model.audit_sidecar.queued != request.delivery_result.audit_sidecar_queued
+        || model.audit_sidecar.event_type != request.delivery_result.audit_sidecar_event_type
+        || model.audit_sidecar.target != request.delivery_result.audit_sidecar_target
+        || model.audit_sidecar.done_blocked_by_audit
+            != request.delivery_result.done_blocked_by_audit
+    {
+        errors.push(
+            "decision projection must surface audit sidecar without rewriting it".to_string(),
+        );
+    }
+    if model.authority_boundary != "read-only-projection" || model.write_authority_allowed {
+        errors.push("decision projection must remain read-only and non-authoritative".to_string());
+    }
+    if model.evidence_refs.is_empty() {
+        errors.push("decision projection requires evidence refs".to_string());
+    }
+    if model.decision_status == "accepted" && !request.decision_result.accepted_ready {
+        errors
+            .push("decision projection cannot present non-ready evidence as accepted".to_string());
+    }
+    if model.delivery_ready && !request.delivery_result.delivery_ready {
+        errors.push("decision projection cannot present not-ready delivery as ready".to_string());
+    }
+    if model.runtime_state == "completed"
+        && (model.decision_status != "accepted" || !model.delivery_ready)
+    {
+        errors.push(
+            "decision projection cannot show completed runtime without accepted ready delivery"
+                .to_string(),
+        );
+    }
+    if model
+        .reason_codes
+        .iter()
+        .any(|reason| reason.contains("audit"))
+    {
+        errors.push("audit sidecar must not pollute decision reason codes".to_string());
+    }
+    for source in model.source_refs.iter().chain(request.source_refs.iter()) {
+        if source.source_ref.trim().is_empty() || source.source_kind.trim().is_empty() {
+            errors.push("decision projection source refs require kind and ref".to_string());
+        }
+        if source.authority
+            && contract
+                .forbidden_authority_source_kinds
+                .iter()
+                .any(|forbidden| forbidden == &source.source_kind)
+        {
+            errors.push(format!(
+                "decision projection source `{}` must not become authority",
+                source.source_kind
+            ));
+        }
+    }
+
+    validate_no_forbidden_terms(
+        "Core decision projection read model",
+        &contract.forbidden_core_terms,
+        core_decision_projection_read_model_surface(model),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 pub fn validate_core_decision_record(
     contract: &CoreDecisionModelContract,
     record: &CoreDecisionRecord,
@@ -3020,6 +3440,23 @@ fn core_delivery_readiness_audit_trigger_contract_surface(
     .collect()
 }
 
+fn core_decision_projection_read_model_contract_surface(
+    contract: &CoreDecisionProjectionReadModelContract,
+) -> Vec<String> {
+    [
+        contract.version.clone(),
+        contract.status.clone(),
+        contract.authority.clone(),
+        contract.readable_source_kinds.join(" "),
+        contract.required_projection_fields.join(" "),
+        contract.forbidden_authority_source_kinds.join(" "),
+        contract.forbidden_write_kinds.join(" "),
+        contract.audit_sidecar_policy.clone(),
+    ]
+    .into_iter()
+    .collect()
+}
+
 fn core_decision_record_surface(record: &CoreDecisionRecord) -> Vec<String> {
     [
         record.version.clone(),
@@ -3130,6 +3567,38 @@ fn core_delivery_readiness_audit_trigger_result_surface(
     .collect()
 }
 
+fn core_decision_projection_read_model_surface(
+    model: &CoreDecisionProjectionReadModel,
+) -> Vec<String> {
+    [
+        model.version.clone(),
+        model.projection_id.clone(),
+        model.subject_ref.clone(),
+        model.decision_ref.clone(),
+        model.decision_status.clone(),
+        model.reason_codes.join(" "),
+        model.evidence_refs.join(" "),
+        model.delivery_ready.to_string(),
+        model.readiness_outcome.clone(),
+        model.audit_sidecar.queued.to_string(),
+        model.audit_sidecar.event_type.clone().unwrap_or_default(),
+        model.audit_sidecar.target.clone().unwrap_or_default(),
+        model.audit_sidecar.done_blocked_by_audit.to_string(),
+        model.runtime_state.clone(),
+        model.authority_boundary.clone(),
+        model.write_authority_allowed.to_string(),
+    ]
+    .into_iter()
+    .chain(model.source_refs.iter().flat_map(|source| {
+        [
+            source.source_kind.clone(),
+            source.source_ref.clone(),
+            source.authority.to_string(),
+        ]
+    }))
+    .collect()
+}
+
 fn core_decision_transition_attempt_surface(
     attempt: &CoreDecisionTransitionAttempt,
 ) -> Vec<String> {
@@ -3161,6 +3630,18 @@ fn delivery_readiness_rule(
         delivery_ready,
         required_refs: required_refs.into_iter().map(str::to_string).collect(),
         meaning: meaning.to_string(),
+    }
+}
+
+fn projection_source_ref(
+    source_kind: &str,
+    source_ref: &str,
+    authority: bool,
+) -> CoreDecisionProjectionSourceRef {
+    CoreDecisionProjectionSourceRef {
+        source_kind: source_kind.to_string(),
+        source_ref: source_ref.to_string(),
+        authority,
     }
 }
 
@@ -4232,6 +4713,145 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.contains("audit cannot block done")));
+    }
+
+    #[test]
+    fn core_decision_projection_read_model_contract_validates() {
+        let contract = core_decision_projection_read_model_contract();
+        let outcome_contract = core_decision_outcome_transition_contract();
+        validate_core_decision_projection_read_model_contract(&contract, &outcome_contract)
+            .unwrap();
+        assert_eq!(
+            contract.version,
+            CORE_DECISION_PROJECTION_READ_MODEL_CONTRACT_VERSION
+        );
+        assert!(contract
+            .forbidden_authority_source_kinds
+            .iter()
+            .any(|source| source == "ProjectionRef"));
+    }
+
+    #[test]
+    fn core_decision_projection_surfaces_readonly_decision_state() {
+        let contract = core_decision_projection_read_model_contract();
+        let request = canonical_core_decision_projection_build_request_fixture();
+        let model = project_core_decision_read_model(&contract, &request);
+
+        validate_core_decision_projection_read_model(&contract, &request, &model).unwrap();
+        assert_eq!(model.decision_status, "accepted");
+        assert!(model.delivery_ready);
+        assert!(!model.audit_sidecar.queued);
+        assert_eq!(model.authority_boundary, "read-only-projection");
+        assert!(!model.write_authority_allowed);
+    }
+
+    #[test]
+    fn core_decision_projection_rejects_missing_evidence_as_ready() {
+        let contract = core_decision_projection_read_model_contract();
+        let mut request = canonical_core_decision_projection_build_request_fixture();
+        request.decision_result = evaluate_core_evidence_to_decision_gate(
+            &core_evidence_to_decision_gate_contract(),
+            &evidence_evaluation_fixture("incomplete"),
+            &[],
+        );
+        let mut model = project_core_decision_read_model(&contract, &request);
+        model.decision_status = "accepted".to_string();
+        model.evidence_refs.clear();
+
+        let errors =
+            validate_core_decision_projection_read_model(&contract, &request, &model).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("must not rewrite decision status")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("requires evidence refs")));
+    }
+
+    #[test]
+    fn core_decision_projection_rejects_fake_evidence_as_accepted() {
+        let contract = core_decision_projection_read_model_contract();
+        let mut request = canonical_core_decision_projection_build_request_fixture();
+        let mut evaluation = evidence_evaluation_fixture("invalid");
+        evaluation.reasons.push("fake-evidence-receipt".to_string());
+        request.decision_result = evaluate_core_evidence_to_decision_gate(
+            &core_evidence_to_decision_gate_contract(),
+            &evaluation,
+            &[],
+        );
+        let mut model = project_core_decision_read_model(&contract, &request);
+        model.decision_status = "accepted".to_string();
+
+        let errors =
+            validate_core_decision_projection_read_model(&contract, &request, &model).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("must not rewrite decision status")));
+    }
+
+    #[test]
+    fn core_decision_projection_rejects_wrong_completed_state() {
+        let contract = core_decision_projection_read_model_contract();
+        let mut request = canonical_core_decision_projection_build_request_fixture();
+        request.decision_result = evaluate_core_evidence_to_decision_gate(
+            &core_evidence_to_decision_gate_contract(),
+            &evidence_evaluation_fixture("incomplete"),
+            &[],
+        );
+        request.runtime_state = "completed".to_string();
+        let model = project_core_decision_read_model(&contract, &request);
+
+        let errors =
+            validate_core_decision_projection_read_model(&contract, &request, &model).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("cannot show completed runtime")));
+    }
+
+    #[test]
+    fn core_decision_projection_rejects_projection_as_authority() {
+        let contract = core_decision_projection_read_model_contract();
+        let request = canonical_core_decision_projection_build_request_fixture();
+        let mut model = project_core_decision_read_model(&contract, &request);
+        model.write_authority_allowed = true;
+        model.authority_boundary = "decision-authority".to_string();
+        model.source_refs.push(projection_source_ref(
+            "ProjectionRef",
+            "ProjectionRef:forged-authority",
+            true,
+        ));
+
+        let errors =
+            validate_core_decision_projection_read_model(&contract, &request, &model).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("read-only and non-authoritative")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("must not become authority")));
+    }
+
+    #[test]
+    fn core_decision_projection_rejects_audit_chain_pollution() {
+        let contract = core_decision_projection_read_model_contract();
+        let mut request = canonical_core_decision_projection_build_request_fixture();
+        request.delivery_result.audit_sidecar_queued = true;
+        request.delivery_result.audit_sidecar_event_type =
+            Some("subject.audit-sidecar.evaluation-queued".to_string());
+        request.delivery_result.audit_sidecar_target = Some("audit-sidecar".to_string());
+        request.delivery_result.done_blocked_by_audit = true;
+        let mut model = project_core_decision_read_model(&contract, &request);
+        model.decision_status = "blocked".to_string();
+        model.reason_codes.push("audit-required".to_string());
+
+        let errors =
+            validate_core_decision_projection_read_model(&contract, &request, &model).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("must not rewrite decision status")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("audit sidecar must not pollute")));
     }
 
     #[test]

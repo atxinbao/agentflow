@@ -177,6 +177,7 @@ CORE_DECISION_FAILURE_REASON_PATH="$RUNTIME_DIR/core-decision-failure-reason-rem
 CORE_EVIDENCE_TO_DECISION_GATE_PATH="$RUNTIME_DIR/core-evidence-to-decision-gate.json"
 CORE_COMPLETION_COMMIT_AUTHORITY_PATH="$RUNTIME_DIR/core-completion-commit-authority.json"
 CORE_DELIVERY_READINESS_AUDIT_TRIGGER_PATH="$RUNTIME_DIR/core-delivery-readiness-audit-trigger.json"
+CORE_DECISION_PROJECTION_READ_MODEL_PATH="$RUNTIME_DIR/core-decision-projection-read-model.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -598,6 +599,7 @@ core_decision_failure_reason = load_json(pathlib.Path(summary_json_path.parent /
 core_evidence_to_decision_gate = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-evidence-to-decision-gate.json")) or {}
 core_completion_commit_authority = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-completion-commit-authority.json")) or {}
 core_delivery_readiness_audit_trigger = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-delivery-readiness-audit-trigger.json")) or {}
+core_decision_projection_read_model = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-projection-read-model.json")) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
 deployment_evidence_wrong_commit = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json")) or {}
@@ -1489,6 +1491,9 @@ summary_payload = {
     "coreDeliveryReadinessAuditTriggerPath": "runtime/core-delivery-readiness-audit-trigger.json" if core_delivery_readiness_audit_trigger else None,
     "coreDeliveryReadinessAuditTriggerStatus": core_delivery_readiness_audit_trigger.get("status") or "missing",
     "coreDeliveryReadinessAuditTriggerCoverage": core_delivery_readiness_audit_trigger.get("coverage") or {},
+    "coreDecisionProjectionReadModelPath": "runtime/core-decision-projection-read-model.json" if core_decision_projection_read_model else None,
+    "coreDecisionProjectionReadModelStatus": core_decision_projection_read_model.get("status") or "missing",
+    "coreDecisionProjectionReadModelCoverage": core_decision_projection_read_model.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1771,6 +1776,9 @@ certification_payload = {
     "coreDeliveryReadinessAuditTriggerPath": "runtime/core-delivery-readiness-audit-trigger.json" if core_delivery_readiness_audit_trigger else None,
     "coreDeliveryReadinessAuditTriggerStatus": core_delivery_readiness_audit_trigger.get("status") or "missing",
     "coreDeliveryReadinessAuditTriggerCoverage": core_delivery_readiness_audit_trigger.get("coverage") or {},
+    "coreDecisionProjectionReadModelPath": "runtime/core-decision-projection-read-model.json" if core_decision_projection_read_model else None,
+    "coreDecisionProjectionReadModelStatus": core_decision_projection_read_model.get("status") or "missing",
+    "coreDecisionProjectionReadModelCoverage": core_decision_projection_read_model.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -9472,6 +9480,110 @@ PY
   record_stage "core-delivery-readiness-audit-trigger" "passed" "$(basename "$CORE_DELIVERY_READINESS_AUDIT_TRIGGER_PATH")"
 }
 
+run_core_decision_projection_read_model_gate() {
+  record_stage "core-decision-projection-read-model" "started" "$CORE_DECISION_PROJECTION_READ_MODEL_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-decision-projection-read-model-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_decision_projection --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-decision-projection-read-model" "agentflow-ontology Core Decision Projection Read Model tests failed"
+  fi
+  python3 - \
+    "$CORE_DECISION_PROJECTION_READ_MODEL_PATH" \
+    "$WORKSPACE/docs/architecture/077-core-decision-projection-read-model-v1.md" \
+    "$WORKSPACE/docs/architecture/074-core-evidence-to-decision-gate-v1.md" \
+    "$WORKSPACE/docs/architecture/076-core-delivery-readiness-audit-trigger-v1.md" \
+    "$WORKSPACE/crates/ontology/src/decision.rs" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md" \
+    "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+evidence_gate_doc_path = pathlib.Path(sys.argv[3])
+delivery_doc_path = pathlib.Path(sys.argv[4])
+decision_source_path = pathlib.Path(sys.argv[5])
+tasks_path = pathlib.Path(sys.argv[6])
+test_log_path = pathlib.Path(sys.argv[7])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+evidence_gate_doc_text = evidence_gate_doc_path.read_text(encoding="utf-8")
+delivery_doc_text = delivery_doc_path.read_text(encoding="utf-8")
+decision_source = decision_source_path.read_text(encoding="utf-8")
+tasks_text = tasks_path.read_text(encoding="utf-8")
+required_fields = [
+    "decisionStatus",
+    "reasonCodes",
+    "evidenceRefs",
+    "deliveryReady",
+    "readinessOutcome",
+    "auditSidecar",
+    "sourceRefs",
+    "authorityBoundary",
+    "writeAuthorityAllowed",
+]
+negative_fixtures = [
+    "core_decision_projection_rejects_missing_evidence_as_ready",
+    "core_decision_projection_rejects_fake_evidence_as_accepted",
+    "core_decision_projection_rejects_wrong_completed_state",
+    "core_decision_projection_rejects_projection_as_authority",
+    "core_decision_projection_rejects_audit_chain_pollution",
+]
+coverage = {
+    "contract-version-defined": "agentflow-core-decision-projection-read-model.v1" in decision_source
+    and "agentflow-core-decision-projection-read-model.v1" in doc_text,
+    "rust-contract-implemented": "CoreDecisionProjectionReadModelContract" in decision_source
+    and "CoreDecisionProjectionBuildRequest" in decision_source
+    and "CoreDecisionProjectionReadModel" in decision_source
+    and "validate_core_decision_projection_read_model_contract" in decision_source
+    and "project_core_decision_read_model" in decision_source
+    and "validate_core_decision_projection_read_model" in decision_source,
+    "reads-decision-and-evidence": "DecisionRef" in doc_text
+    and "EvidenceRef" in doc_text
+    and "Evidence-to-Decision Gate" in evidence_gate_doc_text,
+    "reads-delivery-readiness": "DeliveryReadinessRef" in doc_text
+    and "Core Delivery Readiness" in delivery_doc_text,
+    "surfaces-required-fields": all(field in doc_text for field in required_fields)
+    and all(field in decision_source for field in required_fields),
+    "projection-readonly": "read-only-projection" in decision_source
+    and "writeAuthorityAllowed = false" in doc_text
+    and "write_authority_allowed: false" in decision_source,
+    "projection-as-authority-negative": "ProjectionRef" in decision_source
+    and "core_decision_projection_rejects_projection_as_authority" in decision_source,
+    "missing-evidence-negative": "core_decision_projection_rejects_missing_evidence_as_ready" in decision_source,
+    "fake-evidence-negative": "core_decision_projection_rejects_fake_evidence_as_accepted" in decision_source,
+    "wrong-state-negative": "core_decision_projection_rejects_wrong_completed_state" in decision_source,
+    "audit-chain-pollution-negative": "core_decision_projection_rejects_audit_chain_pollution" in decision_source
+    and "audit sidecar must not pollute" in decision_source
+    and "Audit sidecar" in doc_text,
+    "negative-fixtures-implemented": all(item in decision_source for item in negative_fixtures),
+    "release-task-binds-issue-701": "#701" in tasks_text
+    and "V107-009 Decision Projection Read Model and Negative Fixtures" in tasks_text
+    and "runtime/core-decision-projection-read-model.json" in tasks_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-decision-projection-read-model-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-decision-projection-read-model.v1",
+    "architecturePath": "docs/architecture/077-core-decision-projection-read-model-v1.md",
+    "rustContractPath": "crates/ontology/src/decision.rs",
+    "rustTestLogPath": "runtime/core-decision-projection-read-model-rust-test.log",
+    "requiredFields": required_fields,
+    "negativeFixtures": negative_fixtures,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core decision projection read model coverage failed: {failed}")
+PY
+  record_stage "core-decision-projection-read-model" "passed" "$(basename "$CORE_DECISION_PROJECTION_READ_MODEL_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -10053,6 +10165,7 @@ PY
   run_core_evidence_to_decision_gate
   run_core_completion_commit_authority_gate
   run_core_delivery_readiness_audit_trigger_gate
+  run_core_decision_projection_read_model_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
