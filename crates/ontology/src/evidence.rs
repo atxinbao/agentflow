@@ -12,6 +12,7 @@ pub const CORE_EVIDENCE_AUTHORITY_TRACE_VERSION: &str =
     "agentflow-core-evidence-authority-trace.v1";
 pub const CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION: &str =
     "agentflow-core-evidence-completeness-policy.v1";
+pub const CORE_MISSING_EVIDENCE_REPORT_VERSION: &str = "agentflow-core-missing-evidence-report.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -226,6 +227,31 @@ pub struct CoreEvidenceCompletenessEvaluation {
     pub missing_groups: Vec<String>,
     pub deferred_groups: Vec<String>,
     pub invalid_evidence_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreMissingEvidenceReport {
+    pub version: String,
+    pub report_id: String,
+    pub status: String,
+    pub source_type: String,
+    pub expected_proof: String,
+    pub current_state: String,
+    pub remediation_hint: String,
+    pub evidence_ref: Option<String>,
+    pub outcome: String,
+    pub reasons: Vec<String>,
+    pub decision_boundary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreMissingEvidenceNegativeFixtureResult {
+    pub fixture_id: String,
+    pub status: String,
+    pub expected_reason: String,
+    pub report: CoreMissingEvidenceReport,
 }
 
 pub fn canonical_core_evidence_pack_fixture() -> CoreEvidencePack {
@@ -893,6 +919,239 @@ pub fn core_evidence_completeness_policy_sample_packs() -> Vec<CoreEvidencePack>
     confirmation.source_type = "human-confirmation".to_string();
 
     vec![artifact, confirmation]
+}
+
+pub fn core_missing_evidence_reports_for_completeness_policy(
+    policy: &CoreEvidenceCompletenessPolicy,
+    packs: &[CoreEvidencePack],
+) -> Vec<CoreMissingEvidenceReport> {
+    let mut reports = Vec::new();
+
+    for pack in packs {
+        if let Some(report) = core_missing_evidence_report_for_pack(pack) {
+            reports.push(report);
+        }
+    }
+
+    for group in &policy.requirement_groups {
+        if group.group_kind == "optional" {
+            continue;
+        }
+        let collected = packs
+            .iter()
+            .filter(|pack| {
+                pack.status == "collected"
+                    && !is_fake_core_evidence_proof(pack)
+                    && group
+                        .accepted_source_types
+                        .iter()
+                        .any(|source_type| source_type == &pack.source_type)
+                    && validate_core_evidence_pack_schema(pack).is_ok()
+            })
+            .count();
+
+        if collected >= group.min_collected {
+            continue;
+        }
+
+        let (outcome, reason_prefix, current_state) = match group.group_kind.as_str() {
+            "required" => (
+                "incomplete",
+                "evidence-required-missing",
+                "required-evidence-missing",
+            ),
+            "alternative" => (
+                "incomplete",
+                "evidence-alternative-missing",
+                "alternative-evidence-missing",
+            ),
+            "deferred" => ("deferred", "evidence-deferred", "deferred-evidence-missing"),
+            _ => (
+                "invalid",
+                "evidence-policy-group-kind-unsupported",
+                "invalid",
+            ),
+        };
+
+        reports.push(CoreMissingEvidenceReport {
+            version: CORE_MISSING_EVIDENCE_REPORT_VERSION.to_string(),
+            report_id: format!("missing-group:{}", group.group_id),
+            status: "reported".to_string(),
+            source_type: group.accepted_source_types.join("|"),
+            expected_proof: format!(
+                "at least {} collected evidence pack(s) for {}",
+                group.min_collected, group.group_id
+            ),
+            current_state: current_state.to_string(),
+            remediation_hint: format!("collect evidence for group {}", group.group_id),
+            evidence_ref: None,
+            outcome: outcome.to_string(),
+            reasons: vec![reason(&format!("{reason_prefix}:{}", group.group_id))],
+            decision_boundary: "missing-evidence-does-not-write-completed-state".to_string(),
+        });
+    }
+
+    reports.sort_by(|left, right| left.report_id.cmp(&right.report_id));
+    reports
+}
+
+pub fn core_missing_evidence_report_for_pack(
+    pack: &CoreEvidencePack,
+) -> Option<CoreMissingEvidenceReport> {
+    let mut reasons = Vec::new();
+    let mut outcome = None;
+
+    if is_fake_core_evidence_proof(pack) {
+        reasons.push(reason(&format!("evidence-fake-proof:{}", pack.evidence_id)));
+        outcome = Some("invalid");
+    }
+
+    if pack.status == "missing" {
+        let missing_reason = match pack.source_type.as_str() {
+            "external-proof" => "evidence-external-url-missing",
+            "artifact" | "command-output" | "diff" | "log" | "screenshot" => {
+                "evidence-file-missing"
+            }
+            _ => "evidence-missing",
+        };
+        reasons.push(reason(&format!("{missing_reason}:{}", pack.evidence_id)));
+        outcome.get_or_insert("incomplete");
+    }
+
+    if pack.status == "deferred" {
+        reasons.push(reason(&format!("evidence-deferred:{}", pack.evidence_id)));
+        outcome.get_or_insert("deferred");
+    }
+
+    if pack.digest.value.trim().is_empty() {
+        reasons.push(reason(&format!(
+            "evidence-missing-digest:{}",
+            pack.evidence_id
+        )));
+        outcome = Some("invalid");
+    }
+
+    if validate_core_evidence_pack_schema(pack).is_err() && pack.status != "missing" {
+        reasons.push(reason(&format!("evidence-invalid:{}", pack.evidence_id)));
+        outcome = Some("invalid");
+    }
+
+    let outcome = outcome?;
+    reasons.sort();
+    reasons.dedup();
+
+    Some(CoreMissingEvidenceReport {
+        version: CORE_MISSING_EVIDENCE_REPORT_VERSION.to_string(),
+        report_id: format!("missing-evidence:{}", pack.evidence_id),
+        status: "reported".to_string(),
+        source_type: pack.source_type.clone(),
+        expected_proof: expected_proof_for_source_type(&pack.source_type),
+        current_state: pack.status.clone(),
+        remediation_hint: remediation_hint_for_source_type(&pack.source_type),
+        evidence_ref: Some(pack.evidence_id.clone()),
+        outcome: outcome.to_string(),
+        reasons,
+        decision_boundary: "missing-evidence-does-not-write-completed-state".to_string(),
+    })
+}
+
+pub fn core_missing_evidence_negative_fixtures() -> Vec<CoreMissingEvidenceNegativeFixtureResult> {
+    let fixtures = vec![
+        ("fake-proof", "evidence-fake-proof:evidence-fake-proof", {
+            let mut pack = canonical_core_evidence_pack_fixture();
+            pack.evidence_id = "evidence-fake-proof".to_string();
+            pack.source_type = "external-proof".to_string();
+            pack.provenance.capture_method = "claimed-without-capture".to_string();
+            pack.artifact_refs[0].artifact_kind = "fake-proof".to_string();
+            pack
+        }),
+        (
+            "missing-file",
+            "evidence-file-missing:evidence-missing-local-file",
+            {
+                let mut pack = canonical_core_evidence_pack_fixture();
+                pack.evidence_id = "evidence-missing-local-file".to_string();
+                pack.status = "missing".to_string();
+                pack.source_type = "artifact".to_string();
+                pack.artifact_refs[0].artifact_ref =
+                    ".agentflow/tasks/task-core/evidence/missing.log".to_string();
+                pack
+            },
+        ),
+        (
+            "missing-external-url",
+            "evidence-external-url-missing:evidence-missing-external-url",
+            {
+                let mut pack = canonical_core_evidence_pack_fixture();
+                pack.evidence_id = "evidence-missing-external-url".to_string();
+                pack.status = "missing".to_string();
+                pack.source_type = "external-proof".to_string();
+                pack.artifact_refs[0].artifact_ref = "external://missing-proof".to_string();
+                pack
+            },
+        ),
+        (
+            "missing-digest",
+            "evidence-missing-digest:evidence-missing-digest",
+            {
+                let mut pack = canonical_core_evidence_pack_fixture();
+                pack.evidence_id = "evidence-missing-digest".to_string();
+                pack.digest.value.clear();
+                pack
+            },
+        ),
+    ];
+
+    fixtures
+        .into_iter()
+        .map(|(fixture_id, expected_reason, pack)| {
+            let report = core_missing_evidence_report_for_pack(&pack)
+                .expect("negative fixture must produce a missing evidence report");
+            CoreMissingEvidenceNegativeFixtureResult {
+                fixture_id: fixture_id.to_string(),
+                status: if report
+                    .reasons
+                    .iter()
+                    .any(|reason| reason == expected_reason)
+                {
+                    "passed".to_string()
+                } else {
+                    "failed".to_string()
+                },
+                expected_reason: expected_reason.to_string(),
+                report,
+            }
+        })
+        .collect()
+}
+
+fn is_fake_core_evidence_proof(pack: &CoreEvidencePack) -> bool {
+    pack.status == "collected"
+        && (pack.provenance.capture_method == "claimed-without-capture"
+            || pack
+                .artifact_refs
+                .iter()
+                .any(|artifact| artifact.artifact_kind == "fake-proof"))
+}
+
+fn expected_proof_for_source_type(source_type: &str) -> String {
+    match source_type {
+        "external-proof" => "reachable external proof URL with stable digest".to_string(),
+        "artifact" | "command-output" | "diff" | "log" | "screenshot" => {
+            "local evidence artifact with stable digest".to_string()
+        }
+        _ => "valid evidence pack matching the policy source type".to_string(),
+    }
+}
+
+fn remediation_hint_for_source_type(source_type: &str) -> String {
+    match source_type {
+        "external-proof" => "attach a reachable external proof URL and digest".to_string(),
+        "artifact" | "command-output" | "diff" | "log" | "screenshot" => {
+            "capture the missing local evidence artifact and digest".to_string()
+        }
+        _ => "collect a valid evidence pack before decision evaluation".to_string(),
+    }
 }
 
 pub fn core_evidence_source_type_registry_contract() -> CoreEvidenceSourceTypeRegistryContract {
@@ -1661,5 +1920,62 @@ mod tests {
         assert!(evaluation
             .reasons
             .contains(&"evidence-invalid:evidence-invalid-digest".to_string()));
+    }
+
+    #[test]
+    fn core_missing_evidence_reports_required_and_deferred_gaps() {
+        let policy = canonical_core_evidence_completeness_policy_fixture();
+        let packs = vec![];
+
+        let reports = core_missing_evidence_reports_for_completeness_policy(&policy, &packs);
+        assert!(reports.iter().any(|report| {
+            report.outcome == "incomplete"
+                && report
+                    .reasons
+                    .contains(&"evidence-required-missing:required-local-artifact".to_string())
+        }));
+        assert!(reports.iter().any(|report| {
+            report.outcome == "deferred"
+                && report
+                    .reasons
+                    .contains(&"evidence-deferred:deferred-long-retention".to_string())
+        }));
+        assert!(reports.iter().all(|report| {
+            report.decision_boundary == "missing-evidence-does-not-write-completed-state"
+        }));
+    }
+
+    #[test]
+    fn core_missing_evidence_negative_fixtures_have_stable_reasons() {
+        let fixtures = core_missing_evidence_negative_fixtures();
+        assert_eq!(fixtures.len(), 4);
+        for fixture in fixtures {
+            assert_eq!(
+                fixture.status, "passed",
+                "fixture {} failed with {:?}",
+                fixture.fixture_id, fixture.report.reasons
+            );
+            assert!(fixture.report.reasons.contains(&fixture.expected_reason));
+            assert_ne!(fixture.report.outcome, "complete");
+            assert_eq!(
+                fixture.report.decision_boundary,
+                "missing-evidence-does-not-write-completed-state"
+            );
+        }
+    }
+
+    #[test]
+    fn core_missing_evidence_rejects_fake_proof_as_invalid() {
+        let mut fake_proof = canonical_core_evidence_pack_fixture();
+        fake_proof.evidence_id = "evidence-fake-proof".to_string();
+        fake_proof.source_type = "external-proof".to_string();
+        fake_proof.provenance.capture_method = "claimed-without-capture".to_string();
+
+        let report =
+            core_missing_evidence_report_for_pack(&fake_proof).expect("fake proof must report");
+        assert_eq!(report.outcome, "invalid");
+        assert!(report
+            .reasons
+            .contains(&"evidence-fake-proof:evidence-fake-proof".to_string()));
     }
 }
