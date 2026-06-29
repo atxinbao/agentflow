@@ -8,6 +8,8 @@ pub const CORE_DECISION_INPUT_BINDING_CONTRACT_VERSION: &str =
     "agentflow-core-decision-input-binding.v1";
 pub const CORE_DECISION_OUTCOME_TRANSITION_CONTRACT_VERSION: &str =
     "agentflow-core-decision-outcome-transition.v1";
+pub const CORE_DECISION_FAILURE_REASON_CONTRACT_VERSION: &str =
+    "agentflow-core-decision-failure-reason.v1";
 pub const CORE_EVIDENCE_DECISION_MODEL_VERSION: &str =
     "agentflow-core-evidence-decision-reference-model.v1";
 
@@ -181,6 +183,40 @@ pub struct CoreDecisionTransitionAttempt {
     pub reasons: Vec<CoreDecisionReason>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionFailureReasonContract {
+    pub version: String,
+    pub status: String,
+    pub authority: String,
+    pub applies_to_outcomes: Vec<String>,
+    pub required_fields: Vec<String>,
+    pub remediation_routes: Vec<CoreDecisionRemediationRoute>,
+    pub retry_policy: String,
+    pub forbidden_core_terms: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionRemediationRoute {
+    pub route: String,
+    pub meaning: String,
+    pub retry_eligible: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionFailureReason {
+    pub outcome: String,
+    pub reason_code: String,
+    pub message: String,
+    pub authority_refs: Vec<String>,
+    pub missing_evidence_refs: Vec<String>,
+    pub remediation_route: String,
+    pub retry_eligible: bool,
+    pub blocking: bool,
+}
+
 pub fn core_decision_model_contract() -> CoreDecisionModelContract {
     CoreDecisionModelContract {
         version: CORE_DECISION_MODEL_CONTRACT_VERSION.to_string(),
@@ -270,6 +306,74 @@ pub fn core_decision_model_contract() -> CoreDecisionModelContract {
             "test-log".to_string(),
             "github-issue".to_string(),
         ],
+    }
+}
+
+pub fn core_decision_failure_reason_contract() -> CoreDecisionFailureReasonContract {
+    CoreDecisionFailureReasonContract {
+        version: CORE_DECISION_FAILURE_REASON_CONTRACT_VERSION.to_string(),
+        status: "active".to_string(),
+        authority: "Core Decision failure reasons explain non-accepted outcomes with stable remediation routes."
+            .to_string(),
+        applies_to_outcomes: vec![
+            "rejected".to_string(),
+            "deferred".to_string(),
+            "blocked".to_string(),
+            "needs-fix".to_string(),
+        ],
+        required_fields: vec![
+            "reasonCode".to_string(),
+            "message".to_string(),
+            "authorityRefs".to_string(),
+            "missingEvidenceRefs".to_string(),
+            "remediationRoute".to_string(),
+            "retryEligible".to_string(),
+            "blocking".to_string(),
+        ],
+        remediation_routes: vec![
+            remediation_route(
+                "wait-for-authority",
+                "wait for a required authority fact to become current",
+                true,
+            ),
+            remediation_route(
+                "collect-evidence",
+                "collect missing proof before re-evaluating the decision",
+                true,
+            ),
+            remediation_route(
+                "revise-subject",
+                "revise the subject boundary before re-evaluating the decision",
+                true,
+            ),
+            remediation_route(
+                "cancel-subject",
+                "stop the subject without another automatic decision attempt",
+                false,
+            ),
+            remediation_route(
+                "retry-decision",
+                "retry the decision after authority inputs change",
+                true,
+            ),
+        ],
+        retry_policy:
+            "Retry is allowed only when retryEligible is true and referenced authority facts have changed."
+                .to_string(),
+        forbidden_core_terms: core_decision_model_contract().forbidden_core_terms,
+    }
+}
+
+pub fn canonical_core_decision_failure_reason_fixture() -> CoreDecisionFailureReason {
+    CoreDecisionFailureReason {
+        outcome: "blocked".to_string(),
+        reason_code: "authority-ref-stale".to_string(),
+        message: "required authority input is stale".to_string(),
+        authority_refs: vec!["runtime-state:object-ready".to_string()],
+        missing_evidence_refs: vec!["EvidenceRef:current-runtime-state".to_string()],
+        remediation_route: "wait-for-authority".to_string(),
+        retry_eligible: true,
+        blocking: true,
     }
 }
 
@@ -759,6 +863,196 @@ pub fn validate_core_decision_outcome_transition_contract(
         "Core decision outcome transition contract",
         &contract.forbidden_core_terms,
         core_decision_outcome_transition_contract_surface(contract),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+pub fn validate_core_decision_failure_reason_contract(
+    contract: &CoreDecisionFailureReasonContract,
+    outcome_contract: &CoreDecisionOutcomeTransitionContract,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if contract.version != CORE_DECISION_FAILURE_REASON_CONTRACT_VERSION {
+        errors.push(format!(
+            "decision failure reason version must be `{}`",
+            CORE_DECISION_FAILURE_REASON_CONTRACT_VERSION
+        ));
+    }
+    if contract.status != "active" {
+        errors.push("decision failure reason status must be active".to_string());
+    }
+
+    let transition_outcomes: BTreeSet<_> = outcome_contract
+        .outcomes
+        .iter()
+        .map(|outcome| outcome.outcome.as_str())
+        .collect();
+    let applies_to: BTreeSet<_> = contract
+        .applies_to_outcomes
+        .iter()
+        .map(String::as_str)
+        .collect();
+    for outcome in ["rejected", "deferred", "blocked", "needs-fix"] {
+        if !applies_to.contains(outcome) {
+            errors.push(format!(
+                "decision failure reason contract must apply to `{outcome}`"
+            ));
+        }
+        if !transition_outcomes.contains(outcome) {
+            errors.push(format!(
+                "decision failure reason contract references missing outcome `{outcome}`"
+            ));
+        }
+    }
+    if applies_to.contains("accepted") {
+        errors.push("decision failure reason contract must not apply to accepted".to_string());
+    }
+    for outcome in &contract.applies_to_outcomes {
+        if !transition_outcomes.contains(outcome.as_str()) {
+            errors.push(format!(
+                "decision failure reason contract references unknown outcome `{outcome}`"
+            ));
+        }
+    }
+
+    for field in [
+        "reasonCode",
+        "message",
+        "authorityRefs",
+        "missingEvidenceRefs",
+        "remediationRoute",
+        "retryEligible",
+        "blocking",
+    ] {
+        if !contract
+            .required_fields
+            .iter()
+            .any(|required| required == field)
+        {
+            errors.push(format!(
+                "decision failure reason contract missing required field `{field}`"
+            ));
+        }
+    }
+
+    let route_names: BTreeSet<_> = contract
+        .remediation_routes
+        .iter()
+        .map(|route| route.route.as_str())
+        .collect();
+    for route in [
+        "wait-for-authority",
+        "collect-evidence",
+        "revise-subject",
+        "cancel-subject",
+        "retry-decision",
+    ] {
+        if !route_names.contains(route) {
+            errors.push(format!(
+                "decision failure reason contract missing remediation route `{route}`"
+            ));
+        }
+    }
+    for route in &contract.remediation_routes {
+        if route.route.trim().is_empty() {
+            errors.push("decision failure reason remediation route id is required".to_string());
+        }
+        if route.meaning.trim().is_empty() {
+            errors.push(format!(
+                "decision failure reason remediation route `{}` meaning is required",
+                route.route
+            ));
+        }
+    }
+    if contract.retry_policy.trim().is_empty() {
+        errors.push("decision failure reason retry policy is required".to_string());
+    }
+
+    validate_no_forbidden_terms(
+        "Core decision failure reason contract",
+        &contract.forbidden_core_terms,
+        core_decision_failure_reason_contract_surface(contract),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+pub fn validate_core_decision_failure_reason(
+    contract: &CoreDecisionFailureReasonContract,
+    reason: &CoreDecisionFailureReason,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if reason.outcome == "accepted" {
+        errors.push("decision failure reason must not be attached to accepted".to_string());
+    }
+    if !contract
+        .applies_to_outcomes
+        .iter()
+        .any(|outcome| outcome == &reason.outcome)
+    {
+        errors.push(format!(
+            "decision failure reason outcome `{}` is not in contract",
+            reason.outcome
+        ));
+    }
+    if reason.reason_code.trim().is_empty() {
+        errors.push("decision failure reason code is required".to_string());
+    }
+    if reason.message.trim().is_empty() {
+        errors.push("decision failure reason message is required".to_string());
+    }
+    if reason.authority_refs.is_empty() {
+        errors.push("decision failure reason authority refs are required".to_string());
+    }
+    if reason.missing_evidence_refs.is_empty() {
+        errors.push("decision failure reason missing evidence refs are required".to_string());
+    }
+
+    let Some(route) = contract
+        .remediation_routes
+        .iter()
+        .find(|route| route.route == reason.remediation_route)
+    else {
+        errors.push(format!(
+            "decision failure reason remediation route `{}` is not in contract",
+            reason.remediation_route
+        ));
+        validate_no_forbidden_terms(
+            "Core decision failure reason",
+            &contract.forbidden_core_terms,
+            core_decision_failure_reason_surface(reason),
+            &mut errors,
+        );
+        return Err(errors);
+    };
+
+    if !route.retry_eligible && reason.retry_eligible {
+        errors.push(format!(
+            "decision failure reason route `{}` is not retry eligible",
+            route.route
+        ));
+    }
+    if reason.outcome == "blocked" && !reason.blocking {
+        errors.push("blocked decision failure reason must be blocking".to_string());
+    }
+
+    validate_no_forbidden_terms(
+        "Core decision failure reason",
+        &contract.forbidden_core_terms,
+        core_decision_failure_reason_surface(reason),
         &mut errors,
     );
 
@@ -1399,6 +1693,18 @@ fn outcome_transition(
     }
 }
 
+fn remediation_route(
+    route: &str,
+    meaning: &str,
+    retry_eligible: bool,
+) -> CoreDecisionRemediationRoute {
+    CoreDecisionRemediationRoute {
+        route: route.to_string(),
+        meaning: meaning.to_string(),
+        retry_eligible,
+    }
+}
+
 fn bound_authority_ref(
     ref_kind: &str,
     ref_id: &str,
@@ -1512,6 +1818,28 @@ fn core_decision_outcome_transition_contract_surface(
     .collect()
 }
 
+fn core_decision_failure_reason_contract_surface(
+    contract: &CoreDecisionFailureReasonContract,
+) -> Vec<String> {
+    [
+        contract.version.clone(),
+        contract.status.clone(),
+        contract.authority.clone(),
+        contract.applies_to_outcomes.join(" "),
+        contract.required_fields.join(" "),
+        contract.retry_policy.clone(),
+    ]
+    .into_iter()
+    .chain(contract.remediation_routes.iter().flat_map(|route| {
+        [
+            route.route.clone(),
+            route.meaning.clone(),
+            route.retry_eligible.to_string(),
+        ]
+    }))
+    .collect()
+}
+
 fn core_decision_record_surface(record: &CoreDecisionRecord) -> Vec<String> {
     [
         record.version.clone(),
@@ -1543,6 +1871,19 @@ fn core_decision_record_surface(record: &CoreDecisionRecord) -> Vec<String> {
         ]
     }))
     .collect()
+}
+
+fn core_decision_failure_reason_surface(reason: &CoreDecisionFailureReason) -> Vec<String> {
+    vec![
+        reason.outcome.clone(),
+        reason.reason_code.clone(),
+        reason.message.clone(),
+        reason.authority_refs.join(" "),
+        reason.missing_evidence_refs.join(" "),
+        reason.remediation_route.clone(),
+        reason.retry_eligible.to_string(),
+        reason.blocking.to_string(),
+    ]
 }
 
 fn core_decision_transition_attempt_surface(
@@ -1938,6 +2279,97 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.contains("reasons are required")));
+    }
+
+    #[test]
+    fn core_decision_failure_reason_contract_validates() {
+        let contract = core_decision_failure_reason_contract();
+        let outcome_contract = core_decision_outcome_transition_contract();
+        validate_core_decision_failure_reason_contract(&contract, &outcome_contract).unwrap();
+        assert_eq!(
+            contract.version,
+            CORE_DECISION_FAILURE_REASON_CONTRACT_VERSION
+        );
+        assert!(contract
+            .applies_to_outcomes
+            .iter()
+            .any(|outcome| outcome == "needs-fix"));
+        assert!(contract
+            .required_fields
+            .iter()
+            .any(|field| field == "missingEvidenceRefs"));
+    }
+
+    #[test]
+    fn core_decision_failure_reason_fixture_validates() {
+        let contract = core_decision_failure_reason_contract();
+        let reason = canonical_core_decision_failure_reason_fixture();
+        validate_core_decision_failure_reason(&contract, &reason).unwrap();
+        assert_eq!(reason.outcome, "blocked");
+        assert!(reason.blocking);
+    }
+
+    #[test]
+    fn core_decision_failure_reason_rejects_accepted_outcome() {
+        let contract = core_decision_failure_reason_contract();
+        let mut reason = canonical_core_decision_failure_reason_fixture();
+        reason.outcome = "accepted".to_string();
+
+        let errors = validate_core_decision_failure_reason(&contract, &reason).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("must not be attached to accepted")));
+    }
+
+    #[test]
+    fn core_decision_failure_reason_rejects_missing_authority_refs() {
+        let contract = core_decision_failure_reason_contract();
+        let mut reason = canonical_core_decision_failure_reason_fixture();
+        reason.authority_refs.clear();
+
+        let errors = validate_core_decision_failure_reason(&contract, &reason).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("authority refs are required")));
+    }
+
+    #[test]
+    fn core_decision_failure_reason_rejects_missing_evidence_refs() {
+        let contract = core_decision_failure_reason_contract();
+        let mut reason = canonical_core_decision_failure_reason_fixture();
+        reason.missing_evidence_refs.clear();
+
+        let errors = validate_core_decision_failure_reason(&contract, &reason).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("missing evidence refs are required")));
+    }
+
+    #[test]
+    fn core_decision_failure_reason_rejects_unknown_remediation_route() {
+        let contract = core_decision_failure_reason_contract();
+        let mut reason = canonical_core_decision_failure_reason_fixture();
+        reason.remediation_route = "unknown-route".to_string();
+
+        let errors = validate_core_decision_failure_reason(&contract, &reason).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("is not in contract")));
+    }
+
+    #[test]
+    fn core_decision_failure_reason_rejects_invalid_retry_eligibility() {
+        let contract = core_decision_failure_reason_contract();
+        let mut reason = canonical_core_decision_failure_reason_fixture();
+        reason.outcome = "rejected".to_string();
+        reason.remediation_route = "cancel-subject".to_string();
+        reason.retry_eligible = true;
+        reason.blocking = false;
+
+        let errors = validate_core_decision_failure_reason(&contract, &reason).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("is not retry eligible")));
     }
 
     #[test]
