@@ -30,10 +30,13 @@ pub use decision::{
 };
 pub use evidence::{
     canonical_core_evidence_pack_fixture, core_evidence_pack_negative_fixtures,
-    validate_core_evidence_pack_schema, CoreEvidenceArtifactRef, CoreEvidenceDigest,
-    CoreEvidencePack, CoreEvidencePackNegativeFixtureResult, CoreEvidenceProducerRef,
-    CoreEvidenceProvenance, CoreEvidenceSubjectRef, CoreEvidenceTraceRefs,
-    CORE_EVIDENCE_PACK_SCHEMA_VERSION,
+    core_evidence_source_type_registry_contract, validate_core_evidence_pack_schema,
+    validate_core_evidence_pack_source_type, validate_core_evidence_source_type_registry_contract,
+    CoreEvidenceArtifactRef, CoreEvidenceDigest, CoreEvidencePack,
+    CoreEvidencePackNegativeFixtureResult, CoreEvidenceProducerRef, CoreEvidenceProvenance,
+    CoreEvidenceReferenceAppSourceExample, CoreEvidenceSourceTypeDefinition,
+    CoreEvidenceSourceTypeRegistryContract, CoreEvidenceSubjectRef, CoreEvidenceTraceRefs,
+    CORE_EVIDENCE_PACK_SCHEMA_VERSION, CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_VERSION,
 };
 pub use file_registry::{
     core_file_backed_ontology_registry_projection_contract,

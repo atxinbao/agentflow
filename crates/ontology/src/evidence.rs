@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 pub const CORE_EVIDENCE_PACK_SCHEMA_VERSION: &str = "agentflow-core-evidence-pack.v1";
+pub const CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_VERSION: &str =
+    "agentflow-core-evidence-source-type-registry.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,6 +78,35 @@ pub struct CoreEvidencePackNegativeFixtureResult {
     pub reasons: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceSourceTypeDefinition {
+    pub source_type: String,
+    pub required_fields: Vec<String>,
+    pub allowed_statuses: Vec<String>,
+    pub validation_rule: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceReferenceAppSourceExample {
+    pub reference_app: String,
+    pub example_source: String,
+    pub source_type: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceSourceTypeRegistryContract {
+    pub version: String,
+    pub status: String,
+    pub authority: String,
+    pub reference_mapping_boundary: String,
+    pub source_types: Vec<CoreEvidenceSourceTypeDefinition>,
+    pub reference_app_examples: Vec<CoreEvidenceReferenceAppSourceExample>,
+}
+
 pub fn canonical_core_evidence_pack_fixture() -> CoreEvidencePack {
     CoreEvidencePack {
         version: CORE_EVIDENCE_PACK_SCHEMA_VERSION.to_string(),
@@ -118,6 +149,60 @@ pub fn canonical_core_evidence_pack_fixture() -> CoreEvidencePack {
             action_refs: vec!["action:attach-evidence".to_string()],
             decision_refs: vec!["decision:accept-evidence".to_string()],
         },
+    }
+}
+
+pub fn core_evidence_source_type_registry_contract() -> CoreEvidenceSourceTypeRegistryContract {
+    let allowed_statuses = vec![
+        "collected".to_string(),
+        "missing".to_string(),
+        "invalid".to_string(),
+        "deferred".to_string(),
+        "superseded".to_string(),
+    ];
+    let required_fields = vec![
+        "producer".to_string(),
+        "subject".to_string(),
+        "digest".to_string(),
+        "artifactRefs".to_string(),
+        "provenance".to_string(),
+        "traceRefs".to_string(),
+    ];
+
+    CoreEvidenceSourceTypeRegistryContract {
+        version: CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_VERSION.to_string(),
+        status: "active".to_string(),
+        authority: "Core Evidence Source Type registry defines generic proof source categories."
+            .to_string(),
+        reference_mapping_boundary:
+            "Reference App examples may map domain proof into Core source types, but mappings are not Core authority."
+                .to_string(),
+        source_types: [
+            "artifact",
+            "log",
+            "screenshot",
+            "external-proof",
+            "command-output",
+            "diff",
+            "provenance",
+            "human-confirmation",
+        ]
+        .into_iter()
+        .map(|source_type| CoreEvidenceSourceTypeDefinition {
+            source_type: source_type.to_string(),
+            required_fields: required_fields.clone(),
+            allowed_statuses: allowed_statuses.clone(),
+            validation_rule:
+                "source type evidence must provide producer, subject, digest, artifact refs, provenance, and trace refs"
+                    .to_string(),
+        })
+        .collect(),
+        reference_app_examples: vec![
+            reference_example("software-dev", "changed-content-proof", "diff"),
+            reference_example("software-dev", "local-command-proof", "command-output"),
+            reference_example("software-dev", "ui-proof", "screenshot"),
+            reference_example("software-dev", "merge-proof", "external-proof"),
+        ],
     }
 }
 
@@ -179,6 +264,166 @@ pub fn validate_core_evidence_pack_schema(pack: &CoreEvidencePack) -> Result<(),
     }
     validate_trace_refs(&pack.trace_refs, &mut errors);
     validate_core_surface_terms(pack, &mut errors);
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        errors.sort();
+        errors.dedup();
+        Err(errors)
+    }
+}
+
+pub fn validate_core_evidence_source_type_registry_contract(
+    registry: &CoreEvidenceSourceTypeRegistryContract,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if registry.version != CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_VERSION {
+        errors.push(reason("source-type-registry-version-mismatch"));
+    }
+    if registry.status != "active" {
+        errors.push(reason("source-type-registry-status-unsupported"));
+    }
+    if !registry
+        .reference_mapping_boundary
+        .contains("not Core authority")
+    {
+        errors.push(reason("source-type-reference-boundary-missing"));
+    }
+
+    let required_source_types = [
+        "artifact",
+        "log",
+        "screenshot",
+        "external-proof",
+        "command-output",
+        "diff",
+        "provenance",
+        "human-confirmation",
+    ];
+    for source_type in required_source_types {
+        if !registry
+            .source_types
+            .iter()
+            .any(|definition| definition.source_type == source_type)
+        {
+            errors.push(reason(&format!("source-type-missing:{source_type}")));
+        }
+    }
+
+    let required_statuses = ["collected", "missing", "invalid", "deferred", "superseded"];
+    for definition in &registry.source_types {
+        if definition.source_type.trim().is_empty() {
+            errors.push(reason("source-type-empty"));
+        }
+        for status in required_statuses {
+            if !definition
+                .allowed_statuses
+                .iter()
+                .any(|allowed| allowed == status)
+            {
+                errors.push(reason(&format!(
+                    "source-type-status-missing:{}:{status}",
+                    definition.source_type
+                )));
+            }
+        }
+        for required_field in [
+            "producer",
+            "subject",
+            "digest",
+            "artifactRefs",
+            "provenance",
+            "traceRefs",
+        ] {
+            if !definition
+                .required_fields
+                .iter()
+                .any(|field| field == required_field)
+            {
+                errors.push(reason(&format!(
+                    "source-type-field-missing:{}:{required_field}",
+                    definition.source_type
+                )));
+            }
+        }
+    }
+
+    for example in &registry.reference_app_examples {
+        if registry
+            .source_types
+            .iter()
+            .all(|definition| definition.source_type != example.source_type)
+        {
+            errors.push(reason(&format!(
+                "reference-example-source-type-unknown:{}",
+                example.example_source
+            )));
+        }
+        if example.status != "reference-only" {
+            errors.push(reason(&format!(
+                "reference-example-status-invalid:{}",
+                example.example_source
+            )));
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        errors.sort();
+        errors.dedup();
+        Err(errors)
+    }
+}
+
+pub fn validate_core_evidence_pack_source_type(
+    pack: &CoreEvidencePack,
+    registry: &CoreEvidenceSourceTypeRegistryContract,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+    if let Err(schema_errors) = validate_core_evidence_pack_schema(pack) {
+        errors.extend(schema_errors);
+    }
+    if let Err(registry_errors) = validate_core_evidence_source_type_registry_contract(registry) {
+        errors.extend(registry_errors);
+    }
+
+    let Some(source_type) = registry
+        .source_types
+        .iter()
+        .find(|definition| definition.source_type == pack.source_type)
+    else {
+        errors.push(reason("source-type-unknown"));
+        errors.sort();
+        errors.dedup();
+        return Err(errors);
+    };
+
+    if !source_type
+        .allowed_statuses
+        .iter()
+        .any(|status| status == &pack.status)
+    {
+        errors.push(reason("source-status-unsupported"));
+    }
+    if source_type
+        .required_fields
+        .iter()
+        .any(|field| field == "artifactRefs")
+        && pack.artifact_refs.is_empty()
+    {
+        errors.push(reason("source-required-artifact-refs-missing"));
+    }
+    if source_type
+        .required_fields
+        .iter()
+        .any(|field| field == "provenance")
+        && pack.provenance.capture_ref.trim().is_empty()
+    {
+        errors.push(reason("source-required-provenance-missing"));
+    }
 
     if errors.is_empty() {
         Ok(())
@@ -257,6 +502,19 @@ pub fn core_evidence_pack_negative_fixtures() -> Vec<CoreEvidencePackNegativeFix
             }
         })
         .collect()
+}
+
+fn reference_example(
+    reference_app: &str,
+    example_source: &str,
+    source_type: &str,
+) -> CoreEvidenceReferenceAppSourceExample {
+    CoreEvidenceReferenceAppSourceExample {
+        reference_app: reference_app.to_string(),
+        example_source: example_source.to_string(),
+        source_type: source_type.to_string(),
+        status: "reference-only".to_string(),
+    }
 }
 
 fn validate_digest(path: &str, digest: &CoreEvidenceDigest, errors: &mut Vec<String>) {
@@ -420,5 +678,38 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error == "forbidden-core-term:repository-patch"));
+    }
+
+    #[test]
+    fn core_evidence_source_type_registry_contract_validates() {
+        let registry = core_evidence_source_type_registry_contract();
+        validate_core_evidence_source_type_registry_contract(&registry).unwrap();
+        assert_eq!(registry.source_types.len(), 8);
+        assert_eq!(registry.reference_app_examples.len(), 4);
+    }
+
+    #[test]
+    fn core_evidence_source_type_registry_rejects_unknown_source_type() {
+        let registry = core_evidence_source_type_registry_contract();
+        let mut pack = canonical_core_evidence_pack_fixture();
+        pack.source_type = "unknown-source".to_string();
+
+        let errors = validate_core_evidence_pack_source_type(&pack, &registry).unwrap_err();
+        assert!(errors.iter().any(|error| error == "source-type-unknown"));
+    }
+
+    #[test]
+    fn core_evidence_source_type_registry_resolves_reference_examples() {
+        let registry = core_evidence_source_type_registry_contract();
+        let source_types = registry
+            .source_types
+            .iter()
+            .map(|definition| definition.source_type.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        for example in &registry.reference_app_examples {
+            assert_eq!(example.status, "reference-only");
+            assert!(source_types.contains(example.source_type.as_str()));
+        }
     }
 }
