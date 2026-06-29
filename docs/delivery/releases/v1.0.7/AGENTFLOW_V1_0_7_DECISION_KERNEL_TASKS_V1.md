@@ -47,7 +47,7 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-002 Core Decision Model Contract
 
-状态：in-progress
+状态：done
 
 目标：
 
@@ -62,12 +62,16 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-003 Decision Input Binding
 
-状态：planned
+状态：in-progress
 
 目标：
 
 - 绑定 Spec、Runtime State 和 Evidence；
+- 绑定 Ontology object；
+- Delivery context 只作为可选上下文；
 - 缺失输入必须输出稳定阻断原因；
+- stale / projection-only / provider-session ref 必须被拒绝；
+- 对应 release-gate artifact：`runtime/core-decision-input-binding.json`；
 - 对应 GitHub issue：#695。
 
 依赖：#694。

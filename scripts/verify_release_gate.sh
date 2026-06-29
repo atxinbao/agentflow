@@ -171,6 +171,7 @@ V105_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v105-release-certification.json"
 V106_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v106-release-certification.json"
 V107_RELEASE_PROVENANCE_HANDOFF_PATH="$RUNTIME_DIR/v107-release-provenance-handoff.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
+CORE_DECISION_INPUT_BINDING_PATH="$RUNTIME_DIR/core-decision-input-binding.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -427,6 +428,7 @@ proof_chain = [
     {"stage": "v106-release-certification", "label": "v1.0.6 Release Certification"},
     {"stage": "v107-release-provenance-handoff", "label": "v1.0.7 Release Provenance Handoff"},
     {"stage": "core-decision-model-contract", "label": "Core Decision Model Contract"},
+    {"stage": "core-decision-input-binding", "label": "Core Decision Input Binding"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -496,6 +498,7 @@ runtime_artifacts = [
     {"path": "runtime/release-provenance.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-provenance.json").is_file()},
     {"path": "runtime/v107-release-provenance-handoff.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json").is_file()},
     {"path": "runtime/core-decision-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json").is_file()},
+    {"path": "runtime/core-decision-input-binding.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json").is_file()},
     {"path": "runtime/clean-room-test-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/clean-room-test-proof.json").is_file()},
     {"path": "runtime/audit-sidecar-policy.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-sidecar-policy.json").is_file()},
     {"path": "runtime/provider-smoke-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/provider-smoke-proof.json").is_file()},
@@ -574,6 +577,7 @@ v105_release_certification = load_json(pathlib.Path(summary_json_path.parent / "
 v106_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v106-release-certification.json")) or {}
 v107_release_provenance_handoff = load_json(pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json")) or {}
 core_decision_model_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json")) or {}
+core_decision_input_binding = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json")) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
 deployment_evidence_wrong_commit = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json")) or {}
@@ -1447,6 +1451,9 @@ summary_payload = {
     "coreDecisionModelContractPath": "runtime/core-decision-model-contract.json" if core_decision_model_contract else None,
     "coreDecisionModelContractStatus": core_decision_model_contract.get("status") or "missing",
     "coreDecisionModelContractCoverage": core_decision_model_contract.get("coverage") or {},
+    "coreDecisionInputBindingPath": "runtime/core-decision-input-binding.json" if core_decision_input_binding else None,
+    "coreDecisionInputBindingStatus": core_decision_input_binding.get("status") or "missing",
+    "coreDecisionInputBindingCoverage": core_decision_input_binding.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1711,6 +1718,9 @@ certification_payload = {
     "coreDecisionModelContractPath": "runtime/core-decision-model-contract.json" if core_decision_model_contract else None,
     "coreDecisionModelContractStatus": core_decision_model_contract.get("status") or "missing",
     "coreDecisionModelContractCoverage": core_decision_model_contract.get("coverage") or {},
+    "coreDecisionInputBindingPath": "runtime/core-decision-input-binding.json" if core_decision_input_binding else None,
+    "coreDecisionInputBindingStatus": core_decision_input_binding.get("status") or "missing",
+    "coreDecisionInputBindingCoverage": core_decision_input_binding.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -8860,6 +8870,94 @@ PY
   record_stage "core-decision-model-contract" "passed" "$(basename "$CORE_DECISION_MODEL_CONTRACT_PATH")"
 }
 
+run_core_decision_input_binding_gate() {
+  record_stage "core-decision-input-binding" "started" "$CORE_DECISION_INPUT_BINDING_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-decision-input-binding-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_decision_input_binding --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-decision-input-binding" "agentflow-ontology Core Decision Input Binding tests failed"
+  fi
+  python3 - \
+    "$CORE_DECISION_INPUT_BINDING_PATH" \
+    "$WORKSPACE/docs/architecture/071-core-decision-input-binding-v1.md" \
+    "$WORKSPACE/crates/ontology/src/decision.rs" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md" \
+    "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+tasks_path = pathlib.Path(sys.argv[4])
+test_log_path = pathlib.Path(sys.argv[5])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+tasks_text = tasks_path.read_text(encoding="utf-8")
+required_inputs = ["specBundle", "ontologyObject", "runtimeActionState", "evidencePack"]
+required_ref_kinds = [
+    "SpecBundleRef",
+    "OntologyObjectRef",
+    "RuntimeActionStateRef",
+    "EvidencePackRef",
+]
+optional_context = ["deliveryContext", "DeliveryContextRef"]
+rejected_ref_kinds = ["ProjectionRef", "ProviderSessionRef", "CliSessionRef", "ChatThreadRef"]
+negative_fixtures = [
+    "core_decision_input_binding_rejects_missing_spec",
+    "core_decision_input_binding_rejects_stale_runtime_state",
+    "core_decision_input_binding_rejects_projection_only_ref",
+    "core_decision_input_binding_rejects_provider_session_ref",
+]
+coverage = {
+    "contract-version-defined": "agentflow-core-decision-input-binding.v1" in source_text
+    and "agentflow-core-decision-input-binding.v1" in doc_text,
+    "rust-contract-implemented": "CoreDecisionInputBindingContract" in source_text
+    and "CoreDecisionInputBinding" in source_text
+    and "validate_core_decision_input_binding_contract" in source_text
+    and "validate_core_decision_input_binding" in source_text,
+    "required-inputs-documented": all(item in doc_text for item in required_inputs + required_ref_kinds),
+    "required-inputs-implemented": all(item in source_text for item in required_inputs + required_ref_kinds),
+    "optional-delivery-context-documented": all(item in doc_text for item in optional_context),
+    "optional-delivery-context-implemented": all(item in source_text for item in optional_context),
+    "rejected-ref-kinds-documented": all(item in doc_text for item in rejected_ref_kinds),
+    "rejected-ref-kinds-implemented": all(item in source_text for item in rejected_ref_kinds),
+    "stale-ref-rule-documented": "stale authority ref" in doc_text,
+    "stale-ref-rule-implemented": "stale authority ref" in source_text,
+    "projection-provider-path-rejected": ".agentflow/projections/" in source_text
+    and ".agentflow/provider-sessions/" in source_text,
+    "positive-fixture-implemented": "canonical_core_decision_input_binding_fixture" in source_text,
+    "negative-fixtures-implemented": all(item in source_text for item in negative_fixtures),
+    "release-task-binds-issue-695": "#695" in tasks_text
+    and "V107-003 Decision Input Binding" in tasks_text
+    and "runtime/core-decision-input-binding.json" in tasks_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-decision-input-binding-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-decision-input-binding.v1",
+    "architecturePath": "docs/architecture/071-core-decision-input-binding-v1.md",
+    "rustContractPath": "crates/ontology/src/decision.rs",
+    "rustTestLogPath": "runtime/core-decision-input-binding-rust-test.log",
+    "requiredInputs": required_inputs,
+    "requiredRefKinds": required_ref_kinds,
+    "optionalContext": optional_context,
+    "rejectedRefKinds": rejected_ref_kinds,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core decision input binding coverage failed: {failed}")
+PY
+  record_stage "core-decision-input-binding" "passed" "$(basename "$CORE_DECISION_INPUT_BINDING_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -9435,6 +9533,7 @@ PY
   run_v106_release_certification_gate
   run_v107_release_provenance_handoff_gate
   run_core_decision_model_contract_gate
+  run_core_decision_input_binding_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
