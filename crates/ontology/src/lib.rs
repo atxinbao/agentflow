@@ -23,14 +23,18 @@ pub use core::{
     SOFTWARE_DEV_REFERENCE_ONTOLOGY_REF,
 };
 pub use decision::{
-    canonical_core_decision_record_fixture, core_decision_model_contract,
-    core_evidence_decision_reference_model_contract, validate_core_decision_model_contract,
+    canonical_core_decision_input_binding_fixture, canonical_core_decision_record_fixture,
+    core_decision_input_binding_contract, core_decision_model_contract,
+    core_evidence_decision_reference_model_contract, validate_core_decision_input_binding,
+    validate_core_decision_input_binding_contract, validate_core_decision_model_contract,
     validate_core_decision_record, validate_core_evidence_decision_reference_model_contract,
-    CoreDecisionInputs, CoreDecisionKernelOutcome, CoreDecisionModelContract,
-    CoreDecisionOutcomeDefinition, CoreDecisionReadableFact, CoreDecisionReason,
-    CoreDecisionRecord, CoreDecisionReferenceDefinition, CoreDecisionSubjectRef,
-    CoreDecisionWriteAuthority, CoreDecisionWriteRef, CoreEvidenceDecisionReferenceModelContract,
-    CoreEvidenceReferenceDefinition, CORE_DECISION_MODEL_CONTRACT_VERSION,
+    CoreDecisionBoundAuthorityRef, CoreDecisionInputAuthorityRequirement, CoreDecisionInputBinding,
+    CoreDecisionInputBindingContract, CoreDecisionInputs, CoreDecisionKernelOutcome,
+    CoreDecisionModelContract, CoreDecisionOutcomeDefinition, CoreDecisionReadableFact,
+    CoreDecisionReason, CoreDecisionRecord, CoreDecisionReferenceDefinition,
+    CoreDecisionSubjectRef, CoreDecisionWriteAuthority, CoreDecisionWriteRef,
+    CoreEvidenceDecisionReferenceModelContract, CoreEvidenceReferenceDefinition,
+    CORE_DECISION_INPUT_BINDING_CONTRACT_VERSION, CORE_DECISION_MODEL_CONTRACT_VERSION,
     CORE_EVIDENCE_DECISION_MODEL_VERSION,
 };
 pub use evidence::{

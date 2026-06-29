@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 pub const CORE_DECISION_MODEL_CONTRACT_VERSION: &str = "agentflow-core-decision-model.v1";
+pub const CORE_DECISION_INPUT_BINDING_CONTRACT_VERSION: &str =
+    "agentflow-core-decision-input-binding.v1";
 pub const CORE_EVIDENCE_DECISION_MODEL_VERSION: &str =
     "agentflow-core-evidence-decision-reference-model.v1";
 
@@ -86,6 +88,52 @@ pub struct CoreDecisionWriteRef {
     pub write_kind: String,
     pub target_ref: String,
     pub authority_boundary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionInputBindingContract {
+    pub version: String,
+    pub status: String,
+    pub authority: String,
+    pub required_authority_refs: Vec<CoreDecisionInputAuthorityRequirement>,
+    pub optional_context_refs: Vec<CoreDecisionInputAuthorityRequirement>,
+    pub rejected_ref_kinds: Vec<String>,
+    pub freshness_rule: String,
+    pub forbidden_core_terms: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionInputAuthorityRequirement {
+    pub input_kind: String,
+    pub accepted_ref_kind: String,
+    pub source_kernel: String,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionInputBinding {
+    pub version: String,
+    pub binding_id: String,
+    pub decision_id: String,
+    pub spec_bundle_ref: Option<CoreDecisionBoundAuthorityRef>,
+    pub ontology_object_refs: Vec<CoreDecisionBoundAuthorityRef>,
+    pub runtime_action_state_ref: Option<CoreDecisionBoundAuthorityRef>,
+    pub evidence_pack_refs: Vec<CoreDecisionBoundAuthorityRef>,
+    pub delivery_context_refs: Vec<CoreDecisionBoundAuthorityRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreDecisionBoundAuthorityRef {
+    pub ref_kind: String,
+    pub ref_id: String,
+    pub authority_path: String,
+    pub version: String,
+    pub observed_at: String,
+    pub stale: bool,
 }
 
 pub fn core_decision_model_contract() -> CoreDecisionModelContract {
@@ -176,6 +224,42 @@ pub fn core_decision_model_contract() -> CoreDecisionModelContract {
     }
 }
 
+pub fn core_decision_input_binding_contract() -> CoreDecisionInputBindingContract {
+    CoreDecisionInputBindingContract {
+        version: CORE_DECISION_INPUT_BINDING_CONTRACT_VERSION.to_string(),
+        status: "active".to_string(),
+        authority: "Core Decision input bindings connect a decision to current authority facts before any outcome is evaluated."
+            .to_string(),
+        required_authority_refs: vec![
+            input_requirement("specBundle", "SpecBundleRef", "spec-kernel", true),
+            input_requirement("ontologyObject", "OntologyObjectRef", "ontology-kernel", true),
+            input_requirement(
+                "runtimeActionState",
+                "RuntimeActionStateRef",
+                "runtime-kernel",
+                true,
+            ),
+            input_requirement("evidencePack", "EvidencePackRef", "evidence-kernel", true),
+        ],
+        optional_context_refs: vec![input_requirement(
+            "deliveryContext",
+            "DeliveryContextRef",
+            "delivery-context",
+            false,
+        )],
+        rejected_ref_kinds: vec![
+            "ProjectionRef".to_string(),
+            "ProviderSessionRef".to_string(),
+            "CliSessionRef".to_string(),
+            "ChatThreadRef".to_string(),
+        ],
+        freshness_rule:
+            "Every required authority ref must be current; stale refs block the decision input binding."
+                .to_string(),
+        forbidden_core_terms: core_decision_model_contract().forbidden_core_terms,
+    }
+}
+
 pub fn canonical_core_decision_record_fixture() -> CoreDecisionRecord {
     CoreDecisionRecord {
         version: CORE_DECISION_MODEL_CONTRACT_VERSION.to_string(),
@@ -211,6 +295,44 @@ pub fn canonical_core_decision_record_fixture() -> CoreDecisionRecord {
                 authority_boundary: "event-store".to_string(),
             },
         ],
+    }
+}
+
+pub fn canonical_core_decision_input_binding_fixture() -> CoreDecisionInputBinding {
+    CoreDecisionInputBinding {
+        version: CORE_DECISION_INPUT_BINDING_CONTRACT_VERSION.to_string(),
+        binding_id: "binding-core-001".to_string(),
+        decision_id: "decision-core-001".to_string(),
+        spec_bundle_ref: Some(bound_authority_ref(
+            "SpecBundleRef",
+            "spec:core-decision-input-binding",
+            "docs/requirements/core-decision-input-binding.md",
+            "spec-bundle.v1",
+        )),
+        ontology_object_refs: vec![bound_authority_ref(
+            "OntologyObjectRef",
+            "ontology:core/action-state",
+            "runtime/ontology/core-action-state-semantics.json",
+            "ontology-object.v1",
+        )],
+        runtime_action_state_ref: Some(bound_authority_ref(
+            "RuntimeActionStateRef",
+            "runtime-state:object-ready",
+            ".agentflow/state/runtime/object-ready.json",
+            "runtime-state.v1",
+        )),
+        evidence_pack_refs: vec![bound_authority_ref(
+            "EvidencePackRef",
+            "evidence:core-proof-pack",
+            ".agentflow/tasks/core-decision/evidence/proof-pack.json",
+            "evidence-pack.v1",
+        )],
+        delivery_context_refs: vec![bound_authority_ref(
+            "DeliveryContextRef",
+            "delivery-context:optional-public-record",
+            "docs/delivery/core-decision-input-binding.md",
+            "delivery-context.v1",
+        )],
     }
 }
 
@@ -318,6 +440,84 @@ pub fn validate_core_decision_model_contract(
     }
 }
 
+pub fn validate_core_decision_input_binding_contract(
+    contract: &CoreDecisionInputBindingContract,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if contract.version != CORE_DECISION_INPUT_BINDING_CONTRACT_VERSION {
+        errors.push(format!(
+            "decision input binding version must be `{}`",
+            CORE_DECISION_INPUT_BINDING_CONTRACT_VERSION
+        ));
+    }
+    if contract.status != "active" {
+        errors.push("decision input binding status must be active".to_string());
+    }
+
+    let required_inputs: BTreeSet<_> = contract
+        .required_authority_refs
+        .iter()
+        .filter(|requirement| requirement.required)
+        .map(|requirement| requirement.input_kind.as_str())
+        .collect();
+    for required in [
+        "specBundle",
+        "ontologyObject",
+        "runtimeActionState",
+        "evidencePack",
+    ] {
+        if !required_inputs.contains(required) {
+            errors.push(format!(
+                "decision input binding missing required authority ref `{required}`"
+            ));
+        }
+    }
+
+    let accepted_required_kinds: BTreeSet<_> = contract
+        .required_authority_refs
+        .iter()
+        .map(|requirement| requirement.accepted_ref_kind.as_str())
+        .collect();
+    for required_kind in [
+        "SpecBundleRef",
+        "OntologyObjectRef",
+        "RuntimeActionStateRef",
+        "EvidencePackRef",
+    ] {
+        if !accepted_required_kinds.contains(required_kind) {
+            errors.push(format!(
+                "decision input binding cannot accept required ref kind `{required_kind}`"
+            ));
+        }
+    }
+
+    for rejected_kind in ["ProjectionRef", "ProviderSessionRef"] {
+        if !contract
+            .rejected_ref_kinds
+            .iter()
+            .any(|item| item == rejected_kind)
+        {
+            errors.push(format!(
+                "decision input binding must reject `{rejected_kind}`"
+            ));
+        }
+    }
+
+    validate_no_forbidden_terms(
+        "Core decision input binding contract",
+        &contract.forbidden_core_terms,
+        core_decision_input_binding_contract_surface(contract),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 pub fn validate_core_decision_record(
     contract: &CoreDecisionModelContract,
     record: &CoreDecisionRecord,
@@ -394,6 +594,77 @@ pub fn validate_core_decision_record(
         "Core decision record",
         &contract.forbidden_core_terms,
         core_decision_record_surface(record),
+        &mut errors,
+    );
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+pub fn validate_core_decision_input_binding(
+    contract: &CoreDecisionInputBindingContract,
+    binding: &CoreDecisionInputBinding,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    if binding.version != CORE_DECISION_INPUT_BINDING_CONTRACT_VERSION {
+        errors.push(format!(
+            "decision input binding version must be `{}`",
+            CORE_DECISION_INPUT_BINDING_CONTRACT_VERSION
+        ));
+    }
+    if binding.binding_id.trim().is_empty() {
+        errors.push("decision input binding id is required".to_string());
+    }
+    if binding.decision_id.trim().is_empty() {
+        errors.push("decision input binding decision id is required".to_string());
+    }
+
+    validate_required_ref(
+        contract,
+        "specBundle",
+        "SpecBundleRef",
+        binding.spec_bundle_ref.as_ref(),
+        &mut errors,
+    );
+    validate_required_ref_slice(
+        contract,
+        "ontologyObject",
+        "OntologyObjectRef",
+        &binding.ontology_object_refs,
+        &mut errors,
+    );
+    validate_required_ref(
+        contract,
+        "runtimeActionState",
+        "RuntimeActionStateRef",
+        binding.runtime_action_state_ref.as_ref(),
+        &mut errors,
+    );
+    validate_required_ref_slice(
+        contract,
+        "evidencePack",
+        "EvidencePackRef",
+        &binding.evidence_pack_refs,
+        &mut errors,
+    );
+    for delivery_context_ref in &binding.delivery_context_refs {
+        validate_bound_ref(
+            contract,
+            "deliveryContext",
+            "DeliveryContextRef",
+            delivery_context_ref,
+            &mut errors,
+        );
+    }
+
+    validate_no_forbidden_terms(
+        "Core decision input binding",
+        &contract.forbidden_core_terms,
+        core_decision_input_binding_surface(binding),
         &mut errors,
     );
 
@@ -752,11 +1023,41 @@ fn readable_fact(
     }
 }
 
+fn input_requirement(
+    input_kind: &str,
+    accepted_ref_kind: &str,
+    source_kernel: &str,
+    required: bool,
+) -> CoreDecisionInputAuthorityRequirement {
+    CoreDecisionInputAuthorityRequirement {
+        input_kind: input_kind.to_string(),
+        accepted_ref_kind: accepted_ref_kind.to_string(),
+        source_kernel: source_kernel.to_string(),
+        required,
+    }
+}
+
 fn decision_outcome(outcome: &str, meaning: &str, terminal: bool) -> CoreDecisionKernelOutcome {
     CoreDecisionKernelOutcome {
         outcome: outcome.to_string(),
         meaning: meaning.to_string(),
         terminal,
+    }
+}
+
+fn bound_authority_ref(
+    ref_kind: &str,
+    ref_id: &str,
+    authority_path: &str,
+    version: &str,
+) -> CoreDecisionBoundAuthorityRef {
+    CoreDecisionBoundAuthorityRef {
+        ref_kind: ref_kind.to_string(),
+        ref_id: ref_id.to_string(),
+        authority_path: authority_path.to_string(),
+        version: version.to_string(),
+        observed_at: "2026-06-29T00:00:00Z".to_string(),
+        stale: false,
     }
 }
 
@@ -785,6 +1086,46 @@ fn core_decision_model_surface(contract: &CoreDecisionModelContract) -> Vec<Stri
             ]
         }))
         .collect()
+}
+
+fn core_decision_input_binding_contract_surface(
+    contract: &CoreDecisionInputBindingContract,
+) -> Vec<String> {
+    [
+        contract.version.clone(),
+        contract.status.clone(),
+        contract.authority.clone(),
+        contract.freshness_rule.clone(),
+        contract.rejected_ref_kinds.join(" "),
+    ]
+    .into_iter()
+    .chain(
+        contract
+            .required_authority_refs
+            .iter()
+            .flat_map(|requirement| {
+                [
+                    requirement.input_kind.clone(),
+                    requirement.accepted_ref_kind.clone(),
+                    requirement.source_kernel.clone(),
+                    requirement.required.to_string(),
+                ]
+            }),
+    )
+    .chain(
+        contract
+            .optional_context_refs
+            .iter()
+            .flat_map(|requirement| {
+                [
+                    requirement.input_kind.clone(),
+                    requirement.accepted_ref_kind.clone(),
+                    requirement.source_kernel.clone(),
+                    requirement.required.to_string(),
+                ]
+            }),
+    )
+    .collect()
 }
 
 fn core_decision_record_surface(record: &CoreDecisionRecord) -> Vec<String> {
@@ -818,6 +1159,156 @@ fn core_decision_record_surface(record: &CoreDecisionRecord) -> Vec<String> {
         ]
     }))
     .collect()
+}
+
+fn core_decision_input_binding_surface(binding: &CoreDecisionInputBinding) -> Vec<String> {
+    [
+        binding.version.clone(),
+        binding.binding_id.clone(),
+        binding.decision_id.clone(),
+    ]
+    .into_iter()
+    .chain(
+        binding
+            .spec_bundle_ref
+            .iter()
+            .flat_map(core_decision_bound_ref_surface),
+    )
+    .chain(
+        binding
+            .ontology_object_refs
+            .iter()
+            .flat_map(core_decision_bound_ref_surface),
+    )
+    .chain(
+        binding
+            .runtime_action_state_ref
+            .iter()
+            .flat_map(core_decision_bound_ref_surface),
+    )
+    .chain(
+        binding
+            .evidence_pack_refs
+            .iter()
+            .flat_map(core_decision_bound_ref_surface),
+    )
+    .chain(
+        binding
+            .delivery_context_refs
+            .iter()
+            .flat_map(core_decision_bound_ref_surface),
+    )
+    .collect()
+}
+
+fn core_decision_bound_ref_surface(ref_value: &CoreDecisionBoundAuthorityRef) -> Vec<String> {
+    vec![
+        ref_value.ref_kind.clone(),
+        ref_value.ref_id.clone(),
+        ref_value.authority_path.clone(),
+        ref_value.version.clone(),
+        ref_value.observed_at.clone(),
+        ref_value.stale.to_string(),
+    ]
+}
+
+fn validate_required_ref(
+    contract: &CoreDecisionInputBindingContract,
+    input_kind: &str,
+    accepted_ref_kind: &str,
+    ref_value: Option<&CoreDecisionBoundAuthorityRef>,
+    errors: &mut Vec<String>,
+) {
+    match ref_value {
+        Some(ref_value) => {
+            validate_bound_ref(contract, input_kind, accepted_ref_kind, ref_value, errors)
+        }
+        None => errors.push(format!(
+            "decision input binding missing required authority ref `{input_kind}`"
+        )),
+    }
+}
+
+fn validate_required_ref_slice(
+    contract: &CoreDecisionInputBindingContract,
+    input_kind: &str,
+    accepted_ref_kind: &str,
+    ref_values: &[CoreDecisionBoundAuthorityRef],
+    errors: &mut Vec<String>,
+) {
+    if ref_values.is_empty() {
+        errors.push(format!(
+            "decision input binding missing required authority ref `{input_kind}`"
+        ));
+        return;
+    }
+
+    for ref_value in ref_values {
+        validate_bound_ref(contract, input_kind, accepted_ref_kind, ref_value, errors);
+    }
+}
+
+fn validate_bound_ref(
+    contract: &CoreDecisionInputBindingContract,
+    input_kind: &str,
+    accepted_ref_kind: &str,
+    ref_value: &CoreDecisionBoundAuthorityRef,
+    errors: &mut Vec<String>,
+) {
+    if contract
+        .rejected_ref_kinds
+        .iter()
+        .any(|rejected| rejected == &ref_value.ref_kind)
+    {
+        errors.push(format!(
+            "decision input binding rejected ref kind `{}` for `{input_kind}`",
+            ref_value.ref_kind
+        ));
+    }
+
+    if ref_value.ref_kind != accepted_ref_kind {
+        errors.push(format!(
+            "decision input binding expected `{accepted_ref_kind}` for `{input_kind}` but got `{}`",
+            ref_value.ref_kind
+        ));
+    }
+
+    if ref_value.ref_id.trim().is_empty() {
+        errors.push(format!(
+            "decision input binding `{input_kind}` authority ref id is required"
+        ));
+    }
+    if ref_value.authority_path.trim().is_empty() {
+        errors.push(format!(
+            "decision input binding `{input_kind}` authority path is required"
+        ));
+    }
+    if ref_value.version.trim().is_empty() {
+        errors.push(format!(
+            "decision input binding `{input_kind}` authority version is required"
+        ));
+    }
+    if ref_value.observed_at.trim().is_empty() {
+        errors.push(format!(
+            "decision input binding `{input_kind}` observed timestamp is required"
+        ));
+    }
+    if ref_value.stale {
+        errors.push(format!(
+            "decision input binding stale authority ref `{input_kind}`"
+        ));
+    }
+    if ref_value
+        .authority_path
+        .starts_with(".agentflow/projections/")
+        || ref_value
+            .authority_path
+            .starts_with(".agentflow/provider-sessions/")
+    {
+        errors.push(format!(
+            "decision input binding `{input_kind}` must not read projection or provider session authority"
+        ));
+    }
 }
 
 fn validate_no_forbidden_terms(
@@ -979,6 +1470,85 @@ mod tests {
 
         let errors = validate_core_decision_record(&contract, &record).unwrap_err();
         assert!(errors.iter().any(|error| error.contains("github-issue")));
+    }
+
+    #[test]
+    fn core_decision_input_binding_contract_validates() {
+        let contract = core_decision_input_binding_contract();
+        validate_core_decision_input_binding_contract(&contract).unwrap();
+        assert!(contract
+            .required_authority_refs
+            .iter()
+            .any(|requirement| requirement.accepted_ref_kind == "SpecBundleRef"));
+        assert!(contract
+            .rejected_ref_kinds
+            .iter()
+            .any(|ref_kind| ref_kind == "ProjectionRef"));
+    }
+
+    #[test]
+    fn core_decision_input_binding_fixture_validates() {
+        let contract = core_decision_input_binding_contract();
+        let binding = canonical_core_decision_input_binding_fixture();
+        validate_core_decision_input_binding(&contract, &binding).unwrap();
+        assert_eq!(
+            binding.version,
+            CORE_DECISION_INPUT_BINDING_CONTRACT_VERSION
+        );
+        assert_eq!(binding.evidence_pack_refs.len(), 1);
+    }
+
+    #[test]
+    fn core_decision_input_binding_rejects_missing_spec() {
+        let contract = core_decision_input_binding_contract();
+        let mut binding = canonical_core_decision_input_binding_fixture();
+        binding.spec_bundle_ref = None;
+
+        let errors = validate_core_decision_input_binding(&contract, &binding).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("missing required authority ref `specBundle`")));
+    }
+
+    #[test]
+    fn core_decision_input_binding_rejects_stale_runtime_state() {
+        let contract = core_decision_input_binding_contract();
+        let mut binding = canonical_core_decision_input_binding_fixture();
+        binding.runtime_action_state_ref.as_mut().unwrap().stale = true;
+
+        let errors = validate_core_decision_input_binding(&contract, &binding).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("stale authority ref `runtimeActionState`")));
+    }
+
+    #[test]
+    fn core_decision_input_binding_rejects_projection_only_ref() {
+        let contract = core_decision_input_binding_contract();
+        let mut binding = canonical_core_decision_input_binding_fixture();
+        binding.evidence_pack_refs[0].ref_kind = "ProjectionRef".to_string();
+        binding.evidence_pack_refs[0].authority_path =
+            ".agentflow/projections/tasks/task-core.json".to_string();
+
+        let errors = validate_core_decision_input_binding(&contract, &binding).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("rejected ref kind `ProjectionRef`")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("must not read projection or provider session")));
+    }
+
+    #[test]
+    fn core_decision_input_binding_rejects_provider_session_ref() {
+        let contract = core_decision_input_binding_contract();
+        let mut binding = canonical_core_decision_input_binding_fixture();
+        binding.spec_bundle_ref.as_mut().unwrap().ref_kind = "ProviderSessionRef".to_string();
+
+        let errors = validate_core_decision_input_binding(&contract, &binding).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("rejected ref kind `ProviderSessionRef`")));
     }
 
     #[test]
