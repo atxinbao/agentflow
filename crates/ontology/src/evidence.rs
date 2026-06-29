@@ -14,6 +14,8 @@ pub const CORE_EVIDENCE_AUTHORITY_TRACE_VERSION: &str =
 pub const CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION: &str =
     "agentflow-core-evidence-completeness-policy.v1";
 pub const CORE_MISSING_EVIDENCE_REPORT_VERSION: &str = "agentflow-core-missing-evidence-report.v1";
+pub const SOFTWARE_DEV_EVIDENCE_REFERENCE_MAPPING_VERSION: &str =
+    "agentflow-software-dev-evidence-reference-mapping.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -116,6 +118,26 @@ pub struct CoreEvidenceSourceTypeRegistryContract {
     pub reference_mapping_boundary: String,
     pub source_types: Vec<CoreEvidenceSourceTypeDefinition>,
     pub reference_app_examples: Vec<CoreEvidenceReferenceAppSourceExample>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SoftwareDevEvidenceReferenceMappingContract {
+    pub version: String,
+    pub status: String,
+    pub reference_app: String,
+    pub authority_boundary: String,
+    pub mappings: Vec<SoftwareDevEvidenceReferenceMapping>,
+    pub fixture_packs: Vec<CoreEvidencePack>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SoftwareDevEvidenceReferenceMapping {
+    pub reference_field: String,
+    pub description: String,
+    pub core_source_type: String,
+    pub reference_only: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1413,6 +1435,171 @@ pub fn core_evidence_source_type_registry_contract() -> CoreEvidenceSourceTypeRe
     }
 }
 
+pub fn software_dev_evidence_reference_mapping_contract(
+) -> SoftwareDevEvidenceReferenceMappingContract {
+    SoftwareDevEvidenceReferenceMappingContract {
+        version: SOFTWARE_DEV_EVIDENCE_REFERENCE_MAPPING_VERSION.to_string(),
+        status: "active".to_string(),
+        reference_app: "software-dev".to_string(),
+        authority_boundary:
+            "Software Dev evidence fields are reference app mapping, not Core authority".to_string(),
+        mappings: vec![
+            software_dev_mapping("diff", "Changed content proof.", "diff"),
+            software_dev_mapping("test-log", "Local test result log.", "log"),
+            software_dev_mapping("build-log", "Local build command output.", "command-output"),
+            software_dev_mapping("pr-link", "Remote change review link.", "external-proof"),
+            software_dev_mapping(
+                "release-note",
+                "Public change summary artifact.",
+                "artifact",
+            ),
+            software_dev_mapping(
+                "deployment-proof",
+                "Deployment provenance proof.",
+                "provenance",
+            ),
+        ],
+        fixture_packs: software_dev_reference_evidence_fixture_packs(),
+    }
+}
+
+pub fn software_dev_reference_evidence_fixture_packs() -> Vec<CoreEvidencePack> {
+    [
+        ("reference-diff", "diff", "reference-diff-proof"),
+        ("reference-local-result", "log", "reference-local-result"),
+        (
+            "reference-build-log",
+            "command-output",
+            "reference-build-output",
+        ),
+        (
+            "reference-remote-link",
+            "external-proof",
+            "reference-remote-proof",
+        ),
+        ("reference-change-note", "artifact", "reference-change-note"),
+        (
+            "reference-deployment-proof",
+            "provenance",
+            "reference-deployment-proof",
+        ),
+    ]
+    .into_iter()
+    .map(|(evidence_suffix, source_type, artifact_kind)| {
+        let mut pack = canonical_core_evidence_pack_fixture();
+        pack.evidence_id = format!("evidence-{evidence_suffix}");
+        pack.source_type = source_type.to_string();
+        pack.subject.subject_ref = "task:reference-evidence".to_string();
+        pack.artifact_refs[0].artifact_ref = format!("artifact:{evidence_suffix}");
+        pack.artifact_refs[0].artifact_kind = artifact_kind.to_string();
+        pack
+    })
+    .collect()
+}
+
+pub fn software_dev_reference_evidence_completeness_policy() -> CoreEvidenceCompletenessPolicy {
+    CoreEvidenceCompletenessPolicy {
+        version: CORE_EVIDENCE_COMPLETENESS_POLICY_VERSION.to_string(),
+        policy_id: "policy:software-dev-reference-evidence".to_string(),
+        status: "active".to_string(),
+        route_ref: "route:reference-app-software-dev".to_string(),
+        action_ref: "action:reference-evidence-closeout".to_string(),
+        requirement_groups: vec![CoreEvidenceRequirementGroup {
+            group_id: "software-dev-reference-required-evidence".to_string(),
+            group_kind: "required".to_string(),
+            accepted_source_types: vec![
+                "diff".to_string(),
+                "log".to_string(),
+                "command-output".to_string(),
+                "external-proof".to_string(),
+                "artifact".to_string(),
+                "provenance".to_string(),
+            ],
+            min_collected: 6,
+            deferred_reason: None,
+        }],
+    }
+}
+
+pub fn validate_software_dev_evidence_reference_mapping_contract(
+    contract: &SoftwareDevEvidenceReferenceMappingContract,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+    let registry = core_evidence_source_type_registry_contract();
+    let registry_source_types = registry
+        .source_types
+        .iter()
+        .map(|definition| definition.source_type.as_str())
+        .collect::<BTreeSet<_>>();
+
+    if contract.version != SOFTWARE_DEV_EVIDENCE_REFERENCE_MAPPING_VERSION {
+        errors.push(reason("software-dev-evidence-mapping-version-mismatch"));
+    }
+    if contract.status != "active" {
+        errors.push(reason("software-dev-evidence-mapping-status-unsupported"));
+    }
+    if contract.reference_app != "software-dev" {
+        errors.push(reason("software-dev-evidence-reference-app-mismatch"));
+    }
+    if !contract.authority_boundary.contains("not Core authority") {
+        errors.push(reason("software-dev-evidence-core-boundary-missing"));
+    }
+
+    for required_field in [
+        "diff",
+        "test-log",
+        "build-log",
+        "pr-link",
+        "release-note",
+        "deployment-proof",
+    ] {
+        if contract
+            .mappings
+            .iter()
+            .all(|mapping| mapping.reference_field != required_field)
+        {
+            errors.push(reason(&format!(
+                "software-dev-evidence-reference-field-missing:{required_field}"
+            )));
+        }
+    }
+
+    for mapping in &contract.mappings {
+        if mapping.reference_field.trim().is_empty() {
+            errors.push(reason("software-dev-evidence-reference-field-empty"));
+        }
+        if !mapping.reference_only {
+            errors.push(reason("software-dev-evidence-reference-only-required"));
+        }
+        if !registry_source_types.contains(mapping.core_source_type.as_str()) {
+            errors.push(reason(&format!(
+                "software-dev-evidence-core-source-type-unknown:{}",
+                mapping.core_source_type
+            )));
+        }
+    }
+
+    for pack in &contract.fixture_packs {
+        if let Err(pack_errors) = validate_core_evidence_pack_source_type(pack, &registry) {
+            errors.extend(pack_errors);
+        }
+    }
+
+    let policy = software_dev_reference_evidence_completeness_policy();
+    let evaluation = evaluate_core_evidence_completeness_policy(&policy, &contract.fixture_packs);
+    if evaluation.outcome != "complete" {
+        errors.push(reason("software-dev-evidence-fixture-incomplete"));
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        errors.sort();
+        errors.dedup();
+        Err(errors)
+    }
+}
+
 pub fn validate_core_evidence_pack_schema(pack: &CoreEvidencePack) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
 
@@ -1724,6 +1911,19 @@ fn reference_example(
     }
 }
 
+fn software_dev_mapping(
+    reference_field: &str,
+    description: &str,
+    core_source_type: &str,
+) -> SoftwareDevEvidenceReferenceMapping {
+    SoftwareDevEvidenceReferenceMapping {
+        reference_field: reference_field.to_string(),
+        description: description.to_string(),
+        core_source_type: core_source_type.to_string(),
+        reference_only: true,
+    }
+}
+
 fn validate_digest(path: &str, digest: &CoreEvidenceDigest, errors: &mut Vec<String>) {
     if digest.algorithm != "sha256" {
         errors.push(reason(&format!("{path}-algorithm-unsupported")));
@@ -1952,6 +2152,42 @@ mod tests {
             assert_eq!(example.status, "reference-only");
             assert!(source_types.contains(example.source_type.as_str()));
         }
+    }
+
+    #[test]
+    fn software_dev_evidence_reference_mapping_contract_validates() {
+        let contract = software_dev_evidence_reference_mapping_contract();
+        validate_software_dev_evidence_reference_mapping_contract(&contract).unwrap();
+        assert_eq!(
+            contract.version,
+            SOFTWARE_DEV_EVIDENCE_REFERENCE_MAPPING_VERSION
+        );
+        assert_eq!(contract.mappings.len(), 6);
+        assert!(contract
+            .mappings
+            .iter()
+            .all(|mapping| mapping.reference_only));
+        assert!(contract.authority_boundary.contains("not Core authority"));
+    }
+
+    #[test]
+    fn software_dev_evidence_fixture_maps_through_core_source_registry() {
+        let registry = core_evidence_source_type_registry_contract();
+        let packs = software_dev_reference_evidence_fixture_packs();
+        assert_eq!(packs.len(), 6);
+        for pack in packs {
+            validate_core_evidence_pack_source_type(&pack, &registry).unwrap();
+        }
+    }
+
+    #[test]
+    fn missing_software_dev_evidence_fails_through_core_policy() {
+        let policy = software_dev_reference_evidence_completeness_policy();
+        let evaluation = evaluate_core_evidence_completeness_policy(&policy, &[]);
+        assert_eq!(evaluation.outcome, "incomplete");
+        assert!(evaluation.reasons.contains(
+            &"evidence-required-missing:software-dev-reference-required-evidence".to_string()
+        ));
     }
 
     #[test]
