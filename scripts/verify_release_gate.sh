@@ -160,6 +160,7 @@ CORE_EVIDENCE_COMPLETENESS_POLICY_PATH="$RUNTIME_DIR/core-evidence-completeness-
 CORE_MISSING_EVIDENCE_HANDLING_PATH="$RUNTIME_DIR/core-missing-evidence-handling.json"
 CORE_EXTERNAL_PROOF_PROVENANCE_PATH="$RUNTIME_DIR/core-external-proof-provenance.json"
 SOFTWARE_DEV_REFERENCE_EVIDENCE_MAPPING_PATH="$RUNTIME_DIR/software-dev-reference-evidence-mapping.json"
+EVIDENCE_PROJECTION_READ_MODEL_PATH="$RUNTIME_DIR/evidence-projection-read-model.json"
 CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
 V104_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v104-release-certification.json"
 CORE_RUNTIME_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/core-runtime-negative-fixtures.json"
@@ -412,6 +413,7 @@ proof_chain = [
     {"stage": "core-missing-evidence-handling", "label": "Core Missing Evidence Handling"},
     {"stage": "core-external-proof-provenance", "label": "Core External Proof Provenance"},
     {"stage": "software-dev-reference-evidence-mapping", "label": "Software Dev Reference Evidence Mapping"},
+    {"stage": "evidence-projection-read-model", "label": "Evidence Projection Read Model"},
     {"stage": "core-file-backed-ontology-registry", "label": "Core File-backed Ontology Registry"},
     {"stage": "v104-release-certification", "label": "v1.0.4 Release Certification"},
     {"stage": "core-runtime-negative-fixtures", "label": "Core Runtime Negative Fixtures"},
@@ -503,6 +505,8 @@ runtime_artifacts = [
     {"path": "runtime/core-runtime-admission.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-runtime-admission.json").is_file()},
     {"path": "runtime/core-runtime-arbitration.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-runtime-arbitration.json").is_file()},
     {"path": "runtime/v105-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v105-release-certification.json").is_file()},
+    {"path": "runtime/evidence-projection-read-model.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/evidence-projection-read-model.json").is_file()},
+    {"path": "runtime/evidence-projection-read-model-rust-test.log", "exists": pathlib.Path(summary_json_path.parent / "runtime/evidence-projection-read-model-rust-test.log").is_file()},
     {"path": "runtime/capability-registry.json", "exists": capability_registry_path.is_file()},
     {"path": "runtime/governance-policy.json", "exists": governance_policy_path.is_file()},
     {"path": "runtime/governance-admission.json", "exists": governance_admission_path.is_file()},
@@ -7366,6 +7370,82 @@ PY
   record_stage "software-dev-reference-evidence-mapping" "passed" "$(basename "$SOFTWARE_DEV_REFERENCE_EVIDENCE_MAPPING_PATH")"
 }
 
+run_evidence_projection_read_model_gate() {
+  record_stage "evidence-projection-read-model" "started" "$EVIDENCE_PROJECTION_READ_MODEL_PATH"
+  local rust_test_log="$RUNTIME_DIR/evidence-projection-read-model-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-projection evidence_kernel --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "evidence-projection-read-model" "agentflow-projection Evidence Kernel read model tests failed"
+  fi
+  python3 - "$EVIDENCE_PROJECTION_READ_MODEL_PATH" "$WORKSPACE/docs/architecture/068-evidence-projection-read-model-v1.md" "$WORKSPACE/crates/projection/src/query.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+test_log_path = pathlib.Path(sys.argv[4])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+read_model_fields = [
+    "status",
+    "policyId",
+    "sourceSummaries",
+    "traceRefs",
+    "missingReasons",
+    "completeness",
+    "authority",
+    "readonly",
+]
+status_values = ["passed", "invalid", "deferred"]
+coverage = {
+    "read-model-version-defined": "evidence-kernel-read-model.v1" in source_text
+    and "evidence-kernel-read-model.v1" in doc_text,
+    "read-model-fields-documented": all(field in doc_text for field in read_model_fields),
+    "read-model-fields-implemented": all(field in source_text for field in [
+        "source_summaries",
+        "trace_refs",
+        "missing_reasons",
+        "completeness",
+        "authority",
+        "readonly",
+    ]),
+    "readonly-boundary-documented": "authority = false" in doc_text and "readonly = true" in doc_text,
+    "readonly-boundary-implemented": "authority: false" in source_text and "readonly: true" in source_text,
+    "status-mapping-documented": all(value in doc_text for value in status_values),
+    "status-mapping-implemented": "fn evidence_projection_status" in source_text
+    and all(value in source_text for value in status_values),
+    "core-policy-consumed": "evaluate_core_evidence_completeness_policy" in source_text
+    and "core_missing_evidence_reports_for_completeness_policy" in source_text,
+    "invalid-missing-fixtures-implemented": "evidence_kernel_invalid_missing_projection_fixtures" in source_text,
+    "catalog-entry-implemented": "evidence-kernel" in source_text
+    and "get_evidence_kernel_view" in source_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-evidence-projection-read-model-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "readModelVersion": "evidence-kernel-read-model.v1",
+    "architecturePath": "docs/architecture/068-evidence-projection-read-model-v1.md",
+    "rustContractPath": "crates/projection/src/query.rs",
+    "rustTestLogPath": "runtime/evidence-projection-read-model-rust-test.log",
+    "projectionStatusValues": status_values,
+    "authority": False,
+    "readonly": True,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"evidence projection read model coverage failed: {failed}")
+PY
+  record_stage "evidence-projection-read-model" "passed" "$(basename "$EVIDENCE_PROJECTION_READ_MODEL_PATH")"
+}
+
 run_core_file_backed_ontology_registry_gate() {
   record_stage "core-file-backed-ontology-registry" "started" "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH"
   local rust_test_log="$RUNTIME_DIR/core-file-backed-ontology-registry-rust-test.log"
@@ -8798,6 +8878,7 @@ PY
   run_core_missing_evidence_handling_gate
   run_core_external_proof_provenance_gate
   run_software_dev_reference_evidence_mapping_gate
+  run_evidence_projection_read_model_gate
   run_core_file_backed_ontology_registry_gate
   run_v104_release_certification_gate
   run_core_runtime_negative_fixtures_gate

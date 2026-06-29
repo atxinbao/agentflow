@@ -28,10 +28,13 @@ pub use model::{
 };
 pub use projector::{rebuild_projections, rebuild_projections_with_replay_report};
 pub use query::{
-    get_audit_surface_view, get_delivery_package_view, get_pack_industry_workbench_view,
+    evidence_kernel_invalid_missing_projection_fixtures, get_audit_surface_view,
+    get_delivery_package_view, get_evidence_kernel_view, get_pack_industry_workbench_view,
     get_project_home_view, get_projection_surface_catalog, get_requirement_intake_view,
     get_runtime_health_view, get_spec_loop_view, get_spec_preview_view, get_task_workbench_view,
-    get_work_loop_run_view, get_work_loop_session_view, AuditSurfaceView, DeliveryPackageView,
+    get_work_loop_run_view, get_work_loop_session_view, project_evidence_kernel_read_model,
+    AuditSurfaceView, DeliveryPackageView, EvidenceCompletenessReadModelView,
+    EvidenceKernelReadModelView, EvidenceMissingReasonView, EvidenceSourceSummaryView,
     IssuePreviewItem, PackConnectorCapabilityIndexItem, PackDomainObjectIndexItem,
     PackIndustryWorkbenchItem, PackIndustryWorkbenchView, PackListItemView, PackReadinessView,
     PackSurfacePageIndexItem, ProjectDependencyEdge, ProjectHomeView, ProjectRunSummary,
@@ -39,7 +42,7 @@ pub use query::{
     ProjectionSurfaceQueryView, ProjectionSurfaceReadModelView, RequirementIntakeView,
     RuntimeEventRow, RuntimeHealthView, SpecLoopView, SpecPreviewView, TaskWorkbenchView,
     ViewActionHint, WorkLoopEventView, WorkLoopEvidenceSummaryView, WorkLoopRunView,
-    WorkLoopSessionView, PROJECTION_QUERY_SURFACE_VERSION,
+    WorkLoopSessionView, EVIDENCE_KERNEL_READ_MODEL_VERSION, PROJECTION_QUERY_SURFACE_VERSION,
 };
 pub use storage::{
     load_completion_decision_index, load_completion_decision_projection, load_issue_status_index,
