@@ -78,7 +78,7 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-004 Decision Outcomes and State Transition Semantics
 
-状态：in-progress
+状态：done
 
 目标：
 
@@ -93,12 +93,16 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-005 Failure Reason and Remediation Contract
 
-状态：planned
+状态：in-progress
 
 目标：
 
 - 定义 failure reason 和 remediation hint；
+- failure reason 必须包含 `reasonCode`、`message`、`authorityRefs`、`missingEvidenceRefs`、`remediationRoute`、`retryEligible` 和 `blocking`；
+- remediation route 必须是稳定机器可读值；
+- `accepted` outcome 不能挂 failure reason；
 - 不能只输出人类文案；
+- 对应 release-gate artifact：`runtime/core-decision-failure-reason-remediation.json`；
 - 对应 GitHub issue：#697。
 
 依赖：#696。

@@ -67,6 +67,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [070-core-decision-model-contract-v1.md](070-core-decision-model-contract-v1.md) | Core Decision Model Contract |
 | [071-core-decision-input-binding-v1.md](071-core-decision-input-binding-v1.md) | Core Decision Input Binding |
 | [072-core-decision-outcome-transition-semantics-v1.md](072-core-decision-outcome-transition-semantics-v1.md) | Core Decision Outcome Transition Semantics |
+| [073-core-decision-failure-reason-remediation-v1.md](073-core-decision-failure-reason-remediation-v1.md) | Core Decision Failure Reason / Remediation Contract |
 
 ## Rules
 
