@@ -175,6 +175,7 @@ CORE_DECISION_INPUT_BINDING_PATH="$RUNTIME_DIR/core-decision-input-binding.json"
 CORE_DECISION_OUTCOME_TRANSITIONS_PATH="$RUNTIME_DIR/core-decision-outcome-transitions.json"
 CORE_DECISION_FAILURE_REASON_PATH="$RUNTIME_DIR/core-decision-failure-reason-remediation.json"
 CORE_EVIDENCE_TO_DECISION_GATE_PATH="$RUNTIME_DIR/core-evidence-to-decision-gate.json"
+CORE_COMPLETION_COMMIT_AUTHORITY_PATH="$RUNTIME_DIR/core-completion-commit-authority.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -435,6 +436,7 @@ proof_chain = [
     {"stage": "core-decision-outcome-transitions", "label": "Core Decision Outcome Transitions"},
     {"stage": "core-decision-failure-reason-remediation", "label": "Core Decision Failure Reason / Remediation"},
     {"stage": "core-evidence-to-decision-gate", "label": "Core Evidence-to-Decision Gate"},
+    {"stage": "core-completion-commit-authority", "label": "Core Completion Commit Authority"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -508,6 +510,7 @@ runtime_artifacts = [
     {"path": "runtime/core-decision-outcome-transitions.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json").is_file()},
     {"path": "runtime/core-decision-failure-reason-remediation.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-failure-reason-remediation.json").is_file()},
     {"path": "runtime/core-evidence-to-decision-gate.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-evidence-to-decision-gate.json").is_file()},
+    {"path": "runtime/core-completion-commit-authority.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-completion-commit-authority.json").is_file()},
     {"path": "runtime/clean-room-test-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/clean-room-test-proof.json").is_file()},
     {"path": "runtime/audit-sidecar-policy.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-sidecar-policy.json").is_file()},
     {"path": "runtime/provider-smoke-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/provider-smoke-proof.json").is_file()},
@@ -590,6 +593,7 @@ core_decision_input_binding = load_json(pathlib.Path(summary_json_path.parent / 
 core_decision_outcome_transitions = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json")) or {}
 core_decision_failure_reason = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-failure-reason-remediation.json")) or {}
 core_evidence_to_decision_gate = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-evidence-to-decision-gate.json")) or {}
+core_completion_commit_authority = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-completion-commit-authority.json")) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
 deployment_evidence_wrong_commit = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json")) or {}
@@ -1475,6 +1479,9 @@ summary_payload = {
     "coreEvidenceToDecisionGatePath": "runtime/core-evidence-to-decision-gate.json" if core_evidence_to_decision_gate else None,
     "coreEvidenceToDecisionGateStatus": core_evidence_to_decision_gate.get("status") or "missing",
     "coreEvidenceToDecisionGateCoverage": core_evidence_to_decision_gate.get("coverage") or {},
+    "coreCompletionCommitAuthorityPath": "runtime/core-completion-commit-authority.json" if core_completion_commit_authority else None,
+    "coreCompletionCommitAuthorityStatus": core_completion_commit_authority.get("status") or "missing",
+    "coreCompletionCommitAuthorityCoverage": core_completion_commit_authority.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1751,6 +1758,9 @@ certification_payload = {
     "coreEvidenceToDecisionGatePath": "runtime/core-evidence-to-decision-gate.json" if core_evidence_to_decision_gate else None,
     "coreEvidenceToDecisionGateStatus": core_evidence_to_decision_gate.get("status") or "missing",
     "coreEvidenceToDecisionGateCoverage": core_evidence_to_decision_gate.get("coverage") or {},
+    "coreCompletionCommitAuthorityPath": "runtime/core-completion-commit-authority.json" if core_completion_commit_authority else None,
+    "coreCompletionCommitAuthorityStatus": core_completion_commit_authority.get("status") or "missing",
+    "coreCompletionCommitAuthorityCoverage": core_completion_commit_authority.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -9269,6 +9279,100 @@ PY
   record_stage "core-evidence-to-decision-gate" "passed" "$(basename "$CORE_EVIDENCE_TO_DECISION_GATE_PATH")"
 }
 
+run_core_completion_commit_authority_gate() {
+  record_stage "core-completion-commit-authority" "started" "$CORE_COMPLETION_COMMIT_AUTHORITY_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-completion-commit-authority-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_completion_commit_authority --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-completion-commit-authority" "agentflow-ontology Core Completion Commit Authority tests failed"
+  fi
+  python3 - \
+    "$CORE_COMPLETION_COMMIT_AUTHORITY_PATH" \
+    "$WORKSPACE/docs/architecture/075-core-completion-commit-authority-v1.md" \
+    "$WORKSPACE/docs/architecture/074-core-evidence-to-decision-gate-v1.md" \
+    "$WORKSPACE/crates/ontology/src/decision.rs" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md" \
+    "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+evidence_gate_doc_path = pathlib.Path(sys.argv[3])
+decision_source_path = pathlib.Path(sys.argv[4])
+tasks_path = pathlib.Path(sys.argv[5])
+test_log_path = pathlib.Path(sys.argv[6])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+evidence_gate_doc_text = evidence_gate_doc_path.read_text(encoding="utf-8")
+decision_source = decision_source_path.read_text(encoding="utf-8")
+tasks_text = tasks_path.read_text(encoding="utf-8")
+nonaccepted_outcomes = ["rejected", "deferred", "blocked"]
+negative_fixtures = [
+    "core_completion_commit_authority_rejects_rejected_decision",
+    "core_completion_commit_authority_rejects_deferred_decision",
+    "core_completion_commit_authority_rejects_blocked_decision",
+    "core_completion_commit_authority_rejects_projection_writer",
+    "core_completion_commit_authority_rejects_projection_write_attempt",
+    "core_completion_commit_authority_requires_decision_ref",
+]
+coverage = {
+    "contract-version-defined": "agentflow-core-completion-commit-authority.v1" in decision_source
+    and "agentflow-core-completion-commit-authority.v1" in doc_text,
+    "rust-contract-implemented": "CoreCompletionCommitAuthorityContract" in decision_source
+    and "CoreCompletionCommitAttempt" in decision_source
+    and "CoreCompletionCommitAuthorityResult" in decision_source
+    and "validate_core_completion_commit_authority_contract" in decision_source
+    and "evaluate_core_completion_commit_authority" in decision_source
+    and "validate_core_completion_commit_authority_result" in decision_source,
+    "accepted-decision-required": "required_prior_outcome" in decision_source
+    and "\"accepted\"" in decision_source,
+    "accepted-decision-documented": "Only `accepted` Decision" in doc_text
+    or "只有 `accepted` Decision" in doc_text,
+    "completion-event-bound": "subject.completion.committed" in decision_source
+    and "subject.completion.committed" in doc_text,
+    "event-store-authority": "Event Store" in decision_source
+    and "Event Store" in doc_text,
+    "projection-readonly-bound": "Projection may refresh" in decision_source
+    and "projection" in decision_source
+    and "Projection" in doc_text
+    and "read-only" in doc_text,
+    "nonaccepted-outcomes-documented": all(outcome in doc_text for outcome in nonaccepted_outcomes),
+    "nonaccepted-outcomes-tested": all(item in decision_source for item in negative_fixtures[:3]),
+    "projection-write-attempts-fail": "projection-read-model" in decision_source
+    and "core_completion_commit_authority_rejects_projection_write_attempt" in decision_source,
+    "missing-decision-ref-fails": "completion-decision-ref-missing" in decision_source
+    and "core_completion_commit_authority_requires_decision_ref" in decision_source,
+    "evidence-to-decision-precedes-completion": "Evidence-to-Decision Gate" in evidence_gate_doc_text
+    and "Completion Commit" in doc_text,
+    "release-task-binds-issue-699": "#699" in tasks_text
+    and "V107-007 Completion Commit Authority Boundary" in tasks_text
+    and "runtime/core-completion-commit-authority.json" in tasks_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-completion-commit-authority-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-completion-commit-authority.v1",
+    "architecturePath": "docs/architecture/075-core-completion-commit-authority-v1.md",
+    "rustContractPath": "crates/ontology/src/decision.rs",
+    "rustTestLogPath": "runtime/core-completion-commit-authority-rust-test.log",
+    "requiredPriorOutcome": "accepted",
+    "completionEventType": "subject.completion.committed",
+    "forbiddenWriters": ["projection", "provider-session", "delivery-context", "audit-sidecar"],
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core completion commit authority coverage failed: {failed}")
+PY
+  record_stage "core-completion-commit-authority" "passed" "$(basename "$CORE_COMPLETION_COMMIT_AUTHORITY_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -9848,6 +9952,7 @@ PY
   run_core_decision_outcome_transitions_gate
   run_core_decision_failure_reason_gate
   run_core_evidence_to_decision_gate
+  run_core_completion_commit_authority_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
