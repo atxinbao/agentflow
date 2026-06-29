@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{collections::BTreeSet, fs, path::Path};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -8,6 +8,8 @@ pub const CORE_EVIDENCE_SOURCE_TYPE_REGISTRY_VERSION: &str =
     "agentflow-core-evidence-source-type-registry.v1";
 pub const CORE_EVIDENCE_CAPTURE_RECEIPT_VERSION: &str =
     "agentflow-core-evidence-capture-receipt.v1";
+pub const CORE_EVIDENCE_AUTHORITY_TRACE_VERSION: &str =
+    "agentflow-core-evidence-authority-trace.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -146,6 +148,44 @@ pub struct CoreEvidenceRetentionHint {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoreEvidenceCaptureReceiptNegativeFixtureResult {
+    pub fixture_id: String,
+    pub status: String,
+    pub expected_reason: String,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceAuthorityTrace {
+    pub version: String,
+    pub status: String,
+    pub evidence_id: String,
+    pub trace_refs: CoreEvidenceTraceRefs,
+    pub authority_facts: Vec<CoreEvidenceAuthorityFactRef>,
+    pub collection_event: CoreEvidenceCollectionEventLink,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceAuthorityFactRef {
+    pub fact_kind: String,
+    pub fact_ref: String,
+    pub authority_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceCollectionEventLink {
+    pub event_type: String,
+    pub event_ref: String,
+    pub event_store_path: String,
+    pub correlation_id: String,
+    pub causation_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreEvidenceAuthorityTraceNegativeFixtureResult {
     pub fixture_id: String,
     pub status: String,
     pub expected_reason: String,
@@ -433,6 +473,207 @@ pub fn canonical_core_evidence_capture_receipt_fixture(bytes: &[u8]) -> CoreEvid
             retention_class: "release-certification".to_string(),
             expires_at: Some("2026-12-31T00:00:00Z".to_string()),
         },
+    }
+}
+
+pub fn canonical_core_evidence_authority_trace_fixture() -> CoreEvidenceAuthorityTrace {
+    let pack = canonical_core_evidence_pack_fixture();
+    CoreEvidenceAuthorityTrace {
+        version: CORE_EVIDENCE_AUTHORITY_TRACE_VERSION.to_string(),
+        status: "linked".to_string(),
+        evidence_id: pack.evidence_id.clone(),
+        trace_refs: CoreEvidenceTraceRefs {
+            spec_refs: vec!["spec:core-evidence-pack".to_string()],
+            goal_refs: vec!["goal:evidence-kernel".to_string()],
+            task_refs: vec!["task:core-evidence-pack".to_string()],
+            run_refs: vec!["run:core-evidence-pack".to_string()],
+            action_refs: vec![
+                "action-proposal:attach-evidence".to_string(),
+                "accepted-action:attach-evidence".to_string(),
+            ],
+            decision_refs: vec!["decision:accept-evidence".to_string()],
+        },
+        authority_facts: vec![
+            authority_fact(
+                "SpecBundle",
+                "spec:core-evidence-pack",
+                "docs/requirements/core-evidence-pack.md",
+            ),
+            authority_fact(
+                "Task",
+                "task:core-evidence-pack",
+                ".agentflow/spec/issues/task-core-evidence-pack.json",
+            ),
+            authority_fact(
+                "Run",
+                "run:core-evidence-pack",
+                ".agentflow/tasks/task-core-evidence-pack/run/run.json",
+            ),
+            authority_fact(
+                "ActionProposal",
+                "action-proposal:attach-evidence",
+                ".agentflow/tasks/task-core-evidence-pack/action-proposals/attach-evidence.json",
+            ),
+            authority_fact(
+                "AcceptedAction",
+                "accepted-action:attach-evidence",
+                ".agentflow/tasks/task-core-evidence-pack/actions/attach-evidence.accepted.json",
+            ),
+        ],
+        collection_event: CoreEvidenceCollectionEventLink {
+            event_type: "evidence.collected".to_string(),
+            event_ref: "event:evidence-collected-001".to_string(),
+            event_store_path: ".agentflow/events/task-events.jsonl".to_string(),
+            correlation_id: "corr:core-evidence-pack".to_string(),
+            causation_id: "action-proposal:attach-evidence".to_string(),
+        },
+    }
+}
+
+pub fn validate_core_evidence_authority_trace(
+    pack: &CoreEvidencePack,
+    trace: &CoreEvidenceAuthorityTrace,
+) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+    if let Err(schema_errors) = validate_core_evidence_pack_schema(pack) {
+        errors.extend(schema_errors);
+    }
+    if trace.version != CORE_EVIDENCE_AUTHORITY_TRACE_VERSION {
+        errors.push(reason("evidence-trace-version-mismatch"));
+    }
+    if trace.status != "linked" {
+        errors.push(reason("evidence-trace-status-unsupported"));
+    }
+    if trace.evidence_id != pack.evidence_id {
+        errors.push(reason("evidence-trace-evidence-id-mismatch"));
+    }
+    validate_trace_refs(&trace.trace_refs, &mut errors);
+
+    let fact_refs = trace
+        .authority_facts
+        .iter()
+        .map(|fact| fact.fact_ref.as_str())
+        .collect::<BTreeSet<_>>();
+    for required_ref in trace
+        .trace_refs
+        .spec_refs
+        .iter()
+        .chain(trace.trace_refs.task_refs.iter())
+        .chain(trace.trace_refs.run_refs.iter())
+        .chain(trace.trace_refs.action_refs.iter())
+    {
+        if !fact_refs.contains(required_ref.as_str()) {
+            errors.push(reason("evidence-trace-orphaned"));
+        }
+    }
+
+    for required_kind in [
+        "SpecBundle",
+        "Task",
+        "Run",
+        "ActionProposal",
+        "AcceptedAction",
+    ] {
+        if trace
+            .authority_facts
+            .iter()
+            .all(|fact| fact.fact_kind != required_kind)
+        {
+            errors.push(reason(&format!(
+                "evidence-trace-authority-kind-missing:{required_kind}"
+            )));
+        }
+    }
+
+    for fact in &trace.authority_facts {
+        if fact.fact_kind.trim().is_empty()
+            || fact.fact_ref.trim().is_empty()
+            || fact.authority_path.trim().is_empty()
+        {
+            errors.push(reason("evidence-trace-authority-fact-incomplete"));
+        }
+    }
+
+    if trace.collection_event.event_type != "evidence.collected" {
+        errors.push(reason("evidence-collection-event-type-invalid"));
+    }
+    if trace.collection_event.event_ref.trim().is_empty()
+        || trace.collection_event.event_store_path.trim().is_empty()
+        || trace.collection_event.correlation_id.trim().is_empty()
+        || trace.collection_event.causation_id.trim().is_empty()
+    {
+        errors.push(reason("evidence-collection-event-link-missing"));
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        errors.sort();
+        errors.dedup();
+        Err(errors)
+    }
+}
+
+pub fn core_evidence_authority_trace_negative_fixtures(
+) -> Vec<CoreEvidenceAuthorityTraceNegativeFixtureResult> {
+    let pack = canonical_core_evidence_pack_fixture();
+    let fixtures = vec![
+        ("orphan-evidence", "evidence-trace-orphaned", {
+            let mut trace = canonical_core_evidence_authority_trace_fixture();
+            trace
+                .authority_facts
+                .retain(|fact| fact.fact_ref != "run:core-evidence-pack");
+            trace
+        }),
+        (
+            "missing-action-proposal",
+            "evidence-trace-authority-kind-missing:ActionProposal",
+            {
+                let mut trace = canonical_core_evidence_authority_trace_fixture();
+                trace
+                    .authority_facts
+                    .retain(|fact| fact.fact_kind != "ActionProposal");
+                trace
+            },
+        ),
+        (
+            "missing-collection-event",
+            "evidence-collection-event-link-missing",
+            {
+                let mut trace = canonical_core_evidence_authority_trace_fixture();
+                trace.collection_event.event_ref.clear();
+                trace
+            },
+        ),
+    ];
+
+    fixtures
+        .into_iter()
+        .map(|(fixture_id, expected_reason, trace)| {
+            let reasons = validate_core_evidence_authority_trace(&pack, &trace).unwrap_err();
+            CoreEvidenceAuthorityTraceNegativeFixtureResult {
+                fixture_id: fixture_id.to_string(),
+                status: if reasons.iter().any(|reason| reason == expected_reason) {
+                    "passed".to_string()
+                } else {
+                    "failed".to_string()
+                },
+                expected_reason: expected_reason.to_string(),
+                reasons,
+            }
+        })
+        .collect()
+}
+
+fn authority_fact(
+    fact_kind: &str,
+    fact_ref: &str,
+    authority_path: &str,
+) -> CoreEvidenceAuthorityFactRef {
+    CoreEvidenceAuthorityFactRef {
+        fact_kind: fact_kind.to_string(),
+        fact_ref: fact_ref.to_string(),
+        authority_path: authority_path.to_string(),
     }
 }
 
@@ -1091,6 +1332,52 @@ mod tests {
     fn core_evidence_capture_receipt_negative_fixtures_fail_with_stable_reasons() {
         let fixtures = core_evidence_capture_receipt_negative_fixtures();
         assert_eq!(fixtures.len(), 4);
+        for fixture in fixtures {
+            assert_eq!(
+                fixture.status, "passed",
+                "fixture {} failed with {:?}",
+                fixture.fixture_id, fixture.reasons
+            );
+            assert!(fixture.reasons.contains(&fixture.expected_reason));
+        }
+    }
+
+    #[test]
+    fn core_evidence_authority_trace_fixture_links_to_runtime_authority() {
+        let pack = canonical_core_evidence_pack_fixture();
+        let trace = canonical_core_evidence_authority_trace_fixture();
+
+        validate_core_evidence_authority_trace(&pack, &trace).unwrap();
+        assert_eq!(trace.version, CORE_EVIDENCE_AUTHORITY_TRACE_VERSION);
+        assert_eq!(trace.collection_event.event_type, "evidence.collected");
+        assert!(trace
+            .authority_facts
+            .iter()
+            .any(|fact| fact.fact_kind == "ActionProposal"));
+        assert!(trace
+            .authority_facts
+            .iter()
+            .any(|fact| fact.fact_kind == "AcceptedAction"));
+    }
+
+    #[test]
+    fn core_evidence_authority_trace_rejects_orphan_evidence() {
+        let pack = canonical_core_evidence_pack_fixture();
+        let mut trace = canonical_core_evidence_authority_trace_fixture();
+        trace
+            .authority_facts
+            .retain(|fact| fact.fact_ref != "task:core-evidence-pack");
+
+        let errors = validate_core_evidence_authority_trace(&pack, &trace).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error == "evidence-trace-orphaned"));
+    }
+
+    #[test]
+    fn core_evidence_authority_trace_negative_fixtures_fail_with_stable_reasons() {
+        let fixtures = core_evidence_authority_trace_negative_fixtures();
+        assert_eq!(fixtures.len(), 3);
         for fixture in fixtures {
             assert_eq!(
                 fixture.status, "passed",

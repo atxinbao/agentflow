@@ -10,10 +10,11 @@ pub mod storage;
 
 pub use model::{
     classify_task_event, ContextPackFailedPayload, ContextPackReadyPayload,
-    ContextPackRequestedPayload, EventActor, EventStateTransition, IssueReadyPayload, ReplayFilter,
-    TaskEvent, TaskEventCategory, TaskEventClaimLease, TaskEventClaimStatus,
-    TaskEventConsumerState, TaskEventDeadLetter, TaskEventDraft, TaskEventManifest,
-    TaskEventSummary, TaskReplayCursor, CONSUMER_PANEL, EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED,
+    ContextPackRequestedPayload, EventActor, EventStateTransition, EvidenceCollectedPayload,
+    IssueReadyPayload, ReplayFilter, TaskEvent, TaskEventCategory, TaskEventClaimLease,
+    TaskEventClaimStatus, TaskEventConsumerState, TaskEventDeadLetter, TaskEventDraft,
+    TaskEventManifest, TaskEventSummary, TaskReplayCursor, CONSUMER_PANEL,
+    EVENT_TYPE_EVIDENCE_COLLECTED, EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED,
     EVENT_TYPE_PANEL_CONTEXT_PACK_READY, EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED,
     EVENT_TYPE_SPEC_ISSUE_READY, TASK_EVENT_CLAIM_LEASE_VERSION, TASK_EVENT_CONSUMER_VERSION,
     TASK_EVENT_DEAD_LETTER_VERSION, TASK_EVENT_MANIFEST_VERSION, TASK_EVENT_STREAM_PATH,

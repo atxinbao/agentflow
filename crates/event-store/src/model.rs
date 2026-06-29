@@ -13,6 +13,7 @@ pub const EVENT_TYPE_SPEC_ISSUE_READY: &str = "spec.issue.ready";
 pub const EVENT_TYPE_PANEL_CONTEXT_PACK_REQUESTED: &str = "panel.context-pack.requested";
 pub const EVENT_TYPE_PANEL_CONTEXT_PACK_READY: &str = "panel.context-pack.ready";
 pub const EVENT_TYPE_PANEL_CONTEXT_PACK_FAILED: &str = "panel.context-pack.failed";
+pub const EVENT_TYPE_EVIDENCE_COLLECTED: &str = "evidence.collected";
 
 pub const CONSUMER_PANEL: &str = "panel";
 
@@ -272,6 +273,7 @@ pub fn classify_task_event(event_type: &str) -> TaskEventCategory {
                 || value.starts_with("run.")
                 || value.starts_with("checkpoint.")
                 || value.starts_with("verification.")
+                || value.starts_with("evidence.")
                 || matches!(
                     value,
                     "RequirementSubmitted"
@@ -375,4 +377,48 @@ pub struct ContextPackFailedPayload {
     pub issue_id: String,
     pub context_pack_path: Option<String>,
     pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceCollectedPayload {
+    pub evidence_id: String,
+    pub receipt_id: String,
+    pub spec_refs: Vec<String>,
+    pub task_refs: Vec<String>,
+    pub run_refs: Vec<String>,
+    pub action_refs: Vec<String>,
+    pub receipt_ref: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn evidence_collected_event_is_runtime_category() {
+        assert_eq!(
+            classify_task_event(EVENT_TYPE_EVIDENCE_COLLECTED),
+            TaskEventCategory::Runtime
+        );
+    }
+
+    #[test]
+    fn evidence_collected_payload_carries_trace_refs() {
+        let payload = EvidenceCollectedPayload {
+            evidence_id: "evidence-core-canonical-001".to_string(),
+            receipt_id: "receipt-core-canonical-001".to_string(),
+            spec_refs: vec!["spec:core-evidence-pack".to_string()],
+            task_refs: vec!["task:core-evidence-pack".to_string()],
+            run_refs: vec!["run:core-evidence-pack".to_string()],
+            action_refs: vec![
+                "action-proposal:attach-evidence".to_string(),
+                "accepted-action:attach-evidence".to_string(),
+            ],
+            receipt_ref: "receipt:receipt-core-canonical-001".to_string(),
+        };
+
+        assert_eq!(payload.spec_refs.len(), 1);
+        assert_eq!(payload.action_refs.len(), 2);
+    }
 }
