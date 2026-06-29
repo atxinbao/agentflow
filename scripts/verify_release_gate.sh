@@ -176,6 +176,7 @@ CORE_DECISION_OUTCOME_TRANSITIONS_PATH="$RUNTIME_DIR/core-decision-outcome-trans
 CORE_DECISION_FAILURE_REASON_PATH="$RUNTIME_DIR/core-decision-failure-reason-remediation.json"
 CORE_EVIDENCE_TO_DECISION_GATE_PATH="$RUNTIME_DIR/core-evidence-to-decision-gate.json"
 CORE_COMPLETION_COMMIT_AUTHORITY_PATH="$RUNTIME_DIR/core-completion-commit-authority.json"
+CORE_DELIVERY_READINESS_AUDIT_TRIGGER_PATH="$RUNTIME_DIR/core-delivery-readiness-audit-trigger.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -437,6 +438,7 @@ proof_chain = [
     {"stage": "core-decision-failure-reason-remediation", "label": "Core Decision Failure Reason / Remediation"},
     {"stage": "core-evidence-to-decision-gate", "label": "Core Evidence-to-Decision Gate"},
     {"stage": "core-completion-commit-authority", "label": "Core Completion Commit Authority"},
+    {"stage": "core-delivery-readiness-audit-trigger", "label": "Core Delivery Readiness / Optional Audit Trigger"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -511,6 +513,7 @@ runtime_artifacts = [
     {"path": "runtime/core-decision-failure-reason-remediation.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-failure-reason-remediation.json").is_file()},
     {"path": "runtime/core-evidence-to-decision-gate.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-evidence-to-decision-gate.json").is_file()},
     {"path": "runtime/core-completion-commit-authority.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-completion-commit-authority.json").is_file()},
+    {"path": "runtime/core-delivery-readiness-audit-trigger.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-delivery-readiness-audit-trigger.json").is_file()},
     {"path": "runtime/clean-room-test-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/clean-room-test-proof.json").is_file()},
     {"path": "runtime/audit-sidecar-policy.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-sidecar-policy.json").is_file()},
     {"path": "runtime/provider-smoke-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/provider-smoke-proof.json").is_file()},
@@ -594,6 +597,7 @@ core_decision_outcome_transitions = load_json(pathlib.Path(summary_json_path.par
 core_decision_failure_reason = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-failure-reason-remediation.json")) or {}
 core_evidence_to_decision_gate = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-evidence-to-decision-gate.json")) or {}
 core_completion_commit_authority = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-completion-commit-authority.json")) or {}
+core_delivery_readiness_audit_trigger = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-delivery-readiness-audit-trigger.json")) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
 deployment_evidence_wrong_commit = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json")) or {}
@@ -1482,6 +1486,9 @@ summary_payload = {
     "coreCompletionCommitAuthorityPath": "runtime/core-completion-commit-authority.json" if core_completion_commit_authority else None,
     "coreCompletionCommitAuthorityStatus": core_completion_commit_authority.get("status") or "missing",
     "coreCompletionCommitAuthorityCoverage": core_completion_commit_authority.get("coverage") or {},
+    "coreDeliveryReadinessAuditTriggerPath": "runtime/core-delivery-readiness-audit-trigger.json" if core_delivery_readiness_audit_trigger else None,
+    "coreDeliveryReadinessAuditTriggerStatus": core_delivery_readiness_audit_trigger.get("status") or "missing",
+    "coreDeliveryReadinessAuditTriggerCoverage": core_delivery_readiness_audit_trigger.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1761,6 +1768,9 @@ certification_payload = {
     "coreCompletionCommitAuthorityPath": "runtime/core-completion-commit-authority.json" if core_completion_commit_authority else None,
     "coreCompletionCommitAuthorityStatus": core_completion_commit_authority.get("status") or "missing",
     "coreCompletionCommitAuthorityCoverage": core_completion_commit_authority.get("coverage") or {},
+    "coreDeliveryReadinessAuditTriggerPath": "runtime/core-delivery-readiness-audit-trigger.json" if core_delivery_readiness_audit_trigger else None,
+    "coreDeliveryReadinessAuditTriggerStatus": core_delivery_readiness_audit_trigger.get("status") or "missing",
+    "coreDeliveryReadinessAuditTriggerCoverage": core_delivery_readiness_audit_trigger.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -9373,6 +9383,95 @@ PY
   record_stage "core-completion-commit-authority" "passed" "$(basename "$CORE_COMPLETION_COMMIT_AUTHORITY_PATH")"
 }
 
+run_core_delivery_readiness_audit_trigger_gate() {
+  record_stage "core-delivery-readiness-audit-trigger" "started" "$CORE_DELIVERY_READINESS_AUDIT_TRIGGER_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-delivery-readiness-audit-trigger-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_delivery_readiness --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-delivery-readiness-audit-trigger" "agentflow-ontology Core Delivery Readiness / Optional Audit Trigger tests failed"
+  fi
+  python3 - \
+    "$CORE_DELIVERY_READINESS_AUDIT_TRIGGER_PATH" \
+    "$WORKSPACE/docs/architecture/076-core-delivery-readiness-audit-trigger-v1.md" \
+    "$WORKSPACE/docs/architecture/075-core-completion-commit-authority-v1.md" \
+    "$WORKSPACE/crates/ontology/src/decision.rs" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md" \
+    "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+completion_doc_path = pathlib.Path(sys.argv[3])
+decision_source_path = pathlib.Path(sys.argv[4])
+tasks_path = pathlib.Path(sys.argv[5])
+test_log_path = pathlib.Path(sys.argv[6])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+completion_doc_text = completion_doc_path.read_text(encoding="utf-8")
+decision_source = decision_source_path.read_text(encoding="utf-8")
+tasks_text = tasks_path.read_text(encoding="utf-8")
+readiness_outcomes = ["ready", "waiting-for-public-record", "evidence-missing", "completion-missing"]
+negative_fixtures = [
+    "core_delivery_readiness_missing_public_record_is_not_ready",
+    "core_delivery_readiness_missing_evidence_is_not_ready",
+    "core_delivery_readiness_missing_completion_is_not_ready",
+    "core_delivery_readiness_rejects_audit_block_without_sidecar_queue",
+]
+coverage = {
+    "contract-version-defined": "agentflow-core-delivery-readiness-audit-trigger.v1" in decision_source
+    and "agentflow-core-delivery-readiness-audit-trigger.v1" in doc_text,
+    "rust-contract-implemented": "CoreDeliveryReadinessAuditTriggerContract" in decision_source
+    and "CoreDeliveryReadinessInput" in decision_source
+    and "CoreDeliveryReadinessAuditTriggerResult" in decision_source
+    and "validate_core_delivery_readiness_audit_trigger_contract" in decision_source
+    and "evaluate_core_delivery_readiness_audit_trigger" in decision_source
+    and "validate_core_delivery_readiness_audit_trigger_result" in decision_source,
+    "completion-event-bound": "subject.completion.committed" in decision_source
+    and "subject.completion.committed" in doc_text
+    and "Completion Commit" in completion_doc_text,
+    "readiness-outcomes-documented": all(outcome in doc_text for outcome in readiness_outcomes),
+    "readiness-outcomes-implemented": all(outcome in decision_source for outcome in readiness_outcomes),
+    "default-audit-not-required": "default_audit_required: false" in decision_source
+    or "defaultAuditRequired = false" in doc_text,
+    "explicit-policy-required": "explicit_policy_required: true" in decision_source
+    and "explicitPolicyRequired = true" in doc_text,
+    "sidecar-event-bound": "subject.audit-sidecar.evaluation-queued" in decision_source
+    and "subject.audit-sidecar.evaluation-queued" in doc_text,
+    "normal-ready-does-not-queue-audit": "core_delivery_readiness_ready_does_not_queue_audit_by_default" in decision_source
+    and "assert!(!result.audit_sidecar_queued)" in decision_source,
+    "explicit-policy-queues-sidecar": "core_delivery_readiness_explicit_policy_queues_audit_sidecar" in decision_source
+    and "assert!(result.audit_sidecar_queued)" in decision_source,
+    "negative-fixtures-implemented": all(item in decision_source for item in negative_fixtures),
+    "audit-block-requires-sidecar": "audit cannot block done" in decision_source
+    and "core_delivery_readiness_rejects_audit_block_without_sidecar_queue" in decision_source,
+    "release-task-binds-issue-700": "#700" in tasks_text
+    and "V107-008 Delivery Readiness and Optional Audit Trigger Evaluation" in tasks_text
+    and "runtime/core-delivery-readiness-audit-trigger.json" in tasks_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-delivery-readiness-audit-trigger-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-delivery-readiness-audit-trigger.v1",
+    "architecturePath": "docs/architecture/076-core-delivery-readiness-audit-trigger-v1.md",
+    "rustContractPath": "crates/ontology/src/decision.rs",
+    "rustTestLogPath": "runtime/core-delivery-readiness-audit-trigger-rust-test.log",
+    "readinessOutcomes": readiness_outcomes,
+    "sidecarEventType": "subject.audit-sidecar.evaluation-queued",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core delivery readiness audit trigger coverage failed: {failed}")
+PY
+  record_stage "core-delivery-readiness-audit-trigger" "passed" "$(basename "$CORE_DELIVERY_READINESS_AUDIT_TRIGGER_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -9953,6 +10052,7 @@ PY
   run_core_decision_failure_reason_gate
   run_core_evidence_to_decision_gate
   run_core_completion_commit_authority_gate
+  run_core_delivery_readiness_audit_trigger_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
