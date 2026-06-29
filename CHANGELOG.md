@@ -1,22 +1,32 @@
 # Changelog
 
-更新日期：2026-06-28
+更新日期：2026-06-29
 执行者：Codex
 
 ## Current Baseline
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.0.5/README.md](docs/delivery/releases/v1.0.5/README.md)
-- [docs/delivery/releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.5/AGENTFLOW_V1_0_5_CORE_RUNTIME_KERNEL_TASKS_V1.md)
+- [docs/delivery/releases/v1.0.6/README.md](docs/delivery/releases/v1.0.6/README.md)
+- [docs/delivery/releases/v1.0.6/AGENTFLOW_V1_0_6_CORE_EVIDENCE_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.6/AGENTFLOW_V1_0_6_CORE_EVIDENCE_KERNEL_TASKS_V1.md)
 
 下一版计划：
 
-- v1.0.6 Evidence Kernel。
+- v1.0.7 Decision Kernel。
 
 ## Unreleased
 
-下一版保留给 Evidence Kernel，不在本次 release 中认证。
+下一版保留给 Decision Kernel，不在本次 release 中认证。
+
+## v1.0.6 - 2026-06-29
+
+Core Evidence Kernel baseline:
+
+- defined Core Evidence Pack Schema, Source Type Registry, Capture Receipts, Authority Trace Links, Completeness Policy, Missing Evidence Handling, External Proof Provenance, Software Dev Reference Evidence Mapping, and Evidence Projection Read Model;
+- certified fake / missing / wrong evidence negative fixture coverage through release-gate artifacts;
+- kept Software Dev evidence as Reference App mapping only, not Core Evidence authority;
+- added release-gate artifacts `core-evidence-pack-schema`, `core-evidence-source-type-registry`, `core-evidence-capture-receipts`, `core-evidence-authority-trace-links`, `core-evidence-completeness-policy`, `core-missing-evidence-handling`, `core-external-proof-provenance`, `software-dev-reference-evidence-mapping`, `evidence-projection-read-model`, and `v106-release-certification`;
+- advanced workspace and desktop version metadata to `1.0.6`.
 
 ## v1.0.5 - 2026-06-28
 

@@ -1,6 +1,6 @@
 # AGENTS.md - AgentFlow Source Agent Entry
 
-日期：2026-06-28
+日期：2026-06-29
 执行者：Codex
 
 ## Purpose
@@ -21,7 +21,7 @@ It points agents to tracked documentation. It is not a local runtime fact file.
 9. Current module boundaries: `docs/architecture/current-module-boundaries.md`
 10. Current stable contract baseline: `docs/architecture/041-v100-stable-contract-baseline-v1.md`
 11. Release certification boundary: `docs/architecture/050-v100-release-certification-v1.md`
-12. Current release baseline: `docs/delivery/releases/v1.0.5/README.md`
+12. Current release baseline: `docs/delivery/releases/v1.0.6/README.md`
 13. Historical archive: `docs/project/history/2026-06-current-baseline-history/README.md`
 
 ## Authority Boundary
