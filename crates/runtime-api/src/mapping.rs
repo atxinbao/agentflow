@@ -52,6 +52,202 @@ pub struct RuntimeActionProposalMaterialization {
     pub reference_mapping: RuntimeReferenceAppMapping,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeReferenceAppMappingDefinition {
+    pub action_contract_ref: &'static str,
+    pub app_action_type: &'static str,
+    pub core_action_type: &'static str,
+    pub reference_target_object_type: &'static str,
+    pub pack_id: &'static str,
+    pub source_ref: &'static str,
+}
+
+const SOFTWARE_DEV_REFERENCE_PACK_ID: &str = "software-dev-reference";
+const SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE: &str = "reference-app:software-dev";
+
+const SOFTWARE_DEV_REFERENCE_MAPPING_CATALOG: &[RuntimeReferenceAppMappingDefinition] = &[
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:requirement.submit",
+        app_action_type: "submitRequirement",
+        core_action_type: "captureObject",
+        reference_target_object_type: "Requirement",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:spec.intake",
+        app_action_type: "submitRequirement",
+        core_action_type: "captureObject",
+        reference_target_object_type: "Requirement",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:requirement.normalize",
+        app_action_type: "normalizeRequirement",
+        core_action_type: "normalizeObject",
+        reference_target_object_type: "Requirement",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:requirement.classify",
+        app_action_type: "classifyRequirement",
+        core_action_type: "routeObject",
+        reference_target_object_type: "Requirement",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:spec.draft",
+        app_action_type: "draftSpec",
+        core_action_type: "routeObject",
+        reference_target_object_type: "Requirement",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:spec.approve",
+        app_action_type: "approveSpec",
+        core_action_type: "acceptObject",
+        reference_target_object_type: "Spec",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:project.create",
+        app_action_type: "createProject",
+        core_action_type: "routeObject",
+        reference_target_object_type: "Spec",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:issue.create",
+        app_action_type: "createIssue",
+        core_action_type: "routeObject",
+        reference_target_object_type: "Project",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:issue.activate",
+        app_action_type: "activateIssue",
+        core_action_type: "acceptObject",
+        reference_target_object_type: "Issue",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:issue.claim",
+        app_action_type: "claimIssue",
+        core_action_type: "startObject",
+        reference_target_object_type: "Issue",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:issue.start",
+        app_action_type: "startRun",
+        core_action_type: "startObject",
+        reference_target_object_type: "Issue",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:run.patch.write",
+        app_action_type: "writePatch",
+        core_action_type: "attachArtifact",
+        reference_target_object_type: "Run",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:acceptance.evaluate",
+        app_action_type: "runValidation",
+        core_action_type: "attachEvidence",
+        reference_target_object_type: "Run",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:delivery.prepare",
+        app_action_type: "prepareDelivery",
+        core_action_type: "attachArtifact",
+        reference_target_object_type: "Run",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:delivery.open",
+        app_action_type: "prepareDelivery",
+        core_action_type: "attachArtifact",
+        reference_target_object_type: "Run",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:evidence.submit",
+        app_action_type: "submitEvidence",
+        core_action_type: "attachEvidence",
+        reference_target_object_type: "Run",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:artifact.submit",
+        app_action_type: "submitArtifact",
+        core_action_type: "attachArtifact",
+        reference_target_object_type: "Run",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:issue.done",
+        app_action_type: "markIssueDone",
+        core_action_type: "completeObject",
+        reference_target_object_type: "Issue",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:decision.record",
+        app_action_type: "recordDecision",
+        core_action_type: "completeObject",
+        reference_target_object_type: "Decision",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:audit.request",
+        app_action_type: "requestAudit",
+        core_action_type: "submitForReview",
+        reference_target_object_type: "Issue",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:finding.create",
+        app_action_type: "createFinding",
+        core_action_type: "blockObject",
+        reference_target_object_type: "Audit",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+    RuntimeReferenceAppMappingDefinition {
+        action_contract_ref: "action-contract:finding.link-fix-issue",
+        app_action_type: "linkFixIssue",
+        core_action_type: "supersedeObject",
+        reference_target_object_type: "Finding",
+        pack_id: SOFTWARE_DEV_REFERENCE_PACK_ID,
+        source_ref: SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE,
+    },
+];
+
+pub fn software_dev_reference_mapping_catalog() -> &'static [RuntimeReferenceAppMappingDefinition] {
+    SOFTWARE_DEV_REFERENCE_MAPPING_CATALOG
+}
+
 pub fn map_command_to_action_proposal(request: &RuntimeCommandRequest) -> Result<ActionProposal> {
     let ontology = software_dev_reference_ontology_registry();
     let contracts = core_action_contract_registry(&ontology);
@@ -114,19 +310,27 @@ pub fn materialize_core_action_proposal_with_registry(
         );
     }
 
-    let core_action_type =
-        core_action_type_for_runtime_action(&proposal.action_type).ok_or_else(|| {
+    let mapping = reference_mapping_for_action_contract_ref(&route.action_contract_ref)
+        .ok_or_else(|| {
             anyhow!(
-                "missing Core action mapping for reference action `{}`",
-                proposal.action_type
+                "missing Core action mapping for reference action contract `{}`",
+                route.action_contract_ref
             )
         })?;
+    if mapping.app_action_type != proposal.action_type {
+        anyhow::bail!(
+            "reference mapping mismatch: route action contract `{}` maps to `{}`, got proposal action `{}`",
+            route.action_contract_ref,
+            mapping.app_action_type,
+            proposal.action_type
+        );
+    }
     let core_action = registry
         .core_action_state_semantics
         .actions
         .iter()
-        .find(|action| action.action_type == core_action_type)
-        .ok_or_else(|| anyhow!("unknown Core action `{core_action_type}`"))?;
+        .find(|action| action.action_type == mapping.core_action_type)
+        .ok_or_else(|| anyhow!("unknown Core action `{}`", mapping.core_action_type))?;
     if !registry
         .core_object_link_schema
         .object_schemas
@@ -134,8 +338,9 @@ pub fn materialize_core_action_proposal_with_registry(
         .any(|object| object.object_type == core_action.target_object_type)
     {
         anyhow::bail!(
-            "unknown Core target object `{}` for action `{core_action_type}`",
-            core_action.target_object_type
+            "unknown Core target object `{}` for action `{}`",
+            core_action.target_object_type,
+            mapping.core_action_type
         );
     }
 
@@ -179,18 +384,18 @@ pub fn materialize_core_action_proposal_with_registry(
         reference_mapping: RuntimeReferenceAppMapping {
             mapping_id: format!(
                 "reference-mapping:{}:{}",
-                route.pack_id.as_deref().unwrap_or("software-dev-reference"),
+                route.pack_id.as_deref().unwrap_or(mapping.pack_id),
                 route.action_contract_ref
             ),
             pack_id: route
                 .pack_id
                 .clone()
-                .unwrap_or_else(|| "software-dev-reference".to_string()),
+                .unwrap_or_else(|| mapping.pack_id.to_string()),
             pack_command: route.pack_command.clone(),
             action_contract_ref: route.action_contract_ref.clone(),
             app_action_type: proposal.action_type.clone(),
             app_target_object_type,
-            source_refs: reference_mapping_source_refs(route),
+            source_refs: reference_mapping_source_refs(route, mapping),
         },
     })
 }
@@ -290,81 +495,16 @@ pub fn pack_runtime_route(
 }
 
 pub fn action_type_for_action_contract_ref(action_contract_ref: &str) -> Option<&'static str> {
-    match action_contract_ref.trim() {
-        "action-contract:requirement.submit" | "action-contract:spec.intake" => {
-            Some("submitRequirement")
-        }
-        "action-contract:requirement.normalize" => Some("normalizeRequirement"),
-        "action-contract:requirement.classify" => Some("classifyRequirement"),
-        "action-contract:spec.draft" => Some("draftSpec"),
-        "action-contract:spec.approve" => Some("approveSpec"),
-        "action-contract:project.create" => Some("createProject"),
-        "action-contract:issue.create" => Some("createIssue"),
-        "action-contract:issue.activate" => Some("activateIssue"),
-        "action-contract:issue.claim" => Some("claimIssue"),
-        "action-contract:issue.start" => Some("startRun"),
-        "action-contract:run.patch.write" => Some("writePatch"),
-        "action-contract:acceptance.evaluate" => Some("runValidation"),
-        "action-contract:delivery.prepare" | "action-contract:delivery.open" => {
-            Some("prepareDelivery")
-        }
-        "action-contract:evidence.submit" => Some("submitEvidence"),
-        "action-contract:artifact.submit" => Some("submitArtifact"),
-        "action-contract:issue.done" => Some("markIssueDone"),
-        "action-contract:decision.record" => Some("recordDecision"),
-        "action-contract:audit.request" => Some("requestAudit"),
-        "action-contract:finding.create" => Some("createFinding"),
-        "action-contract:finding.link-fix-issue" => Some("linkFixIssue"),
-        _ => None,
-    }
+    reference_mapping_for_action_contract_ref(action_contract_ref)
+        .map(|mapping| mapping.app_action_type)
 }
 
 pub fn action_contract_ref_for_action_type(action_type: &str) -> Option<&'static str> {
-    match action_type.trim() {
-        "submitRequirement" => Some("action-contract:requirement.submit"),
-        "normalizeRequirement" => Some("action-contract:requirement.normalize"),
-        "classifyRequirement" => Some("action-contract:requirement.classify"),
-        "draftSpec" => Some("action-contract:spec.draft"),
-        "approveSpec" => Some("action-contract:spec.approve"),
-        "createProject" => Some("action-contract:project.create"),
-        "createIssue" => Some("action-contract:issue.create"),
-        "activateIssue" => Some("action-contract:issue.activate"),
-        "claimIssue" => Some("action-contract:issue.claim"),
-        "startRun" => Some("action-contract:issue.start"),
-        "writePatch" => Some("action-contract:run.patch.write"),
-        "runValidation" => Some("action-contract:acceptance.evaluate"),
-        "prepareDelivery" => Some("action-contract:delivery.prepare"),
-        "submitEvidence" => Some("action-contract:evidence.submit"),
-        "submitArtifact" => Some("action-contract:artifact.submit"),
-        "markIssueDone" => Some("action-contract:issue.done"),
-        "recordDecision" => Some("action-contract:decision.record"),
-        "requestAudit" => Some("action-contract:audit.request"),
-        "createFinding" => Some("action-contract:finding.create"),
-        "linkFixIssue" => Some("action-contract:finding.link-fix-issue"),
-        _ => None,
-    }
+    reference_mapping_for_action_type(action_type).map(|mapping| mapping.action_contract_ref)
 }
 
 pub fn core_action_type_for_runtime_action(action_type: &str) -> Option<&'static str> {
-    match action_type.trim() {
-        "submitRequirement" => Some("captureObject"),
-        "normalizeRequirement" => Some("normalizeObject"),
-        "classifyRequirement" => Some("routeObject"),
-        "draftSpec" => Some("routeObject"),
-        "approveSpec" => Some("acceptObject"),
-        "createProject" | "createIssue" => Some("routeObject"),
-        "activateIssue" => Some("acceptObject"),
-        "claimIssue" | "startRun" => Some("startObject"),
-        "writePatch" => Some("attachArtifact"),
-        "runValidation" | "submitEvidence" => Some("attachEvidence"),
-        "prepareDelivery" | "submitArtifact" => Some("attachArtifact"),
-        "markIssueDone" => Some("completeObject"),
-        "recordDecision" => Some("completeObject"),
-        "requestAudit" => Some("submitForReview"),
-        "createFinding" => Some("blockObject"),
-        "linkFixIssue" => Some("supersedeObject"),
-        _ => None,
-    }
+    reference_mapping_for_action_type(action_type).map(|mapping| mapping.core_action_type)
 }
 
 fn resolve_core_action_type(request: &RuntimeCommandRequest) -> Option<&'static str> {
@@ -374,8 +514,15 @@ fn resolve_core_action_type(request: &RuntimeCommandRequest) -> Option<&'static 
         .and_then(|route| action_type_for_action_contract_ref(&route.action_contract_ref))
 }
 
-fn reference_mapping_source_refs(route: &RuntimeCommandRoute) -> Vec<String> {
-    let mut refs = vec![route.action_contract_ref.clone()];
+fn reference_mapping_source_refs(
+    route: &RuntimeCommandRoute,
+    mapping: &RuntimeReferenceAppMappingDefinition,
+) -> Vec<String> {
+    let mut refs = vec![
+        route.action_contract_ref.clone(),
+        mapping.source_ref.to_string(),
+        format!("mapping-catalog:{}", mapping.pack_id),
+    ];
     if let Some(pack_id) = &route.pack_id {
         refs.push(format!("pack:{pack_id}"));
     }
@@ -386,22 +533,26 @@ fn reference_mapping_source_refs(route: &RuntimeCommandRoute) -> Vec<String> {
 }
 
 fn reference_target_object_type_for_action(action_type: &str) -> Option<&'static str> {
-    match action_type {
-        "submitRequirement" | "normalizeRequirement" | "classifyRequirement" | "draftSpec" => {
-            Some("Requirement")
-        }
-        "approveSpec" | "createProject" => Some("Spec"),
-        "createIssue" => Some("Project"),
-        "activateIssue" | "claimIssue" | "startRun" | "markIssueDone" | "requestAudit" => {
-            Some("Issue")
-        }
-        "writePatch" | "runValidation" | "prepareDelivery" | "submitEvidence"
-        | "submitArtifact" => Some("Run"),
-        "recordDecision" => Some("Decision"),
-        "createFinding" => Some("Audit"),
-        "linkFixIssue" => Some("Finding"),
-        _ => None,
-    }
+    reference_mapping_for_action_type(action_type)
+        .map(|mapping| mapping.reference_target_object_type)
+}
+
+fn reference_mapping_for_action_contract_ref(
+    action_contract_ref: &str,
+) -> Option<&'static RuntimeReferenceAppMappingDefinition> {
+    let action_contract_ref = action_contract_ref.trim();
+    software_dev_reference_mapping_catalog()
+        .iter()
+        .find(|mapping| mapping.action_contract_ref == action_contract_ref)
+}
+
+fn reference_mapping_for_action_type(
+    action_type: &str,
+) -> Option<&'static RuntimeReferenceAppMappingDefinition> {
+    let action_type = action_type.trim();
+    software_dev_reference_mapping_catalog()
+        .iter()
+        .find(|mapping| mapping.app_action_type == action_type)
 }
 
 pub fn source_surface_label(surface: &ActionSourceSurface) -> &'static str {
@@ -412,5 +563,65 @@ pub fn source_surface_label(surface: &ActionSourceSurface) -> &'static str {
         ActionSourceSurface::Sdk => "sdk",
         ActionSourceSurface::Agent => "agent",
         ActionSourceSurface::System => "system",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::*;
+
+    #[test]
+    fn software_dev_reference_mapping_catalog_declares_reference_boundary() {
+        let catalog = software_dev_reference_mapping_catalog();
+        assert!(catalog.len() >= 20);
+        assert!(catalog.iter().all(|mapping| {
+            mapping.pack_id == SOFTWARE_DEV_REFERENCE_PACK_ID
+                && mapping.source_ref == SOFTWARE_DEV_REFERENCE_MAPPING_SOURCE
+        }));
+        assert!(catalog
+            .iter()
+            .all(|mapping| !mapping.core_action_type.contains("Requirement")
+                && !mapping.core_action_type.contains("Issue")
+                && !mapping.core_action_type.contains("Release")));
+    }
+
+    #[test]
+    fn action_contract_refs_are_unique_catalog_entries() {
+        let mut refs = HashSet::new();
+        for mapping in software_dev_reference_mapping_catalog() {
+            assert!(
+                refs.insert(mapping.action_contract_ref),
+                "duplicate action contract ref: {}",
+                mapping.action_contract_ref
+            );
+        }
+    }
+
+    #[test]
+    fn reference_mapping_helpers_resolve_from_catalog() {
+        for mapping in software_dev_reference_mapping_catalog() {
+            assert_eq!(
+                action_type_for_action_contract_ref(mapping.action_contract_ref),
+                Some(mapping.app_action_type)
+            );
+            assert_eq!(
+                core_action_type_for_runtime_action(mapping.app_action_type),
+                Some(mapping.core_action_type)
+            );
+            assert_eq!(
+                reference_target_object_type_for_action(mapping.app_action_type),
+                Some(mapping.reference_target_object_type)
+            );
+        }
+        assert_eq!(
+            action_contract_ref_for_action_type("submitRequirement"),
+            Some("action-contract:requirement.submit")
+        );
+        assert_eq!(
+            action_contract_ref_for_action_type("prepareDelivery"),
+            Some("action-contract:delivery.prepare")
+        );
     }
 }
