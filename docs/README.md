@@ -34,7 +34,7 @@ docs/
 6. [architecture/builtin-pack-registry.md](architecture/builtin-pack-registry.md)
 7. [architecture/041-v100-stable-contract-baseline-v1.md](architecture/041-v100-stable-contract-baseline-v1.md)
 8. [architecture/053-core-4d-spec-intake-kernel-v1.md](architecture/053-core-4d-spec-intake-kernel-v1.md)
-9. [delivery/releases/v1.0.6/README.md](delivery/releases/v1.0.6/README.md)
+9. [delivery/releases/v1.0.7/README.md](delivery/releases/v1.0.7/README.md)
 10. [requirements/README.md](requirements/README.md)
 11. [requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md](requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md)
 12. [../CHANGELOG.md](../CHANGELOG.md)

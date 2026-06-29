@@ -166,12 +166,13 @@ Software Dev 的 PR、test log、release record 只能作为 Reference App mappi
 
 ### V107-010 v1.0.7 Release Certification
 
-状态：planned
+状态：done
 
 目标：
 
 - 增加 v1.0.7 release-gate certification artifact；
 - 认证 release provenance handoff、Decision model、input binding、outcomes、failure reason、gate、completion boundary、delivery readiness 和 projection；
+- 对应 release-gate artifact：`runtime/v107-release-certification.json`；
 - 对应 GitHub issue：#702。
 
 依赖：#693、#694、#695、#696、#697、#698、#699、#700、#701。
@@ -206,6 +207,7 @@ runtime/core-evidence-to-decision-gate.json
 runtime/core-completion-commit-authority.json
 runtime/core-delivery-readiness-audit-trigger.json
 runtime/core-decision-projection-read-model.json
+runtime/v107-release-certification.json
 ```
 
-后续 issue 会继续增加 Decision Kernel artifacts。
+后续版本从 `v1.0.8` Projection Kernel 开始，不继续扩大 `v1.0.7` Decision Kernel scope。
