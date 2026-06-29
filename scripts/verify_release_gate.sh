@@ -159,6 +159,7 @@ CORE_EVIDENCE_AUTHORITY_TRACE_LINKS_PATH="$RUNTIME_DIR/core-evidence-authority-t
 CORE_EVIDENCE_COMPLETENESS_POLICY_PATH="$RUNTIME_DIR/core-evidence-completeness-policy.json"
 CORE_MISSING_EVIDENCE_HANDLING_PATH="$RUNTIME_DIR/core-missing-evidence-handling.json"
 CORE_EXTERNAL_PROOF_PROVENANCE_PATH="$RUNTIME_DIR/core-external-proof-provenance.json"
+SOFTWARE_DEV_REFERENCE_EVIDENCE_MAPPING_PATH="$RUNTIME_DIR/software-dev-reference-evidence-mapping.json"
 CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH="$RUNTIME_DIR/core-file-backed-ontology-registry.json"
 V104_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v104-release-certification.json"
 CORE_RUNTIME_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/core-runtime-negative-fixtures.json"
@@ -410,6 +411,7 @@ proof_chain = [
     {"stage": "core-evidence-completeness-policy", "label": "Core Evidence Completeness Policy"},
     {"stage": "core-missing-evidence-handling", "label": "Core Missing Evidence Handling"},
     {"stage": "core-external-proof-provenance", "label": "Core External Proof Provenance"},
+    {"stage": "software-dev-reference-evidence-mapping", "label": "Software Dev Reference Evidence Mapping"},
     {"stage": "core-file-backed-ontology-registry", "label": "Core File-backed Ontology Registry"},
     {"stage": "v104-release-certification", "label": "v1.0.4 Release Certification"},
     {"stage": "core-runtime-negative-fixtures", "label": "Core Runtime Negative Fixtures"},
@@ -7304,6 +7306,66 @@ PY
   record_stage "core-external-proof-provenance" "passed" "$(basename "$CORE_EXTERNAL_PROOF_PROVENANCE_PATH")"
 }
 
+run_software_dev_reference_evidence_mapping_gate() {
+  record_stage "software-dev-reference-evidence-mapping" "started" "$SOFTWARE_DEV_REFERENCE_EVIDENCE_MAPPING_PATH"
+  local rust_test_log="$RUNTIME_DIR/software-dev-reference-evidence-mapping-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology software_dev_evidence --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "software-dev-reference-evidence-mapping" "agentflow-ontology Software Dev Reference Evidence Mapping tests failed"
+  fi
+  python3 - "$SOFTWARE_DEV_REFERENCE_EVIDENCE_MAPPING_PATH" "$WORKSPACE/docs/architecture/067-software-dev-reference-evidence-mapping-v1.md" "$WORKSPACE/crates/ontology/src/evidence.rs" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+source_path = pathlib.Path(sys.argv[3])
+test_log_path = pathlib.Path(sys.argv[4])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+source_text = source_path.read_text(encoding="utf-8")
+reference_fields = ["diff", "test-log", "build-log", "pr-link", "release-note", "deployment-proof"]
+core_source_types = ["diff", "log", "command-output", "external-proof", "artifact", "provenance"]
+coverage = {
+    "mapping-version-defined": "agentflow-software-dev-evidence-reference-mapping.v1" in source_text
+    and "agentflow-software-dev-evidence-reference-mapping.v1" in doc_text,
+    "reference-fields-documented": all(field in doc_text for field in reference_fields),
+    "reference-fields-implemented": all(field in source_text for field in reference_fields),
+    "core-source-types-documented": all(source_type in doc_text for source_type in core_source_types),
+    "core-source-types-implemented": all(source_type in source_text for source_type in core_source_types),
+    "reference-only-boundary-documented": "referenceOnly = true" in doc_text
+    and "不是 Core authority" in doc_text,
+    "reference-only-boundary-implemented": "reference_only" in source_text
+    and "not Core authority" in source_text,
+    "fixture-packs-implemented": "software_dev_reference_evidence_fixture_packs" in source_text,
+    "core-policy-missing-check-implemented": "software_dev_reference_evidence_completeness_policy" in source_text
+    and "evidence-required-missing:software-dev-reference-required-evidence" in source_text,
+    "validator-implemented": "validate_software_dev_evidence_reference_mapping_contract" in source_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-software-dev-reference-evidence-mapping-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-software-dev-evidence-reference-mapping.v1",
+    "architecturePath": "docs/architecture/067-software-dev-reference-evidence-mapping-v1.md",
+    "rustContractPath": "crates/ontology/src/evidence.rs",
+    "rustTestLogPath": "runtime/software-dev-reference-evidence-mapping-rust-test.log",
+    "referenceFields": reference_fields,
+    "coreSourceTypes": core_source_types,
+    "authorityBoundary": "software-dev-reference-app-mapping-not-core-authority",
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"software dev reference evidence mapping coverage failed: {failed}")
+PY
+  record_stage "software-dev-reference-evidence-mapping" "passed" "$(basename "$SOFTWARE_DEV_REFERENCE_EVIDENCE_MAPPING_PATH")"
+}
+
 run_core_file_backed_ontology_registry_gate() {
   record_stage "core-file-backed-ontology-registry" "started" "$CORE_FILE_BACKED_ONTOLOGY_REGISTRY_PATH"
   local rust_test_log="$RUNTIME_DIR/core-file-backed-ontology-registry-rust-test.log"
@@ -8735,6 +8797,7 @@ PY
   run_core_evidence_completeness_policy_gate
   run_core_missing_evidence_handling_gate
   run_core_external_proof_provenance_gate
+  run_software_dev_reference_evidence_mapping_gate
   run_core_file_backed_ontology_registry_gate
   run_v104_release_certification_gate
   run_core_runtime_negative_fixtures_gate

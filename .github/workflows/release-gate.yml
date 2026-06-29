@@ -228,6 +228,8 @@ jobs:
               -o -name 'core-missing-evidence-handling-rust-test.log' \
               -o -name 'core-external-proof-provenance.json' \
               -o -name 'core-external-proof-provenance-rust-test.log' \
+              -o -name 'software-dev-reference-evidence-mapping.json' \
+              -o -name 'software-dev-reference-evidence-mapping-rust-test.log' \
               -o -name 'core-file-backed-ontology-registry.json' \
               -o -name 'core-file-backed-ontology-registry-rust-test.log' \
               -o -name 'core-runtime-negative-fixtures.json' \
@@ -277,6 +279,8 @@ jobs:
             runtime/core-missing-evidence-handling-rust-test.log \
             runtime/core-external-proof-provenance.json \
             runtime/core-external-proof-provenance-rust-test.log \
+            runtime/software-dev-reference-evidence-mapping.json \
+            runtime/software-dev-reference-evidence-mapping-rust-test.log \
             runtime/core-file-backed-ontology-registry.json \
             runtime/core-file-backed-ontology-registry-rust-test.log \
             runtime/v104-release-certification.json \
