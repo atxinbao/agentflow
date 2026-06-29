@@ -39,6 +39,7 @@ v1.0.6 Evidence Kernel
 - [../../../architecture/071-core-decision-input-binding-v1.md](../../../architecture/071-core-decision-input-binding-v1.md)
 - [../../../architecture/072-core-decision-outcome-transition-semantics-v1.md](../../../architecture/072-core-decision-outcome-transition-semantics-v1.md)
 - [../../../architecture/073-core-decision-failure-reason-remediation-v1.md](../../../architecture/073-core-decision-failure-reason-remediation-v1.md)
+- [../../../architecture/074-core-evidence-to-decision-gate-v1.md](../../../architecture/074-core-evidence-to-decision-gate-v1.md)
 - [../v1.0.6/README.md](../v1.0.6/README.md)
 
 ## Non-goals

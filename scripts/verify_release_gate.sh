@@ -174,6 +174,7 @@ CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.jso
 CORE_DECISION_INPUT_BINDING_PATH="$RUNTIME_DIR/core-decision-input-binding.json"
 CORE_DECISION_OUTCOME_TRANSITIONS_PATH="$RUNTIME_DIR/core-decision-outcome-transitions.json"
 CORE_DECISION_FAILURE_REASON_PATH="$RUNTIME_DIR/core-decision-failure-reason-remediation.json"
+CORE_EVIDENCE_TO_DECISION_GATE_PATH="$RUNTIME_DIR/core-evidence-to-decision-gate.json"
 
 BIN="${AGENTFLOW_BIN:-$ROOT/target/debug/agentflow}"
 if [[ -z "${AGENTFLOW_BIN:-}" ]]; then
@@ -433,6 +434,7 @@ proof_chain = [
     {"stage": "core-decision-input-binding", "label": "Core Decision Input Binding"},
     {"stage": "core-decision-outcome-transitions", "label": "Core Decision Outcome Transitions"},
     {"stage": "core-decision-failure-reason-remediation", "label": "Core Decision Failure Reason / Remediation"},
+    {"stage": "core-evidence-to-decision-gate", "label": "Core Evidence-to-Decision Gate"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -505,6 +507,7 @@ runtime_artifacts = [
     {"path": "runtime/core-decision-input-binding.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json").is_file()},
     {"path": "runtime/core-decision-outcome-transitions.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json").is_file()},
     {"path": "runtime/core-decision-failure-reason-remediation.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-failure-reason-remediation.json").is_file()},
+    {"path": "runtime/core-evidence-to-decision-gate.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-evidence-to-decision-gate.json").is_file()},
     {"path": "runtime/clean-room-test-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/clean-room-test-proof.json").is_file()},
     {"path": "runtime/audit-sidecar-policy.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/audit-sidecar-policy.json").is_file()},
     {"path": "runtime/provider-smoke-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/provider-smoke-proof.json").is_file()},
@@ -586,6 +589,7 @@ core_decision_model_contract = load_json(pathlib.Path(summary_json_path.parent /
 core_decision_input_binding = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json")) or {}
 core_decision_outcome_transitions = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json")) or {}
 core_decision_failure_reason = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-failure-reason-remediation.json")) or {}
+core_evidence_to_decision_gate = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-evidence-to-decision-gate.json")) or {}
 deployment_evidence = load_json(deployment_evidence_path) or {}
 deployment_evidence_failure = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-semantic-failure.json")) or {}
 deployment_evidence_wrong_commit = load_json(pathlib.Path(summary_json_path.parent / "runtime/deployment-evidence-wrong-commit.json")) or {}
@@ -1468,6 +1472,9 @@ summary_payload = {
     "coreDecisionFailureReasonPath": "runtime/core-decision-failure-reason-remediation.json" if core_decision_failure_reason else None,
     "coreDecisionFailureReasonStatus": core_decision_failure_reason.get("status") or "missing",
     "coreDecisionFailureReasonCoverage": core_decision_failure_reason.get("coverage") or {},
+    "coreEvidenceToDecisionGatePath": "runtime/core-evidence-to-decision-gate.json" if core_evidence_to_decision_gate else None,
+    "coreEvidenceToDecisionGateStatus": core_evidence_to_decision_gate.get("status") or "missing",
+    "coreEvidenceToDecisionGateCoverage": core_evidence_to_decision_gate.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -1741,6 +1748,9 @@ certification_payload = {
     "coreDecisionFailureReasonPath": "runtime/core-decision-failure-reason-remediation.json" if core_decision_failure_reason else None,
     "coreDecisionFailureReasonStatus": core_decision_failure_reason.get("status") or "missing",
     "coreDecisionFailureReasonCoverage": core_decision_failure_reason.get("coverage") or {},
+    "coreEvidenceToDecisionGatePath": "runtime/core-evidence-to-decision-gate.json" if core_evidence_to_decision_gate else None,
+    "coreEvidenceToDecisionGateStatus": core_evidence_to_decision_gate.get("status") or "missing",
+    "coreEvidenceToDecisionGateCoverage": core_evidence_to_decision_gate.get("coverage") or {},
     "remainingRisks": remaining_risks,
     "deferredItems": deferred_items,
     "authorityBoundaryCertification": authority_boundary_certification,
@@ -9161,6 +9171,104 @@ PY
   record_stage "core-decision-failure-reason-remediation" "passed" "$(basename "$CORE_DECISION_FAILURE_REASON_PATH")"
 }
 
+run_core_evidence_to_decision_gate() {
+  record_stage "core-evidence-to-decision-gate" "started" "$CORE_EVIDENCE_TO_DECISION_GATE_PATH"
+  local rust_test_log="$RUNTIME_DIR/core-evidence-to-decision-gate-rust-test.log"
+  if ! (cd "$WORKSPACE" && cargo test -p agentflow-ontology core_evidence_to_decision_gate --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "core-evidence-to-decision-gate" "agentflow-ontology Core Evidence-to-Decision Gate tests failed"
+  fi
+  python3 - \
+    "$CORE_EVIDENCE_TO_DECISION_GATE_PATH" \
+    "$WORKSPACE/docs/architecture/074-core-evidence-to-decision-gate-v1.md" \
+    "$WORKSPACE/docs/architecture/064-core-evidence-completeness-policy-v1.md" \
+    "$WORKSPACE/docs/architecture/073-core-decision-failure-reason-remediation-v1.md" \
+    "$WORKSPACE/crates/ontology/src/decision.rs" \
+    "$WORKSPACE/crates/ontology/src/evidence.rs" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md" \
+    "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_path = pathlib.Path(sys.argv[1])
+doc_path = pathlib.Path(sys.argv[2])
+evidence_doc_path = pathlib.Path(sys.argv[3])
+failure_doc_path = pathlib.Path(sys.argv[4])
+decision_source_path = pathlib.Path(sys.argv[5])
+evidence_source_path = pathlib.Path(sys.argv[6])
+tasks_path = pathlib.Path(sys.argv[7])
+test_log_path = pathlib.Path(sys.argv[8])
+
+doc_text = doc_path.read_text(encoding="utf-8")
+evidence_doc_text = evidence_doc_path.read_text(encoding="utf-8")
+failure_doc_text = failure_doc_path.read_text(encoding="utf-8")
+decision_source = decision_source_path.read_text(encoding="utf-8")
+evidence_source = evidence_source_path.read_text(encoding="utf-8")
+tasks_text = tasks_path.read_text(encoding="utf-8")
+evidence_outcomes = ["complete", "incomplete", "deferred", "invalid"]
+decision_outcomes = ["accepted", "deferred", "rejected"]
+failure_codes = ["evidence-missing", "evidence-deferred", "evidence-invalid", "authority-mismatch"]
+negative_fixtures = [
+    "core_evidence_to_decision_gate_defers_missing_evidence",
+    "core_evidence_to_decision_gate_rejects_invalid_evidence",
+    "core_evidence_to_decision_gate_rejects_authority_mismatch",
+    "core_evidence_to_decision_gate_rejects_noncomplete_accepted_ready",
+]
+coverage = {
+    "contract-version-defined": "agentflow-core-evidence-to-decision-gate.v1" in decision_source
+    and "agentflow-core-evidence-to-decision-gate.v1" in doc_text,
+    "rust-contract-implemented": "CoreEvidenceToDecisionGateContract" in decision_source
+    and "CoreEvidenceToDecisionGateResult" in decision_source
+    and "validate_core_evidence_to_decision_gate_contract" in decision_source
+    and "validate_core_evidence_to_decision_gate_result" in decision_source
+    and "evaluate_core_evidence_to_decision_gate" in decision_source,
+    "evidence-kernel-version-bound": (
+        "agentflow-core-evidence-completeness-policy.v1" in decision_source
+        or "agentflow-core-evidence-completeness-policy.v1" in evidence_source
+    )
+    and "agentflow-core-evidence-completeness-policy.v1" in doc_text
+    and "agentflow-core-evidence-completeness-policy.v1" in evidence_doc_text,
+    "evidence-outcomes-documented": all(outcome in doc_text for outcome in evidence_outcomes),
+    "evidence-outcomes-implemented": all(outcome in decision_source for outcome in evidence_outcomes),
+    "decision-outcomes-documented": all(outcome in doc_text for outcome in decision_outcomes),
+    "failure-reason-bound": all(code in doc_text for code in failure_codes)
+    and "agentflow-core-decision-failure-reason.v1" in failure_doc_text,
+    "complete-produces-accepted-ready": "canonical_core_evidence_to_decision_gate_result_fixture" in decision_source
+    and "core_evidence_to_decision_gate_accepts_complete_evidence" in decision_source
+    and "assert!(result.accepted_ready)" in decision_source
+    and "result.failure_reason.is_none()" in decision_source,
+    "noncomplete-cannot-accepted-ready": "noncomplete_accepted_ready" in decision_source,
+    "negative-fixtures-implemented": all(item in decision_source for item in negative_fixtures),
+    "evidence-source-exposes-completeness": "CoreEvidenceCompletenessEvaluation" in evidence_source
+    and "evaluate_core_evidence_completeness_policy" in evidence_source,
+    "release-task-binds-issue-698": "#698" in tasks_text
+    and "V107-006 Evidence-to-Decision Gate" in tasks_text
+    and "runtime/core-evidence-to-decision-gate.json" in tasks_text,
+    "rust-contract-tests-passed": test_log_path.is_file(),
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-core-evidence-to-decision-gate-gate.v1",
+    "status": "passed" if not failed else "failed",
+    "contractVersion": "agentflow-core-evidence-to-decision-gate.v1",
+    "architecturePath": "docs/architecture/074-core-evidence-to-decision-gate-v1.md",
+    "rustContractPath": "crates/ontology/src/decision.rs",
+    "rustTestLogPath": "runtime/core-evidence-to-decision-gate-rust-test.log",
+    "evidenceOutcomes": evidence_outcomes,
+    "decisionOutcomes": decision_outcomes,
+    "failureCodes": failure_codes,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"core evidence-to-decision gate coverage failed: {failed}")
+PY
+  record_stage "core-evidence-to-decision-gate" "passed" "$(basename "$CORE_EVIDENCE_TO_DECISION_GATE_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -9739,6 +9847,7 @@ PY
   run_core_decision_input_binding_gate
   run_core_decision_outcome_transitions_gate
   run_core_decision_failure_reason_gate
+  run_core_evidence_to_decision_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
