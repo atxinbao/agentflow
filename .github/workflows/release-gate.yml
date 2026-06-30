@@ -262,6 +262,7 @@ jobs:
               -o -name 'core-completion-commit-authority-rust-test.log' \
               -o -name 'core-delivery-readiness-audit-trigger.json' \
               -o -name 'core-delivery-readiness-audit-trigger-rust-test.log' \
+              -o -name 'core-projection-kernel-contract.json' \
               -o -name 'core-decision-projection-read-model.json' \
               -o -name 'core-decision-projection-read-model-rust-test.log' \
               -o -name 'v107-release-certification.json' \
@@ -335,6 +336,7 @@ jobs:
             runtime/core-completion-commit-authority-rust-test.log \
             runtime/core-delivery-readiness-audit-trigger.json \
             runtime/core-delivery-readiness-audit-trigger-rust-test.log \
+            runtime/core-projection-kernel-contract.json \
             runtime/core-decision-projection-read-model.json \
             runtime/core-decision-projection-read-model-rust-test.log \
             runtime/v107-release-certification.json

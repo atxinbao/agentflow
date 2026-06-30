@@ -8,6 +8,152 @@ pub const REQUIREMENT_PREVIEW_INDEX_VERSION: &str = "requirement-preview-index.v
 pub const SPEC_LOOP_PROJECTION_VERSION: &str = "spec-loop-projection.v1";
 pub const COMPLETION_DECISION_PROJECTION_VERSION: &str = "completion-decision-projection.v1";
 pub const COMPLETION_DECISION_INDEX_VERSION: &str = "completion-decision-index.v1";
+pub const PROJECTION_KERNEL_CONTRACT_VERSION: &str = "projection-kernel-contract.v1";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionKernelSourceRef {
+    pub ref_kind: String,
+    pub path_pattern: String,
+    pub authority: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionKernelForbiddenAuthorityWrite {
+    pub target: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionKernelLifecycleSemantics {
+    pub state: String,
+    pub meaning: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionKernelNegativeFixture {
+    pub fixture_id: String,
+    pub rejected_ref_kind: String,
+    pub rejected_target: String,
+    pub expected_result: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionKernelContract {
+    pub version: String,
+    pub status: String,
+    pub writes_authority: bool,
+    pub accepted_source_refs: Vec<ProjectionKernelSourceRef>,
+    pub forbidden_authority_writes: Vec<ProjectionKernelForbiddenAuthorityWrite>,
+    pub required_fields: Vec<String>,
+    pub lifecycle_semantics: Vec<ProjectionKernelLifecycleSemantics>,
+    pub negative_fixtures: Vec<ProjectionKernelNegativeFixture>,
+}
+
+pub fn projection_kernel_contract() -> ProjectionKernelContract {
+    ProjectionKernelContract {
+        version: PROJECTION_KERNEL_CONTRACT_VERSION.to_string(),
+        status: "active".to_string(),
+        writes_authority: false,
+        accepted_source_refs: vec![
+            ProjectionKernelSourceRef {
+                ref_kind: "spec-authority".to_string(),
+                path_pattern: ".agentflow/spec/**".to_string(),
+                authority: "Spec Kernel".to_string(),
+            },
+            ProjectionKernelSourceRef {
+                ref_kind: "event-authority".to_string(),
+                path_pattern: ".agentflow/events/**".to_string(),
+                authority: "Event Store".to_string(),
+            },
+            ProjectionKernelSourceRef {
+                ref_kind: "task-evidence-authority".to_string(),
+                path_pattern: ".agentflow/tasks/<issue-id>/evidence/**".to_string(),
+                authority: "Evidence Kernel".to_string(),
+            },
+            ProjectionKernelSourceRef {
+                ref_kind: "decision-authority".to_string(),
+                path_pattern: ".agentflow/runtime/decisions/**".to_string(),
+                authority: "Decision Kernel".to_string(),
+            },
+        ],
+        forbidden_authority_writes: vec![
+            "Spec",
+            "Runtime",
+            "Evidence",
+            "Decision",
+            "Completion",
+            "Delivery",
+            "Audit",
+        ]
+        .into_iter()
+        .map(|target| ProjectionKernelForbiddenAuthorityWrite {
+            target: target.to_string(),
+            reason: "Projection is a derived read surface and cannot write authority facts."
+                .to_string(),
+        })
+        .collect(),
+        required_fields: vec![
+            "version".to_string(),
+            "status".to_string(),
+            "sourceRefs".to_string(),
+            "readModelVersion".to_string(),
+            "viewModelVersion".to_string(),
+            "freshness".to_string(),
+            "rebuiltAt".to_string(),
+        ],
+        lifecycle_semantics: vec![
+            ProjectionKernelLifecycleSemantics {
+                state: "stale".to_string(),
+                meaning: "Source facts changed after the read model was built.".to_string(),
+            },
+            ProjectionKernelLifecycleSemantics {
+                state: "invalid".to_string(),
+                meaning: "Required source facts are missing or inconsistent.".to_string(),
+            },
+            ProjectionKernelLifecycleSemantics {
+                state: "deferred".to_string(),
+                meaning: "A pack-specific projection is intentionally unavailable.".to_string(),
+            },
+            ProjectionKernelLifecycleSemantics {
+                state: "fresh".to_string(),
+                meaning: "The read model was rebuilt from the current accepted sources."
+                    .to_string(),
+            },
+        ],
+        negative_fixtures: vec![
+            ProjectionKernelNegativeFixture {
+                fixture_id: "projection-ref-as-authority".to_string(),
+                rejected_ref_kind: "ProjectionRef".to_string(),
+                rejected_target: "Decision".to_string(),
+                expected_result: "rejected".to_string(),
+            },
+            ProjectionKernelNegativeFixture {
+                fixture_id: "provider-session-as-authority".to_string(),
+                rejected_ref_kind: "ProviderSessionRef".to_string(),
+                rejected_target: "Completion".to_string(),
+                expected_result: "rejected".to_string(),
+            },
+            ProjectionKernelNegativeFixture {
+                fixture_id: "github-issue-as-authority".to_string(),
+                rejected_ref_kind: "GitHubIssueRef".to_string(),
+                rejected_target: "Spec".to_string(),
+                expected_result: "rejected".to_string(),
+            },
+        ],
+    }
+}
+
+pub fn projection_kernel_rejects_authority_write(target: &str) -> bool {
+    projection_kernel_contract()
+        .forbidden_authority_writes
+        .iter()
+        .any(|write| write.target == target)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -727,4 +873,60 @@ pub struct CompletionDecisionIndex {
     pub version: String,
     pub updated_at: u64,
     pub decisions: Vec<CompletionDecisionIndexEntry>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        projection_kernel_contract, projection_kernel_rejects_authority_write,
+        PROJECTION_KERNEL_CONTRACT_VERSION,
+    };
+
+    #[test]
+    fn projection_kernel_contract_is_read_only_authority_boundary() {
+        let contract = projection_kernel_contract();
+
+        assert_eq!(contract.version, PROJECTION_KERNEL_CONTRACT_VERSION);
+        assert_eq!(contract.status, "active");
+        assert!(!contract.writes_authority);
+
+        let source_patterns = contract
+            .accepted_source_refs
+            .iter()
+            .map(|source| source.path_pattern.as_str())
+            .collect::<Vec<_>>();
+        assert!(source_patterns.contains(&".agentflow/spec/**"));
+        assert!(source_patterns.contains(&".agentflow/events/**"));
+        assert!(source_patterns.contains(&".agentflow/tasks/<issue-id>/evidence/**"));
+
+        for target in [
+            "Spec",
+            "Runtime",
+            "Evidence",
+            "Decision",
+            "Completion",
+            "Delivery",
+            "Audit",
+        ] {
+            assert!(projection_kernel_rejects_authority_write(target));
+        }
+    }
+
+    #[test]
+    fn projection_kernel_contract_serializes_negative_fixtures() {
+        let payload = serde_json::to_value(projection_kernel_contract()).unwrap();
+
+        assert_eq!(payload["version"], PROJECTION_KERNEL_CONTRACT_VERSION);
+        assert_eq!(payload["writesAuthority"], false);
+        assert!(payload["negativeFixtures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|fixture| fixture["rejectedRefKind"] == "ProjectionRef"));
+        assert!(payload["requiredFields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|field| field == "freshness"));
+    }
 }
