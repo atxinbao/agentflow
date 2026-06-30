@@ -75,6 +75,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [078-release-certification-primary-proof-package-v1.md](078-release-certification-primary-proof-package-v1.md) | Release Certification Primary Proof Package |
 | [079-core-projection-kernel-contract-v1.md](079-core-projection-kernel-contract-v1.md) | Core Projection Kernel Contract |
 | [080-event-replay-projection-rebuild-v1.md](080-event-replay-projection-rebuild-v1.md) | Event Replay -> Projection Rebuild receipt contract |
+| [081-core-read-model-schema-v1.md](081-core-read-model-schema-v1.md) | Core read model schema for Spec / Evidence / Decision / Delivery |
 
 ## Rules
 

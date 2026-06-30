@@ -46,6 +46,7 @@ Projection Kernel 只能读取明确的 Core source refs：
 | Event authority | `.agentflow/events/**` | Event Store |
 | Task evidence authority | `.agentflow/tasks/<issue-id>/evidence/**` | Evidence Kernel |
 | Decision authority | `.agentflow/runtime/decisions/**` | Decision Kernel |
+| Delivery authority | `.agentflow/release/**` | Delivery Kernel |
 
 Projection 不能把 Provider session、CLI output、GitHub issue、GitLab issue、
 Chat thread 或 Desktop transient state 当成 authority。
@@ -61,6 +62,9 @@ Projection Kernel 输出必须带稳定字段：
 - `viewModelVersion`
 - `freshness`
 - `rebuiltAt`
+- `reasonLinks`
+- `evidenceLinks`
+- `authorityBoundary`
 
 Read model 可以面向不同消费者：
 
@@ -111,6 +115,22 @@ Projection Kernel 必须保留负向 fixture：
 
 这些 fixture 的结果必须是 `rejected`。
 
+## Core Read Model Schemas
+
+Projection Kernel 必须冻结四类 Core read model schema：
+
+| Model | Source refs | Required links |
+| --- | --- | --- |
+| `spec` | `spec-authority`, `event-authority` | reason links, evidence links |
+| `evidence` | `task-evidence-authority`, `event-authority` | evidence links |
+| `decision` | `decision-authority`, `spec-authority`, `task-evidence-authority`, `event-authority` | reason links, evidence links |
+| `delivery` | `delivery-authority`, `event-authority` | evidence links, public delivery refs |
+
+每个 schema 都必须包含 identity、version、source refs、freshness、status、
+reason/evidence links 和 authority boundary 字段。
+
+缺失 source refs 或把 projection / provider / GitHub mirror 当成 authority 的组合必须被拒绝。
+
 ## Release Gate Evidence
 
 Release gate 必须生成：
@@ -125,6 +145,7 @@ runtime/core-projection-kernel-contract.json
 - Projection contract status 是 `active`；
 - `writesAuthority` 是 `false`；
 - accepted source refs 覆盖 Spec / Event / Evidence / Decision；
+- Core read model schemas 覆盖 Spec / Evidence / Decision / Delivery；
 - forbidden authority writes 覆盖 Spec / Runtime / Evidence / Decision /
   Completion / Delivery / Audit；
 - lifecycle semantics 覆盖 `fresh` / `stale` / `invalid` / `deferred`；

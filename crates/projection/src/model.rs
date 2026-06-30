@@ -43,6 +43,32 @@ pub struct ProjectionKernelNegativeFixture {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CoreReadModelSchema {
+    pub model_kind: String,
+    pub read_model_version: String,
+    pub object_type: String,
+    pub identity_fields: Vec<String>,
+    pub required_fields: Vec<String>,
+    pub source_ref_kinds: Vec<String>,
+    pub freshness_states: Vec<String>,
+    pub status_values: Vec<String>,
+    pub reason_link_fields: Vec<String>,
+    pub evidence_link_fields: Vec<String>,
+    pub authority_boundary_fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreReadModelSchemaNegativeFixture {
+    pub fixture_id: String,
+    pub model_kind: String,
+    pub invalid_combination: Vec<String>,
+    pub expected_result: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectionKernelContract {
     pub version: String,
     pub status: String,
@@ -52,6 +78,8 @@ pub struct ProjectionKernelContract {
     pub required_fields: Vec<String>,
     pub lifecycle_semantics: Vec<ProjectionKernelLifecycleSemantics>,
     pub negative_fixtures: Vec<ProjectionKernelNegativeFixture>,
+    pub core_read_model_schemas: Vec<CoreReadModelSchema>,
+    pub read_model_negative_fixtures: Vec<CoreReadModelSchemaNegativeFixture>,
 }
 
 pub fn projection_kernel_contract() -> ProjectionKernelContract {
@@ -79,6 +107,11 @@ pub fn projection_kernel_contract() -> ProjectionKernelContract {
                 ref_kind: "decision-authority".to_string(),
                 path_pattern: ".agentflow/runtime/decisions/**".to_string(),
                 authority: "Decision Kernel".to_string(),
+            },
+            ProjectionKernelSourceRef {
+                ref_kind: "delivery-authority".to_string(),
+                path_pattern: ".agentflow/release/**".to_string(),
+                authority: "Delivery Kernel".to_string(),
             },
         ],
         forbidden_authority_writes: vec![
@@ -145,6 +178,8 @@ pub fn projection_kernel_contract() -> ProjectionKernelContract {
                 expected_result: "rejected".to_string(),
             },
         ],
+        core_read_model_schemas: projection_kernel_core_read_model_schemas(),
+        read_model_negative_fixtures: projection_kernel_read_model_negative_fixtures(),
     }
 }
 
@@ -153,6 +188,136 @@ pub fn projection_kernel_rejects_authority_write(target: &str) -> bool {
         .forbidden_authority_writes
         .iter()
         .any(|write| write.target == target)
+}
+
+pub fn projection_kernel_core_read_model_schemas() -> Vec<CoreReadModelSchema> {
+    let stable_required_fields = [
+        "objectId",
+        "objectType",
+        "readModelVersion",
+        "sourceRefs",
+        "freshness",
+        "status",
+        "reasonLinks",
+        "evidenceLinks",
+        "authorityBoundary",
+        "updatedAt",
+    ];
+    let freshness_states = ["fresh", "stale", "invalid", "deferred"];
+    let authority_boundary_fields = [
+        "writesAuthority",
+        "projectionAuthority",
+        "sourceAuthority",
+        "readOnly",
+    ];
+
+    [
+        (
+            "spec",
+            "core-spec-read-model.v1",
+            "SpecObject",
+            vec!["spec-authority", "event-authority"],
+            vec!["draft", "approved", "invalid", "deferred"],
+        ),
+        (
+            "evidence",
+            "core-evidence-read-model.v1",
+            "EvidenceObject",
+            vec!["task-evidence-authority", "event-authority"],
+            vec!["missing", "partial", "complete", "invalid"],
+        ),
+        (
+            "decision",
+            "core-decision-read-model.v1",
+            "DecisionObject",
+            vec![
+                "decision-authority",
+                "spec-authority",
+                "task-evidence-authority",
+                "event-authority",
+            ],
+            vec!["pending", "accepted", "rejected", "deferred", "blocked"],
+        ),
+        (
+            "delivery",
+            "core-delivery-read-model.v1",
+            "DeliveryObject",
+            vec!["delivery-authority", "event-authority"],
+            vec!["draft", "ready", "published", "invalid"],
+        ),
+    ]
+    .into_iter()
+    .map(
+        |(model_kind, read_model_version, object_type, source_ref_kinds, status_values)| {
+            CoreReadModelSchema {
+                model_kind: model_kind.to_string(),
+                read_model_version: read_model_version.to_string(),
+                object_type: object_type.to_string(),
+                identity_fields: vec!["objectId".to_string(), "objectType".to_string()],
+                required_fields: stable_required_fields
+                    .iter()
+                    .map(|field| (*field).to_string())
+                    .collect(),
+                source_ref_kinds: source_ref_kinds.into_iter().map(str::to_string).collect(),
+                freshness_states: freshness_states
+                    .iter()
+                    .map(|state| (*state).to_string())
+                    .collect(),
+                status_values: status_values.into_iter().map(str::to_string).collect(),
+                reason_link_fields: vec![
+                    "reasonLinks".to_string(),
+                    "invalidReasons".to_string(),
+                    "deferredReasons".to_string(),
+                ],
+                evidence_link_fields: vec![
+                    "evidenceLinks".to_string(),
+                    "sourceRefs".to_string(),
+                    "eventRefs".to_string(),
+                ],
+                authority_boundary_fields: authority_boundary_fields
+                    .iter()
+                    .map(|field| (*field).to_string())
+                    .collect(),
+            }
+        },
+    )
+    .collect()
+}
+
+pub fn projection_kernel_read_model_negative_fixtures() -> Vec<CoreReadModelSchemaNegativeFixture> {
+    vec![
+        CoreReadModelSchemaNegativeFixture {
+            fixture_id: "spec-read-model-missing-spec-source-ref".to_string(),
+            model_kind: "spec".to_string(),
+            invalid_combination: vec!["missing:spec-authority".to_string()],
+            expected_result: "rejected".to_string(),
+            reason: "Spec read model must be sourced from Spec authority.".to_string(),
+        },
+        CoreReadModelSchemaNegativeFixture {
+            fixture_id: "evidence-read-model-missing-evidence-ref".to_string(),
+            model_kind: "evidence".to_string(),
+            invalid_combination: vec!["missing:task-evidence-authority".to_string()],
+            expected_result: "rejected".to_string(),
+            reason: "Evidence read model must retain task evidence refs.".to_string(),
+        },
+        CoreReadModelSchemaNegativeFixture {
+            fixture_id: "decision-read-model-missing-evidence-ref".to_string(),
+            model_kind: "decision".to_string(),
+            invalid_combination: vec![
+                "missing:decision-authority".to_string(),
+                "missing:task-evidence-authority".to_string(),
+            ],
+            expected_result: "rejected".to_string(),
+            reason: "Decision read model must bind decision and evidence refs.".to_string(),
+        },
+        CoreReadModelSchemaNegativeFixture {
+            fixture_id: "delivery-read-model-missing-public-record-ref".to_string(),
+            model_kind: "delivery".to_string(),
+            invalid_combination: vec!["missing:delivery-authority".to_string()],
+            expected_result: "rejected".to_string(),
+            reason: "Delivery read model must keep public delivery refs.".to_string(),
+        },
+    ]
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -883,7 +1048,8 @@ pub struct CompletionDecisionIndex {
 #[cfg(test)]
 mod tests {
     use super::{
-        projection_kernel_contract, projection_kernel_rejects_authority_write,
+        projection_kernel_contract, projection_kernel_core_read_model_schemas,
+        projection_kernel_read_model_negative_fixtures, projection_kernel_rejects_authority_write,
         PROJECTION_KERNEL_CONTRACT_VERSION,
     };
 
@@ -903,6 +1069,7 @@ mod tests {
         assert!(source_patterns.contains(&".agentflow/spec/**"));
         assert!(source_patterns.contains(&".agentflow/events/**"));
         assert!(source_patterns.contains(&".agentflow/tasks/<issue-id>/evidence/**"));
+        assert!(source_patterns.contains(&".agentflow/release/**"));
 
         for target in [
             "Spec",
@@ -933,5 +1100,70 @@ mod tests {
             .unwrap()
             .iter()
             .any(|field| field == "freshness"));
+    }
+
+    #[test]
+    fn core_read_model_schemas_cover_stable_fields_and_boundaries() {
+        let schemas = projection_kernel_core_read_model_schemas();
+        let model_kinds = schemas
+            .iter()
+            .map(|schema| schema.model_kind.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(schemas.len(), 4);
+        for model_kind in ["spec", "evidence", "decision", "delivery"] {
+            assert!(model_kinds.contains(&model_kind));
+        }
+
+        for schema in schemas {
+            for required in [
+                "objectId",
+                "objectType",
+                "readModelVersion",
+                "sourceRefs",
+                "freshness",
+                "status",
+                "reasonLinks",
+                "evidenceLinks",
+                "authorityBoundary",
+                "updatedAt",
+            ] {
+                assert!(schema.required_fields.contains(&required.to_string()));
+            }
+            assert!(schema
+                .authority_boundary_fields
+                .contains(&"writesAuthority".to_string()));
+            assert!(schema
+                .authority_boundary_fields
+                .contains(&"projectionAuthority".to_string()));
+            assert!(schema.freshness_states.contains(&"invalid".to_string()));
+            assert!(schema.freshness_states.contains(&"deferred".to_string()));
+            assert!(!schema.source_ref_kinds.is_empty());
+        }
+    }
+
+    #[test]
+    fn core_read_model_negative_fixtures_reject_missing_sources() {
+        let fixtures = projection_kernel_read_model_negative_fixtures();
+        let fixture_ids = fixtures
+            .iter()
+            .map(|fixture| fixture.fixture_id.as_str())
+            .collect::<Vec<_>>();
+
+        for fixture_id in [
+            "spec-read-model-missing-spec-source-ref",
+            "evidence-read-model-missing-evidence-ref",
+            "decision-read-model-missing-evidence-ref",
+            "delivery-read-model-missing-public-record-ref",
+        ] {
+            assert!(fixture_ids.contains(&fixture_id));
+        }
+
+        assert!(fixtures
+            .iter()
+            .all(|fixture| fixture.expected_result == "rejected"));
+        assert!(fixtures
+            .iter()
+            .all(|fixture| !fixture.invalid_combination.is_empty()));
     }
 }

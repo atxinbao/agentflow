@@ -95,6 +95,7 @@ FILESYSTEM_CONTRACT_PATH="$RUNTIME_DIR/filesystem-contract.json"
 PACK_CONTRACT_COMPATIBILITY_PATH="$RUNTIME_DIR/pack-contract-compatibility.json"
 PROJECTION_READMODEL_CONTRACT_PATH="$RUNTIME_DIR/projection-readmodel-contract.json"
 CORE_PROJECTION_KERNEL_CONTRACT_PATH="$RUNTIME_DIR/core-projection-kernel-contract.json"
+CORE_READ_MODEL_SCHEMA_PATH="$RUNTIME_DIR/core-read-model-schema.json"
 EVIDENCE_ACCEPTANCE_CONTRACT_PATH="$RUNTIME_DIR/evidence-acceptance-contract.json"
 EXECUTOR_ADAPTER_CONTRACT_PATH="$RUNTIME_DIR/executor-adapter-contract.json"
 REPLAY_MIGRATION_UPGRADE_CERTIFICATION_PATH="$RUNTIME_DIR/replay-migration-upgrade-certification.json"
@@ -443,6 +444,7 @@ proof_chain = [
     {"stage": "core-completion-commit-authority", "label": "Core Completion Commit Authority"},
     {"stage": "core-delivery-readiness-audit-trigger", "label": "Core Delivery Readiness / Optional Audit Trigger"},
     {"stage": "core-projection-kernel-contract", "label": "Core Projection Kernel Contract"},
+    {"stage": "core-read-model-schema", "label": "Core Read Model Schema"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -4478,6 +4480,135 @@ if payload["status"] != "passed":
     raise SystemExit("core projection kernel contract fixture failed")
 PY
   record_stage "core-projection-kernel-contract" "passed" "$(basename "$CORE_PROJECTION_KERNEL_CONTRACT_PATH")"
+}
+
+run_core_read_model_schema_gate() {
+  record_stage "core-read-model-schema" "started" "$CORE_READ_MODEL_SCHEMA_PATH"
+  python3 - "$ROOT" "$CORE_READ_MODEL_SCHEMA_PATH" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+out_path = pathlib.Path(sys.argv[2])
+doc_path = root / "docs/architecture/081-core-read-model-schema-v1.md"
+source_path = root / "crates/projection/src/model.rs"
+
+doc_text = doc_path.read_text(encoding="utf-8") if doc_path.is_file() else ""
+source_text = source_path.read_text(encoding="utf-8") if source_path.is_file() else ""
+
+model_kinds = ["spec", "evidence", "decision", "delivery"]
+schema_versions = [
+    "core-spec-read-model.v1",
+    "core-evidence-read-model.v1",
+    "core-decision-read-model.v1",
+    "core-delivery-read-model.v1",
+]
+required_fields = [
+    "objectId",
+    "objectType",
+    "readModelVersion",
+    "sourceRefs",
+    "freshness",
+    "status",
+    "reasonLinks",
+    "evidenceLinks",
+    "authorityBoundary",
+    "updatedAt",
+]
+source_ref_kinds = [
+    "spec-authority",
+    "event-authority",
+    "task-evidence-authority",
+    "decision-authority",
+    "delivery-authority",
+]
+freshness_states = ["fresh", "stale", "invalid", "deferred"]
+authority_boundary_fields = [
+    "writesAuthority",
+    "projectionAuthority",
+    "sourceAuthority",
+    "readOnly",
+]
+negative_fixtures = [
+    "spec-read-model-missing-spec-source-ref",
+    "evidence-read-model-missing-evidence-ref",
+    "decision-read-model-missing-evidence-ref",
+    "delivery-read-model-missing-public-record-ref",
+]
+source_symbols = [
+    "CoreReadModelSchema",
+    "CoreReadModelSchemaNegativeFixture",
+    "projection_kernel_core_read_model_schemas",
+    "projection_kernel_read_model_negative_fixtures",
+]
+required_doc_sections = [
+    "## Stable Schema Family",
+    "## Required Fields",
+    "## Freshness States",
+    "## Authority Boundary Fields",
+    "## Negative Fixtures",
+    "## Release Gate Evidence",
+]
+
+missing_doc_sections = [section for section in required_doc_sections if section not in doc_text]
+missing_model_kinds = [kind for kind in model_kinds if f"`{kind}`" not in doc_text or f'"{kind}"' not in source_text]
+missing_schema_versions = [version for version in schema_versions if version not in doc_text or version not in source_text]
+missing_required_fields = [field for field in required_fields if field not in doc_text or f'"{field}"' not in source_text]
+missing_source_ref_kinds = [kind for kind in source_ref_kinds if kind not in doc_text or kind not in source_text]
+missing_freshness_states = [state for state in freshness_states if state not in doc_text or f'"{state}"' not in source_text]
+missing_authority_boundary_fields = [field for field in authority_boundary_fields if field not in doc_text or f'"{field}"' not in source_text]
+missing_negative_fixtures = [fixture for fixture in negative_fixtures if fixture not in doc_text or fixture not in source_text]
+missing_source_symbols = [symbol for symbol in source_symbols if symbol not in source_text]
+
+payload = {
+    "version": "agentflow-core-read-model-schema-gate.v1",
+    "status": "passed",
+    "docPath": "docs/architecture/081-core-read-model-schema-v1.md",
+    "sourcePath": "crates/projection/src/model.rs",
+    "writesAuthority": False,
+    "projectionAuthority": False,
+    "modelKinds": model_kinds,
+    "schemaVersions": schema_versions,
+    "requiredFields": required_fields,
+    "sourceRefKinds": source_ref_kinds,
+    "freshnessStates": freshness_states,
+    "authorityBoundaryFields": authority_boundary_fields,
+    "negativeFixtures": negative_fixtures,
+    "missingDocSections": missing_doc_sections,
+    "missingModelKinds": missing_model_kinds,
+    "missingSchemaVersions": missing_schema_versions,
+    "missingRequiredFields": missing_required_fields,
+    "missingSourceRefKinds": missing_source_ref_kinds,
+    "missingFreshnessStates": missing_freshness_states,
+    "missingAuthorityBoundaryFields": missing_authority_boundary_fields,
+    "missingNegativeFixtures": missing_negative_fixtures,
+    "missingSourceSymbols": missing_source_symbols,
+    "checkedAt": int(time.time()),
+}
+
+if any(
+    [
+        missing_doc_sections,
+        missing_model_kinds,
+        missing_schema_versions,
+        missing_required_fields,
+        missing_source_ref_kinds,
+        missing_freshness_states,
+        missing_authority_boundary_fields,
+        missing_negative_fixtures,
+        missing_source_symbols,
+    ]
+):
+    payload["status"] = "failed"
+
+out_path.parent.mkdir(parents=True, exist_ok=True)
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("core read model schema fixture failed")
+PY
+  record_stage "core-read-model-schema" "passed" "$(basename "$CORE_READ_MODEL_SCHEMA_PATH")"
 }
 
 run_evidence_acceptance_contract_gate() {
@@ -10574,6 +10705,7 @@ PY
   run_core_completion_commit_authority_gate
   run_core_delivery_readiness_audit_trigger_gate
   run_core_projection_kernel_contract_gate
+  run_core_read_model_schema_gate
   run_core_decision_projection_read_model_gate
   run_v107_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
