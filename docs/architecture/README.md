@@ -78,6 +78,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [081-core-read-model-schema-v1.md](081-core-read-model-schema-v1.md) | Core read model schema for Spec / Evidence / Decision / Delivery |
 | [082-view-model-contract-for-industry-apps-v1.md](082-view-model-contract-for-industry-apps-v1.md) | View Model contract for Industry AgentFlow apps |
 | [083-pack-specific-projection-mapping-boundary-v1.md](083-pack-specific-projection-mapping-boundary-v1.md) | Pack-specific Projection mapping boundary |
+| [084-invalid-missing-app-definition-handling-v1.md](084-invalid-missing-app-definition-handling-v1.md) | Invalid / missing app definition handling |
 
 ## Rules
 
