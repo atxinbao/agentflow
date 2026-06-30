@@ -151,6 +151,9 @@ Event Store + authority facts + task artifacts + sidecars
 - rebuild 失败必须输出 structured failure；
 - corrupt event / missing authority / invalid pack 都不能被静默忽略；
 - replay report 必须列出 rebuilt projection paths；
+- replay report 必须列出 source event / fact refs；
+- replay report 必须包含 input digest、output digest 和 receipt id；
+- replay report 必须声明 deterministic rebuild 结果；
 - replay report 必须证明 `writesAuthority=false` 和 `projectionAuthority=false`。
 
 ## Freshness State
