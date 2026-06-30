@@ -1,28 +1,41 @@
 # Changelog
 
-更新日期：2026-06-29
+更新日期：2026-06-30
 执行者：Codex
 
 ## Current Baseline
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.0.7/README.md](docs/delivery/releases/v1.0.7/README.md)
-- [docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md)
+- [docs/delivery/releases/v1.0.8/README.md](docs/delivery/releases/v1.0.8/README.md)
+- [docs/delivery/releases/v1.0.8/AGENTFLOW_V1_0_8_PROJECTION_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.8/AGENTFLOW_V1_0_8_PROJECTION_KERNEL_TASKS_V1.md)
 
 下一版计划：
 
-- v1.0.8 Projection Kernel。
+- v1.0.9 Software Dev Reference App certification。
 
 ## Unreleased
 
-下一版保留给 Projection Kernel，不在本次 release 中认证。
+下一版保留给 Software Dev Reference App certification，不在本次 release 中认证。
 
-Planned v1.0.8 foundation:
+Planned v1.0.9 foundation:
 
-- rebuild full Projection Kernel over stable Core facts;
-- keep Decision Projection read model read-only until Projection Kernel certification;
-- preserve Decision Kernel authority boundary while adding broader projection refresh / replay coverage.
+- certify Software Dev as the first Reference App over stable Core Projection Kernel;
+- keep Core industry-neutral and prevent Software Dev records from becoming Core authority;
+- expose app console surfaces through read-only projection view models and feedback routes.
+
+## v1.0.8 - 2026-06-30
+
+Core Projection Kernel baseline:
+
+- defined the Core Projection Kernel read-only contract over Spec, Event, Evidence and Decision authority facts;
+- added deterministic event replay / projection rebuild reports with failure fixtures;
+- stabilized Core read model schemas for spec, evidence, decision and delivery surfaces;
+- stabilized view model contracts for industry app surfaces without direct authority reads;
+- documented Pack-specific projection mapping boundaries and invalid / missing app definition fail-closed behavior;
+- added feedback surface projection and projection freshness receipts so stale / incomplete surfaces route to Spec evolution preview without writing authority;
+- added release-gate artifacts through `runtime/core-projection-kernel-contract.json`, `runtime/event-replay-projection-report.json`, `runtime/event-replay-projection-failure-report.json`, `runtime/core-read-model-schema.json`, `runtime/core-view-model-contract.json`, `runtime/projection-feedback-freshness-receipts.json`, `pack-projection-readiness.json`, and `runtime/v108-release-certification.json`;
+- advanced workspace and desktop version metadata to `1.0.8`.
 
 ## v1.0.7 - 2026-06-29
 

@@ -175,6 +175,7 @@ V105_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v105-release-certification.json"
 V106_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v106-release-certification.json"
 V107_RELEASE_PROVENANCE_HANDOFF_PATH="$RUNTIME_DIR/v107-release-provenance-handoff.json"
 V107_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v107-release-certification.json"
+V108_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v108-release-certification.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
 CORE_DECISION_INPUT_BINDING_PATH="$RUNTIME_DIR/core-decision-input-binding.json"
 CORE_DECISION_OUTCOME_TRANSITIONS_PATH="$RUNTIME_DIR/core-decision-outcome-transitions.json"
@@ -602,6 +603,7 @@ v105_release_certification = load_json(pathlib.Path(summary_json_path.parent / "
 v106_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v106-release-certification.json")) or {}
 v107_release_provenance_handoff = load_json(pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json")) or {}
 v107_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v107-release-certification.json")) or {}
+v108_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v108-release-certification.json")) or {}
 core_decision_model_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json")) or {}
 core_decision_input_binding = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json")) or {}
 core_decision_outcome_transitions = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json")) or {}
@@ -1483,6 +1485,9 @@ summary_payload = {
     "v107ReleaseCertificationPath": "runtime/v107-release-certification.json" if v107_release_certification else None,
     "v107ReleaseCertificationStatus": v107_release_certification.get("status") or "missing",
     "v107ReleaseCertificationCoverage": v107_release_certification.get("coverage") or {},
+    "v108ReleaseCertificationPath": "runtime/v108-release-certification.json" if v108_release_certification else None,
+    "v108ReleaseCertificationStatus": v108_release_certification.get("status") or "missing",
+    "v108ReleaseCertificationCoverage": v108_release_certification.get("coverage") or {},
     "coreDecisionModelContractPath": "runtime/core-decision-model-contract.json" if core_decision_model_contract else None,
     "coreDecisionModelContractStatus": core_decision_model_contract.get("status") or "missing",
     "coreDecisionModelContractCoverage": core_decision_model_contract.get("coverage") or {},
@@ -2206,7 +2211,7 @@ tracked_docs = [
     "docs/architecture/builtin-pack-registry.md",
     "docs/architecture/041-v100-stable-contract-baseline-v1.md",
     "docs/architecture/050-v100-release-certification-v1.md",
-    "docs/delivery/releases/v1.0.7/README.md",
+    "docs/delivery/releases/v1.0.8/README.md",
     "docs/project/history/2026-06-current-baseline-history/README.md",
 ]
 runtime_only_paths = [
@@ -2251,7 +2256,7 @@ payload = {
     "currentProjectRoadmapEntry": "docs/project/roadmap.md",
     "currentCoreCapabilityEntry": "docs/architecture/021-ai-os-project-core-capabilities-v1.md",
     "currentStableEntry": "docs/architecture/041-v100-stable-contract-baseline-v1.md",
-    "currentReleaseBaselineEntry": "docs/delivery/releases/v1.0.7/README.md",
+    "currentReleaseBaselineEntry": "docs/delivery/releases/v1.0.8/README.md",
     "releaseCertificationEntry": "docs/architecture/050-v100-release-certification-v1.md",
     "defineAgentBoundary": {
         "path": ".agentflow/define/agent/**",
@@ -10364,19 +10369,26 @@ required_artifact_names = [
 certified_hash_paths = {item.get("path") for item in certified_artifact_hashes}
 
 coverage = {
-    "release-version-is-v107": release_version == expected_tag,
-    "release-tag-is-v107": release_tag_name == expected_tag,
-    "cargo-workspace-version-is-107": cargo["workspace"]["package"]["version"] == expected_version,
-    "desktop-package-version-is-107": desktop_package.get("version") == expected_version,
-    "desktop-package-lock-version-is-107": desktop_package_lock.get("version") == expected_version
-    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") == expected_version,
-    "tauri-version-is-107": tauri_config.get("version") == expected_version,
-    "agents-current-baseline-is-v107": "docs/delivery/releases/v1.0.7/README.md" in agents_text,
-    "docs-default-reading-is-v107": "delivery/releases/v1.0.7/README.md" in docs_readme_text,
+    "release-version-at-or-after-v107": release_version in {expected_tag, "v1.0.8"},
+    "release-tag-at-or-after-v107": release_tag_name in {expected_tag, "v1.0.8"},
+    "cargo-workspace-version-at-or-after-107": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.8"},
+    "desktop-package-version-at-or-after-107": desktop_package.get("version") in {expected_version, "1.0.8"},
+    "desktop-package-lock-version-at-or-after-107": desktop_package_lock.get("version") in {expected_version, "1.0.8"}
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.8"},
+    "tauri-version-at-or-after-107": tauri_config.get("version") in {expected_version, "1.0.8"},
+    "agents-current-baseline-is-v108-or-v107": (
+        "docs/delivery/releases/v1.0.8/README.md" in agents_text
+        or "docs/delivery/releases/v1.0.7/README.md" in agents_text
+    ),
+    "docs-default-reading-is-v108-or-v107": (
+        "delivery/releases/v1.0.8/README.md" in docs_readme_text
+        or "delivery/releases/v1.0.7/README.md" in docs_readme_text
+    ),
     "changelog-has-v107-entry": "## v1.0.7 - 2026-06-29" in changelog_text
     and "Core Decision Kernel baseline" in changelog_text
     and "v107-release-certification" in changelog_text,
-    "changelog-next-path-is-v108": "v1.0.8 Projection Kernel" in changelog_text,
+    "changelog-records-v108-path": "v1.0.8" in changelog_text
+    and "Core Projection Kernel" in changelog_text,
     "release-readme-is-baseline": "Core Decision Kernel release baseline" in release_readme_text
     and "runtime/v107-release-certification.json" in release_readme_text
     and "v1.0.8" in release_readme_text,
@@ -10441,6 +10453,304 @@ if failed:
     raise SystemExit(f"v1.0.7 release certification failed: {failed}")
 PY
   record_stage "v107-release-certification" "passed" "$(basename "$V107_RELEASE_CERTIFICATION_PATH")"
+}
+
+run_v108_release_certification_gate() {
+  record_stage "v108-release-certification" "started" "$V108_RELEASE_CERTIFICATION_PATH"
+  python3 - \
+    "$V108_RELEASE_CERTIFICATION_PATH" \
+    "$RELEASE_VERSION" \
+    "$WORKSPACE/Cargo.toml" \
+    "$WORKSPACE/apps/desktop/package.json" \
+    "$WORKSPACE/apps/desktop/package-lock.json" \
+    "$WORKSPACE/apps/desktop/src-tauri/tauri.conf.json" \
+    "$ROOT/CHANGELOG.md" \
+    "$ROOT/AGENTS.md" \
+    "$ROOT/docs/README.md" \
+    "$ROOT/docs/delivery/README.md" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.8/README.md" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.8/AGENTFLOW_V1_0_8_PROJECTION_KERNEL_TASKS_V1.md" \
+    "$ARTIFACT_MANIFEST_PATH" \
+    "$RELEASE_URL" \
+    "$GATE_EVENT_NAME" \
+    "$GATE_REF_TYPE" \
+    "$GATE_REF_NAME" \
+    "$GATE_RUN_ID" \
+    "$GATE_RUN_ATTEMPT" \
+    "$GATE_REPOSITORY" \
+    "$GATE_SERVER_URL" \
+    "$SOURCE_COMMIT_SHA" \
+    "$RELEASE_TAG_NAME" \
+    "$PACK_PROJECTION_READINESS_PATH" \
+    "$V107_RELEASE_CERTIFICATION_PATH" \
+    "$CORE_PROJECTION_KERNEL_CONTRACT_PATH" \
+    "$EVENT_REPLAY_PROJECTION_REPORT_PATH" \
+    "$EVENT_REPLAY_PROJECTION_FAILURE_REPORT_PATH" \
+    "$CORE_READ_MODEL_SCHEMA_PATH" \
+    "$CORE_VIEW_MODEL_CONTRACT_PATH" \
+    "$PROJECTION_FEEDBACK_FRESHNESS_PATH" \
+    "$CORE_DECISION_PROJECTION_READ_MODEL_PATH" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+import time
+import tomllib
+
+(
+    out_path_raw,
+    release_version,
+    cargo_path_raw,
+    desktop_package_path_raw,
+    desktop_package_lock_path_raw,
+    tauri_config_path_raw,
+    changelog_path_raw,
+    agents_path_raw,
+    docs_readme_path_raw,
+    delivery_readme_path_raw,
+    release_readme_path_raw,
+    release_tasks_path_raw,
+    artifact_manifest_path_raw,
+    release_url,
+    gate_event_name,
+    gate_ref_type,
+    gate_ref_name,
+    gate_run_id,
+    gate_run_attempt,
+    gate_repository,
+    gate_server_url,
+    source_commit_sha,
+    release_tag_name,
+    pack_projection_path_raw,
+    *runtime_artifact_path_values,
+) = sys.argv[1:]
+
+out_path = pathlib.Path(out_path_raw)
+cargo_path = pathlib.Path(cargo_path_raw)
+desktop_package_path = pathlib.Path(desktop_package_path_raw)
+desktop_package_lock_path = pathlib.Path(desktop_package_lock_path_raw)
+tauri_config_path = pathlib.Path(tauri_config_path_raw)
+changelog_path = pathlib.Path(changelog_path_raw)
+agents_path = pathlib.Path(agents_path_raw)
+docs_readme_path = pathlib.Path(docs_readme_path_raw)
+delivery_readme_path = pathlib.Path(delivery_readme_path_raw)
+release_readme_path = pathlib.Path(release_readme_path_raw)
+release_tasks_path = pathlib.Path(release_tasks_path_raw)
+artifact_manifest_path = pathlib.Path(artifact_manifest_path_raw)
+pack_projection_path = pathlib.Path(pack_projection_path_raw)
+runtime_artifact_paths = [pathlib.Path(value) for value in runtime_artifact_path_values]
+artifact_paths = runtime_artifact_paths + [pack_projection_path]
+
+expected_version = "1.0.8"
+expected_tag = "v1.0.8"
+cargo = tomllib.loads(cargo_path.read_text(encoding="utf-8"))
+desktop_package = json.loads(desktop_package_path.read_text(encoding="utf-8"))
+desktop_package_lock = json.loads(desktop_package_lock_path.read_text(encoding="utf-8"))
+tauri_config = json.loads(tauri_config_path.read_text(encoding="utf-8"))
+changelog_text = changelog_path.read_text(encoding="utf-8")
+agents_text = agents_path.read_text(encoding="utf-8")
+docs_readme_text = docs_readme_path.read_text(encoding="utf-8")
+delivery_readme_text = delivery_readme_path.read_text(encoding="utf-8")
+release_readme_text = release_readme_path.read_text(encoding="utf-8")
+release_tasks_text = release_tasks_path.read_text(encoding="utf-8")
+
+def load_json(path):
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+artifacts = {path.name: load_json(path) for path in artifact_paths}
+artifact_statuses = {name: payload.get("status") for name, payload in artifacts.items()}
+required_artifact_statuses = {
+    "v107-release-certification.json": "passed",
+    "core-projection-kernel-contract.json": "passed",
+    "event-replay-projection-report.json": "passed",
+    "event-replay-projection-failure-report.json": "failed",
+    "core-read-model-schema.json": "passed",
+    "core-view-model-contract.json": "passed",
+    "projection-feedback-freshness-receipts.json": "passed",
+    "core-decision-projection-read-model.json": "passed",
+    "pack-projection-readiness.json": "passed",
+}
+certified_artifact_hashes = [
+    {
+        "path": f"runtime/{path.name}" if path.parent.name == "runtime" else path.name,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "bytes": path.stat().st_size,
+    }
+    for path in artifact_paths
+    if path.is_file()
+]
+certified_hash_paths = {item.get("path") for item in certified_artifact_hashes}
+artifact_manifest_sha256 = (
+    hashlib.sha256(artifact_manifest_path.read_bytes()).hexdigest()
+    if artifact_manifest_path.is_file()
+    else None
+)
+certification_digest = hashlib.sha256(json.dumps(
+    {
+        "releaseVersion": release_version,
+        "artifactManifestSha256": artifact_manifest_sha256,
+        "certifiedArtifactHashes": certified_artifact_hashes,
+    },
+    sort_keys=True,
+).encode("utf-8")).hexdigest()
+gate_run_url = (
+    f"{gate_server_url.rstrip('/')}/{gate_repository}/actions/runs/{gate_run_id}"
+    if gate_server_url and gate_repository and gate_run_id
+    else None
+)
+event_evidence = {
+    "eventName": gate_event_name,
+    "refType": gate_ref_type or None,
+    "refName": gate_ref_name or None,
+    "runId": gate_run_id or None,
+    "runAttempt": gate_run_attempt or None,
+    "runUrl": gate_run_url,
+    "repository": gate_repository,
+    "sourceCommitSha": source_commit_sha,
+    "releaseTagName": release_tag_name,
+    "releaseUrl": release_url,
+    "certificationArtifactName": f"release-gate-certification-{release_version}",
+    "certificationArtifactDigest": certification_digest,
+    "certificationArtifactDigestSource": "v108-certified-projection-kernel-runtime-artifact-hashes",
+    "artifactManifestPath": "artifact-manifest.json",
+    "artifactManifestSha256": artifact_manifest_sha256,
+}
+
+projection_kernel = artifacts.get("core-projection-kernel-contract.json") or {}
+replay_report = artifacts.get("event-replay-projection-report.json") or {}
+replay_failure = artifacts.get("event-replay-projection-failure-report.json") or {}
+read_model = artifacts.get("core-read-model-schema.json") or {}
+view_model = artifacts.get("core-view-model-contract.json") or {}
+feedback = artifacts.get("projection-feedback-freshness-receipts.json") or {}
+pack_projection = artifacts.get("pack-projection-readiness.json") or {}
+
+required_architecture_docs = [
+    "079-core-projection-kernel-contract-v1.md",
+    "080-event-replay-projection-rebuild-v1.md",
+    "081-core-read-model-schema-v1.md",
+    "082-view-model-contract-for-industry-apps-v1.md",
+    "083-pack-specific-projection-mapping-boundary-v1.md",
+    "084-invalid-missing-app-definition-handling-v1.md",
+    "085-feedback-surface-projection-freshness-receipts-v1.md",
+]
+required_issue_refs = [f"#{number}" for number in range(713, 723)]
+required_task_ids = [f"V108-{index:03d}" for index in range(1, 11)]
+required_runtime_paths = {
+    "runtime/v107-release-certification.json",
+    "runtime/core-projection-kernel-contract.json",
+    "runtime/event-replay-projection-report.json",
+    "runtime/event-replay-projection-failure-report.json",
+    "runtime/core-read-model-schema.json",
+    "runtime/core-view-model-contract.json",
+    "runtime/projection-feedback-freshness-receipts.json",
+    "runtime/core-decision-projection-read-model.json",
+}
+expected_hash_paths = required_runtime_paths | {"pack-projection-readiness.json"}
+
+coverage = {
+    "release-version-is-v108": release_version == expected_tag,
+    "release-tag-is-v108": release_tag_name == expected_tag,
+    "cargo-workspace-version-is-108": cargo["workspace"]["package"]["version"] == expected_version,
+    "desktop-package-version-is-108": desktop_package.get("version") == expected_version,
+    "desktop-package-lock-version-is-108": desktop_package_lock.get("version") == expected_version
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") == expected_version,
+    "tauri-version-is-108": tauri_config.get("version") == expected_version,
+    "agents-current-baseline-is-v108": "docs/delivery/releases/v1.0.8/README.md" in agents_text,
+    "docs-default-reading-is-v108": "delivery/releases/v1.0.8/README.md" in docs_readme_text,
+    "delivery-readme-is-v108": "releases/v1.0.8/README.md" in delivery_readme_text
+    and "Core Projection Kernel" in delivery_readme_text,
+    "changelog-has-v108-entry": "## v1.0.8 - 2026-06-30" in changelog_text
+    and "Core Projection Kernel baseline" in changelog_text
+    and "v108-release-certification" in changelog_text,
+    "changelog-next-path-is-v109": "v1.0.9 Software Dev Reference App certification" in changelog_text,
+    "release-readme-is-baseline": "Core Projection Kernel release baseline" in release_readme_text
+    and "runtime/v108-release-certification.json" in release_readme_text
+    and "v1.0.9" in release_readme_text,
+    "release-readme-states-nongoals": all(phrase in release_readme_text for phrase in [
+        "Software Dev commercial app completion",
+        "v1.0.9",
+        "default Message Bus",
+        "Projection",
+        "GitHub",
+    ]),
+    "release-readme-states-known-risks": "## Known Risks" in release_readme_text
+    and "Software Dev Reference App certification" in release_readme_text,
+    "release-tasks-all-v108-done": all(task_id in release_tasks_text for task_id in required_task_ids)
+    and all(issue_ref in release_tasks_text for issue_ref in required_issue_refs)
+    and release_tasks_text.count("状态：done") >= 10,
+    "architecture-docs-bound": all(doc in release_readme_text for doc in required_architecture_docs)
+    and all(doc in release_tasks_text or doc in release_readme_text for doc in required_architecture_docs),
+    "all-v108-artifacts-present": all(name in artifact_statuses for name in required_artifact_statuses),
+    "all-v108-artifact-statuses-valid": all(
+        artifact_statuses.get(name) == expected_status
+        for name, expected_status in required_artifact_statuses.items()
+    ),
+    "certified-artifact-hashes-present": len(certified_artifact_hashes) == len(artifact_paths)
+    and all(item.get("sha256") and item.get("bytes", 0) > 0 for item in certified_artifact_hashes)
+    and expected_hash_paths.issubset(certified_hash_paths),
+    "artifact-manifest-digest-present": artifact_manifest_sha256 is not None,
+    "certification-artifact-digest-present": len(certification_digest) == 64,
+    "release-event-evidence-recorded": bool(event_evidence["eventName"])
+    and bool(event_evidence["sourceCommitSha"])
+    and bool(event_evidence["releaseTagName"]),
+    "release-run-id-bound-for-ci": gate_event_name == "local" or bool(event_evidence["runId"]),
+    "release-run-url-bound-for-ci": gate_event_name == "local" or bool(event_evidence["runUrl"]),
+    "projection-kernel-readonly": projection_kernel.get("writesAuthority") is False
+    and projection_kernel.get("projectionAuthority") is False,
+    "replay-rebuild-certified": replay_report.get("deterministic") is True
+    and replay_report.get("writesAuthority") is False
+    and replay_report.get("projectionAuthority") is False,
+    "replay-failure-certified": replay_failure.get("status") == "failed"
+    and replay_failure.get("writesAuthority") is False
+    and replay_failure.get("projectionAuthority") is False
+    and bool(replay_failure.get("failures")),
+    "read-model-schema-certified": read_model.get("writesAuthority") is False
+    and read_model.get("projectionAuthority") is False
+    and bool(read_model.get("schemaVersions")),
+    "view-model-certified": view_model.get("writesAuthority") is False
+    and view_model.get("readsAuthorityDirectly") is False,
+    "feedback-freshness-certified": feedback.get("writesAuthority") is False
+    and feedback.get("requiresConfirmationForSpecEvolution") is True
+    and feedback.get("specEvolutionRoute") == "open-spec-evolution-preview",
+    "pack-projection-boundary-certified": pack_projection.get("status") == "passed",
+    "audit-remains-sidecar": "optional sidecar" in release_readme_text,
+    "software-dev-remains-reference-app": "Reference App" in release_readme_text
+    and "Core authority" in release_readme_text,
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-v108-release-certification.v1",
+    "status": "passed" if not failed else "failed",
+    "releaseVersion": expected_tag,
+    "workspaceVersion": expected_version,
+    "certifiedArtifacts": artifact_statuses,
+    "certifiedArtifactHashes": certified_artifact_hashes,
+    "eventEvidence": event_evidence,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "releaseBaseline": "docs/delivery/releases/v1.0.8/README.md",
+    "releaseTasks": "docs/delivery/releases/v1.0.8/AGENTFLOW_V1_0_8_PROJECTION_KERNEL_TASKS_V1.md",
+    "remainingRisks": [
+        {
+            "id": "v109-software-dev-reference-app",
+            "summary": "Software Dev Reference App certification remains outside Core Projection authority.",
+            "blocking": False,
+        },
+        {
+            "id": "projection-feedback-materialization",
+            "summary": "Feedback routes can propose Spec evolution, but authority materialization remains a separate gate.",
+            "blocking": False,
+        },
+    ],
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"v1.0.8 release certification failed: {failed}")
+PY
+  record_stage "v108-release-certification" "passed" "$(basename "$V108_RELEASE_CERTIFICATION_PATH")"
 }
 
 prepare_workspace() {
@@ -11031,6 +11341,7 @@ PY
   run_core_view_model_contract_gate
   run_core_decision_projection_read_model_gate
   run_v107_release_certification_gate
+  run_v108_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
