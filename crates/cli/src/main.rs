@@ -740,6 +740,7 @@ fn write_pack_release_gate_readiness(
                     "activePackId": software_projection.active_pack_id,
                     "packCount": software_projection.pack_list.len(),
                     "workbenchCount": software_projection.industry_workbenches.len(),
+                    "definitionStatus": software_projection.definition_status_index,
                     "viewModelMappingCount": software_projection.view_model_mapping_index.len(),
                     "invalidOrDeferredMappings": software_projection.view_model_mapping_index.iter()
                         .filter(|mapping| mapping.status == "invalid" || mapping.status == "deferred")
@@ -749,6 +750,15 @@ fn write_pack_release_gate_readiness(
                             "reason": mapping.reason,
                         }))
                         .collect::<Vec<_>>(),
+                    "disabledCommandCapabilities": software_projection.connector_capability_index.iter()
+                        .filter(|capability| !capability.command_execution_allowed)
+                        .map(|capability| serde_json::json!({
+                            "connectorId": capability.connector_id,
+                            "actionId": capability.action_id,
+                            "status": capability.status,
+                            "disabledReason": capability.disabled_reason,
+                        }))
+                        .collect::<Vec<_>>(),
                     "readiness": software_projection.pack_readiness,
                 },
                 {
@@ -756,6 +766,7 @@ fn write_pack_release_gate_readiness(
                     "activePackId": design_projection.active_pack_id,
                     "packCount": design_projection.pack_list.len(),
                     "workbenchCount": design_projection.industry_workbenches.len(),
+                    "definitionStatus": design_projection.definition_status_index,
                     "viewModelMappingCount": design_projection.view_model_mapping_index.len(),
                     "invalidOrDeferredMappings": design_projection.view_model_mapping_index.iter()
                         .filter(|mapping| mapping.status == "invalid" || mapping.status == "deferred")
@@ -763,6 +774,15 @@ fn write_pack_release_gate_readiness(
                             "pageId": mapping.page_id,
                             "status": mapping.status,
                             "reason": mapping.reason,
+                        }))
+                        .collect::<Vec<_>>(),
+                    "disabledCommandCapabilities": design_projection.connector_capability_index.iter()
+                        .filter(|capability| !capability.command_execution_allowed)
+                        .map(|capability| serde_json::json!({
+                            "connectorId": capability.connector_id,
+                            "actionId": capability.action_id,
+                            "status": capability.status,
+                            "disabledReason": capability.disabled_reason,
                         }))
                         .collect::<Vec<_>>(),
                     "readiness": design_projection.pack_readiness,

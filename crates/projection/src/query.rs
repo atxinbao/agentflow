@@ -23,8 +23,8 @@ use agentflow_pack::{
     software_dev_connector_definition, software_dev_domain_definition,
     software_dev_surface_definition, ui_design_connector_definition, ui_design_domain_definition,
     ui_design_surface_definition, validate_connector_definition, validate_domain_definition,
-    validate_surface_definition, PackConnectorDefinition, PackDomainDefinition, PackRegistryEntry,
-    PackSurfaceDefinition,
+    validate_surface_definition, PackConnector, PackConnectorDefinition, PackDomainDefinition,
+    PackRegistryEntry, PackSurfaceDefinition, PackValidationStatus,
 };
 use agentflow_spec::{
     read_requirement_preview_runtime, read_spec_issue, read_spec_project, SpecIssue, SpecPriority,
@@ -538,6 +538,16 @@ pub struct PackReadinessView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PackDefinitionStatusIndexItem {
+    pub pack_id: String,
+    pub definition_kind: String,
+    pub status: String,
+    pub reason: String,
+    pub command_execution_allowed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackDomainObjectIndexItem {
     pub pack_id: String,
     pub object_type_id: String,
@@ -580,6 +590,9 @@ pub struct PackConnectorCapabilityIndexItem {
     pub required_capability: String,
     pub writes_external: bool,
     pub evidence_output: String,
+    pub status: String,
+    pub disabled_reason: String,
+    pub command_execution_allowed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -603,6 +616,8 @@ pub struct PackIndustryWorkbenchView {
     pub pack_list: Vec<PackListItemView>,
     #[serde(default)]
     pub pack_readiness: Vec<PackReadinessView>,
+    #[serde(default)]
+    pub definition_status_index: Vec<PackDefinitionStatusIndexItem>,
     #[serde(default)]
     pub domain_object_index: Vec<PackDomainObjectIndexItem>,
     #[serde(default)]
@@ -1660,6 +1675,7 @@ pub fn get_pack_industry_workbench_view(
 
     let mut pack_list = Vec::new();
     let mut pack_readiness = Vec::new();
+    let mut definition_status_index = Vec::new();
     let mut domain_object_index = Vec::new();
     let mut surface_page_index = Vec::new();
     let mut view_model_mapping_index = Vec::new();
@@ -1690,6 +1706,7 @@ pub fn get_pack_industry_workbench_view(
             connector_valid: bundle.connector_valid,
             warnings: bundle.warnings(),
         });
+        definition_status_index.extend(bundle.definition_status_index());
         if active_pack_id.as_ref() != Some(&bundle.pack_id) {
             continue;
         }
@@ -1775,6 +1792,12 @@ pub fn get_pack_industry_workbench_view(
                             required_capability: action.required_capability.clone(),
                             writes_external: action.writes_external,
                             evidence_output: action.evidence_output.clone(),
+                            status: connector_projection_status(connector, bundle.connector_valid),
+                            disabled_reason: connector_disabled_reason(connector),
+                            command_execution_allowed: connector_command_execution_allowed(
+                                connector,
+                                bundle.connector_valid,
+                            ),
                         }
                     })
                 },
@@ -1790,6 +1813,7 @@ pub fn get_pack_industry_workbench_view(
         active_pack_id,
         pack_list,
         pack_readiness,
+        definition_status_index,
         domain_object_index,
         surface_page_index,
         view_model_mapping_index,
@@ -1808,6 +1832,7 @@ struct PackWorkbenchBundle {
     name: String,
     pack_type: String,
     pack_version: String,
+    validation_status: PackValidationStatus,
     manifest_path: String,
     registered: bool,
     manifest_valid: bool,
@@ -1822,10 +1847,91 @@ struct PackWorkbenchBundle {
 
 impl PackWorkbenchBundle {
     fn readiness_status(&self) -> String {
-        if self.manifest_valid && self.domain_valid && self.surface_valid && self.connector_valid {
+        if self.manifest_valid
+            && self.validation_status == PackValidationStatus::Valid
+            && self.domain_valid
+            && self.surface_valid
+            && self.connector_valid
+        {
             "ready".to_string()
         } else {
             "invalid".to_string()
+        }
+    }
+
+    fn command_execution_allowed(&self) -> bool {
+        self.readiness_status() == "ready"
+    }
+
+    fn definition_status_index(&self) -> Vec<PackDefinitionStatusIndexItem> {
+        vec![
+            self.definition_status_item(
+                "app",
+                self.manifest_valid && self.validation_status == PackValidationStatus::Valid,
+                if self.manifest_valid {
+                    "pack-app-definition-ready"
+                } else {
+                    "pack-manifest-invalid"
+                },
+            ),
+            self.definition_status_item(
+                "domain",
+                self.domain_valid,
+                if self.domain_valid {
+                    "pack-domain-ready"
+                } else {
+                    "pack-domain-invalid-or-missing"
+                },
+            ),
+            self.definition_status_item(
+                "surface",
+                self.surface_valid,
+                if self.surface_valid {
+                    "pack-surface-ready"
+                } else {
+                    "pack-surface-invalid-or-missing"
+                },
+            ),
+            self.definition_status_item(
+                "connector",
+                self.connector_valid,
+                if self.connector_valid {
+                    "pack-connector-ready"
+                } else {
+                    "pack-connector-invalid-or-missing"
+                },
+            ),
+        ]
+    }
+
+    fn definition_status_item(
+        &self,
+        definition_kind: &str,
+        valid: bool,
+        ready_or_invalid_reason: &str,
+    ) -> PackDefinitionStatusIndexItem {
+        let (status, reason) = if definition_kind == "app"
+            && self.manifest_valid
+            && self.validation_status != PackValidationStatus::Valid
+        {
+            (
+                "stale".to_string(),
+                format!(
+                    "pack-app-definition-validation-status-{}",
+                    enum_label(&self.validation_status)
+                ),
+            )
+        } else if valid {
+            ("ready".to_string(), ready_or_invalid_reason.to_string())
+        } else {
+            ("invalid".to_string(), ready_or_invalid_reason.to_string())
+        };
+        PackDefinitionStatusIndexItem {
+            pack_id: self.pack_id.clone(),
+            definition_kind: definition_kind.to_string(),
+            status,
+            reason,
+            command_execution_allowed: valid && self.command_execution_allowed(),
         }
     }
 
@@ -1866,6 +1972,29 @@ impl PackWorkbenchBundle {
         warnings.extend(self.definition_warnings.clone());
         warnings
     }
+}
+
+fn connector_projection_status(connector: &PackConnector, connector_valid: bool) -> String {
+    if !connector_valid {
+        "invalid".to_string()
+    } else if !connector_command_execution_allowed(connector, connector_valid) {
+        "deferred".to_string()
+    } else {
+        "ready".to_string()
+    }
+}
+
+fn connector_disabled_reason(connector: &PackConnector) -> String {
+    let disabled_reason = connector.disabled_reason.trim();
+    if disabled_reason.is_empty() || disabled_reason == "capability-registry.disabled-reason" {
+        String::new()
+    } else {
+        disabled_reason.to_string()
+    }
+}
+
+fn connector_command_execution_allowed(connector: &PackConnector, connector_valid: bool) -> bool {
+    connector_valid && connector_disabled_reason(connector).is_empty()
 }
 
 fn build_pack_bundles(project_root: &Path) -> Result<Vec<PackWorkbenchBundle>> {
@@ -1917,6 +2046,7 @@ fn pack_bundle_from_definitions(
         name: name.to_string(),
         pack_type: pack_type.to_string(),
         pack_version: pack_version.to_string(),
+        validation_status: PackValidationStatus::Valid,
         manifest_path: format!(".agentflow/packs/{pack_id}/pack.json"),
         registered: false,
         manifest_valid: true,
@@ -1971,6 +2101,7 @@ fn pack_bundle_from_registry_entry(entry: PackRegistryEntry) -> PackWorkbenchBun
         name: entry.name,
         pack_type: entry.pack_type.as_str().to_string(),
         pack_version: entry.pack_version,
+        validation_status: entry.validation_status,
         manifest_path: entry.manifest_path,
         registered: true,
         manifest_valid: entry.validation.valid,
@@ -3641,6 +3772,16 @@ mod tests {
                 && mapping.projection_ref == "projection.custom"
                 && mapping.status == "ready"
         }));
+        assert!(view.definition_status_index.iter().all(|status| {
+            status.pack_id == "custom-pack"
+                && status.status == "ready"
+                && status.command_execution_allowed
+        }));
+        assert!(view.connector_capability_index.iter().all(|capability| {
+            capability.pack_id == "custom-pack"
+                && capability.status == "ready"
+                && capability.command_execution_allowed
+        }));
     }
 
     #[test]
@@ -3674,6 +3815,84 @@ mod tests {
             .pack_readiness
             .iter()
             .any(|readiness| readiness.pack_id == "custom-pack" && readiness.status == "invalid"));
+    }
+
+    #[test]
+    fn pack_industry_workbench_keeps_invalid_definitions_out_of_command_paths() {
+        let dir = tempdir().unwrap();
+        write_pack_manifest_only(dir.path(), "custom-pack");
+
+        let view = get_pack_industry_workbench_view(dir.path(), Some("custom-pack")).unwrap();
+
+        for kind in ["domain", "surface", "connector"] {
+            let status = view
+                .definition_status_index
+                .iter()
+                .find(|status| status.pack_id == "custom-pack" && status.definition_kind == kind)
+                .unwrap();
+            assert_eq!(status.status, "invalid");
+            assert!(!status.command_execution_allowed);
+        }
+        assert!(view.connector_capability_index.is_empty());
+    }
+
+    #[test]
+    fn pack_industry_workbench_projects_disabled_provider_as_deferred() {
+        let dir = tempdir().unwrap();
+        write_pack_bundle_with_disabled_connector(
+            dir.path(),
+            "custom-pack",
+            "CustomObject",
+            "custom-workbench",
+            "provider-disabled-by-capability-registry",
+        );
+
+        let view = get_pack_industry_workbench_view(dir.path(), Some("custom-pack")).unwrap();
+
+        let capability = view
+            .connector_capability_index
+            .iter()
+            .find(|capability| capability.pack_id == "custom-pack")
+            .unwrap();
+        assert_eq!(capability.status, "deferred");
+        assert_eq!(
+            capability.disabled_reason,
+            "provider-disabled-by-capability-registry"
+        );
+        assert!(!capability.command_execution_allowed);
+    }
+
+    #[test]
+    fn pack_industry_workbench_projects_stale_app_definition_as_non_executable() {
+        let dir = tempdir().unwrap();
+        write_pack_bundle(
+            dir.path(),
+            "custom-pack",
+            "CustomObject",
+            "custom-workbench",
+        );
+        let manifest_path = dir.path().join(".agentflow/packs/custom-pack/pack.json");
+        let mut manifest = serde_json::from_str::<agentflow_pack::PackManifest>(
+            &fs::read_to_string(&manifest_path).unwrap(),
+        )
+        .unwrap();
+        manifest.validation_status = agentflow_pack::PackValidationStatus::Draft;
+        write_json(&manifest_path, &manifest);
+
+        let view = get_pack_industry_workbench_view(dir.path(), Some("custom-pack")).unwrap();
+
+        let app_status = view
+            .definition_status_index
+            .iter()
+            .find(|status| status.pack_id == "custom-pack" && status.definition_kind == "app")
+            .unwrap();
+        assert_eq!(app_status.status, "stale");
+        assert!(!app_status.command_execution_allowed);
+        assert!(view
+            .definition_status_index
+            .iter()
+            .filter(|status| status.pack_id == "custom-pack")
+            .any(|status| status.reason == "pack-app-definition-validation-status-draft"));
     }
 
     #[test]
@@ -3724,7 +3943,7 @@ mod tests {
     }
 
     fn write_pack_bundle(root: &Path, pack_id: &str, object_type: &str, workbench_id: &str) {
-        write_pack_bundle_with_mapping(root, pack_id, object_type, workbench_id, true);
+        write_pack_bundle_with_options(root, pack_id, object_type, workbench_id, true, None);
     }
 
     fn write_pack_bundle_without_view_mapping(
@@ -3733,15 +3952,33 @@ mod tests {
         object_type: &str,
         workbench_id: &str,
     ) {
-        write_pack_bundle_with_mapping(root, pack_id, object_type, workbench_id, false);
+        write_pack_bundle_with_options(root, pack_id, object_type, workbench_id, false, None);
     }
 
-    fn write_pack_bundle_with_mapping(
+    fn write_pack_bundle_with_disabled_connector(
+        root: &Path,
+        pack_id: &str,
+        object_type: &str,
+        workbench_id: &str,
+        disabled_reason: &str,
+    ) {
+        write_pack_bundle_with_options(
+            root,
+            pack_id,
+            object_type,
+            workbench_id,
+            true,
+            Some(disabled_reason),
+        );
+    }
+
+    fn write_pack_bundle_with_options(
         root: &Path,
         pack_id: &str,
         object_type: &str,
         workbench_id: &str,
         include_view_mapping: bool,
+        disabled_connector_reason: Option<&str>,
     ) {
         write_pack_manifest_only(root, pack_id);
         let pack_dir = root.join(".agentflow/packs").join(pack_id);
@@ -3862,7 +4099,7 @@ mod tests {
                     path_policy: "task-evidence".to_string(),
                     authority: false,
                 },
-                disabled_reason: String::new(),
+                disabled_reason: disabled_connector_reason.unwrap_or_default().to_string(),
                 command_boundary: agentflow_pack::ConnectorCommandBoundary {
                     runtime_command_required: true,
                     authority_write: false,

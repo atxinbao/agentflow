@@ -3603,6 +3603,22 @@ if not projection_views:
 for view in projection_views:
     if not view.get("viewModelMappingCount"):
         raise SystemExit("pack projection readiness must include view model mappings")
+    definition_status = view.get("definitionStatus") or []
+    if not definition_status:
+        raise SystemExit("pack projection readiness must include definition status")
+    invalid_status_values = sorted(
+        {
+            item.get("status")
+            for item in definition_status
+            if item.get("status") not in {"ready", "invalid", "deferred", "stale"}
+        }
+    )
+    if invalid_status_values:
+        raise SystemExit(f"pack projection definition status has invalid values: {invalid_status_values}")
+    if not all(item.get("commandExecutionAllowed") in {True, False} for item in definition_status):
+        raise SystemExit("pack projection definition status must expose commandExecutionAllowed")
+    if view.get("disabledCommandCapabilities") is None:
+        raise SystemExit("pack projection readiness must include disabled command capabilities")
 if api_plane.get("status") != "passed":
     raise SystemExit("pack api plane manifest did not pass")
 if software.get("status") != "completed":
