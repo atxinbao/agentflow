@@ -1,7 +1,7 @@
-# 006 - Spec-Driven AI OS Project Goal V2
+# 006 - Spec-Driven AI OS Project Goal V3
 
 创建日期：2026-06-26
-更新日期：2026-06-28
+更新日期：2026-06-30
 执行者：Codex
 
 ## Purpose
@@ -29,7 +29,7 @@ AgentFlow 的底层框架是：
 ```text
 AgentFlow AI OS Project
 = Core OS Runtime
-+ Industry AgentFlow App
++ Industry Product Surface
 ```
 
 其中：
@@ -45,7 +45,16 @@ Core OS Runtime
 ```
 
 ```text
-Industry AgentFlow App
+Industry Product Surface
+= Paid Report Flow
+or Managed Project Flow
+or Assistant / Ops Flow
+```
+
+每个 Industry Product Surface 由三类内置 Pack 支撑：
+
+```text
+Industry Product Surface
 = Domain Pack
 + Surface Pack
 + Connector Pack
@@ -53,7 +62,13 @@ Industry AgentFlow App
 
 Core OS Runtime 只提供通用项目运行能力。
 
-Industry AgentFlow App 定义具体行业的对象、页面、工具和交付方式。
+Industry Product Surface 定义具体行业的输入、对象、页面或报告、工具和交付方式。
+
+行业层不一定是完整 App。它可以是：
+
+- Paid Report Flow：用户输入少量信息并付费，AgentFlow 内部完成一次受控 Run，交付一份报告；
+- Managed Project Flow：用户确认目标，AgentFlow 管理多轮任务、证据、验收和交付；
+- Assistant / Ops Flow：用户授权持续监控、提醒、执行和反馈。
 
 Software Dev 是第一个官方 Reference App，不是 Core OS 的内核目标。
 
@@ -70,6 +85,33 @@ AgentFlow 的产品目标是：
 ```text
 让团队用 Spec 作为方向盘，驱动 Codex / Claude Code / 其他 agents 完成可控、可追踪、可验收、可交付的项目工作。
 ```
+
+商业产品层面的目标是：
+
+```text
+AgentFlow 不先卖 Agent。
+AgentFlow 卖的是可交付结果。
+```
+
+对用户来说，最清晰的付费路径是：
+
+```text
+输入信息
+-> 支付
+-> AgentFlow 内部完成一次受控 Run
+-> 交付可验收结果
+```
+
+所以 AgentFlow 的真实产品入口可以是一次性服务，而不一定是工作台：
+
+```text
+Paid Report Flow
+= Product Order
++ One-shot AgentFlow Run
++ Report Delivery
+```
+
+例如八字合盘报告、合同审查报告、商业尽调摘要、留学申请评估、装修方案报告、品牌命名报告，都可以复用同一套 Core OS Runtime，只更换 Domain Pack、Surface Pack 和 Connector Pack。
 
 Software Dev 是第一个官方 Reference App，因为它最容易验证完整闭环：
 
@@ -198,7 +240,9 @@ PRD、技术方案、任务、验收和交付都从 Spec Bundle 派生。
 
 Core OS 只定义 slice 合同。
 
-Industry App 负责把 slice 映射成行业语言。例如 Software Dev App 可以把 Task Slice 映射成 issue，把 Output Slice 映射成 PR / release / changelog。
+Industry Product Surface 负责把 slice 映射成行业语言。例如 Software Dev Managed Project Flow 可以把 Task Slice 映射成 issue，把 Output Slice 映射成 PR / release / changelog。
+
+Industry Product Surface 也可以把 slice 映射成报告型语言。例如 Paid Report Flow 可以把 Product Slice 映射成订单目标，把 Task Slice 映射成一次性内部 Run，把 Output Slice 映射成报告交付、退款边界和反馈入口。
 
 ## Request Routing
 
@@ -247,6 +291,19 @@ Architecture Plan
 ```
 
 这些概念应由 Software Dev App 通过 Domain Pack、Surface Pack 和 Connector Pack 声明。
+
+Core OS Runtime 也不能把报告型商业对象写死为唯一模型：
+
+```text
+Order
+Payment
+Refund
+Customer
+Report Template
+Report Delivery
+```
+
+这些概念属于 Paid Report Flow 的 Product Surface，可以通过 Surface Pack、Connector Pack 和商业系统连接声明。Core 只需要知道这次 Flow 是否被授权执行、证据是否齐全、Decision 是否允许交付。
 
 ## First Reference App: Software Dev
 
@@ -358,6 +415,8 @@ Feedback
 - Pack marketplace；
 - 视频制作行业壳；
 - 金融 / 制造 / 运营行业壳；
+- 把 Paid Report Flow 写死为唯一商业形态；
+- 把 Order / Payment / Refund 写进 Core OS Runtime；
 - 默认中心化 Message Bus；
 - 多租户云平台优先；
 - 把 GitHub issues 作为 AgentFlow authority；
@@ -370,6 +429,9 @@ Feedback
 - Domain Pack；
 - Surface Pack；
 - Connector Pack；
+- Paid Report Flow；
+- Managed Project Flow；
+- Assistant / Ops Flow；
 - Runtime API / SDK；
 - Event / Projection；
 - Audit sidecar；
@@ -380,7 +442,7 @@ Feedback
 后续所有产品、工程和 UI 决策都必须先回答：
 
 ```text
-它是否增强 Core OS Runtime，或者增强某个 Industry AgentFlow App 在 Core 上的闭环能力？
+它是否增强 Core OS Runtime，或者增强某个 Industry Product Surface 在 Core 上的闭环交付能力？
 ```
 
 如果答案是否定的，默认不进入当前产品主线。
@@ -398,6 +460,14 @@ Decision
 Delivery
 Feedback
 Spec Evolution
+```
+
+如果是商业产品能力，还必须说明它卖的是什么结果：
+
+```text
+Paid Report Flow    卖一份可验收报告
+Managed Project Flow 卖一次可追踪项目交付
+Assistant / Ops Flow 卖持续托管执行结果
 ```
 
 ## Relationship To Versions

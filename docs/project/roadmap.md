@@ -1,6 +1,6 @@
 # Project Roadmap
 
-更新日期：2026-06-28
+更新日期：2026-06-30
 执行者：Codex
 
 ## Purpose
@@ -35,10 +35,12 @@ AgentFlow = Spec-Driven AI OS Project
 
 ```text
 Agent 只是执行器，Spec 才是方向盘。
-Core OS 提供底层能力，行业是运行在 Core 上的 App。
+Core OS 提供底层能力，行业是运行在 Core 上的 Product Surface。
 ```
 
 AgentFlow 后续版本必须先把 Core OS Runtime 的通用能力稳住。Software Dev 是第一个官方 Reference App，用来证明 Core 可运行，不得被写死进 Core。
+
+商业产品目标是卖可交付结果，不是先卖 Agent。行业层可以是 Paid Report Flow、Managed Project Flow 或 Assistant / Ops Flow。
 
 ## System Formula
 
@@ -47,7 +49,7 @@ AgentFlow 的系统公式是：
 ```text
 AgentFlow AI OS Project
 = Core OS Runtime
-+ Industry AgentFlow App
++ Industry Product Surface
 ```
 
 其中：
@@ -63,7 +65,16 @@ Core OS Runtime
 ```
 
 ```text
-Industry AgentFlow App
+Industry Product Surface
+= Paid Report Flow
+or Managed Project Flow
+or Assistant / Ops Flow
+```
+
+每个 Industry Product Surface 由内置 Domain Pack、Surface Pack 和 Connector Pack 支撑：
+
+```text
+Industry Product Surface
 = Domain Pack
 + Surface Pack
 + Connector Pack
