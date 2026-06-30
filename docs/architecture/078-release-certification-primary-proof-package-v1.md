@@ -61,6 +61,26 @@ The workflow also keeps a negative check that deletes one Decision Kernel proof
 from a temporary copy and confirms that the same proof-presence validator rejects
 the broken package.
 
+## Quick-Audit Manifest Truthfulness
+
+The small certification package must include `quick-audit-manifest.json`.
+
+Each entry must distinguish:
+
+- `fullArtifactExists`: the file exists in the full release-gate artifact tree;
+- `certificationArtifactExists`: the file exists in the small certification
+  artifact tree;
+- `includedInQuickAuditPackage`: the file is actually included in the uploaded
+  quick-audit package.
+
+The manifest must not claim `certificationArtifactExists: true` or
+`includedInQuickAuditPackage: true` unless the file is physically present in the
+small package.
+
+The workflow must run a negative check that removes a required primary proof
+from a copied quick-audit package while leaving the original manifest intact.
+The manifest reader must reject that misleading `exists=true` state.
+
 ## Boundary
 
 This contract only controls artifact packaging and proof presence. It does not

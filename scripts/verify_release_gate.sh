@@ -6093,7 +6093,7 @@ roadmap_text = roadmap_path.read_text(encoding="utf-8")
 required_goal_terms = [
     "Spec-Driven AI OS Project",
     "Core OS Runtime",
-    "Industry AgentFlow App",
+    "Industry Product Surface",
     "Agent 只是执行器",
     "Spec 才是方向盘",
     "Software Dev 是第一个官方 Reference App",
@@ -6109,6 +6109,7 @@ required_roadmap_terms = [
     "Spec Loop",
     "Issue Loop",
     "Feedback Loop",
+    "Industry Product Surface",
     "v1.0.3",
     "Core Spec Kernel / Spec Bundle Workspace",
     "v1.0.9",
@@ -6125,6 +6126,7 @@ payload = {
     "roadmapPath": "docs/project/roadmap.md",
     "productGoal": "Spec-Driven AI OS Project",
     "coreRuntime": "Core OS Runtime",
+    "productSurface": "Industry Product Surface",
     "referenceApp": "Software Dev Reference App",
     "planningChain": [
         "docs/project/goal.md",

@@ -353,6 +353,117 @@ jobs:
 
           check_primary_proofs "$certification_dir"
 
+          primary_proof_list="${RUNNER_TEMP:-/tmp}/release-gate-primary-proofs.txt"
+          printf '%s\n' "${primary_proofs[@]}" > "$primary_proof_list"
+
+          python3 - "$artifact_dir" "$certification_dir" "$primary_proof_list" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+          import time
+
+          artifact_dir = pathlib.Path(sys.argv[1])
+          certification_dir = pathlib.Path(sys.argv[2])
+          primary_proof_list = pathlib.Path(sys.argv[3])
+          manifest_path = certification_dir / "quick-audit-manifest.json"
+          required_primary_proofs = [
+              line.strip()
+              for line in primary_proof_list.read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+
+          def file_meta(path):
+              return {
+                  "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                  "bytes": path.stat().st_size,
+              }
+
+          full_paths = {
+              path.relative_to(artifact_dir).as_posix()
+              for path in artifact_dir.rglob("*")
+              if path.is_file()
+          }
+          quick_paths = {
+              path.relative_to(certification_dir).as_posix()
+              for path in certification_dir.rglob("*")
+              if path.is_file() and path.name != manifest_path.name
+          }
+          all_paths = sorted(full_paths | quick_paths | set(required_primary_proofs))
+
+          entries = []
+          errors = []
+          for relative in all_paths:
+              full_path = artifact_dir / relative
+              quick_path = certification_dir / relative
+              full_exists = full_path.is_file()
+              quick_exists = quick_path.is_file()
+              included = quick_exists
+              entry = {
+                  "path": relative,
+                  "fullArtifactExists": full_exists,
+                  "certificationArtifactExists": quick_exists,
+                  "includedInQuickAuditPackage": included,
+                  "requiredPrimaryProof": relative in required_primary_proofs,
+              }
+              if full_exists:
+                  entry["fullArtifact"] = file_meta(full_path)
+              if quick_exists:
+                  entry["quickAuditArtifact"] = file_meta(quick_path)
+              if relative in required_primary_proofs and not (full_exists and quick_exists and included):
+                  errors.append(f"required primary proof not truthfully included: {relative}")
+              if entry["certificationArtifactExists"] != quick_exists:
+                  errors.append(f"certificationArtifactExists drifted from filesystem truth: {relative}")
+              if entry["includedInQuickAuditPackage"] != quick_exists:
+                  errors.append(f"includedInQuickAuditPackage drifted from filesystem truth: {relative}")
+              entries.append(entry)
+
+          entry_by_path = {entry["path"]: entry for entry in entries}
+          for relative in sorted(quick_paths):
+              entry = entry_by_path.get(relative)
+              if not entry or not entry["includedInQuickAuditPackage"]:
+                  errors.append(f"quick package file missing from truthful manifest: {relative}")
+
+          payload = {
+              "version": "agentflow-release-certification-quick-audit-manifest.v1",
+              "status": "failed" if errors else "passed",
+              "artifactRoot": str(artifact_dir),
+              "certificationRoot": str(certification_dir),
+              "requiredPrimaryProofs": required_primary_proofs,
+              "entries": entries,
+              "failedTruthfulness": errors,
+              "checkedAt": int(time.time()),
+          }
+          manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          if errors:
+              raise SystemExit("; ".join(errors))
+          PY
+
+          python3 - "$certification_dir/quick-audit-manifest.json" "$certification_dir" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          manifest_path = pathlib.Path(sys.argv[1])
+          certification_dir = pathlib.Path(sys.argv[2])
+          payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+          errors = []
+          for entry in payload.get("entries", []):
+              relative = entry.get("path")
+              quick_path = certification_dir / relative
+              quick_exists = quick_path.is_file()
+              if entry.get("certificationArtifactExists") is True and not quick_exists:
+                  errors.append(f"manifest claims missing certification artifact exists: {relative}")
+              if entry.get("includedInQuickAuditPackage") is True and not quick_exists:
+                  errors.append(f"manifest claims missing quick-audit artifact is included: {relative}")
+              if quick_exists and entry.get("includedInQuickAuditPackage") is not True:
+                  errors.append(f"manifest omits included quick-audit artifact: {relative}")
+          if payload.get("status") != "passed":
+              errors.append("quick-audit manifest status is not passed")
+          if errors:
+              raise SystemExit("; ".join(errors))
+          PY
+
           negative_dir="${RUNNER_TEMP:-/tmp}/release-gate-certification-primary-proof-negative"
           rm -rf "$negative_dir"
           cp -R "$certification_dir" "$negative_dir"
@@ -363,6 +474,33 @@ jobs:
           else
             cat /tmp/release-gate-certification-primary-proof-negative.log
             echo "primary proof negative check passed"
+          fi
+
+          if python3 - "$negative_dir/quick-audit-manifest.json" "$negative_dir" >/tmp/release-gate-certification-manifest-negative.log 2>&1 <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          manifest_path = pathlib.Path(sys.argv[1])
+          certification_dir = pathlib.Path(sys.argv[2])
+          payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+          errors = []
+          for entry in payload.get("entries", []):
+              relative = entry.get("path")
+              quick_path = certification_dir / relative
+              if entry.get("certificationArtifactExists") is True and not quick_path.is_file():
+                  errors.append(f"manifest claims missing certification artifact exists: {relative}")
+              if entry.get("includedInQuickAuditPackage") is True and not quick_path.is_file():
+                  errors.append(f"manifest claims missing quick-audit artifact is included: {relative}")
+          if errors:
+              raise SystemExit("; ".join(errors))
+          PY
+          then
+            echo "quick-audit manifest negative check failed: misleading exists=true state was accepted" >&2
+            exit 1
+          else
+            cat /tmp/release-gate-certification-manifest-negative.log
+            echo "quick-audit manifest negative check passed"
           fi
 
       - name: Upload certification artifacts
