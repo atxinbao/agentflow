@@ -94,6 +94,7 @@ RUNTIME_API_SDK_COMPATIBILITY_PATH="$RUNTIME_DIR/runtime-api-sdk-compatibility.j
 FILESYSTEM_CONTRACT_PATH="$RUNTIME_DIR/filesystem-contract.json"
 PACK_CONTRACT_COMPATIBILITY_PATH="$RUNTIME_DIR/pack-contract-compatibility.json"
 PROJECTION_READMODEL_CONTRACT_PATH="$RUNTIME_DIR/projection-readmodel-contract.json"
+CORE_PROJECTION_KERNEL_CONTRACT_PATH="$RUNTIME_DIR/core-projection-kernel-contract.json"
 EVIDENCE_ACCEPTANCE_CONTRACT_PATH="$RUNTIME_DIR/evidence-acceptance-contract.json"
 EXECUTOR_ADAPTER_CONTRACT_PATH="$RUNTIME_DIR/executor-adapter-contract.json"
 REPLAY_MIGRATION_UPGRADE_CERTIFICATION_PATH="$RUNTIME_DIR/replay-migration-upgrade-certification.json"
@@ -441,6 +442,7 @@ proof_chain = [
     {"stage": "core-evidence-to-decision-gate", "label": "Core Evidence-to-Decision Gate"},
     {"stage": "core-completion-commit-authority", "label": "Core Completion Commit Authority"},
     {"stage": "core-delivery-readiness-audit-trigger", "label": "Core Delivery Readiness / Optional Audit Trigger"},
+    {"stage": "core-projection-kernel-contract", "label": "Core Projection Kernel Contract"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -4326,6 +4328,134 @@ if payload["status"] != "passed":
     raise SystemExit("projection read model contract fixture failed")
 PY
   record_stage "projection-readmodel-contract" "passed" "$(basename "$PROJECTION_READMODEL_CONTRACT_PATH")"
+}
+
+run_core_projection_kernel_contract_gate() {
+  record_stage "core-projection-kernel-contract" "started" "$CORE_PROJECTION_KERNEL_CONTRACT_PATH"
+  python3 - "$ROOT" "$CORE_PROJECTION_KERNEL_CONTRACT_PATH" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+out_path = pathlib.Path(sys.argv[2])
+doc_path = root / "docs/architecture/079-core-projection-kernel-contract-v1.md"
+source_path = root / "crates/projection/src/model.rs"
+
+doc_text = doc_path.read_text(encoding="utf-8") if doc_path.is_file() else ""
+source_text = source_path.read_text(encoding="utf-8") if source_path.is_file() else ""
+
+required_sections = [
+    "## Authority Boundary",
+    "## Accepted Source Refs",
+    "## Read Model Outputs",
+    "## Lifecycle Semantics",
+    "## Forbidden Authority Writes",
+    "## Negative Fixtures",
+    "## Release Gate Evidence",
+]
+required_doc_phrases = [
+    "Projection 不是 authority",
+    ".agentflow/spec/**",
+    ".agentflow/events/**",
+    ".agentflow/tasks/<issue-id>/evidence/**",
+    ".agentflow/runtime/decisions/**",
+    "ProviderSessionRef",
+    "GitHubIssueRef",
+    "runtime/core-projection-kernel-contract.json",
+]
+accepted_source_refs = [
+    ".agentflow/spec/**",
+    ".agentflow/events/**",
+    ".agentflow/tasks/<issue-id>/evidence/**",
+    ".agentflow/runtime/decisions/**",
+]
+forbidden_authority_writes = [
+    "Spec",
+    "Runtime",
+    "Evidence",
+    "Decision",
+    "Completion",
+    "Delivery",
+    "Audit",
+]
+required_fields = [
+    "version",
+    "status",
+    "sourceRefs",
+    "readModelVersion",
+    "viewModelVersion",
+    "freshness",
+    "rebuiltAt",
+]
+lifecycle_semantics = ["fresh", "stale", "invalid", "deferred"]
+negative_fixtures = [
+    "projection-ref-as-authority",
+    "provider-session-as-authority",
+    "github-issue-as-authority",
+]
+source_symbols = [
+    "PROJECTION_KERNEL_CONTRACT_VERSION",
+    "ProjectionKernelContract",
+    "projection_kernel_contract",
+    "projection_kernel_rejects_authority_write",
+]
+
+missing_sections = [section for section in required_sections if section not in doc_text]
+missing_doc_phrases = [phrase for phrase in required_doc_phrases if phrase not in doc_text]
+missing_source_refs = [ref for ref in accepted_source_refs if ref not in source_text]
+missing_forbidden_writes = [target for target in forbidden_authority_writes if f'"{target}"' not in source_text]
+missing_required_fields = [field for field in required_fields if f'"{field}"' not in source_text]
+missing_lifecycle_states = [state for state in lifecycle_semantics if f'"{state}"' not in source_text]
+missing_negative_fixtures = [fixture for fixture in negative_fixtures if fixture not in source_text]
+missing_source_symbols = [symbol for symbol in source_symbols if symbol not in source_text]
+
+payload = {
+    "version": "agentflow-core-projection-kernel-contract.v1",
+    "status": "passed",
+    "contractVersion": "projection-kernel-contract.v1",
+    "contractStatus": "active",
+    "docPath": "docs/architecture/079-core-projection-kernel-contract-v1.md",
+    "sourcePath": "crates/projection/src/model.rs",
+    "writesAuthority": False,
+    "projectionAuthority": False,
+    "acceptedSourceRefs": accepted_source_refs,
+    "forbiddenAuthorityWrites": forbidden_authority_writes,
+    "requiredFields": required_fields,
+    "lifecycleSemantics": lifecycle_semantics,
+    "negativeFixtures": negative_fixtures,
+    "missingSections": missing_sections,
+    "missingDocPhrases": missing_doc_phrases,
+    "missingSourceRefs": missing_source_refs,
+    "missingForbiddenWrites": missing_forbidden_writes,
+    "missingRequiredFields": missing_required_fields,
+    "missingLifecycleStates": missing_lifecycle_states,
+    "missingNegativeFixtures": missing_negative_fixtures,
+    "missingSourceSymbols": missing_source_symbols,
+    "checkedAt": int(time.time()),
+}
+
+if any(
+    [
+        missing_sections,
+        missing_doc_phrases,
+        missing_source_refs,
+        missing_forbidden_writes,
+        missing_required_fields,
+        missing_lifecycle_states,
+        missing_negative_fixtures,
+        missing_source_symbols,
+    ]
+):
+    payload["status"] = "failed"
+
+out_path.parent.mkdir(parents=True, exist_ok=True)
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("core projection kernel contract fixture failed")
+PY
+  record_stage "core-projection-kernel-contract" "passed" "$(basename "$CORE_PROJECTION_KERNEL_CONTRACT_PATH")"
 }
 
 run_evidence_acceptance_contract_gate() {
@@ -10421,6 +10551,7 @@ PY
   run_core_evidence_to_decision_gate
   run_core_completion_commit_authority_gate
   run_core_delivery_readiness_audit_trigger_gate
+  run_core_projection_kernel_contract_gate
   run_core_decision_projection_read_model_gate
   run_v107_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
