@@ -12,9 +12,9 @@ pub mod storage;
 pub use model::{
     projection_kernel_contract, projection_kernel_core_read_model_schemas,
     projection_kernel_read_model_negative_fixtures, projection_kernel_rejects_authority_write,
-    CompletionDecisionIndex, CompletionDecisionIndexEntry, CompletionDecisionProjection,
-    CoreReadModelSchema, CoreReadModelSchemaNegativeFixture, IssueStatusIndex,
-    IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
+    projection_view_model_contract, CompletionDecisionIndex, CompletionDecisionIndexEntry,
+    CompletionDecisionProjection, CoreReadModelSchema, CoreReadModelSchemaNegativeFixture,
+    IssueStatusIndex, IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
     ProjectCompletionProjection, ProjectExternalReviewProjection, ProjectIssueLanes,
     ProjectProjection, ProjectReleaseProjection, ProjectionAcceptanceSubGateSummary,
     ProjectionAcceptanceSummary, ProjectionAcceptanceTraceabilitySummary, ProjectionAuditSummary,
@@ -22,14 +22,16 @@ pub use model::{
     ProjectionKernelLifecycleSemantics, ProjectionKernelNegativeFixture, ProjectionKernelSourceRef,
     ProjectionPhase, ProjectionPublicDelivery, ProjectionReplayFailure, ProjectionReplayReport,
     ProjectionReplayStatus, ProjectionRuntimeSummary, ProjectionSessionSummary, ProjectionSummary,
+    ProjectionViewModelContract, ProjectionViewModelFieldMapping,
+    ProjectionViewModelNegativeFixture, ProjectionViewModelSurfaceContract,
     RequirementPreviewIndex, RequirementPreviewIndexEntry, RequirementPreviewProjection,
     SpecLoopActionProposalProjection, SpecLoopProjection, SpecLoopStageProjection,
     SpecLoopTraceabilityEdge, TaskProjection, TaskTimelineEvent, TaskTimelineItem,
     COMPLETION_DECISION_INDEX_VERSION, COMPLETION_DECISION_PROJECTION_VERSION,
     ISSUE_STATUS_INDEX_VERSION, PROJECTION_KERNEL_CONTRACT_VERSION,
-    PROJECTION_REPLAY_REPORT_VERSION, PROJECT_PROJECTION_VERSION,
-    REQUIREMENT_PREVIEW_INDEX_VERSION, REQUIREMENT_PREVIEW_PROJECTION_VERSION,
-    SPEC_LOOP_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
+    PROJECTION_REPLAY_REPORT_VERSION, PROJECTION_VIEW_MODEL_CONTRACT_VERSION,
+    PROJECT_PROJECTION_VERSION, REQUIREMENT_PREVIEW_INDEX_VERSION,
+    REQUIREMENT_PREVIEW_PROJECTION_VERSION, SPEC_LOOP_PROJECTION_VERSION, TASK_PROJECTION_VERSION,
 };
 pub use projector::{rebuild_projections, rebuild_projections_with_replay_report};
 pub use query::{

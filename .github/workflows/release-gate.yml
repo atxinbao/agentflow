@@ -266,6 +266,7 @@ jobs:
               -o -name 'event-replay-projection-report.json' \
               -o -name 'event-replay-projection-failure-report.json' \
               -o -name 'core-read-model-schema.json' \
+              -o -name 'core-view-model-contract.json' \
               -o -name 'core-decision-projection-read-model.json' \
               -o -name 'core-decision-projection-read-model-rust-test.log' \
               -o -name 'v107-release-certification.json' \
@@ -343,6 +344,7 @@ jobs:
             runtime/event-replay-projection-report.json \
             runtime/event-replay-projection-failure-report.json \
             runtime/core-read-model-schema.json \
+            runtime/core-view-model-contract.json \
             runtime/core-decision-projection-read-model.json \
             runtime/core-decision-projection-read-model-rust-test.log \
             runtime/v107-release-certification.json
