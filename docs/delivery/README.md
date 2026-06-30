@@ -1,6 +1,6 @@
 # Delivery
 
-更新日期：2026-06-29
+更新日期：2026-06-30
 执行者：Codex
 
 ## Purpose
@@ -21,14 +21,14 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.0.7/README.md](releases/v1.0.7/README.md) | 当前发布基线：Core Decision Kernel |
-| [releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md](releases/v1.0.7/AGENTFLOW_V1_0_7_DECISION_KERNEL_TASKS_V1.md) | v1.0.7 Decision Kernel tasks |
+| [releases/v1.0.8/README.md](releases/v1.0.8/README.md) | 当前发布基线：Core Projection Kernel |
+| [releases/v1.0.8/AGENTFLOW_V1_0_8_PROJECTION_KERNEL_TASKS_V1.md](releases/v1.0.8/AGENTFLOW_V1_0_8_PROJECTION_KERNEL_TASKS_V1.md) | v1.0.8 Projection Kernel tasks |
 
 ## Next Release Planning
 
 | 路径 | 作用 |
 | --- | --- |
-| `v1.0.8` | 下一版计划：Projection Kernel |
+| `v1.0.9` | 下一版计划：Software Dev Reference App certification |
 
 ## Historical Delivery
 

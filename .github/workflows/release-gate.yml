@@ -272,6 +272,7 @@ jobs:
               -o -name 'core-decision-projection-read-model.json' \
               -o -name 'core-decision-projection-read-model-rust-test.log' \
               -o -name 'v107-release-certification.json' \
+              -o -name 'v108-release-certification.json' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
 
@@ -351,7 +352,8 @@ jobs:
             runtime/core-view-model-contract.json \
             runtime/core-decision-projection-read-model.json \
             runtime/core-decision-projection-read-model-rust-test.log \
-            runtime/v107-release-certification.json
+            runtime/v107-release-certification.json \
+            runtime/v108-release-certification.json
           )
 
           check_primary_proofs() {
