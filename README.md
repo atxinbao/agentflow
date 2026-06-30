@@ -1,6 +1,6 @@
 # AgentFlow
 
-更新日期：2026-06-29
+更新日期：2026-06-30
 执行者：Codex
 
 ## Project Goal
@@ -17,14 +17,21 @@ AgentFlow = Spec-Driven AI OS Project
 Agent 只是执行器，Spec 才是方向盘。
 ```
 
-AgentFlow 不是单一行业工具，不是 Agent Runner，也不是 Spec 文档生成器。AgentFlow 要做的是让团队用 Spec 驱动项目对象、动作、证据、验收、交付、反馈和投影，最终形成可控、可追踪、可验收、可交付的 AI 项目操作系统。
+AgentFlow 不是单一行业工具，不是 Agent Runner，也不是 Spec 文档生成器。AgentFlow 要做的是让用户或团队用 Spec 驱动项目对象、动作、证据、验收、交付、反馈和投影，最终形成可控、可追踪、可验收、可交付的 AI 项目操作系统。
+
+商业产品目标：
+
+```text
+AgentFlow 不先卖 Agent。
+AgentFlow 卖的是可交付结果。
+```
 
 ## System Formula
 
 ```text
 AgentFlow AI OS Project
 = Core OS Runtime
-+ Industry AgentFlow App
++ Industry Product Surface
 ```
 
 其中：
@@ -40,13 +47,24 @@ Core OS Runtime
 ```
 
 ```text
-Industry AgentFlow App
-= Domain Pack
-+ Surface Pack
-+ Connector Pack
+Industry Product Surface
+= Paid Report Flow
+or Managed Project Flow
+or Assistant / Ops Flow
 ```
 
-Core OS Runtime 提供通用项目运行能力。Industry AgentFlow App 定义具体行业的对象、页面、工具和交付方式。
+每个 Industry Product Surface 由内置 Domain Pack、Surface Pack 和 Connector Pack 支撑。
+
+Core OS Runtime 提供通用项目运行能力。Industry Product Surface 定义具体行业的输入、对象、页面或报告、工具和交付方式。
+
+最直接的商业入口是 Paid Report Flow：
+
+```text
+用户输入信息
+-> 支付
+-> AgentFlow 内部完成一次受控 Run
+-> 交付可验收报告
+```
 
 Software Dev 是第一个官方 Reference App，用来证明 Core OS Runtime 可以跑完整闭环；它不是 Core OS 的内核目标，也不能把 `Issue / PR / Release / Patch` 等行业词汇写死进 Core。
 
