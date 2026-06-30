@@ -9,6 +9,7 @@ pub const SPEC_LOOP_PROJECTION_VERSION: &str = "spec-loop-projection.v1";
 pub const COMPLETION_DECISION_PROJECTION_VERSION: &str = "completion-decision-projection.v1";
 pub const COMPLETION_DECISION_INDEX_VERSION: &str = "completion-decision-index.v1";
 pub const PROJECTION_KERNEL_CONTRACT_VERSION: &str = "projection-kernel-contract.v1";
+pub const PROJECTION_VIEW_MODEL_CONTRACT_VERSION: &str = "projection-view-model-contract.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,6 +66,47 @@ pub struct CoreReadModelSchemaNegativeFixture {
     pub invalid_combination: Vec<String>,
     pub expected_result: String,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionViewModelFieldMapping {
+    pub read_model_field: String,
+    pub view_model_field: String,
+    pub surface_kind: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionViewModelSurfaceContract {
+    pub surface_id: String,
+    pub source_read_model_kinds: Vec<String>,
+    pub required_view_fields: Vec<String>,
+    pub command_surface: String,
+    pub allowed_action_kind: String,
+    pub state_fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionViewModelNegativeFixture {
+    pub fixture_id: String,
+    pub forbidden_read_path: String,
+    pub expected_result: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionViewModelContract {
+    pub version: String,
+    pub status: String,
+    pub writes_authority: bool,
+    pub reads_authority_directly: bool,
+    pub required_states: Vec<String>,
+    pub field_mappings: Vec<ProjectionViewModelFieldMapping>,
+    pub surfaces: Vec<ProjectionViewModelSurfaceContract>,
+    pub negative_fixtures: Vec<ProjectionViewModelNegativeFixture>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -318,6 +360,133 @@ pub fn projection_kernel_read_model_negative_fixtures() -> Vec<CoreReadModelSche
             reason: "Delivery read model must keep public delivery refs.".to_string(),
         },
     ]
+}
+
+pub fn projection_view_model_contract() -> ProjectionViewModelContract {
+    ProjectionViewModelContract {
+        version: PROJECTION_VIEW_MODEL_CONTRACT_VERSION.to_string(),
+        status: "active".to_string(),
+        writes_authority: false,
+        reads_authority_directly: false,
+        required_states: vec![
+            "fresh".to_string(),
+            "stale".to_string(),
+            "invalid".to_string(),
+            "deferred".to_string(),
+        ],
+        field_mappings: vec![
+            ProjectionViewModelFieldMapping {
+                read_model_field: "objectId".to_string(),
+                view_model_field: "primaryObjectRef".to_string(),
+                surface_kind: "identity".to_string(),
+            },
+            ProjectionViewModelFieldMapping {
+                read_model_field: "status".to_string(),
+                view_model_field: "sections.status".to_string(),
+                surface_kind: "display".to_string(),
+            },
+            ProjectionViewModelFieldMapping {
+                read_model_field: "freshness".to_string(),
+                view_model_field: "staleInvalidDeferredState".to_string(),
+                surface_kind: "state".to_string(),
+            },
+            ProjectionViewModelFieldMapping {
+                read_model_field: "reasonLinks".to_string(),
+                view_model_field: "disabledReasons".to_string(),
+                surface_kind: "explanation".to_string(),
+            },
+            ProjectionViewModelFieldMapping {
+                read_model_field: "evidenceLinks".to_string(),
+                view_model_field: "sections.evidence".to_string(),
+                surface_kind: "evidence".to_string(),
+            },
+            ProjectionViewModelFieldMapping {
+                read_model_field: "authorityBoundary".to_string(),
+                view_model_field: "readOnlyBoundary".to_string(),
+                surface_kind: "boundary".to_string(),
+            },
+        ],
+        surfaces: vec![
+            ProjectionViewModelSurfaceContract {
+                surface_id: "industry.project-home".to_string(),
+                source_read_model_kinds: vec!["spec".to_string(), "decision".to_string()],
+                required_view_fields: vec![
+                    "viewVersion".to_string(),
+                    "viewId".to_string(),
+                    "sourceReadModelRefs".to_string(),
+                    "primaryObjectRef".to_string(),
+                    "sections".to_string(),
+                    "actions".to_string(),
+                    "disabledReasons".to_string(),
+                    "staleInvalidDeferredState".to_string(),
+                ],
+                command_surface: "runtime-action-proposal-only".to_string(),
+                allowed_action_kind: "proposal".to_string(),
+                state_fields: vec![
+                    "fresh".to_string(),
+                    "stale".to_string(),
+                    "invalid".to_string(),
+                ],
+            },
+            ProjectionViewModelSurfaceContract {
+                surface_id: "industry.task-workbench".to_string(),
+                source_read_model_kinds: vec![
+                    "spec".to_string(),
+                    "evidence".to_string(),
+                    "decision".to_string(),
+                    "delivery".to_string(),
+                ],
+                required_view_fields: vec![
+                    "viewVersion".to_string(),
+                    "viewId".to_string(),
+                    "sourceReadModelRefs".to_string(),
+                    "primaryObjectRef".to_string(),
+                    "sections".to_string(),
+                    "actions".to_string(),
+                    "disabledReasons".to_string(),
+                    "staleInvalidDeferredState".to_string(),
+                ],
+                command_surface: "runtime-action-proposal-only".to_string(),
+                allowed_action_kind: "proposal".to_string(),
+                state_fields: vec![
+                    "fresh".to_string(),
+                    "stale".to_string(),
+                    "invalid".to_string(),
+                    "deferred".to_string(),
+                ],
+            },
+        ],
+        negative_fixtures: vec![
+            ProjectionViewModelNegativeFixture {
+                fixture_id: "industry-view-direct-spec-authority-read".to_string(),
+                forbidden_read_path: ".agentflow/spec/**".to_string(),
+                expected_result: "rejected".to_string(),
+                reason: "Industry apps must consume projection view models, not Spec authority."
+                    .to_string(),
+            },
+            ProjectionViewModelNegativeFixture {
+                fixture_id: "industry-view-direct-evidence-authority-read".to_string(),
+                forbidden_read_path: ".agentflow/tasks/<issue-id>/evidence/**".to_string(),
+                expected_result: "rejected".to_string(),
+                reason: "Industry apps must consume evidence read models through projection."
+                    .to_string(),
+            },
+            ProjectionViewModelNegativeFixture {
+                fixture_id: "industry-view-direct-decision-authority-read".to_string(),
+                forbidden_read_path: ".agentflow/runtime/decisions/**".to_string(),
+                expected_result: "rejected".to_string(),
+                reason: "Industry apps must consume decision read models through projection."
+                    .to_string(),
+            },
+            ProjectionViewModelNegativeFixture {
+                fixture_id: "industry-view-direct-delivery-authority-read".to_string(),
+                forbidden_read_path: ".agentflow/release/**".to_string(),
+                expected_result: "rejected".to_string(),
+                reason: "Industry apps must consume delivery read models through projection."
+                    .to_string(),
+            },
+        ],
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1050,7 +1219,8 @@ mod tests {
     use super::{
         projection_kernel_contract, projection_kernel_core_read_model_schemas,
         projection_kernel_read_model_negative_fixtures, projection_kernel_rejects_authority_write,
-        PROJECTION_KERNEL_CONTRACT_VERSION,
+        projection_view_model_contract, PROJECTION_KERNEL_CONTRACT_VERSION,
+        PROJECTION_VIEW_MODEL_CONTRACT_VERSION,
     };
 
     #[test]
@@ -1165,5 +1335,70 @@ mod tests {
         assert!(fixtures
             .iter()
             .all(|fixture| !fixture.invalid_combination.is_empty()));
+    }
+
+    #[test]
+    fn projection_view_model_contract_maps_read_models_to_app_safe_surfaces() {
+        let contract = projection_view_model_contract();
+
+        assert_eq!(contract.version, PROJECTION_VIEW_MODEL_CONTRACT_VERSION);
+        assert_eq!(contract.status, "active");
+        assert!(!contract.writes_authority);
+        assert!(!contract.reads_authority_directly);
+        for state in ["stale", "invalid", "deferred"] {
+            assert!(contract.required_states.contains(&state.to_string()));
+        }
+
+        let view_fields = contract
+            .surfaces
+            .iter()
+            .flat_map(|surface| surface.required_view_fields.iter())
+            .collect::<Vec<_>>();
+        for field in [
+            "viewVersion",
+            "sourceReadModelRefs",
+            "primaryObjectRef",
+            "sections",
+            "actions",
+            "disabledReasons",
+            "staleInvalidDeferredState",
+        ] {
+            assert!(view_fields
+                .iter()
+                .any(|candidate| candidate.as_str() == field));
+        }
+
+        assert!(contract
+            .field_mappings
+            .iter()
+            .any(|mapping| mapping.read_model_field == "freshness"
+                && mapping.view_model_field == "staleInvalidDeferredState"));
+        assert!(contract
+            .surfaces
+            .iter()
+            .all(|surface| surface.command_surface == "runtime-action-proposal-only"));
+    }
+
+    #[test]
+    fn projection_view_model_negative_fixtures_reject_direct_authority_reads() {
+        let contract = projection_view_model_contract();
+        let forbidden_paths = contract
+            .negative_fixtures
+            .iter()
+            .map(|fixture| fixture.forbidden_read_path.as_str())
+            .collect::<Vec<_>>();
+
+        for forbidden in [
+            ".agentflow/spec/**",
+            ".agentflow/tasks/<issue-id>/evidence/**",
+            ".agentflow/runtime/decisions/**",
+            ".agentflow/release/**",
+        ] {
+            assert!(forbidden_paths.contains(&forbidden));
+        }
+        assert!(contract
+            .negative_fixtures
+            .iter()
+            .all(|fixture| fixture.expected_result == "rejected"));
     }
 }

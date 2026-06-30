@@ -96,6 +96,7 @@ PACK_CONTRACT_COMPATIBILITY_PATH="$RUNTIME_DIR/pack-contract-compatibility.json"
 PROJECTION_READMODEL_CONTRACT_PATH="$RUNTIME_DIR/projection-readmodel-contract.json"
 CORE_PROJECTION_KERNEL_CONTRACT_PATH="$RUNTIME_DIR/core-projection-kernel-contract.json"
 CORE_READ_MODEL_SCHEMA_PATH="$RUNTIME_DIR/core-read-model-schema.json"
+CORE_VIEW_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-view-model-contract.json"
 EVIDENCE_ACCEPTANCE_CONTRACT_PATH="$RUNTIME_DIR/evidence-acceptance-contract.json"
 EXECUTOR_ADAPTER_CONTRACT_PATH="$RUNTIME_DIR/executor-adapter-contract.json"
 REPLAY_MIGRATION_UPGRADE_CERTIFICATION_PATH="$RUNTIME_DIR/replay-migration-upgrade-certification.json"
@@ -445,6 +446,7 @@ proof_chain = [
     {"stage": "core-delivery-readiness-audit-trigger", "label": "Core Delivery Readiness / Optional Audit Trigger"},
     {"stage": "core-projection-kernel-contract", "label": "Core Projection Kernel Contract"},
     {"stage": "core-read-model-schema", "label": "Core Read Model Schema"},
+    {"stage": "core-view-model-contract", "label": "Core View Model Contract"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
     {"stage": "context.ready", "label": "Context Ready"},
@@ -4609,6 +4611,133 @@ if payload["status"] != "passed":
     raise SystemExit("core read model schema fixture failed")
 PY
   record_stage "core-read-model-schema" "passed" "$(basename "$CORE_READ_MODEL_SCHEMA_PATH")"
+}
+
+run_core_view_model_contract_gate() {
+  record_stage "core-view-model-contract" "started" "$CORE_VIEW_MODEL_CONTRACT_PATH"
+  python3 - "$ROOT" "$CORE_VIEW_MODEL_CONTRACT_PATH" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+out_path = pathlib.Path(sys.argv[2])
+doc_path = root / "docs/architecture/082-view-model-contract-for-industry-apps-v1.md"
+source_path = root / "crates/projection/src/model.rs"
+
+doc_text = doc_path.read_text(encoding="utf-8") if doc_path.is_file() else ""
+source_text = source_path.read_text(encoding="utf-8") if source_path.is_file() else ""
+
+required_sections = [
+    "## View Model Boundary",
+    "## Required View Fields",
+    "## Field Mapping",
+    "## State Rule",
+    "## Command Surface Rule",
+    "## Negative Fixtures",
+    "## Release Gate Evidence",
+]
+required_fields = [
+    "viewVersion",
+    "viewId",
+    "sourceReadModelRefs",
+    "primaryObjectRef",
+    "sections",
+    "actions",
+    "disabledReasons",
+    "staleInvalidDeferredState",
+    "readOnlyBoundary",
+]
+field_mappings = [
+    ("objectId", "primaryObjectRef"),
+    ("status", "sections.status"),
+    ("freshness", "staleInvalidDeferredState"),
+    ("reasonLinks", "disabledReasons"),
+    ("evidenceLinks", "sections.evidence"),
+    ("authorityBoundary", "readOnlyBoundary"),
+]
+required_states = ["fresh", "stale", "invalid", "deferred"]
+surfaces = ["industry.project-home", "industry.task-workbench"]
+negative_fixtures = [
+    "industry-view-direct-spec-authority-read",
+    "industry-view-direct-evidence-authority-read",
+    "industry-view-direct-decision-authority-read",
+    "industry-view-direct-delivery-authority-read",
+]
+forbidden_paths = [
+    ".agentflow/spec/**",
+    ".agentflow/tasks/<issue-id>/evidence/**",
+    ".agentflow/runtime/decisions/**",
+    ".agentflow/release/**",
+]
+source_symbols = [
+    "PROJECTION_VIEW_MODEL_CONTRACT_VERSION",
+    "ProjectionViewModelContract",
+    "ProjectionViewModelFieldMapping",
+    "ProjectionViewModelSurfaceContract",
+    "ProjectionViewModelNegativeFixture",
+    "projection_view_model_contract",
+]
+
+missing_sections = [section for section in required_sections if section not in doc_text]
+missing_fields = [field for field in required_fields if field not in doc_text or f'"{field}"' not in source_text]
+missing_mappings = [
+    f"{source}->{target}"
+    for source, target in field_mappings
+    if source not in doc_text or target not in doc_text or f'"{source}"' not in source_text or f'"{target}"' not in source_text
+]
+missing_states = [state for state in required_states if state not in doc_text or f'"{state}"' not in source_text]
+missing_surfaces = [surface for surface in surfaces if surface not in doc_text or surface not in source_text]
+missing_negative_fixtures = [fixture for fixture in negative_fixtures if fixture not in doc_text or fixture not in source_text]
+missing_forbidden_paths = [path for path in forbidden_paths if path not in doc_text or path not in source_text]
+missing_source_symbols = [symbol for symbol in source_symbols if symbol not in source_text]
+
+payload = {
+    "version": "agentflow-core-view-model-contract-gate.v1",
+    "status": "passed",
+    "contractVersion": "projection-view-model-contract.v1",
+    "docPath": "docs/architecture/082-view-model-contract-for-industry-apps-v1.md",
+    "sourcePath": "crates/projection/src/model.rs",
+    "writesAuthority": False,
+    "readsAuthorityDirectly": False,
+    "requiredFields": required_fields,
+    "fieldMappings": [{"readModelField": source, "viewModelField": target} for source, target in field_mappings],
+    "requiredStates": required_states,
+    "surfaces": surfaces,
+    "negativeFixtures": negative_fixtures,
+    "forbiddenAuthorityReads": forbidden_paths,
+    "missingSections": missing_sections,
+    "missingFields": missing_fields,
+    "missingMappings": missing_mappings,
+    "missingStates": missing_states,
+    "missingSurfaces": missing_surfaces,
+    "missingNegativeFixtures": missing_negative_fixtures,
+    "missingForbiddenPaths": missing_forbidden_paths,
+    "missingSourceSymbols": missing_source_symbols,
+    "checkedAt": int(time.time()),
+}
+
+if any(
+    [
+        missing_sections,
+        missing_fields,
+        missing_mappings,
+        missing_states,
+        missing_surfaces,
+        missing_negative_fixtures,
+        missing_forbidden_paths,
+        missing_source_symbols,
+    ]
+):
+    payload["status"] = "failed"
+
+out_path.parent.mkdir(parents=True, exist_ok=True)
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("core view model contract fixture failed")
+PY
+  record_stage "core-view-model-contract" "passed" "$(basename "$CORE_VIEW_MODEL_CONTRACT_PATH")"
 }
 
 run_evidence_acceptance_contract_gate() {
@@ -10706,6 +10835,7 @@ PY
   run_core_delivery_readiness_audit_trigger_gate
   run_core_projection_kernel_contract_gate
   run_core_read_model_schema_gate
+  run_core_view_model_contract_gate
   run_core_decision_projection_read_model_gate
   run_v107_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
