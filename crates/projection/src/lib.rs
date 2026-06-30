@@ -10,8 +10,10 @@ pub mod query;
 pub mod storage;
 
 pub use model::{
-    projection_kernel_contract, projection_kernel_rejects_authority_write, CompletionDecisionIndex,
-    CompletionDecisionIndexEntry, CompletionDecisionProjection, IssueStatusIndex,
+    projection_kernel_contract, projection_kernel_core_read_model_schemas,
+    projection_kernel_read_model_negative_fixtures, projection_kernel_rejects_authority_write,
+    CompletionDecisionIndex, CompletionDecisionIndexEntry, CompletionDecisionProjection,
+    CoreReadModelSchema, CoreReadModelSchemaNegativeFixture, IssueStatusIndex,
     IssueStatusIndexEntry, ProjectBlockerSummary, ProjectBrainProjection,
     ProjectCompletionProjection, ProjectExternalReviewProjection, ProjectIssueLanes,
     ProjectProjection, ProjectReleaseProjection, ProjectionAcceptanceSubGateSummary,
