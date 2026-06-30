@@ -2399,6 +2399,16 @@ if payload.get("taskCount", 0) <= 0:
     raise SystemExit("replay happy path must rebuild at least one task projection")
 if not payload.get("rebuiltPaths"):
     raise SystemExit("replay happy path must list rebuilt projection paths")
+if not payload.get("sourceRefs"):
+    raise SystemExit("replay happy path must list source event/fact refs")
+if not payload.get("inputDigest"):
+    raise SystemExit("replay happy path must include input digest")
+if not payload.get("outputDigest"):
+    raise SystemExit("replay happy path must include output digest")
+if not payload.get("receiptId"):
+    raise SystemExit("replay happy path must include receipt id")
+if payload.get("deterministic") is not True:
+    raise SystemExit("replay happy path must declare deterministic rebuild")
 if payload.get("writesAuthority") is not False:
     raise SystemExit("replay happy path must not write authority")
 if payload.get("projectionAuthority") is not False:
@@ -2429,6 +2439,8 @@ if payload.get("status") != "failed":
 failures = payload.get("failures") or []
 if not failures:
     raise SystemExit("failure replay report must include failures")
+if payload.get("deterministic") is not False:
+    raise SystemExit("failure replay report must not claim deterministic rebuild")
 if payload.get("writesAuthority") is not False:
     raise SystemExit("failure replay report must not write authority")
 if payload.get("projectionAuthority") is not False:
@@ -4280,6 +4292,11 @@ payload = {
     "eventReplayFailureStatus": event_replay_failure.get("status"),
     "eventReplayWritesAuthority": event_replay.get("writesAuthority"),
     "eventReplayProjectionAuthority": event_replay.get("projectionAuthority"),
+    "eventReplaySourceRefCount": len(event_replay.get("sourceRefs") or []),
+    "eventReplayInputDigest": event_replay.get("inputDigest"),
+    "eventReplayOutputDigest": event_replay.get("outputDigest"),
+    "eventReplayReceiptId": event_replay.get("receiptId"),
+    "eventReplayDeterministic": event_replay.get("deterministic"),
     "rebuiltPathCount": len(rebuilt_paths),
     "missingProjectionPaths": missing_projection_paths,
     "queryApiReadonly": query_api_readonly,
@@ -4308,6 +4325,11 @@ if (
     or payload["packContractVersion"] != "agentflow-pack-contract-freeze.v1"
     or event_replay.get("status") != "passed"
     or event_replay_failure.get("status") != "failed"
+    or not event_replay.get("sourceRefs")
+    or not event_replay.get("inputDigest")
+    or not event_replay.get("outputDigest")
+    or not event_replay.get("receiptId")
+    or event_replay.get("deterministic") is not True
     or event_replay.get("writesAuthority") is not False
     or event_replay.get("projectionAuthority") is not False
     or not query_api_readonly

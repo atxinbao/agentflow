@@ -231,10 +231,15 @@ pub fn rebuild_projections_with_replay_report(
         Err(error) => ProjectionReplayReport {
             version: PROJECTION_REPLAY_REPORT_VERSION.to_string(),
             status: ProjectionReplayStatus::Failed,
+            source_refs: vec![".agentflow/events/task-events/**".to_string()],
             event_count: 0,
             task_count: 0,
             project_count: 0,
             rebuilt_paths: Vec::new(),
+            input_digest: None,
+            output_digest: None,
+            receipt_id: None,
+            deterministic: false,
             failures: vec![ProjectionReplayFailure {
                 stage: "event-replay-projection-rebuild".to_string(),
                 message: error.to_string(),
@@ -249,16 +254,28 @@ pub fn rebuild_projections_with_replay_report(
 }
 
 fn rebuild_projection_replay_report(root: &Path) -> Result<ProjectionReplayReport> {
-    let event_count = load_task_events(root)?.len();
+    let events = load_task_events(root)?;
+    if events.is_empty() {
+        anyhow::bail!("missing event inputs for projection replay");
+    }
+    let source_refs = projection_replay_source_refs(&events);
+    let input_digest = stable_digest_json(&events)?;
     let summary = rebuild_projections(root)?;
     let rebuilt_paths = projection_rebuilt_paths(root)?;
+    let output_digest = projection_output_digest(root, &rebuilt_paths)?;
+    let receipt_id = projection_replay_receipt_id(&input_digest, &output_digest);
     Ok(ProjectionReplayReport {
         version: PROJECTION_REPLAY_REPORT_VERSION.to_string(),
         status: ProjectionReplayStatus::Passed,
-        event_count,
+        source_refs,
+        event_count: events.len(),
         task_count: summary.task_count,
         project_count: summary.project_count,
         rebuilt_paths,
+        input_digest: Some(input_digest),
+        output_digest: Some(output_digest),
+        receipt_id: Some(receipt_id),
+        deterministic: true,
         failures: Vec::new(),
         writes_authority: false,
         projection_authority: false,
@@ -291,10 +308,55 @@ fn collect_projection_json_paths(
         if path.is_dir() {
             collect_projection_json_paths(root, &path, paths)?;
         } else if path.extension().and_then(|value| value.to_str()) == Some("json") {
-            paths.push(relative_projection_path(root, &path.display().to_string()));
+            let relative = relative_projection_path(root, &path.display().to_string());
+            if relative != ".agentflow/projections/replay-report.json" {
+                paths.push(relative);
+            }
         }
     }
     Ok(())
+}
+
+fn projection_replay_source_refs(events: &[TaskEvent]) -> Vec<String> {
+    events
+        .iter()
+        .map(|event| format!(".agentflow/events/task-events/{}.json", event.event_id))
+        .collect()
+}
+
+fn projection_output_digest(root: &Path, rebuilt_paths: &[String]) -> Result<String> {
+    let mut parts = Vec::new();
+    for rebuilt_path in rebuilt_paths {
+        let path = root.join(rebuilt_path);
+        let content =
+            fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        parts.push(format!("{rebuilt_path}\n{content}"));
+    }
+    Ok(stable_digest_bytes(
+        parts
+            .join("\n---agentflow-projection-output---\n")
+            .as_bytes(),
+    ))
+}
+
+fn projection_replay_receipt_id(input_digest: &str, output_digest: &str) -> String {
+    let input_short = input_digest.get(0..16).unwrap_or(input_digest);
+    let output_short = output_digest.get(0..16).unwrap_or(output_digest);
+    format!("projection-replay-{input_short}-{output_short}")
+}
+
+fn stable_digest_json<T: serde::Serialize>(value: &T) -> Result<String> {
+    let payload = serde_json::to_vec(value)?;
+    Ok(stable_digest_bytes(&payload))
+}
+
+fn stable_digest_bytes(bytes: &[u8]) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("fnv1a64:{hash:016x}")
 }
 
 fn write_projection_replay_report(root: &Path, report: &ProjectionReplayReport) -> Result<PathBuf> {
@@ -2610,6 +2672,24 @@ mod tests {
         assert_eq!(report.event_count, 1);
         assert_eq!(report.task_count, 1);
         assert!(!report.rebuilt_paths.is_empty());
+        assert_eq!(report.source_refs.len(), 1);
+        assert!(report.source_refs[0].starts_with(".agentflow/events/task-events/evt-"));
+        assert!(report
+            .input_digest
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("fnv1a64:"));
+        assert!(report
+            .output_digest
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("fnv1a64:"));
+        assert!(report
+            .receipt_id
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("projection-replay-"));
+        assert!(report.deterministic);
         assert!(!report.writes_authority);
         assert!(!report.projection_authority);
         assert_eq!(projection.issue_id, "AF-PROJ-001");
@@ -2617,6 +2697,32 @@ mod tests {
             .path()
             .join(".agentflow/projections/replay-report.json")
             .is_file());
+    }
+
+    #[test]
+    fn replay_report_has_stable_digest_receipt_across_rebuilds() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+
+        let first = rebuild_projections_with_replay_report(dir.path()).unwrap();
+        let second = rebuild_projections_with_replay_report(dir.path()).unwrap();
+
+        assert_eq!(first.status, ProjectionReplayStatus::Passed);
+        assert_eq!(second.status, ProjectionReplayStatus::Passed);
+        assert_eq!(first.source_refs, second.source_refs);
+        assert_eq!(first.input_digest, second.input_digest);
+        assert_eq!(first.output_digest, second.output_digest);
+        assert_eq!(first.receipt_id, second.receipt_id);
+        assert_eq!(first.rebuilt_paths, second.rebuilt_paths);
+        assert!(!first
+            .rebuilt_paths
+            .iter()
+            .any(|path| path == ".agentflow/projections/replay-report.json"));
     }
 
     #[test]
@@ -2633,12 +2739,35 @@ mod tests {
         assert!(!report.failures.is_empty());
         assert_eq!(report.failures[0].stage, "event-replay-projection-rebuild");
         assert!(report.failures[0].message.contains("parse"));
+        assert_eq!(
+            report.source_refs,
+            vec![".agentflow/events/task-events/**".to_string()]
+        );
+        assert!(report.input_digest.is_none());
+        assert!(report.output_digest.is_none());
+        assert!(report.receipt_id.is_none());
+        assert!(!report.deterministic);
         assert!(!report.writes_authority);
         assert!(!report.projection_authority);
         assert!(dir
             .path()
             .join(".agentflow/projections/replay-report.json")
             .is_file());
+    }
+
+    #[test]
+    fn replay_report_fails_when_event_inputs_are_missing() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+
+        let report = rebuild_projections_with_replay_report(dir.path()).unwrap();
+
+        assert_eq!(report.status, ProjectionReplayStatus::Failed);
+        assert_eq!(report.event_count, 0);
+        assert!(report.failures[0].message.contains("missing event inputs"));
+        assert!(!report.deterministic);
+        assert!(!report.writes_authority);
+        assert!(!report.projection_authority);
     }
 
     #[test]
