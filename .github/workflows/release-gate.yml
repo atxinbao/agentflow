@@ -233,6 +233,8 @@ jobs:
               -o -name 'evidence-projection-read-model.json' \
               -o -name 'evidence-projection-read-model-rust-test.log' \
               -o -name 'core-file-backed-ontology-registry.json' \
+              -o -name 'projection-feedback-freshness-receipts.json' \
+              -o -name 'projection-feedback-freshness-rust-test.log' \
               -o -name 'core-file-backed-ontology-registry-rust-test.log' \
               -o -name 'core-runtime-negative-fixtures.json' \
               -o -name 'core-runtime-negative-runtime-api-test.log' \
@@ -344,6 +346,8 @@ jobs:
             runtime/event-replay-projection-report.json \
             runtime/event-replay-projection-failure-report.json \
             runtime/core-read-model-schema.json \
+            runtime/projection-feedback-freshness-receipts.json \
+            runtime/projection-feedback-freshness-rust-test.log \
             runtime/core-view-model-contract.json \
             runtime/core-decision-projection-read-model.json \
             runtime/core-decision-projection-read-model-rust-test.log \

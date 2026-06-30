@@ -56,6 +56,25 @@ pub struct ProjectionDefinitionVersions {
     pub state_machine_version: String,
 }
 
+pub const PROJECTION_FRESHNESS_RECEIPT_VERSION: &str = "projection-freshness-receipt.v1";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionFreshnessReceipt {
+    pub version: String,
+    pub receipt_id: String,
+    pub projection_ref: String,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+    pub source_digest: String,
+    pub rebuild_receipt_ref: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stale_reason: Option<String>,
+    pub generated_at: u64,
+    pub writes_authority: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectionFreshness {
@@ -70,8 +89,23 @@ pub struct ProjectionFreshness {
     pub last_rebuilt_at: u64,
     pub staleness: String,
     pub definition_versions: ProjectionDefinitionVersions,
+    pub receipt: ProjectionFreshnessReceipt,
     #[serde(default)]
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectionFeedbackRoute {
+    pub status: String,
+    pub route: String,
+    pub reason: String,
+    pub source_surface_key: String,
+    pub target_authority: String,
+    pub proposal_kind: String,
+    pub requires_confirmation: bool,
+    pub confirmation_boundary: String,
+    pub writes_authority: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -659,6 +693,7 @@ pub struct ProjectionSurfaceReadModelView {
     pub source_refs: Vec<String>,
     pub authority: bool,
     pub freshness: ProjectionFreshness,
+    pub feedback: ProjectionFeedbackRoute,
     #[serde(default)]
     pub missing_facts: Vec<String>,
 }
@@ -681,6 +716,50 @@ enum ProjectionScope {
     Project { project_id: String },
     Issue { issue_id: String },
     Audit { source_issue_id: Option<String> },
+}
+
+impl ProjectionScope {
+    fn key(&self) -> String {
+        match self {
+            Self::RequirementPreview { project_id } => {
+                format!("requirement-preview:{project_id}")
+            }
+            Self::Project { project_id } => format!("project:{project_id}"),
+            Self::Issue { issue_id } => format!("issue:{issue_id}"),
+            Self::Audit {
+                source_issue_id: Some(issue_id),
+            } => format!("audit:issue:{issue_id}"),
+            Self::Audit {
+                source_issue_id: None,
+            } => "audit:unscoped".to_string(),
+        }
+    }
+
+    fn source_refs(&self) -> Vec<String> {
+        match self {
+            Self::RequirementPreview { project_id } => vec![
+                format!(".agentflow/spec/requirements/{project_id}/**"),
+                format!(".agentflow/events/task-events/**?projectId={project_id}"),
+            ],
+            Self::Project { project_id } => vec![
+                format!(".agentflow/spec/projects/{project_id}.json"),
+                format!(".agentflow/events/task-events/**?projectId={project_id}"),
+            ],
+            Self::Issue { issue_id } => vec![
+                format!(".agentflow/spec/issues/{issue_id}.json"),
+                format!(".agentflow/events/task-events/**?issueId={issue_id}"),
+            ],
+            Self::Audit {
+                source_issue_id: Some(issue_id),
+            } => vec![
+                format!(".agentflow/audit/**?sourceIssueId={issue_id}"),
+                format!(".agentflow/events/task-events/**?issueId={issue_id}"),
+            ],
+            Self::Audit {
+                source_issue_id: None,
+            } => vec![".agentflow/audit/**".to_string()],
+        }
+    }
 }
 
 pub fn get_projection_surface_catalog(
@@ -2487,6 +2566,18 @@ fn explain_projection_staleness(
     } else {
         "current".to_string()
     };
+    let source_refs = scope.source_refs();
+    let projection_ref = format!("{}:{projection_version}", scope.key());
+    let receipt = projection_freshness_receipt(
+        &projection_ref,
+        source_refs,
+        latest.last_event_id.as_deref(),
+        latest.last_event_type.as_deref(),
+        latest.last_event_timestamp,
+        last_rebuilt_at,
+        &staleness,
+        &warnings,
+    );
 
     Ok(ProjectionFreshness {
         projection_version: projection_version.to_string(),
@@ -2497,6 +2588,7 @@ fn explain_projection_staleness(
         last_rebuilt_at,
         staleness,
         definition_versions: latest.definition_versions,
+        receipt,
         warnings,
     })
 }
@@ -2660,6 +2752,19 @@ fn evidence_trace_refs(trace_refs: &CoreEvidenceTraceRefs) -> Vec<String> {
 }
 
 fn evidence_kernel_freshness() -> ProjectionFreshness {
+    let receipt = projection_freshness_receipt(
+        "core:evidence-kernel:evidence-kernel-read-model.v1",
+        vec![
+            "crates/ontology/src/evidence.rs".to_string(),
+            "docs/architecture/068-evidence-projection-read-model-v1.md".to_string(),
+        ],
+        None,
+        None,
+        None,
+        0,
+        "readonly-derived",
+        &[],
+    );
     ProjectionFreshness {
         projection_version: EVIDENCE_KERNEL_READ_MODEL_VERSION.to_string(),
         query_surface_version: PROJECTION_QUERY_SURFACE_VERSION.to_string(),
@@ -2674,6 +2779,7 @@ fn evidence_kernel_freshness() -> ProjectionFreshness {
             role_policy_version: "not-applicable".to_string(),
             state_machine_version: "not-applicable".to_string(),
         },
+        receipt,
         warnings: Vec::new(),
     }
 }
@@ -2857,8 +2963,10 @@ fn surface_read_model_with_missing(
     freshness: ProjectionFreshness,
     missing_facts: Vec<String>,
 ) -> ProjectionSurfaceReadModelView {
+    let key = format!("{kind}:{object_type}:{object_id}");
+    let feedback = feedback_route_for_surface(&key, status, &freshness, &missing_facts);
     ProjectionSurfaceReadModelView {
-        key: format!("{kind}:{object_type}:{object_id}"),
+        key,
         kind: kind.to_string(),
         object_type: object_type.to_string(),
         object_id: object_id.to_string(),
@@ -2872,6 +2980,7 @@ fn surface_read_model_with_missing(
         source_refs,
         authority: false,
         freshness,
+        feedback,
         missing_facts,
     }
 }
@@ -2888,6 +2997,38 @@ fn catalog_freshness(
     let incomplete = read_models
         .iter()
         .any(|entry| !entry.missing_facts.is_empty());
+    let staleness = if incomplete {
+        "incomplete".to_string()
+    } else if read_models.is_empty() {
+        "empty".to_string()
+    } else {
+        "current".to_string()
+    };
+    let source_refs = read_models
+        .iter()
+        .flat_map(|entry| entry.freshness.receipt.source_refs.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let receipt = projection_freshness_receipt(
+        "catalog:projection-surface-catalog.v1",
+        source_refs,
+        read_models
+            .iter()
+            .filter_map(|entry| entry.freshness.last_event_id.as_deref())
+            .last(),
+        read_models
+            .iter()
+            .filter_map(|entry| entry.freshness.last_event_type.as_deref())
+            .last(),
+        read_models
+            .iter()
+            .filter_map(|entry| entry.freshness.last_event_timestamp)
+            .max(),
+        last_rebuilt_at,
+        &staleness,
+        &warnings,
+    );
     ProjectionFreshness {
         projection_version: "projection-surface-catalog.v1".to_string(),
         query_surface_version: PROJECTION_QUERY_SURFACE_VERSION.to_string(),
@@ -2904,13 +3045,7 @@ fn catalog_freshness(
             .filter_map(|entry| entry.freshness.last_event_timestamp)
             .max(),
         last_rebuilt_at,
-        staleness: if incomplete {
-            "incomplete".to_string()
-        } else if read_models.is_empty() {
-            "empty".to_string()
-        } else {
-            "current".to_string()
-        },
+        staleness,
         definition_versions: read_models
             .iter()
             .find_map(|entry| {
@@ -2918,11 +3053,23 @@ fn catalog_freshness(
                     .then(|| entry.freshness.definition_versions.clone())
             })
             .unwrap_or_else(unavailable_definition_versions),
+        receipt,
         warnings,
     }
 }
 
 fn missing_freshness(reason: &str) -> ProjectionFreshness {
+    let warnings = vec![reason.to_string()];
+    let receipt = projection_freshness_receipt(
+        "missing:projection",
+        vec!["projection-source-missing".to_string()],
+        None,
+        None,
+        None,
+        0,
+        "missing",
+        &warnings,
+    );
     ProjectionFreshness {
         projection_version: "missing".to_string(),
         query_surface_version: PROJECTION_QUERY_SURFACE_VERSION.to_string(),
@@ -2932,8 +3079,163 @@ fn missing_freshness(reason: &str) -> ProjectionFreshness {
         last_rebuilt_at: 0,
         staleness: "missing".to_string(),
         definition_versions: unavailable_definition_versions(),
-        warnings: vec![reason.to_string()],
+        receipt,
+        warnings,
     }
+}
+
+fn feedback_route_for_surface(
+    source_surface_key: &str,
+    status: &str,
+    freshness: &ProjectionFreshness,
+    missing_facts: &[String],
+) -> ProjectionFeedbackRoute {
+    if !missing_facts.is_empty() {
+        return ProjectionFeedbackRoute {
+            status: "blocked".to_string(),
+            route: "repair-projection-inputs".to_string(),
+            reason: format!("projection facts missing: {}", missing_facts.join(", ")),
+            source_surface_key: source_surface_key.to_string(),
+            target_authority: ".agentflow/spec/**".to_string(),
+            proposal_kind: "spec-evolution-preview".to_string(),
+            requires_confirmation: true,
+            confirmation_boundary: "preview-confirmation-materialization-required".to_string(),
+            writes_authority: false,
+        };
+    }
+    if freshness.staleness == "stale" || freshness.staleness == "incomplete" {
+        return ProjectionFeedbackRoute {
+            status: "ready-for-spec-evolution".to_string(),
+            route: "open-spec-evolution-preview".to_string(),
+            reason: stale_feedback_reason(freshness),
+            source_surface_key: source_surface_key.to_string(),
+            target_authority: ".agentflow/spec/**".to_string(),
+            proposal_kind: "spec-evolution-preview".to_string(),
+            requires_confirmation: true,
+            confirmation_boundary: "preview-confirmation-materialization-required".to_string(),
+            writes_authority: false,
+        };
+    }
+    let status = if status == "blocked" {
+        "blocked"
+    } else {
+        "accepted"
+    };
+    ProjectionFeedbackRoute {
+        status: status.to_string(),
+        route: "observe-projection".to_string(),
+        reason: "projection is read-only and current enough for display".to_string(),
+        source_surface_key: source_surface_key.to_string(),
+        target_authority: ".agentflow/spec/**".to_string(),
+        proposal_kind: "none".to_string(),
+        requires_confirmation: false,
+        confirmation_boundary: "not-applicable".to_string(),
+        writes_authority: false,
+    }
+}
+
+fn stale_feedback_reason(freshness: &ProjectionFreshness) -> String {
+    freshness
+        .receipt
+        .stale_reason
+        .clone()
+        .unwrap_or_else(|| "projection freshness is not current".to_string())
+}
+
+fn projection_freshness_receipt(
+    projection_ref: &str,
+    source_refs: Vec<String>,
+    last_event_id: Option<&str>,
+    last_event_type: Option<&str>,
+    last_event_timestamp: Option<u64>,
+    last_rebuilt_at: u64,
+    staleness: &str,
+    warnings: &[String],
+) -> ProjectionFreshnessReceipt {
+    let stale_reason = projection_stale_reason(
+        staleness,
+        last_event_id,
+        last_event_type,
+        last_event_timestamp,
+        last_rebuilt_at,
+        warnings,
+    );
+    let mut parts = Vec::new();
+    parts.push(format!("projectionRef={projection_ref}"));
+    parts.push(format!("staleness={staleness}"));
+    parts.push(format!("lastEventId={}", last_event_id.unwrap_or("none")));
+    parts.push(format!(
+        "lastEventType={}",
+        last_event_type.unwrap_or("none")
+    ));
+    parts.push(format!(
+        "lastEventTimestamp={}",
+        last_event_timestamp
+            .map(|timestamp| timestamp.to_string())
+            .unwrap_or_else(|| "none".to_string())
+    ));
+    parts.push(format!("lastRebuiltAt={last_rebuilt_at}"));
+    parts.extend(source_refs.iter().map(|source| format!("source={source}")));
+    let source_digest = stable_query_digest(&parts.join("\n"));
+    let receipt_short = source_digest
+        .strip_prefix("fnv1a64:")
+        .unwrap_or(source_digest.as_str());
+    ProjectionFreshnessReceipt {
+        version: PROJECTION_FRESHNESS_RECEIPT_VERSION.to_string(),
+        receipt_id: format!("projection-freshness-{receipt_short}"),
+        projection_ref: projection_ref.to_string(),
+        source_refs,
+        source_digest,
+        rebuild_receipt_ref: ".agentflow/projections/replay-report.json".to_string(),
+        status: staleness.to_string(),
+        stale_reason,
+        generated_at: last_rebuilt_at,
+        writes_authority: false,
+    }
+}
+
+fn projection_stale_reason(
+    staleness: &str,
+    last_event_id: Option<&str>,
+    last_event_type: Option<&str>,
+    last_event_timestamp: Option<u64>,
+    last_rebuilt_at: u64,
+    warnings: &[String],
+) -> Option<String> {
+    match staleness {
+        "current" | "readonly-derived" => None,
+        "empty" => Some("no runtime event has been recorded for this projection scope".to_string()),
+        "missing" | "incomplete" => warnings.first().cloned().or_else(|| {
+            Some("required projection source facts are missing or incomplete".to_string())
+        }),
+        "stale" => {
+            if let Some(event_timestamp) = last_event_timestamp {
+                if event_timestamp > last_rebuilt_at {
+                    return Some(format!(
+                        "latest event {} at {} is newer than projection rebuild {}",
+                        last_event_id.unwrap_or("unknown"),
+                        event_timestamp,
+                        last_rebuilt_at
+                    ));
+                }
+            }
+            Some(format!(
+                "projection cursor is behind latest event {} ({})",
+                last_event_id.unwrap_or("unknown"),
+                last_event_type.unwrap_or("unknown")
+            ))
+        }
+        other => Some(format!("projection freshness status is {other}")),
+    }
+}
+
+fn stable_query_digest(input: &str) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in input.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("fnv1a64:{hash:016x}")
 }
 
 fn unavailable_definition_versions() -> ProjectionDefinitionVersions {
@@ -3390,6 +3692,19 @@ mod tests {
         rebuild_projections(dir.path()).unwrap();
         let current = get_task_workbench_view(dir.path(), "AF-PROJ-001").unwrap();
         assert_eq!(current.freshness.staleness, "current");
+        assert_eq!(
+            current.freshness.receipt.version,
+            PROJECTION_FRESHNESS_RECEIPT_VERSION
+        );
+        assert_eq!(current.freshness.receipt.status, "current");
+        assert!(current.freshness.receipt.stale_reason.is_none());
+        assert!(!current.freshness.receipt.source_refs.is_empty());
+        assert!(current
+            .freshness
+            .receipt
+            .source_digest
+            .starts_with("fnv1a64:"));
+        assert!(!current.freshness.receipt.writes_authority);
 
         append_task_event_once(
             dir.path(),
@@ -3402,6 +3717,12 @@ mod tests {
         .unwrap();
         let stale = get_task_workbench_view(dir.path(), "AF-PROJ-001").unwrap();
         assert_eq!(stale.freshness.staleness, "stale");
+        assert_eq!(stale.freshness.receipt.status, "stale");
+        assert!(stale.freshness.receipt.stale_reason.is_some());
+        assert_eq!(
+            stale.freshness.receipt.rebuild_receipt_ref,
+            ".agentflow/projections/replay-report.json"
+        );
         assert_ne!(
             current.freshness.last_event_id,
             stale.freshness.last_event_id
@@ -3586,6 +3907,56 @@ mod tests {
                 .all(|entry| entry.freshness.query_surface_version
                     == PROJECTION_QUERY_SURFACE_VERSION)
         );
+        assert!(catalog.read_models.iter().all(|entry| {
+            entry.freshness.receipt.version == PROJECTION_FRESHNESS_RECEIPT_VERSION
+                && entry
+                    .freshness
+                    .receipt
+                    .source_digest
+                    .starts_with("fnv1a64:")
+                && !entry.freshness.receipt.writes_authority
+                && !entry.feedback.writes_authority
+        }));
+    }
+
+    #[test]
+    fn projection_surface_catalog_routes_stale_feedback_to_spec_evolution_preview() {
+        let dir = tempdir().unwrap();
+        write_fixture(dir.path());
+        append_task_event_once(
+            dir.path(),
+            event("AF-PROJ-001", "issue.scheduled", json!({})),
+        )
+        .unwrap();
+        rebuild_projections(dir.path()).unwrap();
+        append_task_event_once(
+            dir.path(),
+            event(
+                "AF-PROJ-001",
+                "agent.launch.requested",
+                json!({"runId":"run-002"}),
+            ),
+        )
+        .unwrap();
+
+        let catalog = get_projection_surface_catalog(dir.path()).unwrap();
+        let task = catalog
+            .read_models
+            .iter()
+            .find(|entry| entry.kind == "task-workbench" && entry.object_id == "AF-PROJ-001")
+            .expect("task workbench read model should be present");
+
+        assert_eq!(task.freshness.staleness, "stale");
+        assert_eq!(task.feedback.status, "ready-for-spec-evolution");
+        assert_eq!(task.feedback.route, "open-spec-evolution-preview");
+        assert!(task.feedback.requires_confirmation);
+        assert_eq!(
+            task.feedback.confirmation_boundary,
+            "preview-confirmation-materialization-required"
+        );
+        assert_eq!(task.feedback.target_authority, ".agentflow/spec/**");
+        assert_eq!(task.feedback.proposal_kind, "spec-evolution-preview");
+        assert!(!task.feedback.writes_authority);
     }
 
     #[test]

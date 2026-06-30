@@ -46,11 +46,12 @@ pub use query::{
     PackDomainObjectIndexItem, PackIndustryWorkbenchItem, PackIndustryWorkbenchView,
     PackListItemView, PackReadinessView, PackSurfacePageIndexItem, PackViewModelMappingIndexItem,
     ProjectDependencyEdge, ProjectHomeView, ProjectRunSummary, ProjectionDefinitionVersions,
-    ProjectionFreshness, ProjectionSurfaceCatalogView, ProjectionSurfaceQueryView,
-    ProjectionSurfaceReadModelView, RequirementIntakeView, RuntimeEventRow, RuntimeHealthView,
-    SpecLoopView, SpecPreviewView, TaskWorkbenchView, ViewActionHint, WorkLoopEventView,
-    WorkLoopEvidenceSummaryView, WorkLoopRunView, WorkLoopSessionView,
-    EVIDENCE_KERNEL_READ_MODEL_VERSION, PROJECTION_QUERY_SURFACE_VERSION,
+    ProjectionFeedbackRoute, ProjectionFreshness, ProjectionFreshnessReceipt,
+    ProjectionSurfaceCatalogView, ProjectionSurfaceQueryView, ProjectionSurfaceReadModelView,
+    RequirementIntakeView, RuntimeEventRow, RuntimeHealthView, SpecLoopView, SpecPreviewView,
+    TaskWorkbenchView, ViewActionHint, WorkLoopEventView, WorkLoopEvidenceSummaryView,
+    WorkLoopRunView, WorkLoopSessionView, EVIDENCE_KERNEL_READ_MODEL_VERSION,
+    PROJECTION_QUERY_SURFACE_VERSION,
 };
 pub use storage::{
     load_completion_decision_index, load_completion_decision_projection, load_issue_status_index,
