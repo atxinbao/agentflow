@@ -79,6 +79,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [082-view-model-contract-for-industry-apps-v1.md](082-view-model-contract-for-industry-apps-v1.md) | View Model contract for Industry AgentFlow apps |
 | [083-pack-specific-projection-mapping-boundary-v1.md](083-pack-specific-projection-mapping-boundary-v1.md) | Pack-specific Projection mapping boundary |
 | [084-invalid-missing-app-definition-handling-v1.md](084-invalid-missing-app-definition-handling-v1.md) | Invalid / missing app definition handling |
+| [085-feedback-surface-projection-freshness-receipts-v1.md](085-feedback-surface-projection-freshness-receipts-v1.md) | Feedback Surface projection freshness receipts |
 
 ## Rules
 

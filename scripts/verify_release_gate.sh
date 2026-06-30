@@ -96,6 +96,7 @@ PACK_CONTRACT_COMPATIBILITY_PATH="$RUNTIME_DIR/pack-contract-compatibility.json"
 PROJECTION_READMODEL_CONTRACT_PATH="$RUNTIME_DIR/projection-readmodel-contract.json"
 CORE_PROJECTION_KERNEL_CONTRACT_PATH="$RUNTIME_DIR/core-projection-kernel-contract.json"
 CORE_READ_MODEL_SCHEMA_PATH="$RUNTIME_DIR/core-read-model-schema.json"
+PROJECTION_FEEDBACK_FRESHNESS_PATH="$RUNTIME_DIR/projection-feedback-freshness-receipts.json"
 CORE_VIEW_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-view-model-contract.json"
 EVIDENCE_ACCEPTANCE_CONTRACT_PATH="$RUNTIME_DIR/evidence-acceptance-contract.json"
 EXECUTOR_ADAPTER_CONTRACT_PATH="$RUNTIME_DIR/executor-adapter-contract.json"
@@ -446,6 +447,7 @@ proof_chain = [
     {"stage": "core-delivery-readiness-audit-trigger", "label": "Core Delivery Readiness / Optional Audit Trigger"},
     {"stage": "core-projection-kernel-contract", "label": "Core Projection Kernel Contract"},
     {"stage": "core-read-model-schema", "label": "Core Read Model Schema"},
+    {"stage": "projection-feedback-freshness-receipts", "label": "Projection Feedback / Freshness Receipts"},
     {"stage": "core-view-model-contract", "label": "Core View Model Contract"},
     {"stage": "requirement.intake", "label": "Requirement Intake"},
     {"stage": "classification.ready", "label": "Classification Ready"},
@@ -4646,6 +4648,160 @@ if payload["status"] != "passed":
     raise SystemExit("core read model schema fixture failed")
 PY
   record_stage "core-read-model-schema" "passed" "$(basename "$CORE_READ_MODEL_SCHEMA_PATH")"
+}
+
+run_projection_feedback_freshness_gate() {
+  record_stage "projection-feedback-freshness-receipts" "started" "$PROJECTION_FEEDBACK_FRESHNESS_PATH"
+  local rust_test_log="$RUNTIME_DIR/projection-feedback-freshness-rust-test.log"
+  if ! (cd "$ROOT" && cargo test -p agentflow-projection projection_surface_catalog --quiet >"$rust_test_log" 2>&1); then
+    fail_stage "projection-feedback-freshness-receipts" "agentflow-projection feedback/freshness tests failed"
+  fi
+  python3 - "$ROOT" "$PROJECTION_FEEDBACK_FRESHNESS_PATH" "$rust_test_log" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+root = pathlib.Path(sys.argv[1])
+out_path = pathlib.Path(sys.argv[2])
+rust_test_log = pathlib.Path(sys.argv[3])
+doc_path = root / "docs/architecture/085-feedback-surface-projection-freshness-receipts-v1.md"
+source_path = root / "crates/projection/src/query.rs"
+
+doc_text = doc_path.read_text(encoding="utf-8") if doc_path.is_file() else ""
+source_text = source_path.read_text(encoding="utf-8") if source_path.is_file() else ""
+
+freshness_receipt_fields = [
+    "version",
+    "receiptId",
+    "projectionRef",
+    "sourceRefs",
+    "sourceDigest",
+    "rebuildReceiptRef",
+    "status",
+    "staleReason",
+    "generatedAt",
+    "writesAuthority",
+]
+feedback_route_fields = [
+    "status",
+    "route",
+    "reason",
+    "sourceSurfaceKey",
+    "targetAuthority",
+    "proposalKind",
+    "requiresConfirmation",
+    "confirmationBoundary",
+    "writesAuthority",
+]
+required_doc_sections = [
+    "## Purpose",
+    "## Boundary",
+    "## Freshness Receipt",
+    "## Feedback Surface Route",
+    "## Release Gate Evidence",
+]
+required_doc_phrases = [
+    "projection-freshness-receipt.v1",
+    "ready-for-spec-evolution",
+    "spec-evolution-preview",
+    "preview-confirmation-materialization-required",
+    ".agentflow/projections/replay-report.json",
+    ".agentflow/spec/**",
+    "writesAuthority",
+]
+required_source_symbols = [
+    "ProjectionFreshnessReceipt",
+    "ProjectionFeedbackRoute",
+    "PROJECTION_FRESHNESS_RECEIPT_VERSION",
+    "projection_freshness_receipt",
+    "feedback_route_for_surface",
+    "open-spec-evolution-preview",
+    "preview-confirmation-materialization-required",
+    "projection_surface_catalog_routes_stale_feedback_to_spec_evolution_preview",
+]
+
+missing_doc_sections = [section for section in required_doc_sections if section not in doc_text]
+missing_doc_phrases = [phrase for phrase in required_doc_phrases if phrase not in doc_text]
+freshness_source_fields = {
+    "version": "version",
+    "receiptId": "receipt_id",
+    "projectionRef": "projection_ref",
+    "sourceRefs": "source_refs",
+    "sourceDigest": "source_digest",
+    "rebuildReceiptRef": "rebuild_receipt_ref",
+    "status": "status",
+    "staleReason": "stale_reason",
+    "generatedAt": "generated_at",
+    "writesAuthority": "writes_authority",
+}
+feedback_source_fields = {
+    "status": "status",
+    "route": "route",
+    "reason": "reason",
+    "sourceSurfaceKey": "source_surface_key",
+    "targetAuthority": "target_authority",
+    "proposalKind": "proposal_kind",
+    "requiresConfirmation": "requires_confirmation",
+    "confirmationBoundary": "confirmation_boundary",
+    "writesAuthority": "writes_authority",
+}
+missing_freshness_fields = [
+    field for field in freshness_receipt_fields
+    if field not in doc_text
+    or freshness_source_fields[field] not in source_text
+]
+missing_feedback_fields = [
+    field for field in feedback_route_fields
+    if field not in doc_text
+    or feedback_source_fields[field] not in source_text
+]
+missing_source_symbols = [symbol for symbol in required_source_symbols if symbol not in source_text]
+
+rust_log_text = rust_test_log.read_text(encoding="utf-8") if rust_test_log.is_file() else ""
+rust_tests_passed = "test result: ok" in rust_log_text
+
+payload = {
+    "version": "agentflow-projection-feedback-freshness-gate.v1",
+    "status": "passed",
+    "contractVersion": "projection-freshness-receipt.v1",
+    "docPath": "docs/architecture/085-feedback-surface-projection-freshness-receipts-v1.md",
+    "sourcePath": "crates/projection/src/query.rs",
+    "rustTestLogPath": "runtime/projection-feedback-freshness-rust-test.log",
+    "freshnessReceiptFields": freshness_receipt_fields,
+    "feedbackRouteFields": feedback_route_fields,
+    "feedbackStatuses": ["accepted", "ready-for-spec-evolution", "blocked"],
+    "specEvolutionRoute": "open-spec-evolution-preview",
+    "confirmationBoundary": "preview-confirmation-materialization-required",
+    "rebuildReceiptRef": ".agentflow/projections/replay-report.json",
+    "sourceDigestAlgorithm": "fnv1a64",
+    "writesAuthority": False,
+    "projectionAuthority": False,
+    "requiresConfirmationForSpecEvolution": True,
+    "missingDocSections": missing_doc_sections,
+    "missingDocPhrases": missing_doc_phrases,
+    "missingFreshnessFields": missing_freshness_fields,
+    "missingFeedbackFields": missing_feedback_fields,
+    "missingSourceSymbols": missing_source_symbols,
+    "rustTestsPassed": rust_tests_passed,
+    "checkedAt": int(time.time()),
+}
+
+if any([
+    missing_doc_sections,
+    missing_doc_phrases,
+    missing_freshness_fields,
+    missing_feedback_fields,
+    missing_source_symbols,
+]) or not rust_tests_passed:
+    payload["status"] = "failed"
+
+out_path.parent.mkdir(parents=True, exist_ok=True)
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit("projection feedback freshness receipts fixture failed")
+PY
+  record_stage "projection-feedback-freshness-receipts" "passed" "$(basename "$PROJECTION_FEEDBACK_FRESHNESS_PATH")"
 }
 
 run_core_view_model_contract_gate() {
@@ -10871,6 +11027,7 @@ PY
   run_core_delivery_readiness_audit_trigger_gate
   run_core_projection_kernel_contract_gate
   run_core_read_model_schema_gate
+  run_projection_feedback_freshness_gate
   run_core_view_model_contract_gate
   run_core_decision_projection_read_model_gate
   run_v107_release_certification_gate
