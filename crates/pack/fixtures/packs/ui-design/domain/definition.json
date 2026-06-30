@@ -1,0 +1,222 @@
+{
+  "version": "agentflow-pack-domain.v1",
+  "packId": "ui-design",
+  "domainId": "ui-design-domain",
+  "objectTypes": [
+    {
+      "objectTypeId": "ProductBrief",
+      "label": "ProductBrief",
+      "description": "产品简报"
+    },
+    {
+      "objectTypeId": "Direction",
+      "label": "Direction",
+      "description": "设计方向"
+    },
+    {
+      "objectTypeId": "Wireframe",
+      "label": "Wireframe",
+      "description": "线框稿"
+    },
+    {
+      "objectTypeId": "HiFi",
+      "label": "HiFi",
+      "description": "高保真设计"
+    },
+    {
+      "objectTypeId": "DesignSystem",
+      "label": "DesignSystem",
+      "description": "设计系统"
+    },
+    {
+      "objectTypeId": "Page",
+      "label": "Page",
+      "description": "页面"
+    },
+    {
+      "objectTypeId": "Handoff",
+      "label": "Handoff",
+      "description": "设计交接"
+    },
+    {
+      "objectTypeId": "Evidence",
+      "label": "Evidence",
+      "description": "设计验证证据"
+    }
+  ],
+  "linkTypes": [
+    {
+      "linkTypeId": "brief-produces-direction",
+      "fromObjectType": "ProductBrief",
+      "toObjectType": "Direction",
+      "description": "ProductBrief -> Direction"
+    },
+    {
+      "linkTypeId": "direction-produces-wireframe",
+      "fromObjectType": "Direction",
+      "toObjectType": "Wireframe",
+      "description": "Direction -> Wireframe"
+    },
+    {
+      "linkTypeId": "wireframe-produces-hifi",
+      "fromObjectType": "Wireframe",
+      "toObjectType": "HiFi",
+      "description": "Wireframe -> HiFi"
+    },
+    {
+      "linkTypeId": "hifi-produces-design-system",
+      "fromObjectType": "HiFi",
+      "toObjectType": "DesignSystem",
+      "description": "HiFi -> DesignSystem"
+    },
+    {
+      "linkTypeId": "design-system-produces-handoff",
+      "fromObjectType": "DesignSystem",
+      "toObjectType": "Handoff",
+      "description": "DesignSystem -> Handoff"
+    },
+    {
+      "linkTypeId": "handoff-produces-evidence",
+      "fromObjectType": "Handoff",
+      "toObjectType": "Evidence",
+      "description": "Handoff -> Evidence"
+    }
+  ],
+  "stateMachines": [
+    {
+      "objectType": "Handoff",
+      "states": [
+        "draft",
+        "review",
+        "accepted",
+        "blocked"
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "to": "review",
+          "actionType": "design.request-review"
+        },
+        {
+          "from": "review",
+          "to": "accepted",
+          "actionType": "design.accept-handoff"
+        }
+      ]
+    }
+  ],
+  "actionSemantics": [
+    {
+      "actionType": "design.brief.capture",
+      "targetObjectType": "ProductBrief",
+      "description": "design.brief.capture on ProductBrief",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:design.brief.capture",
+      "arbitrationRef": "action-arbitration:design.brief.capture",
+      "simulationRef": "simulation:design.brief.capture",
+      "requiredEvidence": [
+        "brief"
+      ]
+    },
+    {
+      "actionType": "design.direction.select",
+      "targetObjectType": "Direction",
+      "description": "design.direction.select on Direction",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:design.direction.select",
+      "arbitrationRef": "action-arbitration:design.direction.select",
+      "simulationRef": "simulation:design.direction.select",
+      "requiredEvidence": [
+        "product-brief"
+      ]
+    },
+    {
+      "actionType": "design.generate-wireframe",
+      "targetObjectType": "Wireframe",
+      "description": "design.generate-wireframe on Wireframe",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:design.generate-wireframe",
+      "arbitrationRef": "action-arbitration:design.generate-wireframe",
+      "simulationRef": "simulation:design.generate-wireframe",
+      "requiredEvidence": [
+        "direction"
+      ]
+    },
+    {
+      "actionType": "design.hifi.review",
+      "targetObjectType": "HiFi",
+      "description": "design.hifi.review on HiFi",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:design.hifi.review",
+      "arbitrationRef": "action-arbitration:design.hifi.review",
+      "simulationRef": "simulation:design.hifi.review",
+      "requiredEvidence": [
+        "wireframe"
+      ]
+    },
+    {
+      "actionType": "design.system.bind",
+      "targetObjectType": "DesignSystem",
+      "description": "design.system.bind on DesignSystem",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:design.system.bind",
+      "arbitrationRef": "action-arbitration:design.system.bind",
+      "simulationRef": "simulation:design.system.bind",
+      "requiredEvidence": [
+        "hifi",
+        "design-system-ref"
+      ]
+    },
+    {
+      "actionType": "design.accept-handoff",
+      "targetObjectType": "Handoff",
+      "description": "design.accept-handoff on Handoff",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:design.accept-handoff",
+      "arbitrationRef": "action-arbitration:design.accept-handoff",
+      "simulationRef": "simulation:design.accept-handoff",
+      "requiredEvidence": [
+        "visual-preview",
+        "design-system-ref",
+        "handoff"
+      ]
+    }
+  ],
+  "acceptanceSemantics": [
+    {
+      "acceptanceId": "ui-design.handoff.accepted",
+      "objectType": "Handoff",
+      "description": "设计交付必须包含页面、设计系统引用和可追溯证据。",
+      "requiredEvidence": [
+        "design-preview",
+        "handoff"
+      ]
+    }
+  ],
+  "evidencePolicy": {
+    "policyId": "ui-design.evidence.required",
+    "requiredEvidenceKinds": [
+      "visual-preview",
+      "handoff"
+    ],
+    "missingEvidenceBehavior": "reject-handoff"
+  },
+  "auditTriggerHints": [],
+  "migrationCompatibility": {
+    "compatibleWithRuntime": ">=0.8.0",
+    "migrationPolicyRef": "pack.migration.preview-only"
+  },
+  "writesEvents": false
+}

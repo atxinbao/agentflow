@@ -1,0 +1,225 @@
+{
+  "version": "agentflow-pack-connector.v1",
+  "packId": "software-dev",
+  "connectorId": "software-dev-connectors",
+  "connectors": [
+    {
+      "connectorId": "github",
+      "providerType": "github",
+      "supportedActions": [
+        {
+          "actionId": "github.repo.read",
+          "label": "github.repo.read",
+          "requiredCapability": "repo.read",
+          "commandType": "github.repo.read",
+          "writesExternal": false,
+          "evidenceOutput": "connector.evidence"
+        },
+        {
+          "actionId": "github.pull-request.create",
+          "label": "github.pull-request.create",
+          "requiredCapability": "pull_request.create",
+          "commandType": "github.pull-request.create",
+          "writesExternal": true,
+          "evidenceOutput": "connector.evidence"
+        }
+      ],
+      "requiredCapabilities": [
+        "pull_request.create",
+        "repo.read"
+      ],
+      "healthSource": "capability-registry",
+      "smokePolicy": {
+        "requiredForCommands": true,
+        "providerSmokeRef": "provider-smoke:github",
+        "failureDisablesCommands": true
+      },
+      "evidenceOutput": {
+        "channel": "evidence",
+        "pathPolicy": "connector-output-is-evidence-not-authority",
+        "authority": false
+      },
+      "disabledReason": "capability-registry.disabled-reason",
+      "commandBoundary": {
+        "runtimeCommandRequired": true,
+        "authorityWrite": false,
+        "outputAuthority": false,
+        "outputChannels": [
+          "context",
+          "evidence"
+        ]
+      }
+    },
+    {
+      "connectorId": "git",
+      "providerType": "git",
+      "supportedActions": [
+        {
+          "actionId": "git.status",
+          "label": "git.status",
+          "requiredCapability": "git.status",
+          "commandType": "git.status",
+          "writesExternal": false,
+          "evidenceOutput": "connector.evidence"
+        },
+        {
+          "actionId": "git.diff",
+          "label": "git.diff",
+          "requiredCapability": "git.diff",
+          "commandType": "git.diff",
+          "writesExternal": false,
+          "evidenceOutput": "connector.evidence"
+        }
+      ],
+      "requiredCapabilities": [
+        "git.diff",
+        "git.status"
+      ],
+      "healthSource": "capability-registry",
+      "smokePolicy": {
+        "requiredForCommands": true,
+        "providerSmokeRef": "provider-smoke:git",
+        "failureDisablesCommands": true
+      },
+      "evidenceOutput": {
+        "channel": "evidence",
+        "pathPolicy": "connector-output-is-evidence-not-authority",
+        "authority": false
+      },
+      "disabledReason": "capability-registry.disabled-reason",
+      "commandBoundary": {
+        "runtimeCommandRequired": true,
+        "authorityWrite": false,
+        "outputAuthority": false,
+        "outputChannels": [
+          "context",
+          "evidence"
+        ]
+      }
+    },
+    {
+      "connectorId": "codex",
+      "providerType": "codex",
+      "supportedActions": [
+        {
+          "actionId": "codex.launch",
+          "label": "codex.launch",
+          "requiredCapability": "launch",
+          "commandType": "work-agent.launch",
+          "writesExternal": true,
+          "evidenceOutput": "connector.evidence"
+        },
+        {
+          "actionId": "codex.complete",
+          "label": "codex.complete",
+          "requiredCapability": "build_agent.complete",
+          "commandType": "work-agent.complete",
+          "writesExternal": true,
+          "evidenceOutput": "connector.evidence"
+        }
+      ],
+      "requiredCapabilities": [
+        "build_agent.complete",
+        "launch"
+      ],
+      "healthSource": "capability-registry",
+      "smokePolicy": {
+        "requiredForCommands": true,
+        "providerSmokeRef": "provider-smoke:codex",
+        "failureDisablesCommands": true
+      },
+      "evidenceOutput": {
+        "channel": "evidence",
+        "pathPolicy": "connector-output-is-evidence-not-authority",
+        "authority": false
+      },
+      "disabledReason": "capability-registry.disabled-reason",
+      "commandBoundary": {
+        "runtimeCommandRequired": true,
+        "authorityWrite": false,
+        "outputAuthority": false,
+        "outputChannels": [
+          "context",
+          "evidence"
+        ]
+      }
+    },
+    {
+      "connectorId": "claude",
+      "providerType": "claude",
+      "supportedActions": [
+        {
+          "actionId": "claude.launch",
+          "label": "claude.launch",
+          "requiredCapability": "launch",
+          "commandType": "work-agent.launch",
+          "writesExternal": true,
+          "evidenceOutput": "connector.evidence"
+        }
+      ],
+      "requiredCapabilities": [
+        "launch"
+      ],
+      "healthSource": "capability-registry",
+      "smokePolicy": {
+        "requiredForCommands": true,
+        "providerSmokeRef": "provider-smoke:claude",
+        "failureDisablesCommands": true
+      },
+      "evidenceOutput": {
+        "channel": "evidence",
+        "pathPolicy": "connector-output-is-evidence-not-authority",
+        "authority": false
+      },
+      "disabledReason": "capability-registry.disabled-reason",
+      "commandBoundary": {
+        "runtimeCommandRequired": true,
+        "authorityWrite": false,
+        "outputAuthority": false,
+        "outputChannels": [
+          "context",
+          "evidence"
+        ]
+      }
+    },
+    {
+      "connectorId": "browser-preview",
+      "providerType": "browser-preview",
+      "supportedActions": [
+        {
+          "actionId": "browser-preview.smoke",
+          "label": "browser-preview.smoke",
+          "requiredCapability": "browser_preview.smoke",
+          "commandType": "browser-preview.smoke",
+          "writesExternal": false,
+          "evidenceOutput": "connector.evidence"
+        }
+      ],
+      "requiredCapabilities": [
+        "browser_preview.smoke"
+      ],
+      "healthSource": "capability-registry",
+      "smokePolicy": {
+        "requiredForCommands": true,
+        "providerSmokeRef": "provider-smoke:browser-preview",
+        "failureDisablesCommands": true
+      },
+      "evidenceOutput": {
+        "channel": "evidence",
+        "pathPolicy": "connector-output-is-evidence-not-authority",
+        "authority": false
+      },
+      "disabledReason": "capability-registry.disabled-reason",
+      "commandBoundary": {
+        "runtimeCommandRequired": true,
+        "authorityWrite": false,
+        "outputAuthority": false,
+        "outputChannels": [
+          "context",
+          "evidence"
+        ]
+      }
+    }
+  ],
+  "writesAuthority": false
+}

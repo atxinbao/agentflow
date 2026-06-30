@@ -3597,6 +3597,12 @@ for report in reports:
         raise SystemExit("pack simulation must expose gate impact")
 if projection.get("status") != "passed":
     raise SystemExit("pack projection readiness did not pass")
+projection_views = projection.get("views") or []
+if not projection_views:
+    raise SystemExit("pack projection readiness must include projection views")
+for view in projection_views:
+    if not view.get("viewModelMappingCount"):
+        raise SystemExit("pack projection readiness must include view model mappings")
 if api_plane.get("status") != "passed":
     raise SystemExit("pack api plane manifest did not pass")
 if software.get("status") != "completed":
@@ -4247,17 +4253,28 @@ pack_readiness_statuses = {
     for view in (pack_projection.get("views") or [])
     for readiness in (view.get("readiness") or [])
 }
+pack_projection_views = pack_projection.get("views") or []
+pack_invalid_or_deferred_mappings = [
+    mapping
+    for view in pack_projection_views
+    for mapping in (view.get("invalidOrDeferredMappings") or [])
+]
 pack_missing_definition_behavior = (
     "invalid"
     if "invalid" in pack_readiness_statuses
     else "deferred"
-    if "deferred" in pack_readiness_statuses
+    if pack_invalid_or_deferred_mappings
     else None
 )
-pack_projection_no_fallback = (
+pack_projection_mapping_boundary = (
     pack_projection.get("status") == "passed"
+    and bool(pack_projection_views)
+    and all((view.get("viewModelMappingCount") or 0) > 0 for view in pack_projection_views)
+)
+pack_projection_no_fallback = (
+    pack_projection_mapping_boundary
     and pack_missing_definition_behavior in {"invalid", "deferred"}
-    and all((view.get("workbenchCount") or 0) == 0 for view in (pack_projection.get("views") or []))
+    and all((view.get("workbenchCount") or 0) > 0 for view in pack_projection_views)
 )
 read_model_versions = {
     "project-projection": project_projection.get("version"),
@@ -4308,7 +4325,9 @@ payload = {
     "missingProjectionQueries": missing_required_queries,
     "packProjectionStatus": pack_projection.get("status"),
     "packMissingDefinitionBehavior": pack_missing_definition_behavior,
+    "packProjectionMappingBoundary": pack_projection_mapping_boundary,
     "packProjectionNoFallback": pack_projection_no_fallback,
+    "packInvalidOrDeferredMappingCount": len(pack_invalid_or_deferred_mappings),
     "readModelVersions": read_model_versions,
     "missingRequiredReadModels": missing_required_read_models,
     "sidecarReadModelsPresent": sidecar_read_models_present,
@@ -10276,10 +10295,11 @@ if not source_root.is_dir():
     raise SystemExit(f"missing crate pack fixtures: {source_root}")
 target_root.mkdir(parents=True, exist_ok=True)
 for pack_id in ["software-dev", "ui-design"]:
-    source = source_root / pack_id / "pack.json"
+    source = source_root / pack_id
     target_dir = target_root / pack_id
-    target_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, target_dir / "pack.json")
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+    shutil.copytree(source, target_dir)
 PY
   record_stage "pack.project-fixtures" "passed" ".agentflow/packs/software-dev, .agentflow/packs/ui-design"
 }

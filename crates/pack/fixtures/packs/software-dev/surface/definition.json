@@ -1,0 +1,322 @@
+{
+  "version": "agentflow-pack-surface.v1",
+  "packId": "software-dev",
+  "surfaceId": "software-dev-surface",
+  "pages": [
+    {
+      "pageId": "project-home",
+      "label": "Project Home",
+      "description": "Project Home surface",
+      "kind": "main",
+      "viewModelRef": "view-model:project-home",
+      "commandEntryIds": []
+    },
+    {
+      "pageId": "spec-workbench",
+      "label": "Spec Workbench",
+      "description": "Spec Workbench surface",
+      "kind": "workbench",
+      "viewModelRef": "view-model:spec-workbench",
+      "commandEntryIds": [
+        "spec.intake.start"
+      ]
+    },
+    {
+      "pageId": "task-workbench",
+      "label": "Task Workbench",
+      "description": "Task Workbench surface",
+      "kind": "workbench",
+      "viewModelRef": "view-model:task-workbench",
+      "commandEntryIds": [
+        "work.issue.start"
+      ]
+    },
+    {
+      "pageId": "acceptance",
+      "label": "Acceptance",
+      "description": "Acceptance surface",
+      "kind": "workbench",
+      "viewModelRef": "view-model:acceptance",
+      "commandEntryIds": [
+        "acceptance.evaluate"
+      ]
+    },
+    {
+      "pageId": "delivery",
+      "label": "Delivery",
+      "description": "Delivery surface",
+      "kind": "detail",
+      "viewModelRef": "view-model:delivery",
+      "commandEntryIds": [
+        "delivery.open"
+      ]
+    },
+    {
+      "pageId": "event-timeline",
+      "label": "Event Timeline",
+      "description": "Event Timeline surface",
+      "kind": "detail",
+      "viewModelRef": "view-model:event-timeline",
+      "commandEntryIds": []
+    },
+    {
+      "pageId": "evidence-graph",
+      "label": "Evidence Graph",
+      "description": "Evidence Graph surface",
+      "kind": "detail",
+      "viewModelRef": "view-model:evidence-graph",
+      "commandEntryIds": []
+    },
+    {
+      "pageId": "audit-surface",
+      "label": "Audit Surface",
+      "description": "Audit Surface surface",
+      "kind": "sidecar",
+      "viewModelRef": "view-model:audit-surface",
+      "commandEntryIds": [
+        "audit.request.sidecar"
+      ]
+    },
+    {
+      "pageId": "finding-review",
+      "label": "Finding Review",
+      "description": "Finding Review surface",
+      "kind": "sidecar",
+      "viewModelRef": "view-model:finding-review",
+      "commandEntryIds": []
+    },
+    {
+      "pageId": "follow-up-proposal",
+      "label": "Follow-up Proposal",
+      "description": "Follow-up Proposal surface",
+      "kind": "sidecar",
+      "viewModelRef": "view-model:follow-up-proposal",
+      "commandEntryIds": []
+    }
+  ],
+  "workbenches": [
+    {
+      "workbenchId": "project-home-workbench",
+      "pageId": "project-home",
+      "label": "project-home",
+      "primaryObjectType": "Project",
+      "timelineRef": "timeline:project-home"
+    },
+    {
+      "workbenchId": "spec-workbench-workbench",
+      "pageId": "spec-workbench",
+      "label": "spec-workbench",
+      "primaryObjectType": "Spec",
+      "timelineRef": "timeline:spec-workbench"
+    },
+    {
+      "workbenchId": "task-workbench-workbench",
+      "pageId": "task-workbench",
+      "label": "task-workbench",
+      "primaryObjectType": "Issue",
+      "timelineRef": "timeline:task-workbench"
+    },
+    {
+      "workbenchId": "acceptance-workbench",
+      "pageId": "acceptance",
+      "label": "acceptance",
+      "primaryObjectType": "Acceptance",
+      "timelineRef": "timeline:acceptance"
+    }
+  ],
+  "viewModelMappings": [
+    {
+      "mappingId": "project-home-view-model",
+      "pageId": "project-home",
+      "projectionRef": "projection.project-home",
+      "viewModelRef": "view-model:project-home"
+    },
+    {
+      "mappingId": "spec-workbench-view-model",
+      "pageId": "spec-workbench",
+      "projectionRef": "projection.spec-workbench",
+      "viewModelRef": "view-model:spec-workbench"
+    },
+    {
+      "mappingId": "task-workbench-view-model",
+      "pageId": "task-workbench",
+      "projectionRef": "projection.task-workbench",
+      "viewModelRef": "view-model:task-workbench"
+    },
+    {
+      "mappingId": "acceptance-view-model",
+      "pageId": "acceptance",
+      "projectionRef": "projection.acceptance",
+      "viewModelRef": "view-model:acceptance"
+    },
+    {
+      "mappingId": "delivery-view-model",
+      "pageId": "delivery",
+      "projectionRef": "projection.delivery",
+      "viewModelRef": "view-model:delivery"
+    },
+    {
+      "mappingId": "event-timeline-view-model",
+      "pageId": "event-timeline",
+      "projectionRef": "projection.event-timeline",
+      "viewModelRef": "view-model:event-timeline"
+    },
+    {
+      "mappingId": "evidence-graph-view-model",
+      "pageId": "evidence-graph",
+      "projectionRef": "projection.evidence-graph",
+      "viewModelRef": "view-model:evidence-graph"
+    },
+    {
+      "mappingId": "audit-surface-view-model",
+      "pageId": "audit-surface",
+      "projectionRef": "projection.audit-surface",
+      "viewModelRef": "view-model:audit-surface"
+    }
+  ],
+  "commandEntryMappings": [
+    {
+      "commandEntryId": "spec.intake.start",
+      "pageId": "spec-workbench",
+      "label": "spec.intake.start",
+      "commandType": "spec.intake.start",
+      "route": "action-proposal",
+      "actionContractRef": "action-contract:spec.intake"
+    },
+    {
+      "commandEntryId": "work.issue.start",
+      "pageId": "task-workbench",
+      "label": "work.issue.start",
+      "commandType": "work.issue.start",
+      "route": "action-proposal",
+      "actionContractRef": "action-contract:issue.start"
+    },
+    {
+      "commandEntryId": "acceptance.evaluate",
+      "pageId": "acceptance",
+      "label": "acceptance.evaluate",
+      "commandType": "acceptance.evaluate",
+      "route": "action-proposal",
+      "actionContractRef": "action-contract:acceptance.evaluate"
+    },
+    {
+      "commandEntryId": "delivery.open",
+      "pageId": "delivery",
+      "label": "delivery.open",
+      "commandType": "delivery.open",
+      "route": "action-proposal",
+      "actionContractRef": "action-contract:delivery.open"
+    },
+    {
+      "commandEntryId": "audit.request.sidecar",
+      "pageId": "audit-surface",
+      "label": "audit.request.sidecar",
+      "commandType": "audit.request.sidecar",
+      "route": "action-proposal",
+      "actionContractRef": "action-contract:audit.request"
+    }
+  ],
+  "readModelDependencies": [
+    {
+      "dependencyId": "project-home-read-model",
+      "pageId": "project-home",
+      "projectionRef": "projection.project-home",
+      "required": true
+    },
+    {
+      "dependencyId": "spec-workbench-read-model",
+      "pageId": "spec-workbench",
+      "projectionRef": "projection.spec-workbench",
+      "required": true
+    },
+    {
+      "dependencyId": "task-workbench-read-model",
+      "pageId": "task-workbench",
+      "projectionRef": "projection.task-workbench",
+      "required": true
+    },
+    {
+      "dependencyId": "acceptance-read-model",
+      "pageId": "acceptance",
+      "projectionRef": "projection.acceptance",
+      "required": true
+    },
+    {
+      "dependencyId": "delivery-read-model",
+      "pageId": "delivery",
+      "projectionRef": "projection.delivery",
+      "required": true
+    },
+    {
+      "dependencyId": "event-timeline-read-model",
+      "pageId": "event-timeline",
+      "projectionRef": "projection.event-timeline",
+      "required": true
+    },
+    {
+      "dependencyId": "evidence-graph-read-model",
+      "pageId": "evidence-graph",
+      "projectionRef": "projection.evidence-graph",
+      "required": true
+    },
+    {
+      "dependencyId": "audit-surface-read-model",
+      "pageId": "audit-surface",
+      "projectionRef": "projection.audit-surface",
+      "required": true
+    }
+  ],
+  "navigationRules": [
+    {
+      "fromPageId": "project-home",
+      "toPageId": "spec-workbench",
+      "trigger": "start-spec"
+    },
+    {
+      "fromPageId": "spec-workbench",
+      "toPageId": "task-workbench",
+      "trigger": "materialize-issues"
+    },
+    {
+      "fromPageId": "task-workbench",
+      "toPageId": "acceptance",
+      "trigger": "prepare-review"
+    },
+    {
+      "fromPageId": "acceptance",
+      "toPageId": "delivery",
+      "trigger": "completion-accepted"
+    },
+    {
+      "fromPageId": "delivery",
+      "toPageId": "audit-surface",
+      "trigger": "request-sidecar-audit"
+    }
+  ],
+  "statePolicy": {
+    "emptyStateRef": "surface-state.empty",
+    "loadingStateRef": "surface-state.loading",
+    "errorStateRef": "surface-state.error"
+  },
+  "sidecarSurfaces": [
+    {
+      "sidecarId": "audit-surface",
+      "pageId": "audit-surface",
+      "label": "Audit Surface",
+      "blocksMainChain": false
+    },
+    {
+      "sidecarId": "finding-review",
+      "pageId": "finding-review",
+      "label": "Finding Review",
+      "blocksMainChain": false
+    },
+    {
+      "sidecarId": "follow-up-proposal",
+      "pageId": "follow-up-proposal",
+      "label": "Follow-up Proposal",
+      "blocksMainChain": false
+    }
+  ],
+  "writesAuthority": false
+}

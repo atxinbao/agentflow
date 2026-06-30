@@ -1,0 +1,207 @@
+{
+  "version": "agentflow-pack-connector.v1",
+  "packId": "ui-design",
+  "connectorId": "ui-design-connectors",
+  "connectors": [
+    {
+      "connectorId": "figma",
+      "providerType": "figma",
+      "supportedActions": [
+        {
+          "actionId": "figma.read",
+          "label": "figma.read",
+          "requiredCapability": "mcp.provider.list",
+          "commandType": "figma.read",
+          "writesExternal": false,
+          "evidenceOutput": "connector.evidence"
+        }
+      ],
+      "requiredCapabilities": [
+        "mcp.provider.list"
+      ],
+      "healthSource": "capability-registry",
+      "smokePolicy": {
+        "requiredForCommands": true,
+        "providerSmokeRef": "provider-smoke:figma",
+        "failureDisablesCommands": true
+      },
+      "evidenceOutput": {
+        "channel": "evidence",
+        "pathPolicy": "connector-output-is-evidence-not-authority",
+        "authority": false
+      },
+      "disabledReason": "capability-registry.disabled-reason",
+      "commandBoundary": {
+        "runtimeCommandRequired": true,
+        "authorityWrite": false,
+        "outputAuthority": false,
+        "outputChannels": [
+          "context",
+          "evidence"
+        ]
+      }
+    },
+    {
+      "connectorId": "image-assets",
+      "providerType": "image-assets",
+      "supportedActions": [
+        {
+          "actionId": "assets.read",
+          "label": "assets.read",
+          "requiredCapability": "git.status",
+          "commandType": "assets.read",
+          "writesExternal": false,
+          "evidenceOutput": "connector.evidence"
+        }
+      ],
+      "requiredCapabilities": [
+        "git.status"
+      ],
+      "healthSource": "capability-registry",
+      "smokePolicy": {
+        "requiredForCommands": true,
+        "providerSmokeRef": "provider-smoke:image-assets",
+        "failureDisablesCommands": true
+      },
+      "evidenceOutput": {
+        "channel": "evidence",
+        "pathPolicy": "connector-output-is-evidence-not-authority",
+        "authority": false
+      },
+      "disabledReason": "capability-registry.disabled-reason",
+      "commandBoundary": {
+        "runtimeCommandRequired": true,
+        "authorityWrite": false,
+        "outputAuthority": false,
+        "outputChannels": [
+          "context",
+          "evidence"
+        ]
+      }
+    },
+    {
+      "connectorId": "frontend-repo",
+      "providerType": "frontend-repo",
+      "supportedActions": [
+        {
+          "actionId": "frontend.status",
+          "label": "frontend.status",
+          "requiredCapability": "git.status",
+          "commandType": "frontend.status",
+          "writesExternal": false,
+          "evidenceOutput": "connector.evidence"
+        },
+        {
+          "actionId": "frontend.diff",
+          "label": "frontend.diff",
+          "requiredCapability": "git.diff",
+          "commandType": "frontend.diff",
+          "writesExternal": false,
+          "evidenceOutput": "connector.evidence"
+        }
+      ],
+      "requiredCapabilities": [
+        "git.diff",
+        "git.status"
+      ],
+      "healthSource": "capability-registry",
+      "smokePolicy": {
+        "requiredForCommands": true,
+        "providerSmokeRef": "provider-smoke:frontend-repo",
+        "failureDisablesCommands": true
+      },
+      "evidenceOutput": {
+        "channel": "evidence",
+        "pathPolicy": "connector-output-is-evidence-not-authority",
+        "authority": false
+      },
+      "disabledReason": "capability-registry.disabled-reason",
+      "commandBoundary": {
+        "runtimeCommandRequired": true,
+        "authorityWrite": false,
+        "outputAuthority": false,
+        "outputChannels": [
+          "context",
+          "evidence"
+        ]
+      }
+    },
+    {
+      "connectorId": "design-export",
+      "providerType": "design-export",
+      "supportedActions": [
+        {
+          "actionId": "design-export.read",
+          "label": "design-export.read",
+          "requiredCapability": "mcp.provider.list",
+          "commandType": "design-export.read",
+          "writesExternal": false,
+          "evidenceOutput": "connector.evidence"
+        }
+      ],
+      "requiredCapabilities": [
+        "mcp.provider.list"
+      ],
+      "healthSource": "capability-registry",
+      "smokePolicy": {
+        "requiredForCommands": true,
+        "providerSmokeRef": "provider-smoke:design-export",
+        "failureDisablesCommands": true
+      },
+      "evidenceOutput": {
+        "channel": "evidence",
+        "pathPolicy": "connector-output-is-evidence-not-authority",
+        "authority": false
+      },
+      "disabledReason": "capability-registry.disabled-reason",
+      "commandBoundary": {
+        "runtimeCommandRequired": true,
+        "authorityWrite": false,
+        "outputAuthority": false,
+        "outputChannels": [
+          "context",
+          "evidence"
+        ]
+      }
+    },
+    {
+      "connectorId": "browser-preview",
+      "providerType": "browser-preview",
+      "supportedActions": [
+        {
+          "actionId": "browser-preview.smoke",
+          "label": "browser-preview.smoke",
+          "requiredCapability": "browser_preview.smoke",
+          "commandType": "browser-preview.smoke",
+          "writesExternal": false,
+          "evidenceOutput": "connector.evidence"
+        }
+      ],
+      "requiredCapabilities": [
+        "browser_preview.smoke"
+      ],
+      "healthSource": "capability-registry",
+      "smokePolicy": {
+        "requiredForCommands": true,
+        "providerSmokeRef": "provider-smoke:browser-preview",
+        "failureDisablesCommands": true
+      },
+      "evidenceOutput": {
+        "channel": "evidence",
+        "pathPolicy": "connector-output-is-evidence-not-authority",
+        "authority": false
+      },
+      "disabledReason": "capability-registry.disabled-reason",
+      "commandBoundary": {
+        "runtimeCommandRequired": true,
+        "authorityWrite": false,
+        "outputAuthority": false,
+        "outputChannels": [
+          "context",
+          "evidence"
+        ]
+      }
+    }
+  ],
+  "writesAuthority": false
+}

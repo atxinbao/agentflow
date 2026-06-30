@@ -1,0 +1,392 @@
+{
+  "version": "agentflow-pack-domain.v1",
+  "packId": "software-dev",
+  "domainId": "software-dev-domain",
+  "objectTypes": [
+    {
+      "objectTypeId": "Requirement",
+      "label": "Requirement",
+      "description": "公开需求文档"
+    },
+    {
+      "objectTypeId": "Spec",
+      "label": "Spec",
+      "description": "已确认规格"
+    },
+    {
+      "objectTypeId": "Issue",
+      "label": "Issue",
+      "description": "可执行任务"
+    },
+    {
+      "objectTypeId": "Run",
+      "label": "Run",
+      "description": "工作循环运行"
+    },
+    {
+      "objectTypeId": "Acceptance",
+      "label": "Acceptance",
+      "description": "验收结论"
+    },
+    {
+      "objectTypeId": "Delivery",
+      "label": "Delivery",
+      "description": "交付记录"
+    },
+    {
+      "objectTypeId": "PullRequest",
+      "label": "PullRequest",
+      "description": "PR/MR 交付入口"
+    },
+    {
+      "objectTypeId": "Release",
+      "label": "Release",
+      "description": "版本发布"
+    },
+    {
+      "objectTypeId": "Evidence",
+      "label": "Evidence",
+      "description": "验证证据"
+    },
+    {
+      "objectTypeId": "Audit",
+      "label": "Audit",
+      "description": "独立审计"
+    },
+    {
+      "objectTypeId": "Finding",
+      "label": "Finding",
+      "description": "审计发现"
+    },
+    {
+      "objectTypeId": "FollowUpProposal",
+      "label": "FollowUpProposal",
+      "description": "后续修复提案"
+    }
+  ],
+  "linkTypes": [
+    {
+      "linkTypeId": "requirement-produces-spec",
+      "fromObjectType": "Requirement",
+      "toObjectType": "Spec",
+      "description": "Requirement -> Spec"
+    },
+    {
+      "linkTypeId": "spec-produces-issue",
+      "fromObjectType": "Spec",
+      "toObjectType": "Issue",
+      "description": "Spec -> Issue"
+    },
+    {
+      "linkTypeId": "issue-produces-run",
+      "fromObjectType": "Issue",
+      "toObjectType": "Run",
+      "description": "Issue -> Run"
+    },
+    {
+      "linkTypeId": "run-produces-acceptance",
+      "fromObjectType": "Run",
+      "toObjectType": "Acceptance",
+      "description": "Run -> Acceptance"
+    },
+    {
+      "linkTypeId": "acceptance-produces-delivery",
+      "fromObjectType": "Acceptance",
+      "toObjectType": "Delivery",
+      "description": "Acceptance -> Delivery"
+    },
+    {
+      "linkTypeId": "run-produces-evidence",
+      "fromObjectType": "Run",
+      "toObjectType": "Evidence",
+      "description": "Run -> Evidence"
+    },
+    {
+      "linkTypeId": "run-produces-pr",
+      "fromObjectType": "Run",
+      "toObjectType": "PullRequest",
+      "description": "Run -> PullRequest"
+    },
+    {
+      "linkTypeId": "delivery-includes-pr",
+      "fromObjectType": "Delivery",
+      "toObjectType": "PullRequest",
+      "description": "Delivery -> PullRequest"
+    },
+    {
+      "linkTypeId": "release-includes-delivery",
+      "fromObjectType": "Release",
+      "toObjectType": "Delivery",
+      "description": "Release -> Delivery"
+    },
+    {
+      "linkTypeId": "delivery-can-request-audit",
+      "fromObjectType": "Delivery",
+      "toObjectType": "Audit",
+      "description": "Delivery -> Audit"
+    },
+    {
+      "linkTypeId": "audit-produces-finding",
+      "fromObjectType": "Audit",
+      "toObjectType": "Finding",
+      "description": "Audit -> Finding"
+    },
+    {
+      "linkTypeId": "finding-produces-follow-up-proposal",
+      "fromObjectType": "Finding",
+      "toObjectType": "FollowUpProposal",
+      "description": "Finding -> FollowUpProposal"
+    }
+  ],
+  "stateMachines": [
+    {
+      "objectType": "Issue",
+      "states": [
+        "backlog",
+        "todo",
+        "in_progress",
+        "in_review",
+        "done",
+        "blocked",
+        "cancel"
+      ],
+      "transitions": [
+        {
+          "from": "backlog",
+          "to": "todo",
+          "actionType": "activateIssue"
+        },
+        {
+          "from": "todo",
+          "to": "in_progress",
+          "actionType": "startRun"
+        },
+        {
+          "from": "in_progress",
+          "to": "in_review",
+          "actionType": "runValidation"
+        },
+        {
+          "from": "in_review",
+          "to": "done",
+          "actionType": "markIssueDone"
+        }
+      ]
+    },
+    {
+      "objectType": "Audit",
+      "states": [
+        "requested",
+        "in_progress",
+        "reported",
+        "closed"
+      ],
+      "transitions": [
+        {
+          "from": "requested",
+          "to": "in_progress",
+          "actionType": "requestAudit"
+        },
+        {
+          "from": "in_progress",
+          "to": "reported",
+          "actionType": "createFinding"
+        },
+        {
+          "from": "reported",
+          "to": "closed",
+          "actionType": "linkFixIssue"
+        }
+      ]
+    }
+  ],
+  "actionSemantics": [
+    {
+      "actionType": "submitRequirement",
+      "targetObjectType": "Requirement",
+      "description": "submitRequirement on Requirement",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:submitRequirement",
+      "arbitrationRef": "action-arbitration:submitRequirement",
+      "simulationRef": "simulation:submitRequirement",
+      "requiredEvidence": [
+        "validation"
+      ]
+    },
+    {
+      "actionType": "approveSpec",
+      "targetObjectType": "Spec",
+      "description": "approveSpec on Spec",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:approveSpec",
+      "arbitrationRef": "action-arbitration:approveSpec",
+      "simulationRef": "simulation:approveSpec",
+      "requiredEvidence": [
+        "validation"
+      ]
+    },
+    {
+      "actionType": "createIssue",
+      "targetObjectType": "Issue",
+      "description": "createIssue on Issue",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:createIssue",
+      "arbitrationRef": "action-arbitration:createIssue",
+      "simulationRef": "simulation:createIssue",
+      "requiredEvidence": [
+        "validation"
+      ]
+    },
+    {
+      "actionType": "activateIssue",
+      "targetObjectType": "Issue",
+      "description": "activateIssue on Issue",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:activateIssue",
+      "arbitrationRef": "action-arbitration:activateIssue",
+      "simulationRef": "simulation:activateIssue",
+      "requiredEvidence": [
+        "validation"
+      ]
+    },
+    {
+      "actionType": "startRun",
+      "targetObjectType": "Issue",
+      "description": "startRun on Issue",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:startRun",
+      "arbitrationRef": "action-arbitration:startRun",
+      "simulationRef": "simulation:startRun",
+      "requiredEvidence": [
+        "validation"
+      ]
+    },
+    {
+      "actionType": "runValidation",
+      "targetObjectType": "Run",
+      "description": "runValidation on Run",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:runValidation",
+      "arbitrationRef": "action-arbitration:runValidation",
+      "simulationRef": "simulation:runValidation",
+      "requiredEvidence": [
+        "validation"
+      ]
+    },
+    {
+      "actionType": "prepareDelivery",
+      "targetObjectType": "Run",
+      "description": "prepareDelivery on Run",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:prepareDelivery",
+      "arbitrationRef": "action-arbitration:prepareDelivery",
+      "simulationRef": "simulation:prepareDelivery",
+      "requiredEvidence": [
+        "validation"
+      ]
+    },
+    {
+      "actionType": "markIssueDone",
+      "targetObjectType": "Issue",
+      "description": "markIssueDone on Issue",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:markIssueDone",
+      "arbitrationRef": "action-arbitration:markIssueDone",
+      "simulationRef": "simulation:markIssueDone",
+      "requiredEvidence": [
+        "validation"
+      ]
+    },
+    {
+      "actionType": "requestAudit",
+      "targetObjectType": "Issue",
+      "description": "requestAudit on Issue",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:requestAudit",
+      "arbitrationRef": "action-arbitration:requestAudit",
+      "simulationRef": "simulation:requestAudit",
+      "requiredEvidence": [
+        "validation"
+      ]
+    },
+    {
+      "actionType": "createFinding",
+      "targetObjectType": "Audit",
+      "description": "createFinding on Audit",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:createFinding",
+      "arbitrationRef": "action-arbitration:createFinding",
+      "simulationRef": "simulation:createFinding",
+      "requiredEvidence": [
+        "validation"
+      ]
+    },
+    {
+      "actionType": "linkFixIssue",
+      "targetObjectType": "Finding",
+      "description": "linkFixIssue on Finding",
+      "allowedRoles": [
+        "WorkAgent"
+      ],
+      "contractRef": "action-contract:linkFixIssue",
+      "arbitrationRef": "action-arbitration:linkFixIssue",
+      "simulationRef": "simulation:linkFixIssue",
+      "requiredEvidence": [
+        "validation"
+      ]
+    }
+  ],
+  "acceptanceSemantics": [
+    {
+      "acceptanceId": "software-dev.issue.done",
+      "objectType": "Issue",
+      "description": "任务完成必须有本地验证证据、PR/MR 记录和 Done 写回。",
+      "requiredEvidence": [
+        "validation",
+        "pull-request",
+        "completion-commit"
+      ]
+    }
+  ],
+  "evidencePolicy": {
+    "policyId": "software-dev.evidence.required",
+    "requiredEvidenceKinds": [
+      "validation",
+      "delivery"
+    ],
+    "missingEvidenceBehavior": "reject-completion"
+  },
+  "auditTriggerHints": [
+    {
+      "hintId": "software-dev.audit.sidecar",
+      "objectType": "Release",
+      "condition": "explicit-human-or-release-rule",
+      "sidecarOnly": true
+    }
+  ],
+  "migrationCompatibility": {
+    "compatibleWithRuntime": ">=0.8.0",
+    "migrationPolicyRef": "pack.migration.preview-only"
+  },
+  "writesEvents": false
+}
