@@ -247,10 +247,28 @@ jobs:
               -o -name 'core-runtime-arbitration-rust-test.log' \
               -o -name 'v105-release-certification.json' \
               -o -name 'v106-release-certification.json' \
+              -o -name 'v107-release-provenance-handoff.json' \
+              -o -name 'core-decision-model-contract.json' \
+              -o -name 'core-decision-model-contract-rust-test.log' \
+              -o -name 'core-decision-input-binding.json' \
+              -o -name 'core-decision-input-binding-rust-test.log' \
+              -o -name 'core-decision-outcome-transitions.json' \
+              -o -name 'core-decision-outcome-transitions-rust-test.log' \
+              -o -name 'core-decision-failure-reason-remediation.json' \
+              -o -name 'core-decision-failure-reason-remediation-rust-test.log' \
+              -o -name 'core-evidence-to-decision-gate.json' \
+              -o -name 'core-evidence-to-decision-gate-rust-test.log' \
+              -o -name 'core-completion-commit-authority.json' \
+              -o -name 'core-completion-commit-authority-rust-test.log' \
+              -o -name 'core-delivery-readiness-audit-trigger.json' \
+              -o -name 'core-delivery-readiness-audit-trigger-rust-test.log' \
+              -o -name 'core-decision-projection-read-model.json' \
+              -o -name 'core-decision-projection-read-model-rust-test.log' \
+              -o -name 'v107-release-certification.json' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
 
-          for primary_proof in \
+          primary_proofs=(
             runtime/core-4d-spec-intake.json \
             runtime/core-4d-spec-intake-rust-test.log \
             runtime/core-4d-spec-intake-positive-certification.json \
@@ -301,13 +319,51 @@ jobs:
             runtime/core-runtime-arbitration.json \
             runtime/core-runtime-arbitration-rust-test.log \
             runtime/v105-release-certification.json \
-            runtime/v106-release-certification.json
-          do
-            if [ ! -f "$certification_dir/$primary_proof" ]; then
-              echo "missing certification primary proof: $primary_proof" >&2
-              exit 1
-            fi
-          done
+            runtime/v106-release-certification.json \
+            runtime/v107-release-provenance-handoff.json \
+            runtime/core-decision-model-contract.json \
+            runtime/core-decision-model-contract-rust-test.log \
+            runtime/core-decision-input-binding.json \
+            runtime/core-decision-input-binding-rust-test.log \
+            runtime/core-decision-outcome-transitions.json \
+            runtime/core-decision-outcome-transitions-rust-test.log \
+            runtime/core-decision-failure-reason-remediation.json \
+            runtime/core-decision-failure-reason-remediation-rust-test.log \
+            runtime/core-evidence-to-decision-gate.json \
+            runtime/core-evidence-to-decision-gate-rust-test.log \
+            runtime/core-completion-commit-authority.json \
+            runtime/core-completion-commit-authority-rust-test.log \
+            runtime/core-delivery-readiness-audit-trigger.json \
+            runtime/core-delivery-readiness-audit-trigger-rust-test.log \
+            runtime/core-decision-projection-read-model.json \
+            runtime/core-decision-projection-read-model-rust-test.log \
+            runtime/v107-release-certification.json
+          )
+
+          check_primary_proofs() {
+            local root="$1"
+            local primary_proof
+            for primary_proof in "${primary_proofs[@]}"; do
+              if [ ! -f "$root/$primary_proof" ]; then
+                echo "missing certification primary proof: $primary_proof" >&2
+                return 1
+              fi
+            done
+          }
+
+          check_primary_proofs "$certification_dir"
+
+          negative_dir="${RUNNER_TEMP:-/tmp}/release-gate-certification-primary-proof-negative"
+          rm -rf "$negative_dir"
+          cp -R "$certification_dir" "$negative_dir"
+          rm -f "$negative_dir/runtime/core-decision-model-contract.json"
+          if check_primary_proofs "$negative_dir" >/tmp/release-gate-certification-primary-proof-negative.log 2>&1; then
+            echo "primary proof negative check failed: missing core decision proof was accepted" >&2
+            exit 1
+          else
+            cat /tmp/release-gate-certification-primary-proof-negative.log
+            echo "primary proof negative check passed"
+          fi
 
       - name: Upload certification artifacts
         if: always()

@@ -72,6 +72,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [075-core-completion-commit-authority-v1.md](075-core-completion-commit-authority-v1.md) | Core Completion Commit Authority |
 | [076-core-delivery-readiness-audit-trigger-v1.md](076-core-delivery-readiness-audit-trigger-v1.md) | Core Delivery Readiness / Optional Audit Trigger |
 | [077-core-decision-projection-read-model-v1.md](077-core-decision-projection-read-model-v1.md) | Core Decision Projection Read Model |
+| [078-release-certification-primary-proof-package-v1.md](078-release-certification-primary-proof-package-v1.md) | Release Certification Primary Proof Package |
 
 ## Rules
 
