@@ -559,6 +559,18 @@ pub struct PackSurfacePageIndexItem {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PackViewModelMappingIndexItem {
+    pub pack_id: String,
+    pub mapping_id: String,
+    pub page_id: String,
+    pub projection_ref: String,
+    pub view_model_ref: String,
+    pub status: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackConnectorCapabilityIndexItem {
     pub pack_id: String,
     pub connector_id: String,
@@ -595,6 +607,8 @@ pub struct PackIndustryWorkbenchView {
     pub domain_object_index: Vec<PackDomainObjectIndexItem>,
     #[serde(default)]
     pub surface_page_index: Vec<PackSurfacePageIndexItem>,
+    #[serde(default)]
+    pub view_model_mapping_index: Vec<PackViewModelMappingIndexItem>,
     #[serde(default)]
     pub connector_capability_index: Vec<PackConnectorCapabilityIndexItem>,
     #[serde(default)]
@@ -1648,6 +1662,7 @@ pub fn get_pack_industry_workbench_view(
     let mut pack_readiness = Vec::new();
     let mut domain_object_index = Vec::new();
     let mut surface_page_index = Vec::new();
+    let mut view_model_mapping_index = Vec::new();
     let mut connector_capability_index = Vec::new();
     let mut industry_workbenches = Vec::new();
     let mut source_refs = BTreeSet::new();
@@ -1689,6 +1704,11 @@ pub fn get_pack_industry_workbench_view(
             }));
         }
         if let Some(surface) = bundle.surface.as_ref() {
+            let mapped_page_ids = surface
+                .view_model_mappings
+                .iter()
+                .map(|mapping| mapping.page_id.as_str())
+                .collect::<BTreeSet<_>>();
             surface_page_index.extend(surface.pages.iter().map(|page| PackSurfacePageIndexItem {
                 pack_id: bundle.pack_id.clone(),
                 page_id: page.page_id.clone(),
@@ -1696,6 +1716,40 @@ pub fn get_pack_industry_workbench_view(
                 page_kind: enum_label(&page.kind),
                 view_model_ref: page.view_model_ref.clone(),
                 command_entry_ids: page.command_entry_ids.clone(),
+            }));
+            view_model_mapping_index.extend(surface.view_model_mappings.iter().map(|mapping| {
+                PackViewModelMappingIndexItem {
+                    pack_id: bundle.pack_id.clone(),
+                    mapping_id: mapping.mapping_id.clone(),
+                    page_id: mapping.page_id.clone(),
+                    projection_ref: mapping.projection_ref.clone(),
+                    view_model_ref: mapping.view_model_ref.clone(),
+                    status: if bundle.surface_valid {
+                        "ready".to_string()
+                    } else {
+                        "invalid".to_string()
+                    },
+                    reason: if bundle.surface_valid {
+                        "pack-surface-mapping-ready".to_string()
+                    } else {
+                        "pack-surface-invalid".to_string()
+                    },
+                }
+            }));
+            view_model_mapping_index.extend(surface.pages.iter().filter_map(|page| {
+                if mapped_page_ids.contains(page.page_id.as_str()) {
+                    None
+                } else {
+                    Some(PackViewModelMappingIndexItem {
+                        pack_id: bundle.pack_id.clone(),
+                        mapping_id: format!("missing:{}", page.page_id),
+                        page_id: page.page_id.clone(),
+                        projection_ref: String::new(),
+                        view_model_ref: page.view_model_ref.clone(),
+                        status: "deferred".to_string(),
+                        reason: "pack-surface-view-model-mapping-missing".to_string(),
+                    })
+                }
             }));
             industry_workbenches.extend(surface.workbenches.iter().map(|workbench| {
                 PackIndustryWorkbenchItem {
@@ -1738,6 +1792,7 @@ pub fn get_pack_industry_workbench_view(
         pack_readiness,
         domain_object_index,
         surface_page_index,
+        view_model_mapping_index,
         connector_capability_index,
         industry_workbenches,
         source_refs: source_refs.into_iter().collect(),
@@ -3512,6 +3567,11 @@ mod tests {
             .surface_page_index
             .iter()
             .any(|page| page.page_id == "task-workbench"));
+        assert!(software.view_model_mapping_index.iter().any(|mapping| {
+            mapping.page_id == "task-workbench"
+                && mapping.projection_ref == "projection.task-workbench"
+                && mapping.status == "ready"
+        }));
         assert!(software
             .surface_page_index
             .iter()
@@ -3575,6 +3635,45 @@ mod tests {
             .industry_workbenches
             .iter()
             .any(|workbench| workbench.workbench_id == "custom-workbench"));
+        assert!(view.view_model_mapping_index.iter().any(|mapping| {
+            mapping.pack_id == "custom-pack"
+                && mapping.page_id == "custom-page"
+                && mapping.projection_ref == "projection.custom"
+                && mapping.status == "ready"
+        }));
+    }
+
+    #[test]
+    fn pack_industry_workbench_marks_missing_view_mapping_deferred_without_fallback() {
+        let dir = tempdir().unwrap();
+        write_pack_bundle_without_view_mapping(
+            dir.path(),
+            "custom-pack",
+            "CustomObject",
+            "custom-workbench",
+        );
+
+        let view = get_pack_industry_workbench_view(dir.path(), Some("custom-pack")).unwrap();
+
+        assert_eq!(view.active_pack_id.as_deref(), Some("custom-pack"));
+        assert!(view
+            .domain_object_index
+            .iter()
+            .any(|object| object.object_type_id == "CustomObject"));
+        assert!(!view
+            .domain_object_index
+            .iter()
+            .any(|object| object.object_type_id == "Issue"));
+        assert!(view.view_model_mapping_index.iter().any(|mapping| {
+            mapping.pack_id == "custom-pack"
+                && mapping.page_id == "custom-page"
+                && mapping.status == "deferred"
+                && mapping.reason == "pack-surface-view-model-mapping-missing"
+        }));
+        assert!(view
+            .pack_readiness
+            .iter()
+            .any(|readiness| readiness.pack_id == "custom-pack" && readiness.status == "invalid"));
     }
 
     #[test]
@@ -3625,6 +3724,25 @@ mod tests {
     }
 
     fn write_pack_bundle(root: &Path, pack_id: &str, object_type: &str, workbench_id: &str) {
+        write_pack_bundle_with_mapping(root, pack_id, object_type, workbench_id, true);
+    }
+
+    fn write_pack_bundle_without_view_mapping(
+        root: &Path,
+        pack_id: &str,
+        object_type: &str,
+        workbench_id: &str,
+    ) {
+        write_pack_bundle_with_mapping(root, pack_id, object_type, workbench_id, false);
+    }
+
+    fn write_pack_bundle_with_mapping(
+        root: &Path,
+        pack_id: &str,
+        object_type: &str,
+        workbench_id: &str,
+        include_view_mapping: bool,
+    ) {
         write_pack_manifest_only(root, pack_id);
         let pack_dir = root.join(".agentflow/packs").join(pack_id);
         fs::create_dir_all(pack_dir.join("domain")).unwrap();
@@ -3684,12 +3802,16 @@ mod tests {
                 primary_object_type: object_type.to_string(),
                 timeline_ref: "custom.timeline".to_string(),
             }],
-            view_model_mappings: vec![agentflow_pack::SurfaceViewModelMapping {
-                mapping_id: "custom-page-view".to_string(),
-                page_id: "custom-page".to_string(),
-                projection_ref: "projection.custom".to_string(),
-                view_model_ref: "view-model:custom-page".to_string(),
-            }],
+            view_model_mappings: if include_view_mapping {
+                vec![agentflow_pack::SurfaceViewModelMapping {
+                    mapping_id: "custom-page-view".to_string(),
+                    page_id: "custom-page".to_string(),
+                    projection_ref: "projection.custom".to_string(),
+                    view_model_ref: "view-model:custom-page".to_string(),
+                }]
+            } else {
+                Vec::new()
+            },
             command_entry_mappings: vec![agentflow_pack::SurfaceCommandEntryMapping {
                 command_entry_id: "custom.start".to_string(),
                 page_id: "custom-page".to_string(),

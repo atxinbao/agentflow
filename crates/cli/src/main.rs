@@ -740,6 +740,15 @@ fn write_pack_release_gate_readiness(
                     "activePackId": software_projection.active_pack_id,
                     "packCount": software_projection.pack_list.len(),
                     "workbenchCount": software_projection.industry_workbenches.len(),
+                    "viewModelMappingCount": software_projection.view_model_mapping_index.len(),
+                    "invalidOrDeferredMappings": software_projection.view_model_mapping_index.iter()
+                        .filter(|mapping| mapping.status == "invalid" || mapping.status == "deferred")
+                        .map(|mapping| serde_json::json!({
+                            "pageId": mapping.page_id,
+                            "status": mapping.status,
+                            "reason": mapping.reason,
+                        }))
+                        .collect::<Vec<_>>(),
                     "readiness": software_projection.pack_readiness,
                 },
                 {
@@ -747,6 +756,15 @@ fn write_pack_release_gate_readiness(
                     "activePackId": design_projection.active_pack_id,
                     "packCount": design_projection.pack_list.len(),
                     "workbenchCount": design_projection.industry_workbenches.len(),
+                    "viewModelMappingCount": design_projection.view_model_mapping_index.len(),
+                    "invalidOrDeferredMappings": design_projection.view_model_mapping_index.iter()
+                        .filter(|mapping| mapping.status == "invalid" || mapping.status == "deferred")
+                        .map(|mapping| serde_json::json!({
+                            "pageId": mapping.page_id,
+                            "status": mapping.status,
+                            "reason": mapping.reason,
+                        }))
+                        .collect::<Vec<_>>(),
                     "readiness": design_projection.pack_readiness,
                 },
             ],

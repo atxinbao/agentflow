@@ -1,0 +1,289 @@
+{
+  "version": "agentflow-pack-surface.v1",
+  "packId": "ui-design",
+  "surfaceId": "ui-design-surface",
+  "pages": [
+    {
+      "pageId": "design-home",
+      "label": "Design Home",
+      "description": "Design Home surface",
+      "kind": "main",
+      "viewModelRef": "view-model:design-home",
+      "commandEntryIds": []
+    },
+    {
+      "pageId": "brief-intake",
+      "label": "Brief Intake",
+      "description": "Brief Intake surface",
+      "kind": "workbench",
+      "viewModelRef": "view-model:brief-intake",
+      "commandEntryIds": [
+        "design.brief.capture"
+      ]
+    },
+    {
+      "pageId": "direction-board",
+      "label": "Direction Board",
+      "description": "Direction Board surface",
+      "kind": "workbench",
+      "viewModelRef": "view-model:direction-board",
+      "commandEntryIds": [
+        "design.direction.select"
+      ]
+    },
+    {
+      "pageId": "wireframe-board",
+      "label": "Wireframe Board",
+      "description": "Wireframe Board surface",
+      "kind": "workbench",
+      "viewModelRef": "view-model:wireframe-board",
+      "commandEntryIds": [
+        "design.wireframe.generate"
+      ]
+    },
+    {
+      "pageId": "hifi-review",
+      "label": "HiFi Review",
+      "description": "HiFi Review surface",
+      "kind": "workbench",
+      "viewModelRef": "view-model:hifi-review",
+      "commandEntryIds": [
+        "design.hifi.review"
+      ]
+    },
+    {
+      "pageId": "design-system",
+      "label": "Design System",
+      "description": "Design System surface",
+      "kind": "detail",
+      "viewModelRef": "view-model:design-system",
+      "commandEntryIds": [
+        "design.system.bind"
+      ]
+    },
+    {
+      "pageId": "handoff-surface",
+      "label": "Handoff Surface",
+      "description": "Handoff Surface surface",
+      "kind": "detail",
+      "viewModelRef": "view-model:handoff-surface",
+      "commandEntryIds": [
+        "design.handoff.accept"
+      ]
+    }
+  ],
+  "workbenches": [
+    {
+      "workbenchId": "design-home-workbench",
+      "pageId": "design-home",
+      "label": "design-home",
+      "primaryObjectType": "ProductBrief",
+      "timelineRef": "timeline:design-home"
+    },
+    {
+      "workbenchId": "brief-intake-workbench",
+      "pageId": "brief-intake",
+      "label": "brief-intake",
+      "primaryObjectType": "ProductBrief",
+      "timelineRef": "timeline:brief-intake"
+    },
+    {
+      "workbenchId": "direction-board-workbench",
+      "pageId": "direction-board",
+      "label": "direction-board",
+      "primaryObjectType": "Direction",
+      "timelineRef": "timeline:direction-board"
+    },
+    {
+      "workbenchId": "wireframe-board-workbench",
+      "pageId": "wireframe-board",
+      "label": "wireframe-board",
+      "primaryObjectType": "Wireframe",
+      "timelineRef": "timeline:wireframe-board"
+    },
+    {
+      "workbenchId": "hifi-review-workbench",
+      "pageId": "hifi-review",
+      "label": "hifi-review",
+      "primaryObjectType": "HiFi",
+      "timelineRef": "timeline:hifi-review"
+    }
+  ],
+  "viewModelMappings": [
+    {
+      "mappingId": "design-home-view-model",
+      "pageId": "design-home",
+      "projectionRef": "projection.design-home",
+      "viewModelRef": "view-model:design-home"
+    },
+    {
+      "mappingId": "brief-intake-view-model",
+      "pageId": "brief-intake",
+      "projectionRef": "projection.brief-intake",
+      "viewModelRef": "view-model:brief-intake"
+    },
+    {
+      "mappingId": "direction-board-view-model",
+      "pageId": "direction-board",
+      "projectionRef": "projection.direction-board",
+      "viewModelRef": "view-model:direction-board"
+    },
+    {
+      "mappingId": "wireframe-board-view-model",
+      "pageId": "wireframe-board",
+      "projectionRef": "projection.wireframe-board",
+      "viewModelRef": "view-model:wireframe-board"
+    },
+    {
+      "mappingId": "hifi-review-view-model",
+      "pageId": "hifi-review",
+      "projectionRef": "projection.hifi-review",
+      "viewModelRef": "view-model:hifi-review"
+    },
+    {
+      "mappingId": "design-system-view-model",
+      "pageId": "design-system",
+      "projectionRef": "projection.design-system",
+      "viewModelRef": "view-model:design-system"
+    },
+    {
+      "mappingId": "handoff-surface-view-model",
+      "pageId": "handoff-surface",
+      "projectionRef": "projection.handoff-surface",
+      "viewModelRef": "view-model:handoff-surface"
+    }
+  ],
+  "commandEntryMappings": [
+    {
+      "commandEntryId": "design.brief.capture",
+      "pageId": "brief-intake",
+      "label": "design.brief.capture",
+      "commandType": "design.brief.capture",
+      "route": "action-proposal",
+      "actionContractRef": "action-contract:design.brief.capture"
+    },
+    {
+      "commandEntryId": "design.direction.select",
+      "pageId": "direction-board",
+      "label": "design.direction.select",
+      "commandType": "design.direction.select",
+      "route": "action-proposal",
+      "actionContractRef": "action-contract:design.direction.select"
+    },
+    {
+      "commandEntryId": "design.wireframe.generate",
+      "pageId": "wireframe-board",
+      "label": "design.wireframe.generate",
+      "commandType": "design.wireframe.generate",
+      "route": "action-proposal",
+      "actionContractRef": "action-contract:design.generate-wireframe"
+    },
+    {
+      "commandEntryId": "design.hifi.review",
+      "pageId": "hifi-review",
+      "label": "design.hifi.review",
+      "commandType": "design.hifi.review",
+      "route": "action-proposal",
+      "actionContractRef": "action-contract:design.hifi.review"
+    },
+    {
+      "commandEntryId": "design.system.bind",
+      "pageId": "design-system",
+      "label": "design.system.bind",
+      "commandType": "design.system.bind",
+      "route": "action-proposal",
+      "actionContractRef": "action-contract:design.system.bind"
+    },
+    {
+      "commandEntryId": "design.handoff.accept",
+      "pageId": "handoff-surface",
+      "label": "design.handoff.accept",
+      "commandType": "design.handoff.accept",
+      "route": "action-proposal",
+      "actionContractRef": "action-contract:design.accept-handoff"
+    }
+  ],
+  "readModelDependencies": [
+    {
+      "dependencyId": "design-home-read-model",
+      "pageId": "design-home",
+      "projectionRef": "projection.design-home",
+      "required": true
+    },
+    {
+      "dependencyId": "brief-intake-read-model",
+      "pageId": "brief-intake",
+      "projectionRef": "projection.brief-intake",
+      "required": true
+    },
+    {
+      "dependencyId": "direction-board-read-model",
+      "pageId": "direction-board",
+      "projectionRef": "projection.direction-board",
+      "required": true
+    },
+    {
+      "dependencyId": "wireframe-board-read-model",
+      "pageId": "wireframe-board",
+      "projectionRef": "projection.wireframe-board",
+      "required": true
+    },
+    {
+      "dependencyId": "hifi-review-read-model",
+      "pageId": "hifi-review",
+      "projectionRef": "projection.hifi-review",
+      "required": true
+    },
+    {
+      "dependencyId": "design-system-read-model",
+      "pageId": "design-system",
+      "projectionRef": "projection.design-system",
+      "required": true
+    },
+    {
+      "dependencyId": "handoff-surface-read-model",
+      "pageId": "handoff-surface",
+      "projectionRef": "projection.handoff-surface",
+      "required": true
+    }
+  ],
+  "navigationRules": [
+    {
+      "fromPageId": "design-home",
+      "toPageId": "brief-intake",
+      "trigger": "start-brief"
+    },
+    {
+      "fromPageId": "brief-intake",
+      "toPageId": "direction-board",
+      "trigger": "brief-confirmed"
+    },
+    {
+      "fromPageId": "direction-board",
+      "toPageId": "wireframe-board",
+      "trigger": "direction-selected"
+    },
+    {
+      "fromPageId": "wireframe-board",
+      "toPageId": "hifi-review",
+      "trigger": "wireframe-approved"
+    },
+    {
+      "fromPageId": "hifi-review",
+      "toPageId": "design-system",
+      "trigger": "hifi-accepted"
+    },
+    {
+      "fromPageId": "design-system",
+      "toPageId": "handoff-surface",
+      "trigger": "design-system-bound"
+    }
+  ],
+  "statePolicy": {
+    "emptyStateRef": "surface-state.empty",
+    "loadingStateRef": "surface-state.loading",
+    "errorStateRef": "surface-state.error"
+  },
+  "sidecarSurfaces": [],
+  "writesAuthority": false
+}
