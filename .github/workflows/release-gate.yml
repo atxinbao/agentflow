@@ -292,6 +292,14 @@ jobs:
               -o -name 'v110-software-dev-e2e-product-surface.json' \
               -o -name 'v110-quick-audit-product-source-proofs.json' \
               -o -name 'v110-release-certification.json' \
+              -o -name 'v111-product-schema-command-mapping.json' \
+              -o -name 'v111-product-to-pack-data-driven-bridge.json' \
+              -o -name 'v111-runtime-data-driven-product-resolver.json' \
+              -o -name 'v111-projection-data-driven-product-readmodel.json' \
+              -o -name 'v111-product-bridge-pollution-gate.json' \
+              -o -name 'v111-runtime-projection-proof-artifacts.json' \
+              -o -name 'v111-synthetic-second-product-fixture.json' \
+              -o -name 'v111-release-certification.json' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
 
@@ -400,7 +408,15 @@ jobs:
             runtime/v110-product-command-route-installation.json \
             runtime/v110-software-dev-e2e-product-surface.json \
             runtime/v110-quick-audit-product-source-proofs.json \
-            runtime/v110-release-certification.json
+            runtime/v110-release-certification.json \
+            runtime/v111-product-schema-command-mapping.json \
+            runtime/v111-product-to-pack-data-driven-bridge.json \
+            runtime/v111-runtime-data-driven-product-resolver.json \
+            runtime/v111-projection-data-driven-product-readmodel.json \
+            runtime/v111-product-bridge-pollution-gate.json \
+            runtime/v111-runtime-projection-proof-artifacts.json \
+            runtime/v111-synthetic-second-product-fixture.json \
+            runtime/v111-release-certification.json
           )
 
           check_primary_proofs() {

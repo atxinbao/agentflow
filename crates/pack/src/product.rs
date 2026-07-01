@@ -104,8 +104,26 @@ pub struct ProductSurfacePage {
 #[serde(rename_all = "camelCase")]
 pub struct ProductSurfaceCommand {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_id: Option<String>,
     pub label: String,
     pub runtime_command: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_contract_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_object_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connector_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_capability: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_policy_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acceptance_policy_ref: Option<String>,
     pub requires_projection_freshness: bool,
 }
 
@@ -129,8 +147,22 @@ pub struct ProductConnector {
     #[serde(rename = "type")]
     pub connector_type: String,
     pub authority: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_type: Option<String>,
+    #[serde(default)]
+    pub supported_actions: Vec<ProductConnectorSupportedAction>,
     #[serde(default)]
     pub produces: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductConnectorSupportedAction {
+    pub action_id: String,
+    pub label: String,
+    pub required_capability: String,
+    pub command_type: String,
+    pub writes_external: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -172,10 +204,17 @@ pub struct ProductCommandRoute {
     pub product_id: String,
     pub pack_id: String,
     pub command: String,
+    pub command_id: String,
     pub label: String,
     pub runtime_command: String,
     pub action_contract_ref: String,
     pub target_object_type: String,
+    pub page_id: String,
+    pub skill_ref: String,
+    pub connector_id: String,
+    pub required_capability: String,
+    pub evidence_policy_ref: String,
+    pub acceptance_policy_ref: String,
     pub source_refs: Vec<String>,
 }
 
@@ -257,6 +296,16 @@ pub fn load_product_definition(
     load_product_definition_from_entry(&entry)
 }
 
+pub fn load_product_definition_from_root(
+    product_root: impl AsRef<Path>,
+) -> Result<ProductDefinition> {
+    let product_root = product_root.as_ref().to_path_buf();
+    let manifest_path = product_root.join("product.toml");
+    let manifest = load_product_manifest(&manifest_path)?;
+    let entry = product_registry_entry(product_root, manifest_path, manifest);
+    load_product_definition_from_entry(&entry)
+}
+
 pub fn load_product_definition_from_entry(
     entry: &ProductRegistryEntry,
 ) -> Result<ProductDefinition> {
@@ -309,6 +358,10 @@ pub fn load_product_definition_from_entry(
                 definition_path(&product_root, &manifest.entrypoints.connectors).display()
             )
         })?;
+    diagnostics.extend(validate_surface_command_mappings(
+        &surface,
+        &definition_path(&product_root, &manifest.entrypoints.surface),
+    ));
 
     let writes_authority = manifest.authority.writes_core_authority
         || manifest.authority.writes_runtime_authority
@@ -397,16 +450,23 @@ pub fn product_command_route(
     definition: &ProductDefinition,
     command: &ProductSurfaceCommand,
 ) -> Result<ProductCommandRoute> {
-    let (action_contract_ref, target_object_type) = product_command_mapping(command)?;
+    let mapping = product_command_mapping(command)?;
     let product_root = PathBuf::from(&definition.manifest.source_boundary);
     Ok(ProductCommandRoute {
         product_id: definition.product_id.clone(),
         pack_id: definition.pack_id.clone(),
         command: command.id.clone(),
+        command_id: mapping.command_id,
         label: command.label.clone(),
         runtime_command: command.runtime_command.clone(),
-        action_contract_ref: action_contract_ref.to_string(),
-        target_object_type: target_object_type.to_string(),
+        action_contract_ref: mapping.action_contract_ref,
+        target_object_type: mapping.target_object_type,
+        page_id: mapping.page_id,
+        skill_ref: mapping.skill_ref,
+        connector_id: mapping.connector_id,
+        required_capability: mapping.required_capability,
+        evidence_policy_ref: mapping.evidence_policy_ref,
+        acceptance_policy_ref: mapping.acceptance_policy_ref,
         source_refs: vec![
             normalize_path(&product_root.join("product.toml")),
             normalize_path(&product_root.join(&definition.manifest.entrypoints.surface)),
@@ -417,21 +477,107 @@ pub fn product_command_route(
     })
 }
 
-pub fn product_command_mapping(
-    command: &ProductSurfaceCommand,
-) -> Result<(&'static str, &'static str)> {
-    match (command.id.as_str(), command.runtime_command.as_str()) {
-        ("work.issue.start", "runtime.command.start-work") => {
-            Ok(("action-contract:issue.start", "Issue"))
-        }
-        ("work.issue.review", "runtime.command.prepare-review") => {
-            Ok(("action-contract:delivery.prepare", "Run"))
-        }
-        _ => bail!(
-            "product command `{}` has no product-to-pack action contract mapping",
-            command.id
-        ),
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCommandMapping {
+    pub command_id: String,
+    pub action_contract_ref: String,
+    pub target_object_type: String,
+    pub page_id: String,
+    pub skill_ref: String,
+    pub connector_id: String,
+    pub required_capability: String,
+    pub evidence_policy_ref: String,
+    pub acceptance_policy_ref: String,
+}
+
+pub fn product_command_mapping(command: &ProductSurfaceCommand) -> Result<ProductCommandMapping> {
+    Ok(ProductCommandMapping {
+        command_id: non_empty_option(command.command_id.as_deref(), "commandId", &command.id)?,
+        action_contract_ref: non_empty_option(
+            command.action_contract_ref.as_deref(),
+            "actionContractRef",
+            &command.id,
+        )?,
+        target_object_type: non_empty_option(
+            command.target_object_type.as_deref(),
+            "targetObjectType",
+            &command.id,
+        )?,
+        page_id: non_empty_option(command.page_id.as_deref(), "pageId", &command.id)?,
+        skill_ref: non_empty_option(command.skill_ref.as_deref(), "skillRef", &command.id)?,
+        connector_id: non_empty_option(
+            command.connector_id.as_deref(),
+            "connectorId",
+            &command.id,
+        )?,
+        required_capability: non_empty_option(
+            command.required_capability.as_deref(),
+            "requiredCapability",
+            &command.id,
+        )?,
+        evidence_policy_ref: non_empty_option(
+            command.evidence_policy_ref.as_deref(),
+            "evidencePolicyRef",
+            &command.id,
+        )?,
+        acceptance_policy_ref: non_empty_option(
+            command.acceptance_policy_ref.as_deref(),
+            "acceptancePolicyRef",
+            &command.id,
+        )?,
+    })
+}
+
+fn non_empty_option(value: Option<&str>, field: &str, command_id: &str) -> Result<String> {
+    match value.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(value) => Ok(value.to_string()),
+        None => bail!("product command `{command_id}` missing required mapping field `{field}`"),
     }
+}
+
+fn validate_surface_command_mappings(
+    surface: &ProductSurfaceDefinition,
+    path: &Path,
+) -> Vec<ProductRegistryDiagnostic> {
+    let mut diagnostics = Vec::new();
+    for command in surface.commands.iter() {
+        if command.command_id.as_deref().unwrap_or_default() != command.id {
+            diagnostics.push(diagnostic(
+                "product-command-id-mismatch",
+                format!(
+                    "command `{}` must declare commandId equal to its id",
+                    command.id
+                ),
+                &normalize_path(path),
+            ));
+        }
+        for (field, value) in [
+            ("actionContractRef", command.action_contract_ref.as_deref()),
+            ("targetObjectType", command.target_object_type.as_deref()),
+            ("pageId", command.page_id.as_deref()),
+            ("skillRef", command.skill_ref.as_deref()),
+            ("connectorId", command.connector_id.as_deref()),
+            ("requiredCapability", command.required_capability.as_deref()),
+            ("evidencePolicyRef", command.evidence_policy_ref.as_deref()),
+            (
+                "acceptancePolicyRef",
+                command.acceptance_policy_ref.as_deref(),
+            ),
+        ] {
+            if value.map(str::trim).unwrap_or_default().is_empty() {
+                diagnostics.push(diagnostic(
+                    "product-command-mapping-missing",
+                    format!(
+                        "command `{}` missing required mapping field `{field}`",
+                        command.id
+                    ),
+                    &normalize_path(path),
+                ));
+            }
+        }
+    }
+    diagnostics
 }
 
 fn product_registry_entry(
@@ -591,7 +737,10 @@ fn normalize_path(path: impl AsRef<Path>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_product_definition, load_product_registry, product_to_pack_contract};
+    use super::{
+        load_product_definition, load_product_definition_from_root, load_product_registry,
+        product_to_pack_contract,
+    };
     use std::path::Path;
 
     #[test]
@@ -641,12 +790,127 @@ mod tests {
             .commands
             .iter()
             .any(|command| command.command == "work.issue.start"
-                && command.action_contract_ref == "action-contract:issue.start"));
+                && command.command_id == "work.issue.start"
+                && command.action_contract_ref == "action-contract:issue.start"
+                && command.page_id == "task-workbench"
+                && command.skill_ref == "skill:software-dev/build-agent-start"
+                && command.connector_id == "codex"
+                && command.required_capability == "launch"));
         assert!(contract
             .commands
             .iter()
             .any(|command| command.command == "work.issue.review"
-                && command.action_contract_ref == "action-contract:delivery.prepare"));
+                && command.action_contract_ref == "action-contract:delivery.prepare"
+                && command.target_object_type == "Run"
+                && command.required_capability == "build_agent.complete"));
+    }
+
+    #[test]
+    fn product_definition_reports_missing_command_mapping_as_diagnostic() {
+        let dir = tempfile::tempdir().unwrap();
+        let product_root = dir.path().join("demo");
+        std::fs::create_dir_all(product_root.join("domain")).unwrap();
+        std::fs::create_dir_all(product_root.join("surface")).unwrap();
+        std::fs::create_dir_all(product_root.join("connectors")).unwrap();
+        std::fs::create_dir_all(product_root.join("flows")).unwrap();
+        std::fs::create_dir_all(product_root.join("projections")).unwrap();
+        std::fs::create_dir_all(product_root.join("fixtures")).unwrap();
+        std::fs::write(
+            product_root.join("product.toml"),
+            r#"
+product_id = "demo"
+name = "Demo"
+version = "1.1.1"
+status = "fixture"
+source_boundary = "demo"
+core_boundary = "read-only-product-source"
+fixture_mirror = "test-only"
+pack_id = "demo"
+
+[authority]
+writes_core_authority = false
+writes_runtime_authority = false
+source_of_product_definitions = true
+runtime_materializes_facts = false
+
+[entrypoints]
+domain = "domain/definition.json"
+surface = "surface/definition.json"
+connectors = "connectors/definition.json"
+flow = "flows/reference-flow.json"
+projection = "projections/read-models.json"
+golden_fixture = "fixtures/golden-scenario.json"
+negative_fixtures = "fixtures/negative-authority-fixtures.json"
+"#,
+        )
+        .unwrap();
+        std::fs::write(product_root.join("domain/definition.json"), "{}").unwrap();
+        std::fs::write(
+            product_root.join("surface/definition.json"),
+            r#"{
+  "version": "demo-surface.v1",
+  "productId": "demo",
+  "sourceBoundary": "demo/surface",
+  "coreAuthority": false,
+  "commands": [
+    {
+      "id": "demo.open",
+      "label": "Open",
+      "runtimeCommand": "runtime.command.start-work",
+      "requiresProjectionFreshness": true
+    }
+  ]
+}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            product_root.join("connectors/definition.json"),
+            r#"{"version":"demo-connectors.v1","productId":"demo","sourceBoundary":"demo/connectors","coreAuthority":false,"connectors":[]}"#,
+        )
+        .unwrap();
+        for relative in [
+            "flows/reference-flow.json",
+            "projections/read-models.json",
+            "fixtures/golden-scenario.json",
+            "fixtures/negative-authority-fixtures.json",
+        ] {
+            std::fs::write(product_root.join(relative), "{}").unwrap();
+        }
+
+        let definition = load_product_definition_from_root(&product_root).unwrap();
+
+        assert!(!definition.valid);
+        assert!(definition.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "product-command-mapping-missing"
+                && diagnostic.message.contains("actionContractRef")
+        }));
+    }
+
+    #[test]
+    fn synthetic_product_fixture_maps_without_software_dev_defaults() {
+        let root = workspace_root();
+        let fixture_root = root.join("products/_fixtures/synthetic-review");
+
+        let definition = load_product_definition_from_root(&fixture_root).unwrap();
+        let route = super::product_command_route(
+            &definition,
+            definition
+                .surface
+                .commands
+                .iter()
+                .find(|command| command.id == "synthetic.case.open")
+                .unwrap(),
+        )
+        .unwrap();
+
+        assert!(definition.valid);
+        assert_eq!(route.pack_id, "synthetic-review");
+        assert_eq!(route.command, "synthetic.case.open");
+        assert_eq!(route.page_id, "review-console");
+        assert_eq!(route.target_object_type, "Case");
+        assert_eq!(route.skill_ref, "skill:synthetic-review/open-case");
+        assert_eq!(route.connector_id, "fixture-agent");
+        assert_eq!(route.required_capability, "synthetic.launch");
     }
 
     #[test]

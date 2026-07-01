@@ -1,0 +1,16 @@
+{
+  "version": "agentflow-synthetic-review-negative-fixtures.v1",
+  "productId": "synthetic-review",
+  "fixtures": [
+    {
+      "id": "fixture-log-only",
+      "status": "rejected",
+      "reason": "fixture log cannot become authority"
+    },
+    {
+      "id": "missing-product-mapping",
+      "status": "deferred",
+      "reason": "command mapping must come from Product source"
+    }
+  ]
+}

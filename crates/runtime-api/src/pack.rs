@@ -70,6 +70,8 @@ pub struct PackCommandEntryView {
     pub page_id: String,
     pub route: String,
     pub action_contract_ref: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill_ref: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,6 +95,11 @@ pub struct PackSurfaceRouteView {
     pub action_contract_ref: String,
     pub runtime_command_type: String,
     pub target_object_type: String,
+    pub skill_ref: String,
+    pub connector_id: String,
+    pub required_capability: String,
+    pub evidence_policy_ref: String,
+    pub acceptance_policy_ref: String,
     pub source_refs: Vec<String>,
 }
 
@@ -173,6 +180,7 @@ pub fn list_pack_commands(
                 page_id: mapping.page_id.clone(),
                 route: format!("{:?}", mapping.route),
                 action_contract_ref: mapping.action_contract_ref.clone(),
+                skill_ref: None,
             }
         }));
     }
@@ -511,6 +519,22 @@ fn resolve_pack_command(
             action_contract_ref: mapping.action_contract_ref.clone(),
             runtime_command_type: runtime_command_type.to_string(),
             target_object_type: action_semantic.target_object_type.clone(),
+            skill_ref: format!("pack:{}:{}", pack_id, command),
+            connector_id: connector_decisions
+                .first()
+                .map(|decision| decision.connector_id.clone())
+                .unwrap_or_default(),
+            required_capability: connector_decisions
+                .first()
+                .map(|decision| decision.required_capability.clone())
+                .unwrap_or_default(),
+            evidence_policy_ref: bundle.domain.evidence_policy.policy_id.clone(),
+            acceptance_policy_ref: bundle
+                .domain
+                .acceptance_semantics
+                .first()
+                .map(|semantic| semantic.acceptance_id.clone())
+                .unwrap_or_default(),
             source_refs: vec![
                 bundle.entry.manifest_path.clone(),
                 definition_path_for_entry(&bundle.entry, &bundle.entry.domain_path)
@@ -593,32 +617,20 @@ fn resolve_product_command(
             version: PACK_COMMAND_SURFACE_VERSION.to_string(),
             pack_id: product_route.pack_id.clone(),
             command: product_route.command.clone(),
-            page_id: product_page_for_command(&definition.surface, command)
-                .unwrap_or("task-workbench")
-                .to_string(),
+            page_id: product_route.page_id.clone(),
             route: "product-surface/runtime-command".to_string(),
             action_contract_ref: product_route.action_contract_ref,
             runtime_command_type: crate::mapping::CORE_RUNTIME_COMMAND_TYPE.to_string(),
             target_object_type: product_route.target_object_type,
+            skill_ref: product_route.skill_ref,
+            connector_id: product_route.connector_id,
+            required_capability: product_route.required_capability,
+            evidence_policy_ref: product_route.evidence_policy_ref,
+            acceptance_policy_ref: product_route.acceptance_policy_ref,
             source_refs: product_route.source_refs,
         },
         capability,
     })
-}
-
-fn product_page_for_command<'a>(
-    surface: &'a agentflow_pack::ProductSurfaceDefinition,
-    command: &str,
-) -> Option<&'a str> {
-    let page_id = match command {
-        "work.issue.start" | "work.issue.review" => "task-workbench",
-        _ => return None,
-    };
-    surface
-        .pages
-        .iter()
-        .find(|page| page.id == page_id)
-        .map(|page| page.id.as_str())
 }
 
 fn product_capability_status(
@@ -626,50 +638,42 @@ fn product_capability_status(
     definition: &agentflow_pack::ProductDefinition,
     route: &agentflow_pack::ProductCommandRoute,
 ) -> PackCapabilityStatusView {
-    let (worker_id, required_capability) = product_required_capability(&route.command);
     let connector_exists = definition
         .connectors
         .connectors
         .iter()
-        .any(|connector| connector.id == worker_id && !connector.authority);
+        .any(|connector| connector.id == route.connector_id && !connector.authority);
     if !connector_exists {
         return PackCapabilityStatusView {
             version: PACK_COMMAND_SURFACE_VERSION.to_string(),
             pack_id: route.pack_id.clone(),
             command: route.command.clone(),
-            required_capabilities: vec![required_capability.to_string()],
-            provider_ids: vec![worker_id.to_string()],
+            required_capabilities: vec![route.required_capability.clone()],
+            provider_ids: vec![route.connector_id.clone()],
             command_boundary: "runtime-api/product-surface/action-contract/arbitration".to_string(),
             available: false,
             reason: format!(
-                "product command `{}` has no non-authority connector `{worker_id}`",
-                route.command
+                "product command `{}` has no non-authority connector `{}`",
+                route.command, route.connector_id
             ),
         };
     }
 
     let registry = load_project_capability_registry(project_root)
         .unwrap_or_else(|_| agentflow_capability_registry::default_capability_registry());
-    let decision = evaluate_command(&registry, worker_id, required_capability);
+    let decision = evaluate_command(&registry, &route.connector_id, &route.required_capability);
     PackCapabilityStatusView {
         version: PACK_COMMAND_SURFACE_VERSION.to_string(),
         pack_id: route.pack_id.clone(),
         command: route.command.clone(),
         required_capabilities: decision.required_capabilities,
-        provider_ids: vec![worker_id.to_string()],
+        provider_ids: vec![route.connector_id.clone()],
         command_boundary: "runtime-api/product-surface/action-contract/arbitration".to_string(),
         available: decision.enabled && decision.health == WorkerHealth::Ready,
         reason: decision.disabled_reason.unwrap_or_else(|| {
             "product command is available through product connector and capability registry"
                 .to_string()
         }),
-    }
-}
-
-fn product_required_capability(command: &str) -> (&'static str, &'static str) {
-    match command {
-        "work.issue.review" => ("codex", "build_agent.complete"),
-        _ => ("codex", "launch"),
     }
 }
 
@@ -821,7 +825,7 @@ fn runtime_command_from_pack_request(
         )),
         source_surface: request.source_surface.clone(),
         actor_role: request.actor_role.clone(),
-        skill_ref: Some(format!("pack:{}:{}", request.pack_id, request.command)),
+        skill_ref: Some(resolved.route.skill_ref.clone()),
         target_object_ref: Some(ActionRef {
             object_type: request.target_object_type.clone(),
             id: request.target_object_id.clone(),

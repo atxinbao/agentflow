@@ -2176,6 +2176,37 @@ fn pack_bundle_from_invalid_product(
 fn product_domain_to_pack_domain(
     definition: &agentflow_pack::ProductDefinition,
 ) -> PackDomainDefinition {
+    let states = product_string_array(&definition.domain, "states");
+    let state_machine_object_type = definition
+        .domain
+        .get("stateMachineObjectType")
+        .and_then(|value| value.as_str())
+        .map(product_object_type_id)
+        .unwrap_or_else(|| {
+            definition
+                .surface
+                .commands
+                .iter()
+                .find_map(|command| command.target_object_type.clone())
+                .unwrap_or_else(|| "Object".to_string())
+        });
+    let transitions = definition
+        .domain
+        .get("stateTransitions")
+        .and_then(|value| value.as_array())
+        .map(|transitions| {
+            transitions
+                .iter()
+                .filter_map(|transition| {
+                    Some(agentflow_pack::DomainStateTransition {
+                        from: transition.get("from")?.as_str()?.to_string(),
+                        to: transition.get("to")?.as_str()?.to_string(),
+                        action_type: transition.get("actionType")?.as_str()?.to_string(),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     let object_types = definition
         .domain
         .get("objectTypes")
@@ -2206,76 +2237,13 @@ fn product_domain_to_pack_domain(
         object_types,
         link_types: Vec::new(),
         state_machines: vec![agentflow_pack::DomainStateMachine {
-            object_type: "Issue".to_string(),
-            states: vec![
-                "backlog".to_string(),
-                "todo".to_string(),
-                "in_progress".to_string(),
-                "in_review".to_string(),
-                "done".to_string(),
-                "blocked".to_string(),
-                "cancel".to_string(),
-            ],
-            transitions: vec![
-                agentflow_pack::DomainStateTransition {
-                    from: "todo".to_string(),
-                    to: "in_progress".to_string(),
-                    action_type: "startRun".to_string(),
-                },
-                agentflow_pack::DomainStateTransition {
-                    from: "in_progress".to_string(),
-                    to: "in_review".to_string(),
-                    action_type: "runValidation".to_string(),
-                },
-                agentflow_pack::DomainStateTransition {
-                    from: "in_review".to_string(),
-                    to: "done".to_string(),
-                    action_type: "markIssueDone".to_string(),
-                },
-            ],
+            object_type: state_machine_object_type,
+            states,
+            transitions,
         }],
-        action_semantics: vec![
-            agentflow_pack::DomainActionSemantic {
-                action_type: "startRun".to_string(),
-                target_object_type: "Issue".to_string(),
-                description: "Start Software Dev task work through Runtime API.".to_string(),
-                allowed_roles: vec!["build-agent".to_string()],
-                contract_ref: "action-contract:issue.start".to_string(),
-                arbitration_ref: "action-arbitration:runtime-command".to_string(),
-                simulation_ref: "simulation:work.issue.start".to_string(),
-                required_evidence: vec!["product-contract".to_string()],
-            },
-            agentflow_pack::DomainActionSemantic {
-                action_type: "prepareDelivery".to_string(),
-                target_object_type: "Run".to_string(),
-                description: "Prepare review and delivery proof after local validation."
-                    .to_string(),
-                allowed_roles: vec!["build-agent".to_string()],
-                contract_ref: "action-contract:delivery.prepare".to_string(),
-                arbitration_ref: "action-arbitration:runtime-command".to_string(),
-                simulation_ref: "simulation:work.issue.review".to_string(),
-                required_evidence: vec!["local-command-proof".to_string()],
-            },
-        ],
-        acceptance_semantics: vec![agentflow_pack::DomainAcceptanceSemantic {
-            acceptance_id: "software-dev-acceptance".to_string(),
-            object_type: "Run".to_string(),
-            description: "Evidence and decision must be present before delivery.".to_string(),
-            required_evidence: vec![
-                "changed-content-proof".to_string(),
-                "local-command-proof".to_string(),
-                "merge-proof".to_string(),
-            ],
-        }],
-        evidence_policy: agentflow_pack::DomainEvidencePolicy {
-            policy_id: "software-dev-product-evidence".to_string(),
-            required_evidence_kinds: vec![
-                "changed-content-proof".to_string(),
-                "local-command-proof".to_string(),
-                "merge-proof".to_string(),
-            ],
-            missing_evidence_behavior: "defer-completion".to_string(),
-        },
+        action_semantics: product_action_semantics(definition),
+        acceptance_semantics: product_acceptance_semantics(definition),
+        evidence_policy: product_evidence_policy(definition),
         audit_trigger_hints: Vec::new(),
         migration_compatibility: agentflow_pack::DomainMigrationCompatibility {
             compatible_with_runtime: ">=1.1.0".to_string(),
@@ -2283,6 +2251,99 @@ fn product_domain_to_pack_domain(
         },
         writes_events: false,
     }
+}
+
+fn product_action_semantics(
+    definition: &agentflow_pack::ProductDefinition,
+) -> Vec<agentflow_pack::DomainActionSemantic> {
+    definition
+        .domain
+        .get("actions")
+        .and_then(|value| value.as_array())
+        .map(|actions| {
+            actions
+                .iter()
+                .filter_map(|action| {
+                    Some(agentflow_pack::DomainActionSemantic {
+                        action_type: action.get("actionType")?.as_str()?.to_string(),
+                        target_object_type: action.get("targetObjectType")?.as_str()?.to_string(),
+                        description: action
+                            .get("description")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or_default()
+                            .to_string(),
+                        allowed_roles: product_string_array(action, "allowedRoles"),
+                        contract_ref: action.get("contractRef")?.as_str()?.to_string(),
+                        arbitration_ref: action.get("arbitrationRef")?.as_str()?.to_string(),
+                        simulation_ref: action.get("simulationRef")?.as_str()?.to_string(),
+                        required_evidence: product_string_array(action, "requiredEvidence"),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn product_acceptance_semantics(
+    definition: &agentflow_pack::ProductDefinition,
+) -> Vec<agentflow_pack::DomainAcceptanceSemantic> {
+    definition
+        .domain
+        .get("acceptanceSemantics")
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    Some(agentflow_pack::DomainAcceptanceSemantic {
+                        acceptance_id: item.get("acceptanceId")?.as_str()?.to_string(),
+                        object_type: item.get("objectType")?.as_str()?.to_string(),
+                        description: item
+                            .get("description")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or_default()
+                            .to_string(),
+                        required_evidence: product_string_array(item, "requiredEvidence"),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn product_evidence_policy(
+    definition: &agentflow_pack::ProductDefinition,
+) -> agentflow_pack::DomainEvidencePolicy {
+    let policy = definition
+        .domain
+        .get("evidencePolicy")
+        .unwrap_or(&Value::Null);
+    agentflow_pack::DomainEvidencePolicy {
+        policy_id: policy
+            .get("policyId")
+            .and_then(|value| value.as_str())
+            .unwrap_or("product-evidence-policy")
+            .to_string(),
+        required_evidence_kinds: product_string_array(policy, "requiredEvidence"),
+        missing_evidence_behavior: policy
+            .get("missingEvidenceBehavior")
+            .and_then(|value| value.as_str())
+            .unwrap_or("defer-completion")
+            .to_string(),
+    }
+}
+
+fn product_string_array(value: &Value, field: &str) -> Vec<String> {
+    value
+        .get(field)
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn product_surface_to_pack_surface(
@@ -2306,7 +2367,7 @@ fn product_surface_to_pack_surface(
                 .surface
                 .commands
                 .iter()
-                .filter(|command| product_page_id_for_command(&command.id) == page.id)
+                .filter(|command| command.page_id.as_deref() == Some(page.id.as_str()))
                 .map(|command| command.id.clone())
                 .collect(),
         })
@@ -2346,17 +2407,32 @@ fn product_surface_to_pack_surface(
         .commands
         .iter()
         .filter_map(|command| {
-            let (action_contract_ref, _) = agentflow_pack::product_command_mapping(command).ok()?;
+            let mapping = agentflow_pack::product_command_mapping(command).ok()?;
             Some(agentflow_pack::SurfaceCommandEntryMapping {
                 command_entry_id: command.id.clone(),
-                page_id: product_page_id_for_command(&command.id),
+                page_id: mapping.page_id,
                 label: command.label.clone(),
                 command_type: command.id.clone(),
                 route: agentflow_pack::SurfaceCommandRoute::RuntimeCommand,
-                action_contract_ref: action_contract_ref.to_string(),
+                action_contract_ref: mapping.action_contract_ref,
             })
         })
         .collect::<Vec<_>>();
+    let primary_command = definition.surface.commands.first();
+    let primary_page_id = primary_command
+        .and_then(|command| command.page_id.clone())
+        .or_else(|| definition.surface.pages.first().map(|page| page.id.clone()))
+        .unwrap_or_else(|| "product-workbench".to_string());
+    let primary_page_label = definition
+        .surface
+        .pages
+        .iter()
+        .find(|page| page.id == primary_page_id)
+        .map(|page| page.label.clone())
+        .unwrap_or_else(|| primary_page_id.clone());
+    let primary_object_type = primary_command
+        .and_then(|command| command.target_object_type.clone())
+        .unwrap_or_else(|| "Object".to_string());
 
     PackSurfaceDefinition {
         version: agentflow_pack::PACK_SURFACE_VERSION.to_string(),
@@ -2364,10 +2440,10 @@ fn product_surface_to_pack_surface(
         surface_id: format!("{}-product-surface", definition.product_id),
         pages,
         workbenches: vec![agentflow_pack::SurfaceWorkbench {
-            workbench_id: "software-dev-task-workbench".to_string(),
-            page_id: "task-workbench".to_string(),
-            label: "Task Workbench".to_string(),
-            primary_object_type: "Issue".to_string(),
+            workbench_id: format!("{}-primary-workbench", definition.product_id),
+            page_id: primary_page_id,
+            label: primary_page_label,
+            primary_object_type,
             timeline_ref: "projection.task.timeline".to_string(),
         }],
         view_model_mappings,
@@ -2404,42 +2480,19 @@ fn product_connectors_to_pack_connector(
 fn product_connector_to_pack_connector(
     connector: &agentflow_pack::ProductConnector,
 ) -> PackConnector {
-    let provider_type = match connector.id.as_str() {
-        "git" => agentflow_pack::PackConnectorProviderType::Git,
-        "github" => agentflow_pack::PackConnectorProviderType::Github,
-        "codex" => agentflow_pack::PackConnectorProviderType::Codex,
-        "browser-preview" => agentflow_pack::PackConnectorProviderType::BrowserPreview,
-        _ => agentflow_pack::PackConnectorProviderType::Custom,
-    };
-    let supported_actions = match connector.id.as_str() {
-        "codex" => vec![
-            product_supported_action("codex.launch", "launch", "work.issue.start", true),
+    let provider_type = product_provider_type(connector.provider_type.as_deref(), &connector.id);
+    let supported_actions = connector
+        .supported_actions
+        .iter()
+        .map(|action| {
             product_supported_action(
-                "codex.complete",
-                "build_agent.complete",
-                "work.issue.review",
-                true,
-            ),
-        ],
-        "github" => vec![product_supported_action(
-            "github.pull-request.create",
-            "pull_request.create",
-            "github.pull-request.create",
-            true,
-        )],
-        "git" => vec![product_supported_action(
-            "git.status",
-            "git.status",
-            "git.status",
-            false,
-        )],
-        _ => vec![product_supported_action(
-            &format!("{}.ready", connector.id),
-            "ready",
-            &format!("{}.ready", connector.id),
-            false,
-        )],
-    };
+                &action.action_id,
+                &action.required_capability,
+                &action.command_type,
+                action.writes_external,
+            )
+        })
+        .collect::<Vec<_>>();
     let required_capabilities = supported_actions
         .iter()
         .map(|action| action.required_capability.clone())
@@ -2487,10 +2540,22 @@ fn product_supported_action(
     }
 }
 
-fn product_page_id_for_command(command: &str) -> String {
-    match command {
-        "work.issue.start" | "work.issue.review" => "task-workbench".to_string(),
-        _ => "project-home".to_string(),
+fn product_provider_type(
+    provider_type: Option<&str>,
+    connector_id: &str,
+) -> agentflow_pack::PackConnectorProviderType {
+    match provider_type.unwrap_or(connector_id) {
+        "git" => agentflow_pack::PackConnectorProviderType::Git,
+        "github" => agentflow_pack::PackConnectorProviderType::Github,
+        "gitlab" => agentflow_pack::PackConnectorProviderType::Gitlab,
+        "codex" => agentflow_pack::PackConnectorProviderType::Codex,
+        "claude" => agentflow_pack::PackConnectorProviderType::Claude,
+        "browser-preview" => agentflow_pack::PackConnectorProviderType::BrowserPreview,
+        "figma" => agentflow_pack::PackConnectorProviderType::Figma,
+        "image-assets" => agentflow_pack::PackConnectorProviderType::ImageAssets,
+        "frontend-repo" => agentflow_pack::PackConnectorProviderType::FrontendRepo,
+        "design-export" => agentflow_pack::PackConnectorProviderType::DesignExport,
+        _ => agentflow_pack::PackConnectorProviderType::Custom,
     }
 }
 

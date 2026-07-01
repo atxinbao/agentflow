@@ -7,22 +7,35 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.1.0/README.md](docs/delivery/releases/v1.1.0/README.md)
-- [docs/delivery/releases/v1.1.0/AGENTFLOW_V1_1_0_PRODUCT_SURFACE_HARDENING_TASKS_V1.md](docs/delivery/releases/v1.1.0/AGENTFLOW_V1_1_0_PRODUCT_SURFACE_HARDENING_TASKS_V1.md)
+- [docs/delivery/releases/v1.1.1/README.md](docs/delivery/releases/v1.1.1/README.md)
+- [docs/delivery/releases/v1.1.1/AGENTFLOW_V1_1_1_PRODUCT_CONTRACT_DATA_DRIVEN_TASKS_V1.md](docs/delivery/releases/v1.1.1/AGENTFLOW_V1_1_1_PRODUCT_CONTRACT_DATA_DRIVEN_TASKS_V1.md)
 
 下一版计划：
 
-- v1.1.x Product Surface follow-up hardening。
+- v1.1.x Desktop command route installation and multi-product console hardening。
 
 ## Unreleased
 
-下一版保留给 Product Surface follow-up hardening，不在本次 release 中认证。
+下一版保留给 Desktop command route installation and multi-product console hardening，不在本次 release 中认证。
 
 Planned v1.1.x foundation:
 
 - harden product surface installation and user-facing console routes;
 - keep `products/**` as source definitions and `.agentflow/**` as runtime facts;
 - expand reference app certification without adding Core industry-specific authority.
+
+## v1.1.1 - 2026-07-01
+
+Product Contract Data-driven hardening:
+
+- added Product command mapping fields for command, runtime, action contract, target object, page, skill, connector, capability, evidence policy and acceptance policy refs;
+- changed Product-to-Pack command routing to read mapping fields from Product source instead of hardcoded Software Dev command names;
+- changed Runtime API Product resolver to use Product source page, skill, connector and capability refs;
+- changed Projection Product conversion to read domain actions, acceptance semantics, evidence policy, command pages and connector supported actions from Product source;
+- added a synthetic second Product fixture under `products/_fixtures/synthetic-review/**` to prove generic behavior outside Software Dev command names;
+- expanded release-gate quick-audit primary proofs with v1.1.1 Runtime / Projection proof artifacts and Product bridge pollution checks;
+- added v1.1.1 release task traceability for GitHub issues `#757` through `#764`;
+- advanced workspace and desktop version metadata to `1.1.1`.
 
 ## v1.1.0 - 2026-07-01
 
@@ -34,6 +47,7 @@ Product Surface Hardening:
 - made Projection read models consume product source definitions and expose invalid/deferred state when product/pack sources are missing instead of silently injecting built-in Software Dev fallback data;
 - added Software Dev product route, product-to-pack contract and missing-source negative tests;
 - added v1.1.0 release task traceability and certification artifacts for GitHub issues `#746` through `#755`;
+- published the v1.1.0 release baseline at [docs/delivery/releases/v1.1.0/README.md](docs/delivery/releases/v1.1.0/README.md);
 - advanced workspace and desktop version metadata to `1.1.0`.
 
 ## v1.0.9 - 2026-07-01

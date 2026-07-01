@@ -40,7 +40,68 @@
     "blocked",
     "cancel"
   ],
+  "stateMachineObjectType": "task",
+  "stateTransitions": [
+    {
+      "from": "todo",
+      "to": "in_progress",
+      "actionType": "startRun"
+    },
+    {
+      "from": "in_progress",
+      "to": "in_review",
+      "actionType": "runValidation"
+    },
+    {
+      "from": "in_review",
+      "to": "done",
+      "actionType": "markIssueDone"
+    }
+  ],
+  "actions": [
+    {
+      "actionType": "startRun",
+      "targetObjectType": "Issue",
+      "description": "Start Software Dev task work through Runtime API.",
+      "allowedRoles": [
+        "build-agent"
+      ],
+      "contractRef": "action-contract:issue.start",
+      "arbitrationRef": "action-arbitration:runtime-command",
+      "simulationRef": "simulation:work.issue.start",
+      "requiredEvidence": [
+        "product-contract"
+      ]
+    },
+    {
+      "actionType": "prepareDelivery",
+      "targetObjectType": "Run",
+      "description": "Prepare review and delivery proof after local validation.",
+      "allowedRoles": [
+        "build-agent"
+      ],
+      "contractRef": "action-contract:delivery.prepare",
+      "arbitrationRef": "action-arbitration:runtime-command",
+      "simulationRef": "simulation:work.issue.review",
+      "requiredEvidence": [
+        "local-command-proof"
+      ]
+    }
+  ],
+  "acceptanceSemantics": [
+    {
+      "acceptanceId": "software-dev-acceptance",
+      "objectType": "Run",
+      "description": "Evidence and decision must be present before delivery.",
+      "requiredEvidence": [
+        "changed-content-proof",
+        "local-command-proof",
+        "merge-proof"
+      ]
+    }
+  ],
   "evidencePolicy": {
+    "policyId": "software-dev-product-evidence",
     "requiredEvidence": [
       "changed-content-proof",
       "local-command-proof",

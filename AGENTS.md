@@ -21,8 +21,9 @@ It points agents to tracked documentation. It is not a local runtime fact file.
 9. Current module boundaries: `docs/architecture/current-module-boundaries.md`
 10. Current stable contract baseline: `docs/architecture/041-v100-stable-contract-baseline-v1.md`
 11. Release certification boundary: `docs/architecture/050-v100-release-certification-v1.md`
-12. Current release baseline: `docs/delivery/releases/v1.1.0/README.md`
-13. Historical archive: `docs/project/history/2026-06-current-baseline-history/README.md`
+12. Current release baseline: `docs/delivery/releases/v1.1.1/README.md`
+13. Previous release baseline: `docs/delivery/releases/v1.1.0/README.md`
+14. Historical archive: `docs/project/history/2026-06-current-baseline-history/README.md`
 
 ## Authority Boundary
 

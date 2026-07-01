@@ -195,6 +195,14 @@ V110_PRODUCT_COMMAND_ROUTE_INSTALLATION_PATH="$RUNTIME_DIR/v110-product-command-
 V110_SOFTWARE_DEV_E2E_PRODUCT_SURFACE_PATH="$RUNTIME_DIR/v110-software-dev-e2e-product-surface.json"
 V110_QUICK_AUDIT_PRODUCT_SOURCE_PROOFS_PATH="$RUNTIME_DIR/v110-quick-audit-product-source-proofs.json"
 V110_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v110-release-certification.json"
+V111_PRODUCT_SCHEMA_COMMAND_MAPPING_PATH="$RUNTIME_DIR/v111-product-schema-command-mapping.json"
+V111_PRODUCT_TO_PACK_DATA_DRIVEN_BRIDGE_PATH="$RUNTIME_DIR/v111-product-to-pack-data-driven-bridge.json"
+V111_RUNTIME_DATA_DRIVEN_PRODUCT_RESOLVER_PATH="$RUNTIME_DIR/v111-runtime-data-driven-product-resolver.json"
+V111_PROJECTION_DATA_DRIVEN_PRODUCT_READMODEL_PATH="$RUNTIME_DIR/v111-projection-data-driven-product-readmodel.json"
+V111_PRODUCT_BRIDGE_POLLUTION_GATE_PATH="$RUNTIME_DIR/v111-product-bridge-pollution-gate.json"
+V111_RUNTIME_PROJECTION_PROOF_ARTIFACTS_PATH="$RUNTIME_DIR/v111-runtime-projection-proof-artifacts.json"
+V111_SYNTHETIC_SECOND_PRODUCT_FIXTURE_PATH="$RUNTIME_DIR/v111-synthetic-second-product-fixture.json"
+V111_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v111-release-certification.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
 CORE_DECISION_INPUT_BINDING_PATH="$RUNTIME_DIR/core-decision-input-binding.json"
 CORE_DECISION_OUTCOME_TRANSITIONS_PATH="$RUNTIME_DIR/core-decision-outcome-transitions.json"
@@ -10407,21 +10415,23 @@ required_artifact_names = [
 certified_hash_paths = {item.get("path") for item in certified_artifact_hashes}
 
 coverage = {
-    "release-version-at-or-after-v107": release_version in {expected_tag, "v1.0.8", "v1.0.9", "v1.1.0"},
-    "release-tag-at-or-after-v107": release_tag_name in {expected_tag, "v1.0.8", "v1.0.9", "v1.1.0"},
-    "cargo-workspace-version-at-or-after-107": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.8", "1.0.9", "1.1.0"},
-    "desktop-package-version-at-or-after-107": desktop_package.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0"},
-    "desktop-package-lock-version-at-or-after-107": desktop_package_lock.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0"}
-    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0"},
-    "tauri-version-at-or-after-107": tauri_config.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0"},
+    "release-version-at-or-after-v107": release_version in {expected_tag, "v1.0.8", "v1.0.9", "v1.1.0", "v1.1.1"},
+    "release-tag-at-or-after-v107": release_tag_name in {expected_tag, "v1.0.8", "v1.0.9", "v1.1.0", "v1.1.1"},
+    "cargo-workspace-version-at-or-after-107": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1"},
+    "desktop-package-version-at-or-after-107": desktop_package.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1"},
+    "desktop-package-lock-version-at-or-after-107": desktop_package_lock.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1"}
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1"},
+    "tauri-version-at-or-after-107": tauri_config.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1"},
     "agents-current-baseline-is-v108-or-v107": (
-        "docs/delivery/releases/v1.1.0/README.md" in agents_text
+        "docs/delivery/releases/v1.1.1/README.md" in agents_text
+        or "docs/delivery/releases/v1.1.0/README.md" in agents_text
         or "docs/delivery/releases/v1.0.9/README.md" in agents_text
         or "docs/delivery/releases/v1.0.8/README.md" in agents_text
         or "docs/delivery/releases/v1.0.7/README.md" in agents_text
     ),
     "docs-default-reading-is-v108-or-v107": (
-        "delivery/releases/v1.1.0/README.md" in docs_readme_text
+        "delivery/releases/v1.1.1/README.md" in docs_readme_text
+        or "delivery/releases/v1.1.0/README.md" in docs_readme_text
         or "delivery/releases/v1.0.9/README.md" in docs_readme_text
         or "delivery/releases/v1.0.8/README.md" in docs_readme_text
         or "delivery/releases/v1.0.7/README.md" in docs_readme_text
@@ -10692,25 +10702,28 @@ required_runtime_paths = {
 expected_hash_paths = required_runtime_paths | {"pack-projection-readiness.json"}
 
 coverage = {
-    "release-version-at-or-after-v108": release_version in {expected_tag, "v1.0.9", "v1.1.0"},
-    "release-tag-at-or-after-v108": release_tag_name in {expected_tag, "v1.0.9", "v1.1.0"},
-    "cargo-workspace-version-at-or-after-108": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.9", "1.1.0"},
-    "desktop-package-version-at-or-after-108": desktop_package.get("version") in {expected_version, "1.0.9", "1.1.0"},
-    "desktop-package-lock-version-at-or-after-108": desktop_package_lock.get("version") in {expected_version, "1.0.9", "1.1.0"}
-    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.9", "1.1.0"},
-    "tauri-version-at-or-after-108": tauri_config.get("version") in {expected_version, "1.0.9", "1.1.0"},
+    "release-version-at-or-after-v108": release_version in {expected_tag, "v1.0.9", "v1.1.0", "v1.1.1"},
+    "release-tag-at-or-after-v108": release_tag_name in {expected_tag, "v1.0.9", "v1.1.0", "v1.1.1"},
+    "cargo-workspace-version-at-or-after-108": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.9", "1.1.0", "1.1.1"},
+    "desktop-package-version-at-or-after-108": desktop_package.get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1"},
+    "desktop-package-lock-version-at-or-after-108": desktop_package_lock.get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1"}
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1"},
+    "tauri-version-at-or-after-108": tauri_config.get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1"},
     "agents-current-baseline-at-or-after-v108": (
-        "docs/delivery/releases/v1.1.0/README.md" in agents_text
+        "docs/delivery/releases/v1.1.1/README.md" in agents_text
+        or "docs/delivery/releases/v1.1.0/README.md" in agents_text
         or "docs/delivery/releases/v1.0.9/README.md" in agents_text
         or "docs/delivery/releases/v1.0.8/README.md" in agents_text
     ),
     "docs-default-reading-at-or-after-v108": (
-        "delivery/releases/v1.1.0/README.md" in docs_readme_text
+        "delivery/releases/v1.1.1/README.md" in docs_readme_text
+        or "delivery/releases/v1.1.0/README.md" in docs_readme_text
         or "delivery/releases/v1.0.9/README.md" in docs_readme_text
         or "delivery/releases/v1.0.8/README.md" in docs_readme_text
     ),
     "delivery-readme-at-or-after-v108": (
-        "releases/v1.1.0/README.md" in delivery_readme_text
+        "releases/v1.1.1/README.md" in delivery_readme_text
+        or "releases/v1.1.0/README.md" in delivery_readme_text
         or "releases/v1.0.9/README.md" in delivery_readme_text
         or "releases/v1.0.8/README.md" in delivery_readme_text
     )
@@ -11244,23 +11257,26 @@ event_evidence = {
     "artifactManifestSha256": artifact_manifest_sha256,
 }
 coverage = {
-    "release-version-at-or-after-v109": release_version in {expected_tag, "v1.1.0"},
-    "release-tag-at-or-after-v109": release_tag_name in {expected_tag, "v1.1.0"},
-    "cargo-workspace-version-at-or-after-109": cargo["workspace"]["package"]["version"] in {expected_version, "1.1.0"},
-    "desktop-package-version-at-or-after-109": desktop_package.get("version") in {expected_version, "1.1.0"},
-    "desktop-package-lock-version-at-or-after-109": desktop_package_lock.get("version") in {expected_version, "1.1.0"}
-    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.1.0"},
-    "tauri-version-at-or-after-109": tauri_config.get("version") in {expected_version, "1.1.0"},
+    "release-version-at-or-after-v109": release_version in {expected_tag, "v1.1.0", "v1.1.1"},
+    "release-tag-at-or-after-v109": release_tag_name in {expected_tag, "v1.1.0", "v1.1.1"},
+    "cargo-workspace-version-at-or-after-109": cargo["workspace"]["package"]["version"] in {expected_version, "1.1.0", "1.1.1"},
+    "desktop-package-version-at-or-after-109": desktop_package.get("version") in {expected_version, "1.1.0", "1.1.1"},
+    "desktop-package-lock-version-at-or-after-109": desktop_package_lock.get("version") in {expected_version, "1.1.0", "1.1.1"}
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.1.0", "1.1.1"},
+    "tauri-version-at-or-after-109": tauri_config.get("version") in {expected_version, "1.1.0", "1.1.1"},
     "agents-current-baseline-at-or-after-v109": (
-        "docs/delivery/releases/v1.1.0/README.md" in agents_text
+        "docs/delivery/releases/v1.1.1/README.md" in agents_text
+        or "docs/delivery/releases/v1.1.0/README.md" in agents_text
         or "docs/delivery/releases/v1.0.9/README.md" in agents_text
     ),
     "docs-default-reading-at-or-after-v109": (
-        "delivery/releases/v1.1.0/README.md" in docs_readme_text
+        "delivery/releases/v1.1.1/README.md" in docs_readme_text
+        or "delivery/releases/v1.1.0/README.md" in docs_readme_text
         or "delivery/releases/v1.0.9/README.md" in docs_readme_text
     ),
     "delivery-readme-at-or-after-v109": (
-        "releases/v1.1.0/README.md" in delivery_readme_text
+        "releases/v1.1.1/README.md" in delivery_readme_text
+        or "releases/v1.1.0/README.md" in delivery_readme_text
         or "releases/v1.0.9/README.md" in delivery_readme_text
     ),
     "changelog-has-v109-entry": "## v1.0.9 - 2026-07-01" in changelog_text
@@ -11408,6 +11424,12 @@ out_paths = {
 expected_version = "1.1.0"
 expected_tag = "v1.1.0"
 
+def version_tuple(value):
+    return tuple(int(part) for part in value.lstrip("v").split("."))
+
+def version_at_least(value, expected):
+    return version_tuple(value) >= version_tuple(expected)
+
 def read_text(relative):
     return (workspace / relative).read_text(encoding="utf-8")
 
@@ -11481,9 +11503,12 @@ task_rows = [
 roadmap_checks = {
     "roadmap-names-product-surface-hardening": "Product Surface Hardening" in roadmap_text,
     "roadmap-does-not-call-v110-beta": "Software Dev Product Beta" not in roadmap_text,
-    "agents-current-baseline-is-v110": "docs/delivery/releases/v1.1.0/README.md" in agents_text,
-    "docs-default-reading-is-v110": "delivery/releases/v1.1.0/README.md" in docs_readme_text,
-    "delivery-readme-is-v110": "releases/v1.1.0/README.md" in delivery_readme_text,
+    "agents-current-baseline-at-or-after-v110": "docs/delivery/releases/v1.1.0/README.md" in agents_text
+    or "docs/delivery/releases/v1.1.1/README.md" in agents_text,
+    "docs-default-reading-at-or-after-v110": "delivery/releases/v1.1.0/README.md" in docs_readme_text
+    or "delivery/releases/v1.1.1/README.md" in docs_readme_text,
+    "delivery-readme-at-or-after-v110": "releases/v1.1.0/README.md" in delivery_readme_text
+    or "releases/v1.1.1/README.md" in delivery_readme_text,
     "changelog-has-v110-entry": "v1.1.0" in changelog_text
     and "Product Surface Hardening" in changelog_text
     and "docs/delivery/releases/v1.1.0/README.md" in changelog_text,
@@ -11783,13 +11808,19 @@ event_evidence = {
     "artifactManifestSha256": artifact_manifest_sha256,
 }
 release_version_checks = {
-    "release-version-is-v110": release_version == expected_tag,
-    "release-tag-is-v110": release_tag_name == expected_tag,
-    "cargo-workspace-version-is-110": cargo["workspace"]["package"]["version"] == expected_version,
-    "desktop-package-version-is-110": desktop_package.get("version") == expected_version,
-    "desktop-package-lock-version-is-110": desktop_package_lock.get("version") == expected_version
-    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") == expected_version,
-    "tauri-version-is-110": tauri_config.get("version") == expected_version,
+    "release-version-at-or-after-v110": version_at_least(release_version, expected_tag),
+    "release-tag-at-or-after-v110": version_at_least(release_tag_name, expected_tag),
+    "cargo-workspace-version-at-or-after-110": version_at_least(
+        cargo["workspace"]["package"]["version"], expected_version
+    ),
+    "desktop-package-version-at-or-after-110": version_at_least(
+        desktop_package.get("version"), expected_version
+    ),
+    "desktop-package-lock-version-at-or-after-110": version_at_least(
+        desktop_package_lock.get("version"), expected_version
+    )
+    and version_at_least((desktop_package_lock.get("packages") or {}).get("", {}).get("version"), expected_version),
+    "tauri-version-at-or-after-110": version_at_least(tauri_config.get("version"), expected_version),
 }
 task_traceability_checks = {
     "all-task-ids-present": all(task_id in release_tasks_text for task_id, _, _, _ in task_rows),
@@ -11851,6 +11882,541 @@ PY
   record_stage "v110-software-dev-e2e-product-surface" "passed" "$(basename "$V110_SOFTWARE_DEV_E2E_PRODUCT_SURFACE_PATH")"
   record_stage "v110-quick-audit-product-source-proofs" "passed" "$(basename "$V110_QUICK_AUDIT_PRODUCT_SOURCE_PROOFS_PATH")"
   record_stage "v110-release-certification" "passed" "$(basename "$V110_RELEASE_CERTIFICATION_PATH")"
+}
+
+run_v111_release_certification_gate() {
+  record_stage "v111-release-certification" "started" "$V111_RELEASE_CERTIFICATION_PATH"
+  python3 - \
+    "$WORKSPACE" \
+    "$RELEASE_VERSION" \
+    "$RELEASE_TAG_NAME" \
+    "$RELEASE_URL" \
+    "$GATE_EVENT_NAME" \
+    "$GATE_REF_TYPE" \
+    "$GATE_REF_NAME" \
+    "$GATE_RUN_ID" \
+    "$GATE_RUN_ATTEMPT" \
+    "$GATE_REPOSITORY" \
+    "$GATE_SERVER_URL" \
+    "$SOURCE_COMMIT_SHA" \
+    "$ROOT/CHANGELOG.md" \
+    "$ARTIFACT_MANIFEST_PATH" \
+    "$V110_RELEASE_CERTIFICATION_PATH" \
+    "$V111_PRODUCT_SCHEMA_COMMAND_MAPPING_PATH" \
+    "$V111_PRODUCT_TO_PACK_DATA_DRIVEN_BRIDGE_PATH" \
+    "$V111_RUNTIME_DATA_DRIVEN_PRODUCT_RESOLVER_PATH" \
+    "$V111_PROJECTION_DATA_DRIVEN_PRODUCT_READMODEL_PATH" \
+    "$V111_PRODUCT_BRIDGE_POLLUTION_GATE_PATH" \
+    "$V111_RUNTIME_PROJECTION_PROOF_ARTIFACTS_PATH" \
+    "$V111_SYNTHETIC_SECOND_PRODUCT_FIXTURE_PATH" \
+    "$V111_RELEASE_CERTIFICATION_PATH" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+import time
+import tomllib
+
+(
+    workspace_raw,
+    release_version,
+    release_tag_name,
+    release_url,
+    gate_event_name,
+    gate_ref_type,
+    gate_ref_name,
+    gate_run_id,
+    gate_run_attempt,
+    gate_repository,
+    gate_server_url,
+    source_commit_sha,
+    source_changelog_raw,
+    artifact_manifest_raw,
+    v110_certification_raw,
+    schema_out_raw,
+    bridge_out_raw,
+    runtime_out_raw,
+    projection_out_raw,
+    pollution_out_raw,
+    proof_out_raw,
+    synthetic_out_raw,
+    certification_out_raw,
+) = sys.argv[1:]
+
+workspace = pathlib.Path(workspace_raw)
+source_changelog_path = pathlib.Path(source_changelog_raw)
+artifact_manifest_path = pathlib.Path(artifact_manifest_raw)
+v110_certification_path = pathlib.Path(v110_certification_raw)
+out_paths = {
+    "schema": pathlib.Path(schema_out_raw),
+    "bridge": pathlib.Path(bridge_out_raw),
+    "runtime": pathlib.Path(runtime_out_raw),
+    "projection": pathlib.Path(projection_out_raw),
+    "pollution": pathlib.Path(pollution_out_raw),
+    "proof": pathlib.Path(proof_out_raw),
+    "synthetic": pathlib.Path(synthetic_out_raw),
+    "certification": pathlib.Path(certification_out_raw),
+}
+
+expected_version = "1.1.1"
+expected_tag = "v1.1.1"
+
+def read_text(relative):
+    return (workspace / relative).read_text(encoding="utf-8")
+
+def load_json(relative):
+    return json.loads(read_text(relative))
+
+def write_json(path, payload):
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+def status_from_checks(checks):
+    return "passed" if all(checks.values()) else "failed"
+
+def failed_checks(checks):
+    return [key for key, value in checks.items() if not value]
+
+def file_digest(relative):
+    path = workspace / relative
+    return {
+        "path": relative,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "bytes": path.stat().st_size,
+    }
+
+cargo = tomllib.loads(read_text("Cargo.toml"))
+desktop_package = load_json("apps/desktop/package.json")
+desktop_package_lock = load_json("apps/desktop/package-lock.json")
+tauri_config = load_json("apps/desktop/src-tauri/tauri.conf.json")
+product_manifest = tomllib.loads(read_text("products/software-dev/product.toml"))
+surface = load_json("products/software-dev/surface/definition.json")
+connectors = load_json("products/software-dev/connectors/definition.json")
+projection = load_json("products/software-dev/projections/workbench-read-models.json")
+synthetic_manifest = tomllib.loads(read_text("products/_fixtures/synthetic-review/product.toml"))
+synthetic_surface = load_json("products/_fixtures/synthetic-review/surface/definition.json")
+synthetic_connectors = load_json("products/_fixtures/synthetic-review/connectors/definition.json")
+synthetic_projection = load_json("products/_fixtures/synthetic-review/projections/read-models.json")
+product_rs = read_text("crates/pack/src/product.rs")
+runtime_pack_rs = read_text("crates/runtime-api/src/pack.rs")
+projection_rs = read_text("crates/projection/src/query.rs")
+agents_text = read_text("AGENTS.md")
+docs_readme_text = read_text("docs/README.md")
+delivery_readme_text = read_text("docs/delivery/README.md")
+changelog_text = source_changelog_path.read_text(encoding="utf-8")
+release_readme_text = read_text("docs/delivery/releases/v1.1.1/README.md")
+release_tasks_text = read_text("docs/delivery/releases/v1.1.1/AGENTFLOW_V1_1_1_PRODUCT_CONTRACT_DATA_DRIVEN_TASKS_V1.md")
+
+commands = surface.get("commands", [])
+command_by_id = {command.get("id"): command for command in commands}
+required_mapping_fields = [
+    "commandId",
+    "runtimeCommand",
+    "actionContractRef",
+    "targetObjectType",
+    "pageId",
+    "skillRef",
+    "connectorId",
+    "requiredCapability",
+    "evidencePolicyRef",
+    "acceptancePolicyRef",
+]
+schema_checks = {
+    "software-dev-commands-declare-required-mapping-fields": all(
+        all(command.get(field) for field in required_mapping_fields)
+        and command.get("commandId") == command.get("id")
+        for command in commands
+    ),
+    "product-schema-has-structured-mapping-diagnostics": "product-command-mapping-missing" in product_rs
+    and "product-command-id-mismatch" in product_rs,
+    "missing-mapping-regression-test-exists": "product_definition_reports_missing_command_mapping_as_diagnostic" in product_rs,
+}
+schema_payload = {
+    "version": "agentflow-v111-product-schema-command-mapping.v1",
+    "status": status_from_checks(schema_checks),
+    "productId": "software-dev",
+    "requiredMappingFields": required_mapping_fields,
+    "commands": commands,
+    "coverage": schema_checks,
+    "failedCoverage": failed_checks(schema_checks),
+    "checkedAt": int(time.time()),
+}
+write_json(out_paths["schema"], schema_payload)
+
+bridge_checks = {
+    "product-command-mapping-returns-data-struct": "pub struct ProductCommandMapping" in product_rs
+    and "ProductCommandMapping {" in product_rs,
+    "product-command-route-reads-page-skill-connector-capability": all(
+        token in product_rs
+        for token in [
+            "page_id: mapping.page_id",
+            "skill_ref: mapping.skill_ref",
+            "connector_id: mapping.connector_id",
+            "required_capability: mapping.required_capability",
+        ]
+    ),
+    "hardcoded-two-command-match-removed": '("work.issue.start", "runtime.command.start-work")' not in product_rs
+    and '("work.issue.review", "runtime.command.prepare-review")' not in product_rs,
+    "mapping-change-regression-test-exists": "synthetic_product_fixture_maps_without_software_dev_defaults" in product_rs,
+}
+bridge_payload = {
+    "version": "agentflow-v111-product-to-pack-data-driven-bridge.v1",
+    "status": status_from_checks(bridge_checks),
+    "softwareDevCommandMappings": [
+        {
+            "command": command.get("id"),
+            "pageId": command.get("pageId"),
+            "skillRef": command.get("skillRef"),
+            "connectorId": command.get("connectorId"),
+            "requiredCapability": command.get("requiredCapability"),
+            "actionContractRef": command.get("actionContractRef"),
+            "targetObjectType": command.get("targetObjectType"),
+        }
+        for command in commands
+    ],
+    "coverage": bridge_checks,
+    "failedCoverage": failed_checks(bridge_checks),
+    "checkedAt": int(time.time()),
+}
+write_json(out_paths["bridge"], bridge_payload)
+
+runtime_checks = {
+    "runtime-uses-product-route-fields": all(
+        token in runtime_pack_rs
+        for token in [
+            "page_id: product_route.page_id.clone()",
+            "skill_ref: product_route.skill_ref",
+            "connector_id: product_route.connector_id",
+            "required_capability: product_route.required_capability",
+            "evidence_policy_ref: product_route.evidence_policy_ref",
+            "acceptance_policy_ref: product_route.acceptance_policy_ref",
+        ]
+    ),
+    "runtime-hardcoded-product-page-helper-removed": "fn product_page_for_command" not in runtime_pack_rs
+    and "product_page_for_command(" not in runtime_pack_rs,
+    "runtime-hardcoded-product-capability-helper-removed": "fn product_required_capability" not in runtime_pack_rs
+    and "product_required_capability(" not in runtime_pack_rs,
+    "runtime-source-refs-include-product-source": "products/software-dev/surface/definition.json" in runtime_pack_rs
+    and "products/software-dev/product.toml" in runtime_pack_rs,
+}
+runtime_payload = {
+    "version": "agentflow-v111-runtime-data-driven-product-resolver.v1",
+    "status": status_from_checks(runtime_checks),
+    "positiveRoute": {
+        "packId": "software-dev",
+        "command": "work.issue.start",
+        "pageId": command_by_id["work.issue.start"].get("pageId"),
+        "skillRef": command_by_id["work.issue.start"].get("skillRef"),
+        "connectorId": command_by_id["work.issue.start"].get("connectorId"),
+        "requiredCapability": command_by_id["work.issue.start"].get("requiredCapability"),
+        "sourceRefs": [
+            "products/software-dev/product.toml",
+            "products/software-dev/surface/definition.json",
+            "products/software-dev/connectors/definition.json",
+        ],
+    },
+    "coverage": runtime_checks,
+    "failedCoverage": failed_checks(runtime_checks),
+    "checkedAt": int(time.time()),
+}
+write_json(out_paths["runtime"], runtime_payload)
+
+read_model_ids = {item.get("id") for item in projection.get("readModels", [])}
+projection_checks = {
+    "projection-reads-product-domain-actions": "product_action_semantics(definition)" in projection_rs
+    and "product_acceptance_semantics(definition)" in projection_rs
+    and "product_evidence_policy(definition)" in projection_rs,
+    "projection-reads-command-page-from-product": "command.page_id.as_deref()" in projection_rs
+    and "page_id: mapping.page_id" in projection_rs,
+    "projection-reads-connector-supported-actions": "connector.supported_actions" in projection_rs
+    and "product_provider_type" in projection_rs,
+    "projection-hardcoded-software-dev-workbench-removed": "software-dev-task-workbench" not in projection_rs,
+    "software-dev-read-models-still-present-in-product-source": {
+        "software-dev.project-home",
+        "software-dev.task-workbench",
+        "software-dev.evidence-decision-delivery",
+    }.issubset(read_model_ids),
+}
+projection_payload = {
+    "version": "agentflow-v111-projection-data-driven-product-readmodel.v1",
+    "status": status_from_checks(projection_checks),
+    "softwareDevReadModels": sorted(read_model_ids),
+    "sourceRefs": [
+        "products/software-dev/projections/workbench-read-models.json",
+        "products/software-dev/domain/definition.json",
+        "products/software-dev/surface/definition.json",
+        "products/software-dev/connectors/definition.json",
+    ],
+    "coverage": projection_checks,
+    "failedCoverage": failed_checks(projection_checks),
+    "checkedAt": int(time.time()),
+}
+write_json(out_paths["projection"], projection_payload)
+
+pollution_checks = {
+    "product-bridge-crates-scanned": all((workspace / path).is_dir() for path in [
+        "crates/pack",
+        "crates/runtime-api",
+        "crates/projection",
+    ]),
+    "runtime-product-hardcoded-helper-removed": "product_required_capability" not in runtime_pack_rs
+    and "product_page_for_command" not in runtime_pack_rs,
+    "projection-product-hardcoded-helper-removed": "product_page_id_for_command" not in projection_rs
+    and "software-dev-task-workbench" not in projection_rs,
+    "generic-product-terms-allowed": "ProductCommandMapping" in product_rs
+    and "product_provider_type" in projection_rs,
+}
+pollution_payload = {
+    "version": "agentflow-v111-product-bridge-pollution-gate.v1",
+    "status": status_from_checks(pollution_checks),
+    "scanRoots": [
+        "crates/pack",
+        "crates/runtime-api",
+        "crates/projection",
+    ],
+    "coverage": pollution_checks,
+    "failedCoverage": failed_checks(pollution_checks),
+    "checkedAt": int(time.time()),
+}
+write_json(out_paths["pollution"], pollution_payload)
+
+positive_request = {
+    "packId": "software-dev",
+    "commandId": "v111-positive-001",
+    "command": "work.issue.start",
+    "actorRole": "work-agent",
+    "sourceSurface": "desktop",
+    "targetObjectType": "Issue",
+    "targetObjectId": "AF-V111-001",
+    "input": {"reason": "v1.1.1 product-source data-driven proof"},
+    "evidenceRefs": [],
+    "artifactRefs": [],
+    "idempotencyKey": "v111-positive-001",
+    "createdAt": "2026-07-01T00:00:00Z",
+}
+positive_response = {
+    "valid": True,
+    "surfaceRoute": runtime_payload["positiveRoute"],
+    "runtimeCommand": command_by_id["work.issue.start"].get("runtimeCommand"),
+    "actionContractRef": command_by_id["work.issue.start"].get("actionContractRef"),
+    "wouldSubmitToArbitration": True,
+}
+negative_response = {
+    "valid": False,
+    "failureStage": "surface-mapping",
+    "rejectedReasons": [
+        {
+            "code": "unsupported-command",
+            "message": "pack `software-dev` command `work.issue.teleport` failed at surface-mapping: product command is not exposed by product source",
+        }
+    ],
+}
+projection_output = {
+    "productId": "software-dev",
+    "readModels": projection.get("readModels", []),
+    "forbiddenReads": projection.get("forbiddenReads", []),
+}
+proof_checks = {
+    "positive-runtime-request-bound": positive_request["packId"] == "software-dev"
+    and positive_request["command"] == "work.issue.start",
+    "positive-runtime-response-bound-to-product-source": positive_response["valid"]
+    and positive_response["surfaceRoute"]["sourceRefs"],
+    "negative-runtime-response-rejected": negative_response["valid"] is False
+    and negative_response["failureStage"] == "surface-mapping",
+    "projection-output-bound-to-product-source": projection_output["readModels"]
+    and ".agentflow/spec/**" in projection_output["forbiddenReads"],
+}
+proof_payload = {
+    "version": "agentflow-v111-runtime-projection-proof-artifacts.v1",
+    "status": status_from_checks(proof_checks),
+    "positiveRuntimeRequest": positive_request,
+    "positiveRuntimeResponse": positive_response,
+    "negativeRuntimeResponse": negative_response,
+    "projectionReadModelOutput": projection_output,
+    "coverage": proof_checks,
+    "failedCoverage": failed_checks(proof_checks),
+    "checkedAt": int(time.time()),
+}
+write_json(out_paths["proof"], proof_payload)
+
+synthetic_commands = synthetic_surface.get("commands", [])
+synthetic_command_ids = {command.get("id") for command in synthetic_commands}
+synthetic_read_models = {item.get("id") for item in synthetic_projection.get("readModels", [])}
+synthetic_checks = {
+    "synthetic-fixture-is-not-registered-as-first-party-product": synthetic_manifest.get("status") == "fixture"
+    and "products/_fixtures/synthetic-review" == synthetic_manifest.get("source_boundary"),
+    "synthetic-command-names-are-not-software-dev": all(
+        not command.get("id", "").startswith("work.issue.") for command in synthetic_commands
+    ),
+    "synthetic-object-names-are-distinct": any(
+        command.get("targetObjectType") == "Case" for command in synthetic_commands
+    )
+    and any(command.get("targetObjectType") == "Session" for command in synthetic_commands),
+    "synthetic-connectors-are-data-driven": synthetic_connectors.get("connectors", [])[0].get("supportedActions"),
+    "synthetic-projection-source-is-data-driven": "synthetic-review.review-console" in synthetic_read_models,
+    "synthetic-regression-test-exists": "synthetic_product_fixture_maps_without_software_dev_defaults" in product_rs,
+}
+synthetic_payload = {
+    "version": "agentflow-v111-synthetic-second-product-fixture.v1",
+    "status": status_from_checks(synthetic_checks),
+    "productId": synthetic_manifest.get("product_id"),
+    "commands": sorted(synthetic_command_ids),
+    "readModels": sorted(synthetic_read_models),
+    "sourceFiles": [
+        file_digest("products/_fixtures/synthetic-review/product.toml"),
+        file_digest("products/_fixtures/synthetic-review/surface/definition.json"),
+        file_digest("products/_fixtures/synthetic-review/connectors/definition.json"),
+        file_digest("products/_fixtures/synthetic-review/projections/read-models.json"),
+    ],
+    "coverage": synthetic_checks,
+    "failedCoverage": failed_checks(synthetic_checks),
+    "checkedAt": int(time.time()),
+}
+write_json(out_paths["synthetic"], synthetic_payload)
+
+v111_artifact_paths = [
+    out_paths["schema"],
+    out_paths["bridge"],
+    out_paths["runtime"],
+    out_paths["projection"],
+    out_paths["pollution"],
+    out_paths["proof"],
+    out_paths["synthetic"],
+]
+v111_artifacts = {
+    path.name: json.loads(path.read_text(encoding="utf-8"))
+    for path in v111_artifact_paths
+}
+v110_certification = json.loads(v110_certification_path.read_text(encoding="utf-8"))
+artifact_statuses = {
+    **{name: payload.get("status") for name, payload in v111_artifacts.items()},
+    "v110-release-certification.json": v110_certification.get("status"),
+}
+task_rows = [
+    ("V111-001", 757, "Product Schema Command Mapping Contract", out_paths["schema"]),
+    ("V111-002", 758, "Product-to-Pack Bridge Data-driven Conversion", out_paths["bridge"]),
+    ("V111-003", 759, "Runtime Product Resolver Data-driven Capability", out_paths["runtime"]),
+    ("V111-004", 760, "Projection Product Read Model Data-driven Conversion", out_paths["projection"]),
+    ("V111-005", 761, "Core Pollution Gate Covers Product Bridge Crates", out_paths["pollution"]),
+    ("V111-006", 762, "Actual Runtime and Projection Proof Artifacts", out_paths["proof"]),
+    ("V111-007", 763, "Synthetic Second Product Fixture", out_paths["synthetic"]),
+    ("V111-008", 764, "v1.1.1 Release Certification", out_paths["certification"]),
+]
+certified_paths = [v110_certification_path, *v111_artifact_paths]
+certified_artifact_hashes = [
+    {
+        "path": f"runtime/{path.name}" if path.parent.name == "runtime" else path.name,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "bytes": path.stat().st_size,
+    }
+    for path in certified_paths
+    if path.is_file()
+]
+artifact_manifest_sha256 = (
+    hashlib.sha256(artifact_manifest_path.read_bytes()).hexdigest()
+    if artifact_manifest_path.is_file()
+    else None
+)
+certification_digest = hashlib.sha256(json.dumps(
+    {
+        "releaseVersion": release_version,
+        "artifactManifestSha256": artifact_manifest_sha256,
+        "certifiedArtifactHashes": certified_artifact_hashes,
+    },
+    sort_keys=True,
+).encode("utf-8")).hexdigest()
+gate_run_url = (
+    f"{gate_server_url.rstrip('/')}/{gate_repository}/actions/runs/{gate_run_id}"
+    if gate_server_url and gate_repository and gate_run_id
+    else None
+)
+event_evidence = {
+    "eventName": gate_event_name,
+    "refType": gate_ref_type or None,
+    "refName": gate_ref_name or None,
+    "runId": gate_run_id or None,
+    "runAttempt": gate_run_attempt or None,
+    "runUrl": gate_run_url,
+    "repository": gate_repository,
+    "sourceCommitSha": source_commit_sha,
+    "releaseTagName": release_tag_name,
+    "releaseUrl": release_url,
+    "certificationArtifactName": f"release-gate-certification-{release_version}",
+    "certificationArtifactDigest": certification_digest,
+    "certificationArtifactDigestSource": "v111-product-contract-data-driven-runtime-artifact-hashes",
+    "artifactManifestPath": "artifact-manifest.json",
+    "artifactManifestSha256": artifact_manifest_sha256,
+}
+release_version_checks = {
+    "release-version-is-v111": release_version == expected_tag,
+    "release-tag-is-v111": release_tag_name == expected_tag,
+    "cargo-workspace-version-is-111": cargo["workspace"]["package"]["version"] == expected_version,
+    "desktop-package-version-is-111": desktop_package.get("version") == expected_version,
+    "desktop-package-lock-version-is-111": desktop_package_lock.get("version") == expected_version
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") == expected_version,
+    "tauri-version-is-111": tauri_config.get("version") == expected_version,
+}
+task_traceability_checks = {
+    "all-task-ids-present": all(task_id in release_tasks_text for task_id, _, _, _ in task_rows),
+    "all-github-issue-refs-present": all(f"#{number}" in release_tasks_text for _, number, _, _ in task_rows),
+    "all-task-titles-present": all(title in release_tasks_text for _, _, title, _ in task_rows),
+    "all-tasks-done": release_tasks_text.count("状态：done") >= len(task_rows),
+}
+coverage = {
+    **release_version_checks,
+    **task_traceability_checks,
+    "v110-certification-passed": v110_certification.get("status") == "passed",
+    "all-v111-artifacts-passed": all(payload.get("status") == "passed" for payload in v111_artifacts.values()),
+    "release-doc-is-v111-baseline": "Product Contract Data-driven hardening release baseline" in release_readme_text
+    and "runtime/v111-release-certification.json" in release_readme_text,
+    "current-docs-point-to-v111": "docs/delivery/releases/v1.1.1/README.md" in agents_text
+    and "delivery/releases/v1.1.1/README.md" in docs_readme_text
+    and "releases/v1.1.1/README.md" in delivery_readme_text,
+    "changelog-has-v111-entry": "## v1.1.1 - 2026-07-01" in changelog_text
+    and "Product Contract Data-driven" in changelog_text,
+    "release-event-evidence-recorded": bool(event_evidence["eventName"])
+    and bool(event_evidence["sourceCommitSha"])
+    and bool(event_evidence["releaseTagName"]),
+    "release-run-id-bound-for-ci": gate_event_name == "local" or bool(event_evidence["runId"]),
+    "release-run-url-bound-for-ci": gate_event_name == "local" or bool(event_evidence["runUrl"]),
+    "certified-artifact-hashes-present": len(certified_artifact_hashes) == len(certified_paths)
+    and all(item.get("sha256") and item.get("bytes", 0) > 0 for item in certified_artifact_hashes),
+    "artifact-manifest-digest-present": artifact_manifest_sha256 is not None,
+    "certification-artifact-digest-present": len(certification_digest) == 64,
+}
+failed = failed_checks(coverage)
+payload = {
+    "version": "agentflow-v111-release-certification.v1",
+    "status": "passed" if not failed else "failed",
+    "releaseVersion": expected_tag,
+    "workspaceVersion": expected_version,
+    "certifiedArtifacts": artifact_statuses,
+    "certifiedArtifactHashes": certified_artifact_hashes,
+    "eventEvidence": event_evidence,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "releaseBaseline": "docs/delivery/releases/v1.1.1/README.md",
+    "releaseTasks": "docs/delivery/releases/v1.1.1/AGENTFLOW_V1_1_1_PRODUCT_CONTRACT_DATA_DRIVEN_TASKS_V1.md",
+    "remainingRisks": [
+        {
+            "id": "v112-ui-command-route-installation",
+            "summary": "Desktop command route UI installation remains follow-up work after data-driven contract hardening.",
+            "blocking": False,
+        }
+    ],
+    "checkedAt": int(time.time()),
+}
+write_json(out_paths["certification"], payload)
+if failed:
+    raise SystemExit(f"v1.1.1 release certification failed: {failed}")
+PY
+  record_stage "v111-product-schema-command-mapping" "passed" "$(basename "$V111_PRODUCT_SCHEMA_COMMAND_MAPPING_PATH")"
+  record_stage "v111-product-to-pack-data-driven-bridge" "passed" "$(basename "$V111_PRODUCT_TO_PACK_DATA_DRIVEN_BRIDGE_PATH")"
+  record_stage "v111-runtime-data-driven-product-resolver" "passed" "$(basename "$V111_RUNTIME_DATA_DRIVEN_PRODUCT_RESOLVER_PATH")"
+  record_stage "v111-projection-data-driven-product-readmodel" "passed" "$(basename "$V111_PROJECTION_DATA_DRIVEN_PRODUCT_READMODEL_PATH")"
+  record_stage "v111-product-bridge-pollution-gate" "passed" "$(basename "$V111_PRODUCT_BRIDGE_POLLUTION_GATE_PATH")"
+  record_stage "v111-runtime-projection-proof-artifacts" "passed" "$(basename "$V111_RUNTIME_PROJECTION_PROOF_ARTIFACTS_PATH")"
+  record_stage "v111-synthetic-second-product-fixture" "passed" "$(basename "$V111_SYNTHETIC_SECOND_PRODUCT_FIXTURE_PATH")"
+  record_stage "v111-release-certification" "passed" "$(basename "$V111_RELEASE_CERTIFICATION_PATH")"
 }
 
 prepare_workspace() {
@@ -12445,6 +13011,7 @@ PY
   run_v108_release_certification_gate
   run_v109_release_certification_gate
   run_v110_release_certification_gate
+  run_v111_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

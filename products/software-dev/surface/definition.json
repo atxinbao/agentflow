@@ -38,14 +38,32 @@
   "commands": [
     {
       "id": "work.issue.start",
+      "commandId": "work.issue.start",
       "label": "Start Task",
       "runtimeCommand": "runtime.command.start-work",
+      "actionContractRef": "action-contract:issue.start",
+      "targetObjectType": "Issue",
+      "pageId": "task-workbench",
+      "skillRef": "skill:software-dev/build-agent-start",
+      "connectorId": "codex",
+      "requiredCapability": "launch",
+      "evidencePolicyRef": "evidence-policy:software-dev-product-evidence",
+      "acceptancePolicyRef": "acceptance:software-dev-acceptance",
       "requiresProjectionFreshness": true
     },
     {
       "id": "work.issue.review",
+      "commandId": "work.issue.review",
       "label": "Prepare Review",
       "runtimeCommand": "runtime.command.prepare-review",
+      "actionContractRef": "action-contract:delivery.prepare",
+      "targetObjectType": "Run",
+      "pageId": "task-workbench",
+      "skillRef": "skill:software-dev/build-agent-review",
+      "connectorId": "codex",
+      "requiredCapability": "build_agent.complete",
+      "evidencePolicyRef": "evidence-policy:software-dev-product-evidence",
+      "acceptancePolicyRef": "acceptance:software-dev-acceptance",
       "requiresProjectionFreshness": true
     }
   ]
