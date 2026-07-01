@@ -1,6 +1,6 @@
 # Project Roadmap
 
-更新日期：2026-06-30
+更新日期：2026-07-01
 执行者：Codex
 
 ## Purpose
@@ -80,6 +80,18 @@ Industry Product Surface
 + Connector Pack
 ```
 
+源码目录边界必须保持：
+
+```text
+crates/**     = Core OS Runtime
+products/**   = Industry Product Surface / Reference App source
+apps/**       = user-facing clients
+docs/**       = human-readable records
+.agentflow/** = Runtime fact source
+```
+
+详细边界以 [../architecture/086-industry-product-source-boundary-v1.md](../architecture/086-industry-product-source-boundary-v1.md) 为准。
+
 ## Planning Chain
 
 AgentFlow 的项目规划链路是：
@@ -130,7 +142,7 @@ Loop 之间不能互相越权：
 
 `v1.0.3` 到 `v1.0.8` 先完成 Core OS Runtime 的 6 个 Kernel。
 
-`v1.0.9` 再用 Software Dev Reference App 做端到端认证。
+`v1.0.9` 再用 Software Dev Reference App 做端到端认证，并冻结第一个行业壳的源码边界。
 
 `v1.1.0` 才进入 Software Dev Product Beta。
 
@@ -143,7 +155,7 @@ Loop 之间不能互相越权：
 | `v1.0.6` | Core Evidence Kernel | Evidence |
 | `v1.0.7` | Core Decision Kernel | Decision |
 | `v1.0.8` | Core Projection Kernel | Projection |
-| `v1.0.9` | Software Dev Reference App Certification | Project Loop / Delivery |
+| `v1.0.9` | Software Dev Reference App / Industry Shell Certification | Project Loop / Delivery |
 | `v1.1.0` | Software Dev Product Beta | Product release |
 
 ## Version Intent
@@ -298,6 +310,22 @@ Intent
 ```
 
 本版目标是 certification，不扩新行业，不做 marketplace，不引入默认 Message Bus。
+
+本版也必须证明第一个行业壳不污染 Core：
+
+```text
+Core OS Runtime
++ products/software-dev
+= Software Dev Reference App
+```
+
+`v1.0.9` 应引入或认证：
+
+- `products/software-dev/**` 作为 first-party Reference App source；
+- Domain Pack / Surface Pack / Connector Pack 通过 Pack contract 接入 Core；
+- `crates/pack/fixtures/**` 只保留为测试夹具；
+- `crates/**` 不把 `Issue / PR / Release / Patch / GitHub / Codex / Claude` 写成 Core authority；
+- release certification 能追溯 Product source -> Runtime facts -> Evidence -> Decision -> Delivery。
 
 ### v1.1.0 - Software Dev Product Beta
 

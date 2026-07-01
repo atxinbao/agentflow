@@ -1,6 +1,6 @@
 # Project Context
 
-更新日期：2026-06-30
+更新日期：2026-07-01
 执行者：Codex
 
 ## Current Positioning
@@ -27,16 +27,25 @@ AgentFlow 的商业产品目标是卖可交付结果，不是先卖 Agent 本身
 
 ## Directory Planes
 
-AgentFlow 至少有两个平面：
+AgentFlow 有五个需要区分的平面：
 
 ```text
-docs/       = Human / Project / Third-party Knowledge Plane
-.agentflow/ = Agent Runtime Control Plane
+crates/**     = Core OS Runtime source plane
+products/**   = Industry Product Surface / Reference App source plane
+apps/**       = user-facing client source plane
+docs/**       = Human / Project / Third-party Knowledge Plane
+.agentflow/** = Agent Runtime Control Plane
 ```
 
-`docs/` 给人和第三方看，解释项目目标、需求、架构和交付。
+`crates/**` 只放通用 Core 能力。
 
-`.agentflow/` 给 Agent 和 Runtime 用，保存角色、技能、执行合同、事件、任务状态、证据和投影。
+`products/**` 放行业壳源码，例如 `products/software-dev/**`。
+
+`apps/**` 放用户界面，只消费 Projection、Product Surface 和 Runtime API。
+
+`docs/**` 给人和第三方看，解释项目目标、需求、架构和交付。
+
+`.agentflow/**` 给 Agent 和 Runtime 用，保存角色、技能、执行合同、事件、任务状态、证据和投影。
 
 ## Current Docs Standard
 
@@ -65,3 +74,4 @@ docs/delivery      记录交付结果
 Pack registry、Pack source、Pack upgrade 和 role / skill binding 规则见：
 
 - [../architecture/builtin-pack-registry.md](../architecture/builtin-pack-registry.md)
+- [../architecture/086-industry-product-source-boundary-v1.md](../architecture/086-industry-product-source-boundary-v1.md)

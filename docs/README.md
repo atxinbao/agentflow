@@ -1,6 +1,6 @@
 # Docs Index
 
-更新日期：2026-06-30
+更新日期：2026-07-01
 执行者：Codex
 
 ## Current Standard
@@ -32,12 +32,13 @@ docs/
 4. [project/context.md](project/context.md)
 5. [architecture/021-ai-os-project-core-capabilities-v1.md](architecture/021-ai-os-project-core-capabilities-v1.md)
 6. [architecture/builtin-pack-registry.md](architecture/builtin-pack-registry.md)
-7. [architecture/041-v100-stable-contract-baseline-v1.md](architecture/041-v100-stable-contract-baseline-v1.md)
-8. [architecture/053-core-4d-spec-intake-kernel-v1.md](architecture/053-core-4d-spec-intake-kernel-v1.md)
-9. [delivery/releases/v1.0.8/README.md](delivery/releases/v1.0.8/README.md)
-10. [requirements/README.md](requirements/README.md)
-11. [requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md](requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md)
-12. [../CHANGELOG.md](../CHANGELOG.md)
+7. [architecture/086-industry-product-source-boundary-v1.md](architecture/086-industry-product-source-boundary-v1.md)
+8. [architecture/041-v100-stable-contract-baseline-v1.md](architecture/041-v100-stable-contract-baseline-v1.md)
+9. [architecture/053-core-4d-spec-intake-kernel-v1.md](architecture/053-core-4d-spec-intake-kernel-v1.md)
+10. [delivery/releases/v1.0.8/README.md](delivery/releases/v1.0.8/README.md)
+11. [requirements/README.md](requirements/README.md)
+12. [requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md](requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md)
+13. [../CHANGELOG.md](../CHANGELOG.md)
 
 ## Rules
 
@@ -46,7 +47,9 @@ docs/
 - `docs/requirements/**` 只保存 confirmed Spec Bundle。
 - `docs/architecture/**` 保存长期架构、Core 能力和稳定合同，不直接授权实现。
 - `docs/delivery/**` 记录 release、handoff、decision record 和交付结果。
-- 内置 Pack 是 App 能力，不进入 `docs/project/**`；项目只记录当前启用的 Pack 引用。
+- `products/**` 是 Industry Product Surface / Reference App source。
+- 内置 Pack 是 App / Product 能力，不进入 `docs/project/**`；项目只记录当前启用的 Pack 引用。
+- `crates/pack/fixtures/**` 只保留为测试夹具，不能作为正式行业壳源码位置。
 - 后续新开发必须先进入 confirmed Spec Bundle，再派生 `.agentflow/spec/**` 执行合同。
 
 历史文档只保留在 [project/history/](project/history/README.md)，不作为新建项目默认目录。
