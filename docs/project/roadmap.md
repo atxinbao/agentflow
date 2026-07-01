@@ -144,7 +144,7 @@ Loop 之间不能互相越权：
 
 `v1.0.9` 再用 Software Dev Reference App 做端到端认证，并冻结第一个行业壳的源码边界。
 
-`v1.1.0` 才进入 Software Dev Product Beta。
+`v1.1.0` 先做 Product Surface Hardening，把 `products/software-dev/**` 接入 Product Registry、Runtime command route 和 Projection source。
 
 | Version | Goal | Primary loop / kernel |
 | --- | --- | --- |
@@ -156,7 +156,7 @@ Loop 之间不能互相越权：
 | `v1.0.7` | Core Decision Kernel | Decision |
 | `v1.0.8` | Core Projection Kernel | Projection |
 | `v1.0.9` | Software Dev Reference App / Industry Shell Certification | Project Loop / Delivery |
-| `v1.1.0` | Software Dev Product Beta | Product release |
+| `v1.1.0` | Product Surface Hardening | Product Surface / Runtime / Projection |
 
 ## Version Intent
 
@@ -327,17 +327,32 @@ Core OS Runtime
 - `crates/**` 不把 `Issue / PR / Release / Patch / GitHub / Codex / Claude` 写成 Core authority；
 - release certification 能追溯 Product source -> Runtime facts -> Evidence -> Decision -> Delivery。
 
-### v1.1.0 - Software Dev Product Beta
+### v1.1.0 - Product Surface Hardening
 
-`v1.1.0` 不是底层补丁版。
+`v1.1.0` 不是 Software Dev commercial beta。
 
-只有当 `v1.0.3` 到 `v1.0.9` 完成后，`v1.1.0` 才能定义为：
+只有当 `v1.0.3` 到 `v1.0.9` 完成后，`v1.1.0` 才能把 Product Surface 接到 Runtime / Projection 消费链：
 
 ```text
-Software Dev Product Beta
+products/software-dev/**
+-> Product Registry
+-> Product to Pack Contract
+-> Runtime API command routes
+-> Projection read models
 ```
 
-目标是让一个团队可以真实使用 AgentFlow 跑完整软件开发工作流。
+目标是让 Product source 成为 Runtime / Projection 的真实输入，而不是继续依赖 fixture mirror 或内置 fallback。
+
+本版应该回答：
+
+- `products/software-dev/product.toml` 和阶段入口是否可被稳定读取；
+- Product command 如何映射到现有 Pack / Runtime action contract；
+- Runtime API 是否优先从 Product source 解析命令；
+- Projection 是否从 Product source 生成 read model；
+- 缺少 Product / Pack source 时是否进入 invalid / deferred，而不是注入内置 fallback；
+- release gate 是否能证明 Product Surface 没有污染 Core authority。
+
+商业 Product Beta、安装器、完整行业壳 UI 和外部市场化交付仍属于后续版本。
 
 ## Task Derivation Rule
 

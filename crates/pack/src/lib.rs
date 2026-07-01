@@ -7,6 +7,7 @@
 
 pub mod connector;
 pub mod domain;
+pub mod product;
 pub mod surface;
 pub mod validation;
 
@@ -24,6 +25,15 @@ pub use domain::{
     DomainLinkType, DomainMigrationCompatibility, DomainObjectType, DomainStateMachine,
     DomainStateTransition, PackDomainDefinition, PackDomainValidationIssue,
     PackDomainValidationReport, PACK_DOMAIN_VERSION,
+};
+pub use product::{
+    load_product_definition, load_product_definition_from_entry, load_product_manifest,
+    load_product_registry, product_command_mapping, product_command_route, product_root,
+    product_to_pack_contract, ProductAuthority, ProductCommandRoute, ProductConnector,
+    ProductConnectorDefinition, ProductDefinition, ProductEntrypoints, ProductManifest,
+    ProductRegistry, ProductRegistryDiagnostic, ProductRegistryEntry, ProductSurfaceCommand,
+    ProductSurfaceDefinition, ProductSurfacePage, ProductToPackContract,
+    PRODUCT_DEFINITION_VERSION, PRODUCT_REGISTRY_VERSION, PRODUCT_TO_PACK_CONTRACT_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use std::{

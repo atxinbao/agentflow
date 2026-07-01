@@ -20,11 +20,9 @@ use agentflow_ontology::{
     CoreEvidenceCompletenessPolicy, CoreEvidencePack, CoreEvidenceTraceRefs,
 };
 use agentflow_pack::{
-    software_dev_connector_definition, software_dev_domain_definition,
-    software_dev_surface_definition, ui_design_connector_definition, ui_design_domain_definition,
-    ui_design_surface_definition, validate_connector_definition, validate_domain_definition,
-    validate_surface_definition, PackConnector, PackConnectorDefinition, PackDomainDefinition,
-    PackRegistryEntry, PackSurfaceDefinition, PackValidationStatus,
+    validate_connector_definition, validate_domain_definition, validate_surface_definition,
+    PackConnector, PackConnectorDefinition, PackDomainDefinition, PackRegistryEntry,
+    PackSurfaceDefinition, PackValidationStatus,
 };
 use agentflow_spec::{
     read_requirement_preview_runtime, read_spec_issue, read_spec_project, SpecIssue, SpecPriority,
@@ -983,6 +981,21 @@ pub fn get_projection_surface_catalog(
 
     match build_pack_bundles(project_root) {
         Ok(bundles) => {
+            if bundles.is_empty() {
+                read_models.push(surface_read_model_with_missing(
+                    "pack-industry-workbench",
+                    "pack",
+                    "product-surface-missing",
+                    "Product Surface Workbench",
+                    "invalid",
+                    "get_pack_industry_workbench_view",
+                    Vec::new(),
+                    ".agentflow/projections/packs/product-surface-missing.json",
+                    vec!["products/**".to_string(), ".agentflow/packs/**".to_string()],
+                    missing_freshness("product-surface-missing"),
+                    vec!["product-source-or-pack-registry-missing".to_string()],
+                ));
+            }
             for bundle in bundles {
                 read_models.push(surface_read_model(
                     "pack-industry-workbench",
@@ -2015,7 +2028,11 @@ impl PackWorkbenchBundle {
     }
 
     fn source_refs(&self) -> Vec<String> {
-        let mut refs = vec![format!("pack-builtin:{}", self.pack_id)];
+        let mut refs = if self.pack_type == "product-source" {
+            vec![format!("product-source:{}", self.pack_id)]
+        } else {
+            Vec::new()
+        };
         if self.registered {
             refs.push(self.manifest_path.clone());
         }
@@ -2077,28 +2094,17 @@ fn connector_command_execution_allowed(connector: &PackConnector, connector_vali
 }
 
 fn build_pack_bundles(project_root: &Path) -> Result<Vec<PackWorkbenchBundle>> {
-    let registry = agentflow_pack::load_pack_registry(project_root)?;
+    let product_registry = agentflow_pack::load_product_registry(project_root)?;
     let mut bundles = Vec::new();
-    if registry.entries.is_empty() {
-        bundles.push(pack_bundle_from_definitions(
-            "software-dev",
-            "Software Dev",
-            "software-dev",
-            "0.8.0",
-            software_dev_domain_definition(),
-            software_dev_surface_definition(),
-            software_dev_connector_definition(),
-        ));
-        bundles.push(pack_bundle_from_definitions(
-            "ui-design",
-            "UI Design",
-            "ui-design",
-            "0.8.0",
-            ui_design_domain_definition(),
-            ui_design_surface_definition(),
-            ui_design_connector_definition(),
-        ));
+    if !product_registry.entries.is_empty() {
+        for entry in product_registry.entries {
+            match agentflow_pack::load_product_definition_from_entry(&entry) {
+                Ok(definition) => bundles.push(pack_bundle_from_product_definition(definition)),
+                Err(error) => bundles.push(pack_bundle_from_invalid_product(entry, error)),
+            }
+        }
     } else {
+        let registry = agentflow_pack::load_pack_registry(project_root)?;
         for entry in registry.entries {
             bundles.push(pack_bundle_from_registry_entry(entry));
         }
@@ -2108,35 +2114,396 @@ fn build_pack_bundles(project_root: &Path) -> Result<Vec<PackWorkbenchBundle>> {
     Ok(bundles)
 }
 
-fn pack_bundle_from_definitions(
-    pack_id: &str,
-    name: &str,
-    pack_type: &str,
-    pack_version: &str,
-    domain: PackDomainDefinition,
-    surface: PackSurfaceDefinition,
-    connector: PackConnectorDefinition,
+fn pack_bundle_from_product_definition(
+    definition: agentflow_pack::ProductDefinition,
 ) -> PackWorkbenchBundle {
-    let domain_report = validate_domain_definition(&domain);
-    let surface_report = validate_surface_definition(&surface);
-    let connector_report = validate_connector_definition(&connector);
+    let valid = definition.valid && !definition.writes_authority;
     PackWorkbenchBundle {
-        pack_id: pack_id.to_string(),
-        name: name.to_string(),
-        pack_type: pack_type.to_string(),
-        pack_version: pack_version.to_string(),
-        validation_status: PackValidationStatus::Valid,
-        manifest_path: format!(".agentflow/packs/{pack_id}/pack.json"),
-        registered: false,
-        manifest_valid: true,
-        domain_valid: domain_report.valid,
-        surface_valid: surface_report.valid,
-        connector_valid: connector_report.valid,
-        domain: Some(domain),
-        surface: Some(surface),
-        connector: Some(connector),
-        definition_warnings: Vec::new(),
+        pack_id: definition.pack_id.clone(),
+        name: definition.manifest.name.clone(),
+        pack_type: "product-source".to_string(),
+        pack_version: definition.manifest.version.clone(),
+        validation_status: if valid {
+            PackValidationStatus::Valid
+        } else {
+            PackValidationStatus::Invalid
+        },
+        manifest_path: definition
+            .manifest
+            .source_boundary
+            .trim_end_matches('/')
+            .to_string()
+            + "/product.toml",
+        registered: true,
+        manifest_valid: valid,
+        domain_valid: valid,
+        surface_valid: valid,
+        connector_valid: valid,
+        domain: Some(product_domain_to_pack_domain(&definition)),
+        surface: Some(product_surface_to_pack_surface(&definition)),
+        connector: Some(product_connectors_to_pack_connector(&definition)),
+        definition_warnings: definition
+            .diagnostics
+            .iter()
+            .map(|diagnostic| format!("{}: {}", diagnostic.code, diagnostic.message))
+            .collect(),
     }
+}
+
+fn pack_bundle_from_invalid_product(
+    entry: agentflow_pack::ProductRegistryEntry,
+    error: anyhow::Error,
+) -> PackWorkbenchBundle {
+    PackWorkbenchBundle {
+        pack_id: entry.pack_id,
+        name: entry.name,
+        pack_type: "product-source".to_string(),
+        pack_version: entry.version,
+        validation_status: PackValidationStatus::Invalid,
+        manifest_path: entry.manifest_path,
+        registered: true,
+        manifest_valid: false,
+        domain_valid: false,
+        surface_valid: false,
+        connector_valid: false,
+        domain: None,
+        surface: None,
+        connector: None,
+        definition_warnings: vec![format!("product-definition-unreadable: {error}")],
+    }
+}
+
+fn product_domain_to_pack_domain(
+    definition: &agentflow_pack::ProductDefinition,
+) -> PackDomainDefinition {
+    let object_types = definition
+        .domain
+        .get("objectTypes")
+        .and_then(|value| value.as_array())
+        .map(|objects| {
+            objects
+                .iter()
+                .filter_map(|object| {
+                    let id = object.get("type").and_then(|value| value.as_str())?;
+                    Some(agentflow_pack::DomainObjectType {
+                        object_type_id: product_object_type_id(id),
+                        label: product_object_type_id(id),
+                        description: object
+                            .get("description")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or(id)
+                            .to_string(),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    PackDomainDefinition {
+        version: agentflow_pack::PACK_DOMAIN_VERSION.to_string(),
+        pack_id: definition.pack_id.clone(),
+        domain_id: format!("{}-product-domain", definition.product_id),
+        object_types,
+        link_types: Vec::new(),
+        state_machines: vec![agentflow_pack::DomainStateMachine {
+            object_type: "Issue".to_string(),
+            states: vec![
+                "backlog".to_string(),
+                "todo".to_string(),
+                "in_progress".to_string(),
+                "in_review".to_string(),
+                "done".to_string(),
+                "blocked".to_string(),
+                "cancel".to_string(),
+            ],
+            transitions: vec![
+                agentflow_pack::DomainStateTransition {
+                    from: "todo".to_string(),
+                    to: "in_progress".to_string(),
+                    action_type: "startRun".to_string(),
+                },
+                agentflow_pack::DomainStateTransition {
+                    from: "in_progress".to_string(),
+                    to: "in_review".to_string(),
+                    action_type: "runValidation".to_string(),
+                },
+                agentflow_pack::DomainStateTransition {
+                    from: "in_review".to_string(),
+                    to: "done".to_string(),
+                    action_type: "markIssueDone".to_string(),
+                },
+            ],
+        }],
+        action_semantics: vec![
+            agentflow_pack::DomainActionSemantic {
+                action_type: "startRun".to_string(),
+                target_object_type: "Issue".to_string(),
+                description: "Start Software Dev task work through Runtime API.".to_string(),
+                allowed_roles: vec!["build-agent".to_string()],
+                contract_ref: "action-contract:issue.start".to_string(),
+                arbitration_ref: "action-arbitration:runtime-command".to_string(),
+                simulation_ref: "simulation:work.issue.start".to_string(),
+                required_evidence: vec!["product-contract".to_string()],
+            },
+            agentflow_pack::DomainActionSemantic {
+                action_type: "prepareDelivery".to_string(),
+                target_object_type: "Run".to_string(),
+                description: "Prepare review and delivery proof after local validation."
+                    .to_string(),
+                allowed_roles: vec!["build-agent".to_string()],
+                contract_ref: "action-contract:delivery.prepare".to_string(),
+                arbitration_ref: "action-arbitration:runtime-command".to_string(),
+                simulation_ref: "simulation:work.issue.review".to_string(),
+                required_evidence: vec!["local-command-proof".to_string()],
+            },
+        ],
+        acceptance_semantics: vec![agentflow_pack::DomainAcceptanceSemantic {
+            acceptance_id: "software-dev-acceptance".to_string(),
+            object_type: "Run".to_string(),
+            description: "Evidence and decision must be present before delivery.".to_string(),
+            required_evidence: vec![
+                "changed-content-proof".to_string(),
+                "local-command-proof".to_string(),
+                "merge-proof".to_string(),
+            ],
+        }],
+        evidence_policy: agentflow_pack::DomainEvidencePolicy {
+            policy_id: "software-dev-product-evidence".to_string(),
+            required_evidence_kinds: vec![
+                "changed-content-proof".to_string(),
+                "local-command-proof".to_string(),
+                "merge-proof".to_string(),
+            ],
+            missing_evidence_behavior: "defer-completion".to_string(),
+        },
+        audit_trigger_hints: Vec::new(),
+        migration_compatibility: agentflow_pack::DomainMigrationCompatibility {
+            compatible_with_runtime: ">=1.1.0".to_string(),
+            migration_policy_ref: "product-source-primary".to_string(),
+        },
+        writes_events: false,
+    }
+}
+
+fn product_surface_to_pack_surface(
+    definition: &agentflow_pack::ProductDefinition,
+) -> PackSurfaceDefinition {
+    let pages = definition
+        .surface
+        .pages
+        .iter()
+        .map(|page| agentflow_pack::SurfacePage {
+            page_id: page.id.clone(),
+            label: page.label.clone(),
+            description: format!("{} product surface", page.label),
+            kind: match page.id.as_str() {
+                "project-home" => agentflow_pack::SurfacePageKind::Main,
+                "delivery-view" => agentflow_pack::SurfacePageKind::Detail,
+                _ => agentflow_pack::SurfacePageKind::Workbench,
+            },
+            view_model_ref: format!("view-model:{}", page.id),
+            command_entry_ids: definition
+                .surface
+                .commands
+                .iter()
+                .filter(|command| product_page_id_for_command(&command.id) == page.id)
+                .map(|command| command.id.clone())
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+    let view_model_mappings = definition
+        .surface
+        .pages
+        .iter()
+        .flat_map(|page| {
+            page.reads
+                .iter()
+                .map(move |read| agentflow_pack::SurfaceViewModelMapping {
+                    mapping_id: format!("{}:{}", page.id, read),
+                    page_id: page.id.clone(),
+                    projection_ref: read.clone(),
+                    view_model_ref: format!("view-model:{}", page.id),
+                })
+        })
+        .collect::<Vec<_>>();
+    let read_model_dependencies = definition
+        .surface
+        .pages
+        .iter()
+        .flat_map(|page| {
+            page.reads
+                .iter()
+                .map(move |read| agentflow_pack::SurfaceReadModelDependency {
+                    dependency_id: format!("{}:{}", page.id, read),
+                    page_id: page.id.clone(),
+                    projection_ref: read.clone(),
+                    required: true,
+                })
+        })
+        .collect::<Vec<_>>();
+    let command_entry_mappings = definition
+        .surface
+        .commands
+        .iter()
+        .filter_map(|command| {
+            let (action_contract_ref, _) = agentflow_pack::product_command_mapping(command).ok()?;
+            Some(agentflow_pack::SurfaceCommandEntryMapping {
+                command_entry_id: command.id.clone(),
+                page_id: product_page_id_for_command(&command.id),
+                label: command.label.clone(),
+                command_type: command.id.clone(),
+                route: agentflow_pack::SurfaceCommandRoute::RuntimeCommand,
+                action_contract_ref: action_contract_ref.to_string(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    PackSurfaceDefinition {
+        version: agentflow_pack::PACK_SURFACE_VERSION.to_string(),
+        pack_id: definition.pack_id.clone(),
+        surface_id: format!("{}-product-surface", definition.product_id),
+        pages,
+        workbenches: vec![agentflow_pack::SurfaceWorkbench {
+            workbench_id: "software-dev-task-workbench".to_string(),
+            page_id: "task-workbench".to_string(),
+            label: "Task Workbench".to_string(),
+            primary_object_type: "Issue".to_string(),
+            timeline_ref: "projection.task.timeline".to_string(),
+        }],
+        view_model_mappings,
+        command_entry_mappings,
+        read_model_dependencies,
+        navigation_rules: Vec::new(),
+        state_policy: agentflow_pack::SurfaceStatePolicy {
+            empty_state_ref: "product-empty-state".to_string(),
+            loading_state_ref: "product-loading-state".to_string(),
+            error_state_ref: "product-error-state".to_string(),
+        },
+        sidecar_surfaces: Vec::new(),
+        writes_authority: false,
+    }
+}
+
+fn product_connectors_to_pack_connector(
+    definition: &agentflow_pack::ProductDefinition,
+) -> PackConnectorDefinition {
+    PackConnectorDefinition {
+        version: agentflow_pack::PACK_CONNECTOR_VERSION.to_string(),
+        pack_id: definition.pack_id.clone(),
+        connector_id: format!("{}-product-connectors", definition.product_id),
+        connectors: definition
+            .connectors
+            .connectors
+            .iter()
+            .map(product_connector_to_pack_connector)
+            .collect(),
+        writes_authority: false,
+    }
+}
+
+fn product_connector_to_pack_connector(
+    connector: &agentflow_pack::ProductConnector,
+) -> PackConnector {
+    let provider_type = match connector.id.as_str() {
+        "git" => agentflow_pack::PackConnectorProviderType::Git,
+        "github" => agentflow_pack::PackConnectorProviderType::Github,
+        "codex" => agentflow_pack::PackConnectorProviderType::Codex,
+        "browser-preview" => agentflow_pack::PackConnectorProviderType::BrowserPreview,
+        _ => agentflow_pack::PackConnectorProviderType::Custom,
+    };
+    let supported_actions = match connector.id.as_str() {
+        "codex" => vec![
+            product_supported_action("codex.launch", "launch", "work.issue.start", true),
+            product_supported_action(
+                "codex.complete",
+                "build_agent.complete",
+                "work.issue.review",
+                true,
+            ),
+        ],
+        "github" => vec![product_supported_action(
+            "github.pull-request.create",
+            "pull_request.create",
+            "github.pull-request.create",
+            true,
+        )],
+        "git" => vec![product_supported_action(
+            "git.status",
+            "git.status",
+            "git.status",
+            false,
+        )],
+        _ => vec![product_supported_action(
+            &format!("{}.ready", connector.id),
+            "ready",
+            &format!("{}.ready", connector.id),
+            false,
+        )],
+    };
+    let required_capabilities = supported_actions
+        .iter()
+        .map(|action| action.required_capability.clone())
+        .collect::<Vec<_>>();
+
+    PackConnector {
+        connector_id: connector.id.clone(),
+        provider_type,
+        supported_actions,
+        required_capabilities,
+        health_source: agentflow_pack::ConnectorHealthSource::CapabilityRegistry,
+        smoke_policy: agentflow_pack::ConnectorSmokePolicy {
+            required_for_commands: true,
+            provider_smoke_ref: format!("provider-smoke:{}", connector.id),
+            failure_disables_commands: true,
+        },
+        evidence_output: agentflow_pack::ConnectorEvidenceOutput {
+            channel: "evidence".to_string(),
+            path_policy: "connector-output-is-evidence-not-authority".to_string(),
+            authority: false,
+        },
+        disabled_reason: "capability-registry.disabled-reason".to_string(),
+        command_boundary: agentflow_pack::ConnectorCommandBoundary {
+            runtime_command_required: true,
+            authority_write: false,
+            output_authority: false,
+            output_channels: connector.produces.clone(),
+        },
+    }
+}
+
+fn product_supported_action(
+    action_id: &str,
+    capability: &str,
+    command_type: &str,
+    writes_external: bool,
+) -> agentflow_pack::ConnectorSupportedAction {
+    agentflow_pack::ConnectorSupportedAction {
+        action_id: action_id.to_string(),
+        label: action_id.to_string(),
+        required_capability: capability.to_string(),
+        command_type: command_type.to_string(),
+        writes_external,
+        evidence_output: "connector.evidence".to_string(),
+    }
+}
+
+fn product_page_id_for_command(command: &str) -> String {
+    match command {
+        "work.issue.start" | "work.issue.review" => "task-workbench".to_string(),
+        _ => "project-home".to_string(),
+    }
+}
+
+fn product_object_type_id(product_type: &str) -> String {
+    match product_type {
+        "spec" => "Spec",
+        "task" => "Issue",
+        "run" => "Run",
+        "pull-request" => "PullRequest",
+        "release" => "Release",
+        other => other,
+    }
+    .to_string()
 }
 
 fn pack_bundle_from_registry_entry(entry: PackRegistryEntry) -> PackWorkbenchBundle {
@@ -4031,16 +4398,13 @@ mod tests {
     }
 
     #[test]
-    fn pack_industry_workbench_view_exposes_software_and_design_read_models() {
-        let dir = tempdir().unwrap();
+    fn pack_industry_workbench_view_exposes_product_source_read_models() {
+        let root = workspace_root();
 
-        let software = get_pack_industry_workbench_view(dir.path(), Some("software-dev")).unwrap();
-        let design = get_pack_industry_workbench_view(dir.path(), Some("ui-design")).unwrap();
+        let software = get_pack_industry_workbench_view(&root, Some("software-dev")).unwrap();
 
         assert!(!software.authority);
-        assert!(!design.authority);
         assert_eq!(software.active_pack_id.as_deref(), Some("software-dev"));
-        assert_eq!(design.active_pack_id.as_deref(), Some("ui-design"));
         assert!(software
             .domain_object_index
             .iter()
@@ -4048,61 +4412,33 @@ mod tests {
         assert!(software
             .domain_object_index
             .iter()
-            .any(|object| object.object_type_id == "Acceptance"));
-        assert!(software
-            .domain_object_index
-            .iter()
-            .any(|object| object.object_type_id == "Delivery"));
-        assert!(design
-            .domain_object_index
-            .iter()
-            .any(|object| object.object_type_id == "Wireframe"));
-        assert!(design
-            .domain_object_index
-            .iter()
-            .any(|object| object.object_type_id == "DesignSystem"));
-        assert!(!design
-            .domain_object_index
-            .iter()
-            .any(|object| object.object_type_id == "Issue" || object.object_type_id == "Run"));
+            .any(|object| object.object_type_id == "PullRequest"));
         assert!(software
             .surface_page_index
             .iter()
             .any(|page| page.page_id == "task-workbench"));
         assert!(software.view_model_mapping_index.iter().any(|mapping| {
             mapping.page_id == "task-workbench"
-                && mapping.projection_ref == "projection.task-workbench"
+                && mapping.projection_ref == "projection.task.timeline"
                 && mapping.status == "ready"
         }));
         assert!(software
             .surface_page_index
             .iter()
-            .any(|page| page.page_id == "audit-surface" && page.page_kind == "sidecar"));
-        assert!(design
-            .surface_page_index
-            .iter()
-            .any(|page| page.page_id == "wireframe-board"));
+            .any(|page| page.page_id == "delivery-view" && page.page_kind == "detail"));
         assert!(software
             .connector_capability_index
             .iter()
-            .any(|capability| capability.connector_id == "github"
-                && capability.action_id == "github.pull-request.create"));
-        assert!(design
-            .connector_capability_index
-            .iter()
-            .any(|capability| capability.connector_id == "figma"));
+            .any(|capability| capability.connector_id == "codex"
+                && capability.command_type == "work.issue.start"));
         assert!(software
-            .pack_readiness
-            .iter()
-            .all(|readiness| readiness.status == "ready"));
-        assert!(design
             .pack_readiness
             .iter()
             .all(|readiness| readiness.status == "ready"));
 
-        let default_view = get_pack_industry_workbench_view(dir.path(), None).unwrap();
-        assert_eq!(default_view.pack_list.len(), 2);
-        assert_eq!(default_view.pack_readiness.len(), 2);
+        let default_view = get_pack_industry_workbench_view(&root, None).unwrap();
+        assert_eq!(default_view.pack_list.len(), 1);
+        assert_eq!(default_view.pack_readiness.len(), 1);
         assert_eq!(default_view.active_pack_id.as_deref(), Some("software-dev"));
         assert!(default_view
             .domain_object_index
@@ -4488,5 +4824,13 @@ mod tests {
 
     fn write_json(path: impl AsRef<Path>, value: &impl serde::Serialize) {
         fs::write(path, serde_json::to_string_pretty(value).unwrap()).unwrap();
+    }
+
+    fn workspace_root() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .unwrap()
+            .to_path_buf()
     }
 }
