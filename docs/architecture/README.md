@@ -1,6 +1,6 @@
 # Architecture
 
-更新日期：2026-06-26
+更新日期：2026-07-01
 执行者：Codex
 
 ## Purpose
@@ -25,6 +25,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | --- | --- |
 | [021-ai-os-project-core-capabilities-v1.md](021-ai-os-project-core-capabilities-v1.md) | AI OS Project Core 通用能力 |
 | [builtin-pack-registry.md](builtin-pack-registry.md) | App 内置 Pack Registry 与用户项目引用边界 |
+| [086-industry-product-source-boundary-v1.md](086-industry-product-source-boundary-v1.md) | Core / Product / App / Runtime fact source 源码边界 |
 | [agentflow-filesystem-workflow-architecture-v1.md](agentflow-filesystem-workflow-architecture-v1.md) | filesystem-first workflow 架构 |
 | [stable-contracts.md](stable-contracts.md) | v1.x 稳定架构合同索引 |
 | [current-module-boundaries.md](current-module-boundaries.md) | 当前模块边界 |
@@ -80,6 +81,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [083-pack-specific-projection-mapping-boundary-v1.md](083-pack-specific-projection-mapping-boundary-v1.md) | Pack-specific Projection mapping boundary |
 | [084-invalid-missing-app-definition-handling-v1.md](084-invalid-missing-app-definition-handling-v1.md) | Invalid / missing app definition handling |
 | [085-feedback-surface-projection-freshness-receipts-v1.md](085-feedback-surface-projection-freshness-receipts-v1.md) | Feedback Surface projection freshness receipts |
+| [086-industry-product-source-boundary-v1.md](086-industry-product-source-boundary-v1.md) | Industry Product Source Boundary |
 
 ## Rules
 

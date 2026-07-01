@@ -1,6 +1,6 @@
 # Architecture Docs
 
-更新日期：2026-06-28
+更新日期：2026-07-01
 执行者：Codex
 
 ## Purpose
@@ -18,7 +18,7 @@ docs/project/history/2026-06-current-baseline-history/architecture/
 ```text
 AgentFlow AI OS Project
 = Core OS Runtime
-+ Industry AgentFlow App
++ Industry Product Surface
 ```
 
 ## Current Architecture Baseline
@@ -29,6 +29,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | --- | --- |
 | [040-release-source-agent-entry-v1.md](040-release-source-agent-entry-v1.md) | 定义 release source 中的稳定 Agent entry、tracked docs 映射和 runtime-only 边界 |
 | [builtin-pack-registry.md](builtin-pack-registry.md) | 定义 App 内置 Pack Registry、用户项目 active-pack 引用和 Pack 不进入 `docs/project/**` 的边界 |
+| [086-industry-product-source-boundary-v1.md](086-industry-product-source-boundary-v1.md) | 定义 `crates/**`、`products/**`、`apps/**`、`docs/**` 和 `.agentflow/**` 的源码与事实源边界 |
 | [041-v100-stable-contract-baseline-v1.md](041-v100-stable-contract-baseline-v1.md) | 定义 v1.0 Stable Contract Baseline、stable / internal / experimental 边界和 release gate 元数据 |
 | [042-v100-runtime-api-sdk-freeze-v1.md](042-v100-runtime-api-sdk-freeze-v1.md) | 定义 v1.0 Runtime API / SDK 的 command、query、event、decision、error 与治理准入冻结合同 |
 | [043-v100-agentflow-filesystem-contract-freeze-v1.md](043-v100-agentflow-filesystem-contract-freeze-v1.md) | 定义 v1.0 `.agentflow/` 文件系统 authority、projection、local cache、public record 和 retired path 冻结合同 |
@@ -48,12 +49,13 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 
 1. [041-v100-stable-contract-baseline-v1.md](041-v100-stable-contract-baseline-v1.md)
 2. [builtin-pack-registry.md](builtin-pack-registry.md)
-3. [043-v100-agentflow-filesystem-contract-freeze-v1.md](043-v100-agentflow-filesystem-contract-freeze-v1.md)
-4. [044-v100-pack-contract-freeze-v1.md](044-v100-pack-contract-freeze-v1.md)
-5. [046-v100-evidence-acceptance-contract-freeze-v1.md](046-v100-evidence-acceptance-contract-freeze-v1.md)
-6. [047-v100-executor-adapter-contract-freeze-v1.md](047-v100-executor-adapter-contract-freeze-v1.md)
-7. [049-v100-software-dev-pack-stable-baseline-v1.md](049-v100-software-dev-pack-stable-baseline-v1.md)
-8. [052-v101-software-dev-pack-usage-baseline-v1.md](052-v101-software-dev-pack-usage-baseline-v1.md)
+3. [086-industry-product-source-boundary-v1.md](086-industry-product-source-boundary-v1.md)
+4. [043-v100-agentflow-filesystem-contract-freeze-v1.md](043-v100-agentflow-filesystem-contract-freeze-v1.md)
+5. [044-v100-pack-contract-freeze-v1.md](044-v100-pack-contract-freeze-v1.md)
+6. [046-v100-evidence-acceptance-contract-freeze-v1.md](046-v100-evidence-acceptance-contract-freeze-v1.md)
+7. [047-v100-executor-adapter-contract-freeze-v1.md](047-v100-executor-adapter-contract-freeze-v1.md)
+8. [049-v100-software-dev-pack-stable-baseline-v1.md](049-v100-software-dev-pack-stable-baseline-v1.md)
+9. [052-v101-software-dev-pack-usage-baseline-v1.md](052-v101-software-dev-pack-usage-baseline-v1.md)
 
 ## Rules
 

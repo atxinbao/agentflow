@@ -1,6 +1,6 @@
 # Glossary
 
-更新日期：2026-06-30
+更新日期：2026-07-01
 执行者：Codex
 
 | 术语 | 定义 |
@@ -9,6 +9,7 @@
 | AI OS Project | Core OS Runtime 加 Industry Product Surface 的项目操作系统形态 |
 | Core OS Runtime | Spec、Ontology、Runtime、Evidence、Decision、Projection 六个 Kernel 的底层能力 |
 | Industry Product Surface | 行业产品表面，可以是 Paid Report Flow、Managed Project Flow 或 Assistant / Ops Flow |
+| Industry Product Source | `products/**` 下的行业壳源码定义，例如 `products/software-dev/**` |
 | Paid Report Flow | 用户输入信息并付费，AgentFlow 内部完成一次受控 Run，交付一份可验收报告 |
 | Managed Project Flow | 围绕目标、任务、证据、验收和交付运行的多步项目型行业产品形态 |
 | Assistant / Ops Flow | 持续托管、监控、提醒、执行和反馈的行业产品形态 |

@@ -1,6 +1,6 @@
 # Project
 
-更新日期：2026-06-30
+更新日期：2026-07-01
 执行者：Codex
 
 ## Purpose
@@ -31,5 +31,6 @@ docs/project
 - `docs/project/**` 定义项目，不直接授权实现。
 - `docs/project/roadmap.md` 定义版本方向，不直接拆 issue。
 - 内置 Pack 不写入 `docs/project/**`；Pack 本体由 AgentFlow App 管理。
+- 行业壳源码属于 `products/**`，不是 `docs/project/**`，也不是 `crates/**` Core。
 - `docs/project/history/**` 只作为历史参考。
 - Agent 角色、任务合同、事件、证据和运行状态属于 `.agentflow/**`。
