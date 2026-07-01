@@ -8,8 +8,8 @@ use crate::responses::{
 };
 use agentflow_action_contract::{ActionRef, ActionSourceSurface};
 use agentflow_capability_registry::{
-    evaluate_pack_connector_commands, CapabilityRegistry, PackConnectorCommandDecision,
-    WorkerHealth,
+    evaluate_command, evaluate_pack_connector_commands, CapabilityRegistry,
+    PackConnectorCommandDecision, WorkerHealth,
 };
 use anyhow::{Context, Result};
 use serde::de::DeserializeOwned;
@@ -426,6 +426,10 @@ fn resolve_pack_command(
     pack_id: &str,
     command: &str,
 ) -> Result<ResolvedPackCommand, PackCommandResolveError> {
+    if let Ok(resolved) = resolve_product_command(project_root, pack_id, command) {
+        return Ok(resolved);
+    }
+
     let registry = agentflow_pack::load_pack_registry(project_root).map_err(|error| {
         pack_resolve_error("read-model", format!("pack registry unreadable: {error}"))
     })?;
@@ -522,6 +526,151 @@ fn resolve_pack_command(
         },
         capability,
     })
+}
+
+fn resolve_product_command(
+    project_root: &Path,
+    pack_id: &str,
+    command: &str,
+) -> Result<ResolvedPackCommand, PackCommandResolveError> {
+    let registry = agentflow_pack::load_product_registry(project_root).map_err(|error| {
+        pack_resolve_error(
+            "read-model",
+            format!("product registry unreadable: {error}"),
+        )
+    })?;
+    let entry = registry.product(pack_id).cloned().ok_or_else(|| {
+        pack_resolve_error(
+            "read-model",
+            format!("product `{pack_id}` is not registered in products/**"),
+        )
+    })?;
+    if !entry.valid {
+        return Err(pack_resolve_error(
+            "read-model",
+            format!("product `{pack_id}` is invalid: {:?}", entry.diagnostics),
+        ));
+    }
+    let definition = agentflow_pack::load_product_definition_from_entry(&entry)
+        .map_err(|error| pack_resolve_error("read-model", error.to_string()))?;
+    if !definition.valid {
+        return Err(pack_resolve_error(
+            "read-model",
+            format!(
+                "product `{pack_id}` definition is invalid: {:?}",
+                definition.diagnostics
+            ),
+        ));
+    }
+    let command_entry = definition
+        .surface
+        .commands
+        .iter()
+        .find(|entry| entry.id == command)
+        .ok_or_else(|| {
+            pack_resolve_error(
+                "surface-mapping",
+                format!("product command `{command}` is not exposed by product `{pack_id}`"),
+            )
+        })?;
+    let product_route = agentflow_pack::product_command_route(&definition, command_entry)
+        .map_err(|error| pack_resolve_error("surface-mapping", error.to_string()))?;
+    if crate::mapping::action_type_for_action_contract_ref(&product_route.action_contract_ref)
+        .is_none()
+    {
+        return Err(pack_resolve_error(
+            "surface-mapping",
+            format!(
+                "product command `{command}` uses unsupported action contract `{}`",
+                product_route.action_contract_ref
+            ),
+        ));
+    }
+    let capability = product_capability_status(project_root, &definition, &product_route);
+
+    Ok(ResolvedPackCommand {
+        route: PackSurfaceRouteView {
+            version: PACK_COMMAND_SURFACE_VERSION.to_string(),
+            pack_id: product_route.pack_id.clone(),
+            command: product_route.command.clone(),
+            page_id: product_page_for_command(&definition.surface, command)
+                .unwrap_or("task-workbench")
+                .to_string(),
+            route: "product-surface/runtime-command".to_string(),
+            action_contract_ref: product_route.action_contract_ref,
+            runtime_command_type: crate::mapping::CORE_RUNTIME_COMMAND_TYPE.to_string(),
+            target_object_type: product_route.target_object_type,
+            source_refs: product_route.source_refs,
+        },
+        capability,
+    })
+}
+
+fn product_page_for_command<'a>(
+    surface: &'a agentflow_pack::ProductSurfaceDefinition,
+    command: &str,
+) -> Option<&'a str> {
+    let page_id = match command {
+        "work.issue.start" | "work.issue.review" => "task-workbench",
+        _ => return None,
+    };
+    surface
+        .pages
+        .iter()
+        .find(|page| page.id == page_id)
+        .map(|page| page.id.as_str())
+}
+
+fn product_capability_status(
+    project_root: &Path,
+    definition: &agentflow_pack::ProductDefinition,
+    route: &agentflow_pack::ProductCommandRoute,
+) -> PackCapabilityStatusView {
+    let (worker_id, required_capability) = product_required_capability(&route.command);
+    let connector_exists = definition
+        .connectors
+        .connectors
+        .iter()
+        .any(|connector| connector.id == worker_id && !connector.authority);
+    if !connector_exists {
+        return PackCapabilityStatusView {
+            version: PACK_COMMAND_SURFACE_VERSION.to_string(),
+            pack_id: route.pack_id.clone(),
+            command: route.command.clone(),
+            required_capabilities: vec![required_capability.to_string()],
+            provider_ids: vec![worker_id.to_string()],
+            command_boundary: "runtime-api/product-surface/action-contract/arbitration".to_string(),
+            available: false,
+            reason: format!(
+                "product command `{}` has no non-authority connector `{worker_id}`",
+                route.command
+            ),
+        };
+    }
+
+    let registry = load_project_capability_registry(project_root)
+        .unwrap_or_else(|_| agentflow_capability_registry::default_capability_registry());
+    let decision = evaluate_command(&registry, worker_id, required_capability);
+    PackCapabilityStatusView {
+        version: PACK_COMMAND_SURFACE_VERSION.to_string(),
+        pack_id: route.pack_id.clone(),
+        command: route.command.clone(),
+        required_capabilities: decision.required_capabilities,
+        provider_ids: vec![worker_id.to_string()],
+        command_boundary: "runtime-api/product-surface/action-contract/arbitration".to_string(),
+        available: decision.enabled && decision.health == WorkerHealth::Ready,
+        reason: decision.disabled_reason.unwrap_or_else(|| {
+            "product command is available through product connector and capability registry"
+                .to_string()
+        }),
+    }
+}
+
+fn product_required_capability(command: &str) -> (&'static str, &'static str) {
+    match command {
+        "work.issue.review" => ("codex", "build_agent.complete"),
+        _ => ("codex", "launch"),
+    }
 }
 
 fn capability_status_from_decisions(
@@ -899,6 +1048,30 @@ mod tests {
     }
 
     #[test]
+    fn runtime_resolves_product_surface_route_before_pack_registry() {
+        let root = workspace_root();
+
+        let route = query_pack_surface_route(&root, "software-dev", "work.issue.start").unwrap();
+        let review_route =
+            query_pack_surface_route(&root, "software-dev", "work.issue.review").unwrap();
+
+        assert_eq!(route.action_contract_ref, "action-contract:issue.start");
+        assert_eq!(route.target_object_type, "Issue");
+        assert!(route
+            .source_refs
+            .iter()
+            .any(|source| source == "products/software-dev/surface/definition.json"));
+        assert_eq!(
+            review_route.action_contract_ref,
+            "action-contract:delivery.prepare"
+        );
+        assert!(review_route
+            .source_refs
+            .iter()
+            .any(|source| source == "products/software-dev/product.toml"));
+    }
+
+    #[test]
     fn runtime_validates_pack_command_through_action_contract() {
         let dir = tempfile::tempdir().unwrap();
         write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
@@ -1242,5 +1415,13 @@ mod tests {
 
     fn write_json(path: impl AsRef<Path>, value: &impl serde::Serialize) {
         std::fs::write(path, serde_json::to_string_pretty(value).unwrap()).unwrap();
+    }
+
+    fn workspace_root() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .unwrap()
+            .to_path_buf()
     }
 }

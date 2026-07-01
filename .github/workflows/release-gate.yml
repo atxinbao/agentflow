@@ -282,6 +282,16 @@ jobs:
               -o -name 'v109-mapping-boundary.json' \
               -o -name 'v109-golden-scenario.json' \
               -o -name 'v109-release-certification.json' \
+              -o -name 'v110-roadmap-release-goal-alignment.json' \
+              -o -name 'v110-product-registry-loader.json' \
+              -o -name 'v110-product-to-pack-contract.json' \
+              -o -name 'v110-runtime-product-command-routes.json' \
+              -o -name 'v110-projection-product-source.json' \
+              -o -name 'v110-core-pollution-detection.json' \
+              -o -name 'v110-product-command-route-installation.json' \
+              -o -name 'v110-software-dev-e2e-product-surface.json' \
+              -o -name 'v110-quick-audit-product-source-proofs.json' \
+              -o -name 'v110-release-certification.json' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
 
@@ -380,7 +390,17 @@ jobs:
             runtime/v109-workbench-read-models.json \
             runtime/v109-mapping-boundary.json \
             runtime/v109-golden-scenario.json \
-            runtime/v109-release-certification.json
+            runtime/v109-release-certification.json \
+            runtime/v110-roadmap-release-goal-alignment.json \
+            runtime/v110-product-registry-loader.json \
+            runtime/v110-product-to-pack-contract.json \
+            runtime/v110-runtime-product-command-routes.json \
+            runtime/v110-projection-product-source.json \
+            runtime/v110-core-pollution-detection.json \
+            runtime/v110-product-command-route-installation.json \
+            runtime/v110-software-dev-e2e-product-surface.json \
+            runtime/v110-quick-audit-product-source-proofs.json \
+            runtime/v110-release-certification.json
           )
 
           check_primary_proofs() {

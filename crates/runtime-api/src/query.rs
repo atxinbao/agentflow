@@ -107,9 +107,13 @@ mod tests {
 
     #[test]
     fn runtime_api_reads_pack_industry_workbench() {
-        let dir = tempfile::tempdir().unwrap();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .unwrap()
+            .to_path_buf();
 
-        let view = get_pack_industry_workbench_view(dir.path(), Some("software-dev")).unwrap();
+        let view = get_pack_industry_workbench_view(root, Some("software-dev")).unwrap();
 
         assert!(!view.authority);
         assert_eq!(view.active_pack_id.as_deref(), Some("software-dev"));
@@ -120,6 +124,6 @@ mod tests {
         assert!(view
             .connector_capability_index
             .iter()
-            .any(|capability| capability.connector_id == "github"));
+            .any(|capability| capability.connector_id == "codex"));
     }
 }

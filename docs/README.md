@@ -35,7 +35,7 @@ docs/
 7. [architecture/086-industry-product-source-boundary-v1.md](architecture/086-industry-product-source-boundary-v1.md)
 8. [architecture/041-v100-stable-contract-baseline-v1.md](architecture/041-v100-stable-contract-baseline-v1.md)
 9. [architecture/053-core-4d-spec-intake-kernel-v1.md](architecture/053-core-4d-spec-intake-kernel-v1.md)
-10. [delivery/releases/v1.0.9/README.md](delivery/releases/v1.0.9/README.md)
+10. [delivery/releases/v1.1.0/README.md](delivery/releases/v1.1.0/README.md)
 11. [requirements/README.md](requirements/README.md)
 12. [requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md](requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md)
 13. [../CHANGELOG.md](../CHANGELOG.md)
