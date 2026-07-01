@@ -1,0 +1,32 @@
+{
+  "version": "agentflow-software-dev-golden-scenario.v1",
+  "scenarioId": "software-dev-reference-app-loop",
+  "productId": "software-dev",
+  "sourceBoundary": "products/software-dev/fixtures",
+  "coreAuthority": false,
+  "steps": [
+    "core-spec-bundle-confirmed",
+    "software-dev-task-contract-derived",
+    "runtime-command-admitted",
+    "connector-handoff-created",
+    "evidence-pack-collected",
+    "decision-accepted",
+    "delivery-record-produced",
+    "projection-workbench-updated",
+    "feedback-freshness-receipt-created"
+  ],
+  "primaryProofs": [
+    "task-to-issue-traceability",
+    "product-contract",
+    "spec-task-flow",
+    "connector-handoff",
+    "evidence-decision-delivery",
+    "workbench-read-models",
+    "mapping-boundary"
+  ],
+  "completionPolicy": {
+    "auditSidecarBlocksDefaultDone": false,
+    "projectionWritesAuthority": false,
+    "providerSessionWritesAuthority": false
+  }
+}

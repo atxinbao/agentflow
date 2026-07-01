@@ -1,0 +1,38 @@
+{
+  "version": "agentflow-software-dev-workbench-projections.v1",
+  "productId": "software-dev",
+  "sourceBoundary": "products/software-dev/projections",
+  "coreAuthority": false,
+  "readModels": [
+    {
+      "id": "software-dev.project-home",
+      "source": "core.projection.project-summary",
+      "staleVisible": true,
+      "writesAuthority": false
+    },
+    {
+      "id": "software-dev.task-workbench",
+      "source": "core.projection.task-timeline",
+      "staleVisible": true,
+      "writesAuthority": false
+    },
+    {
+      "id": "software-dev.evidence-decision-delivery",
+      "source": "core.projection.evidence-decision-delivery",
+      "staleVisible": true,
+      "writesAuthority": false
+    },
+    {
+      "id": "software-dev.audit-sidecar",
+      "source": "core.projection.audit-sidecar",
+      "staleVisible": true,
+      "writesAuthority": false
+    }
+  ],
+  "forbiddenReads": [
+    ".agentflow/spec/**",
+    ".agentflow/tasks/**",
+    ".agentflow/events/**",
+    ".agentflow/evidence/**"
+  ]
+}

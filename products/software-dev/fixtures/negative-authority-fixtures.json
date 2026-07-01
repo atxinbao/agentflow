@@ -1,0 +1,42 @@
+{
+  "version": "agentflow-software-dev-negative-authority-fixtures.v1",
+  "productId": "software-dev",
+  "sourceBoundary": "products/software-dev/fixtures",
+  "fixtures": [
+    {
+      "id": "github-issue-only",
+      "status": "rejected",
+      "reason": "GitHub issue mirror cannot replace confirmed Spec authority."
+    },
+    {
+      "id": "provider-transcript-only",
+      "status": "rejected",
+      "reason": "Provider transcript is an execution record, not project truth."
+    },
+    {
+      "id": "pull-request-only",
+      "status": "rejected",
+      "reason": "Pull request proves review surface only; evidence and decision are still required."
+    },
+    {
+      "id": "release-note-only",
+      "status": "rejected",
+      "reason": "Release note is public delivery text, not completion authority."
+    },
+    {
+      "id": "direct-projection-write",
+      "status": "rejected",
+      "reason": "Projection is read-only and cannot write authority."
+    },
+    {
+      "id": "missing-product-mapping",
+      "status": "deferred",
+      "reason": "Missing product mapping is visible as invalid/deferred, not silently accepted."
+    },
+    {
+      "id": "audit-default-blocker",
+      "status": "rejected",
+      "reason": "Audit is optional sidecar and must not block the default Done path."
+    }
+  ]
+}

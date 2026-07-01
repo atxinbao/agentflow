@@ -1,0 +1,52 @@
+{
+  "version": "agentflow-software-dev-surface.v1",
+  "productId": "software-dev",
+  "sourceBoundary": "products/software-dev/surface",
+  "coreAuthority": false,
+  "pages": [
+    {
+      "id": "project-home",
+      "label": "Project Home",
+      "reads": [
+        "projection.project.summary",
+        "projection.task.queue",
+        "projection.feedback.freshness"
+      ],
+      "writesAuthority": false
+    },
+    {
+      "id": "task-workbench",
+      "label": "Task Workbench",
+      "reads": [
+        "projection.task.timeline",
+        "projection.task.evidence",
+        "projection.task.decision",
+        "projection.task.delivery"
+      ],
+      "writesAuthority": false
+    },
+    {
+      "id": "delivery-view",
+      "label": "Delivery View",
+      "reads": [
+        "projection.delivery.summary",
+        "projection.release.external-proof"
+      ],
+      "writesAuthority": false
+    }
+  ],
+  "commands": [
+    {
+      "id": "work.issue.start",
+      "label": "Start Task",
+      "runtimeCommand": "runtime.command.start-work",
+      "requiresProjectionFreshness": true
+    },
+    {
+      "id": "work.issue.review",
+      "label": "Prepare Review",
+      "runtimeCommand": "runtime.command.prepare-review",
+      "requiresProjectionFreshness": true
+    }
+  ]
+}

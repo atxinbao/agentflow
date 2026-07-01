@@ -273,8 +273,25 @@ jobs:
               -o -name 'core-decision-projection-read-model-rust-test.log' \
               -o -name 'v107-release-certification.json' \
               -o -name 'v108-release-certification.json' \
+              -o -name 'v109-task-issue-traceability.json' \
+              -o -name 'v109-software-dev-product-contract.json' \
+              -o -name 'v109-spec-task-flow.json' \
+              -o -name 'v109-connector-handoff.json' \
+              -o -name 'v109-evidence-decision-delivery.json' \
+              -o -name 'v109-workbench-read-models.json' \
+              -o -name 'v109-mapping-boundary.json' \
+              -o -name 'v109-golden-scenario.json' \
+              -o -name 'v109-release-certification.json' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
+
+          for file in \
+            pack-projection-readiness.json
+          do
+            if [ -f "$artifact_dir/$file" ]; then
+              cp "$artifact_dir/$file" "$certification_dir/$file"
+            fi
+          done
 
           primary_proofs=(
             runtime/core-4d-spec-intake.json \
@@ -353,7 +370,17 @@ jobs:
             runtime/core-decision-projection-read-model.json \
             runtime/core-decision-projection-read-model-rust-test.log \
             runtime/v107-release-certification.json \
-            runtime/v108-release-certification.json
+            runtime/v108-release-certification.json \
+            pack-projection-readiness.json \
+            runtime/v109-task-issue-traceability.json \
+            runtime/v109-software-dev-product-contract.json \
+            runtime/v109-spec-task-flow.json \
+            runtime/v109-connector-handoff.json \
+            runtime/v109-evidence-decision-delivery.json \
+            runtime/v109-workbench-read-models.json \
+            runtime/v109-mapping-boundary.json \
+            runtime/v109-golden-scenario.json \
+            runtime/v109-release-certification.json
           )
 
           check_primary_proofs() {

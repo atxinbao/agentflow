@@ -21,14 +21,16 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.0.8/README.md](releases/v1.0.8/README.md) | 当前发布基线：Core Projection Kernel |
+| [releases/v1.0.9/README.md](releases/v1.0.9/README.md) | 当前发布基线：Software Dev Reference App Boundary Certification |
+| [releases/v1.0.9/AGENTFLOW_V1_0_9_SOFTWARE_DEV_REFERENCE_APP_TASKS_V1.md](releases/v1.0.9/AGENTFLOW_V1_0_9_SOFTWARE_DEV_REFERENCE_APP_TASKS_V1.md) | v1.0.9 Software Dev Reference App tasks |
+| [releases/v1.0.8/README.md](releases/v1.0.8/README.md) | 上一发布基线：Core Projection Kernel |
 | [releases/v1.0.8/AGENTFLOW_V1_0_8_PROJECTION_KERNEL_TASKS_V1.md](releases/v1.0.8/AGENTFLOW_V1_0_8_PROJECTION_KERNEL_TASKS_V1.md) | v1.0.8 Projection Kernel tasks |
 
 ## Next Release Planning
 
 | 路径 | 作用 |
 | --- | --- |
-| `v1.0.9` | 下一版计划：Software Dev Reference App certification |
+| `v1.1.0` | 下一版计划：Product Surface hardening |
 
 ## Historical Delivery
 

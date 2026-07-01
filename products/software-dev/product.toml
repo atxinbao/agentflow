@@ -1,0 +1,23 @@
+product_id = "software-dev"
+name = "Software Dev Reference App"
+version = "agentflow-software-dev-reference-app.v1"
+status = "certified-reference"
+source_boundary = "products/software-dev"
+core_boundary = "crates/** remains Core OS Runtime"
+fixture_mirror = "crates/pack/fixtures/packs/software-dev"
+pack_id = "software-dev"
+
+[authority]
+writes_core_authority = false
+writes_runtime_authority = false
+source_of_product_definitions = true
+runtime_materializes_facts = false
+
+[entrypoints]
+domain = "domain/definition.json"
+surface = "surface/definition.json"
+connectors = "connectors/definition.json"
+flow = "flows/reference-task-flow.json"
+projection = "projections/workbench-read-models.json"
+golden_fixture = "fixtures/golden-scenario.json"
+negative_fixtures = "fixtures/negative-authority-fixtures.json"

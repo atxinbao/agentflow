@@ -1,0 +1,52 @@
+{
+  "version": "agentflow-software-dev-connectors.v1",
+  "productId": "software-dev",
+  "sourceBoundary": "products/software-dev/connectors",
+  "coreAuthority": false,
+  "connectors": [
+    {
+      "id": "git",
+      "type": "vcs",
+      "authority": false,
+      "produces": [
+        "changed-content-proof",
+        "branch-proof"
+      ]
+    },
+    {
+      "id": "github",
+      "type": "review-provider",
+      "authority": false,
+      "produces": [
+        "pull-request-proof",
+        "merge-proof",
+        "issue-mirror-proof"
+      ]
+    },
+    {
+      "id": "codex",
+      "type": "agent-provider",
+      "authority": false,
+      "produces": [
+        "provider-transcript",
+        "execution-session-proof"
+      ]
+    },
+    {
+      "id": "shell",
+      "type": "local-command",
+      "authority": false,
+      "produces": [
+        "local-command-proof",
+        "test-log"
+      ]
+    }
+  ],
+  "invalidAuthoritySources": [
+    "github-issue-only",
+    "provider-memory-only",
+    "pull-request-only",
+    "release-note-only",
+    "test-log-only"
+  ]
+}
