@@ -354,6 +354,29 @@ products/software-dev/**
 
 商业 Product Beta、安装器、完整行业壳 UI 和外部市场化交付仍属于后续版本。
 
+### v1.1.1 - Product Contract Data-driven Hardening
+
+`v1.1.1` 继续 `v1.1.0` 的 Product Surface hardening，但收口点更窄：
+
+```text
+Product source command mapping
+-> Product-to-Pack bridge
+-> Runtime resolver
+-> Projection read model
+-> runtime/projection proof artifacts
+```
+
+本版确认：
+
+- Product source 显式声明 commandId、runtimeCommand、actionContractRef、targetObjectType、pageId、skillRef、connectorId、requiredCapability、evidencePolicyRef 和 acceptancePolicyRef；
+- Product-to-Pack bridge 不再通过 Software Dev 命令名硬编码推断 action contract 或对象类型；
+- Runtime resolver 不再通过 Software Dev 命令名硬编码推断 page、skill、connector 或 capability；
+- Projection 不再通过 Software Dev 专用 helper 推断 workbench / connector / evidence 语义；
+- `products/_fixtures/synthetic-review/**` 作为第二个 Product 测试夹具证明桥接链路是通用的；
+- release gate 产出 v1.1.1 runtime / projection proof artifacts。
+
+UI command route installation、多 Product console、Product installer 和行业壳市场化仍属于后续版本。
+
 ## Task Derivation Rule
 
 任何版本任务必须从 roadmap 进入 confirmed Spec Bundle，再进入 `.agentflow/spec/**`。

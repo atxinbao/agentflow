@@ -1,0 +1,57 @@
+{
+  "version": "agentflow-synthetic-review-surface.v1",
+  "productId": "synthetic-review",
+  "sourceBoundary": "products/_fixtures/synthetic-review/surface",
+  "coreAuthority": false,
+  "pages": [
+    {
+      "id": "case-board",
+      "label": "Case Board",
+      "reads": [
+        "projection.synthetic.case-queue"
+      ],
+      "writesAuthority": false
+    },
+    {
+      "id": "review-console",
+      "label": "Review Console",
+      "reads": [
+        "projection.synthetic.case-timeline",
+        "projection.synthetic.case-evidence"
+      ],
+      "writesAuthority": false
+    }
+  ],
+  "commands": [
+    {
+      "id": "synthetic.case.open",
+      "commandId": "synthetic.case.open",
+      "label": "Open Synthetic Case",
+      "runtimeCommand": "runtime.command.start-work",
+      "actionContractRef": "action-contract:issue.start",
+      "targetObjectType": "Case",
+      "pageId": "review-console",
+      "skillRef": "skill:synthetic-review/open-case",
+      "connectorId": "fixture-agent",
+      "requiredCapability": "synthetic.launch",
+      "evidencePolicyRef": "evidence-policy:synthetic-review-evidence",
+      "acceptancePolicyRef": "acceptance:synthetic-review-acceptance",
+      "requiresProjectionFreshness": true
+    },
+    {
+      "id": "synthetic.case.review",
+      "commandId": "synthetic.case.review",
+      "label": "Review Synthetic Case",
+      "runtimeCommand": "runtime.command.prepare-review",
+      "actionContractRef": "action-contract:delivery.prepare",
+      "targetObjectType": "Session",
+      "pageId": "review-console",
+      "skillRef": "skill:synthetic-review/review-case",
+      "connectorId": "fixture-agent",
+      "requiredCapability": "synthetic.complete",
+      "evidencePolicyRef": "evidence-policy:synthetic-review-evidence",
+      "acceptancePolicyRef": "acceptance:synthetic-review-acceptance",
+      "requiresProjectionFreshness": true
+    }
+  ]
+}

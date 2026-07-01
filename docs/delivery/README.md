@@ -21,7 +21,9 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.1.0/README.md](releases/v1.1.0/README.md) | 当前发布基线：Product Surface Hardening |
+| [releases/v1.1.1/README.md](releases/v1.1.1/README.md) | 当前发布基线：Product Contract Data-driven hardening |
+| [releases/v1.1.1/AGENTFLOW_V1_1_1_PRODUCT_CONTRACT_DATA_DRIVEN_TASKS_V1.md](releases/v1.1.1/AGENTFLOW_V1_1_1_PRODUCT_CONTRACT_DATA_DRIVEN_TASKS_V1.md) | v1.1.1 Product contract data-driven tasks |
+| [releases/v1.1.0/README.md](releases/v1.1.0/README.md) | 上一发布基线：Product Surface Hardening |
 | [releases/v1.1.0/AGENTFLOW_V1_1_0_PRODUCT_SURFACE_HARDENING_TASKS_V1.md](releases/v1.1.0/AGENTFLOW_V1_1_0_PRODUCT_SURFACE_HARDENING_TASKS_V1.md) | v1.1.0 Product Surface hardening tasks |
 | [releases/v1.0.9/README.md](releases/v1.0.9/README.md) | 上一发布基线：Software Dev Reference App Boundary Certification |
 | [releases/v1.0.9/AGENTFLOW_V1_0_9_SOFTWARE_DEV_REFERENCE_APP_TASKS_V1.md](releases/v1.0.9/AGENTFLOW_V1_0_9_SOFTWARE_DEV_REFERENCE_APP_TASKS_V1.md) | v1.0.9 Software Dev Reference App tasks |

@@ -8,6 +8,16 @@
       "id": "git",
       "type": "vcs",
       "authority": false,
+      "providerType": "git",
+      "supportedActions": [
+        {
+          "actionId": "git.status",
+          "label": "Git Status",
+          "requiredCapability": "git.status",
+          "commandType": "git.status",
+          "writesExternal": false
+        }
+      ],
       "produces": [
         "changed-content-proof",
         "branch-proof"
@@ -17,6 +27,16 @@
       "id": "github",
       "type": "review-provider",
       "authority": false,
+      "providerType": "github",
+      "supportedActions": [
+        {
+          "actionId": "github.pull-request.create",
+          "label": "Create Pull Request",
+          "requiredCapability": "pull_request.create",
+          "commandType": "github.pull-request.create",
+          "writesExternal": true
+        }
+      ],
       "produces": [
         "pull-request-proof",
         "merge-proof",
@@ -27,6 +47,23 @@
       "id": "codex",
       "type": "agent-provider",
       "authority": false,
+      "providerType": "codex",
+      "supportedActions": [
+        {
+          "actionId": "codex.launch",
+          "label": "Launch Build Agent",
+          "requiredCapability": "launch",
+          "commandType": "work.issue.start",
+          "writesExternal": true
+        },
+        {
+          "actionId": "codex.complete",
+          "label": "Complete Build Agent Run",
+          "requiredCapability": "build_agent.complete",
+          "commandType": "work.issue.review",
+          "writesExternal": true
+        }
+      ],
       "produces": [
         "provider-transcript",
         "execution-session-proof"
@@ -36,6 +73,16 @@
       "id": "shell",
       "type": "local-command",
       "authority": false,
+      "providerType": "custom",
+      "supportedActions": [
+        {
+          "actionId": "shell.ready",
+          "label": "Shell Ready",
+          "requiredCapability": "ready",
+          "commandType": "shell.ready",
+          "writesExternal": false
+        }
+      ],
       "produces": [
         "local-command-proof",
         "test-log"
