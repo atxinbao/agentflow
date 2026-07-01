@@ -1,0 +1,65 @@
+{
+  "version": "agentflow-software-dev-domain.v1",
+  "productId": "software-dev",
+  "packId": "software-dev",
+  "sourceBoundary": "products/software-dev/domain",
+  "coreAuthority": false,
+  "objectTypes": [
+    {
+      "type": "spec",
+      "coreKind": "object",
+      "description": "Confirmed requirement and implementation intent."
+    },
+    {
+      "type": "task",
+      "coreKind": "object",
+      "description": "A Software Dev work item derived from confirmed Spec authority."
+    },
+    {
+      "type": "run",
+      "coreKind": "object",
+      "description": "Runtime execution record for a task."
+    },
+    {
+      "type": "pull-request",
+      "coreKind": "external-proof",
+      "description": "External review and merge record, not AgentFlow authority."
+    },
+    {
+      "type": "release",
+      "coreKind": "external-proof",
+      "description": "Public delivery surface, not task authority by itself."
+    }
+  ],
+  "states": [
+    "backlog",
+    "todo",
+    "in_progress",
+    "in_review",
+    "done",
+    "blocked",
+    "cancel"
+  ],
+  "evidencePolicy": {
+    "requiredEvidence": [
+      "changed-content-proof",
+      "local-command-proof",
+      "merge-proof"
+    ],
+    "optionalEvidence": [
+      "ui-proof",
+      "provider-transcript",
+      "audit-sidecar-proof"
+    ],
+    "insufficientAlone": [
+      "pull-request",
+      "release-note",
+      "provider-transcript",
+      "test-log"
+    ]
+  },
+  "auditBoundary": {
+    "defaultCompletionBlocker": false,
+    "sidecarOnly": true
+  }
+}

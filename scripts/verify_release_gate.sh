@@ -176,6 +176,15 @@ V106_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v106-release-certification.json"
 V107_RELEASE_PROVENANCE_HANDOFF_PATH="$RUNTIME_DIR/v107-release-provenance-handoff.json"
 V107_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v107-release-certification.json"
 V108_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v108-release-certification.json"
+V109_TASK_ISSUE_TRACEABILITY_PATH="$RUNTIME_DIR/v109-task-issue-traceability.json"
+V109_SOFTWARE_DEV_PRODUCT_CONTRACT_PATH="$RUNTIME_DIR/v109-software-dev-product-contract.json"
+V109_SPEC_TASK_FLOW_PATH="$RUNTIME_DIR/v109-spec-task-flow.json"
+V109_CONNECTOR_HANDOFF_PATH="$RUNTIME_DIR/v109-connector-handoff.json"
+V109_EVIDENCE_DECISION_DELIVERY_PATH="$RUNTIME_DIR/v109-evidence-decision-delivery.json"
+V109_WORKBENCH_READ_MODELS_PATH="$RUNTIME_DIR/v109-workbench-read-models.json"
+V109_MAPPING_BOUNDARY_PATH="$RUNTIME_DIR/v109-mapping-boundary.json"
+V109_GOLDEN_SCENARIO_PATH="$RUNTIME_DIR/v109-golden-scenario.json"
+V109_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v109-release-certification.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
 CORE_DECISION_INPUT_BINDING_PATH="$RUNTIME_DIR/core-decision-input-binding.json"
 CORE_DECISION_OUTCOME_TRANSITIONS_PATH="$RUNTIME_DIR/core-decision-outcome-transitions.json"
@@ -2211,7 +2220,7 @@ tracked_docs = [
     "docs/architecture/builtin-pack-registry.md",
     "docs/architecture/041-v100-stable-contract-baseline-v1.md",
     "docs/architecture/050-v100-release-certification-v1.md",
-    "docs/delivery/releases/v1.0.8/README.md",
+    "docs/delivery/releases/v1.0.9/README.md",
     "docs/project/history/2026-06-current-baseline-history/README.md",
 ]
 runtime_only_paths = [
@@ -2256,7 +2265,7 @@ payload = {
     "currentProjectRoadmapEntry": "docs/project/roadmap.md",
     "currentCoreCapabilityEntry": "docs/architecture/021-ai-os-project-core-capabilities-v1.md",
     "currentStableEntry": "docs/architecture/041-v100-stable-contract-baseline-v1.md",
-    "currentReleaseBaselineEntry": "docs/delivery/releases/v1.0.8/README.md",
+    "currentReleaseBaselineEntry": "docs/delivery/releases/v1.0.9/README.md",
     "releaseCertificationEntry": "docs/architecture/050-v100-release-certification-v1.md",
     "defineAgentBoundary": {
         "path": ".agentflow/define/agent/**",
@@ -10369,19 +10378,21 @@ required_artifact_names = [
 certified_hash_paths = {item.get("path") for item in certified_artifact_hashes}
 
 coverage = {
-    "release-version-at-or-after-v107": release_version in {expected_tag, "v1.0.8"},
-    "release-tag-at-or-after-v107": release_tag_name in {expected_tag, "v1.0.8"},
-    "cargo-workspace-version-at-or-after-107": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.8"},
-    "desktop-package-version-at-or-after-107": desktop_package.get("version") in {expected_version, "1.0.8"},
-    "desktop-package-lock-version-at-or-after-107": desktop_package_lock.get("version") in {expected_version, "1.0.8"}
-    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.8"},
-    "tauri-version-at-or-after-107": tauri_config.get("version") in {expected_version, "1.0.8"},
+    "release-version-at-or-after-v107": release_version in {expected_tag, "v1.0.8", "v1.0.9"},
+    "release-tag-at-or-after-v107": release_tag_name in {expected_tag, "v1.0.8", "v1.0.9"},
+    "cargo-workspace-version-at-or-after-107": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.8", "1.0.9"},
+    "desktop-package-version-at-or-after-107": desktop_package.get("version") in {expected_version, "1.0.8", "1.0.9"},
+    "desktop-package-lock-version-at-or-after-107": desktop_package_lock.get("version") in {expected_version, "1.0.8", "1.0.9"}
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.8", "1.0.9"},
+    "tauri-version-at-or-after-107": tauri_config.get("version") in {expected_version, "1.0.8", "1.0.9"},
     "agents-current-baseline-is-v108-or-v107": (
-        "docs/delivery/releases/v1.0.8/README.md" in agents_text
+        "docs/delivery/releases/v1.0.9/README.md" in agents_text
+        or "docs/delivery/releases/v1.0.8/README.md" in agents_text
         or "docs/delivery/releases/v1.0.7/README.md" in agents_text
     ),
     "docs-default-reading-is-v108-or-v107": (
-        "delivery/releases/v1.0.8/README.md" in docs_readme_text
+        "delivery/releases/v1.0.9/README.md" in docs_readme_text
+        or "delivery/releases/v1.0.8/README.md" in docs_readme_text
         or "delivery/releases/v1.0.7/README.md" in docs_readme_text
     ),
     "changelog-has-v107-entry": "## v1.0.7 - 2026-06-29" in changelog_text
@@ -10650,21 +10661,31 @@ required_runtime_paths = {
 expected_hash_paths = required_runtime_paths | {"pack-projection-readiness.json"}
 
 coverage = {
-    "release-version-is-v108": release_version == expected_tag,
-    "release-tag-is-v108": release_tag_name == expected_tag,
-    "cargo-workspace-version-is-108": cargo["workspace"]["package"]["version"] == expected_version,
-    "desktop-package-version-is-108": desktop_package.get("version") == expected_version,
-    "desktop-package-lock-version-is-108": desktop_package_lock.get("version") == expected_version
-    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") == expected_version,
-    "tauri-version-is-108": tauri_config.get("version") == expected_version,
-    "agents-current-baseline-is-v108": "docs/delivery/releases/v1.0.8/README.md" in agents_text,
-    "docs-default-reading-is-v108": "delivery/releases/v1.0.8/README.md" in docs_readme_text,
-    "delivery-readme-is-v108": "releases/v1.0.8/README.md" in delivery_readme_text
+    "release-version-at-or-after-v108": release_version in {expected_tag, "v1.0.9"},
+    "release-tag-at-or-after-v108": release_tag_name in {expected_tag, "v1.0.9"},
+    "cargo-workspace-version-at-or-after-108": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.9"},
+    "desktop-package-version-at-or-after-108": desktop_package.get("version") in {expected_version, "1.0.9"},
+    "desktop-package-lock-version-at-or-after-108": desktop_package_lock.get("version") in {expected_version, "1.0.9"}
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.9"},
+    "tauri-version-at-or-after-108": tauri_config.get("version") in {expected_version, "1.0.9"},
+    "agents-current-baseline-at-or-after-v108": (
+        "docs/delivery/releases/v1.0.9/README.md" in agents_text
+        or "docs/delivery/releases/v1.0.8/README.md" in agents_text
+    ),
+    "docs-default-reading-at-or-after-v108": (
+        "delivery/releases/v1.0.9/README.md" in docs_readme_text
+        or "delivery/releases/v1.0.8/README.md" in docs_readme_text
+    ),
+    "delivery-readme-at-or-after-v108": (
+        "releases/v1.0.9/README.md" in delivery_readme_text
+        or "releases/v1.0.8/README.md" in delivery_readme_text
+    )
     and "Core Projection Kernel" in delivery_readme_text,
     "changelog-has-v108-entry": "## v1.0.8 - 2026-06-30" in changelog_text
     and "Core Projection Kernel baseline" in changelog_text
     and "v108-release-certification" in changelog_text,
-    "changelog-next-path-is-v109": "v1.0.9 Software Dev Reference App certification" in changelog_text,
+    "changelog-records-v109-path": "## v1.0.9 - 2026-07-01" in changelog_text
+    and "Software Dev Reference App Boundary Certification" in changelog_text,
     "release-readme-is-baseline": "Core Projection Kernel release baseline" in release_readme_text
     and "runtime/v108-release-certification.json" in release_readme_text
     and "v1.0.9" in release_readme_text,
@@ -10751,6 +10772,514 @@ if failed:
     raise SystemExit(f"v1.0.8 release certification failed: {failed}")
 PY
   record_stage "v108-release-certification" "passed" "$(basename "$V108_RELEASE_CERTIFICATION_PATH")"
+}
+
+run_v109_release_certification_gate() {
+  record_stage "v109-release-certification" "started" "$V109_RELEASE_CERTIFICATION_PATH"
+  python3 - \
+    "$V109_RELEASE_CERTIFICATION_PATH" \
+    "$RELEASE_VERSION" \
+    "$WORKSPACE/Cargo.toml" \
+    "$WORKSPACE/apps/desktop/package.json" \
+    "$WORKSPACE/apps/desktop/package-lock.json" \
+    "$WORKSPACE/apps/desktop/src-tauri/tauri.conf.json" \
+    "$ROOT/CHANGELOG.md" \
+    "$ROOT/AGENTS.md" \
+    "$ROOT/docs/README.md" \
+    "$ROOT/docs/delivery/README.md" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.9/README.md" \
+    "$WORKSPACE/docs/delivery/releases/v1.0.9/AGENTFLOW_V1_0_9_SOFTWARE_DEV_REFERENCE_APP_TASKS_V1.md" \
+    "$ARTIFACT_MANIFEST_PATH" \
+    "$RELEASE_URL" \
+    "$GATE_EVENT_NAME" \
+    "$GATE_REF_TYPE" \
+    "$GATE_REF_NAME" \
+    "$GATE_RUN_ID" \
+    "$GATE_RUN_ATTEMPT" \
+    "$GATE_REPOSITORY" \
+    "$GATE_SERVER_URL" \
+    "$SOURCE_COMMIT_SHA" \
+    "$RELEASE_TAG_NAME" \
+    "$PACK_PROJECTION_READINESS_PATH" \
+    "$V108_RELEASE_CERTIFICATION_PATH" \
+    "$V109_TASK_ISSUE_TRACEABILITY_PATH" \
+    "$V109_SOFTWARE_DEV_PRODUCT_CONTRACT_PATH" \
+    "$V109_SPEC_TASK_FLOW_PATH" \
+    "$V109_CONNECTOR_HANDOFF_PATH" \
+    "$V109_EVIDENCE_DECISION_DELIVERY_PATH" \
+    "$V109_WORKBENCH_READ_MODELS_PATH" \
+    "$V109_MAPPING_BOUNDARY_PATH" \
+    "$V109_GOLDEN_SCENARIO_PATH" \
+    "$WORKSPACE/products/software-dev/product.toml" \
+    "$WORKSPACE/products/software-dev/domain/definition.json" \
+    "$WORKSPACE/products/software-dev/surface/definition.json" \
+    "$WORKSPACE/products/software-dev/connectors/definition.json" \
+    "$WORKSPACE/products/software-dev/flows/reference-task-flow.json" \
+    "$WORKSPACE/products/software-dev/projections/workbench-read-models.json" \
+    "$WORKSPACE/products/software-dev/fixtures/golden-scenario.json" \
+    "$WORKSPACE/products/software-dev/fixtures/negative-authority-fixtures.json" \
+    "$WORKSPACE/crates/pack/fixtures/packs/software-dev" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+import time
+import tomllib
+
+(
+    out_path_raw,
+    release_version,
+    cargo_path_raw,
+    desktop_package_path_raw,
+    desktop_package_lock_path_raw,
+    tauri_config_path_raw,
+    changelog_path_raw,
+    agents_path_raw,
+    docs_readme_path_raw,
+    delivery_readme_path_raw,
+    release_readme_path_raw,
+    release_tasks_path_raw,
+    artifact_manifest_path_raw,
+    release_url,
+    gate_event_name,
+    gate_ref_type,
+    gate_ref_name,
+    gate_run_id,
+    gate_run_attempt,
+    gate_repository,
+    gate_server_url,
+    source_commit_sha,
+    release_tag_name,
+    pack_projection_path_raw,
+    v108_certification_path_raw,
+    task_trace_path_raw,
+    product_contract_path_raw,
+    spec_task_flow_path_raw,
+    connector_handoff_path_raw,
+    evidence_delivery_path_raw,
+    workbench_read_models_path_raw,
+    mapping_boundary_path_raw,
+    golden_scenario_path_raw,
+    product_toml_path_raw,
+    domain_path_raw,
+    surface_path_raw,
+    connectors_path_raw,
+    flow_path_raw,
+    projections_path_raw,
+    golden_path_raw,
+    negative_path_raw,
+    fixture_mirror_path_raw,
+) = sys.argv[1:]
+
+out_path = pathlib.Path(out_path_raw)
+cargo_path = pathlib.Path(cargo_path_raw)
+desktop_package_path = pathlib.Path(desktop_package_path_raw)
+desktop_package_lock_path = pathlib.Path(desktop_package_lock_path_raw)
+tauri_config_path = pathlib.Path(tauri_config_path_raw)
+changelog_path = pathlib.Path(changelog_path_raw)
+agents_path = pathlib.Path(agents_path_raw)
+docs_readme_path = pathlib.Path(docs_readme_path_raw)
+delivery_readme_path = pathlib.Path(delivery_readme_path_raw)
+release_readme_path = pathlib.Path(release_readme_path_raw)
+release_tasks_path = pathlib.Path(release_tasks_path_raw)
+artifact_manifest_path = pathlib.Path(artifact_manifest_path_raw)
+pack_projection_path = pathlib.Path(pack_projection_path_raw)
+v108_certification_path = pathlib.Path(v108_certification_path_raw)
+task_trace_path = pathlib.Path(task_trace_path_raw)
+product_contract_path = pathlib.Path(product_contract_path_raw)
+spec_task_flow_path = pathlib.Path(spec_task_flow_path_raw)
+connector_handoff_path = pathlib.Path(connector_handoff_path_raw)
+evidence_delivery_path = pathlib.Path(evidence_delivery_path_raw)
+workbench_read_models_path = pathlib.Path(workbench_read_models_path_raw)
+mapping_boundary_path = pathlib.Path(mapping_boundary_path_raw)
+golden_scenario_path = pathlib.Path(golden_scenario_path_raw)
+product_toml_path = pathlib.Path(product_toml_path_raw)
+domain_path = pathlib.Path(domain_path_raw)
+surface_path = pathlib.Path(surface_path_raw)
+connectors_path = pathlib.Path(connectors_path_raw)
+flow_path = pathlib.Path(flow_path_raw)
+projections_path = pathlib.Path(projections_path_raw)
+golden_path = pathlib.Path(golden_path_raw)
+negative_path = pathlib.Path(negative_path_raw)
+fixture_mirror_path = pathlib.Path(fixture_mirror_path_raw)
+
+expected_version = "1.0.9"
+expected_tag = "v1.0.9"
+
+def load_json(path):
+    if not path.is_file():
+        raise SystemExit(f"missing JSON source: {path}")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+def write_json(path, payload):
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+def file_digest(path):
+    return {
+        "path": str(path),
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "bytes": path.stat().st_size,
+    }
+
+cargo = tomllib.loads(cargo_path.read_text(encoding="utf-8"))
+desktop_package = json.loads(desktop_package_path.read_text(encoding="utf-8"))
+desktop_package_lock = json.loads(desktop_package_lock_path.read_text(encoding="utf-8"))
+tauri_config = json.loads(tauri_config_path.read_text(encoding="utf-8"))
+product = tomllib.loads(product_toml_path.read_text(encoding="utf-8")) if product_toml_path.is_file() else {}
+domain = load_json(domain_path)
+surface = load_json(surface_path)
+connectors = load_json(connectors_path)
+flow = load_json(flow_path)
+projections = load_json(projections_path)
+golden = load_json(golden_path)
+negative = load_json(negative_path)
+pack_projection = load_json(pack_projection_path)
+v108_certification = load_json(v108_certification_path)
+
+changelog_text = changelog_path.read_text(encoding="utf-8")
+agents_text = agents_path.read_text(encoding="utf-8")
+docs_readme_text = docs_readme_path.read_text(encoding="utf-8")
+delivery_readme_text = delivery_readme_path.read_text(encoding="utf-8")
+release_readme_text = release_readme_path.read_text(encoding="utf-8")
+release_tasks_text = release_tasks_path.read_text(encoding="utf-8")
+
+task_rows = [
+    ("V109-001", 734, "Release Task / GitHub Issue Traceability Gate", task_trace_path),
+    ("V109-002", 735, "Quick Audit Pack Projection Primary Proof Inclusion", pack_projection_path),
+    ("V109-003", 736, "products/software-dev Reference App Contract", product_contract_path),
+    ("V109-004", 737, "Software Dev Spec Bundle to Task Flow", spec_task_flow_path),
+    ("V109-005", 738, "Software Dev Connector Handoff and Runtime Command Baseline", connector_handoff_path),
+    ("V109-006", 739, "Software Dev Evidence / Decision / Delivery Closed Loop", evidence_delivery_path),
+    ("V109-007", 740, "Software Dev Projection Workbench Read Models", workbench_read_models_path),
+    ("V109-008", 741, "Core/Product Pack-backed Mapping Boundary Cleanup", mapping_boundary_path),
+    ("V109-009", 742, "End-to-End Reference App Scenario and Core Boundary Negative Fixtures", golden_scenario_path),
+    ("V109-010", 743, "v1.0.9 Reference App Boundary Release Certification", out_path),
+]
+
+traceability_checks = {
+    "all-task-ids-present": all(task_id in release_tasks_text for task_id, _, _, _ in task_rows),
+    "all-github-issue-refs-present": all(f"#{number}" in release_tasks_text for _, number, _, _ in task_rows),
+    "all-task-titles-present": all(title in release_tasks_text for _, _, title, _ in task_rows),
+    "all-tasks-done": release_tasks_text.count("状态：done") >= len(task_rows),
+    "github-issues-are-not-authority": "GitHub issues are planning mirrors" in release_tasks_text
+    and "not AgentFlow authority" in release_tasks_text,
+}
+task_trace_payload = {
+    "version": "agentflow-v109-task-issue-traceability.v1",
+    "status": "passed" if all(traceability_checks.values()) else "failed",
+    "releaseVersion": expected_tag,
+    "githubIssuesAreAuthority": False,
+    "tasks": [
+        {
+            "taskId": task_id,
+            "issueNumber": number,
+            "issueRef": f"#{number}",
+            "title": title,
+            "primaryProof": "pack-projection-readiness.json" if task_id == "V109-002" else f"runtime/{path.name}",
+            "status": "done",
+        }
+        for task_id, number, title, path in task_rows
+    ],
+    "coverage": traceability_checks,
+    "checkedAt": int(time.time()),
+}
+write_json(task_trace_path, task_trace_payload)
+
+product_checks = {
+    "product-id-is-software-dev": product.get("product_id") == "software-dev",
+    "source-boundary-is-products-software-dev": product.get("source_boundary") == "products/software-dev",
+    "core-authority-false": product.get("authority", {}).get("writes_core_authority") is False
+    and product.get("authority", {}).get("writes_runtime_authority") is False,
+    "all-entrypoints-exist": all(path.is_file() for path in [
+        domain_path, surface_path, connectors_path, flow_path, projections_path, golden_path, negative_path
+    ]),
+    "fixture-mirror-exists": fixture_mirror_path.is_dir(),
+    "domain-product-id-matches": domain.get("productId") == "software-dev" and domain.get("coreAuthority") is False,
+    "surface-product-id-matches": surface.get("productId") == "software-dev" and surface.get("coreAuthority") is False,
+}
+product_payload = {
+    "version": "agentflow-v109-software-dev-product-contract.v1",
+    "status": "passed" if all(product_checks.values()) else "failed",
+    "productId": "software-dev",
+    "sourceBoundary": "products/software-dev/**",
+    "fixtureMirror": "crates/pack/fixtures/packs/software-dev/**",
+    "coreAuthority": False,
+    "sourceFiles": [file_digest(path) for path in [
+        product_toml_path, domain_path, surface_path, connectors_path, flow_path, projections_path, golden_path, negative_path
+    ]],
+    "coverage": product_checks,
+    "checkedAt": int(time.time()),
+}
+write_json(product_contract_path, product_payload)
+
+flow_stages = [item.get("stage") for item in flow.get("flow", [])]
+flow_checks = {
+    "required-stages-present": all(stage in flow_stages for stage in [
+        "spec-bundle", "handoff", "execution", "evidence", "decision", "delivery"
+    ]),
+    "no-flow-stage-writes-authority": all(item.get("writesAuthority") is False for item in flow.get("flow", [])),
+    "blocked-paths-cover-authority-risks": all(
+        any(token in path for path in flow.get("blockedPaths", []))
+        for token in ["github-issue", "provider-session", "projection", "audit-sidecar"]
+    ),
+}
+spec_flow_payload = {
+    "version": "agentflow-v109-spec-task-flow.v1",
+    "status": "passed" if all(flow_checks.values()) else "failed",
+    "productId": "software-dev",
+    "flow": flow.get("flow", []),
+    "blockedPaths": flow.get("blockedPaths", []),
+    "coverage": flow_checks,
+    "checkedAt": int(time.time()),
+}
+write_json(spec_task_flow_path, spec_flow_payload)
+
+connector_ids = {item.get("id") for item in connectors.get("connectors", [])}
+connector_checks = {
+    "required-connectors-present": {"git", "github", "codex", "shell"}.issubset(connector_ids),
+    "all-connectors-nonauthority": all(item.get("authority") is False for item in connectors.get("connectors", [])),
+    "invalid-authority-sources-bound": all(item in connectors.get("invalidAuthoritySources", []) for item in [
+        "github-issue-only", "provider-memory-only", "pull-request-only", "release-note-only", "test-log-only"
+    ]),
+}
+connector_payload = {
+    "version": "agentflow-v109-connector-handoff.v1",
+    "status": "passed" if all(connector_checks.values()) else "failed",
+    "productId": "software-dev",
+    "connectors": connectors.get("connectors", []),
+    "invalidAuthoritySources": connectors.get("invalidAuthoritySources", []),
+    "coverage": connector_checks,
+    "checkedAt": int(time.time()),
+}
+write_json(connector_handoff_path, connector_payload)
+
+evidence_policy = domain.get("evidencePolicy", {})
+evidence_checks = {
+    "required-evidence-present": all(item in evidence_policy.get("requiredEvidence", []) for item in [
+        "changed-content-proof", "local-command-proof", "merge-proof"
+    ]),
+    "insufficient-alone-bound": all(item in evidence_policy.get("insufficientAlone", []) for item in [
+        "pull-request", "release-note", "provider-transcript", "test-log"
+    ]),
+    "audit-is-sidecar": domain.get("auditBoundary", {}).get("defaultCompletionBlocker") is False
+    and domain.get("auditBoundary", {}).get("sidecarOnly") is True,
+    "golden-includes-delivery-record": "delivery-record-produced" in golden.get("steps", []),
+}
+evidence_payload = {
+    "version": "agentflow-v109-evidence-decision-delivery.v1",
+    "status": "passed" if all(evidence_checks.values()) else "failed",
+    "requiredEvidence": evidence_policy.get("requiredEvidence", []),
+    "optionalEvidence": evidence_policy.get("optionalEvidence", []),
+    "insufficientAlone": evidence_policy.get("insufficientAlone", []),
+    "auditBoundary": domain.get("auditBoundary", {}),
+    "coverage": evidence_checks,
+    "checkedAt": int(time.time()),
+}
+write_json(evidence_delivery_path, evidence_payload)
+
+read_model_ids = {item.get("id") for item in projections.get("readModels", [])}
+surface_pages = {item.get("id") for item in surface.get("pages", [])}
+workbench_checks = {
+    "task-workbench-read-model-present": "software-dev.task-workbench" in read_model_ids,
+    "task-workbench-page-present": "task-workbench" in surface_pages,
+    "all-read-models-readonly": all(item.get("writesAuthority") is False for item in projections.get("readModels", [])),
+    "forbidden-authority-reads-bound": all(path in projections.get("forbiddenReads", []) for path in [
+        ".agentflow/spec/**", ".agentflow/tasks/**", ".agentflow/events/**", ".agentflow/evidence/**"
+    ]),
+}
+workbench_payload = {
+    "version": "agentflow-v109-workbench-read-models.v1",
+    "status": "passed" if all(workbench_checks.values()) else "failed",
+    "readModels": projections.get("readModels", []),
+    "surfacePages": surface.get("pages", []),
+    "coverage": workbench_checks,
+    "checkedAt": int(time.time()),
+}
+write_json(workbench_read_models_path, workbench_payload)
+
+negative_ids = {item.get("id"): item.get("status") for item in negative.get("fixtures", [])}
+mapping_checks = {
+    "product-source-exists": product_toml_path.is_file(),
+    "fixture-mirror-exists": fixture_mirror_path.is_dir(),
+    "negative-direct-projection-write-rejected": negative_ids.get("direct-projection-write") == "rejected",
+    "negative-missing-product-mapping-deferred": negative_ids.get("missing-product-mapping") == "deferred",
+    "github-provider-pr-release-negative-bound": all(negative_ids.get(item) == "rejected" for item in [
+        "github-issue-only", "provider-transcript-only", "pull-request-only", "release-note-only"
+    ]),
+}
+mapping_payload = {
+    "version": "agentflow-v109-mapping-boundary.v1",
+    "status": "passed" if all(mapping_checks.values()) else "failed",
+    "productSourceBoundary": "products/software-dev/**",
+    "fixtureMirror": "crates/pack/fixtures/packs/software-dev/**",
+    "negativeAuthorityFixtures": negative.get("fixtures", []),
+    "coverage": mapping_checks,
+    "checkedAt": int(time.time()),
+}
+write_json(mapping_boundary_path, mapping_payload)
+
+golden_checks = {
+    "golden-scenario-steps-present": all(step in golden.get("steps", []) for step in [
+        "core-spec-bundle-confirmed",
+        "software-dev-task-contract-derived",
+        "runtime-command-admitted",
+        "connector-handoff-created",
+        "evidence-pack-collected",
+        "decision-accepted",
+        "delivery-record-produced",
+        "projection-workbench-updated",
+    ]),
+    "negative-fixtures-present": all(item in negative_ids for item in [
+        "github-issue-only", "provider-transcript-only", "pull-request-only", "release-note-only",
+        "direct-projection-write", "missing-product-mapping", "audit-default-blocker",
+    ]),
+    "completion-policy-protects-authority": golden.get("completionPolicy", {}).get("projectionWritesAuthority") is False
+    and golden.get("completionPolicy", {}).get("providerSessionWritesAuthority") is False
+    and golden.get("completionPolicy", {}).get("auditSidecarBlocksDefaultDone") is False,
+}
+golden_payload = {
+    "version": "agentflow-v109-golden-scenario.v1",
+    "status": "passed" if all(golden_checks.values()) else "failed",
+    "scenarioId": golden.get("scenarioId"),
+    "steps": golden.get("steps", []),
+    "negativeAuthorityFixtures": negative.get("fixtures", []),
+    "coverage": golden_checks,
+    "checkedAt": int(time.time()),
+}
+write_json(golden_scenario_path, golden_payload)
+
+v109_artifact_paths = [
+    task_trace_path,
+    product_contract_path,
+    spec_task_flow_path,
+    connector_handoff_path,
+    evidence_delivery_path,
+    workbench_read_models_path,
+    mapping_boundary_path,
+    golden_scenario_path,
+]
+v109_artifacts = {path.name: load_json(path) for path in v109_artifact_paths}
+artifact_statuses = {
+    **{name: payload.get("status") for name, payload in v109_artifacts.items()},
+    "pack-projection-readiness.json": pack_projection.get("status"),
+    "v108-release-certification.json": v108_certification.get("status"),
+}
+certified_paths = [v108_certification_path, pack_projection_path, *v109_artifact_paths]
+certified_artifact_hashes = [
+    {
+        "path": f"runtime/{path.name}" if path.parent.name == "runtime" else path.name,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "bytes": path.stat().st_size,
+    }
+    for path in certified_paths
+    if path.is_file()
+]
+artifact_manifest_sha256 = (
+    hashlib.sha256(artifact_manifest_path.read_bytes()).hexdigest()
+    if artifact_manifest_path.is_file()
+    else None
+)
+certification_digest = hashlib.sha256(json.dumps(
+    {
+        "releaseVersion": release_version,
+        "artifactManifestSha256": artifact_manifest_sha256,
+        "certifiedArtifactHashes": certified_artifact_hashes,
+    },
+    sort_keys=True,
+).encode("utf-8")).hexdigest()
+gate_run_url = (
+    f"{gate_server_url.rstrip('/')}/{gate_repository}/actions/runs/{gate_run_id}"
+    if gate_server_url and gate_repository and gate_run_id
+    else None
+)
+event_evidence = {
+    "eventName": gate_event_name,
+    "refType": gate_ref_type or None,
+    "refName": gate_ref_name or None,
+    "runId": gate_run_id or None,
+    "runAttempt": gate_run_attempt or None,
+    "runUrl": gate_run_url,
+    "repository": gate_repository,
+    "sourceCommitSha": source_commit_sha,
+    "releaseTagName": release_tag_name,
+    "releaseUrl": release_url,
+    "certificationArtifactName": f"release-gate-certification-{release_version}",
+    "certificationArtifactDigest": certification_digest,
+    "certificationArtifactDigestSource": "v109-software-dev-reference-app-runtime-artifact-hashes",
+    "artifactManifestPath": "artifact-manifest.json",
+    "artifactManifestSha256": artifact_manifest_sha256,
+}
+coverage = {
+    "release-version-is-v109": release_version == expected_tag,
+    "release-tag-is-v109": release_tag_name == expected_tag,
+    "cargo-workspace-version-is-109": cargo["workspace"]["package"]["version"] == expected_version,
+    "desktop-package-version-is-109": desktop_package.get("version") == expected_version,
+    "desktop-package-lock-version-is-109": desktop_package_lock.get("version") == expected_version
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") == expected_version,
+    "tauri-version-is-109": tauri_config.get("version") == expected_version,
+    "agents-current-baseline-is-v109": "docs/delivery/releases/v1.0.9/README.md" in agents_text,
+    "docs-default-reading-is-v109": "delivery/releases/v1.0.9/README.md" in docs_readme_text,
+    "delivery-readme-is-v109": "releases/v1.0.9/README.md" in delivery_readme_text,
+    "changelog-has-v109-entry": "## v1.0.9 - 2026-07-01" in changelog_text
+    and "Software Dev Reference App Boundary Certification" in changelog_text,
+    "release-readme-is-v109-baseline": "Software Dev Reference App boundary certification release baseline" in release_readme_text
+    and "runtime/v109-release-certification.json" in release_readme_text,
+    "release-tasks-are-bound": all(traceability_checks.values()),
+    "all-v109-artifacts-passed": all(payload.get("status") == "passed" for payload in v109_artifacts.values()),
+    "pack-projection-included-as-primary-proof": pack_projection.get("status") == "passed",
+    "v108-certification-passed": v108_certification.get("status") == "passed",
+    "product-contract-passed": product_payload["status"] == "passed",
+    "spec-task-flow-passed": spec_flow_payload["status"] == "passed",
+    "connector-handoff-passed": connector_payload["status"] == "passed",
+    "evidence-decision-delivery-passed": evidence_payload["status"] == "passed",
+    "workbench-read-models-passed": workbench_payload["status"] == "passed",
+    "mapping-boundary-passed": mapping_payload["status"] == "passed",
+    "golden-scenario-passed": golden_payload["status"] == "passed",
+    "release-event-evidence-recorded": bool(event_evidence["eventName"])
+    and bool(event_evidence["sourceCommitSha"])
+    and bool(event_evidence["releaseTagName"]),
+    "release-run-id-bound-for-ci": gate_event_name == "local" or bool(event_evidence["runId"]),
+    "release-run-url-bound-for-ci": gate_event_name == "local" or bool(event_evidence["runUrl"]),
+    "certified-artifact-hashes-present": len(certified_artifact_hashes) == len(certified_paths)
+    and all(item.get("sha256") and item.get("bytes", 0) > 0 for item in certified_artifact_hashes),
+    "artifact-manifest-digest-present": artifact_manifest_sha256 is not None,
+    "certification-artifact-digest-present": len(certification_digest) == 64,
+}
+failed = [item for item, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-v109-release-certification.v1",
+    "status": "passed" if not failed else "failed",
+    "releaseVersion": expected_tag,
+    "workspaceVersion": expected_version,
+    "certifiedArtifacts": artifact_statuses,
+    "certifiedArtifactHashes": certified_artifact_hashes,
+    "eventEvidence": event_evidence,
+    "coverage": coverage,
+    "failedCoverage": failed,
+    "releaseBaseline": "docs/delivery/releases/v1.0.9/README.md",
+    "releaseTasks": "docs/delivery/releases/v1.0.9/AGENTFLOW_V1_0_9_SOFTWARE_DEV_REFERENCE_APP_TASKS_V1.md",
+    "remainingRisks": [
+        {
+            "id": "v110-product-surface-hardening",
+            "summary": "Product Surface installation and route handling remain follow-up hardening.",
+            "blocking": False,
+        }
+    ],
+    "checkedAt": int(time.time()),
+}
+write_json(out_path, payload)
+if failed:
+    raise SystemExit(f"v1.0.9 release certification failed: {failed}")
+PY
+  record_stage "v109-task-issue-traceability" "passed" "$(basename "$V109_TASK_ISSUE_TRACEABILITY_PATH")"
+  record_stage "v109-software-dev-product-contract" "passed" "$(basename "$V109_SOFTWARE_DEV_PRODUCT_CONTRACT_PATH")"
+  record_stage "v109-spec-task-flow" "passed" "$(basename "$V109_SPEC_TASK_FLOW_PATH")"
+  record_stage "v109-connector-handoff" "passed" "$(basename "$V109_CONNECTOR_HANDOFF_PATH")"
+  record_stage "v109-evidence-decision-delivery" "passed" "$(basename "$V109_EVIDENCE_DECISION_DELIVERY_PATH")"
+  record_stage "v109-workbench-read-models" "passed" "$(basename "$V109_WORKBENCH_READ_MODELS_PATH")"
+  record_stage "v109-mapping-boundary" "passed" "$(basename "$V109_MAPPING_BOUNDARY_PATH")"
+  record_stage "v109-golden-scenario" "passed" "$(basename "$V109_GOLDEN_SCENARIO_PATH")"
+  record_stage "v109-release-certification" "passed" "$(basename "$V109_RELEASE_CERTIFICATION_PATH")"
 }
 
 prepare_workspace() {
@@ -11342,6 +11871,7 @@ PY
   run_core_decision_projection_read_model_gate
   run_v107_release_certification_gate
   run_v108_release_certification_gate
+  run_v109_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

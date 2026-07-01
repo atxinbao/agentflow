@@ -7,22 +7,34 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.0.8/README.md](docs/delivery/releases/v1.0.8/README.md)
-- [docs/delivery/releases/v1.0.8/AGENTFLOW_V1_0_8_PROJECTION_KERNEL_TASKS_V1.md](docs/delivery/releases/v1.0.8/AGENTFLOW_V1_0_8_PROJECTION_KERNEL_TASKS_V1.md)
+- [docs/delivery/releases/v1.0.9/README.md](docs/delivery/releases/v1.0.9/README.md)
+- [docs/delivery/releases/v1.0.9/AGENTFLOW_V1_0_9_SOFTWARE_DEV_REFERENCE_APP_TASKS_V1.md](docs/delivery/releases/v1.0.9/AGENTFLOW_V1_0_9_SOFTWARE_DEV_REFERENCE_APP_TASKS_V1.md)
 
 下一版计划：
 
-- v1.0.9 Software Dev Reference App certification。
+- v1.1.0 Product Surface hardening。
 
 ## Unreleased
 
-下一版保留给 Software Dev Reference App certification，不在本次 release 中认证。
+下一版保留给 Product Surface hardening，不在本次 release 中认证。
 
-Planned v1.0.9 foundation:
+Planned v1.1.0 foundation:
 
-- certify Software Dev as the first Reference App over stable Core Projection Kernel;
-- keep Core industry-neutral and prevent Software Dev records from becoming Core authority;
-- expose app console surfaces through read-only projection view models and feedback routes.
+- harden product surface installation and user-facing console routes;
+- keep `products/**` as source definitions and `.agentflow/**` as runtime facts;
+- expand reference app certification without adding Core industry-specific authority.
+
+## v1.0.9 - 2026-07-01
+
+Software Dev Reference App Boundary Certification:
+
+- added `products/software-dev/**` as the first-party Software Dev Reference App source boundary;
+- kept `crates/pack/fixtures/packs/software-dev/**` as fixture mirror only;
+- certified task-to-GitHub issue traceability for V109 planning mirrors without granting GitHub issue authority;
+- included Pack projection primary proof in the quick-audit certification package;
+- added product contract, Spec-to-task flow, connector handoff, evidence / decision / delivery, workbench projection and mapping-boundary release-gate artifacts;
+- certified Software Dev golden scenario and negative authority fixtures for GitHub issue-only, provider transcript-only, PR-only, release-note-only, direct projection write, missing product mapping and audit default blocker cases;
+- advanced workspace and desktop version metadata to `1.0.9`.
 
 ## v1.0.8 - 2026-06-30
 

@@ -1,0 +1,50 @@
+{
+  "version": "agentflow-software-dev-reference-task-flow.v1",
+  "productId": "software-dev",
+  "sourceBoundary": "products/software-dev/flows",
+  "coreAuthority": false,
+  "flow": [
+    {
+      "stage": "spec-bundle",
+      "input": "core.spec.bundle",
+      "output": "software-dev.task-contract",
+      "writesAuthority": false
+    },
+    {
+      "stage": "handoff",
+      "input": "software-dev.task-contract",
+      "output": "runtime.command.proposal",
+      "writesAuthority": false
+    },
+    {
+      "stage": "execution",
+      "input": "accepted.runtime.command",
+      "output": "software-dev.run-artifacts",
+      "writesAuthority": false
+    },
+    {
+      "stage": "evidence",
+      "input": "software-dev.run-artifacts",
+      "output": "core.evidence-pack",
+      "writesAuthority": false
+    },
+    {
+      "stage": "decision",
+      "input": "core.evidence-pack",
+      "output": "core.decision",
+      "writesAuthority": false
+    },
+    {
+      "stage": "delivery",
+      "input": "accepted.core.decision",
+      "output": "public.delivery.record",
+      "writesAuthority": false
+    }
+  ],
+  "blockedPaths": [
+    "github-issue -> task-authority",
+    "provider-session -> completion-authority",
+    "projection -> spec-authority",
+    "audit-sidecar -> default-done-blocker"
+  ]
+}
