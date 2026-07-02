@@ -190,143 +190,7 @@ jobs:
           done
 
           if [ -d "$artifact_dir/runtime" ]; then
-            find "$artifact_dir/runtime" -maxdepth 1 -type f \( \
-              -name '*certification*.json' \
-              -o -name '*provenance*.json' \
-              -o -name '*boundary*.json' \
-              -o -name '*baseline*.json' \
-              -o -name '*negative*.json' \
-              -o -name '*governance*.json' \
-              -o -name '*roadmap*.json' \
-              -o -name '*artifact*.json' \
-              -o -name 'core-4d-spec-intake.json' \
-              -o -name 'core-4d-spec-intake-rust-test.log' \
-              -o -name 'core-4d-spec-intake-positive-rust-test.log' \
-              -o -name 'core-4d-spec-intake-negative-rust-test.log' \
-              -o -name 'core-ontology-kernel.json' \
-              -o -name 'core-ontology-kernel-rust-test.log' \
-              -o -name 'core-object-link-schema.json' \
-              -o -name 'core-object-link-schema-rust-test.log' \
-              -o -name 'core-action-state-semantics.json' \
-              -o -name 'core-action-state-semantics-rust-test.log' \
-              -o -name 'core-skill-registry.json' \
-              -o -name 'core-skill-registry-rust-test.log' \
-              -o -name 'core-evidence-decision-reference-model.json' \
-              -o -name 'core-evidence-decision-reference-model-rust-test.log' \
-              -o -name 'core-evidence-pack-schema.json' \
-              -o -name 'core-evidence-pack-schema-rust-test.log' \
-              -o -name 'core-evidence-source-type-registry.json' \
-              -o -name 'core-evidence-source-type-registry-rust-test.log' \
-              -o -name 'core-evidence-capture-receipts.json' \
-              -o -name 'core-evidence-capture-receipts-rust-test.log' \
-              -o -name 'core-evidence-authority-trace-links.json' \
-              -o -name 'core-evidence-authority-trace-links-rust-test.log' \
-              -o -name 'core-evidence-authority-trace-links-event-store-rust-test.log' \
-              -o -name 'core-evidence-completeness-policy.json' \
-              -o -name 'core-evidence-completeness-policy-rust-test.log' \
-              -o -name 'core-missing-evidence-handling.json' \
-              -o -name 'core-missing-evidence-handling-rust-test.log' \
-              -o -name 'core-external-proof-provenance.json' \
-              -o -name 'core-external-proof-provenance-rust-test.log' \
-              -o -name 'software-dev-reference-evidence-mapping.json' \
-              -o -name 'software-dev-reference-evidence-mapping-rust-test.log' \
-              -o -name 'evidence-projection-read-model.json' \
-              -o -name 'evidence-projection-read-model-rust-test.log' \
-              -o -name 'core-file-backed-ontology-registry.json' \
-              -o -name 'projection-feedback-freshness-receipts.json' \
-              -o -name 'projection-feedback-freshness-rust-test.log' \
-              -o -name 'core-file-backed-ontology-registry-rust-test.log' \
-              -o -name 'core-runtime-negative-fixtures.json' \
-              -o -name 'core-runtime-negative-runtime-api-test.log' \
-              -o -name 'core-runtime-negative-arbitration-test.log' \
-              -o -name 'core-runtime-negative-task-artifacts-test.log' \
-              -o -name 'core-runtime-negative-projection-test.log' \
-              -o -name 'core-runtime-kernel.json' \
-              -o -name 'core-runtime-kernel-runtime-api-test.log' \
-              -o -name 'core-runtime-admission.json' \
-              -o -name 'core-runtime-admission-rust-test.log' \
-              -o -name 'core-runtime-arbitration.json' \
-              -o -name 'core-runtime-arbitration-rust-test.log' \
-              -o -name 'v105-release-certification.json' \
-              -o -name 'v106-release-certification.json' \
-              -o -name 'v107-release-provenance-handoff.json' \
-              -o -name 'core-decision-model-contract.json' \
-              -o -name 'core-decision-model-contract-rust-test.log' \
-              -o -name 'core-decision-input-binding.json' \
-              -o -name 'core-decision-input-binding-rust-test.log' \
-              -o -name 'core-decision-outcome-transitions.json' \
-              -o -name 'core-decision-outcome-transitions-rust-test.log' \
-              -o -name 'core-decision-failure-reason-remediation.json' \
-              -o -name 'core-decision-failure-reason-remediation-rust-test.log' \
-              -o -name 'core-evidence-to-decision-gate.json' \
-              -o -name 'core-evidence-to-decision-gate-rust-test.log' \
-              -o -name 'core-completion-commit-authority.json' \
-              -o -name 'core-completion-commit-authority-rust-test.log' \
-              -o -name 'core-delivery-readiness-audit-trigger.json' \
-              -o -name 'core-delivery-readiness-audit-trigger-rust-test.log' \
-              -o -name 'core-projection-kernel-contract.json' \
-              -o -name 'event-replay-projection-report.json' \
-              -o -name 'event-replay-projection-failure-report.json' \
-              -o -name 'core-read-model-schema.json' \
-              -o -name 'core-view-model-contract.json' \
-              -o -name 'core-decision-projection-read-model.json' \
-              -o -name 'core-decision-projection-read-model-rust-test.log' \
-              -o -name 'v107-release-certification.json' \
-              -o -name 'v108-release-certification.json' \
-              -o -name 'v109-task-issue-traceability.json' \
-              -o -name 'v109-software-dev-product-contract.json' \
-              -o -name 'v109-spec-task-flow.json' \
-              -o -name 'v109-connector-handoff.json' \
-              -o -name 'v109-evidence-decision-delivery.json' \
-              -o -name 'v109-workbench-read-models.json' \
-              -o -name 'v109-mapping-boundary.json' \
-              -o -name 'v109-golden-scenario.json' \
-              -o -name 'v109-release-certification.json' \
-              -o -name 'v110-roadmap-release-goal-alignment.json' \
-              -o -name 'v110-product-registry-loader.json' \
-              -o -name 'v110-product-to-pack-contract.json' \
-              -o -name 'v110-runtime-product-command-routes.json' \
-              -o -name 'v110-projection-product-source.json' \
-              -o -name 'v110-core-pollution-detection.json' \
-              -o -name 'v110-product-command-route-installation.json' \
-              -o -name 'v110-software-dev-e2e-product-surface.json' \
-              -o -name 'v110-quick-audit-product-source-proofs.json' \
-              -o -name 'v110-release-certification.json' \
-              -o -name 'v111-product-schema-command-mapping.json' \
-              -o -name 'v111-product-to-pack-data-driven-bridge.json' \
-              -o -name 'v111-runtime-data-driven-product-resolver.json' \
-              -o -name 'v111-projection-data-driven-product-readmodel.json' \
-              -o -name 'v111-product-bridge-pollution-gate.json' \
-              -o -name 'v111-runtime-projection-proof-artifacts.json' \
-              -o -name 'v111-synthetic-second-product-fixture.json' \
-              -o -name 'v111-release-certification.json' \
-              -o -name 'v112-real-product-runtime-proof.json' \
-              -o -name 'v112-real-product-projection-proof.json' \
-              -o -name 'v112-product-bridge-pollution-scan.json' \
-              -o -name 'v112-registry-discovered-second-product.json' \
-              -o -name 'v112-desktop-product-command-route-read-model.json' \
-              -o -name 'v112-desktop-command-button-installation.json' \
-              -o -name 'v112-multi-product-console-states.json' \
-              -o -name 'v112-release-certification.json' \
-              -o -name 'v113-product-command-state-contract.json' \
-              -o -name 'v113-product-command-submit-contract.json' \
-              -o -name 'v113-runtime-product-command-submit-api.json' \
-              -o -name 'v113-desktop-confirm-submit-command-flow.json' \
-              -o -name 'v113-product-command-evidence-handoff.json' \
-              -o -name 'v113-multi-product-state-ui-proof.json' \
-              -o -name 'v113-semantic-product-bridge-pollution-scan.json' \
-              -o -name 'v113-release-certification.json' \
-              -o -name 'v114-product-submit-receipt-binding.json' \
-              -o -name 'v114-desktop-confirm-submit-interaction.json' \
-              -o -name 'v114-product-bridge-semantic-pollution-scan.json' \
-              -o -name 'v114-project-workspace-creation-contract.json' \
-              -o -name 'v114-product-selected-workspace-bootstrap.json' \
-              -o -name 'v114-standard-docs-agentflow-fact-source-init.json' \
-              -o -name 'v114-active-product-workspace-projection.json' \
-              -o -name 'v114-workspace-init-failure-recovery.json' \
-              -o -name 'v114-software-dev-workspace-golden-path.json' \
-              -o -name 'v114-release-certification.json' \
-            \) -exec cp {} "$certification_dir/runtime/" \;
+            cp -R "$artifact_dir/runtime/." "$certification_dir/runtime/"
           fi
 
           for file in \
@@ -337,155 +201,39 @@ jobs:
             fi
           done
 
-          primary_proofs=(
-            runtime/core-4d-spec-intake.json \
-            runtime/core-4d-spec-intake-rust-test.log \
-            runtime/core-4d-spec-intake-positive-certification.json \
-            runtime/core-4d-spec-intake-positive-rust-test.log \
-            runtime/core-4d-spec-intake-negative-certification.json \
-            runtime/core-4d-spec-intake-negative-rust-test.log \
-            runtime/core-ontology-kernel.json \
-            runtime/core-ontology-kernel-rust-test.log \
-            runtime/core-object-link-schema.json \
-            runtime/core-object-link-schema-rust-test.log \
-            runtime/core-action-state-semantics.json \
-            runtime/core-action-state-semantics-rust-test.log \
-            runtime/core-skill-registry.json \
-            runtime/core-skill-registry-rust-test.log \
-            runtime/core-evidence-decision-reference-model.json \
-            runtime/core-evidence-decision-reference-model-rust-test.log \
-            runtime/core-evidence-pack-schema.json \
-            runtime/core-evidence-pack-schema-rust-test.log \
-            runtime/core-evidence-source-type-registry.json \
-            runtime/core-evidence-source-type-registry-rust-test.log \
-            runtime/core-evidence-capture-receipts.json \
-            runtime/core-evidence-capture-receipts-rust-test.log \
-            runtime/core-evidence-authority-trace-links.json \
-            runtime/core-evidence-authority-trace-links-rust-test.log \
-            runtime/core-evidence-authority-trace-links-event-store-rust-test.log \
-            runtime/core-evidence-completeness-policy.json \
-            runtime/core-evidence-completeness-policy-rust-test.log \
-            runtime/core-missing-evidence-handling.json \
-            runtime/core-missing-evidence-handling-rust-test.log \
-            runtime/core-external-proof-provenance.json \
-            runtime/core-external-proof-provenance-rust-test.log \
-            runtime/software-dev-reference-evidence-mapping.json \
-            runtime/software-dev-reference-evidence-mapping-rust-test.log \
-            runtime/evidence-projection-read-model.json \
-            runtime/evidence-projection-read-model-rust-test.log \
-            runtime/core-file-backed-ontology-registry.json \
-            runtime/core-file-backed-ontology-registry-rust-test.log \
-            runtime/v104-release-certification.json \
-            runtime/core-runtime-negative-fixtures.json \
-            runtime/core-runtime-negative-runtime-api-test.log \
-            runtime/core-runtime-negative-arbitration-test.log \
-            runtime/core-runtime-negative-task-artifacts-test.log \
-            runtime/core-runtime-negative-projection-test.log \
-            runtime/core-runtime-kernel.json \
-            runtime/core-runtime-kernel-runtime-api-test.log \
-            runtime/core-runtime-admission.json \
-            runtime/core-runtime-admission-rust-test.log \
-            runtime/core-runtime-arbitration.json \
-            runtime/core-runtime-arbitration-rust-test.log \
-            runtime/v105-release-certification.json \
-            runtime/v106-release-certification.json \
-            runtime/v107-release-provenance-handoff.json \
-            runtime/core-decision-model-contract.json \
-            runtime/core-decision-model-contract-rust-test.log \
-            runtime/core-decision-input-binding.json \
-            runtime/core-decision-input-binding-rust-test.log \
-            runtime/core-decision-outcome-transitions.json \
-            runtime/core-decision-outcome-transitions-rust-test.log \
-            runtime/core-decision-failure-reason-remediation.json \
-            runtime/core-decision-failure-reason-remediation-rust-test.log \
-            runtime/core-evidence-to-decision-gate.json \
-            runtime/core-evidence-to-decision-gate-rust-test.log \
-            runtime/core-completion-commit-authority.json \
-            runtime/core-completion-commit-authority-rust-test.log \
-            runtime/core-delivery-readiness-audit-trigger.json \
-            runtime/core-delivery-readiness-audit-trigger-rust-test.log \
-            runtime/core-projection-kernel-contract.json \
-            runtime/event-replay-projection-report.json \
-            runtime/event-replay-projection-failure-report.json \
-            runtime/core-read-model-schema.json \
-            runtime/projection-feedback-freshness-receipts.json \
-            runtime/projection-feedback-freshness-rust-test.log \
-            runtime/core-view-model-contract.json \
-            runtime/core-decision-projection-read-model.json \
-            runtime/core-decision-projection-read-model-rust-test.log \
-            runtime/v107-release-certification.json \
-            runtime/v108-release-certification.json \
-            pack-projection-readiness.json \
-            runtime/v109-task-issue-traceability.json \
-            runtime/v109-software-dev-product-contract.json \
-            runtime/v109-spec-task-flow.json \
-            runtime/v109-connector-handoff.json \
-            runtime/v109-evidence-decision-delivery.json \
-            runtime/v109-workbench-read-models.json \
-            runtime/v109-mapping-boundary.json \
-            runtime/v109-golden-scenario.json \
-            runtime/v109-release-certification.json \
-            runtime/v110-roadmap-release-goal-alignment.json \
-            runtime/v110-product-registry-loader.json \
-            runtime/v110-product-to-pack-contract.json \
-            runtime/v110-runtime-product-command-routes.json \
-            runtime/v110-projection-product-source.json \
-            runtime/v110-core-pollution-detection.json \
-            runtime/v110-product-command-route-installation.json \
-            runtime/v110-software-dev-e2e-product-surface.json \
-            runtime/v110-quick-audit-product-source-proofs.json \
-            runtime/v110-release-certification.json \
-            runtime/v111-product-schema-command-mapping.json \
-            runtime/v111-product-to-pack-data-driven-bridge.json \
-            runtime/v111-runtime-data-driven-product-resolver.json \
-            runtime/v111-projection-data-driven-product-readmodel.json \
-            runtime/v111-product-bridge-pollution-gate.json \
-            runtime/v111-runtime-projection-proof-artifacts.json \
-            runtime/v111-synthetic-second-product-fixture.json \
-            runtime/v111-release-certification.json \
-            runtime/v112-real-product-runtime-proof.json \
-            runtime/v112-real-product-projection-proof.json \
-            runtime/v112-product-bridge-pollution-scan.json \
-            runtime/v112-registry-discovered-second-product.json \
-            runtime/v112-desktop-product-command-route-read-model.json \
-            runtime/v112-desktop-command-button-installation.json \
-            runtime/v112-multi-product-console-states.json \
-            runtime/v112-release-certification.json
-            runtime/v113-product-command-state-contract.json \
-            runtime/v113-product-command-submit-contract.json \
-            runtime/v113-runtime-product-command-submit-api.json \
-            runtime/v113-desktop-confirm-submit-command-flow.json \
-            runtime/v113-product-command-evidence-handoff.json \
-            runtime/v113-multi-product-state-ui-proof.json \
-            runtime/v113-semantic-product-bridge-pollution-scan.json \
-            runtime/v113-release-certification.json \
-            runtime/v114-product-submit-receipt-binding.json \
-            runtime/v114-desktop-confirm-submit-interaction.json \
-            runtime/v114-product-bridge-semantic-pollution-scan.json \
-            runtime/v114-project-workspace-creation-contract.json \
-            runtime/v114-product-selected-workspace-bootstrap.json \
-            runtime/v114-standard-docs-agentflow-fact-source-init.json \
-            runtime/v114-active-product-workspace-projection.json \
-            runtime/v114-workspace-init-failure-recovery.json \
-            runtime/v114-software-dev-workspace-golden-path.json \
-            runtime/v114-release-certification.json
-          )
+          primary_proof_list="${RUNNER_TEMP:-/tmp}/release-gate-primary-proofs.txt"
+          python3 - "$certification_dir" "$primary_proof_list" <<'PY'
+          import pathlib
+          import sys
+
+          certification_dir = pathlib.Path(sys.argv[1])
+          output_path = pathlib.Path(sys.argv[2])
+          runtime_dir = certification_dir / "runtime"
+          paths = []
+          if runtime_dir.is_dir():
+              paths = sorted(
+                  path.relative_to(certification_dir).as_posix()
+                  for path in runtime_dir.iterdir()
+                  if path.is_file()
+              )
+          output_path.write_text("\n".join(paths) + ("\n" if paths else ""), encoding="utf-8")
+          PY
 
           check_primary_proofs() {
             local root="$1"
             local primary_proof
-            for primary_proof in "${primary_proofs[@]}"; do
+            while IFS= read -r primary_proof; do
+              if [ -z "$primary_proof" ]; then
+                continue
+              fi
               if [ ! -f "$root/$primary_proof" ]; then
                 echo "missing certification primary proof: $primary_proof" >&2
                 return 1
               fi
-            done
+            done < "$primary_proof_list"
           }
 
           check_primary_proofs "$certification_dir"
-
-          primary_proof_list="${RUNNER_TEMP:-/tmp}/release-gate-primary-proofs.txt"
-          printf '%s\n' "${primary_proofs[@]}" > "$primary_proof_list"
 
           python3 - "$artifact_dir" "$certification_dir" "$primary_proof_list" <<'PY'
           import hashlib
