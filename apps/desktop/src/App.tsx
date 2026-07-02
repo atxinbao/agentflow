@@ -2386,6 +2386,8 @@ function ProjectHomePage({
   tasks: V1Issue[];
 }) {
   const [commandSurfaceFeedback, setCommandSurfaceFeedback] = useState<string | null>(null);
+  const [pendingProductCommandSubmitId, setPendingProductCommandSubmitId] =
+    useState<string | null>(null);
   const recentActivities = buildRecentActivities(outputBundle, initializationState.status);
   const activeIssue =
     homeProjectProjection?.currentIssueId
@@ -2454,43 +2456,98 @@ function ProjectHomePage({
           title: nextActionLabel,
         },
       ];
-  const productCommandEntries = productCommandSurfaceState.view?.commands.map((command) => ({
-    commandStatus: productCommandSurfaceStatus(command),
-    commandType: command.command,
-    detail: `${command.productId} · ${command.reason}`,
-    disabled: productCommandSurfaceState.source === "loading",
-    id: `${command.productId}-${command.command}`,
-    label: command.label,
-    loading: productCommandSurfaceState.source === "loading",
-    onClick: () => {
-      setCommandSurfaceFeedback(`正在 dry-run：${command.command}`);
-      if (isBrowserPreviewRuntime()) {
-        setCommandSurfaceFeedback(`${command.label} dry-run：${command.dryRunStatus}`);
-        return;
-      }
-      void invoke<{ valid?: boolean; rejectedReasons?: Array<{ message?: string }> }>(
-        "dry_run_product_command",
-        {
-          command: command.command,
-          packId: command.packId,
-          projectRoot,
-          targetObjectId: `${command.targetObjectType.toLowerCase()}-desktop-preview`,
-        },
-      )
-        .then((report) => {
-          const reason = report.valid
-            ? "通过"
-            : report.rejectedReasons?.[0]?.message ?? "未通过";
-          setCommandSurfaceFeedback(`${command.label} dry-run：${reason}`);
-        })
-        .catch((error) => {
-          setCommandSurfaceFeedback(error instanceof Error ? error.message : String(error));
-        });
-    },
-    proposalRef: `dry-run-${command.productId}-${command.commandId}`,
-    runtimeApi: "ProductCommandSurface -> validate_pack_command -> dry_run_pack_command",
-    target: command.targetObjectType,
-  } satisfies CommandSurfaceActionView)) ?? [];
+  const productCommandEntries = productCommandSurfaceState.view?.commands.map((command) => {
+    const actionId = `${command.productId}-${command.command}`;
+    const canSubmit = command.state === "valid";
+    const awaitingConfirmation = pendingProductCommandSubmitId === actionId;
+    return {
+      commandStatus: awaitingConfirmation ? "needs-human-decision" : productCommandSurfaceStatus(command),
+      commandType: command.command,
+      detail: `${command.productId} · ${command.reason}`,
+      disabled: productCommandSurfaceState.source === "loading",
+      id: actionId,
+      label: awaitingConfirmation ? `确认提交：${command.label}` : command.label,
+      loading: productCommandSurfaceState.source === "loading",
+      onClick: () => {
+        if (!canSubmit) {
+          setPendingProductCommandSubmitId(null);
+          setCommandSurfaceFeedback(
+            `${command.label} 当前为 ${commandSurfaceStatusLabel(productCommandSurfaceStatus(command))}，不能提交：${command.reason}`,
+          );
+          return;
+        }
+        if (awaitingConfirmation) {
+          setCommandSurfaceFeedback(`正在提交：${command.command}`);
+          if (isBrowserPreviewRuntime()) {
+            setPendingProductCommandSubmitId(null);
+            setCommandSurfaceFeedback(`${command.label} 已提交，等待 Runtime 回执。`);
+            return;
+          }
+          void invoke<ProductCommandSubmitResponse>("submit_product_command", {
+            projectRoot,
+            request: {
+              actorRole: "desktop-user",
+              command: command.command,
+              createdAt: "1970-01-01T00:00:00Z",
+              dryRunReceiptId: `dry-run-${command.productId}-${command.commandId}`,
+              evidenceRefs: [`runtime/${command.productId}/${command.commandId}/dry-run.json`],
+              idempotencyKey: `desktop-submit-${command.productId}-${command.commandId}`,
+              input: { reason: "desktop confirm-then-submit product command" },
+              packId: command.packId,
+              targetObjectId: `${command.targetObjectType.toLowerCase()}-desktop-submit`,
+            },
+          })
+            .then((response) => {
+              setPendingProductCommandSubmitId(null);
+              const receipt = response.receipt?.receiptId ? ` · ${response.receipt.receiptId}` : "";
+              const reason = response.accepted
+                ? `已提交${receipt}`
+                : response.rejectedReasons?.[0]?.message ?? commandSurfaceStatusLabel(response.state);
+              setCommandSurfaceFeedback(`${command.label}：${reason}`);
+            })
+            .catch((error) => {
+              setCommandSurfaceFeedback(error instanceof Error ? error.message : String(error));
+            });
+          return;
+        }
+        setCommandSurfaceFeedback(`正在 dry-run：${command.command}`);
+        if (isBrowserPreviewRuntime()) {
+          setPendingProductCommandSubmitId(actionId);
+          setCommandSurfaceFeedback(`${command.label} dry-run：通过。请再次确认提交。`);
+          return;
+        }
+        void invoke<{ valid?: boolean; rejectedReasons?: Array<{ message?: string }> }>(
+          "dry_run_product_command",
+          {
+            command: command.command,
+            packId: command.packId,
+            projectRoot,
+            targetObjectId: `${command.targetObjectType.toLowerCase()}-desktop-preview`,
+          },
+        )
+          .then((report) => {
+            if (report.valid) {
+              setPendingProductCommandSubmitId(actionId);
+              setCommandSurfaceFeedback(`${command.label} dry-run：通过。请再次确认提交。`);
+              return;
+            }
+            setPendingProductCommandSubmitId(null);
+            const reason = report.rejectedReasons?.[0]?.message ?? "未通过";
+            setCommandSurfaceFeedback(`${command.label} dry-run：${reason}`);
+          })
+          .catch((error) => {
+            setCommandSurfaceFeedback(error instanceof Error ? error.message : String(error));
+          });
+      },
+      proposalRef: awaitingConfirmation
+        ? `submit-${command.productId}-${command.commandId}`
+        : `dry-run-${command.productId}-${command.commandId}`,
+      runtimeApi: awaitingConfirmation
+        ? "ProductCommandSurface -> submit_product_command -> Runtime arbitration"
+        : "ProductCommandSurface -> validate_pack_command -> dry_run_pack_command",
+      target: command.targetObjectType,
+    } satisfies CommandSurfaceActionView;
+  }) ?? [];
   const fallbackCommandEntries: CommandSurfaceActionView[] = [
     {
       commandStatus: activeIssue ? "rejected" : projectLoopState === "loading" ? "queued" : "pending",
@@ -2753,7 +2810,17 @@ function ProjectHomeAgentEntryPanel({ activeOwnerLabel }: { activeOwnerLabel: st
   );
 }
 
-type CommandSurfaceStatus = "pending" | "accepted" | "rejected" | "queued" | "needs-human-decision";
+type CommandSurfaceStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "queued"
+  | "needs-human-decision"
+  | "valid"
+  | "invalid"
+  | "deferred"
+  | "unavailable"
+  | "submitted";
 
 type CommandSurfaceActionView = {
   commandStatus: CommandSurfaceStatus;
@@ -2829,10 +2896,15 @@ function CommandSurfaceActionList({ actions }: { actions: CommandSurfaceActionVi
 function commandSurfaceStatusLabel(status: CommandSurfaceStatus) {
   const labels: Record<CommandSurfaceStatus, string> = {
     accepted: "已接受",
+    deferred: "暂缓",
+    invalid: "无效",
     "needs-human-decision": "需人工确认",
     pending: "待提交",
     queued: "已排队",
     rejected: "已拒绝",
+    submitted: "已提交",
+    unavailable: "不可用",
+    valid: "可提交",
   };
   return labels[status];
 }
@@ -2840,22 +2912,21 @@ function commandSurfaceStatusLabel(status: CommandSurfaceStatus) {
 function commandSurfaceStatusTone(status: CommandSurfaceStatus) {
   const tones: Record<CommandSurfaceStatus, StatusChipStatus> = {
     accepted: "ready",
+    deferred: "warning",
+    invalid: "failed",
     "needs-human-decision": "warning",
     pending: "idle",
     queued: "working",
     rejected: "failed",
+    submitted: "ready",
+    unavailable: "idle",
+    valid: "ready",
   };
   return tones[status];
 }
 
 function productCommandSurfaceStatus(command: ProductCommandSurfaceCommand): CommandSurfaceStatus {
-  if (command.available && command.validationStatus === "valid" && command.dryRunStatus === "valid") {
-    return "accepted";
-  }
-  if (command.validationStatus === "invalid" || command.dryRunStatus === "invalid") {
-    return "rejected";
-  }
-  return "pending";
+  return command.state;
 }
 
 function specCommandSurfaceActions(requirementId: string, currentState: string): CommandSurfaceActionView[] {
@@ -6350,14 +6421,55 @@ type ProductCommandSurfaceCommand = {
   requiredCapability: string;
   sourceRefs: string[];
   available: boolean;
+  state: ProductCommandState;
   validationStatus: string;
   dryRunStatus: string;
+  failureStage?: string | null;
   reason: string;
+};
+
+type ProductCommandState =
+  | "valid"
+  | "invalid"
+  | "deferred"
+  | "unavailable"
+  | "rejected"
+  | "submitted";
+
+type ProductCommandSubmitResponse = {
+  version: string;
+  packId: string;
+  command: string;
+  state: ProductCommandState;
+  accepted: boolean;
+  dryRunRequired: boolean;
+  receipt?: {
+    receiptId: string;
+    commandId: string;
+    state: ProductCommandState;
+    decision: string;
+    acceptedActionId?: string | null;
+    correlationId: string;
+  } | null;
+  evidenceHandoff?: {
+    evidencePolicyRef: string;
+    acceptancePolicyRef: string;
+    requiredEvidence: string[];
+    affectedProjections: string[];
+    nextDecisionHandoff: string;
+  } | null;
+  rejectedReasons: Array<{ message?: string }>;
 };
 
 type ProductCommandSurfaceView = {
   version: string;
   writesAuthority: boolean;
+  stateLegend: Array<{
+    state: ProductCommandState;
+    label: string;
+    description: string;
+    canSubmit: boolean;
+  }>;
   products: Array<{
     productId: string;
     packId: string;
@@ -6372,8 +6484,12 @@ type ProductCommandSurfaceView = {
     validProductCount: number;
     commandCount: number;
     availableCommandCount: number;
+    validCommandCount: number;
     invalidCommandCount: number;
     deferredCommandCount: number;
+    unavailableCommandCount: number;
+    rejectedCommandCount: number;
+    submittedCommandCount: number;
   };
 };
 
@@ -6716,8 +6832,10 @@ function buildBrowserPreviewProductCommandSurface(): ProductCommandSurfaceView {
         "products/software-dev/surface/definition.json",
       ],
       available: true,
+      state: "valid",
       validationStatus: "valid",
       dryRunStatus: "valid",
+      failureStage: null,
       reason: "product command is available through product connector and capability registry",
     },
     {
@@ -6737,8 +6855,10 @@ function buildBrowserPreviewProductCommandSurface(): ProductCommandSurfaceView {
         "products/synthetic-review/surface/definition.json",
       ],
       available: false,
+      state: "deferred",
       validationStatus: "invalid",
       dryRunStatus: "invalid",
+      failureStage: "capability",
       reason: "fixture-agent capability is deferred in Browser Preview",
     },
   ];
@@ -6746,6 +6866,44 @@ function buildBrowserPreviewProductCommandSurface(): ProductCommandSurfaceView {
   return {
     version: "agentflow-product-command-surface.v1",
     writesAuthority: false,
+    stateLegend: [
+      {
+        state: "valid",
+        label: "可提交",
+        description: "命令路线、能力和 dry-run 均通过，可以进入确认提交。",
+        canSubmit: true,
+      },
+      {
+        state: "invalid",
+        label: "无效",
+        description: "命令、路由或映射缺失，需要先修复产品合同。",
+        canSubmit: false,
+      },
+      {
+        state: "deferred",
+        label: "暂缓",
+        description: "路由存在，但 provider、worker 或能力还未就绪。",
+        canSubmit: false,
+      },
+      {
+        state: "unavailable",
+        label: "不可用",
+        description: "缺少连接器或能力映射，当前环境不能执行。",
+        canSubmit: false,
+      },
+      {
+        state: "rejected",
+        label: "已拒绝",
+        description: "提交证据或治理门禁未满足，未写入权威事实。",
+        canSubmit: false,
+      },
+      {
+        state: "submitted",
+        label: "已提交",
+        description: "命令已进入 Runtime arbitration，并产生提交回执。",
+        canSubmit: false,
+      },
+    ],
     products: [
       {
         productId: "software-dev",
@@ -6770,8 +6928,12 @@ function buildBrowserPreviewProductCommandSurface(): ProductCommandSurfaceView {
       validProductCount: 2,
       commandCount: commands.length,
       availableCommandCount: commands.filter((command) => command.available).length,
-      invalidCommandCount: commands.filter((command) => command.validationStatus === "invalid").length,
-      deferredCommandCount: commands.filter((command) => !command.available).length,
+      validCommandCount: commands.filter((command) => command.state === "valid").length,
+      invalidCommandCount: commands.filter((command) => command.state === "invalid").length,
+      deferredCommandCount: commands.filter((command) => command.state === "deferred").length,
+      unavailableCommandCount: commands.filter((command) => command.state === "unavailable").length,
+      rejectedCommandCount: commands.filter((command) => command.state === "rejected").length,
+      submittedCommandCount: commands.filter((command) => command.state === "submitted").length,
     },
   };
 }

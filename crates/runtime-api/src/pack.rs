@@ -1,11 +1,14 @@
 use crate::commands::{
-    execute_command_via_arbitration, validate_runtime_command, RuntimeCommandRequest,
+    build_project_arbitration_context, execute_command_via_arbitration,
+    execute_command_via_arbitration_with_context, validate_runtime_command, RuntimeCommandRequest,
+    RuntimeEvidencePolicyRef,
 };
 use crate::errors::{RuntimeCommandError, RuntimeCommandErrorCode};
 use crate::responses::{
     RuntimeCommandDecision, RuntimeCommandResponse, RuntimeCommandStatus,
     RuntimeCommandValidationReport, RUNTIME_COMMAND_API_VERSION,
 };
+use agentflow_action_arbitration::{EvidenceFact, StateFact};
 use agentflow_action_contract::{ActionRef, ActionSourceSurface};
 use agentflow_capability_registry::{
     evaluate_command, evaluate_pack_connector_commands, CapabilityRegistry,
@@ -26,6 +29,27 @@ pub type PackValidationArtifactView = agentflow_pack::PackValidationArtifact;
 
 pub const PACK_COMMAND_SURFACE_VERSION: &str = "agentflow-pack-command-surface.v1";
 pub const PRODUCT_COMMAND_SURFACE_VERSION: &str = "agentflow-product-command-surface.v1";
+pub const PRODUCT_COMMAND_SUBMIT_VERSION: &str = "agentflow-product-command-submit.v1";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProductCommandState {
+    Valid,
+    Invalid,
+    Deferred,
+    Unavailable,
+    Rejected,
+    Submitted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCommandStateLegendEntry {
+    pub state: ProductCommandState,
+    pub label: String,
+    pub description: String,
+    pub can_submit: bool,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -157,6 +181,7 @@ pub struct PackCommandDryRunReport {
 pub struct ProductCommandSurfaceView {
     pub version: String,
     pub writes_authority: bool,
+    pub state_legend: Vec<ProductCommandStateLegendEntry>,
     pub products: Vec<ProductCommandSurfaceProductView>,
     pub commands: Vec<ProductCommandSurfaceActionView>,
     pub summary: ProductCommandSurfaceSummary,
@@ -197,8 +222,11 @@ pub struct ProductCommandSurfaceActionView {
     pub acceptance_policy_ref: String,
     pub source_refs: Vec<String>,
     pub available: bool,
+    pub state: ProductCommandState,
     pub validation_status: String,
     pub dry_run_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_stage: Option<String>,
     pub reason: String,
     pub validation: PackCommandValidationReport,
     pub dry_run: PackCommandDryRunReport,
@@ -211,8 +239,81 @@ pub struct ProductCommandSurfaceSummary {
     pub valid_product_count: usize,
     pub command_count: usize,
     pub available_command_count: usize,
+    pub valid_command_count: usize,
     pub invalid_command_count: usize,
     pub deferred_command_count: usize,
+    pub unavailable_command_count: usize,
+    pub rejected_command_count: usize,
+    pub submitted_command_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCommandSubmitRequest {
+    pub pack_id: String,
+    pub command: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_object_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dry_run_receipt_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_evidence_ref: Option<String>,
+    #[serde(default)]
+    pub input: Value,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    #[serde(default)]
+    pub artifact_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCommandSubmitReceipt {
+    pub receipt_id: String,
+    pub command_id: String,
+    pub state: ProductCommandState,
+    pub decision: RuntimeCommandDecision,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_action_id: Option<String>,
+    pub correlation_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCommandEvidenceHandoff {
+    pub evidence_policy_ref: String,
+    pub acceptance_policy_ref: String,
+    pub required_evidence: Vec<String>,
+    pub affected_projections: Vec<String>,
+    pub next_decision_handoff: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCommandSubmitResponse {
+    pub version: String,
+    pub pack_id: String,
+    pub command: String,
+    pub state: ProductCommandState,
+    pub accepted: bool,
+    pub dry_run_required: bool,
+    pub validation: PackCommandValidationReport,
+    pub dry_run: PackCommandDryRunReport,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_response: Option<RuntimeCommandResponse>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<ProductCommandSubmitReceipt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_handoff: Option<ProductCommandEvidenceHandoff>,
+    pub affected_projections: Vec<String>,
+    pub rejected_reasons: Vec<RuntimeCommandError>,
+    pub source_refs: Vec<String>,
 }
 
 pub fn get_pack_registry(project_root: impl AsRef<Path>) -> Result<PackRegistryView> {
@@ -435,7 +536,8 @@ pub fn list_product_command_surface(
                     let request = product_command_request_from_route(&route);
                     let validation = validate_pack_command(project_root, &request)?;
                     let dry_run = dry_run_pack_command(project_root, &request)?;
-                    let available = validation.valid && dry_run.valid;
+                    let state = product_command_state(&validation, &dry_run);
+                    let available = state == ProductCommandState::Valid;
                     let reason = validation
                         .capability_status
                         .as_ref()
@@ -486,9 +588,11 @@ pub fn list_product_command_surface(
                         acceptance_policy_ref: route_view.acceptance_policy_ref.clone(),
                         source_refs: route_view.source_refs.clone(),
                         available,
+                        state,
                         validation_status: if validation.valid { "valid" } else { "invalid" }
                             .to_string(),
                         dry_run_status: if dry_run.valid { "valid" } else { "invalid" }.to_string(),
+                        failure_stage: validation.failure_stage.clone(),
                         reason,
                         validation,
                         dry_run,
@@ -536,15 +640,35 @@ pub fn list_product_command_surface(
     let valid_product_count = products.iter().filter(|product| product.valid).count();
     let command_count = commands.len();
     let available_command_count = commands.iter().filter(|command| command.available).count();
+    let valid_command_count = commands
+        .iter()
+        .filter(|command| command.state == ProductCommandState::Valid)
+        .count();
     let invalid_command_count = commands
         .iter()
-        .filter(|command| command.validation_status == "invalid")
+        .filter(|command| command.state == ProductCommandState::Invalid)
         .count();
-    let deferred_command_count = command_count.saturating_sub(available_command_count);
+    let deferred_command_count = commands
+        .iter()
+        .filter(|command| command.state == ProductCommandState::Deferred)
+        .count();
+    let unavailable_command_count = commands
+        .iter()
+        .filter(|command| command.state == ProductCommandState::Unavailable)
+        .count();
+    let rejected_command_count = commands
+        .iter()
+        .filter(|command| command.state == ProductCommandState::Rejected)
+        .count();
+    let submitted_command_count = commands
+        .iter()
+        .filter(|command| command.state == ProductCommandState::Submitted)
+        .count();
 
     Ok(ProductCommandSurfaceView {
         version: PRODUCT_COMMAND_SURFACE_VERSION.to_string(),
         writes_authority: false,
+        state_legend: product_command_state_legend(),
         products,
         commands,
         summary: ProductCommandSurfaceSummary {
@@ -552,8 +676,12 @@ pub fn list_product_command_surface(
             valid_product_count,
             command_count,
             available_command_count,
+            valid_command_count,
             invalid_command_count,
             deferred_command_count,
+            unavailable_command_count,
+            rejected_command_count,
+            submitted_command_count,
         },
     })
 }
@@ -586,6 +714,199 @@ pub fn dry_run_product_command(
     dry_run_pack_command(project_root, &request)
 }
 
+pub fn submit_product_command(
+    project_root: impl AsRef<Path>,
+    request: ProductCommandSubmitRequest,
+) -> Result<ProductCommandSubmitResponse> {
+    let root = project_root.as_ref();
+    let route = query_pack_surface_route(root, &request.pack_id, &request.command).ok();
+    let target_object_id = request
+        .target_object_id
+        .clone()
+        .unwrap_or_else(|| "desktop-submit-target".to_string());
+    let command_id = request
+        .idempotency_key
+        .clone()
+        .unwrap_or_else(|| format!("product-submit-{}-{}", request.pack_id, request.command));
+    let idempotency_key = normalized_product_submit_idempotency_key(
+        request.idempotency_key.as_deref(),
+        &request.pack_id,
+        &request.command,
+        &target_object_id,
+        &command_id,
+    );
+    let mut evidence_refs = request
+        .evidence_refs
+        .iter()
+        .filter_map(|evidence_ref| normalized_product_submit_evidence_ref(evidence_ref))
+        .collect::<Vec<_>>();
+    let mut artifact_refs = request
+        .artifact_refs
+        .iter()
+        .filter_map(|artifact_ref| normalized_product_submit_artifact_ref(artifact_ref))
+        .collect::<Vec<_>>();
+    if let Some(receipt) = request.dry_run_receipt_id.as_ref() {
+        if !receipt.trim().is_empty() {
+            if let Some(evidence_ref) = normalized_product_submit_evidence_ref(receipt) {
+                evidence_refs.push(evidence_ref);
+            }
+            if let Some(artifact_ref) = normalized_product_submit_artifact_ref(receipt) {
+                artifact_refs.push(artifact_ref);
+            }
+        }
+    }
+    if let Some(receipt) = request.validation_evidence_ref.as_ref() {
+        if !receipt.trim().is_empty() {
+            if let Some(evidence_ref) = normalized_product_submit_evidence_ref(receipt) {
+                evidence_refs.push(evidence_ref);
+            }
+            if let Some(artifact_ref) = normalized_product_submit_artifact_ref(receipt) {
+                artifact_refs.push(artifact_ref);
+            }
+        }
+    }
+    evidence_refs = dedupe_ordered(evidence_refs);
+    artifact_refs = dedupe_ordered(artifact_refs);
+    let pack_request = PackCommandRequest {
+        pack_id: request.pack_id.clone(),
+        command_id: command_id.clone(),
+        command: request.command.clone(),
+        actor_role: request
+            .actor_role
+            .clone()
+            .unwrap_or_else(|| "desktop-user".to_string()),
+        source_surface: ActionSourceSurface::Desktop,
+        target_object_type: route
+            .as_ref()
+            .map(|route| route.target_object_type.clone())
+            .unwrap_or_else(|| "Unknown".to_string()),
+        target_object_id: target_object_id.clone(),
+        input: product_submit_runtime_input(route.as_ref(), &target_object_id, &request.input),
+        evidence_refs,
+        artifact_refs,
+        idempotency_key,
+        created_at: request
+            .created_at
+            .clone()
+            .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string()),
+    };
+    let validation = validate_pack_command(root, &pack_request)?;
+    let dry_run = dry_run_pack_command(root, &pack_request)?;
+    let initial_state = product_command_state(&validation, &dry_run);
+    let source_refs = validation
+        .surface_route
+        .as_ref()
+        .map(|route| route.source_refs.clone())
+        .unwrap_or_default();
+    let affected_projections = dry_run.affected_projections.clone();
+
+    if initial_state != ProductCommandState::Valid {
+        return Ok(product_command_submit_closed_response(
+            &pack_request,
+            initial_state,
+            validation,
+            dry_run,
+            None,
+            true,
+            source_refs,
+            affected_projections,
+        ));
+    }
+
+    let dry_run_evidence_present = request
+        .dry_run_receipt_id
+        .as_ref()
+        .is_some_and(|receipt| !receipt.trim().is_empty())
+        || request
+            .validation_evidence_ref
+            .as_ref()
+            .is_some_and(|receipt| !receipt.trim().is_empty());
+    if !dry_run_evidence_present {
+        return Ok(product_command_submit_closed_response(
+            &pack_request,
+            ProductCommandState::Rejected,
+            validation,
+            dry_run,
+            Some(RuntimeCommandError::new(
+                RuntimeCommandErrorCode::MissingField,
+                "product command submit requires dryRunReceiptId or validationEvidenceRef before authority handoff",
+                Some("dryRunReceiptId"),
+            )),
+            true,
+            source_refs,
+            affected_projections,
+        ));
+    }
+
+    let route_view = validation.surface_route.as_ref();
+    if route_view
+        .map(|route| route.evidence_policy_ref.trim().is_empty())
+        .unwrap_or(true)
+    {
+        return Ok(product_command_submit_closed_response(
+            &pack_request,
+            ProductCommandState::Deferred,
+            validation,
+            dry_run,
+            Some(RuntimeCommandError::new(
+                RuntimeCommandErrorCode::GovernanceDeferred,
+                "product command submit requires evidence policy before acceptance",
+                Some("evidencePolicyRef"),
+            )),
+            false,
+            source_refs,
+            affected_projections,
+        ));
+    }
+
+    let runtime_response = submit_product_pack_action_proposal(root, &pack_request)?;
+    let state = product_command_state_from_runtime_response(&runtime_response);
+    let accepted = state == ProductCommandState::Submitted;
+    let receipt = ProductCommandSubmitReceipt {
+        receipt_id: format!("receipt-{}", runtime_response.command_id),
+        command_id: runtime_response.command_id.clone(),
+        state,
+        decision: runtime_response.decision.clone(),
+        accepted_action_id: runtime_response.accepted_action_id.clone(),
+        correlation_id: runtime_response.correlation_id.clone(),
+    };
+    let evidence_handoff = if accepted {
+        route_view.map(|route| ProductCommandEvidenceHandoff {
+            evidence_policy_ref: route.evidence_policy_ref.clone(),
+            acceptance_policy_ref: route.acceptance_policy_ref.clone(),
+            required_evidence: vec![
+                "runtime-command-response".to_string(),
+                "accepted-action-event".to_string(),
+                "projection-refresh-receipt".to_string(),
+            ],
+            affected_projections: affected_projections.clone(),
+            next_decision_handoff:
+                "Runtime API -> evidence policy -> projection refresh -> acceptance gate"
+                    .to_string(),
+        })
+    } else {
+        None
+    };
+    let rejected_reasons = runtime_response.rejected_reasons.clone();
+
+    Ok(ProductCommandSubmitResponse {
+        version: PRODUCT_COMMAND_SUBMIT_VERSION.to_string(),
+        pack_id: pack_request.pack_id,
+        command: pack_request.command,
+        state,
+        accepted,
+        dry_run_required: false,
+        validation,
+        dry_run,
+        runtime_response: Some(runtime_response),
+        receipt: Some(receipt),
+        evidence_handoff,
+        affected_projections,
+        rejected_reasons,
+        source_refs,
+    })
+}
+
 pub fn submit_pack_action_proposal(
     project_root: impl AsRef<Path>,
     request: &PackCommandRequest,
@@ -613,6 +934,46 @@ pub fn submit_pack_action_proposal(
             )],
         ))
     }
+}
+
+fn submit_product_pack_action_proposal(
+    project_root: impl AsRef<Path>,
+    request: &PackCommandRequest,
+) -> Result<RuntimeCommandResponse> {
+    let root = project_root.as_ref();
+    let validation = validate_pack_command(root, request)?;
+    if !validation.valid {
+        return Ok(invalid_pack_command_response(
+            request,
+            validation.rejected_reasons,
+        ));
+    }
+    let Some(runtime_command) = validation.runtime_command.as_ref() else {
+        return Ok(invalid_pack_command_response(
+            request,
+            vec![RuntimeCommandError::new(
+                RuntimeCommandErrorCode::UnsupportedCommand,
+                format!(
+                    "pack command `{}` did not produce a Core runtime route",
+                    request.command
+                ),
+                Some("command"),
+            )],
+        ));
+    };
+    let mut context = build_project_arbitration_context(root)?;
+    context.insert_state(StateFact {
+        object_type: request.target_object_type.clone(),
+        object_id: request.target_object_id.clone(),
+        state_id: product_submit_target_state(request).to_string(),
+    });
+    for evidence_ref in runtime_command.evidence_refs.iter() {
+        context.insert_evidence(EvidenceFact {
+            evidence_ref: evidence_ref.clone(),
+            evidence_type: product_submit_evidence_type(evidence_ref).to_string(),
+        });
+    }
+    execute_command_via_arbitration_with_context(root, runtime_command, &context)
 }
 
 pub fn pack_registry_read_receipt(registry: &PackRegistryView) -> PackRegistryReadReceipt {
@@ -1070,9 +1431,219 @@ fn runtime_command_from_pack_request(
         evidence_refs: request.evidence_refs.clone(),
         artifact_refs: request.artifact_refs.clone(),
         expected_outputs: Vec::new(),
-        evidence_policy: None,
+        evidence_policy: if resolved.route.evidence_policy_ref.trim().is_empty() {
+            None
+        } else {
+            Some(RuntimeEvidencePolicyRef {
+                policy_id: resolved.route.evidence_policy_ref.clone(),
+                required_evidence: vec![
+                    "runtime-command-response".to_string(),
+                    "accepted-action-event".to_string(),
+                ],
+                missing_evidence_behavior: "reject-submit".to_string(),
+            })
+        },
         idempotency_key: request.idempotency_key.clone(),
         created_at: request.created_at.clone(),
+    }
+}
+
+fn product_command_state(
+    validation: &PackCommandValidationReport,
+    dry_run: &PackCommandDryRunReport,
+) -> ProductCommandState {
+    if validation.valid && dry_run.valid {
+        return ProductCommandState::Valid;
+    }
+    match validation.failure_stage.as_deref() {
+        Some("connector") => ProductCommandState::Unavailable,
+        Some("capability") => ProductCommandState::Deferred,
+        Some("schema") | Some("surface-mapping") | Some("read-model") => {
+            ProductCommandState::Invalid
+        }
+        _ if !validation.valid => ProductCommandState::Invalid,
+        _ => ProductCommandState::Rejected,
+    }
+}
+
+fn product_command_state_from_runtime_response(
+    response: &RuntimeCommandResponse,
+) -> ProductCommandState {
+    match response.status {
+        RuntimeCommandStatus::Accepted | RuntimeCommandStatus::Queued => {
+            ProductCommandState::Submitted
+        }
+        RuntimeCommandStatus::Deferred
+        | RuntimeCommandStatus::HumanDecisionRequired
+        | RuntimeCommandStatus::Superseded => ProductCommandState::Deferred,
+        RuntimeCommandStatus::InvalidCommand => ProductCommandState::Invalid,
+        RuntimeCommandStatus::Rejected | RuntimeCommandStatus::Cancelled => {
+            ProductCommandState::Rejected
+        }
+    }
+}
+
+fn product_submit_runtime_input(
+    route: Option<&PackSurfaceRouteView>,
+    target_object_id: &str,
+    request_input: &Value,
+) -> Value {
+    if route.is_some_and(|route| route.action_contract_ref == "action-contract:issue.start") {
+        return serde_json::json!({
+            "runId": request_input
+                .get("runId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("run-{target_object_id}")),
+        });
+    }
+    request_input.clone()
+}
+
+fn normalized_product_submit_idempotency_key(
+    requested: Option<&str>,
+    pack_id: &str,
+    command: &str,
+    target_object_id: &str,
+    command_id: &str,
+) -> String {
+    if let Some(value) = requested {
+        if value
+            .split(':')
+            .filter(|part| !part.trim().is_empty())
+            .count()
+            >= 5
+        {
+            return value.to_string();
+        }
+    }
+    format!("product:{pack_id}:{command}:{target_object_id}:{command_id}")
+}
+
+fn normalized_product_submit_evidence_ref(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("EvidenceRef:") || trimmed.starts_with("DecisionRef:") {
+        Some(trimmed.to_string())
+    } else {
+        Some(format!("EvidenceRef:{trimmed}"))
+    }
+}
+
+fn normalized_product_submit_artifact_ref(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("ArtifactRef:") {
+        Some(trimmed.to_string())
+    } else {
+        Some(format!("ArtifactRef:{trimmed}"))
+    }
+}
+
+fn product_submit_evidence_type(evidence_ref: &str) -> &'static str {
+    if evidence_ref.starts_with("DecisionRef:") {
+        return "humanConfirmation";
+    }
+    if evidence_ref.contains("validation") || evidence_ref.contains("verify") {
+        return "validationEvidence";
+    }
+    if evidence_ref.contains("dry-run") || evidence_ref.contains("dryRun") {
+        return "dryRunReceipt";
+    }
+    "runtimeCommandEvidence"
+}
+
+fn product_submit_target_state(request: &PackCommandRequest) -> &'static str {
+    if request.command == "work.issue.start" {
+        "ready"
+    } else {
+        "active"
+    }
+}
+
+fn dedupe_ordered(values: Vec<String>) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    values
+        .into_iter()
+        .filter(|value| seen.insert(value.clone()))
+        .collect()
+}
+
+fn product_command_state_legend() -> Vec<ProductCommandStateLegendEntry> {
+    vec![
+        ProductCommandStateLegendEntry {
+            state: ProductCommandState::Valid,
+            label: "可提交".to_string(),
+            description: "命令路线、能力和 dry-run 均通过，可以进入确认提交。".to_string(),
+            can_submit: true,
+        },
+        ProductCommandStateLegendEntry {
+            state: ProductCommandState::Invalid,
+            label: "无效".to_string(),
+            description: "命令、路由或映射缺失，需要先修复产品合同。".to_string(),
+            can_submit: false,
+        },
+        ProductCommandStateLegendEntry {
+            state: ProductCommandState::Deferred,
+            label: "暂缓".to_string(),
+            description: "路由存在，但 provider、worker 或能力还未就绪。".to_string(),
+            can_submit: false,
+        },
+        ProductCommandStateLegendEntry {
+            state: ProductCommandState::Unavailable,
+            label: "不可用".to_string(),
+            description: "缺少连接器或能力映射，当前环境不能执行。".to_string(),
+            can_submit: false,
+        },
+        ProductCommandStateLegendEntry {
+            state: ProductCommandState::Rejected,
+            label: "已拒绝".to_string(),
+            description: "提交证据或治理门禁未满足，未写入权威事实。".to_string(),
+            can_submit: false,
+        },
+        ProductCommandStateLegendEntry {
+            state: ProductCommandState::Submitted,
+            label: "已提交".to_string(),
+            description: "命令已进入 Runtime arbitration，并产生提交回执。".to_string(),
+            can_submit: false,
+        },
+    ]
+}
+
+fn product_command_submit_closed_response(
+    request: &PackCommandRequest,
+    state: ProductCommandState,
+    validation: PackCommandValidationReport,
+    dry_run: PackCommandDryRunReport,
+    extra_reason: Option<RuntimeCommandError>,
+    dry_run_required: bool,
+    source_refs: Vec<String>,
+    affected_projections: Vec<String>,
+) -> ProductCommandSubmitResponse {
+    let mut rejected_reasons = validation.rejected_reasons.clone();
+    rejected_reasons.extend(dry_run.rejected_reasons.clone());
+    if let Some(reason) = extra_reason {
+        rejected_reasons.push(reason);
+    }
+    ProductCommandSubmitResponse {
+        version: PRODUCT_COMMAND_SUBMIT_VERSION.to_string(),
+        pack_id: request.pack_id.clone(),
+        command: request.command.clone(),
+        state,
+        accepted: false,
+        dry_run_required,
+        validation,
+        dry_run,
+        runtime_response: None,
+        receipt: None,
+        evidence_handoff: None,
+        affected_projections,
+        rejected_reasons,
+        source_refs,
     }
 }
 
@@ -1171,9 +1742,11 @@ fn invalid_pack_command_response(
 mod tests {
     use super::{
         dry_run_pack_command, get_pack_registry, get_pack_validation_artifact, list_pack_commands,
-        pack_registry_read_receipt, pack_validation_artifact_read_receipt,
-        query_pack_capability_status, query_pack_surface_route, submit_pack_action_proposal,
-        validate_pack_command, PackCommandRequest,
+        list_product_command_surface, pack_registry_read_receipt,
+        pack_validation_artifact_read_receipt, query_pack_capability_status,
+        query_pack_surface_route, submit_pack_action_proposal, submit_product_command,
+        validate_pack_command, PackCommandRequest, ProductCommandState,
+        ProductCommandSubmitRequest,
     };
     use crate::responses::RuntimeCommandStatus;
     use agentflow_action_contract::ActionSourceSurface;
@@ -1508,6 +2081,129 @@ mod tests {
     }
 
     #[test]
+    fn product_command_surface_exposes_stable_state_contract() {
+        let root = workspace_root();
+
+        let surface = list_product_command_surface(&root).unwrap();
+
+        assert!(surface
+            .state_legend
+            .iter()
+            .any(|entry| entry.state == ProductCommandState::Valid && entry.can_submit));
+        assert!(surface
+            .commands
+            .iter()
+            .any(|command| command.product_id == "software-dev"
+                && matches!(
+                    command.state,
+                    ProductCommandState::Valid
+                        | ProductCommandState::Deferred
+                        | ProductCommandState::Unavailable
+                )));
+        assert_eq!(
+            surface.summary.valid_command_count
+                + surface.summary.invalid_command_count
+                + surface.summary.deferred_command_count
+                + surface.summary.unavailable_command_count
+                + surface.summary.rejected_command_count
+                + surface.summary.submitted_command_count,
+            surface.summary.command_count
+        );
+    }
+
+    #[test]
+    fn product_command_submit_requires_dry_run_receipt_before_authority_handoff() {
+        let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
+
+        let response = submit_product_command(
+            dir.path(),
+            ProductCommandSubmitRequest {
+                pack_id: "software-dev".to_string(),
+                command: "work.issue.start".to_string(),
+                target_object_id: Some("AF-V113-DRY-RUN-REQUIRED".to_string()),
+                dry_run_receipt_id: None,
+                validation_evidence_ref: None,
+                input: json!({"reason": "submit without dry-run receipt"}),
+                evidence_refs: Vec::new(),
+                artifact_refs: Vec::new(),
+                idempotency_key: Some("v113-submit-without-receipt".to_string()),
+                actor_role: Some("work-agent".to_string()),
+                created_at: Some("2026-07-02T00:00:00Z".to_string()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(response.state, ProductCommandState::Rejected);
+        assert!(!response.accepted);
+        assert!(response.dry_run_required);
+        assert!(response
+            .rejected_reasons
+            .iter()
+            .any(|reason| reason.message.contains("dryRunReceiptId")));
+    }
+
+    #[test]
+    fn product_command_submit_returns_receipt_and_evidence_handoff() {
+        let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
+
+        let response = submit_product_command(
+            dir.path(),
+            ProductCommandSubmitRequest {
+                pack_id: "software-dev".to_string(),
+                command: "work.issue.start".to_string(),
+                target_object_id: Some("AF-V113-SUBMIT-001".to_string()),
+                dry_run_receipt_id: Some("dry-run-v113-submit-001".to_string()),
+                validation_evidence_ref: None,
+                input: json!({"reason": "submit product command through Runtime API"}),
+                evidence_refs: vec!["runtime/v113-dry-run-proof.json".to_string()],
+                artifact_refs: Vec::new(),
+                idempotency_key: Some("v113-product-submit-001".to_string()),
+                actor_role: Some("work-agent".to_string()),
+                created_at: Some("2026-07-02T00:00:00Z".to_string()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(response.state, ProductCommandState::Submitted);
+        assert!(response.accepted);
+        assert!(response.runtime_response.is_some());
+        assert!(response.receipt.is_some());
+        let handoff = response.evidence_handoff.unwrap();
+        assert!(!handoff.evidence_policy_ref.is_empty());
+        assert!(handoff
+            .required_evidence
+            .contains(&"accepted-action-event".to_string()));
+    }
+
+    #[test]
+    fn product_command_missing_route_is_invalid_not_deferred() {
+        let root = workspace_root();
+
+        let response = submit_product_command(
+            &root,
+            ProductCommandSubmitRequest {
+                pack_id: "software-dev".to_string(),
+                command: "work.issue.teleport".to_string(),
+                target_object_id: Some("AF-V113-INVALID".to_string()),
+                dry_run_receipt_id: Some("dry-run-invalid".to_string()),
+                validation_evidence_ref: None,
+                input: json!({}),
+                evidence_refs: Vec::new(),
+                artifact_refs: Vec::new(),
+                idempotency_key: Some("v113-invalid-command".to_string()),
+                actor_role: Some("work-agent".to_string()),
+                created_at: Some("2026-07-02T00:00:00Z".to_string()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(response.state, ProductCommandState::Invalid);
+        assert!(!response.accepted);
+    }
+
+    #[test]
     fn runtime_resolves_custom_pack_command_from_registry_files() {
         let dir = tempfile::tempdir().unwrap();
         write_pack_bundle(dir.path(), "custom-pack", "custom.issue.start");
@@ -1641,33 +2337,58 @@ mod tests {
     ) {
         let registry = CapabilityRegistry {
             version: CAPABILITY_REGISTRY_VERSION.to_string(),
-            workers: vec![WorkerRegistryEntry {
-                worker_id: "github".to_string(),
-                title: "GitHub Connector".to_string(),
-                kind: WorkerKind::AgentProvider,
-                health,
-                requires_auth: false,
-                disabled_reason: None,
-                provider_smoke: None,
-                runtime_roles: Vec::new(),
-                skill_packs: Vec::new(),
-                tool_kinds: Vec::new(),
-                capabilities: vec![WorkerCapability {
-                    capability_id: capability_id.to_string(),
-                    label: capability_id.to_string(),
-                    command: capability_id.to_string(),
-                    required: true,
-                    available,
+            workers: vec![
+                WorkerRegistryEntry {
+                    worker_id: "github".to_string(),
+                    title: "GitHub Connector".to_string(),
+                    kind: WorkerKind::AgentProvider,
+                    health,
                     requires_auth: false,
-                    policy,
-                    disabled_reason: disabled_reason.map(str::to_string),
-                }],
-                boundary: WorkerBoundary::connector(
-                    vec!["repo".to_string()],
-                    vec!["pull-request".to_string()],
-                    vec!["evidence".to_string()],
-                ),
-            }],
+                    disabled_reason: None,
+                    provider_smoke: None,
+                    runtime_roles: Vec::new(),
+                    skill_packs: Vec::new(),
+                    tool_kinds: Vec::new(),
+                    capabilities: vec![WorkerCapability {
+                        capability_id: capability_id.to_string(),
+                        label: capability_id.to_string(),
+                        command: capability_id.to_string(),
+                        required: true,
+                        available,
+                        requires_auth: false,
+                        policy,
+                        disabled_reason: disabled_reason.map(str::to_string),
+                    }],
+                    boundary: WorkerBoundary::connector(
+                        vec!["repo".to_string()],
+                        vec!["pull-request".to_string()],
+                        vec!["evidence".to_string()],
+                    ),
+                },
+                WorkerRegistryEntry {
+                    worker_id: "local-shell-validator".to_string(),
+                    title: "Local Shell Validator".to_string(),
+                    kind: WorkerKind::Validator,
+                    health: WorkerHealth::Ready,
+                    requires_auth: false,
+                    disabled_reason: None,
+                    provider_smoke: None,
+                    runtime_roles: Vec::new(),
+                    skill_packs: Vec::new(),
+                    tool_kinds: Vec::new(),
+                    capabilities: vec![WorkerCapability {
+                        capability_id: "validate.build".to_string(),
+                        label: "validate.build".to_string(),
+                        command: "validate.build".to_string(),
+                        required: true,
+                        available: true,
+                        requires_auth: false,
+                        policy: CapabilityPolicy::Allowed,
+                        disabled_reason: None,
+                    }],
+                    boundary: WorkerBoundary::runtime_worker(vec!["evidence".to_string()]),
+                },
+            ],
         };
         let path = root.join(".agentflow/runtime/capability-registry.json");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();

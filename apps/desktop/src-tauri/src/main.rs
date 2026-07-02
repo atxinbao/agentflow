@@ -49,6 +49,7 @@ fn main() {
             commands::runtime_api::load_api_plane_manifest,
             commands::runtime_api::load_product_command_surface,
             commands::runtime_api::dry_run_product_command,
+            commands::runtime_api::submit_product_command,
             commands::projection::rebuild_task_projections,
             commands::projection::load_projection_issue_status_index,
             commands::projection::load_task_projection,

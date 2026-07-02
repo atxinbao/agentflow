@@ -284,6 +284,8 @@ pub fn classify_task_event(event_type: &str) -> TaskEventCategory {
                         | "ProjectCreated"
                         | "IssueCreated"
                         | "IssueActivated"
+                        | "IssueClaimed"
+                        | "IssueRunning"
                         | "RunStarted"
                         | "EvidenceSubmitted"
                         | "ArtifactSubmitted"

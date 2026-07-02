@@ -29,6 +29,15 @@ pub(crate) fn dry_run_product_command(
     .map_err(|error| format!("dry run product command failed: {error}"))
 }
 
+#[tauri::command]
+pub(crate) fn submit_product_command(
+    project_root: String,
+    request: agentflow_runtime_api::ProductCommandSubmitRequest,
+) -> Result<agentflow_runtime_api::ProductCommandSubmitResponse, String> {
+    agentflow_runtime_api::submit_product_command(project_root, request)
+        .map_err(|error| format!("submit product command failed: {error}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::load_api_plane_manifest;

@@ -528,7 +528,8 @@ fn is_core_object_type(value: &str) -> bool {
 
 fn allowed_surfaces(role: &str) -> Vec<String> {
     let values: &[&str] = match role {
-        "work-agent" | "delivery-agent" | "audit-agent" => &["agent", "cli", "sdk", "system"],
+        "work-agent" => &["desktop", "agent", "cli", "sdk", "system"],
+        "delivery-agent" | "audit-agent" => &["agent", "cli", "sdk", "system"],
         "human-owner" => &["conversation", "desktop", "cli", "sdk", "system"],
         _ => &["conversation", "desktop", "agent", "cli", "sdk", "system"],
     };
@@ -837,7 +838,7 @@ mod tests {
     #[test]
     fn governance_rejects_forbidden_skill_surface() {
         let mut request = request("local-shell-validator", "local.test");
-        request.source_surface = Some("desktop".to_string());
+        request.source_surface = Some("conversation".to_string());
 
         let report = evaluate_runtime_governance(&role_registry(), &ready_registry(), request);
 
