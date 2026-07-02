@@ -4502,9 +4502,13 @@ mod tests {
             .all(|readiness| readiness.status == "ready"));
 
         let default_view = get_pack_industry_workbench_view(&root, None).unwrap();
-        assert_eq!(default_view.pack_list.len(), 1);
-        assert_eq!(default_view.pack_readiness.len(), 1);
+        assert_eq!(default_view.pack_list.len(), 2);
+        assert_eq!(default_view.pack_readiness.len(), 2);
         assert_eq!(default_view.active_pack_id.as_deref(), Some("software-dev"));
+        assert!(default_view
+            .pack_list
+            .iter()
+            .any(|item| item.pack_id == "synthetic-review"));
         assert!(default_view
             .domain_object_index
             .iter()

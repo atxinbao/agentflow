@@ -1,0 +1,94 @@
+{
+  "version": "agentflow-synthetic-review-domain.v1",
+  "productId": "synthetic-review",
+  "packId": "synthetic-review",
+  "sourceBoundary": "products/synthetic-review/domain",
+  "coreAuthority": false,
+  "objectTypes": [
+    {
+      "type": "case",
+      "coreKind": "object",
+      "description": "Synthetic review case used only for data-driven bridge tests."
+    },
+    {
+      "type": "session",
+      "coreKind": "object",
+      "description": "Synthetic runtime session used only for fixture validation."
+    }
+  ],
+  "states": [
+    "backlog",
+    "todo",
+    "in_progress",
+    "in_review",
+    "done",
+    "blocked",
+    "cancel"
+  ],
+  "stateMachineObjectType": "case",
+  "stateTransitions": [
+    {
+      "from": "todo",
+      "to": "in_progress",
+      "actionType": "openCase"
+    },
+    {
+      "from": "in_progress",
+      "to": "in_review",
+      "actionType": "reviewCase"
+    }
+  ],
+  "actions": [
+    {
+      "actionType": "openCase",
+      "targetObjectType": "Case",
+      "description": "Open a synthetic case through the generic runtime command surface.",
+      "allowedRoles": [
+        "build-agent"
+      ],
+      "contractRef": "action-contract:issue.start",
+      "arbitrationRef": "action-arbitration:runtime-command",
+      "simulationRef": "simulation:synthetic.case.open",
+      "requiredEvidence": [
+        "synthetic-case-contract"
+      ]
+    },
+    {
+      "actionType": "reviewCase",
+      "targetObjectType": "Session",
+      "description": "Prepare a synthetic case review without software development semantics.",
+      "allowedRoles": [
+        "build-agent"
+      ],
+      "contractRef": "action-contract:delivery.prepare",
+      "arbitrationRef": "action-arbitration:runtime-command",
+      "simulationRef": "simulation:synthetic.case.review",
+      "requiredEvidence": [
+        "synthetic-local-proof"
+      ]
+    }
+  ],
+  "acceptanceSemantics": [
+    {
+      "acceptanceId": "synthetic-review-acceptance",
+      "objectType": "Session",
+      "description": "Synthetic review evidence must exist before completion.",
+      "requiredEvidence": [
+        "synthetic-local-proof",
+        "synthetic-decision-proof"
+      ]
+    }
+  ],
+  "evidencePolicy": {
+    "policyId": "synthetic-review-evidence",
+    "requiredEvidence": [
+      "synthetic-local-proof",
+      "synthetic-decision-proof"
+    ],
+    "missingEvidenceBehavior": "defer-completion"
+  },
+  "auditBoundary": {
+    "defaultCompletionBlocker": false,
+    "sidecarOnly": true
+  }
+}

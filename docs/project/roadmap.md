@@ -377,6 +377,30 @@ Product source command mapping
 
 UI command route installation、多 Product console、Product installer 和行业壳市场化仍属于后续版本。
 
+### v1.1.2 - Product Execution Proof and Command Surface Hardening
+
+`v1.1.2` 继续 `v1.1.1` 的 Product Contract Data-driven hardening，但把证明从静态合同推进到真实 Runtime / Projection / Desktop command surface：
+
+```text
+products/**
+-> Runtime API validate / dry-run
+-> Projection read model
+-> Desktop Product Command Surface
+-> release-gate proof artifacts
+```
+
+本版确认：
+
+- Runtime proof harness 必须调用 `validate_pack_command` 和 `dry_run_pack_command`，不能手写 positive / negative JSON；
+- Projection proof harness 必须调用 Product read model API；
+- `products/synthetic-review/**` 作为直接 Product registry entry，证明第二个 Product 能被标准路径发现；
+- Desktop 从 Runtime API 加载 Product command route read model，并在按钮点击时先执行 dry-run；
+- 多 Product console 可以展示 valid / invalid / deferred 状态，不回落到 Software Dev；
+- recursive pollution scanner 覆盖 Product bridge 相关 crates；
+- release gate 产出 v1.1.2 execution / projection / desktop / multi-product proof artifacts。
+
+Product command authority submission、Product installer、marketplace 和完整行业壳 UI 仍属于后续版本。
+
 ## Task Derivation Rule
 
 任何版本任务必须从 roadmap 进入 confirmed Spec Bundle，再进入 `.agentflow/spec/**`。

@@ -1,0 +1,30 @@
+{
+  "version": "agentflow-synthetic-review-flow.v1",
+  "productId": "synthetic-review",
+  "sourceBoundary": "products/synthetic-review/flows",
+  "coreAuthority": false,
+  "flow": [
+    {
+      "stage": "case-contract",
+      "input": "synthetic.case-intent",
+      "output": "synthetic.case-contract",
+      "writesAuthority": false
+    },
+    {
+      "stage": "handoff",
+      "input": "synthetic.case-contract",
+      "output": "runtime.command.proposal",
+      "writesAuthority": false
+    },
+    {
+      "stage": "review",
+      "input": "accepted.runtime.command",
+      "output": "synthetic.review-artifacts",
+      "writesAuthority": false
+    }
+  ],
+  "blockedPaths": [
+    "fixture-log -> authority",
+    "provider-session -> completion-authority"
+  ]
+}

@@ -1,0 +1,23 @@
+product_id = "synthetic-review"
+name = "Synthetic Review Fixture"
+version = "agentflow-synthetic-review-reference-app.v1"
+status = "certified-reference"
+source_boundary = "products/synthetic-review"
+core_boundary = "read-only-product-source"
+fixture_mirror = "test-only"
+pack_id = "synthetic-review"
+
+[authority]
+writes_core_authority = false
+writes_runtime_authority = false
+source_of_product_definitions = true
+runtime_materializes_facts = false
+
+[entrypoints]
+domain = "domain/definition.json"
+surface = "surface/definition.json"
+connectors = "connectors/definition.json"
+flow = "flows/reference-flow.json"
+projection = "projections/read-models.json"
+golden_fixture = "fixtures/golden-scenario.json"
+negative_fixtures = "fixtures/negative-authority-fixtures.json"

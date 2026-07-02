@@ -7,22 +7,36 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.1.1/README.md](docs/delivery/releases/v1.1.1/README.md)
-- [docs/delivery/releases/v1.1.1/AGENTFLOW_V1_1_1_PRODUCT_CONTRACT_DATA_DRIVEN_TASKS_V1.md](docs/delivery/releases/v1.1.1/AGENTFLOW_V1_1_1_PRODUCT_CONTRACT_DATA_DRIVEN_TASKS_V1.md)
+- [docs/delivery/releases/v1.1.2/README.md](docs/delivery/releases/v1.1.2/README.md)
+- [docs/delivery/releases/v1.1.2/AGENTFLOW_V1_1_2_PRODUCT_EXECUTION_PROOF_COMMAND_SURFACE_TASKS_V1.md](docs/delivery/releases/v1.1.2/AGENTFLOW_V1_1_2_PRODUCT_EXECUTION_PROOF_COMMAND_SURFACE_TASKS_V1.md)
 
 下一版计划：
 
-- v1.1.x Desktop command route installation and multi-product console hardening。
+- v1.1.x Product command submission and marketplace-ready Product console hardening。
 
 ## Unreleased
 
-下一版保留给 Desktop command route installation and multi-product console hardening，不在本次 release 中认证。
+下一版保留给 Product command submission and marketplace-ready Product console hardening，不在本次 release 中认证。
 
 Planned v1.1.x foundation:
 
 - harden product surface installation and user-facing console routes;
 - keep `products/**` as source definitions and `.agentflow/**` as runtime facts;
 - expand reference app certification without adding Core industry-specific authority.
+
+## v1.1.2 - 2026-07-02
+
+Product Execution Proof and Command Surface hardening:
+
+- added direct `products/synthetic-review/**` Product source so the registry discovers a second Product outside `_fixtures`;
+- added Runtime API Product Command Surface read model that validates and dry-runs Product commands through existing Runtime APIs;
+- added Desktop Tauri commands and Project Home command surface rendering for Product command routes and dry-run actions;
+- added a real v1.1.2 runtime proof harness that calls `validate_pack_command` and `dry_run_pack_command` for positive and negative Product commands;
+- added a real v1.1.2 projection proof harness that calls Product read models through Projection API;
+- added recursive Product bridge pollution scanning for `crates/pack`, `crates/runtime-api` and `crates/projection`;
+- expanded release-gate quick-audit primary proofs with v1.1.2 Product execution, projection, desktop and multi-product state artifacts;
+- added v1.1.2 release task traceability for GitHub issues `#766` through `#773`;
+- advanced workspace and desktop version metadata to `1.1.2`.
 
 ## v1.1.1 - 2026-07-01
 

@@ -300,6 +300,14 @@ jobs:
               -o -name 'v111-runtime-projection-proof-artifacts.json' \
               -o -name 'v111-synthetic-second-product-fixture.json' \
               -o -name 'v111-release-certification.json' \
+              -o -name 'v112-real-product-runtime-proof.json' \
+              -o -name 'v112-real-product-projection-proof.json' \
+              -o -name 'v112-product-bridge-pollution-scan.json' \
+              -o -name 'v112-registry-discovered-second-product.json' \
+              -o -name 'v112-desktop-product-command-route-read-model.json' \
+              -o -name 'v112-desktop-command-button-installation.json' \
+              -o -name 'v112-multi-product-console-states.json' \
+              -o -name 'v112-release-certification.json' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
 
@@ -416,7 +424,15 @@ jobs:
             runtime/v111-product-bridge-pollution-gate.json \
             runtime/v111-runtime-projection-proof-artifacts.json \
             runtime/v111-synthetic-second-product-fixture.json \
-            runtime/v111-release-certification.json
+            runtime/v111-release-certification.json \
+            runtime/v112-real-product-runtime-proof.json \
+            runtime/v112-real-product-projection-proof.json \
+            runtime/v112-product-bridge-pollution-scan.json \
+            runtime/v112-registry-discovered-second-product.json \
+            runtime/v112-desktop-product-command-route-read-model.json \
+            runtime/v112-desktop-command-button-installation.json \
+            runtime/v112-multi-product-console-states.json \
+            runtime/v112-release-certification.json
           )
 
           check_primary_proofs() {

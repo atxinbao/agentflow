@@ -1,0 +1,26 @@
+{
+  "version": "agentflow-synthetic-review-projections.v1",
+  "productId": "synthetic-review",
+  "sourceBoundary": "products/synthetic-review/projections",
+  "coreAuthority": false,
+  "readModels": [
+    {
+      "id": "synthetic-review.case-board",
+      "source": "core.projection.synthetic-case-summary",
+      "staleVisible": true,
+      "writesAuthority": false
+    },
+    {
+      "id": "synthetic-review.review-console",
+      "source": "core.projection.synthetic-case-timeline",
+      "staleVisible": true,
+      "writesAuthority": false
+    }
+  ],
+  "forbiddenReads": [
+    ".agentflow/spec/**",
+    ".agentflow/tasks/**",
+    ".agentflow/events/**",
+    ".agentflow/evidence/**"
+  ]
+}

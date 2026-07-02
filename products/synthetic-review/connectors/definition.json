@@ -1,0 +1,38 @@
+{
+  "version": "agentflow-synthetic-review-connectors.v1",
+  "productId": "synthetic-review",
+  "sourceBoundary": "products/synthetic-review/connectors",
+  "coreAuthority": false,
+  "connectors": [
+    {
+      "id": "fixture-agent",
+      "type": "agent-provider",
+      "authority": false,
+      "providerType": "custom",
+      "supportedActions": [
+        {
+          "actionId": "fixture-agent.open",
+          "label": "Open Synthetic Case",
+          "requiredCapability": "synthetic.launch",
+          "commandType": "synthetic.case.open",
+          "writesExternal": false
+        },
+        {
+          "actionId": "fixture-agent.review",
+          "label": "Review Synthetic Case",
+          "requiredCapability": "synthetic.complete",
+          "commandType": "synthetic.case.review",
+          "writesExternal": false
+        }
+      ],
+      "produces": [
+        "synthetic-transcript",
+        "synthetic-review-proof"
+      ]
+    }
+  ],
+  "invalidAuthoritySources": [
+    "fixture-log-only",
+    "provider-memory-only"
+  ]
+}
