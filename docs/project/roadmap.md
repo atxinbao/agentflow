@@ -1,6 +1,6 @@
 # Project Roadmap
 
-更新日期：2026-07-01
+更新日期：2026-07-02
 执行者：Codex
 
 ## Purpose
@@ -146,6 +146,15 @@ Loop 之间不能互相越权：
 
 `v1.1.0` 先做 Product Surface Hardening，把 `products/software-dev/**` 接入 Product Registry、Runtime command route 和 Projection source。
 
+`v1.1.3` 完成后，Product Command Surface 应从 dry-run 进入受控 submit。它仍不是商业发布终点，而是 Product Surface 能安全驱动 Runtime 的起点。
+
+产品化目标分两段：
+
+```text
+v1.1.9 = 可内测产品
+v1.2.3 / v1.2.4 = 可公开发布产品
+```
+
 | Version | Goal | Primary loop / kernel |
 | --- | --- | --- |
 | `v1.0.2` | Release hardening closeout | Release / Governance |
@@ -157,6 +166,20 @@ Loop 之间不能互相越权：
 | `v1.0.8` | Core Projection Kernel | Projection |
 | `v1.0.9` | Software Dev Reference App / Industry Shell Certification | Project Loop / Delivery |
 | `v1.1.0` | Product Surface Hardening | Product Surface / Runtime / Projection |
+| `v1.1.1` | Product Contract Data-driven Hardening | Product Surface / Pack bridge |
+| `v1.1.2` | Product Execution Proof and Command Surface Hardening | Runtime / Projection / Desktop proof |
+| `v1.1.3` | Product Command Submission and State Semantics | Runtime submit / Command state |
+| `v1.1.4` | Project Creation and Product Workspace | Project Loop / Workspace |
+| `v1.1.5` | Spec Intake to Goal / Roadmap / Task Productization | Spec Loop / Project Loop |
+| `v1.1.6` | Executor Adapter Real Execution Closure | Executor adapter / Issue Loop |
+| `v1.1.7` | Evidence / Decision / Delivery User Readability | Evidence / Decision / Delivery |
+| `v1.1.8` | Recovery / Resume / Failure Handling | Runtime recovery / Issue Loop |
+| `v1.1.9` | Software Dev Reference App Beta Certification | Beta certification |
+| `v1.2.0` | Product Onboarding and First-run Experience | Product onboarding |
+| `v1.2.1` | Team Workflow and Project Sharing | Collaboration |
+| `v1.2.2` | Commercial Boundary / License / Usage Model | Commercial boundary |
+| `v1.2.3` | Public Release Candidate Certification | Public release readiness |
+| `v1.2.4` | Public Product Release Closeout | Public product release |
 
 ## Version Intent
 
@@ -400,6 +423,200 @@ products/**
 - release gate 产出 v1.1.2 execution / projection / desktop / multi-product proof artifacts。
 
 Product command authority submission、Product installer、marketplace 和完整行业壳 UI 仍属于后续版本。
+
+### v1.1.3 - Product Command Submission and State Semantics
+
+`v1.1.3` 把 Product Command Surface 从 dry-run 证明推进到受控 submit：
+
+```text
+Product Command dry-run
+-> explicit command state
+-> human confirmation
+-> Runtime submit
+-> arbitration / decision
+-> evidence handoff
+```
+
+本版确认：
+
+- Product command state 明确区分 valid / invalid / deferred / unavailable / rejected；
+- capability unavailable 不能再被 UI 简化成 invalid；
+- Product command submit 必须经过 Runtime API、governance、arbitration 和 evidence handoff；
+- Desktop 只能走 confirm-then-submit，不能绕过 dry-run 或 Runtime admission；
+- release gate 必须包含真实 submit positive / negative proof；
+- Product bridge pollution scanner 升级成语义扫描，不只依赖窄 token 列表。
+
+本版完成后，AgentFlow 具备安全触发 Product Runtime command 的基础能力，但还不是可销售产品。
+
+### v1.1.4 - Project Creation and Product Workspace
+
+`v1.1.4` 让用户可以从产品入口创建一个真实 AgentFlow project workspace。
+
+本版目标：
+
+- 新建项目时生成标准 `docs/project/**` 和 `.agentflow/**` 运行空间；
+- Product source 决定项目类型和默认 surface；
+- Project Loop 能读取 goal、roadmap、active product 和 workspace 状态；
+- Software Dev Reference App 可以作为默认 Product workspace 启动；
+- workspace 初始化必须有 receipt、projection 和失败恢复。
+
+本版不做复杂团队协作，不做商业收费。
+
+### v1.1.5 - Spec Intake to Goal / Roadmap / Task Productization
+
+`v1.1.5` 把用户输入产品化成 Spec-driven 入口。
+
+本版目标：
+
+- Intent intake 进入 Spec Bundle；
+- Spec Bundle 派生 goal / roadmap / tasks；
+- clarify / research / define / plan / task / decide / deliver / evolve 路由可被 Product 使用；
+- 用户确认前不写 authority；
+- 确认后 materialize 到 Runtime 可读合同；
+- Software Dev Reference App 能从需求生成可执行任务集合。
+
+本版重点是输入闭环，不是强化执行器。
+
+### v1.1.6 - Executor Adapter Real Execution Closure
+
+`v1.1.6` 把 Codex / Claude Code 等执行器真正纳入受控 Issue Loop。
+
+本版目标：
+
+- executor adapter contract；
+- handoff、allowed surface、expected outputs、evidence policy；
+- 执行前准入，执行后 diff / evidence / status 校验；
+- provider failure、timeout、cancel、retry 的最小闭环；
+- 不把 executor session 当作 AgentFlow authority。
+
+本版完成后，Software Dev Reference App 应能跑真实 Agent 执行链，而不是只证明 command surface。
+
+### v1.1.7 - Evidence / Decision / Delivery User Readability
+
+`v1.1.7` 把底层事实变成用户看得懂的交付状态。
+
+本版目标：
+
+- evidence graph 对用户可读；
+- Decision reason 可解释；
+- Delivery package 包含结果、证据、限制和下一步；
+- rejected / needs-fix / deferred 有明确修复路径；
+- Audit 仍保持 sidecar，不回到主业务链。
+
+本版完成后，用户能判断“为什么 Done 或为什么不能 Done”。
+
+### v1.1.8 - Recovery / Resume / Failure Handling
+
+`v1.1.8` 处理真实使用中最常见的断点。
+
+本版目标：
+
+- run resume；
+- failed command recovery；
+- stale projection rebuild；
+- interrupted executor session closeout；
+- duplicate command / idempotency handling；
+- workspace health check；
+- release gate 覆盖恢复场景负向夹具。
+
+没有恢复能力，产品不能进入真实团队内测。
+
+### v1.1.9 - Software Dev Reference App Beta Certification
+
+`v1.1.9` 是第一个可内测产品基线。
+
+本版目标：
+
+```text
+create project
+-> intake spec
+-> derive tasks
+-> run executor
+-> collect evidence
+-> decision
+-> delivery
+-> feedback
+```
+
+本版必须证明：
+
+- Software Dev Reference App 不是 Core pollution；
+- 一个真实小型开发任务可以完成闭环；
+- 失败、重试、交付和反馈都有可读 projection；
+- release artifact 可以支撑快速审计。
+
+`v1.1.9` 可以进入受控内测，但不等于公开商业发布。
+
+### v1.2.0 - Product Onboarding and First-run Experience
+
+`v1.2.0` 开始从内测产品走向真实用户。
+
+本版目标：
+
+- first-run project setup；
+- Product selection；
+- workspace readiness check；
+- provider / connector readiness；
+- sample project / guided run；
+- 用户不需要理解 `.agentflow/**` 也能开始使用。
+
+本版不应扩新行业，仍围绕 Software Dev Reference App。
+
+### v1.2.1 - Team Workflow and Project Sharing
+
+`v1.2.1` 支撑团队场景。
+
+本版目标：
+
+- project sharing boundary；
+- role / permission / handoff view；
+- team-readable delivery and decision history；
+- 多人反馈进入 Feedback Loop；
+- 不把权限逻辑塞进单个行业 Product。
+
+本版可以先做本地或轻量协作，不急着做完整云多租户。
+
+### v1.2.2 - Commercial Boundary / License / Usage Model
+
+`v1.2.2` 定义商业发布前的使用边界。
+
+本版目标：
+
+- license / entitlement / usage boundary；
+- paid feature boundary；
+- paid report flow 与 managed project flow 的产品边界；
+- telemetry / support evidence 的最小合同；
+- delivery / refund / customer feedback 的文档化规则。
+
+本版不是先做支付系统，而是先冻结商业边界。
+
+### v1.2.3 - Public Release Candidate Certification
+
+`v1.2.3` 是公开发布候选。
+
+本版目标：
+
+- clean-room install / run / update；
+- full beta scenario certification；
+- docs / onboarding / troubleshooting；
+- release artifact 自包含；
+- known risks and support boundary；
+- public release go / no-go decision。
+
+如果 `v1.2.3` 发现阻断问题，进入 `v1.2.4` 修复后发布。
+
+### v1.2.4 - Public Product Release Closeout
+
+`v1.2.4` 是公开发布收口版本，仅在 `v1.2.3` 有阻断修复时需要。
+
+本版目标：
+
+- 修复 RC 阻断问题；
+- 关闭 public release checklist；
+- 发布稳定安装包、文档和 release notes；
+- 确认公开用户入口、支持边界和后续 roadmap。
+
+如果 `v1.2.3` 已满足公开发布标准，`v1.2.4` 可以跳过或作为首个 patch release 预留。
 
 ## Task Derivation Rule
 
