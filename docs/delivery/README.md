@@ -21,7 +21,9 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.1.2/README.md](releases/v1.1.2/README.md) | 当前发布基线：Product Execution Proof and Command Surface hardening |
+| [releases/v1.1.3/README.md](releases/v1.1.3/README.md) | 当前发布基线：Product Command Submission and State Semantics |
+| [releases/v1.1.3/AGENTFLOW_V1_1_3_PRODUCT_COMMAND_SUBMISSION_TASKS_V1.md](releases/v1.1.3/AGENTFLOW_V1_1_3_PRODUCT_COMMAND_SUBMISSION_TASKS_V1.md) | v1.1.3 Product command submission tasks |
+| [releases/v1.1.2/README.md](releases/v1.1.2/README.md) | 上一发布基线：Product Execution Proof and Command Surface hardening |
 | [releases/v1.1.2/AGENTFLOW_V1_1_2_PRODUCT_EXECUTION_PROOF_COMMAND_SURFACE_TASKS_V1.md](releases/v1.1.2/AGENTFLOW_V1_1_2_PRODUCT_EXECUTION_PROOF_COMMAND_SURFACE_TASKS_V1.md) | v1.1.2 Product execution proof and command surface tasks |
 | [releases/v1.1.1/README.md](releases/v1.1.1/README.md) | 上一发布基线：Product Contract Data-driven hardening |
 | [releases/v1.1.1/AGENTFLOW_V1_1_1_PRODUCT_CONTRACT_DATA_DRIVEN_TASKS_V1.md](releases/v1.1.1/AGENTFLOW_V1_1_1_PRODUCT_CONTRACT_DATA_DRIVEN_TASKS_V1.md) | v1.1.1 Product contract data-driven tasks |
@@ -36,7 +38,7 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| `v1.1.x` | 下一版计划：Product command submission and marketplace-ready Product console hardening |
+| `v1.1.4` | 下一版计划：Project Creation and Product Workspace |
 
 ## Historical Delivery
 

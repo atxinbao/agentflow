@@ -308,6 +308,14 @@ jobs:
               -o -name 'v112-desktop-command-button-installation.json' \
               -o -name 'v112-multi-product-console-states.json' \
               -o -name 'v112-release-certification.json' \
+              -o -name 'v113-product-command-state-contract.json' \
+              -o -name 'v113-product-command-submit-contract.json' \
+              -o -name 'v113-runtime-product-command-submit-api.json' \
+              -o -name 'v113-desktop-confirm-submit-command-flow.json' \
+              -o -name 'v113-product-command-evidence-handoff.json' \
+              -o -name 'v113-multi-product-state-ui-proof.json' \
+              -o -name 'v113-semantic-product-bridge-pollution-scan.json' \
+              -o -name 'v113-release-certification.json' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
 
@@ -433,6 +441,14 @@ jobs:
             runtime/v112-desktop-command-button-installation.json \
             runtime/v112-multi-product-console-states.json \
             runtime/v112-release-certification.json
+            runtime/v113-product-command-state-contract.json \
+            runtime/v113-product-command-submit-contract.json \
+            runtime/v113-runtime-product-command-submit-api.json \
+            runtime/v113-desktop-confirm-submit-command-flow.json \
+            runtime/v113-product-command-evidence-handoff.json \
+            runtime/v113-multi-product-state-ui-proof.json \
+            runtime/v113-semantic-product-bridge-pollution-scan.json \
+            runtime/v113-release-certification.json
           )
 
           check_primary_proofs() {

@@ -1469,7 +1469,7 @@ mod tests {
     fn governance_rejects_forbidden_surface_before_writing_proposal() {
         let dir = tempdir().unwrap();
         let mut request = work_run_request("cmd-forbidden-surface");
-        request.source_surface = ActionSourceSurface::Desktop;
+        request.source_surface = ActionSourceSurface::Conversation;
 
         let response = execute_command_via_arbitration_with_context(
             dir.path(),

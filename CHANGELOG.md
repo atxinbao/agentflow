@@ -7,22 +7,35 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.1.2/README.md](docs/delivery/releases/v1.1.2/README.md)
-- [docs/delivery/releases/v1.1.2/AGENTFLOW_V1_1_2_PRODUCT_EXECUTION_PROOF_COMMAND_SURFACE_TASKS_V1.md](docs/delivery/releases/v1.1.2/AGENTFLOW_V1_1_2_PRODUCT_EXECUTION_PROOF_COMMAND_SURFACE_TASKS_V1.md)
+- [docs/delivery/releases/v1.1.3/README.md](docs/delivery/releases/v1.1.3/README.md)
+- [docs/delivery/releases/v1.1.3/AGENTFLOW_V1_1_3_PRODUCT_COMMAND_SUBMISSION_TASKS_V1.md](docs/delivery/releases/v1.1.3/AGENTFLOW_V1_1_3_PRODUCT_COMMAND_SUBMISSION_TASKS_V1.md)
 
 下一版计划：
 
-- v1.1.x Product command submission and marketplace-ready Product console hardening。
+- v1.1.4 Project Creation and Product Workspace。
 
 ## Unreleased
 
-下一版保留给 Product command submission and marketplace-ready Product console hardening，不在本次 release 中认证。
+下一版保留给 Project Creation and Product Workspace，不在本次 release 中认证。
 
-Planned v1.1.x foundation:
+Planned v1.1.4 foundation:
 
-- harden product surface installation and user-facing console routes;
+- initialize Product-backed project workspaces;
 - keep `products/**` as source definitions and `.agentflow/**` as runtime facts;
-- expand reference app certification without adding Core industry-specific authority.
+- preserve Runtime submit authority and projection proof boundaries.
+
+## v1.1.3 - 2026-07-02
+
+Product Command Submission and State Semantics:
+
+- added explicit Product command states for `valid`, `invalid`, `deferred`, `unavailable`, `rejected` and `submitted`;
+- added controlled Product command submit through Runtime API governance and arbitration;
+- added confirm-then-submit Desktop Product command flow with pending confirmation state;
+- added Product command submit receipts and evidence handoff records;
+- added event-store taxonomy support for issue running lifecycle events emitted by accepted runtime actions;
+- expanded release-gate proof artifacts with Product command state, submit, runtime, Desktop, evidence handoff, multi-product and semantic bridge pollution proofs;
+- added v1.1.3 release task traceability for GitHub issues `#775` through `#782`;
+- advanced workspace and desktop version metadata to `1.1.3`.
 
 ## v1.1.2 - 2026-07-02
 
