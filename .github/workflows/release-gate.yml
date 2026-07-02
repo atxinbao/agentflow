@@ -316,6 +316,16 @@ jobs:
               -o -name 'v113-multi-product-state-ui-proof.json' \
               -o -name 'v113-semantic-product-bridge-pollution-scan.json' \
               -o -name 'v113-release-certification.json' \
+              -o -name 'v114-product-submit-receipt-binding.json' \
+              -o -name 'v114-desktop-confirm-submit-interaction.json' \
+              -o -name 'v114-product-bridge-semantic-pollution-scan.json' \
+              -o -name 'v114-project-workspace-creation-contract.json' \
+              -o -name 'v114-product-selected-workspace-bootstrap.json' \
+              -o -name 'v114-standard-docs-agentflow-fact-source-init.json' \
+              -o -name 'v114-active-product-workspace-projection.json' \
+              -o -name 'v114-workspace-init-failure-recovery.json' \
+              -o -name 'v114-software-dev-workspace-golden-path.json' \
+              -o -name 'v114-release-certification.json' \
             \) -exec cp {} "$certification_dir/runtime/" \;
           fi
 
@@ -448,7 +458,17 @@ jobs:
             runtime/v113-product-command-evidence-handoff.json \
             runtime/v113-multi-product-state-ui-proof.json \
             runtime/v113-semantic-product-bridge-pollution-scan.json \
-            runtime/v113-release-certification.json
+            runtime/v113-release-certification.json \
+            runtime/v114-product-submit-receipt-binding.json \
+            runtime/v114-desktop-confirm-submit-interaction.json \
+            runtime/v114-product-bridge-semantic-pollution-scan.json \
+            runtime/v114-project-workspace-creation-contract.json \
+            runtime/v114-product-selected-workspace-bootstrap.json \
+            runtime/v114-standard-docs-agentflow-fact-source-init.json \
+            runtime/v114-active-product-workspace-projection.json \
+            runtime/v114-workspace-init-failure-recovery.json \
+            runtime/v114-software-dev-workspace-golden-path.json \
+            runtime/v114-release-certification.json
           )
 
           check_primary_proofs() {

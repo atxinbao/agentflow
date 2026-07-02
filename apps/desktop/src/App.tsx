@@ -2388,6 +2388,8 @@ function ProjectHomePage({
   const [commandSurfaceFeedback, setCommandSurfaceFeedback] = useState<string | null>(null);
   const [pendingProductCommandSubmitId, setPendingProductCommandSubmitId] =
     useState<string | null>(null);
+  const [pendingProductCommandReceiptId, setPendingProductCommandReceiptId] =
+    useState<string | null>(null);
   const recentActivities = buildRecentActivities(outputBundle, initializationState.status);
   const activeIssue =
     homeProjectProjection?.currentIssueId
@@ -2458,6 +2460,7 @@ function ProjectHomePage({
       ];
   const productCommandEntries = productCommandSurfaceState.view?.commands.map((command) => {
     const actionId = `${command.productId}-${command.command}`;
+    const targetObjectId = `${command.targetObjectType.toLowerCase()}-desktop-command`;
     const canSubmit = command.state === "valid";
     const awaitingConfirmation = pendingProductCommandSubmitId === actionId;
     return {
@@ -2471,34 +2474,43 @@ function ProjectHomePage({
       onClick: () => {
         if (!canSubmit) {
           setPendingProductCommandSubmitId(null);
+          setPendingProductCommandReceiptId(null);
           setCommandSurfaceFeedback(
             `${command.label} 当前为 ${commandSurfaceStatusLabel(productCommandSurfaceStatus(command))}，不能提交：${command.reason}`,
           );
           return;
         }
         if (awaitingConfirmation) {
+          if (!pendingProductCommandReceiptId) {
+            setPendingProductCommandSubmitId(null);
+            setCommandSurfaceFeedback(`${command.label} dry-run 回执缺失，请重新 dry-run。`);
+            return;
+          }
           setCommandSurfaceFeedback(`正在提交：${command.command}`);
           if (isBrowserPreviewRuntime()) {
             setPendingProductCommandSubmitId(null);
+            setPendingProductCommandReceiptId(null);
             setCommandSurfaceFeedback(`${command.label} 已提交，等待 Runtime 回执。`);
             return;
           }
           void invoke<ProductCommandSubmitResponse>("submit_product_command", {
             projectRoot,
             request: {
-              actorRole: "desktop-user",
+              actorRole: "work-agent",
               command: command.command,
               createdAt: "1970-01-01T00:00:00Z",
-              dryRunReceiptId: `dry-run-${command.productId}-${command.commandId}`,
+              dryRunReceiptId: pendingProductCommandReceiptId,
               evidenceRefs: [`runtime/${command.productId}/${command.commandId}/dry-run.json`],
+              artifactRefs: [`runtime/${command.productId}/${command.commandId}/dry-run.json`],
               idempotencyKey: `desktop-submit-${command.productId}-${command.commandId}`,
               input: { reason: "desktop confirm-then-submit product command" },
               packId: command.packId,
-              targetObjectId: `${command.targetObjectType.toLowerCase()}-desktop-submit`,
+              targetObjectId,
             },
           })
             .then((response) => {
               setPendingProductCommandSubmitId(null);
+              setPendingProductCommandReceiptId(null);
               const receipt = response.receipt?.receiptId ? ` · ${response.receipt.receiptId}` : "";
               const reason = response.accepted
                 ? `已提交${receipt}`
@@ -2506,6 +2518,7 @@ function ProjectHomePage({
               setCommandSurfaceFeedback(`${command.label}：${reason}`);
             })
             .catch((error) => {
+              setPendingProductCommandReceiptId(null);
               setCommandSurfaceFeedback(error instanceof Error ? error.message : String(error));
             });
           return;
@@ -2513,25 +2526,28 @@ function ProjectHomePage({
         setCommandSurfaceFeedback(`正在 dry-run：${command.command}`);
         if (isBrowserPreviewRuntime()) {
           setPendingProductCommandSubmitId(actionId);
+          setPendingProductCommandReceiptId(`browser-preview-${actionId}`);
           setCommandSurfaceFeedback(`${command.label} dry-run：通过。请再次确认提交。`);
           return;
         }
-        void invoke<{ valid?: boolean; rejectedReasons?: Array<{ message?: string }> }>(
+        void invoke<ProductCommandDryRunReport>(
           "dry_run_product_command",
           {
             command: command.command,
             packId: command.packId,
             projectRoot,
-            targetObjectId: `${command.targetObjectType.toLowerCase()}-desktop-preview`,
+            targetObjectId,
           },
         )
           .then((report) => {
-            if (report.valid) {
+            if (report.valid && report.receipt?.receiptId) {
               setPendingProductCommandSubmitId(actionId);
+              setPendingProductCommandReceiptId(report.receipt.receiptId);
               setCommandSurfaceFeedback(`${command.label} dry-run：通过。请再次确认提交。`);
               return;
             }
             setPendingProductCommandSubmitId(null);
+            setPendingProductCommandReceiptId(null);
             const reason = report.rejectedReasons?.[0]?.message ?? "未通过";
             setCommandSurfaceFeedback(`${command.label} dry-run：${reason}`);
           })
@@ -6435,6 +6451,18 @@ type ProductCommandState =
   | "unavailable"
   | "rejected"
   | "submitted";
+
+type ProductCommandDryRunReport = {
+  valid: boolean;
+  receipt?: {
+    receiptId: string;
+    packId: string;
+    command: string;
+    targetObjectId: string;
+    normalizedInputHash: string;
+  } | null;
+  rejectedReasons?: Array<{ message?: string }>;
+};
 
 type ProductCommandSubmitResponse = {
   version: string;

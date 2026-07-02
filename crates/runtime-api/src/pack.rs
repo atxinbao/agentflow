@@ -173,7 +173,30 @@ pub struct PackCommandDryRunReport {
     pub would_submit_to_arbitration: bool,
     pub expected_events: Vec<String>,
     pub affected_projections: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<ProductCommandDryRunReceipt>,
     pub rejected_reasons: Vec<RuntimeCommandError>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCommandDryRunReceipt {
+    pub receipt_id: String,
+    pub pack_id: String,
+    pub command: String,
+    pub command_id: String,
+    pub target_object_type: String,
+    pub target_object_id: String,
+    pub normalized_input_hash: String,
+    pub route: String,
+    pub action_contract_ref: String,
+    pub evidence_policy_ref: String,
+    pub acceptance_policy_ref: String,
+    pub expected_events: Vec<String>,
+    pub affected_projections: Vec<String>,
+    pub evidence_refs: Vec<String>,
+    pub artifact_refs: Vec<String>,
+    pub source_refs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -279,6 +302,10 @@ pub struct ProductCommandSubmitReceipt {
     pub command_id: String,
     pub state: ProductCommandState,
     pub decision: RuntimeCommandDecision,
+    pub dry_run_receipt_id: String,
+    pub normalized_input_hash: String,
+    pub route: String,
+    pub action_contract_ref: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted_action_id: Option<String>,
     pub correlation_id: String,
@@ -497,6 +524,18 @@ pub fn dry_run_pack_command(
         .as_ref()
         .map(|route| vec![format!("projection.refresh:{}", route.target_object_type)])
         .unwrap_or_default();
+    let receipt = validation.surface_route.as_ref().and_then(|route| {
+        if validation.valid {
+            Some(product_command_dry_run_receipt(
+                request,
+                route,
+                &expected_events,
+                &affected_projections,
+            ))
+        } else {
+            None
+        }
+    });
 
     Ok(PackCommandDryRunReport {
         version: PACK_COMMAND_SURFACE_VERSION.to_string(),
@@ -511,6 +550,7 @@ pub fn dry_run_pack_command(
         would_submit_to_arbitration: validation.valid,
         expected_events,
         affected_projections,
+        receipt,
         rejected_reasons: validation.rejected_reasons,
     })
 }
@@ -693,6 +733,7 @@ pub fn dry_run_product_command(
     target_object_id: Option<&str>,
 ) -> Result<PackCommandDryRunReport> {
     let route = query_pack_surface_route(project_root.as_ref(), pack_id, command)?;
+    let target_object_id = target_object_id.unwrap_or("desktop-preview-target");
     let request = PackCommandRequest {
         pack_id: pack_id.to_string(),
         command_id: format!("desktop-dry-run-{pack_id}-{command}"),
@@ -700,14 +741,22 @@ pub fn dry_run_product_command(
         actor_role: "desktop-user".to_string(),
         source_surface: ActionSourceSurface::Desktop,
         target_object_type: route.target_object_type,
-        target_object_id: target_object_id
-            .unwrap_or("desktop-preview-target")
-            .to_string(),
-        input: serde_json::json!({
-            "reason": "desktop product command dry run"
-        }),
-        evidence_refs: Vec::new(),
-        artifact_refs: Vec::new(),
+        target_object_id: target_object_id.to_string(),
+        input: if route.action_contract_ref == "action-contract:issue.start" {
+            serde_json::json!({
+                "runId": format!("run-{target_object_id}")
+            })
+        } else {
+            serde_json::json!({
+                "reason": "desktop product command dry run"
+            })
+        },
+        evidence_refs: vec![format!(
+            "EvidenceRef:runtime/{pack_id}/{command}/dry-run.json"
+        )],
+        artifact_refs: vec![format!(
+            "ArtifactRef:runtime/{pack_id}/{command}/dry-run.json"
+        )],
         idempotency_key: format!("desktop-dry-run-{pack_id}-{command}"),
         created_at: "1970-01-01T00:00:00Z".to_string(),
     };
@@ -745,16 +794,6 @@ pub fn submit_product_command(
         .iter()
         .filter_map(|artifact_ref| normalized_product_submit_artifact_ref(artifact_ref))
         .collect::<Vec<_>>();
-    if let Some(receipt) = request.dry_run_receipt_id.as_ref() {
-        if !receipt.trim().is_empty() {
-            if let Some(evidence_ref) = normalized_product_submit_evidence_ref(receipt) {
-                evidence_refs.push(evidence_ref);
-            }
-            if let Some(artifact_ref) = normalized_product_submit_artifact_ref(receipt) {
-                artifact_refs.push(artifact_ref);
-            }
-        }
-    }
     if let Some(receipt) = request.validation_evidence_ref.as_ref() {
         if !receipt.trim().is_empty() {
             if let Some(evidence_ref) = normalized_product_submit_evidence_ref(receipt) {
@@ -813,15 +852,13 @@ pub fn submit_product_command(
         ));
     }
 
-    let dry_run_evidence_present = request
+    let submitted_receipt_id = request
         .dry_run_receipt_id
         .as_ref()
-        .is_some_and(|receipt| !receipt.trim().is_empty())
-        || request
-            .validation_evidence_ref
-            .as_ref()
-            .is_some_and(|receipt| !receipt.trim().is_empty());
-    if !dry_run_evidence_present {
+        .map(|receipt| receipt.trim())
+        .filter(|receipt| !receipt.is_empty());
+    let expected_receipt = dry_run.receipt.as_ref();
+    if submitted_receipt_id.is_none() {
         return Ok(product_command_submit_closed_response(
             &pack_request,
             ProductCommandState::Rejected,
@@ -829,7 +866,39 @@ pub fn submit_product_command(
             dry_run,
             Some(RuntimeCommandError::new(
                 RuntimeCommandErrorCode::MissingField,
-                "product command submit requires dryRunReceiptId or validationEvidenceRef before authority handoff",
+                "product command submit requires a valid dryRunReceiptId before authority handoff",
+                Some("dryRunReceiptId"),
+            )),
+            true,
+            source_refs,
+            affected_projections,
+        ));
+    }
+    let Some(expected_receipt) = expected_receipt else {
+        return Ok(product_command_submit_closed_response(
+            &pack_request,
+            ProductCommandState::Rejected,
+            validation,
+            dry_run,
+            Some(RuntimeCommandError::new(
+                RuntimeCommandErrorCode::InvalidCommand,
+                "product command submit cannot bind receipt because dry-run did not produce a receipt",
+                Some("dryRunReceiptId"),
+            )),
+            true,
+            source_refs,
+            affected_projections,
+        ));
+    };
+    if submitted_receipt_id != Some(expected_receipt.receipt_id.as_str()) {
+        return Ok(product_command_submit_closed_response(
+            &pack_request,
+            ProductCommandState::Rejected,
+            validation,
+            dry_run,
+            Some(RuntimeCommandError::new(
+                RuntimeCommandErrorCode::InvalidCommand,
+                "product command submit dryRunReceiptId does not match the current pack, command, target, input, route and evidence binding",
                 Some("dryRunReceiptId"),
             )),
             true,
@@ -867,6 +936,10 @@ pub fn submit_product_command(
         command_id: runtime_response.command_id.clone(),
         state,
         decision: runtime_response.decision.clone(),
+        dry_run_receipt_id: expected_receipt.receipt_id.clone(),
+        normalized_input_hash: expected_receipt.normalized_input_hash.clone(),
+        route: expected_receipt.route.clone(),
+        action_contract_ref: expected_receipt.action_contract_ref.clone(),
         accepted_action_id: runtime_response.accepted_action_id.clone(),
         correlation_id: runtime_response.correlation_id.clone(),
     };
@@ -1483,6 +1556,63 @@ fn product_command_state_from_runtime_response(
     }
 }
 
+fn product_command_dry_run_receipt(
+    request: &PackCommandRequest,
+    route: &PackSurfaceRouteView,
+    expected_events: &[String],
+    affected_projections: &[String],
+) -> ProductCommandDryRunReceipt {
+    let normalized_input_hash = stable_json_hash(&request.input);
+    let seed = [
+        request.pack_id.as_str(),
+        request.command.as_str(),
+        request.target_object_type.as_str(),
+        request.target_object_id.as_str(),
+        normalized_input_hash.as_str(),
+        route.route.as_str(),
+        route.action_contract_ref.as_str(),
+        route.evidence_policy_ref.as_str(),
+        route.acceptance_policy_ref.as_str(),
+        &expected_events.join("|"),
+        &affected_projections.join("|"),
+        &request.evidence_refs.join("|"),
+        &request.artifact_refs.join("|"),
+    ]
+    .join("\u{1f}");
+    ProductCommandDryRunReceipt {
+        receipt_id: format!("dry-run-{}", stable_string_hash(&seed)),
+        pack_id: request.pack_id.clone(),
+        command: request.command.clone(),
+        command_id: request.command_id.clone(),
+        target_object_type: request.target_object_type.clone(),
+        target_object_id: request.target_object_id.clone(),
+        normalized_input_hash,
+        route: route.route.clone(),
+        action_contract_ref: route.action_contract_ref.clone(),
+        evidence_policy_ref: route.evidence_policy_ref.clone(),
+        acceptance_policy_ref: route.acceptance_policy_ref.clone(),
+        expected_events: expected_events.to_vec(),
+        affected_projections: affected_projections.to_vec(),
+        evidence_refs: request.evidence_refs.clone(),
+        artifact_refs: request.artifact_refs.clone(),
+        source_refs: route.source_refs.clone(),
+    }
+}
+
+fn stable_json_hash(value: &Value) -> String {
+    let payload = serde_json::to_string(value).unwrap_or_else(|_| "null".to_string());
+    stable_string_hash(&payload)
+}
+
+fn stable_string_hash(value: &str) -> String {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in value.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
+}
+
 fn product_submit_runtime_input(
     route: Option<&PackSurfaceRouteView>,
     target_object_id: &str,
@@ -1548,11 +1678,8 @@ fn product_submit_evidence_type(evidence_ref: &str) -> &'static str {
     if evidence_ref.starts_with("DecisionRef:") {
         return "humanConfirmation";
     }
-    if evidence_ref.contains("validation") || evidence_ref.contains("verify") {
-        return "validationEvidence";
-    }
-    if evidence_ref.contains("dry-run") || evidence_ref.contains("dryRun") {
-        return "dryRunReceipt";
+    if evidence_ref.starts_with("EvidenceRef:") {
+        return "EvidenceRef";
     }
     "runtimeCommandEvidence"
 }
@@ -1741,11 +1868,11 @@ fn invalid_pack_command_response(
 #[cfg(test)]
 mod tests {
     use super::{
-        dry_run_pack_command, get_pack_registry, get_pack_validation_artifact, list_pack_commands,
-        list_product_command_surface, pack_registry_read_receipt,
-        pack_validation_artifact_read_receipt, query_pack_capability_status,
-        query_pack_surface_route, submit_pack_action_proposal, submit_product_command,
-        validate_pack_command, PackCommandRequest, ProductCommandState,
+        dry_run_pack_command, dry_run_product_command, get_pack_registry,
+        get_pack_validation_artifact, list_pack_commands, list_product_command_surface,
+        pack_registry_read_receipt, pack_validation_artifact_read_receipt,
+        query_pack_capability_status, query_pack_surface_route, submit_pack_action_proposal,
+        submit_product_command, validate_pack_command, PackCommandRequest, ProductCommandState,
         ProductCommandSubmitRequest,
     };
     use crate::responses::RuntimeCommandStatus;
@@ -2126,7 +2253,9 @@ mod tests {
                 validation_evidence_ref: None,
                 input: json!({"reason": "submit without dry-run receipt"}),
                 evidence_refs: Vec::new(),
-                artifact_refs: Vec::new(),
+                artifact_refs: vec![
+                    "ArtifactRef:runtime/software-dev/work.issue.start/dry-run.json".to_string(),
+                ],
                 idempotency_key: Some("v113-submit-without-receipt".to_string()),
                 actor_role: Some("work-agent".to_string()),
                 created_at: Some("2026-07-02T00:00:00Z".to_string()),
@@ -2147,18 +2276,31 @@ mod tests {
     fn product_command_submit_returns_receipt_and_evidence_handoff() {
         let dir = tempfile::tempdir().unwrap();
         write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
+        let target_object_id = "AF-V114-SUBMIT-001";
+        let dry_run = dry_run_product_command(
+            dir.path(),
+            "software-dev",
+            "work.issue.start",
+            Some(target_object_id),
+        )
+        .unwrap();
+        let dry_run_receipt_id = dry_run.receipt.unwrap().receipt_id;
 
         let response = submit_product_command(
             dir.path(),
             ProductCommandSubmitRequest {
                 pack_id: "software-dev".to_string(),
                 command: "work.issue.start".to_string(),
-                target_object_id: Some("AF-V113-SUBMIT-001".to_string()),
-                dry_run_receipt_id: Some("dry-run-v113-submit-001".to_string()),
+                target_object_id: Some(target_object_id.to_string()),
+                dry_run_receipt_id: Some(dry_run_receipt_id.clone()),
                 validation_evidence_ref: None,
-                input: json!({"reason": "submit product command through Runtime API"}),
-                evidence_refs: vec!["runtime/v113-dry-run-proof.json".to_string()],
-                artifact_refs: Vec::new(),
+                input: json!({}),
+                evidence_refs: vec![
+                    "runtime/software-dev/work.issue.start/dry-run.json".to_string()
+                ],
+                artifact_refs: vec![
+                    "ArtifactRef:runtime/software-dev/work.issue.start/dry-run.json".to_string(),
+                ],
                 idempotency_key: Some("v113-product-submit-001".to_string()),
                 actor_role: Some("work-agent".to_string()),
                 created_at: Some("2026-07-02T00:00:00Z".to_string()),
@@ -2169,12 +2311,81 @@ mod tests {
         assert_eq!(response.state, ProductCommandState::Submitted);
         assert!(response.accepted);
         assert!(response.runtime_response.is_some());
-        assert!(response.receipt.is_some());
+        assert_eq!(
+            response
+                .receipt
+                .as_ref()
+                .map(|receipt| receipt.dry_run_receipt_id.as_str()),
+            Some(dry_run_receipt_id.as_str())
+        );
         let handoff = response.evidence_handoff.unwrap();
         assert!(!handoff.evidence_policy_ref.is_empty());
         assert!(handoff
             .required_evidence
             .contains(&"accepted-action-event".to_string()));
+    }
+
+    #[test]
+    fn product_command_submit_rejects_forged_or_mismatched_receipts() {
+        let dir = tempfile::tempdir().unwrap();
+        write_pack_bundle(dir.path(), "software-dev", "work.issue.start");
+        let target_object_id = "AF-V114-SUBMIT-002";
+        let dry_run = dry_run_product_command(
+            dir.path(),
+            "software-dev",
+            "work.issue.start",
+            Some(target_object_id),
+        )
+        .unwrap();
+        let dry_run_receipt_id = dry_run.receipt.unwrap().receipt_id;
+
+        let forged = submit_product_command(
+            dir.path(),
+            ProductCommandSubmitRequest {
+                pack_id: "software-dev".to_string(),
+                command: "work.issue.start".to_string(),
+                target_object_id: Some(target_object_id.to_string()),
+                dry_run_receipt_id: Some("dry-run-forged".to_string()),
+                validation_evidence_ref: None,
+                input: json!({}),
+                evidence_refs: vec![
+                    "runtime/software-dev/work.issue.start/dry-run.json".to_string()
+                ],
+                artifact_refs: vec![
+                    "ArtifactRef:runtime/software-dev/work.issue.start/dry-run.json".to_string(),
+                ],
+                idempotency_key: Some("v114-forged-receipt".to_string()),
+                actor_role: Some("work-agent".to_string()),
+                created_at: Some("2026-07-02T00:00:00Z".to_string()),
+            },
+        )
+        .unwrap();
+        assert_eq!(forged.state, ProductCommandState::Rejected);
+        assert!(forged
+            .rejected_reasons
+            .iter()
+            .any(|reason| reason.message.contains("does not match")));
+
+        let wrong_target = submit_product_command(
+            dir.path(),
+            ProductCommandSubmitRequest {
+                pack_id: "software-dev".to_string(),
+                command: "work.issue.start".to_string(),
+                target_object_id: Some("AF-V114-SUBMIT-OTHER".to_string()),
+                dry_run_receipt_id: Some(dry_run_receipt_id),
+                validation_evidence_ref: None,
+                input: json!({}),
+                evidence_refs: vec![
+                    "runtime/software-dev/work.issue.start/dry-run.json".to_string()
+                ],
+                artifact_refs: Vec::new(),
+                idempotency_key: Some("v114-wrong-target-receipt".to_string()),
+                actor_role: Some("work-agent".to_string()),
+                created_at: Some("2026-07-02T00:00:00Z".to_string()),
+            },
+        )
+        .unwrap();
+        assert_eq!(wrong_target.state, ProductCommandState::Rejected);
     }
 
     #[test]
