@@ -5,6 +5,30 @@ pub(crate) fn load_api_plane_manifest() -> Result<agentflow_runtime_api::ApiPlan
     Ok(agentflow_runtime_api::api_plane_manifest())
 }
 
+#[tauri::command]
+pub(crate) fn load_product_command_surface(
+    project_root: String,
+) -> Result<agentflow_runtime_api::ProductCommandSurfaceView, String> {
+    agentflow_runtime_api::list_product_command_surface(project_root)
+        .map_err(|error| format!("load product command surface failed: {error}"))
+}
+
+#[tauri::command]
+pub(crate) fn dry_run_product_command(
+    project_root: String,
+    pack_id: String,
+    command: String,
+    target_object_id: Option<String>,
+) -> Result<agentflow_runtime_api::PackCommandDryRunReport, String> {
+    agentflow_runtime_api::dry_run_product_command(
+        project_root,
+        &pack_id,
+        &command,
+        target_object_id.as_deref(),
+    )
+    .map_err(|error| format!("dry run product command failed: {error}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::load_api_plane_manifest;

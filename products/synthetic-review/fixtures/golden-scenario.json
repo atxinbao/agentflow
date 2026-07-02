@@ -1,0 +1,15 @@
+{
+  "version": "agentflow-synthetic-review-golden-fixture.v1",
+  "scenarioId": "synthetic-review-generic-product-loop",
+  "productId": "synthetic-review",
+  "primaryProofs": [
+    "product-contract",
+    "runtime-command-route",
+    "projection-read-model"
+  ],
+  "steps": [
+    "synthetic-case-contract-confirmed",
+    "runtime-command-admitted",
+    "projection-review-console-updated"
+  ]
+}

@@ -25,6 +25,7 @@ pub type PackRegistryView = agentflow_pack::PackRegistry;
 pub type PackValidationArtifactView = agentflow_pack::PackValidationArtifact;
 
 pub const PACK_COMMAND_SURFACE_VERSION: &str = "agentflow-pack-command-surface.v1";
+pub const PRODUCT_COMMAND_SURFACE_VERSION: &str = "agentflow-product-command-surface.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,6 +150,69 @@ pub struct PackCommandDryRunReport {
     pub expected_events: Vec<String>,
     pub affected_projections: Vec<String>,
     pub rejected_reasons: Vec<RuntimeCommandError>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCommandSurfaceView {
+    pub version: String,
+    pub writes_authority: bool,
+    pub products: Vec<ProductCommandSurfaceProductView>,
+    pub commands: Vec<ProductCommandSurfaceActionView>,
+    pub summary: ProductCommandSurfaceSummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCommandSurfaceProductView {
+    pub product_id: String,
+    pub pack_id: String,
+    pub name: String,
+    pub status: String,
+    pub product_root: String,
+    pub manifest_path: String,
+    pub valid: bool,
+    pub command_count: usize,
+    #[serde(default)]
+    pub diagnostics: Vec<agentflow_pack::ProductRegistryDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCommandSurfaceActionView {
+    pub product_id: String,
+    pub pack_id: String,
+    pub command_id: String,
+    pub command: String,
+    pub label: String,
+    pub page_id: String,
+    pub route: String,
+    pub action_contract_ref: String,
+    pub runtime_command_type: String,
+    pub target_object_type: String,
+    pub skill_ref: String,
+    pub connector_id: String,
+    pub required_capability: String,
+    pub evidence_policy_ref: String,
+    pub acceptance_policy_ref: String,
+    pub source_refs: Vec<String>,
+    pub available: bool,
+    pub validation_status: String,
+    pub dry_run_status: String,
+    pub reason: String,
+    pub validation: PackCommandValidationReport,
+    pub dry_run: PackCommandDryRunReport,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCommandSurfaceSummary {
+    pub product_count: usize,
+    pub valid_product_count: usize,
+    pub command_count: usize,
+    pub available_command_count: usize,
+    pub invalid_command_count: usize,
+    pub deferred_command_count: usize,
 }
 
 pub fn get_pack_registry(project_root: impl AsRef<Path>) -> Result<PackRegistryView> {
@@ -348,6 +412,178 @@ pub fn dry_run_pack_command(
         affected_projections,
         rejected_reasons: validation.rejected_reasons,
     })
+}
+
+pub fn list_product_command_surface(
+    project_root: impl AsRef<Path>,
+) -> Result<ProductCommandSurfaceView> {
+    let project_root = project_root.as_ref();
+    let registry = agentflow_pack::load_product_registry(project_root)?;
+    let mut products = Vec::new();
+    let mut commands = Vec::new();
+
+    for entry in registry.entries.iter() {
+        match agentflow_pack::load_product_definition_from_entry(entry) {
+            Ok(definition) => {
+                let mut command_count = 0;
+                for command in definition.surface.commands.iter() {
+                    let Ok(route) = agentflow_pack::product_command_route(&definition, command)
+                    else {
+                        continue;
+                    };
+                    command_count += 1;
+                    let request = product_command_request_from_route(&route);
+                    let validation = validate_pack_command(project_root, &request)?;
+                    let dry_run = dry_run_pack_command(project_root, &request)?;
+                    let available = validation.valid && dry_run.valid;
+                    let reason = validation
+                        .capability_status
+                        .as_ref()
+                        .map(|status| status.reason.clone())
+                        .unwrap_or_else(|| {
+                            validation
+                                .rejected_reasons
+                                .first()
+                                .map(|error| error.message.clone())
+                                .unwrap_or_else(|| "product command route ready".to_string())
+                        });
+                    let route_view =
+                        validation
+                            .surface_route
+                            .clone()
+                            .unwrap_or(PackSurfaceRouteView {
+                                version: PACK_COMMAND_SURFACE_VERSION.to_string(),
+                                pack_id: route.pack_id.clone(),
+                                command: route.command.clone(),
+                                page_id: route.page_id.clone(),
+                                route: "product-surface/runtime-command".to_string(),
+                                action_contract_ref: route.action_contract_ref.clone(),
+                                runtime_command_type: crate::mapping::CORE_RUNTIME_COMMAND_TYPE
+                                    .to_string(),
+                                target_object_type: route.target_object_type.clone(),
+                                skill_ref: route.skill_ref.clone(),
+                                connector_id: route.connector_id.clone(),
+                                required_capability: route.required_capability.clone(),
+                                evidence_policy_ref: route.evidence_policy_ref.clone(),
+                                acceptance_policy_ref: route.acceptance_policy_ref.clone(),
+                                source_refs: route.source_refs.clone(),
+                            });
+                    commands.push(ProductCommandSurfaceActionView {
+                        product_id: definition.product_id.clone(),
+                        pack_id: route_view.pack_id.clone(),
+                        command_id: route.command_id.clone(),
+                        command: route_view.command.clone(),
+                        label: route.label.clone(),
+                        page_id: route_view.page_id.clone(),
+                        route: route_view.route.clone(),
+                        action_contract_ref: route_view.action_contract_ref.clone(),
+                        runtime_command_type: route_view.runtime_command_type.clone(),
+                        target_object_type: route_view.target_object_type.clone(),
+                        skill_ref: route_view.skill_ref.clone(),
+                        connector_id: route_view.connector_id.clone(),
+                        required_capability: route_view.required_capability.clone(),
+                        evidence_policy_ref: route_view.evidence_policy_ref.clone(),
+                        acceptance_policy_ref: route_view.acceptance_policy_ref.clone(),
+                        source_refs: route_view.source_refs.clone(),
+                        available,
+                        validation_status: if validation.valid { "valid" } else { "invalid" }
+                            .to_string(),
+                        dry_run_status: if dry_run.valid { "valid" } else { "invalid" }.to_string(),
+                        reason,
+                        validation,
+                        dry_run,
+                    });
+                }
+                products.push(ProductCommandSurfaceProductView {
+                    product_id: entry.product_id.clone(),
+                    pack_id: entry.pack_id.clone(),
+                    name: entry.name.clone(),
+                    status: entry.status.clone(),
+                    product_root: entry.product_root.clone(),
+                    manifest_path: entry.manifest_path.clone(),
+                    valid: definition.valid && !definition.writes_authority,
+                    command_count,
+                    diagnostics: definition.diagnostics.clone(),
+                });
+            }
+            Err(error) => {
+                products.push(ProductCommandSurfaceProductView {
+                    product_id: entry.product_id.clone(),
+                    pack_id: entry.pack_id.clone(),
+                    name: entry.name.clone(),
+                    status: entry.status.clone(),
+                    product_root: entry.product_root.clone(),
+                    manifest_path: entry.manifest_path.clone(),
+                    valid: false,
+                    command_count: 0,
+                    diagnostics: vec![agentflow_pack::ProductRegistryDiagnostic {
+                        code: "product-definition-unreadable".to_string(),
+                        message: error.to_string(),
+                        path: entry.manifest_path.clone(),
+                    }],
+                });
+            }
+        }
+    }
+
+    products.sort_by(|left, right| left.product_id.cmp(&right.product_id));
+    commands.sort_by(|left, right| {
+        left.product_id
+            .cmp(&right.product_id)
+            .then_with(|| left.command.cmp(&right.command))
+    });
+    let product_count = products.len();
+    let valid_product_count = products.iter().filter(|product| product.valid).count();
+    let command_count = commands.len();
+    let available_command_count = commands.iter().filter(|command| command.available).count();
+    let invalid_command_count = commands
+        .iter()
+        .filter(|command| command.validation_status == "invalid")
+        .count();
+    let deferred_command_count = command_count.saturating_sub(available_command_count);
+
+    Ok(ProductCommandSurfaceView {
+        version: PRODUCT_COMMAND_SURFACE_VERSION.to_string(),
+        writes_authority: false,
+        products,
+        commands,
+        summary: ProductCommandSurfaceSummary {
+            product_count,
+            valid_product_count,
+            command_count,
+            available_command_count,
+            invalid_command_count,
+            deferred_command_count,
+        },
+    })
+}
+
+pub fn dry_run_product_command(
+    project_root: impl AsRef<Path>,
+    pack_id: &str,
+    command: &str,
+    target_object_id: Option<&str>,
+) -> Result<PackCommandDryRunReport> {
+    let route = query_pack_surface_route(project_root.as_ref(), pack_id, command)?;
+    let request = PackCommandRequest {
+        pack_id: pack_id.to_string(),
+        command_id: format!("desktop-dry-run-{pack_id}-{command}"),
+        command: command.to_string(),
+        actor_role: "desktop-user".to_string(),
+        source_surface: ActionSourceSurface::Desktop,
+        target_object_type: route.target_object_type,
+        target_object_id: target_object_id
+            .unwrap_or("desktop-preview-target")
+            .to_string(),
+        input: serde_json::json!({
+            "reason": "desktop product command dry run"
+        }),
+        evidence_refs: Vec::new(),
+        artifact_refs: Vec::new(),
+        idempotency_key: format!("desktop-dry-run-{pack_id}-{command}"),
+        created_at: "1970-01-01T00:00:00Z".to_string(),
+    };
+    dry_run_pack_command(project_root, &request)
 }
 
 pub fn submit_pack_action_proposal(
@@ -837,6 +1073,27 @@ fn runtime_command_from_pack_request(
         evidence_policy: None,
         idempotency_key: request.idempotency_key.clone(),
         created_at: request.created_at.clone(),
+    }
+}
+
+fn product_command_request_from_route(
+    route: &agentflow_pack::ProductCommandRoute,
+) -> PackCommandRequest {
+    PackCommandRequest {
+        pack_id: route.pack_id.clone(),
+        command_id: format!("read-model-{}", route.command_id),
+        command: route.command.clone(),
+        actor_role: "work-agent".to_string(),
+        source_surface: ActionSourceSurface::Desktop,
+        target_object_type: route.target_object_type.clone(),
+        target_object_id: format!("{}-target", route.command_id),
+        input: serde_json::json!({
+            "reason": "product command surface read model validation"
+        }),
+        evidence_refs: Vec::new(),
+        artifact_refs: Vec::new(),
+        idempotency_key: format!("read-model-{}", route.command_id),
+        created_at: "1970-01-01T00:00:00Z".to_string(),
     }
 }
 

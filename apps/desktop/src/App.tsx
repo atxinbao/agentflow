@@ -568,6 +568,7 @@ function App() {
   const workspaceData = useWorkspaceData(projectRoot);
   const outputBundle = useOutputBundle(projectRoot, outputRefreshToken);
   const initializationState = useProjectInitializationStatus(projectRoot, outputRefreshToken);
+  const productCommandSurfaceState = useProductCommandSurface(projectRoot);
 
   useEffect(() => {
     if (connectedProvider) {
@@ -1502,6 +1503,8 @@ function App() {
             onOpenAudit={() => setActivePage("audit")}
             onOpenTasks={() => setActivePage("tasks")}
             outputBundle={outputBundle}
+            productCommandSurfaceState={productCommandSurfaceState}
+            projectRoot={projectRoot}
             projectLoopFeedback={projectLoopFeedback}
             projectLoopState={projectLoopState}
             selectedTask={selectedTask}
@@ -2358,6 +2361,8 @@ function ProjectHomePage({
   onRunProjectLoop,
   onOpenTasks,
   outputBundle,
+  productCommandSurfaceState,
+  projectRoot,
   projectLoopFeedback,
   projectLoopState,
   selectedTask,
@@ -2372,12 +2377,15 @@ function ProjectHomePage({
   onRunProjectLoop: () => void;
   onOpenTasks: () => void;
   outputBundle: OutputBundleState;
+  productCommandSurfaceState: ProductCommandSurfaceState;
+  projectRoot: string;
   projectLoopFeedback: string | null;
   projectLoopState: ButtonInteractionState;
   selectedTask: V1Issue | null;
   stateStatus: StateStatusSnapshot | null;
   tasks: V1Issue[];
 }) {
+  const [commandSurfaceFeedback, setCommandSurfaceFeedback] = useState<string | null>(null);
   const recentActivities = buildRecentActivities(outputBundle, initializationState.status);
   const activeIssue =
     homeProjectProjection?.currentIssueId
@@ -2446,7 +2454,44 @@ function ProjectHomePage({
           title: nextActionLabel,
         },
       ];
-  const commandEntries: CommandSurfaceActionView[] = [
+  const productCommandEntries = productCommandSurfaceState.view?.commands.map((command) => ({
+    commandStatus: productCommandSurfaceStatus(command),
+    commandType: command.command,
+    detail: `${command.productId} · ${command.reason}`,
+    disabled: productCommandSurfaceState.source === "loading",
+    id: `${command.productId}-${command.command}`,
+    label: command.label,
+    loading: productCommandSurfaceState.source === "loading",
+    onClick: () => {
+      setCommandSurfaceFeedback(`正在 dry-run：${command.command}`);
+      if (isBrowserPreviewRuntime()) {
+        setCommandSurfaceFeedback(`${command.label} dry-run：${command.dryRunStatus}`);
+        return;
+      }
+      void invoke<{ valid?: boolean; rejectedReasons?: Array<{ message?: string }> }>(
+        "dry_run_product_command",
+        {
+          command: command.command,
+          packId: command.packId,
+          projectRoot,
+          targetObjectId: `${command.targetObjectType.toLowerCase()}-desktop-preview`,
+        },
+      )
+        .then((report) => {
+          const reason = report.valid
+            ? "通过"
+            : report.rejectedReasons?.[0]?.message ?? "未通过";
+          setCommandSurfaceFeedback(`${command.label} dry-run：${reason}`);
+        })
+        .catch((error) => {
+          setCommandSurfaceFeedback(error instanceof Error ? error.message : String(error));
+        });
+    },
+    proposalRef: `dry-run-${command.productId}-${command.commandId}`,
+    runtimeApi: "ProductCommandSurface -> validate_pack_command -> dry_run_pack_command",
+    target: command.targetObjectType,
+  } satisfies CommandSurfaceActionView)) ?? [];
+  const fallbackCommandEntries: CommandSurfaceActionView[] = [
     {
       commandStatus: activeIssue ? "rejected" : projectLoopState === "loading" ? "queued" : "pending",
       commandType: "startWork",
@@ -2489,6 +2534,7 @@ function ProjectHomePage({
       target: activeIssue?.id ?? homeProjectProjection?.projectId ?? "project",
     },
   ];
+  const commandEntries = productCommandEntries.length ? productCommandEntries : fallbackCommandEntries;
 
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
@@ -2641,6 +2687,10 @@ function ProjectHomePage({
         <ProjectHomeAgentEntryPanel activeOwnerLabel={nextOwnerLabel} />
         <Panel className="v16-home-column" title="Command Surface">
           <CommandSurfaceActionList actions={commandEntries} />
+          {productCommandSurfaceState.error ? (
+            <p className="v16-feedback">{productCommandSurfaceState.error}</p>
+          ) : null}
+          {commandSurfaceFeedback ? <p className="v16-feedback">{commandSurfaceFeedback}</p> : null}
         </Panel>
       </section>
 
@@ -2796,6 +2846,16 @@ function commandSurfaceStatusTone(status: CommandSurfaceStatus) {
     rejected: "failed",
   };
   return tones[status];
+}
+
+function productCommandSurfaceStatus(command: ProductCommandSurfaceCommand): CommandSurfaceStatus {
+  if (command.available && command.validationStatus === "valid" && command.dryRunStatus === "valid") {
+    return "accepted";
+  }
+  if (command.validationStatus === "invalid" || command.dryRunStatus === "invalid") {
+    return "rejected";
+  }
+  return "pending";
 }
 
 function specCommandSurfaceActions(requirementId: string, currentState: string): CommandSurfaceActionView[] {
@@ -6276,10 +6336,63 @@ type ApiPlaneManifestState = {
   source: DataSource;
 };
 
+type ProductCommandSurfaceCommand = {
+  productId: string;
+  packId: string;
+  commandId: string;
+  command: string;
+  label: string;
+  pageId: string;
+  runtimeCommandType: string;
+  targetObjectType: string;
+  skillRef: string;
+  connectorId: string;
+  requiredCapability: string;
+  sourceRefs: string[];
+  available: boolean;
+  validationStatus: string;
+  dryRunStatus: string;
+  reason: string;
+};
+
+type ProductCommandSurfaceView = {
+  version: string;
+  writesAuthority: boolean;
+  products: Array<{
+    productId: string;
+    packId: string;
+    name: string;
+    status: string;
+    valid: boolean;
+    commandCount: number;
+  }>;
+  commands: ProductCommandSurfaceCommand[];
+  summary: {
+    productCount: number;
+    validProductCount: number;
+    commandCount: number;
+    availableCommandCount: number;
+    invalidCommandCount: number;
+    deferredCommandCount: number;
+  };
+};
+
+type ProductCommandSurfaceState = {
+  error: string | null;
+  source: DataSource;
+  view: ProductCommandSurfaceView | null;
+};
+
 const initialApiPlaneManifestState: ApiPlaneManifestState = {
   error: null,
   manifest: null,
   source: "idle",
+};
+
+const initialProductCommandSurfaceState: ProductCommandSurfaceState = {
+  error: null,
+  source: "idle",
+  view: null,
 };
 
 const advancedStateFileNames = [
@@ -6386,6 +6499,53 @@ function useApiPlaneManifest(): ApiPlaneManifestState {
   }, []);
 
   return apiPlaneState;
+}
+
+function useProductCommandSurface(projectRoot: string | null): ProductCommandSurfaceState {
+  const [surfaceState, setSurfaceState] = useState<ProductCommandSurfaceState>(
+    initialProductCommandSurfaceState,
+  );
+
+  useEffect(() => {
+    if (!projectRoot) {
+      setSurfaceState(initialProductCommandSurfaceState);
+      return;
+    }
+
+    if (isBrowserPreviewRuntime()) {
+      setSurfaceState({
+        error: null,
+        source: "preview",
+        view: buildBrowserPreviewProductCommandSurface(),
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setSurfaceState((current) => ({ ...current, error: null, source: "loading" }));
+
+    void invoke<ProductCommandSurfaceView>("load_product_command_surface", { projectRoot })
+      .then((view) => {
+        if (!cancelled) {
+          setSurfaceState({ error: null, source: "tauri", view });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setSurfaceState({
+            error: error instanceof Error ? error.message : String(error),
+            source: "unavailable",
+            view: null,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectRoot]);
+
+  return surfaceState;
 }
 
 async function loadAdvancedStateFiles(
@@ -6534,6 +6694,85 @@ function buildBrowserPreviewApiPlaneManifest() {
     entries,
     scope: "runtime/projection/command/connector/provider/audit/release",
     version: "agentflow-api-plane-manifest.v1",
+  };
+}
+
+function buildBrowserPreviewProductCommandSurface(): ProductCommandSurfaceView {
+  const commands: ProductCommandSurfaceCommand[] = [
+    {
+      productId: "software-dev",
+      packId: "software-dev",
+      commandId: "work.issue.start",
+      command: "work.issue.start",
+      label: "启动任务执行",
+      pageId: "task-workbench",
+      runtimeCommandType: "runtime.command.execute",
+      targetObjectType: "Issue",
+      skillRef: "skill:software-dev/start-work",
+      connectorId: "codex",
+      requiredCapability: "provider.codex.launch",
+      sourceRefs: [
+        "products/software-dev/product.toml",
+        "products/software-dev/surface/definition.json",
+      ],
+      available: true,
+      validationStatus: "valid",
+      dryRunStatus: "valid",
+      reason: "product command is available through product connector and capability registry",
+    },
+    {
+      productId: "synthetic-review",
+      packId: "synthetic-review",
+      commandId: "synthetic.case.open",
+      command: "synthetic.case.open",
+      label: "打开合成用例",
+      pageId: "review-console",
+      runtimeCommandType: "runtime.command.execute",
+      targetObjectType: "Case",
+      skillRef: "skill:synthetic-review/open-case",
+      connectorId: "fixture-agent",
+      requiredCapability: "synthetic.launch",
+      sourceRefs: [
+        "products/synthetic-review/product.toml",
+        "products/synthetic-review/surface/definition.json",
+      ],
+      available: false,
+      validationStatus: "invalid",
+      dryRunStatus: "invalid",
+      reason: "fixture-agent capability is deferred in Browser Preview",
+    },
+  ];
+
+  return {
+    version: "agentflow-product-command-surface.v1",
+    writesAuthority: false,
+    products: [
+      {
+        productId: "software-dev",
+        packId: "software-dev",
+        name: "Software Development Product",
+        status: "stable",
+        valid: true,
+        commandCount: 1,
+      },
+      {
+        productId: "synthetic-review",
+        packId: "synthetic-review",
+        name: "Synthetic Review Fixture",
+        status: "certified-reference",
+        valid: true,
+        commandCount: 1,
+      },
+    ],
+    commands,
+    summary: {
+      productCount: 2,
+      validProductCount: 2,
+      commandCount: commands.length,
+      availableCommandCount: commands.filter((command) => command.available).length,
+      invalidCommandCount: commands.filter((command) => command.validationStatus === "invalid").length,
+      deferredCommandCount: commands.filter((command) => !command.available).length,
+    },
   };
 }
 

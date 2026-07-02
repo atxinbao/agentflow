@@ -41,13 +41,15 @@ pub use mapping::{
     CORE_RUNTIME_COMMAND_TYPE,
 };
 pub use pack::{
-    dry_run_pack_command, get_pack_registry, get_pack_validation_artifact, list_pack_commands,
-    pack_registry_read_receipt, pack_validation_artifact_read_receipt,
-    query_pack_capability_status, query_pack_surface_route, submit_pack_action_proposal,
-    validate_pack_command, PackCapabilityStatusView, PackCommandDryRunReport, PackCommandEntryView,
-    PackCommandListView, PackCommandRequest, PackCommandValidationReport, PackRegistryReadReceipt,
-    PackRegistryView, PackSurfaceRouteView, PackValidationArtifactReadReceipt,
-    PackValidationArtifactView, PACK_COMMAND_SURFACE_VERSION,
+    dry_run_pack_command, dry_run_product_command, get_pack_registry, get_pack_validation_artifact,
+    list_pack_commands, list_product_command_surface, pack_registry_read_receipt,
+    pack_validation_artifact_read_receipt, query_pack_capability_status, query_pack_surface_route,
+    submit_pack_action_proposal, validate_pack_command, PackCapabilityStatusView,
+    PackCommandDryRunReport, PackCommandEntryView, PackCommandListView, PackCommandRequest,
+    PackCommandValidationReport, PackRegistryReadReceipt, PackRegistryView, PackSurfaceRouteView,
+    PackValidationArtifactReadReceipt, PackValidationArtifactView, ProductCommandSurfaceActionView,
+    ProductCommandSurfaceProductView, ProductCommandSurfaceSummary, ProductCommandSurfaceView,
+    PACK_COMMAND_SURFACE_VERSION, PRODUCT_COMMAND_SURFACE_VERSION,
 };
 pub use query::{
     get_audit_surface_view, get_core_file_backed_ontology_registry_view, get_delivery_package_view,
