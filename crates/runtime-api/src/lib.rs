@@ -13,6 +13,7 @@ pub mod formal;
 pub mod handoff;
 pub mod mapping;
 pub mod pack;
+pub mod product_workspace;
 pub mod query;
 pub mod responses;
 pub mod work_proposals;
@@ -48,11 +49,17 @@ pub use pack::{
     PackCapabilityStatusView, PackCommandDryRunReport, PackCommandEntryView, PackCommandListView,
     PackCommandRequest, PackCommandValidationReport, PackRegistryReadReceipt, PackRegistryView,
     PackSurfaceRouteView, PackValidationArtifactReadReceipt, PackValidationArtifactView,
-    ProductCommandEvidenceHandoff, ProductCommandState, ProductCommandStateLegendEntry,
-    ProductCommandSubmitReceipt, ProductCommandSubmitRequest, ProductCommandSubmitResponse,
-    ProductCommandSurfaceActionView, ProductCommandSurfaceProductView,
-    ProductCommandSurfaceSummary, ProductCommandSurfaceView, PACK_COMMAND_SURFACE_VERSION,
-    PRODUCT_COMMAND_SUBMIT_VERSION, PRODUCT_COMMAND_SURFACE_VERSION,
+    ProductCommandDryRunReceipt, ProductCommandEvidenceHandoff, ProductCommandState,
+    ProductCommandStateLegendEntry, ProductCommandSubmitReceipt, ProductCommandSubmitRequest,
+    ProductCommandSubmitResponse, ProductCommandSurfaceActionView,
+    ProductCommandSurfaceProductView, ProductCommandSurfaceSummary, ProductCommandSurfaceView,
+    PACK_COMMAND_SURFACE_VERSION, PRODUCT_COMMAND_SUBMIT_VERSION, PRODUCT_COMMAND_SURFACE_VERSION,
+};
+pub use product_workspace::{
+    create_product_workspace, load_product_workspace_projection, ProductWorkspaceCreationMode,
+    ProductWorkspaceCreationReceipt, ProductWorkspaceCreationRequest, ProductWorkspacePathSet,
+    ProductWorkspaceProductBinding, ProductWorkspaceProjection, ProductWorkspaceStatus,
+    PRODUCT_WORKSPACE_CONTRACT_VERSION, PRODUCT_WORKSPACE_PROJECTION_VERSION,
 };
 pub use query::{
     get_audit_surface_view, get_core_file_backed_ontology_registry_view, get_delivery_package_view,

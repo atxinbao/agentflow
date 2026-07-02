@@ -1,9 +1,9 @@
 use agentflow_action_contract::ActionSourceSurface;
 use agentflow_capability_registry::{default_capability_registry, CapabilityPolicy, WorkerHealth};
 use agentflow_runtime_api::{
-    dry_run_pack_command, list_product_command_surface, query_pack_surface_route,
-    submit_product_command, validate_pack_command, PackCommandRequest, ProductCommandState,
-    ProductCommandSubmitRequest,
+    dry_run_pack_command, dry_run_product_command, list_product_command_surface,
+    query_pack_surface_route, submit_product_command, validate_pack_command, PackCommandRequest,
+    ProductCommandState, ProductCommandSubmitRequest,
 };
 use anyhow::{bail, Result};
 use serde_json::{json, Value};
@@ -175,17 +175,29 @@ fn submit_contract_proof(workspace: &Path) -> Result<Value> {
 }
 
 fn runtime_submit_api_proof(workspace: &Path) -> Result<Value> {
+    let target_object_id = "AF-V113-SUBMIT";
+    let dry_run = dry_run_product_command(
+        workspace,
+        "software-dev",
+        "work.issue.start",
+        Some(target_object_id),
+    )?;
+    let dry_run_receipt_id = dry_run
+        .receipt
+        .as_ref()
+        .map(|receipt| receipt.receipt_id.clone())
+        .unwrap_or_default();
     let accepted = submit_product_command(
         workspace,
         ProductCommandSubmitRequest {
             pack_id: "software-dev".to_string(),
             command: "work.issue.start".to_string(),
-            target_object_id: Some("AF-V113-SUBMIT".to_string()),
-            dry_run_receipt_id: Some("dry-run-v113-submit".to_string()),
+            target_object_id: Some(target_object_id.to_string()),
+            dry_run_receipt_id: Some(dry_run_receipt_id),
             validation_evidence_ref: None,
-            input: json!({"reason": "v1.1.3 submit Runtime API proof"}),
-            evidence_refs: vec!["runtime/v113-product-command-state-contract.json".to_string()],
-            artifact_refs: Vec::new(),
+            input: json!({}),
+            evidence_refs: vec!["runtime/software-dev/work.issue.start/dry-run.json".to_string()],
+            artifact_refs: vec!["runtime/software-dev/work.issue.start/dry-run.json".to_string()],
             idempotency_key: Some("v113-runtime-submit".to_string()),
             actor_role: Some("work-agent".to_string()),
             created_at: Some("2026-07-02T00:00:00Z".to_string()),
@@ -200,6 +212,7 @@ fn runtime_submit_api_proof(workspace: &Path) -> Result<Value> {
     Ok(json!({
         "version": "agentflow-v113-runtime-product-command-submit-api.v1",
         "status": status_from_checks(&checks),
+        "dryRun": dry_run,
         "acceptedSubmit": accepted,
         "coverage": checks,
         "failedCoverage": failed_checks(&checks),

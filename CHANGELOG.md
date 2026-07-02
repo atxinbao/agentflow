@@ -7,22 +7,37 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.1.3/README.md](docs/delivery/releases/v1.1.3/README.md)
-- [docs/delivery/releases/v1.1.3/AGENTFLOW_V1_1_3_PRODUCT_COMMAND_SUBMISSION_TASKS_V1.md](docs/delivery/releases/v1.1.3/AGENTFLOW_V1_1_3_PRODUCT_COMMAND_SUBMISSION_TASKS_V1.md)
+- [docs/delivery/releases/v1.1.4/README.md](docs/delivery/releases/v1.1.4/README.md)
+- [docs/delivery/releases/v1.1.4/AGENTFLOW_V1_1_4_PROJECT_CREATION_PRODUCT_WORKSPACE_TASKS_V1.md](docs/delivery/releases/v1.1.4/AGENTFLOW_V1_1_4_PROJECT_CREATION_PRODUCT_WORKSPACE_TASKS_V1.md)
 
 下一版计划：
 
-- v1.1.4 Project Creation and Product Workspace。
+- v1.1.5 Product workspace lifecycle and provider launch closure。
 
 ## Unreleased
 
-下一版保留给 Project Creation and Product Workspace，不在本次 release 中认证。
+下一版保留给 Product workspace lifecycle and provider launch closure，不在本次 release 中认证。
 
-Planned v1.1.4 foundation:
+Planned v1.1.5 foundation:
 
-- initialize Product-backed project workspaces;
-- keep `products/**` as source definitions and `.agentflow/**` as runtime facts;
-- preserve Runtime submit authority and projection proof boundaries.
+- advance Product workspace lifecycle beyond initial creation;
+- close provider launch and workspace recovery loops;
+- preserve Product workspace projection and Runtime authority boundaries.
+
+## v1.1.4 - 2026-07-02
+
+Project Creation and Product Workspace:
+
+- added Product command dry-run receipt binding so submit must reuse the exact dry-run receipt for the same target and input;
+- added Desktop confirm-submit behavior proof over the Product command dry-run and submit path;
+- added Product workspace creation contract with machine-readable receipt, paths, active Product binding, blockers and statuses;
+- initialized standard `docs/project/**` records and `.agentflow/spec/**`, `.agentflow/events/**`, `.agentflow/tasks/**` local fact roots for Product-selected workspaces;
+- added active Product workspace projection for read-only Desktop and runtime surfaces;
+- added duplicate, partial, invalid-root and missing-product recovery states for workspace initialization;
+- certified Software Dev as the default Product workspace golden path while keeping Product-specific constants out of Core bridge code;
+- expanded release-gate proof artifacts with v1.1.4 receipt, Desktop, pollution, workspace, bootstrap, projection, failure, golden path and release certification proofs;
+- added v1.1.4 release task traceability for GitHub issues `#785` through `#794`;
+- advanced workspace and desktop version metadata to `1.1.4`.
 
 ## v1.1.3 - 2026-07-02
 
