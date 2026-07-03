@@ -7,22 +7,38 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.1.5/README.md](docs/delivery/releases/v1.1.5/README.md)
-- [docs/delivery/releases/v1.1.5/AGENTFLOW_V1_1_5_SPEC_INTAKE_PRODUCTIZATION_TASKS_V1.md](docs/delivery/releases/v1.1.5/AGENTFLOW_V1_1_5_SPEC_INTAKE_PRODUCTIZATION_TASKS_V1.md)
+- [docs/delivery/releases/v1.1.6/README.md](docs/delivery/releases/v1.1.6/README.md)
+- [docs/delivery/releases/v1.1.6/AGENTFLOW_V1_1_6_EXECUTOR_ADAPTER_REAL_EXECUTION_TASKS_V1.md](docs/delivery/releases/v1.1.6/AGENTFLOW_V1_1_6_EXECUTOR_ADAPTER_REAL_EXECUTION_TASKS_V1.md)
 
 下一版计划：
 
-- v1.1.6 Product workspace lifecycle and provider launch closure。
+- v1.1.7 Evidence / Decision / Delivery surface readability。
 
 ## Unreleased
 
-下一版保留给 Product workspace lifecycle and provider launch closure，不在本次 release 中认证。
+下一版保留给 Evidence / Decision / Delivery surface readability，不在本次 release 中认证。
 
-Planned v1.1.6 foundation:
+Planned v1.1.7 foundation:
 
-- advance Product workspace lifecycle beyond initial creation;
-- close provider launch and workspace recovery loops;
-- preserve Product workspace projection and Runtime authority boundaries.
+- make evidence, decision and delivery surfaces easier to read from Desktop;
+- preserve Executor Adapter authority boundaries introduced in `v1.1.6`;
+- keep release-gate certification as the mandatory closeout path.
+
+## v1.1.6 - 2026-07-03
+
+Executor Adapter Real Execution Closure:
+
+- aligned `v1.1.6` release authority with `docs/project/roadmap.md` so the release focuses on Executor Adapter real execution, not provider launch closure;
+- hardened Core route next-action semantics so `clarify` and `research` never expose confirmation or materialization authority actions;
+- exposed Product Spec Intake through Desktop Runtime API commands for preview, confirmation and materialization flows;
+- added Executor Adapter handoff package generation under `.agentflow/tasks/<issue-id>/runs/<run-id>/launch/**`;
+- added allowed surface and diff boundary checking before executor result writeback;
+- added executor evidence capture that binds command evidence, validation output, handoff refs and diff boundary reports;
+- added executor result writeback that normalizes issue and run status after evidence and boundary checks pass;
+- added explicit failure, timeout, cancel and retry lifecycle receipts, with retry creating a new run;
+- certified the Software Dev real executor golden path from Spec Issue to handoff, evidence, boundary, writeback and projection;
+- added v1.1.6 release-gate proof artifacts and task traceability for GitHub issues `#808` through `#817`;
+- advanced workspace and desktop version metadata to `1.1.6`.
 
 ## v1.1.5 - 2026-07-03
 

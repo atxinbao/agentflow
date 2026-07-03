@@ -460,16 +460,35 @@ fn decide_core_route(raw_text: &str) -> ProductCoreRouteDecision {
         _ => "preview-only-until-confirmed",
     }
     .to_string();
+    let allowed_next_actions = allowed_next_actions_for_route(&route);
     ProductCoreRouteDecision {
         route,
         reasons: vec![reason.to_string()],
         missing_inputs,
-        allowed_next_actions: vec![
+        allowed_next_actions,
+        write_boundary,
+    }
+}
+
+fn allowed_next_actions_for_route(route: &CoreIntakeRoute) -> Vec<String> {
+    match route {
+        CoreIntakeRoute::Clarify => {
+            vec![
+                "clarify-requirement".to_string(),
+                "regenerate-preview".to_string(),
+            ]
+        }
+        CoreIntakeRoute::Research => {
+            vec![
+                "prepare-research-response".to_string(),
+                "regenerate-preview".to_string(),
+            ]
+        }
+        _ => vec![
             "preview".to_string(),
             "confirm".to_string(),
             "materialize-after-confirmation".to_string(),
         ],
-        write_boundary,
     }
 }
 
@@ -761,6 +780,48 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("modified after confirmation"));
+    }
+
+    #[test]
+    fn no_authority_routes_only_expose_safe_next_actions() {
+        let root = workspace_root();
+        let dir = tempdir().unwrap();
+        let clarify = preview_product_intent(
+            &root,
+            dir.path().join("clarify"),
+            ProductIntentIntakeRequest {
+                raw_text: "？".to_string(),
+                selected_product_id: "software-dev".to_string(),
+                workspace_id: "v116-clarify".to_string(),
+                source_surface: "desktop-project-home".to_string(),
+                locale: "zh-CN".to_string(),
+                attachment_refs: Vec::new(),
+                source_refs: Vec::new(),
+            },
+        )
+        .unwrap();
+        let research = preview_product_intent(
+            &root,
+            dir.path().join("research"),
+            ProductIntentIntakeRequest {
+                raw_text: "research 当前 Agent workflow 方案。".to_string(),
+                selected_product_id: "software-dev".to_string(),
+                workspace_id: "v116-research".to_string(),
+                source_surface: "desktop-project-home".to_string(),
+                locale: "zh-CN".to_string(),
+                attachment_refs: Vec::new(),
+                source_refs: Vec::new(),
+            },
+        )
+        .unwrap();
+
+        for receipt in [clarify, research] {
+            assert_eq!(receipt.route_decision.write_boundary, "no-authority-write");
+            assert!(!receipt.next_actions.contains(&"confirm".to_string()));
+            assert!(!receipt
+                .next_actions
+                .contains(&"materialize-after-confirmation".to_string()));
+        }
     }
 
     fn software_request() -> ProductIntentIntakeRequest {

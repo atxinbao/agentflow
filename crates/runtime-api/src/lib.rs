@@ -9,6 +9,7 @@
 pub mod api_plane;
 pub mod commands;
 pub mod errors;
+pub mod executor_adapter_real_execution;
 pub mod formal;
 pub mod handoff;
 pub mod mapping;
@@ -30,6 +31,17 @@ pub use commands::{
     RuntimeExpectedOutputRef,
 };
 pub use errors::{RuntimeCommandError, RuntimeCommandErrorCode};
+pub use executor_adapter_real_execution::{
+    capture_executor_evidence, check_executor_diff_boundary, create_executor_handoff_package,
+    record_executor_lifecycle, write_executor_result_to_issue, ExecutorCommandEvidenceInput,
+    ExecutorDiffBoundaryReport, ExecutorDiffBoundaryRequest, ExecutorDiffInputFile,
+    ExecutorEvidenceCaptureReport, ExecutorEvidenceCaptureRequest, ExecutorHandoffPackage,
+    ExecutorHandoffRequest, ExecutorLifecycleAction, ExecutorLifecycleReceipt,
+    ExecutorLifecycleRequest, ExecutorResultOutcome, ExecutorResultWritebackReport,
+    ExecutorResultWritebackRequest, EXECUTOR_DIFF_BOUNDARY_REPORT_VERSION,
+    EXECUTOR_EVIDENCE_CAPTURE_VERSION, EXECUTOR_HANDOFF_PACKAGE_VERSION,
+    EXECUTOR_LIFECYCLE_RECEIPT_VERSION, EXECUTOR_RESULT_WRITEBACK_VERSION,
+};
 pub use formal::{
     audit_request_human, completion_decide, completion_inspect, project_confirm_goal,
     project_confirm_plan, project_intake, project_materialize, project_preview_goal,

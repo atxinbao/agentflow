@@ -79,4 +79,4 @@ quick-audit-manifest.json
 
 ## Next Version
 
-`v1.1.6` can continue toward Product workspace lifecycle and provider launch closure after this Spec Intake baseline is certified.
+`v1.1.6` can continue toward Executor Adapter Real Execution Closure after this Spec Intake baseline is certified.

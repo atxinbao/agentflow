@@ -86,6 +86,51 @@ pub(crate) fn materialize_confirmed_product_spec(
         .map_err(|error| format!("materialize confirmed product spec failed: {error}"))
 }
 
+#[tauri::command]
+pub(crate) fn create_executor_handoff_package(
+    project_root: String,
+    request: agentflow_runtime_api::ExecutorHandoffRequest,
+) -> Result<agentflow_runtime_api::ExecutorHandoffPackage, String> {
+    agentflow_runtime_api::create_executor_handoff_package(project_root, request)
+        .map_err(|error| format!("create executor handoff package failed: {error}"))
+}
+
+#[tauri::command]
+pub(crate) fn check_executor_diff_boundary(
+    project_root: String,
+    request: agentflow_runtime_api::ExecutorDiffBoundaryRequest,
+) -> Result<agentflow_runtime_api::ExecutorDiffBoundaryReport, String> {
+    agentflow_runtime_api::check_executor_diff_boundary(project_root, request)
+        .map_err(|error| format!("check executor diff boundary failed: {error}"))
+}
+
+#[tauri::command]
+pub(crate) fn capture_executor_evidence(
+    project_root: String,
+    request: agentflow_runtime_api::ExecutorEvidenceCaptureRequest,
+) -> Result<agentflow_runtime_api::ExecutorEvidenceCaptureReport, String> {
+    agentflow_runtime_api::capture_executor_evidence(project_root, request)
+        .map_err(|error| format!("capture executor evidence failed: {error}"))
+}
+
+#[tauri::command]
+pub(crate) fn write_executor_result_to_issue(
+    project_root: String,
+    request: agentflow_runtime_api::ExecutorResultWritebackRequest,
+) -> Result<agentflow_runtime_api::ExecutorResultWritebackReport, String> {
+    agentflow_runtime_api::write_executor_result_to_issue(project_root, request)
+        .map_err(|error| format!("write executor result to issue failed: {error}"))
+}
+
+#[tauri::command]
+pub(crate) fn record_executor_lifecycle(
+    project_root: String,
+    request: agentflow_runtime_api::ExecutorLifecycleRequest,
+) -> Result<agentflow_runtime_api::ExecutorLifecycleReceipt, String> {
+    agentflow_runtime_api::record_executor_lifecycle(project_root, request)
+        .map_err(|error| format!("record executor lifecycle failed: {error}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
