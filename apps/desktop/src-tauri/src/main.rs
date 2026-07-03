@@ -60,6 +60,7 @@ fn main() {
             commands::runtime_api::capture_executor_evidence,
             commands::runtime_api::write_executor_result_to_issue,
             commands::runtime_api::record_executor_lifecycle,
+            commands::runtime_api::load_executor_flow_read_model,
             commands::projection::rebuild_task_projections,
             commands::projection::load_projection_issue_status_index,
             commands::projection::load_task_projection,

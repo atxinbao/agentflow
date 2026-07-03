@@ -1,6 +1,6 @@
 # Delivery
 
-更新日期：2026-07-03
+更新日期：2026-07-04
 执行者：Codex
 
 ## Purpose
@@ -21,7 +21,9 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.1.6/README.md](releases/v1.1.6/README.md) | 当前发布基线：Executor Adapter Real Execution Closure |
+| [releases/v1.1.7/README.md](releases/v1.1.7/README.md) | 当前发布基线：Evidence / Decision / Delivery User Readability |
+| [releases/v1.1.7/AGENTFLOW_V1_1_7_EVIDENCE_DECISION_DELIVERY_READABILITY_TASKS_V1.md](releases/v1.1.7/AGENTFLOW_V1_1_7_EVIDENCE_DECISION_DELIVERY_READABILITY_TASKS_V1.md) | v1.1.7 Evidence / Decision / Delivery readability tasks |
+| [releases/v1.1.6/README.md](releases/v1.1.6/README.md) | 上一发布基线：Executor Adapter Real Execution Closure |
 | [releases/v1.1.6/AGENTFLOW_V1_1_6_EXECUTOR_ADAPTER_REAL_EXECUTION_TASKS_V1.md](releases/v1.1.6/AGENTFLOW_V1_1_6_EXECUTOR_ADAPTER_REAL_EXECUTION_TASKS_V1.md) | v1.1.6 Executor Adapter real execution closure tasks |
 | [releases/v1.1.5/README.md](releases/v1.1.5/README.md) | 上一发布基线：Spec Intake to Goal / Roadmap / Task Productization |
 | [releases/v1.1.5/AGENTFLOW_V1_1_5_SPEC_INTAKE_PRODUCTIZATION_TASKS_V1.md](releases/v1.1.5/AGENTFLOW_V1_1_5_SPEC_INTAKE_PRODUCTIZATION_TASKS_V1.md) | v1.1.5 Spec Intake productization tasks |
@@ -44,7 +46,7 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| `v1.1.7` | 下一版计划：Evidence / Decision / Delivery surface readability |
+| `v1.1.8` | 下一版计划：Recovery / Resume / Failure Handling |
 
 ## Historical Delivery
 
