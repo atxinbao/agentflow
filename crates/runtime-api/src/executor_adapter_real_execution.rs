@@ -33,6 +33,7 @@ pub const EXECUTOR_DIFF_BOUNDARY_REPORT_VERSION: &str =
 pub const EXECUTOR_EVIDENCE_CAPTURE_VERSION: &str = "agentflow-executor-evidence-capture.v1";
 pub const EXECUTOR_RESULT_WRITEBACK_VERSION: &str = "agentflow-executor-result-writeback.v1";
 pub const EXECUTOR_LIFECYCLE_RECEIPT_VERSION: &str = "agentflow-executor-lifecycle-receipt.v1";
+pub const EXECUTOR_FLOW_READ_MODEL_VERSION: &str = "agentflow-executor-flow-read-model.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -293,6 +294,110 @@ pub struct ExecutorLifecycleReceipt {
     pub created_at: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorActionVisibility {
+    pub action: String,
+    pub label: String,
+    pub state: String,
+    pub enabled: bool,
+    pub reason: String,
+    pub required_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorEvidenceGraphNode {
+    pub node_id: String,
+    pub label: String,
+    pub kind: String,
+    pub status: String,
+    pub source_ref: Option<String>,
+    pub local_only: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorEvidenceGraphLink {
+    pub from: String,
+    pub to: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorEvidenceGraphProjection {
+    pub status: String,
+    pub nodes: Vec<ExecutorEvidenceGraphNode>,
+    pub links: Vec<ExecutorEvidenceGraphLink>,
+    pub missing: Vec<String>,
+    pub stale: Vec<String>,
+    pub failed: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorDecisionProjection {
+    pub outcome: String,
+    pub accepted: bool,
+    pub reasons: Vec<String>,
+    pub remediation: Vec<String>,
+    pub passed_gates: Vec<String>,
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorDeliveryPackageProjection {
+    pub status: String,
+    pub summary: String,
+    pub evidence_summary: String,
+    pub decision_summary: String,
+    pub limitations: Vec<String>,
+    pub changed_outputs: Vec<String>,
+    pub next_suggested_step: String,
+    pub proof_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorRepairActionProjection {
+    pub state: String,
+    pub action: String,
+    pub label: String,
+    pub allowed: bool,
+    pub boundary: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorPortableDiagnosticRef {
+    pub field: String,
+    pub value: String,
+    pub portable: bool,
+    pub local_only: bool,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorFlowReadModel {
+    pub version: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub issue_status: String,
+    pub run_status: Option<String>,
+    pub action_visibility: Vec<ExecutorActionVisibility>,
+    pub evidence_graph: ExecutorEvidenceGraphProjection,
+    pub decision: ExecutorDecisionProjection,
+    pub delivery: ExecutorDeliveryPackageProjection,
+    pub repair_actions: Vec<ExecutorRepairActionProjection>,
+    pub diagnostics: Vec<ExecutorPortableDiagnosticRef>,
+    pub source_refs: Vec<String>,
+    pub generated_at: u64,
+}
+
 pub fn create_executor_handoff_package(
     project_root: impl AsRef<Path>,
     request: ExecutorHandoffRequest,
@@ -327,6 +432,86 @@ pub fn create_executor_handoff_package(
         "Executor handoff package prepared; executor session remains transport.",
     )?;
     Ok(package)
+}
+
+pub fn get_executor_flow_read_model(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<ExecutorFlowReadModel> {
+    let root = canonicalize_project_root(project_root)?;
+    let issue = read_spec_issue(&root, issue_id)?;
+    let run = optional_json::<TaskRun>(
+        &agentflow_task_artifacts::task_run_dir(&root, issue_id, run_id)?.join("run.json"),
+    )?;
+    let handoff =
+        optional_json::<ExecutorHandoffPackage>(&executor_handoff_path(&root, issue_id, run_id)?)?;
+    let boundary = optional_json::<ExecutorDiffBoundaryReport>(&executor_boundary_report_path(
+        &root, issue_id, run_id,
+    )?)?;
+    let evidence = agentflow_task_artifacts::load_task_evidence(&root, issue_id).ok();
+    let validation = agentflow_task_artifacts::load_task_validation(&root, issue_id, run_id).ok();
+    let closeout =
+        agentflow_task_artifacts::load_task_executor_closeout(&root, issue_id, run_id).ok();
+    let writeback = optional_json::<ExecutorResultWritebackReport>(
+        &executor_writeback_report_path(&root, issue_id, run_id)?,
+    )?;
+
+    let source_refs = source_refs_for_flow(
+        &root,
+        issue_id,
+        run_id,
+        handoff.as_ref(),
+        boundary.as_ref(),
+        evidence.as_ref(),
+        closeout.as_ref(),
+        writeback.as_ref(),
+    )?;
+    let diagnostics = diagnostics_for_run(run.as_ref());
+    Ok(ExecutorFlowReadModel {
+        version: EXECUTOR_FLOW_READ_MODEL_VERSION.to_string(),
+        issue_id: issue.issue_id.clone(),
+        run_id: run_id.to_string(),
+        issue_status: issue.status.as_str().to_string(),
+        run_status: run
+            .as_ref()
+            .map(|run| run_status_label(&run.status).to_string()),
+        action_visibility: action_visibility_for_flow(
+            &issue,
+            run.as_ref(),
+            handoff.as_ref(),
+            boundary.as_ref(),
+            evidence.as_ref(),
+            closeout.as_ref(),
+        ),
+        evidence_graph: evidence_graph_for_flow(
+            run.as_ref(),
+            handoff.as_ref(),
+            boundary.as_ref(),
+            evidence.as_ref(),
+            validation.as_ref(),
+            closeout.as_ref(),
+        ),
+        decision: decision_projection_for_flow(
+            boundary.as_ref(),
+            evidence.as_ref(),
+            closeout.as_ref(),
+        ),
+        delivery: delivery_projection_for_flow(
+            boundary.as_ref(),
+            evidence.as_ref(),
+            closeout.as_ref(),
+        ),
+        repair_actions: repair_actions_for_flow(
+            &issue,
+            boundary.as_ref(),
+            evidence.as_ref(),
+            closeout.as_ref(),
+        ),
+        diagnostics,
+        source_refs,
+        generated_at: unix_timestamp_seconds(),
+    })
 }
 
 pub fn check_executor_diff_boundary(
@@ -784,15 +969,57 @@ fn normalize_surface(root: &Path, paths: &[String]) -> Result<Vec<String>> {
     }
     paths
         .iter()
-        .map(|path| {
-            if path.starts_with("workspace://") || path.contains('*') {
-                Ok(path.clone())
-            } else {
-                normalize_relative_path_string(PathBuf::from(path))
-            }
-        })
-        .map(|value| value.or_else(|_| normalize_relative_to_root(root, root.join("docs"))))
+        .map(|path| normalize_executor_surface_entry(root, path))
         .collect()
+}
+
+fn normalize_executor_surface_entry(root: &Path, path: &str) -> Result<String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("executor surface path is required");
+    }
+    if trimmed != path {
+        anyhow::bail!(
+            "executor surface path must not contain leading or trailing whitespace: {path}"
+        );
+    }
+    if trimmed == "*" || trimmed == "**" {
+        anyhow::bail!("executor surface wildcard must be scoped, found {trimmed}");
+    }
+    if let Some(rest) = trimmed.strip_prefix("workspace://") {
+        if rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\') {
+            anyhow::bail!("malformed workspace surface ref: {trimmed}");
+        }
+        let normalized = normalize_supported_surface_pattern(rest)?;
+        return Ok(format!("workspace://{normalized}"));
+    }
+    if Path::new(trimmed).is_absolute() {
+        anyhow::bail!("executor surface path must be repo-relative, found {trimmed}");
+    }
+    let normalized = normalize_supported_surface_pattern(trimmed)?;
+    let _ = normalize_relative_to_root(root, root.join(normalized.trim_end_matches("/**")))?;
+    Ok(normalized)
+}
+
+fn normalize_supported_surface_pattern(value: &str) -> Result<String> {
+    if value.contains('\\') {
+        anyhow::bail!("executor surface path must use forward slashes, found {value}");
+    }
+    if value.contains('*') && !value.ends_with("/**") {
+        anyhow::bail!(
+            "executor surface only supports exact paths or scoped /** patterns, found {value}"
+        );
+    }
+    if value.ends_with("/**") {
+        let prefix = value.trim_end_matches("/**");
+        let normalized_prefix = normalize_relative_path_string(PathBuf::from(prefix))?;
+        if normalized_prefix.is_empty() {
+            anyhow::bail!("executor surface pattern requires a non-empty prefix");
+        }
+        Ok(format!("{normalized_prefix}/**"))
+    } else {
+        normalize_relative_path_string(PathBuf::from(value))
+    }
 }
 
 fn path_allowed(path: &str, surface: &[String]) -> bool {
@@ -800,6 +1027,7 @@ fn path_allowed(path: &str, surface: &[String]) -> bool {
 }
 
 fn surface_matches(pattern: &str, path: &str) -> bool {
+    let pattern = pattern.strip_prefix("workspace://").unwrap_or(pattern);
     if pattern == "**" || pattern == "*" {
         return true;
     }
@@ -892,6 +1120,482 @@ fn write_json(path: &Path, payload: &impl Serialize) -> Result<()> {
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
     let payload = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     Ok(serde_json::from_str(&payload)?)
+}
+
+fn optional_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Option<T>> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    read_json(path).map(Some)
+}
+
+fn source_refs_for_flow(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+    handoff: Option<&ExecutorHandoffPackage>,
+    boundary: Option<&ExecutorDiffBoundaryReport>,
+    evidence: Option<&TaskEvidence>,
+    closeout: Option<&TaskExecutorCloseout>,
+    writeback: Option<&ExecutorResultWritebackReport>,
+) -> Result<Vec<String>> {
+    let mut refs = vec![normalize_relative_to_root(
+        root,
+        agentflow_task_artifacts::task_run_dir(root, issue_id, run_id)?.join("run.json"),
+    )?];
+    if let Some(handoff) = handoff {
+        refs.push(handoff.handoff_path.clone());
+    }
+    if let Some(boundary) = boundary {
+        refs.push(boundary.report_path.clone());
+    }
+    if let Some(evidence) = evidence {
+        refs.push(evidence.run_path.clone());
+        refs.push(evidence.validation_path.clone());
+    }
+    if closeout.is_some() {
+        refs.push(normalize_relative_to_root(
+            root,
+            agentflow_task_artifacts::task_executor_closeout_path(root, issue_id, run_id)?,
+        )?);
+    }
+    if let Some(writeback) = writeback {
+        refs.push(writeback.writeback_path.clone());
+    }
+    refs.sort();
+    refs.dedup();
+    Ok(refs)
+}
+
+fn action_visibility_for_flow(
+    issue: &SpecIssue,
+    run: Option<&TaskRun>,
+    handoff: Option<&ExecutorHandoffPackage>,
+    boundary: Option<&ExecutorDiffBoundaryReport>,
+    evidence: Option<&TaskEvidence>,
+    closeout: Option<&TaskExecutorCloseout>,
+) -> Vec<ExecutorActionVisibility> {
+    let has_run = run.is_some();
+    let has_handoff = handoff.is_some();
+    let boundary_passed = boundary.map(|b| b.status == "passed").unwrap_or(false);
+    let evidence_passed = evidence.map(|e| e.status == "passed").unwrap_or(false);
+    let has_closeout = closeout.is_some();
+    vec![
+        action_visibility(
+            "prepare-handoff",
+            "准备执行交接",
+            has_run,
+            !has_handoff
+                && !matches!(
+                    issue.status,
+                    SpecIssueStatus::Done | SpecIssueStatus::Cancel
+                ),
+            if has_handoff {
+                "handoff 已存在"
+            } else {
+                "需要 issue 和 run"
+            },
+            vec!["SpecIssue".to_string(), "TaskRun".to_string()],
+        ),
+        action_visibility(
+            "check-boundary",
+            "检查变更边界",
+            has_handoff,
+            has_handoff && boundary.is_none(),
+            if !has_handoff {
+                "缺少 handoff"
+            } else {
+                "等待 diff 输入"
+            },
+            vec!["ExecutorHandoffPackage".to_string()],
+        ),
+        action_visibility(
+            "capture-evidence",
+            "采集验证证据",
+            boundary_passed,
+            boundary_passed && !evidence_passed,
+            if boundary_passed {
+                "边界已通过"
+            } else {
+                "边界未通过"
+            },
+            vec!["ExecutorDiffBoundaryReport".to_string()],
+        ),
+        action_visibility(
+            "writeback-result",
+            "写回执行结果",
+            evidence_passed,
+            evidence_passed && boundary_passed && !has_closeout,
+            if evidence_passed && boundary_passed {
+                "证据和边界已就绪"
+            } else {
+                "缺少证据或边界证明"
+            },
+            vec![
+                "TaskEvidence".to_string(),
+                "ExecutorDiffBoundaryReport".to_string(),
+            ],
+        ),
+    ]
+}
+
+fn action_visibility(
+    action: &str,
+    label: &str,
+    ready: bool,
+    enabled: bool,
+    reason: &str,
+    required_refs: Vec<String>,
+) -> ExecutorActionVisibility {
+    ExecutorActionVisibility {
+        action: action.to_string(),
+        label: label.to_string(),
+        state: if enabled {
+            "available"
+        } else if ready {
+            "ready"
+        } else {
+            "deferred"
+        }
+        .to_string(),
+        enabled,
+        reason: reason.to_string(),
+        required_refs,
+    }
+}
+
+fn evidence_graph_for_flow(
+    run: Option<&TaskRun>,
+    handoff: Option<&ExecutorHandoffPackage>,
+    boundary: Option<&ExecutorDiffBoundaryReport>,
+    evidence: Option<&TaskEvidence>,
+    validation: Option<&agentflow_task_artifacts::TaskValidationRecord>,
+    closeout: Option<&TaskExecutorCloseout>,
+) -> ExecutorEvidenceGraphProjection {
+    let mut nodes = Vec::new();
+    let mut links = Vec::new();
+    push_graph_node(
+        &mut nodes,
+        "run",
+        "Run",
+        "runtime",
+        run.is_some(),
+        None,
+        true,
+    );
+    push_graph_node(
+        &mut nodes,
+        "handoff",
+        "Executor handoff",
+        "handoff",
+        handoff.is_some(),
+        handoff.map(|h| h.handoff_path.clone()),
+        false,
+    );
+    push_graph_node(
+        &mut nodes,
+        "boundary",
+        "Diff boundary",
+        "boundary",
+        boundary.map(|b| b.status == "passed").unwrap_or(false),
+        boundary.map(|b| b.report_path.clone()),
+        false,
+    );
+    push_graph_node(
+        &mut nodes,
+        "validation",
+        "Validation output",
+        "validation",
+        validation.map(|v| v.passed).unwrap_or(false),
+        evidence.map(|e| e.validation_path.clone()),
+        false,
+    );
+    push_graph_node(
+        &mut nodes,
+        "evidence",
+        "Evidence pack",
+        "evidence",
+        evidence.map(|e| e.status == "passed").unwrap_or(false),
+        evidence.map(|e| e.run_path.clone()),
+        false,
+    );
+    push_graph_node(
+        &mut nodes,
+        "closeout",
+        "Executor closeout",
+        "decision",
+        closeout.map(|c| c.can_writeback).unwrap_or(false),
+        None,
+        false,
+    );
+    for (from, to, label) in [
+        ("run", "handoff", "creates"),
+        ("handoff", "boundary", "scopes"),
+        ("boundary", "validation", "guards"),
+        ("validation", "evidence", "supports"),
+        ("evidence", "closeout", "feeds"),
+    ] {
+        links.push(ExecutorEvidenceGraphLink {
+            from: from.to_string(),
+            to: to.to_string(),
+            label: label.to_string(),
+        });
+    }
+    let missing = nodes
+        .iter()
+        .filter(|node| node.status == "missing")
+        .map(|node| node.label.clone())
+        .collect::<Vec<_>>();
+    let failed = nodes
+        .iter()
+        .filter(|node| node.status == "failed")
+        .map(|node| node.label.clone())
+        .collect::<Vec<_>>();
+    ExecutorEvidenceGraphProjection {
+        status: if missing.is_empty() && failed.is_empty() {
+            "complete"
+        } else if !failed.is_empty() {
+            "failed"
+        } else {
+            "partial"
+        }
+        .to_string(),
+        nodes,
+        links,
+        missing,
+        stale: Vec::new(),
+        failed,
+    }
+}
+
+fn push_graph_node(
+    nodes: &mut Vec<ExecutorEvidenceGraphNode>,
+    node_id: &str,
+    label: &str,
+    kind: &str,
+    ready: bool,
+    source_ref: Option<String>,
+    local_only: bool,
+) {
+    nodes.push(ExecutorEvidenceGraphNode {
+        node_id: node_id.to_string(),
+        label: label.to_string(),
+        kind: kind.to_string(),
+        status: if ready { "ready" } else { "missing" }.to_string(),
+        source_ref,
+        local_only,
+    });
+}
+
+fn decision_projection_for_flow(
+    boundary: Option<&ExecutorDiffBoundaryReport>,
+    evidence: Option<&TaskEvidence>,
+    closeout: Option<&TaskExecutorCloseout>,
+) -> ExecutorDecisionProjection {
+    let boundary_passed = boundary.map(|b| b.status == "passed").unwrap_or(false);
+    let evidence_passed = evidence.map(|e| e.status == "passed").unwrap_or(false);
+    let closeout_accepted = closeout.map(|c| c.can_writeback).unwrap_or(false);
+    let accepted = boundary_passed && evidence_passed && closeout_accepted;
+    let mut reasons = Vec::new();
+    let mut remediation = Vec::new();
+    let mut passed_gates = Vec::new();
+    if boundary_passed {
+        passed_gates.push("diff-boundary".to_string());
+    } else {
+        reasons.push("Diff boundary has not passed.".to_string());
+        remediation.push(
+            "Fix changed paths or update the Spec Issue allowed surface before retry.".to_string(),
+        );
+    }
+    if evidence_passed {
+        passed_gates.push("evidence".to_string());
+    } else {
+        reasons.push("Evidence pack is missing or failed.".to_string());
+        remediation
+            .push("Run validation and capture command evidence before writeback.".to_string());
+    }
+    if closeout_accepted {
+        passed_gates.push("executor-closeout".to_string());
+    } else {
+        reasons.push("Executor closeout has not accepted writeback.".to_string());
+        remediation.push(
+            "Complete executor result writeback after evidence and boundary are ready.".to_string(),
+        );
+    }
+    ExecutorDecisionProjection {
+        outcome: if accepted { "accepted" } else { "not-ready" }.to_string(),
+        accepted,
+        reasons,
+        remediation,
+        passed_gates,
+        source_refs: closeout
+            .map(|c| c.normalized_core_refs.decision_refs.clone())
+            .unwrap_or_default(),
+    }
+}
+
+fn delivery_projection_for_flow(
+    boundary: Option<&ExecutorDiffBoundaryReport>,
+    evidence: Option<&TaskEvidence>,
+    closeout: Option<&TaskExecutorCloseout>,
+) -> ExecutorDeliveryPackageProjection {
+    let decision = decision_projection_for_flow(boundary, evidence, closeout);
+    let changed_outputs = closeout
+        .map(|c| {
+            c.changed_files
+                .iter()
+                .map(|file| file.path.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    let proof_refs = closeout
+        .map(|c| {
+            let mut refs = c.evidence_refs.clone();
+            refs.extend(c.normalized_core_refs.artifact_refs.clone());
+            refs
+        })
+        .unwrap_or_default();
+    ExecutorDeliveryPackageProjection {
+        status: if decision.accepted {
+            "ready"
+        } else {
+            "not-ready"
+        }
+        .to_string(),
+        summary: closeout
+            .map(|c| {
+                if c.can_writeback {
+                    "Executor result is accepted and ready for user-facing delivery."
+                } else {
+                    "Executor result is not ready for delivery."
+                }
+            })
+            .unwrap_or("Delivery package is waiting for executor closeout.")
+            .to_string(),
+        evidence_summary: evidence
+            .map(|e| format!("Evidence status: {}", e.status))
+            .unwrap_or_else(|| "Evidence is missing.".to_string()),
+        decision_summary: if decision.accepted {
+            "Decision accepted all required gates.".to_string()
+        } else {
+            decision.reasons.join(" ")
+        },
+        limitations: if decision.accepted {
+            Vec::new()
+        } else {
+            decision.reasons.clone()
+        },
+        changed_outputs,
+        next_suggested_step: if decision.accepted {
+            "Show delivery summary and keep Audit as optional sidecar.".to_string()
+        } else {
+            "Resolve the listed decision reasons before delivery.".to_string()
+        },
+        proof_refs,
+    }
+}
+
+fn repair_actions_for_flow(
+    issue: &SpecIssue,
+    boundary: Option<&ExecutorDiffBoundaryReport>,
+    evidence: Option<&TaskEvidence>,
+    closeout: Option<&TaskExecutorCloseout>,
+) -> Vec<ExecutorRepairActionProjection> {
+    let boundary_passed = boundary.map(|b| b.status == "passed").unwrap_or(false);
+    let evidence_passed = evidence.map(|e| e.status == "passed").unwrap_or(false);
+    let closeout_ready = closeout.map(|c| c.can_writeback).unwrap_or(false);
+    let mut actions = Vec::new();
+    if !boundary_passed {
+        actions.push(repair_action(
+            issue.status.as_str(),
+            "fix-boundary",
+            "修复变更边界",
+            true,
+            "Spec Issue allowed / denied surface",
+            "当前 diff boundary 未通过或缺失。",
+        ));
+    }
+    if boundary_passed && !evidence_passed {
+        actions.push(repair_action(
+            issue.status.as_str(),
+            "recapture-evidence",
+            "重新采集证据",
+            true,
+            "Runtime evidence capture",
+            "边界已通过，但证据缺失或失败。",
+        ));
+    }
+    if boundary_passed && evidence_passed && !closeout_ready {
+        actions.push(repair_action(
+            issue.status.as_str(),
+            "retry-writeback",
+            "重新写回结果",
+            true,
+            "Decision / Completion authority",
+            "证据已就绪，但 closeout 未接受。",
+        ));
+    }
+    if actions.is_empty() {
+        actions.push(repair_action(
+            issue.status.as_str(),
+            "none",
+            "无需修复",
+            false,
+            "Read-only delivery",
+            "当前执行结果已经可交付或处于终态。",
+        ));
+    }
+    actions
+}
+
+fn repair_action(
+    state: &str,
+    action: &str,
+    label: &str,
+    allowed: bool,
+    boundary: &str,
+    reason: &str,
+) -> ExecutorRepairActionProjection {
+    ExecutorRepairActionProjection {
+        state: state.to_string(),
+        action: action.to_string(),
+        label: label.to_string(),
+        allowed,
+        boundary: boundary.to_string(),
+        reason: reason.to_string(),
+    }
+}
+
+fn diagnostics_for_run(run: Option<&TaskRun>) -> Vec<ExecutorPortableDiagnosticRef> {
+    let Some(run) = run else {
+        return Vec::new();
+    };
+    [
+        ("workingDirectory", run.working_directory.as_ref()),
+        ("workspaceRoot", run.workspace_root.as_ref()),
+        ("worktreeRoot", run.worktree_root.as_ref()),
+        ("runtimeRoot", run.runtime_root.as_ref()),
+        ("evidenceRoot", run.evidence_root.as_ref()),
+        ("launchRequestPath", run.launch_request_path.as_ref()),
+    ]
+    .into_iter()
+    .filter_map(|(field, value)| value.map(|value| (field, value)))
+    .map(|(field, value)| {
+        let local_only = Path::new(value).is_absolute();
+        ExecutorPortableDiagnosticRef {
+            field: field.to_string(),
+            value: value.clone(),
+            portable: !local_only,
+            local_only,
+            label: if local_only {
+                "local diagnostic path"
+            } else {
+                "portable project ref"
+            }
+            .to_string(),
+        }
+    })
+    .collect()
 }
 
 fn digest_lines(values: &[String]) -> String {

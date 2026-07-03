@@ -1,28 +1,44 @@
 # Changelog
 
-更新日期：2026-07-03
+更新日期：2026-07-04
 执行者：Codex
 
 ## Current Baseline
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.1.6/README.md](docs/delivery/releases/v1.1.6/README.md)
-- [docs/delivery/releases/v1.1.6/AGENTFLOW_V1_1_6_EXECUTOR_ADAPTER_REAL_EXECUTION_TASKS_V1.md](docs/delivery/releases/v1.1.6/AGENTFLOW_V1_1_6_EXECUTOR_ADAPTER_REAL_EXECUTION_TASKS_V1.md)
+- [docs/delivery/releases/v1.1.7/README.md](docs/delivery/releases/v1.1.7/README.md)
+- [docs/delivery/releases/v1.1.7/AGENTFLOW_V1_1_7_EVIDENCE_DECISION_DELIVERY_READABILITY_TASKS_V1.md](docs/delivery/releases/v1.1.7/AGENTFLOW_V1_1_7_EVIDENCE_DECISION_DELIVERY_READABILITY_TASKS_V1.md)
 
 下一版计划：
 
-- v1.1.7 Evidence / Decision / Delivery surface readability。
+- v1.1.8 Recovery / Resume / Failure Handling。
 
 ## Unreleased
 
-下一版保留给 Evidence / Decision / Delivery surface readability，不在本次 release 中认证。
+下一版保留给 Recovery / Resume / Failure Handling，不在本次 release 中认证。
 
-Planned v1.1.7 foundation:
+Planned v1.1.8 foundation:
 
-- make evidence, decision and delivery surfaces easier to read from Desktop;
-- preserve Executor Adapter authority boundaries introduced in `v1.1.6`;
+- improve runtime recovery, resume and failure handling;
+- preserve Evidence / Decision / Delivery read models introduced in `v1.1.7`;
 - keep release-gate certification as the mandatory closeout path.
+
+## v1.1.7 - 2026-07-04
+
+Evidence / Decision / Delivery User Readability:
+
+- aligned `v1.1.7` release authority with `docs/project/roadmap.md` as user-readable executor closure;
+- hardened executor surface path validation so invalid paths, absolute paths, parent traversal, malformed workspace refs and unsupported glob patterns are rejected instead of normalized into `docs`;
+- added Desktop Runtime API command `load_executor_flow_read_model` so Desktop can render executor state through Runtime API instead of reading authority files directly;
+- added executor flow read model with action visibility, evidence graph, decision reasons, delivery package, repair actions and portable diagnostic refs;
+- projected evidence graph nodes and links for run, handoff, boundary, validation, evidence and closeout facts;
+- projected Decision accepted / not-ready reasons and remediation paths from boundary, evidence and closeout facts;
+- projected Delivery Package summaries for ready and not-ready states without reintroducing Audit as a default blocker;
+- documented that Audit remains optional sidecar for executor delivery readability;
+- separated portable project refs from local-only diagnostic paths in executor projections;
+- added v1.1.7 release-gate proof artifacts and task traceability for GitHub issues `#819` through `#828`;
+- advanced workspace and desktop version metadata to `1.1.7`.
 
 ## v1.1.6 - 2026-07-03
 

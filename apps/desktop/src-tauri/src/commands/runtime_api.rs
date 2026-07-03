@@ -131,6 +131,16 @@ pub(crate) fn record_executor_lifecycle(
         .map_err(|error| format!("record executor lifecycle failed: {error}"))
 }
 
+#[tauri::command]
+pub(crate) fn load_executor_flow_read_model(
+    project_root: String,
+    issue_id: String,
+    run_id: String,
+) -> Result<agentflow_runtime_api::ExecutorFlowReadModel, String> {
+    agentflow_runtime_api::get_executor_flow_read_model(project_root, &issue_id, &run_id)
+        .map_err(|error| format!("load executor flow read model failed: {error}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
