@@ -1,28 +1,43 @@
 # Changelog
 
-更新日期：2026-06-30
+更新日期：2026-07-03
 执行者：Codex
 
 ## Current Baseline
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.1.4/README.md](docs/delivery/releases/v1.1.4/README.md)
-- [docs/delivery/releases/v1.1.4/AGENTFLOW_V1_1_4_PROJECT_CREATION_PRODUCT_WORKSPACE_TASKS_V1.md](docs/delivery/releases/v1.1.4/AGENTFLOW_V1_1_4_PROJECT_CREATION_PRODUCT_WORKSPACE_TASKS_V1.md)
+- [docs/delivery/releases/v1.1.5/README.md](docs/delivery/releases/v1.1.5/README.md)
+- [docs/delivery/releases/v1.1.5/AGENTFLOW_V1_1_5_SPEC_INTAKE_PRODUCTIZATION_TASKS_V1.md](docs/delivery/releases/v1.1.5/AGENTFLOW_V1_1_5_SPEC_INTAKE_PRODUCTIZATION_TASKS_V1.md)
 
 下一版计划：
 
-- v1.1.5 Product workspace lifecycle and provider launch closure。
+- v1.1.6 Product workspace lifecycle and provider launch closure。
 
 ## Unreleased
 
 下一版保留给 Product workspace lifecycle and provider launch closure，不在本次 release 中认证。
 
-Planned v1.1.5 foundation:
+Planned v1.1.6 foundation:
 
 - advance Product workspace lifecycle beyond initial creation;
 - close provider launch and workspace recovery loops;
 - preserve Product workspace projection and Runtime authority boundaries.
+
+## v1.1.5 - 2026-07-03
+
+Spec Intake to Goal / Roadmap / Task Productization:
+
+- aligned the release plan with `docs/project/roadmap.md` so `v1.1.5` is Spec Intake productization, not provider launch closure;
+- added Product-level Intent Intake that preserves raw human input, selected Product, workspace id, source surface, locale and source refs;
+- added Product route decisions for `clarify`, `research`, `define`, `plan`, `task`, `decide`, `deliver` and `evolve` without granting preview authority writes;
+- added preview-first Product Spec artifacts under `.agentflow/previews/spec-intake/**`;
+- added confirmation records bound to preview id and preview hash before authority writes are allowed;
+- added confirmed materialization from Product Spec preview to public `docs/requirements/**` and local `.agentflow/spec/projects/**` / `.agentflow/spec/issues/**`;
+- added Desktop Runtime API bridge commands for Product Workspace creation/projection and Product Spec Intake preview/confirmation/materialization;
+- added portable `workspace://` receipt/projection refs while keeping absolute paths confined to local diagnostics;
+- added v1.1.5 release-gate proof artifacts and task traceability for GitHub issues `#797` through `#806`;
+- advanced workspace and desktop version metadata to `1.1.5`.
 
 ## v1.1.4 - 2026-07-02
 

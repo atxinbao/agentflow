@@ -58,6 +58,15 @@ pub struct ProductWorkspacePathSet {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProductWorkspaceLocalDiagnostics {
+    pub workspace_root: String,
+    pub created_paths: Vec<String>,
+    pub existing_paths: Vec<String>,
+    pub projection_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProductWorkspaceProductBinding {
     pub product_id: String,
     pub pack_id: String,
@@ -76,13 +85,16 @@ pub struct ProductWorkspaceCreationReceipt {
     pub status: ProductWorkspaceStatus,
     pub project_name: String,
     pub workspace_id: String,
+    pub workspace_root_ref: String,
     pub workspace_root: String,
     pub selected_product_id: String,
     pub creation_mode: ProductWorkspaceCreationMode,
     pub writes_authority: bool,
     pub created_paths: Vec<String>,
     pub existing_paths: Vec<String>,
+    pub portable_paths: ProductWorkspacePathSet,
     pub paths: ProductWorkspacePathSet,
+    pub local_diagnostics: ProductWorkspaceLocalDiagnostics,
     pub active_product: Option<ProductWorkspaceProductBinding>,
     pub projection_refresh_hint: String,
     pub blockers: Vec<String>,
@@ -94,6 +106,7 @@ pub struct ProductWorkspaceProjection {
     pub version: String,
     pub workspace_id: String,
     pub project_name: String,
+    pub workspace_root_ref: String,
     pub workspace_root: String,
     pub status: ProductWorkspaceStatus,
     pub active_product: Option<ProductWorkspaceProductBinding>,
@@ -101,6 +114,8 @@ pub struct ProductWorkspaceProjection {
     pub blockers: Vec<String>,
     pub docs_ready: bool,
     pub fact_source_ready: bool,
+    pub portable_paths: ProductWorkspacePathSet,
+    pub local_diagnostics: ProductWorkspaceLocalDiagnostics,
     pub projection_source: String,
     pub rebuild_receipt: String,
 }
@@ -258,8 +273,9 @@ pub fn load_product_workspace_projection(
                 .and_then(|payload| serde_json::from_value(payload).ok());
             return ProductWorkspaceProjection {
                 version: PRODUCT_WORKSPACE_PROJECTION_VERSION.to_string(),
-                workspace_id,
+                workspace_id: workspace_id.clone(),
                 project_name,
+                workspace_root_ref: "workspace://root".to_string(),
                 workspace_root: normalize_path(workspace_root),
                 status: ProductWorkspaceStatus::Ready,
                 active_product,
@@ -268,6 +284,13 @@ pub fn load_product_workspace_projection(
                 docs_ready: workspace_root.join("docs/project/goal.md").is_file(),
                 fact_source_ready: workspace_root.join(".agentflow/spec/projects").is_dir()
                     && workspace_root.join(".agentflow/spec/issues").is_dir(),
+                portable_paths: workspace_portable_paths(&workspace_id),
+                local_diagnostics: ProductWorkspaceLocalDiagnostics {
+                    workspace_root: normalize_path(workspace_root),
+                    created_paths: Vec::new(),
+                    existing_paths: vec![normalize_path(&manifest_path)],
+                    projection_path: normalize_path(&projection_path),
+                },
                 projection_source: normalize_path(&manifest_path),
                 rebuild_receipt: "projection-rebuilt-from-workspace-manifest".to_string(),
             };
@@ -278,6 +301,7 @@ pub fn load_product_workspace_projection(
         version: PRODUCT_WORKSPACE_PROJECTION_VERSION.to_string(),
         workspace_id: "missing-workspace".to_string(),
         project_name: "Missing Workspace".to_string(),
+        workspace_root_ref: "workspace://root".to_string(),
         workspace_root: normalize_path(workspace_root),
         status: ProductWorkspaceStatus::Partial,
         active_product: None,
@@ -285,6 +309,13 @@ pub fn load_product_workspace_projection(
         blockers: vec!["workspace manifest is missing".to_string()],
         docs_ready: false,
         fact_source_ready: false,
+        portable_paths: workspace_portable_paths("missing-workspace"),
+        local_diagnostics: ProductWorkspaceLocalDiagnostics {
+            workspace_root: normalize_path(workspace_root),
+            created_paths: Vec::new(),
+            existing_paths: Vec::new(),
+            projection_path: normalize_path(&projection_path),
+        },
         projection_source: normalize_path(&projection_path),
         rebuild_receipt: "projection-rebuild-blocked".to_string(),
     }
@@ -386,6 +417,7 @@ fn write_product_workspace_projection(
         version: PRODUCT_WORKSPACE_PROJECTION_VERSION.to_string(),
         workspace_id: receipt.workspace_id.clone(),
         project_name: receipt.project_name.clone(),
+        workspace_root_ref: receipt.workspace_root_ref.clone(),
         workspace_root: receipt.workspace_root.clone(),
         status: ProductWorkspaceStatus::Ready,
         active_product: receipt.active_product.clone(),
@@ -393,6 +425,15 @@ fn write_product_workspace_projection(
         blockers: Vec::new(),
         docs_ready: true,
         fact_source_ready: true,
+        portable_paths: receipt.portable_paths.clone(),
+        local_diagnostics: ProductWorkspaceLocalDiagnostics {
+            workspace_root: receipt.workspace_root.clone(),
+            created_paths: receipt.created_paths.clone(),
+            existing_paths: receipt.existing_paths.clone(),
+            projection_path: normalize_path(
+                workspace_root.join(".agentflow/projections/workspace-state.json"),
+            ),
+        },
         projection_source: ".agentflow/workspace.json".to_string(),
         rebuild_receipt: format!("rebuild-{}", receipt.receipt_id),
     };
@@ -453,19 +494,31 @@ fn workspace_receipt(
         "{}:{}:{}:{:?}",
         workspace_id, request.selected_product_id, request.initial_goal, status
     );
+    let portable_paths = workspace_portable_paths(&workspace_id);
+    let normalized_root = normalize_path(&workspace_root);
+    let projection_path =
+        normalize_path(workspace_root.join(".agentflow/projections/workspace-state.json"));
     ProductWorkspaceCreationReceipt {
         version: PRODUCT_WORKSPACE_CONTRACT_VERSION.to_string(),
         receipt_id: format!("workspace-{:016x}", stable_hash(receipt_seed.as_bytes())),
         status,
         project_name: request.project_name,
         workspace_id,
-        workspace_root: normalize_path(workspace_root),
+        workspace_root_ref: "workspace://root".to_string(),
+        workspace_root: normalized_root.clone(),
         selected_product_id: request.selected_product_id,
         creation_mode: request.creation_mode,
         writes_authority: !created_paths.is_empty(),
-        created_paths,
-        existing_paths,
+        created_paths: created_paths.clone(),
+        existing_paths: existing_paths.clone(),
+        portable_paths,
         paths,
+        local_diagnostics: ProductWorkspaceLocalDiagnostics {
+            workspace_root: normalized_root,
+            created_paths,
+            existing_paths,
+            projection_path,
+        },
         active_product,
         projection_refresh_hint: "reload .agentflow/projections/workspace-state.json".to_string(),
         blockers,
@@ -493,6 +546,23 @@ fn workspace_paths(workspace_root: &Path, workspace_id: &str) -> ProductWorkspac
         projection_path: normalize_path(
             workspace_root.join(".agentflow/projections/workspace-state.json"),
         ),
+    }
+}
+
+fn workspace_portable_paths(workspace_id: &str) -> ProductWorkspacePathSet {
+    ProductWorkspacePathSet {
+        docs_project_dir: "workspace://docs/project".to_string(),
+        goal_doc: "workspace://docs/project/goal.md".to_string(),
+        roadmap_doc: "workspace://docs/project/roadmap.md".to_string(),
+        context_doc: "workspace://docs/project/context.md".to_string(),
+        agentflow_root: "workspace://.agentflow".to_string(),
+        workspace_manifest: "workspace://.agentflow/workspace.json".to_string(),
+        spec_projects_dir: "workspace://.agentflow/spec/projects".to_string(),
+        spec_issues_dir: "workspace://.agentflow/spec/issues".to_string(),
+        events_dir: "workspace://.agentflow/events".to_string(),
+        tasks_dir: "workspace://.agentflow/tasks".to_string(),
+        evidence_dir: format!("workspace://.agentflow/tasks/{workspace_id}/evidence"),
+        projection_path: "workspace://.agentflow/projections/workspace-state.json".to_string(),
     }
 }
 
@@ -573,11 +643,26 @@ mod tests {
         );
         assert!(PathBuf::from(&receipt.paths.goal_doc).is_file());
         assert!(PathBuf::from(&receipt.paths.spec_projects_dir).is_dir());
+        assert_eq!(receipt.workspace_root_ref, "workspace://root");
+        assert!(receipt.portable_paths.goal_doc.starts_with("workspace://"));
+        assert!(!receipt
+            .portable_paths
+            .goal_doc
+            .contains(dir.path().to_str().unwrap()));
+        assert!(receipt
+            .local_diagnostics
+            .workspace_root
+            .contains("workspace"));
 
         let projection = load_product_workspace_projection(&receipt.workspace_root);
         assert_eq!(projection.status, ProductWorkspaceStatus::Ready);
         assert!(projection.docs_ready);
         assert!(projection.fact_source_ready);
+        assert_eq!(projection.workspace_root_ref, "workspace://root");
+        assert!(projection
+            .portable_paths
+            .workspace_manifest
+            .starts_with("workspace://"));
     }
 
     #[test]
