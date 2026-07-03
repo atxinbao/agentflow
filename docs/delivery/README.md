@@ -21,7 +21,9 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.1.5/README.md](releases/v1.1.5/README.md) | 当前发布基线：Spec Intake to Goal / Roadmap / Task Productization |
+| [releases/v1.1.6/README.md](releases/v1.1.6/README.md) | 当前发布基线：Executor Adapter Real Execution Closure |
+| [releases/v1.1.6/AGENTFLOW_V1_1_6_EXECUTOR_ADAPTER_REAL_EXECUTION_TASKS_V1.md](releases/v1.1.6/AGENTFLOW_V1_1_6_EXECUTOR_ADAPTER_REAL_EXECUTION_TASKS_V1.md) | v1.1.6 Executor Adapter real execution closure tasks |
+| [releases/v1.1.5/README.md](releases/v1.1.5/README.md) | 上一发布基线：Spec Intake to Goal / Roadmap / Task Productization |
 | [releases/v1.1.5/AGENTFLOW_V1_1_5_SPEC_INTAKE_PRODUCTIZATION_TASKS_V1.md](releases/v1.1.5/AGENTFLOW_V1_1_5_SPEC_INTAKE_PRODUCTIZATION_TASKS_V1.md) | v1.1.5 Spec Intake productization tasks |
 | [releases/v1.1.4/README.md](releases/v1.1.4/README.md) | 上一发布基线：Project Creation and Product Workspace |
 | [releases/v1.1.4/AGENTFLOW_V1_1_4_PROJECT_CREATION_PRODUCT_WORKSPACE_TASKS_V1.md](releases/v1.1.4/AGENTFLOW_V1_1_4_PROJECT_CREATION_PRODUCT_WORKSPACE_TASKS_V1.md) | v1.1.4 Project creation and product workspace tasks |
@@ -42,7 +44,7 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| `v1.1.6` | 下一版计划：Product workspace lifecycle and provider launch closure |
+| `v1.1.7` | 下一版计划：Evidence / Decision / Delivery surface readability |
 
 ## Historical Delivery
 
