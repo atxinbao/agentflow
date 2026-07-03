@@ -77,4 +77,4 @@ quick-audit-manifest.json
 
 ## Next Version
 
-`v1.1.5` can continue toward Product workspace lifecycle and provider launch closure after this creation baseline is certified.
+`v1.1.5` continues toward Spec Intake to Goal / Roadmap / Task Productization after this creation baseline is certified.

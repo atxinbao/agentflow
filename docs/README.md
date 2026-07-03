@@ -1,6 +1,6 @@
 # Docs Index
 
-更新日期：2026-07-01
+更新日期：2026-07-03
 执行者：Codex
 
 ## Current Standard
@@ -35,7 +35,7 @@ docs/
 7. [architecture/086-industry-product-source-boundary-v1.md](architecture/086-industry-product-source-boundary-v1.md)
 8. [architecture/041-v100-stable-contract-baseline-v1.md](architecture/041-v100-stable-contract-baseline-v1.md)
 9. [architecture/053-core-4d-spec-intake-kernel-v1.md](architecture/053-core-4d-spec-intake-kernel-v1.md)
-10. [delivery/releases/v1.1.4/README.md](delivery/releases/v1.1.4/README.md)
+10. [delivery/releases/v1.1.5/README.md](delivery/releases/v1.1.5/README.md)
 11. [requirements/README.md](requirements/README.md)
 12. [requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md](requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md)
 13. [../CHANGELOG.md](../CHANGELOG.md)

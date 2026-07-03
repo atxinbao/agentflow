@@ -16,6 +16,7 @@ pub mod pack;
 pub mod product_workspace;
 pub mod query;
 pub mod responses;
+pub mod spec_intake_productization;
 pub mod work_proposals;
 pub mod work_state;
 
@@ -57,9 +58,10 @@ pub use pack::{
 };
 pub use product_workspace::{
     create_product_workspace, load_product_workspace_projection, ProductWorkspaceCreationMode,
-    ProductWorkspaceCreationReceipt, ProductWorkspaceCreationRequest, ProductWorkspacePathSet,
-    ProductWorkspaceProductBinding, ProductWorkspaceProjection, ProductWorkspaceStatus,
-    PRODUCT_WORKSPACE_CONTRACT_VERSION, PRODUCT_WORKSPACE_PROJECTION_VERSION,
+    ProductWorkspaceCreationReceipt, ProductWorkspaceCreationRequest,
+    ProductWorkspaceLocalDiagnostics, ProductWorkspacePathSet, ProductWorkspaceProductBinding,
+    ProductWorkspaceProjection, ProductWorkspaceStatus, PRODUCT_WORKSPACE_CONTRACT_VERSION,
+    PRODUCT_WORKSPACE_PROJECTION_VERSION,
 };
 pub use query::{
     get_audit_surface_view, get_core_file_backed_ontology_registry_view, get_delivery_package_view,
@@ -70,6 +72,15 @@ pub use query::{
 pub use responses::{
     RuntimeCommandDecision, RuntimeCommandResponse, RuntimeCommandStatus,
     RuntimeCommandValidationReport, RUNTIME_COMMAND_API_VERSION,
+};
+pub use spec_intake_productization::{
+    confirm_product_spec_preview, materialize_confirmed_product_spec, preview_product_intent,
+    read_product_spec_confirmation, read_product_spec_preview, ProductCoreRouteDecision,
+    ProductIntentIntakeReceipt, ProductIntentIntakeRequest, ProductIntentProductMapping,
+    ProductSpecConfirmationRecord, ProductSpecConfirmationRequest,
+    ProductSpecMaterializationReport, ProductSpecPreviewArtifact, ProductSpecPreviewDecision,
+    ProductTaskPreview, PRODUCT_SPEC_CONFIRMATION_VERSION, PRODUCT_SPEC_INTAKE_VERSION,
+    PRODUCT_SPEC_MATERIALIZATION_VERSION, PRODUCT_SPEC_PREVIEW_VERSION,
 };
 pub use work_proposals::{
     write_work_action_proposals_from_spec_issue, WorkActionProposalContract,
