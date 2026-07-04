@@ -7,22 +7,32 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.1.7/README.md](docs/delivery/releases/v1.1.7/README.md)
-- [docs/delivery/releases/v1.1.7/AGENTFLOW_V1_1_7_EVIDENCE_DECISION_DELIVERY_READABILITY_TASKS_V1.md](docs/delivery/releases/v1.1.7/AGENTFLOW_V1_1_7_EVIDENCE_DECISION_DELIVERY_READABILITY_TASKS_V1.md)
+- [docs/delivery/releases/v1.1.8/README.md](docs/delivery/releases/v1.1.8/README.md)
+- [docs/delivery/releases/v1.1.8/AGENTFLOW_V1_1_8_RECOVERY_RESUME_FAILURE_HANDLING_TASKS_V1.md](docs/delivery/releases/v1.1.8/AGENTFLOW_V1_1_8_RECOVERY_RESUME_FAILURE_HANDLING_TASKS_V1.md)
 
 下一版计划：
 
-- v1.1.8 Recovery / Resume / Failure Handling。
+- v1.1.9 Next Runtime Surface Hardening。
 
 ## Unreleased
 
-下一版保留给 Recovery / Resume / Failure Handling，不在本次 release 中认证。
+下一版保留给 Next Runtime Surface Hardening，不在本次 release 中认证。
 
-Planned v1.1.8 foundation:
+## v1.1.8 - 2026-07-04
 
-- improve runtime recovery, resume and failure handling;
-- preserve Evidence / Decision / Delivery read models introduced in `v1.1.7`;
-- keep release-gate certification as the mandatory closeout path.
+Recovery / Resume / Failure Handling:
+
+- aligned `v1.1.8` release authority with `docs/project/roadmap.md` as the recovery and failure handling baseline;
+- hardened release closeout metadata so certification records `releaseVersion`, `releaseTag`, `sourceCommit`, `workflowRunId`, `artifactNames` and `primaryProofs`;
+- tightened executor evidence graph completion so `complete` is only emitted after run, handoff, boundary, validation, evidence and closeout facts are all ready;
+- added Runtime API resume receipts for interrupted or failed runs without marking terminal tasks as done;
+- added failed command recovery receipts for retry, replace, rerun and block paths while preserving the original failed command evidence;
+- added interrupt lifecycle closeout semantics so interrupted executor sessions remain resumable and do not fake completion;
+- added duplicate command / idempotency handling for recovery and resume operations;
+- added projection rebuild recovery receipts and workspace health reports for missing authority, stale projections and provider readiness markers;
+- connected Desktop task details to the `load_executor_flow_read_model` Runtime API query for read-only executor flow display;
+- added v1.1.8 release-gate proof artifacts and task traceability for GitHub issues `#830` through `#839`;
+- advanced workspace and desktop version metadata to `1.1.8`.
 
 ## v1.1.7 - 2026-07-04
 

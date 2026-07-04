@@ -156,6 +156,35 @@ type ExecuteStatusState = {
   source: "idle" | "loading" | "tauri" | "preview" | "unavailable";
 };
 
+type ExecutorFlowReadModel = {
+  actionVisibility: Array<{ action: string; enabled: boolean; label: string; reason: string; state: string }>;
+  decision: { accepted: boolean; outcome: string; reasons: string[]; remediation: string[] };
+  delivery: { status: string; summary: string; nextSuggestedStep: string; proofRefs: string[] };
+  diagnostics: Array<{ field: string; label: string; localOnly: boolean; portable: boolean; value: string }>;
+  evidenceGraph: { status: string; missing: string[]; failed: string[]; stale: string[] };
+  issueId: string;
+  issueStatus: string;
+  recovery?: { status: string; options: string[]; receiptRefs: string[] };
+  resume?: { status: string; allowed: boolean; reason: string; receiptRefs: string[] };
+  runId: string;
+  runStatus: string | null;
+  sourceRefs: string[];
+  workspaceHealth?: {
+    status: string;
+    missingRefs: string[];
+    staleRefs: string[];
+    providerReady: boolean;
+    projectionFresh: boolean;
+    nextAction: string;
+  };
+};
+
+type ExecutorFlowState = {
+  error: string | null;
+  flow: ExecutorFlowReadModel | null;
+  source: DataSource;
+};
+
 type DeliveryPrMetadataState = {
   branchName?: string | null;
   createdRemotePr: boolean;
@@ -534,6 +563,11 @@ function App() {
   const [projectLoopFeedback, setProjectLoopFeedback] = useState<string | null>(null);
   const [projectRuntimeState, setProjectRuntimeState] = useState<ButtonInteractionState>("enabled");
   const [projectRuntimeFeedback, setProjectRuntimeFeedback] = useState<string | null>(null);
+  const [executorFlowState, setExecutorFlowState] = useState<ExecutorFlowState>({
+    error: null,
+    flow: null,
+    source: "idle",
+  });
   const [handedOffIssues, setHandedOffIssues] = useState<Set<string>>(() => readStoredIssueSet());
   const preparedProjectRoots = useRef(new Set<string>());
   const { activePageByProject, activeProjectRoot, expandedProjectRoots, projects } = projectRegistry;
@@ -989,6 +1023,7 @@ function App() {
   );
   const selectedTaskProjection =
     taskProjectionState.projection?.issueId === selectedTask?.id ? taskProjectionState.projection : null;
+  const selectedTaskRunId = selectedTaskProjection?.runtime.runId ?? selectedTask?.latestRunId ?? null;
   const selectedProjectProjection =
     projectProjectionState.projection?.projectId === selectedProjectGroup?.id
       ? projectProjectionState.projection
@@ -1002,6 +1037,41 @@ function App() {
     () => buildNextStep(stateStatusState, inputSnapshotState.snapshot?.issues.length ?? 0, selectedTask),
     [inputSnapshotState.snapshot?.issues.length, selectedTask, stateStatusState],
   );
+
+  useEffect(() => {
+    if (!projectRoot || !selectedTask?.id || !selectedTaskRunId) {
+      setExecutorFlowState({ error: null, flow: null, source: "idle" });
+      return;
+    }
+    if (isBrowserPreviewRuntime()) {
+      setExecutorFlowState({ error: null, flow: null, source: "preview" });
+      return;
+    }
+    let cancelled = false;
+    setExecutorFlowState((current) => ({ ...current, error: null, source: "loading" }));
+    void invoke<ExecutorFlowReadModel>("load_executor_flow_read_model", {
+      issueId: selectedTask.id,
+      projectRoot,
+      runId: selectedTaskRunId,
+    })
+      .then((flow) => {
+        if (!cancelled) {
+          setExecutorFlowState({ error: null, flow, source: "tauri" });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setExecutorFlowState({
+            error: error instanceof Error ? error.message : String(error),
+            flow: null,
+            source: "unavailable",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectRoot, selectedTask?.id, selectedTaskRunId, taskListRefreshToken, executeRefreshToken]);
   const activeProjectLiveStatus = projectRoot
     ? activeProjectRegistryStatus === "missing"
       ? "missing"
@@ -1520,6 +1590,7 @@ function App() {
             copyState={taskCopyState}
             detailFocus={taskDetailFocus}
             executeStatusState={executeStatusState}
+            executorFlowState={executorFlowState}
             mcpSessionsState={mcpSessionsState}
             onDetailFocusHandled={() => setTaskDetailFocus(null)}
             onOpenAudit={() => setActivePage("audit")}
@@ -3110,6 +3181,7 @@ function TasksPage({
   copyState,
   detailFocus,
   executeStatusState,
+  executorFlowState,
   mcpSessionsState,
   onDetailFocusHandled,
   onOpenAudit,
@@ -3138,6 +3210,7 @@ function TasksPage({
   copyState: ButtonInteractionState;
   detailFocus: "delivery" | null;
   executeStatusState: ExecuteStatusState;
+  executorFlowState: ExecutorFlowState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
   onOpenAudit: () => void;
@@ -3173,6 +3246,7 @@ function TasksPage({
         copyState={copyState}
         detailFocus={detailFocus}
         executeStatusState={executeStatusState}
+        executorFlowState={executorFlowState}
         mcpSessionsState={mcpSessionsState}
         onDetailFocusHandled={onDetailFocusHandled}
         onOpenAudit={onOpenAudit}
@@ -3206,6 +3280,7 @@ function TaskList({
   copyState,
   detailFocus,
   executeStatusState,
+  executorFlowState,
   mcpSessionsState,
   onDetailFocusHandled,
   onOpenAudit,
@@ -3234,6 +3309,7 @@ function TaskList({
   copyState: ButtonInteractionState;
   detailFocus: "delivery" | null;
   executeStatusState: ExecuteStatusState;
+  executorFlowState: ExecutorFlowState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
   onOpenAudit: () => void;
@@ -3415,6 +3491,7 @@ function TaskList({
         copyState={copyState}
         detailFocus={detailFocus}
         executeStatusState={executeStatusState}
+        executorFlowState={executorFlowState}
         mcpSessionsState={mcpSessionsState}
         onDetailFocusHandled={onDetailFocusHandled}
         onOpenAudit={onOpenAudit}
@@ -3618,6 +3695,7 @@ function TaskDetail({
   copyState,
   detailFocus,
   executeStatusState,
+  executorFlowState,
   mcpSessionsState,
   onDetailFocusHandled,
   onOpenAudit,
@@ -3643,6 +3721,7 @@ function TaskDetail({
   copyState: ButtonInteractionState;
   detailFocus: "delivery" | null;
   executeStatusState: ExecuteStatusState;
+  executorFlowState: ExecutorFlowState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
   onOpenAudit: () => void;
@@ -3726,6 +3805,7 @@ function TaskDetail({
       copyState={copyState}
       detailFocus={detailFocus}
       executeStatusState={executeStatusState}
+      executorFlowState={executorFlowState}
       mcpSessionsState={mcpSessionsState}
       onDetailFocusHandled={onDetailFocusHandled}
       onOpenAudit={onOpenAudit}
@@ -4149,6 +4229,7 @@ function TaskDetailReader({
   copyState,
   detailFocus,
   executeStatusState,
+  executorFlowState,
   mcpSessionsState,
   onDetailFocusHandled,
   onOpenAudit,
@@ -4163,6 +4244,7 @@ function TaskDetailReader({
   copyState: ButtonInteractionState;
   detailFocus: "delivery" | null;
   executeStatusState: ExecuteStatusState;
+  executorFlowState: ExecutorFlowState;
   mcpSessionsState: McpSessionsState;
   onDetailFocusHandled: () => void;
   onOpenAudit: () => void;
@@ -4313,6 +4395,7 @@ function TaskDetailReader({
               artifact={finalDeliveryArtifact}
               executionProjection={executionProjection}
               deliveryProjection={deliveryProjection}
+              executorFlowState={executorFlowState}
               onOpenAudit={onOpenAudit}
               reviewItems={reviewItems}
               status={effectiveDisplayStatus}
@@ -4404,6 +4487,7 @@ function TaskFlowSidebar({
   artifact,
   executionProjection,
   deliveryProjection,
+  executorFlowState,
   onOpenAudit,
   reviewItems,
   status,
@@ -4413,6 +4497,7 @@ function TaskFlowSidebar({
   artifact: DeliveryArtifactState | null;
   executionProjection: TaskExecutionProjection;
   deliveryProjection: TaskDeliveryProjection;
+  executorFlowState: ExecutorFlowState;
   onOpenAudit: () => void;
   reviewItems: string[];
   status: IssueDisplayStatus;
@@ -4425,6 +4510,7 @@ function TaskFlowSidebar({
   const auditItems = taskAuditSummaryItems(task, taskProjection);
   const acceptanceItems = taskAcceptanceGateItems(task, taskProjection, deliveryProjection);
   const completionCommitItems = taskCompletionCommitItems(task, taskProjection, deliveryProjection);
+  const runtimeFlowItems = executorFlowSummaryItems(executorFlowState);
 
   return (
     <div className="v16-task-side-rail">
@@ -4438,6 +4524,7 @@ function TaskFlowSidebar({
           <SectionList title="验证与证据" items={verificationItems} />
           <SectionList title="验收门" items={acceptanceItems} />
           <SectionList title="完成写回" items={completionCommitItems} />
+          <SectionList title="Runtime API" items={runtimeFlowItems} />
           <SectionList title="交付槽位" items={deliverySlotItems} />
           <SectionList title="公开交付" items={publicDeliveryItems} />
           <SectionList title="评审状态" items={reviewItems} />
@@ -4459,6 +4546,26 @@ function TaskFlowSidebar({
       </section>
     </div>
   );
+}
+
+function executorFlowSummaryItems(state: ExecutorFlowState): string[] {
+  if (state.source === "loading") {
+    return ["正在读取 Runtime API。"];
+  }
+  if (state.error) {
+    return [`Runtime API 不可用：${state.error}`];
+  }
+  if (!state.flow) {
+    return ["当前任务还没有 Runtime API run read model。"];
+  }
+  const flow = state.flow;
+  return [
+    `Run：${flow.runId} · ${flow.runStatus ?? "未记录"}`,
+    `证据图：${flow.evidenceGraph.status}`,
+    `恢复：${flow.resume?.status ?? "未记录"} · ${flow.resume?.allowed ? "可继续" : "不可继续"}`,
+    `失败修复：${flow.recovery?.status ?? "未记录"}`,
+    `工作区健康：${flow.workspaceHealth?.status ?? "未记录"}`,
+  ];
 }
 
 function IssueStatusFlow({

@@ -132,6 +132,44 @@ pub(crate) fn record_executor_lifecycle(
 }
 
 #[tauri::command]
+pub(crate) fn resume_executor_run(
+    project_root: String,
+    request: agentflow_runtime_api::ExecutorRunResumeRequest,
+) -> Result<agentflow_runtime_api::ExecutorRunResumeReceipt, String> {
+    agentflow_runtime_api::resume_executor_run(project_root, request)
+        .map_err(|error| format!("resume executor run failed: {error}"))
+}
+
+#[tauri::command]
+pub(crate) fn recover_failed_executor_command(
+    project_root: String,
+    request: agentflow_runtime_api::ExecutorCommandRecoveryRequest,
+) -> Result<agentflow_runtime_api::ExecutorCommandRecoveryReceipt, String> {
+    agentflow_runtime_api::recover_failed_executor_command(project_root, request)
+        .map_err(|error| format!("recover failed executor command failed: {error}"))
+}
+
+#[tauri::command]
+pub(crate) fn rebuild_executor_projection(
+    project_root: String,
+    issue_id: String,
+    run_id: String,
+) -> Result<agentflow_runtime_api::ExecutorProjectionRebuildReceipt, String> {
+    agentflow_runtime_api::rebuild_executor_projection(project_root, &issue_id, &run_id)
+        .map_err(|error| format!("rebuild executor projection failed: {error}"))
+}
+
+#[tauri::command]
+pub(crate) fn check_executor_workspace_health(
+    project_root: String,
+    issue_id: String,
+    run_id: String,
+) -> Result<agentflow_runtime_api::ExecutorWorkspaceHealthReport, String> {
+    agentflow_runtime_api::check_executor_workspace_health(project_root, &issue_id, &run_id)
+        .map_err(|error| format!("check executor workspace health failed: {error}"))
+}
+
+#[tauri::command]
 pub(crate) fn load_executor_flow_read_model(
     project_root: String,
     issue_id: String,

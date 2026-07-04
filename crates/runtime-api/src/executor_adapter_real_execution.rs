@@ -34,6 +34,13 @@ pub const EXECUTOR_EVIDENCE_CAPTURE_VERSION: &str = "agentflow-executor-evidence
 pub const EXECUTOR_RESULT_WRITEBACK_VERSION: &str = "agentflow-executor-result-writeback.v1";
 pub const EXECUTOR_LIFECYCLE_RECEIPT_VERSION: &str = "agentflow-executor-lifecycle-receipt.v1";
 pub const EXECUTOR_FLOW_READ_MODEL_VERSION: &str = "agentflow-executor-flow-read-model.v1";
+pub const EXECUTOR_RESUME_RECEIPT_VERSION: &str = "agentflow-executor-resume-receipt.v1";
+pub const EXECUTOR_COMMAND_RECOVERY_RECEIPT_VERSION: &str =
+    "agentflow-executor-command-recovery-receipt.v1";
+pub const EXECUTOR_PROJECTION_REBUILD_RECEIPT_VERSION: &str =
+    "agentflow-executor-projection-rebuild-receipt.v1";
+pub const EXECUTOR_WORKSPACE_HEALTH_REPORT_VERSION: &str =
+    "agentflow-executor-workspace-health-report.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -249,6 +256,7 @@ pub struct ExecutorResultWritebackReport {
 #[serde(rename_all = "kebab-case")]
 pub enum ExecutorLifecycleAction {
     Timeout,
+    Interrupt,
     Cancel,
     Retry,
     Supersede,
@@ -258,6 +266,7 @@ impl ExecutorLifecycleAction {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Timeout => "timeout",
+            Self::Interrupt => "interrupt",
             Self::Cancel => "cancel",
             Self::Retry => "retry",
             Self::Supersede => "supersede",
@@ -292,6 +301,142 @@ pub struct ExecutorLifecycleReceipt {
     pub superseded_run_id: Option<String>,
     pub receipt_path: String,
     pub created_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorRunResumeRequest {
+    pub issue_id: String,
+    pub run_id: String,
+    pub actor: String,
+    pub reason: String,
+    #[serde(default)]
+    pub resume_run_id: Option<String>,
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorRunResumeReceipt {
+    pub version: String,
+    pub issue_id: String,
+    pub previous_run_id: String,
+    pub resume_run_id: String,
+    pub actor: String,
+    pub reason: String,
+    pub resumable: bool,
+    pub blocked_reasons: Vec<String>,
+    pub previous_run_status: String,
+    pub issue_status: String,
+    pub receipt_path: String,
+    pub idempotency_key: Option<String>,
+    pub payload_sha256: String,
+    pub reused_existing: bool,
+    pub created_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExecutorCommandRecoveryAction {
+    Retry,
+    Replace,
+    Rerun,
+    Block,
+}
+
+impl ExecutorCommandRecoveryAction {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Retry => "retry",
+            Self::Replace => "replace",
+            Self::Rerun => "rerun",
+            Self::Block => "block",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorCommandRecoveryRequest {
+    pub issue_id: String,
+    pub run_id: String,
+    pub failed_command_id: String,
+    pub action: ExecutorCommandRecoveryAction,
+    pub actor: String,
+    pub reason: String,
+    #[serde(default)]
+    pub replacement_command: Option<ExecutorCommandEvidenceInput>,
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorCommandRecoveryReceipt {
+    pub version: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub failed_command_id: String,
+    pub action: ExecutorCommandRecoveryAction,
+    pub actor: String,
+    pub reason: String,
+    pub original_failed_evidence_preserved: bool,
+    pub replacement_command_id: Option<String>,
+    pub issue_status: String,
+    pub receipt_path: String,
+    pub idempotency_key: Option<String>,
+    pub payload_sha256: String,
+    pub reused_existing: bool,
+    pub created_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorProjectionRebuildReceipt {
+    pub version: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub status: String,
+    pub replay_status: String,
+    pub event_count: usize,
+    pub rebuilt_paths: Vec<String>,
+    pub failures: Vec<String>,
+    pub receipt_path: String,
+    pub generated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorWorkspaceHealthReport {
+    pub version: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub status: String,
+    pub required_refs: Vec<String>,
+    pub missing_refs: Vec<String>,
+    pub stale_refs: Vec<String>,
+    pub provider_ready: bool,
+    pub projection_fresh: bool,
+    pub next_action: String,
+    pub generated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorResumeProjection {
+    pub status: String,
+    pub allowed: bool,
+    pub reason: String,
+    pub receipt_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutorRecoveryProjection {
+    pub status: String,
+    pub options: Vec<String>,
+    pub receipt_refs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -392,6 +537,9 @@ pub struct ExecutorFlowReadModel {
     pub evidence_graph: ExecutorEvidenceGraphProjection,
     pub decision: ExecutorDecisionProjection,
     pub delivery: ExecutorDeliveryPackageProjection,
+    pub resume: ExecutorResumeProjection,
+    pub recovery: ExecutorRecoveryProjection,
+    pub workspace_health: ExecutorWorkspaceHealthReport,
     pub repair_actions: Vec<ExecutorRepairActionProjection>,
     pub diagnostics: Vec<ExecutorPortableDiagnosticRef>,
     pub source_refs: Vec<String>,
@@ -456,6 +604,7 @@ pub fn get_executor_flow_read_model(
     let writeback = optional_json::<ExecutorResultWritebackReport>(
         &executor_writeback_report_path(&root, issue_id, run_id)?,
     )?;
+    let workspace_health = check_executor_workspace_health(&root, issue_id, run_id)?;
 
     let source_refs = source_refs_for_flow(
         &root,
@@ -502,6 +651,9 @@ pub fn get_executor_flow_read_model(
             evidence.as_ref(),
             closeout.as_ref(),
         ),
+        resume: resume_projection_for_flow(&root, &issue, run.as_ref(), issue_id, run_id)?,
+        recovery: recovery_projection_for_flow(&root, issue_id, run_id)?,
+        workspace_health,
         repair_actions: repair_actions_for_flow(
             &issue,
             boundary.as_ref(),
@@ -791,6 +943,9 @@ pub fn record_executor_lifecycle(
         ExecutorLifecycleAction::Timeout => {
             (TaskRunStatus::Failed, SpecIssueStatus::Blocked, None, None)
         }
+        ExecutorLifecycleAction::Interrupt => {
+            (TaskRunStatus::Failed, SpecIssueStatus::Todo, None, None)
+        }
         ExecutorLifecycleAction::Cancel => (
             TaskRunStatus::Cancelled,
             SpecIssueStatus::Cancel,
@@ -856,6 +1011,287 @@ pub fn record_executor_lifecycle(
     };
     write_json(&receipt_path, &receipt)?;
     Ok(receipt)
+}
+
+pub fn resume_executor_run(
+    project_root: impl AsRef<Path>,
+    request: ExecutorRunResumeRequest,
+) -> Result<ExecutorRunResumeReceipt> {
+    let root = canonicalize_project_root(project_root)?;
+    let receipt_path = executor_resume_receipt_path(&root, &request.issue_id, &request.run_id)?;
+    let payload_sha256 = stable_payload_sha256(&request)?;
+    if let Some(existing) = read_idempotent_receipt::<ExecutorRunResumeReceipt>(
+        &receipt_path,
+        request.idempotency_key.as_deref(),
+        &payload_sha256,
+    )? {
+        return Ok(ExecutorRunResumeReceipt {
+            reused_existing: true,
+            ..existing
+        });
+    }
+
+    let issue = read_spec_issue(&root, &request.issue_id)?;
+    let run = read_json::<TaskRun>(
+        &agentflow_task_artifacts::task_run_dir(&root, &request.issue_id, &request.run_id)?
+            .join("run.json"),
+    )?;
+    let mut blocked_reasons = Vec::new();
+    if matches!(
+        issue.status,
+        SpecIssueStatus::Done | SpecIssueStatus::Cancel
+    ) {
+        blocked_reasons.push(format!("issue-terminal-{}", issue.status.as_str()));
+    }
+    if matches!(
+        run.status,
+        TaskRunStatus::Completed | TaskRunStatus::Cancelled
+    ) {
+        blocked_reasons.push(format!("run-terminal-{}", run_status_label(&run.status)));
+    }
+    let resumable = blocked_reasons.is_empty();
+    let resume_run_id = request
+        .resume_run_id
+        .clone()
+        .unwrap_or_else(|| format!("{}-resume", request.run_id));
+    if resumable {
+        let _ = commit_task_run_writeback(
+            &root,
+            &request.issue_id,
+            &request.run_id,
+            TaskRunStatus::Failed,
+            "resume-requested",
+            Some(request.reason.clone()),
+            None,
+        )?;
+        let _ = create_task_run(
+            &root,
+            &request.issue_id,
+            &resume_run_id,
+            &issue.workflow_ref,
+            Some(format!("agentflow/direct/{}-resume", request.issue_id)),
+        )?;
+        let _ = update_spec_issue_status(&root, &request.issue_id, SpecIssueStatus::Todo)?;
+    }
+    let refreshed_issue = read_spec_issue(&root, &request.issue_id)?;
+    let receipt = ExecutorRunResumeReceipt {
+        version: EXECUTOR_RESUME_RECEIPT_VERSION.to_string(),
+        issue_id: request.issue_id,
+        previous_run_id: request.run_id,
+        resume_run_id,
+        actor: request.actor,
+        reason: request.reason,
+        resumable,
+        blocked_reasons,
+        previous_run_status: run_status_label(&run.status).to_string(),
+        issue_status: refreshed_issue.status.as_str().to_string(),
+        receipt_path: normalize_relative_to_root(&root, &receipt_path)?,
+        idempotency_key: request.idempotency_key,
+        payload_sha256,
+        reused_existing: false,
+        created_at: unix_timestamp_seconds(),
+    };
+    write_json(&receipt_path, &receipt)?;
+    Ok(receipt)
+}
+
+pub fn recover_failed_executor_command(
+    project_root: impl AsRef<Path>,
+    request: ExecutorCommandRecoveryRequest,
+) -> Result<ExecutorCommandRecoveryReceipt> {
+    let root = canonicalize_project_root(project_root)?;
+    let receipt_path = executor_command_recovery_receipt_path(
+        &root,
+        &request.issue_id,
+        &request.run_id,
+        &request.failed_command_id,
+        request.action.as_str(),
+    )?;
+    let payload_sha256 = stable_payload_sha256(&request)?;
+    if let Some(existing) = read_idempotent_receipt::<ExecutorCommandRecoveryReceipt>(
+        &receipt_path,
+        request.idempotency_key.as_deref(),
+        &payload_sha256,
+    )? {
+        return Ok(ExecutorCommandRecoveryReceipt {
+            reused_existing: true,
+            ..existing
+        });
+    }
+
+    let validation =
+        agentflow_task_artifacts::load_task_validation(&root, &request.issue_id, &request.run_id)
+            .context("command recovery requires validation record")?;
+    if !validation
+        .failed_command_ids
+        .iter()
+        .any(|command_id| command_id == &request.failed_command_id)
+    {
+        anyhow::bail!(
+            "command recovery target is not a failed command: {}",
+            request.failed_command_id
+        );
+    }
+    let replacement_command_id = match request.replacement_command.clone() {
+        Some(command) => {
+            let record = write_task_command_record(
+                &root,
+                &request.issue_id,
+                &request.run_id,
+                TaskCommandInput {
+                    label: command.label,
+                    program: command.program,
+                    args: command.args,
+                    exit_code: command.exit_code,
+                    stdout: command.stdout,
+                    stderr: command.stderr,
+                },
+            )?;
+            Some(record.command_id)
+        }
+        None => None,
+    };
+    let issue_status = match request.action {
+        ExecutorCommandRecoveryAction::Block => {
+            let _ = commit_task_run_writeback(
+                &root,
+                &request.issue_id,
+                &request.run_id,
+                TaskRunStatus::Failed,
+                "command-recovery-blocked",
+                Some(request.reason.clone()),
+                None,
+            )?;
+            update_spec_issue_status(&root, &request.issue_id, SpecIssueStatus::Blocked)?
+                .status
+                .as_str()
+                .to_string()
+        }
+        ExecutorCommandRecoveryAction::Retry
+        | ExecutorCommandRecoveryAction::Replace
+        | ExecutorCommandRecoveryAction::Rerun => {
+            update_spec_issue_status(&root, &request.issue_id, SpecIssueStatus::Todo)?
+                .status
+                .as_str()
+                .to_string()
+        }
+    };
+    let receipt = ExecutorCommandRecoveryReceipt {
+        version: EXECUTOR_COMMAND_RECOVERY_RECEIPT_VERSION.to_string(),
+        issue_id: request.issue_id,
+        run_id: request.run_id,
+        failed_command_id: request.failed_command_id,
+        action: request.action,
+        actor: request.actor,
+        reason: request.reason,
+        original_failed_evidence_preserved: true,
+        replacement_command_id,
+        issue_status,
+        receipt_path: normalize_relative_to_root(&root, &receipt_path)?,
+        idempotency_key: request.idempotency_key,
+        payload_sha256,
+        reused_existing: false,
+        created_at: unix_timestamp_seconds(),
+    };
+    write_json(&receipt_path, &receipt)?;
+    Ok(receipt)
+}
+
+pub fn rebuild_executor_projection(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<ExecutorProjectionRebuildReceipt> {
+    let root = canonicalize_project_root(project_root)?;
+    let report = agentflow_projection::rebuild_projections_with_replay_report(&root)?;
+    let failures = report
+        .failures
+        .iter()
+        .map(|failure| format!("{}: {}", failure.stage, failure.message))
+        .collect::<Vec<_>>();
+    let receipt_path = executor_projection_rebuild_receipt_path(&root, issue_id, run_id)?;
+    let status = if report.status == agentflow_projection::ProjectionReplayStatus::Passed {
+        "fresh"
+    } else {
+        "failed"
+    };
+    let receipt = ExecutorProjectionRebuildReceipt {
+        version: EXECUTOR_PROJECTION_REBUILD_RECEIPT_VERSION.to_string(),
+        issue_id: issue_id.to_string(),
+        run_id: run_id.to_string(),
+        status: status.to_string(),
+        replay_status: format!("{:?}", report.status),
+        event_count: report.event_count,
+        rebuilt_paths: report.rebuilt_paths,
+        failures,
+        receipt_path: normalize_relative_to_root(&root, &receipt_path)?,
+        generated_at: unix_timestamp_seconds(),
+    };
+    write_json(&receipt_path, &receipt)?;
+    Ok(receipt)
+}
+
+pub fn check_executor_workspace_health(
+    project_root: impl AsRef<Path>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<ExecutorWorkspaceHealthReport> {
+    let root = canonicalize_project_root(project_root)?;
+    let required_refs = vec![
+        "docs/project/goal.md".to_string(),
+        "docs/project/roadmap.md".to_string(),
+        format!(".agentflow/spec/issues/{issue_id}.json"),
+        format!(".agentflow/tasks/{issue_id}/runs/{run_id}/run.json"),
+    ];
+    let missing_refs = required_refs
+        .iter()
+        .filter(|path| !root.join(path).is_file())
+        .cloned()
+        .collect::<Vec<_>>();
+    let run = optional_json::<TaskRun>(
+        &agentflow_task_artifacts::task_run_dir(&root, issue_id, run_id)?.join("run.json"),
+    )?;
+    let provider_ready = run
+        .as_ref()
+        .and_then(|run| run.provider.as_ref())
+        .map(|provider| !provider.trim().is_empty())
+        .unwrap_or(false);
+    let projection_report =
+        agentflow_projection::rebuild_projections_with_replay_report(&root).ok();
+    let projection_fresh = projection_report
+        .as_ref()
+        .map(|report| report.status == agentflow_projection::ProjectionReplayStatus::Passed)
+        .unwrap_or(false);
+    let mut stale_refs = Vec::new();
+    if !projection_fresh {
+        stale_refs.push(".agentflow/projections/**".to_string());
+        stale_refs.push(".agentflow/indexes/**".to_string());
+    }
+    let status = if !missing_refs.is_empty() {
+        "blocked"
+    } else if !projection_fresh || !provider_ready {
+        "repairable"
+    } else {
+        "healthy"
+    };
+    let next_action = match status {
+        "healthy" => "continue-executor-flow",
+        "repairable" => "rebuild-projection-or-refresh-provider-marker",
+        _ => "restore-required-authority-refs",
+    };
+    Ok(ExecutorWorkspaceHealthReport {
+        version: EXECUTOR_WORKSPACE_HEALTH_REPORT_VERSION.to_string(),
+        issue_id: issue_id.to_string(),
+        run_id: run_id.to_string(),
+        status: status.to_string(),
+        required_refs,
+        missing_refs,
+        stale_refs,
+        provider_ready,
+        projection_fresh,
+        next_action: next_action.to_string(),
+        generated_at: unix_timestamp_seconds(),
+    })
 }
 
 fn build_handoff_package(
@@ -1105,6 +1541,101 @@ fn executor_lifecycle_receipt_path(
     )
 }
 
+fn executor_resume_receipt_path(root: &Path, issue_id: &str, run_id: &str) -> Result<PathBuf> {
+    Ok(
+        agentflow_task_artifacts::task_run_dir(root, issue_id, run_id)?
+            .join("lifecycle")
+            .join("resume.json"),
+    )
+}
+
+fn executor_command_recovery_receipt_path(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+    failed_command_id: &str,
+    action: &str,
+) -> Result<PathBuf> {
+    Ok(
+        agentflow_task_artifacts::task_run_dir(root, issue_id, run_id)?
+            .join("recovery")
+            .join(format!("{failed_command_id}-{action}.json")),
+    )
+}
+
+fn executor_projection_rebuild_receipt_path(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<PathBuf> {
+    Ok(
+        agentflow_task_artifacts::task_run_dir(root, issue_id, run_id)?
+            .join("projection")
+            .join("rebuild.json"),
+    )
+}
+
+fn lifecycle_receipt_refs(root: &Path, issue_id: &str, run_id: &str) -> Result<Vec<String>> {
+    collect_json_refs(
+        root,
+        &agentflow_task_artifacts::task_run_dir(root, issue_id, run_id)?.join("lifecycle"),
+    )
+}
+
+fn recovery_receipt_refs(root: &Path, issue_id: &str, run_id: &str) -> Result<Vec<String>> {
+    collect_json_refs(
+        root,
+        &agentflow_task_artifacts::task_run_dir(root, issue_id, run_id)?.join("recovery"),
+    )
+}
+
+fn collect_json_refs(root: &Path, dir: &Path) -> Result<Vec<String>> {
+    if !dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut refs = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.extension().and_then(|value| value.to_str()) == Some("json") {
+            refs.push(normalize_relative_to_root(root, path)?);
+        }
+    }
+    refs.sort();
+    Ok(refs)
+}
+
+fn stable_payload_sha256(payload: &impl Serialize) -> Result<String> {
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(&serde_json::to_vec(payload)?)
+    ))
+}
+
+fn read_idempotent_receipt<T: for<'de> Deserialize<'de>>(
+    path: &Path,
+    idempotency_key: Option<&str>,
+    payload_sha256: &str,
+) -> Result<Option<T>> {
+    let Some(key) = idempotency_key else {
+        return Ok(None);
+    };
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let value: serde_json::Value = read_json(path)?;
+    if value.get("idempotencyKey").and_then(|item| item.as_str()) != Some(key) {
+        return Ok(None);
+    }
+    let existing_hash = value
+        .get("payloadSha256")
+        .and_then(|item| item.as_str())
+        .unwrap_or_default();
+    if existing_hash != payload_sha256 {
+        anyhow::bail!("conflicting idempotency key: {key}");
+    }
+    Ok(Some(serde_json::from_value(value)?))
+}
+
 fn write_json(path: &Path, payload: &impl Serialize) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -1328,6 +1859,39 @@ fn evidence_graph_for_flow(
         None,
         false,
     );
+    if let Some(node) = nodes.iter_mut().find(|node| node.node_id == "boundary") {
+        if boundary.is_some() && boundary.map(|b| b.status.as_str()) != Some("passed") {
+            node.status = "failed".to_string();
+        }
+    }
+    if let Some(node) = nodes.iter_mut().find(|node| node.node_id == "validation") {
+        if validation.is_some() && !validation.map(|v| v.passed).unwrap_or(false) {
+            node.status = "failed".to_string();
+        }
+    }
+    if let Some(node) = nodes.iter_mut().find(|node| node.node_id == "evidence") {
+        if evidence.is_some() && evidence.map(|e| e.status.as_str()) != Some("passed") {
+            node.status = "failed".to_string();
+        }
+    }
+    if let Some(node) = nodes.iter_mut().find(|node| node.node_id == "closeout") {
+        if closeout.is_some() && !closeout.map(|c| c.can_writeback).unwrap_or(false) {
+            node.status = "failed".to_string();
+        }
+    }
+    let mut stale = Vec::new();
+    if let (Some(run), Some(evidence)) = (run, evidence) {
+        if closeout.is_none()
+            && evidence.generated_at.unwrap_or(evidence.created_at) < run.updated_at
+        {
+            stale.push("Evidence pack is older than the current run state.".to_string());
+            if let Some(node) = nodes.iter_mut().find(|node| node.node_id == "evidence") {
+                if node.status == "ready" {
+                    node.status = "stale".to_string();
+                }
+            }
+        }
+    }
     for (from, to, label) in [
         ("run", "handoff", "creates"),
         ("handoff", "boundary", "scopes"),
@@ -1351,11 +1915,16 @@ fn evidence_graph_for_flow(
         .filter(|node| node.status == "failed")
         .map(|node| node.label.clone())
         .collect::<Vec<_>>();
+    let ready_count = nodes.iter().filter(|node| node.status == "ready").count();
     ExecutorEvidenceGraphProjection {
-        status: if missing.is_empty() && failed.is_empty() {
-            "complete"
+        status: if ready_count == 0 {
+            "missing"
         } else if !failed.is_empty() {
             "failed"
+        } else if !stale.is_empty() {
+            "stale"
+        } else if missing.is_empty() {
+            "complete"
         } else {
             "partial"
         }
@@ -1363,9 +1932,90 @@ fn evidence_graph_for_flow(
         nodes,
         links,
         missing,
-        stale: Vec::new(),
+        stale,
         failed,
     }
+}
+
+fn resume_projection_for_flow(
+    root: &Path,
+    issue: &SpecIssue,
+    run: Option<&TaskRun>,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<ExecutorResumeProjection> {
+    let receipt_refs = lifecycle_receipt_refs(root, issue_id, run_id)?;
+    let terminal_issue = matches!(
+        issue.status,
+        SpecIssueStatus::Done | SpecIssueStatus::Cancel
+    );
+    let terminal_run = run
+        .map(|run| {
+            matches!(
+                run.status,
+                TaskRunStatus::Completed | TaskRunStatus::Cancelled
+            )
+        })
+        .unwrap_or(false);
+    let allowed = run.is_some() && !terminal_issue && !terminal_run;
+    let status = if receipt_refs
+        .iter()
+        .any(|path| path.ends_with("/resume.json"))
+    {
+        "resumed"
+    } else if allowed {
+        "available"
+    } else {
+        "blocked"
+    };
+    let reason = if allowed {
+        "当前 run 可以通过正式 resume receipt 继续。"
+    } else if run.is_none() {
+        "当前任务还没有 run，不能执行 resume。"
+    } else {
+        "当前 issue 或 run 已是终态，不能执行 resume。"
+    };
+    Ok(ExecutorResumeProjection {
+        status: status.to_string(),
+        allowed,
+        reason: reason.to_string(),
+        receipt_refs,
+    })
+}
+
+fn recovery_projection_for_flow(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<ExecutorRecoveryProjection> {
+    let receipt_refs = recovery_receipt_refs(root, issue_id, run_id)?;
+    let validation = agentflow_task_artifacts::load_task_validation(root, issue_id, run_id).ok();
+    let failed_command_count = validation
+        .as_ref()
+        .map(|record| record.failed_command_ids.len())
+        .unwrap_or(0);
+    let options = if failed_command_count > 0 {
+        vec![
+            "retry-failed-command".to_string(),
+            "replace-failed-command".to_string(),
+            "rerun-validation".to_string(),
+            "block-with-reason".to_string(),
+        ]
+    } else {
+        Vec::new()
+    };
+    let status = if failed_command_count > 0 {
+        "recovery-available"
+    } else if !receipt_refs.is_empty() {
+        "recovery-recorded"
+    } else {
+        "idle"
+    };
+    Ok(ExecutorRecoveryProjection {
+        status: status.to_string(),
+        options,
+        receipt_refs,
+    })
 }
 
 fn push_graph_node(

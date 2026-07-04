@@ -80,7 +80,8 @@ fn planning_alignment_proof(workspace: &Path) -> Result<Value> {
     let checks = json!({
         "roadmap-v116-is-executor-adapter-real-execution": roadmap.contains("v1.1.6") && roadmap.contains("Executor Adapter Real Execution Closure"),
         "changelog-v116-entry-present": changelog.contains("## v1.1.6") && changelog.contains("Executor Adapter Real Execution Closure"),
-        "delivery-current-v116": delivery.contains("releases/v1.1.6/README.md") && delivery.contains("当前发布基线"),
+        "delivery-current-v116": delivery.contains("releases/v1.1.8/README.md")
+            && delivery.contains("当前发布基线"),
         "release-doc-v116": release_readme.contains("Executor Adapter Real Execution Closure"),
         "release-tasks-v116-issues": (808..=817).all(|issue| release_tasks.contains(&format!("#{issue}"))),
         "provider-launch-closure-removed": !changelog.contains("v1.1.6 Product workspace lifecycle and provider launch closure")
