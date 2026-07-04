@@ -5,6 +5,7 @@
 //! failure lifecycle records. Executor sessions are observable transport; they
 //! never become AgentFlow authority.
 
+use agentflow_mcp::{McpProviderSmokeArtifact, McpProviderSmokeOutcome};
 use agentflow_spec::{read_spec_issue, update_spec_issue_status, SpecIssue, SpecIssueStatus};
 use agentflow_task_artifacts::{
     commit_task_run_writeback, create_task_run, write_task_changed_files,
@@ -417,6 +418,10 @@ pub struct ExecutorWorkspaceHealthReport {
     pub missing_refs: Vec<String>,
     pub stale_refs: Vec<String>,
     pub provider_ready: bool,
+    pub provider_status: String,
+    pub provider_smoke_ref: Option<String>,
+    pub skill_status: String,
+    pub skill_smoke_ref: Option<String>,
     pub projection_fresh: bool,
     pub next_action: String,
     pub generated_at: u64,
@@ -1251,11 +1256,16 @@ pub fn check_executor_workspace_health(
     let run = optional_json::<TaskRun>(
         &agentflow_task_artifacts::task_run_dir(&root, issue_id, run_id)?.join("run.json"),
     )?;
-    let provider_ready = run
+    let provider_name = run
         .as_ref()
         .and_then(|run| run.provider.as_ref())
-        .map(|provider| !provider.trim().is_empty())
-        .unwrap_or(false);
+        .map(|provider| provider.trim())
+        .filter(|provider| !provider.is_empty());
+    let run_started_at = run.as_ref().and_then(|run| run.started_at);
+    let (provider_ready, provider_status, provider_smoke_ref) =
+        resolve_provider_smoke_status(&root, provider_name, run_started_at)?;
+    let (skill_ready, skill_status, skill_smoke_ref) =
+        resolve_skill_smoke_status(&root, issue_id, run_id)?;
     let projection_report =
         agentflow_projection::rebuild_projections_with_replay_report(&root).ok();
     let projection_fresh = projection_report
@@ -1269,14 +1279,14 @@ pub fn check_executor_workspace_health(
     }
     let status = if !missing_refs.is_empty() {
         "blocked"
-    } else if !projection_fresh || !provider_ready {
+    } else if !projection_fresh || !provider_ready || !skill_ready {
         "repairable"
     } else {
         "healthy"
     };
     let next_action = match status {
         "healthy" => "continue-executor-flow",
-        "repairable" => "rebuild-projection-or-refresh-provider-marker",
+        "repairable" => "rebuild-projection-or-refresh-provider-skill-smoke",
         _ => "restore-required-authority-refs",
     };
     Ok(ExecutorWorkspaceHealthReport {
@@ -1288,6 +1298,10 @@ pub fn check_executor_workspace_health(
         missing_refs,
         stale_refs,
         provider_ready,
+        provider_status,
+        provider_smoke_ref,
+        skill_status,
+        skill_smoke_ref,
         projection_fresh,
         next_action: next_action.to_string(),
         generated_at: unix_timestamp_seconds(),
@@ -1604,6 +1618,69 @@ fn collect_json_refs(root: &Path, dir: &Path) -> Result<Vec<String>> {
     Ok(refs)
 }
 
+fn resolve_provider_smoke_status(
+    root: &Path,
+    provider_name: Option<&str>,
+    run_started_at: Option<u64>,
+) -> Result<(bool, String, Option<String>)> {
+    let Some(provider_name) = provider_name else {
+        return Ok((false, "unknown".to_string(), None));
+    };
+    let smoke_dir = root.join(".agentflow/state/mcp/provider-smoke");
+    if !smoke_dir.is_dir() {
+        return Ok((false, "missing".to_string(), None));
+    }
+    let mut artifacts = Vec::new();
+    for entry in fs::read_dir(&smoke_dir)? {
+        let path = entry?.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let artifact = read_json::<McpProviderSmokeArtifact>(&path)?;
+        if artifact.provider == provider_name {
+            artifacts.push((path, artifact));
+        }
+    }
+    let Some((path, artifact)) = artifacts
+        .into_iter()
+        .max_by_key(|(_, artifact)| artifact.created_at)
+    else {
+        return Ok((false, "missing".to_string(), None));
+    };
+    let smoke_ref = normalize_relative_to_root(root, path)?;
+    let ready = artifact.outcome == McpProviderSmokeOutcome::Passed
+        && artifact.terminal_provider_state_projectable
+        && run_started_at
+            .map(|started_at| artifact.created_at >= started_at)
+            .unwrap_or(true);
+    let status = if ready { "ready" } else { "stale" };
+    Ok((ready, status.to_string(), Some(smoke_ref)))
+}
+
+fn resolve_skill_smoke_status(
+    root: &Path,
+    issue_id: &str,
+    run_id: &str,
+) -> Result<(bool, String, Option<String>)> {
+    let path = agentflow_task_artifacts::task_run_dir(root, issue_id, run_id)?
+        .join("smoke")
+        .join("skill-smoke.json");
+    if !path.is_file() {
+        return Ok((false, "missing".to_string(), None));
+    }
+    let payload = read_json::<serde_json::Value>(&path)?;
+    let status = payload
+        .get("status")
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown");
+    let ready = status == "ready" || status == "passed";
+    Ok((
+        ready,
+        if ready { "ready" } else { "stale" }.to_string(),
+        Some(normalize_relative_to_root(root, path)?),
+    ))
+}
+
 fn stable_payload_sha256(payload: &impl Serialize) -> Result<String> {
     Ok(format!(
         "{:x}",
@@ -1616,20 +1693,24 @@ fn read_idempotent_receipt<T: for<'de> Deserialize<'de>>(
     idempotency_key: Option<&str>,
     payload_sha256: &str,
 ) -> Result<Option<T>> {
-    let Some(key) = idempotency_key else {
-        return Ok(None);
-    };
     if !path.is_file() {
         return Ok(None);
     }
     let value: serde_json::Value = read_json(path)?;
-    if value.get("idempotencyKey").and_then(|item| item.as_str()) != Some(key) {
-        return Ok(None);
-    }
+    let existing_key = value.get("idempotencyKey").and_then(|item| item.as_str());
     let existing_hash = value
         .get("payloadSha256")
         .and_then(|item| item.as_str())
         .unwrap_or_default();
+    let Some(key) = idempotency_key else {
+        anyhow::bail!(
+            "receipt already exists without matching idempotency key: {}",
+            path.display()
+        );
+    };
+    if existing_key != Some(key) {
+        anyhow::bail!("conflicting idempotency receipt path: {}", path.display());
+    }
     if existing_hash != payload_sha256 {
         anyhow::bail!("conflicting idempotency key: {key}");
     }

@@ -1,3 +1,8 @@
+use agentflow_mcp::{
+    McpCapability, McpProviderKind, McpProviderSmokeArtifact, McpProviderSmokeOutcome,
+    McpProviderStatus, McpProviderStatusCode, McpSessionStatus,
+    MCP_PROVIDER_SMOKE_ARTIFACT_VERSION,
+};
 use agentflow_runtime_api::{
     capture_executor_evidence, check_executor_diff_boundary, check_executor_workspace_health,
     create_executor_handoff_package, get_executor_flow_read_model, rebuild_executor_projection,
@@ -300,6 +305,8 @@ fn workspace_health_proof(workspace: &Path) -> Result<Value> {
     reset_path(&root)?;
     let issue = seed_issue(&root, "AF-V118-HEALTH-001", vec!["docs/**".to_string()])?;
     create_executor_handoff_package(&root, handoff_request(&issue.issue_id, "run-001"))?;
+    write_provider_smoke(&root, "codex", 9_999_999_999)?;
+    write_skill_smoke(&root, &issue.issue_id, "run-001", "ready")?;
     let report = check_executor_workspace_health(&root, &issue.issue_id, "run-001")?;
     fs::remove_file(root.join("docs/project/goal.md"))?;
     let broken = check_executor_workspace_health(&root, &issue.issue_id, "run-001")?;
@@ -437,6 +444,51 @@ fn seed_issue(root: &Path, issue_id: &str, allowed_paths: Vec<String>) -> Result
     let issue = issue_from_requirement(root, Path::new("docs/requirements/example.md"), draft)?;
     write_spec_issue(root, &issue)?;
     Ok(issue)
+}
+
+fn write_provider_smoke(root: &Path, provider: &str, created_at: u64) -> Result<()> {
+    let mut health = McpProviderStatus::new(McpProviderKind::Codex, created_at);
+    health.status = McpProviderStatusCode::Ready;
+    health.installed = true;
+    health.authenticated = Some(true);
+    health.capabilities = vec![McpCapability::new("provider.codex.launch", true)];
+    let artifact = McpProviderSmokeArtifact {
+        version: MCP_PROVIDER_SMOKE_ARTIFACT_VERSION.to_string(),
+        provider: provider.to_string(),
+        outcome: McpProviderSmokeOutcome::Passed,
+        reason: "release gate fixture provider smoke passed".to_string(),
+        health,
+        launch_request_path: Some(".agentflow/tmp/provider-smoke-request.md".to_string()),
+        session_id: Some("session-v118-smoke".to_string()),
+        session_snapshot_path: Some(
+            ".agentflow/state/mcp/sessions/session-v118-smoke.json".to_string(),
+        ),
+        session_snapshot_readable: true,
+        terminal_status: Some(McpSessionStatus::Done),
+        terminal_provider_state_projectable: true,
+        artifact_path: format!(
+            ".agentflow/state/mcp/provider-smoke/{}-{}.json",
+            provider, created_at
+        ),
+        created_at,
+    };
+    write_json(root.join(&artifact.artifact_path).as_path(), &artifact)
+}
+
+fn write_skill_smoke(root: &Path, issue_id: &str, run_id: &str, status: &str) -> Result<()> {
+    let path = agentflow_task_artifacts::task_run_dir(root, issue_id, run_id)?
+        .join("smoke")
+        .join("skill-smoke.json");
+    write_json(
+        &path,
+        &json!({
+            "version": "agentflow-skill-smoke.v1",
+            "issueId": issue_id,
+            "runId": run_id,
+            "status": status,
+            "skill": "build-agent",
+        }),
+    )
 }
 
 fn seed_requirement(root: &Path) -> Result<()> {
