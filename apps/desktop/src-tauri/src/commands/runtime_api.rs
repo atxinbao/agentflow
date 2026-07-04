@@ -59,6 +59,39 @@ pub(crate) fn load_product_workspace_projection(
 }
 
 #[tauri::command]
+pub(crate) fn load_first_run_onboarding_contract(
+    selected_product_id: String,
+) -> Result<agentflow_runtime_api::ProductFirstRunOnboardingContract, String> {
+    Ok(agentflow_runtime_api::first_run_onboarding_contract(
+        selected_product_id,
+    ))
+}
+
+#[tauri::command]
+pub(crate) fn check_product_onboarding_readiness(
+    product_source_root: String,
+    workspace_root: String,
+    selected_product_id: String,
+) -> Result<agentflow_runtime_api::ProductOnboardingReadinessReport, String> {
+    Ok(agentflow_runtime_api::check_product_onboarding_readiness(
+        product_source_root,
+        workspace_root,
+        selected_product_id,
+    ))
+}
+
+#[tauri::command]
+pub(crate) fn load_guided_sample_run_plan(
+    workspace_root: String,
+    selected_product_id: String,
+) -> Result<agentflow_runtime_api::ProductGuidedSampleRunPlan, String> {
+    Ok(agentflow_runtime_api::guided_sample_run_plan(
+        workspace_root,
+        selected_product_id,
+    ))
+}
+
+#[tauri::command]
 pub(crate) fn preview_product_intent(
     product_source_root: String,
     workspace_root: String,
@@ -182,8 +215,9 @@ pub(crate) fn load_executor_flow_read_model(
 #[cfg(test)]
 mod tests {
     use super::{
-        create_product_workspace, load_api_plane_manifest, load_product_workspace_projection,
-        preview_product_intent,
+        check_product_onboarding_readiness, create_product_workspace, load_api_plane_manifest,
+        load_first_run_onboarding_contract, load_guided_sample_run_plan,
+        load_product_workspace_projection, preview_product_intent,
     };
     use agentflow_runtime_api::{
         ProductIntentIntakeRequest, ProductWorkspaceCreationMode, ProductWorkspaceCreationRequest,
@@ -265,6 +299,53 @@ mod tests {
         assert!(Path::new(dir.path())
             .join(&receipt.preview_artifact_ref)
             .is_file());
+    }
+
+    #[test]
+    fn product_onboarding_bridge_exposes_contract_readiness_and_sample_plan() {
+        let repo = workspace_root();
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = dir.path().join("workspace");
+
+        let contract = load_first_run_onboarding_contract("software-dev".to_string())
+            .expect("load first run contract");
+        assert!(contract
+            .user_hidden_paths
+            .contains(&".agentflow/**".to_string()));
+        assert!(contract
+            .command_entries
+            .contains(&"check_product_onboarding_readiness".to_string()));
+
+        create_product_workspace(
+            repo.to_string_lossy().to_string(),
+            ProductWorkspaceCreationRequest {
+                project_name: "Desktop Onboarding Workspace".to_string(),
+                workspace_root: workspace.to_string_lossy().to_string(),
+                selected_product_id: "software-dev".to_string(),
+                initial_goal: "Check onboarding readiness.".to_string(),
+                creation_mode: ProductWorkspaceCreationMode::Create,
+            },
+        )
+        .expect("create product workspace");
+
+        let readiness = check_product_onboarding_readiness(
+            repo.to_string_lossy().to_string(),
+            workspace.to_string_lossy().to_string(),
+            "software-dev".to_string(),
+        )
+        .expect("check onboarding readiness");
+        assert!(readiness.user_hidden_agentflow_boundary);
+        assert!(readiness.diagnostics_available);
+
+        let plan = load_guided_sample_run_plan(
+            workspace.to_string_lossy().to_string(),
+            "software-dev".to_string(),
+        )
+        .expect("load guided sample plan");
+        assert!(plan
+            .expected_trace
+            .iter()
+            .any(|item| item.contains("Delivery")));
     }
 
     fn workspace_root() -> PathBuf {

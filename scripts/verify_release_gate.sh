@@ -279,6 +279,16 @@ V119_EXECUTOR_RUN_EVIDENCE_DECISION_DELIVERY_GOLDEN_PATH="$RUNTIME_DIR/v119-exec
 V119_FAILURE_RETRY_FEEDBACK_BETA_SCENARIO_PATH="$RUNTIME_DIR/v119-failure-retry-feedback-beta-scenario.json"
 V119_DESKTOP_BETA_READINESS_UI_SMOKE_PROOF_PATH="$RUNTIME_DIR/v119-desktop-beta-readiness-ui-smoke-proof.json"
 V119_BETA_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v119-beta-release-certification.json"
+V120_RELEASE_CERTIFICATION_TOP_LEVEL_METADATA_PATH="$RUNTIME_DIR/v120-release-certification-top-level-metadata.json"
+V120_CERTIFICATION_ARTIFACT_MANIFEST_PRIMARY_PROOF_INDEX_PATH="$RUNTIME_DIR/v120-certification-artifact-manifest-primary-proof-index.json"
+V120_FIRST_RUN_PRODUCT_ONBOARDING_CONTRACT_PATH="$RUNTIME_DIR/v120-first-run-product-onboarding-contract.json"
+V120_PRODUCT_SELECTION_WORKSPACE_BOOTSTRAP_PATH="$RUNTIME_DIR/v120-product-selection-workspace-bootstrap.json"
+V120_WORKSPACE_READINESS_PREFLIGHT_PATH="$RUNTIME_DIR/v120-workspace-readiness-preflight.json"
+V120_PROVIDER_CONNECTOR_SKILL_READINESS_PATH="$RUNTIME_DIR/v120-provider-connector-skill-readiness.json"
+V120_GUIDED_SAMPLE_PROJECT_GOLDEN_RUN_PATH="$RUNTIME_DIR/v120-guided-sample-project-golden-run.json"
+V120_DESKTOP_FIRST_RUN_ONBOARDING_SURFACE_PATH="$RUNTIME_DIR/v120-desktop-first-run-onboarding-surface.json"
+V120_USER_HIDDEN_AGENTFLOW_BOUNDARY_PATH="$RUNTIME_DIR/v120-user-hidden-agentflow-boundary.json"
+V120_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v120-release-certification.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
 CORE_DECISION_INPUT_BINDING_PATH="$RUNTIME_DIR/core-decision-input-binding.json"
 CORE_DECISION_OUTCOME_TRANSITIONS_PATH="$RUNTIME_DIR/core-decision-outcome-transitions.json"
@@ -10492,13 +10502,13 @@ required_artifact_names = [
 certified_hash_paths = {item.get("path") for item in certified_artifact_hashes}
 
 coverage = {
-    "release-version-at-or-after-v107": release_version in {expected_tag, "v1.0.8", "v1.0.9", "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "release-tag-at-or-after-v107": release_tag_name in {expected_tag, "v1.0.8", "v1.0.9", "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "cargo-workspace-version-at-or-after-107": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-version-at-or-after-107": desktop_package.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-lock-version-at-or-after-107": desktop_package_lock.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"}
-    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "tauri-version-at-or-after-107": tauri_config.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
+    "release-version-at-or-after-v107": release_version in {expected_tag, "v1.0.8", "v1.0.9", "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "release-tag-at-or-after-v107": release_tag_name in {expected_tag, "v1.0.8", "v1.0.9", "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "cargo-workspace-version-at-or-after-107": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-version-at-or-after-107": desktop_package.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-lock-version-at-or-after-107": desktop_package_lock.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"}
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "tauri-version-at-or-after-107": tauri_config.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
     "agents-current-baseline-is-v108-or-v107": (
         ("docs/delivery/releases/v1.1.9/README.md" in agents_text or "docs/delivery/releases/v1.1.8/README.md" in agents_text or "docs/delivery/releases/v1.1.7/README.md" in agents_text or "docs/delivery/releases/v1.1.6/README.md" in agents_text or "docs/delivery/releases/v1.1.5/README.md" in agents_text) or "docs/delivery/releases/v1.1.4/README.md" in agents_text or "docs/delivery/releases/v1.1.3/README.md" in agents_text or "docs/delivery/releases/v1.1.2/README.md" in agents_text
         or "docs/delivery/releases/v1.1.1/README.md" in agents_text
@@ -10781,13 +10791,13 @@ required_runtime_paths = {
 expected_hash_paths = required_runtime_paths | {"pack-projection-readiness.json"}
 
 coverage = {
-    "release-version-at-or-after-v108": release_version in {expected_tag, "v1.0.9", "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "release-tag-at-or-after-v108": release_tag_name in {expected_tag, "v1.0.9", "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "cargo-workspace-version-at-or-after-108": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-version-at-or-after-108": desktop_package.get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-lock-version-at-or-after-108": desktop_package_lock.get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"}
-    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "tauri-version-at-or-after-108": tauri_config.get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
+    "release-version-at-or-after-v108": release_version in {expected_tag, "v1.0.9", "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "release-tag-at-or-after-v108": release_tag_name in {expected_tag, "v1.0.9", "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "cargo-workspace-version-at-or-after-108": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-version-at-or-after-108": desktop_package.get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-lock-version-at-or-after-108": desktop_package_lock.get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"}
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "tauri-version-at-or-after-108": tauri_config.get("version") in {expected_version, "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
     "agents-current-baseline-at-or-after-v108": (
         ("docs/delivery/releases/v1.1.9/README.md" in agents_text or "docs/delivery/releases/v1.1.8/README.md" in agents_text or "docs/delivery/releases/v1.1.7/README.md" in agents_text or "docs/delivery/releases/v1.1.6/README.md" in agents_text or "docs/delivery/releases/v1.1.5/README.md" in agents_text) or "docs/delivery/releases/v1.1.4/README.md" in agents_text or "docs/delivery/releases/v1.1.3/README.md" in agents_text or "docs/delivery/releases/v1.1.2/README.md" in agents_text
         or "docs/delivery/releases/v1.1.1/README.md" in agents_text
@@ -11339,13 +11349,13 @@ event_evidence = {
     "artifactManifestSha256": artifact_manifest_sha256,
 }
 coverage = {
-    "release-version-at-or-after-v109": release_version in {expected_tag, "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "release-tag-at-or-after-v109": release_tag_name in {expected_tag, "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "cargo-workspace-version-at-or-after-109": cargo["workspace"]["package"]["version"] in {expected_version, "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-version-at-or-after-109": desktop_package.get("version") in {expected_version, "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-lock-version-at-or-after-109": desktop_package_lock.get("version") in {expected_version, "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"}
-    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "tauri-version-at-or-after-109": tauri_config.get("version") in {expected_version, "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
+    "release-version-at-or-after-v109": release_version in {expected_tag, "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "release-tag-at-or-after-v109": release_tag_name in {expected_tag, "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "cargo-workspace-version-at-or-after-109": cargo["workspace"]["package"]["version"] in {expected_version, "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-version-at-or-after-109": desktop_package.get("version") in {expected_version, "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-lock-version-at-or-after-109": desktop_package_lock.get("version") in {expected_version, "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"}
+    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "tauri-version-at-or-after-109": tauri_config.get("version") in {expected_version, "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
     "agents-current-baseline-at-or-after-v109": (
         ("docs/delivery/releases/v1.1.9/README.md" in agents_text or "docs/delivery/releases/v1.1.8/README.md" in agents_text or "docs/delivery/releases/v1.1.7/README.md" in agents_text or "docs/delivery/releases/v1.1.6/README.md" in agents_text or "docs/delivery/releases/v1.1.5/README.md" in agents_text) or "docs/delivery/releases/v1.1.4/README.md" in agents_text or "docs/delivery/releases/v1.1.3/README.md" in agents_text or "docs/delivery/releases/v1.1.2/README.md" in agents_text
         or "docs/delivery/releases/v1.1.1/README.md" in agents_text
@@ -12764,12 +12774,12 @@ gate_run_url = (
     else None
 )
 checks = {
-    "release-version-at-or-after-v112": release_version in {"v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "release-tag-at-or-after-v112": release_tag_name in {"v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "cargo-workspace-version-at-or-after-112": cargo["workspace"]["package"]["version"] in {"1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-version-at-or-after-112": desktop_package.get("version") in {"1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-lock-version-at-or-after-112": desktop_package_lock.get("version") in {"1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"} and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {"1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "tauri-version-at-or-after-112": tauri_config.get("version") in {"1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
+    "release-version-at-or-after-v112": release_version in {"v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "release-tag-at-or-after-v112": release_tag_name in {"v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "cargo-workspace-version-at-or-after-112": cargo["workspace"]["package"]["version"] in {"1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-version-at-or-after-112": desktop_package.get("version") in {"1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-lock-version-at-or-after-112": desktop_package_lock.get("version") in {"1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"} and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {"1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "tauri-version-at-or-after-112": tauri_config.get("version") in {"1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
     "v111-certification-still-passed": v111_certification.get("status") == "passed",
     "all-v112-artifacts-passed": all(payload.get("status") == "passed" for payload in artifacts.values()),
     "release-doc-is-v112-baseline": "Product Execution Proof and Command Surface hardening release baseline" in release_readme_text and "runtime/v112-release-certification.json" in release_readme_text,
@@ -13085,12 +13095,12 @@ gate_run_url = (
     else None
 )
 checks = {
-    "release-version-at-or-after-v113": release_version in {"v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "release-tag-at-or-after-v113": release_tag_name in {"v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "cargo-workspace-version-at-or-after-113": cargo["workspace"]["package"]["version"] in {"1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-version-at-or-after-113": desktop_package.get("version") in {"1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-lock-version-at-or-after-113": desktop_package_lock.get("version") in {"1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"} and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {"1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "tauri-version-at-or-after-113": tauri_config.get("version") in {"1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
+    "release-version-at-or-after-v113": release_version in {"v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "release-tag-at-or-after-v113": release_tag_name in {"v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "cargo-workspace-version-at-or-after-113": cargo["workspace"]["package"]["version"] in {"1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-version-at-or-after-113": desktop_package.get("version") in {"1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-lock-version-at-or-after-113": desktop_package_lock.get("version") in {"1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"} and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {"1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "tauri-version-at-or-after-113": tauri_config.get("version") in {"1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
     "v112-certification-still-passed": v112_certification.get("status") == "passed",
     "all-v113-artifacts-passed": all(payload.get("status") == "passed" for payload in artifacts.values()),
     "release-doc-is-v113-baseline": "Product Command Submission and State Semantics release baseline" in release_readme_text and "runtime/v113-release-certification.json" in release_readme_text,
@@ -13310,12 +13320,12 @@ gate_run_url = (
     else None
 )
 checks = {
-    "release-version-is-v114": release_version in {"v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "release-tag-is-v114": release_tag_name in {"v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "cargo-workspace-version-is-114": cargo["workspace"]["package"]["version"] in {"1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-version-is-114": desktop_package.get("version") in {"1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-lock-version-is-114": desktop_package_lock.get("version") in {"1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"} and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {"1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "tauri-version-is-114": tauri_config.get("version") in {"1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
+    "release-version-is-v114": release_version in {"v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "release-tag-is-v114": release_tag_name in {"v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "cargo-workspace-version-is-114": cargo["workspace"]["package"]["version"] in {"1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-version-is-114": desktop_package.get("version") in {"1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-lock-version-is-114": desktop_package_lock.get("version") in {"1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"} and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {"1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "tauri-version-is-114": tauri_config.get("version") in {"1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
     "v113-certification-still-passed": v113_certification.get("status") == "passed",
     "all-v114-artifacts-passed": all(payload.get("status") == "passed" for payload in artifacts.values()),
     "release-doc-is-v114-baseline": "Project Creation and Product Workspace release baseline" in release_readme_text and "runtime/v114-release-certification.json" in release_readme_text,
@@ -13441,11 +13451,11 @@ release_tasks = (root / "docs/delivery/releases/v1.1.5/AGENTFLOW_V1_1_5_SPEC_INT
 
 checks = {
     "all-v115-artifacts-passed": all(payload.get("status") == "passed" for payload in artifacts),
-    "release-version-v115": release_version in {"v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"} and release_tag in {"v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "workspace-version-v115": cargo_version in {"1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-version-v115": package_json.get("version") in {"1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-lock-version-v115": package_lock.get("version") in {"1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"} and package_lock.get("packages", {}).get("", {}).get("version") in {"1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "tauri-version-v115": tauri.get("version") in {"1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9"},
+    "release-version-v115": release_version in {"v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"} and release_tag in {"v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "workspace-version-v115": cargo_version in {"1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-version-v115": package_json.get("version") in {"1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-lock-version-v115": package_lock.get("version") in {"1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"} and package_lock.get("packages", {}).get("", {}).get("version") in {"1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "tauri-version-v115": tauri.get("version") in {"1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
     "changelog-current-v115": "## v1.1.5" in changelog and "Spec Intake" in changelog and "Goal / Roadmap / Task Productization" in changelog,
     "delivery-current-v115": ("releases/v1.1.5/README.md" in delivery or "releases/v1.1.6/README.md" in delivery or "releases/v1.1.7/README.md" in delivery) and "当前发布基线" in delivery,
     "release-readme-v115": "Spec Intake to Goal / Roadmap / Task Productization" in release_readme,
@@ -13539,11 +13549,11 @@ release_tasks = (root / "docs/delivery/releases/v1.1.6/AGENTFLOW_V1_1_6_EXECUTOR
 
 checks = {
     "all-v116-artifacts-passed": all(payload.get("status") == "passed" for payload in artifacts),
-    "release-version-v116": release_version in {"v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"} and release_tag in {"v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9"},
-    "workspace-version-v116": cargo_version in {"1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-version-v116": package_json.get("version") in {"1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "desktop-lock-version-v116": package_lock.get("version") in {"1.1.6", "1.1.7", "1.1.8", "1.1.9"} and package_lock.get("packages", {}).get("", {}).get("version") in {"1.1.6", "1.1.7", "1.1.8", "1.1.9"},
-    "tauri-version-v116": tauri.get("version") in {"1.1.6", "1.1.7", "1.1.8", "1.1.9"},
+    "release-version-v116": release_version in {"v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"} and release_tag in {"v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "workspace-version-v116": cargo_version in {"1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-version-v116": package_json.get("version") in {"1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-lock-version-v116": package_lock.get("version") in {"1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"} and package_lock.get("packages", {}).get("", {}).get("version") in {"1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "tauri-version-v116": tauri.get("version") in {"1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0"},
     "changelog-current-v116": "## v1.1.6" in changelog and "Executor Adapter Real Execution Closure" in changelog,
     "delivery-current-v116": ("releases/v1.1.9/README.md" in delivery or "releases/v1.1.8/README.md" in delivery or "releases/v1.1.7/README.md" in delivery or "releases/v1.1.6/README.md" in delivery) and "当前发布基线" in delivery,
     "docs-current-v116": ("delivery/releases/v1.1.9/README.md" in docs_readme or "delivery/releases/v1.1.8/README.md" in docs_readme or "delivery/releases/v1.1.7/README.md" in docs_readme or "delivery/releases/v1.1.6/README.md" in docs_readme),
@@ -13656,11 +13666,11 @@ primary_file_names = {path.name for path in artifact_paths[:-2]}
 
 checks = {
     "all-v117-artifacts-passed": all(payload.get("status") == "passed" for payload in artifacts),
-    "release-version-v117": release_version in {"v1.1.7", "v1.1.8", "v1.1.9"} and release_tag in {"v1.1.7", "v1.1.8", "v1.1.9"},
-    "workspace-version-v117": cargo_version in {"1.1.7", "1.1.8", "1.1.9"},
-    "desktop-package-version-v117": package_json.get("version") in {"1.1.7", "1.1.8", "1.1.9"},
-    "desktop-lock-version-v117": package_lock.get("version") in {"1.1.7", "1.1.8", "1.1.9"} and package_lock.get("packages", {}).get("", {}).get("version") in {"1.1.7", "1.1.8", "1.1.9"},
-    "tauri-version-v117": tauri.get("version") in {"1.1.7", "1.1.8", "1.1.9"},
+    "release-version-v117": release_version in {"v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"} and release_tag in {"v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0"},
+    "workspace-version-v117": cargo_version in {"1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-version-v117": package_json.get("version") in {"1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "desktop-lock-version-v117": package_lock.get("version") in {"1.1.7", "1.1.8", "1.1.9", "1.2.0"} and package_lock.get("packages", {}).get("", {}).get("version") in {"1.1.7", "1.1.8", "1.1.9", "1.2.0"},
+    "tauri-version-v117": tauri.get("version") in {"1.1.7", "1.1.8", "1.1.9", "1.2.0"},
     "changelog-current-v117": "## v1.1.7" in changelog and "Evidence / Decision / Delivery User Readability" in changelog,
     "delivery-current-v117": ("releases/v1.1.9/README.md" in delivery or "releases/v1.1.8/README.md" in delivery or "releases/v1.1.7/README.md" in delivery) and "当前发布基线" in delivery,
     "docs-current-v117": ("delivery/releases/v1.1.9/README.md" in docs_readme or "delivery/releases/v1.1.8/README.md" in docs_readme or "delivery/releases/v1.1.7/README.md" in docs_readme),
@@ -13773,11 +13783,11 @@ primary_file_names = {path.name for path in artifact_paths[:-1]}
 
 checks = {
     "all-v118-artifacts-passed": all(payload.get("status") == "passed" for payload in artifacts),
-    "release-version-v118": release_version in {"v1.1.8", "v1.1.9"} and release_tag in {"v1.1.8", "v1.1.9"},
-    "workspace-version-v118": cargo_version in {"1.1.8", "1.1.9"},
-    "desktop-package-version-v118": package_json.get("version") in {"1.1.8", "1.1.9"},
-    "desktop-lock-version-v118": package_lock.get("version") in {"1.1.8", "1.1.9"} and package_lock.get("packages", {}).get("", {}).get("version") in {"1.1.8", "1.1.9"},
-    "tauri-version-v118": tauri.get("version") in {"1.1.8", "1.1.9"},
+    "release-version-v118": release_version in {"v1.1.8", "v1.1.9", "v1.2.0"} and release_tag in {"v1.1.8", "v1.1.9", "v1.2.0"},
+    "workspace-version-v118": cargo_version in {"1.1.8", "1.1.9", "1.2.0"},
+    "desktop-package-version-v118": package_json.get("version") in {"1.1.8", "1.1.9", "1.2.0"},
+    "desktop-lock-version-v118": package_lock.get("version") in {"1.1.8", "1.1.9", "1.2.0"} and package_lock.get("packages", {}).get("", {}).get("version") in {"1.1.8", "1.1.9", "1.2.0"},
+    "tauri-version-v118": tauri.get("version") in {"1.1.8", "1.1.9", "1.2.0"},
     "changelog-current-v118": "## v1.1.8" in changelog and "Recovery / Resume / Failure Handling" in changelog,
     "delivery-current-v118": "releases/v1.1.8/README.md" in delivery and "当前发布基线" in delivery,
     "docs-current-v118": "delivery/releases/v1.1.8/README.md" in docs_readme,
@@ -13892,13 +13902,13 @@ primary_file_names = {path.name for path in artifact_paths[:-1]}
 
 checks = {
     "all-v119-artifacts-passed": all(payload.get("status") == "passed" for payload in artifacts),
-    "release-version-v119": release_version == "v1.1.9" and release_tag == "v1.1.9",
-    "workspace-version-v119": cargo_version == "1.1.9",
-    "desktop-package-version-v119": package_json.get("version") == "1.1.9",
-    "desktop-lock-version-v119": package_lock.get("version") == "1.1.9" and package_lock.get("packages", {}).get("", {}).get("version") == "1.1.9",
-    "tauri-version-v119": tauri.get("version") == "1.1.9",
+    "release-version-v119": release_version in {"v1.1.9", "v1.2.0"} and release_tag in {"v1.1.9", "v1.2.0"},
+    "workspace-version-v119": cargo_version in {"1.1.9", "1.2.0"},
+    "desktop-package-version-v119": package_json.get("version") in {"1.1.9", "1.2.0"},
+    "desktop-lock-version-v119": package_lock.get("version") in {"1.1.9", "1.2.0"} and package_lock.get("packages", {}).get("", {}).get("version") in {"1.1.9", "1.2.0"},
+    "tauri-version-v119": tauri.get("version") in {"1.1.9", "1.2.0"},
     "changelog-current-v119": "## v1.1.9" in changelog and "Software Dev Reference App Beta Certification" in changelog,
-    "delivery-current-v119": "releases/v1.1.9/README.md" in delivery and "当前发布基线" in delivery,
+    "delivery-current-v119": "releases/v1.1.9/README.md" in delivery and ("当前发布基线" in delivery or "上一发布基线" in delivery),
     "docs-current-v119": "delivery/releases/v1.1.9/README.md" in docs_readme,
     "agents-current-v119": "docs/delivery/releases/v1.1.9/README.md" in agents,
     "release-readme-v119": "Software Dev Reference App Beta Certification" in release_readme and "runtime/v119-beta-release-certification.json" in release_readme,
@@ -13944,6 +13954,133 @@ PY
   record_stage "v119-failure-retry-feedback-beta-scenario" "passed" "$(basename "$V119_FAILURE_RETRY_FEEDBACK_BETA_SCENARIO_PATH")"
   record_stage "v119-desktop-beta-readiness-ui-smoke-proof" "passed" "$(basename "$V119_DESKTOP_BETA_READINESS_UI_SMOKE_PROOF_PATH")"
   record_stage "v119-release-certification" "passed" "$(basename "$V119_BETA_RELEASE_CERTIFICATION_PATH")"
+}
+
+run_v120_release_certification_gate() {
+  record_stage "v120-release-certification" "started" "$V120_RELEASE_CERTIFICATION_PATH"
+  local gate_run_id_for_cert="${GATE_RUN_ID:-local-workflow-run}"
+
+  git -C "$WORKSPACE" checkout -B "$BOOTSTRAP_BRANCH" "$SOURCE_COMMIT_SHA" >/dev/null
+  git -C "$WORKSPACE" reset --hard "$SOURCE_COMMIT_SHA" >/dev/null
+  git -C "$WORKSPACE" clean -fdx >/dev/null
+
+  RELEASE_VERSION="$RELEASE_VERSION" \
+  RELEASE_TAG_NAME="$RELEASE_TAG_NAME" \
+  SOURCE_COMMIT_SHA="$SOURCE_COMMIT_SHA" \
+  GITHUB_RUN_ID="$gate_run_id_for_cert" \
+  cargo run -p agentflow-runtime-api --example v120_product_onboarding_first_run_proofs --manifest-path "$WORKSPACE/Cargo.toml" -- \
+    "$WORKSPACE" \
+    "$V120_RELEASE_CERTIFICATION_TOP_LEVEL_METADATA_PATH" \
+    "$V120_CERTIFICATION_ARTIFACT_MANIFEST_PRIMARY_PROOF_INDEX_PATH" \
+    "$V120_FIRST_RUN_PRODUCT_ONBOARDING_CONTRACT_PATH" \
+    "$V120_PRODUCT_SELECTION_WORKSPACE_BOOTSTRAP_PATH" \
+    "$V120_WORKSPACE_READINESS_PREFLIGHT_PATH" \
+    "$V120_PROVIDER_CONNECTOR_SKILL_READINESS_PATH" \
+    "$V120_GUIDED_SAMPLE_PROJECT_GOLDEN_RUN_PATH" \
+    "$V120_DESKTOP_FIRST_RUN_ONBOARDING_SURFACE_PATH" \
+    "$V120_USER_HIDDEN_AGENTFLOW_BOUNDARY_PATH" \
+    "$V120_RELEASE_CERTIFICATION_PATH" >/dev/null
+
+  python3 - "$WORKSPACE" "$RELEASE_VERSION" "$RELEASE_TAG_NAME" \
+    "$gate_run_id_for_cert" "$SOURCE_COMMIT_SHA" \
+    "$V120_RELEASE_CERTIFICATION_TOP_LEVEL_METADATA_PATH" \
+    "$V120_CERTIFICATION_ARTIFACT_MANIFEST_PRIMARY_PROOF_INDEX_PATH" \
+    "$V120_FIRST_RUN_PRODUCT_ONBOARDING_CONTRACT_PATH" \
+    "$V120_PRODUCT_SELECTION_WORKSPACE_BOOTSTRAP_PATH" \
+    "$V120_WORKSPACE_READINESS_PREFLIGHT_PATH" \
+    "$V120_PROVIDER_CONNECTOR_SKILL_READINESS_PATH" \
+    "$V120_GUIDED_SAMPLE_PROJECT_GOLDEN_RUN_PATH" \
+    "$V120_DESKTOP_FIRST_RUN_ONBOARDING_SURFACE_PATH" \
+    "$V120_USER_HIDDEN_AGENTFLOW_BOUNDARY_PATH" \
+    "$V120_RELEASE_CERTIFICATION_PATH" <<'PY'
+import json
+import pathlib
+import sys
+import tomllib
+
+root = pathlib.Path(sys.argv[1])
+release_version = sys.argv[2]
+release_tag = sys.argv[3]
+workflow_run_id = sys.argv[4]
+source_commit = sys.argv[5]
+artifact_paths = [pathlib.Path(value) for value in sys.argv[6:]]
+certification_path = artifact_paths[-1]
+
+def load_json(path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+artifacts = [load_json(path) for path in artifact_paths]
+cargo_version = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]["package"]["version"]
+package_json = load_json(root / "apps/desktop/package.json")
+package_lock = load_json(root / "apps/desktop/package-lock.json")
+tauri = load_json(root / "apps/desktop/src-tauri/tauri.conf.json")
+changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+delivery = (root / "docs/delivery/README.md").read_text(encoding="utf-8")
+docs_readme = (root / "docs/README.md").read_text(encoding="utf-8")
+agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+release_readme = (root / "docs/delivery/releases/v1.2.0/README.md").read_text(encoding="utf-8")
+release_tasks = (root / "docs/delivery/releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md").read_text(encoding="utf-8")
+certification = load_json(certification_path)
+manifest = artifacts[1]
+primary_proofs = certification.get("primaryProofs", [])
+primary_file_names = {path.name for path in artifact_paths}
+manifest_index = manifest.get("payload", {}).get("primaryProofIndex", [])
+
+checks = {
+    "all-v120-artifacts-passed": all(payload.get("status") == "passed" for payload in artifacts),
+    "release-version-v120": release_version == "v1.2.0" and release_tag == "v1.2.0",
+    "workspace-version-v120": cargo_version == "1.2.0",
+    "desktop-package-version-v120": package_json.get("version") == "1.2.0",
+    "desktop-lock-version-v120": package_lock.get("version") == "1.2.0" and package_lock.get("packages", {}).get("", {}).get("version") == "1.2.0",
+    "tauri-version-v120": tauri.get("version") == "1.2.0",
+    "changelog-current-v120": "## v1.2.0" in changelog and "Product Onboarding and First-run Experience" in changelog,
+    "delivery-current-v120": "releases/v1.2.0/README.md" in delivery and "当前发布基线" in delivery,
+    "docs-current-v120": "delivery/releases/v1.2.0/README.md" in docs_readme,
+    "agents-current-v120": "docs/delivery/releases/v1.2.0/README.md" in agents,
+    "release-readme-v120": "Product Onboarding and First-run Experience" in release_readme and "runtime/v120-release-certification.json" in release_readme,
+    "release-tasks-v120-complete": all(f"#{issue}" in release_tasks for issue in range(852, 862)),
+    "certification-top-level-metadata": certification.get("releaseVersion") == release_version and certification.get("releaseTag") == release_tag and certification.get("sourceCommit") == source_commit and certification.get("workflowRunId") == workflow_run_id and bool(certification.get("artifactNames")) and bool(primary_proofs),
+    "primary-proofs-present": all(pathlib.Path(proof).name in primary_file_names for proof in primary_proofs),
+    "manifest-primary-proof-index": bool(manifest_index) and all(item.get("sha256") and item.get("bytes", 0) > 0 and item.get("proofRole") for item in manifest_index),
+    "metadata-proof": artifacts[0].get("coverage", {}).get("release-metadata-top-level-fields-present") is True and artifacts[0].get("coverage", {}).get("mismatched-metadata-negative-check-rejects") is True,
+    "first-run-contract-proof": artifacts[2].get("coverage", {}).get("required-states-present") is True and artifacts[2].get("coverage", {}).get("agentflow-hidden-from-user") is True,
+    "product-bootstrap-proof": artifacts[3].get("coverage", {}).get("software-dev-product-creates-workspace") is True and artifacts[3].get("coverage", {}).get("missing-product-is-rejected") is True,
+    "workspace-readiness-proof": artifacts[4].get("coverage", {}).get("ready-after-all-evidence") is True,
+    "provider-skill-proof": artifacts[5].get("coverage", {}).get("provider-name-alone-not-ready") is True and artifacts[5].get("coverage", {}).get("provider-connector-skill-ready") is True,
+    "guided-sample-proof": artifacts[6].get("coverage", {}).get("sample-covers-intake-tasks-execute-evidence-delivery-feedback") is True,
+    "desktop-first-run-proof": artifacts[7].get("coverage", {}).get("desktop-uses-product-onboarding-read-model-marker") is True and artifacts[7].get("coverage", {}).get("runtime-commands-registered") is True,
+    "hidden-boundary-proof": artifacts[8].get("coverage", {}).get("contract-hides-agentflow-from-normal-users") is True,
+}
+failed = [key for key, passed in checks.items() if not passed]
+certification["releaseGateMetadata"] = {
+    "releaseVersion": release_version,
+    "releaseTag": release_tag,
+    "sourceCommit": source_commit,
+    "workflowRunId": workflow_run_id,
+    "workspaceVersion": cargo_version,
+    "desktopPackageVersion": package_json.get("version"),
+    "tauriVersion": tauri.get("version"),
+    "artifactNames": ["agentflow-release-certification", "agentflow-release-gate-full"],
+    "primaryProofs": primary_proofs,
+}
+certification["releaseGateCoverage"] = checks
+certification["releaseGateFailedCoverage"] = failed
+certification["status"] = "passed" if not failed and certification.get("status") == "passed" else "failed"
+certification_path.write_text(json.dumps(certification, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if certification["status"] != "passed":
+    raise SystemExit(f"v120 release certification failed: {failed}")
+PY
+
+  record_stage "v120-release-certification-top-level-metadata" "passed" "$(basename "$V120_RELEASE_CERTIFICATION_TOP_LEVEL_METADATA_PATH")"
+  record_stage "v120-certification-artifact-manifest-primary-proof-index" "passed" "$(basename "$V120_CERTIFICATION_ARTIFACT_MANIFEST_PRIMARY_PROOF_INDEX_PATH")"
+  record_stage "v120-first-run-product-onboarding-contract" "passed" "$(basename "$V120_FIRST_RUN_PRODUCT_ONBOARDING_CONTRACT_PATH")"
+  record_stage "v120-product-selection-workspace-bootstrap" "passed" "$(basename "$V120_PRODUCT_SELECTION_WORKSPACE_BOOTSTRAP_PATH")"
+  record_stage "v120-workspace-readiness-preflight" "passed" "$(basename "$V120_WORKSPACE_READINESS_PREFLIGHT_PATH")"
+  record_stage "v120-provider-connector-skill-readiness" "passed" "$(basename "$V120_PROVIDER_CONNECTOR_SKILL_READINESS_PATH")"
+  record_stage "v120-guided-sample-project-golden-run" "passed" "$(basename "$V120_GUIDED_SAMPLE_PROJECT_GOLDEN_RUN_PATH")"
+  record_stage "v120-desktop-first-run-onboarding-surface" "passed" "$(basename "$V120_DESKTOP_FIRST_RUN_ONBOARDING_SURFACE_PATH")"
+  record_stage "v120-user-hidden-agentflow-boundary" "passed" "$(basename "$V120_USER_HIDDEN_AGENTFLOW_BOUNDARY_PATH")"
+  record_stage "v120-release-certification" "passed" "$(basename "$V120_RELEASE_CERTIFICATION_PATH")"
 }
 
 prepare_workspace() {
@@ -14547,6 +14684,7 @@ PY
   run_v117_release_certification_gate
   run_v118_release_certification_gate
   run_v119_release_certification_gate
+  run_v120_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

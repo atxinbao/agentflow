@@ -14,6 +14,7 @@ pub mod formal;
 pub mod handoff;
 pub mod mapping;
 pub mod pack;
+pub mod product_onboarding;
 pub mod product_workspace;
 pub mod query;
 pub mod responses;
@@ -77,6 +78,13 @@ pub use pack::{
     ProductCommandSubmitResponse, ProductCommandSurfaceActionView,
     ProductCommandSurfaceProductView, ProductCommandSurfaceSummary, ProductCommandSurfaceView,
     PACK_COMMAND_SURFACE_VERSION, PRODUCT_COMMAND_SUBMIT_VERSION, PRODUCT_COMMAND_SURFACE_VERSION,
+};
+pub use product_onboarding::{
+    check_product_onboarding_readiness, first_run_onboarding_contract, guided_sample_run_plan,
+    ProductFirstRunOnboardingContract, ProductGuidedSampleRunPlan, ProductGuidedSampleStage,
+    ProductOnboardingReadinessReport, ProductOnboardingStateContract, ProductOnboardingStatus,
+    ProductReadinessItem, ProductReadinessStatus, PRODUCT_FIRST_RUN_ONBOARDING_CONTRACT_VERSION,
+    PRODUCT_GUIDED_SAMPLE_RUN_PLAN_VERSION, PRODUCT_ONBOARDING_READINESS_VERSION,
 };
 pub use product_workspace::{
     create_product_workspace, load_product_workspace_projection, ProductWorkspaceCreationMode,

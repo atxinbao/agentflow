@@ -1956,7 +1956,12 @@ function FirstRunModal({
   }
 
   return (
-    <div className="v16-modal-backdrop" data-agentflow-screen="first-run">
+    <div
+      className="v16-modal-backdrop"
+      data-agentflow-read-model="product-onboarding"
+      data-agentflow-runtime-command="create_product_workspace check_product_onboarding_readiness load_guided_sample_run_plan"
+      data-agentflow-screen="first-run"
+    >
       <WindowChrome className="v16-floating-window v16-first-run-window" aria-label="首次引导">
         <header className="v16-first-run-header">
           <div>
@@ -1974,9 +1979,9 @@ function FirstRunModal({
 
         {stepTitle === "选择项目" ? (
           <section className="v16-first-run-body">
-            <p>打开一个本地项目，AgentFlow 会准备工作规则和项目现场。</p>
+            <p>选择 Software Dev Reference App，再打开一个本地项目。AgentFlow 会准备项目文档、Runtime 事实源和首个引导样例。</p>
             <div className="v16-project-picker">
-              <span>{projectRoot ? projectRoot : "还没有选择项目"}</span>
+              <span>{projectRoot ? projectRoot : "Software Dev Reference App · 还没有选择项目"}</span>
               <ActionButton leftIcon={<FolderOpen size={16} />} onClick={onChooseProject} variant="primary">
                 打开本地项目
               </ActionButton>
@@ -1996,12 +2001,12 @@ function FirstRunModal({
             </div>
             <ul className="v16-check-list">
               {[
-                "检测项目结构",
-                "创建 Agent 工作规则",
-                "创建 .agentflow 目录结构",
-                "读取项目现场",
-                "初始化项目状态",
-                "验证环境",
+                "读取产品定义",
+                "准备项目文档",
+                "准备 Runtime 事实源",
+                "刷新工作区投影",
+                "检查 Provider / Connector / Skill",
+                "准备引导样例",
               ].map((item) => (
                 <li className={projectReady ? "ready" : ""} key={item}>
                   <CheckCircle2 size={15} />

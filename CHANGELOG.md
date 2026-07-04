@@ -1,22 +1,40 @@
 # Changelog
 
-更新日期：2026-07-04
+更新日期：2026-07-05
 执行者：Codex
 
 ## Current Baseline
 
 当前发布基线：
 
+- [docs/delivery/releases/v1.2.0/README.md](docs/delivery/releases/v1.2.0/README.md)
+- [docs/delivery/releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md](docs/delivery/releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md)
+
+上一发布基线：
+
 - [docs/delivery/releases/v1.1.9/README.md](docs/delivery/releases/v1.1.9/README.md)
 - [docs/delivery/releases/v1.1.9/AGENTFLOW_V1_1_9_SOFTWARE_DEV_REFERENCE_APP_BETA_CERTIFICATION_TASKS_V1.md](docs/delivery/releases/v1.1.9/AGENTFLOW_V1_1_9_SOFTWARE_DEV_REFERENCE_APP_BETA_CERTIFICATION_TASKS_V1.md)
 
 下一版计划：
 
-- v1.2.0 Product Onboarding and First-run Experience。
+- v1.2.x Product console continuity after onboarding。
 
 ## Unreleased
 
-下一版保留给 Product Onboarding and First-run Experience，不在本次 release 中认证。
+下一版保留给 Product console continuity after onboarding，不在本次 release 中认证。
+
+## v1.2.0 - 2026-07-05
+
+Product Onboarding and First-run Experience:
+
+- added Runtime API first-run onboarding contract for choosing Software Dev Reference App, bootstrapping a workspace, checking readiness and running a guided sample;
+- added Product onboarding readiness report covering Product definition, workspace projection, provider smoke, connector status and skill status;
+- added guided sample run plan from intake through tasks, executor, evidence, delivery and repairable feedback;
+- added Desktop Runtime API bridge commands for onboarding contract, readiness and guided sample plan;
+- updated Desktop first-run onboarding surface to present Software Dev Reference App, Runtime facts and provider / connector / skill readiness without exposing `.agentflow` internals as primary UX;
+- added release-gate proof artifacts for top-level metadata, primary proof manifest, first-run contract, product bootstrap, readiness, provider setup, guided sample, Desktop surface, hidden `.agentflow` boundary and release certification;
+- added v1.2.0 release task traceability for GitHub issues `#852` through `#861`;
+- advanced workspace and desktop version metadata to `1.2.0`.
 
 ## v1.1.9 - 2026-07-04
 
