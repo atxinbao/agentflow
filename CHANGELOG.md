@@ -7,16 +7,31 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.1.8/README.md](docs/delivery/releases/v1.1.8/README.md)
-- [docs/delivery/releases/v1.1.8/AGENTFLOW_V1_1_8_RECOVERY_RESUME_FAILURE_HANDLING_TASKS_V1.md](docs/delivery/releases/v1.1.8/AGENTFLOW_V1_1_8_RECOVERY_RESUME_FAILURE_HANDLING_TASKS_V1.md)
+- [docs/delivery/releases/v1.1.9/README.md](docs/delivery/releases/v1.1.9/README.md)
+- [docs/delivery/releases/v1.1.9/AGENTFLOW_V1_1_9_SOFTWARE_DEV_REFERENCE_APP_BETA_CERTIFICATION_TASKS_V1.md](docs/delivery/releases/v1.1.9/AGENTFLOW_V1_1_9_SOFTWARE_DEV_REFERENCE_APP_BETA_CERTIFICATION_TASKS_V1.md)
 
 下一版计划：
 
-- v1.1.9 Next Runtime Surface Hardening。
+- v1.2.0 Product Onboarding and First-run Experience。
 
 ## Unreleased
 
-下一版保留给 Next Runtime Surface Hardening，不在本次 release 中认证。
+下一版保留给 Product Onboarding and First-run Experience，不在本次 release 中认证。
+
+## v1.1.9 - 2026-07-04
+
+Software Dev Reference App Beta Certification:
+
+- aligned `v1.1.9` release authority with `docs/project/roadmap.md` as the Software Dev reference app beta baseline;
+- added top-level release certification metadata contract checks for `releaseVersion`, `releaseTag`, `sourceCommit`, `workflowRunId`, `artifactNames` and `primaryProofs`;
+- hardened recovery receipt idempotency so same path with different key or missing key is rejected instead of overwriting existing receipts;
+- added positive projection rebuild recovery proof from event replay and negative proof for missing event inputs;
+- tightened workspace health so configured provider names do not count as readiness without provider smoke and skill smoke evidence;
+- documented Software Dev reference app beta scope across Domain Pack, Surface Pack, Connector Pack and Desktop without treating it as Core GA or commercial launch;
+- added golden Project -> Intake -> Tasks, Executor -> Evidence -> Decision -> Delivery, and Failure -> Retry -> Feedback proof scenarios;
+- added Desktop beta readiness smoke proof for Runtime API-backed executor flow display;
+- added v1.1.9 release-gate proof artifacts and task traceability for GitHub issues `#841` through `#850`;
+- advanced workspace and desktop version metadata to `1.1.9`.
 
 ## v1.1.8 - 2026-07-04
 

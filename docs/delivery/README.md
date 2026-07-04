@@ -21,7 +21,9 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.1.8/README.md](releases/v1.1.8/README.md) | 当前发布基线：Recovery / Resume / Failure Handling |
+| [releases/v1.1.9/README.md](releases/v1.1.9/README.md) | 当前发布基线：Software Dev Reference App Beta Certification |
+| [releases/v1.1.9/AGENTFLOW_V1_1_9_SOFTWARE_DEV_REFERENCE_APP_BETA_CERTIFICATION_TASKS_V1.md](releases/v1.1.9/AGENTFLOW_V1_1_9_SOFTWARE_DEV_REFERENCE_APP_BETA_CERTIFICATION_TASKS_V1.md) | v1.1.9 Software Dev Reference App Beta Certification tasks |
+| [releases/v1.1.8/README.md](releases/v1.1.8/README.md) | 上一发布基线：Recovery / Resume / Failure Handling |
 | [releases/v1.1.8/AGENTFLOW_V1_1_8_RECOVERY_RESUME_FAILURE_HANDLING_TASKS_V1.md](releases/v1.1.8/AGENTFLOW_V1_1_8_RECOVERY_RESUME_FAILURE_HANDLING_TASKS_V1.md) | v1.1.8 Recovery / Resume / Failure Handling tasks |
 | [releases/v1.1.7/README.md](releases/v1.1.7/README.md) | 上一发布基线：Evidence / Decision / Delivery User Readability |
 | [releases/v1.1.7/AGENTFLOW_V1_1_7_EVIDENCE_DECISION_DELIVERY_READABILITY_TASKS_V1.md](releases/v1.1.7/AGENTFLOW_V1_1_7_EVIDENCE_DECISION_DELIVERY_READABILITY_TASKS_V1.md) | v1.1.7 Evidence / Decision / Delivery readability tasks |
@@ -47,7 +49,7 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| `v1.1.9` | 下一版计划：Next Runtime Surface Hardening |
+| `v1.2.0` | 下一版计划：Product Onboarding and First-run Experience |
 
 ## Historical Delivery
 
