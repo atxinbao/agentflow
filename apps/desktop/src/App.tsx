@@ -296,7 +296,10 @@ type ProductOnboardingRuntimeReceipt = {
     deliveryPath?: string;
     deferredReason?: string;
     failureReason?: string;
+    retryAttemptPath?: string;
+    retryable: boolean;
     decisionResult: string;
+    nextActions: string[];
     deliverySummary: string[];
   };
 };
@@ -572,6 +575,17 @@ function firstRunRuntimeFeedback(receipt: ProductOnboardingRuntimeReceipt | null
     return null;
   }
 
+  const sampleReceipt = receipt.guidedSampleRunReceipt;
+  if (sampleReceipt.status === "retry") {
+    return sampleReceipt.failureReason ?? sampleReceipt.nextActions[0] ?? "引导样例失败，请按提示修复后重试。";
+  }
+  if (sampleReceipt.status === "deferred") {
+    return sampleReceipt.deferredReason ?? sampleReceipt.nextActions[0] ?? "引导样例已暂缓，请刷新 readiness 证据后重试。";
+  }
+  if (sampleReceipt.status === "blocked") {
+    return sampleReceipt.failureReason ?? "引导样例被阻断，请先修复缺失项。";
+  }
+
   const readinessStatus = receipt.readiness.status;
   if (readinessStatus === "ready") {
     return "Runtime 已创建工作区、完成 readiness 检查，并准备好引导样例。";
@@ -619,10 +633,11 @@ function firstRunRuntimeChecklist(receipt: ProductOnboardingRuntimeReceipt | nul
   const workspaceReady = ["created", "ready", "duplicate"].includes(receipt.workspaceReceipt.status);
   const readinessReady = receipt.readiness.status === "ready";
   const sampleReady = receipt.guidedSampleRunReceipt.status === "completed";
+  const sampleBlocked = ["blocked", "retry", "deferred"].includes(receipt.guidedSampleRunReceipt.status);
   return [
     { label: `创建 Product 工作区：${receipt.workspaceReceipt.status}`, ready: workspaceReady, blocked: !workspaceReady },
     { label: `Runtime readiness：${receipt.readiness.status}`, ready: readinessReady, blocked: receipt.readiness.status === "blocked" },
-    { label: `引导样例运行：${receipt.guidedSampleRunReceipt.status}`, ready: sampleReady, blocked: receipt.guidedSampleRunReceipt.status === "blocked" },
+    { label: `引导样例运行：${receipt.guidedSampleRunReceipt.status}`, ready: sampleReady, blocked: sampleBlocked },
     ...receipt.readiness.items.map((item) => ({
       label: `${item.label}：${item.status}`,
       ready: item.status === "ready",
@@ -672,6 +687,7 @@ function App() {
   const [selectedIntent, setSelectedIntent] = useState("我要新增功能");
   const [onboardingFeedback, setOnboardingFeedback] = useState<string | null>(null);
   const [firstRunRuntimeReceipt, setFirstRunRuntimeReceipt] = useState<ProductOnboardingRuntimeReceipt | null>(null);
+  const [firstRunRetrying, setFirstRunRetrying] = useState(false);
   const [taskActionFeedback, setTaskActionFeedback] = useState<string | null>(null);
   const [taskCopyState, setTaskCopyState] = useState<ButtonInteractionState>("enabled");
   const [projectLoopState, setProjectLoopState] = useState<ButtonInteractionState>("enabled");
@@ -1455,6 +1471,42 @@ function App() {
     }
   }
 
+  async function retryFirstRunGuidedSample() {
+    if (!projectRoot || isBrowserPreviewRuntime()) {
+      return;
+    }
+    setFirstRunRetrying(true);
+    setOnboardingFeedback("正在重新运行引导样例。");
+    try {
+      const guidedSampleRunReceipt = await invoke<ProductOnboardingRuntimeReceipt["guidedSampleRunReceipt"]>(
+        "run_guided_sample",
+        {
+          executionMode: "deterministic-dry-run",
+          selectedProductId: "software-dev",
+          workspaceRoot: projectRoot,
+        },
+      );
+      setFirstRunRuntimeReceipt((current) =>
+        current
+          ? {
+              ...current,
+              guidedSampleRunReceipt,
+            }
+          : current,
+      );
+      setOnboardingFeedback(
+        guidedSampleRunReceipt.status === "completed"
+          ? "引导样例已重新运行成功。"
+          : guidedSampleRunReceipt.failureReason ?? guidedSampleRunReceipt.deferredReason ?? "引导样例仍需处理。",
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setOnboardingFeedback(message);
+    } finally {
+      setFirstRunRetrying(false);
+    }
+  }
+
   function refreshWorkspace() {
     if (!projectRoot) {
       return;
@@ -1786,7 +1838,9 @@ function App() {
           onChooseProject={() => void chooseProjectFolder()}
           onClose={completeOnboarding}
           onIntentChange={setSelectedIntent}
+          onRetryGuidedSample={() => void retryFirstRunGuidedSample()}
           projectRoot={projectRoot}
+          retrying={firstRunRetrying}
           runtimeReceipt={firstRunRuntimeReceipt}
           selectedIntent={selectedIntent}
         />
@@ -2065,7 +2119,9 @@ function FirstRunModal({
   onChooseProject,
   onClose,
   onIntentChange,
+  onRetryGuidedSample,
   projectRoot,
+  retrying,
   runtimeReceipt,
   selectedIntent,
 }: {
@@ -2073,7 +2129,9 @@ function FirstRunModal({
   onChooseProject: () => void;
   onClose: () => void;
   onIntentChange: (intent: string) => void;
+  onRetryGuidedSample: () => void;
   projectRoot: string | null;
+  retrying: boolean;
   runtimeReceipt: ProductOnboardingRuntimeReceipt | null;
   selectedIntent: string;
 }) {
@@ -2169,8 +2227,10 @@ function FirstRunModal({
             ) : null}
             {runtimeReceipt ? (
               <div
-                className="v16-runtime-receipt"
+                className={`v16-runtime-receipt status-${runtimeReceipt.guidedSampleRunReceipt.status}`}
                 data-agentflow-guided-sample-run-receipt={runtimeReceipt.guidedSampleRunReceipt.receiptPath}
+                data-agentflow-guided-sample-status={runtimeReceipt.guidedSampleRunReceipt.status}
+                data-agentflow-guided-sample-retryable={runtimeReceipt.guidedSampleRunReceipt.retryable ? "true" : "false"}
                 data-agentflow-runtime-receipt={runtimeReceipt.version}
               >
                 <span>Runtime 调用</span>
@@ -2181,11 +2241,41 @@ function FirstRunModal({
                   {runtimeReceipt.guidedSampleRunReceipt.result} · decision{" "}
                   {runtimeReceipt.guidedSampleRunReceipt.decisionResult}
                 </code>
+                {runtimeReceipt.guidedSampleRunReceipt.failureReason ? (
+                  <>
+                    <span>失败原因</span>
+                    <code>{runtimeReceipt.guidedSampleRunReceipt.failureReason}</code>
+                  </>
+                ) : null}
+                {runtimeReceipt.guidedSampleRunReceipt.deferredReason ? (
+                  <>
+                    <span>暂缓原因</span>
+                    <code>{runtimeReceipt.guidedSampleRunReceipt.deferredReason}</code>
+                  </>
+                ) : null}
+                {runtimeReceipt.guidedSampleRunReceipt.retryAttemptPath ? (
+                  <>
+                    <span>重试记录</span>
+                    <code>{runtimeReceipt.guidedSampleRunReceipt.retryAttemptPath}</code>
+                  </>
+                ) : null}
                 {runtimeReceipt.guidedSampleRunReceipt.deliveryPath ? (
                   <>
                     <span>样例交付</span>
                     <code>{runtimeReceipt.guidedSampleRunReceipt.deliveryPath}</code>
                   </>
+                ) : null}
+                {runtimeReceipt.guidedSampleRunReceipt.nextActions.length ? (
+                  <ul aria-label="引导样例下一步">
+                    {runtimeReceipt.guidedSampleRunReceipt.nextActions.map((action) => (
+                      <li key={action}>{action}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {runtimeReceipt.guidedSampleRunReceipt.retryable ? (
+                  <ActionButton disabled={retrying || !projectRoot} onClick={onRetryGuidedSample} size="sm" variant="primary">
+                    {retrying ? "正在重试" : "重试引导样例"}
+                  </ActionButton>
                 ) : null}
               </div>
             ) : null}

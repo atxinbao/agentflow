@@ -125,6 +125,7 @@ pub(crate) fn run_first_run_product_onboarding(
     project_name: String,
     selected_product_id: String,
     initial_goal: String,
+    guided_sample_execution_mode: Option<String>,
 ) -> Result<DesktopFirstRunOnboardingReceipt, String> {
     let product_source_root = resolve_product_source_root(&project_root)
         .map_err(|error| format!("resolve product source root failed: {error}"))?;
@@ -151,7 +152,7 @@ pub(crate) fn run_first_run_product_onboarding(
     let guided_sample_run_receipt = agentflow_runtime_api::run_guided_sample(
         project_root,
         selected_product_id,
-        "deterministic-dry-run",
+        guided_sample_execution_mode.unwrap_or_else(|| "deterministic-dry-run".to_string()),
     )
     .map_err(|error| format!("run guided sample failed: {error}"))?;
 
@@ -491,6 +492,7 @@ mod tests {
             "Desktop First Run".to_string(),
             "software-dev".to_string(),
             "Create the first guided sample.".to_string(),
+            None,
         )
         .expect("run first-run product onboarding");
 
@@ -527,6 +529,34 @@ mod tests {
         assert!(workspace
             .join(&receipt.guided_sample_run_receipt.receipt_path)
             .is_file());
+    }
+
+    #[test]
+    fn first_run_onboarding_command_preserves_retry_failure_state() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = dir.path().join("workspace");
+
+        let receipt = run_first_run_product_onboarding(
+            workspace.to_string_lossy().to_string(),
+            "Desktop Failed First Run".to_string(),
+            "software-dev".to_string(),
+            "Show retry state for failed guided sample.".to_string(),
+            Some("deterministic-fail".to_string()),
+        )
+        .expect("run failed first-run product onboarding");
+
+        assert_eq!(receipt.guided_sample_run_receipt.result, "failed");
+        assert_eq!(
+            receipt.guided_sample_run_receipt.decision_result,
+            "rejected"
+        );
+        assert!(receipt.guided_sample_run_receipt.delivery_path.is_none());
+        assert!(receipt.guided_sample_run_receipt.retryable);
+        assert!(receipt
+            .guided_sample_run_receipt
+            .retry_attempt_path
+            .as_ref()
+            .is_some_and(|path| workspace.join(path).is_file()));
     }
 
     fn workspace_root() -> PathBuf {

@@ -294,6 +294,8 @@ try {
   assert.ok(appEntry.includes("guidedSampleRunReceipt"));
   assert.ok(appEntry.includes("decisionResult"));
   assert.ok(appEntry.includes("deliveryPath"));
+  assert.ok(appEntry.includes("retryAttemptPath"));
+  assert.ok(appEntry.includes("data-agentflow-guided-sample-retryable"));
   assert.ok(appEntry.includes("data-agentflow-guided-sample-run-receipt"));
   assert.ok(appEntry.includes('data-agentflow-page="workbench"'));
   assert.ok(appEntry.includes('data-agentflow-page="spec"'));
