@@ -21,7 +21,9 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.2.0/README.md](releases/v1.2.0/README.md) | 当前发布基线：Product Onboarding and First-run Experience |
+| [releases/v1.2.1/README.md](releases/v1.2.1/README.md) | 当前发布基线：First-run Execution Closure and Team Workflow Boundary |
+| [releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md](releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md) | v1.2.1 First-run Execution Closure and Team Workflow Boundary tasks |
+| [releases/v1.2.0/README.md](releases/v1.2.0/README.md) | 上一发布基线：Product Onboarding and First-run Experience |
 | [releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md](releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md) | v1.2.0 Product Onboarding and First-run Experience tasks |
 | [releases/v1.1.9/README.md](releases/v1.1.9/README.md) | 上一发布基线：Software Dev Reference App Beta Certification |
 | [releases/v1.1.9/AGENTFLOW_V1_1_9_SOFTWARE_DEV_REFERENCE_APP_BETA_CERTIFICATION_TASKS_V1.md](releases/v1.1.9/AGENTFLOW_V1_1_9_SOFTWARE_DEV_REFERENCE_APP_BETA_CERTIFICATION_TASKS_V1.md) | v1.1.9 Software Dev Reference App Beta Certification tasks |
