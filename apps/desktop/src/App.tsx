@@ -282,6 +282,18 @@ type ProductOnboardingRuntimeReceipt = {
     }>;
     expectedTrace: string[];
   };
+  guidedSampleRunReceipt: {
+    issueId: string;
+    runId: string;
+    command: string;
+    executionMode: string;
+    status: string;
+    result: string;
+    runPath: string;
+    receiptPath: string;
+    evidencePath?: string;
+    deferredReason?: string;
+  };
 };
 
 type ProjectRuntimeAction =
@@ -601,11 +613,11 @@ function firstRunRuntimeChecklist(receipt: ProductOnboardingRuntimeReceipt | nul
 
   const workspaceReady = ["created", "ready", "duplicate"].includes(receipt.workspaceReceipt.status);
   const readinessReady = receipt.readiness.status === "ready";
-  const sampleReady = receipt.guidedSampleRunPlan.status === "ready";
+  const sampleReady = receipt.guidedSampleRunReceipt.status === "completed";
   return [
     { label: `创建 Product 工作区：${receipt.workspaceReceipt.status}`, ready: workspaceReady, blocked: !workspaceReady },
     { label: `Runtime readiness：${receipt.readiness.status}`, ready: readinessReady, blocked: receipt.readiness.status === "blocked" },
-    { label: `引导样例计划：${receipt.guidedSampleRunPlan.status}`, ready: sampleReady, blocked: receipt.guidedSampleRunPlan.status === "blocked" },
+    { label: `引导样例运行：${receipt.guidedSampleRunReceipt.status}`, ready: sampleReady, blocked: receipt.guidedSampleRunReceipt.status === "blocked" },
     ...receipt.readiness.items.map((item) => ({
       label: `${item.label}：${item.status}`,
       ready: item.status === "ready",
@@ -2151,9 +2163,18 @@ function FirstRunModal({
               </div>
             ) : null}
             {runtimeReceipt ? (
-              <div className="v16-runtime-receipt" data-agentflow-runtime-receipt={runtimeReceipt.version}>
+              <div
+                className="v16-runtime-receipt"
+                data-agentflow-guided-sample-run-receipt={runtimeReceipt.guidedSampleRunReceipt.receiptPath}
+                data-agentflow-runtime-receipt={runtimeReceipt.version}
+              >
                 <span>Runtime 调用</span>
                 <code>{runtimeReceipt.invokedCommands.join(" -> ")}</code>
+                <span>样例 Run</span>
+                <code>
+                  {runtimeReceipt.guidedSampleRunReceipt.issueId} / {runtimeReceipt.guidedSampleRunReceipt.runId} ·{" "}
+                  {runtimeReceipt.guidedSampleRunReceipt.result}
+                </code>
               </div>
             ) : null}
           </section>

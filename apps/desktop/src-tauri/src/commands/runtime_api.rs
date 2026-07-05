@@ -11,6 +11,7 @@ pub(crate) struct DesktopFirstRunOnboardingReceipt {
     pub(crate) workspace_receipt: agentflow_runtime_api::ProductWorkspaceCreationReceipt,
     pub(crate) readiness: agentflow_runtime_api::ProductOnboardingReadinessReport,
     pub(crate) guided_sample_run_plan: agentflow_runtime_api::ProductGuidedSampleRunPlan,
+    pub(crate) guided_sample_run_receipt: agentflow_runtime_api::ProductGuidedSampleRunReceipt,
 }
 
 #[tauri::command]
@@ -105,6 +106,20 @@ pub(crate) fn load_guided_sample_run_plan(
 }
 
 #[tauri::command]
+pub(crate) fn run_guided_sample(
+    workspace_root: String,
+    selected_product_id: String,
+    execution_mode: Option<String>,
+) -> Result<agentflow_runtime_api::ProductGuidedSampleRunReceipt, String> {
+    agentflow_runtime_api::run_guided_sample(
+        workspace_root,
+        selected_product_id,
+        execution_mode.unwrap_or_else(|| "deterministic-dry-run".to_string()),
+    )
+    .map_err(|error| format!("run guided sample failed: {error}"))
+}
+
+#[tauri::command]
 pub(crate) fn run_first_run_product_onboarding(
     project_root: String,
     project_name: String,
@@ -129,8 +144,16 @@ pub(crate) fn run_first_run_product_onboarding(
         project_root.clone(),
         selected_product_id.clone(),
     );
-    let guided_sample_run_plan =
-        agentflow_runtime_api::guided_sample_run_plan(project_root, selected_product_id);
+    let guided_sample_run_plan = agentflow_runtime_api::guided_sample_run_plan(
+        project_root.clone(),
+        selected_product_id.clone(),
+    );
+    let guided_sample_run_receipt = agentflow_runtime_api::run_guided_sample(
+        project_root,
+        selected_product_id,
+        "deterministic-dry-run",
+    )
+    .map_err(|error| format!("run guided sample failed: {error}"))?;
 
     Ok(DesktopFirstRunOnboardingReceipt {
         version: "agentflow-desktop-first-run-onboarding-receipt.v1".to_string(),
@@ -138,11 +161,13 @@ pub(crate) fn run_first_run_product_onboarding(
             "create_product_workspace".to_string(),
             "check_product_onboarding_readiness".to_string(),
             "load_guided_sample_run_plan".to_string(),
+            "run_guided_sample".to_string(),
         ],
         product_source_root: product_source_root_string,
         workspace_receipt,
         readiness,
         guided_sample_run_plan,
+        guided_sample_run_receipt,
     })
 }
 
@@ -304,7 +329,7 @@ mod tests {
         check_product_onboarding_readiness, create_product_workspace, load_api_plane_manifest,
         load_first_run_onboarding_contract, load_guided_sample_run_plan,
         load_product_workspace_projection, preview_product_intent,
-        run_first_run_product_onboarding,
+        run_first_run_product_onboarding, run_guided_sample,
     };
     use agentflow_runtime_api::{
         ProductIntentIntakeRequest, ProductWorkspaceCreationMode, ProductWorkspaceCreationRequest,
@@ -433,6 +458,18 @@ mod tests {
             .expected_trace
             .iter()
             .any(|item| item.contains("Delivery")));
+        let run_receipt = run_guided_sample(
+            workspace.to_string_lossy().to_string(),
+            "software-dev".to_string(),
+            Some("deterministic-dry-run".to_string()),
+        )
+        .expect("run guided sample");
+        assert_eq!(run_receipt.result, "passed");
+        assert!(workspace.join(&run_receipt.receipt_path).is_file());
+        assert!(run_receipt
+            .evidence_path
+            .as_ref()
+            .is_some_and(|path| workspace.join(path).is_file()));
     }
 
     #[test]
@@ -457,7 +494,8 @@ mod tests {
             vec![
                 "create_product_workspace".to_string(),
                 "check_product_onboarding_readiness".to_string(),
-                "load_guided_sample_run_plan".to_string()
+                "load_guided_sample_run_plan".to_string(),
+                "run_guided_sample".to_string()
             ]
         );
         assert!(receipt.workspace_receipt.writes_authority);
@@ -467,6 +505,14 @@ mod tests {
             receipt.guided_sample_run_plan.selected_product_id,
             "software-dev"
         );
+        assert_eq!(receipt.guided_sample_run_receipt.result, "passed");
+        assert_eq!(
+            receipt.guided_sample_run_receipt.issue_id,
+            "AF-GUIDED-SAMPLE-001"
+        );
+        assert!(workspace
+            .join(&receipt.guided_sample_run_receipt.receipt_path)
+            .is_file());
     }
 
     fn workspace_root() -> PathBuf {
