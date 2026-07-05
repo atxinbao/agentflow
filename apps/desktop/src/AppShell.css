@@ -364,6 +364,27 @@
   color: var(--v16-success, #15803d);
 }
 
+.v16-check-list li.blocked {
+  color: var(--v16-danger, #dc2626);
+}
+
+.v16-runtime-receipt {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--v16-line, #d7e0ee);
+  border-radius: 8px;
+  background: var(--v16-surface-muted, #f7f9fc);
+  color: var(--v16-subtle, #7c8797);
+  font-size: 12px;
+}
+
+.v16-runtime-receipt code {
+  color: var(--v16-ink, #172033);
+  white-space: normal;
+  word-break: break-word;
+}
+
 .v16-agent-brief {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

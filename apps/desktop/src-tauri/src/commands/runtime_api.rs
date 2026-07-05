@@ -1,5 +1,18 @@
 //! Runtime API read commands for Desktop Advanced diagnostics.
 
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DesktopFirstRunOnboardingReceipt {
+    pub(crate) version: String,
+    pub(crate) invoked_commands: Vec<String>,
+    pub(crate) product_source_root: String,
+    pub(crate) workspace_receipt: agentflow_runtime_api::ProductWorkspaceCreationReceipt,
+    pub(crate) readiness: agentflow_runtime_api::ProductOnboardingReadinessReport,
+    pub(crate) guided_sample_run_plan: agentflow_runtime_api::ProductGuidedSampleRunPlan,
+}
+
 #[tauri::command]
 pub(crate) fn load_api_plane_manifest() -> Result<agentflow_runtime_api::ApiPlaneManifest, String> {
     Ok(agentflow_runtime_api::api_plane_manifest())
@@ -89,6 +102,48 @@ pub(crate) fn load_guided_sample_run_plan(
         workspace_root,
         selected_product_id,
     ))
+}
+
+#[tauri::command]
+pub(crate) fn run_first_run_product_onboarding(
+    project_root: String,
+    project_name: String,
+    selected_product_id: String,
+    initial_goal: String,
+) -> Result<DesktopFirstRunOnboardingReceipt, String> {
+    let product_source_root = resolve_product_source_root(&project_root)
+        .map_err(|error| format!("resolve product source root failed: {error}"))?;
+    let product_source_root_string = product_source_root.to_string_lossy().to_string();
+    let workspace_receipt = agentflow_runtime_api::create_product_workspace(
+        product_source_root_string.clone(),
+        agentflow_runtime_api::ProductWorkspaceCreationRequest {
+            project_name,
+            workspace_root: project_root.clone(),
+            selected_product_id: selected_product_id.clone(),
+            initial_goal,
+            creation_mode: agentflow_runtime_api::ProductWorkspaceCreationMode::Recover,
+        },
+    );
+    let readiness = agentflow_runtime_api::check_product_onboarding_readiness(
+        product_source_root_string.clone(),
+        project_root.clone(),
+        selected_product_id.clone(),
+    );
+    let guided_sample_run_plan =
+        agentflow_runtime_api::guided_sample_run_plan(project_root, selected_product_id);
+
+    Ok(DesktopFirstRunOnboardingReceipt {
+        version: "agentflow-desktop-first-run-onboarding-receipt.v1".to_string(),
+        invoked_commands: vec![
+            "create_product_workspace".to_string(),
+            "check_product_onboarding_readiness".to_string(),
+            "load_guided_sample_run_plan".to_string(),
+        ],
+        product_source_root: product_source_root_string,
+        workspace_receipt,
+        readiness,
+        guided_sample_run_plan,
+    })
 }
 
 #[tauri::command]
@@ -212,12 +267,44 @@ pub(crate) fn load_executor_flow_read_model(
         .map_err(|error| format!("load executor flow read model failed: {error}"))
 }
 
+fn resolve_product_source_root(workspace_root: &str) -> Result<PathBuf, String> {
+    let candidates = [
+        std::env::var("AGENTFLOW_PRODUCT_SOURCE_ROOT")
+            .ok()
+            .map(PathBuf::from),
+        std::env::current_dir().ok(),
+        repo_root_from_manifest_dir(),
+        Some(PathBuf::from(workspace_root)),
+    ];
+
+    candidates
+        .into_iter()
+        .flatten()
+        .find(|candidate| has_product_registry(candidate))
+        .ok_or_else(|| {
+            "no products/** registry found for Product Onboarding Runtime commands".to_string()
+        })
+}
+
+fn repo_root_from_manifest_dir() -> Option<PathBuf> {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+}
+
+fn has_product_registry(path: &Path) -> bool {
+    path.join("products/software-dev/product.toml").is_file()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         check_product_onboarding_readiness, create_product_workspace, load_api_plane_manifest,
         load_first_run_onboarding_contract, load_guided_sample_run_plan,
         load_product_workspace_projection, preview_product_intent,
+        run_first_run_product_onboarding,
     };
     use agentflow_runtime_api::{
         ProductIntentIntakeRequest, ProductWorkspaceCreationMode, ProductWorkspaceCreationRequest,
@@ -346,6 +433,40 @@ mod tests {
             .expected_trace
             .iter()
             .any(|item| item.contains("Delivery")));
+    }
+
+    #[test]
+    fn first_run_onboarding_command_invokes_runtime_sequence() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = dir.path().join("workspace");
+
+        let receipt = run_first_run_product_onboarding(
+            workspace.to_string_lossy().to_string(),
+            "Desktop First Run".to_string(),
+            "software-dev".to_string(),
+            "Create the first guided sample.".to_string(),
+        )
+        .expect("run first-run product onboarding");
+
+        assert_eq!(
+            receipt.version,
+            "agentflow-desktop-first-run-onboarding-receipt.v1"
+        );
+        assert_eq!(
+            receipt.invoked_commands,
+            vec![
+                "create_product_workspace".to_string(),
+                "check_product_onboarding_readiness".to_string(),
+                "load_guided_sample_run_plan".to_string()
+            ]
+        );
+        assert!(receipt.workspace_receipt.writes_authority);
+        assert!(workspace.join(".agentflow/workspace.json").is_file());
+        assert!(receipt.readiness.user_hidden_agentflow_boundary);
+        assert_eq!(
+            receipt.guided_sample_run_plan.selected_product_id,
+            "software-dev"
+        );
     }
 
     fn workspace_root() -> PathBuf {

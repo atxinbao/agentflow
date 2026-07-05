@@ -251,6 +251,39 @@ type ProjectWorkspaceSummary = {
   initializationStatus?: ProjectInitializationStatus | null;
 };
 
+type ProductOnboardingRuntimeReceipt = {
+  version: string;
+  invokedCommands: string[];
+  productSourceRoot: string;
+  workspaceReceipt: {
+    status: string;
+    receiptId: string;
+    blockers: string[];
+  };
+  readiness: {
+    status: string;
+    nextActions: string[];
+    blockers: string[];
+    items: Array<{
+      id: string;
+      label: string;
+      status: string;
+      userSummary: string;
+      nextAction: string;
+    }>;
+  };
+  guidedSampleRunPlan: {
+    status: string;
+    stages: Array<{
+      id: string;
+      label: string;
+      owner: string;
+      expectedOutput: string;
+    }>;
+    expectedTrace: string[];
+  };
+};
+
 type ProjectRuntimeAction =
   | "completion-accept"
   | "completion-continue"
@@ -517,6 +550,51 @@ function readStoredIssueSet() {
   }
 }
 
+function firstRunRuntimeFeedback(receipt: ProductOnboardingRuntimeReceipt | null) {
+  if (!receipt) {
+    return null;
+  }
+
+  const readinessStatus = receipt.readiness.status;
+  if (readinessStatus === "ready") {
+    return "Runtime 已创建工作区、完成 readiness 检查，并准备好引导样例。";
+  }
+  if (readinessStatus === "blocked") {
+    return receipt.readiness.blockers[0] ?? "Runtime readiness 被阻断，请先修复缺失项。";
+  }
+  if (readinessStatus === "repairable") {
+    return receipt.readiness.nextActions[0] ?? "Runtime readiness 需要补齐，请按提示修复后重试。";
+  }
+  return `Runtime readiness：${readinessStatus}`;
+}
+
+function firstRunRuntimeChecklist(receipt: ProductOnboardingRuntimeReceipt | null, projectReady: boolean) {
+  if (!receipt) {
+    return [
+      { label: "读取产品定义", ready: projectReady, blocked: false },
+      { label: "准备项目文档", ready: projectReady, blocked: false },
+      { label: "准备 Runtime 事实源", ready: projectReady, blocked: false },
+      { label: "刷新工作区投影", ready: projectReady, blocked: false },
+      { label: "检查 Provider / Connector / Skill", ready: projectReady, blocked: false },
+      { label: "准备引导样例", ready: projectReady, blocked: false },
+    ];
+  }
+
+  const workspaceReady = ["created", "ready", "duplicate"].includes(receipt.workspaceReceipt.status);
+  const readinessReady = receipt.readiness.status === "ready";
+  const sampleReady = receipt.guidedSampleRunPlan.status === "ready";
+  return [
+    { label: `创建 Product 工作区：${receipt.workspaceReceipt.status}`, ready: workspaceReady, blocked: !workspaceReady },
+    { label: `Runtime readiness：${receipt.readiness.status}`, ready: readinessReady, blocked: receipt.readiness.status === "blocked" },
+    { label: `引导样例计划：${receipt.guidedSampleRunPlan.status}`, ready: sampleReady, blocked: receipt.guidedSampleRunPlan.status === "blocked" },
+    ...receipt.readiness.items.map((item) => ({
+      label: `${item.label}：${item.status}`,
+      ready: item.status === "ready",
+      blocked: item.status === "failed",
+    })),
+  ];
+}
+
 function startWindowDrag(event: MouseEvent<HTMLElement>) {
   if (isBrowserPreviewRuntime() || event.button !== 0) {
     return;
@@ -557,6 +635,7 @@ function App() {
   });
   const [selectedIntent, setSelectedIntent] = useState("我要新增功能");
   const [onboardingFeedback, setOnboardingFeedback] = useState<string | null>(null);
+  const [firstRunRuntimeReceipt, setFirstRunRuntimeReceipt] = useState<ProductOnboardingRuntimeReceipt | null>(null);
   const [taskActionFeedback, setTaskActionFeedback] = useState<string | null>(null);
   const [taskCopyState, setTaskCopyState] = useState<ButtonInteractionState>("enabled");
   const [projectLoopState, setProjectLoopState] = useState<ButtonInteractionState>("enabled");
@@ -1271,7 +1350,7 @@ function App() {
 
       const projectRootToAdd = normalizedRoot;
       const projectName = projectNameFromPath(projectRootToAdd) || "本地项目";
-      setOnboardingFeedback("正在准备项目工作规则和现场。");
+      setOnboardingFeedback("正在通过 Runtime 准备 Product 工作区。");
       setProjectRegistry((current) =>
         upsertProject(
           current,
@@ -1284,6 +1363,13 @@ function App() {
           }),
         ),
       );
+      const runtimeReceipt = await invoke<ProductOnboardingRuntimeReceipt>("run_first_run_product_onboarding", {
+        initialGoal: selectedIntent,
+        projectName,
+        projectRoot: projectRootToAdd,
+        selectedProductId: "software-dev",
+      });
+      setFirstRunRuntimeReceipt(runtimeReceipt);
       const summary = await invoke<ProjectWorkspaceSummary>("prepare_local_project_workspace", {
         appLocale: detectAppLocale(),
         projectRoot: projectRootToAdd,
@@ -1301,7 +1387,13 @@ function App() {
         ),
       );
       setOutputRefreshToken((current) => current + 1);
-      setOnboardingFeedback(summary.initializationStatus?.message ?? "项目已准备好。");
+      setTaskListRefreshToken((current) => current + 1);
+      setExecuteRefreshToken((current) => current + 1);
+      setMcpRefreshToken((current) => current + 1);
+      setStateRefreshToken((current) => current + 1);
+      setOnboardingFeedback(
+        firstRunRuntimeFeedback(runtimeReceipt) ?? summary.initializationStatus?.message ?? "项目已准备好。",
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setOnboardingFeedback(message);
@@ -1659,6 +1751,7 @@ function App() {
           onClose={completeOnboarding}
           onIntentChange={setSelectedIntent}
           projectRoot={projectRoot}
+          runtimeReceipt={firstRunRuntimeReceipt}
           selectedIntent={selectedIntent}
         />
       ) : null}
@@ -1937,6 +2030,7 @@ function FirstRunModal({
   onClose,
   onIntentChange,
   projectRoot,
+  runtimeReceipt,
   selectedIntent,
 }: {
   feedback: string | null;
@@ -1944,6 +2038,7 @@ function FirstRunModal({
   onClose: () => void;
   onIntentChange: (intent: string) => void;
   projectRoot: string | null;
+  runtimeReceipt: ProductOnboardingRuntimeReceipt | null;
   selectedIntent: string;
 }) {
   const [stepIndex, setStepIndex] = useState(0);
@@ -2000,20 +2095,19 @@ function FirstRunModal({
               </div>
             </div>
             <ul className="v16-check-list">
-              {[
-                "读取产品定义",
-                "准备项目文档",
-                "准备 Runtime 事实源",
-                "刷新工作区投影",
-                "检查 Provider / Connector / Skill",
-                "准备引导样例",
-              ].map((item) => (
-                <li className={projectReady ? "ready" : ""} key={item}>
+              {firstRunRuntimeChecklist(runtimeReceipt, projectReady).map((item) => (
+                <li className={item.ready ? "ready" : item.blocked ? "blocked" : ""} key={item.label}>
                   <CheckCircle2 size={15} />
-                  <span>{item}</span>
+                  <span>{item.label}</span>
                 </li>
               ))}
             </ul>
+            {runtimeReceipt ? (
+              <div className="v16-runtime-receipt" data-agentflow-runtime-receipt={runtimeReceipt.version}>
+                <span>Runtime 调用</span>
+                <code>{runtimeReceipt.invokedCommands.join(" -> ")}</code>
+              </div>
+            ) : null}
           </section>
         ) : null}
 

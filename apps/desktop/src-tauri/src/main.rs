@@ -55,6 +55,7 @@ fn main() {
             commands::runtime_api::load_first_run_onboarding_contract,
             commands::runtime_api::check_product_onboarding_readiness,
             commands::runtime_api::load_guided_sample_run_plan,
+            commands::runtime_api::run_first_run_product_onboarding,
             commands::runtime_api::preview_product_intent,
             commands::runtime_api::confirm_product_spec_preview,
             commands::runtime_api::materialize_confirmed_product_spec,
