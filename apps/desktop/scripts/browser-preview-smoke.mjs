@@ -292,6 +292,8 @@ try {
   assert.ok(appEntry.includes('data-agentflow-readiness-fixtures="ready repairable blocked deferred"'));
   assert.ok(appEntry.includes('data-agentflow-readiness-panel="runtime-read-model"'));
   assert.ok(appEntry.includes("guidedSampleRunReceipt"));
+  assert.ok(appEntry.includes("decisionResult"));
+  assert.ok(appEntry.includes("deliveryPath"));
   assert.ok(appEntry.includes("data-agentflow-guided-sample-run-receipt"));
   assert.ok(appEntry.includes('data-agentflow-page="workbench"'));
   assert.ok(appEntry.includes('data-agentflow-page="spec"'));

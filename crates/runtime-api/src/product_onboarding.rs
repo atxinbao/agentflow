@@ -4,8 +4,10 @@ use crate::product_workspace::{
 use agentflow_mcp::{McpProviderSmokeArtifact, McpProviderSmokeOutcome};
 use agentflow_task_artifacts::{
     create_task_run, prepare_task_artifact_workspace, task_run_dir, update_task_run_status,
-    write_task_command_record, write_task_evidence, write_task_validation, TaskCommandInput,
-    TaskRunStatus,
+    write_task_acceptance_gate_decision, write_task_command_record, write_task_evidence,
+    write_task_validation, TaskAcceptanceGateDecision, TaskAcceptanceGateKind,
+    TaskAcceptanceOutcome, TaskAcceptanceSubGateDecision, TaskAcceptanceTraceability,
+    TaskCommandInput, TaskRunStatus, TASK_ACCEPTANCE_GATE_VERSION,
 };
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -13,6 +15,7 @@ use serde_json::Value;
 use std::{
     fs,
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 pub const PRODUCT_FIRST_RUN_ONBOARDING_CONTRACT_VERSION: &str =
@@ -169,7 +172,15 @@ pub struct ProductGuidedSampleRunReceipt {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deferred_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_reason: Option<String>,
+    pub decision_result: String,
+    pub delivery_summary: Vec<String>,
     pub created_paths: Vec<String>,
     pub trace: Vec<String>,
 }
@@ -473,7 +484,10 @@ pub fn run_guided_sample(
         .active_product
         .as_ref()
         .is_some_and(|product| product.product_id == selected_product_id);
-    let execution_mode_allowed = execution_mode == "deterministic-dry-run";
+    let execution_mode_allowed = matches!(
+        execution_mode.as_str(),
+        "deterministic-dry-run" | "deterministic-fail"
+    );
     let deferred_reason = if !active_product_matches {
         Some(format!(
             "selected product {selected_product_id} does not match the active workspace product"
@@ -506,7 +520,17 @@ pub fn run_guided_sample(
     let receipt_path = guided_sample_receipt_path();
     let mut created_paths = vec![run_path.clone()];
     let trace;
-    let (status, result, evidence_path, deferred_reason) = if let Some(reason) = deferred_reason {
+    let (
+        status,
+        result,
+        evidence_path,
+        decision_path,
+        delivery_path,
+        deferred_reason,
+        failure_reason,
+        decision_result,
+        delivery_summary,
+    ) = if let Some(reason) = deferred_reason {
         update_task_run_status(
             workspace_root,
             GUIDED_SAMPLE_ISSUE_ID,
@@ -521,9 +545,15 @@ pub fn run_guided_sample(
             ProductOnboardingStatus::Deferred,
             "deferred".to_string(),
             None,
+            None,
+            None,
             Some(reason),
+            None,
+            "deferred".to_string(),
+            Vec::new(),
         )
     } else {
+        let should_fail = execution_mode == "deterministic-fail";
         update_task_run_status(
             workspace_root,
             GUIDED_SAMPLE_ISSUE_ID,
@@ -542,11 +572,19 @@ pub fn run_guided_sample(
                     selected_product_id.clone(),
                     execution_mode.clone(),
                 ],
-                exit_code: Some(0),
-                stdout: format!(
-                    "Guided sample deterministic dry-run completed for {selected_product_id}."
-                ),
-                stderr: String::new(),
+                exit_code: if should_fail { Some(1) } else { Some(0) },
+                stdout: if should_fail {
+                    String::new()
+                } else {
+                    format!(
+                        "Guided sample deterministic dry-run completed for {selected_product_id}."
+                    )
+                },
+                stderr: if should_fail {
+                    "Guided sample deterministic failure for release proof.".to_string()
+                } else {
+                    String::new()
+                },
             },
         )?;
         update_task_run_status(
@@ -561,34 +599,101 @@ pub fn run_guided_sample(
             workspace_root,
             GUIDED_SAMPLE_ISSUE_ID,
             GUIDED_SAMPLE_RUN_ID,
-            "Guided sample run completed with deterministic dry-run evidence.",
+            if validation.passed {
+                "Guided sample run completed with deterministic dry-run evidence."
+            } else {
+                "Guided sample run failed with structured validation evidence."
+            },
         )?;
+        let decision =
+            write_guided_sample_decision(workspace_root, validation.passed, &selected_product_id)?;
+        let final_status = if validation.passed {
+            TaskRunStatus::Completed
+        } else {
+            TaskRunStatus::Failed
+        };
         update_task_run_status(
             workspace_root,
             GUIDED_SAMPLE_ISSUE_ID,
             GUIDED_SAMPLE_RUN_ID,
-            TaskRunStatus::Completed,
+            final_status,
         )?;
         let evidence_path = Some(guided_sample_evidence_path());
+        let decision_path = Some(guided_sample_decision_path());
+        let delivery_path = if validation.passed {
+            let delivery_path = write_guided_sample_delivery_record(
+                workspace_root,
+                &selected_product_id,
+                &receipt_path,
+                evidence_path.as_deref().unwrap_or(""),
+                decision_path.as_deref().unwrap_or(""),
+            )?;
+            Some(delivery_path)
+        } else {
+            None
+        };
         created_paths.extend([
             command.stdout_path,
             command.stderr_path,
             ".agentflow/tasks/AF-GUIDED-SAMPLE-001/runs/run-001/validation.json".to_string(),
             evidence_path.clone().unwrap_or_else(|| validation_path()),
+            decision_path
+                .clone()
+                .unwrap_or_else(|| guided_sample_decision_path()),
         ]);
+        if let Some(path) = delivery_path.clone() {
+            created_paths.push(path);
+        }
         trace = vec![
             "guided-sample:received".to_string(),
             "guided-sample:run-created".to_string(),
             format!("guided-sample:command-recorded:{}", command.command_id),
             format!("guided-sample:validation:{}", validation.passed),
             "guided-sample:evidence-written".to_string(),
-            "guided-sample:completed".to_string(),
+            format!("guided-sample:decision:{}", decision.outcome.as_str()),
+            if validation.passed {
+                "guided-sample:delivery-written".to_string()
+            } else {
+                "guided-sample:delivery-skipped".to_string()
+            },
+            if validation.passed {
+                "guided-sample:completed".to_string()
+            } else {
+                "guided-sample:failed".to_string()
+            },
         ];
         (
-            ProductOnboardingStatus::Completed,
-            "passed".to_string(),
+            if validation.passed {
+                ProductOnboardingStatus::Completed
+            } else {
+                ProductOnboardingStatus::Retry
+            },
+            if validation.passed {
+                "passed".to_string()
+            } else {
+                "failed".to_string()
+            },
             evidence_path,
+            decision_path,
+            delivery_path,
             None,
+            if validation.passed {
+                None
+            } else {
+                Some("guided sample validation command failed".to_string())
+            },
+            decision.outcome.as_str().to_string(),
+            if validation.passed {
+                vec![
+                    "Guided sample evidence accepted.".to_string(),
+                    "Delivery record written for first-run review.".to_string(),
+                ]
+            } else {
+                vec![
+                    "No delivery record written because acceptance decision rejected the sample."
+                        .to_string(),
+                ]
+            },
         )
     };
 
@@ -606,7 +711,12 @@ pub fn run_guided_sample(
         run_path,
         receipt_path: receipt_path.clone(),
         evidence_path,
+        decision_path,
+        delivery_path,
         deferred_reason,
+        failure_reason,
+        decision_result,
+        delivery_summary,
         created_paths,
         trace,
     };
@@ -644,6 +754,133 @@ fn guided_sample_evidence_path() -> String {
     ".agentflow/tasks/AF-GUIDED-SAMPLE-001/evidence/evidence.json".to_string()
 }
 
+fn guided_sample_decision_path() -> String {
+    ".agentflow/tasks/AF-GUIDED-SAMPLE-001/acceptance-gate.json".to_string()
+}
+
+fn write_guided_sample_decision(
+    workspace_root: &Path,
+    passed: bool,
+    selected_product_id: &str,
+) -> Result<TaskAcceptanceGateDecision> {
+    let evidence_path = guided_sample_evidence_path();
+    let validation_path = validation_path();
+    let decision = TaskAcceptanceGateDecision {
+        version: TASK_ACCEPTANCE_GATE_VERSION.to_string(),
+        issue_id: GUIDED_SAMPLE_ISSUE_ID.to_string(),
+        run_id: GUIDED_SAMPLE_RUN_ID.to_string(),
+        passed,
+        outcome: if passed {
+            TaskAcceptanceOutcome::Accepted
+        } else {
+            TaskAcceptanceOutcome::Rejected
+        },
+        summary: if passed {
+            format!("Guided sample evidence accepted for {selected_product_id}.")
+        } else {
+            format!("Guided sample evidence rejected for {selected_product_id}.")
+        },
+        sub_gates: vec![
+            guided_sample_sub_gate(
+                TaskAcceptanceGateKind::Verification,
+                passed,
+                vec![validation_path.clone()],
+                if passed {
+                    Vec::new()
+                } else {
+                    vec!["validation command exited non-zero".to_string()]
+                },
+            ),
+            guided_sample_sub_gate(
+                TaskAcceptanceGateKind::Evidence,
+                passed,
+                vec![evidence_path.clone()],
+                if passed {
+                    Vec::new()
+                } else {
+                    vec!["evidence status is failed".to_string()]
+                },
+            ),
+        ],
+        required_evidence_types: vec!["command-output".to_string(), "validation".to_string()],
+        evidence_entries: Vec::new(),
+        blockers: if passed {
+            Vec::new()
+        } else {
+            vec!["guided sample validation failed".to_string()]
+        },
+        failure_reasons: if passed {
+            Vec::new()
+        } else {
+            vec!["guided sample validation command failed".to_string()]
+        },
+        next_steps: if passed {
+            vec!["查看 guided sample delivery record".to_string()]
+        } else {
+            vec!["修复 guided sample 配置后重试".to_string()]
+        },
+        traceability: TaskAcceptanceTraceability {
+            issue_id: GUIDED_SAMPLE_ISSUE_ID.to_string(),
+            run_id: GUIDED_SAMPLE_RUN_ID.to_string(),
+            session_id: None,
+            session_owner: Some("Runtime".to_string()),
+            provider: Some("agentflow-runtime".to_string()),
+            branch_name: None,
+            acceptance_decision_path: guided_sample_decision_path(),
+            evidence_path,
+            validation_path,
+            changed_files_path: None,
+            closeout_proof_path: guided_sample_receipt_path(),
+            pr_url: None,
+            merge_commit_sha: None,
+        },
+        checked_at: unix_timestamp_seconds(),
+    };
+    write_task_acceptance_gate_decision(workspace_root, GUIDED_SAMPLE_ISSUE_ID, &decision)
+}
+
+fn guided_sample_sub_gate(
+    gate: TaskAcceptanceGateKind,
+    passed: bool,
+    inputs: Vec<String>,
+    failure_reasons: Vec<String>,
+) -> TaskAcceptanceSubGateDecision {
+    TaskAcceptanceSubGateDecision {
+        gate,
+        passed,
+        inputs,
+        outputs: Vec::new(),
+        failure_reasons,
+        repair_suggestion: if passed {
+            "无需修复。".to_string()
+        } else {
+            "重新生成 readiness 证据并重跑 guided sample。".to_string()
+        },
+    }
+}
+
+fn write_guided_sample_delivery_record(
+    workspace_root: &Path,
+    selected_product_id: &str,
+    receipt_path: &str,
+    evidence_path: &str,
+    decision_path: &str,
+) -> Result<String> {
+    let delivery_path = format!("docs/delivery/guided-sample/{selected_product_id}.md");
+    let body = format!(
+        "# Guided Sample Delivery\n\n- Product: `{selected_product_id}`\n- Issue: `{GUIDED_SAMPLE_ISSUE_ID}`\n- Run: `{GUIDED_SAMPLE_RUN_ID}`\n- Receipt: `{receipt_path}`\n- Evidence: `{evidence_path}`\n- Decision: `{decision_path}`\n- Result: accepted\n"
+    );
+    write_text(workspace_root.join(&delivery_path), &body)?;
+    Ok(delivery_path)
+}
+
+fn unix_timestamp_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default()
+}
+
 fn write_json(path: impl AsRef<Path>, value: &impl Serialize) -> Result<()> {
     let path = path.as_ref();
     if let Some(parent) = path.parent() {
@@ -651,6 +888,14 @@ fn write_json(path: impl AsRef<Path>, value: &impl Serialize) -> Result<()> {
     }
     fs::write(path, serde_json::to_string_pretty(value)?)
         .with_context(|| format!("write {}", path.display()))
+}
+
+fn write_text(path: impl AsRef<Path>, value: &str) -> Result<()> {
+    let path = path.as_ref();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    fs::write(path, value).with_context(|| format!("write {}", path.display()))
 }
 
 fn sample_stage(
@@ -983,6 +1228,15 @@ mod tests {
             .as_ref()
             .is_some_and(|path| workspace.join(path).is_file()));
         assert!(receipt
+            .decision_path
+            .as_ref()
+            .is_some_and(|path| workspace.join(path).is_file()));
+        assert!(receipt
+            .delivery_path
+            .as_ref()
+            .is_some_and(|path| workspace.join(path).is_file()));
+        assert_eq!(receipt.decision_result, "accepted");
+        assert!(receipt
             .trace
             .iter()
             .any(|item| item == "guided-sample:completed"));
@@ -1011,6 +1265,46 @@ mod tests {
         assert!(receipt.deferred_reason.is_some());
         assert!(workspace.join(&receipt.receipt_path).is_file());
         assert!(receipt.evidence_path.is_none());
+        assert!(receipt.decision_path.is_none());
+        assert!(receipt.delivery_path.is_none());
+    }
+
+    #[test]
+    fn guided_sample_run_rejects_failed_evidence_without_delivery() {
+        let source = workspace_root();
+        let product_id = test_product_id();
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        create_product_workspace(
+            &source,
+            ProductWorkspaceCreationRequest {
+                project_name: "V121 Failed Guided Run".to_string(),
+                workspace_root: workspace.to_string_lossy().to_string(),
+                selected_product_id: product_id.clone(),
+                initial_goal: "Reject failed guided sample evidence.".to_string(),
+                creation_mode: ProductWorkspaceCreationMode::Create,
+            },
+        );
+
+        let receipt =
+            run_guided_sample(&workspace, product_id, "deterministic-fail").expect("failed sample");
+        assert_eq!(receipt.status, ProductOnboardingStatus::Retry);
+        assert_eq!(receipt.result, "failed");
+        assert_eq!(receipt.decision_result, "rejected");
+        assert!(receipt.failure_reason.is_some());
+        assert!(receipt
+            .evidence_path
+            .as_ref()
+            .is_some_and(|path| workspace.join(path).is_file()));
+        assert!(receipt
+            .decision_path
+            .as_ref()
+            .is_some_and(|path| workspace.join(path).is_file()));
+        assert!(receipt.delivery_path.is_none());
+        assert!(receipt
+            .trace
+            .iter()
+            .any(|item| item == "guided-sample:delivery-skipped"));
     }
 
     fn write_status(path: &Path, status: &str) {
