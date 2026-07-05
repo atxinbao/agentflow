@@ -54,6 +54,7 @@ fn main() {
             commands::runtime_api::load_product_workspace_projection,
             commands::runtime_api::load_first_run_onboarding_contract,
             commands::runtime_api::load_team_workflow_boundary_contract,
+            commands::runtime_api::load_project_sharing_read_model,
             commands::runtime_api::check_product_onboarding_readiness,
             commands::runtime_api::load_guided_sample_run_plan,
             commands::runtime_api::run_guided_sample,

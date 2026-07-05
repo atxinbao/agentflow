@@ -16,6 +16,7 @@ pub mod mapping;
 pub mod pack;
 pub mod product_onboarding;
 pub mod product_workspace;
+pub mod project_sharing;
 pub mod query;
 pub mod responses;
 pub mod spec_intake_productization;
@@ -95,6 +96,10 @@ pub use product_workspace::{
     ProductWorkspaceLocalDiagnostics, ProductWorkspacePathSet, ProductWorkspaceProductBinding,
     ProductWorkspaceProjection, ProductWorkspaceStatus, PRODUCT_WORKSPACE_CONTRACT_VERSION,
     PRODUCT_WORKSPACE_PROJECTION_VERSION,
+};
+pub use project_sharing::{
+    project_sharing_read_model, ProjectSharingField, ProjectSharingReadModel,
+    ProjectSharingTaskSummary, PROJECT_SHARING_READ_MODEL_VERSION,
 };
 pub use query::{
     get_audit_surface_view, get_core_file_backed_ontology_registry_view, get_delivery_package_view,
