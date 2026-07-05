@@ -186,6 +186,11 @@ pub fn api_plane_manifest() -> ApiPlaneManifest {
             "team_workflow_boundary_contract",
             "Team workflow boundary contract",
         ),
+        projection_query(
+            "projection.project-sharing",
+            "project_sharing_read_model",
+            "Project sharing read model",
+        ),
         event_api_readonly(
             "event.runtime.replay",
             "replay_runtime_events",

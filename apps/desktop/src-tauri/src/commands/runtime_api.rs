@@ -88,6 +88,17 @@ pub(crate) fn load_team_workflow_boundary_contract(
 }
 
 #[tauri::command]
+pub(crate) fn load_project_sharing_read_model(
+    project_root: String,
+    project_id: String,
+) -> Result<agentflow_runtime_api::ProjectSharingReadModel, String> {
+    Ok(agentflow_runtime_api::project_sharing_read_model(
+        project_root,
+        &project_id,
+    ))
+}
+
+#[tauri::command]
 pub(crate) fn check_product_onboarding_readiness(
     product_source_root: String,
     workspace_root: String,
@@ -335,8 +346,9 @@ mod tests {
     use super::{
         check_product_onboarding_readiness, create_product_workspace, load_api_plane_manifest,
         load_first_run_onboarding_contract, load_guided_sample_run_plan,
-        load_product_workspace_projection, load_team_workflow_boundary_contract,
-        preview_product_intent, run_first_run_product_onboarding, run_guided_sample,
+        load_product_workspace_projection, load_project_sharing_read_model,
+        load_team_workflow_boundary_contract, preview_product_intent,
+        run_first_run_product_onboarding, run_guided_sample,
     };
     use agentflow_runtime_api::{
         ProductIntentIntakeRequest, ProductWorkspaceCreationMode, ProductWorkspaceCreationRequest,
@@ -551,6 +563,20 @@ mod tests {
             .reference_app_consumption
             .iter()
             .any(|item| item.contains("Reference apps")));
+    }
+
+    #[test]
+    fn project_sharing_bridge_exposes_readonly_projection_view() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let view = load_project_sharing_read_model(
+            dir.path().to_string_lossy().to_string(),
+            "missing".to_string(),
+        )
+        .expect("load project sharing read model");
+
+        assert_eq!(view.status, "invalid");
+        assert!(view.readonly);
+        assert!(!view.authority);
     }
 
     #[test]
