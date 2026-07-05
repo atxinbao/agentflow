@@ -84,6 +84,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [086-industry-product-source-boundary-v1.md](086-industry-product-source-boundary-v1.md) | Industry Product Source Boundary |
 | [087-team-workflow-boundary-contract-v1.md](087-team-workflow-boundary-contract-v1.md) | Team Workflow Boundary Contract |
 | [088-project-sharing-read-model-v1.md](088-project-sharing-read-model-v1.md) | Project Sharing Read Model |
+| [089-role-permission-handoff-view-v1.md](089-role-permission-handoff-view-v1.md) | Role / Permission / Handoff View |
 
 ## Rules
 

@@ -19,6 +19,7 @@ pub mod product_workspace;
 pub mod project_sharing;
 pub mod query;
 pub mod responses;
+pub mod role_permission_handoff;
 pub mod spec_intake_productization;
 pub mod team_workflow;
 pub mod work_proposals;
@@ -110,6 +111,10 @@ pub use query::{
 pub use responses::{
     RuntimeCommandDecision, RuntimeCommandResponse, RuntimeCommandStatus,
     RuntimeCommandValidationReport, RUNTIME_COMMAND_API_VERSION,
+};
+pub use role_permission_handoff::{
+    role_permission_handoff_view, RolePermissionHandoffState, RolePermissionHandoffView,
+    RolePermissionNegativeFixture, RolePermissionViewRole, ROLE_PERMISSION_HANDOFF_VIEW_VERSION,
 };
 pub use spec_intake_productization::{
     confirm_product_spec_preview, materialize_confirmed_product_spec, preview_product_intent,
