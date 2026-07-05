@@ -550,7 +550,7 @@ mod tests {
         assert!(contract
             .reference_app_consumption
             .iter()
-            .any(|item| item.contains("Software Dev Reference App")));
+            .any(|item| item.contains("Reference apps")));
     }
 
     #[test]

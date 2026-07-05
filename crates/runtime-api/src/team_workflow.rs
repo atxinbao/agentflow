@@ -196,7 +196,7 @@ pub fn team_workflow_boundary_contract() -> TeamWorkflowBoundaryContract {
             write_boundary: "Runtime writes facts; Desktop renders readonly history.".to_string(),
         }],
         reference_app_consumption: vec![
-            "Software Dev Reference App may render these views as examples.".to_string(),
+            "Reference apps may render these views as product examples.".to_string(),
             "Reference App behavior must not become Core authority.".to_string(),
         ],
         core_neutrality_rules: vec![
