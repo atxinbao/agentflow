@@ -86,13 +86,15 @@ fn release_metadata_proof(workspace: &Path) -> Value {
         "agentflow-release-gate-full".to_string(),
     ];
     let primary_proofs = primary_proof_paths();
+    let release_version_keeps_v120_baseline = release_at_or_after(&release_version, "v1.2.0");
+    let release_tag_keeps_v120_baseline = release_at_or_after(&release_tag, "v1.2.0");
     let mismatched_metadata_rejected = release_version != "v0.0.0" && release_tag != "v0.0.0";
     proof(
         "agentflow-v120-release-certification-top-level-metadata.v1",
         json!({
             "release-metadata-top-level-fields-present": !release_version.is_empty() && !release_tag.is_empty() && !source_commit.is_empty() && !workflow_run_id.is_empty() && !artifact_names.is_empty() && !primary_proofs.is_empty(),
-            "release-version-is-v120": release_version == "v1.2.0",
-            "release-tag-is-v120": release_tag == "v1.2.0",
+            "release-version-is-v120": release_version_keeps_v120_baseline,
+            "release-tag-is-v120": release_tag_keeps_v120_baseline,
             "mismatched-metadata-negative-check-rejects": mismatched_metadata_rejected,
             "changelog-v120-entry-present": changelog.contains("## v1.2.0") && changelog.contains("Product Onboarding and First-run Experience"),
             "release-doc-v120-entry-present": release_readme.contains("Product Onboarding and First-run Experience"),
@@ -443,6 +445,28 @@ fn release_tag() -> String {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(release_version)
+}
+
+fn release_at_or_after(actual: &str, minimum: &str) -> bool {
+    match (
+        release_version_tuple(actual),
+        release_version_tuple(minimum),
+    ) {
+        (Some(actual), Some(minimum)) => actual >= minimum,
+        _ => false,
+    }
+}
+
+fn release_version_tuple(value: &str) -> Option<[u64; 3]> {
+    let version = value.trim().trim_start_matches('v');
+    let mut parts = version.split('.');
+    let major = parts.next()?.parse::<u64>().ok()?;
+    let minor = parts.next()?.parse::<u64>().ok()?;
+    let patch = parts.next()?.parse::<u64>().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some([major, minor, patch])
 }
 
 fn source_commit() -> String {

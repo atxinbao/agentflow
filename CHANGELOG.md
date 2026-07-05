@@ -7,13 +7,13 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.2.0/README.md](docs/delivery/releases/v1.2.0/README.md)
-- [docs/delivery/releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md](docs/delivery/releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.1/README.md](docs/delivery/releases/v1.2.1/README.md)
+- [docs/delivery/releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md](docs/delivery/releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md)
 
 上一发布基线：
 
-- [docs/delivery/releases/v1.1.9/README.md](docs/delivery/releases/v1.1.9/README.md)
-- [docs/delivery/releases/v1.1.9/AGENTFLOW_V1_1_9_SOFTWARE_DEV_REFERENCE_APP_BETA_CERTIFICATION_TASKS_V1.md](docs/delivery/releases/v1.1.9/AGENTFLOW_V1_1_9_SOFTWARE_DEV_REFERENCE_APP_BETA_CERTIFICATION_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.0/README.md](docs/delivery/releases/v1.2.0/README.md)
+- [docs/delivery/releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md](docs/delivery/releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md)
 
 下一版计划：
 
@@ -22,6 +22,22 @@
 ## Unreleased
 
 下一版保留给 Product console continuity after onboarding，不在本次 release 中认证。
+
+## v1.2.1 - 2026-07-05
+
+First-run Execution Closure and Team Workflow Boundary:
+
+- closed first-run Desktop execution gaps by routing onboarding through Runtime API commands;
+- bound Desktop onboarding readiness to Runtime read models instead of static UI assumptions;
+- converted the guided sample into an actual deterministic Runtime run with success and failure receipts;
+- exposed guided sample evidence / decision / delivery proof paths and kept failed runs repairable;
+- added first-run failure / retry UI state so failed sample runs do not silently become Done;
+- added the local/lightweight Team Workflow Boundary Contract and kept cloud multi-tenant, public commercial launch, payment and new industry work out of scope;
+- added Project Sharing Read Model for product, goal, roadmap, task, latest decision, delivery and feedback summaries;
+- added Role / Permission / Handoff View for Spec Agent, Build Agent, Audit Agent, Review Agent, Human Owner and Viewer;
+- added Team Delivery / Decision History View with decision, delivery, feedback route and optional audit sidecar entries;
+- added v1.2.1 release delivery baseline and GitHub issue traceability for `#863` through `#872`;
+- advanced workspace and desktop version metadata to `1.2.1`.
 
 ## v1.2.0 - 2026-07-05
 
