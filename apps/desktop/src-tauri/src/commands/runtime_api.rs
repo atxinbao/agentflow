@@ -82,6 +82,12 @@ pub(crate) fn load_first_run_onboarding_contract(
 }
 
 #[tauri::command]
+pub(crate) fn load_team_workflow_boundary_contract(
+) -> Result<agentflow_runtime_api::TeamWorkflowBoundaryContract, String> {
+    Ok(agentflow_runtime_api::team_workflow_boundary_contract())
+}
+
+#[tauri::command]
 pub(crate) fn check_product_onboarding_readiness(
     product_source_root: String,
     workspace_root: String,
@@ -329,8 +335,8 @@ mod tests {
     use super::{
         check_product_onboarding_readiness, create_product_workspace, load_api_plane_manifest,
         load_first_run_onboarding_contract, load_guided_sample_run_plan,
-        load_product_workspace_projection, preview_product_intent,
-        run_first_run_product_onboarding, run_guided_sample,
+        load_product_workspace_projection, load_team_workflow_boundary_contract,
+        preview_product_intent, run_first_run_product_onboarding, run_guided_sample,
     };
     use agentflow_runtime_api::{
         ProductIntentIntakeRequest, ProductWorkspaceCreationMode, ProductWorkspaceCreationRequest,
@@ -529,6 +535,22 @@ mod tests {
         assert!(workspace
             .join(&receipt.guided_sample_run_receipt.receipt_path)
             .is_file());
+    }
+
+    #[test]
+    fn team_workflow_boundary_bridge_exposes_local_contract() {
+        let contract =
+            load_team_workflow_boundary_contract().expect("load team workflow boundary contract");
+
+        assert_eq!(contract.release, "v1.2.1");
+        assert!(contract
+            .excluded_capabilities
+            .iter()
+            .any(|item| item.contains("cloud multi-tenant")));
+        assert!(contract
+            .reference_app_consumption
+            .iter()
+            .any(|item| item.contains("Reference apps")));
     }
 
     #[test]

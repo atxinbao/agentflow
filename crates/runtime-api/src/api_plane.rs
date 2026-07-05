@@ -181,6 +181,11 @@ pub fn api_plane_manifest() -> ApiPlaneManifest {
             "get_pack_industry_workbench_view",
             "Pack industry workbench view",
         ),
+        projection_query(
+            "projection.team-workflow-boundary",
+            "team_workflow_boundary_contract",
+            "Team workflow boundary contract",
+        ),
         event_api_readonly(
             "event.runtime.replay",
             "replay_runtime_events",

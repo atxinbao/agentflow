@@ -19,6 +19,7 @@ pub mod product_workspace;
 pub mod query;
 pub mod responses;
 pub mod spec_intake_productization;
+pub mod team_workflow;
 pub mod work_proposals;
 pub mod work_state;
 
@@ -113,6 +114,11 @@ pub use spec_intake_productization::{
     ProductSpecMaterializationReport, ProductSpecPreviewArtifact, ProductSpecPreviewDecision,
     ProductTaskPreview, PRODUCT_SPEC_CONFIRMATION_VERSION, PRODUCT_SPEC_INTAKE_VERSION,
     PRODUCT_SPEC_MATERIALIZATION_VERSION, PRODUCT_SPEC_PREVIEW_VERSION,
+};
+pub use team_workflow::{
+    team_workflow_boundary_contract, TeamWorkflowBoundaryContract, TeamWorkflowCapability,
+    TeamWorkflowDeliveryHistoryBoundary, TeamWorkflowFeedbackBoundary, TeamWorkflowHandoffBoundary,
+    TeamWorkflowPermissionView, TeamWorkflowRoleBoundary, TEAM_WORKFLOW_BOUNDARY_CONTRACT_VERSION,
 };
 pub use work_proposals::{
     write_work_action_proposals_from_spec_issue, WorkActionProposalContract,
