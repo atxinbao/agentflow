@@ -292,7 +292,12 @@ type ProductOnboardingRuntimeReceipt = {
     runPath: string;
     receiptPath: string;
     evidencePath?: string;
+    decisionPath?: string;
+    deliveryPath?: string;
     deferredReason?: string;
+    failureReason?: string;
+    decisionResult: string;
+    deliverySummary: string[];
   };
 };
 
@@ -2173,8 +2178,15 @@ function FirstRunModal({
                 <span>样例 Run</span>
                 <code>
                   {runtimeReceipt.guidedSampleRunReceipt.issueId} / {runtimeReceipt.guidedSampleRunReceipt.runId} ·{" "}
-                  {runtimeReceipt.guidedSampleRunReceipt.result}
+                  {runtimeReceipt.guidedSampleRunReceipt.result} · decision{" "}
+                  {runtimeReceipt.guidedSampleRunReceipt.decisionResult}
                 </code>
+                {runtimeReceipt.guidedSampleRunReceipt.deliveryPath ? (
+                  <>
+                    <span>样例交付</span>
+                    <code>{runtimeReceipt.guidedSampleRunReceipt.deliveryPath}</code>
+                  </>
+                ) : null}
               </div>
             ) : null}
           </section>

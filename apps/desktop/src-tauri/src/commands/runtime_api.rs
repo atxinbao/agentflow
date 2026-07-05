@@ -465,9 +465,18 @@ mod tests {
         )
         .expect("run guided sample");
         assert_eq!(run_receipt.result, "passed");
+        assert_eq!(run_receipt.decision_result, "accepted");
         assert!(workspace.join(&run_receipt.receipt_path).is_file());
         assert!(run_receipt
             .evidence_path
+            .as_ref()
+            .is_some_and(|path| workspace.join(path).is_file()));
+        assert!(run_receipt
+            .decision_path
+            .as_ref()
+            .is_some_and(|path| workspace.join(path).is_file()));
+        assert!(run_receipt
+            .delivery_path
             .as_ref()
             .is_some_and(|path| workspace.join(path).is_file()));
     }
@@ -510,6 +519,11 @@ mod tests {
             receipt.guided_sample_run_receipt.issue_id,
             "AF-GUIDED-SAMPLE-001"
         );
+        assert_eq!(
+            receipt.guided_sample_run_receipt.decision_result,
+            "accepted"
+        );
+        assert!(receipt.guided_sample_run_receipt.delivery_path.is_some());
         assert!(workspace
             .join(&receipt.guided_sample_run_receipt.receipt_path)
             .is_file());
