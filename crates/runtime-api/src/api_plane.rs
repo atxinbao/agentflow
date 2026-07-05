@@ -191,6 +191,11 @@ pub fn api_plane_manifest() -> ApiPlaneManifest {
             "project_sharing_read_model",
             "Project sharing read model",
         ),
+        projection_query(
+            "projection.role-permission-handoff",
+            "role_permission_handoff_view",
+            "Role permission handoff view",
+        ),
         event_api_readonly(
             "event.runtime.replay",
             "replay_runtime_events",
