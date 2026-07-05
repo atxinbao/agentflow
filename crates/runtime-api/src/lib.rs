@@ -81,10 +81,12 @@ pub use pack::{
 };
 pub use product_onboarding::{
     check_product_onboarding_readiness, first_run_onboarding_contract, guided_sample_run_plan,
-    ProductFirstRunOnboardingContract, ProductGuidedSampleRunPlan, ProductGuidedSampleStage,
-    ProductOnboardingReadinessReport, ProductOnboardingStateContract, ProductOnboardingStatus,
-    ProductReadinessItem, ProductReadinessStatus, PRODUCT_FIRST_RUN_ONBOARDING_CONTRACT_VERSION,
-    PRODUCT_GUIDED_SAMPLE_RUN_PLAN_VERSION, PRODUCT_ONBOARDING_READINESS_VERSION,
+    run_guided_sample, ProductFirstRunOnboardingContract, ProductGuidedSampleRunPlan,
+    ProductGuidedSampleRunReceipt, ProductGuidedSampleStage, ProductOnboardingReadinessReport,
+    ProductOnboardingStateContract, ProductOnboardingStatus, ProductReadinessItem,
+    ProductReadinessStatus, PRODUCT_FIRST_RUN_ONBOARDING_CONTRACT_VERSION,
+    PRODUCT_GUIDED_SAMPLE_RUN_PLAN_VERSION, PRODUCT_GUIDED_SAMPLE_RUN_RECEIPT_VERSION,
+    PRODUCT_ONBOARDING_READINESS_VERSION,
 };
 pub use product_workspace::{
     create_product_workspace, load_product_workspace_projection, ProductWorkspaceCreationMode,

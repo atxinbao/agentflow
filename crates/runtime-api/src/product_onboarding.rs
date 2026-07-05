@@ -2,6 +2,11 @@ use crate::product_workspace::{
     load_product_workspace_projection, ProductWorkspaceProjection, ProductWorkspaceStatus,
 };
 use agentflow_mcp::{McpProviderSmokeArtifact, McpProviderSmokeOutcome};
+use agentflow_task_artifacts::{
+    create_task_run, prepare_task_artifact_workspace, task_run_dir, update_task_run_status,
+    write_task_command_record, write_task_evidence, write_task_validation, TaskCommandInput,
+    TaskRunStatus,
+};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,6 +20,11 @@ pub const PRODUCT_FIRST_RUN_ONBOARDING_CONTRACT_VERSION: &str =
 pub const PRODUCT_ONBOARDING_READINESS_VERSION: &str = "agentflow-product-onboarding-readiness.v1";
 pub const PRODUCT_GUIDED_SAMPLE_RUN_PLAN_VERSION: &str =
     "agentflow-product-guided-sample-run-plan.v1";
+pub const PRODUCT_GUIDED_SAMPLE_RUN_RECEIPT_VERSION: &str =
+    "agentflow-product-guided-sample-run-receipt.v1";
+const GUIDED_SAMPLE_ISSUE_ID: &str = "AF-GUIDED-SAMPLE-001";
+const GUIDED_SAMPLE_RUN_ID: &str = "run-001";
+const GUIDED_SAMPLE_WORKFLOW_REF: &str = "workflow://agentflow/product-onboarding-guided-sample";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -142,6 +152,28 @@ pub struct ProductGuidedSampleRunPlan {
     pub failure_next_action: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductGuidedSampleRunReceipt {
+    pub version: String,
+    pub selected_product_id: String,
+    pub workspace_root_ref: String,
+    pub issue_id: String,
+    pub run_id: String,
+    pub command: String,
+    pub execution_mode: String,
+    pub status: ProductOnboardingStatus,
+    pub result: String,
+    pub run_path: String,
+    pub receipt_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deferred_reason: Option<String>,
+    pub created_paths: Vec<String>,
+    pub trace: Vec<String>,
+}
+
 pub fn first_run_onboarding_contract(
     selected_product_id: impl Into<String>,
 ) -> ProductFirstRunOnboardingContract {
@@ -229,6 +261,7 @@ pub fn first_run_onboarding_contract(
             "load_product_workspace_projection".to_string(),
             "check_product_onboarding_readiness".to_string(),
             "guided_sample_run_plan".to_string(),
+            "run_guided_sample".to_string(),
         ],
         authority_boundary:
             "Desktop shows projections and Runtime command results; users do not edit .agentflow facts."
@@ -426,6 +459,161 @@ pub fn guided_sample_run_plan(
     }
 }
 
+pub fn run_guided_sample(
+    workspace_root: impl AsRef<Path>,
+    selected_product_id: impl Into<String>,
+    execution_mode: impl Into<String>,
+) -> Result<ProductGuidedSampleRunReceipt> {
+    let workspace_root = workspace_root.as_ref();
+    let selected_product_id = selected_product_id.into();
+    let execution_mode = execution_mode.into();
+    let plan = guided_sample_run_plan(workspace_root, selected_product_id.clone());
+    let projection = load_product_workspace_projection(workspace_root);
+    let active_product_matches = projection
+        .active_product
+        .as_ref()
+        .is_some_and(|product| product.product_id == selected_product_id);
+    let execution_mode_allowed = execution_mode == "deterministic-dry-run";
+    let deferred_reason = if !active_product_matches {
+        Some(format!(
+            "selected product {selected_product_id} does not match the active workspace product"
+        ))
+    } else if plan.status != ProductOnboardingStatus::Ready {
+        Some("workspace projection is not ready for guided sample execution".to_string())
+    } else if !execution_mode_allowed {
+        Some(format!(
+            "execution mode {execution_mode} is not allowed for guided sample"
+        ))
+    } else {
+        None
+    };
+
+    prepare_task_artifact_workspace(workspace_root, GUIDED_SAMPLE_ISSUE_ID)?;
+    let run_directory = task_run_dir(workspace_root, GUIDED_SAMPLE_ISSUE_ID, GUIDED_SAMPLE_RUN_ID)?;
+    if run_directory.exists() {
+        fs::remove_dir_all(&run_directory)
+            .with_context(|| format!("reset guided sample run dir {}", run_directory.display()))?;
+    }
+    create_task_run(
+        workspace_root,
+        GUIDED_SAMPLE_ISSUE_ID,
+        GUIDED_SAMPLE_RUN_ID,
+        GUIDED_SAMPLE_WORKFLOW_REF,
+        None,
+    )?;
+
+    let run_path = guided_sample_run_path();
+    let receipt_path = guided_sample_receipt_path();
+    let mut created_paths = vec![run_path.clone()];
+    let trace;
+    let (status, result, evidence_path, deferred_reason) = if let Some(reason) = deferred_reason {
+        update_task_run_status(
+            workspace_root,
+            GUIDED_SAMPLE_ISSUE_ID,
+            GUIDED_SAMPLE_RUN_ID,
+            TaskRunStatus::Cancelled,
+        )?;
+        trace = vec![
+            "guided-sample:received".to_string(),
+            "guided-sample:deferred".to_string(),
+        ];
+        (
+            ProductOnboardingStatus::Deferred,
+            "deferred".to_string(),
+            None,
+            Some(reason),
+        )
+    } else {
+        update_task_run_status(
+            workspace_root,
+            GUIDED_SAMPLE_ISSUE_ID,
+            GUIDED_SAMPLE_RUN_ID,
+            TaskRunStatus::InProgress,
+        )?;
+        let command = write_task_command_record(
+            workspace_root,
+            GUIDED_SAMPLE_ISSUE_ID,
+            GUIDED_SAMPLE_RUN_ID,
+            TaskCommandInput {
+                label: "Run guided sample dry-run".to_string(),
+                program: "agentflow-runtime".to_string(),
+                args: vec![
+                    "guided-sample".to_string(),
+                    selected_product_id.clone(),
+                    execution_mode.clone(),
+                ],
+                exit_code: Some(0),
+                stdout: format!(
+                    "Guided sample deterministic dry-run completed for {selected_product_id}."
+                ),
+                stderr: String::new(),
+            },
+        )?;
+        update_task_run_status(
+            workspace_root,
+            GUIDED_SAMPLE_ISSUE_ID,
+            GUIDED_SAMPLE_RUN_ID,
+            TaskRunStatus::Validating,
+        )?;
+        let validation =
+            write_task_validation(workspace_root, GUIDED_SAMPLE_ISSUE_ID, GUIDED_SAMPLE_RUN_ID)?;
+        let _evidence = write_task_evidence(
+            workspace_root,
+            GUIDED_SAMPLE_ISSUE_ID,
+            GUIDED_SAMPLE_RUN_ID,
+            "Guided sample run completed with deterministic dry-run evidence.",
+        )?;
+        update_task_run_status(
+            workspace_root,
+            GUIDED_SAMPLE_ISSUE_ID,
+            GUIDED_SAMPLE_RUN_ID,
+            TaskRunStatus::Completed,
+        )?;
+        let evidence_path = Some(guided_sample_evidence_path());
+        created_paths.extend([
+            command.stdout_path,
+            command.stderr_path,
+            ".agentflow/tasks/AF-GUIDED-SAMPLE-001/runs/run-001/validation.json".to_string(),
+            evidence_path.clone().unwrap_or_else(|| validation_path()),
+        ]);
+        trace = vec![
+            "guided-sample:received".to_string(),
+            "guided-sample:run-created".to_string(),
+            format!("guided-sample:command-recorded:{}", command.command_id),
+            format!("guided-sample:validation:{}", validation.passed),
+            "guided-sample:evidence-written".to_string(),
+            "guided-sample:completed".to_string(),
+        ];
+        (
+            ProductOnboardingStatus::Completed,
+            "passed".to_string(),
+            evidence_path,
+            None,
+        )
+    };
+
+    created_paths.push(receipt_path.clone());
+    let receipt = ProductGuidedSampleRunReceipt {
+        version: PRODUCT_GUIDED_SAMPLE_RUN_RECEIPT_VERSION.to_string(),
+        selected_product_id,
+        workspace_root_ref: "workspace://root".to_string(),
+        issue_id: GUIDED_SAMPLE_ISSUE_ID.to_string(),
+        run_id: GUIDED_SAMPLE_RUN_ID.to_string(),
+        command: "run_guided_sample".to_string(),
+        execution_mode,
+        status,
+        result,
+        run_path,
+        receipt_path: receipt_path.clone(),
+        evidence_path,
+        deferred_reason,
+        created_paths,
+        trace,
+    };
+    write_json(workspace_root.join(&receipt_path), &receipt)?;
+    Ok(receipt)
+}
+
 fn state_contract(
     status: ProductOnboardingStatus,
     user_label: &str,
@@ -438,6 +626,31 @@ fn state_contract(
         runtime_meaning: runtime_meaning.to_string(),
         next_action: next_action.to_string(),
     }
+}
+
+fn guided_sample_run_path() -> String {
+    ".agentflow/tasks/AF-GUIDED-SAMPLE-001/runs/run-001/run.json".to_string()
+}
+
+fn guided_sample_receipt_path() -> String {
+    ".agentflow/tasks/AF-GUIDED-SAMPLE-001/runs/run-001/guided-sample-receipt.json".to_string()
+}
+
+fn validation_path() -> String {
+    ".agentflow/tasks/AF-GUIDED-SAMPLE-001/runs/run-001/validation.json".to_string()
+}
+
+fn guided_sample_evidence_path() -> String {
+    ".agentflow/tasks/AF-GUIDED-SAMPLE-001/evidence/evidence.json".to_string()
+}
+
+fn write_json(path: impl AsRef<Path>, value: &impl Serialize) -> Result<()> {
+    let path = path.as_ref();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    fs::write(path, serde_json::to_string_pretty(value)?)
+        .with_context(|| format!("write {}", path.display()))
 }
 
 fn sample_stage(
@@ -738,6 +951,66 @@ mod tests {
             .expected_trace
             .iter()
             .any(|item| item.contains("Executor")));
+    }
+
+    #[test]
+    fn guided_sample_run_writes_actual_receipt_and_task_evidence() {
+        let source = workspace_root();
+        let product_id = test_product_id();
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        create_product_workspace(
+            &source,
+            ProductWorkspaceCreationRequest {
+                project_name: "V121 Guided Run".to_string(),
+                workspace_root: workspace.to_string_lossy().to_string(),
+                selected_product_id: product_id.clone(),
+                initial_goal: "Run guided sample.".to_string(),
+                creation_mode: ProductWorkspaceCreationMode::Create,
+            },
+        );
+
+        let receipt =
+            run_guided_sample(&workspace, product_id, "deterministic-dry-run").expect("sample run");
+        assert_eq!(receipt.status, ProductOnboardingStatus::Completed);
+        assert_eq!(receipt.result, "passed");
+        assert_eq!(receipt.issue_id, GUIDED_SAMPLE_ISSUE_ID);
+        assert_eq!(receipt.run_id, GUIDED_SAMPLE_RUN_ID);
+        assert!(workspace.join(&receipt.run_path).is_file());
+        assert!(workspace.join(&receipt.receipt_path).is_file());
+        assert!(receipt
+            .evidence_path
+            .as_ref()
+            .is_some_and(|path| workspace.join(path).is_file()));
+        assert!(receipt
+            .trace
+            .iter()
+            .any(|item| item == "guided-sample:completed"));
+    }
+
+    #[test]
+    fn guided_sample_run_defers_invalid_sample_configuration() {
+        let source = workspace_root();
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        create_product_workspace(
+            &source,
+            ProductWorkspaceCreationRequest {
+                project_name: "V121 Invalid Guided Run".to_string(),
+                workspace_root: workspace.to_string_lossy().to_string(),
+                selected_product_id: test_product_id(),
+                initial_goal: "Reject mismatched guided sample.".to_string(),
+                creation_mode: ProductWorkspaceCreationMode::Create,
+            },
+        );
+
+        let receipt = run_guided_sample(&workspace, "unknown-product", "deterministic-dry-run")
+            .expect("deferred sample run");
+        assert_eq!(receipt.status, ProductOnboardingStatus::Deferred);
+        assert_eq!(receipt.result, "deferred");
+        assert!(receipt.deferred_reason.is_some());
+        assert!(workspace.join(&receipt.receipt_path).is_file());
+        assert!(receipt.evidence_path.is_none());
     }
 
     fn write_status(path: &Path, status: &str) {
