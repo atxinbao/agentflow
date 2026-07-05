@@ -21,6 +21,7 @@ pub mod query;
 pub mod responses;
 pub mod role_permission_handoff;
 pub mod spec_intake_productization;
+pub mod team_delivery_decision_history;
 pub mod team_workflow;
 pub mod work_proposals;
 pub mod work_state;
@@ -124,6 +125,10 @@ pub use spec_intake_productization::{
     ProductSpecMaterializationReport, ProductSpecPreviewArtifact, ProductSpecPreviewDecision,
     ProductTaskPreview, PRODUCT_SPEC_CONFIRMATION_VERSION, PRODUCT_SPEC_INTAKE_VERSION,
     PRODUCT_SPEC_MATERIALIZATION_VERSION, PRODUCT_SPEC_PREVIEW_VERSION,
+};
+pub use team_delivery_decision_history::{
+    team_delivery_decision_history_view, TeamAuditSidecar, TeamDeliveryDecisionHistoryView,
+    TeamFeedbackHook, TeamHistoryEntry, TeamHistorySummary, TEAM_DELIVERY_DECISION_HISTORY_VERSION,
 };
 pub use team_workflow::{
     team_workflow_boundary_contract, TeamWorkflowBoundaryContract, TeamWorkflowCapability,
