@@ -82,6 +82,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [084-invalid-missing-app-definition-handling-v1.md](084-invalid-missing-app-definition-handling-v1.md) | Invalid / missing app definition handling |
 | [085-feedback-surface-projection-freshness-receipts-v1.md](085-feedback-surface-projection-freshness-receipts-v1.md) | Feedback Surface projection freshness receipts |
 | [086-industry-product-source-boundary-v1.md](086-industry-product-source-boundary-v1.md) | Industry Product Source Boundary |
+| [087-team-workflow-boundary-contract-v1.md](087-team-workflow-boundary-contract-v1.md) | Team Workflow Boundary Contract |
 
 ## Rules
 
