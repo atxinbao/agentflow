@@ -11,7 +11,7 @@ use agentflow_task_artifacts::{
 };
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -179,7 +179,11 @@ pub struct ProductGuidedSampleRunReceipt {
     pub deferred_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_attempt_path: Option<String>,
+    pub retryable: bool,
     pub decision_result: String,
+    pub next_actions: Vec<String>,
     pub delivery_summary: Vec<String>,
     pub created_paths: Vec<String>,
     pub trace: Vec<String>,
@@ -529,6 +533,7 @@ pub fn run_guided_sample(
         deferred_reason,
         failure_reason,
         decision_result,
+        next_actions,
         delivery_summary,
     ) = if let Some(reason) = deferred_reason {
         update_task_run_status(
@@ -550,6 +555,7 @@ pub fn run_guided_sample(
             Some(reason),
             None,
             "deferred".to_string(),
+            vec!["刷新 readiness 证据后重试引导样例。".to_string()],
             Vec::new(),
         )
     } else {
@@ -684,6 +690,14 @@ pub fn run_guided_sample(
             },
             decision.outcome.as_str().to_string(),
             if validation.passed {
+                vec!["查看样例交付。".to_string()]
+            } else {
+                vec![
+                    "查看失败原因。".to_string(),
+                    "修复配置后重新运行引导样例。".to_string(),
+                ]
+            },
+            if validation.passed {
                 vec![
                     "Guided sample evidence accepted.".to_string(),
                     "Delivery record written for first-run review.".to_string(),
@@ -697,6 +711,24 @@ pub fn run_guided_sample(
         )
     };
 
+    let retryable = matches!(
+        status,
+        ProductOnboardingStatus::Retry
+            | ProductOnboardingStatus::Repairable
+            | ProductOnboardingStatus::Deferred
+            | ProductOnboardingStatus::Blocked
+    );
+    let retry_attempt_path = if retryable {
+        Some(guided_sample_retry_attempt_path(
+            status.as_str(),
+            unix_timestamp_seconds(),
+        ))
+    } else {
+        None
+    };
+    if let Some(path) = retry_attempt_path.clone() {
+        created_paths.push(path);
+    }
     created_paths.push(receipt_path.clone());
     let receipt = ProductGuidedSampleRunReceipt {
         version: PRODUCT_GUIDED_SAMPLE_RUN_RECEIPT_VERSION.to_string(),
@@ -715,12 +747,18 @@ pub fn run_guided_sample(
         delivery_path,
         deferred_reason,
         failure_reason,
+        retry_attempt_path,
+        retryable,
         decision_result,
+        next_actions,
         delivery_summary,
         created_paths,
         trace,
     };
     write_json(workspace_root.join(&receipt_path), &receipt)?;
+    if let Some(path) = receipt.retry_attempt_path.as_deref() {
+        write_guided_sample_retry_attempt(workspace_root, path, &receipt)?;
+    }
     Ok(receipt)
 }
 
@@ -756,6 +794,33 @@ fn guided_sample_evidence_path() -> String {
 
 fn guided_sample_decision_path() -> String {
     ".agentflow/tasks/AF-GUIDED-SAMPLE-001/acceptance-gate.json".to_string()
+}
+
+fn guided_sample_retry_attempt_path(status: &str, checked_at: u64) -> String {
+    format!(".agentflow/tasks/AF-GUIDED-SAMPLE-001/retry-attempts/{checked_at}-{status}.json")
+}
+
+fn write_guided_sample_retry_attempt(
+    workspace_root: &Path,
+    path: &str,
+    receipt: &ProductGuidedSampleRunReceipt,
+) -> Result<()> {
+    write_json(
+        workspace_root.join(path),
+        &json!({
+            "version": "agentflow-guided-sample-retry-attempt.v1",
+            "issueId": receipt.issue_id,
+            "runId": receipt.run_id,
+            "status": receipt.status.as_str(),
+            "result": receipt.result,
+            "receiptPath": receipt.receipt_path,
+            "failureReason": receipt.failure_reason,
+            "deferredReason": receipt.deferred_reason,
+            "decisionResult": receipt.decision_result,
+            "nextActions": receipt.next_actions.clone(),
+            "createdAt": unix_timestamp_seconds(),
+        }),
+    )
 }
 
 fn write_guided_sample_decision(
@@ -1236,6 +1301,12 @@ mod tests {
             .as_ref()
             .is_some_and(|path| workspace.join(path).is_file()));
         assert_eq!(receipt.decision_result, "accepted");
+        assert!(!receipt.retryable);
+        assert!(receipt.retry_attempt_path.is_none());
+        assert!(receipt
+            .next_actions
+            .iter()
+            .any(|item| item.contains("交付")));
         assert!(receipt
             .trace
             .iter()
@@ -1267,6 +1338,15 @@ mod tests {
         assert!(receipt.evidence_path.is_none());
         assert!(receipt.decision_path.is_none());
         assert!(receipt.delivery_path.is_none());
+        assert!(receipt.retryable);
+        assert!(receipt
+            .retry_attempt_path
+            .as_ref()
+            .is_some_and(|path| workspace.join(path).is_file()));
+        assert!(receipt
+            .next_actions
+            .iter()
+            .any(|item| item.contains("重试")));
     }
 
     #[test]
@@ -1301,6 +1381,15 @@ mod tests {
             .as_ref()
             .is_some_and(|path| workspace.join(path).is_file()));
         assert!(receipt.delivery_path.is_none());
+        assert!(receipt.retryable);
+        assert!(receipt
+            .retry_attempt_path
+            .as_ref()
+            .is_some_and(|path| workspace.join(path).is_file()));
+        assert!(receipt
+            .next_actions
+            .iter()
+            .any(|item| item.contains("失败原因")));
         assert!(receipt
             .trace
             .iter()

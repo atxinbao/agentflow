@@ -432,10 +432,39 @@
   font-size: 12px;
 }
 
+.v16-runtime-receipt.status-retry,
+.v16-runtime-receipt.status-deferred {
+  border-color: rgba(217, 119, 6, 0.32);
+  background: rgba(217, 119, 6, 0.07);
+}
+
+.v16-runtime-receipt.status-blocked {
+  border-color: rgba(220, 38, 38, 0.32);
+  background: rgba(220, 38, 38, 0.07);
+}
+
+.v16-runtime-receipt.status-completed {
+  border-color: rgba(21, 128, 61, 0.28);
+  background: rgba(21, 128, 61, 0.06);
+}
+
 .v16-runtime-receipt code {
   color: var(--v16-ink, #172033);
   white-space: normal;
   word-break: break-word;
+}
+
+.v16-runtime-receipt ul {
+  display: grid;
+  gap: 4px;
+  margin: 2px 0;
+  padding-left: 16px;
+  color: var(--v16-ink, #172033);
+}
+
+.v16-runtime-receipt .af-action-button {
+  justify-self: start;
+  margin-top: 2px;
 }
 
 .v16-agent-brief {
