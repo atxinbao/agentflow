@@ -110,6 +110,17 @@ pub(crate) fn load_role_permission_handoff_view(
 }
 
 #[tauri::command]
+pub(crate) fn load_team_delivery_decision_history_view(
+    project_root: String,
+    project_id: String,
+) -> Result<agentflow_runtime_api::TeamDeliveryDecisionHistoryView, String> {
+    Ok(agentflow_runtime_api::team_delivery_decision_history_view(
+        project_root,
+        &project_id,
+    ))
+}
+
+#[tauri::command]
 pub(crate) fn check_product_onboarding_readiness(
     product_source_root: String,
     workspace_root: String,
@@ -358,8 +369,9 @@ mod tests {
         check_product_onboarding_readiness, create_product_workspace, load_api_plane_manifest,
         load_first_run_onboarding_contract, load_guided_sample_run_plan,
         load_product_workspace_projection, load_project_sharing_read_model,
-        load_role_permission_handoff_view, load_team_workflow_boundary_contract,
-        preview_product_intent, run_first_run_product_onboarding, run_guided_sample,
+        load_role_permission_handoff_view, load_team_delivery_decision_history_view,
+        load_team_workflow_boundary_contract, preview_product_intent,
+        run_first_run_product_onboarding, run_guided_sample,
     };
     use agentflow_runtime_api::{
         ProductIntentIntakeRequest, ProductWorkspaceCreationMode, ProductWorkspaceCreationRequest,
@@ -606,6 +618,22 @@ mod tests {
             .negative_fixtures
             .iter()
             .any(|fixture| fixture.fixture_id == "invalid-role"));
+    }
+
+    #[test]
+    fn team_delivery_decision_history_bridge_exposes_invalid_missing_projection() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let view = load_team_delivery_decision_history_view(
+            dir.path().to_string_lossy().to_string(),
+            "missing".to_string(),
+        )
+        .expect("load team delivery decision history view");
+
+        assert_eq!(view.status, "invalid");
+        assert!(view.readonly);
+        assert!(!view.authority);
+        assert!(!view.projection_backed);
+        assert!(!view.audit_sidecar.blocking);
     }
 
     #[test]

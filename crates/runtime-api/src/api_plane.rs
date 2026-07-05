@@ -196,6 +196,11 @@ pub fn api_plane_manifest() -> ApiPlaneManifest {
             "role_permission_handoff_view",
             "Role permission handoff view",
         ),
+        projection_query(
+            "projection.team-delivery-decision-history",
+            "team_delivery_decision_history_view",
+            "Team delivery and decision history view",
+        ),
         event_api_readonly(
             "event.runtime.replay",
             "replay_runtime_events",
