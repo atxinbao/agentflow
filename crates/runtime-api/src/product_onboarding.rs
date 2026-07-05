@@ -22,6 +22,7 @@ pub enum ProductOnboardingStatus {
     Start,
     Blocked,
     Repairable,
+    Deferred,
     Ready,
     Completed,
     Retry,
@@ -33,6 +34,7 @@ impl ProductOnboardingStatus {
             Self::Start => "start",
             Self::Blocked => "blocked",
             Self::Repairable => "repairable",
+            Self::Deferred => "deferred",
             Self::Ready => "ready",
             Self::Completed => "completed",
             Self::Retry => "retry",
@@ -175,6 +177,12 @@ pub fn first_run_onboarding_contract(
                 "按提示补齐环境证据",
             ),
             state_contract(
+                ProductOnboardingStatus::Deferred,
+                "暂缓执行",
+                "工作区证据存在但有 stale / skipped 状态，Runtime 暂不进入样例执行。",
+                "刷新 readiness 证据后重新检测",
+            ),
+            state_contract(
                 ProductOnboardingStatus::Ready,
                 "可以开始",
                 "产品工作区、投影、provider、connector 和 skill readiness 都可用。",
@@ -311,10 +319,21 @@ pub fn check_product_onboarding_readiness(
         .map(|item| item.next_action.clone())
         .collect::<Vec<_>>();
     let ready = items.iter().all(|item| item.status.ready());
+    let has_deferred_evidence = items
+        .iter()
+        .any(|item| matches!(item.status, ProductReadinessStatus::Stale));
+    let has_repairable_gap = items.iter().any(|item| {
+        matches!(
+            item.status,
+            ProductReadinessStatus::Missing | ProductReadinessStatus::Unknown
+        )
+    });
     let status = if ready {
         ProductOnboardingStatus::Ready
     } else if !blockers.is_empty() {
         ProductOnboardingStatus::Blocked
+    } else if has_deferred_evidence && !has_repairable_gap {
+        ProductOnboardingStatus::Deferred
     } else {
         ProductOnboardingStatus::Repairable
     };
@@ -610,6 +629,7 @@ mod tests {
         );
         assert!(states.contains(&"start"));
         assert!(states.contains(&"blocked"));
+        assert!(states.contains(&"deferred"));
         assert!(states.contains(&"ready"));
         assert!(states.contains(&"completed"));
         assert!(states.contains(&"retry"));
@@ -658,6 +678,42 @@ mod tests {
     }
 
     #[test]
+    fn readiness_reports_deferred_for_stale_runtime_evidence() {
+        let source = workspace_root();
+        let product_id = test_product_id();
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        create_product_workspace(
+            &source,
+            ProductWorkspaceCreationRequest {
+                project_name: "V121 Deferred".to_string(),
+                workspace_root: workspace.to_string_lossy().to_string(),
+                selected_product_id: product_id.clone(),
+                initial_goal: "Check deferred readiness.".to_string(),
+                creation_mode: ProductWorkspaceCreationMode::Create,
+            },
+        );
+
+        write_provider_smoke_with_outcome(&workspace, 2, McpProviderSmokeOutcome::Skipped);
+        write_status(&workspace.join(connector_status_ref(&product_id)), "ready");
+        write_status(
+            &workspace.join(".agentflow/state/mcp/skills/build-agent.json"),
+            "ready",
+        );
+
+        let deferred = check_product_onboarding_readiness(&source, &workspace, product_id);
+        assert_eq!(deferred.status, ProductOnboardingStatus::Deferred);
+        assert!(deferred
+            .items
+            .iter()
+            .any(|item| item.id == "provider" && item.status == ProductReadinessStatus::Stale));
+        assert!(deferred
+            .next_actions
+            .iter()
+            .any(|action| action.contains("Provider")));
+    }
+
+    #[test]
     fn guided_sample_plan_is_ready_only_for_ready_workspace() {
         let source = workspace_root();
         let product_id = test_product_id();
@@ -692,16 +748,33 @@ mod tests {
     }
 
     fn write_provider_smoke(root: &Path, created_at: u64) {
+        write_provider_smoke_with_outcome(root, created_at, McpProviderSmokeOutcome::Passed);
+    }
+
+    fn write_provider_smoke_with_outcome(
+        root: &Path,
+        created_at: u64,
+        outcome: McpProviderSmokeOutcome,
+    ) {
         let mut health = McpProviderStatus::new(McpProviderKind::Codex, created_at);
-        health.status = McpProviderStatusCode::Ready;
-        health.installed = true;
-        health.authenticated = Some(true);
-        health.capabilities = vec![McpCapability::new("provider.codex.launch", true)];
+        let passed = outcome == McpProviderSmokeOutcome::Passed;
+        health.status = if passed {
+            McpProviderStatusCode::Ready
+        } else {
+            McpProviderStatusCode::Unavailable
+        };
+        health.installed = passed;
+        health.authenticated = Some(passed);
+        health.capabilities = vec![McpCapability::new("provider.codex.launch", passed)];
         let artifact = McpProviderSmokeArtifact {
             version: MCP_PROVIDER_SMOKE_ARTIFACT_VERSION.to_string(),
             provider: "codex".to_string(),
-            outcome: McpProviderSmokeOutcome::Passed,
-            reason: "test smoke passed".to_string(),
+            outcome,
+            reason: if passed {
+                "test smoke passed".to_string()
+            } else {
+                "test smoke skipped".to_string()
+            },
             health,
             launch_request_path: None,
             session_id: Some("session-v120".to_string()),

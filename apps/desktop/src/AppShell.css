@@ -368,6 +368,59 @@
   color: var(--v16-danger, #dc2626);
 }
 
+.v16-readiness-summary {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--v16-line, #d7e0ee);
+  border-radius: 8px;
+  background: var(--v16-surface-muted, #f7f9fc);
+  color: var(--v16-muted, #43546d);
+  font-size: 12px;
+}
+
+.v16-readiness-summary.status-ready {
+  border-color: rgba(21, 128, 61, 0.28);
+  background: rgba(21, 128, 61, 0.06);
+}
+
+.v16-readiness-summary.status-blocked {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.v16-readiness-summary.status-repairable,
+.v16-readiness-summary.status-deferred {
+  border-color: rgba(217, 119, 6, 0.3);
+  background: rgba(217, 119, 6, 0.07);
+}
+
+.v16-readiness-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v16-readiness-summary-head span {
+  color: var(--v16-subtle, #7c8797);
+}
+
+.v16-readiness-summary-head strong {
+  color: var(--v16-ink, #172033);
+}
+
+.v16-readiness-summary p {
+  margin: 0;
+}
+
+.v16-readiness-summary ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
+}
+
 .v16-runtime-receipt {
   display: grid;
   gap: 6px;

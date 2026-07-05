@@ -288,6 +288,9 @@ try {
   assert.ok(appEntry.includes('data-agentflow-ux="v16"'));
   assert.ok(appEntry.includes('data-agentflow-screen="login"'));
   assert.ok(appEntry.includes('data-agentflow-screen="first-run"'));
+  assert.ok(appEntry.includes('data-agentflow-readiness-source="runtime-read-model"'));
+  assert.ok(appEntry.includes('data-agentflow-readiness-fixtures="ready repairable blocked deferred"'));
+  assert.ok(appEntry.includes('data-agentflow-readiness-panel="runtime-read-model"'));
   assert.ok(appEntry.includes('data-agentflow-page="workbench"'));
   assert.ok(appEntry.includes('data-agentflow-page="spec"'));
   assert.ok(appEntry.includes('data-agentflow-page="tasks"'));

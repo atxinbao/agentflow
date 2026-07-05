@@ -565,7 +565,26 @@ function firstRunRuntimeFeedback(receipt: ProductOnboardingRuntimeReceipt | null
   if (readinessStatus === "repairable") {
     return receipt.readiness.nextActions[0] ?? "Runtime readiness 需要补齐，请按提示修复后重试。";
   }
+  if (readinessStatus === "deferred") {
+    return receipt.readiness.nextActions[0] ?? "Runtime readiness 已暂缓，请刷新 readiness 证据后重试。";
+  }
   return `Runtime readiness：${readinessStatus}`;
+}
+
+function firstRunReadinessStatusLabel(status: string) {
+  if (status === "ready") {
+    return "可以开始";
+  }
+  if (status === "blocked") {
+    return "无法继续";
+  }
+  if (status === "repairable") {
+    return "需要补齐";
+  }
+  if (status === "deferred") {
+    return "暂缓执行";
+  }
+  return status;
 }
 
 function firstRunRuntimeChecklist(receipt: ProductOnboardingRuntimeReceipt | null, projectReady: boolean) {
@@ -2054,6 +2073,9 @@ function FirstRunModal({
     <div
       className="v16-modal-backdrop"
       data-agentflow-read-model="product-onboarding"
+      data-agentflow-readiness-fixtures="ready repairable blocked deferred"
+      data-agentflow-readiness-source="runtime-read-model"
+      data-agentflow-readiness-status={runtimeReceipt?.readiness.status ?? "not-loaded"}
       data-agentflow-runtime-command="create_product_workspace check_product_onboarding_readiness load_guided_sample_run_plan"
       data-agentflow-screen="first-run"
     >
@@ -2102,6 +2124,32 @@ function FirstRunModal({
                 </li>
               ))}
             </ul>
+            {runtimeReceipt ? (
+              <div
+                className={`v16-readiness-summary status-${runtimeReceipt.readiness.status}`}
+                data-agentflow-readiness-panel="runtime-read-model"
+              >
+                <div className="v16-readiness-summary-head">
+                  <span>Runtime Readiness</span>
+                  <strong>{firstRunReadinessStatusLabel(runtimeReceipt.readiness.status)}</strong>
+                </div>
+                <p>{firstRunRuntimeFeedback(runtimeReceipt)}</p>
+                {runtimeReceipt.readiness.nextActions.length ? (
+                  <ul aria-label="Readiness 下一步">
+                    {runtimeReceipt.readiness.nextActions.map((action) => (
+                      <li key={action}>{action}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {runtimeReceipt.readiness.blockers.length ? (
+                  <ul aria-label="Readiness 阻断原因">
+                    {runtimeReceipt.readiness.blockers.map((blocker) => (
+                      <li key={blocker}>{blocker}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
             {runtimeReceipt ? (
               <div className="v16-runtime-receipt" data-agentflow-runtime-receipt={runtimeReceipt.version}>
                 <span>Runtime 调用</span>
