@@ -314,6 +314,7 @@ V122_MILESTONE_CLOSEOUT_REPAIR_PATH="$RUNTIME_DIR/v122-milestone-closeout-repair
 V122_COMMERCIAL_PROOF_VERSION_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/v122-commercial-proof-version-negative-fixture.json"
 V123_COMMERCIAL_PRODUCT_READ_MODEL_CONTRACT_PATH="$RUNTIME_DIR/v123-commercial-product-read-model-contract.json"
 V123_PAID_REPORT_FLOW_PREFLIGHT_CONTRACT_PATH="$RUNTIME_DIR/v123-paid-report-flow-preflight-contract.json"
+V123_MANAGED_PROJECT_FLOW_COMMERCIAL_BOUNDARY_PATH="$RUNTIME_DIR/v123-managed-project-flow-commercial-boundary.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -540,6 +541,7 @@ proof_chain = [
     {"stage": "release.v122-commercial-proof-version-negative-fixture", "label": "V122 Commercial Proof Version Negative Fixture"},
     {"stage": "release.v123-commercial-product-read-model-contract", "label": "V123 Commercial Product Read Model Contract"},
     {"stage": "release.v123-paid-report-flow-preflight-contract", "label": "V123 Paid Report Flow Preflight Contract"},
+    {"stage": "release.v123-managed-project-flow-commercial-boundary", "label": "V123 Managed Project Flow Commercial Boundary"},
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
@@ -679,6 +681,7 @@ runtime_artifacts = [
     {"path": "runtime/v122-commercial-proof-version-negative-fixture.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-commercial-proof-version-negative-fixture.json").is_file()},
     {"path": "runtime/v123-commercial-product-read-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-commercial-product-read-model-contract.json").is_file()},
     {"path": "runtime/v123-paid-report-flow-preflight-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-paid-report-flow-preflight-contract.json").is_file()},
+    {"path": "runtime/v123-managed-project-flow-commercial-boundary.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-managed-project-flow-commercial-boundary.json").is_file()},
     {"path": "runtime/core-decision-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json").is_file()},
     {"path": "runtime/core-decision-input-binding.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json").is_file()},
     {"path": "runtime/core-decision-outcome-transitions.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json").is_file()},
@@ -3421,6 +3424,195 @@ PY
   fi
 
   record_stage "$stage" "passed" "$(basename "$V123_PAID_REPORT_FLOW_PREFLIGHT_CONTRACT_PATH")"
+}
+
+run_v123_managed_project_flow_commercial_boundary_gate() {
+  local stage="release.v123-managed-project-flow-commercial-boundary"
+  record_stage "$stage" "started" "$V123_MANAGED_PROJECT_FLOW_COMMERCIAL_BOUNDARY_PATH"
+
+  if ! python3 - \
+    "$V123_MANAGED_PROJECT_FLOW_COMMERCIAL_BOUNDARY_PATH" \
+    "$ROOT" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_raw, root_raw = sys.argv[1:]
+out_path = pathlib.Path(out_raw)
+root = pathlib.Path(root_raw)
+doc_path = root / "docs" / "architecture" / "097-managed-project-flow-commercial-boundary-v1.md"
+text = doc_path.read_text(encoding="utf-8") if doc_path.is_file() else ""
+
+required_concepts = [
+    "project workspace",
+    "roles",
+    "tasks",
+    "evidence",
+    "decisions",
+    "delivery history",
+    "feedback",
+]
+required_fields = [
+    "version",
+    "productId",
+    "flowType",
+    "projectWorkspaceRef",
+    "goalRef",
+    "roles",
+    "taskGraphRef",
+    "evidencePolicy",
+    "decisionPolicy",
+    "deliveryHistoryRef",
+    "feedbackRoute",
+    "entitlementState",
+    "availability",
+    "unavailableReason",
+    "runtimeCommandPolicy",
+    "runtimeAdmissionRequired",
+    "coreRuntimeDecisionAuthority",
+    "deliveryShape",
+]
+paid_report_only_fields = ["reportInputRef", "orderIntentId", "reportDefinitionId", "reportDeliveryPromise"]
+
+fixtures = [
+    {
+        "id": "software-dev-managed-project",
+        "input": {
+            "productId": "software-dev",
+            "flowType": "managed-project-flow",
+            "projectWorkspaceRef": "workspace",
+            "taskGraphRef": "tasks",
+            "deliveryHistoryRef": "delivery-history",
+            "entitlementState": "active",
+            "authorityFields": ["projectWorkspaceRef", "goalRef", "taskGraphRef"],
+        },
+        "expected": {"availability": "available", "runtimeCommandPolicy": "propose-to-runtime", "unavailableReason": "none", "flowContract": "managed-project-flow", "coreRuntimeDecisionAuthority": False},
+    },
+    {
+        "id": "paid-report-field-as-authority",
+        "input": {
+            "productId": "software-dev",
+            "flowType": "managed-project-flow",
+            "projectWorkspaceRef": None,
+            "taskGraphRef": None,
+            "deliveryHistoryRef": None,
+            "entitlementState": "active",
+            "authorityFields": ["reportInputRef", "reportDefinitionId", "reportDeliveryPromise"],
+        },
+        "expected": {"availability": "invalid", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "paid-report-field-not-managed-project-authority", "flowContract": "managed-project-flow", "coreRuntimeDecisionAuthority": False},
+    },
+    {
+        "id": "wrong-flow-contract",
+        "input": {
+            "productId": "software-dev",
+            "flowType": "paid-report-flow",
+            "projectWorkspaceRef": "workspace",
+            "taskGraphRef": "tasks",
+            "deliveryHistoryRef": "delivery-history",
+            "entitlementState": "active",
+            "authorityFields": ["projectWorkspaceRef"],
+        },
+        "expected": {"availability": "invalid", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "wrong-flow-contract", "flowContract": "paid-report-flow", "coreRuntimeDecisionAuthority": False},
+    },
+    {
+        "id": "disabled-entitlement",
+        "input": {
+            "productId": "software-dev",
+            "flowType": "managed-project-flow",
+            "projectWorkspaceRef": "workspace",
+            "taskGraphRef": "tasks",
+            "deliveryHistoryRef": "delivery-history",
+            "entitlementState": "disabled",
+            "authorityFields": ["projectWorkspaceRef", "taskGraphRef"],
+        },
+        "expected": {"availability": "rejected", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "disabled-entitlement", "flowContract": "managed-project-flow", "coreRuntimeDecisionAuthority": False},
+    },
+    {
+        "id": "deferred-entitlement",
+        "input": {
+            "productId": "software-dev",
+            "flowType": "managed-project-flow",
+            "projectWorkspaceRef": "workspace",
+            "taskGraphRef": "tasks",
+            "deliveryHistoryRef": "delivery-history",
+            "entitlementState": "deferred",
+            "authorityFields": ["projectWorkspaceRef", "taskGraphRef"],
+        },
+        "expected": {"availability": "deferred", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "deferred-entitlement", "flowContract": "managed-project-flow", "coreRuntimeDecisionAuthority": False},
+    },
+]
+
+def evaluate(case):
+    data = case["input"]
+    if data["flowType"] != "managed-project-flow":
+        return {"availability": "invalid", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "wrong-flow-contract", "flowContract": data["flowType"], "coreRuntimeDecisionAuthority": False}
+    if any(field in paid_report_only_fields for field in data["authorityFields"]) and not data.get("projectWorkspaceRef"):
+        return {"availability": "invalid", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "paid-report-field-not-managed-project-authority", "flowContract": "managed-project-flow", "coreRuntimeDecisionAuthority": False}
+    if data["entitlementState"] == "disabled":
+        return {"availability": "rejected", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "disabled-entitlement", "flowContract": "managed-project-flow", "coreRuntimeDecisionAuthority": False}
+    if data["entitlementState"] == "deferred":
+        return {"availability": "deferred", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "deferred-entitlement", "flowContract": "managed-project-flow", "coreRuntimeDecisionAuthority": False}
+    if not data.get("projectWorkspaceRef") or not data.get("taskGraphRef") or not data.get("deliveryHistoryRef"):
+        return {"availability": "invalid", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "missing-project-authority", "flowContract": "managed-project-flow", "coreRuntimeDecisionAuthority": False}
+    return {"availability": "available", "runtimeCommandPolicy": "propose-to-runtime", "unavailableReason": "none", "flowContract": "managed-project-flow", "coreRuntimeDecisionAuthority": False}
+
+fixture_results = []
+for case in fixtures:
+    actual = evaluate(case)
+    fixture_results.append({
+        **case,
+        "actual": actual,
+        "passed": actual == case["expected"],
+    })
+
+coverage = {
+    "docExists": doc_path.is_file(),
+    "versionedBoundaryDefined": "agentflow-managed-project-flow-commercial-boundary.v1" in text,
+    "softwareDevReferenceProduct": "Software Dev 是 Managed Project Flow Reference Product" in text,
+    "softwareDevMapsToManagedProject": "managed-project-flow" in text and "paid-report-flow" in text and "不能被解释成" in text,
+    "requiredConceptsDefined": all(concept in text for concept in required_concepts),
+    "requiredFieldsDefined": all(f'"{field}"' in text for field in required_fields),
+    "entitlementAffectsProductSurfaceOnly": "只能影响 Product surface" in text and "不能改变 Core Runtime" in text,
+    "coreRuntimeIndustryNeutral": "Core Runtime" in text and "industry-neutral" in text,
+    "paidReportOnlyFieldsRejected": all(field in text for field in paid_report_only_fields) and "不能使用 Paid Report-only 字段作为 authority" in text,
+    "negativeFixtureRejectsPaidReportAuthority": next(result for result in fixture_results if result["id"] == "paid-report-field-as-authority")["passed"],
+    "nonGoalsExplicit": all(value in text for value in ["new Software Dev implementation work", "payment provider", "new industry app"]),
+}
+
+failed_coverage = [key for key, passed in coverage.items() if not passed]
+failed_fixtures = [result["id"] for result in fixture_results if not result["passed"]]
+payload = {
+    "version": "agentflow-v123-managed-project-flow-commercial-boundary.v1",
+    "status": "passed" if not failed_coverage and not failed_fixtures else "failed",
+    "sourceIssue": "#909",
+    "boundaryVersion": "agentflow-managed-project-flow-commercial-boundary.v1",
+    "proofPath": "runtime/v123-managed-project-flow-commercial-boundary.json",
+    "referenceProduct": "software-dev",
+    "flowType": "managed-project-flow",
+    "rejectedFlowType": "paid-report-flow",
+    "concepts": required_concepts,
+    "authority": {
+        "softwareDevIsManagedProjectFlow": True,
+        "coreRuntimeIndustryNeutral": True,
+        "entitlementChangesProductSurfaceOnly": True,
+        "paidReportFieldsAreNotManagedProjectAuthority": True,
+    },
+    "fixtures": fixture_results,
+    "coverage": coverage,
+    "failedCoverageKeys": failed_coverage,
+    "failedFixtureIds": failed_fixtures,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit(f"Managed Project Flow commercial boundary gate failed: coverage={failed_coverage}, fixtures={failed_fixtures}")
+PY
+  then
+    fail_stage "$stage" "V123 managed project flow commercial boundary failed"
+  fi
+
+  record_stage "$stage" "passed" "$(basename "$V123_MANAGED_PROJECT_FLOW_COMMERCIAL_BOUNDARY_PATH")"
 }
 
 run_source_agent_entry_gate() {
@@ -16038,6 +16230,7 @@ PY
   run_v122_commercial_proof_version_negative_fixture
   run_v123_commercial_product_read_model_contract_gate
   run_v123_paid_report_flow_preflight_contract_gate
+  run_v123_managed_project_flow_commercial_boundary_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
