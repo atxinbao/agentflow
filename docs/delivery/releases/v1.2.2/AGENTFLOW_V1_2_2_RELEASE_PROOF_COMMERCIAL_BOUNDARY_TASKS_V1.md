@@ -66,6 +66,25 @@ primaryProofs
 runtimeReleaseCertificationPath = runtime/v122-release-certification.json
 ```
 
+## Post-release Closeout Repair
+
+V123-003 records the post-release closeout repair for this release. The v1.2.2
+tag, GitHub Release, and source archive remain unchanged.
+
+The repair closes the live `v1.2.2` GitHub milestone after all V122 issues were
+already closed, then records the live provider proof in the v1.2.3 release gate:
+
+```text
+repairProof: runtime/v122-milestone-closeout-repair.json
+milestoneNumber: 17
+milestoneState: closed
+openIssues: 0
+closedAt: 2026-07-06T17:40:17Z
+```
+
+This repair hardens the closeout proof chain without rewriting the published
+v1.2.2 release.
+
 ## Excluded Work
 
 The following remain outside `v1.2.2`:

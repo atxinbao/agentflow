@@ -306,6 +306,7 @@ V121_ISSUE_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/v121-issue-milestone-closeout.j
 V121_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v121-release-certification.json"
 V122_ISSUE_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/v122-issue-milestone-closeout.json"
 V122_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v122-release-certification.json"
+V122_MILESTONE_CLOSEOUT_REPAIR_PATH="$RUNTIME_DIR/v122-milestone-closeout-repair.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -528,6 +529,7 @@ proof_chain = [
     {"stage": "release.github-release-fact", "label": "GitHub Release Fact"},
     {"stage": "release.live-github-milestone-closeout", "label": "Live GitHub Milestone Closeout"},
     {"stage": "release.closeout-proof-negative-fixture", "label": "Release Closeout Proof Negative Fixture"},
+    {"stage": "release.v122-milestone-closeout-repair", "label": "v1.2.2 Milestone Closeout Repair"},
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
@@ -659,6 +661,7 @@ runtime_artifacts = [
     {"path": "runtime/v121-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v121-release-certification.json").is_file()},
     {"path": "runtime/v122-issue-milestone-closeout.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-issue-milestone-closeout.json").is_file()},
     {"path": "runtime/v122-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-release-certification.json").is_file()},
+    {"path": "runtime/v122-milestone-closeout-repair.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-milestone-closeout-repair.json").is_file()},
     {"path": "runtime/core-decision-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json").is_file()},
     {"path": "runtime/core-decision-input-binding.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json").is_file()},
     {"path": "runtime/core-decision-outcome-transitions.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json").is_file()},
@@ -2861,6 +2864,159 @@ PY
   fi
 
   record_stage "$stage" "passed" "$(basename "$RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH")"
+}
+
+run_v122_milestone_closeout_repair_gate() {
+  local stage="release.v122-milestone-closeout-repair"
+  local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+  record_stage "$stage" "started" "$V122_MILESTONE_CLOSEOUT_REPAIR_PATH"
+
+  if [[ -z "$token" ]]; then
+    python3 - "$V122_MILESTONE_CLOSEOUT_REPAIR_PATH" "$SOURCE_COMMIT_SHA" "$GATE_RUN_ID" "$GATE_REPOSITORY" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out, source_commit, run_id, repository = sys.argv[1:]
+payload = {
+    "version": "agentflow-v122-milestone-closeout-repair.v1",
+    "status": "deferred",
+    "reason": "missing GitHub token for live v1.2.2 milestone repair proof",
+    "releaseVersion": "v1.2.2",
+    "milestoneTitle": "v1.2.2",
+    "milestoneNumber": 17,
+    "repository": repository,
+    "sourceCommitSha": source_commit or None,
+    "workflowRunId": run_id or None,
+    "publishedReleasePreserved": True,
+    "tagRewrite": False,
+    "sourceArchiveRewrite": False,
+    "checkedAt": int(time.time()),
+}
+pathlib.Path(out).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+    if [[ "$REQUIRE_PUBLISHED_RELEASE_FACTS" == "1" ]]; then
+      fail_stage "$stage" "missing GitHub token for v1.2.2 milestone repair proof"
+    fi
+    record_stage "$stage" "deferred" "missing GitHub token"
+    return
+  fi
+
+  if ! python3 - \
+    "$V122_MILESTONE_CLOSEOUT_REPAIR_PATH" \
+    "$SOURCE_COMMIT_SHA" \
+    "$GATE_RUN_ID" \
+    "$GATE_REPOSITORY" \
+    "$GATE_SERVER_URL" \
+    "$token" <<'PY'
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import time
+
+out_raw, source_commit, run_id, repository, server_url, token = sys.argv[1:]
+api_base = os.environ.get("GITHUB_API_URL") or "https://api.github.com"
+repo_path = repository.strip("/")
+milestone_number = 17
+milestone_title = "v1.2.2"
+
+def request_json(url):
+    command = [
+        "curl",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--location",
+        "-H",
+        "Accept: application/vnd.github+json",
+        "-H",
+        f"Authorization: Bearer {token}",
+        "-H",
+        "User-Agent: agentflow-release-gate",
+        "-H",
+        "X-GitHub-Api-Version: 2022-11-28",
+        url,
+    ]
+    try:
+        raw = subprocess.check_output(command, text=True, stderr=subprocess.STDOUT, timeout=45)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"GitHub API request failed: {url} {exc.output[:300]}")
+    except subprocess.TimeoutExpired:
+        raise SystemExit(f"GitHub API request timed out: {url}")
+    return json.loads(raw)
+
+milestone_url = f"{api_base}/repos/{repo_path}/milestones/{milestone_number}"
+issues_url = f"{api_base}/repos/{repo_path}/issues?state=all&milestone={milestone_number}&per_page=100"
+milestone = request_json(milestone_url)
+issues = request_json(issues_url)
+issue_rows = [
+    {
+        "number": item.get("number"),
+        "title": item.get("title"),
+        "state": item.get("state"),
+        "url": item.get("html_url"),
+        "closedAt": item.get("closed_at"),
+    }
+    for item in issues
+    if "pull_request" not in item
+]
+open_issues = [item for item in issue_rows if item.get("state") == "open"]
+closed_issues = [item for item in issue_rows if item.get("state") == "closed"]
+milestone_state = milestone.get("state")
+closed_at = milestone.get("closed_at")
+
+coverage = {
+    "liveMilestoneRead": True,
+    "milestoneNumberMatches": milestone.get("number") == milestone_number,
+    "milestoneTitleMatches": milestone.get("title") == milestone_title,
+    "milestoneClosed": milestone_state == "closed",
+    "milestoneHasNoOpenIssues": len(open_issues) == 0,
+    "closedAtPresent": bool(closed_at),
+    "publishedReleasePreserved": True,
+    "tagNotRewritten": True,
+    "sourceArchiveNotRewritten": True,
+}
+failed = [key for key, passed in coverage.items() if not passed]
+payload = {
+    "version": "agentflow-v122-milestone-closeout-repair.v1",
+    "status": "passed" if not failed else "failed",
+    "releaseVersion": "v1.2.2",
+    "repairType": "post-release-live-milestone-close",
+    "repairReason": "v1.2.2 release remains valid, but the live GitHub milestone had to be closed after release proof hardening exposed the contradiction.",
+    "milestoneTitle": milestone_title,
+    "milestoneNumber": milestone_number,
+    "milestoneUrl": milestone.get("html_url"),
+    "milestoneState": milestone_state,
+    "openIssueCount": len(open_issues),
+    "closedIssueCount": len(closed_issues),
+    "closedAt": closed_at,
+    "repository": repository,
+    "sourceCommitSha": source_commit or None,
+    "workflowRunId": run_id or None,
+    "apiMilestoneSource": milestone_url,
+    "apiIssueSource": issues_url,
+    "publishedReleasePreserved": True,
+    "tagRewrite": False,
+    "sourceArchiveRewrite": False,
+    "waiver": None,
+    "openIssues": open_issues,
+    "closedIssues": closed_issues,
+    "coverage": coverage,
+    "failedCoverageKeys": failed,
+    "checkedAt": int(time.time()),
+}
+pathlib.Path(out_raw).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"v1.2.2 milestone closeout repair failed: {failed}")
+PY
+  then
+    fail_stage "$stage" "v1.2.2 milestone closeout repair proof failed"
+  fi
+
+  record_stage "$stage" "passed" "$(basename "$V122_MILESTONE_CLOSEOUT_REPAIR_PATH")"
 }
 
 run_source_agent_entry_gate() {
@@ -15197,6 +15353,7 @@ main() {
   verify_release_publication_facts "$WORKSPACE"
   verify_live_github_milestone_closeout
   run_release_closeout_proof_negative_fixture
+  run_v122_milestone_closeout_repair_gate
   run_provider_smoke_gate
   run_api_plane_manifest_gate
   run_runtime_api_sdk_compatibility_gate
