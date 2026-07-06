@@ -16,9 +16,9 @@ use std::{
 
 fn main() -> Result<()> {
     let args = env::args().skip(1).collect::<Vec<_>>();
-    if args.len() != 14 {
+    if args.len() != 15 {
         bail!(
-            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <desktop-team-surface> <commercial-boundary> <license-entitlement> <issue-milestone-closeout> <release-certification>"
+            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <desktop-team-surface> <commercial-boundary> <license-entitlement> <paid-feature> <issue-milestone-closeout> <release-certification>"
         );
     }
 
@@ -35,6 +35,7 @@ fn main() -> Result<()> {
     let desktop_surface = desktop_team_workflow_surface_binding_proof(&workspace)?;
     let commercial_boundary = commercial_product_layer_boundary_proof(&workspace)?;
     let license_entitlement = license_entitlement_boundary_proof(&workspace)?;
+    let paid_feature = paid_feature_boundary_proof(&workspace)?;
     let closeout = issue_milestone_closeout_proof(&workspace);
 
     for (path, payload) in [
@@ -48,7 +49,8 @@ fn main() -> Result<()> {
         (&proof_paths[8], &desktop_surface),
         (&proof_paths[9], &commercial_boundary),
         (&proof_paths[10], &license_entitlement),
-        (&proof_paths[11], &closeout),
+        (&proof_paths[11], &paid_feature),
+        (&proof_paths[12], &closeout),
     ] {
         write_json(path, payload)?;
     }
@@ -68,9 +70,10 @@ fn main() -> Result<()> {
         &desktop_surface,
         &commercial_boundary,
         &license_entitlement,
+        &paid_feature,
         &closeout,
     ]);
-    write_json(&proof_paths[12], &certification)?;
+    write_json(&proof_paths[13], &certification)?;
 
     Ok(())
 }
@@ -424,6 +427,86 @@ fn license_entitlement_boundary_proof(workspace: &Path) -> Result<Value> {
     ))
 }
 
+fn paid_feature_boundary_proof(workspace: &Path) -> Result<Value> {
+    let doc_path = workspace.join("docs/architecture/093-paid-feature-boundary-v1.md");
+    let doc = read_text(&doc_path)?;
+    let concepts = [
+        "Feature",
+        "Feature Tier",
+        "Feature Access",
+        "Upgrade Required",
+        "Availability Reason",
+        "Runtime Admission",
+    ];
+    let tiers = ["free", "paid", "deferred", "unavailable"];
+    let reasons = [
+        "upgrade-required",
+        "entitlement-expired",
+        "entitlement-deferred",
+        "feature-unavailable",
+        "feature-unknown",
+    ];
+    let fixtures = [
+        ("free", "disabled", "allowed", "allowed-to-propose"),
+        ("paid", "active", "allowed", "allowed-to-propose"),
+        (
+            "paid",
+            "trial",
+            "allowed-with-trial-boundary",
+            "allowed-to-propose",
+        ),
+        ("paid", "expired", "rejected", "blocked-before-runtime"),
+        ("paid", "disabled", "rejected", "blocked-before-runtime"),
+        ("paid", "deferred", "deferred", "blocked-before-runtime"),
+        ("paid", "unknown", "invalid", "blocked-before-runtime"),
+        ("deferred", "deferred", "deferred", "blocked-before-runtime"),
+        (
+            "unavailable",
+            "active",
+            "rejected",
+            "blocked-before-runtime",
+        ),
+    ];
+
+    Ok(proof(
+        "agentflow-v121-paid-feature-boundary.v1",
+        json!({
+            "tracked-architecture-contract-present": doc.contains("# Paid Feature Boundary v1"),
+            "paid-feature-concepts-defined": concepts.iter().all(|concept| doc.contains(concept)),
+            "feature-tiers-covered": tiers.iter().all(|tier| doc.contains(tier)),
+            "paid-feature-is-product-layer-read-model": doc.contains("agentflow-paid-feature-read-model.v1") && doc.contains("Product-layer read model"),
+            "paid-only-without-entitlement-blocked-before-runtime": doc.contains("blocked-before-runtime") && doc.contains("不能进入 Core Runtime command admission"),
+            "ui-explains-unavailable-or-upgrade-required": reasons.iter().all(|reason| doc.contains(reason)),
+            "runtime-admission-still-required": doc.contains("Core Runtime 仍必须重新执行自己的 command admission"),
+            "no-payment-provider-required": doc.contains("payment provider") && doc.contains("不实现"),
+            "testable-fixtures-present": fixtures.iter().all(|(tier, entitlement, policy, admission)| {
+                doc.contains(tier)
+                    && doc.contains(entitlement)
+                    && doc.contains(policy)
+                    && doc.contains(admission)
+            }),
+        }),
+        json!({
+            "paidFeatureBoundary": {
+                "docPath": "docs/architecture/093-paid-feature-boundary-v1.md",
+                "concepts": concepts,
+                "tiers": tiers,
+                "reasons": reasons,
+                "fixtures": fixtures.iter().map(|(tier, entitlement, policy, admission)| json!({
+                    "featureTier": tier,
+                    "entitlementState": entitlement,
+                    "submitPolicy": policy,
+                    "runtimeAdmission": admission,
+                })).collect::<Vec<_>>(),
+                "sourceIssue": "#890",
+                "authority": false,
+                "runtimeAdmissionBypass": false,
+                "paymentProviderRequired": false,
+            }
+        }),
+    ))
+}
+
 fn issue_milestone_closeout_proof(workspace: &Path) -> Value {
     let release_readme =
         read_text(workspace.join("docs/delivery/releases/v1.2.1/README.md")).unwrap_or_default();
@@ -504,16 +587,17 @@ fn release_certification_proof(proofs: &[&Value]) -> Value {
         "agentflow-v121-release-certification.v1",
         json!({
             "all-primary-proofs-passed": proofs.iter().all(|proof| proof.get("status").and_then(Value::as_str) == Some("passed")),
-            "primary-proof-count": primary_proofs.len() == 13,
+            "primary-proof-count": primary_proofs.len() == 14,
             "primary-proofs-are-v121": primary_proofs.iter().all(|path| path.contains("runtime/v121-")),
             "first-run-execution-certified": true,
             "team-workflow-boundary-certified": true,
             "commercial-boundary-certified": true,
             "license-entitlement-boundary-certified": true,
+            "paid-feature-boundary-certified": true,
             "not-v120-historical-certification": true,
         }),
         json!({
-            "releaseScope": "first-run-execution-closure-team-workflow-and-commercial-boundary",
+            "releaseScope": "first-run-execution-closure-team-workflow-commercial-and-paid-feature-boundary",
             "historicalV120Only": false,
             "commercialLaunch": false,
         }),
@@ -615,6 +699,7 @@ fn primary_proof_paths() -> Vec<String> {
         "runtime/v121-desktop-team-workflow-surface-binding.json".to_string(),
         "runtime/v121-commercial-boundary-contract.json".to_string(),
         "runtime/v121-license-entitlement-boundary.json".to_string(),
+        "runtime/v121-paid-feature-boundary.json".to_string(),
         "runtime/v121-issue-milestone-closeout.json".to_string(),
         "runtime/v121-release-certification.json".to_string(),
     ]
@@ -656,6 +741,7 @@ fn issue_refs_for_proof(path: &Path) -> Vec<&'static str> {
         "desktop-team-workflow-surface-binding" => vec!["#887"],
         "commercial-boundary-contract" => vec!["#888"],
         "license-entitlement-boundary" => vec!["#889"],
+        "paid-feature-boundary" => vec!["#890"],
         "issue-milestone-closeout" => (863..=872)
             .map(|issue| match issue {
                 863 => "#863",
