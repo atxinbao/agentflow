@@ -76,12 +76,14 @@ fn release_metadata_proof(workspace: &Path) -> Value {
     let source_commit = source_commit();
     let workflow_run_id = workflow_run_id();
     let primary_proofs = primary_proof_paths();
+    let release_version_keeps_v121_baseline = release_at_or_after(&release_version, "v1.2.1");
+    let release_tag_keeps_v121_baseline = release_at_or_after(&release_tag, "v1.2.1");
 
     proof(
         "agentflow-v121-release-certification-top-level-metadata.v1",
         json!({
-            "release-version-is-v121": release_version == "v1.2.1",
-            "release-tag-is-v121": release_tag == "v1.2.1",
+            "release-version-keeps-v121-baseline": release_version_keeps_v121_baseline,
+            "release-tag-keeps-v121-baseline": release_tag_keeps_v121_baseline,
             "source-commit-present": !source_commit.is_empty(),
             "workflow-run-id-present": !workflow_run_id.is_empty(),
             "primary-proofs-are-v121": primary_proofs.iter().all(|path| path.contains("runtime/v121-")),
@@ -327,6 +329,28 @@ fn release_tag() -> String {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(release_version)
+}
+
+fn release_at_or_after(actual: &str, minimum: &str) -> bool {
+    match (
+        release_version_tuple(actual),
+        release_version_tuple(minimum),
+    ) {
+        (Some(actual), Some(minimum)) => actual >= minimum,
+        _ => false,
+    }
+}
+
+fn release_version_tuple(value: &str) -> Option<[u64; 3]> {
+    let version = value.trim().trim_start_matches('v');
+    let mut parts = version.split('.');
+    let major = parts.next()?.parse::<u64>().ok()?;
+    let minor = parts.next()?.parse::<u64>().ok()?;
+    let patch = parts.next()?.parse::<u64>().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some([major, minor, patch])
 }
 
 fn source_commit() -> String {
