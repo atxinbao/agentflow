@@ -1,27 +1,43 @@
 # Changelog
 
-更新日期：2026-07-06
+更新日期：2026-07-07
 执行者：Codex
 
 ## Current Baseline
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.2.2/README.md](docs/delivery/releases/v1.2.2/README.md)
-- [docs/delivery/releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md](docs/delivery/releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.3/README.md](docs/delivery/releases/v1.2.3/README.md)
+- [docs/delivery/releases/v1.2.3/AGENTFLOW_V1_2_3_RELEASE_CLOSEOUT_COMMERCIAL_TRACEABILITY_TASKS_V1.md](docs/delivery/releases/v1.2.3/AGENTFLOW_V1_2_3_RELEASE_CLOSEOUT_COMMERCIAL_TRACEABILITY_TASKS_V1.md)
 
 上一发布基线：
 
-- [docs/delivery/releases/v1.2.1/README.md](docs/delivery/releases/v1.2.1/README.md)
-- [docs/delivery/releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md](docs/delivery/releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.2/README.md](docs/delivery/releases/v1.2.2/README.md)
+- [docs/delivery/releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md](docs/delivery/releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md)
 
 下一版计划：
 
-- v1.2.x Product console continuity after commercial boundary preflight。
+- v1.2.x Product console continuity after release closeout and commercial traceability hardening。
 
 ## Unreleased
 
-下一版保留给 Product console continuity after commercial boundary preflight，不在本次 release 中认证。
+下一版保留给 Product console continuity after release closeout and commercial traceability hardening，不在本次 release 中认证。
+
+## v1.2.3 - 2026-07-07
+
+Release Closeout Proof Hardening and Commercial Surface Traceability:
+
+- added live GitHub milestone closeout certification for release proof that depends on remote issue / milestone state;
+- added a negative fixture so release closeout proof cannot self-assert remote provider state;
+- recorded the repaired `v1.2.2` milestone closeout as a v1.2.3 release-gate proof without rewriting the published v1.2.2 tag;
+- added a v1.2.2 commercial proof version negative fixture to reject wrong-version commercial primary proofs;
+- added commercial product read model contract proof for projection-only commercial boundary facts;
+- added paid report flow preflight proof so paid-only flows fail before Runtime execution when entitlement or paid feature state is invalid;
+- added managed project flow commercial boundary proof so managed project workflows cannot gain paid report authority;
+- added Desktop commercial boundary surface proof for read-only disabled / deferred / managed-project commercial states;
+- added commercial boundary negative fixtures covering unavailable, invalid and wrong-authority states;
+- added v1.2.3 release delivery baseline and GitHub issue traceability for `#903` through `#912`;
+- advanced workspace and desktop version metadata to `1.2.3`.
 
 ## v1.2.2 - 2026-07-06
 
