@@ -130,6 +130,7 @@ jobs:
 
       - name: Release gate E2E
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ steps.release_meta.outputs.release_version }}
           RELEASE_TAG_NAME: ${{ steps.release_meta.outputs.release_tag }}
           RELEASE_URL: ${{ steps.release_meta.outputs.release_url }}
