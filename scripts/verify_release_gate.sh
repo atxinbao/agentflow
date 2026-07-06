@@ -640,6 +640,7 @@ runtime_artifacts = [
     {"path": "runtime/v100-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v100-release-certification.json").is_file()},
     {"path": "runtime/release-provenance.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-provenance.json").is_file()},
     {"path": "runtime/v107-release-provenance-handoff.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json").is_file()},
+    {"path": "runtime/v121-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v121-release-certification.json").is_file()},
     {"path": "runtime/core-decision-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json").is_file()},
     {"path": "runtime/core-decision-input-binding.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json").is_file()},
     {"path": "runtime/core-decision-outcome-transitions.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json").is_file()},
@@ -726,6 +727,7 @@ v106_release_certification = load_json(pathlib.Path(summary_json_path.parent / "
 v107_release_provenance_handoff = load_json(pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json")) or {}
 v107_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v107-release-certification.json")) or {}
 v108_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v108-release-certification.json")) or {}
+v121_release_certification = load_json(pathlib.Path(summary_json_path.parent / "runtime/v121-release-certification.json")) or {}
 core_decision_model_contract = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json")) or {}
 core_decision_input_binding = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json")) or {}
 core_decision_outcome_transitions = load_json(pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json")) or {}
@@ -1315,6 +1317,23 @@ authority_boundary_certification = {
     "runtimeApiRemainsAuthorityBoundary": True,
     "eventStoreRemainsDurableAuthority": True,
 }
+root_release_tag = release_tag_name or release.get("tagName") or release_version
+root_source_commit = source_commit_sha
+root_workflow_run_id = gate_run_id or "local-workflow-run"
+root_artifact_names = ["agentflow-release-certification", "agentflow-release-gate-full"]
+root_primary_proofs = v121_release_certification.get("primaryProofs") or []
+v121_root_runtime_metadata_matches = (
+    v121_release_certification.get("releaseVersion") == release_version
+    and v121_release_certification.get("releaseTag") == root_release_tag
+    and v121_release_certification.get("sourceCommit") == root_source_commit
+    and v121_release_certification.get("workflowRunId") == root_workflow_run_id
+    and v121_release_certification.get("artifactNames") == root_artifact_names
+    and v121_release_certification.get("primaryProofs") == root_primary_proofs
+)
+if current_status == "passed" and (not v121_root_runtime_metadata_matches or not root_primary_proofs):
+    current_status = "failed"
+    current_stage = "v121-root-runtime-metadata"
+    current_message = "root certification metadata does not match runtime/v121-release-certification.json"
 
 checklist = [
     {
@@ -1376,6 +1395,11 @@ checklist = [
         "id": "runtime-fixture-gate",
         "label": "release gate 跑本地 runtime fixture gate",
         "passed": stage_status.get("release.publish.refresh") == "passed",
+    },
+    {
+        "id": "v121-root-runtime-metadata-match",
+        "label": "root certification exposes top-level metadata matching runtime/v121-release-certification.json",
+        "passed": v121_root_runtime_metadata_matches and bool(root_primary_proofs),
     },
     {
         "id": "external-readable-proof",
@@ -1762,8 +1786,16 @@ release_gate_run = current_gate_run if gate_event_name == "release" else None
 
 certification_payload = {
     "version": "agentflow-release-gate-certification.v1",
+    "status": current_status,
     "releaseVersion": release_version,
-    "tagName": release_tag_name or release.get("tagName"),
+    "releaseTag": root_release_tag,
+    "sourceCommit": root_source_commit,
+    "workflowRunId": root_workflow_run_id,
+    "artifactNames": root_artifact_names,
+    "primaryProofs": root_primary_proofs,
+    "runtimeReleaseCertificationPath": "runtime/v121-release-certification.json" if v121_release_certification else None,
+    "rootRuntimeMetadataMatches": v121_root_runtime_metadata_matches,
+    "tagName": root_release_tag,
     "sourceCommitSha": source_commit_sha,
     "gateWorkflow": "release-gate",
     "gateClass": "runtime-fixture-gate",
@@ -2126,6 +2158,8 @@ for item in runtime_artifacts:
     mark = "present" if item["exists"] else "missing"
     cert_lines.append(f"- `{item['path']}`: `{mark}`")
 cert_md_path.write_text("\n".join(cert_lines) + "\n", encoding="utf-8")
+if current_stage == "v121-root-runtime-metadata":
+    raise SystemExit(current_message or "root certification metadata does not match runtime certification")
 PY
 }
 
@@ -14159,13 +14193,28 @@ primary_file_names = {path.name for path in artifact_paths}
 manifest_index = manifest.get("payload", {}).get("primaryProofIndex", [])
 v120_artifact_names = {name for name in primary_file_names if name.startswith("v120-")}
 
+def version_tuple(value):
+    version = (value or "").strip().lstrip("v")
+    parts = version.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        return tuple(int(part) for part in parts)
+    except ValueError:
+        return None
+
+def version_at_or_after(value, minimum):
+    value_tuple = version_tuple(value)
+    minimum_tuple = version_tuple(minimum)
+    return value_tuple is not None and minimum_tuple is not None and value_tuple >= minimum_tuple
+
 checks = {
     "all-v121-artifacts-passed": all(payload.get("status") == "passed" for payload in artifacts),
-    "release-version-v121": release_version == "v1.2.1" and release_tag == "v1.2.1",
-    "workspace-version-v121": cargo_version == "1.2.1",
-    "desktop-package-version-v121": package_json.get("version") == "1.2.1",
-    "desktop-lock-version-v121": package_lock.get("version") == "1.2.1" and package_lock.get("packages", {}).get("", {}).get("version") == "1.2.1",
-    "tauri-version-v121": tauri.get("version") == "1.2.1",
+    "release-version-keeps-v121": version_at_or_after(release_version, "v1.2.1") and version_at_or_after(release_tag, "v1.2.1"),
+    "workspace-version-keeps-v121": version_at_or_after(cargo_version, "1.2.1"),
+    "desktop-package-version-keeps-v121": version_at_or_after(package_json.get("version"), "1.2.1"),
+    "desktop-lock-version-keeps-v121": version_at_or_after(package_lock.get("version"), "1.2.1") and version_at_or_after(package_lock.get("packages", {}).get("", {}).get("version"), "1.2.1"),
+    "tauri-version-keeps-v121": version_at_or_after(tauri.get("version"), "1.2.1"),
     "changelog-current-v121": "## v1.2.1" in changelog and "First-run Execution Closure and Team Workflow Boundary" in changelog,
     "delivery-current-v121": "releases/v1.2.1/README.md" in delivery and "当前发布基线" in delivery,
     "release-readme-v121": "First-run Execution Closure and Team Workflow Boundary" in release_readme,
@@ -14175,7 +14224,7 @@ checks = {
     "primary-proofs-are-v121": bool(primary_proofs) and all(pathlib.Path(proof).name.startswith("v121-") for proof in primary_proofs),
     "v120-proofs-not-accepted": not v120_artifact_names,
     "manifest-primary-proof-index": bool(manifest_index) and all(item.get("sha256") and item.get("bytes", 0) > 0 and item.get("proofRole") and pathlib.Path(item.get("path", "")).name.startswith("v121-") for item in manifest_index),
-    "metadata-proof": artifacts[0].get("coverage", {}).get("release-version-is-v121") is True and artifacts[0].get("coverage", {}).get("primary-proofs-are-v121") is True,
+    "metadata-proof": artifacts[0].get("coverage", {}).get("release-version-keeps-v121-baseline") is True and artifacts[0].get("coverage", {}).get("primary-proofs-are-v121") is True,
     "first-run-runtime-command-proof": artifacts[2].get("coverage", {}).get("contract-is-runtime-api-backed") is True and artifacts[2].get("coverage", {}).get("workspace-created") is True,
     "guided-sample-closure-proof": artifacts[3].get("coverage", {}).get("sample-completed") is True and artifacts[3].get("coverage", {}).get("evidence-decision-delivery-present") is True,
     "team-boundary-proof": artifacts[4].get("coverage", {}).get("release-is-v121") is True and artifacts[4].get("coverage", {}).get("local-lightweight-scope") is True,
