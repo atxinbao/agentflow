@@ -1,27 +1,43 @@
 # Changelog
 
-更新日期：2026-07-05
+更新日期：2026-07-06
 执行者：Codex
 
 ## Current Baseline
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.2.1/README.md](docs/delivery/releases/v1.2.1/README.md)
-- [docs/delivery/releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md](docs/delivery/releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.2/README.md](docs/delivery/releases/v1.2.2/README.md)
+- [docs/delivery/releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md](docs/delivery/releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md)
 
 上一发布基线：
 
-- [docs/delivery/releases/v1.2.0/README.md](docs/delivery/releases/v1.2.0/README.md)
-- [docs/delivery/releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md](docs/delivery/releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.1/README.md](docs/delivery/releases/v1.2.1/README.md)
+- [docs/delivery/releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md](docs/delivery/releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md)
 
 下一版计划：
 
-- v1.2.x Product console continuity after onboarding。
+- v1.2.x Product console continuity after commercial boundary preflight。
 
 ## Unreleased
 
-下一版保留给 Product console continuity after onboarding，不在本次 release 中认证。
+下一版保留给 Product console continuity after commercial boundary preflight，不在本次 release 中认证。
+
+## v1.2.2 - 2026-07-06
+
+Release Proof Hardening and Commercial Boundary Preflight:
+
+- added a dedicated V121 release certification gate so the v1.2.1 proof chain is externally readable;
+- aligned root `certification.json` top-level metadata with runtime release certification metadata;
+- added primary proof artifact manifest indexing path, sha256, byte size, proof role and GitHub issue refs;
+- added V121 issue traceability and milestone closeout proof for release-gate certification;
+- bound Desktop team workflow surfaces to Runtime read model commands;
+- added Commercial Boundary Contract for Product layer concepts, Product surface boundary and commercial non-goals;
+- added License / Entitlement Boundary covering active, disabled, expired, missing and deferred entitlement states;
+- added Paid Feature Boundary so paid-only Product flows are blocked before Runtime command admission;
+- added Paid Report Flow vs Managed Project Flow Contract while keeping both mapped to Spec / Evidence / Decision / Delivery;
+- added v1.2.2 release delivery baseline and GitHub issue traceability for `#883` through `#892`;
+- advanced workspace and desktop version metadata to `1.2.2`.
 
 ## v1.2.1 - 2026-07-05
 

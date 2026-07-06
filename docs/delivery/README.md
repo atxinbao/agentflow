@@ -1,6 +1,6 @@
 # Delivery
 
-更新日期：2026-07-05
+更新日期：2026-07-06
 执行者：Codex
 
 ## Purpose
@@ -21,7 +21,9 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.2.1/README.md](releases/v1.2.1/README.md) | 当前发布基线：First-run Execution Closure and Team Workflow Boundary |
+| [releases/v1.2.2/README.md](releases/v1.2.2/README.md) | 当前发布基线：Release Proof Hardening and Commercial Boundary Preflight |
+| [releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md](releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md) | v1.2.2 Release Proof Hardening and Commercial Boundary Preflight tasks |
+| [releases/v1.2.1/README.md](releases/v1.2.1/README.md) | 上一发布基线：First-run Execution Closure and Team Workflow Boundary |
 | [releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md](releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md) | v1.2.1 First-run Execution Closure and Team Workflow Boundary tasks |
 | [releases/v1.2.0/README.md](releases/v1.2.0/README.md) | 上一发布基线：Product Onboarding and First-run Experience |
 | [releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md](releases/v1.2.0/AGENTFLOW_V1_2_0_PRODUCT_ONBOARDING_FIRST_RUN_TASKS_V1.md) | v1.2.0 Product Onboarding and First-run Experience tasks |
@@ -53,7 +55,7 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| `v1.2.x` | 下一版计划：Product console continuity after onboarding |
+| `v1.2.x` | 下一版计划：Product console continuity after commercial boundary preflight |
 
 ## Historical Delivery
 
