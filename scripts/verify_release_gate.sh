@@ -306,6 +306,7 @@ V121_ISSUE_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/v121-issue-milestone-closeout.j
 V121_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v121-release-certification.json"
 V122_ISSUE_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/v122-issue-milestone-closeout.json"
 V122_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v122-release-certification.json"
+LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
 CORE_DECISION_INPUT_BINDING_PATH="$RUNTIME_DIR/core-decision-input-binding.json"
 CORE_DECISION_OUTCOME_TRANSITIONS_PATH="$RUNTIME_DIR/core-decision-outcome-transitions.json"
@@ -436,7 +437,8 @@ write_gate_reports() {
     "$RELEASE_ARTIFACT_BOUNDARY_PATH" \
     "$PROJECT_ROADMAP_BASELINE_PATH" \
     "$V103_RELEASE_FIX_CERTIFICATION_PATH" \
-    "$CORE_RUNTIME_NEGATIVE_FIXTURES_PATH" <<'PY'
+    "$CORE_RUNTIME_NEGATIVE_FIXTURES_PATH" \
+    "$LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH" <<'PY'
 import json
 import pathlib
 import sys
@@ -482,6 +484,7 @@ release_artifact_boundary_path = pathlib.Path(sys.argv[38])
 project_roadmap_baseline_path = pathlib.Path(sys.argv[39])
 v103_release_fix_certification_path = pathlib.Path(sys.argv[40])
 core_runtime_negative_fixtures_path = pathlib.Path(sys.argv[41])
+live_github_milestone_closeout_path = pathlib.Path(sys.argv[42])
 
 def load_json(path: pathlib.Path):
     if not path.is_file():
@@ -522,6 +525,7 @@ proof_chain = [
     {"stage": "release.version-metadata", "label": "Release Version Metadata"},
     {"stage": "release.changelog-entry", "label": "Release Changelog Entry"},
     {"stage": "release.github-release-fact", "label": "GitHub Release Fact"},
+    {"stage": "release.live-github-milestone-closeout", "label": "Live GitHub Milestone Closeout"},
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
@@ -629,6 +633,7 @@ runtime_artifacts = [
     {"path": "runtime/spec-loop-manifest.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/spec-loop-manifest.json").is_file()},
     {"path": "runtime/spec-loop-projection.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/spec-loop-projection.json").is_file()},
     {"path": "runtime/release-facts.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-facts.json").is_file()},
+    {"path": "runtime/live-github-milestone-closeout.json", "exists": live_github_milestone_closeout_path.is_file()},
     {"path": "runtime/external-review-surface.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/external-review-surface.json").is_file()},
     {"path": "runtime/completion-runtime.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/completion-runtime.json").is_file()},
     {"path": "runtime/final-closeout-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/final-closeout-proof.json").is_file()},
@@ -2354,6 +2359,239 @@ PY
   else
     record_stage "release.github-release-fact" "passed" "not required before release publication"
   fi
+}
+
+verify_live_github_milestone_closeout() {
+  local stage="release.live-github-milestone-closeout"
+  local milestone_title="${RELEASE_MILESTONE_TITLE:-$RELEASE_VERSION}"
+  local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+  local waiver_reason="${RELEASE_MILESTONE_WAIVER_REASON:-}"
+
+  record_stage "$stage" "started" "$milestone_title"
+
+  if [[ -z "$token" ]]; then
+    python3 - "$LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH" "$milestone_title" "$RELEASE_VERSION" "$SOURCE_COMMIT_SHA" "$GATE_RUN_ID" "$GATE_REPOSITORY" "$REQUIRE_PUBLISHED_RELEASE_FACTS" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out, milestone_title, release_version, source_commit, run_id, repository, require_published = sys.argv[1:]
+payload = {
+    "version": "agentflow-live-github-milestone-closeout.v1",
+    "status": "deferred",
+    "reason": "missing GitHub token for live milestone query",
+    "milestoneTitle": milestone_title,
+    "releaseVersion": release_version,
+    "repository": repository,
+    "sourceCommitSha": source_commit or None,
+    "workflowRunId": run_id or None,
+    "apiSource": None,
+    "checkedAt": int(time.time()),
+}
+pathlib.Path(out).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+    if [[ "$REQUIRE_PUBLISHED_RELEASE_FACTS" == "1" ]]; then
+      fail_stage "$stage" "missing GitHub token for live milestone closeout proof"
+    fi
+    record_stage "$stage" "deferred" "missing GitHub token"
+    return
+  fi
+
+  if ! python3 - \
+    "$LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH" \
+    "$milestone_title" \
+    "$RELEASE_VERSION" \
+    "$SOURCE_COMMIT_SHA" \
+    "$GATE_RUN_ID" \
+    "$GATE_REPOSITORY" \
+    "$GATE_SERVER_URL" \
+    "$REQUIRE_PUBLISHED_RELEASE_FACTS" \
+    "$waiver_reason" \
+    "$token" <<'PY'
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import time
+import urllib.parse
+
+(
+    out_raw,
+    milestone_title,
+    release_version,
+    source_commit,
+    run_id,
+    repository,
+    server_url,
+    require_published,
+    waiver_reason,
+    token,
+) = sys.argv[1:]
+
+api_base = os.environ.get("GITHUB_API_URL") or "https://api.github.com"
+repo_path = repository.strip("/")
+headers = {
+    "Accept": "application/vnd.github+json",
+    "Authorization": f"Bearer {token}",
+    "User-Agent": "agentflow-release-gate",
+    "X-GitHub-Api-Version": "2022-11-28",
+}
+
+def request_json(url):
+    command = [
+        "curl",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--location",
+        "-H",
+        f"Accept: {headers['Accept']}",
+        "-H",
+        f"Authorization: Bearer {token}",
+        "-H",
+        "User-Agent: agentflow-release-gate",
+        "-H",
+        f"X-GitHub-Api-Version: {headers['X-GitHub-Api-Version']}",
+        url,
+    ]
+    try:
+        raw = subprocess.check_output(command, text=True, stderr=subprocess.STDOUT, timeout=45)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"GitHub API request failed: {url} {exc.output[:300]}")
+    except subprocess.TimeoutExpired:
+        raise SystemExit(f"GitHub API request timed out: {url}")
+    return json.loads(raw), {}
+
+def paged(path, query):
+    page = 1
+    results = []
+    while True:
+        params = dict(query)
+        params["per_page"] = "100"
+        params["page"] = str(page)
+        url = f"{api_base}/repos/{repo_path}/{path}?{urllib.parse.urlencode(params)}"
+        payload, headers = request_json(url)
+        if not isinstance(payload, list):
+            raise SystemExit(f"GitHub API expected list for {path}")
+        results.extend(payload)
+        if len(payload) < 100:
+            break
+        page += 1
+    return results
+
+milestones = paged("milestones", {"state": "all"})
+matches = [item for item in milestones if item.get("title") == milestone_title]
+payload = {
+    "version": "agentflow-live-github-milestone-closeout.v1",
+    "milestoneTitle": milestone_title,
+    "releaseVersion": release_version,
+    "repository": repository,
+    "sourceCommitSha": source_commit or None,
+    "workflowRunId": run_id or None,
+    "apiSource": f"{api_base}/repos/{repo_path}",
+    "checkedAt": int(time.time()),
+}
+
+if not matches:
+    payload.update({
+        "status": "deferred" if require_published != "1" else "failed",
+        "reason": "GitHub milestone not found",
+        "milestoneNumber": None,
+        "milestoneState": None,
+        "openIssueCount": None,
+        "closedIssueCount": None,
+        "closedAt": None,
+        "waiver": waiver_reason or None,
+    })
+    pathlib.Path(out_raw).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if require_published == "1":
+        raise SystemExit("release certification requires existing live GitHub milestone")
+    raise SystemExit(0)
+
+if len(matches) > 1:
+    raise SystemExit(f"multiple GitHub milestones matched title {milestone_title!r}")
+
+milestone = matches[0]
+milestone_number = milestone.get("number")
+issues = paged("issues", {"state": "all", "milestone": str(milestone_number)})
+issue_rows = [
+    {
+        "number": item.get("number"),
+        "title": item.get("title"),
+        "state": item.get("state"),
+        "url": item.get("html_url"),
+        "closedAt": item.get("closed_at"),
+    }
+    for item in issues
+    if "pull_request" not in item
+]
+open_issues = [item for item in issue_rows if item.get("state") == "open"]
+closed_issues = [item for item in issue_rows if item.get("state") == "closed"]
+milestone_state = milestone.get("state")
+waiver = waiver_reason.strip() or None
+
+if milestone_state == "closed":
+    status = "passed"
+    reason = None
+elif waiver:
+    status = "waived"
+    reason = "live GitHub milestone is open but explicit waiver is recorded"
+elif require_published == "1":
+    status = "failed"
+    reason = "live GitHub milestone is not closed"
+else:
+    status = "deferred"
+    reason = "live GitHub milestone is not closed"
+
+payload.update({
+    "status": status,
+    "reason": reason,
+    "milestoneNumber": milestone_number,
+    "milestoneUrl": milestone.get("html_url"),
+    "milestoneState": milestone_state,
+    "openIssueCount": len(open_issues),
+    "closedIssueCount": len(closed_issues),
+    "closedAt": milestone.get("closed_at"),
+    "apiMilestoneSource": f"{api_base}/repos/{repo_path}/milestones?state=all",
+    "apiIssueSource": f"{api_base}/repos/{repo_path}/issues?milestone={milestone_number}&state=all",
+    "waiver": waiver,
+    "openIssues": open_issues,
+    "closedIssues": closed_issues,
+    "distinguishesNoOpenIssuesFromClosedMilestone": len(open_issues) == 0 and milestone_state != "closed",
+})
+pathlib.Path(out_raw).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if status == "failed":
+    raise SystemExit(reason)
+PY
+  then
+    fail_stage "$stage" "live GitHub milestone closeout proof failed for $milestone_title"
+  fi
+
+  local live_status
+  live_status="$(python3 - "$LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH" <<'PY'
+import json
+import pathlib
+import sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload.get("status", "missing"))
+PY
+)"
+  case "$live_status" in
+    passed|waived)
+      record_stage "$stage" "passed" "$milestone_title"
+      ;;
+    deferred)
+      if [[ "$REQUIRE_PUBLISHED_RELEASE_FACTS" == "1" ]]; then
+        fail_stage "$stage" "release certification cannot defer live GitHub milestone closeout proof"
+      fi
+      record_stage "$stage" "deferred" "$milestone_title"
+      ;;
+    *)
+      fail_stage "$stage" "unexpected live milestone proof status: $live_status"
+      ;;
+  esac
 }
 
 run_source_agent_entry_gate() {
@@ -14688,6 +14926,7 @@ main() {
   verify_stable_contract_baseline "$WORKSPACE"
   verify_release_metadata "$WORKSPACE"
   verify_release_publication_facts "$WORKSPACE"
+  verify_live_github_milestone_closeout
   run_provider_smoke_gate
   run_api_plane_manifest_gate
   run_runtime_api_sdk_compatibility_gate
