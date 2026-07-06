@@ -92,10 +92,10 @@ Both reuse Core Runtime facts and Product surfaces. Neither flow adds a new indu
 | Role / handoff | `runtime/v121-role-permission-handoff-view.json` | readonly role and handoff view |
 | Team history | `runtime/v121-team-delivery-decision-history-view.json` | delivery / decision / feedback history |
 | Desktop team surface | `runtime/v121-desktop-team-workflow-surface-binding.json` | Desktop reads team workflow surfaces |
-| Commercial boundary | `runtime/v121-commercial-boundary-contract.json` | commercial layer boundary |
-| License / entitlement | `runtime/v121-license-entitlement-boundary.json` | license and entitlement boundary |
-| Paid feature | `runtime/v121-paid-feature-boundary.json` | paid-only feature access boundary |
-| Commercial workflow shapes | `runtime/v121-commercial-workflow-shapes.json` | paid report vs managed project flow |
+| Commercial boundary | `runtime/v122-commercial-boundary-contract.json` | commercial layer boundary |
+| License / entitlement | `runtime/v122-license-entitlement-boundary.json` | license and entitlement boundary |
+| Paid feature | `runtime/v122-paid-feature-boundary.json` | paid-only feature access boundary |
+| Commercial workflow shapes | `runtime/v122-commercial-workflow-shapes.json` | paid report vs managed project flow |
 | V121 issue / milestone closeout | `runtime/v121-issue-milestone-closeout.json` | inherited V121 issue and milestone closeout |
 | V121 release certification | `runtime/v121-release-certification.json` | inherited V121 certification package |
 | V122 issue / milestone closeout | `runtime/v122-issue-milestone-closeout.json` | V122 issue and milestone closeout |
@@ -157,6 +157,11 @@ The release gate for `v1.2.2` must certify:
 - Desktop team workflow, commercial boundary, license / entitlement, paid feature, and commercial workflow shape proofs all pass;
 - the root certification artifact points at `runtime/v122-release-certification.json`;
 - the small certification artifact includes top-level release metadata and primary proof index.
+
+Commercial proof primary artifacts are release-scoped to `v122-*`. Historical
+`v121-*` commercial proof files may be emitted as explicit legacy aliases for
+compatibility, but they cannot satisfy V122 commercial issue traceability in the
+primary proof manifest.
 
 ## Next Version
 

@@ -16,9 +16,9 @@ use std::{
 
 fn main() -> Result<()> {
     let args = env::args().skip(1).collect::<Vec<_>>();
-    if args.len() != 18 {
+    if args.len() != 22 {
         bail!(
-            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <desktop-team-surface> <commercial-boundary> <license-entitlement> <paid-feature> <commercial-workflow-shapes> <v121-issue-milestone-closeout> <v122-issue-milestone-closeout> <v121-release-certification> <v122-release-certification>"
+            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <desktop-team-surface> <v121-commercial-boundary> <v121-license-entitlement> <v121-paid-feature> <v121-commercial-workflow-shapes> <v122-commercial-boundary> <v122-license-entitlement> <v122-paid-feature> <v122-commercial-workflow-shapes> <v121-issue-milestone-closeout> <v122-issue-milestone-closeout> <v121-release-certification> <v122-release-certification>"
         );
     }
 
@@ -33,10 +33,40 @@ fn main() -> Result<()> {
     let role_handoff = role_permission_handoff_view_proof(&workspace)?;
     let history = team_delivery_decision_history_proof(&workspace)?;
     let desktop_surface = desktop_team_workflow_surface_binding_proof(&workspace)?;
-    let commercial_boundary = commercial_product_layer_boundary_proof(&workspace)?;
-    let license_entitlement = license_entitlement_boundary_proof(&workspace)?;
-    let paid_feature = paid_feature_boundary_proof(&workspace)?;
-    let commercial_workflow_shapes = commercial_workflow_shapes_proof(&workspace)?;
+    let commercial_boundary_base = commercial_product_layer_boundary_proof(&workspace)?;
+    let license_entitlement_base = license_entitlement_boundary_proof(&workspace)?;
+    let paid_feature_base = paid_feature_boundary_proof(&workspace)?;
+    let commercial_workflow_shapes_base = commercial_workflow_shapes_proof(&workspace)?;
+    let commercial_boundary = legacy_alias_proof(
+        commercial_boundary_base.clone(),
+        "runtime/v122-commercial-boundary-contract.json",
+    );
+    let license_entitlement = legacy_alias_proof(
+        license_entitlement_base.clone(),
+        "runtime/v122-license-entitlement-boundary.json",
+    );
+    let paid_feature = legacy_alias_proof(
+        paid_feature_base.clone(),
+        "runtime/v122-paid-feature-boundary.json",
+    );
+    let commercial_workflow_shapes = legacy_alias_proof(
+        commercial_workflow_shapes_base.clone(),
+        "runtime/v122-commercial-workflow-shapes.json",
+    );
+    let v122_commercial_boundary = v122_primary_proof(
+        commercial_boundary_base,
+        "agentflow-v122-commercial-boundary-contract.v1",
+    );
+    let v122_license_entitlement = v122_primary_proof(
+        license_entitlement_base,
+        "agentflow-v122-license-entitlement-boundary.v1",
+    );
+    let v122_paid_feature =
+        v122_primary_proof(paid_feature_base, "agentflow-v122-paid-feature-boundary.v1");
+    let v122_commercial_workflow_shapes = v122_primary_proof(
+        commercial_workflow_shapes_base,
+        "agentflow-v122-commercial-workflow-shapes.v1",
+    );
     let v121_closeout = v121_issue_milestone_closeout_proof(&workspace);
     let v122_closeout = v122_issue_milestone_closeout_proof(&workspace);
 
@@ -53,8 +83,12 @@ fn main() -> Result<()> {
         (&proof_paths[10], &license_entitlement),
         (&proof_paths[11], &paid_feature),
         (&proof_paths[12], &commercial_workflow_shapes),
-        (&proof_paths[13], &v121_closeout),
-        (&proof_paths[14], &v122_closeout),
+        (&proof_paths[13], &v122_commercial_boundary),
+        (&proof_paths[14], &v122_license_entitlement),
+        (&proof_paths[15], &v122_paid_feature),
+        (&proof_paths[16], &v122_commercial_workflow_shapes),
+        (&proof_paths[17], &v121_closeout),
+        (&proof_paths[18], &v122_closeout),
     ] {
         write_json(path, payload)?;
     }
@@ -78,7 +112,7 @@ fn main() -> Result<()> {
         &commercial_workflow_shapes,
         &v121_closeout,
     ]);
-    write_json(&proof_paths[15], &certification)?;
+    write_json(&proof_paths[19], &certification)?;
 
     let v122_certification = v122_release_certification_proof(&[
         &metadata,
@@ -90,15 +124,15 @@ fn main() -> Result<()> {
         &role_handoff,
         &history,
         &desktop_surface,
-        &commercial_boundary,
-        &license_entitlement,
-        &paid_feature,
-        &commercial_workflow_shapes,
+        &v122_commercial_boundary,
+        &v122_license_entitlement,
+        &v122_paid_feature,
+        &v122_commercial_workflow_shapes,
         &v121_closeout,
         &v122_closeout,
         &certification,
     ]);
-    write_json(&proof_paths[16], &v122_certification)?;
+    write_json(&proof_paths[20], &v122_certification)?;
 
     Ok(())
 }
@@ -718,7 +752,9 @@ fn artifact_manifest_primary_proof_index_proof(paths: &[PathBuf]) -> Result<Valu
                 .file_stem()
                 .and_then(|name| name.to_str())
                 .unwrap_or("");
-            stem != "v121-release-certification" && stem != "v122-release-certification"
+            stem != "v121-release-certification"
+                && stem != "v122-release-certification"
+                && !is_v121_commercial_legacy_alias(stem)
         })
         .map(|(_, path)| -> Result<Value> {
             Ok(json!({
@@ -727,6 +763,7 @@ fn artifact_manifest_primary_proof_index_proof(paths: &[PathBuf]) -> Result<Valu
                 "bytes": fs::metadata(path)?.len(),
                 "proofRole": proof_role(path),
                 "issueRefs": issue_refs_for_proof(path),
+                "releaseScope": proof_release_scope(path),
                 "primary": true,
             }))
         })
@@ -738,8 +775,11 @@ fn artifact_manifest_primary_proof_index_proof(paths: &[PathBuf]) -> Result<Valu
             "all-indexed-artifacts-are-release-scoped": index.iter().all(|item| item.get("path").and_then(Value::as_str).is_some_and(|path| path.contains("runtime/v121-") || path.contains("runtime/v122-"))),
             "hashes-present": index.iter().all(|item| item.get("sha256").and_then(Value::as_str).is_some_and(|value| !value.is_empty())),
             "issue-refs-present": index.iter().all(|item| item.get("issueRefs").and_then(Value::as_array).is_some_and(|refs| !refs.is_empty())),
+            "release-scope-present": index.iter().all(|item| item.get("releaseScope").and_then(Value::as_str).is_some_and(|value| !value.is_empty())),
             "all-v121-issues-have-primary-proof": all_issue_refs_have_proof(&index, 863, 872),
             "all-v122-issues-have-primary-proof": all_issue_refs_have_proof(&index, 883, 892),
+            "v121-commercial-legacy-aliases-not-primary": index.iter().all(|item| item.get("path").and_then(Value::as_str).is_some_and(|path| !path.starts_with("runtime/v121-commercial-") && !path.starts_with("runtime/v121-license-entitlement-") && !path.starts_with("runtime/v121-paid-feature-"))),
+            "v122-commercial-primary-proofs-present": v122_commercial_primary_proof_paths().iter().all(|path| index.iter().any(|item| item.get("path").and_then(Value::as_str) == Some(path.as_str()) && item.get("releaseScope").and_then(Value::as_str) == Some("v1.2.2"))),
         }),
         json!({ "primaryProofIndex": index }),
     ))
@@ -816,6 +856,33 @@ fn proof(version: &str, checks: Value, payload: Value) -> Value {
     })
 }
 
+fn legacy_alias_proof(mut value: Value, legacy_alias_for: &str) -> Value {
+    if let Some(payload) = value.get_mut("payload").and_then(Value::as_object_mut) {
+        payload.insert("primary".to_string(), json!(false));
+        payload.insert("legacyAlias".to_string(), json!(true));
+        payload.insert("legacyAliasFor".to_string(), json!(legacy_alias_for));
+        payload.insert("releaseScope".to_string(), json!("v1.2.1-legacy-alias"));
+    }
+    value
+}
+
+fn v122_primary_proof(mut value: Value, version: &str) -> Value {
+    if let Some(object) = value.as_object_mut() {
+        object.insert("version".to_string(), json!(version));
+    }
+    if let Some(payload) = value.get_mut("payload").and_then(Value::as_object_mut) {
+        payload.insert("primary".to_string(), json!(true));
+        payload.insert("legacyAlias".to_string(), json!(false));
+        payload.insert("releaseScope".to_string(), json!("v1.2.2"));
+        payload.insert(
+            "releaseIssues".to_string(),
+            json!(["#888", "#889", "#890", "#891"]),
+        );
+        payload.remove("legacyAliasFor");
+    }
+    value
+}
+
 fn with_top_level_release_metadata(mut value: Value, primary_proofs: Vec<String>) -> Value {
     let object = value.as_object_mut().expect("proof object");
     object.insert("releaseVersion".to_string(), json!(release_version()));
@@ -882,10 +949,28 @@ fn env_or(name: &str, default_value: &str) -> String {
 }
 
 fn primary_proof_paths() -> Vec<String> {
-    let mut paths = v121_primary_proof_paths();
+    let mut paths = v121_primary_proof_paths()
+        .into_iter()
+        .filter(|path| {
+            !is_v121_commercial_legacy_alias(
+                path.trim_start_matches("runtime/")
+                    .trim_end_matches(".json"),
+            )
+        })
+        .collect::<Vec<_>>();
+    paths.extend(v122_commercial_primary_proof_paths());
     paths.push("runtime/v122-issue-milestone-closeout.json".to_string());
     paths.push("runtime/v122-release-certification.json".to_string());
     paths
+}
+
+fn v122_commercial_primary_proof_paths() -> Vec<String> {
+    vec![
+        "runtime/v122-commercial-boundary-contract.json".to_string(),
+        "runtime/v122-license-entitlement-boundary.json".to_string(),
+        "runtime/v122-paid-feature-boundary.json".to_string(),
+        "runtime/v122-commercial-workflow-shapes.json".to_string(),
+    ]
 }
 
 fn v121_primary_proof_paths() -> Vec<String> {
@@ -930,6 +1015,16 @@ fn all_issue_refs_have_proof(index: &[Value], start: u64, end: u64) -> bool {
                 })
         })
     })
+}
+
+fn is_v121_commercial_legacy_alias(stem: &str) -> bool {
+    matches!(
+        stem,
+        "v121-commercial-boundary-contract"
+            | "v121-license-entitlement-boundary"
+            | "v121-paid-feature-boundary"
+            | "v121-commercial-workflow-shapes"
+    )
 }
 
 fn issue_refs_for_proof(path: &Path) -> Vec<&'static str> {
@@ -1023,6 +1118,18 @@ fn proof_role(path: &Path) -> String {
         .trim_start_matches("v121-")
         .trim_start_matches("v122-")
         .to_string()
+}
+
+fn proof_release_scope(path: &Path) -> &'static str {
+    let stem = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    if stem.starts_with("v122-") {
+        "v1.2.2"
+    } else {
+        "v1.2.1"
+    }
 }
 
 fn sha256(path: &Path) -> Result<String> {
