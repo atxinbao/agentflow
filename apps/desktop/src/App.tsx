@@ -1163,6 +1163,11 @@ function App() {
     homeProjectProjectionState.projection?.projectId === homeProjectGroup?.id
       ? homeProjectProjectionState.projection
       : null;
+  const teamWorkflowViewsState = useTeamWorkflowViews(
+    projectRoot,
+    homeProjectGroup?.id ?? null,
+    taskListRefreshToken + executeRefreshToken + outputRefreshToken,
+  );
   const agentLocale = agentManualState.status?.locale.agentLocale ?? detectAppLocale() ?? "en-US";
   const nextStep = useMemo(
     () => buildNextStep(stateStatusState, inputSnapshotState.snapshot?.issues.length ?? 0, selectedTask),
@@ -1760,6 +1765,7 @@ function App() {
             selectedTask={selectedTask}
             stateStatus={stateStatusState.status}
             tasks={tasks}
+            teamWorkflowViewsState={teamWorkflowViewsState}
           />
         ) : null}
         {projectRoot && !projectAvailabilityStatus && activePage === "tasks" ? (
@@ -2709,6 +2715,7 @@ function ProjectHomePage({
   selectedTask,
   stateStatus,
   tasks,
+  teamWorkflowViewsState,
 }: {
   homeProjectGroup: TaskProjectGroup | null;
   homeProjectProjection: ProjectProjection | null;
@@ -2725,6 +2732,7 @@ function ProjectHomePage({
   selectedTask: V1Issue | null;
   stateStatus: StateStatusSnapshot | null;
   tasks: V1Issue[];
+  teamWorkflowViewsState: TeamWorkflowViewsState;
 }) {
   const [commandSurfaceFeedback, setCommandSurfaceFeedback] = useState<string | null>(null);
   const [pendingProductCommandSubmitId, setPendingProductCommandSubmitId] =
@@ -3099,6 +3107,7 @@ function ProjectHomePage({
 
       <section className="v16-home-columns" aria-label="项目入口与最近活动">
         <ProjectHomeAgentEntryPanel activeOwnerLabel={nextOwnerLabel} />
+        <ProjectHomeTeamWorkflowPanel state={teamWorkflowViewsState} />
         <Panel className="v16-home-column" title="Command Surface">
           <CommandSurfaceActionList actions={commandEntries} />
           {productCommandSurfaceState.error ? (
@@ -3162,6 +3171,87 @@ function ProjectHomeAgentEntryPanel({ activeOwnerLabel }: { activeOwnerLabel: st
           <p>只读核对证据、交付、追溯和 findings，不替代任务 Done 判断。</p>
           <small>适用：需要独立验收或人工审计。</small>
         </article>
+      </div>
+    </Panel>
+  );
+}
+
+function ProjectHomeTeamWorkflowPanel({ state }: { state: TeamWorkflowViewsState }) {
+  const sharing = state.sharing;
+  const handoff = state.handoff;
+  const history = state.history;
+  const boundary = state.boundary;
+  const loading = state.source === "loading";
+  const sourceLabel = loading
+    ? "读取中"
+    : state.source === "tauri"
+      ? "Runtime API"
+      : state.source === "preview"
+        ? "Browser Preview"
+        : state.source === "unavailable"
+          ? "不可用"
+          : "等待项目";
+  const status: StatusChipStatus = state.error
+    ? "failed"
+    : loading
+      ? "working"
+      : [sharing?.status, handoff?.status, history?.status].some((item) => item === "invalid")
+        ? "warning"
+        : sharing || handoff || history
+          ? "ready"
+          : "idle";
+  const ownerLabel = handoff?.currentOwnerRole
+    ? agentRoleLabelZh(handoff.currentOwnerRole as AgentRole)
+    : "未分配";
+  const sharingItems = sharing
+    ? [
+        `状态：${artifactStatusLabel(sharing.status)}`,
+        `项目：${sharing.title}`,
+        `任务：${sharing.tasks.summary}`,
+        `只读：${sharing.readonly ? "是" : "否"}，权威：${sharing.authority ? "是" : "否"}`,
+        ...(sharing.blockers.length ? sharing.blockers : ["没有共享视图阻断。"]),
+      ]
+    : [loading ? "正在读取项目共享视图。" : state.error ?? "等待项目共享视图。"];
+  const handoffItems = handoff
+    ? [
+        `当前负责人：${ownerLabel}`,
+        handoff.currentOwnerReason,
+        ...handoff.handoffs.slice(0, 3).map((item) => (
+          `${item.fromRole} -> ${item.toRole}：${artifactStatusLabel(item.status)}，${item.reason}`
+        )),
+        ...(handoff.blockers.length ? handoff.blockers : ["没有交接阻断。"]),
+      ]
+    : [loading ? "正在读取角色与交接视图。" : state.error ?? "等待角色与交接视图。"];
+  const historyItems = history
+    ? [
+        `状态：${artifactStatusLabel(history.status)}`,
+        `最近决策：${history.latestDecision.summary}`,
+        `最近交付：${history.latestDelivery.summary}`,
+        `历史记录：${history.entries.length} 条`,
+        `反馈入口：${history.feedback.summary}`,
+        ...(history.blockers.length ? history.blockers : ["没有交付历史阻断。"]),
+      ]
+    : [loading ? "正在读取交付和决策历史。" : state.error ?? "等待交付和决策历史。"];
+  const commandItems = state.invokedCommands.length
+    ? state.invokedCommands.map((command) => `${command}：已请求`)
+    : ["等待 Runtime API 命令。"];
+
+  return (
+    <Panel className="v16-home-column" title="团队工作流">
+      <div className="v16-project-home-next-step-card">
+        <div className="v16-project-home-next-step-header">
+          <StatusBadge status={status}>{sourceLabel}</StatusBadge>
+          <strong>{boundary?.scope ?? "local-lightweight-team-workflow"}</strong>
+        </div>
+        <p>
+          团队工作流只读展示 Runtime read model。Desktop 不直接读取 authority 文件，不写项目事实。
+        </p>
+      </div>
+      <div className="v16-project-home-grid">
+        <SectionList title="项目共享" items={sharingItems} />
+        <SectionList title="角色与交接" items={handoffItems} />
+        <SectionList title="交付和决策历史" items={historyItems} />
+        <SectionList title="Runtime 命令" items={commandItems} />
       </div>
     </Panel>
   );
@@ -6904,6 +6994,167 @@ type ProductCommandSurfaceState = {
   view: ProductCommandSurfaceView | null;
 };
 
+type TeamWorkflowBoundaryContract = {
+  version: string;
+  release: string;
+  scope: string;
+  includedCapabilities: Array<{
+    id: string;
+    label: string;
+    ownerPlane: string;
+    readModel: string;
+    writeBoundary: string;
+  }>;
+  roleBoundaries: Array<{
+    role: string;
+    responsibilities: string[];
+    cannotDo: string[];
+  }>;
+  permissionViews: Array<{
+    id: string;
+    label: string;
+    source: string;
+    displayOnly: boolean;
+  }>;
+  handoffBoundaries: Array<{
+    id: string;
+    fromRole: string;
+    toRole: string;
+    requiredRefs: string[];
+    productNeutral: boolean;
+  }>;
+  deliveryHistoryBoundaries: Array<{
+    id: string;
+    source: string;
+    visibleTo: string[];
+    writeBoundary: string;
+  }>;
+  excludedCapabilities: string[];
+};
+
+type TeamWorkflowField = {
+  label: string;
+  status: string;
+  summary: string;
+  sourceRef?: string | null;
+};
+
+type ProjectSharingReadModel = {
+  version: string;
+  status: string;
+  projectId: string;
+  title: string;
+  product: TeamWorkflowField;
+  goal: TeamWorkflowField;
+  roadmap: TeamWorkflowField;
+  tasks: {
+    status: string;
+    total: number;
+    completed: number;
+    current: number;
+    future: number;
+    blocked: number;
+    summary: string;
+    sourceRef: string;
+  };
+  latestDecision: TeamWorkflowField;
+  latestDelivery: TeamWorkflowField;
+  feedback: TeamWorkflowField;
+  sourceProjectionRefs: string[];
+  blockers: string[];
+  readonly: boolean;
+  authority: boolean;
+  projectionBacked: boolean;
+  updatedAt: number;
+};
+
+type RolePermissionHandoffView = {
+  version: string;
+  status: string;
+  projectId: string;
+  currentOwnerRole: string | null;
+  currentOwnerReason: string;
+  roles: Array<{
+    roleId: string;
+    label: string;
+    canRead: string[];
+    canAct: string[];
+    currentOwner: boolean;
+    ownerReason: string;
+  }>;
+  handoffs: Array<{
+    handoffId: string;
+    fromRole: string;
+    toRole: string;
+    status: string;
+    reason: string;
+    requiredRefs: string[];
+  }>;
+  negativeFixtures: Array<{
+    fixtureId: string;
+    rejectedInput: string;
+    expectedStatus: string;
+    reason: string;
+  }>;
+  sourceProjectionRefs: string[];
+  blockers: string[];
+  readonly: boolean;
+  authority: boolean;
+  projectionBacked: boolean;
+};
+
+type TeamDeliveryDecisionHistoryView = {
+  version: string;
+  status: string;
+  projectId: string;
+  title: string;
+  entries: Array<{
+    entryId: string;
+    entryKind: string;
+    issueId?: string | null;
+    status: string;
+    outcome?: string | null;
+    summary: string;
+    reasons: string[];
+    remediations: string[];
+    evidenceRefs: string[];
+    deliveryRefs: string[];
+    actorRole: string;
+    feedbackRoute?: string | null;
+    updatedAt: number;
+  }>;
+  latestDecision: TeamWorkflowField;
+  latestDelivery: TeamWorkflowField;
+  feedback: {
+    status: string;
+    route: string;
+    summary: string;
+    requiredRefs: string[];
+  };
+  auditSidecar: {
+    status: string;
+    summary: string;
+    blocking: boolean;
+    sourceRef?: string | null;
+  };
+  sourceProjectionRefs: string[];
+  blockers: string[];
+  readonly: boolean;
+  authority: boolean;
+  projectionBacked: boolean;
+  updatedAt: number;
+};
+
+type TeamWorkflowViewsState = {
+  boundary: TeamWorkflowBoundaryContract | null;
+  error: string | null;
+  handoff: RolePermissionHandoffView | null;
+  history: TeamDeliveryDecisionHistoryView | null;
+  invokedCommands: string[];
+  sharing: ProjectSharingReadModel | null;
+  source: DataSource;
+};
+
 const initialApiPlaneManifestState: ApiPlaneManifestState = {
   error: null,
   manifest: null,
@@ -6914,6 +7165,16 @@ const initialProductCommandSurfaceState: ProductCommandSurfaceState = {
   error: null,
   source: "idle",
   view: null,
+};
+
+const initialTeamWorkflowViewsState: TeamWorkflowViewsState = {
+  boundary: null,
+  error: null,
+  handoff: null,
+  history: null,
+  invokedCommands: [],
+  sharing: null,
+  source: "idle",
 };
 
 const advancedStateFileNames = [
@@ -7067,6 +7328,87 @@ function useProductCommandSurface(projectRoot: string | null): ProductCommandSur
   }, [projectRoot]);
 
   return surfaceState;
+}
+
+function useTeamWorkflowViews(
+  projectRoot: string | null,
+  projectId: string | null,
+  refreshToken: number,
+): TeamWorkflowViewsState {
+  const [teamWorkflowState, setTeamWorkflowState] = useState<TeamWorkflowViewsState>(
+    initialTeamWorkflowViewsState,
+  );
+
+  useEffect(() => {
+    if (!projectRoot || !projectId) {
+      setTeamWorkflowState(initialTeamWorkflowViewsState);
+      return;
+    }
+
+    const invokedCommands = [
+      "load_team_workflow_boundary_contract",
+      "load_project_sharing_read_model",
+      "load_role_permission_handoff_view",
+      "load_team_delivery_decision_history_view",
+    ];
+
+    if (isBrowserPreviewRuntime()) {
+      setTeamWorkflowState({
+        ...buildBrowserPreviewTeamWorkflowViews(projectId),
+        error: null,
+        invokedCommands,
+        source: "preview",
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setTeamWorkflowState((current) => ({
+      ...current,
+      error: null,
+      invokedCommands,
+      source: "loading",
+    }));
+
+    void Promise.all([
+      invoke<TeamWorkflowBoundaryContract>("load_team_workflow_boundary_contract"),
+      invoke<ProjectSharingReadModel>("load_project_sharing_read_model", { projectRoot, projectId }),
+      invoke<RolePermissionHandoffView>("load_role_permission_handoff_view", { projectRoot, projectId }),
+      invoke<TeamDeliveryDecisionHistoryView>("load_team_delivery_decision_history_view", {
+        projectRoot,
+        projectId,
+      }),
+    ])
+      .then(([boundary, sharing, handoff, history]) => {
+        if (!cancelled) {
+          setTeamWorkflowState({
+            boundary,
+            error: null,
+            handoff,
+            history,
+            invokedCommands,
+            sharing,
+            source: "tauri",
+          });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setTeamWorkflowState({
+            ...initialTeamWorkflowViewsState,
+            error: error instanceof Error ? error.message : String(error),
+            invokedCommands,
+            source: "unavailable",
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, projectRoot, refreshToken]);
+
+  return teamWorkflowState;
 }
 
 async function loadAdvancedStateFiles(
@@ -7339,6 +7681,255 @@ function buildBrowserPreviewProductCommandSurface(): ProductCommandSurfaceView {
       unavailableCommandCount: commands.filter((command) => command.state === "unavailable").length,
       rejectedCommandCount: commands.filter((command) => command.state === "rejected").length,
       submittedCommandCount: commands.filter((command) => command.state === "submitted").length,
+    },
+  };
+}
+
+function buildBrowserPreviewTeamWorkflowViews(projectId: string): Pick<
+  TeamWorkflowViewsState,
+  "boundary" | "handoff" | "history" | "sharing"
+> {
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    boundary: {
+      excludedCapabilities: ["cloud multi-tenant workspace", "payment or entitlement management"],
+      includedCapabilities: [
+        {
+          id: "project-sharing",
+          label: "项目共享视图",
+          ownerPlane: "projection",
+          readModel: "project-sharing-read-model",
+          writeBoundary: "Runtime command / local workspace fact",
+        },
+        {
+          id: "role-permission-handoff",
+          label: "角色、权限和交接视图",
+          ownerPlane: "projection",
+          readModel: "role-permission-handoff-view",
+          writeBoundary: "Runtime command / local workspace fact",
+        },
+        {
+          id: "delivery-decision-history",
+          label: "团队可读交付和决策历史",
+          ownerPlane: "projection",
+          readModel: "delivery-decision-history-read-model",
+          writeBoundary: "Task / decision / delivery facts",
+        },
+      ],
+      deliveryHistoryBoundaries: [
+        {
+          id: "team-readable-delivery-history",
+          source: "task evidence + acceptance decision + delivery record",
+          visibleTo: ["human-owner", "team reviewer"],
+          writeBoundary: "Runtime writes facts; Desktop renders readonly history.",
+        },
+      ],
+      handoffBoundaries: [
+        {
+          fromRole: "spec-agent",
+          id: "spec-to-build",
+          productNeutral: true,
+          requiredRefs: ["confirmed requirement", "spec issue", "context refs"],
+          toRole: "build-agent",
+        },
+        {
+          fromRole: "build-agent",
+          id: "build-to-audit",
+          productNeutral: true,
+          requiredRefs: ["delivery record", "decision record", "evidence refs"],
+          toRole: "audit-agent",
+        },
+      ],
+      permissionViews: [
+        {
+          displayOnly: true,
+          id: "handoff-allowed",
+          label: "允许交接",
+          source: "runtime role contract",
+        },
+        {
+          displayOnly: true,
+          id: "delivery-visible",
+          label: "交付可见",
+          source: "delivery / decision projection",
+        },
+      ],
+      release: "v1.2.1",
+      roleBoundaries: [
+        {
+          cannotDo: ["代替 Human Owner 接受交付"],
+          responsibilities: ["整理团队输入", "生成 preview", "确认后 materialize"],
+          role: "spec-agent",
+        },
+        {
+          cannotDo: ["跳过验收门"],
+          responsibilities: ["消费已确认任务", "生成证据", "写回交付事实"],
+          role: "build-agent",
+        },
+      ],
+      scope: "local-lightweight-team-workflow",
+      version: "agentflow-team-workflow-boundary.v1",
+    },
+    handoff: {
+      authority: false,
+      blockers: [],
+      currentOwnerReason: "Browser Preview 当前项目有活跃任务，交接给 Build Agent。",
+      currentOwnerRole: "build-agent",
+      handoffs: [
+        {
+          fromRole: "spec-agent",
+          handoffId: "spec-to-build",
+          reason: "Spec issue 已确认，等待执行。",
+          requiredRefs: ["confirmed requirement", "spec issue", "context refs"],
+          status: "ready",
+          toRole: "build-agent",
+        },
+        {
+          fromRole: "build-agent",
+          handoffId: "build-to-audit",
+          reason: "交付记录尚未完成。",
+          requiredRefs: ["delivery record", "decision record", "evidence refs"],
+          status: "deferred",
+          toRole: "audit-agent",
+        },
+      ],
+      negativeFixtures: [
+        {
+          expectedStatus: "invalid",
+          fixtureId: "invalid-role",
+          reason: "未知角色不能获得交接权限。",
+          rejectedInput: "external-owner",
+        },
+      ],
+      projectId,
+      projectionBacked: true,
+      readonly: true,
+      roles: [
+        {
+          canAct: ["start work loop", "write evidence", "submit delivery"],
+          canRead: ["project sharing", "spec issue", "handoff", "task evidence"],
+          currentOwner: true,
+          label: "Build Agent",
+          ownerReason: "当前执行任务归 Build Agent。",
+          roleId: "build-agent",
+        },
+        {
+          canAct: ["inspect delivery", "write audit report"],
+          canRead: ["project sharing", "delivery history", "decision history"],
+          currentOwner: false,
+          label: "Audit Agent",
+          ownerReason: "等待交付后接手。",
+          roleId: "audit-agent",
+        },
+      ],
+      sourceProjectionRefs: [`.agentflow/projections/projects/${projectId}.json`],
+      status: "ready",
+      version: "agentflow-role-permission-handoff-view.v1",
+    },
+    history: {
+      auditSidecar: {
+        blocking: false,
+        sourceRef: null,
+        status: "not-requested",
+        summary: "Audit 是独立流程，不阻断默认交付历史。",
+      },
+      authority: false,
+      blockers: [],
+      entries: [
+        {
+          actorRole: "build-agent",
+          deliveryRefs: ["PR/MR body"],
+          entryId: "history-preview-delivery",
+          entryKind: "delivery",
+          evidenceRefs: ["local validation"],
+          feedbackRoute: "feedback-loop",
+          issueId: "AF-PREVIEW-001",
+          outcome: "accepted",
+          reasons: ["Browser Preview team history fixture."],
+          remediations: [],
+          status: "ready",
+          summary: "交付和决策历史对团队只读可见。",
+          updatedAt: now,
+        },
+      ],
+      feedback: {
+        requiredRefs: ["decision history entry", "delivery history entry"],
+        route: "feedback-loop",
+        status: "ready",
+        summary: "团队反馈需要进入下一轮 Spec Loop 确认。",
+      },
+      latestDecision: {
+        label: "Latest decision",
+        status: "ready",
+        summary: "最近决策可读。",
+      },
+      latestDelivery: {
+        label: "Latest delivery",
+        status: "ready",
+        summary: "最近交付可读。",
+      },
+      projectId,
+      projectionBacked: true,
+      readonly: true,
+      sourceProjectionRefs: [`.agentflow/projections/projects/${projectId}.json`],
+      status: "ready",
+      title: projectId,
+      updatedAt: now,
+      version: "agentflow-team-delivery-decision-history.v1",
+    },
+    sharing: {
+      authority: false,
+      blockers: [],
+      feedback: {
+        label: "Feedback",
+        status: "ready",
+        summary: "团队反馈进入下一轮 Spec Loop。",
+      },
+      goal: {
+        label: "Goal",
+        status: "ready",
+        summary: "团队可读项目目标。",
+        sourceRef: ".agentflow/projections/workspace-state.json",
+      },
+      latestDecision: {
+        label: "Latest decision",
+        status: "ready",
+        summary: "最近完成判断可读。",
+      },
+      latestDelivery: {
+        label: "Latest delivery",
+        status: "ready",
+        summary: "最近交付记录可读。",
+      },
+      product: {
+        label: "Product",
+        status: "ready",
+        summary: `AgentFlow (${projectId})`,
+        sourceRef: ".agentflow/projections/workspace-state.json",
+      },
+      projectId,
+      projectionBacked: true,
+      readonly: true,
+      roadmap: {
+        label: "Roadmap",
+        status: "ready",
+        summary: "团队工作流读取 projection，不读取 authority。",
+      },
+      sourceProjectionRefs: [`.agentflow/projections/projects/${projectId}.json`],
+      status: "ready",
+      tasks: {
+        blocked: 0,
+        completed: 2,
+        current: 1,
+        future: 1,
+        sourceRef: `.agentflow/projections/projects/${projectId}.json`,
+        status: "ready",
+        summary: "2 已完成 / 1 当前 / 1 等待",
+        total: 4,
+      },
+      title: "Browser Preview Team Workflow",
+      updatedAt: now,
+      version: "agentflow-project-sharing-read-model.v1",
     },
   };
 }
