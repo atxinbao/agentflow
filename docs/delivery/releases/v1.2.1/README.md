@@ -75,6 +75,24 @@ Task traceability is recorded in:
 
 - [AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md](AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md)
 
+## GitHub Milestone Closeout
+
+`v1.2.1` GitHub milestone closeout is part of the release certification boundary.
+
+```text
+milestone: v1.2.1
+milestoneNumber: 16
+state: closed
+openIssues: 0
+closedIssues: 10
+closedAt: 2026-07-06T12:09:35Z
+waiver: none
+```
+
+The release gate must not claim complete V121 traceability unless all V121
+issues `#863` through `#872` are closed and the milestone is closed, or unless a
+future certification records an explicit waiver reason.
+
 ## Authority Rules
 
 - GitHub issues are release planning and traceability records, not task authority.
