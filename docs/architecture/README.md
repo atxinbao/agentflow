@@ -87,6 +87,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [089-role-permission-handoff-view-v1.md](089-role-permission-handoff-view-v1.md) | Role / Permission / Handoff View |
 | [090-team-delivery-decision-history-v1.md](090-team-delivery-decision-history-v1.md) | Team Delivery / Decision History View |
 | [091-commercial-product-layer-boundary-v1.md](091-commercial-product-layer-boundary-v1.md) | Commercial Product Layer Boundary |
+| [092-license-entitlement-boundary-v1.md](092-license-entitlement-boundary-v1.md) | License / Entitlement Boundary |
 
 ## Rules
 
