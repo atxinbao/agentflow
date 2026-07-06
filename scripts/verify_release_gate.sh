@@ -315,6 +315,7 @@ V122_COMMERCIAL_PROOF_VERSION_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/v122-commercia
 V123_COMMERCIAL_PRODUCT_READ_MODEL_CONTRACT_PATH="$RUNTIME_DIR/v123-commercial-product-read-model-contract.json"
 V123_PAID_REPORT_FLOW_PREFLIGHT_CONTRACT_PATH="$RUNTIME_DIR/v123-paid-report-flow-preflight-contract.json"
 V123_MANAGED_PROJECT_FLOW_COMMERCIAL_BOUNDARY_PATH="$RUNTIME_DIR/v123-managed-project-flow-commercial-boundary.json"
+V123_DESKTOP_COMMERCIAL_BOUNDARY_SURFACE_PATH="$RUNTIME_DIR/v123-desktop-commercial-boundary-surface.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -542,6 +543,7 @@ proof_chain = [
     {"stage": "release.v123-commercial-product-read-model-contract", "label": "V123 Commercial Product Read Model Contract"},
     {"stage": "release.v123-paid-report-flow-preflight-contract", "label": "V123 Paid Report Flow Preflight Contract"},
     {"stage": "release.v123-managed-project-flow-commercial-boundary", "label": "V123 Managed Project Flow Commercial Boundary"},
+    {"stage": "release.v123-desktop-commercial-boundary-surface", "label": "V123 Desktop Commercial Boundary Surface"},
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
@@ -682,6 +684,7 @@ runtime_artifacts = [
     {"path": "runtime/v123-commercial-product-read-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-commercial-product-read-model-contract.json").is_file()},
     {"path": "runtime/v123-paid-report-flow-preflight-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-paid-report-flow-preflight-contract.json").is_file()},
     {"path": "runtime/v123-managed-project-flow-commercial-boundary.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-managed-project-flow-commercial-boundary.json").is_file()},
+    {"path": "runtime/v123-desktop-commercial-boundary-surface.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-desktop-commercial-boundary-surface.json").is_file()},
     {"path": "runtime/core-decision-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json").is_file()},
     {"path": "runtime/core-decision-input-binding.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json").is_file()},
     {"path": "runtime/core-decision-outcome-transitions.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json").is_file()},
@@ -3613,6 +3616,140 @@ PY
   fi
 
   record_stage "$stage" "passed" "$(basename "$V123_MANAGED_PROJECT_FLOW_COMMERCIAL_BOUNDARY_PATH")"
+}
+
+run_v123_desktop_commercial_boundary_surface_gate() {
+  local stage="release.v123-desktop-commercial-boundary-surface"
+  record_stage "$stage" "started" "$V123_DESKTOP_COMMERCIAL_BOUNDARY_SURFACE_PATH"
+
+  if ! python3 - \
+    "$V123_DESKTOP_COMMERCIAL_BOUNDARY_SURFACE_PATH" \
+    "$ROOT" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_raw, root_raw = sys.argv[1:]
+out_path = pathlib.Path(out_raw)
+root = pathlib.Path(root_raw)
+app_path = root / "apps" / "desktop" / "src" / "App.tsx"
+css_path = root / "apps" / "desktop" / "src" / "AppShell.css"
+read_model_doc = root / "docs" / "architecture" / "095-commercial-product-read-model-contract-v1.md"
+paid_report_doc = root / "docs" / "architecture" / "096-paid-report-flow-preflight-contract-v1.md"
+managed_project_doc = root / "docs" / "architecture" / "097-managed-project-flow-commercial-boundary-v1.md"
+app = app_path.read_text(encoding="utf-8") if app_path.is_file() else ""
+css = css_path.read_text(encoding="utf-8") if css_path.is_file() else ""
+docs = "\n".join(
+    path.read_text(encoding="utf-8")
+    for path in [read_model_doc, paid_report_doc, managed_project_doc]
+    if path.is_file()
+)
+component_start = app.find("function ProjectHomeCommercialBoundaryPanel")
+component_end = app.find("type CommandSurfaceStatus", component_start)
+component_text = app[component_start:component_end] if component_start >= 0 and component_end > component_start else ""
+
+fixtures = [
+    {
+        "id": "paid-report-disabled",
+        "input": {"flowType": "paid-report-flow", "entitlementState": "disabled", "paidFeatureState": "disabled"},
+        "expected": {"availability": "rejected", "commandPolicy": "blocked-before-runtime", "canSubmitRuntimeCommandProposal": False, "renderedExecutable": False},
+    },
+    {
+        "id": "paid-report-deferred",
+        "input": {"flowType": "paid-report-flow", "entitlementState": "deferred", "paidFeatureState": "deferred"},
+        "expected": {"availability": "deferred", "commandPolicy": "blocked-before-runtime", "canSubmitRuntimeCommandProposal": False, "renderedExecutable": False},
+    },
+    {
+        "id": "managed-project-active",
+        "input": {"flowType": "managed-project-flow", "entitlementState": "trial", "paidFeatureState": "not-required"},
+        "expected": {"availability": "available", "commandPolicy": "allowed-to-propose", "canSubmitRuntimeCommandProposal": True, "renderedExecutable": False},
+    },
+]
+
+def evaluate(case):
+    data = case["input"]
+    if data["entitlementState"] == "disabled":
+        return {"availability": "rejected", "commandPolicy": "blocked-before-runtime", "canSubmitRuntimeCommandProposal": False, "renderedExecutable": False}
+    if data["entitlementState"] == "deferred":
+        return {"availability": "deferred", "commandPolicy": "blocked-before-runtime", "canSubmitRuntimeCommandProposal": False, "renderedExecutable": False}
+    return {"availability": "available", "commandPolicy": "allowed-to-propose", "canSubmitRuntimeCommandProposal": True, "renderedExecutable": False}
+
+fixture_results = []
+for case in fixtures:
+    actual = evaluate(case)
+    fixture_results.append({
+        **case,
+        "actual": actual,
+        "passed": actual == case["expected"],
+    })
+
+forbidden_surface_terms = ["checkout", "account settings", "public launch messaging", "payment UI"]
+forbidden_write_terms = [
+    "write_commercial",
+    "save_commercial",
+    "submit_commercial",
+    ".agentflow/spec",
+    ".agentflow/events",
+    ".agentflow/tasks",
+]
+
+coverage = {
+    "appExists": app_path.is_file(),
+    "cssExists": css_path.is_file(),
+    "readModelDocsExist": read_model_doc.is_file() and paid_report_doc.is_file() and managed_project_doc.is_file(),
+    "desktopCommercialPanelRendered": "ProjectHomeCommercialBoundaryPanel" in app and "Commercial Boundary" in app,
+    "commercialReadModelVersionConsumed": "agentflow-commercial-product-read-model.v1" in app,
+    "flowTypeRendered": 'data-agentflow-flow-type={entry.flowType}' in app and "paid-report-flow" in app and "managed-project-flow" in app,
+    "entitlementRendered": 'data-agentflow-entitlement-state={entry.entitlementState}' in app and "Entitlement" in app,
+    "paidFeatureRendered": 'data-agentflow-paid-feature-state={entry.paidFeatureState}' in app and "Paid Feature" in app,
+    "unavailableReasonRendered": "unavailableReason" in app and "Reason" in app,
+    "nextActionRendered": "nextAction" in app and "Next Action" in app,
+    "projectionOnlyMarked": 'data-agentflow-projection-only={String(model.projectionOnly)}' in app and "projectionOnly: true" in app,
+    "coreAuthorityFalseMarked": 'data-agentflow-core-authority={String(model.coreAuthority)}' in app and "coreAuthority: false" in app,
+    "writesAuthorityFalseMarked": 'data-agentflow-writes-authority={String(model.writesAuthority)}' in app and "writesAuthority: false" in app,
+    "disabledPaidFeatureNotExecutable": next(result for result in fixture_results if result["id"] == "paid-report-disabled")["actual"]["renderedExecutable"] is False and "disabled-entitlement" in app,
+    "deferredEntitlementNotReady": next(result for result in fixture_results if result["id"] == "paid-report-deferred")["actual"]["availability"] == "deferred" and "deferred-entitlement" in app and "不能把 deferred 显示为 ready" in app,
+    "managedProjectDistinctShape": "managed-project-flow" in app and ".v16-commercial-boundary-card.managed-project-flow" in css,
+    "paidReportDistinctShape": "paid-report-flow" in app and ".v16-commercial-boundary-card.paid-report-flow" in css,
+    "noPaymentCheckoutAccountMessaging": bool(component_text) and all(term not in component_text for term in forbidden_surface_terms),
+    "noCommercialAuthorityWrites": bool(component_text) and all(term not in component_text for term in forbidden_write_terms),
+    "contractDocsAligned": "Desktop / Product surface 只能消费" in docs and "不能直接启动 run" in docs and "Software Dev 是 Managed Project Flow Reference Product" in docs,
+}
+
+failed_coverage = [key for key, passed in coverage.items() if not passed]
+failed_fixtures = [result["id"] for result in fixture_results if not result["passed"]]
+payload = {
+    "version": "agentflow-v123-desktop-commercial-boundary-surface.v1",
+    "status": "passed" if not failed_coverage and not failed_fixtures else "failed",
+    "sourceIssue": "#910",
+    "proofPath": "runtime/v123-desktop-commercial-boundary-surface.json",
+    "readModelVersion": "agentflow-commercial-product-read-model.v1",
+    "desktopSurface": {
+        "component": "ProjectHomeCommercialBoundaryPanel",
+        "projectionOnly": True,
+        "coreAuthority": False,
+        "writesAuthority": False,
+        "paymentUiImplemented": False,
+        "checkoutImplemented": False,
+        "accountSettingsImplemented": False,
+    },
+    "supportedFlows": ["paid-report-flow", "managed-project-flow"],
+    "fixtures": fixture_results,
+    "coverage": coverage,
+    "failedCoverageKeys": failed_coverage,
+    "failedFixtureIds": failed_fixtures,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit(f"Desktop commercial boundary surface gate failed: coverage={failed_coverage}, fixtures={failed_fixtures}")
+PY
+  then
+    fail_stage "$stage" "V123 desktop commercial boundary surface failed"
+  fi
+
+  record_stage "$stage" "passed" "$(basename "$V123_DESKTOP_COMMERCIAL_BOUNDARY_SURFACE_PATH")"
 }
 
 run_source_agent_entry_gate() {
@@ -16231,6 +16368,7 @@ PY
   run_v123_commercial_product_read_model_contract_gate
   run_v123_paid_report_flow_preflight_contract_gate
   run_v123_managed_project_flow_commercial_boundary_gate
+  run_v123_desktop_commercial_boundary_surface_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

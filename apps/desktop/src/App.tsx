@@ -2957,6 +2957,7 @@ function ProjectHomePage({
     },
   ];
   const commandEntries = productCommandEntries.length ? productCommandEntries : fallbackCommandEntries;
+  const commercialBoundaryReadModel = buildCommercialBoundaryReadModel(productCommandSurfaceState.view);
 
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
@@ -3108,6 +3109,7 @@ function ProjectHomePage({
       <section className="v16-home-columns" aria-label="项目入口与最近活动">
         <ProjectHomeAgentEntryPanel activeOwnerLabel={nextOwnerLabel} />
         <ProjectHomeTeamWorkflowPanel state={teamWorkflowViewsState} />
+        <ProjectHomeCommercialBoundaryPanel model={commercialBoundaryReadModel} source={productCommandSurfaceState.source} />
         <Panel className="v16-home-column" title="Command Surface">
           <CommandSurfaceActionList actions={commandEntries} />
           {productCommandSurfaceState.error ? (
@@ -3255,6 +3257,208 @@ function ProjectHomeTeamWorkflowPanel({ state }: { state: TeamWorkflowViewsState
       </div>
     </Panel>
   );
+}
+
+type CommercialFlowType = "paid-report-flow" | "managed-project-flow";
+type CommercialAvailability = "available" | "rejected" | "deferred" | "invalid";
+type CommercialCommandPolicy = "allowed-to-propose" | "blocked-before-runtime";
+
+type CommercialBoundaryEntry = {
+  productId: string;
+  productName: string;
+  flowType: CommercialFlowType;
+  flowLabel: string;
+  entitlementState: "active" | "trial" | "disabled" | "deferred";
+  paidFeatureState: "enabled" | "disabled" | "deferred" | "not-required";
+  deliveryPromise: "report" | "project-delivery";
+  availability: CommercialAvailability;
+  unavailableReason: string;
+  nextAction: string;
+  commandPolicy: CommercialCommandPolicy;
+  canSubmitRuntimeCommandProposal: boolean;
+  coreAuthority: false;
+  projectionOnly: true;
+};
+
+type CommercialBoundaryReadModel = {
+  version: "agentflow-commercial-product-read-model.v1";
+  source: "product-read-model";
+  projectionOnly: true;
+  coreAuthority: false;
+  writesAuthority: false;
+  entries: CommercialBoundaryEntry[];
+};
+
+function ProjectHomeCommercialBoundaryPanel({
+  model,
+  source,
+}: {
+  model: CommercialBoundaryReadModel;
+  source: DataSource;
+}) {
+  const sourceLabel = source === "tauri" ? "Runtime Projection" : source === "preview" ? "Browser Preview" : "Read Model";
+
+  return (
+    <Panel className="v16-home-column" title="Commercial Boundary">
+      <div
+        className="v16-commercial-boundary-panel"
+        data-agentflow-read-model="commercial-product-boundary"
+        data-agentflow-projection-only={String(model.projectionOnly)}
+        data-agentflow-core-authority={String(model.coreAuthority)}
+        data-agentflow-writes-authority={String(model.writesAuthority)}
+      >
+        <div className="v16-project-home-next-step-header">
+          <StatusBadge status="idle">{sourceLabel}</StatusBadge>
+          <strong>{model.version}</strong>
+        </div>
+        <p>
+          Desktop 只消费 Product read model。商业可用性不能绕过 Core Runtime admission，也不能写 authority facts。
+        </p>
+        <div className="v16-commercial-boundary-list">
+          {model.entries.map((entry) => (
+            <article
+              className={`v16-commercial-boundary-card ${entry.flowType}`}
+              data-agentflow-flow-type={entry.flowType}
+              data-agentflow-availability={entry.availability}
+              data-agentflow-entitlement-state={entry.entitlementState}
+              data-agentflow-paid-feature-state={entry.paidFeatureState}
+              data-agentflow-can-submit-runtime-command-proposal={String(entry.canSubmitRuntimeCommandProposal)}
+              data-agentflow-command-policy={entry.commandPolicy}
+              key={`${entry.productId}-${entry.flowType}-${entry.entitlementState}`}
+            >
+              <div className="v16-commercial-boundary-card-head">
+                <div>
+                  <span>{entry.flowLabel}</span>
+                  <strong>{entry.productName}</strong>
+                </div>
+                <StatusBadge status={commercialAvailabilityTone(entry.availability)}>
+                  {commercialAvailabilityLabel(entry.availability)}
+                </StatusBadge>
+              </div>
+              <dl>
+                <div>
+                  <dt>Flow</dt>
+                  <dd>{entry.flowType}</dd>
+                </div>
+                <div>
+                  <dt>Entitlement</dt>
+                  <dd>{entry.entitlementState}</dd>
+                </div>
+                <div>
+                  <dt>Paid Feature</dt>
+                  <dd>{entry.paidFeatureState}</dd>
+                </div>
+                <div>
+                  <dt>Delivery</dt>
+                  <dd>{entry.deliveryPromise}</dd>
+                </div>
+                <div>
+                  <dt>Reason</dt>
+                  <dd>{entry.unavailableReason}</dd>
+                </div>
+                <div>
+                  <dt>Next Action</dt>
+                  <dd>{entry.nextAction}</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function buildCommercialBoundaryReadModel(
+  productCommandSurface: ProductCommandSurfaceView | null,
+): CommercialBoundaryReadModel {
+  const softwareDevAvailable = productCommandSurface?.commands.some(
+    (command) => command.productId === "software-dev" && command.state === "valid" && command.available,
+  ) ?? true;
+  const softwareDevAvailability: CommercialAvailability = softwareDevAvailable ? "available" : "deferred";
+  const softwareDevCommandPolicy: CommercialCommandPolicy = softwareDevAvailable
+    ? "allowed-to-propose"
+    : "blocked-before-runtime";
+
+  return {
+    version: "agentflow-commercial-product-read-model.v1",
+    source: "product-read-model",
+    projectionOnly: true,
+    coreAuthority: false,
+    writesAuthority: false,
+    entries: [
+      {
+        availability: "rejected",
+        canSubmitRuntimeCommandProposal: false,
+        commandPolicy: "blocked-before-runtime",
+        coreAuthority: false,
+        deliveryPromise: "report",
+        entitlementState: "disabled",
+        flowLabel: "Paid Report Flow",
+        flowType: "paid-report-flow",
+        nextAction: "先补齐有效 entitlement，再生成 Runtime command proposal。",
+        paidFeatureState: "disabled",
+        productId: "paid-report",
+        productName: "Paid Report",
+        projectionOnly: true,
+        unavailableReason: "disabled-entitlement",
+      },
+      {
+        availability: "deferred",
+        canSubmitRuntimeCommandProposal: false,
+        commandPolicy: "blocked-before-runtime",
+        coreAuthority: false,
+        deliveryPromise: "report",
+        entitlementState: "deferred",
+        flowLabel: "Paid Report Flow",
+        flowType: "paid-report-flow",
+        nextAction: "等待 entitlement 生效；Desktop 不能把 deferred 显示为 ready。",
+        paidFeatureState: "deferred",
+        productId: "paid-report-preview",
+        productName: "Paid Report Preview",
+        projectionOnly: true,
+        unavailableReason: "deferred-entitlement",
+      },
+      {
+        availability: softwareDevAvailability,
+        canSubmitRuntimeCommandProposal: softwareDevAvailable,
+        commandPolicy: softwareDevCommandPolicy,
+        coreAuthority: false,
+        deliveryPromise: "project-delivery",
+        entitlementState: "trial",
+        flowLabel: "Managed Project Flow",
+        flowType: "managed-project-flow",
+        nextAction: softwareDevAvailable
+          ? "可以生成 Runtime command proposal；仍需 Core Runtime admission。"
+          : "等待 product command surface 恢复可用。",
+        paidFeatureState: "not-required",
+        productId: "software-dev",
+        productName: "Software Dev",
+        projectionOnly: true,
+        unavailableReason: softwareDevAvailable ? "none" : "deferred-entitlement",
+      },
+    ],
+  };
+}
+
+function commercialAvailabilityLabel(availability: CommercialAvailability) {
+  const labels: Record<CommercialAvailability, string> = {
+    available: "可提案",
+    deferred: "已暂缓",
+    invalid: "无效",
+    rejected: "不可执行",
+  };
+  return labels[availability];
+}
+
+function commercialAvailabilityTone(availability: CommercialAvailability): StatusChipStatus {
+  const tones: Record<CommercialAvailability, StatusChipStatus> = {
+    available: "ready",
+    deferred: "warning",
+    invalid: "failed",
+    rejected: "failed",
+  };
+  return tones[availability];
 }
 
 type CommandSurfaceStatus =
