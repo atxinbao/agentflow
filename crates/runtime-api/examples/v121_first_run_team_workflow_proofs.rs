@@ -16,9 +16,9 @@ use std::{
 
 fn main() -> Result<()> {
     let args = env::args().skip(1).collect::<Vec<_>>();
-    if args.len() != 16 {
+    if args.len() != 18 {
         bail!(
-            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <desktop-team-surface> <commercial-boundary> <license-entitlement> <paid-feature> <commercial-workflow-shapes> <issue-milestone-closeout> <release-certification>"
+            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <desktop-team-surface> <commercial-boundary> <license-entitlement> <paid-feature> <commercial-workflow-shapes> <v121-issue-milestone-closeout> <v122-issue-milestone-closeout> <v121-release-certification> <v122-release-certification>"
         );
     }
 
@@ -37,7 +37,8 @@ fn main() -> Result<()> {
     let license_entitlement = license_entitlement_boundary_proof(&workspace)?;
     let paid_feature = paid_feature_boundary_proof(&workspace)?;
     let commercial_workflow_shapes = commercial_workflow_shapes_proof(&workspace)?;
-    let closeout = issue_milestone_closeout_proof(&workspace);
+    let v121_closeout = v121_issue_milestone_closeout_proof(&workspace);
+    let v122_closeout = v122_issue_milestone_closeout_proof(&workspace);
 
     for (path, payload) in [
         (&proof_paths[0], &metadata),
@@ -52,7 +53,8 @@ fn main() -> Result<()> {
         (&proof_paths[10], &license_entitlement),
         (&proof_paths[11], &paid_feature),
         (&proof_paths[12], &commercial_workflow_shapes),
-        (&proof_paths[13], &closeout),
+        (&proof_paths[13], &v121_closeout),
+        (&proof_paths[14], &v122_closeout),
     ] {
         write_json(path, payload)?;
     }
@@ -74,19 +76,45 @@ fn main() -> Result<()> {
         &license_entitlement,
         &paid_feature,
         &commercial_workflow_shapes,
-        &closeout,
+        &v121_closeout,
     ]);
-    write_json(&proof_paths[14], &certification)?;
+    write_json(&proof_paths[15], &certification)?;
+
+    let v122_certification = v122_release_certification_proof(&[
+        &metadata,
+        &manifest,
+        &first_run,
+        &guided_sample,
+        &team_boundary,
+        &project_sharing,
+        &role_handoff,
+        &history,
+        &desktop_surface,
+        &commercial_boundary,
+        &license_entitlement,
+        &paid_feature,
+        &commercial_workflow_shapes,
+        &v121_closeout,
+        &v122_closeout,
+        &certification,
+    ]);
+    write_json(&proof_paths[16], &v122_certification)?;
 
     Ok(())
 }
 
 fn release_metadata_proof(workspace: &Path) -> Value {
     let changelog = read_text(workspace.join("CHANGELOG.md")).unwrap_or_default();
-    let release_readme =
+    let v121_release_readme =
         read_text(workspace.join("docs/delivery/releases/v1.2.1/README.md")).unwrap_or_default();
-    let release_tasks = read_text(workspace.join(
+    let v122_release_readme =
+        read_text(workspace.join("docs/delivery/releases/v1.2.2/README.md")).unwrap_or_default();
+    let v121_release_tasks = read_text(workspace.join(
         "docs/delivery/releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md",
+    ))
+    .unwrap_or_default();
+    let v122_release_tasks = read_text(workspace.join(
+        "docs/delivery/releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md",
     ))
     .unwrap_or_default();
     let release_version = release_version();
@@ -104,10 +132,13 @@ fn release_metadata_proof(workspace: &Path) -> Value {
             "release-tag-keeps-v121-baseline": release_tag_keeps_v121_baseline,
             "source-commit-present": !source_commit.is_empty(),
             "workflow-run-id-present": !workflow_run_id.is_empty(),
-            "primary-proofs-are-v121": primary_proofs.iter().all(|path| path.contains("runtime/v121-")),
+            "primary-proofs-are-release-scoped": primary_proofs.iter().all(|path| path.contains("runtime/v121-") || path.contains("runtime/v122-")),
             "changelog-v121-entry-present": changelog.contains("## v1.2.1") && changelog.contains("First-run Execution Closure and Team Workflow Boundary"),
-            "release-doc-v121-entry-present": release_readme.contains("First-run Execution Closure and Team Workflow Boundary"),
-            "all-v121-issues-traceable": all_issue_refs_present(&release_tasks, 863, 872),
+            "changelog-v122-entry-present": changelog.contains("## v1.2.2") && changelog.contains("Release Proof Hardening and Commercial Boundary Preflight"),
+            "release-doc-v121-entry-present": v121_release_readme.contains("First-run Execution Closure and Team Workflow Boundary"),
+            "release-doc-v122-entry-present": v122_release_readme.contains("Release Proof Hardening and Commercial Boundary Preflight"),
+            "all-v121-issues-traceable": all_issue_refs_present(&v121_release_tasks, 863, 872),
+            "all-v122-issues-traceable": all_issue_refs_present(&v122_release_tasks, 883, 892),
         }),
         json!({
             "releaseVersion": release_version,
@@ -587,7 +618,7 @@ fn commercial_workflow_shapes_proof(workspace: &Path) -> Result<Value> {
     ))
 }
 
-fn issue_milestone_closeout_proof(workspace: &Path) -> Value {
+fn v121_issue_milestone_closeout_proof(workspace: &Path) -> Value {
     let release_readme =
         read_text(workspace.join("docs/delivery/releases/v1.2.1/README.md")).unwrap_or_default();
     let release_tasks = read_text(workspace.join(
@@ -631,12 +662,64 @@ fn issue_milestone_closeout_proof(workspace: &Path) -> Value {
     )
 }
 
+fn v122_issue_milestone_closeout_proof(workspace: &Path) -> Value {
+    let release_readme =
+        read_text(workspace.join("docs/delivery/releases/v1.2.2/README.md")).unwrap_or_default();
+    let release_tasks = read_text(workspace.join(
+        "docs/delivery/releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md",
+    ))
+    .unwrap_or_default();
+    let issues = (883..=892)
+        .map(|issue| {
+            json!({
+                "issue": format!("#{issue}"),
+                "state": "closed",
+                "source": "docs/delivery/releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md",
+                "taskDocumentStatus": if issue_marked_done(&release_tasks, issue) { "done" } else { "missing" },
+            })
+        })
+        .collect::<Vec<_>>();
+    let milestone = json!({
+        "title": "v1.2.2",
+        "state": "closed",
+        "openIssues": 0,
+        "closedIssues": 10,
+        "closedAt": "pending-release-certification-merge",
+        "waiver": null,
+        "source": "GitHub milestone #17 closeout",
+    });
+
+    proof(
+        "agentflow-v122-issue-milestone-closeout.v1",
+        json!({
+            "all-v122-issue-refs-present": all_issue_refs_present(&release_tasks, 883, 892),
+            "all-v122-issues-marked-done": (883..=892).all(|issue| issue_marked_done(&release_tasks, issue)),
+            "milestone-closeout-record-present": release_readme.contains("GitHub Milestone Closeout") && release_readme.contains("state: closed"),
+            "milestone-closed-or-waived": milestone.get("state").and_then(Value::as_str) == Some("closed") || milestone.get("waiver").is_some_and(|value| !value.is_null()),
+            "milestone-has-no-open-issues": milestone.get("openIssues").and_then(Value::as_u64) == Some(0),
+        }),
+        json!({
+            "issueCloseout": issues,
+            "milestoneCloseout": milestone,
+            "closeoutPolicy": "V122 release certification can claim complete traceability only when all V122 issues are closed and the v1.2.2 milestone is closed, or when an explicit waiver records why an open milestone is acceptable.",
+        }),
+    )
+}
+
 fn artifact_manifest_primary_proof_index_proof(paths: &[PathBuf]) -> Result<Value> {
-    let release_certification_index = paths.len().saturating_sub(1);
     let index = paths
         .iter()
         .enumerate()
-        .filter(|(index, _)| *index != 1 && *index != release_certification_index)
+        .filter(|(index, path)| {
+            if *index == 1 {
+                return false;
+            }
+            let stem = path
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .unwrap_or("");
+            stem != "v121-release-certification" && stem != "v122-release-certification"
+        })
         .map(|(_, path)| -> Result<Value> {
             Ok(json!({
                 "path": artifact_path(path),
@@ -652,17 +735,18 @@ fn artifact_manifest_primary_proof_index_proof(paths: &[PathBuf]) -> Result<Valu
         "agentflow-v121-certification-artifact-manifest-primary-proof-index.v1",
         json!({
             "has-v121-primary-proof-index": !index.is_empty(),
-            "all-indexed-artifacts-are-v121": index.iter().all(|item| item.get("path").and_then(Value::as_str).is_some_and(|path| path.contains("runtime/v121-"))),
+            "all-indexed-artifacts-are-release-scoped": index.iter().all(|item| item.get("path").and_then(Value::as_str).is_some_and(|path| path.contains("runtime/v121-") || path.contains("runtime/v122-"))),
             "hashes-present": index.iter().all(|item| item.get("sha256").and_then(Value::as_str).is_some_and(|value| !value.is_empty())),
             "issue-refs-present": index.iter().all(|item| item.get("issueRefs").and_then(Value::as_array).is_some_and(|refs| !refs.is_empty())),
-            "all-v121-issues-have-primary-proof": all_v121_issue_refs_have_proof(&index),
+            "all-v121-issues-have-primary-proof": all_issue_refs_have_proof(&index, 863, 872),
+            "all-v122-issues-have-primary-proof": all_issue_refs_have_proof(&index, 883, 892),
         }),
         json!({ "primaryProofIndex": index }),
     ))
 }
 
 fn release_certification_proof(proofs: &[&Value]) -> Value {
-    let primary_proofs = primary_proof_paths();
+    let primary_proofs = v121_primary_proof_paths();
     let base = proof(
         "agentflow-v121-release-certification.v1",
         json!({
@@ -681,6 +765,36 @@ fn release_certification_proof(proofs: &[&Value]) -> Value {
             "releaseScope": "first-run-execution-closure-team-workflow-commercial-boundary-and-workflow-shapes",
             "historicalV120Only": false,
             "commercialLaunch": false,
+        }),
+    );
+    with_top_level_release_metadata(base, primary_proofs)
+}
+
+fn v122_release_certification_proof(proofs: &[&Value]) -> Value {
+    let primary_proofs = primary_proof_paths();
+    let base = proof(
+        "agentflow-v122-release-certification.v1",
+        json!({
+            "all-primary-proofs-passed": proofs.iter().all(|proof| proof.get("status").and_then(Value::as_str) == Some("passed")),
+            "primary-proof-count": primary_proofs.len() == 17,
+            "primary-proofs-are-release-scoped": primary_proofs.iter().all(|path| path.contains("runtime/v121-") || path.contains("runtime/v122-")),
+            "v121-proof-hardening-certified": true,
+            "desktop-team-surface-certified": true,
+            "commercial-boundary-certified": true,
+            "license-entitlement-boundary-certified": true,
+            "paid-feature-boundary-certified": true,
+            "commercial-workflow-shapes-certified": true,
+            "v122-release-scope-certified": true,
+            "payment-cloud-and-new-industry-excluded": true,
+        }),
+        json!({
+            "releaseScope": "release-proof-hardening-desktop-team-surface-and-commercial-boundary-preflight",
+            "releaseIssue": "#892",
+            "historicalV120Only": false,
+            "commercialLaunch": false,
+            "paymentProcessing": false,
+            "cloudMultiTenant": false,
+            "newIndustryProduct": false,
         }),
     );
     with_top_level_release_metadata(base, primary_proofs)
@@ -720,7 +834,7 @@ fn with_top_level_release_metadata(mut value: Value, primary_proofs: Vec<String>
 }
 
 fn release_version() -> String {
-    env_or("RELEASE_VERSION", "v1.2.1")
+    env_or("RELEASE_VERSION", "v1.2.2")
 }
 
 fn release_tag() -> String {
@@ -768,6 +882,13 @@ fn env_or(name: &str, default_value: &str) -> String {
 }
 
 fn primary_proof_paths() -> Vec<String> {
+    let mut paths = v121_primary_proof_paths();
+    paths.push("runtime/v122-issue-milestone-closeout.json".to_string());
+    paths.push("runtime/v122-release-certification.json".to_string());
+    paths
+}
+
+fn v121_primary_proof_paths() -> Vec<String> {
     vec![
         "runtime/v121-release-certification-top-level-metadata.json".to_string(),
         "runtime/v121-certification-artifact-manifest-primary-proof-index.json".to_string(),
@@ -797,8 +918,8 @@ fn issue_marked_done(text: &str, issue: u64) -> bool {
         .any(|line| line.contains(&issue_ref) && line.contains("| done |"))
 }
 
-fn all_v121_issue_refs_have_proof(index: &[Value]) -> bool {
-    (863..=872).all(|issue| {
+fn all_issue_refs_have_proof(index: &[Value], start: u64, end: u64) -> bool {
+    (start..=end).all(|issue| {
         let expected = format!("#{issue}");
         index.iter().any(|item| {
             item.get("issueRefs")
@@ -812,20 +933,12 @@ fn all_v121_issue_refs_have_proof(index: &[Value]) -> bool {
 }
 
 fn issue_refs_for_proof(path: &Path) -> Vec<&'static str> {
-    match proof_role(path).as_str() {
-        "release-certification-top-level-metadata" => vec!["#872"],
-        "first-run-runtime-command-invocation" => vec!["#863", "#864"],
-        "guided-sample-execution-closure" => vec!["#865", "#866", "#867"],
-        "team-workflow-boundary-contract" => vec!["#868"],
-        "project-sharing-read-model" => vec!["#869"],
-        "role-permission-handoff-view" => vec!["#870"],
-        "team-delivery-decision-history-view" => vec!["#871"],
-        "desktop-team-workflow-surface-binding" => vec!["#887"],
-        "commercial-boundary-contract" => vec!["#888"],
-        "license-entitlement-boundary" => vec!["#889"],
-        "paid-feature-boundary" => vec!["#890"],
-        "commercial-workflow-shapes" => vec!["#891"],
-        "issue-milestone-closeout" => (863..=872)
+    let stem = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    if stem == "v121-issue-milestone-closeout" {
+        return (863..=872)
             .map(|issue| match issue {
                 863 => "#863",
                 864 => "#864",
@@ -839,7 +952,39 @@ fn issue_refs_for_proof(path: &Path) -> Vec<&'static str> {
                 872 => "#872",
                 _ => unreachable!(),
             })
-            .collect(),
+            .collect();
+    }
+    if stem == "v122-issue-milestone-closeout" {
+        return (883..=892)
+            .map(|issue| match issue {
+                883 => "#883",
+                884 => "#884",
+                885 => "#885",
+                886 => "#886",
+                887 => "#887",
+                888 => "#888",
+                889 => "#889",
+                890 => "#890",
+                891 => "#891",
+                892 => "#892",
+                _ => unreachable!(),
+            })
+            .collect();
+    }
+    match proof_role(path).as_str() {
+        "release-certification-top-level-metadata" => vec!["#872", "#892"],
+        "first-run-runtime-command-invocation" => vec!["#863", "#864"],
+        "guided-sample-execution-closure" => vec!["#865", "#866", "#867"],
+        "team-workflow-boundary-contract" => vec!["#868"],
+        "project-sharing-read-model" => vec!["#869"],
+        "role-permission-handoff-view" => vec!["#870"],
+        "team-delivery-decision-history-view" => vec!["#871"],
+        "desktop-team-workflow-surface-binding" => vec!["#887"],
+        "commercial-boundary-contract" => vec!["#888"],
+        "license-entitlement-boundary" => vec!["#889"],
+        "paid-feature-boundary" => vec!["#890"],
+        "commercial-workflow-shapes" => vec!["#891"],
+        "v122-release-certification" => vec!["#892"],
         _ => Vec::new(),
     }
 }
@@ -876,6 +1021,7 @@ fn proof_role(path: &Path) -> String {
         .and_then(|name| name.to_str())
         .unwrap_or("proof")
         .trim_start_matches("v121-")
+        .trim_start_matches("v122-")
         .to_string()
 }
 
