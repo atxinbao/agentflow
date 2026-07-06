@@ -307,6 +307,7 @@ V121_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v121-release-certification.json"
 V122_ISSUE_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/v122-issue-milestone-closeout.json"
 V122_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v122-release-certification.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
+RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
 CORE_DECISION_INPUT_BINDING_PATH="$RUNTIME_DIR/core-decision-input-binding.json"
 CORE_DECISION_OUTCOME_TRANSITIONS_PATH="$RUNTIME_DIR/core-decision-outcome-transitions.json"
@@ -526,6 +527,7 @@ proof_chain = [
     {"stage": "release.changelog-entry", "label": "Release Changelog Entry"},
     {"stage": "release.github-release-fact", "label": "GitHub Release Fact"},
     {"stage": "release.live-github-milestone-closeout", "label": "Live GitHub Milestone Closeout"},
+    {"stage": "release.closeout-proof-negative-fixture", "label": "Release Closeout Proof Negative Fixture"},
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
@@ -634,6 +636,7 @@ runtime_artifacts = [
     {"path": "runtime/spec-loop-projection.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/spec-loop-projection.json").is_file()},
     {"path": "runtime/release-facts.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-facts.json").is_file()},
     {"path": "runtime/live-github-milestone-closeout.json", "exists": live_github_milestone_closeout_path.is_file()},
+    {"path": "runtime/release-closeout-proof-negative-fixture.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-closeout-proof-negative-fixture.json").is_file()},
     {"path": "runtime/external-review-surface.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/external-review-surface.json").is_file()},
     {"path": "runtime/completion-runtime.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/completion-runtime.json").is_file()},
     {"path": "runtime/final-closeout-proof.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/final-closeout-proof.json").is_file()},
@@ -2381,6 +2384,28 @@ payload = {
     "version": "agentflow-live-github-milestone-closeout.v1",
     "status": "deferred",
     "reason": "missing GitHub token for live milestone query",
+    "claimedState": {
+        "milestoneTitle": milestone_title,
+        "expectedMilestoneState": "closed",
+        "source": "release-closeout-contract",
+    },
+    "observedState": {
+        "provider": "github",
+        "providerBacked": False,
+        "milestoneTitle": milestone_title,
+        "milestoneFound": None,
+        "milestoneState": None,
+        "openIssueCount": None,
+        "closedIssueCount": None,
+        "closedAt": None,
+        "apiSource": None,
+    },
+    "decision": {
+        "status": "deferred",
+        "reason": "missing GitHub token for live milestone query",
+        "providerBacked": False,
+        "source": "release-gate",
+    },
     "milestoneTitle": milestone_title,
     "releaseVersion": release_version,
     "repository": repository,
@@ -2495,9 +2520,33 @@ payload = {
 }
 
 if not matches:
+    status = "deferred" if require_published != "1" else "failed"
+    reason = "GitHub milestone not found"
     payload.update({
-        "status": "deferred" if require_published != "1" else "failed",
-        "reason": "GitHub milestone not found",
+        "status": status,
+        "reason": reason,
+        "claimedState": {
+            "milestoneTitle": milestone_title,
+            "expectedMilestoneState": "closed",
+            "source": "release-closeout-contract",
+        },
+        "observedState": {
+            "provider": "github",
+            "providerBacked": True,
+            "milestoneTitle": milestone_title,
+            "milestoneFound": False,
+            "milestoneState": None,
+            "openIssueCount": None,
+            "closedIssueCount": None,
+            "closedAt": None,
+            "apiSource": f"{api_base}/repos/{repo_path}/milestones?state=all",
+        },
+        "decision": {
+            "status": status,
+            "reason": reason,
+            "providerBacked": True,
+            "source": "release-gate",
+        },
         "milestoneNumber": None,
         "milestoneState": None,
         "openIssueCount": None,
@@ -2548,6 +2597,34 @@ else:
 payload.update({
     "status": status,
     "reason": reason,
+    "claimedState": {
+        "milestoneTitle": milestone_title,
+        "expectedMilestoneState": "closed",
+        "source": "release-closeout-contract",
+    },
+    "observedState": {
+        "provider": "github",
+        "providerBacked": True,
+        "milestoneTitle": milestone_title,
+        "milestoneFound": True,
+        "milestoneNumber": milestone_number,
+        "milestoneUrl": milestone.get("html_url"),
+        "milestoneState": milestone_state,
+        "openIssueCount": len(open_issues),
+        "closedIssueCount": len(closed_issues),
+        "closedAt": milestone.get("closed_at"),
+        "apiMilestoneSource": f"{api_base}/repos/{repo_path}/milestones?state=all",
+        "apiIssueSource": f"{api_base}/repos/{repo_path}/issues?milestone={milestone_number}&state=all",
+    },
+    "decision": {
+        "status": status,
+        "reason": reason,
+        "providerBacked": True,
+        "observedMilestoneState": milestone_state,
+        "observedOpenIssueCount": len(open_issues),
+        "waiver": waiver,
+        "source": "release-gate",
+    },
     "milestoneNumber": milestone_number,
     "milestoneUrl": milestone.get("html_url"),
     "milestoneState": milestone_state,
@@ -2592,6 +2669,198 @@ PY
       fail_stage "$stage" "unexpected live milestone proof status: $live_status"
       ;;
   esac
+}
+
+run_release_closeout_proof_negative_fixture() {
+  local stage="release.closeout-proof-negative-fixture"
+  record_stage "$stage" "started" "$RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH"
+
+  if ! python3 - "$LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH" "$RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH" <<'PY'
+import copy
+import json
+import pathlib
+import sys
+import time
+
+source_path = pathlib.Path(sys.argv[1])
+output_path = pathlib.Path(sys.argv[2])
+
+if not source_path.is_file():
+    raise SystemExit("missing live GitHub milestone closeout proof")
+
+source = json.loads(source_path.read_text(encoding="utf-8"))
+
+def validate_closeout_proof(payload):
+    failed = []
+    if payload.get("version") != "agentflow-live-github-milestone-closeout.v1":
+        failed.append("version.invalid")
+
+    claimed = payload.get("claimedState")
+    observed = payload.get("observedState")
+    decision = payload.get("decision")
+    if not isinstance(claimed, dict):
+        failed.append("claimedState.missing")
+        claimed = {}
+    if not isinstance(observed, dict):
+        failed.append("observedState.missing")
+        observed = {}
+    if not isinstance(decision, dict):
+        failed.append("decision.missing")
+        decision = {}
+
+    decision_status = decision.get("status") or payload.get("status")
+    observed_state = observed.get("milestoneState")
+    expected_state = claimed.get("expectedMilestoneState")
+    provider_backed = observed.get("providerBacked") is True and decision.get("providerBacked") is True
+    has_provider_source = bool(
+        observed.get("apiSource")
+        or observed.get("apiMilestoneSource")
+        or observed.get("apiIssueSource")
+    )
+
+    if not provider_backed:
+        failed.append("providerEvidence.missing")
+    if not has_provider_source:
+        failed.append("providerSource.missing")
+    if expected_state == "closed" and decision_status == "passed" and observed_state != "closed":
+        failed.append("decision.observedStateMismatch")
+    if decision_status in {"passed", "waived"} and observed.get("milestoneFound") is False:
+        failed.append("decision.milestoneMissing")
+    if decision_status == "waived" and not decision.get("waiver"):
+        failed.append("decision.waiverMissing")
+    if payload.get("milestoneState") and observed_state and payload.get("milestoneState") != observed_state:
+        failed.append("legacyField.observedStateMismatch")
+    return failed
+
+valid_source_failures = validate_closeout_proof(source)
+if valid_source_failures and source.get("status") not in {"deferred", "failed"}:
+    raise SystemExit(f"live provider-backed closeout proof is invalid: {valid_source_failures}")
+if valid_source_failures and source.get("status") in {"deferred", "failed"}:
+    allowed = {"providerEvidence.missing", "providerSource.missing"}
+    unexpected = [item for item in valid_source_failures if item not in allowed]
+    if unexpected:
+        raise SystemExit(f"live deferred closeout proof has unexpected failures: {unexpected}")
+
+self_asserted = copy.deepcopy(source)
+self_asserted.update({
+    "status": "passed",
+    "reason": None,
+    "claimedState": {
+        "milestoneTitle": source.get("milestoneTitle"),
+        "expectedMilestoneState": "closed",
+        "source": "self-asserted-fixture",
+    },
+    "observedState": {
+        "provider": "github",
+        "providerBacked": False,
+        "milestoneTitle": source.get("milestoneTitle"),
+        "milestoneFound": None,
+        "milestoneState": None,
+        "openIssueCount": None,
+        "closedIssueCount": None,
+        "closedAt": None,
+        "apiSource": None,
+    },
+    "decision": {
+        "status": "passed",
+        "reason": None,
+        "providerBacked": False,
+        "source": "self-asserted-fixture",
+    },
+})
+
+mismatched = copy.deepcopy(source)
+mismatched_observed = dict(mismatched.get("observedState") or {})
+mismatched_observed.update({
+    "providerBacked": True,
+    "milestoneState": "open",
+    "openIssueCount": max(1, int(mismatched_observed.get("openIssueCount") or 0)),
+    "apiSource": mismatched_observed.get("apiSource") or mismatched_observed.get("apiMilestoneSource") or "https://api.github.com/repos/atxinbao/agentflow/milestones",
+})
+mismatched.update({
+    "status": "passed",
+    "milestoneState": "open",
+    "claimedState": {
+        "milestoneTitle": source.get("milestoneTitle"),
+        "expectedMilestoneState": "closed",
+        "source": "negative-fixture",
+    },
+    "observedState": mismatched_observed,
+    "decision": {
+        "status": "passed",
+        "reason": None,
+        "providerBacked": True,
+        "observedMilestoneState": "open",
+        "source": "negative-fixture",
+    },
+})
+
+provider_backed_deferred = copy.deepcopy(source)
+provider_observed = dict(provider_backed_deferred.get("observedState") or {})
+provider_observed.update({
+    "providerBacked": True,
+    "milestoneFound": True,
+    "milestoneState": "open",
+    "apiSource": provider_observed.get("apiSource") or provider_observed.get("apiMilestoneSource") or "https://api.github.com/repos/atxinbao/agentflow/milestones",
+})
+provider_backed_deferred.update({
+    "status": "deferred",
+    "milestoneState": "open",
+    "observedState": provider_observed,
+    "decision": {
+        "status": "deferred",
+        "reason": "live GitHub milestone is not closed",
+        "providerBacked": True,
+        "observedMilestoneState": "open",
+        "source": "negative-fixture-control",
+    },
+})
+
+cases = [
+    {
+        "caseId": "self-asserted-closed-milestone",
+        "expected": "rejected",
+        "failedCoverageKeys": validate_closeout_proof(self_asserted),
+    },
+    {
+        "caseId": "provider-observed-open-but-decision-passed",
+        "expected": "rejected",
+        "failedCoverageKeys": validate_closeout_proof(mismatched),
+    },
+    {
+        "caseId": "provider-observed-open-deferred",
+        "expected": "accepted",
+        "failedCoverageKeys": validate_closeout_proof(provider_backed_deferred),
+    },
+]
+
+for case in cases:
+    if case["expected"] == "rejected" and not case["failedCoverageKeys"]:
+        raise SystemExit(f"negative closeout fixture was accepted: {case['caseId']}")
+    if case["expected"] == "accepted" and case["failedCoverageKeys"]:
+        raise SystemExit(f"provider-backed deferred fixture was rejected: {case}")
+
+payload = {
+    "version": "agentflow-release-closeout-proof-negative-fixture.v1",
+    "status": "passed",
+    "sourceProofPath": str(source_path),
+    "liveProofStatus": source.get("status"),
+    "cases": cases,
+    "failedCoverageKeys": sorted({
+        key
+        for case in cases
+        if case["expected"] == "rejected"
+        for key in case["failedCoverageKeys"]
+    }),
+    "checkedAt": int(time.time()),
+}
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  then
+    fail_stage "$stage" "release closeout proof negative fixture failed"
+  fi
+
+  record_stage "$stage" "passed" "$(basename "$RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH")"
 }
 
 run_source_agent_entry_gate() {
@@ -14927,6 +15196,7 @@ main() {
   verify_release_metadata "$WORKSPACE"
   verify_release_publication_facts "$WORKSPACE"
   verify_live_github_milestone_closeout
+  run_release_closeout_proof_negative_fixture
   run_provider_smoke_gate
   run_api_plane_manifest_gate
   run_runtime_api_sdk_compatibility_gate
