@@ -302,11 +302,16 @@ V121_COMMERCIAL_BOUNDARY_CONTRACT_PATH="$RUNTIME_DIR/v121-commercial-boundary-co
 V121_LICENSE_ENTITLEMENT_BOUNDARY_PATH="$RUNTIME_DIR/v121-license-entitlement-boundary.json"
 V121_PAID_FEATURE_BOUNDARY_PATH="$RUNTIME_DIR/v121-paid-feature-boundary.json"
 V121_COMMERCIAL_WORKFLOW_SHAPES_PATH="$RUNTIME_DIR/v121-commercial-workflow-shapes.json"
+V122_COMMERCIAL_BOUNDARY_CONTRACT_PATH="$RUNTIME_DIR/v122-commercial-boundary-contract.json"
+V122_LICENSE_ENTITLEMENT_BOUNDARY_PATH="$RUNTIME_DIR/v122-license-entitlement-boundary.json"
+V122_PAID_FEATURE_BOUNDARY_PATH="$RUNTIME_DIR/v122-paid-feature-boundary.json"
+V122_COMMERCIAL_WORKFLOW_SHAPES_PATH="$RUNTIME_DIR/v122-commercial-workflow-shapes.json"
 V121_ISSUE_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/v121-issue-milestone-closeout.json"
 V121_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v121-release-certification.json"
 V122_ISSUE_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/v122-issue-milestone-closeout.json"
 V122_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v122-release-certification.json"
 V122_MILESTONE_CLOSEOUT_REPAIR_PATH="$RUNTIME_DIR/v122-milestone-closeout-repair.json"
+V122_COMMERCIAL_PROOF_VERSION_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/v122-commercial-proof-version-negative-fixture.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -530,6 +535,7 @@ proof_chain = [
     {"stage": "release.live-github-milestone-closeout", "label": "Live GitHub Milestone Closeout"},
     {"stage": "release.closeout-proof-negative-fixture", "label": "Release Closeout Proof Negative Fixture"},
     {"stage": "release.v122-milestone-closeout-repair", "label": "v1.2.2 Milestone Closeout Repair"},
+    {"stage": "release.v122-commercial-proof-version-negative-fixture", "label": "V122 Commercial Proof Version Negative Fixture"},
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
@@ -659,9 +665,14 @@ runtime_artifacts = [
     {"path": "runtime/release-provenance.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/release-provenance.json").is_file()},
     {"path": "runtime/v107-release-provenance-handoff.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v107-release-provenance-handoff.json").is_file()},
     {"path": "runtime/v121-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v121-release-certification.json").is_file()},
+    {"path": "runtime/v122-commercial-boundary-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-commercial-boundary-contract.json").is_file()},
+    {"path": "runtime/v122-license-entitlement-boundary.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-license-entitlement-boundary.json").is_file()},
+    {"path": "runtime/v122-paid-feature-boundary.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-paid-feature-boundary.json").is_file()},
+    {"path": "runtime/v122-commercial-workflow-shapes.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-commercial-workflow-shapes.json").is_file()},
     {"path": "runtime/v122-issue-milestone-closeout.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-issue-milestone-closeout.json").is_file()},
     {"path": "runtime/v122-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-release-certification.json").is_file()},
     {"path": "runtime/v122-milestone-closeout-repair.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-milestone-closeout-repair.json").is_file()},
+    {"path": "runtime/v122-commercial-proof-version-negative-fixture.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-commercial-proof-version-negative-fixture.json").is_file()},
     {"path": "runtime/core-decision-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json").is_file()},
     {"path": "runtime/core-decision-input-binding.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json").is_file()},
     {"path": "runtime/core-decision-outcome-transitions.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json").is_file()},
@@ -3017,6 +3028,96 @@ PY
   fi
 
   record_stage "$stage" "passed" "$(basename "$V122_MILESTONE_CLOSEOUT_REPAIR_PATH")"
+}
+
+run_v122_commercial_proof_version_negative_fixture() {
+  local stage="release.v122-commercial-proof-version-negative-fixture"
+  record_stage "$stage" "started" "$V122_COMMERCIAL_PROOF_VERSION_NEGATIVE_FIXTURE_PATH"
+
+  if ! python3 - \
+    "$V122_COMMERCIAL_PROOF_VERSION_NEGATIVE_FIXTURE_PATH" \
+    "$V121_CERTIFICATION_ARTIFACT_MANIFEST_PRIMARY_PROOF_INDEX_PATH" \
+    "$V122_RELEASE_CERTIFICATION_PATH" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_raw, manifest_raw, certification_raw = sys.argv[1:]
+out_path = pathlib.Path(out_raw)
+manifest = json.loads(pathlib.Path(manifest_raw).read_text(encoding="utf-8"))
+certification = json.loads(pathlib.Path(certification_raw).read_text(encoding="utf-8"))
+
+index = manifest.get("payload", {}).get("primaryProofIndex", [])
+primary_proofs = set(certification.get("primaryProofs", []))
+manifest_paths = {item.get("path") for item in index}
+
+legacy_paths = [
+    "runtime/v121-commercial-boundary-contract.json",
+    "runtime/v121-license-entitlement-boundary.json",
+    "runtime/v121-paid-feature-boundary.json",
+    "runtime/v121-commercial-workflow-shapes.json",
+]
+v122_cases = [
+    ("#888", "runtime/v122-commercial-boundary-contract.json"),
+    ("#889", "runtime/v122-license-entitlement-boundary.json"),
+    ("#890", "runtime/v122-paid-feature-boundary.json"),
+    ("#891", "runtime/v122-commercial-workflow-shapes.json"),
+]
+
+def manifest_item(path):
+    return next((item for item in index if item.get("path") == path), None)
+
+cases = []
+for path in legacy_paths:
+    cases.append({
+        "id": f"reject-{pathlib.Path(path).name}",
+        "path": path,
+        "expected": "rejected",
+        "actual": "rejected" if path not in primary_proofs and path not in manifest_paths else "accepted",
+        "reason": "wrong release prefix cannot satisfy V122 commercial primary proof",
+        "checks": {
+            "notInPrimaryProofs": path not in primary_proofs,
+            "notInManifestIndex": path not in manifest_paths,
+        },
+    })
+
+for issue_ref, path in v122_cases:
+    item = manifest_item(path)
+    cases.append({
+        "id": f"accept-{pathlib.Path(path).name}",
+        "path": path,
+        "expected": "accepted",
+        "actual": "accepted" if path in primary_proofs and item and item.get("releaseScope") == "v1.2.2" and issue_ref in item.get("issueRefs", []) else "rejected",
+        "reason": "V122 commercial primary proof has matching release scope, issue refs, hash, and byte size",
+        "checks": {
+            "inPrimaryProofs": path in primary_proofs,
+            "inManifestIndex": item is not None,
+            "releaseScopeV122": item is not None and item.get("releaseScope") == "v1.2.2",
+            "issueRefPresent": item is not None and issue_ref in item.get("issueRefs", []),
+            "hashPresent": item is not None and bool(item.get("sha256")),
+            "bytesPresent": item is not None and item.get("bytes", 0) > 0,
+        },
+    })
+
+failed = [case for case in cases if case["actual"] != case["expected"]]
+payload = {
+    "version": "agentflow-v122-commercial-proof-version-negative-fixture.v1",
+    "status": "passed" if not failed else "failed",
+    "purpose": "Reject V121 commercial proof paths as V122 primary proofs while accepting V122-scoped commercial primary proofs.",
+    "cases": cases,
+    "failedCaseIds": [case["id"] for case in failed],
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"V122 commercial proof negative fixture failed: {[case['id'] for case in failed]}")
+PY
+  then
+    fail_stage "$stage" "V122 commercial proof negative fixture failed"
+  fi
+
+  record_stage "$stage" "passed" "$(basename "$V122_COMMERCIAL_PROOF_VERSION_NEGATIVE_FIXTURE_PATH")"
 }
 
 run_source_agent_entry_gate() {
@@ -14829,6 +14930,10 @@ run_v121_release_certification_gate() {
     "$V121_LICENSE_ENTITLEMENT_BOUNDARY_PATH" \
     "$V121_PAID_FEATURE_BOUNDARY_PATH" \
     "$V121_COMMERCIAL_WORKFLOW_SHAPES_PATH" \
+    "$V122_COMMERCIAL_BOUNDARY_CONTRACT_PATH" \
+    "$V122_LICENSE_ENTITLEMENT_BOUNDARY_PATH" \
+    "$V122_PAID_FEATURE_BOUNDARY_PATH" \
+    "$V122_COMMERCIAL_WORKFLOW_SHAPES_PATH" \
     "$V121_ISSUE_MILESTONE_CLOSEOUT_PATH" \
     "$V122_ISSUE_MILESTONE_CLOSEOUT_PATH" \
     "$V121_RELEASE_CERTIFICATION_PATH" \
@@ -14849,6 +14954,10 @@ run_v121_release_certification_gate() {
     "$V121_LICENSE_ENTITLEMENT_BOUNDARY_PATH" \
     "$V121_PAID_FEATURE_BOUNDARY_PATH" \
     "$V121_COMMERCIAL_WORKFLOW_SHAPES_PATH" \
+    "$V122_COMMERCIAL_BOUNDARY_CONTRACT_PATH" \
+    "$V122_LICENSE_ENTITLEMENT_BOUNDARY_PATH" \
+    "$V122_PAID_FEATURE_BOUNDARY_PATH" \
+    "$V122_COMMERCIAL_WORKFLOW_SHAPES_PATH" \
     "$V121_ISSUE_MILESTONE_CLOSEOUT_PATH" \
     "$V122_ISSUE_MILESTONE_CLOSEOUT_PATH" \
     "$V121_RELEASE_CERTIFICATION_PATH" \
@@ -14891,6 +15000,31 @@ indexed_issue_refs = {
     for ref in item.get("issueRefs", [])
 }
 v120_artifact_names = {name for name in primary_file_names if name.startswith("v120-")}
+legacy_v121_commercial_paths = {
+    "runtime/v121-commercial-boundary-contract.json",
+    "runtime/v121-license-entitlement-boundary.json",
+    "runtime/v121-paid-feature-boundary.json",
+    "runtime/v121-commercial-workflow-shapes.json",
+}
+v122_commercial_paths = {
+    "runtime/v122-commercial-boundary-contract.json",
+    "runtime/v122-license-entitlement-boundary.json",
+    "runtime/v122-paid-feature-boundary.json",
+    "runtime/v122-commercial-workflow-shapes.json",
+}
+primary_proof_set = set(primary_proofs)
+manifest_paths = {item.get("path") for item in manifest_index}
+
+def manifest_has_v122_commercial_issue(issue_ref, expected_path):
+    return any(
+        item.get("path") == expected_path
+        and item.get("releaseScope") == "v1.2.2"
+        and issue_ref in item.get("issueRefs", [])
+        and item.get("sha256")
+        and item.get("bytes", 0) > 0
+        and item.get("proofRole")
+        for item in manifest_index
+    )
 
 def version_tuple(value):
     version = (value or "").strip().lstrip("v")
@@ -14925,9 +15059,12 @@ checks = {
     "primary-proofs-present": all(pathlib.Path(proof).name in primary_file_names for proof in primary_proofs),
     "primary-proofs-are-release-scoped": bool(primary_proofs) and all(pathlib.Path(proof).name.startswith(("v121-", "v122-")) for proof in primary_proofs),
     "v120-proofs-not-accepted": not v120_artifact_names,
-    "manifest-primary-proof-index": bool(manifest_index) and all(item.get("sha256") and item.get("bytes", 0) > 0 and item.get("proofRole") and item.get("issueRefs") and pathlib.Path(item.get("path", "")).name.startswith(("v121-", "v122-")) for item in manifest_index),
+    "manifest-primary-proof-index": bool(manifest_index) and all(item.get("sha256") and item.get("bytes", 0) > 0 and item.get("proofRole") and item.get("issueRefs") and item.get("releaseScope") and pathlib.Path(item.get("path", "")).name.startswith(("v121-", "v122-")) for item in manifest_index),
     "manifest-v121-issue-traceability": all(f"#{issue}" in indexed_issue_refs for issue in range(863, 873)),
     "manifest-v122-issue-traceability": all(f"#{issue}" in indexed_issue_refs for issue in range(883, 893)),
+    "v122-commercial-primary-proof-paths": v122_commercial_paths.issubset(primary_proof_set) and v122_commercial_paths.issubset(manifest_paths),
+    "v121-commercial-legacy-not-primary": primary_proof_set.isdisjoint(legacy_v121_commercial_paths) and manifest_paths.isdisjoint(legacy_v121_commercial_paths),
+    "v122-commercial-issue-proof-alignment": manifest_has_v122_commercial_issue("#888", "runtime/v122-commercial-boundary-contract.json") and manifest_has_v122_commercial_issue("#889", "runtime/v122-license-entitlement-boundary.json") and manifest_has_v122_commercial_issue("#890", "runtime/v122-paid-feature-boundary.json") and manifest_has_v122_commercial_issue("#891", "runtime/v122-commercial-workflow-shapes.json"),
     "metadata-proof": artifacts[0].get("coverage", {}).get("release-version-keeps-v121-baseline") is True and artifacts[0].get("coverage", {}).get("primary-proofs-are-release-scoped") is True and artifacts[0].get("coverage", {}).get("all-v122-issues-traceable") is True,
     "first-run-runtime-command-proof": artifacts[2].get("coverage", {}).get("contract-is-runtime-api-backed") is True and artifacts[2].get("coverage", {}).get("workspace-created") is True,
     "guided-sample-closure-proof": artifacts[3].get("coverage", {}).get("sample-completed") is True and artifacts[3].get("coverage", {}).get("evidence-decision-delivery-present") is True and artifacts[3].get("coverage", {}).get("failure-retry-receipt-present") is True and artifacts[3].get("coverage", {}).get("failed-sample-does-not-write-delivery") is True,
@@ -14936,14 +15073,15 @@ checks = {
     "role-handoff-proof": artifacts[6].get("coverage", {}).get("view-versioned") is True and artifacts[6].get("coverage", {}).get("handoff-state-visible") is True,
     "history-proof": artifacts[7].get("coverage", {}).get("view-versioned") is True and artifacts[7].get("coverage", {}).get("audit-is-optional-sidecar") is True,
     "desktop-team-surface-binding-proof": artifacts[8].get("coverage", {}).get("desktop-calls-all-team-read-model-commands") is True and artifacts[8].get("coverage", {}).get("desktop-renders-team-workflow-panel") is True and artifacts[8].get("coverage", {}).get("desktop-shows-invalid-or-deferred-states") is True,
-    "commercial-boundary-contract-proof": artifacts[9].get("coverage", {}).get("tracked-architecture-contract-present") is True and artifacts[9].get("coverage", {}).get("commercial-product-layer-concepts-defined") is True and artifacts[9].get("coverage", {}).get("core-runtime-boundary-preserved") is True and artifacts[9].get("coverage", {}).get("software-dev-reference-app-is-surface-only") is True and artifacts[9].get("coverage", {}).get("v122-commercial-non-goals-explicit") is True,
-    "license-entitlement-boundary-proof": artifacts[10].get("coverage", {}).get("license-entitlement-concepts-defined") is True and artifacts[10].get("coverage", {}).get("entitlement-states-covered") is True and artifacts[10].get("coverage", {}).get("disabled-entitlement-rejects-paid-only-flow") is True and artifacts[10].get("coverage", {}).get("deferred-entitlement-is-not-ready") is True and artifacts[10].get("coverage", {}).get("no-payment-provider-required") is True,
-    "paid-feature-boundary-proof": artifacts[11].get("coverage", {}).get("paid-feature-concepts-defined") is True and artifacts[11].get("coverage", {}).get("feature-tiers-covered") is True and artifacts[11].get("coverage", {}).get("paid-only-without-entitlement-blocked-before-runtime") is True and artifacts[11].get("coverage", {}).get("ui-explains-unavailable-or-upgrade-required") is True and artifacts[11].get("coverage", {}).get("runtime-admission-still-required") is True and artifacts[11].get("coverage", {}).get("no-payment-provider-required") is True,
-    "commercial-workflow-shapes-proof": artifacts[12].get("coverage", {}).get("paid-report-flow-defined") is True and artifacts[12].get("coverage", {}).get("managed-project-flow-defined") is True and artifacts[12].get("coverage", {}).get("flows-map-to-core-runtime-facts") is True and artifacts[12].get("coverage", {}).get("flows-reuse-core-runtime-and-product-surfaces") is True and artifacts[12].get("coverage", {}).get("runtime-admission-not-bypassed") is True and artifacts[12].get("coverage", {}).get("no-new-industry-product-or-payment") is True,
-    "v121-issue-milestone-closeout-proof": artifacts[13].get("coverage", {}).get("all-v121-issue-refs-present") is True and artifacts[13].get("coverage", {}).get("all-v121-issues-marked-done") is True,
-    "v122-issue-milestone-closeout-proof": artifacts[14].get("coverage", {}).get("all-v122-issue-refs-present") is True and artifacts[14].get("coverage", {}).get("all-v122-issues-marked-done") is True and artifacts[14].get("coverage", {}).get("milestone-closed-or-waived") is True and artifacts[14].get("coverage", {}).get("milestone-has-no-open-issues") is True,
-    "v121-release-certification-proof": artifacts[15].get("coverage", {}).get("all-primary-proofs-passed") is True,
-    "v122-release-certification-proof": artifacts[16].get("coverage", {}).get("v122-release-scope-certified") is True and artifacts[16].get("coverage", {}).get("payment-cloud-and-new-industry-excluded") is True,
+    "commercial-boundary-contract-proof": artifacts[13].get("coverage", {}).get("tracked-architecture-contract-present") is True and artifacts[13].get("coverage", {}).get("commercial-product-layer-concepts-defined") is True and artifacts[13].get("coverage", {}).get("core-runtime-boundary-preserved") is True and artifacts[13].get("coverage", {}).get("software-dev-reference-app-is-surface-only") is True and artifacts[13].get("coverage", {}).get("v122-commercial-non-goals-explicit") is True and artifacts[13].get("payload", {}).get("releaseScope") == "v1.2.2" and artifacts[13].get("payload", {}).get("primary") is True,
+    "license-entitlement-boundary-proof": artifacts[14].get("coverage", {}).get("license-entitlement-concepts-defined") is True and artifacts[14].get("coverage", {}).get("entitlement-states-covered") is True and artifacts[14].get("coverage", {}).get("disabled-entitlement-rejects-paid-only-flow") is True and artifacts[14].get("coverage", {}).get("deferred-entitlement-is-not-ready") is True and artifacts[14].get("coverage", {}).get("no-payment-provider-required") is True and artifacts[14].get("payload", {}).get("releaseScope") == "v1.2.2" and artifacts[14].get("payload", {}).get("primary") is True,
+    "paid-feature-boundary-proof": artifacts[15].get("coverage", {}).get("paid-feature-concepts-defined") is True and artifacts[15].get("coverage", {}).get("feature-tiers-covered") is True and artifacts[15].get("coverage", {}).get("paid-only-without-entitlement-blocked-before-runtime") is True and artifacts[15].get("coverage", {}).get("ui-explains-unavailable-or-upgrade-required") is True and artifacts[15].get("coverage", {}).get("runtime-admission-still-required") is True and artifacts[15].get("coverage", {}).get("no-payment-provider-required") is True and artifacts[15].get("payload", {}).get("releaseScope") == "v1.2.2" and artifacts[15].get("payload", {}).get("primary") is True,
+    "commercial-workflow-shapes-proof": artifacts[16].get("coverage", {}).get("paid-report-flow-defined") is True and artifacts[16].get("coverage", {}).get("managed-project-flow-defined") is True and artifacts[16].get("coverage", {}).get("flows-map-to-core-runtime-facts") is True and artifacts[16].get("coverage", {}).get("flows-reuse-core-runtime-and-product-surfaces") is True and artifacts[16].get("coverage", {}).get("runtime-admission-not-bypassed") is True and artifacts[16].get("coverage", {}).get("no-new-industry-product-or-payment") is True and artifacts[16].get("payload", {}).get("releaseScope") == "v1.2.2" and artifacts[16].get("payload", {}).get("primary") is True,
+    "v121-commercial-aliases-explicit": all(artifacts[index].get("payload", {}).get("legacyAlias") is True and artifacts[index].get("payload", {}).get("primary") is False and artifacts[index].get("payload", {}).get("legacyAliasFor") in v122_commercial_paths for index in range(9, 13)),
+    "v121-issue-milestone-closeout-proof": artifacts[17].get("coverage", {}).get("all-v121-issue-refs-present") is True and artifacts[17].get("coverage", {}).get("all-v121-issues-marked-done") is True,
+    "v122-issue-milestone-closeout-proof": artifacts[18].get("coverage", {}).get("all-v122-issue-refs-present") is True and artifacts[18].get("coverage", {}).get("all-v122-issues-marked-done") is True and artifacts[18].get("coverage", {}).get("milestone-closed-or-waived") is True and artifacts[18].get("coverage", {}).get("milestone-has-no-open-issues") is True,
+    "v121-release-certification-proof": artifacts[19].get("coverage", {}).get("all-primary-proofs-passed") is True,
+    "v122-release-certification-proof": artifacts[20].get("coverage", {}).get("v122-release-scope-certified") is True and artifacts[20].get("coverage", {}).get("payment-cloud-and-new-industry-excluded") is True,
 }
 failed = [key for key, passed in checks.items() if not passed]
 certification["releaseGateMetadata"] = {
@@ -14978,6 +15116,10 @@ PY
   record_stage "v121-license-entitlement-boundary" "passed" "$(basename "$V121_LICENSE_ENTITLEMENT_BOUNDARY_PATH")"
   record_stage "v121-paid-feature-boundary" "passed" "$(basename "$V121_PAID_FEATURE_BOUNDARY_PATH")"
   record_stage "v121-commercial-workflow-shapes" "passed" "$(basename "$V121_COMMERCIAL_WORKFLOW_SHAPES_PATH")"
+  record_stage "v122-commercial-boundary-contract" "passed" "$(basename "$V122_COMMERCIAL_BOUNDARY_CONTRACT_PATH")"
+  record_stage "v122-license-entitlement-boundary" "passed" "$(basename "$V122_LICENSE_ENTITLEMENT_BOUNDARY_PATH")"
+  record_stage "v122-paid-feature-boundary" "passed" "$(basename "$V122_PAID_FEATURE_BOUNDARY_PATH")"
+  record_stage "v122-commercial-workflow-shapes" "passed" "$(basename "$V122_COMMERCIAL_WORKFLOW_SHAPES_PATH")"
   record_stage "v121-issue-milestone-closeout" "passed" "$(basename "$V121_ISSUE_MILESTONE_CLOSEOUT_PATH")"
   record_stage "v122-issue-milestone-closeout" "passed" "$(basename "$V122_ISSUE_MILESTONE_CLOSEOUT_PATH")"
   record_stage "v121-release-certification" "passed" "$(basename "$V121_RELEASE_CERTIFICATION_PATH")"
@@ -15590,6 +15732,7 @@ PY
   run_v119_release_certification_gate
   run_v120_release_certification_gate
   run_v121_release_certification_gate
+  run_v122_commercial_proof_version_negative_fixture
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

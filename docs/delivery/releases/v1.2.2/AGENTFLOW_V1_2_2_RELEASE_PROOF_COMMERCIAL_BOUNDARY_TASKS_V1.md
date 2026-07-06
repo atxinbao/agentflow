@@ -14,10 +14,10 @@ This document records the public delivery traceability for `v1.2.2`.
 | V122-003 | #885 | V121 Primary Proof Artifact Generation | done | `runtime/v121-certification-artifact-manifest-primary-proof-index.json` |
 | V122-004 | #886 | V121 Issue Traceability and Milestone Closeout Gate | done | `runtime/v121-issue-milestone-closeout.json` |
 | V122-005 | #887 | Desktop Team Workflow Surface Binding | done | `runtime/v121-desktop-team-workflow-surface-binding.json` |
-| V122-006 | #888 | Commercial Boundary Contract | done | `runtime/v121-commercial-boundary-contract.json` |
-| V122-007 | #889 | License / Entitlement Boundary | done | `runtime/v121-license-entitlement-boundary.json` |
-| V122-008 | #890 | Paid Feature Boundary | done | `runtime/v121-paid-feature-boundary.json` |
-| V122-009 | #891 | Paid Report Flow vs Managed Project Flow Contract | done | `runtime/v121-commercial-workflow-shapes.json` |
+| V122-006 | #888 | Commercial Boundary Contract | done | `runtime/v122-commercial-boundary-contract.json` |
+| V122-007 | #889 | License / Entitlement Boundary | done | `runtime/v122-license-entitlement-boundary.json` |
+| V122-008 | #890 | Paid Feature Boundary | done | `runtime/v122-paid-feature-boundary.json` |
+| V122-009 | #891 | Paid Report Flow vs Managed Project Flow Contract | done | `runtime/v122-commercial-workflow-shapes.json` |
 | V122-010 | #892 | v1.2.2 Release Certification | done | `runtime/v122-release-certification.json` |
 
 ## Dependency Order
@@ -65,6 +65,24 @@ artifactNames
 primaryProofs
 runtimeReleaseCertificationPath = runtime/v122-release-certification.json
 ```
+
+## Commercial Primary Proof Alignment
+
+V122 commercial issue traceability is certified by V122-scoped primary proof
+paths:
+
+```text
+#888 -> runtime/v122-commercial-boundary-contract.json
+#889 -> runtime/v122-license-entitlement-boundary.json
+#890 -> runtime/v122-paid-feature-boundary.json
+#891 -> runtime/v122-commercial-workflow-shapes.json
+```
+
+The corresponding `runtime/v121-*` commercial files are legacy aliases only.
+They must be marked non-primary and must not satisfy the V122 primary proof
+manifest. The release gate negative fixture
+`runtime/v122-commercial-proof-version-negative-fixture.json` rejects those
+wrong-version aliases as V122 commercial primary proof.
 
 ## Post-release Closeout Repair
 
