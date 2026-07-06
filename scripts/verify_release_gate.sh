@@ -313,6 +313,7 @@ V122_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v122-release-certification.json"
 V122_MILESTONE_CLOSEOUT_REPAIR_PATH="$RUNTIME_DIR/v122-milestone-closeout-repair.json"
 V122_COMMERCIAL_PROOF_VERSION_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/v122-commercial-proof-version-negative-fixture.json"
 V123_COMMERCIAL_PRODUCT_READ_MODEL_CONTRACT_PATH="$RUNTIME_DIR/v123-commercial-product-read-model-contract.json"
+V123_PAID_REPORT_FLOW_PREFLIGHT_CONTRACT_PATH="$RUNTIME_DIR/v123-paid-report-flow-preflight-contract.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -538,6 +539,7 @@ proof_chain = [
     {"stage": "release.v122-milestone-closeout-repair", "label": "v1.2.2 Milestone Closeout Repair"},
     {"stage": "release.v122-commercial-proof-version-negative-fixture", "label": "V122 Commercial Proof Version Negative Fixture"},
     {"stage": "release.v123-commercial-product-read-model-contract", "label": "V123 Commercial Product Read Model Contract"},
+    {"stage": "release.v123-paid-report-flow-preflight-contract", "label": "V123 Paid Report Flow Preflight Contract"},
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
@@ -676,6 +678,7 @@ runtime_artifacts = [
     {"path": "runtime/v122-milestone-closeout-repair.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-milestone-closeout-repair.json").is_file()},
     {"path": "runtime/v122-commercial-proof-version-negative-fixture.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-commercial-proof-version-negative-fixture.json").is_file()},
     {"path": "runtime/v123-commercial-product-read-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-commercial-product-read-model-contract.json").is_file()},
+    {"path": "runtime/v123-paid-report-flow-preflight-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-paid-report-flow-preflight-contract.json").is_file()},
     {"path": "runtime/core-decision-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json").is_file()},
     {"path": "runtime/core-decision-input-binding.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json").is_file()},
     {"path": "runtime/core-decision-outcome-transitions.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json").is_file()},
@@ -3262,6 +3265,162 @@ PY
   fi
 
   record_stage "$stage" "passed" "$(basename "$V123_COMMERCIAL_PRODUCT_READ_MODEL_CONTRACT_PATH")"
+}
+
+run_v123_paid_report_flow_preflight_contract_gate() {
+  local stage="release.v123-paid-report-flow-preflight-contract"
+  record_stage "$stage" "started" "$V123_PAID_REPORT_FLOW_PREFLIGHT_CONTRACT_PATH"
+
+  if ! python3 - \
+    "$V123_PAID_REPORT_FLOW_PREFLIGHT_CONTRACT_PATH" \
+    "$ROOT" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_raw, root_raw = sys.argv[1:]
+out_path = pathlib.Path(out_raw)
+root = pathlib.Path(root_raw)
+doc_path = root / "docs" / "architecture" / "096-paid-report-flow-preflight-contract-v1.md"
+text = doc_path.read_text(encoding="utf-8") if doc_path.is_file() else ""
+
+required_input_fields = [
+    "version",
+    "productId",
+    "flowType",
+    "requestId",
+    "reportInputRef",
+    "productAccessState",
+    "entitlementState",
+    "paidFeatureState",
+    "orderIntentId",
+    "reportDefinitionId",
+    "controlledRunRequest",
+    "evidenceRequirement",
+    "decisionRequirement",
+    "reportDeliveryPromise",
+    "feedbackEntry",
+]
+required_output_fields = [
+    "preflightOutcome",
+    "unavailableReason",
+    "runtimeCommandPolicy",
+    "runtimeAdmissionRequired",
+    "canSubmitRuntimeCommandProposal",
+    "canStartRunDirectly",
+]
+
+fixtures = [
+    {
+        "id": "paid-report-ready",
+        "input": {"hasInput": True, "entitlementState": "active", "flowState": "available", "hasReportDefinition": True, "runtimeAdmission": "not-submitted"},
+        "expected": {"preflightOutcome": "allowed", "runtimeCommandPolicy": "propose-to-runtime", "unavailableReason": "none", "canSubmitRuntimeCommandProposal": True, "canStartRunDirectly": False},
+    },
+    {
+        "id": "missing-input",
+        "input": {"hasInput": False, "entitlementState": "active", "flowState": "available", "hasReportDefinition": True, "runtimeAdmission": "not-submitted"},
+        "expected": {"preflightOutcome": "invalid", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "missing-input", "canSubmitRuntimeCommandProposal": False, "canStartRunDirectly": False},
+    },
+    {
+        "id": "disabled-entitlement",
+        "input": {"hasInput": True, "entitlementState": "disabled", "flowState": "available", "hasReportDefinition": True, "runtimeAdmission": "not-submitted"},
+        "expected": {"preflightOutcome": "rejected", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "entitlement-disabled", "canSubmitRuntimeCommandProposal": False, "canStartRunDirectly": False},
+    },
+    {
+        "id": "flow-deferred",
+        "input": {"hasInput": True, "entitlementState": "active", "flowState": "deferred", "hasReportDefinition": True, "runtimeAdmission": "not-submitted"},
+        "expected": {"preflightOutcome": "deferred", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "flow-deferred", "canSubmitRuntimeCommandProposal": False, "canStartRunDirectly": False},
+    },
+    {
+        "id": "missing-report-definition",
+        "input": {"hasInput": True, "entitlementState": "active", "flowState": "available", "hasReportDefinition": False, "runtimeAdmission": "not-submitted"},
+        "expected": {"preflightOutcome": "invalid", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "report-template-missing", "canSubmitRuntimeCommandProposal": False, "canStartRunDirectly": False},
+    },
+    {
+        "id": "runtime-admission-rejected",
+        "input": {"hasInput": True, "entitlementState": "active", "flowState": "available", "hasReportDefinition": True, "runtimeAdmission": "rejected"},
+        "expected": {"preflightOutcome": "rejected", "runtimeCommandPolicy": "rejected-by-runtime-admission", "unavailableReason": "runtime-admission-rejected", "canSubmitRuntimeCommandProposal": False, "canStartRunDirectly": False},
+    },
+]
+
+def evaluate(case):
+    data = case["input"]
+    if not data["hasInput"]:
+        return {"preflightOutcome": "invalid", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "missing-input", "canSubmitRuntimeCommandProposal": False, "canStartRunDirectly": False}
+    if data["entitlementState"] == "disabled":
+        return {"preflightOutcome": "rejected", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "entitlement-disabled", "canSubmitRuntimeCommandProposal": False, "canStartRunDirectly": False}
+    if data["flowState"] == "deferred":
+        return {"preflightOutcome": "deferred", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "flow-deferred", "canSubmitRuntimeCommandProposal": False, "canStartRunDirectly": False}
+    if not data["hasReportDefinition"]:
+        return {"preflightOutcome": "invalid", "runtimeCommandPolicy": "blocked-before-runtime", "unavailableReason": "report-template-missing", "canSubmitRuntimeCommandProposal": False, "canStartRunDirectly": False}
+    if data["runtimeAdmission"] == "rejected":
+        return {"preflightOutcome": "rejected", "runtimeCommandPolicy": "rejected-by-runtime-admission", "unavailableReason": "runtime-admission-rejected", "canSubmitRuntimeCommandProposal": False, "canStartRunDirectly": False}
+    return {"preflightOutcome": "allowed", "runtimeCommandPolicy": "propose-to-runtime", "unavailableReason": "none", "canSubmitRuntimeCommandProposal": True, "canStartRunDirectly": False}
+
+fixture_results = []
+for case in fixtures:
+    actual = evaluate(case)
+    fixture_results.append({
+        **case,
+        "actual": actual,
+        "passed": actual == case["expected"],
+    })
+
+coverage = {
+    "docExists": doc_path.is_file(),
+    "versionedPreflightDefined": "agentflow-paid-report-flow-preflight.v1" in text,
+    "requiredInputFieldsDefined": all(f'"{field}"' in text for field in required_input_fields),
+    "requiredOutputFieldsDefined": all(f'"{field}"' in text for field in required_output_fields),
+    "flowTypePaidReportOnly": '"flowType": "paid-report-flow"' in text,
+    "productAccessCheckDefined": "product access check" in text and "Product read model" in text,
+    "orderIntentDefined": "order intent" in text and "不等于 payment capture" in text,
+    "controlledRunRequestDefined": "controlledRunRequest" in text and "Runtime command proposal" in text,
+    "evidenceRequirementDefined": "evidenceRequirement" in text and "report-generation-evidence" in text,
+    "decisionRequirementDefined": "decisionRequirement" in text and "report-delivery-decision" in text,
+    "reportDeliveryPromiseDefined": "reportDeliveryPromise" in text and '"reportDeliveryPromise": "report"' in text,
+    "feedbackEntryDefined": "feedbackEntry" in text and "report-feedback" in text,
+    "outcomesCovered": all(value in text for value in ["allowed", "rejected", "deferred", "invalid"]),
+    "allowedStillRequiresRuntimeAdmission": "runtimeAdmissionRequired" in text and "Core Runtime admission" in text and "不能直接启动 run" in text,
+    "negativeFixturesPresent": all(value in text for value in ["missing input", "disabled entitlement", "flow deferred", "missing report definition", "Runtime admission rejected"]),
+    "disabledEntitlementCannotStartRun": next(result for result in fixture_results if result["id"] == "disabled-entitlement")["actual"]["canStartRunDirectly"] is False,
+    "missingReportDefinitionCannotStartRun": next(result for result in fixture_results if result["id"] == "missing-report-definition")["actual"]["canStartRunDirectly"] is False,
+    "nonGoalsExplicit": all(value in text for value in ["real payment capture", "customer account system", "public report marketplace", "domain-specific report Product", "report generation engine"]),
+}
+
+failed_coverage = [key for key, passed in coverage.items() if not passed]
+failed_fixtures = [result["id"] for result in fixture_results if not result["passed"]]
+payload = {
+    "version": "agentflow-v123-paid-report-flow-preflight-contract.v1",
+    "status": "passed" if not failed_coverage and not failed_fixtures else "failed",
+    "sourceIssue": "#908",
+    "preflightVersion": "agentflow-paid-report-flow-preflight.v1",
+    "proofPath": "runtime/v123-paid-report-flow-preflight-contract.json",
+    "flowType": "paid-report-flow",
+    "preflightOutcomes": ["allowed", "rejected", "deferred", "invalid"],
+    "requiredInputFields": required_input_fields,
+    "requiredOutputFields": required_output_fields,
+    "authority": {
+        "coreRuntimeAdmissionRequired": True,
+        "canStartRunDirectly": False,
+        "paymentCaptureImplemented": False,
+        "reportGenerationImplemented": False,
+    },
+    "fixtures": fixture_results,
+    "coverage": coverage,
+    "failedCoverageKeys": failed_coverage,
+    "failedFixtureIds": failed_fixtures,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit(f"Paid Report Flow preflight contract gate failed: coverage={failed_coverage}, fixtures={failed_fixtures}")
+PY
+  then
+    fail_stage "$stage" "V123 paid report flow preflight contract failed"
+  fi
+
+  record_stage "$stage" "passed" "$(basename "$V123_PAID_REPORT_FLOW_PREFLIGHT_CONTRACT_PATH")"
 }
 
 run_source_agent_entry_gate() {
@@ -15878,6 +16037,7 @@ PY
   run_v121_release_certification_gate
   run_v122_commercial_proof_version_negative_fixture
   run_v123_commercial_product_read_model_contract_gate
+  run_v123_paid_report_flow_preflight_contract_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
