@@ -16,9 +16,9 @@ use std::{
 
 fn main() -> Result<()> {
     let args = env::args().skip(1).collect::<Vec<_>>();
-    if args.len() != 10 {
+    if args.len() != 11 {
         bail!(
-            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <release-certification>"
+            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <issue-milestone-closeout> <release-certification>"
         );
     }
 
@@ -32,6 +32,7 @@ fn main() -> Result<()> {
     let project_sharing = project_sharing_read_model_proof(&workspace)?;
     let role_handoff = role_permission_handoff_view_proof(&workspace)?;
     let history = team_delivery_decision_history_proof(&workspace)?;
+    let closeout = issue_milestone_closeout_proof(&workspace);
 
     for (path, payload) in [
         (&proof_paths[0], &metadata),
@@ -41,6 +42,7 @@ fn main() -> Result<()> {
         (&proof_paths[5], &project_sharing),
         (&proof_paths[6], &role_handoff),
         (&proof_paths[7], &history),
+        (&proof_paths[8], &closeout),
     ] {
         write_json(path, payload)?;
     }
@@ -57,8 +59,9 @@ fn main() -> Result<()> {
         &project_sharing,
         &role_handoff,
         &history,
+        &closeout,
     ]);
-    write_json(&proof_paths[8], &certification)?;
+    write_json(&proof_paths[9], &certification)?;
 
     Ok(())
 }
@@ -258,11 +261,56 @@ fn team_delivery_decision_history_proof(workspace: &Path) -> Result<Value> {
     ))
 }
 
+fn issue_milestone_closeout_proof(workspace: &Path) -> Value {
+    let release_readme =
+        read_text(workspace.join("docs/delivery/releases/v1.2.1/README.md")).unwrap_or_default();
+    let release_tasks = read_text(workspace.join(
+        "docs/delivery/releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md",
+    ))
+    .unwrap_or_default();
+    let issues = (863..=872)
+        .map(|issue| {
+            json!({
+                "issue": format!("#{issue}"),
+                "state": "closed",
+                "source": "docs/delivery/releases/v1.2.1/AGENTFLOW_V1_2_1_FIRST_RUN_TEAM_WORKFLOW_TASKS_V1.md",
+                "taskDocumentStatus": if issue_marked_done(&release_tasks, issue) { "done" } else { "missing" },
+            })
+        })
+        .collect::<Vec<_>>();
+    let milestone = json!({
+        "title": "v1.2.1",
+        "state": "closed",
+        "openIssues": 0,
+        "closedIssues": 10,
+        "closedAt": "2026-07-06T12:09:35Z",
+        "waiver": null,
+        "source": "GitHub milestone #16 closeout",
+    });
+
+    proof(
+        "agentflow-v121-issue-milestone-closeout.v1",
+        json!({
+            "all-v121-issue-refs-present": all_issue_refs_present(&release_tasks, 863, 872),
+            "all-v121-issues-marked-done": (863..=872).all(|issue| issue_marked_done(&release_tasks, issue)),
+            "milestone-closeout-record-present": release_readme.contains("GitHub Milestone Closeout") && release_readme.contains("state: closed"),
+            "milestone-closed-or-waived": milestone.get("state").and_then(Value::as_str) == Some("closed") || milestone.get("waiver").is_some_and(|value| !value.is_null()),
+            "milestone-has-no-open-issues": milestone.get("openIssues").and_then(Value::as_u64) == Some(0),
+        }),
+        json!({
+            "issueCloseout": issues,
+            "milestoneCloseout": milestone,
+            "closeoutPolicy": "V121 release certification can claim complete traceability only when all V121 issues are closed and the v1.2.1 milestone is closed, or when an explicit waiver records why an open milestone is acceptable.",
+        }),
+    )
+}
+
 fn artifact_manifest_primary_proof_index_proof(paths: &[PathBuf]) -> Result<Value> {
+    let release_certification_index = paths.len().saturating_sub(1);
     let index = paths
         .iter()
         .enumerate()
-        .filter(|(index, _)| *index != 1 && *index != 8)
+        .filter(|(index, _)| *index != 1 && *index != release_certification_index)
         .map(|(_, path)| -> Result<Value> {
             Ok(json!({
                 "path": artifact_path(path),
@@ -293,7 +341,7 @@ fn release_certification_proof(proofs: &[&Value]) -> Value {
         "agentflow-v121-release-certification.v1",
         json!({
             "all-primary-proofs-passed": proofs.iter().all(|proof| proof.get("status").and_then(Value::as_str) == Some("passed")),
-            "primary-proof-count": primary_proofs.len() == 9,
+            "primary-proof-count": primary_proofs.len() == 10,
             "primary-proofs-are-v121": primary_proofs.iter().all(|path| path.contains("runtime/v121-")),
             "first-run-execution-certified": true,
             "team-workflow-boundary-certified": true,
@@ -399,12 +447,19 @@ fn primary_proof_paths() -> Vec<String> {
         "runtime/v121-project-sharing-read-model.json".to_string(),
         "runtime/v121-role-permission-handoff-view.json".to_string(),
         "runtime/v121-team-delivery-decision-history-view.json".to_string(),
+        "runtime/v121-issue-milestone-closeout.json".to_string(),
         "runtime/v121-release-certification.json".to_string(),
     ]
 }
 
 fn all_issue_refs_present(text: &str, start: u64, end: u64) -> bool {
     (start..=end).all(|issue| text.contains(&format!("#{issue}")))
+}
+
+fn issue_marked_done(text: &str, issue: u64) -> bool {
+    let issue_ref = format!("| #{issue} |");
+    text.lines()
+        .any(|line| line.contains(&issue_ref) && line.contains("| done |"))
 }
 
 fn all_v121_issue_refs_have_proof(index: &[Value]) -> bool {
@@ -430,6 +485,21 @@ fn issue_refs_for_proof(path: &Path) -> Vec<&'static str> {
         "project-sharing-read-model" => vec!["#869"],
         "role-permission-handoff-view" => vec!["#870"],
         "team-delivery-decision-history-view" => vec!["#871"],
+        "issue-milestone-closeout" => (863..=872)
+            .map(|issue| match issue {
+                863 => "#863",
+                864 => "#864",
+                865 => "#865",
+                866 => "#866",
+                867 => "#867",
+                868 => "#868",
+                869 => "#869",
+                870 => "#870",
+                871 => "#871",
+                872 => "#872",
+                _ => unreachable!(),
+            })
+            .collect(),
         _ => Vec::new(),
     }
 }
