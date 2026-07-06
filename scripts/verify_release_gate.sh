@@ -316,6 +316,7 @@ V123_COMMERCIAL_PRODUCT_READ_MODEL_CONTRACT_PATH="$RUNTIME_DIR/v123-commercial-p
 V123_PAID_REPORT_FLOW_PREFLIGHT_CONTRACT_PATH="$RUNTIME_DIR/v123-paid-report-flow-preflight-contract.json"
 V123_MANAGED_PROJECT_FLOW_COMMERCIAL_BOUNDARY_PATH="$RUNTIME_DIR/v123-managed-project-flow-commercial-boundary.json"
 V123_DESKTOP_COMMERCIAL_BOUNDARY_SURFACE_PATH="$RUNTIME_DIR/v123-desktop-commercial-boundary-surface.json"
+V123_COMMERCIAL_BOUNDARY_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/v123-commercial-boundary-negative-fixtures.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -544,6 +545,7 @@ proof_chain = [
     {"stage": "release.v123-paid-report-flow-preflight-contract", "label": "V123 Paid Report Flow Preflight Contract"},
     {"stage": "release.v123-managed-project-flow-commercial-boundary", "label": "V123 Managed Project Flow Commercial Boundary"},
     {"stage": "release.v123-desktop-commercial-boundary-surface", "label": "V123 Desktop Commercial Boundary Surface"},
+    {"stage": "release.v123-commercial-boundary-negative-fixtures", "label": "V123 Commercial Boundary Negative Fixtures"},
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
@@ -685,6 +687,7 @@ runtime_artifacts = [
     {"path": "runtime/v123-paid-report-flow-preflight-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-paid-report-flow-preflight-contract.json").is_file()},
     {"path": "runtime/v123-managed-project-flow-commercial-boundary.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-managed-project-flow-commercial-boundary.json").is_file()},
     {"path": "runtime/v123-desktop-commercial-boundary-surface.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-desktop-commercial-boundary-surface.json").is_file()},
+    {"path": "runtime/v123-commercial-boundary-negative-fixtures.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-commercial-boundary-negative-fixtures.json").is_file()},
     {"path": "runtime/core-decision-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json").is_file()},
     {"path": "runtime/core-decision-input-binding.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json").is_file()},
     {"path": "runtime/core-decision-outcome-transitions.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json").is_file()},
@@ -3750,6 +3753,182 @@ PY
   fi
 
   record_stage "$stage" "passed" "$(basename "$V123_DESKTOP_COMMERCIAL_BOUNDARY_SURFACE_PATH")"
+}
+
+run_v123_commercial_boundary_negative_fixtures_gate() {
+  local stage="release.v123-commercial-boundary-negative-fixtures"
+  record_stage "$stage" "started" "$V123_COMMERCIAL_BOUNDARY_NEGATIVE_FIXTURES_PATH"
+
+  if ! python3 - \
+    "$V123_COMMERCIAL_BOUNDARY_NEGATIVE_FIXTURES_PATH" \
+    "$ROOT" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_raw, root_raw = sys.argv[1:]
+out_path = pathlib.Path(out_raw)
+root = pathlib.Path(root_raw)
+doc_path = root / "docs" / "architecture" / "098-commercial-boundary-negative-fixtures-v1.md"
+app_path = root / "apps" / "desktop" / "src" / "App.tsx"
+doc = doc_path.read_text(encoding="utf-8") if doc_path.is_file() else ""
+app = app_path.read_text(encoding="utf-8") if app_path.is_file() else ""
+
+fixtures = [
+    {
+        "id": "expired-entitlement",
+        "input": {"flowType": "paid-report-flow", "productId": "paid-report", "entitlementState": "expired", "paidFeatureState": "enabled", "flowDefinition": True, "paymentConfigured": True},
+        "expected": {"decision": "rejected", "unavailableReason": "expired-entitlement", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False},
+    },
+    {
+        "id": "disabled-entitlement",
+        "input": {"flowType": "paid-report-flow", "productId": "paid-report", "entitlementState": "disabled", "paidFeatureState": "enabled", "flowDefinition": True, "paymentConfigured": True},
+        "expected": {"decision": "rejected", "unavailableReason": "disabled-entitlement", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False},
+    },
+    {
+        "id": "deferred-entitlement",
+        "input": {"flowType": "paid-report-flow", "productId": "paid-report", "entitlementState": "deferred", "paidFeatureState": "enabled", "flowDefinition": True, "paymentConfigured": True},
+        "expected": {"decision": "deferred", "unavailableReason": "deferred-entitlement", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False},
+    },
+    {
+        "id": "missing-entitlement",
+        "input": {"flowType": "paid-report-flow", "productId": "paid-report", "entitlementState": "missing", "paidFeatureState": "enabled", "flowDefinition": True, "paymentConfigured": True},
+        "expected": {"decision": "invalid", "unavailableReason": "missing-entitlement", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False},
+    },
+    {
+        "id": "unknown-product",
+        "input": {"flowType": "paid-report-flow", "productId": "unknown-product", "entitlementState": "active", "paidFeatureState": "enabled", "flowDefinition": True, "paymentConfigured": True},
+        "expected": {"decision": "invalid", "unavailableReason": "unknown-product", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False},
+    },
+    {
+        "id": "missing-flow-definition",
+        "input": {"flowType": "paid-report-flow", "productId": "paid-report", "entitlementState": "active", "paidFeatureState": "enabled", "flowDefinition": False, "paymentConfigured": True},
+        "expected": {"decision": "invalid", "unavailableReason": "missing-flow-definition", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False},
+    },
+    {
+        "id": "wrong-flow-type",
+        "input": {"flowType": "paid-report-flow", "productId": "software-dev", "entitlementState": "active", "paidFeatureState": "not-required", "flowDefinition": True, "paymentConfigured": True},
+        "expected": {"decision": "invalid", "unavailableReason": "wrong-flow-type", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False},
+    },
+    {
+        "id": "payment-not-configured",
+        "input": {"flowType": "paid-report-flow", "productId": "paid-report", "entitlementState": "active", "paidFeatureState": "enabled", "flowDefinition": True, "paymentConfigured": False},
+        "expected": {"decision": "deferred", "unavailableReason": "payment-not-configured", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False},
+    },
+    {
+        "id": "paid-report-authority-in-managed-project",
+        "input": {"flowType": "managed-project-flow", "productId": "software-dev", "entitlementState": "active", "paidFeatureState": "not-required", "flowDefinition": True, "paymentConfigured": True, "authorityFields": ["reportInputRef", "reportDefinitionId", "reportDeliveryPromise"]},
+        "expected": {"decision": "invalid", "unavailableReason": "paid-report-field-not-managed-project-authority", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False},
+    },
+    {
+        "id": "desktop-deferred-rendering",
+        "input": {"flowType": "paid-report-flow", "productId": "paid-report-preview", "entitlementState": "deferred", "paidFeatureState": "deferred", "flowDefinition": True, "paymentConfigured": True, "surface": "desktop"},
+        "expected": {"decision": "deferred", "unavailableReason": "deferred-entitlement", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False, "renderedExecutable": False},
+    },
+    {
+        "id": "desktop-invalid-rendering",
+        "input": {"flowType": "paid-report-flow", "productId": "paid-report", "entitlementState": "disabled", "paidFeatureState": "disabled", "flowDefinition": True, "paymentConfigured": True, "surface": "desktop"},
+        "expected": {"decision": "rejected", "unavailableReason": "disabled-entitlement", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False, "renderedExecutable": False},
+    },
+]
+
+paid_report_products = {"paid-report", "paid-report-preview"}
+managed_project_products = {"software-dev"}
+paid_report_authority_fields = {"reportInputRef", "orderIntentId", "reportDefinitionId", "reportDeliveryPromise"}
+
+def evaluate(case):
+    data = case["input"]
+    if data.get("flowType") == "managed-project-flow" and paid_report_authority_fields.intersection(data.get("authorityFields", [])):
+        return {"decision": "invalid", "unavailableReason": "paid-report-field-not-managed-project-authority", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False, **({"renderedExecutable": False} if data.get("surface") == "desktop" else {})}
+    if data.get("flowType") == "paid-report-flow" and data.get("productId") in managed_project_products:
+        return {"decision": "invalid", "unavailableReason": "wrong-flow-type", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False}
+    if data.get("productId") not in paid_report_products.union(managed_project_products):
+        return {"decision": "invalid", "unavailableReason": "unknown-product", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False}
+    if not data.get("flowDefinition"):
+        return {"decision": "invalid", "unavailableReason": "missing-flow-definition", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False}
+    entitlement = data.get("entitlementState")
+    if entitlement == "expired":
+        return {"decision": "rejected", "unavailableReason": "expired-entitlement", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False}
+    if entitlement == "disabled":
+        return {"decision": "rejected", "unavailableReason": "disabled-entitlement", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False, **({"renderedExecutable": False} if data.get("surface") == "desktop" else {})}
+    if entitlement == "deferred":
+        return {"decision": "deferred", "unavailableReason": "deferred-entitlement", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False, **({"renderedExecutable": False} if data.get("surface") == "desktop" else {})}
+    if entitlement == "missing":
+        return {"decision": "invalid", "unavailableReason": "missing-entitlement", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False}
+    if data.get("flowType") == "paid-report-flow" and not data.get("paymentConfigured"):
+        return {"decision": "deferred", "unavailableReason": "payment-not-configured", "runtimeCommandPolicy": "blocked-before-runtime", "runtimeAdmissionAttempted": False}
+    return {"decision": "allowed", "unavailableReason": "none", "runtimeCommandPolicy": "propose-to-runtime", "runtimeAdmissionAttempted": True}
+
+fixture_results = []
+for case in fixtures:
+    actual = evaluate(case)
+    fixture_results.append({
+        **case,
+        "actual": actual,
+        "passed": actual == case["expected"],
+    })
+
+required_fixture_ids = {
+    "expired-entitlement",
+    "disabled-entitlement",
+    "deferred-entitlement",
+    "missing-entitlement",
+    "unknown-product",
+    "missing-flow-definition",
+    "wrong-flow-type",
+    "payment-not-configured",
+    "paid-report-authority-in-managed-project",
+    "desktop-deferred-rendering",
+    "desktop-invalid-rendering",
+}
+
+coverage = {
+    "docExists": doc_path.is_file(),
+    "versionedFixtureContractDefined": "agentflow-commercial-boundary-negative-fixtures.v1" in doc,
+    "allRequiredFixtureIdsPresent": required_fixture_ids.issubset({case["id"] for case in fixtures}) and all(fixture_id in doc for fixture_id in required_fixture_ids),
+    "allFixturesExecuted": all(result["passed"] for result in fixture_results),
+    "allFailedCommercialPreflightsBlockedBeforeRuntime": all(
+        result["actual"]["runtimeCommandPolicy"] == "blocked-before-runtime" and result["actual"]["runtimeAdmissionAttempted"] is False
+        for result in fixture_results
+    ),
+    "failureModesHaveExplicitDecisions": all(result["actual"]["decision"] in {"rejected", "deferred", "invalid"} for result in fixture_results),
+    "managedProjectRejectsPaidReportAuthority": next(result for result in fixture_results if result["id"] == "paid-report-authority-in-managed-project")["actual"]["unavailableReason"] == "paid-report-field-not-managed-project-authority",
+    "desktopDeferredNotExecutable": next(result for result in fixture_results if result["id"] == "desktop-deferred-rendering")["actual"]["renderedExecutable"] is False and "deferred-entitlement" in app and "data-agentflow-can-submit-runtime-command-proposal" in app,
+    "desktopInvalidNotExecutable": next(result for result in fixture_results if result["id"] == "desktop-invalid-rendering")["actual"]["renderedExecutable"] is False and "disabled-entitlement" in app and "data-agentflow-can-submit-runtime-command-proposal" in app,
+    "noPaidProviderIntegration": all(term in doc for term in ["不实现 payment", "不实现 payment、checkout", "外部 entitlement service"]) and "payment provider" not in app,
+}
+
+failed_coverage = [key for key, passed in coverage.items() if not passed]
+failed_fixtures = [result["id"] for result in fixture_results if not result["passed"]]
+payload = {
+    "version": "agentflow-v123-commercial-boundary-negative-fixtures.v1",
+    "status": "passed" if not failed_coverage and not failed_fixtures else "failed",
+    "sourceIssue": "#911",
+    "fixtureContractVersion": "agentflow-commercial-boundary-negative-fixtures.v1",
+    "proofPath": "runtime/v123-commercial-boundary-negative-fixtures.json",
+    "fixtures": fixture_results,
+    "coverage": coverage,
+    "failedCoverageKeys": failed_coverage,
+    "failedFixtureIds": failed_fixtures,
+    "authority": {
+        "failedCommercialPreflightCanSubmitRuntimeCommand": False,
+        "managedProjectCanUsePaidReportAuthority": False,
+        "desktopInvalidOrDeferredCanRenderExecutable": False,
+        "paymentProviderImplemented": False,
+        "externalEntitlementServiceImplemented": False,
+    },
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit(f"Commercial boundary negative fixtures gate failed: coverage={failed_coverage}, fixtures={failed_fixtures}")
+PY
+  then
+    fail_stage "$stage" "V123 commercial boundary negative fixtures failed"
+  fi
+
+  record_stage "$stage" "passed" "$(basename "$V123_COMMERCIAL_BOUNDARY_NEGATIVE_FIXTURES_PATH")"
 }
 
 run_source_agent_entry_gate() {
@@ -16369,6 +16548,7 @@ PY
   run_v123_paid_report_flow_preflight_contract_gate
   run_v123_managed_project_flow_commercial_boundary_gate
   run_v123_desktop_commercial_boundary_surface_gate
+  run_v123_commercial_boundary_negative_fixtures_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

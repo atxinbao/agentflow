@@ -93,6 +93,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [095-commercial-product-read-model-contract-v1.md](095-commercial-product-read-model-contract-v1.md) | Commercial Product Read Model Contract |
 | [096-paid-report-flow-preflight-contract-v1.md](096-paid-report-flow-preflight-contract-v1.md) | Paid Report Flow Preflight Contract |
 | [097-managed-project-flow-commercial-boundary-v1.md](097-managed-project-flow-commercial-boundary-v1.md) | Managed Project Flow Commercial Boundary |
+| [098-commercial-boundary-negative-fixtures-v1.md](098-commercial-boundary-negative-fixtures-v1.md) | Commercial Boundary Negative Fixtures |
 
 ## Rules
 
