@@ -147,6 +147,8 @@ fn first_run_runtime_command_proof(workspace: &Path) -> Result<Value> {
 fn guided_sample_execution_closure_proof(workspace: &Path) -> Result<Value> {
     let root = workspace.join("tmp/v121-guided-sample-execution");
     reset_path(&root)?;
+    let retry_root = workspace.join("tmp/v121-guided-sample-retry");
+    reset_path(&retry_root)?;
     let product_id = "software-dev";
     let receipt = create_product_workspace(
         workspace,
@@ -159,6 +161,17 @@ fn guided_sample_execution_closure_proof(workspace: &Path) -> Result<Value> {
         },
     );
     let sample = run_guided_sample(&root, product_id, "deterministic-dry-run")?;
+    let retry_receipt = create_product_workspace(
+        workspace,
+        ProductWorkspaceCreationRequest {
+            project_name: "V121 Guided Sample Retry".to_string(),
+            workspace_root: retry_root.display().to_string(),
+            selected_product_id: product_id.to_string(),
+            initial_goal: "Prove v1.2.1 guided sample failure and retry receipt.".to_string(),
+            creation_mode: ProductWorkspaceCreationMode::Create,
+        },
+    );
+    let retry_sample = run_guided_sample(&retry_root, product_id, "deterministic-fail")?;
 
     Ok(proof(
         "agentflow-v121-guided-sample-execution-closure.v1",
@@ -167,10 +180,15 @@ fn guided_sample_execution_closure_proof(workspace: &Path) -> Result<Value> {
             "sample-completed": sample.status == ProductOnboardingStatus::Completed,
             "receipt-is-task-scoped": sample.issue_id == "AF-GUIDED-SAMPLE-001" && sample.run_id == "run-001",
             "evidence-decision-delivery-present": sample.evidence_path.is_some() && sample.decision_path.is_some() && sample.delivery_path.is_some(),
+            "failure-retry-workspace-created": retry_receipt.status == ProductWorkspaceStatus::Created,
+            "failure-retry-receipt-present": retry_sample.status == ProductOnboardingStatus::Retry && retry_sample.retryable && retry_sample.retry_attempt_path.is_some(),
+            "failed-sample-does-not-write-delivery": retry_sample.delivery_path.is_none(),
         }),
         json!({
             "workspaceReceipt": receipt,
             "guidedSampleReceipt": sample,
+            "retryWorkspaceReceipt": retry_receipt,
+            "retryGuidedSampleReceipt": retry_sample,
         }),
     ))
 }
@@ -251,6 +269,7 @@ fn artifact_manifest_primary_proof_index_proof(paths: &[PathBuf]) -> Result<Valu
                 "sha256": sha256(path)?,
                 "bytes": fs::metadata(path)?.len(),
                 "proofRole": proof_role(path),
+                "issueRefs": issue_refs_for_proof(path),
                 "primary": true,
             }))
         })
@@ -261,6 +280,8 @@ fn artifact_manifest_primary_proof_index_proof(paths: &[PathBuf]) -> Result<Valu
             "has-v121-primary-proof-index": !index.is_empty(),
             "all-indexed-artifacts-are-v121": index.iter().all(|item| item.get("path").and_then(Value::as_str).is_some_and(|path| path.contains("runtime/v121-"))),
             "hashes-present": index.iter().all(|item| item.get("sha256").and_then(Value::as_str).is_some_and(|value| !value.is_empty())),
+            "issue-refs-present": index.iter().all(|item| item.get("issueRefs").and_then(Value::as_array).is_some_and(|refs| !refs.is_empty())),
+            "all-v121-issues-have-primary-proof": all_v121_issue_refs_have_proof(&index),
         }),
         json!({ "primaryProofIndex": index }),
     ))
@@ -384,6 +405,33 @@ fn primary_proof_paths() -> Vec<String> {
 
 fn all_issue_refs_present(text: &str, start: u64, end: u64) -> bool {
     (start..=end).all(|issue| text.contains(&format!("#{issue}")))
+}
+
+fn all_v121_issue_refs_have_proof(index: &[Value]) -> bool {
+    (863..=872).all(|issue| {
+        let expected = format!("#{issue}");
+        index.iter().any(|item| {
+            item.get("issueRefs")
+                .and_then(Value::as_array)
+                .is_some_and(|refs| {
+                    refs.iter()
+                        .any(|value| value.as_str() == Some(expected.as_str()))
+                })
+        })
+    })
+}
+
+fn issue_refs_for_proof(path: &Path) -> Vec<&'static str> {
+    match proof_role(path).as_str() {
+        "release-certification-top-level-metadata" => vec!["#872"],
+        "first-run-runtime-command-invocation" => vec!["#863", "#864"],
+        "guided-sample-execution-closure" => vec!["#865", "#866", "#867"],
+        "team-workflow-boundary-contract" => vec!["#868"],
+        "project-sharing-read-model" => vec!["#869"],
+        "role-permission-handoff-view" => vec!["#870"],
+        "team-delivery-decision-history-view" => vec!["#871"],
+        _ => Vec::new(),
+    }
 }
 
 fn write_json(path: &Path, payload: &impl Serialize) -> Result<()> {

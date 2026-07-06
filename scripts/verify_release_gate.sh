@@ -14191,6 +14191,11 @@ manifest = artifacts[1]
 primary_proofs = certification.get("primaryProofs", [])
 primary_file_names = {path.name for path in artifact_paths}
 manifest_index = manifest.get("payload", {}).get("primaryProofIndex", [])
+indexed_issue_refs = {
+    ref
+    for item in manifest_index
+    for ref in item.get("issueRefs", [])
+}
 v120_artifact_names = {name for name in primary_file_names if name.startswith("v120-")}
 
 def version_tuple(value):
@@ -14223,10 +14228,11 @@ checks = {
     "primary-proofs-present": all(pathlib.Path(proof).name in primary_file_names for proof in primary_proofs),
     "primary-proofs-are-v121": bool(primary_proofs) and all(pathlib.Path(proof).name.startswith("v121-") for proof in primary_proofs),
     "v120-proofs-not-accepted": not v120_artifact_names,
-    "manifest-primary-proof-index": bool(manifest_index) and all(item.get("sha256") and item.get("bytes", 0) > 0 and item.get("proofRole") and pathlib.Path(item.get("path", "")).name.startswith("v121-") for item in manifest_index),
+    "manifest-primary-proof-index": bool(manifest_index) and all(item.get("sha256") and item.get("bytes", 0) > 0 and item.get("proofRole") and item.get("issueRefs") and pathlib.Path(item.get("path", "")).name.startswith("v121-") for item in manifest_index),
+    "manifest-v121-issue-traceability": all(f"#{issue}" in indexed_issue_refs for issue in range(863, 873)),
     "metadata-proof": artifacts[0].get("coverage", {}).get("release-version-keeps-v121-baseline") is True and artifacts[0].get("coverage", {}).get("primary-proofs-are-v121") is True,
     "first-run-runtime-command-proof": artifacts[2].get("coverage", {}).get("contract-is-runtime-api-backed") is True and artifacts[2].get("coverage", {}).get("workspace-created") is True,
-    "guided-sample-closure-proof": artifacts[3].get("coverage", {}).get("sample-completed") is True and artifacts[3].get("coverage", {}).get("evidence-decision-delivery-present") is True,
+    "guided-sample-closure-proof": artifacts[3].get("coverage", {}).get("sample-completed") is True and artifacts[3].get("coverage", {}).get("evidence-decision-delivery-present") is True and artifacts[3].get("coverage", {}).get("failure-retry-receipt-present") is True and artifacts[3].get("coverage", {}).get("failed-sample-does-not-write-delivery") is True,
     "team-boundary-proof": artifacts[4].get("coverage", {}).get("release-is-v121") is True and artifacts[4].get("coverage", {}).get("local-lightweight-scope") is True,
     "project-sharing-proof": artifacts[5].get("coverage", {}).get("read-model-versioned") is True and artifacts[5].get("coverage", {}).get("readonly-view") is True,
     "role-handoff-proof": artifacts[6].get("coverage", {}).get("view-versioned") is True and artifacts[6].get("coverage", {}).get("handoff-state-visible") is True,
