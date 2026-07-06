@@ -89,6 +89,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [091-commercial-product-layer-boundary-v1.md](091-commercial-product-layer-boundary-v1.md) | Commercial Product Layer Boundary |
 | [092-license-entitlement-boundary-v1.md](092-license-entitlement-boundary-v1.md) | License / Entitlement Boundary |
 | [093-paid-feature-boundary-v1.md](093-paid-feature-boundary-v1.md) | Paid Feature Boundary |
+| [094-commercial-workflow-shapes-v1.md](094-commercial-workflow-shapes-v1.md) | Commercial Workflow Shapes |
 
 ## Rules
 
