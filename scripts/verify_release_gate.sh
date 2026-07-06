@@ -301,6 +301,7 @@ V121_DESKTOP_TEAM_WORKFLOW_SURFACE_BINDING_PATH="$RUNTIME_DIR/v121-desktop-team-
 V121_COMMERCIAL_BOUNDARY_CONTRACT_PATH="$RUNTIME_DIR/v121-commercial-boundary-contract.json"
 V121_LICENSE_ENTITLEMENT_BOUNDARY_PATH="$RUNTIME_DIR/v121-license-entitlement-boundary.json"
 V121_PAID_FEATURE_BOUNDARY_PATH="$RUNTIME_DIR/v121-paid-feature-boundary.json"
+V121_COMMERCIAL_WORKFLOW_SHAPES_PATH="$RUNTIME_DIR/v121-commercial-workflow-shapes.json"
 V121_ISSUE_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/v121-issue-milestone-closeout.json"
 V121_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v121-release-certification.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -14157,6 +14158,7 @@ run_v121_release_certification_gate() {
     "$V121_COMMERCIAL_BOUNDARY_CONTRACT_PATH" \
     "$V121_LICENSE_ENTITLEMENT_BOUNDARY_PATH" \
     "$V121_PAID_FEATURE_BOUNDARY_PATH" \
+    "$V121_COMMERCIAL_WORKFLOW_SHAPES_PATH" \
     "$V121_ISSUE_MILESTONE_CLOSEOUT_PATH" \
     "$V121_RELEASE_CERTIFICATION_PATH" >/dev/null
 
@@ -14174,6 +14176,7 @@ run_v121_release_certification_gate() {
     "$V121_COMMERCIAL_BOUNDARY_CONTRACT_PATH" \
     "$V121_LICENSE_ENTITLEMENT_BOUNDARY_PATH" \
     "$V121_PAID_FEATURE_BOUNDARY_PATH" \
+    "$V121_COMMERCIAL_WORKFLOW_SHAPES_PATH" \
     "$V121_ISSUE_MILESTONE_CLOSEOUT_PATH" \
     "$V121_RELEASE_CERTIFICATION_PATH" <<'PY'
 import json
@@ -14256,7 +14259,8 @@ checks = {
     "commercial-boundary-contract-proof": artifacts[9].get("coverage", {}).get("tracked-architecture-contract-present") is True and artifacts[9].get("coverage", {}).get("commercial-product-layer-concepts-defined") is True and artifacts[9].get("coverage", {}).get("core-runtime-boundary-preserved") is True and artifacts[9].get("coverage", {}).get("software-dev-reference-app-is-surface-only") is True and artifacts[9].get("coverage", {}).get("v122-commercial-non-goals-explicit") is True,
     "license-entitlement-boundary-proof": artifacts[10].get("coverage", {}).get("license-entitlement-concepts-defined") is True and artifacts[10].get("coverage", {}).get("entitlement-states-covered") is True and artifacts[10].get("coverage", {}).get("disabled-entitlement-rejects-paid-only-flow") is True and artifacts[10].get("coverage", {}).get("deferred-entitlement-is-not-ready") is True and artifacts[10].get("coverage", {}).get("no-payment-provider-required") is True,
     "paid-feature-boundary-proof": artifacts[11].get("coverage", {}).get("paid-feature-concepts-defined") is True and artifacts[11].get("coverage", {}).get("feature-tiers-covered") is True and artifacts[11].get("coverage", {}).get("paid-only-without-entitlement-blocked-before-runtime") is True and artifacts[11].get("coverage", {}).get("ui-explains-unavailable-or-upgrade-required") is True and artifacts[11].get("coverage", {}).get("runtime-admission-still-required") is True and artifacts[11].get("coverage", {}).get("no-payment-provider-required") is True,
-    "issue-milestone-closeout-proof": artifacts[12].get("coverage", {}).get("all-v121-issue-refs-present") is True and artifacts[12].get("coverage", {}).get("all-v121-issues-marked-done") is True and artifacts[12].get("coverage", {}).get("milestone-closed-or-waived") is True and artifacts[12].get("coverage", {}).get("milestone-has-no-open-issues") is True,
+    "commercial-workflow-shapes-proof": artifacts[12].get("coverage", {}).get("paid-report-flow-defined") is True and artifacts[12].get("coverage", {}).get("managed-project-flow-defined") is True and artifacts[12].get("coverage", {}).get("flows-map-to-core-runtime-facts") is True and artifacts[12].get("coverage", {}).get("flows-reuse-core-runtime-and-product-surfaces") is True and artifacts[12].get("coverage", {}).get("runtime-admission-not-bypassed") is True and artifacts[12].get("coverage", {}).get("no-new-industry-product-or-payment") is True,
+    "issue-milestone-closeout-proof": artifacts[13].get("coverage", {}).get("all-v121-issue-refs-present") is True and artifacts[13].get("coverage", {}).get("all-v121-issues-marked-done") is True and artifacts[13].get("coverage", {}).get("milestone-closed-or-waived") is True and artifacts[13].get("coverage", {}).get("milestone-has-no-open-issues") is True,
 }
 failed = [key for key, passed in checks.items() if not passed]
 certification["releaseGateMetadata"] = {
@@ -14290,6 +14294,7 @@ PY
   record_stage "v121-commercial-boundary-contract" "passed" "$(basename "$V121_COMMERCIAL_BOUNDARY_CONTRACT_PATH")"
   record_stage "v121-license-entitlement-boundary" "passed" "$(basename "$V121_LICENSE_ENTITLEMENT_BOUNDARY_PATH")"
   record_stage "v121-paid-feature-boundary" "passed" "$(basename "$V121_PAID_FEATURE_BOUNDARY_PATH")"
+  record_stage "v121-commercial-workflow-shapes" "passed" "$(basename "$V121_COMMERCIAL_WORKFLOW_SHAPES_PATH")"
   record_stage "v121-issue-milestone-closeout" "passed" "$(basename "$V121_ISSUE_MILESTONE_CLOSEOUT_PATH")"
   record_stage "v121-release-certification" "passed" "$(basename "$V121_RELEASE_CERTIFICATION_PATH")"
 }

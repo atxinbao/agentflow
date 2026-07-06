@@ -16,9 +16,9 @@ use std::{
 
 fn main() -> Result<()> {
     let args = env::args().skip(1).collect::<Vec<_>>();
-    if args.len() != 15 {
+    if args.len() != 16 {
         bail!(
-            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <desktop-team-surface> <commercial-boundary> <license-entitlement> <paid-feature> <issue-milestone-closeout> <release-certification>"
+            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <desktop-team-surface> <commercial-boundary> <license-entitlement> <paid-feature> <commercial-workflow-shapes> <issue-milestone-closeout> <release-certification>"
         );
     }
 
@@ -36,6 +36,7 @@ fn main() -> Result<()> {
     let commercial_boundary = commercial_product_layer_boundary_proof(&workspace)?;
     let license_entitlement = license_entitlement_boundary_proof(&workspace)?;
     let paid_feature = paid_feature_boundary_proof(&workspace)?;
+    let commercial_workflow_shapes = commercial_workflow_shapes_proof(&workspace)?;
     let closeout = issue_milestone_closeout_proof(&workspace);
 
     for (path, payload) in [
@@ -50,7 +51,8 @@ fn main() -> Result<()> {
         (&proof_paths[9], &commercial_boundary),
         (&proof_paths[10], &license_entitlement),
         (&proof_paths[11], &paid_feature),
-        (&proof_paths[12], &closeout),
+        (&proof_paths[12], &commercial_workflow_shapes),
+        (&proof_paths[13], &closeout),
     ] {
         write_json(path, payload)?;
     }
@@ -71,9 +73,10 @@ fn main() -> Result<()> {
         &commercial_boundary,
         &license_entitlement,
         &paid_feature,
+        &commercial_workflow_shapes,
         &closeout,
     ]);
-    write_json(&proof_paths[13], &certification)?;
+    write_json(&proof_paths[14], &certification)?;
 
     Ok(())
 }
@@ -507,6 +510,83 @@ fn paid_feature_boundary_proof(workspace: &Path) -> Result<Value> {
     ))
 }
 
+fn commercial_workflow_shapes_proof(workspace: &Path) -> Result<Value> {
+    let doc_path = workspace.join("docs/architecture/094-commercial-workflow-shapes-v1.md");
+    let doc = read_text(&doc_path)?;
+    let core_mappings = [
+        "Spec",
+        "Evidence",
+        "Decision",
+        "Delivery",
+        "Projection",
+        "Completion",
+    ];
+    let paid_report_steps = [
+        "input",
+        "product access check",
+        "order intent",
+        "controlled run",
+        "evidence",
+        "decision",
+        "report delivery",
+        "feedback",
+    ];
+    let managed_project_steps = [
+        "goal",
+        "spec",
+        "tasks",
+        "execution",
+        "evidence",
+        "decision",
+        "delivery",
+        "feedback",
+    ];
+    let non_goals = [
+        "payment checkout",
+        "order payment lifecycle",
+        "customer account",
+        "cloud project collaboration",
+        "new industry product",
+    ];
+
+    Ok(proof(
+        "agentflow-v121-commercial-workflow-shapes.v1",
+        json!({
+            "tracked-architecture-contract-present": doc.contains("# Commercial Workflow Shapes v1"),
+            "paid-report-flow-defined": doc.contains("Paid Report Flow") && paid_report_steps.iter().all(|step| doc.contains(step)),
+            "managed-project-flow-defined": doc.contains("Managed Project Flow") && managed_project_steps.iter().all(|step| doc.contains(step)),
+            "flows-map-to-core-runtime-facts": core_mappings.iter().all(|mapping| doc.contains(mapping)),
+            "flows-reuse-core-runtime-and-product-surfaces": doc.contains("Core Runtime") && doc.contains("Product surface") && doc.contains("Runtime command proposal"),
+            "paid-report-is-one-shot": doc.contains("一次性交付形态") && doc.contains("report delivery"),
+            "managed-project-is-long-running": doc.contains("长周期项目交付形态") && doc.contains("多任务项目交付"),
+            "runtime-admission-not-bypassed": doc.contains("不能因为是商业 flow 就绕过 Runtime command admission"),
+            "no-new-industry-product-or-payment": non_goals.iter().all(|item| doc.contains(item)),
+        }),
+        json!({
+            "commercialWorkflowShapes": {
+                "docPath": "docs/architecture/094-commercial-workflow-shapes-v1.md",
+                "flows": [
+                    {
+                        "id": "paid-report-flow",
+                        "shape": "one-shot-report-delivery",
+                        "steps": paid_report_steps,
+                    },
+                    {
+                        "id": "managed-project-flow",
+                        "shape": "long-running-project-delivery",
+                        "steps": managed_project_steps,
+                    }
+                ],
+                "coreMappings": core_mappings,
+                "sourceIssue": "#891",
+                "authority": false,
+                "newIndustryProduct": false,
+                "paymentImplemented": false,
+            }
+        }),
+    ))
+}
+
 fn issue_milestone_closeout_proof(workspace: &Path) -> Value {
     let release_readme =
         read_text(workspace.join("docs/delivery/releases/v1.2.1/README.md")).unwrap_or_default();
@@ -587,17 +667,18 @@ fn release_certification_proof(proofs: &[&Value]) -> Value {
         "agentflow-v121-release-certification.v1",
         json!({
             "all-primary-proofs-passed": proofs.iter().all(|proof| proof.get("status").and_then(Value::as_str) == Some("passed")),
-            "primary-proof-count": primary_proofs.len() == 14,
+            "primary-proof-count": primary_proofs.len() == 15,
             "primary-proofs-are-v121": primary_proofs.iter().all(|path| path.contains("runtime/v121-")),
             "first-run-execution-certified": true,
             "team-workflow-boundary-certified": true,
             "commercial-boundary-certified": true,
             "license-entitlement-boundary-certified": true,
             "paid-feature-boundary-certified": true,
+            "commercial-workflow-shapes-certified": true,
             "not-v120-historical-certification": true,
         }),
         json!({
-            "releaseScope": "first-run-execution-closure-team-workflow-commercial-and-paid-feature-boundary",
+            "releaseScope": "first-run-execution-closure-team-workflow-commercial-boundary-and-workflow-shapes",
             "historicalV120Only": false,
             "commercialLaunch": false,
         }),
@@ -700,6 +781,7 @@ fn primary_proof_paths() -> Vec<String> {
         "runtime/v121-commercial-boundary-contract.json".to_string(),
         "runtime/v121-license-entitlement-boundary.json".to_string(),
         "runtime/v121-paid-feature-boundary.json".to_string(),
+        "runtime/v121-commercial-workflow-shapes.json".to_string(),
         "runtime/v121-issue-milestone-closeout.json".to_string(),
         "runtime/v121-release-certification.json".to_string(),
     ]
@@ -742,6 +824,7 @@ fn issue_refs_for_proof(path: &Path) -> Vec<&'static str> {
         "commercial-boundary-contract" => vec!["#888"],
         "license-entitlement-boundary" => vec!["#889"],
         "paid-feature-boundary" => vec!["#890"],
+        "commercial-workflow-shapes" => vec!["#891"],
         "issue-milestone-closeout" => (863..=872)
             .map(|issue| match issue {
                 863 => "#863",
