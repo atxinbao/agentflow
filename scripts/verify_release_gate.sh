@@ -297,6 +297,7 @@ V121_TEAM_WORKFLOW_BOUNDARY_CONTRACT_PATH="$RUNTIME_DIR/v121-team-workflow-bound
 V121_PROJECT_SHARING_READ_MODEL_PATH="$RUNTIME_DIR/v121-project-sharing-read-model.json"
 V121_ROLE_PERMISSION_HANDOFF_VIEW_PATH="$RUNTIME_DIR/v121-role-permission-handoff-view.json"
 V121_TEAM_DELIVERY_DECISION_HISTORY_VIEW_PATH="$RUNTIME_DIR/v121-team-delivery-decision-history-view.json"
+V121_DESKTOP_TEAM_WORKFLOW_SURFACE_BINDING_PATH="$RUNTIME_DIR/v121-desktop-team-workflow-surface-binding.json"
 V121_ISSUE_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/v121-issue-milestone-closeout.json"
 V121_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v121-release-certification.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -14149,6 +14150,7 @@ run_v121_release_certification_gate() {
     "$V121_PROJECT_SHARING_READ_MODEL_PATH" \
     "$V121_ROLE_PERMISSION_HANDOFF_VIEW_PATH" \
     "$V121_TEAM_DELIVERY_DECISION_HISTORY_VIEW_PATH" \
+    "$V121_DESKTOP_TEAM_WORKFLOW_SURFACE_BINDING_PATH" \
     "$V121_ISSUE_MILESTONE_CLOSEOUT_PATH" \
     "$V121_RELEASE_CERTIFICATION_PATH" >/dev/null
 
@@ -14162,6 +14164,7 @@ run_v121_release_certification_gate() {
     "$V121_PROJECT_SHARING_READ_MODEL_PATH" \
     "$V121_ROLE_PERMISSION_HANDOFF_VIEW_PATH" \
     "$V121_TEAM_DELIVERY_DECISION_HISTORY_VIEW_PATH" \
+    "$V121_DESKTOP_TEAM_WORKFLOW_SURFACE_BINDING_PATH" \
     "$V121_ISSUE_MILESTONE_CLOSEOUT_PATH" \
     "$V121_RELEASE_CERTIFICATION_PATH" <<'PY'
 import json
@@ -14240,7 +14243,8 @@ checks = {
     "project-sharing-proof": artifacts[5].get("coverage", {}).get("read-model-versioned") is True and artifacts[5].get("coverage", {}).get("readonly-view") is True,
     "role-handoff-proof": artifacts[6].get("coverage", {}).get("view-versioned") is True and artifacts[6].get("coverage", {}).get("handoff-state-visible") is True,
     "history-proof": artifacts[7].get("coverage", {}).get("view-versioned") is True and artifacts[7].get("coverage", {}).get("audit-is-optional-sidecar") is True,
-    "issue-milestone-closeout-proof": artifacts[8].get("coverage", {}).get("all-v121-issue-refs-present") is True and artifacts[8].get("coverage", {}).get("all-v121-issues-marked-done") is True and artifacts[8].get("coverage", {}).get("milestone-closed-or-waived") is True and artifacts[8].get("coverage", {}).get("milestone-has-no-open-issues") is True,
+    "desktop-team-surface-binding-proof": artifacts[8].get("coverage", {}).get("desktop-calls-all-team-read-model-commands") is True and artifacts[8].get("coverage", {}).get("desktop-renders-team-workflow-panel") is True and artifacts[8].get("coverage", {}).get("desktop-shows-invalid-or-deferred-states") is True,
+    "issue-milestone-closeout-proof": artifacts[9].get("coverage", {}).get("all-v121-issue-refs-present") is True and artifacts[9].get("coverage", {}).get("all-v121-issues-marked-done") is True and artifacts[9].get("coverage", {}).get("milestone-closed-or-waived") is True and artifacts[9].get("coverage", {}).get("milestone-has-no-open-issues") is True,
 }
 failed = [key for key, passed in checks.items() if not passed]
 certification["releaseGateMetadata"] = {
@@ -14270,6 +14274,7 @@ PY
   record_stage "v121-project-sharing-read-model" "passed" "$(basename "$V121_PROJECT_SHARING_READ_MODEL_PATH")"
   record_stage "v121-role-permission-handoff-view" "passed" "$(basename "$V121_ROLE_PERMISSION_HANDOFF_VIEW_PATH")"
   record_stage "v121-team-delivery-decision-history-view" "passed" "$(basename "$V121_TEAM_DELIVERY_DECISION_HISTORY_VIEW_PATH")"
+  record_stage "v121-desktop-team-workflow-surface-binding" "passed" "$(basename "$V121_DESKTOP_TEAM_WORKFLOW_SURFACE_BINDING_PATH")"
   record_stage "v121-issue-milestone-closeout" "passed" "$(basename "$V121_ISSUE_MILESTONE_CLOSEOUT_PATH")"
   record_stage "v121-release-certification" "passed" "$(basename "$V121_RELEASE_CERTIFICATION_PATH")"
 }

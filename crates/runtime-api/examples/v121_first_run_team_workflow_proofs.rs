@@ -16,9 +16,9 @@ use std::{
 
 fn main() -> Result<()> {
     let args = env::args().skip(1).collect::<Vec<_>>();
-    if args.len() != 11 {
+    if args.len() != 12 {
         bail!(
-            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <issue-milestone-closeout> <release-certification>"
+            "usage: v121_first_run_team_workflow_proofs <workspace> <metadata> <manifest> <first-run> <guided-sample> <team-boundary> <project-sharing> <role-handoff> <history> <desktop-team-surface> <issue-milestone-closeout> <release-certification>"
         );
     }
 
@@ -32,6 +32,7 @@ fn main() -> Result<()> {
     let project_sharing = project_sharing_read_model_proof(&workspace)?;
     let role_handoff = role_permission_handoff_view_proof(&workspace)?;
     let history = team_delivery_decision_history_proof(&workspace)?;
+    let desktop_surface = desktop_team_workflow_surface_binding_proof(&workspace)?;
     let closeout = issue_milestone_closeout_proof(&workspace);
 
     for (path, payload) in [
@@ -42,7 +43,8 @@ fn main() -> Result<()> {
         (&proof_paths[5], &project_sharing),
         (&proof_paths[6], &role_handoff),
         (&proof_paths[7], &history),
-        (&proof_paths[8], &closeout),
+        (&proof_paths[8], &desktop_surface),
+        (&proof_paths[9], &closeout),
     ] {
         write_json(path, payload)?;
     }
@@ -59,9 +61,10 @@ fn main() -> Result<()> {
         &project_sharing,
         &role_handoff,
         &history,
+        &desktop_surface,
         &closeout,
     ]);
-    write_json(&proof_paths[9], &certification)?;
+    write_json(&proof_paths[10], &certification)?;
 
     Ok(())
 }
@@ -261,6 +264,56 @@ fn team_delivery_decision_history_proof(workspace: &Path) -> Result<Value> {
     ))
 }
 
+fn desktop_team_workflow_surface_binding_proof(workspace: &Path) -> Result<Value> {
+    let app = read_text(workspace.join("apps/desktop/src/App.tsx"))?;
+    let main_rs = read_text(workspace.join("apps/desktop/src-tauri/src/main.rs"))?;
+    let runtime_api =
+        read_text(workspace.join("apps/desktop/src-tauri/src/commands/runtime_api.rs"))?;
+    let required_commands = [
+        "load_team_workflow_boundary_contract",
+        "load_project_sharing_read_model",
+        "load_role_permission_handoff_view",
+        "load_team_delivery_decision_history_view",
+    ];
+    let commands = required_commands
+        .iter()
+        .map(|command| {
+            json!({
+                "command": command,
+                "calledByDesktop": app.contains(&format!("\"{command}\"")),
+                "registeredInTauri": main_rs.contains(&format!("commands::runtime_api::{command}")),
+                "implementedByBridge": runtime_api.contains(&format!("fn {command}")),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(proof(
+        "agentflow-v121-desktop-team-workflow-surface-binding.v1",
+        json!({
+            "desktop-calls-all-team-read-model-commands": required_commands.iter().all(|command| app.contains(&format!("\"{command}\""))),
+            "tauri-registers-all-team-read-model-commands": required_commands.iter().all(|command| main_rs.contains(&format!("commands::runtime_api::{command}"))),
+            "runtime-bridge-implements-all-team-read-model-commands": required_commands.iter().all(|command| runtime_api.contains(&format!("fn {command}"))),
+            "desktop-renders-team-workflow-panel": app.contains("ProjectHomeTeamWorkflowPanel") && app.contains("团队工作流"),
+            "desktop-renders-project-sharing": app.contains("项目共享") && app.contains("sharing.tasks.summary"),
+            "desktop-renders-handoff-owner": app.contains("角色与交接") && app.contains("currentOwnerRole"),
+            "desktop-renders-delivery-decision-history": app.contains("交付和决策历史") && app.contains("latestDecision") && app.contains("latestDelivery"),
+            "desktop-shows-invalid-or-deferred-states": app.contains("invalid") && app.contains("deferred") && app.contains("artifactStatusLabel"),
+        }),
+        json!({
+            "desktopSurface": {
+                "files": [
+                    "apps/desktop/src/App.tsx",
+                    "apps/desktop/src-tauri/src/main.rs",
+                    "apps/desktop/src-tauri/src/commands/runtime_api.rs"
+                ],
+                "commands": commands,
+                "readonly": true,
+                "authority": false
+            }
+        }),
+    ))
+}
+
 fn issue_milestone_closeout_proof(workspace: &Path) -> Value {
     let release_readme =
         read_text(workspace.join("docs/delivery/releases/v1.2.1/README.md")).unwrap_or_default();
@@ -341,7 +394,7 @@ fn release_certification_proof(proofs: &[&Value]) -> Value {
         "agentflow-v121-release-certification.v1",
         json!({
             "all-primary-proofs-passed": proofs.iter().all(|proof| proof.get("status").and_then(Value::as_str) == Some("passed")),
-            "primary-proof-count": primary_proofs.len() == 10,
+            "primary-proof-count": primary_proofs.len() == 11,
             "primary-proofs-are-v121": primary_proofs.iter().all(|path| path.contains("runtime/v121-")),
             "first-run-execution-certified": true,
             "team-workflow-boundary-certified": true,
@@ -447,6 +500,7 @@ fn primary_proof_paths() -> Vec<String> {
         "runtime/v121-project-sharing-read-model.json".to_string(),
         "runtime/v121-role-permission-handoff-view.json".to_string(),
         "runtime/v121-team-delivery-decision-history-view.json".to_string(),
+        "runtime/v121-desktop-team-workflow-surface-binding.json".to_string(),
         "runtime/v121-issue-milestone-closeout.json".to_string(),
         "runtime/v121-release-certification.json".to_string(),
     ]
@@ -485,6 +539,7 @@ fn issue_refs_for_proof(path: &Path) -> Vec<&'static str> {
         "project-sharing-read-model" => vec!["#869"],
         "role-permission-handoff-view" => vec!["#870"],
         "team-delivery-decision-history-view" => vec!["#871"],
+        "desktop-team-workflow-surface-binding" => vec!["#887"],
         "issue-milestone-closeout" => (863..=872)
             .map(|issue| match issue {
                 863 => "#863",
