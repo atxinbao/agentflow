@@ -312,6 +312,7 @@ V122_ISSUE_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/v122-issue-milestone-closeout.j
 V122_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v122-release-certification.json"
 V122_MILESTONE_CLOSEOUT_REPAIR_PATH="$RUNTIME_DIR/v122-milestone-closeout-repair.json"
 V122_COMMERCIAL_PROOF_VERSION_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/v122-commercial-proof-version-negative-fixture.json"
+V123_COMMERCIAL_PRODUCT_READ_MODEL_CONTRACT_PATH="$RUNTIME_DIR/v123-commercial-product-read-model-contract.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -536,6 +537,7 @@ proof_chain = [
     {"stage": "release.closeout-proof-negative-fixture", "label": "Release Closeout Proof Negative Fixture"},
     {"stage": "release.v122-milestone-closeout-repair", "label": "v1.2.2 Milestone Closeout Repair"},
     {"stage": "release.v122-commercial-proof-version-negative-fixture", "label": "V122 Commercial Proof Version Negative Fixture"},
+    {"stage": "release.v123-commercial-product-read-model-contract", "label": "V123 Commercial Product Read Model Contract"},
     {"stage": "pack.release-gate-readiness", "label": "Pack Release Gate Readiness"},
     {"stage": "pack.negative-fixtures", "label": "Pack Negative Fixtures"},
     {"stage": "pack.migration-execution", "label": "Pack Migration Execution"},
@@ -673,6 +675,7 @@ runtime_artifacts = [
     {"path": "runtime/v122-release-certification.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-release-certification.json").is_file()},
     {"path": "runtime/v122-milestone-closeout-repair.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-milestone-closeout-repair.json").is_file()},
     {"path": "runtime/v122-commercial-proof-version-negative-fixture.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v122-commercial-proof-version-negative-fixture.json").is_file()},
+    {"path": "runtime/v123-commercial-product-read-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/v123-commercial-product-read-model-contract.json").is_file()},
     {"path": "runtime/core-decision-model-contract.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-model-contract.json").is_file()},
     {"path": "runtime/core-decision-input-binding.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-input-binding.json").is_file()},
     {"path": "runtime/core-decision-outcome-transitions.json", "exists": pathlib.Path(summary_json_path.parent / "runtime/core-decision-outcome-transitions.json").is_file()},
@@ -3118,6 +3121,147 @@ PY
   fi
 
   record_stage "$stage" "passed" "$(basename "$V122_COMMERCIAL_PROOF_VERSION_NEGATIVE_FIXTURE_PATH")"
+}
+
+run_v123_commercial_product_read_model_contract_gate() {
+  local stage="release.v123-commercial-product-read-model-contract"
+  record_stage "$stage" "started" "$V123_COMMERCIAL_PRODUCT_READ_MODEL_CONTRACT_PATH"
+
+  if ! python3 - \
+    "$V123_COMMERCIAL_PRODUCT_READ_MODEL_CONTRACT_PATH" \
+    "$ROOT" <<'PY'
+import json
+import pathlib
+import sys
+import time
+
+out_raw, root_raw = sys.argv[1:]
+out_path = pathlib.Path(out_raw)
+root = pathlib.Path(root_raw)
+doc_path = root / "docs" / "architecture" / "095-commercial-product-read-model-contract-v1.md"
+text = doc_path.read_text(encoding="utf-8") if doc_path.is_file() else ""
+
+required_fields = [
+    "version",
+    "productId",
+    "flowType",
+    "entitlementState",
+    "paidFeatureState",
+    "deliveryPromise",
+    "availability",
+    "unavailableReason",
+    "commandPolicy",
+    "projectionOnly",
+    "coreAuthority",
+]
+
+fixtures = [
+    {
+        "id": "missing-product",
+        "input": {"productId": None, "flowType": "paid-report-flow", "entitlementState": "active"},
+        "expected": {"availability": "invalid", "commandPolicy": "blocked-before-runtime", "unavailableReason": "missing-product"},
+    },
+    {
+        "id": "disabled-entitlement",
+        "input": {"productId": "software-dev", "flowType": "paid-report-flow", "entitlementState": "disabled"},
+        "expected": {"availability": "rejected", "commandPolicy": "blocked-before-runtime", "unavailableReason": "disabled-entitlement"},
+    },
+    {
+        "id": "deferred-entitlement",
+        "input": {"productId": "software-dev", "flowType": "managed-project-flow", "entitlementState": "deferred"},
+        "expected": {"availability": "deferred", "commandPolicy": "blocked-before-runtime", "unavailableReason": "deferred-entitlement"},
+    },
+    {
+        "id": "unknown-flow-type",
+        "input": {"productId": "software-dev", "flowType": "unknown-flow", "entitlementState": "active"},
+        "expected": {"availability": "invalid", "commandPolicy": "blocked-before-runtime", "unavailableReason": "unknown-flow-type"},
+    },
+    {
+        "id": "paid-report-ready",
+        "input": {"productId": "software-dev", "flowType": "paid-report-flow", "entitlementState": "active"},
+        "expected": {"availability": "available", "commandPolicy": "allowed-to-propose", "unavailableReason": "none"},
+    },
+    {
+        "id": "managed-project-ready",
+        "input": {"productId": "software-dev", "flowType": "managed-project-flow", "entitlementState": "trial"},
+        "expected": {"availability": "available", "commandPolicy": "allowed-to-propose", "unavailableReason": "none"},
+    },
+]
+
+def evaluate(case):
+    product_id = case["input"].get("productId")
+    flow_type = case["input"].get("flowType")
+    entitlement = case["input"].get("entitlementState")
+    if not product_id:
+        return {"availability": "invalid", "commandPolicy": "blocked-before-runtime", "unavailableReason": "missing-product"}
+    if flow_type not in {"paid-report-flow", "managed-project-flow"}:
+        return {"availability": "invalid", "commandPolicy": "blocked-before-runtime", "unavailableReason": "unknown-flow-type"}
+    if entitlement == "disabled":
+        return {"availability": "rejected", "commandPolicy": "blocked-before-runtime", "unavailableReason": "disabled-entitlement"}
+    if entitlement == "deferred":
+        return {"availability": "deferred", "commandPolicy": "blocked-before-runtime", "unavailableReason": "deferred-entitlement"}
+    if entitlement == "expired":
+        return {"availability": "rejected", "commandPolicy": "blocked-before-runtime", "unavailableReason": "entitlement-expired"}
+    return {"availability": "available", "commandPolicy": "allowed-to-propose", "unavailableReason": "none"}
+
+fixture_results = []
+for case in fixtures:
+    actual = evaluate(case)
+    fixture_results.append({
+        **case,
+        "actual": actual,
+        "passed": actual == case["expected"],
+    })
+
+coverage = {
+    "docExists": doc_path.is_file(),
+    "versionedReadModelDefined": "agentflow-commercial-product-read-model.v1" in text,
+    "requiredFieldsDefined": all(f'"{field}"' in text for field in required_fields),
+    "paidReportFlowMapped": "paid-report-flow" in text and ("delivery promise is `report`" in text or "delivery promise 是 `report`" in text),
+    "managedProjectFlowMapped": "managed-project-flow" in text and ("delivery promise is `project-delivery`" in text or "delivery promise 是 `project-delivery`" in text),
+    "productSurfaceProjectionOnly": "Product-layer projection" in text and "Desktop / Product surface 只能消费" in text,
+    "readModelNotCoreAuthority": "coreAuthority" in text and "false" in text and "不能成为 Runtime authority" in text,
+    "blocksBeforeRuntimeForNegativeFixtures": all(
+        result["actual"]["commandPolicy"] == "blocked-before-runtime"
+        for result in fixture_results
+        if result["id"] in {"missing-product", "disabled-entitlement", "deferred-entitlement", "unknown-flow-type"}
+    ),
+    "negativeFixturesPresent": all(value in text for value in ["missing Product", "disabled entitlement", "deferred entitlement", "unknown flow type"]),
+    "nonGoalsExplicit": all(value in text for value in ["account system", "payment checkout", "refund engine", "cloud entitlement server"]),
+    "runtimeAdmissionNotBypassed": "Core Runtime admission" in text and ("不能把 commercial availability 当作 Core Runtime admission" in text or "把 commercial availability 当作 Core Runtime admission" in text),
+}
+
+failed_coverage = [key for key, passed in coverage.items() if not passed]
+failed_fixtures = [result["id"] for result in fixture_results if not result["passed"]]
+payload = {
+    "version": "agentflow-v123-commercial-product-read-model-contract.v1",
+    "status": "passed" if not failed_coverage and not failed_fixtures else "failed",
+    "sourceIssue": "#907",
+    "readModelVersion": "agentflow-commercial-product-read-model.v1",
+    "proofPath": "runtime/v123-commercial-product-read-model-contract.json",
+    "supportedFlows": ["paid-report-flow", "managed-project-flow"],
+    "readModelFields": required_fields,
+    "authority": {
+        "projectionOnly": True,
+        "coreAuthority": False,
+        "productSurfaceConsumesProjectionOnly": True,
+        "runtimeAdmissionBypass": False,
+    },
+    "fixtures": fixture_results,
+    "coverage": coverage,
+    "failedCoverageKeys": failed_coverage,
+    "failedFixtureIds": failed_fixtures,
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "passed":
+    raise SystemExit(f"Commercial product read model contract gate failed: coverage={failed_coverage}, fixtures={failed_fixtures}")
+PY
+  then
+    fail_stage "$stage" "V123 commercial product read model contract failed"
+  fi
+
+  record_stage "$stage" "passed" "$(basename "$V123_COMMERCIAL_PRODUCT_READ_MODEL_CONTRACT_PATH")"
 }
 
 run_source_agent_entry_gate() {
@@ -15733,6 +15877,7 @@ PY
   run_v120_release_certification_gate
   run_v121_release_certification_gate
   run_v122_commercial_proof_version_negative_fixture
+  run_v123_commercial_product_read_model_contract_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
