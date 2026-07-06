@@ -117,13 +117,26 @@ milestoneNumber: 17
 state: closed
 openIssues: 0
 closedIssues: 10
-closedAt: after V122-010 merge
+closedAt: 2026-07-06T17:40:17Z
 waiver: none
+repairRecordedBy: v1.2.3 / V123-003
+repairProof: runtime/v122-milestone-closeout-repair.json
 ```
 
 The release gate must not claim complete V122 traceability unless all V122
 issues `#883` through `#892` are closed and the milestone is closed, or unless a
 future certification records an explicit waiver reason.
+
+### Post-release Closeout Repair
+
+`v1.2.2` remains the published release baseline. The published tag, GitHub
+Release, and source archive are not rewritten.
+
+During `v1.2.3` release proof hardening, the live GitHub milestone was found
+open even though all V122 issues were closed. V123-003 repaired the live
+milestone state by closing milestone `#17` and added
+`runtime/v122-milestone-closeout-repair.json` to the v1.2.3 release gate so
+future certification proves the repaired state from live GitHub API evidence.
 
 ## Authority Rules
 
