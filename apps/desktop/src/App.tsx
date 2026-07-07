@@ -734,6 +734,7 @@ function App() {
   const outputBundle = useOutputBundle(projectRoot, outputRefreshToken);
   const initializationState = useProjectInitializationStatus(projectRoot, outputRefreshToken);
   const productCommandSurfaceState = useProductCommandSurface(projectRoot);
+  const commercialProductReadModelState = useCommercialProductReadModel(projectRoot);
 
   useEffect(() => {
     if (connectedProvider) {
@@ -1758,6 +1759,7 @@ function App() {
             onOpenAudit={() => setActivePage("audit")}
             onOpenTasks={() => setActivePage("tasks")}
             outputBundle={outputBundle}
+            commercialProductReadModelState={commercialProductReadModelState}
             productCommandSurfaceState={productCommandSurfaceState}
             projectRoot={projectRoot}
             projectLoopFeedback={projectLoopFeedback}
@@ -2700,6 +2702,7 @@ function ProjectAvailabilityPage({
 }
 
 function ProjectHomePage({
+  commercialProductReadModelState,
   homeProjectGroup,
   homeProjectProjection,
   initializationState,
@@ -2725,6 +2728,7 @@ function ProjectHomePage({
   onRunProjectLoop: () => void;
   onOpenTasks: () => void;
   outputBundle: OutputBundleState;
+  commercialProductReadModelState: CommercialProductReadModelState;
   productCommandSurfaceState: ProductCommandSurfaceState;
   projectRoot: string;
   projectLoopFeedback: string | null;
@@ -2957,7 +2961,7 @@ function ProjectHomePage({
     },
   ];
   const commandEntries = productCommandEntries.length ? productCommandEntries : fallbackCommandEntries;
-  const commercialBoundaryReadModel = buildCommercialBoundaryReadModel(productCommandSurfaceState.view);
+  const commercialBoundaryReadModel = commercialProductReadModelState.model;
 
   return (
     <section className="v16-page v16-home-page" data-agentflow-page="workbench">
@@ -3109,7 +3113,11 @@ function ProjectHomePage({
       <section className="v16-home-columns" aria-label="项目入口与最近活动">
         <ProjectHomeAgentEntryPanel activeOwnerLabel={nextOwnerLabel} />
         <ProjectHomeTeamWorkflowPanel state={teamWorkflowViewsState} />
-        <ProjectHomeCommercialBoundaryPanel model={commercialBoundaryReadModel} source={productCommandSurfaceState.source} />
+        <ProjectHomeCommercialBoundaryPanel
+          error={commercialProductReadModelState.error}
+          model={commercialBoundaryReadModel}
+          source={commercialProductReadModelState.source}
+        />
         <Panel className="v16-home-column" title="Command Surface">
           <CommandSurfaceActionList actions={commandEntries} />
           {productCommandSurfaceState.error ? (
@@ -3268,9 +3276,9 @@ type CommercialBoundaryEntry = {
   productName: string;
   flowType: CommercialFlowType;
   flowLabel: string;
-  entitlementState: "active" | "trial" | "disabled" | "deferred";
-  paidFeatureState: "enabled" | "disabled" | "deferred" | "not-required";
-  deliveryPromise: "report" | "project-delivery";
+  entitlementState: "active" | "trial" | "expired" | "disabled" | "deferred" | "missing";
+  paidFeatureState: "enabled" | "disabled" | "deferred" | "not-required" | "missing";
+  deliveryPromise: "report" | "project-delivery" | "none";
   availability: CommercialAvailability;
   unavailableReason: string;
   nextAction: string;
@@ -3278,44 +3286,77 @@ type CommercialBoundaryEntry = {
   canSubmitRuntimeCommandProposal: boolean;
   coreAuthority: false;
   projectionOnly: true;
+  writesAuthority: false;
+  sourceRefs?: string[];
 };
 
 type CommercialBoundaryReadModel = {
   version: "agentflow-commercial-product-read-model.v1";
-  source: "product-read-model";
+  status?: string;
+  source: string;
   projectionOnly: true;
   coreAuthority: false;
   writesAuthority: false;
   entries: CommercialBoundaryEntry[];
+  sourceRefs?: string[];
+  freshness?: string;
+};
+
+type CommercialProductReadModelState = {
+  error: string | null;
+  model: CommercialBoundaryReadModel | null;
+  source: DataSource;
 };
 
 function ProjectHomeCommercialBoundaryPanel({
-  model,
+  error,
+  model: modelInput,
   source,
 }: {
-  model: CommercialBoundaryReadModel;
+  error: string | null;
+  model: CommercialBoundaryReadModel | null;
   source: DataSource;
 }) {
+  const model: CommercialBoundaryReadModel =
+    modelInput ??
+    ({
+      coreAuthority: false,
+      entries: [],
+      projectionOnly: true,
+      source: "runtime-unavailable",
+      status: "unavailable",
+      version: "agentflow-commercial-product-read-model.v1",
+      writesAuthority: false,
+    } satisfies CommercialBoundaryReadModel);
+  const hasRuntimeModel = modelInput !== null;
   const sourceLabel = source === "tauri" ? "Runtime Projection" : source === "preview" ? "Browser Preview" : "Read Model";
+  const statusLabel = model?.status ? ` · ${model.status}` : "";
 
   return (
     <Panel className="v16-home-column" title="Commercial Boundary">
       <div
         className="v16-commercial-boundary-panel"
         data-agentflow-read-model="commercial-product-boundary"
+        data-agentflow-source={source}
+        data-agentflow-preview-fallback={String(source === "preview")}
         data-agentflow-projection-only={String(model.projectionOnly)}
         data-agentflow-core-authority={String(model.coreAuthority)}
         data-agentflow-writes-authority={String(model.writesAuthority)}
       >
         <div className="v16-project-home-next-step-header">
           <StatusBadge status="idle">{sourceLabel}</StatusBadge>
-          <strong>{model.version}</strong>
+          <strong>{hasRuntimeModel ? `${model.version}${statusLabel}` : "runtime read model unavailable"}</strong>
         </div>
         <p>
           Desktop 只消费 Product read model。商业可用性不能绕过 Core Runtime admission，也不能写 authority facts。
         </p>
+        {error ? <p className="v16-feedback">{error}</p> : null}
+        {!hasRuntimeModel ? (
+          <p className="v16-feedback">等待 Runtime commercial read model。</p>
+        ) : null}
         <div className="v16-commercial-boundary-list">
-          {model.entries.map((entry) => (
+          {hasRuntimeModel
+            ? model.entries.map((entry) => (
             <article
               className={`v16-commercial-boundary-card ${entry.flowType}`}
               data-agentflow-flow-type={entry.flowType}
@@ -3324,6 +3365,7 @@ function ProjectHomeCommercialBoundaryPanel({
               data-agentflow-paid-feature-state={entry.paidFeatureState}
               data-agentflow-can-submit-runtime-command-proposal={String(entry.canSubmitRuntimeCommandProposal)}
               data-agentflow-command-policy={entry.commandPolicy}
+              data-agentflow-writes-authority={String(entry.writesAuthority)}
               key={`${entry.productId}-${entry.flowType}-${entry.entitlementState}`}
             >
               <div className="v16-commercial-boundary-card-head">
@@ -3362,27 +3404,19 @@ function ProjectHomeCommercialBoundaryPanel({
                 </div>
               </dl>
             </article>
-          ))}
+              ))
+            : null}
         </div>
       </div>
     </Panel>
   );
 }
 
-function buildCommercialBoundaryReadModel(
-  productCommandSurface: ProductCommandSurfaceView | null,
-): CommercialBoundaryReadModel {
-  const softwareDevAvailable = productCommandSurface?.commands.some(
-    (command) => command.productId === "software-dev" && command.state === "valid" && command.available,
-  ) ?? true;
-  const softwareDevAvailability: CommercialAvailability = softwareDevAvailable ? "available" : "deferred";
-  const softwareDevCommandPolicy: CommercialCommandPolicy = softwareDevAvailable
-    ? "allowed-to-propose"
-    : "blocked-before-runtime";
-
+function buildBrowserPreviewCommercialBoundaryReadModel(): CommercialBoundaryReadModel {
   return {
     version: "agentflow-commercial-product-read-model.v1",
-    source: "product-read-model",
+    status: "preview",
+    source: "browser-preview-fixture",
     projectionOnly: true,
     coreAuthority: false,
     writesAuthority: false,
@@ -3402,6 +3436,7 @@ function buildCommercialBoundaryReadModel(
         productName: "Paid Report",
         projectionOnly: true,
         unavailableReason: "disabled-entitlement",
+        writesAuthority: false,
       },
       {
         availability: "deferred",
@@ -3418,24 +3453,24 @@ function buildCommercialBoundaryReadModel(
         productName: "Paid Report Preview",
         projectionOnly: true,
         unavailableReason: "deferred-entitlement",
+        writesAuthority: false,
       },
       {
-        availability: softwareDevAvailability,
-        canSubmitRuntimeCommandProposal: softwareDevAvailable,
-        commandPolicy: softwareDevCommandPolicy,
+        availability: "available",
+        canSubmitRuntimeCommandProposal: true,
+        commandPolicy: "allowed-to-propose",
         coreAuthority: false,
         deliveryPromise: "project-delivery",
         entitlementState: "trial",
         flowLabel: "Managed Project Flow",
         flowType: "managed-project-flow",
-        nextAction: softwareDevAvailable
-          ? "可以生成 Runtime command proposal；仍需 Core Runtime admission。"
-          : "等待 product command surface 恢复可用。",
+        nextAction: "可以生成 Runtime command proposal；仍需 Core Runtime admission。",
         paidFeatureState: "not-required",
         productId: "software-dev",
         productName: "Software Dev",
         projectionOnly: true,
-        unavailableReason: softwareDevAvailable ? "none" : "deferred-entitlement",
+        unavailableReason: "none",
+        writesAuthority: false,
       },
     ],
   };
@@ -7371,6 +7406,12 @@ const initialProductCommandSurfaceState: ProductCommandSurfaceState = {
   view: null,
 };
 
+const initialCommercialProductReadModelState: CommercialProductReadModelState = {
+  error: null,
+  model: null,
+  source: "idle",
+};
+
 const initialTeamWorkflowViewsState: TeamWorkflowViewsState = {
   boundary: null,
   error: null,
@@ -7532,6 +7573,53 @@ function useProductCommandSurface(projectRoot: string | null): ProductCommandSur
   }, [projectRoot]);
 
   return surfaceState;
+}
+
+function useCommercialProductReadModel(projectRoot: string | null): CommercialProductReadModelState {
+  const [readModelState, setReadModelState] = useState<CommercialProductReadModelState>(
+    initialCommercialProductReadModelState,
+  );
+
+  useEffect(() => {
+    if (!projectRoot) {
+      setReadModelState(initialCommercialProductReadModelState);
+      return;
+    }
+
+    if (isBrowserPreviewRuntime()) {
+      setReadModelState({
+        error: null,
+        model: buildBrowserPreviewCommercialBoundaryReadModel(),
+        source: "preview",
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setReadModelState((current) => ({ ...current, error: null, source: "loading" }));
+
+    void invoke<CommercialBoundaryReadModel>("load_commercial_product_read_model", { projectRoot })
+      .then((model) => {
+        if (!cancelled) {
+          setReadModelState({ error: null, model, source: "tauri" });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setReadModelState({
+            error: error instanceof Error ? error.message : String(error),
+            model: null,
+            source: "unavailable",
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectRoot]);
+
+  return readModelState;
 }
 
 function useTeamWorkflowViews(

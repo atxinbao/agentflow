@@ -28,6 +28,30 @@ pub(crate) fn load_product_command_surface(
 }
 
 #[tauri::command]
+pub(crate) fn load_commercial_product_read_model(
+    _project_root: String,
+) -> Result<agentflow_runtime_api::CommercialProductReadModel, String> {
+    Ok(agentflow_runtime_api::load_commercial_product_read_model())
+}
+
+#[tauri::command]
+pub(crate) fn load_commercial_product_projection_query(
+    _project_root: String,
+) -> Result<agentflow_runtime_api::CommercialProjectionQuery, String> {
+    Ok(agentflow_runtime_api::get_commercial_product_projection_query())
+}
+
+#[tauri::command]
+pub(crate) fn run_paid_report_preflight(
+    _project_root: String,
+    request: agentflow_runtime_api::PaidReportPreflightRequest,
+) -> Result<agentflow_runtime_api::PaidReportPreflightResult, String> {
+    Ok(agentflow_runtime_api::evaluate_paid_report_preflight(
+        request,
+    ))
+}
+
+#[tauri::command]
 pub(crate) fn dry_run_product_command(
     project_root: String,
     pack_id: String,

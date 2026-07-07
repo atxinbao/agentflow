@@ -7,21 +7,37 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.2.3/README.md](docs/delivery/releases/v1.2.3/README.md)
-- [docs/delivery/releases/v1.2.3/AGENTFLOW_V1_2_3_RELEASE_CLOSEOUT_COMMERCIAL_TRACEABILITY_TASKS_V1.md](docs/delivery/releases/v1.2.3/AGENTFLOW_V1_2_3_RELEASE_CLOSEOUT_COMMERCIAL_TRACEABILITY_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.4/README.md](docs/delivery/releases/v1.2.4/README.md)
+- [docs/delivery/releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md](docs/delivery/releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md)
 
 上一发布基线：
 
-- [docs/delivery/releases/v1.2.2/README.md](docs/delivery/releases/v1.2.2/README.md)
-- [docs/delivery/releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md](docs/delivery/releases/v1.2.2/AGENTFLOW_V1_2_2_RELEASE_PROOF_COMMERCIAL_BOUNDARY_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.3/README.md](docs/delivery/releases/v1.2.3/README.md)
+- [docs/delivery/releases/v1.2.3/AGENTFLOW_V1_2_3_RELEASE_CLOSEOUT_COMMERCIAL_TRACEABILITY_TASKS_V1.md](docs/delivery/releases/v1.2.3/AGENTFLOW_V1_2_3_RELEASE_CLOSEOUT_COMMERCIAL_TRACEABILITY_TASKS_V1.md)
 
 下一版计划：
 
-- v1.2.x Product console continuity after release closeout and commercial traceability hardening。
+- v1.2.x Product console continuity after commercial Runtime read model closeout。
 
 ## Unreleased
 
-下一版保留给 Product console continuity after release closeout and commercial traceability hardening，不在本次 release 中认证。
+下一版保留给 Product console continuity after commercial Runtime read model closeout，不在本次 release 中认证。
+
+## v1.2.4 - 2026-07-07
+
+Commercial Runtime Read Model and Closeout Distinction:
+
+- split live closeout facts into `hasNoOpenIssues` and `isMilestoneClosed` so zero open issues cannot be treated as a closed milestone;
+- added final release certification rejection for deferred live closeout without explicit waiver metadata;
+- added Commercial Product Runtime read model API for paid report and managed project commercial state;
+- added Commercial Product projection query surface with read-only authority semantics;
+- updated Desktop Commercial Surface to consume the Runtime read model and mark Browser Preview fallback explicitly;
+- added Paid Report preflight Runtime API before Runtime command admission;
+- added Managed Project commercial boundary Runtime fixture so commercial entitlement does not change Core Runtime authority;
+- added commercial negative Runtime fixtures for disabled, expired, deferred, missing and wrong-flow states;
+- added Commercial Surface golden path proof from read model to projection, Desktop and preflight;
+- added v1.2.4 release delivery baseline and GitHub issue traceability for `#923` through `#932`;
+- advanced workspace and desktop version metadata to `1.2.4`.
 
 ## v1.2.3 - 2026-07-07
 
