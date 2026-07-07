@@ -8,6 +8,7 @@
       "flowType": "paid-report-flow",
       "paidFeatureState": "enabled",
       "paymentConfigured": true,
+      "reportDefinitionId": "paid-report-definition-v1",
       "reportDefinitionPresent": true,
       "requiredInputRefs": [
         "reportInputRef",
@@ -42,29 +43,6 @@
         "report-delivery-decision"
       ],
       "sourceRef": "products/commercial-runtime/products.json#paid-report-preview"
-    },
-    {
-      "productId": "paid-report-missing-report",
-      "productName": "Paid Report Missing Report",
-      "flowType": "paid-report-flow",
-      "paidFeatureState": "enabled",
-      "paymentConfigured": true,
-      "reportDefinitionPresent": false,
-      "requiredInputRefs": [
-        "reportInputRef",
-        "orderIntentId"
-      ],
-      "sourceRef": "products/commercial-runtime/products.json#paid-report-missing-report"
-    },
-    {
-      "productId": "paid-report-missing-input",
-      "productName": "Paid Report Missing Input",
-      "flowType": "paid-report-flow",
-      "paidFeatureState": "enabled",
-      "paymentConfigured": true,
-      "reportDefinitionPresent": true,
-      "requiredInputRefs": [],
-      "sourceRef": "products/commercial-runtime/products.json#paid-report-missing-input"
     },
     {
       "productId": "managed-project",

@@ -1,0 +1,29 @@
+{
+  "version": "agentflow-commercial-product-registry.v1",
+  "source": "products/_fixtures/commercial-runtime-negative/products.json",
+  "products": [
+    {
+      "productId": "paid-report-missing-report",
+      "productName": "Paid Report Missing Report",
+      "flowType": "paid-report-flow",
+      "paidFeatureState": "enabled",
+      "paymentConfigured": true,
+      "reportDefinitionPresent": false,
+      "requiredInputRefs": [
+        "reportInputRef",
+        "orderIntentId"
+      ],
+      "sourceRef": "products/_fixtures/commercial-runtime-negative/products.json#paid-report-missing-report"
+    },
+    {
+      "productId": "paid-report-missing-input",
+      "productName": "Paid Report Missing Input",
+      "flowType": "paid-report-flow",
+      "paidFeatureState": "enabled",
+      "paymentConfigured": true,
+      "reportDefinitionPresent": true,
+      "requiredInputRefs": [],
+      "sourceRef": "products/_fixtures/commercial-runtime-negative/products.json#paid-report-missing-input"
+    }
+  ]
+}

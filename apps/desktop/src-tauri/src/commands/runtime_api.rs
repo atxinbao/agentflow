@@ -29,16 +29,16 @@ pub(crate) fn load_product_command_surface(
 
 #[tauri::command]
 pub(crate) fn load_commercial_product_read_model(
-    _project_root: String,
+    project_root: String,
 ) -> Result<agentflow_runtime_api::CommercialProductReadModel, String> {
-    Ok(agentflow_runtime_api::load_commercial_product_read_model())
+    Ok(agentflow_runtime_api::load_project_commercial_product_read_model(project_root))
 }
 
 #[tauri::command]
 pub(crate) fn load_commercial_product_projection_query(
-    _project_root: String,
+    project_root: String,
 ) -> Result<agentflow_runtime_api::CommercialProjectionQuery, String> {
-    Ok(agentflow_runtime_api::get_commercial_product_projection_query())
+    Ok(agentflow_runtime_api::get_project_commercial_product_projection_query(project_root))
 }
 
 #[tauri::command]

@@ -21,7 +21,9 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.2.5/README.md](releases/v1.2.5/README.md) | 当前发布基线：Published Release Certification and Registry-backed Commercial Runtime |
+| [releases/v1.2.6/README.md](releases/v1.2.6/README.md) | 当前发布基线：Project-scoped Commercial Product Instance Hardening |
+| [releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md](releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md) | v1.2.6 Project-scoped Commercial Product Instance hardening tasks |
+| [releases/v1.2.5/README.md](releases/v1.2.5/README.md) | 上一发布基线：Published Release Certification and Registry-backed Commercial Runtime |
 | [releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md](releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md) | v1.2.5 Published Release Certification and Registry-backed Commercial Runtime tasks |
 | [releases/v1.2.4/README.md](releases/v1.2.4/README.md) | 上一发布基线：Commercial Runtime Read Model and Closeout Distinction |
 | [releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md](releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md) | v1.2.4 Commercial Runtime Read Model and Closeout Distinction tasks |
