@@ -1,7 +1,8 @@
 use agentflow_runtime_api::{
-    commercial_golden_path, commercial_negative_fixture_report,
+    commercial_golden_path, commercial_negative_fixture_report, default_commercial_registry_root,
     evaluate_paid_report_preflight_from_registry, get_commercial_product_projection_query,
     load_registry_commercial_product_read_model, managed_project_commercial_fixture,
+    negative_commercial_fixture_root, production_registry_has_fixture_only_products,
     CommercialAvailability, PaidReportPreflightDecision,
 };
 use anyhow::{bail, Context, Result};
@@ -21,7 +22,10 @@ fn main() -> Result<()> {
     }
 
     let paths = args.iter().map(PathBuf::from).collect::<Vec<_>>();
-    let registry_root = Path::new("products/commercial-runtime");
+    let registry_root_buf = PathBuf::from(default_commercial_registry_root());
+    let registry_root = registry_root_buf.as_path();
+    let negative_registry_root_buf = PathBuf::from(negative_commercial_fixture_root());
+    let negative_registry_root = negative_registry_root_buf.as_path();
     let read_model = load_registry_commercial_product_read_model(registry_root)
         .context("load product registry-backed commercial read model")?;
     let paid_report_allowed =
@@ -34,11 +38,22 @@ fn main() -> Result<()> {
     )
     .context("evaluate paid report deferred fixture")?;
     let missing_report = evaluate_paid_report_preflight_from_registry(
-        registry_root,
+        negative_registry_root,
         "paid-report-missing-report",
         "missing-report",
     )
     .context("evaluate missing report fixture")?;
+    let missing_input = evaluate_paid_report_preflight_from_registry(
+        negative_registry_root,
+        "paid-report-missing-input",
+        "missing-input",
+    )
+    .context("evaluate missing input fixture")?;
+    let negative_read_model = load_registry_commercial_product_read_model(negative_registry_root)
+        .context("load negative fixture commercial read model")?;
+    let production_has_fixture_only_products =
+        production_registry_has_fixture_only_products(registry_root)
+            .context("scan production registry fixture-only ids")?;
     let projection = get_commercial_product_projection_query();
     let managed_project = managed_project_commercial_fixture();
     let negative = commercial_negative_fixture_report();
@@ -49,16 +64,16 @@ fn main() -> Result<()> {
         .iter()
         .find(|entry| entry.product_id == "paid-report")
         .context("paid-report registry entry missing")?;
-    let missing_report_entry = read_model
+    let missing_report_entry = negative_read_model
         .entries
         .iter()
         .find(|entry| entry.product_id == "paid-report-missing-report")
-        .context("paid-report-missing-report registry entry missing")?;
-    let missing_input_entry = read_model
+        .context("paid-report-missing-report negative fixture entry missing")?;
+    let missing_input_entry = negative_read_model
         .entries
         .iter()
         .find(|entry| entry.product_id == "paid-report-missing-input")
-        .context("paid-report-missing-input registry entry missing")?;
+        .context("paid-report-missing-input negative fixture entry missing")?;
 
     write_json(
         &paths[0],
@@ -68,6 +83,7 @@ fn main() -> Result<()> {
                 && read_model.projection_only
                 && !read_model.writes_authority
                 && paid_report_entry.availability == CommercialAvailability::Available
+                && !production_has_fixture_only_products
                 && missing_report_entry.availability == CommercialAvailability::Invalid
                 && missing_input_entry.availability == CommercialAvailability::Invalid
             { "passed" } else { "failed" },
@@ -79,6 +95,8 @@ fn main() -> Result<()> {
                 "sourceIsProductRegistryConfig": true,
                 "defaultInputsNotProductionSource": true,
                 "writesAuthority": false,
+                "productionRegistryExcludesFixtureOnlyProducts": !production_has_fixture_only_products,
+                "negativeFixtureRegistrySource": negative_commercial_fixture_root(),
                 "missingReportDefinitionRejected": missing_report_entry.unavailable_reason == "missing-report-definition",
                 "missingRequiredInputsRejected": missing_input_entry.unavailable_reason == "missing-required-inputs"
             }
@@ -97,7 +115,8 @@ fn main() -> Result<()> {
             "cases": [
                 preflight_case("active-paid-report", &paid_report_allowed),
                 preflight_case("deferred-paid-report-preview", &paid_report_deferred),
-                preflight_case("missing-report-definition", &missing_report)
+                preflight_case("missing-report-definition", &missing_report),
+                preflight_case("missing-required-inputs", &missing_input)
             ]
         }),
     )?;
