@@ -8,6 +8,7 @@
 
 pub mod api_plane;
 pub mod commands;
+pub mod commercial;
 pub mod errors;
 pub mod executor_adapter_real_execution;
 pub mod formal;
@@ -34,6 +35,21 @@ pub use commands::{
     execute_command_via_arbitration, execute_command_via_arbitration_with_context,
     validate_runtime_command, RuntimeCommandRequest, RuntimeCommandRoute, RuntimeEvidencePolicyRef,
     RuntimeExpectedOutputRef,
+};
+pub use commercial::{
+    build_commercial_product_read_model, commercial_golden_path,
+    commercial_negative_fixture_report, default_commercial_product_inputs,
+    evaluate_commercial_product, evaluate_paid_report_preflight,
+    get_commercial_product_projection_query, load_commercial_product_read_model,
+    managed_project_commercial_fixture, CommercialAvailability, CommercialCommandPolicy,
+    CommercialDeliveryPromise, CommercialEntitlementState, CommercialFixtureResult,
+    CommercialFlowType, CommercialGoldenPathProof, CommercialNegativeFixtureReport,
+    CommercialPaidFeatureState, CommercialProductInput, CommercialProductReadModel,
+    CommercialProductReadModelEntry, CommercialProjectionQuery, ManagedProjectCommercialFixture,
+    PaidReportPreflightDecision, PaidReportPreflightRequest, PaidReportPreflightResult,
+    COMMERCIAL_GOLDEN_PATH_VERSION, COMMERCIAL_NEGATIVE_FIXTURE_VERSION,
+    COMMERCIAL_PRODUCT_READ_MODEL_VERSION, COMMERCIAL_PROJECTION_QUERY_VERSION,
+    MANAGED_PROJECT_COMMERCIAL_FIXTURE_VERSION, PAID_REPORT_PREFLIGHT_VERSION,
 };
 pub use errors::{RuntimeCommandError, RuntimeCommandErrorCode};
 pub use executor_adapter_real_execution::{
