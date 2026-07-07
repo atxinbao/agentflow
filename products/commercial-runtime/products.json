@@ -1,0 +1,78 @@
+{
+  "version": "agentflow-commercial-product-registry.v1",
+  "source": "products/commercial-runtime/products.json",
+  "products": [
+    {
+      "productId": "paid-report",
+      "productName": "Paid Report",
+      "flowType": "paid-report-flow",
+      "paidFeatureState": "enabled",
+      "paymentConfigured": true,
+      "reportDefinitionPresent": true,
+      "requiredInputRefs": [
+        "reportInputRef",
+        "orderIntentId"
+      ],
+      "evidenceRequirements": [
+        "report-generation-evidence",
+        "source-input-trace",
+        "delivery-package-proof"
+      ],
+      "decisionRequirements": [
+        "report-delivery-decision",
+        "human-acceptance-or-repair-route"
+      ],
+      "sourceRef": "products/commercial-runtime/products.json#paid-report"
+    },
+    {
+      "productId": "paid-report-preview",
+      "productName": "Paid Report Preview",
+      "flowType": "paid-report-flow",
+      "paidFeatureState": "deferred",
+      "paymentConfigured": false,
+      "reportDefinitionPresent": true,
+      "requiredInputRefs": [
+        "reportInputRef",
+        "orderIntentId"
+      ],
+      "evidenceRequirements": [
+        "report-generation-evidence"
+      ],
+      "decisionRequirements": [
+        "report-delivery-decision"
+      ],
+      "sourceRef": "products/commercial-runtime/products.json#paid-report-preview"
+    },
+    {
+      "productId": "paid-report-missing-report",
+      "productName": "Paid Report Missing Report",
+      "flowType": "paid-report-flow",
+      "paidFeatureState": "enabled",
+      "paymentConfigured": true,
+      "reportDefinitionPresent": false,
+      "requiredInputRefs": [
+        "reportInputRef",
+        "orderIntentId"
+      ],
+      "sourceRef": "products/commercial-runtime/products.json#paid-report-missing-report"
+    },
+    {
+      "productId": "paid-report-missing-input",
+      "productName": "Paid Report Missing Input",
+      "flowType": "paid-report-flow",
+      "paidFeatureState": "enabled",
+      "paymentConfigured": true,
+      "reportDefinitionPresent": true,
+      "requiredInputRefs": [],
+      "sourceRef": "products/commercial-runtime/products.json#paid-report-missing-input"
+    },
+    {
+      "productId": "managed-project",
+      "productName": "Managed Project",
+      "flowType": "managed-project-flow",
+      "paidFeatureState": "not-required",
+      "requiredProjectRefsPresent": true,
+      "sourceRef": "products/commercial-runtime/products.json#managed-project"
+    }
+  ]
+}

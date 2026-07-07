@@ -21,7 +21,9 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.2.4/README.md](releases/v1.2.4/README.md) | 当前发布基线：Commercial Runtime Read Model and Closeout Distinction |
+| [releases/v1.2.5/README.md](releases/v1.2.5/README.md) | 当前发布基线：Published Release Certification and Registry-backed Commercial Runtime |
+| [releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md](releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md) | v1.2.5 Published Release Certification and Registry-backed Commercial Runtime tasks |
+| [releases/v1.2.4/README.md](releases/v1.2.4/README.md) | 上一发布基线：Commercial Runtime Read Model and Closeout Distinction |
 | [releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md](releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md) | v1.2.4 Commercial Runtime Read Model and Closeout Distinction tasks |
 | [releases/v1.2.3/README.md](releases/v1.2.3/README.md) | 上一发布基线：Release Closeout Proof Hardening and Commercial Surface Traceability |
 | [releases/v1.2.3/AGENTFLOW_V1_2_3_RELEASE_CLOSEOUT_COMMERCIAL_TRACEABILITY_TASKS_V1.md](releases/v1.2.3/AGENTFLOW_V1_2_3_RELEASE_CLOSEOUT_COMMERCIAL_TRACEABILITY_TASKS_V1.md) | v1.2.3 Release Closeout Proof Hardening and Commercial Surface Traceability tasks |
@@ -59,7 +61,7 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| `v1.2.x` | 下一版计划：Product console continuity after commercial Runtime read model closeout |
+| `v1.2.x` | 下一版计划：Product console continuity after published release certification and registry-backed commercial runtime closeout |
 
 ## Historical Delivery
 
