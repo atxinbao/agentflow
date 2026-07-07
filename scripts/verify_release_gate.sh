@@ -17041,6 +17041,24 @@ delivery_readme = (root / "docs/delivery/README.md").read_text(encoding="utf-8")
 release_readme = (root / "docs/delivery/releases/v1.2.5/README.md").read_text(encoding="utf-8")
 release_tasks = (root / "docs/delivery/releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md").read_text(encoding="utf-8")
 app = (root / "apps/desktop/src/App.tsx").read_text(encoding="utf-8")
+
+def version_at_or_after(value, minimum):
+    actual = str(value or "").strip()
+    floor = str(minimum or "").strip()
+    if actual.startswith("v"):
+        actual = actual[1:]
+    if floor.startswith("v"):
+        floor = floor[1:]
+    try:
+        actual_parts = tuple(int(part) for part in actual.split("."))
+        minimum_parts = tuple(int(part) for part in floor.split("."))
+    except ValueError:
+        return False
+    max_len = max(len(actual_parts), len(minimum_parts))
+    actual_parts = actual_parts + (0,) * (max_len - len(actual_parts))
+    minimum_parts = minimum_parts + (0,) * (max_len - len(minimum_parts))
+    return actual_parts >= minimum_parts
+
 checks = {
     "release-version-at-or-after-v125": version_at_or_after(release_version, "v1.2.5") and version_at_or_after(release_tag, "v1.2.5"),
     "workspace-version-at-or-after-v125": version_at_or_after(f"v{cargo_version}", "v1.2.5"),
