@@ -337,6 +337,16 @@ V125_DESKTOP_RUNTIME_ONLY_COMMERCIAL_SURFACE_PATH="$RUNTIME_DIR/v125-desktop-run
 V125_COMMERCIAL_GOLDEN_PATH_REGISTRY_PATH="$RUNTIME_DIR/v125-commercial-golden-path-registry.json"
 V125_RELEASE_EVENT_ARTIFACT_CERTIFICATION_PATH="$RUNTIME_DIR/v125-release-event-artifact-certification.json"
 V125_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v125-release-certification.json"
+V126_CERTIFICATION_KIND_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/v126-certification-kind-negative-fixture.json"
+V126_PRODUCTION_FIXTURE_SEPARATION_PATH="$RUNTIME_DIR/v126-production-fixture-separation.json"
+V126_PROJECT_COMMERCIAL_REGISTRY_RESOLVER_PATH="$RUNTIME_DIR/v126-project-commercial-registry-resolver.json"
+V126_COMMERCIAL_READ_MODEL_STATUS_SEMANTICS_PATH="$RUNTIME_DIR/v126-commercial-read-model-status-semantics.json"
+V126_REGISTRY_ONLY_COMMERCIAL_GOLDEN_PATH="$RUNTIME_DIR/v126-registry-only-commercial-golden-path.json"
+V126_DESKTOP_PROJECT_COMMERCIAL_READ_MODEL_PATH="$RUNTIME_DIR/v126-desktop-project-commercial-read-model.json"
+V126_PAID_REPORT_PRODUCT_INSTANCE_CONTRACT_PATH="$RUNTIME_DIR/v126-paid-report-product-instance-contract.json"
+V126_PAID_REPORT_PREFLIGHT_HANDOFF_PATH="$RUNTIME_DIR/v126-paid-report-preflight-runtime-proposal-handoff.json"
+V126_COMMERCIAL_NEGATIVE_FIXTURE_ISOLATION_GATE_PATH="$RUNTIME_DIR/v126-commercial-negative-fixture-isolation-gate.json"
+V126_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v126-release-certification.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -10204,6 +10214,12 @@ import sys
 import time
 import tomllib
 
+def version_at_or_after(actual, minimum):
+    def parts(value):
+        value = value.lstrip("v")
+        return tuple(int(part) for part in value.split("."))
+    return parts(actual) >= parts(minimum)
+
 out_path = pathlib.Path(sys.argv[1])
 release_version = sys.argv[2]
 cargo_path = pathlib.Path(sys.argv[3])
@@ -17008,17 +17024,17 @@ release_readme = (root / "docs/delivery/releases/v1.2.5/README.md").read_text(en
 release_tasks = (root / "docs/delivery/releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md").read_text(encoding="utf-8")
 app = (root / "apps/desktop/src/App.tsx").read_text(encoding="utf-8")
 checks = {
-    "release-version-is-v125": release_version == "v1.2.5" and release_tag == "v1.2.5",
-    "workspace-version-is-v125": cargo_version == "1.2.5",
+    "release-version-at-or-after-v125": version_at_or_after(release_version, "v1.2.5") and version_at_or_after(release_tag, "v1.2.5"),
+    "workspace-version-at-or-after-v125": version_at_or_after(f"v{cargo_version}", "v1.2.5"),
     "cargo-lock-agentflow-packages-are-v125": all(
-        package.get("version") == "1.2.5"
+        version_at_or_after(f"v{package.get('version')}", "v1.2.5")
         for package in cargo_lock.get("package", [])
         if str(package.get("name", "")).startswith("agentflow-")
     ),
-    "desktop-package-version-is-v125": package_json.get("version") == "1.2.5",
-    "desktop-lock-version-is-v125": package_lock.get("version") == "1.2.5"
-        and package_lock.get("packages", {}).get("", {}).get("version") == "1.2.5",
-    "tauri-version-is-v125": tauri.get("version") == "1.2.5",
+    "desktop-package-version-at-or-after-v125": version_at_or_after(f"v{package_json.get('version')}", "v1.2.5"),
+    "desktop-lock-version-at-or-after-v125": version_at_or_after(f"v{package_lock.get('version')}", "v1.2.5")
+        and version_at_or_after(f"v{package_lock.get('packages', {}).get('', {}).get('version')}", "v1.2.5"),
+    "tauri-version-at-or-after-v125": version_at_or_after(f"v{tauri.get('version')}", "v1.2.5"),
     "changelog-current-v125": "## v1.2.5" in changelog and "Registry-backed Commercial Runtime" in changelog,
     "docs-current-v125": "delivery/releases/v1.2.5/README.md" in docs_readme,
     "delivery-current-v125": "releases/v1.2.5/README.md" in delivery_readme and "当前发布基线" in delivery_readme,
@@ -17037,6 +17053,7 @@ primary_proofs = sorted(f"runtime/{path.name}" for path in proof_paths) + ["runt
 payload = {
     "version": "agentflow-v125-release-certification.v1",
     "status": "passed" if not failed else "failed",
+    "certificationKind": proofs["v125-release-event-artifact-certification.json"].get("certificationKind"),
     "releaseVersion": release_version,
     "releaseTag": release_tag,
     "sourceCommit": source_commit,
@@ -17061,6 +17078,194 @@ if failed:
 PY
 
   record_stage "$stage" "passed" "$(basename "$V125_RELEASE_CERTIFICATION_PATH")"
+}
+
+run_v126_commercial_project_scope_proofs_gate() {
+  local stage="release.v126-commercial-project-scope-proofs"
+  record_stage "$stage" "started" "$V126_COMMERCIAL_NEGATIVE_FIXTURE_ISOLATION_GATE_PATH"
+
+  run_workspace_cmd "$stage.cargo-test" "$RUNTIME_DIR/v126-commercial-runtime-cargo-test.txt" \
+    cargo test -p agentflow-runtime-api commercial
+
+  run_workspace_cmd "$stage.generate" "$RUNTIME_DIR/v126-commercial-runtime-proofs.txt" \
+    cargo run -p agentflow-runtime-api --example v126_commercial_runtime_proofs -- \
+      "$V126_CERTIFICATION_KIND_NEGATIVE_FIXTURE_PATH" \
+      "$V126_PRODUCTION_FIXTURE_SEPARATION_PATH" \
+      "$V126_PROJECT_COMMERCIAL_REGISTRY_RESOLVER_PATH" \
+      "$V126_COMMERCIAL_READ_MODEL_STATUS_SEMANTICS_PATH" \
+      "$V126_REGISTRY_ONLY_COMMERCIAL_GOLDEN_PATH" \
+      "$V126_DESKTOP_PROJECT_COMMERCIAL_READ_MODEL_PATH" \
+      "$V126_PAID_REPORT_PRODUCT_INSTANCE_CONTRACT_PATH" \
+      "$V126_PAID_REPORT_PREFLIGHT_HANDOFF_PATH" \
+      "$V126_COMMERCIAL_NEGATIVE_FIXTURE_ISOLATION_GATE_PATH"
+
+  python3 - \
+    "$WORKSPACE" \
+    "$V126_CERTIFICATION_KIND_NEGATIVE_FIXTURE_PATH" \
+    "$V126_PRODUCTION_FIXTURE_SEPARATION_PATH" \
+    "$V126_PROJECT_COMMERCIAL_REGISTRY_RESOLVER_PATH" \
+    "$V126_COMMERCIAL_READ_MODEL_STATUS_SEMANTICS_PATH" \
+    "$V126_REGISTRY_ONLY_COMMERCIAL_GOLDEN_PATH" \
+    "$V126_DESKTOP_PROJECT_COMMERCIAL_READ_MODEL_PATH" \
+    "$V126_PAID_REPORT_PRODUCT_INSTANCE_CONTRACT_PATH" \
+    "$V126_PAID_REPORT_PREFLIGHT_HANDOFF_PATH" \
+    "$V126_COMMERCIAL_NEGATIVE_FIXTURE_ISOLATION_GATE_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+paths = [pathlib.Path(value) for value in sys.argv[2:]]
+proofs = {path.name: json.loads(path.read_text(encoding="utf-8")) for path in paths}
+failed = [name for name, proof in proofs.items() if proof.get("status") != "passed"]
+app_tauri = (root / "apps/desktop/src-tauri/src/commands/runtime_api.rs").read_text(encoding="utf-8")
+if "load_project_commercial_product_read_model" not in app_tauri:
+    failed.append("tauri-project-commercial-read-model")
+if "get_project_commercial_product_projection_query" not in app_tauri:
+    failed.append("tauri-project-commercial-projection-query")
+products = json.loads((root / "products/commercial-runtime/products.json").read_text(encoding="utf-8"))
+production_ids = {item.get("productId") for item in products.get("products", [])}
+if {"paid-report-missing-report", "paid-report-missing-input"} & production_ids:
+    failed.append("production-registry-fixture-id-leak")
+fixture_products = json.loads((root / "products/_fixtures/commercial-runtime-negative/products.json").read_text(encoding="utf-8"))
+fixture_ids = {item.get("productId") for item in fixture_products.get("products", [])}
+if not {"paid-report-missing-report", "paid-report-missing-input"}.issubset(fixture_ids):
+    failed.append("fixture-registry-missing-negative-ids")
+if proofs["v126-registry-only-commercial-golden-path.json"].get("source") != "project-commercial-registry":
+    failed.append("golden-path-not-registry-only")
+if not proofs["v126-paid-report-preflight-runtime-proposal-handoff.json"].get("allowed", {}).get("proposalCreated"):
+    failed.append("allowed-handoff-missing-proposal")
+if proofs["v126-paid-report-preflight-runtime-proposal-handoff.json"].get("blocked", {}).get("proposalCreated"):
+    failed.append("blocked-handoff-created-proposal")
+if failed:
+    raise SystemExit(f"v126 commercial project scope proofs failed: {failed}")
+PY
+
+  record_stage "$stage" "passed" "v126 commercial project scope proofs"
+}
+
+run_v126_release_certification_gate() {
+  local stage="release.v126-release-certification"
+  local gate_run_id_for_cert="${GATE_RUN_ID:-local-workflow-run}"
+  record_stage "$stage" "started" "$V126_RELEASE_CERTIFICATION_PATH"
+
+  python3 - \
+    "$WORKSPACE" \
+    "$RELEASE_VERSION" \
+    "$RELEASE_TAG_NAME" \
+    "$gate_run_id_for_cert" \
+    "$SOURCE_COMMIT_SHA" \
+    "$REQUIRE_PUBLISHED_RELEASE_FACTS" \
+    "$V126_RELEASE_CERTIFICATION_PATH" \
+    "$V126_CERTIFICATION_KIND_NEGATIVE_FIXTURE_PATH" \
+    "$V126_PRODUCTION_FIXTURE_SEPARATION_PATH" \
+    "$V126_PROJECT_COMMERCIAL_REGISTRY_RESOLVER_PATH" \
+    "$V126_COMMERCIAL_READ_MODEL_STATUS_SEMANTICS_PATH" \
+    "$V126_REGISTRY_ONLY_COMMERCIAL_GOLDEN_PATH" \
+    "$V126_DESKTOP_PROJECT_COMMERCIAL_READ_MODEL_PATH" \
+    "$V126_PAID_REPORT_PRODUCT_INSTANCE_CONTRACT_PATH" \
+    "$V126_PAID_REPORT_PREFLIGHT_HANDOFF_PATH" \
+    "$V126_COMMERCIAL_NEGATIVE_FIXTURE_ISOLATION_GATE_PATH" <<'PY'
+import json
+import pathlib
+import sys
+import time
+import tomllib
+
+(
+    root_raw,
+    release_version,
+    release_tag,
+    workflow_run_id,
+    source_commit,
+    require_published_raw,
+    out_raw,
+    *proof_raws,
+) = sys.argv[1:]
+
+def version_at_or_after(actual, minimum):
+    def parts(value):
+        value = value.lstrip("v")
+        return tuple(int(part) for part in value.split("."))
+    return parts(actual) >= parts(minimum)
+
+root = pathlib.Path(root_raw)
+out_path = pathlib.Path(out_raw)
+proof_paths = [pathlib.Path(value) for value in proof_raws]
+proofs = {path.name: json.loads(path.read_text(encoding="utf-8")) for path in proof_paths}
+require_published = require_published_raw == "1"
+cargo_version = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]["package"]["version"]
+cargo_lock = tomllib.loads((root / "Cargo.lock").read_text(encoding="utf-8"))
+package_json = json.loads((root / "apps/desktop/package.json").read_text(encoding="utf-8"))
+package_lock = json.loads((root / "apps/desktop/package-lock.json").read_text(encoding="utf-8"))
+tauri = json.loads((root / "apps/desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+docs_readme = (root / "docs/README.md").read_text(encoding="utf-8")
+delivery_readme = (root / "docs/delivery/README.md").read_text(encoding="utf-8")
+release_readme = (root / "docs/delivery/releases/v1.2.6/README.md").read_text(encoding="utf-8")
+release_tasks = (root / "docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md").read_text(encoding="utf-8")
+certification_kind = "published" if require_published else "candidate"
+checks = {
+    "release-version-is-v126": release_version == "v1.2.6" and release_tag == "v1.2.6",
+    "workspace-version-is-v126": cargo_version == "1.2.6",
+    "cargo-lock-agentflow-packages-are-v126": all(
+        package.get("version") == "1.2.6"
+        for package in cargo_lock.get("package", [])
+        if str(package.get("name", "")).startswith("agentflow-")
+    ),
+    "desktop-package-version-is-v126": package_json.get("version") == "1.2.6",
+    "desktop-lock-version-is-v126": package_lock.get("version") == "1.2.6"
+        and package_lock.get("packages", {}).get("", {}).get("version") == "1.2.6",
+    "tauri-version-is-v126": tauri.get("version") == "1.2.6",
+    "changelog-current-v126": "## v1.2.6" in changelog and "Project-scoped Commercial Product Instance" in changelog,
+    "docs-current-v126": "delivery/releases/v1.2.6/README.md" in docs_readme,
+    "delivery-current-v126": "releases/v1.2.6/README.md" in delivery_readme and "当前发布基线" in delivery_readme,
+    "release-readme-v126": "Project-scoped Commercial Product Instance" in release_readme,
+    "release-tasks-v126-complete": all(f"#{issue}" in release_tasks for issue in range(945, 955)),
+    "all-v126-primary-proofs-passed": all(proof.get("status") == "passed" for proof in proofs.values()),
+    "top-level-certification-kind": certification_kind in {"candidate", "published"},
+    "cert-kind-negative-fixture": proofs["v126-certification-kind-negative-fixture.json"].get("coverage", {}).get("candidateCannotSatisfyPublished") is True,
+    "production-fixture-separated": proofs["v126-production-fixture-separation.json"].get("coverage", {}).get("productionRegistryExcludesNegativeFixtures") is True,
+    "project-resolver-present": proofs["v126-project-commercial-registry-resolver.json"].get("coverage", {}).get("projectRootUsed") is True,
+    "status-semantics-present": proofs["v126-commercial-read-model-status-semantics.json"].get("coverage", {}).get("readyProductRemainsUsableWhenPreviewDeferred") is True,
+    "registry-only-golden-path": proofs["v126-registry-only-commercial-golden-path.json"].get("coverage", {}).get("primaryProofUsesRegistryInputs") is True,
+    "desktop-project-read-model": proofs["v126-desktop-project-commercial-read-model.json"].get("desktopSurface", {}).get("projectRootPassedToRuntime") is True,
+    "paid-report-instance": proofs["v126-paid-report-product-instance-contract.json"].get("coverage", {}).get("instanceLinksProductDefinitionAndEntitlement") is True,
+    "preflight-handoff": proofs["v126-paid-report-preflight-runtime-proposal-handoff.json"].get("coverage", {}).get("allowedPreflightCreatesProposalHandoff") is True,
+    "negative-fixture-isolation": proofs["v126-commercial-negative-fixture-isolation-gate.json"].get("coverage", {}).get("fixtureOnlyIdsRejectedFromProductionReadModel") is True,
+}
+failed = [key for key, passed in checks.items() if not passed]
+primary_proofs = sorted(f"runtime/{path.name}" for path in proof_paths) + ["runtime/v126-release-certification.json"]
+payload = {
+    "version": "agentflow-v126-release-certification.v1",
+    "status": "passed" if not failed else "failed",
+    "certificationKind": certification_kind,
+    "releaseVersion": release_version,
+    "releaseTag": release_tag,
+    "sourceCommit": source_commit,
+    "workflowRunId": workflow_run_id,
+    "artifactNames": ["agentflow-release-certification", "agentflow-release-gate-full"],
+    "primaryProofs": primary_proofs,
+    "runtimeReleaseCertificationPath": "runtime/v126-release-certification.json",
+    "coverage": checks,
+    "failedCoverage": failed,
+    "payload": {
+        "releaseScope": "v1.2.6",
+        "primary": True,
+        "issueRefs": [f"#{issue}" for issue in range(945, 955)],
+        "proofPaths": primary_proofs,
+        "certifiedBoundary": "project-scoped commercial product instances and fixture isolation",
+        "publicCommercialLaunch": False,
+        "realPaidReportGeneration": False,
+    },
+    "checkedAt": int(time.time()),
+}
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+if failed:
+    raise SystemExit(f"v126 release certification failed: {failed}")
+PY
+
+  record_stage "$stage" "passed" "$(basename "$V126_RELEASE_CERTIFICATION_PATH")"
 }
 
 prepare_workspace() {
@@ -17686,6 +17891,8 @@ PY
   run_v125_commercial_registry_runtime_proofs_gate
   run_v125_release_event_artifact_certification_gate
   run_v125_release_certification_gate
+  run_v126_commercial_project_scope_proofs_gate
+  run_v126_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

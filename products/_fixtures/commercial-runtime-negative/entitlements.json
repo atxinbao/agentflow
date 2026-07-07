@@ -1,0 +1,16 @@
+{
+  "version": "agentflow-commercial-entitlement-source.v1",
+  "source": "products/_fixtures/commercial-runtime-negative/entitlements.json",
+  "entitlements": [
+    {
+      "productId": "paid-report-missing-report",
+      "entitlementState": "active",
+      "sourceRef": "products/_fixtures/commercial-runtime-negative/entitlements.json#paid-report-missing-report"
+    },
+    {
+      "productId": "paid-report-missing-input",
+      "entitlementState": "active",
+      "sourceRef": "products/_fixtures/commercial-runtime-negative/entitlements.json#paid-report-missing-input"
+    }
+  ]
+}

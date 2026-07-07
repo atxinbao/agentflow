@@ -1,6 +1,10 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::HashMap,
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 pub const COMMERCIAL_PRODUCT_READ_MODEL_VERSION: &str =
     "agentflow-commercial-product-read-model.v1";
@@ -17,6 +21,12 @@ pub const COMMERCIAL_ENTITLEMENT_SOURCE_VERSION: &str =
     "agentflow-commercial-entitlement-source.v1";
 pub const PAID_REPORT_PRODUCT_DEFINITION_VERSION: &str =
     "agentflow-paid-report-product-definition.v1";
+pub const PAID_REPORT_PRODUCT_INSTANCE_VERSION: &str = "agentflow-paid-report-product-instance.v1";
+pub const PAID_REPORT_RUNTIME_PROPOSAL_HANDOFF_VERSION: &str =
+    "agentflow-paid-report-runtime-proposal-handoff.v1";
+
+const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
+const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -115,6 +125,8 @@ pub struct CommercialProductDefinition {
     #[serde(default)]
     pub required_input_refs: Vec<String>,
     #[serde(default)]
+    pub report_definition_id: String,
+    #[serde(default)]
     pub evidence_requirements: Vec<String>,
     #[serde(default)]
     pub decision_requirements: Vec<String>,
@@ -181,6 +193,59 @@ pub struct CommercialProductReadModel {
     #[serde(default)]
     pub source_refs: Vec<String>,
     pub freshness: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportProductInstanceContract {
+    pub version: String,
+    pub status: String,
+    pub product_instance_id: String,
+    pub product_id: String,
+    pub report_definition_id: String,
+    #[serde(default)]
+    pub required_input_refs: Vec<String>,
+    #[serde(default)]
+    pub evidence_requirements: Vec<String>,
+    #[serde(default)]
+    pub decision_requirements: Vec<String>,
+    pub entitlement_state: CommercialEntitlementState,
+    pub paid_feature_state: CommercialPaidFeatureState,
+    pub delivery_promise: CommercialDeliveryPromise,
+    pub can_submit_runtime_command_proposal: bool,
+    pub unavailable_reason: String,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportRuntimeProposal {
+    pub product_instance_id: String,
+    pub product_id: String,
+    pub request_id: String,
+    #[serde(default)]
+    pub required_input_refs: Vec<String>,
+    pub report_definition_id: String,
+    #[serde(default)]
+    pub evidence_policy: Vec<String>,
+    #[serde(default)]
+    pub decision_policy: Vec<String>,
+    pub delivery_promise: CommercialDeliveryPromise,
+    pub runtime_admission_required: bool,
+    pub can_start_run_directly: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportRuntimeProposalHandoff {
+    pub version: String,
+    pub status: String,
+    pub reason: String,
+    pub proposal_created: bool,
+    pub product_instance: PaidReportProductInstanceContract,
+    pub preflight: PaidReportPreflightResult,
+    pub proposal: Option<PaidReportRuntimeProposal>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -352,19 +417,7 @@ pub fn build_commercial_product_read_model(
         .into_iter()
         .map(evaluate_commercial_product)
         .collect::<Vec<_>>();
-    let status = if entries
-        .iter()
-        .any(|entry| entry.availability == CommercialAvailability::Invalid)
-    {
-        "invalid"
-    } else if entries
-        .iter()
-        .any(|entry| entry.availability == CommercialAvailability::Deferred)
-    {
-        "deferred"
-    } else {
-        "fresh"
-    };
+    let status = commercial_read_model_status(&entries);
 
     CommercialProductReadModel {
         version: COMMERCIAL_PRODUCT_READ_MODEL_VERSION.to_string(),
@@ -383,9 +436,9 @@ pub fn build_commercial_product_read_model(
 }
 
 pub fn load_commercial_product_read_model() -> CommercialProductReadModel {
-    let registry_root = Path::new("products/commercial-runtime");
+    let registry_root = resolve_default_commercial_registry_root();
     if registry_root.is_dir() {
-        if let Ok(model) = load_registry_commercial_product_read_model(registry_root) {
+        if let Ok(model) = load_registry_commercial_product_read_model(&registry_root) {
             return model;
         }
     }
@@ -396,6 +449,54 @@ pub fn load_commercial_product_read_model() -> CommercialProductReadModel {
         "crates/runtime-api/src/commercial.rs::default_commercial_product_inputs".to_string(),
     );
     model
+}
+
+pub fn load_project_commercial_product_read_model(
+    project_root: impl AsRef<Path>,
+) -> CommercialProductReadModel {
+    let registry_root = project_commercial_registry_root(project_root);
+    if registry_root.is_dir() {
+        match load_registry_commercial_product_read_model(&registry_root) {
+            Ok(mut model) => {
+                model.source = "project-commercial-registry".to_string();
+                model
+                    .source_refs
+                    .insert(0, registry_root.display().to_string());
+                model
+            }
+            Err(error) => CommercialProductReadModel {
+                version: COMMERCIAL_PRODUCT_READ_MODEL_VERSION.to_string(),
+                status: "invalid".to_string(),
+                source: "project-commercial-registry-invalid".to_string(),
+                projection_only: true,
+                core_authority: false,
+                writes_authority: false,
+                entries: Vec::new(),
+                source_refs: vec![
+                    registry_root.display().to_string(),
+                    format!("error:{error}"),
+                    "docs/architecture/095-commercial-product-read-model-contract-v1.md"
+                        .to_string(),
+                ],
+                freshness: "fresh".to_string(),
+            },
+        }
+    } else {
+        CommercialProductReadModel {
+            version: COMMERCIAL_PRODUCT_READ_MODEL_VERSION.to_string(),
+            status: "unavailable".to_string(),
+            source: "project-commercial-registry-missing".to_string(),
+            projection_only: true,
+            core_authority: false,
+            writes_authority: false,
+            entries: Vec::new(),
+            source_refs: vec![
+                registry_root.display().to_string(),
+                "docs/architecture/095-commercial-product-read-model-contract-v1.md".to_string(),
+            ],
+            freshness: "fresh".to_string(),
+        }
+    }
 }
 
 pub fn load_registry_commercial_product_read_model(
@@ -437,19 +538,7 @@ pub fn load_registry_commercial_product_read_model(
         entries.push(entry);
     }
 
-    let status = if entries
-        .iter()
-        .any(|entry| entry.availability == CommercialAvailability::Invalid)
-    {
-        "invalid"
-    } else if entries
-        .iter()
-        .any(|entry| entry.availability == CommercialAvailability::Deferred)
-    {
-        "deferred"
-    } else {
-        "fresh"
-    };
+    let status = commercial_read_model_status(&entries);
 
     Ok(CommercialProductReadModel {
         version: COMMERCIAL_PRODUCT_READ_MODEL_VERSION.to_string(),
@@ -512,8 +601,136 @@ pub fn evaluate_paid_report_preflight_from_registry(
     Ok(result)
 }
 
+pub fn resolve_paid_report_product_instance_from_registry(
+    registry_root: impl AsRef<Path>,
+    product_id: &str,
+) -> Result<PaidReportProductInstanceContract> {
+    let registry_root = registry_root.as_ref();
+    let registry =
+        read_json::<CommercialProductRegistryConfig>(&registry_root.join("products.json"))?;
+    let entitlement_source =
+        read_json::<CommercialEntitlementSourceConfig>(&registry_root.join("entitlements.json"))?;
+    let definition = registry
+        .products
+        .iter()
+        .find(|entry| entry.product_id == product_id)
+        .with_context(|| format!("missing product definition `{product_id}`"))?;
+    let entitlement = entitlement_source
+        .entitlements
+        .iter()
+        .find(|entry| entry.product_id == product_id);
+    let input = commercial_product_input_from_definition(definition, entitlement);
+    let entry = evaluate_commercial_product(input);
+    let report_definition_id = if definition.report_definition_id.trim().is_empty() {
+        format!("{}-report-definition", definition.product_id)
+    } else {
+        definition.report_definition_id.clone()
+    };
+    let missing_required_instance_fields = definition.required_input_refs.is_empty()
+        || !definition.report_definition_present
+        || report_definition_id.trim().is_empty();
+    let can_submit = entry.can_submit_runtime_command_proposal && !missing_required_instance_fields;
+    let (status, unavailable_reason) = if definition.flow_type != CommercialFlowType::PaidReportFlow
+    {
+        ("invalid", "not-paid-report-product")
+    } else if !definition.report_definition_present {
+        ("invalid", "missing-report-definition")
+    } else if definition.required_input_refs.is_empty() {
+        ("invalid", "missing-required-inputs")
+    } else if entry.availability == CommercialAvailability::Available {
+        ("ready", "none")
+    } else {
+        ("blocked", entry.unavailable_reason.as_str())
+    };
+
+    Ok(PaidReportProductInstanceContract {
+        version: PAID_REPORT_PRODUCT_INSTANCE_VERSION.to_string(),
+        status: status.to_string(),
+        product_instance_id: format!("{}::{}", registry.source, definition.product_id),
+        product_id: definition.product_id.clone(),
+        report_definition_id,
+        required_input_refs: definition.required_input_refs.clone(),
+        evidence_requirements: if definition.evidence_requirements.is_empty() {
+            vec!["report-generation-evidence".to_string()]
+        } else {
+            definition.evidence_requirements.clone()
+        },
+        decision_requirements: if definition.decision_requirements.is_empty() {
+            vec!["report-delivery-decision".to_string()]
+        } else {
+            definition.decision_requirements.clone()
+        },
+        entitlement_state: entitlement
+            .map(|entry| entry.entitlement_state)
+            .unwrap_or(CommercialEntitlementState::Missing),
+        paid_feature_state: definition.paid_feature_state,
+        delivery_promise: CommercialDeliveryPromise::Report,
+        can_submit_runtime_command_proposal: can_submit,
+        unavailable_reason: unavailable_reason.to_string(),
+        source_refs: registry_source_refs(registry_root, definition, entitlement),
+    })
+}
+
+pub fn build_paid_report_runtime_proposal_handoff_from_registry(
+    registry_root: impl AsRef<Path>,
+    product_id: &str,
+    request_id: &str,
+) -> Result<PaidReportRuntimeProposalHandoff> {
+    let instance = resolve_paid_report_product_instance_from_registry(&registry_root, product_id)?;
+    let preflight =
+        evaluate_paid_report_preflight_from_registry(registry_root, product_id, request_id)?;
+    let allowed = instance.can_submit_runtime_command_proposal
+        && preflight.decision == PaidReportPreflightDecision::Allowed
+        && preflight.can_submit_runtime_command_proposal
+        && preflight.runtime_admission_required
+        && !preflight.can_start_run_directly;
+    let proposal = allowed.then(|| PaidReportRuntimeProposal {
+        product_instance_id: instance.product_instance_id.clone(),
+        product_id: instance.product_id.clone(),
+        request_id: preflight.request_id.clone(),
+        required_input_refs: instance.required_input_refs.clone(),
+        report_definition_id: instance.report_definition_id.clone(),
+        evidence_policy: instance.evidence_requirements.clone(),
+        decision_policy: instance.decision_requirements.clone(),
+        delivery_promise: instance.delivery_promise,
+        runtime_admission_required: true,
+        can_start_run_directly: false,
+    });
+    let status = if allowed { "ready" } else { "blocked" };
+    let reason = if allowed {
+        "proposal-ready-runtime-admission-required".to_string()
+    } else if instance.status != "ready" {
+        instance.unavailable_reason.clone()
+    } else {
+        preflight.unavailable_reason.clone()
+    };
+    Ok(PaidReportRuntimeProposalHandoff {
+        version: PAID_REPORT_RUNTIME_PROPOSAL_HANDOFF_VERSION.to_string(),
+        status: status.to_string(),
+        reason,
+        proposal_created: proposal.is_some(),
+        product_instance: instance,
+        preflight,
+        proposal,
+    })
+}
+
 pub fn get_commercial_product_projection_query() -> CommercialProjectionQuery {
     let read_model = load_commercial_product_read_model();
+    commercial_product_projection_query_from_read_model(read_model)
+}
+
+pub fn get_project_commercial_product_projection_query(
+    project_root: impl AsRef<Path>,
+) -> CommercialProjectionQuery {
+    commercial_product_projection_query_from_read_model(load_project_commercial_product_read_model(
+        project_root,
+    ))
+}
+
+fn commercial_product_projection_query_from_read_model(
+    read_model: CommercialProductReadModel,
+) -> CommercialProjectionQuery {
     CommercialProjectionQuery {
         version: COMMERCIAL_PROJECTION_QUERY_VERSION.to_string(),
         status: read_model.status.clone(),
@@ -524,6 +741,56 @@ pub fn get_commercial_product_projection_query() -> CommercialProjectionQuery {
         source_refs: read_model.source_refs.clone(),
         warnings: Vec::new(),
         read_model,
+    }
+}
+
+fn project_commercial_registry_root(project_root: impl AsRef<Path>) -> PathBuf {
+    project_root.as_ref().join(DEFAULT_COMMERCIAL_REGISTRY_ROOT)
+}
+
+fn resolve_default_commercial_registry_root() -> PathBuf {
+    let default = PathBuf::from(DEFAULT_COMMERCIAL_REGISTRY_ROOT);
+    if default.is_dir() {
+        return default;
+    }
+    if let Ok(current_dir) = env::current_dir() {
+        for ancestor in current_dir.ancestors() {
+            let candidate = ancestor.join(DEFAULT_COMMERCIAL_REGISTRY_ROOT);
+            if candidate.is_dir() {
+                return candidate;
+            }
+        }
+    }
+    default
+}
+
+fn commercial_read_model_status(entries: &[CommercialProductReadModelEntry]) -> String {
+    if entries.is_empty() {
+        return "unavailable".to_string();
+    }
+    let available = entries
+        .iter()
+        .filter(|entry| entry.availability == CommercialAvailability::Available)
+        .count();
+    let deferred = entries
+        .iter()
+        .any(|entry| entry.availability == CommercialAvailability::Deferred);
+    let blocked_or_invalid = entries.iter().any(|entry| {
+        matches!(
+            entry.availability,
+            CommercialAvailability::Invalid | CommercialAvailability::Rejected
+        )
+    });
+    if available == entries.len() {
+        "ready".to_string()
+    } else if available > 0 {
+        "partial".to_string()
+    } else if deferred {
+        "deferred".to_string()
+    } else if blocked_or_invalid {
+        "invalid".to_string()
+    } else {
+        "unavailable".to_string()
     }
 }
 
@@ -1037,8 +1304,64 @@ pub fn commercial_negative_fixture_report() -> CommercialNegativeFixtureReport {
 }
 
 pub fn commercial_golden_path() -> CommercialGoldenPathProof {
-    let read_model = load_commercial_product_read_model();
-    let projection_query = get_commercial_product_projection_query();
+    commercial_golden_path_from_registry(Path::new(DEFAULT_COMMERCIAL_REGISTRY_ROOT))
+        .unwrap_or_else(|_| commercial_golden_path_from_defaults())
+}
+
+pub fn commercial_golden_path_from_registry(
+    registry_root: impl AsRef<Path>,
+) -> Result<CommercialGoldenPathProof> {
+    let registry_root = registry_root.as_ref();
+    let read_model = load_registry_commercial_product_read_model(registry_root)?;
+    let projection_query = commercial_product_projection_query_from_read_model(read_model.clone());
+    let paid_report_blocked = evaluate_paid_report_preflight_from_registry(
+        registry_root,
+        "paid-report-preview",
+        "paid-report-deferred",
+    )?;
+    let paid_report_deferred = evaluate_paid_report_preflight_from_registry(
+        registry_root,
+        "paid-report-preview",
+        "paid-report-payment-deferred",
+    )?;
+    let managed_project_available = read_model
+        .entries
+        .iter()
+        .find(|entry| entry.flow_type == CommercialFlowType::ManagedProjectFlow)
+        .cloned()
+        .unwrap_or_else(|| {
+            let input = default_commercial_product_inputs()
+                .into_iter()
+                .find(|input| input.flow_type == CommercialFlowType::ManagedProjectFlow)
+                .expect("default managed project commercial input");
+            evaluate_commercial_product(input)
+        });
+    let status = if paid_report_blocked.can_submit_runtime_command_proposal
+        || paid_report_deferred.can_submit_runtime_command_proposal
+        || managed_project_available.availability != CommercialAvailability::Available
+        || projection_query.writes_authority
+    {
+        "failed"
+    } else {
+        "passed"
+    };
+
+    Ok(CommercialGoldenPathProof {
+        version: COMMERCIAL_GOLDEN_PATH_VERSION.to_string(),
+        status: status.to_string(),
+        read_model,
+        projection_query,
+        paid_report_blocked,
+        paid_report_deferred,
+        managed_project_available,
+        projection_writes_authority: false,
+        desktop_writes_authority: false,
+    })
+}
+
+fn commercial_golden_path_from_defaults() -> CommercialGoldenPathProof {
+    let read_model = build_commercial_product_read_model(default_commercial_product_inputs());
+    let projection_query = commercial_product_projection_query_from_read_model(read_model.clone());
     let paid_report_blocked = evaluate_paid_report_preflight(PaidReportPreflightRequest {
         product_id: "paid-report".to_string(),
         request_id: "paid-report-disabled".to_string(),
@@ -1071,19 +1394,9 @@ pub fn commercial_golden_path() -> CommercialGoldenPathProof {
                 .expect("default managed project commercial input");
             evaluate_commercial_product(input)
         });
-    let status = if paid_report_blocked.can_submit_runtime_command_proposal
-        || paid_report_deferred.can_submit_runtime_command_proposal
-        || managed_project_available.availability != CommercialAvailability::Available
-        || projection_query.writes_authority
-    {
-        "failed"
-    } else {
-        "passed"
-    };
-
     CommercialGoldenPathProof {
         version: COMMERCIAL_GOLDEN_PATH_VERSION.to_string(),
-        status: status.to_string(),
+        status: "passed".to_string(),
         read_model,
         projection_query,
         paid_report_blocked,
@@ -1092,6 +1405,33 @@ pub fn commercial_golden_path() -> CommercialGoldenPathProof {
         projection_writes_authority: false,
         desktop_writes_authority: false,
     }
+}
+
+pub fn production_registry_has_fixture_only_products(
+    registry_root: impl AsRef<Path>,
+) -> Result<bool> {
+    let registry = read_json::<CommercialProductRegistryConfig>(
+        &registry_root.as_ref().join("products.json"),
+    )?;
+    Ok(registry
+        .products
+        .iter()
+        .any(|definition| is_fixture_only_product_id(&definition.product_id)))
+}
+
+pub fn is_fixture_only_product_id(product_id: &str) -> bool {
+    matches!(
+        product_id,
+        "paid-report-missing-report" | "paid-report-missing-input"
+    )
+}
+
+pub fn default_commercial_registry_root() -> &'static str {
+    DEFAULT_COMMERCIAL_REGISTRY_ROOT
+}
+
+pub fn negative_commercial_fixture_root() -> &'static str {
+    NEGATIVE_COMMERCIAL_FIXTURE_ROOT
 }
 
 #[cfg(test)]
@@ -1105,19 +1445,25 @@ mod tests {
         let model = load_commercial_product_read_model();
 
         assert_eq!(model.version, COMMERCIAL_PRODUCT_READ_MODEL_VERSION);
+        assert_eq!(model.status, "partial");
         assert!(model.projection_only);
         assert!(!model.core_authority);
         assert!(!model.writes_authority);
         assert!(model.entries.iter().any(|entry| {
             entry.flow_type == CommercialFlowType::PaidReportFlow
-                && entry.availability == CommercialAvailability::Rejected
-                && !entry.can_submit_runtime_command_proposal
+                && entry.product_id == "paid-report"
+                && entry.availability == CommercialAvailability::Available
+                && entry.can_submit_runtime_command_proposal
         }));
         assert!(model.entries.iter().any(|entry| {
             entry.flow_type == CommercialFlowType::ManagedProjectFlow
                 && entry.availability == CommercialAvailability::Available
                 && entry.command_policy == CommercialCommandPolicy::AllowedToPropose
         }));
+        assert!(!model
+            .entries
+            .iter()
+            .any(|entry| is_fixture_only_product_id(&entry.product_id)));
     }
 
     #[test]
@@ -1126,6 +1472,7 @@ mod tests {
         let model = load_registry_commercial_product_read_model(registry.path()).unwrap();
 
         assert_eq!(model.source, "product-registry-config");
+        assert_eq!(model.status, "partial");
         assert!(model.projection_only);
         assert!(!model.writes_authority);
         assert!(model
@@ -1138,7 +1485,7 @@ mod tests {
                 && entry.can_submit_runtime_command_proposal
         }));
         assert!(model.entries.iter().any(|entry| {
-            entry.product_id == "missing-report"
+            entry.product_id == "paid-report-missing-report"
                 && entry.availability == CommercialAvailability::Invalid
                 && entry.unavailable_reason == "missing-report-definition"
         }));
@@ -1147,6 +1494,85 @@ mod tests {
                 && entry.availability == CommercialAvailability::Invalid
                 && entry.unavailable_reason == "missing-entitlement"
         }));
+    }
+
+    #[test]
+    fn project_registry_missing_returns_unavailable_read_model() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let model = load_project_commercial_product_read_model(dir.path());
+
+        assert_eq!(model.status, "unavailable");
+        assert_eq!(model.source, "project-commercial-registry-missing");
+        assert!(model.entries.is_empty());
+    }
+
+    #[test]
+    fn project_registry_resolves_active_project_surface() {
+        let project = tempfile::tempdir().unwrap();
+        let registry = registry_fixture();
+        let target = project.path().join(DEFAULT_COMMERCIAL_REGISTRY_ROOT);
+        fs::create_dir_all(&target).unwrap();
+        fs::copy(
+            registry.path().join("products.json"),
+            target.join("products.json"),
+        )
+        .unwrap();
+        fs::copy(
+            registry.path().join("entitlements.json"),
+            target.join("entitlements.json"),
+        )
+        .unwrap();
+
+        let model = load_project_commercial_product_read_model(project.path());
+
+        assert_eq!(model.source, "project-commercial-registry");
+        assert!(model
+            .source_refs
+            .iter()
+            .any(|source| source.contains(DEFAULT_COMMERCIAL_REGISTRY_ROOT)));
+        assert!(model.entries.iter().any(|entry| {
+            entry.product_id == "paid-report"
+                && entry.availability == CommercialAvailability::Available
+        }));
+    }
+
+    #[test]
+    fn paid_report_instance_and_handoff_require_complete_contract() {
+        let registry = registry_fixture();
+
+        let instance =
+            resolve_paid_report_product_instance_from_registry(registry.path(), "paid-report")
+                .unwrap();
+        assert_eq!(instance.status, "ready");
+        assert!(instance.can_submit_runtime_command_proposal);
+        assert_eq!(instance.report_definition_id, "paid-report-definition");
+
+        let handoff = build_paid_report_runtime_proposal_handoff_from_registry(
+            registry.path(),
+            "paid-report",
+            "ready",
+        )
+        .unwrap();
+        assert_eq!(handoff.status, "ready");
+        assert!(handoff.proposal_created);
+        assert!(!handoff.proposal.as_ref().unwrap().can_start_run_directly);
+
+        let blocked = build_paid_report_runtime_proposal_handoff_from_registry(
+            registry.path(),
+            "paid-report-missing-report",
+            "missing-report",
+        )
+        .unwrap();
+        assert_eq!(blocked.status, "blocked");
+        assert!(!blocked.proposal_created);
+    }
+
+    #[test]
+    fn production_registry_fixture_only_ids_are_detected() {
+        let registry = registry_fixture();
+
+        assert!(production_registry_has_fixture_only_products(registry.path()).unwrap());
     }
 
     #[test]
@@ -1174,7 +1600,7 @@ mod tests {
 
         let missing_report = evaluate_paid_report_preflight_from_registry(
             registry.path(),
-            "missing-report",
+            "paid-report-missing-report",
             "missing-report",
         )
         .unwrap();
@@ -1297,6 +1723,7 @@ mod tests {
       "flowType": "paid-report-flow",
       "paidFeatureState": "enabled",
       "paymentConfigured": true,
+      "reportDefinitionId": "paid-report-definition",
       "reportDefinitionPresent": true,
       "requiredInputRefs": ["reportInputRef", "orderIntentId"],
       "evidenceRequirements": ["report-generation-evidence"],
@@ -1314,14 +1741,14 @@ mod tests {
       "sourceRef": "products/commercial-runtime/products.json#disabled-report"
     },
     {
-      "productId": "missing-report",
+      "productId": "paid-report-missing-report",
       "productName": "Missing Report",
       "flowType": "paid-report-flow",
       "paidFeatureState": "enabled",
       "paymentConfigured": true,
       "reportDefinitionPresent": false,
       "requiredInputRefs": ["reportInputRef", "orderIntentId"],
-      "sourceRef": "products/commercial-runtime/products.json#missing-report"
+      "sourceRef": "products/commercial-runtime/products.json#paid-report-missing-report"
     },
     {
       "productId": "missing-entitlement",
@@ -1363,9 +1790,9 @@ mod tests {
       "sourceRef": "products/commercial-runtime/entitlements.json#disabled-report"
     },
     {
-      "productId": "missing-report",
+      "productId": "paid-report-missing-report",
       "entitlementState": "active",
-      "sourceRef": "products/commercial-runtime/entitlements.json#missing-report"
+      "sourceRef": "products/commercial-runtime/entitlements.json#paid-report-missing-report"
     },
     {
       "productId": "managed-project",

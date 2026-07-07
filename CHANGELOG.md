@@ -7,13 +7,13 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.2.5/README.md](docs/delivery/releases/v1.2.5/README.md)
-- [docs/delivery/releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md](docs/delivery/releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.6/README.md](docs/delivery/releases/v1.2.6/README.md)
+- [docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md](docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md)
 
 上一发布基线：
 
-- [docs/delivery/releases/v1.2.4/README.md](docs/delivery/releases/v1.2.4/README.md)
-- [docs/delivery/releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md](docs/delivery/releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.5/README.md](docs/delivery/releases/v1.2.5/README.md)
+- [docs/delivery/releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md](docs/delivery/releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md)
 
 下一版计划：
 
@@ -22,6 +22,22 @@
 ## Unreleased
 
 下一版保留给 Product console continuity after registry-backed commercial runtime closeout，不在本次 release 中认证。
+
+## v1.2.6 - 2026-07-07
+
+Project-scoped Commercial Product Instance Hardening:
+
+- added top-level `certificationKind` to final release certification proof semantics;
+- separated production commercial registry from fixture-only negative commercial registry;
+- added project-scoped commercial registry resolver for Runtime and Desktop commands;
+- hardened Commercial Product read model status semantics with `ready` / `partial` / `deferred` / `invalid` / `unavailable`;
+- moved commercial golden path proof to registry-only inputs;
+- updated Desktop commercial Runtime command to use active project root;
+- added Paid Report product instance contract with input, report definition, evidence, decision and delivery requirements;
+- added Paid Report preflight to Runtime proposal handoff that cannot start a run directly;
+- added negative fixture isolation proof so fixture-only product ids cannot leak into production product surface;
+- added v1.2.6 release delivery baseline and GitHub issue traceability for `#945` through `#954`;
+- advanced workspace and desktop version metadata to `1.2.6`.
 
 ## v1.2.5 - 2026-07-07
 
