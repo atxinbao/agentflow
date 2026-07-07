@@ -12207,6 +12207,24 @@ artifact_paths = [pathlib.Path(value) for value in artifact_path_values]
 
 expected_version = "1.0.7"
 expected_tag = "v1.0.7"
+
+def version_at_or_after(value, minimum):
+    text = str(value or "").strip()
+    floor = str(minimum or "").strip()
+    if text.startswith("v"):
+        text = text[1:]
+    if floor.startswith("v"):
+        floor = floor[1:]
+    try:
+        actual_parts = tuple(int(part) for part in text.split("."))
+        minimum_parts = tuple(int(part) for part in floor.split("."))
+    except ValueError:
+        return False
+    max_len = max(len(actual_parts), len(minimum_parts))
+    actual_parts = actual_parts + (0,) * (max_len - len(actual_parts))
+    minimum_parts = minimum_parts + (0,) * (max_len - len(minimum_parts))
+    return actual_parts >= minimum_parts
+
 cargo = tomllib.loads(cargo_path.read_text(encoding="utf-8"))
 desktop_package = json.loads(desktop_package_path.read_text(encoding="utf-8"))
 desktop_package_lock = json.loads(desktop_package_lock_path.read_text(encoding="utf-8"))
@@ -12279,13 +12297,13 @@ required_artifact_names = [
 certified_hash_paths = {item.get("path") for item in certified_artifact_hashes}
 
 coverage = {
-    "release-version-at-or-after-v107": release_version in {expected_tag, "v1.0.8", "v1.0.9", "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0", "v1.2.1", "v1.2.2", "v1.2.3", "v1.2.4", "v1.2.5"},
-    "release-tag-at-or-after-v107": release_tag_name in {expected_tag, "v1.0.8", "v1.0.9", "v1.1.0", "v1.1.1", "v1.1.2", "v1.1.3", "v1.1.4", "v1.1.5", "v1.1.6", "v1.1.7", "v1.1.8", "v1.1.9", "v1.2.0", "v1.2.1", "v1.2.2", "v1.2.3", "v1.2.4", "v1.2.5"},
-    "cargo-workspace-version-at-or-after-107": cargo["workspace"]["package"]["version"] in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.4", "1.2.5"},
-    "desktop-package-version-at-or-after-107": desktop_package.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.4", "1.2.5"},
-    "desktop-package-lock-version-at-or-after-107": desktop_package_lock.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.4", "1.2.5"}
-    and (desktop_package_lock.get("packages") or {}).get("", {}).get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.4", "1.2.5"},
-    "tauri-version-at-or-after-107": tauri_config.get("version") in {expected_version, "1.0.8", "1.0.9", "1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.2.0", "1.2.1", "1.2.2", "1.2.3", "1.2.4", "1.2.5"},
+    "release-version-at-or-after-v107": version_at_or_after(release_version, expected_tag),
+    "release-tag-at-or-after-v107": version_at_or_after(release_tag_name, expected_tag),
+    "cargo-workspace-version-at-or-after-107": version_at_or_after(cargo["workspace"]["package"]["version"], expected_version),
+    "desktop-package-version-at-or-after-107": version_at_or_after(desktop_package.get("version"), expected_version),
+    "desktop-package-lock-version-at-or-after-107": version_at_or_after(desktop_package_lock.get("version"), expected_version)
+    and version_at_or_after((desktop_package_lock.get("packages") or {}).get("", {}).get("version"), expected_version),
+    "tauri-version-at-or-after-107": version_at_or_after(tauri_config.get("version"), expected_version),
     "agents-current-baseline-is-v108-or-v107": (
         ("docs/delivery/releases/v1.1.9/README.md" in agents_text or "docs/delivery/releases/v1.1.8/README.md" in agents_text or "docs/delivery/releases/v1.1.7/README.md" in agents_text or "docs/delivery/releases/v1.1.6/README.md" in agents_text or "docs/delivery/releases/v1.1.5/README.md" in agents_text) or "docs/delivery/releases/v1.1.4/README.md" in agents_text or "docs/delivery/releases/v1.1.3/README.md" in agents_text or "docs/delivery/releases/v1.1.2/README.md" in agents_text
         or "docs/delivery/releases/v1.1.1/README.md" in agents_text
