@@ -1,0 +1,31 @@
+{
+  "version": "agentflow-commercial-entitlement-source.v1",
+  "source": "products/commercial-runtime/entitlements.json",
+  "entitlements": [
+    {
+      "productId": "paid-report",
+      "entitlementState": "active",
+      "sourceRef": "products/commercial-runtime/entitlements.json#paid-report"
+    },
+    {
+      "productId": "paid-report-preview",
+      "entitlementState": "deferred",
+      "sourceRef": "products/commercial-runtime/entitlements.json#paid-report-preview"
+    },
+    {
+      "productId": "paid-report-missing-report",
+      "entitlementState": "active",
+      "sourceRef": "products/commercial-runtime/entitlements.json#paid-report-missing-report"
+    },
+    {
+      "productId": "paid-report-missing-input",
+      "entitlementState": "active",
+      "sourceRef": "products/commercial-runtime/entitlements.json#paid-report-missing-input"
+    },
+    {
+      "productId": "managed-project",
+      "entitlementState": "trial",
+      "sourceRef": "products/commercial-runtime/entitlements.json#managed-project"
+    }
+  ]
+}

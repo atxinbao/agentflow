@@ -7,21 +7,38 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.2.4/README.md](docs/delivery/releases/v1.2.4/README.md)
-- [docs/delivery/releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md](docs/delivery/releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.5/README.md](docs/delivery/releases/v1.2.5/README.md)
+- [docs/delivery/releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md](docs/delivery/releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md)
 
 上一发布基线：
 
-- [docs/delivery/releases/v1.2.3/README.md](docs/delivery/releases/v1.2.3/README.md)
-- [docs/delivery/releases/v1.2.3/AGENTFLOW_V1_2_3_RELEASE_CLOSEOUT_COMMERCIAL_TRACEABILITY_TASKS_V1.md](docs/delivery/releases/v1.2.3/AGENTFLOW_V1_2_3_RELEASE_CLOSEOUT_COMMERCIAL_TRACEABILITY_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.4/README.md](docs/delivery/releases/v1.2.4/README.md)
+- [docs/delivery/releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md](docs/delivery/releases/v1.2.4/AGENTFLOW_V1_2_4_COMMERCIAL_RUNTIME_READ_MODEL_TASKS_V1.md)
 
 下一版计划：
 
-- v1.2.x Product console continuity after commercial Runtime read model closeout。
+- v1.2.x Product console continuity after published release certification and registry-backed commercial runtime closeout。
 
 ## Unreleased
 
-下一版保留给 Product console continuity after commercial Runtime read model closeout，不在本次 release 中认证。
+下一版保留给 Product console continuity after registry-backed commercial runtime closeout，不在本次 release 中认证。
+
+## v1.2.5 - 2026-07-07
+
+Published Release Certification and Registry-backed Commercial Runtime:
+
+- added release publication state proof that separates candidate, tagged, released and published states;
+- split candidate certification from published certification so PR / local release gates cannot claim published release facts;
+- tightened waiver contract consistency across absent, complete and invalid waiver cases;
+- added `products/commercial-runtime/**` as the commercial product registry and entitlement source fixture;
+- moved Commercial Product read model production source to registry/config-backed Runtime input while keeping default inputs as fallback/test data only;
+- added entitlement source coverage for active, trial, deferred and invalid commercial states;
+- added Paid Report product definition fixture with required inputs, evidence requirements and decision requirements;
+- certified Desktop commercial production surface as Runtime/Tauri read-only with marked Browser Preview fallback;
+- added registry-backed Commercial Surface golden path proof;
+- added release-event artifact certification for tag, GitHub Release URL, workflow run, source commit, artifact manifest and milestone facts;
+- added v1.2.5 release delivery baseline and GitHub issue traceability for `#934` through `#943`;
+- advanced workspace and desktop version metadata to `1.2.5`.
 
 ## v1.2.4 - 2026-07-07
 
