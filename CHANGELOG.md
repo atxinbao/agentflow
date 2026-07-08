@@ -7,21 +7,37 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.2.6/README.md](docs/delivery/releases/v1.2.6/README.md)
-- [docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md](docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.7/README.md](docs/delivery/releases/v1.2.7/README.md)
+- [docs/delivery/releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md)
 
 上一发布基线：
 
-- [docs/delivery/releases/v1.2.5/README.md](docs/delivery/releases/v1.2.5/README.md)
-- [docs/delivery/releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md](docs/delivery/releases/v1.2.5/AGENTFLOW_V1_2_5_PUBLISHED_RELEASE_CERTIFICATION_REGISTRY_COMMERCIAL_RUNTIME_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.6/README.md](docs/delivery/releases/v1.2.6/README.md)
+- [docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md](docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md)
 
 下一版计划：
 
-- v1.2.x Product console continuity after published release certification and registry-backed commercial runtime closeout。
+- v1.2.x Product console continuity after paid report Runtime handoff closure。
 
 ## Unreleased
 
-下一版保留给 Product console continuity after registry-backed commercial runtime closeout，不在本次 release 中认证。
+下一版保留给 Product console continuity after paid report Runtime handoff closure，不在本次 release 中认证。
+
+## v1.2.7 - 2026-07-08
+
+Paid Report Runtime Handoff Closure:
+
+- aligned v1.2.7 planning around project-scoped Paid Report Runtime handoff closure;
+- documented Software Dev as Managed Project Flow Reference App and Paid Report as generic backend handoff;
+- added project-scoped Paid Report product instance resolver API;
+- added project-scoped Paid Report preflight / Runtime proposal handoff API;
+- updated Desktop Paid Report preflight bridge to use active project root;
+- certified golden path source semantics so Core Runtime stays generic and concrete paid report SKU names are not Core authority;
+- added Runtime proposal admission receipt for Paid Report handoff;
+- added Paid Report run contract boundary that requires admission receipt and cannot start directly from preflight;
+- added Evidence / Decision / Delivery projection contract for Paid Report flow;
+- added v1.2.7 release delivery baseline and GitHub issue traceability for `#956` through `#965`;
+- advanced workspace and desktop version metadata to `1.2.7`.
 
 ## v1.2.6 - 2026-07-07
 
