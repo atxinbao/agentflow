@@ -24,6 +24,11 @@ pub const PAID_REPORT_PRODUCT_DEFINITION_VERSION: &str =
 pub const PAID_REPORT_PRODUCT_INSTANCE_VERSION: &str = "agentflow-paid-report-product-instance.v1";
 pub const PAID_REPORT_RUNTIME_PROPOSAL_HANDOFF_VERSION: &str =
     "agentflow-paid-report-runtime-proposal-handoff.v1";
+pub const PAID_REPORT_RUNTIME_ADMISSION_RECEIPT_VERSION: &str =
+    "agentflow-paid-report-runtime-admission-receipt.v1";
+pub const PAID_REPORT_RUN_CONTRACT_VERSION: &str = "agentflow-paid-report-run-contract.v1";
+pub const PAID_REPORT_DELIVERY_PROJECTION_VERSION: &str =
+    "agentflow-paid-report-delivery-projection.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
@@ -246,6 +251,71 @@ pub struct PaidReportRuntimeProposalHandoff {
     pub product_instance: PaidReportProductInstanceContract,
     pub preflight: PaidReportPreflightResult,
     pub proposal: Option<PaidReportRuntimeProposal>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportRuntimeAdmissionReceipt {
+    pub version: String,
+    pub status: String,
+    pub receipt_id: String,
+    pub product_instance_id: String,
+    pub product_id: String,
+    pub request_id: String,
+    pub admission_decision: String,
+    pub runtime_admission_required: bool,
+    pub can_start_run_directly: bool,
+    #[serde(default)]
+    pub required_evidence: Vec<String>,
+    #[serde(default)]
+    pub required_decision_policy: Vec<String>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportRunContract {
+    pub version: String,
+    pub status: String,
+    pub run_contract_id: String,
+    pub product_instance_id: String,
+    pub product_id: String,
+    pub request_id: String,
+    #[serde(default)]
+    pub input_refs: Vec<String>,
+    pub report_definition_id: String,
+    #[serde(default)]
+    pub expected_evidence: Vec<String>,
+    #[serde(default)]
+    pub decision_policy: Vec<String>,
+    pub delivery_promise: CommercialDeliveryPromise,
+    pub runtime_admission_receipt_id: String,
+    pub can_start_run_directly: bool,
+    pub concrete_sku_is_core_authority: bool,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportDeliveryProjection {
+    pub version: String,
+    pub status: String,
+    pub product_instance_id: String,
+    pub product_id: String,
+    pub request_id: String,
+    pub projection_only: bool,
+    pub writes_authority: bool,
+    #[serde(default)]
+    pub required_evidence: Vec<String>,
+    #[serde(default)]
+    pub decision_policy: Vec<String>,
+    pub evidence_satisfied: bool,
+    pub decision_satisfied: bool,
+    pub delivery_ready: bool,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -671,6 +741,16 @@ pub fn resolve_paid_report_product_instance_from_registry(
     })
 }
 
+pub fn resolve_paid_report_product_instance_from_project(
+    project_root: impl AsRef<Path>,
+    product_id: &str,
+) -> Result<PaidReportProductInstanceContract> {
+    resolve_paid_report_product_instance_from_registry(
+        project_commercial_registry_root(project_root),
+        product_id,
+    )
+}
+
 pub fn build_paid_report_runtime_proposal_handoff_from_registry(
     registry_root: impl AsRef<Path>,
     product_id: &str,
@@ -713,6 +793,140 @@ pub fn build_paid_report_runtime_proposal_handoff_from_registry(
         preflight,
         proposal,
     })
+}
+
+pub fn build_paid_report_runtime_proposal_handoff_from_project(
+    project_root: impl AsRef<Path>,
+    product_id: &str,
+    request_id: &str,
+) -> Result<PaidReportRuntimeProposalHandoff> {
+    build_paid_report_runtime_proposal_handoff_from_registry(
+        project_commercial_registry_root(project_root),
+        product_id,
+        request_id,
+    )
+}
+
+pub fn admit_paid_report_runtime_proposal(
+    handoff: &PaidReportRuntimeProposalHandoff,
+) -> PaidReportRuntimeAdmissionReceipt {
+    let admitted = handoff.status == "ready"
+        && handoff.proposal_created
+        && handoff.proposal.as_ref().is_some_and(|proposal| {
+            proposal.runtime_admission_required && !proposal.can_start_run_directly
+        });
+    let proposal = handoff.proposal.as_ref();
+    let required_evidence = proposal
+        .map(|proposal| proposal.evidence_policy.clone())
+        .unwrap_or_else(|| handoff.product_instance.evidence_requirements.clone());
+    let required_decision_policy = proposal
+        .map(|proposal| proposal.decision_policy.clone())
+        .unwrap_or_else(|| handoff.product_instance.decision_requirements.clone());
+    let request_id = proposal
+        .map(|proposal| proposal.request_id.clone())
+        .unwrap_or_else(|| handoff.preflight.request_id.clone());
+
+    PaidReportRuntimeAdmissionReceipt {
+        version: PAID_REPORT_RUNTIME_ADMISSION_RECEIPT_VERSION.to_string(),
+        status: if admitted { "admitted" } else { "blocked" }.to_string(),
+        receipt_id: format!(
+            "paid-report-admission-{}-{}",
+            handoff.product_instance.product_id, request_id
+        ),
+        product_instance_id: handoff.product_instance.product_instance_id.clone(),
+        product_id: handoff.product_instance.product_id.clone(),
+        request_id,
+        admission_decision: if admitted {
+            "accepted-for-runtime-proposal"
+        } else {
+            "blocked-before-runtime"
+        }
+        .to_string(),
+        runtime_admission_required: true,
+        can_start_run_directly: false,
+        required_evidence,
+        required_decision_policy,
+        source_refs: handoff.product_instance.source_refs.clone(),
+    }
+}
+
+pub fn build_paid_report_run_contract(
+    handoff: &PaidReportRuntimeProposalHandoff,
+    receipt: &PaidReportRuntimeAdmissionReceipt,
+) -> PaidReportRunContract {
+    let proposal = handoff.proposal.as_ref();
+    let input_refs = proposal
+        .map(|proposal| proposal.required_input_refs.clone())
+        .unwrap_or_else(|| handoff.product_instance.required_input_refs.clone());
+    let report_definition_id = proposal
+        .map(|proposal| proposal.report_definition_id.clone())
+        .unwrap_or_else(|| handoff.product_instance.report_definition_id.clone());
+    let expected_evidence = if receipt.required_evidence.is_empty() {
+        handoff.product_instance.evidence_requirements.clone()
+    } else {
+        receipt.required_evidence.clone()
+    };
+    let decision_policy = if receipt.required_decision_policy.is_empty() {
+        handoff.product_instance.decision_requirements.clone()
+    } else {
+        receipt.required_decision_policy.clone()
+    };
+    let ready = receipt.status == "admitted"
+        && !receipt.can_start_run_directly
+        && !input_refs.is_empty()
+        && !report_definition_id.trim().is_empty()
+        && !expected_evidence.is_empty()
+        && !decision_policy.is_empty();
+
+    PaidReportRunContract {
+        version: PAID_REPORT_RUN_CONTRACT_VERSION.to_string(),
+        status: if ready { "ready" } else { "blocked" }.to_string(),
+        run_contract_id: format!("paid-report-run-{}", receipt.request_id),
+        product_instance_id: receipt.product_instance_id.clone(),
+        product_id: receipt.product_id.clone(),
+        request_id: receipt.request_id.clone(),
+        input_refs,
+        report_definition_id,
+        expected_evidence,
+        decision_policy,
+        delivery_promise: CommercialDeliveryPromise::Report,
+        runtime_admission_receipt_id: receipt.receipt_id.clone(),
+        can_start_run_directly: false,
+        concrete_sku_is_core_authority: false,
+        source_refs: receipt.source_refs.clone(),
+    }
+}
+
+pub fn project_paid_report_delivery_projection(
+    run_contract: &PaidReportRunContract,
+    evidence_satisfied: bool,
+    decision_satisfied: bool,
+) -> PaidReportDeliveryProjection {
+    let status = if run_contract.status == "blocked" {
+        "blocked"
+    } else if evidence_satisfied && decision_satisfied {
+        "delivery-ready"
+    } else if evidence_satisfied {
+        "decision-needed"
+    } else {
+        "evidence-needed"
+    };
+
+    PaidReportDeliveryProjection {
+        version: PAID_REPORT_DELIVERY_PROJECTION_VERSION.to_string(),
+        status: status.to_string(),
+        product_instance_id: run_contract.product_instance_id.clone(),
+        product_id: run_contract.product_id.clone(),
+        request_id: run_contract.request_id.clone(),
+        projection_only: true,
+        writes_authority: false,
+        required_evidence: run_contract.expected_evidence.clone(),
+        decision_policy: run_contract.decision_policy.clone(),
+        evidence_satisfied,
+        decision_satisfied,
+        delivery_ready: status == "delivery-ready",
+        source_refs: run_contract.source_refs.clone(),
+    }
 }
 
 pub fn get_commercial_product_projection_query() -> CommercialProjectionQuery {
@@ -1566,6 +1780,68 @@ mod tests {
         .unwrap();
         assert_eq!(blocked.status, "blocked");
         assert!(!blocked.proposal_created);
+    }
+
+    #[test]
+    fn paid_report_project_handoff_requires_runtime_admission_and_delivery_projection() {
+        let project = tempfile::tempdir().unwrap();
+        let registry = registry_fixture();
+        let target = project.path().join(DEFAULT_COMMERCIAL_REGISTRY_ROOT);
+        fs::create_dir_all(&target).unwrap();
+        fs::copy(
+            registry.path().join("products.json"),
+            target.join("products.json"),
+        )
+        .unwrap();
+        fs::copy(
+            registry.path().join("entitlements.json"),
+            target.join("entitlements.json"),
+        )
+        .unwrap();
+
+        let instance =
+            resolve_paid_report_product_instance_from_project(project.path(), "paid-report")
+                .unwrap();
+        assert_eq!(instance.status, "ready");
+        assert!(instance
+            .source_refs
+            .iter()
+            .any(|source| source.contains(DEFAULT_COMMERCIAL_REGISTRY_ROOT)));
+
+        let handoff = build_paid_report_runtime_proposal_handoff_from_project(
+            project.path(),
+            "paid-report",
+            "project-request",
+        )
+        .unwrap();
+        assert_eq!(handoff.status, "ready");
+        assert!(handoff.proposal_created);
+        assert!(!handoff.proposal.as_ref().unwrap().can_start_run_directly);
+
+        let receipt = admit_paid_report_runtime_proposal(&handoff);
+        assert_eq!(receipt.status, "admitted");
+        assert_eq!(receipt.admission_decision, "accepted-for-runtime-proposal");
+        assert!(receipt.runtime_admission_required);
+        assert!(!receipt.can_start_run_directly);
+
+        let run_contract = build_paid_report_run_contract(&handoff, &receipt);
+        assert_eq!(run_contract.status, "ready");
+        assert!(!run_contract.can_start_run_directly);
+        assert!(!run_contract.concrete_sku_is_core_authority);
+        assert_eq!(
+            run_contract.delivery_promise,
+            CommercialDeliveryPromise::Report
+        );
+
+        let awaiting_evidence =
+            project_paid_report_delivery_projection(&run_contract, false, false);
+        assert_eq!(awaiting_evidence.status, "evidence-needed");
+        assert!(!awaiting_evidence.writes_authority);
+        assert!(awaiting_evidence.projection_only);
+
+        let ready = project_paid_report_delivery_projection(&run_contract, true, true);
+        assert_eq!(ready.status, "delivery-ready");
+        assert!(ready.delivery_ready);
     }
 
     #[test]

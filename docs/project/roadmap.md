@@ -153,6 +153,7 @@ Loop 之间不能互相越权：
 ```text
 v1.1.9 = 可内测产品
 v1.2.3 / v1.2.4 = 可公开发布产品
+v1.2.5 / v1.2.6 / v1.2.7 = Commercial Runtime 公开发布后的项目级交接收口
 ```
 
 | Version | Goal | Primary loop / kernel |
@@ -180,6 +181,9 @@ v1.2.3 / v1.2.4 = 可公开发布产品
 | `v1.2.2` | Commercial Boundary / License / Usage Model | Commercial boundary |
 | `v1.2.3` | Public Release Candidate Certification | Public release readiness |
 | `v1.2.4` | Public Product Release Closeout | Public product release |
+| `v1.2.5` | Published Release Certification and Registry-backed Commercial Runtime | Release certification / Commercial registry |
+| `v1.2.6` | Project-scoped Commercial Product Instance Hardening | Product instance / Project registry |
+| `v1.2.7` | Paid Report Runtime Handoff Closure | Paid Report handoff / Runtime admission |
 
 ## Version Intent
 
@@ -617,6 +621,42 @@ create project
 - 确认公开用户入口、支持边界和后续 roadmap。
 
 如果 `v1.2.3` 已满足公开发布标准，`v1.2.4` 可以跳过或作为首个 patch release 预留。
+
+### v1.2.5 - Published Release Certification and Registry-backed Commercial Runtime
+
+`v1.2.5` 在公开发布后修正 release certification 与商业 Runtime source：
+
+- release certification 区分 candidate / published；
+- production commercial registry 成为 Product source；
+- Commercial Product read model 从 registry/config 生成；
+- negative fixtures 不能污染 production product surface；
+- release-event artifact 必须带 tag、release URL、workflow run 和 source commit。
+
+本版不做真实支付、checkout、customer account 或具体商业 SKU。
+
+### v1.2.6 - Project-scoped Commercial Product Instance Hardening
+
+`v1.2.6` 把 commercial registry 从 source-level 推进到 project-scoped：
+
+- 当前项目根解析 `products/commercial-runtime/**`；
+- 缺少 project commercial registry 时显示 non-ready；
+- aggregate status 与 per-entry availability 分离；
+- Paid Report product instance 定义 input、report definition、evidence、decision 和 delivery promise；
+- allowed preflight 只能生成 Runtime proposal handoff，不能直接 run。
+
+### v1.2.7 - Paid Report Runtime Handoff Closure
+
+`v1.2.7` 继续 `v1.2.6`，关闭 project-scoped Paid Report Runtime handoff：
+
+- Software Dev 保持 Managed Project Flow Reference App；
+- Paid Report 只作为 generic backend handoff，不引入具体 report SKU；
+- Desktop Paid Report preflight 必须使用 active project root；
+- Runtime proposal 进入 admission receipt；
+- run contract 必须绑定 admission receipt、input refs、report definition、evidence policy 和 decision policy；
+- delivery projection 只读取 evidence / decision 状态，不写 authority；
+- release certification 证明 handoff、admission、run contract 和 delivery projection 的完整链路。
+
+本版仍不做支付、checkout、账号、真实 report generation 或公开商业上线。
 
 ## Task Derivation Rule
 

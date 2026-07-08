@@ -43,12 +43,30 @@ pub(crate) fn load_commercial_product_projection_query(
 
 #[tauri::command]
 pub(crate) fn run_paid_report_preflight(
-    _project_root: String,
+    project_root: String,
     request: agentflow_runtime_api::PaidReportPreflightRequest,
 ) -> Result<agentflow_runtime_api::PaidReportPreflightResult, String> {
-    Ok(agentflow_runtime_api::evaluate_paid_report_preflight(
-        request,
-    ))
+    agentflow_runtime_api::build_paid_report_runtime_proposal_handoff_from_project(
+        project_root,
+        &request.product_id,
+        &request.request_id,
+    )
+    .map(|handoff| handoff.preflight)
+    .map_err(|error| format!("run paid report preflight failed: {error}"))
+}
+
+#[tauri::command]
+pub(crate) fn build_paid_report_runtime_handoff(
+    project_root: String,
+    product_id: String,
+    request_id: String,
+) -> Result<agentflow_runtime_api::PaidReportRuntimeProposalHandoff, String> {
+    agentflow_runtime_api::build_paid_report_runtime_proposal_handoff_from_project(
+        project_root,
+        &product_id,
+        &request_id,
+    )
+    .map_err(|error| format!("build paid report runtime handoff failed: {error}"))
 }
 
 #[tauri::command]

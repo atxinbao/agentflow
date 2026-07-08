@@ -51,6 +51,7 @@ fn main() {
             commands::runtime_api::load_commercial_product_read_model,
             commands::runtime_api::load_commercial_product_projection_query,
             commands::runtime_api::run_paid_report_preflight,
+            commands::runtime_api::build_paid_report_runtime_handoff,
             commands::runtime_api::dry_run_product_command,
             commands::runtime_api::submit_product_command,
             commands::runtime_api::create_product_workspace,
