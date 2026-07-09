@@ -41,6 +41,16 @@ pub const PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION: &str =
     "agentflow-paid-report-delivery-package-projection.v1";
 pub const PAID_REPORT_FEEDBACK_LOOP_PROJECTION_VERSION: &str =
     "agentflow-paid-report-feedback-loop-projection.v1";
+pub const PAID_REPORT_ORDER_RECORD_VERSION: &str = "agentflow-paid-report-order-record.v1";
+pub const PAID_REPORT_ENTITLEMENT_AUTHORIZATION_VERSION: &str =
+    "agentflow-paid-report-entitlement-authorization.v1";
+pub const PAID_REPORT_ORDER_TO_RUN_ADMISSION_VERSION: &str =
+    "agentflow-paid-report-order-to-run-admission.v1";
+pub const PAID_REPORT_CUSTOMER_DELIVERY_ACCESS_VERSION: &str =
+    "agentflow-paid-report-customer-delivery-access.v1";
+pub const PAID_REPORT_ACCESS_RECEIPT_VERSION: &str = "agentflow-paid-report-access-receipt.v1";
+pub const PAID_REPORT_COMMERCIAL_POLICY_VERSION: &str =
+    "agentflow-paid-report-commercial-policy.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
@@ -506,6 +516,117 @@ pub struct PaidReportFeedbackLoopProjection {
     pub next_action: String,
     pub projection_only: bool,
     pub writes_authority: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportOrderRecord {
+    pub version: String,
+    pub status: String,
+    pub order_id: String,
+    pub product_instance_id: String,
+    pub request_id: String,
+    pub order_intent_id: String,
+    pub input_snapshot_id: String,
+    pub offer_ref: String,
+    pub lifecycle_state: String,
+    pub runnable: bool,
+    pub created_at: String,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportEntitlementAuthorization {
+    pub version: String,
+    pub status: String,
+    pub authorization_receipt_id: String,
+    pub order_id: String,
+    pub product_instance_id: String,
+    pub authorization_state: String,
+    pub authorization_decision: String,
+    pub payment_provider_checkout: bool,
+    pub provider_charge_executed: bool,
+    #[serde(default)]
+    pub failure_reasons: Vec<String>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportOrderToRunAdmission {
+    pub version: String,
+    pub status: String,
+    pub admission_id: String,
+    pub order_id: String,
+    pub authorization_receipt_id: String,
+    pub input_snapshot_id: String,
+    pub run_id: String,
+    pub product_instance_id: String,
+    pub accepted: bool,
+    #[serde(default)]
+    pub failure_reasons: Vec<String>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportCustomerDeliveryAccessProjection {
+    pub version: String,
+    pub status: String,
+    pub delivery_package_id: String,
+    pub order_id: String,
+    pub decision_id: String,
+    pub report_artifact_id: String,
+    pub product_instance_id: String,
+    pub access_status: String,
+    pub next_action: String,
+    pub download_visible: bool,
+    pub projection_only: bool,
+    pub writes_authority: bool,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportAccessReceipt {
+    pub version: String,
+    pub status: String,
+    pub access_receipt_id: String,
+    pub delivery_package_id: String,
+    pub order_id: String,
+    pub product_instance_id: String,
+    pub access_scope: String,
+    pub generated_at: String,
+    pub expires_at: String,
+    #[serde(default)]
+    pub artifact_refs: Vec<String>,
+    pub access_handle: String,
+    pub blocked_reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportCommercialPolicyRecord {
+    pub version: String,
+    pub status: String,
+    pub policy_id: String,
+    pub outcome: String,
+    pub original_order_id: String,
+    pub original_run_id: String,
+    pub original_artifact_id: String,
+    pub original_decision_id: String,
+    pub feedback_id: String,
+    pub creates_follow_up_proposal: bool,
+    pub mutates_delivered_artifact: bool,
+    pub requires_new_authorization: bool,
+    pub commercial_decision_only: bool,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1499,6 +1620,253 @@ pub fn project_paid_report_feedback_loop(
         .to_string(),
         projection_only: true,
         writes_authority: false,
+    }
+}
+
+pub fn build_paid_report_order_record(
+    instance: &PaidReportProductInstanceContract,
+    order_intent: &PaidReportOrderIntent,
+    input_snapshot: &PaidReportInputSnapshot,
+    offer_ref: &str,
+) -> PaidReportOrderRecord {
+    let runnable = instance.status == "ready"
+        && order_intent.status == "ready"
+        && input_snapshot.input_ready
+        && order_intent.product_instance_id == instance.product_instance_id
+        && input_snapshot.product_instance_id == instance.product_instance_id
+        && !offer_ref.trim().is_empty();
+    let lifecycle_state = if runnable {
+        "order-ready"
+    } else if !input_snapshot.input_ready {
+        "input-snapshot-missing"
+    } else if order_intent.status != "ready" {
+        "order-intent-missing"
+    } else {
+        "order-blocked"
+    };
+
+    PaidReportOrderRecord {
+        version: PAID_REPORT_ORDER_RECORD_VERSION.to_string(),
+        status: lifecycle_state.to_string(),
+        order_id: format!("paid-report-order-{}", input_snapshot.request_id),
+        product_instance_id: instance.product_instance_id.clone(),
+        request_id: input_snapshot.request_id.clone(),
+        order_intent_id: order_intent.order_intent_id.clone(),
+        input_snapshot_id: input_snapshot.input_snapshot_id.clone(),
+        offer_ref: offer_ref.to_string(),
+        lifecycle_state: lifecycle_state.to_string(),
+        runnable,
+        created_at: "2026-07-09T00:00:00Z".to_string(),
+        source_refs: instance.source_refs.clone(),
+    }
+}
+
+pub fn authorize_paid_report_order(
+    order: &PaidReportOrderRecord,
+    authorization_state: &str,
+) -> PaidReportEntitlementAuthorization {
+    let normalized = authorization_state.trim();
+    let authorized = order.runnable && matches!(normalized, "paid" | "waived");
+    let decision = if authorized {
+        "authorized"
+    } else if normalized == "deferred" {
+        "deferred"
+    } else {
+        "blocked"
+    };
+    let mut failure_reasons = Vec::new();
+    if !order.runnable {
+        failure_reasons.push("order-not-runnable".to_string());
+    }
+    match normalized {
+        "paid" | "waived" | "deferred" => {}
+        "refunded" => failure_reasons.push("order-refunded".to_string()),
+        "missing" => failure_reasons.push("entitlement-missing".to_string()),
+        "revoked" => failure_reasons.push("entitlement-revoked".to_string()),
+        _ => failure_reasons.push("unknown-authorization-state".to_string()),
+    }
+
+    PaidReportEntitlementAuthorization {
+        version: PAID_REPORT_ENTITLEMENT_AUTHORIZATION_VERSION.to_string(),
+        status: decision.to_string(),
+        authorization_receipt_id: format!("authorization-{}", order.order_id),
+        order_id: order.order_id.clone(),
+        product_instance_id: order.product_instance_id.clone(),
+        authorization_state: normalized.to_string(),
+        authorization_decision: decision.to_string(),
+        payment_provider_checkout: false,
+        provider_charge_executed: false,
+        failure_reasons,
+        source_refs: order.source_refs.clone(),
+    }
+}
+
+pub fn admit_paid_report_order_to_run(
+    order: &PaidReportOrderRecord,
+    authorization: &PaidReportEntitlementAuthorization,
+    input_snapshot: &PaidReportInputSnapshot,
+    run_receipt: &PaidReportRunExecutionReceipt,
+) -> PaidReportOrderToRunAdmission {
+    let accepted = order.runnable
+        && authorization.status == "authorized"
+        && authorization.order_id == order.order_id
+        && input_snapshot.input_ready
+        && input_snapshot.input_snapshot_id == order.input_snapshot_id
+        && run_receipt.product_instance_id == order.product_instance_id
+        && run_receipt.input_snapshot_id == input_snapshot.input_snapshot_id;
+    let mut failure_reasons = Vec::new();
+    if !order.runnable {
+        failure_reasons.push("order-not-runnable".to_string());
+    }
+    if authorization.status != "authorized" || authorization.order_id != order.order_id {
+        failure_reasons.push("authorization-not-valid".to_string());
+    }
+    if !input_snapshot.input_ready || input_snapshot.input_snapshot_id != order.input_snapshot_id {
+        failure_reasons.push("input-snapshot-not-valid".to_string());
+    }
+    if run_receipt.product_instance_id != order.product_instance_id {
+        failure_reasons.push("product-instance-mismatch".to_string());
+    }
+
+    PaidReportOrderToRunAdmission {
+        version: PAID_REPORT_ORDER_TO_RUN_ADMISSION_VERSION.to_string(),
+        status: if accepted { "accepted" } else { "blocked" }.to_string(),
+        admission_id: format!("order-to-run-admission-{}", order.order_id),
+        order_id: order.order_id.clone(),
+        authorization_receipt_id: authorization.authorization_receipt_id.clone(),
+        input_snapshot_id: input_snapshot.input_snapshot_id.clone(),
+        run_id: run_receipt.run_id.clone(),
+        product_instance_id: order.product_instance_id.clone(),
+        accepted,
+        failure_reasons,
+        source_refs: order.source_refs.clone(),
+    }
+}
+
+pub fn project_paid_report_customer_delivery_access(
+    order: &PaidReportOrderRecord,
+    delivery: &PaidReportDeliveryPackageProjection,
+    decision: &PaidReportDecisionRecord,
+    artifact: &PaidReportArtifact,
+    authorization: &PaidReportEntitlementAuthorization,
+) -> PaidReportCustomerDeliveryAccessProjection {
+    let available = order.runnable
+        && delivery.download_ready
+        && decision.outcome == PaidReportDecisionOutcome::Accepted
+        && authorization.status == "authorized"
+        && artifact.status == "complete"
+        && delivery
+            .report_artifact_refs
+            .iter()
+            .any(|entry| entry == &artifact.artifact_id);
+    let (access_status, next_action) = if available {
+        ("accessible", "show-download")
+    } else if authorization.authorization_state == "refunded" {
+        ("blocked", "show-refund-policy")
+    } else if decision.outcome == PaidReportDecisionOutcome::NeedsFix {
+        ("repair-needed", "show-repair-route")
+    } else if authorization.status != "authorized" {
+        ("blocked", "resolve-authorization")
+    } else if !delivery.download_ready {
+        ("blocked", "wait-for-accepted-decision")
+    } else {
+        ("blocked", "wait-for-report-artifact")
+    };
+
+    PaidReportCustomerDeliveryAccessProjection {
+        version: PAID_REPORT_CUSTOMER_DELIVERY_ACCESS_VERSION.to_string(),
+        status: access_status.to_string(),
+        delivery_package_id: delivery.delivery_package_id.clone(),
+        order_id: order.order_id.clone(),
+        decision_id: decision.decision_id.clone(),
+        report_artifact_id: artifact.artifact_id.clone(),
+        product_instance_id: order.product_instance_id.clone(),
+        access_status: access_status.to_string(),
+        next_action: next_action.to_string(),
+        download_visible: available,
+        projection_only: true,
+        writes_authority: false,
+        source_refs: order.source_refs.clone(),
+    }
+}
+
+pub fn build_paid_report_access_receipt(
+    access: &PaidReportCustomerDeliveryAccessProjection,
+    revoked: bool,
+    expired: bool,
+) -> PaidReportAccessReceipt {
+    let allowed = access.download_visible && !revoked && !expired;
+    let blocked_reason = if allowed {
+        "none"
+    } else if revoked {
+        "access-revoked"
+    } else if expired {
+        "access-expired"
+    } else {
+        access.next_action.as_str()
+    };
+
+    PaidReportAccessReceipt {
+        version: PAID_REPORT_ACCESS_RECEIPT_VERSION.to_string(),
+        status: if allowed { "allowed" } else { "blocked" }.to_string(),
+        access_receipt_id: format!("access-receipt-{}", access.delivery_package_id),
+        delivery_package_id: access.delivery_package_id.clone(),
+        order_id: access.order_id.clone(),
+        product_instance_id: access.product_instance_id.clone(),
+        access_scope: "customer-report-download".to_string(),
+        generated_at: "2026-07-09T00:00:00Z".to_string(),
+        expires_at: "2026-07-16T00:00:00Z".to_string(),
+        artifact_refs: vec![access.report_artifact_id.clone()],
+        access_handle: if allowed {
+            format!("download-token-{}", access.delivery_package_id)
+        } else {
+            String::new()
+        },
+        blocked_reason: blocked_reason.to_string(),
+    }
+}
+
+pub fn evaluate_paid_report_commercial_policy(
+    order: &PaidReportOrderRecord,
+    delivery: &PaidReportDeliveryPackageProjection,
+    decision: &PaidReportDecisionRecord,
+    feedback: &PaidReportFeedbackLoopProjection,
+    policy_outcome: &str,
+) -> PaidReportCommercialPolicyRecord {
+    let normalized = policy_outcome.trim();
+    let creates_follow_up = matches!(normalized, "repair-request" | "controlled-rerun");
+    let requires_new_authorization = normalized == "controlled-rerun";
+    let status = match normalized {
+        "refund-request" => "refund-requested",
+        "repair-request" => "repair-proposed",
+        "controlled-rerun" => "rerun-needs-authorization",
+        "accepted-after-repair" => "accepted-after-repair",
+        "no-follow-up" => "closed",
+        _ => "blocked",
+    };
+
+    PaidReportCommercialPolicyRecord {
+        version: PAID_REPORT_COMMERCIAL_POLICY_VERSION.to_string(),
+        status: status.to_string(),
+        policy_id: format!("policy-{}", feedback.feedback_id),
+        outcome: normalized.to_string(),
+        original_order_id: order.order_id.clone(),
+        original_run_id: delivery.run_id.clone(),
+        original_artifact_id: delivery
+            .report_artifact_refs
+            .first()
+            .cloned()
+            .unwrap_or_default(),
+        original_decision_id: decision.decision_id.clone(),
+        feedback_id: feedback.feedback_id.clone(),
+        creates_follow_up_proposal: creates_follow_up,
+        mutates_delivered_artifact: false,
+        requires_new_authorization,
+        commercial_decision_only: normalized == "refund-request",
+        source_refs: vec![
+            "docs/delivery/releases/v1.2.9/README.md".to_string(),
+            "docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md".to_string(),
+        ],
     }
 }
 
@@ -2720,6 +3088,169 @@ mod tests {
             proof.managed_project_available.availability,
             CommercialAvailability::Available
         );
+    }
+
+    #[test]
+    fn paid_report_order_authorization_and_access_require_valid_chain() {
+        let registry = registry_fixture();
+        let project_root = tempfile::tempdir().unwrap();
+        install_registry_fixture(&registry, project_root.path());
+        let instance =
+            resolve_paid_report_product_instance_from_project(project_root.path(), "paid-report")
+                .unwrap();
+        let handoff = build_paid_report_runtime_proposal_handoff_from_project(
+            project_root.path(),
+            "paid-report",
+            "v129-test",
+        )
+        .unwrap();
+        let admission = admit_paid_report_runtime_proposal(&handoff);
+        let run_contract = build_paid_report_run_contract(&handoff, &admission);
+        let order_intent = build_paid_report_order_intent(&instance, "v129-test");
+        let mut submitted_fields = HashMap::new();
+        submitted_fields.insert("reportInputRef".to_string(), "input.json".to_string());
+        submitted_fields.insert(
+            "orderIntentId".to_string(),
+            order_intent.order_intent_id.clone(),
+        );
+        let input_snapshot = build_paid_report_input_snapshot(
+            &instance,
+            Some(&order_intent),
+            "v129-test",
+            submitted_fields,
+        );
+        let order =
+            build_paid_report_order_record(&instance, &order_intent, &input_snapshot, "offer-v1");
+        let authorized = authorize_paid_report_order(&order, "paid");
+        let refunded = authorize_paid_report_order(&order, "refunded");
+        let run_receipt =
+            build_paid_report_run_execution_receipt(&run_contract, Some(&input_snapshot), true);
+        let order_admission =
+            admit_paid_report_order_to_run(&order, &authorized, &input_snapshot, &run_receipt);
+        let refunded_admission =
+            admit_paid_report_order_to_run(&order, &refunded, &input_snapshot, &run_receipt);
+
+        assert!(order.runnable);
+        assert_eq!(authorized.status, "authorized");
+        assert!(!authorized.payment_provider_checkout);
+        assert_eq!(refunded.status, "blocked");
+        assert_eq!(order_admission.status, "accepted");
+        assert_eq!(refunded_admission.status, "blocked");
+
+        let artifact = build_paid_report_artifact(Some(&run_receipt), true);
+        let evidence = capture_paid_report_generation_evidence(
+            &run_receipt,
+            &artifact,
+            run_contract.expected_evidence.clone(),
+            vec!["report-generation-evidence".to_string()],
+        );
+        let decision =
+            decide_paid_report_delivery(&artifact, &evidence, PaidReportDecisionOutcome::Accepted);
+        let delivery = project_paid_report_delivery_package(&artifact, &evidence, &decision);
+        let access = project_paid_report_customer_delivery_access(
+            &order,
+            &delivery,
+            &decision,
+            &artifact,
+            &authorized,
+        );
+        let allowed = build_paid_report_access_receipt(&access, false, false);
+        let expired = build_paid_report_access_receipt(&access, false, true);
+
+        assert!(access.download_visible);
+        assert_eq!(allowed.status, "allowed");
+        assert_eq!(expired.status, "blocked");
+        assert_eq!(expired.blocked_reason, "access-expired");
+    }
+
+    #[test]
+    fn paid_report_policy_never_mutates_delivered_artifact() {
+        let delivery = PaidReportDeliveryPackageProjection {
+            version: PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION.to_string(),
+            status: "delivery-ready".to_string(),
+            delivery_package_id: "delivery-package-v129".to_string(),
+            product_instance_id: "product-instance-v129".to_string(),
+            run_id: "run-v129".to_string(),
+            report_artifact_refs: vec!["artifact-v129".to_string()],
+            evidence_refs: vec!["evidence-v129".to_string()],
+            decision_refs: vec!["decision-v129".to_string()],
+            delivery_status: "delivery-ready".to_string(),
+            download_ready: true,
+            display_contract: "download-report-and-evidence".to_string(),
+            next_action: "show-download".to_string(),
+            projection_only: true,
+            writes_authority: false,
+        };
+        let order = PaidReportOrderRecord {
+            version: PAID_REPORT_ORDER_RECORD_VERSION.to_string(),
+            status: "order-ready".to_string(),
+            order_id: "order-v129".to_string(),
+            product_instance_id: "product-instance-v129".to_string(),
+            request_id: "v129".to_string(),
+            order_intent_id: "intent-v129".to_string(),
+            input_snapshot_id: "snapshot-v129".to_string(),
+            offer_ref: "offer-v129".to_string(),
+            lifecycle_state: "order-ready".to_string(),
+            runnable: true,
+            created_at: "2026-07-09T00:00:00Z".to_string(),
+            source_refs: Vec::new(),
+        };
+        let decision = PaidReportDecisionRecord {
+            version: PAID_REPORT_DECISION_RECORD_VERSION.to_string(),
+            status: "accepted".to_string(),
+            decision_id: "decision-v129".to_string(),
+            outcome: PaidReportDecisionOutcome::Accepted,
+            report_artifact_id: "artifact-v129".to_string(),
+            evidence_pack_id: "evidence-v129".to_string(),
+            failure_reasons: Vec::new(),
+            remediation_route: "deliver".to_string(),
+            projection_only: false,
+            writes_authority: true,
+        };
+        let feedback = PaidReportFeedbackLoopProjection {
+            version: PAID_REPORT_FEEDBACK_LOOP_PROJECTION_VERSION.to_string(),
+            status: "repair-requested".to_string(),
+            feedback_id: "feedback-v129".to_string(),
+            feedback_state: "repair-requested".to_string(),
+            repair_request_id: "repair-v129".to_string(),
+            original_product_instance_id: "product-instance-v129".to_string(),
+            run_id: "run-v129".to_string(),
+            artifact_id: "artifact-v129".to_string(),
+            evidence_pack_id: "evidence-v129".to_string(),
+            decision_id: "decision-v129".to_string(),
+            mutates_delivered_artifact: false,
+            follow_up_route: "controlled-follow-up-proposal".to_string(),
+            next_action: "create-repair-proposal".to_string(),
+            projection_only: true,
+            writes_authority: false,
+        };
+
+        let repair = evaluate_paid_report_commercial_policy(
+            &order,
+            &delivery,
+            &decision,
+            &feedback,
+            "repair-request",
+        );
+        let refund = evaluate_paid_report_commercial_policy(
+            &order,
+            &delivery,
+            &decision,
+            &feedback,
+            "refund-request",
+        );
+        let rerun = evaluate_paid_report_commercial_policy(
+            &order,
+            &delivery,
+            &decision,
+            &feedback,
+            "controlled-rerun",
+        );
+
+        assert!(repair.creates_follow_up_proposal);
+        assert!(!repair.mutates_delivered_artifact);
+        assert!(refund.commercial_decision_only);
+        assert!(rerun.requires_new_authorization);
     }
 
     fn registry_fixture() -> TempDir {
