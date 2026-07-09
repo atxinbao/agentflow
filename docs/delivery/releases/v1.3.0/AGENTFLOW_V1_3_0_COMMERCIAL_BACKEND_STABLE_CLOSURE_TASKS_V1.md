@@ -9,8 +9,8 @@ This document records the planned public delivery traceability for `v1.3.0`.
 
 | Task | GitHub Issue | Title | Status | Primary proof |
 | --- | --- | --- | --- | --- |
-| V130-001 | #993 | v1.2.9 Release Audit and Certification Semantics Repair | in progress | `proofs/v130-001-v129-release-audit-facts.json` |
-| V130-002 | #994 | Commercial Backend Stable Contract | planned | TBD |
+| V130-001 | #993 | v1.2.9 Release Audit and Certification Semantics Repair | done | `proofs/v130-001-v129-release-audit-facts.json` |
+| V130-002 | #994 | Commercial Backend Stable Contract | done | `runtime/v130-commercial-backend-stable-contract.json` |
 | V130-003 | #995 | Paid Report Flow State Machine | planned | TBD |
 | V130-004 | #996 | Commercial Authority Boundary Freeze | planned | TBD |
 | V130-005 | #997 | Product SKU Extension Contract | planned | TBD |
@@ -56,3 +56,46 @@ synthetic-project-release-sidecar-rejected
 This avoids the previous `published-release-facts-match-source-commit` wording,
 which mixed live GitHub release authority with synthetic sidecar facts.
 
+## V130-002 Commercial Backend Stable Contract
+
+`V130-002` freezes the generic Paid Report commercial backend contract as a
+machine-readable baseline:
+
+```text
+agentflow-commercial-backend-stable-contract.v1
+```
+
+The release-gate proof at `runtime/v130-commercial-backend-stable-contract.json`
+must list every stable backend object, required field, optional/defaulted field,
+status value, object version, stable error/decision state, and migration policy.
+
+The stable object groups are:
+
+```text
+Product
+Order
+Entitlement
+Run
+Artifact
+Evidence
+Decision
+Delivery
+Feedback
+```
+
+The stable error / decision states are:
+
+```text
+invalid
+deferred
+blocked
+accepted
+revoked
+expired
+refunded
+repair-needed
+delivery-ready
+```
+
+After `v1.3.0`, backward-incompatible commercial backend contract changes require
+an explicit migration or version bump and a release-gate proof update.
