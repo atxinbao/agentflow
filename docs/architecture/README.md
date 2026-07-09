@@ -96,6 +96,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [098-commercial-boundary-negative-fixtures-v1.md](098-commercial-boundary-negative-fixtures-v1.md) | Commercial Boundary Negative Fixtures |
 | [099-commercial-backend-stable-contract-v1.md](099-commercial-backend-stable-contract-v1.md) | Commercial Backend Stable Contract |
 | [100-paid-report-flow-state-machine-v1.md](100-paid-report-flow-state-machine-v1.md) | Paid Report Flow State Machine |
+| [101-commercial-authority-boundary-v1.md](101-commercial-authority-boundary-v1.md) | Commercial Authority Boundary |
 
 ## Rules
 

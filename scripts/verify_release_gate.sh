@@ -380,6 +380,7 @@ V129_RELEASE_CERTIFICATION_INPUT_PATH="$RUNTIME_DIR/v129-release-certification-i
 V129_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v129-release-certification.json"
 V130_COMMERCIAL_BACKEND_STABLE_CONTRACT_PATH="$RUNTIME_DIR/v130-commercial-backend-stable-contract.json"
 V130_PAID_REPORT_FLOW_STATE_MACHINE_PATH="$RUNTIME_DIR/v130-paid-report-flow-state-machine.json"
+V130_COMMERCIAL_AUTHORITY_BOUNDARY_PATH="$RUNTIME_DIR/v130-commercial-authority-boundary.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -18382,6 +18383,101 @@ PY
   record_stage "$stage" "passed" "$(basename "$V130_PAID_REPORT_FLOW_STATE_MACHINE_PATH")"
 }
 
+run_v130_commercial_authority_boundary_gate() {
+  local stage="release.v130-commercial-authority-boundary"
+  record_stage "$stage" "started" "$V130_COMMERCIAL_AUTHORITY_BOUNDARY_PATH"
+
+  run_workspace_cmd "$stage.generate" "$RUNTIME_DIR/v130-commercial-authority-boundary.txt" \
+    cargo run -p agentflow-runtime-api --example v130_commercial_authority_boundary_proofs -- \
+      "$V130_COMMERCIAL_AUTHORITY_BOUNDARY_PATH"
+
+  python3 - "$V130_COMMERCIAL_AUTHORITY_BOUNDARY_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+failed = []
+
+if payload.get("version") != "agentflow-commercial-authority-boundary.v1":
+    failed.append("wrong-version")
+if payload.get("status") != "passed":
+    failed.append("status-not-passed")
+if payload.get("releaseVersion") != "v1.3.0":
+    failed.append("wrong-release-version")
+
+required_objects = {
+    "PaidReportOrderRecord",
+    "PaidReportEntitlementAuthorization",
+    "PaidReportOrderToRunAdmission",
+    "PaidReportRunExecutionReceipt",
+    "PaidReportArtifact",
+    "PaidReportEvidencePack",
+    "PaidReportDecisionRecord",
+    "PaidReportDeliveryPackageProjection",
+    "PaidReportCustomerDeliveryAccessProjection",
+    "PaidReportAccessReceipt",
+    "PaidReportFeedbackLoopProjection",
+    "PaidReportCommercialPolicyRecord",
+}
+authority_map = payload.get("authorityMap", [])
+object_names = {rule.get("objectName") for rule in authority_map}
+if not required_objects.issubset(object_names):
+    failed.append("missing-authority-map-objects")
+
+for rule in authority_map:
+    if not rule.get("contractVersion"):
+        failed.append(f"{rule.get('objectName')}-missing-contract-version")
+    if rule.get("projectionOnly") is True:
+        if rule.get("canCreate") is True:
+            failed.append(f"{rule.get('objectName')}-projection-can-create")
+        if rule.get("canUpdate") is True:
+            failed.append(f"{rule.get('objectName')}-projection-can-update")
+        if rule.get("writesAuthority") is True:
+            failed.append(f"{rule.get('objectName')}-projection-writes-authority")
+
+readonly = set(payload.get("readOnlySurfaces", []))
+for surface in [
+    "Projection",
+    "Customer View",
+    "Download View",
+    "Synthetic Release Fixture",
+    "Release Sidecar",
+]:
+    if surface not in readonly:
+        failed.append(f"missing-readonly-surface-{surface}")
+
+fixtures = {fixture.get("fixtureId"): fixture for fixture in payload.get("negativeFixtures", [])}
+for fixture_id in [
+    "projection-writing-authority",
+    "customer-view-writing-authority",
+    "download-view-writing-authority",
+    "synthetic-release-sidecar-promoted-as-authority",
+    "release-sidecar-promoted-as-authority",
+]:
+    fixture = fixtures.get(fixture_id)
+    if not fixture:
+        failed.append(f"missing-negative-fixture-{fixture_id}")
+        continue
+    if fixture.get("status") != "failed-as-expected":
+        failed.append(f"{fixture_id}-unexpected-status")
+    if fixture.get("canWriteAuthority") is True:
+        failed.append(f"{fixture_id}-can-write-authority")
+    if not fixture.get("failureReason"):
+        failed.append(f"{fixture_id}-missing-failure-reason")
+
+policy = payload.get("syntheticReleaseSidecarPolicy", "")
+if "cannot replace live GitHub release provenance" not in policy:
+    failed.append("missing-synthetic-sidecar-policy")
+
+if failed:
+    raise SystemExit(f"v130 commercial authority boundary failed: {failed}")
+PY
+
+  record_stage "$stage" "passed" "$(basename "$V130_COMMERCIAL_AUTHORITY_BOUNDARY_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -19015,6 +19111,7 @@ PY
   run_v129_release_certification_gate
   run_v130_commercial_backend_stable_contract_gate
   run_v130_paid_report_flow_state_machine_gate
+  run_v130_commercial_authority_boundary_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

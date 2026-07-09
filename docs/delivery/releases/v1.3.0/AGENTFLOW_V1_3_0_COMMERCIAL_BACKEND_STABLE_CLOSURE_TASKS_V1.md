@@ -12,7 +12,7 @@ This document records the planned public delivery traceability for `v1.3.0`.
 | V130-001 | #993 | v1.2.9 Release Audit and Certification Semantics Repair | done | `proofs/v130-001-v129-release-audit-facts.json` |
 | V130-002 | #994 | Commercial Backend Stable Contract | done | `runtime/v130-commercial-backend-stable-contract.json` |
 | V130-003 | #995 | Paid Report Flow State Machine | done | `runtime/v130-paid-report-flow-state-machine.json` |
-| V130-004 | #996 | Commercial Authority Boundary Freeze | planned | TBD |
+| V130-004 | #996 | Commercial Authority Boundary Freeze | done | `runtime/v130-commercial-authority-boundary.json` |
 | V130-005 | #997 | Product SKU Extension Contract | planned | TBD |
 | V130-006 | #998 | Provider / Generator Adapter Boundary | planned | TBD |
 | V130-007 | #999 | Payment Provider Adapter Boundary | planned | TBD |
@@ -139,4 +139,36 @@ rerun-needs-authorization
 refunded
 expired
 closed
+```
+
+## V130-004 Commercial Authority Boundary Freeze
+
+`V130-004` freezes the writable authority map for generic Paid Report backend
+objects:
+
+```text
+agentflow-commercial-authority-boundary.v1
+```
+
+The release-gate proof at `runtime/v130-commercial-authority-boundary.json`
+must include:
+
+- writable authority rules for Order, Entitlement, Run Admission, Run,
+  Artifact, Evidence, Decision, Access Receipt and Commercial Policy;
+- read-only projection rules for Delivery Package Projection, Customer Delivery
+  Access Projection and Feedback Loop Projection;
+- read-only surface list for Projection, Customer View, Download View,
+  Synthetic Release Fixture and Release Sidecar;
+- negative fixtures proving those read-only surfaces cannot write authority;
+- negative fixtures proving synthetic release sidecars cannot satisfy live
+  release authority.
+
+The read-only surfaces are:
+
+```text
+Projection
+Customer View
+Download View
+Synthetic Release Fixture
+Release Sidecar
 ```
