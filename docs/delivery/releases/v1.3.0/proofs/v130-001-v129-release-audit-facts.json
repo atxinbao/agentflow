@@ -1,0 +1,40 @@
+{
+  "version": "agentflow-v130-v129-release-audit-facts.v1",
+  "status": "passed",
+  "issueRef": "#993",
+  "releaseVersion": "v1.2.9",
+  "releaseUrl": "https://github.com/atxinbao/agentflow/releases/tag/v1.2.9",
+  "publishedAt": "2026-07-09T17:05:59Z",
+  "sourceCommitSha": "5b868ba9a8f37d0ad513d5999a7aa025354f668c",
+  "tagName": "v1.2.9",
+  "tagObjectKind": "tag",
+  "tagObjectId": "d03431719b3bb7eca1d141b152f3d4a385279a01",
+  "peeledCommitSha": "5b868ba9a8f37d0ad513d5999a7aa025354f668c",
+  "releaseGateRuns": [
+    {
+      "event": "release",
+      "runId": "29035832598",
+      "status": "success",
+      "headSha": "5b868ba9a8f37d0ad513d5999a7aa025354f668c"
+    },
+    {
+      "event": "push",
+      "ref": "v1.2.9",
+      "runId": "29035185062",
+      "status": "success",
+      "headSha": "5b868ba9a8f37d0ad513d5999a7aa025354f668c"
+    },
+    {
+      "event": "push",
+      "ref": "main",
+      "runId": "29035118100",
+      "status": "success",
+      "headSha": "5b868ba9a8f37d0ad513d5999a7aa025354f668c"
+    }
+  ],
+  "authorityDecision": {
+    "publishedReleaseAuthority": "live-github-release-provenance",
+    "syntheticProjectReleaseGateSidecarMaySatisfyPublishedCertification": false,
+    "finalCertificationMustExposeConcreteTagKind": true
+  }
+}
