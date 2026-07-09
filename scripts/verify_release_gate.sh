@@ -17977,6 +17977,7 @@ run_v129_release_certification_gate() {
     "$V129_RELEASE_CERTIFICATION_INPUT_PATH" <<'PY'
 import json
 import pathlib
+import subprocess
 import sys
 import time
 import tomllib
