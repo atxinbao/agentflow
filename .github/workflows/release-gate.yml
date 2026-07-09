@@ -223,6 +223,10 @@ jobs:
           check_primary_proofs() {
             local root="$1"
             local primary_proof
+            if [ ! -s "$primary_proof_list" ]; then
+              echo "missing certification primary proof list" >&2
+              return 1
+            fi
             while IFS= read -r primary_proof; do
               if [ -z "$primary_proof" ]; then
                 continue
@@ -347,9 +351,14 @@ jobs:
           negative_dir="${RUNNER_TEMP:-/tmp}/release-gate-certification-primary-proof-negative"
           rm -rf "$negative_dir"
           cp -R "$certification_dir" "$negative_dir"
-          rm -f "$negative_dir/runtime/core-decision-model-contract.json"
+          negative_primary_proof="$(head -n 1 "$primary_proof_list")"
+          if [ -z "$negative_primary_proof" ]; then
+            echo "primary proof negative check failed: primary proof list is empty" >&2
+            exit 1
+          fi
+          rm -f "$negative_dir/$negative_primary_proof"
           if check_primary_proofs "$negative_dir" >/tmp/release-gate-certification-primary-proof-negative.log 2>&1; then
-            echo "primary proof negative check failed: missing core decision proof was accepted" >&2
+            echo "primary proof negative check failed: missing required proof was accepted: $negative_primary_proof" >&2
             exit 1
           else
             cat /tmp/release-gate-certification-primary-proof-negative.log
