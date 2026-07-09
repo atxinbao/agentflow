@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     env, fs,
@@ -29,6 +30,17 @@ pub const PAID_REPORT_RUNTIME_ADMISSION_RECEIPT_VERSION: &str =
 pub const PAID_REPORT_RUN_CONTRACT_VERSION: &str = "agentflow-paid-report-run-contract.v1";
 pub const PAID_REPORT_DELIVERY_PROJECTION_VERSION: &str =
     "agentflow-paid-report-delivery-projection.v1";
+pub const PAID_REPORT_ORDER_INTENT_VERSION: &str = "agentflow-paid-report-order-intent.v1";
+pub const PAID_REPORT_INPUT_SNAPSHOT_VERSION: &str = "agentflow-paid-report-input-snapshot.v1";
+pub const PAID_REPORT_RUN_EXECUTION_RECEIPT_VERSION: &str =
+    "agentflow-paid-report-run-execution-receipt.v1";
+pub const PAID_REPORT_ARTIFACT_VERSION: &str = "agentflow-paid-report-artifact.v1";
+pub const PAID_REPORT_EVIDENCE_PACK_VERSION: &str = "agentflow-paid-report-evidence-pack.v1";
+pub const PAID_REPORT_DECISION_RECORD_VERSION: &str = "agentflow-paid-report-decision-record.v1";
+pub const PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION: &str =
+    "agentflow-paid-report-delivery-package-projection.v1";
+pub const PAID_REPORT_FEEDBACK_LOOP_PROJECTION_VERSION: &str =
+    "agentflow-paid-report-feedback-loop-projection.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
@@ -316,6 +328,184 @@ pub struct PaidReportDeliveryProjection {
     pub delivery_ready: bool,
     #[serde(default)]
     pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportOrderIntent {
+    pub version: String,
+    pub status: String,
+    pub order_intent_id: String,
+    pub product_instance_id: String,
+    pub product_id: String,
+    pub request_id: String,
+    pub intent_kind: String,
+    pub payment_provider_charge: bool,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportInputSnapshot {
+    pub version: String,
+    pub status: String,
+    pub input_snapshot_id: String,
+    pub product_instance_id: String,
+    pub product_id: String,
+    pub request_id: String,
+    pub report_definition_id: String,
+    pub order_intent_id: String,
+    #[serde(default)]
+    pub required_input_refs: Vec<String>,
+    #[serde(default)]
+    pub submitted_fields: HashMap<String, String>,
+    pub input_ready: bool,
+    pub order_intent_ready: bool,
+    pub projection_only: bool,
+    pub writes_authority: bool,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportRunExecutionReceipt {
+    pub version: String,
+    pub status: String,
+    pub receipt_id: String,
+    pub run_id: String,
+    pub product_instance_id: String,
+    pub product_id: String,
+    pub request_id: String,
+    pub runtime_admission_receipt_id: String,
+    pub input_snapshot_id: String,
+    pub report_definition_id: String,
+    #[serde(default)]
+    pub expected_artifact_ids: Vec<String>,
+    #[serde(default)]
+    pub failure_reasons: Vec<String>,
+    pub started: bool,
+    pub completed: bool,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportArtifactSection {
+    pub section_id: String,
+    pub title: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportArtifact {
+    pub version: String,
+    pub status: String,
+    pub artifact_id: String,
+    pub product_instance_id: String,
+    pub run_id: String,
+    pub report_definition_id: String,
+    pub title: String,
+    #[serde(default)]
+    pub sections: Vec<PaidReportArtifactSection>,
+    pub summary: String,
+    pub generated_at: String,
+    pub storage_path: String,
+    #[serde(default)]
+    pub source_evidence_refs: Vec<String>,
+    pub delivery_ready: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportEvidencePack {
+    pub version: String,
+    pub status: String,
+    pub evidence_pack_id: String,
+    pub product_instance_id: String,
+    pub run_id: String,
+    pub input_snapshot_id: String,
+    pub run_execution_receipt_id: String,
+    pub report_artifact_id: String,
+    pub generation_receipt_id: String,
+    #[serde(default)]
+    pub required_evidence: Vec<String>,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    pub evidence_complete: bool,
+    pub append_only: bool,
+    pub project_scoped: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PaidReportDecisionOutcome {
+    Accepted,
+    NeedsFix,
+    Rejected,
+    Deferred,
+    Blocked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportDecisionRecord {
+    pub version: String,
+    pub status: String,
+    pub decision_id: String,
+    pub outcome: PaidReportDecisionOutcome,
+    pub report_artifact_id: String,
+    pub evidence_pack_id: String,
+    #[serde(default)]
+    pub failure_reasons: Vec<String>,
+    pub remediation_route: String,
+    pub projection_only: bool,
+    pub writes_authority: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportDeliveryPackageProjection {
+    pub version: String,
+    pub status: String,
+    pub delivery_package_id: String,
+    pub product_instance_id: String,
+    pub run_id: String,
+    #[serde(default)]
+    pub report_artifact_refs: Vec<String>,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    #[serde(default)]
+    pub decision_refs: Vec<String>,
+    pub delivery_status: String,
+    pub download_ready: bool,
+    pub display_contract: String,
+    pub next_action: String,
+    pub projection_only: bool,
+    pub writes_authority: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportFeedbackLoopProjection {
+    pub version: String,
+    pub status: String,
+    pub feedback_id: String,
+    pub feedback_state: String,
+    pub repair_request_id: String,
+    pub original_product_instance_id: String,
+    pub run_id: String,
+    pub artifact_id: String,
+    pub evidence_pack_id: String,
+    pub decision_id: String,
+    pub mutates_delivered_artifact: bool,
+    pub follow_up_route: String,
+    pub next_action: String,
+    pub projection_only: bool,
+    pub writes_authority: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -745,10 +935,20 @@ pub fn resolve_paid_report_product_instance_from_project(
     project_root: impl AsRef<Path>,
     product_id: &str,
 ) -> Result<PaidReportProductInstanceContract> {
-    resolve_paid_report_product_instance_from_registry(
-        project_commercial_registry_root(project_root),
-        product_id,
-    )
+    let project_root = project_root.as_ref();
+    let registry_root = project_commercial_registry_root(project_root);
+    let mut instance =
+        resolve_paid_report_product_instance_from_registry(&registry_root, product_id)?;
+    let project_digest = stable_path_digest(project_root);
+    instance.product_instance_id = format!(
+        "project-{project_digest}::{}::{}",
+        instance.product_id, instance.report_definition_id
+    );
+    instance.source_refs.insert(
+        0,
+        format!("project:{}#{}", project_root.display(), project_digest),
+    );
+    Ok(instance)
 }
 
 pub fn build_paid_report_runtime_proposal_handoff_from_registry(
@@ -759,6 +959,15 @@ pub fn build_paid_report_runtime_proposal_handoff_from_registry(
     let instance = resolve_paid_report_product_instance_from_registry(&registry_root, product_id)?;
     let preflight =
         evaluate_paid_report_preflight_from_registry(registry_root, product_id, request_id)?;
+    Ok(paid_report_runtime_proposal_handoff_from_parts(
+        instance, preflight,
+    ))
+}
+
+fn paid_report_runtime_proposal_handoff_from_parts(
+    instance: PaidReportProductInstanceContract,
+    preflight: PaidReportPreflightResult,
+) -> PaidReportRuntimeProposalHandoff {
     let allowed = instance.can_submit_runtime_command_proposal
         && preflight.decision == PaidReportPreflightDecision::Allowed
         && preflight.can_submit_runtime_command_proposal
@@ -784,7 +993,7 @@ pub fn build_paid_report_runtime_proposal_handoff_from_registry(
     } else {
         preflight.unavailable_reason.clone()
     };
-    Ok(PaidReportRuntimeProposalHandoff {
+    PaidReportRuntimeProposalHandoff {
         version: PAID_REPORT_RUNTIME_PROPOSAL_HANDOFF_VERSION.to_string(),
         status: status.to_string(),
         reason,
@@ -792,7 +1001,7 @@ pub fn build_paid_report_runtime_proposal_handoff_from_registry(
         product_instance: instance,
         preflight,
         proposal,
-    })
+    }
 }
 
 pub fn build_paid_report_runtime_proposal_handoff_from_project(
@@ -800,11 +1009,16 @@ pub fn build_paid_report_runtime_proposal_handoff_from_project(
     product_id: &str,
     request_id: &str,
 ) -> Result<PaidReportRuntimeProposalHandoff> {
-    build_paid_report_runtime_proposal_handoff_from_registry(
+    let project_root = project_root.as_ref();
+    let instance = resolve_paid_report_product_instance_from_project(project_root, product_id)?;
+    let preflight = evaluate_paid_report_preflight_from_registry(
         project_commercial_registry_root(project_root),
         product_id,
         request_id,
-    )
+    )?;
+    Ok(paid_report_runtime_proposal_handoff_from_parts(
+        instance, preflight,
+    ))
 }
 
 pub fn admit_paid_report_runtime_proposal(
@@ -926,6 +1140,365 @@ pub fn project_paid_report_delivery_projection(
         decision_satisfied,
         delivery_ready: status == "delivery-ready",
         source_refs: run_contract.source_refs.clone(),
+    }
+}
+
+pub fn build_paid_report_order_intent(
+    instance: &PaidReportProductInstanceContract,
+    request_id: &str,
+) -> PaidReportOrderIntent {
+    PaidReportOrderIntent {
+        version: PAID_REPORT_ORDER_INTENT_VERSION.to_string(),
+        status: if instance.status == "ready" {
+            "ready"
+        } else {
+            "blocked"
+        }
+        .to_string(),
+        order_intent_id: format!("paid-report-order-intent-{request_id}"),
+        product_instance_id: instance.product_instance_id.clone(),
+        product_id: instance.product_id.clone(),
+        request_id: request_id.to_string(),
+        intent_kind: "product-execution-intent".to_string(),
+        payment_provider_charge: false,
+        source_refs: instance.source_refs.clone(),
+    }
+}
+
+pub fn build_paid_report_input_snapshot(
+    instance: &PaidReportProductInstanceContract,
+    order_intent: Option<&PaidReportOrderIntent>,
+    request_id: &str,
+    submitted_fields: HashMap<String, String>,
+) -> PaidReportInputSnapshot {
+    let missing_required = instance
+        .required_input_refs
+        .iter()
+        .filter(|required| !submitted_fields.contains_key(required.as_str()))
+        .count();
+    let order_intent_ready = order_intent.is_some_and(|intent| {
+        intent.status == "ready"
+            && intent.product_instance_id == instance.product_instance_id
+            && !intent.payment_provider_charge
+    });
+    let input_ready = missing_required == 0
+        && order_intent_ready
+        && !instance.report_definition_id.trim().is_empty();
+    let status = if input_ready {
+        "input-ready"
+    } else if !order_intent_ready {
+        "order-intent-missing"
+    } else {
+        "input-missing"
+    };
+
+    PaidReportInputSnapshot {
+        version: PAID_REPORT_INPUT_SNAPSHOT_VERSION.to_string(),
+        status: status.to_string(),
+        input_snapshot_id: format!("paid-report-input-snapshot-{request_id}"),
+        product_instance_id: instance.product_instance_id.clone(),
+        product_id: instance.product_id.clone(),
+        request_id: request_id.to_string(),
+        report_definition_id: instance.report_definition_id.clone(),
+        order_intent_id: order_intent
+            .map(|intent| intent.order_intent_id.clone())
+            .unwrap_or_default(),
+        required_input_refs: instance.required_input_refs.clone(),
+        submitted_fields,
+        input_ready,
+        order_intent_ready,
+        projection_only: true,
+        writes_authority: false,
+        source_refs: instance.source_refs.clone(),
+    }
+}
+
+pub fn build_paid_report_run_execution_receipt(
+    run_contract: &PaidReportRunContract,
+    input_snapshot: Option<&PaidReportInputSnapshot>,
+    completed: bool,
+) -> PaidReportRunExecutionReceipt {
+    let input_snapshot_ready = input_snapshot.is_some_and(|snapshot| {
+        snapshot.input_ready
+            && snapshot.product_instance_id == run_contract.product_instance_id
+            && snapshot.report_definition_id == run_contract.report_definition_id
+    });
+    let mut failure_reasons = Vec::new();
+    if run_contract.status != "ready" {
+        failure_reasons.push("run-contract-not-ready".to_string());
+    }
+    if run_contract.runtime_admission_receipt_id.trim().is_empty() {
+        failure_reasons.push("missing-admission-receipt".to_string());
+    }
+    if !input_snapshot_ready {
+        failure_reasons.push("missing-valid-input-snapshot".to_string());
+    }
+    let started = failure_reasons.is_empty();
+    let status = if !started {
+        "blocked"
+    } else if completed {
+        "completed"
+    } else {
+        "started"
+    };
+    let run_id = run_contract
+        .run_contract_id
+        .replace("contract", "execution");
+
+    PaidReportRunExecutionReceipt {
+        version: PAID_REPORT_RUN_EXECUTION_RECEIPT_VERSION.to_string(),
+        status: status.to_string(),
+        receipt_id: format!("{run_id}-receipt"),
+        run_id,
+        product_instance_id: run_contract.product_instance_id.clone(),
+        product_id: run_contract.product_id.clone(),
+        request_id: run_contract.request_id.clone(),
+        runtime_admission_receipt_id: run_contract.runtime_admission_receipt_id.clone(),
+        input_snapshot_id: input_snapshot
+            .map(|snapshot| snapshot.input_snapshot_id.clone())
+            .unwrap_or_default(),
+        report_definition_id: run_contract.report_definition_id.clone(),
+        expected_artifact_ids: vec![format!("report-artifact-{}", run_contract.request_id)],
+        failure_reasons,
+        started,
+        completed: started && completed,
+        source_refs: run_contract.source_refs.clone(),
+    }
+}
+
+pub fn build_paid_report_artifact(
+    run_receipt: Option<&PaidReportRunExecutionReceipt>,
+    complete: bool,
+) -> PaidReportArtifact {
+    let run_ready = run_receipt.is_some_and(|receipt| receipt.status == "completed");
+    let request_id = run_receipt
+        .map(|receipt| receipt.request_id.clone())
+        .unwrap_or_else(|| "missing-run".to_string());
+    let sections = if run_ready && complete {
+        vec![
+            PaidReportArtifactSection {
+                section_id: "summary".to_string(),
+                title: "Summary".to_string(),
+                body: "Generic paid report summary generated from accepted runtime facts."
+                    .to_string(),
+            },
+            PaidReportArtifactSection {
+                section_id: "details".to_string(),
+                title: "Details".to_string(),
+                body: "Generic paid report details remain product/pack supplied.".to_string(),
+            },
+        ]
+    } else {
+        Vec::new()
+    };
+    let artifact_complete = run_ready && complete && !sections.is_empty();
+    let status = if artifact_complete {
+        "complete"
+    } else if !run_ready {
+        "blocked"
+    } else {
+        "incomplete"
+    };
+
+    PaidReportArtifact {
+        version: PAID_REPORT_ARTIFACT_VERSION.to_string(),
+        status: status.to_string(),
+        artifact_id: format!("report-artifact-{request_id}"),
+        product_instance_id: run_receipt
+            .map(|receipt| receipt.product_instance_id.clone())
+            .unwrap_or_default(),
+        run_id: run_receipt
+            .map(|receipt| receipt.run_id.clone())
+            .unwrap_or_default(),
+        report_definition_id: run_receipt
+            .map(|receipt| receipt.report_definition_id.clone())
+            .unwrap_or_default(),
+        title: "Generic Paid Report".to_string(),
+        sections,
+        summary: if artifact_complete {
+            "Generic paid report artifact is complete.".to_string()
+        } else {
+            "Generic paid report artifact is incomplete.".to_string()
+        },
+        generated_at: "2026-07-09T00:00:00Z".to_string(),
+        storage_path: format!(".agentflow/tasks/{request_id}/report-artifacts/report.json"),
+        source_evidence_refs: run_receipt
+            .map(|receipt| vec![receipt.receipt_id.clone()])
+            .unwrap_or_default(),
+        delivery_ready: artifact_complete,
+    }
+}
+
+pub fn capture_paid_report_generation_evidence(
+    run_receipt: &PaidReportRunExecutionReceipt,
+    artifact: &PaidReportArtifact,
+    required_evidence: Vec<String>,
+    evidence_refs: Vec<String>,
+) -> PaidReportEvidencePack {
+    let required_complete = !required_evidence.is_empty()
+        && required_evidence
+            .iter()
+            .all(|required| evidence_refs.iter().any(|entry| entry.contains(required)));
+    let links_complete = run_receipt.status == "completed"
+        && artifact.status == "complete"
+        && artifact.run_id == run_receipt.run_id;
+    let evidence_complete = required_complete && links_complete;
+
+    PaidReportEvidencePack {
+        version: PAID_REPORT_EVIDENCE_PACK_VERSION.to_string(),
+        status: if evidence_complete {
+            "complete"
+        } else {
+            "evidence-needed"
+        }
+        .to_string(),
+        evidence_pack_id: format!("evidence-pack-{}", run_receipt.request_id),
+        product_instance_id: run_receipt.product_instance_id.clone(),
+        run_id: run_receipt.run_id.clone(),
+        input_snapshot_id: run_receipt.input_snapshot_id.clone(),
+        run_execution_receipt_id: run_receipt.receipt_id.clone(),
+        report_artifact_id: artifact.artifact_id.clone(),
+        generation_receipt_id: format!("generation-receipt-{}", run_receipt.request_id),
+        required_evidence,
+        evidence_refs,
+        evidence_complete,
+        append_only: true,
+        project_scoped: true,
+    }
+}
+
+pub fn decide_paid_report_delivery(
+    artifact: &PaidReportArtifact,
+    evidence_pack: &PaidReportEvidencePack,
+    requested_outcome: PaidReportDecisionOutcome,
+) -> PaidReportDecisionRecord {
+    let accepted = requested_outcome == PaidReportDecisionOutcome::Accepted
+        && artifact.status == "complete"
+        && evidence_pack.evidence_complete
+        && evidence_pack.report_artifact_id == artifact.artifact_id;
+    let outcome = if accepted {
+        PaidReportDecisionOutcome::Accepted
+    } else if artifact.status != "complete" {
+        PaidReportDecisionOutcome::Blocked
+    } else if !evidence_pack.evidence_complete {
+        PaidReportDecisionOutcome::NeedsFix
+    } else {
+        requested_outcome
+    };
+    let failure_reasons = match outcome {
+        PaidReportDecisionOutcome::Accepted => Vec::new(),
+        PaidReportDecisionOutcome::Blocked => vec!["report-artifact-incomplete".to_string()],
+        PaidReportDecisionOutcome::NeedsFix => vec!["evidence-incomplete".to_string()],
+        PaidReportDecisionOutcome::Rejected => vec!["decision-rejected".to_string()],
+        PaidReportDecisionOutcome::Deferred => vec!["decision-deferred".to_string()],
+    };
+
+    PaidReportDecisionRecord {
+        version: PAID_REPORT_DECISION_RECORD_VERSION.to_string(),
+        status: if outcome == PaidReportDecisionOutcome::Accepted {
+            "accepted"
+        } else {
+            "not-accepted"
+        }
+        .to_string(),
+        decision_id: format!("decision-{}", evidence_pack.run_id),
+        outcome,
+        report_artifact_id: artifact.artifact_id.clone(),
+        evidence_pack_id: evidence_pack.evidence_pack_id.clone(),
+        failure_reasons,
+        remediation_route: if outcome == PaidReportDecisionOutcome::Accepted {
+            "deliver".to_string()
+        } else {
+            "repair-request".to_string()
+        },
+        projection_only: false,
+        writes_authority: true,
+    }
+}
+
+pub fn project_paid_report_delivery_package(
+    artifact: &PaidReportArtifact,
+    evidence_pack: &PaidReportEvidencePack,
+    decision: &PaidReportDecisionRecord,
+) -> PaidReportDeliveryPackageProjection {
+    let accepted = decision.outcome == PaidReportDecisionOutcome::Accepted
+        && artifact.status == "complete"
+        && evidence_pack.evidence_complete;
+    let delivery_status = if accepted {
+        "delivery-ready"
+    } else {
+        decision.status.as_str()
+    };
+
+    PaidReportDeliveryPackageProjection {
+        version: PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION.to_string(),
+        status: delivery_status.to_string(),
+        delivery_package_id: format!("delivery-package-{}", decision.decision_id),
+        product_instance_id: evidence_pack.product_instance_id.clone(),
+        run_id: evidence_pack.run_id.clone(),
+        report_artifact_refs: vec![artifact.artifact_id.clone()],
+        evidence_refs: evidence_pack.evidence_refs.clone(),
+        decision_refs: vec![decision.decision_id.clone()],
+        delivery_status: delivery_status.to_string(),
+        download_ready: accepted,
+        display_contract: if accepted {
+            "download-report-and-evidence"
+        } else {
+            "show-next-action-only"
+        }
+        .to_string(),
+        next_action: if accepted {
+            "show-download"
+        } else {
+            "resolve-decision"
+        }
+        .to_string(),
+        projection_only: true,
+        writes_authority: false,
+    }
+}
+
+pub fn project_paid_report_feedback_loop(
+    delivery: &PaidReportDeliveryPackageProjection,
+    decision: &PaidReportDecisionRecord,
+    feedback_state: &str,
+) -> PaidReportFeedbackLoopProjection {
+    let repair_requested = feedback_state == "repair-requested";
+    PaidReportFeedbackLoopProjection {
+        version: PAID_REPORT_FEEDBACK_LOOP_PROJECTION_VERSION.to_string(),
+        status: feedback_state.to_string(),
+        feedback_id: format!("feedback-{}", delivery.delivery_package_id),
+        feedback_state: feedback_state.to_string(),
+        repair_request_id: if repair_requested {
+            format!("repair-{}", delivery.delivery_package_id)
+        } else {
+            String::new()
+        },
+        original_product_instance_id: delivery.product_instance_id.clone(),
+        run_id: delivery.run_id.clone(),
+        artifact_id: delivery
+            .report_artifact_refs
+            .first()
+            .cloned()
+            .unwrap_or_default(),
+        evidence_pack_id: delivery.evidence_refs.first().cloned().unwrap_or_default(),
+        decision_id: decision.decision_id.clone(),
+        mutates_delivered_artifact: false,
+        follow_up_route: if repair_requested {
+            "controlled-follow-up-proposal"
+        } else {
+            "no-follow-up"
+        }
+        .to_string(),
+        next_action: match feedback_state {
+            "feedback-needed" => "collect-feedback",
+            "repair-requested" => "create-repair-proposal",
+            "accepted-after-repair" => "close-feedback",
+            _ => "show-feedback-status",
+        }
+        .to_string(),
+        projection_only: true,
+        writes_authority: false,
     }
 }
 
@@ -1056,6 +1629,15 @@ fn portable_registry_ref(registry_root: &Path, path: &Path) -> String {
     path.strip_prefix(registry_root)
         .map(|relative| format!("{}/{}", registry_root.display(), relative.display()))
         .unwrap_or_else(|_| path.display().to_string())
+}
+
+fn stable_path_digest(path: &Path) -> String {
+    let canonical_or_display = path
+        .canonicalize()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|_| path.display().to_string());
+    let digest = Sha256::digest(canonical_or_display.as_bytes());
+    format!("{digest:x}")[..16].to_string()
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
@@ -1845,6 +2427,161 @@ mod tests {
     }
 
     #[test]
+    fn paid_report_project_instance_id_is_project_unique() {
+        let registry = registry_fixture();
+        let project_a = tempfile::tempdir().unwrap();
+        let project_b = tempfile::tempdir().unwrap();
+        install_registry_fixture(&registry, project_a.path());
+        install_registry_fixture(&registry, project_b.path());
+
+        let source_instance =
+            resolve_paid_report_product_instance_from_registry(registry.path(), "paid-report")
+                .unwrap();
+        let instance_a =
+            resolve_paid_report_product_instance_from_project(project_a.path(), "paid-report")
+                .unwrap();
+        let instance_b =
+            resolve_paid_report_product_instance_from_project(project_b.path(), "paid-report")
+                .unwrap();
+
+        assert_ne!(
+            instance_a.product_instance_id,
+            instance_b.product_instance_id
+        );
+        assert_ne!(
+            source_instance.product_instance_id,
+            instance_a.product_instance_id
+        );
+        assert!(instance_a
+            .source_refs
+            .iter()
+            .any(|source| source.contains(DEFAULT_COMMERCIAL_REGISTRY_ROOT)));
+        assert!(instance_a
+            .source_refs
+            .iter()
+            .any(|source| source.starts_with("project:")));
+    }
+
+    #[test]
+    fn paid_report_v128_run_artifact_delivery_and_feedback_contracts() {
+        let project = tempfile::tempdir().unwrap();
+        let registry = registry_fixture();
+        install_registry_fixture(&registry, project.path());
+        let handoff = build_paid_report_runtime_proposal_handoff_from_project(
+            project.path(),
+            "paid-report",
+            "v128-ready",
+        )
+        .unwrap();
+        let admission = admit_paid_report_runtime_proposal(&handoff);
+        let run_contract = build_paid_report_run_contract(&handoff, &admission);
+        let order_intent = build_paid_report_order_intent(&handoff.product_instance, "v128-ready");
+        let mut submitted_fields = HashMap::new();
+        submitted_fields.insert("reportInputRef".to_string(), "input/ref.json".to_string());
+        submitted_fields.insert(
+            "orderIntentId".to_string(),
+            order_intent.order_intent_id.clone(),
+        );
+        let input_snapshot = build_paid_report_input_snapshot(
+            &handoff.product_instance,
+            Some(&order_intent),
+            "v128-ready",
+            submitted_fields,
+        );
+
+        assert_eq!(order_intent.status, "ready");
+        assert!(!order_intent.payment_provider_charge);
+        assert_eq!(input_snapshot.status, "input-ready");
+        assert!(input_snapshot.input_ready);
+        assert!(input_snapshot.order_intent_ready);
+        assert!(!input_snapshot.writes_authority);
+
+        let blocked_receipt = build_paid_report_run_execution_receipt(&run_contract, None, true);
+        assert_eq!(blocked_receipt.status, "blocked");
+        assert!(blocked_receipt
+            .failure_reasons
+            .contains(&"missing-valid-input-snapshot".to_string()));
+
+        let run_receipt =
+            build_paid_report_run_execution_receipt(&run_contract, Some(&input_snapshot), true);
+        assert_eq!(run_receipt.status, "completed");
+        assert!(run_receipt.started);
+        assert!(run_receipt.completed);
+        assert!(!run_receipt.expected_artifact_ids.is_empty());
+
+        let blocked_artifact = build_paid_report_artifact(None, true);
+        assert_eq!(blocked_artifact.status, "blocked");
+
+        let incomplete_artifact = build_paid_report_artifact(Some(&run_receipt), false);
+        assert_eq!(incomplete_artifact.status, "incomplete");
+        assert!(!incomplete_artifact.delivery_ready);
+
+        let artifact = build_paid_report_artifact(Some(&run_receipt), true);
+        assert_eq!(artifact.status, "complete");
+        assert!(artifact.delivery_ready);
+        assert!(!artifact.sections.is_empty());
+        assert!(artifact.storage_path.contains(".agentflow/tasks/"));
+
+        let missing_evidence = capture_paid_report_generation_evidence(
+            &run_receipt,
+            &artifact,
+            run_contract.expected_evidence.clone(),
+            Vec::new(),
+        );
+        assert_eq!(missing_evidence.status, "evidence-needed");
+        assert!(!missing_evidence.evidence_complete);
+        assert!(missing_evidence.append_only);
+        assert!(missing_evidence.project_scoped);
+
+        let evidence = capture_paid_report_generation_evidence(
+            &run_receipt,
+            &artifact,
+            run_contract.expected_evidence.clone(),
+            vec![
+                "report-generation-evidence:input-snapshot".to_string(),
+                "report-generation-evidence:run-receipt".to_string(),
+                "report-generation-evidence:artifact".to_string(),
+            ],
+        );
+        assert_eq!(evidence.status, "complete");
+        assert!(evidence.evidence_complete);
+
+        let blocked_decision = decide_paid_report_delivery(
+            &incomplete_artifact,
+            &evidence,
+            PaidReportDecisionOutcome::Accepted,
+        );
+        assert_eq!(blocked_decision.outcome, PaidReportDecisionOutcome::Blocked);
+        assert!(!blocked_decision.failure_reasons.is_empty());
+
+        let needs_fix_decision = decide_paid_report_delivery(
+            &artifact,
+            &missing_evidence,
+            PaidReportDecisionOutcome::Accepted,
+        );
+        assert_eq!(
+            needs_fix_decision.outcome,
+            PaidReportDecisionOutcome::NeedsFix
+        );
+
+        let decision =
+            decide_paid_report_delivery(&artifact, &evidence, PaidReportDecisionOutcome::Accepted);
+        assert_eq!(decision.outcome, PaidReportDecisionOutcome::Accepted);
+        assert!(decision.writes_authority);
+
+        let package = project_paid_report_delivery_package(&artifact, &evidence, &decision);
+        assert_eq!(package.status, "delivery-ready");
+        assert!(package.download_ready);
+        assert!(package.projection_only);
+        assert!(!package.writes_authority);
+
+        let repair = project_paid_report_feedback_loop(&package, &decision, "repair-requested");
+        assert_eq!(repair.status, "repair-requested");
+        assert!(!repair.mutates_delivered_artifact);
+        assert_eq!(repair.follow_up_route, "controlled-follow-up-proposal");
+    }
+
+    #[test]
     fn production_registry_fixture_only_ids_are_detected() {
         let registry = registry_fixture();
 
@@ -2081,5 +2818,20 @@ mod tests {
         )
         .unwrap();
         dir
+    }
+
+    fn install_registry_fixture(registry: &TempDir, project_root: &Path) {
+        let target = project_root.join(DEFAULT_COMMERCIAL_REGISTRY_ROOT);
+        fs::create_dir_all(&target).unwrap();
+        fs::copy(
+            registry.path().join("products.json"),
+            target.join("products.json"),
+        )
+        .unwrap();
+        fs::copy(
+            registry.path().join("entitlements.json"),
+            target.join("entitlements.json"),
+        )
+        .unwrap();
     }
 }

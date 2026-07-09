@@ -1,27 +1,48 @@
 # Changelog
 
-更新日期：2026-07-07
+更新日期：2026-07-09
 执行者：Codex
 
 ## Current Baseline
 
 当前发布基线：
 
+- [docs/delivery/releases/v1.2.8/README.md](docs/delivery/releases/v1.2.8/README.md)
+- [docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md)
+
+上一发布基线：
+
 - [docs/delivery/releases/v1.2.7/README.md](docs/delivery/releases/v1.2.7/README.md)
 - [docs/delivery/releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md)
 
-上一发布基线：
+历史发布基线：
 
 - [docs/delivery/releases/v1.2.6/README.md](docs/delivery/releases/v1.2.6/README.md)
 - [docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md](docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md)
 
 下一版计划：
 
-- v1.2.x Product console continuity after paid report Runtime handoff closure。
+- v1.2.x Product console continuity after paid report run delivery artifact closure。
 
 ## Unreleased
 
-下一版保留给 Product console continuity after paid report Runtime handoff closure，不在本次 release 中认证。
+下一版保留给 Product console continuity after paid report run delivery artifact closure，不在本次 release 中认证。
+
+## v1.2.8 - 2026-07-09
+
+Paid Report Run and Delivery Artifact Closure:
+
+- repaired release provenance and tag policy certification so stale fixture commit facts cannot pass published release certification;
+- made Paid Report product instance identity project-unique by binding it to the active project/workspace digest;
+- added generic Paid Report input snapshot and order intent contracts without introducing concrete industry SKU authority;
+- added Paid Report run execution receipt with deterministic started / completed / blocked cases;
+- added report artifact schema and storage boundary for project-scoped report artifacts;
+- added report generation evidence pack linking input snapshot, run receipt, report artifact and generation receipt;
+- added delivery decision gate with accepted / needs-fix / rejected / deferred / blocked outcomes;
+- added delivery package projection and download/display contract that is ready only after accepted decision;
+- added feedback and repair request loop projection without mutating delivered artifacts;
+- added v1.2.8 release delivery baseline and GitHub issue traceability for `#967` through `#976`;
+- advanced workspace and desktop version metadata to `1.2.8`.
 
 ## v1.2.7 - 2026-07-08
 
