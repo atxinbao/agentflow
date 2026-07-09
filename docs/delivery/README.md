@@ -69,7 +69,8 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| `v1.3.x` | 下一版计划：Product console continuity after paid report commercial order/access closure |
+| [releases/v1.3.0/README.md](releases/v1.3.0/README.md) | v1.3.0 计划：Commercial Backend Stable Closure |
+| [releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md](releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md) | v1.3.0 Commercial Backend Stable Closure tasks |
 
 ## Historical Delivery
 

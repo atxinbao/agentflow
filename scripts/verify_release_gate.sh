@@ -18025,7 +18025,9 @@ release_facts = load_optional(release_facts_raw)
 release_tag_proof = load_optional(release_tag_proof_raw)
 remote_release_proof = load_optional(remote_release_proof_raw)
 certification_kind = "published" if require_published else "candidate"
-tag_kind = release_tag_proof.get("tagKind") or release_tag_proof.get("tagType") or "unknown"
+provenance_tag_kind = release_provenance.get("tagObjectKind")
+tag_kind = provenance_tag_kind or release_tag_proof.get("tagKind") or release_tag_proof.get("tagType")
+live_release_provenance_concrete = provenance_tag_kind in {"tag", "commit"}
 
 def git_rev_parse(rev):
     try:
@@ -18038,17 +18040,23 @@ def git_rev_parse(rev):
         return None
 
 published_commit_checks = True
+synthetic_sidecar_rejected = proofs["v129-release-provenance-facts-commit-alignment.json"].get("syntheticProjectReleaseGateE2eCannotSatisfyPublishedReleaseCertification") is True
 if require_published:
     provenance_commit = release_provenance.get("tagCommitSha") or release_provenance.get("sourceCommitSha")
     peeled_tag_commit = git_rev_parse(f"{release_tag}^{{}}")
     published_commit_checks = (
-        release_provenance.get("tagName") == release_tag
+        live_release_provenance_concrete
+        and release_provenance.get("tagName") == release_tag
         and provenance_commit == source_commit
         and release_provenance.get("tagCommitMatchesSource") is True
         and peeled_tag_commit == source_commit
         and release_facts.get("tagName") == release_tag
         and remote_release_proof.get("tagName") == release_tag
     )
+else:
+    peeled_tag_commit = release_provenance.get("tagCommitSha") or source_commit
+    if not tag_kind:
+        tag_kind = "pending"
 
 forbidden_terms = [
     "bazi",
@@ -18079,7 +18087,7 @@ checks = {
     "release-readme-v129": "Paid Report Commercial Order and Access Closure" in release_readme,
     "release-tasks-v129-complete": all(f"#{issue}" in release_tasks for issue in range(979, 989)),
     "all-v129-primary-proofs-passed": all(proof.get("status") == "passed" for proof in proofs.values()),
-    "release-alignment-proof": proofs["v129-release-provenance-facts-commit-alignment.json"].get("syntheticProjectReleaseGateE2eCannotSatisfyPublishedReleaseCertification") is True,
+    "synthetic-project-release-sidecar-rejected": synthetic_sidecar_rejected,
     "tag-kind-proof": proofs["v129-annotated-tag-kind-certification-repair.json"].get("tagPolicy", {}).get("tagKindUnknownRejectedWhenReleaseProvenanceIsConcrete") is True,
     "order-record-proof": proofs["v129-paid-report-order-record-contract.json"].get("coverage", {}).get("schemaHasRequiredFields") is True,
     "authorization-proof": proofs["v129-payment-entitlement-authorization-boundary.json"].get("coverage", {}).get("paymentProviderChargeOutsideCoreRuntime") is True,
@@ -18089,7 +18097,7 @@ checks = {
     "policy-proof": proofs["v129-refund-repair-rerun-policy-contract.json"].get("coverage", {}).get("neverMutatesDeliveredArtifactInPlace") is True,
     "negative-fixture-proof": proofs["v129-commercial-negative-fixtures.json"].get("coverage", {}).get("eachFixtureHasMachineReadableReasonCode") is True,
     "core-pollution-scan": not forbidden_hits,
-    "published-release-facts-match-source-commit": published_commit_checks,
+    "live-github-release-provenance-matches-source-commit": published_commit_checks,
 }
 failed = [key for key, passed in checks.items() if not passed]
 primary_proofs = sorted(f"runtime/{path.name}" for path in proof_paths) + ["runtime/v129-release-certification.json"]
@@ -18110,8 +18118,30 @@ payload = {
         "paymentProviderCheckout": False,
         "coreRuntimeAuthority": "Product Instance / Order / Entitlement / Run / Artifact / Evidence / Decision / Delivery / Feedback",
     },
+    "releaseAuthority": {
+        "liveGitHubReleaseProvenance": {
+            "required": require_published,
+            "matchesSourceCommit": published_commit_checks,
+            "tagName": release_provenance.get("tagName"),
+            "tagKind": tag_kind,
+            "tagObjectKind": provenance_tag_kind,
+            "annotatedTagObjectId": release_provenance.get("annotatedTagObjectId"),
+            "peeledCommitSha": peeled_tag_commit,
+            "sourceCommitSha": source_commit,
+            "tagCommitSha": release_provenance.get("tagCommitSha"),
+            "releaseFactsTagName": release_facts.get("tagName"),
+            "remoteReleaseTagName": remote_release_proof.get("tagName"),
+        },
+        "syntheticProjectReleaseGateSidecar": {
+            "cannotSatisfyPublishedReleaseCertification": synthetic_sidecar_rejected,
+            "proofPath": "runtime/v129-release-provenance-facts-commit-alignment.json",
+        },
+    },
     "tagPolicy": {
         "tagKind": tag_kind,
+        "tagObjectKind": provenance_tag_kind,
+        "annotatedTagObjectId": release_provenance.get("annotatedTagObjectId"),
+        "peeledCommitSha": peeled_tag_commit,
         "annotatedAllowed": True,
         "lightweightAllowed": True,
         "unsignedTagPolicy": "warning-only",

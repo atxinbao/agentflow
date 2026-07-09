@@ -24,11 +24,20 @@
 
 下一版计划：
 
-- v1.3.x Product console continuity after paid report commercial order/access closure。
+- [docs/delivery/releases/v1.3.0/README.md](docs/delivery/releases/v1.3.0/README.md)
+- [docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md)
 
 ## Unreleased
 
-下一版保留给 Product console continuity after paid report commercial order/access closure，不在本次 release 中认证。
+Commercial Backend Stable Closure:
+
+- started v1.3.0 delivery planning with `#993` through `#1002`;
+- recorded v1.2.9 live release audit facts as the first v1.3.0 proof artifact;
+- split v1.2.9 release certification coverage between live GitHub release
+  authority and synthetic project release sidecar rejection;
+- updated v1.2.9 final certification payload to expose concrete tag kind,
+  annotated tag object id and peeled commit sha when live release provenance is
+  available.
 
 ## v1.2.9 - 2026-07-09
 
