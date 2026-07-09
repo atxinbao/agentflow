@@ -379,6 +379,7 @@ V129_COMMERCIAL_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/v129-commercial-negative-fi
 V129_RELEASE_CERTIFICATION_INPUT_PATH="$RUNTIME_DIR/v129-release-certification-input.json"
 V129_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v129-release-certification.json"
 V130_COMMERCIAL_BACKEND_STABLE_CONTRACT_PATH="$RUNTIME_DIR/v130-commercial-backend-stable-contract.json"
+V130_PAID_REPORT_FLOW_STATE_MACHINE_PATH="$RUNTIME_DIR/v130-paid-report-flow-state-machine.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -18263,6 +18264,124 @@ PY
   record_stage "$stage" "passed" "$(basename "$V130_COMMERCIAL_BACKEND_STABLE_CONTRACT_PATH")"
 }
 
+run_v130_paid_report_flow_state_machine_gate() {
+  local stage="release.v130-paid-report-flow-state-machine"
+  record_stage "$stage" "started" "$V130_PAID_REPORT_FLOW_STATE_MACHINE_PATH"
+
+  run_workspace_cmd "$stage.generate" "$RUNTIME_DIR/v130-paid-report-flow-state-machine.txt" \
+    cargo run -p agentflow-runtime-api --example v130_paid_report_flow_state_machine_proofs -- \
+      "$V130_PAID_REPORT_FLOW_STATE_MACHINE_PATH"
+
+  python3 - "$V130_PAID_REPORT_FLOW_STATE_MACHINE_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+failed = []
+
+if payload.get("version") != "agentflow-paid-report-flow-state-machine.v1":
+    failed.append("wrong-version")
+if payload.get("status") != "passed":
+    failed.append("status-not-passed")
+if payload.get("releaseVersion") != "v1.3.0":
+    failed.append("wrong-release-version")
+
+required_states = {
+    "draft-order",
+    "order-ready",
+    "authorized",
+    "admitted",
+    "running",
+    "artifact-ready",
+    "evidence-complete",
+    "accepted",
+    "delivery-ready",
+    "feedback-needed",
+    "repair-requested",
+    "rerun-needs-authorization",
+    "refunded",
+    "expired",
+    "closed",
+}
+states = set(payload.get("states", []))
+if not required_states.issubset(states):
+    failed.append("missing-required-states")
+
+positive = payload.get("positiveFixtures", [])
+negative = payload.get("negativeFixtures", [])
+if not positive:
+    failed.append("missing-positive-fixtures")
+if not negative:
+    failed.append("missing-negative-fixtures")
+
+if not any(
+    item.get("transition", {}).get("toState") == "accepted"
+    and item.get("transition", {}).get("writesAcceptedAuthority") is True
+    for item in positive
+):
+    failed.append("missing-accepted-authority-positive-transition")
+
+if not any(
+    item.get("transition", {}).get("toState") == "delivery-ready"
+    and item.get("transition", {}).get("writesDeliveryReadyAuthority") is True
+    for item in positive
+):
+    failed.append("missing-delivery-ready-authority-positive-transition")
+
+required_bindings = {
+    "PaidReportOrderRecord",
+    "PaidReportEntitlementAuthorization",
+    "PaidReportOrderToRunAdmission",
+    "PaidReportRunExecutionReceipt",
+    "PaidReportArtifact",
+    "PaidReportEvidencePack",
+    "PaidReportDecisionRecord",
+    "PaidReportDeliveryPackageProjection",
+    "PaidReportFeedbackLoopProjection",
+}
+bound_objects = {
+    binding.get("objectName")
+    for item in positive
+    for binding in item.get("transition", {}).get("requiredContracts", [])
+}
+if not required_bindings.issubset(bound_objects):
+    failed.append("missing-contract-bindings")
+
+for item in positive:
+    transition = item.get("transition", {})
+    if item.get("status") != "passed":
+        failed.append(f"{item.get('fixtureId')}-not-passed")
+    if transition.get("fromState") not in states or transition.get("toState") not in states:
+        failed.append(f"{item.get('fixtureId')}-unknown-state")
+    if not transition.get("requiredContracts"):
+        failed.append(f"{item.get('fixtureId')}-missing-required-contracts")
+
+for item in negative:
+    transition = item.get("transition", {})
+    failure_reasons = transition.get("failureReasons", [])
+    fixture_id = item.get("fixtureId")
+    if item.get("status") != "failed-as-expected":
+        failed.append(f"{fixture_id}-unexpected-status")
+    if not failure_reasons:
+        failed.append(f"{fixture_id}-missing-failure-reasons")
+    if transition.get("writesAuthority") is True:
+        failed.append(f"{fixture_id}-writes-authority")
+    if transition.get("writesAcceptedAuthority") is True:
+        failed.append(f"{fixture_id}-writes-accepted-authority")
+    if transition.get("writesDeliveryReadyAuthority") is True:
+        failed.append(f"{fixture_id}-writes-delivery-ready-authority")
+    if any(reason.get("preventsAuthorityWrites") is not True for reason in failure_reasons):
+        failed.append(f"{fixture_id}-failure-does-not-block-authority")
+
+if failed:
+    raise SystemExit(f"v130 paid report flow state machine failed: {failed}")
+PY
+
+  record_stage "$stage" "passed" "$(basename "$V130_PAID_REPORT_FLOW_STATE_MACHINE_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -18895,6 +19014,7 @@ PY
   run_v129_commercial_order_access_closure_gate
   run_v129_release_certification_gate
   run_v130_commercial_backend_stable_contract_gate
+  run_v130_paid_report_flow_state_machine_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

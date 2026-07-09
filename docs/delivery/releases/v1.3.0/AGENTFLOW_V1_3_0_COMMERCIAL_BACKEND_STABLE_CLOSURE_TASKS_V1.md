@@ -11,7 +11,7 @@ This document records the planned public delivery traceability for `v1.3.0`.
 | --- | --- | --- | --- | --- |
 | V130-001 | #993 | v1.2.9 Release Audit and Certification Semantics Repair | done | `proofs/v130-001-v129-release-audit-facts.json` |
 | V130-002 | #994 | Commercial Backend Stable Contract | done | `runtime/v130-commercial-backend-stable-contract.json` |
-| V130-003 | #995 | Paid Report Flow State Machine | planned | TBD |
+| V130-003 | #995 | Paid Report Flow State Machine | done | `runtime/v130-paid-report-flow-state-machine.json` |
 | V130-004 | #996 | Commercial Authority Boundary Freeze | planned | TBD |
 | V130-005 | #997 | Product SKU Extension Contract | planned | TBD |
 | V130-006 | #998 | Provider / Generator Adapter Boundary | planned | TBD |
@@ -99,3 +99,44 @@ delivery-ready
 
 After `v1.3.0`, backward-incompatible commercial backend contract changes require
 an explicit migration or version bump and a release-gate proof update.
+
+## V130-003 Paid Report Flow State Machine
+
+`V130-003` defines the generic Paid Report backend lifecycle as a stable runtime
+state machine:
+
+```text
+agentflow-paid-report-flow-state-machine.v1
+```
+
+The release-gate proof at `runtime/v130-paid-report-flow-state-machine.json`
+must include:
+
+- all lifecycle states from `draft-order` through `closed`;
+- positive transition fixtures for the order, entitlement, run, artifact,
+  evidence, decision, delivery and feedback chain;
+- negative transition fixtures for illegal shortcuts such as
+  `draft-order -> accepted` and `artifact-ready -> delivery-ready`;
+- machine-readable failure reasons for every invalid transition;
+- explicit authority flags proving invalid transitions cannot write accepted or
+  delivery-ready authority.
+
+The stable state list is:
+
+```text
+draft-order
+order-ready
+authorized
+admitted
+running
+artifact-ready
+evidence-complete
+accepted
+delivery-ready
+feedback-needed
+repair-requested
+rerun-needs-authorization
+refunded
+expired
+closed
+```

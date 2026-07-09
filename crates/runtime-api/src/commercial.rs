@@ -53,6 +53,8 @@ pub const PAID_REPORT_COMMERCIAL_POLICY_VERSION: &str =
     "agentflow-paid-report-commercial-policy.v1";
 pub const COMMERCIAL_BACKEND_STABLE_CONTRACT_VERSION: &str =
     "agentflow-commercial-backend-stable-contract.v1";
+pub const PAID_REPORT_FLOW_STATE_MACHINE_VERSION: &str =
+    "agentflow-paid-report-flow-state-machine.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
@@ -120,6 +122,63 @@ pub struct CommercialBackendStableContract {
     pub migration_policy: CommercialBackendMigrationPolicy,
     #[serde(default)]
     pub non_goals: Vec<String>,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportFlowContractBinding {
+    pub object_name: String,
+    pub contract_version: String,
+    pub binding_reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportFlowFailureReason {
+    pub code: String,
+    pub message: String,
+    pub prevents_authority_writes: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportFlowTransition {
+    pub from_state: String,
+    pub to_state: String,
+    pub event: String,
+    pub source_object: String,
+    pub source_contract_version: String,
+    pub writes_authority: bool,
+    pub writes_accepted_authority: bool,
+    pub writes_delivery_ready_authority: bool,
+    #[serde(default)]
+    pub required_contracts: Vec<PaidReportFlowContractBinding>,
+    #[serde(default)]
+    pub failure_reasons: Vec<PaidReportFlowFailureReason>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportFlowTransitionFixture {
+    pub fixture_id: String,
+    pub status: String,
+    pub transition: PaidReportFlowTransition,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidReportFlowStateMachine {
+    pub version: String,
+    pub status: String,
+    pub release_version: String,
+    pub authority_boundary: String,
+    #[serde(default)]
+    pub states: Vec<String>,
+    #[serde(default)]
+    pub positive_fixtures: Vec<PaidReportFlowTransitionFixture>,
+    #[serde(default)]
+    pub negative_fixtures: Vec<PaidReportFlowTransitionFixture>,
     pub checked_at: String,
 }
 
@@ -334,6 +393,581 @@ pub fn commercial_backend_stable_contract() -> CommercialBackendStableContract {
             "production payment checkout, charge, or refund execution".to_string(),
         ],
         checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
+pub fn paid_report_flow_state_machine() -> PaidReportFlowStateMachine {
+    PaidReportFlowStateMachine {
+        version: PAID_REPORT_FLOW_STATE_MACHINE_VERSION.to_string(),
+        status: "passed".to_string(),
+        release_version: "v1.3.0".to_string(),
+        authority_boundary: "Core Runtime owns the generic Paid Report lifecycle state machine. Product / Pack / SKU layers may bind concrete copy, pricing, prompts, and provider execution, but they cannot bypass these lifecycle transitions.".to_string(),
+        states: paid_report_flow_states(),
+        positive_fixtures: vec![
+            positive_flow_fixture(
+                "positive-draft-order-to-order-ready",
+                "draft-order",
+                "order-ready",
+                "order.input-snapshot-ready",
+                "PaidReportOrderRecord",
+                PAID_REPORT_ORDER_RECORD_VERSION,
+                false,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportOrderIntent",
+                        PAID_REPORT_ORDER_INTENT_VERSION,
+                        "order intent records the customer request before authority can become order-ready",
+                    ),
+                    flow_binding(
+                        "PaidReportInputSnapshot",
+                        PAID_REPORT_INPUT_SNAPSHOT_VERSION,
+                        "input snapshot freezes the submitted fields used by the order",
+                    ),
+                    flow_binding(
+                        "PaidReportOrderRecord",
+                        PAID_REPORT_ORDER_RECORD_VERSION,
+                        "order record owns the order-ready lifecycle state",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-order-ready-to-authorized",
+                "order-ready",
+                "authorized",
+                "entitlement.authorized",
+                "PaidReportEntitlementAuthorization",
+                PAID_REPORT_ENTITLEMENT_AUTHORIZATION_VERSION,
+                true,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportOrderRecord",
+                        PAID_REPORT_ORDER_RECORD_VERSION,
+                        "authorization must bind to a concrete order",
+                    ),
+                    flow_binding(
+                        "PaidReportEntitlementAuthorization",
+                        PAID_REPORT_ENTITLEMENT_AUTHORIZATION_VERSION,
+                        "entitlement authorization owns the authorized state",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-authorized-to-admitted",
+                "authorized",
+                "admitted",
+                "order-to-run.accepted",
+                "PaidReportOrderToRunAdmission",
+                PAID_REPORT_ORDER_TO_RUN_ADMISSION_VERSION,
+                true,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportEntitlementAuthorization",
+                        PAID_REPORT_ENTITLEMENT_AUTHORIZATION_VERSION,
+                        "admission requires an authorized entitlement",
+                    ),
+                    flow_binding(
+                        "PaidReportOrderToRunAdmission",
+                        PAID_REPORT_ORDER_TO_RUN_ADMISSION_VERSION,
+                        "admission receipt owns the admitted state",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-admitted-to-running",
+                "admitted",
+                "running",
+                "run.started",
+                "PaidReportRunExecutionReceipt",
+                PAID_REPORT_RUN_EXECUTION_RECEIPT_VERSION,
+                true,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportRunContract",
+                        PAID_REPORT_RUN_CONTRACT_VERSION,
+                        "run contract defines expected evidence and delivery promise",
+                    ),
+                    flow_binding(
+                        "PaidReportRunExecutionReceipt",
+                        PAID_REPORT_RUN_EXECUTION_RECEIPT_VERSION,
+                        "run receipt owns run execution progress",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-running-to-artifact-ready",
+                "running",
+                "artifact-ready",
+                "artifact.complete",
+                "PaidReportArtifact",
+                PAID_REPORT_ARTIFACT_VERSION,
+                true,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportRunExecutionReceipt",
+                        PAID_REPORT_RUN_EXECUTION_RECEIPT_VERSION,
+                        "artifact must trace back to a completed run receipt",
+                    ),
+                    flow_binding(
+                        "PaidReportArtifact",
+                        PAID_REPORT_ARTIFACT_VERSION,
+                        "artifact owns the artifact-ready state",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-artifact-ready-to-evidence-complete",
+                "artifact-ready",
+                "evidence-complete",
+                "evidence.complete",
+                "PaidReportEvidencePack",
+                PAID_REPORT_EVIDENCE_PACK_VERSION,
+                true,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportArtifact",
+                        PAID_REPORT_ARTIFACT_VERSION,
+                        "evidence pack must reference the produced artifact",
+                    ),
+                    flow_binding(
+                        "PaidReportEvidencePack",
+                        PAID_REPORT_EVIDENCE_PACK_VERSION,
+                        "evidence pack owns evidence completeness",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-evidence-complete-to-accepted",
+                "evidence-complete",
+                "accepted",
+                "decision.accepted",
+                "PaidReportDecisionRecord",
+                PAID_REPORT_DECISION_RECORD_VERSION,
+                true,
+                true,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportEvidencePack",
+                        PAID_REPORT_EVIDENCE_PACK_VERSION,
+                        "accepted decision requires complete evidence",
+                    ),
+                    flow_binding(
+                        "PaidReportDecisionRecord",
+                        PAID_REPORT_DECISION_RECORD_VERSION,
+                        "decision record owns accepted authority",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-accepted-to-delivery-ready",
+                "accepted",
+                "delivery-ready",
+                "delivery.ready",
+                "PaidReportDeliveryPackageProjection",
+                PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION,
+                true,
+                false,
+                true,
+                vec![
+                    flow_binding(
+                        "PaidReportDecisionRecord",
+                        PAID_REPORT_DECISION_RECORD_VERSION,
+                        "delivery-ready requires an accepted decision",
+                    ),
+                    flow_binding(
+                        "PaidReportDeliveryPackageProjection",
+                        PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION,
+                        "delivery package projection exposes delivery readiness",
+                    ),
+                    flow_binding(
+                        "PaidReportCustomerDeliveryAccessProjection",
+                        PAID_REPORT_CUSTOMER_DELIVERY_ACCESS_VERSION,
+                        "customer access projection binds delivery readiness to visible access",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-delivery-ready-to-feedback-needed",
+                "delivery-ready",
+                "feedback-needed",
+                "feedback.repair-requested",
+                "PaidReportFeedbackLoopProjection",
+                PAID_REPORT_FEEDBACK_LOOP_PROJECTION_VERSION,
+                false,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportDeliveryPackageProjection",
+                        PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION,
+                        "feedback starts from an existing delivery package",
+                    ),
+                    flow_binding(
+                        "PaidReportFeedbackLoopProjection",
+                        PAID_REPORT_FEEDBACK_LOOP_PROJECTION_VERSION,
+                        "feedback loop projection owns the feedback-needed state",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-feedback-needed-to-repair-requested",
+                "feedback-needed",
+                "repair-requested",
+                "policy.repair-proposed",
+                "PaidReportCommercialPolicyRecord",
+                PAID_REPORT_COMMERCIAL_POLICY_VERSION,
+                false,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportFeedbackLoopProjection",
+                        PAID_REPORT_FEEDBACK_LOOP_PROJECTION_VERSION,
+                        "repair policy must bind to a feedback request",
+                    ),
+                    flow_binding(
+                        "PaidReportCommercialPolicyRecord",
+                        PAID_REPORT_COMMERCIAL_POLICY_VERSION,
+                        "commercial policy records the repair route",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-repair-requested-to-rerun-needs-authorization",
+                "repair-requested",
+                "rerun-needs-authorization",
+                "policy.controlled-rerun",
+                "PaidReportCommercialPolicyRecord",
+                PAID_REPORT_COMMERCIAL_POLICY_VERSION,
+                false,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportCommercialPolicyRecord",
+                        PAID_REPORT_COMMERCIAL_POLICY_VERSION,
+                        "controlled rerun must preserve the original delivery and require new authorization",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-delivery-ready-to-refunded",
+                "delivery-ready",
+                "refunded",
+                "policy.refund-requested",
+                "PaidReportCommercialPolicyRecord",
+                PAID_REPORT_COMMERCIAL_POLICY_VERSION,
+                false,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportCommercialPolicyRecord",
+                        PAID_REPORT_COMMERCIAL_POLICY_VERSION,
+                        "refund is a commercial decision and must not mutate the delivered artifact",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-delivery-ready-to-expired",
+                "delivery-ready",
+                "expired",
+                "access.expired",
+                "PaidReportAccessReceipt",
+                PAID_REPORT_ACCESS_RECEIPT_VERSION,
+                false,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportAccessReceipt",
+                        PAID_REPORT_ACCESS_RECEIPT_VERSION,
+                        "access receipt records time-bound customer access expiration",
+                    ),
+                ],
+            ),
+            positive_flow_fixture(
+                "positive-delivery-ready-to-closed",
+                "delivery-ready",
+                "closed",
+                "policy.no-follow-up",
+                "PaidReportCommercialPolicyRecord",
+                PAID_REPORT_COMMERCIAL_POLICY_VERSION,
+                false,
+                false,
+                false,
+                vec![
+                    flow_binding(
+                        "PaidReportCommercialPolicyRecord",
+                        PAID_REPORT_COMMERCIAL_POLICY_VERSION,
+                        "commercial policy closes the flow without follow-up authority writes",
+                    ),
+                ],
+            ),
+        ],
+        negative_fixtures: vec![
+            negative_flow_fixture(
+                "negative-draft-order-to-accepted",
+                "draft-order",
+                "accepted",
+                "decision.accepted-without-chain",
+                "PaidReportDecisionRecord",
+                PAID_REPORT_DECISION_RECORD_VERSION,
+                vec![
+                    flow_binding(
+                        "PaidReportEvidencePack",
+                        PAID_REPORT_EVIDENCE_PACK_VERSION,
+                        "accepted authority requires completed evidence",
+                    ),
+                    flow_binding(
+                        "PaidReportDecisionRecord",
+                        PAID_REPORT_DECISION_RECORD_VERSION,
+                        "accepted authority cannot be written from draft order",
+                    ),
+                ],
+                vec![
+                    flow_failure(
+                        "missing-order-authorization",
+                        "draft-order has no authorized entitlement or admitted run",
+                    ),
+                    flow_failure(
+                        "missing-evidence-complete",
+                        "accepted authority requires complete evidence before decision",
+                    ),
+                ],
+            ),
+            negative_flow_fixture(
+                "negative-order-ready-to-delivery-ready",
+                "order-ready",
+                "delivery-ready",
+                "delivery.ready-without-run",
+                "PaidReportDeliveryPackageProjection",
+                PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION,
+                vec![
+                    flow_binding(
+                        "PaidReportOrderToRunAdmission",
+                        PAID_REPORT_ORDER_TO_RUN_ADMISSION_VERSION,
+                        "delivery-ready requires admitted execution",
+                    ),
+                    flow_binding(
+                        "PaidReportDeliveryPackageProjection",
+                        PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION,
+                        "delivery projection cannot bypass run, artifact, evidence, and decision",
+                    ),
+                ],
+                vec![
+                    flow_failure(
+                        "missing-run-admission",
+                        "order-ready has not been admitted to a run",
+                    ),
+                    flow_failure(
+                        "missing-accepted-decision",
+                        "delivery-ready requires an accepted decision record",
+                    ),
+                ],
+            ),
+            negative_flow_fixture(
+                "negative-authorized-to-running",
+                "authorized",
+                "running",
+                "run.started-without-admission",
+                "PaidReportRunExecutionReceipt",
+                PAID_REPORT_RUN_EXECUTION_RECEIPT_VERSION,
+                vec![
+                    flow_binding(
+                        "PaidReportOrderToRunAdmission",
+                        PAID_REPORT_ORDER_TO_RUN_ADMISSION_VERSION,
+                        "authorized order must be admitted before a run can start",
+                    ),
+                ],
+                vec![flow_failure(
+                    "missing-order-to-run-admission",
+                    "authorized entitlement cannot start execution without admission",
+                )],
+            ),
+            negative_flow_fixture(
+                "negative-artifact-ready-to-delivery-ready",
+                "artifact-ready",
+                "delivery-ready",
+                "delivery.ready-without-evidence",
+                "PaidReportDeliveryPackageProjection",
+                PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION,
+                vec![
+                    flow_binding(
+                        "PaidReportEvidencePack",
+                        PAID_REPORT_EVIDENCE_PACK_VERSION,
+                        "delivery-ready requires evidence completeness",
+                    ),
+                    flow_binding(
+                        "PaidReportDecisionRecord",
+                        PAID_REPORT_DECISION_RECORD_VERSION,
+                        "delivery-ready requires an accepted decision",
+                    ),
+                ],
+                vec![
+                    flow_failure(
+                        "missing-evidence-pack",
+                        "artifact-ready cannot skip evidence completeness",
+                    ),
+                    flow_failure(
+                        "missing-accepted-decision",
+                        "delivery-ready cannot be written before accepted decision",
+                    ),
+                ],
+            ),
+            negative_flow_fixture(
+                "negative-refunded-to-delivery-ready",
+                "refunded",
+                "delivery-ready",
+                "delivery.ready-after-refund",
+                "PaidReportDeliveryPackageProjection",
+                PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION,
+                vec![
+                    flow_binding(
+                        "PaidReportCommercialPolicyRecord",
+                        PAID_REPORT_COMMERCIAL_POLICY_VERSION,
+                        "refund closes commercial access without restoring delivery authority",
+                    ),
+                ],
+                vec![flow_failure(
+                    "refunded-flow-cannot-restore-delivery",
+                    "refunded state requires a new authorization before any new delivery",
+                )],
+            ),
+            negative_flow_fixture(
+                "negative-expired-to-delivery-ready",
+                "expired",
+                "delivery-ready",
+                "delivery.ready-after-expiration",
+                "PaidReportAccessReceipt",
+                PAID_REPORT_ACCESS_RECEIPT_VERSION,
+                vec![
+                    flow_binding(
+                        "PaidReportAccessReceipt",
+                        PAID_REPORT_ACCESS_RECEIPT_VERSION,
+                        "expired access receipt blocks delivery-ready authority writes",
+                    ),
+                ],
+                vec![flow_failure(
+                    "expired-access-cannot-write-delivery",
+                    "expired access cannot become delivery-ready without a new valid access receipt",
+                )],
+            ),
+        ],
+        checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
+fn paid_report_flow_states() -> Vec<String> {
+    [
+        "draft-order",
+        "order-ready",
+        "authorized",
+        "admitted",
+        "running",
+        "artifact-ready",
+        "evidence-complete",
+        "accepted",
+        "delivery-ready",
+        "feedback-needed",
+        "repair-requested",
+        "rerun-needs-authorization",
+        "refunded",
+        "expired",
+        "closed",
+    ]
+    .iter()
+    .map(|state| state.to_string())
+    .collect()
+}
+
+fn positive_flow_fixture(
+    fixture_id: &str,
+    from_state: &str,
+    to_state: &str,
+    event: &str,
+    source_object: &str,
+    source_contract_version: &str,
+    writes_authority: bool,
+    writes_accepted_authority: bool,
+    writes_delivery_ready_authority: bool,
+    required_contracts: Vec<PaidReportFlowContractBinding>,
+) -> PaidReportFlowTransitionFixture {
+    PaidReportFlowTransitionFixture {
+        fixture_id: fixture_id.to_string(),
+        status: "passed".to_string(),
+        transition: PaidReportFlowTransition {
+            from_state: from_state.to_string(),
+            to_state: to_state.to_string(),
+            event: event.to_string(),
+            source_object: source_object.to_string(),
+            source_contract_version: source_contract_version.to_string(),
+            writes_authority,
+            writes_accepted_authority,
+            writes_delivery_ready_authority,
+            required_contracts,
+            failure_reasons: Vec::new(),
+        },
+    }
+}
+
+fn negative_flow_fixture(
+    fixture_id: &str,
+    from_state: &str,
+    to_state: &str,
+    event: &str,
+    source_object: &str,
+    source_contract_version: &str,
+    required_contracts: Vec<PaidReportFlowContractBinding>,
+    failure_reasons: Vec<PaidReportFlowFailureReason>,
+) -> PaidReportFlowTransitionFixture {
+    PaidReportFlowTransitionFixture {
+        fixture_id: fixture_id.to_string(),
+        status: "failed-as-expected".to_string(),
+        transition: PaidReportFlowTransition {
+            from_state: from_state.to_string(),
+            to_state: to_state.to_string(),
+            event: event.to_string(),
+            source_object: source_object.to_string(),
+            source_contract_version: source_contract_version.to_string(),
+            writes_authority: false,
+            writes_accepted_authority: false,
+            writes_delivery_ready_authority: false,
+            required_contracts,
+            failure_reasons,
+        },
+    }
+}
+
+fn flow_binding(
+    object_name: &str,
+    contract_version: &str,
+    binding_reason: &str,
+) -> PaidReportFlowContractBinding {
+    PaidReportFlowContractBinding {
+        object_name: object_name.to_string(),
+        contract_version: contract_version.to_string(),
+        binding_reason: binding_reason.to_string(),
+    }
+}
+
+fn flow_failure(code: &str, message: &str) -> PaidReportFlowFailureReason {
+    PaidReportFlowFailureReason {
+        code: code.to_string(),
+        message: message.to_string(),
+        prevents_authority_writes: true,
     }
 }
 
@@ -3708,6 +4342,128 @@ mod tests {
             "delivery-ready",
         ] {
             assert!(states.contains(state), "missing state {state}");
+        }
+    }
+
+    #[test]
+    fn paid_report_flow_state_machine_covers_required_states_and_invalid_transitions() {
+        let machine = paid_report_flow_state_machine();
+
+        assert_eq!(machine.version, PAID_REPORT_FLOW_STATE_MACHINE_VERSION);
+        assert_eq!(machine.status, "passed");
+        assert_eq!(machine.release_version, "v1.3.0");
+
+        let states = machine
+            .states
+            .iter()
+            .map(String::as_str)
+            .collect::<std::collections::HashSet<_>>();
+        for state in [
+            "draft-order",
+            "order-ready",
+            "authorized",
+            "admitted",
+            "running",
+            "artifact-ready",
+            "evidence-complete",
+            "accepted",
+            "delivery-ready",
+            "feedback-needed",
+            "repair-requested",
+            "rerun-needs-authorization",
+            "refunded",
+            "expired",
+            "closed",
+        ] {
+            assert!(states.contains(state), "missing state {state}");
+        }
+
+        assert!(
+            machine
+                .positive_fixtures
+                .iter()
+                .any(|fixture| fixture.transition.to_state == "accepted"
+                    && fixture.transition.writes_accepted_authority),
+            "accepted authority must have a positive transition"
+        );
+        assert!(
+            machine
+                .positive_fixtures
+                .iter()
+                .any(|fixture| fixture.transition.to_state == "delivery-ready"
+                    && fixture.transition.writes_delivery_ready_authority),
+            "delivery-ready authority must have a positive transition"
+        );
+
+        let mut bound_objects = std::collections::HashSet::new();
+        for fixture in &machine.positive_fixtures {
+            assert_eq!(fixture.status, "passed");
+            assert!(
+                states.contains(fixture.transition.from_state.as_str()),
+                "unknown from state {}",
+                fixture.transition.from_state
+            );
+            assert!(
+                states.contains(fixture.transition.to_state.as_str()),
+                "unknown to state {}",
+                fixture.transition.to_state
+            );
+            assert!(!fixture.transition.required_contracts.is_empty());
+            for binding in &fixture.transition.required_contracts {
+                assert!(!binding.contract_version.trim().is_empty());
+                bound_objects.insert(binding.object_name.as_str());
+            }
+        }
+
+        for required in [
+            "PaidReportOrderRecord",
+            "PaidReportEntitlementAuthorization",
+            "PaidReportOrderToRunAdmission",
+            "PaidReportRunExecutionReceipt",
+            "PaidReportArtifact",
+            "PaidReportEvidencePack",
+            "PaidReportDecisionRecord",
+            "PaidReportDeliveryPackageProjection",
+            "PaidReportFeedbackLoopProjection",
+        ] {
+            assert!(
+                bound_objects.contains(required),
+                "missing binding {required}"
+            );
+        }
+
+        assert!(!machine.negative_fixtures.is_empty());
+        for fixture in &machine.negative_fixtures {
+            assert_eq!(fixture.status, "failed-as-expected");
+            assert!(
+                !fixture.transition.failure_reasons.is_empty(),
+                "{} must publish failure reasons",
+                fixture.fixture_id
+            );
+            assert!(
+                fixture
+                    .transition
+                    .failure_reasons
+                    .iter()
+                    .all(|reason| reason.prevents_authority_writes),
+                "{} must block authority writes",
+                fixture.fixture_id
+            );
+            assert!(
+                !fixture.transition.writes_accepted_authority,
+                "{} must not write accepted authority",
+                fixture.fixture_id
+            );
+            assert!(
+                !fixture.transition.writes_delivery_ready_authority,
+                "{} must not write delivery-ready authority",
+                fixture.fixture_id
+            );
+            assert!(
+                !fixture.transition.writes_authority,
+                "{} must not write authority",
+                fixture.fixture_id
+            );
         }
     }
 
