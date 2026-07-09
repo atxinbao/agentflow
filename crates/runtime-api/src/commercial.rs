@@ -51,9 +51,382 @@ pub const PAID_REPORT_CUSTOMER_DELIVERY_ACCESS_VERSION: &str =
 pub const PAID_REPORT_ACCESS_RECEIPT_VERSION: &str = "agentflow-paid-report-access-receipt.v1";
 pub const PAID_REPORT_COMMERCIAL_POLICY_VERSION: &str =
     "agentflow-paid-report-commercial-policy.v1";
+pub const COMMERCIAL_BACKEND_STABLE_CONTRACT_VERSION: &str =
+    "agentflow-commercial-backend-stable-contract.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialBackendStableField {
+    pub name: String,
+    pub field_type: String,
+    pub required: bool,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialBackendStableObject {
+    pub object_name: String,
+    pub rust_type: String,
+    pub category: String,
+    pub version: String,
+    #[serde(default)]
+    pub required_fields: Vec<CommercialBackendStableField>,
+    #[serde(default)]
+    pub optional_fields: Vec<CommercialBackendStableField>,
+    #[serde(default)]
+    pub status_values: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialBackendDecisionState {
+    pub state: String,
+    pub owner: String,
+    pub meaning: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialBackendErrorDecisionModel {
+    #[serde(default)]
+    pub stable_states: Vec<CommercialBackendDecisionState>,
+    #[serde(default)]
+    pub failure_reason_policy: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialBackendMigrationPolicy {
+    pub stable_after_release: String,
+    pub backward_incompatible_changes_require_version_bump: bool,
+    pub explicit_migration_required: bool,
+    pub machine_readable_baseline_required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialBackendStableContract {
+    pub version: String,
+    pub status: String,
+    pub release_version: String,
+    pub authority_boundary: String,
+    #[serde(default)]
+    pub objects: Vec<CommercialBackendStableObject>,
+    pub error_decision_model: CommercialBackendErrorDecisionModel,
+    pub migration_policy: CommercialBackendMigrationPolicy,
+    #[serde(default)]
+    pub non_goals: Vec<String>,
+    pub checked_at: String,
+}
+
+pub fn commercial_backend_stable_contract() -> CommercialBackendStableContract {
+    CommercialBackendStableContract {
+        version: COMMERCIAL_BACKEND_STABLE_CONTRACT_VERSION.to_string(),
+        status: "passed".to_string(),
+        release_version: "v1.3.0".to_string(),
+        authority_boundary: "Core Runtime owns the generic Paid Report backend contract; Product / Pack / SKU definitions own concrete domain copy, pricing, prompts, and provider-specific report generation.".to_string(),
+        objects: vec![
+            stable_object(
+                "Product Definition",
+                "PaidReportProductDefinition",
+                "commercial-product-definition",
+                PAID_REPORT_PRODUCT_DEFINITION_VERSION,
+                &["version", "status", "productId", "productName", "flowType", "reportDefinitionId"],
+                &["requiredInputRefs", "evidenceRequirements", "decisionRequirements", "sourceRefs"],
+                &["ready", "invalid", "deferred"],
+            ),
+            stable_object(
+                "Product Instance",
+                "PaidReportProductInstanceContract",
+                "commercial-product-instance",
+                PAID_REPORT_PRODUCT_INSTANCE_VERSION,
+                &["version", "status", "productInstanceId", "productId", "reportDefinitionId", "entitlementState", "paidFeatureState", "deliveryPromise", "canSubmitRuntimeCommandProposal", "unavailableReason"],
+                &["requiredInputRefs", "evidenceRequirements", "decisionRequirements", "sourceRefs"],
+                &["ready", "invalid", "deferred", "blocked"],
+            ),
+            stable_object(
+                "Runtime Proposal Handoff",
+                "PaidReportRuntimeProposalHandoff",
+                "runtime-handoff",
+                PAID_REPORT_RUNTIME_PROPOSAL_HANDOFF_VERSION,
+                &["version", "status", "reason", "proposalCreated", "productInstance", "preflight"],
+                &["proposal"],
+                &["ready", "blocked", "deferred", "invalid"],
+            ),
+            stable_object(
+                "Runtime Admission Receipt",
+                "PaidReportRuntimeAdmissionReceipt",
+                "runtime-admission",
+                PAID_REPORT_RUNTIME_ADMISSION_RECEIPT_VERSION,
+                &["version", "status", "receiptId", "productInstanceId", "productId", "requestId", "admissionDecision", "runtimeAdmissionRequired", "canStartRunDirectly"],
+                &["requiredEvidence", "requiredDecisionPolicy", "sourceRefs"],
+                &["accepted", "blocked", "deferred", "invalid"],
+            ),
+            stable_object(
+                "Run Contract",
+                "PaidReportRunContract",
+                "run",
+                PAID_REPORT_RUN_CONTRACT_VERSION,
+                &["version", "status", "runContractId", "productInstanceId", "productId", "requestId", "reportDefinitionId", "deliveryPromise", "runtimeAdmissionReceiptId", "canStartRunDirectly", "concreteSkuIsCoreAuthority"],
+                &["inputRefs", "expectedEvidence", "decisionPolicy", "sourceRefs"],
+                &["ready", "blocked", "invalid"],
+            ),
+            stable_object(
+                "Order Intent",
+                "PaidReportOrderIntent",
+                "order",
+                PAID_REPORT_ORDER_INTENT_VERSION,
+                &["version", "status", "orderIntentId", "productInstanceId", "productId", "requestId", "intentKind", "paymentProviderCharge"],
+                &["sourceRefs"],
+                &["ready", "blocked", "invalid"],
+            ),
+            stable_object(
+                "Input Snapshot",
+                "PaidReportInputSnapshot",
+                "order",
+                PAID_REPORT_INPUT_SNAPSHOT_VERSION,
+                &["version", "status", "inputSnapshotId", "productInstanceId", "productId", "requestId", "reportDefinitionId", "orderIntentId", "inputReady", "orderIntentReady", "projectionOnly", "writesAuthority"],
+                &["requiredInputRefs", "submittedFields", "sourceRefs"],
+                &["input-ready", "input-missing", "blocked", "invalid"],
+            ),
+            stable_object(
+                "Order Record",
+                "PaidReportOrderRecord",
+                "order",
+                PAID_REPORT_ORDER_RECORD_VERSION,
+                &["version", "status", "orderId", "productInstanceId", "requestId", "orderIntentId", "inputSnapshotId", "offerRef", "lifecycleState", "runnable", "createdAt"],
+                &["sourceRefs"],
+                &["order-ready", "input-snapshot-missing", "order-intent-missing", "order-blocked"],
+            ),
+            stable_object(
+                "Entitlement Authorization",
+                "PaidReportEntitlementAuthorization",
+                "entitlement",
+                PAID_REPORT_ENTITLEMENT_AUTHORIZATION_VERSION,
+                &["version", "status", "authorizationReceiptId", "orderId", "productInstanceId", "authorizationState", "authorizationDecision", "paymentProviderCheckout", "providerChargeExecuted"],
+                &["failureReasons", "sourceRefs"],
+                &["authorized", "deferred", "blocked", "refunded", "revoked"],
+            ),
+            stable_object(
+                "Order To Run Admission",
+                "PaidReportOrderToRunAdmission",
+                "run",
+                PAID_REPORT_ORDER_TO_RUN_ADMISSION_VERSION,
+                &["version", "status", "admissionId", "orderId", "authorizationReceiptId", "inputSnapshotId", "runId", "productInstanceId", "accepted"],
+                &["failureReasons", "sourceRefs"],
+                &["accepted", "blocked", "invalid"],
+            ),
+            stable_object(
+                "Run Execution Receipt",
+                "PaidReportRunExecutionReceipt",
+                "run",
+                PAID_REPORT_RUN_EXECUTION_RECEIPT_VERSION,
+                &["version", "status", "receiptId", "runId", "productInstanceId", "productId", "requestId", "runtimeAdmissionReceiptId", "inputSnapshotId", "reportDefinitionId", "started", "completed"],
+                &["expectedArtifactIds", "failureReasons", "sourceRefs"],
+                &["completed", "blocked", "failed", "invalid"],
+            ),
+            stable_object(
+                "Report Artifact",
+                "PaidReportArtifact",
+                "artifact",
+                PAID_REPORT_ARTIFACT_VERSION,
+                &["version", "status", "artifactId", "productInstanceId", "runId", "reportDefinitionId", "title", "summary", "generatedAt", "storagePath", "deliveryReady"],
+                &["sections", "sourceEvidenceRefs"],
+                &["complete", "incomplete", "blocked", "invalid"],
+            ),
+            stable_object(
+                "Evidence Pack",
+                "PaidReportEvidencePack",
+                "evidence",
+                PAID_REPORT_EVIDENCE_PACK_VERSION,
+                &["version", "status", "evidencePackId", "productInstanceId", "runId", "inputSnapshotId", "runExecutionReceiptId", "reportArtifactId", "generationReceiptId", "evidenceComplete", "appendOnly", "projectScoped"],
+                &["requiredEvidence", "evidenceRefs"],
+                &["complete", "evidence-needed", "blocked", "invalid"],
+            ),
+            stable_object(
+                "Decision Record",
+                "PaidReportDecisionRecord",
+                "decision",
+                PAID_REPORT_DECISION_RECORD_VERSION,
+                &["version", "status", "decisionId", "outcome", "reportArtifactId", "evidencePackId", "remediationRoute", "projectionOnly", "writesAuthority"],
+                &["failureReasons"],
+                &["accepted", "needs-fix", "rejected", "deferred", "blocked"],
+            ),
+            stable_object(
+                "Delivery Package Projection",
+                "PaidReportDeliveryPackageProjection",
+                "delivery",
+                PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION,
+                &["version", "status", "deliveryPackageId", "productInstanceId", "runId", "deliveryStatus", "downloadReady", "displayContract", "nextAction", "projectionOnly", "writesAuthority"],
+                &["reportArtifactRefs", "evidenceRefs", "decisionRefs"],
+                &["delivery-ready", "repair-needed", "blocked", "deferred"],
+            ),
+            stable_object(
+                "Customer Delivery Access",
+                "PaidReportCustomerDeliveryAccessProjection",
+                "delivery",
+                PAID_REPORT_CUSTOMER_DELIVERY_ACCESS_VERSION,
+                &["version", "status", "deliveryPackageId", "orderId", "decisionId", "reportArtifactId", "productInstanceId", "accessStatus", "nextAction", "downloadVisible", "projectionOnly", "writesAuthority"],
+                &["sourceRefs"],
+                &["accessible", "blocked", "repair-needed"],
+            ),
+            stable_object(
+                "Access Receipt",
+                "PaidReportAccessReceipt",
+                "delivery",
+                PAID_REPORT_ACCESS_RECEIPT_VERSION,
+                &["version", "status", "accessReceiptId", "deliveryPackageId", "orderId", "productInstanceId", "accessScope", "generatedAt", "expiresAt", "accessHandle", "blockedReason"],
+                &["artifactRefs"],
+                &["allowed", "blocked", "revoked", "expired"],
+            ),
+            stable_object(
+                "Feedback Loop Projection",
+                "PaidReportFeedbackLoopProjection",
+                "feedback",
+                PAID_REPORT_FEEDBACK_LOOP_PROJECTION_VERSION,
+                &["version", "status", "feedbackId", "feedbackState", "repairRequestId", "originalProductInstanceId", "runId", "artifactId", "evidencePackId", "decisionId", "mutatesDeliveredArtifact", "followUpRoute", "nextAction", "projectionOnly", "writesAuthority"],
+                &[],
+                &["repair-requested", "closed", "blocked"],
+            ),
+            stable_object(
+                "Commercial Policy Record",
+                "PaidReportCommercialPolicyRecord",
+                "feedback",
+                PAID_REPORT_COMMERCIAL_POLICY_VERSION,
+                &["version", "status", "policyId", "outcome", "originalOrderId", "originalRunId", "originalArtifactId", "originalDecisionId", "feedbackId", "createsFollowUpProposal", "mutatesDeliveredArtifact", "requiresNewAuthorization", "commercialDecisionOnly"],
+                &["sourceRefs"],
+                &["refund-requested", "repair-proposed", "rerun-needs-authorization", "accepted-after-repair", "closed", "blocked"],
+            ),
+        ],
+        error_decision_model: CommercialBackendErrorDecisionModel {
+            stable_states: vec![
+                decision_state("invalid", "Runtime", "contract input is structurally invalid or missing required source facts"),
+                decision_state("deferred", "Entitlement", "commercial entitlement or paid feature exists but is not yet eligible for runtime admission"),
+                decision_state("blocked", "Runtime", "hard gate prevents the next transition and must include machine-readable failureReasons"),
+                decision_state("accepted", "Decision", "artifact, evidence, and decision requirements passed and can move toward delivery"),
+                decision_state("revoked", "Delivery", "previously issued customer access is no longer valid"),
+                decision_state("expired", "Delivery", "time-bound customer access has elapsed"),
+                decision_state("refunded", "Commercial Policy", "commercial decision stops access or follow-up without mutating delivered artifact"),
+                decision_state("repair-needed", "Decision", "delivery exists but requires a controlled repair proposal"),
+                decision_state("delivery-ready", "Delivery", "accepted decision and complete evidence make the package downloadable"),
+            ],
+            failure_reason_policy: vec![
+                "blocked / invalid records must expose failureReasons or blockedReason".to_string(),
+                "delivery access cannot hide refunded, revoked, expired, or repair-needed reasons".to_string(),
+                "Core Runtime must not execute provider checkout, charge, refund, or concrete report generation".to_string(),
+            ],
+        },
+        migration_policy: CommercialBackendMigrationPolicy {
+            stable_after_release: "v1.3.0".to_string(),
+            backward_incompatible_changes_require_version_bump: true,
+            explicit_migration_required: true,
+            machine_readable_baseline_required: true,
+        },
+        non_goals: vec![
+            "concrete paid-report industry SKU".to_string(),
+            "model/provider-specific final report generation".to_string(),
+            "public commercial launch".to_string(),
+            "cloud multi-tenant launch".to_string(),
+            "production payment checkout, charge, or refund execution".to_string(),
+        ],
+        checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
+fn stable_object(
+    object_name: &str,
+    rust_type: &str,
+    category: &str,
+    version: &str,
+    required_fields: &[&str],
+    optional_fields: &[&str],
+    status_values: &[&str],
+) -> CommercialBackendStableObject {
+    CommercialBackendStableObject {
+        object_name: object_name.to_string(),
+        rust_type: rust_type.to_string(),
+        category: category.to_string(),
+        version: version.to_string(),
+        required_fields: required_fields
+            .iter()
+            .map(|name| stable_field(name, true))
+            .collect(),
+        optional_fields: optional_fields
+            .iter()
+            .map(|name| stable_field(name, false))
+            .collect(),
+        status_values: status_values
+            .iter()
+            .map(|value| value.to_string())
+            .collect(),
+    }
+}
+
+fn stable_field(name: &str, required: bool) -> CommercialBackendStableField {
+    CommercialBackendStableField {
+        name: name.to_string(),
+        field_type: infer_stable_field_type(name).to_string(),
+        required,
+        description: if required {
+            format!("{name} is part of the stable v1.3.0 contract.")
+        } else {
+            format!("{name} is optional/defaulted in the stable v1.3.0 contract.")
+        },
+    }
+}
+
+fn infer_stable_field_type(name: &str) -> &'static str {
+    if name.ends_with("Refs") || name.ends_with("Reasons") || name == "sections" {
+        "array"
+    } else if matches!(
+        name,
+        "submittedFields" | "productInstance" | "preflight" | "proposal"
+    ) {
+        "object"
+    } else if name.starts_with("can")
+        || name.starts_with("writes")
+        || name.starts_with("projection")
+        || name.ends_with("Ready")
+        || name.ends_with("Visible")
+        || name.ends_with("Complete")
+        || name.ends_with("Required")
+        || name.ends_with("Authority")
+        || matches!(
+            name,
+            "runnable"
+                | "accepted"
+                | "started"
+                | "completed"
+                | "appendOnly"
+                | "projectScoped"
+                | "paymentProviderCharge"
+                | "paymentProviderCheckout"
+                | "providerChargeExecuted"
+                | "downloadReady"
+                | "downloadVisible"
+                | "mutatesDeliveredArtifact"
+                | "createsFollowUpProposal"
+                | "requiresNewAuthorization"
+                | "commercialDecisionOnly"
+        )
+    {
+        "boolean"
+    } else {
+        "string"
+    }
+}
+
+fn decision_state(state: &str, owner: &str, meaning: &str) -> CommercialBackendDecisionState {
+    CommercialBackendDecisionState {
+        state: state.to_string(),
+        owner: owner.to_string(),
+        meaning: meaning.to_string(),
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -3251,6 +3624,91 @@ mod tests {
         assert!(!repair.mutates_delivered_artifact);
         assert!(refund.commercial_decision_only);
         assert!(rerun.requires_new_authorization);
+    }
+
+    #[test]
+    fn commercial_backend_stable_contract_lists_all_required_objects_and_states() {
+        let contract = commercial_backend_stable_contract();
+
+        assert_eq!(contract.version, COMMERCIAL_BACKEND_STABLE_CONTRACT_VERSION);
+        assert_eq!(contract.status, "passed");
+        assert_eq!(contract.release_version, "v1.3.0");
+        assert!(
+            contract
+                .migration_policy
+                .backward_incompatible_changes_require_version_bump
+        );
+        assert!(contract.migration_policy.explicit_migration_required);
+        assert!(contract.migration_policy.machine_readable_baseline_required);
+
+        let object_names = contract
+            .objects
+            .iter()
+            .map(|object| object.object_name.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        for required in [
+            "Product Definition",
+            "Product Instance",
+            "Order Record",
+            "Entitlement Authorization",
+            "Order To Run Admission",
+            "Run Execution Receipt",
+            "Report Artifact",
+            "Evidence Pack",
+            "Decision Record",
+            "Delivery Package Projection",
+            "Customer Delivery Access",
+            "Access Receipt",
+            "Feedback Loop Projection",
+            "Commercial Policy Record",
+        ] {
+            assert!(object_names.contains(required), "missing {required}");
+        }
+
+        for object in &contract.objects {
+            assert!(!object.version.trim().is_empty(), "missing version");
+            assert!(
+                object
+                    .required_fields
+                    .iter()
+                    .any(|field| field.name == "version" && field.required),
+                "{} must require version",
+                object.object_name
+            );
+            assert!(
+                object
+                    .required_fields
+                    .iter()
+                    .any(|field| field.name == "status" && field.required),
+                "{} must require status",
+                object.object_name
+            );
+            assert!(
+                !object.status_values.is_empty(),
+                "{} must publish status values",
+                object.object_name
+            );
+        }
+
+        let states = contract
+            .error_decision_model
+            .stable_states
+            .iter()
+            .map(|state| state.state.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        for state in [
+            "invalid",
+            "deferred",
+            "blocked",
+            "accepted",
+            "revoked",
+            "expired",
+            "refunded",
+            "repair-needed",
+            "delivery-ready",
+        ] {
+            assert!(states.contains(state), "missing state {state}");
+        }
     }
 
     fn registry_fixture() -> TempDir {

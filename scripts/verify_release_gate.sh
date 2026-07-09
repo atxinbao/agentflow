@@ -378,6 +378,7 @@ V129_REFUND_REPAIR_RERUN_POLICY_PATH="$RUNTIME_DIR/v129-refund-repair-rerun-poli
 V129_COMMERCIAL_NEGATIVE_FIXTURES_PATH="$RUNTIME_DIR/v129-commercial-negative-fixtures.json"
 V129_RELEASE_CERTIFICATION_INPUT_PATH="$RUNTIME_DIR/v129-release-certification-input.json"
 V129_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v129-release-certification.json"
+V130_COMMERCIAL_BACKEND_STABLE_CONTRACT_PATH="$RUNTIME_DIR/v130-commercial-backend-stable-contract.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -18173,6 +18174,95 @@ PY
   record_stage "$stage" "passed" "$(basename "$V129_RELEASE_CERTIFICATION_PATH")"
 }
 
+run_v130_commercial_backend_stable_contract_gate() {
+  local stage="release.v130-commercial-backend-stable-contract"
+  record_stage "$stage" "started" "$V130_COMMERCIAL_BACKEND_STABLE_CONTRACT_PATH"
+
+  run_workspace_cmd "$stage.generate" "$RUNTIME_DIR/v130-commercial-backend-stable-contract.txt" \
+    cargo run -p agentflow-runtime-api --example v130_commercial_backend_contract_proofs -- \
+      "$V130_COMMERCIAL_BACKEND_STABLE_CONTRACT_PATH"
+
+  python3 - "$V130_COMMERCIAL_BACKEND_STABLE_CONTRACT_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+failed = []
+
+if payload.get("version") != "agentflow-commercial-backend-stable-contract.v1":
+    failed.append("wrong-version")
+if payload.get("status") != "passed":
+    failed.append("status-not-passed")
+if payload.get("releaseVersion") != "v1.3.0":
+    failed.append("wrong-release-version")
+
+objects = payload.get("objects", [])
+required_objects = {
+    "Product Definition",
+    "Product Instance",
+    "Order Record",
+    "Entitlement Authorization",
+    "Order To Run Admission",
+    "Run Execution Receipt",
+    "Report Artifact",
+    "Evidence Pack",
+    "Decision Record",
+    "Delivery Package Projection",
+    "Customer Delivery Access",
+    "Access Receipt",
+    "Feedback Loop Projection",
+    "Commercial Policy Record",
+}
+object_names = {entry.get("objectName") for entry in objects}
+if not required_objects.issubset(object_names):
+    failed.append("missing-required-commercial-objects")
+
+for entry in objects:
+    if not entry.get("version"):
+        failed.append(f"{entry.get('objectName')}-missing-version")
+    required_fields = entry.get("requiredFields", [])
+    if not any(field.get("name") == "version" and field.get("required") is True for field in required_fields):
+        failed.append(f"{entry.get('objectName')}-missing-version-field")
+    if not any(field.get("name") == "status" and field.get("required") is True for field in required_fields):
+        failed.append(f"{entry.get('objectName')}-missing-status-field")
+    if not entry.get("statusValues"):
+        failed.append(f"{entry.get('objectName')}-missing-status-values")
+
+states = {
+    entry.get("state")
+    for entry in payload.get("errorDecisionModel", {}).get("stableStates", [])
+}
+required_states = {
+    "invalid",
+    "deferred",
+    "blocked",
+    "accepted",
+    "revoked",
+    "expired",
+    "refunded",
+    "repair-needed",
+    "delivery-ready",
+}
+if not required_states.issubset(states):
+    failed.append("missing-error-decision-states")
+
+migration = payload.get("migrationPolicy", {})
+if migration.get("backwardIncompatibleChangesRequireVersionBump") is not True:
+    failed.append("missing-version-bump-policy")
+if migration.get("explicitMigrationRequired") is not True:
+    failed.append("missing-explicit-migration-policy")
+if migration.get("machineReadableBaselineRequired") is not True:
+    failed.append("missing-machine-readable-baseline-policy")
+
+if failed:
+    raise SystemExit(f"v130 commercial backend stable contract failed: {failed}")
+PY
+
+  record_stage "$stage" "passed" "$(basename "$V130_COMMERCIAL_BACKEND_STABLE_CONTRACT_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -18804,6 +18894,7 @@ PY
   run_v128_release_certification_gate
   run_v129_commercial_order_access_closure_gate
   run_v129_release_certification_gate
+  run_v130_commercial_backend_stable_contract_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

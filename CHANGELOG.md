@@ -37,7 +37,12 @@ Commercial Backend Stable Closure:
   authority and synthetic project release sidecar rejection;
 - updated v1.2.9 final certification payload to expose concrete tag kind,
   annotated tag object id and peeled commit sha when live release provenance is
-  available.
+  available;
+- added the v1.3.0 commercial backend stable contract as a machine-readable
+  Product / Order / Entitlement / Run / Artifact / Evidence / Decision /
+  Delivery / Feedback schema inventory;
+- required explicit migration or version bump policy for backward-incompatible
+  commercial backend contract changes after v1.3.0.
 
 ## v1.2.9 - 2026-07-09
 
