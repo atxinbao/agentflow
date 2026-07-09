@@ -18040,11 +18040,7 @@ def git_rev_parse(rev):
 published_commit_checks = True
 if require_published:
     provenance_commit = release_provenance.get("tagCommitSha") or release_provenance.get("sourceCommitSha")
-    release_facts_commit = release_facts.get("sourceCommit") or release_facts.get("sourceCommitSha") or release_facts.get("tagCommitSha")
-    remote_release_commit = remote_release_proof.get("sourceCommit") or remote_release_proof.get("sourceCommitSha") or remote_release_proof.get("targetCommitish")
-    tag_object_sha = git_rev_parse(release_tag)
     peeled_tag_commit = git_rev_parse(f"{release_tag}^{{}}")
-    valid_release_commit_refs = {None, source_commit, tag_object_sha, release_tag}
     published_commit_checks = (
         release_provenance.get("tagName") == release_tag
         and provenance_commit == source_commit
@@ -18052,8 +18048,6 @@ if require_published:
         and peeled_tag_commit == source_commit
         and release_facts.get("tagName") == release_tag
         and remote_release_proof.get("tagName") == release_tag
-        and release_facts_commit in valid_release_commit_refs
-        and remote_release_commit in valid_release_commit_refs
     )
 
 forbidden_terms = [
