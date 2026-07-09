@@ -41,6 +41,9 @@ Commercial Backend Stable Closure:
 - added the v1.3.0 commercial backend stable contract as a machine-readable
   Product / Order / Entitlement / Run / Artifact / Evidence / Decision /
   Delivery / Feedback schema inventory;
+- added the v1.3.0 Paid Report Flow state machine covering draft order through
+  closed delivery, with positive lifecycle fixtures and negative invalid
+  transition fixtures that cannot write accepted or delivery-ready authority;
 - required explicit migration or version bump policy for backward-incompatible
   commercial backend contract changes after v1.3.0.
 
