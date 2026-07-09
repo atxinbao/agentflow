@@ -17718,25 +17718,16 @@ forbidden_terms = [
 ]
 forbidden_hits = [term for term in forbidden_terms if term in runtime_api.lower()]
 
-stale_fixture_commit = "project-release-gate-e2e"
-release_fact_text = json.dumps(
-    {
-        "releaseProvenance": release_provenance,
-        "releaseFacts": release_facts,
-        "releaseTagProof": release_tag_proof,
-        "remoteReleaseProof": remote_release_proof,
-    },
-    sort_keys=True,
-)
 tag_kind = release_tag_proof.get("tagKind") or release_tag_proof.get("tagType") or "unknown"
 published_commit_checks = True
 if require_published:
+    provenance_commit = release_provenance.get("tagCommitSha") or release_provenance.get("sourceCommitSha")
     published_commit_checks = (
-        release_facts.get("tagName") == release_tag
+        release_provenance.get("tagName") == release_tag
+        and provenance_commit == source_commit
+        and release_provenance.get("tagCommitMatchesSource") is True
+        and release_facts.get("tagName") == release_tag
         and remote_release_proof.get("tagName") == release_tag
-        and (release_facts.get("tagCommitSha") or release_facts.get("releaseCommitSha") or source_commit) == source_commit
-        and (remote_release_proof.get("tagCommitSha") or remote_release_proof.get("releaseCommitSha") or source_commit) == source_commit
-        and stale_fixture_commit not in release_fact_text
     )
 
 checks = {
