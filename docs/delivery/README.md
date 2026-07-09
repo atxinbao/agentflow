@@ -21,7 +21,9 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.2.8/README.md](releases/v1.2.8/README.md) | 当前发布基线：Paid Report Run and Delivery Artifact Closure |
+| [releases/v1.2.9/README.md](releases/v1.2.9/README.md) | 当前发布基线：Paid Report Commercial Order and Access Closure |
+| [releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md](releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md) | v1.2.9 Paid Report Commercial Order and Access Closure tasks |
+| [releases/v1.2.8/README.md](releases/v1.2.8/README.md) | 上一发布基线：Paid Report Run and Delivery Artifact Closure |
 | [releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md](releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md) | v1.2.8 Paid Report Run and Delivery Artifact Closure tasks |
 | [releases/v1.2.7/README.md](releases/v1.2.7/README.md) | 上一发布基线：Paid Report Runtime Handoff Closure |
 | [releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md](releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md) | v1.2.7 Paid Report Runtime Handoff Closure tasks |
@@ -67,7 +69,7 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| `v1.2.x` | 下一版计划：Product console continuity after paid report run delivery artifact closure |
+| `v1.3.x` | 下一版计划：Product console continuity after paid report commercial order/access closure |
 
 ## Historical Delivery
 

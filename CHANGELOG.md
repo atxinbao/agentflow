@@ -7,26 +7,44 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.2.8/README.md](docs/delivery/releases/v1.2.8/README.md)
-- [docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.9/README.md](docs/delivery/releases/v1.2.9/README.md)
+- [docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md)
 
 上一发布基线：
 
-- [docs/delivery/releases/v1.2.7/README.md](docs/delivery/releases/v1.2.7/README.md)
-- [docs/delivery/releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.8/README.md](docs/delivery/releases/v1.2.8/README.md)
+- [docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md)
 
 历史发布基线：
 
+- [docs/delivery/releases/v1.2.7/README.md](docs/delivery/releases/v1.2.7/README.md)
+- [docs/delivery/releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md)
 - [docs/delivery/releases/v1.2.6/README.md](docs/delivery/releases/v1.2.6/README.md)
 - [docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md](docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md)
 
 下一版计划：
 
-- v1.2.x Product console continuity after paid report run delivery artifact closure。
+- v1.3.x Product console continuity after paid report commercial order/access closure。
 
 ## Unreleased
 
-下一版保留给 Product console continuity after paid report run delivery artifact closure，不在本次 release 中认证。
+下一版保留给 Product console continuity after paid report commercial order/access closure，不在本次 release 中认证。
+
+## v1.2.9 - 2026-07-09
+
+Paid Report Commercial Order and Access Closure:
+
+- repaired published release provenance / release facts commit alignment so synthetic project-release-gate-e2e facts cannot satisfy release certification;
+- repaired annotated and lightweight tag kind certification by separating tag object id and peeled commit sha semantics;
+- added generic Paid Report Order Record contract binding request, Product Instance, order intent, input snapshot and offer metadata;
+- added payment / entitlement authorization boundary with paid, waived, deferred, refunded and missing states, without provider checkout;
+- added Order-to-Run Admission Gate requiring valid order record, authorization, input snapshot and runtime receipt;
+- added Customer Delivery Access Projection for accessible, blocked, expired and repair-needed report delivery states;
+- added report access receipt contract for allowed, expired and revoked customer delivery access;
+- added refund / repair / controlled rerun policy contract without mutating delivered artifacts in place;
+- added commercial negative fixtures for stale release facts, unknown tag kind, fake paid state, refunded order, mismatched product instance, missing input snapshot, missing accepted decision and expired access token;
+- added v1.2.9 release delivery baseline and GitHub issue traceability for `#979` through `#988`;
+- advanced workspace and desktop version metadata to `1.2.9`.
 
 ## v1.2.8 - 2026-07-09
 
