@@ -1,21 +1,24 @@
 # Changelog
 
-更新日期：2026-07-10
+更新日期：2026-07-11
 执行者：Codex
 
 ## Current Baseline
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.3.0/README.md](docs/delivery/releases/v1.3.0/README.md)
-- [docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md)
+- [docs/delivery/releases/v1.3.1/README.md](docs/delivery/releases/v1.3.1/README.md)
+- [docs/delivery/releases/v1.3.1/AGENTFLOW_V1_3_1_COMMERCIAL_CERTIFICATION_FIRST_SKU_READINESS_HARDENING_TASKS_V1.md](docs/delivery/releases/v1.3.1/AGENTFLOW_V1_3_1_COMMERCIAL_CERTIFICATION_FIRST_SKU_READINESS_HARDENING_TASKS_V1.md)
 
 上一发布基线：
 
-- [docs/delivery/releases/v1.2.9/README.md](docs/delivery/releases/v1.2.9/README.md)
-- [docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md)
+- [docs/delivery/releases/v1.3.0/README.md](docs/delivery/releases/v1.3.0/README.md)
+- [docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md)
 
 历史发布基线：
+
+- [docs/delivery/releases/v1.2.9/README.md](docs/delivery/releases/v1.2.9/README.md)
+- [docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md)
 
 - [docs/delivery/releases/v1.2.8/README.md](docs/delivery/releases/v1.2.8/README.md)
 - [docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md)
@@ -25,6 +28,29 @@
 - [docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md](docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md)
 
 ## Unreleased
+
+## v1.3.1 - 2026-07-11
+
+Commercial Certification and First SKU Readiness Hardening:
+
+- closed GitHub issues `#1014` through `#1021` with a dedicated V131 release
+  certification chain;
+- recorded the failed `v1.3.0` release-event run as superseded and bound the
+  final successful release-event run as release authority;
+- repaired certification artifact primary proof inclusion so docs proofs and
+  runtime proofs are both derived from `certification.json.primaryProofs`;
+- repaired the quick-audit manifest truth source so every required primary
+  proof has full-artifact and certification-artifact existence, hash and byte
+  metadata;
+- aligned `docs/project/roadmap.md` with `v1.2.9`, `v1.3.0` and `v1.3.1`
+  commercial backend baselines;
+- added the first Paid Report SKU readiness contract while explicitly keeping
+  concrete SKU launch, provider generation, payment checkout and public
+  commercial launch out of scope;
+- added SKU pack boundary negative fixtures and adapter dry-run receipt
+  hardening for provider/generator and payment receipts;
+- added `runtime/v131-release-certification.json` as the v1.3.1 root release
+  certification proof.
 
 ## v1.3.0 - 2026-07-10
 

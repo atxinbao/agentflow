@@ -1,6 +1,6 @@
 # Delivery
 
-更新日期：2026-07-09
+更新日期：2026-07-11
 执行者：Codex
 
 ## Purpose
@@ -21,7 +21,11 @@ docs/delivery
 
 | 路径 | 作用 |
 | --- | --- |
-| [releases/v1.2.9/README.md](releases/v1.2.9/README.md) | 当前发布基线：Paid Report Commercial Order and Access Closure |
+| [releases/v1.3.1/README.md](releases/v1.3.1/README.md) | 当前发布基线：Commercial Certification and First SKU Readiness Hardening |
+| [releases/v1.3.1/AGENTFLOW_V1_3_1_COMMERCIAL_CERTIFICATION_FIRST_SKU_READINESS_HARDENING_TASKS_V1.md](releases/v1.3.1/AGENTFLOW_V1_3_1_COMMERCIAL_CERTIFICATION_FIRST_SKU_READINESS_HARDENING_TASKS_V1.md) | v1.3.1 Commercial Certification and First SKU Readiness Hardening tasks |
+| [releases/v1.3.0/README.md](releases/v1.3.0/README.md) | 上一发布基线：Commercial Backend Stable Closure |
+| [releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md](releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md) | v1.3.0 Commercial Backend Stable Closure tasks |
+| [releases/v1.2.9/README.md](releases/v1.2.9/README.md) | 历史发布基线：Paid Report Commercial Order and Access Closure |
 | [releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md](releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md) | v1.2.9 Paid Report Commercial Order and Access Closure tasks |
 | [releases/v1.2.8/README.md](releases/v1.2.8/README.md) | 上一发布基线：Paid Report Run and Delivery Artifact Closure |
 | [releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md](releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md) | v1.2.8 Paid Report Run and Delivery Artifact Closure tasks |
@@ -67,10 +71,7 @@ docs/delivery
 
 ## Next Release Planning
 
-| 路径 | 作用 |
-| --- | --- |
-| [releases/v1.3.0/README.md](releases/v1.3.0/README.md) | v1.3.0 计划：Commercial Backend Stable Closure |
-| [releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md](releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md) | v1.3.0 Commercial Backend Stable Closure tasks |
+下一发布计划尚未进入 delivery baseline。
 
 ## Historical Delivery
 

@@ -1,0 +1,57 @@
+{
+  "version": "agentflow-v131-v130-release-event-certification-closeout.v1",
+  "status": "passed",
+  "issueRef": "#1014",
+  "releaseVersion": "v1.3.0",
+  "releaseUrl": "https://github.com/atxinbao/agentflow/releases/tag/v1.3.0",
+  "sourceCommitSha": "69085be5850f3acc3dd0fbc81c84fde49ac573bb",
+  "tagName": "v1.3.0",
+  "tagObjectKind": "tag",
+  "tagObjectId": "631a4a5c7b27c0ed000bc7cd8b6ffc9fbb3f1201",
+  "peeledCommitSha": "69085be5850f3acc3dd0fbc81c84fde49ac573bb",
+  "releaseGateRuns": [
+    {
+      "event": "pull_request",
+      "runId": "29107111537",
+      "status": "success",
+      "headSha": "69085be5850f3acc3dd0fbc81c84fde49ac573bb"
+    },
+    {
+      "event": "push",
+      "ref": "main",
+      "runId": "29107754326",
+      "status": "success",
+      "headSha": "69085be5850f3acc3dd0fbc81c84fde49ac573bb"
+    },
+    {
+      "event": "push",
+      "ref": "v1.3.0",
+      "runId": "29108394409",
+      "status": "success",
+      "headSha": "69085be5850f3acc3dd0fbc81c84fde49ac573bb"
+    },
+    {
+      "event": "release",
+      "runId": "29109034218",
+      "status": "failure",
+      "headSha": "69085be5850f3acc3dd0fbc81c84fde49ac573bb",
+      "supersededBy": "29109432746",
+      "supersededReason": "release-event ran before milestone closeout was repaired"
+    },
+    {
+      "event": "release",
+      "runId": "29109432746",
+      "status": "success",
+      "headSha": "69085be5850f3acc3dd0fbc81c84fde49ac573bb",
+      "finalAuthority": true
+    }
+  ],
+  "authorityDecision": {
+    "finalReleaseEventRunId": "29109432746",
+    "failedReleaseEventRunMayCertifyRelease": false,
+    "missingReleaseEventRunMayCertifyRelease": false,
+    "prGateMayReplaceReleaseEventGate": false,
+    "mainPushGateMayReplaceReleaseEventGate": false,
+    "tagPushGateMayReplaceReleaseEventGate": false
+  }
+}

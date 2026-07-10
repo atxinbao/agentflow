@@ -919,7 +919,7 @@ fn sanitize_id(id: &str) -> String {
 mod tests {
     use super::{
         agentflow_cli_candidates, configured_codex_model_from_content, is_local_target_binary,
-        CodexProvider, DEFAULT_CODEX_MODEL,
+        CodexProvider, CODEX_PROGRAM, DEFAULT_CODEX_MODEL,
     };
     use crate::{
         model::{
@@ -967,7 +967,12 @@ mod tests {
 
     #[test]
     fn codex_provider_builds_exec_launch_plan() {
-        let provider = CodexProvider::new();
+        let provider = CodexProvider {
+            program: CODEX_PROGRAM.to_string(),
+            sandbox: "workspace-write".to_string(),
+            approval_policy: "never".to_string(),
+            model: Some(DEFAULT_CODEX_MODEL.to_string()),
+        };
         let request = McpLaunchRequest::new(
             "codex",
             "AF-001",
