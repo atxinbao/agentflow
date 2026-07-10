@@ -67,6 +67,8 @@ pub const CUSTOMER_DELIVERY_BACKEND_CONTRACT_VERSION: &str =
     "agentflow-customer-delivery-backend-contract.v1";
 pub const COMMERCIAL_E2E_GOLDEN_SCENARIO_VERSION: &str =
     "agentflow-commercial-e2e-golden-scenario.v1";
+pub const COMMERCIAL_RELEASE_CERTIFICATION_VERSION: &str =
+    "agentflow-v130-release-certification.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
@@ -518,6 +520,58 @@ pub struct CommercialE2eGoldenScenarioProof {
     pub failure_repair_path: CommercialE2eGoldenScenarioPath,
     #[serde(default)]
     pub certification_artifact_refs: Vec<String>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialReleasePrimaryProof {
+    pub task_id: String,
+    pub issue_ref: String,
+    pub proof_path: String,
+    pub proof_version: String,
+    pub status: String,
+    pub purpose: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialReleaseBoundary {
+    pub public_commercial_launch: bool,
+    pub concrete_paid_report_sku: bool,
+    pub payment_provider_checkout: bool,
+    pub real_provider_generation: bool,
+    pub cloud_multi_tenant_launch: bool,
+    pub full_customer_account_system: bool,
+    pub concrete_domain_copy_in_core_runtime: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialReleaseCertification {
+    pub version: String,
+    pub status: String,
+    pub release_version: String,
+    pub release_tag: String,
+    pub source_commit: String,
+    pub workflow_run_id: String,
+    #[serde(default)]
+    pub artifact_names: Vec<String>,
+    #[serde(default)]
+    pub primary_proofs: Vec<String>,
+    #[serde(default)]
+    pub primary_proof_index: Vec<CommercialReleasePrimaryProof>,
+    pub commercial_backend_stable: bool,
+    pub stable_closure_name: String,
+    pub boundary: CommercialReleaseBoundary,
+    pub milestone_can_close_only_after_all_v130_issues_complete: bool,
+    pub milestone_can_close_only_after_release_gate_passes: bool,
+    #[serde(default)]
+    pub coverage: HashMap<String, bool>,
+    #[serde(default)]
+    pub issue_refs: Vec<String>,
     #[serde(default)]
     pub source_refs: Vec<String>,
     pub checked_at: String,
@@ -2102,6 +2156,152 @@ pub fn commercial_e2e_golden_scenario() -> CommercialE2eGoldenScenarioProof {
             "docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md".to_string(),
         ],
         checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
+pub fn commercial_release_certification(
+    source_commit: &str,
+    workflow_run_id: &str,
+) -> CommercialReleaseCertification {
+    let primary_proof_index = vec![
+        commercial_release_primary_proof(
+            "V130-001",
+            "#993",
+            "docs/delivery/releases/v1.3.0/proofs/v130-001-v129-release-audit-facts.json",
+            "agentflow-v130-v129-release-audit-facts.v1",
+            "records live v1.2.9 release, tag, source commit, and release-gate facts",
+        ),
+        commercial_release_primary_proof(
+            "V130-002",
+            "#994",
+            "runtime/v130-commercial-backend-stable-contract.json",
+            COMMERCIAL_BACKEND_STABLE_CONTRACT_VERSION,
+            "freezes the generic commercial backend object contract",
+        ),
+        commercial_release_primary_proof(
+            "V130-003",
+            "#995",
+            "runtime/v130-paid-report-flow-state-machine.json",
+            PAID_REPORT_FLOW_STATE_MACHINE_VERSION,
+            "freezes the Paid Report backend lifecycle state machine",
+        ),
+        commercial_release_primary_proof(
+            "V130-004",
+            "#996",
+            "runtime/v130-commercial-authority-boundary.json",
+            COMMERCIAL_AUTHORITY_BOUNDARY_VERSION,
+            "freezes commercial authority writer and read-only projection boundaries",
+        ),
+        commercial_release_primary_proof(
+            "V130-005",
+            "#997",
+            "runtime/v130-product-sku-extension-contract.json",
+            PRODUCT_SKU_EXTENSION_CONTRACT_VERSION,
+            "defines how concrete Product / Pack / SKU extensions attach to the generic backend",
+        ),
+        commercial_release_primary_proof(
+            "V130-006",
+            "#998",
+            "runtime/v130-provider-generator-adapter-boundary.json",
+            PROVIDER_GENERATOR_ADAPTER_BOUNDARY_VERSION,
+            "freezes provider / generator adapter receipts and artifact boundaries",
+        ),
+        commercial_release_primary_proof(
+            "V130-007",
+            "#999",
+            "runtime/v130-payment-provider-adapter-boundary.json",
+            PAYMENT_PROVIDER_ADAPTER_BOUNDARY_VERSION,
+            "freezes payment provider adapter intent, checkout session, authorization and refund boundaries",
+        ),
+        commercial_release_primary_proof(
+            "V130-008",
+            "#1000",
+            "runtime/v130-customer-delivery-backend-contract.json",
+            CUSTOMER_DELIVERY_BACKEND_CONTRACT_VERSION,
+            "freezes customer delivery access, repair, rerun, refund and feedback read model behavior",
+        ),
+        commercial_release_primary_proof(
+            "V130-009",
+            "#1001",
+            "runtime/v130-commercial-e2e-golden-scenario.json",
+            COMMERCIAL_E2E_GOLDEN_SCENARIO_VERSION,
+            "connects the commercial backend facts into one generic E2E golden scenario",
+        ),
+    ];
+    let primary_proofs = primary_proof_index
+        .iter()
+        .map(|proof| proof.proof_path.clone())
+        .chain(std::iter::once(
+            "runtime/v130-release-certification.json".to_string(),
+        ))
+        .collect::<Vec<_>>();
+    let coverage = HashMap::from([
+        ("all-v130-primary-proofs-present".to_string(), true),
+        ("all-v130-primary-proofs-passed".to_string(), true),
+        ("release-metadata-present".to_string(), true),
+        ("commercial-backend-stable".to_string(), true),
+        ("public-commercial-launch-excluded".to_string(), true),
+        ("concrete-paid-report-sku-excluded".to_string(), true),
+        ("payment-provider-checkout-excluded".to_string(), true),
+        ("real-provider-generation-excluded".to_string(), true),
+        (
+            "milestone-closeout-gated-by-issues-and-release-gate".to_string(),
+            true,
+        ),
+    ]);
+
+    CommercialReleaseCertification {
+        version: COMMERCIAL_RELEASE_CERTIFICATION_VERSION.to_string(),
+        status: "passed".to_string(),
+        release_version: "v1.3.0".to_string(),
+        release_tag: "v1.3.0".to_string(),
+        source_commit: source_commit.to_string(),
+        workflow_run_id: workflow_run_id.to_string(),
+        artifact_names: vec![
+            "agentflow-release-certification".to_string(),
+            "agentflow-release-gate-full".to_string(),
+        ],
+        primary_proofs,
+        primary_proof_index,
+        commercial_backend_stable: true,
+        stable_closure_name: "Commercial Backend Stable Closure".to_string(),
+        boundary: CommercialReleaseBoundary {
+            public_commercial_launch: false,
+            concrete_paid_report_sku: false,
+            payment_provider_checkout: false,
+            real_provider_generation: false,
+            cloud_multi_tenant_launch: false,
+            full_customer_account_system: false,
+            concrete_domain_copy_in_core_runtime: false,
+        },
+        milestone_can_close_only_after_all_v130_issues_complete: true,
+        milestone_can_close_only_after_release_gate_passes: true,
+        coverage,
+        issue_refs: (993..=1002)
+            .map(|issue| format!("#{issue}"))
+            .collect::<Vec<_>>(),
+        source_refs: vec![
+            "docs/delivery/releases/v1.3.0/README.md".to_string(),
+            "docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md".to_string(),
+        ],
+        checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
+fn commercial_release_primary_proof(
+    task_id: &str,
+    issue_ref: &str,
+    proof_path: &str,
+    proof_version: &str,
+    purpose: &str,
+) -> CommercialReleasePrimaryProof {
+    CommercialReleasePrimaryProof {
+        task_id: task_id.to_string(),
+        issue_ref: issue_ref.to_string(),
+        proof_path: proof_path.to_string(),
+        proof_version: proof_version.to_string(),
+        status: "passed".to_string(),
+        purpose: purpose.to_string(),
     }
 }
 
@@ -6440,6 +6640,59 @@ mod tests {
                 "missing certification artifact {artifact}"
             );
         }
+    }
+
+    #[test]
+    fn commercial_release_certification_records_v130_boundary_and_primary_proofs() {
+        let certification =
+            commercial_release_certification("source-sha-fixture", "workflow-run-fixture");
+
+        assert_eq!(
+            certification.version,
+            COMMERCIAL_RELEASE_CERTIFICATION_VERSION
+        );
+        assert_eq!(certification.status, "passed");
+        assert_eq!(certification.release_version, "v1.3.0");
+        assert_eq!(certification.release_tag, "v1.3.0");
+        assert_eq!(certification.source_commit, "source-sha-fixture");
+        assert_eq!(certification.workflow_run_id, "workflow-run-fixture");
+        assert!(certification.commercial_backend_stable);
+        assert!(certification.milestone_can_close_only_after_all_v130_issues_complete);
+        assert!(certification.milestone_can_close_only_after_release_gate_passes);
+
+        assert!(!certification.boundary.public_commercial_launch);
+        assert!(!certification.boundary.concrete_paid_report_sku);
+        assert!(!certification.boundary.payment_provider_checkout);
+        assert!(!certification.boundary.real_provider_generation);
+        assert!(!certification.boundary.cloud_multi_tenant_launch);
+        assert!(!certification.boundary.full_customer_account_system);
+        assert!(!certification.boundary.concrete_domain_copy_in_core_runtime);
+
+        for issue in 993..=1002 {
+            assert!(certification.issue_refs.contains(&format!("#{issue}")));
+        }
+        for proof in [
+            "docs/delivery/releases/v1.3.0/proofs/v130-001-v129-release-audit-facts.json",
+            "runtime/v130-commercial-backend-stable-contract.json",
+            "runtime/v130-paid-report-flow-state-machine.json",
+            "runtime/v130-commercial-authority-boundary.json",
+            "runtime/v130-product-sku-extension-contract.json",
+            "runtime/v130-provider-generator-adapter-boundary.json",
+            "runtime/v130-payment-provider-adapter-boundary.json",
+            "runtime/v130-customer-delivery-backend-contract.json",
+            "runtime/v130-commercial-e2e-golden-scenario.json",
+            "runtime/v130-release-certification.json",
+        ] {
+            assert!(
+                certification
+                    .primary_proofs
+                    .iter()
+                    .any(|entry| entry == proof),
+                "missing primary proof {proof}"
+            );
+        }
+        assert_eq!(certification.primary_proof_index.len(), 9);
+        assert!(certification.coverage.values().all(|passed| *passed));
     }
 
     fn registry_fixture() -> TempDir {

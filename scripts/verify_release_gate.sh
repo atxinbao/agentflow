@@ -386,6 +386,7 @@ V130_PROVIDER_GENERATOR_ADAPTER_BOUNDARY_PATH="$RUNTIME_DIR/v130-provider-genera
 V130_PAYMENT_PROVIDER_ADAPTER_BOUNDARY_PATH="$RUNTIME_DIR/v130-payment-provider-adapter-boundary.json"
 V130_CUSTOMER_DELIVERY_BACKEND_CONTRACT_PATH="$RUNTIME_DIR/v130-customer-delivery-backend-contract.json"
 V130_COMMERCIAL_E2E_GOLDEN_SCENARIO_PATH="$RUNTIME_DIR/v130-commercial-e2e-golden-scenario.json"
+V130_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v130-release-certification.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -19012,6 +19013,106 @@ PY
   record_stage "$stage" "passed" "$(basename "$V130_COMMERCIAL_E2E_GOLDEN_SCENARIO_PATH")"
 }
 
+run_v130_release_certification_gate() {
+  local stage="release.v130-release-certification"
+  local workflow_run_id="${GATE_RUN_ID:-local-workflow-run}"
+  record_stage "$stage" "started" "$V130_RELEASE_CERTIFICATION_PATH"
+
+  run_workspace_cmd "$stage.generate" "$RUNTIME_DIR/v130-release-certification.txt" \
+    cargo run -p agentflow-runtime-api --example v130_release_certification_proofs -- \
+      "$V130_RELEASE_CERTIFICATION_PATH" "$SOURCE_COMMIT_SHA" "$workflow_run_id"
+
+  python3 - "$V130_RELEASE_CERTIFICATION_PATH" "$WORKSPACE" "$RUNTIME_DIR" "$SOURCE_COMMIT_SHA" "$workflow_run_id" <<'PY'
+import json
+import pathlib
+import sys
+
+cert_path = pathlib.Path(sys.argv[1])
+workspace = pathlib.Path(sys.argv[2])
+runtime_dir = pathlib.Path(sys.argv[3])
+source_commit = sys.argv[4]
+workflow_run_id = sys.argv[5]
+payload = json.loads(cert_path.read_text(encoding="utf-8"))
+failed = []
+
+if payload.get("version") != "agentflow-v130-release-certification.v1":
+    failed.append("wrong-version")
+if payload.get("status") != "passed":
+    failed.append("status-not-passed")
+if payload.get("releaseVersion") != "v1.3.0":
+    failed.append("wrong-release-version")
+if payload.get("releaseTag") != "v1.3.0":
+    failed.append("wrong-release-tag")
+if payload.get("sourceCommit") != source_commit:
+    failed.append("wrong-source-commit")
+if payload.get("workflowRunId") != workflow_run_id:
+    failed.append("wrong-workflow-run-id")
+if payload.get("artifactNames") != ["agentflow-release-certification", "agentflow-release-gate-full"]:
+    failed.append("wrong-artifact-names")
+if payload.get("commercialBackendStable") is not True:
+    failed.append("commercial-backend-not-stable")
+
+expected = [
+    "docs/delivery/releases/v1.3.0/proofs/v130-001-v129-release-audit-facts.json",
+    "runtime/v130-commercial-backend-stable-contract.json",
+    "runtime/v130-paid-report-flow-state-machine.json",
+    "runtime/v130-commercial-authority-boundary.json",
+    "runtime/v130-product-sku-extension-contract.json",
+    "runtime/v130-provider-generator-adapter-boundary.json",
+    "runtime/v130-payment-provider-adapter-boundary.json",
+    "runtime/v130-customer-delivery-backend-contract.json",
+    "runtime/v130-commercial-e2e-golden-scenario.json",
+    "runtime/v130-release-certification.json",
+]
+primary_proofs = set(payload.get("primaryProofs", []))
+for proof in expected:
+    if proof not in primary_proofs:
+        failed.append(f"missing-primary-proof-{proof}")
+    proof_path = workspace / proof if proof.startswith("docs/") else runtime_dir / pathlib.Path(proof).name
+    if not proof_path.is_file():
+        failed.append(f"missing-primary-proof-file-{proof}")
+        continue
+    proof_payload = json.loads(proof_path.read_text(encoding="utf-8"))
+    if proof_payload.get("status") != "passed":
+        failed.append(f"primary-proof-not-passed-{proof}")
+
+proof_index = payload.get("primaryProofIndex", [])
+index_by_issue = {entry.get("issueRef"): entry for entry in proof_index}
+for issue in range(993, 1002):
+    issue_ref = f"#{issue}"
+    entry = index_by_issue.get(issue_ref)
+    if not entry:
+        failed.append(f"missing-primary-proof-index-{issue_ref}")
+    elif entry.get("status") != "passed":
+        failed.append(f"primary-proof-index-not-passed-{issue_ref}")
+
+boundary = payload.get("boundary", {})
+for key in [
+    "publicCommercialLaunch",
+    "concretePaidReportSku",
+    "paymentProviderCheckout",
+    "realProviderGeneration",
+    "cloudMultiTenantLaunch",
+    "fullCustomerAccountSystem",
+    "concreteDomainCopyInCoreRuntime",
+]:
+    if boundary.get(key) is not False:
+        failed.append(f"boundary-flag-not-false-{key}")
+
+if payload.get("milestoneCanCloseOnlyAfterAllV130IssuesComplete") is not True:
+    failed.append("milestone-not-gated-by-v130-issues")
+if payload.get("milestoneCanCloseOnlyAfterReleaseGatePasses") is not True:
+    failed.append("milestone-not-gated-by-release-gate")
+if any(value is not True for value in payload.get("coverage", {}).values()):
+    failed.append("coverage-not-passed")
+
+if failed:
+    raise SystemExit(f"v130 release certification failed: {failed}")
+PY
+
+  record_stage "$stage" "passed" "$(basename "$V130_RELEASE_CERTIFICATION_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -19651,6 +19752,7 @@ PY
   run_v130_payment_provider_adapter_boundary_gate
   run_v130_customer_delivery_backend_contract_gate
   run_v130_commercial_e2e_golden_scenario_gate
+  run_v130_release_certification_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

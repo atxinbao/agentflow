@@ -102,6 +102,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [104-payment-provider-adapter-boundary-v1.md](104-payment-provider-adapter-boundary-v1.md) | Payment Provider Adapter Boundary |
 | [105-customer-delivery-backend-contract-v1.md](105-customer-delivery-backend-contract-v1.md) | Customer Delivery Backend Contract |
 | [106-commercial-e2e-golden-scenario-v1.md](106-commercial-e2e-golden-scenario-v1.md) | Commercial End-to-End Golden Scenario |
+| [107-commercial-release-certification-v1.md](107-commercial-release-certification-v1.md) | Commercial Release Certification |
 
 ## Rules
 
