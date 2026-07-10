@@ -81,6 +81,7 @@ or local E2E evidence.
 | v1.3.0 commercial backend stable contract | `runtime/v130-commercial-backend-stable-contract.json` | machine-readable Product / Order / Entitlement / Run / Artifact / Evidence / Decision / Delivery / Feedback schema inventory |
 | v1.3.0 paid report flow state machine | `runtime/v130-paid-report-flow-state-machine.json` | machine-readable Paid Report lifecycle states, positive transitions, and invalid transition failure fixtures |
 | v1.3.0 commercial authority boundary | `runtime/v130-commercial-authority-boundary.json` | machine-readable authority writer map and negative fixtures for projection / customer view / download view / sidecar authority writes |
+| v1.3.0 product SKU extension contract | `runtime/v130-product-sku-extension-contract.json` | machine-readable Product / Pack / SKU extension contract with synthetic SKU and missing-SKU negative fixture |
 
 ## GitHub Traceability
 

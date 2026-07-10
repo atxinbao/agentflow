@@ -381,6 +381,7 @@ V129_RELEASE_CERTIFICATION_PATH="$RUNTIME_DIR/v129-release-certification.json"
 V130_COMMERCIAL_BACKEND_STABLE_CONTRACT_PATH="$RUNTIME_DIR/v130-commercial-backend-stable-contract.json"
 V130_PAID_REPORT_FLOW_STATE_MACHINE_PATH="$RUNTIME_DIR/v130-paid-report-flow-state-machine.json"
 V130_COMMERCIAL_AUTHORITY_BOUNDARY_PATH="$RUNTIME_DIR/v130-commercial-authority-boundary.json"
+V130_PRODUCT_SKU_EXTENSION_CONTRACT_PATH="$RUNTIME_DIR/v130-product-sku-extension-contract.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -18478,6 +18479,113 @@ PY
   record_stage "$stage" "passed" "$(basename "$V130_COMMERCIAL_AUTHORITY_BOUNDARY_PATH")"
 }
 
+run_v130_product_sku_extension_contract_gate() {
+  local stage="release.v130-product-sku-extension-contract"
+  record_stage "$stage" "started" "$V130_PRODUCT_SKU_EXTENSION_CONTRACT_PATH"
+
+  run_workspace_cmd "$stage.generate" "$RUNTIME_DIR/v130-product-sku-extension-contract.txt" \
+    cargo run -p agentflow-runtime-api --example v130_product_sku_extension_contract_proofs -- \
+      "$V130_PRODUCT_SKU_EXTENSION_CONTRACT_PATH"
+
+  python3 - "$V130_PRODUCT_SKU_EXTENSION_CONTRACT_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+failed = []
+
+if payload.get("version") != "agentflow-product-sku-extension-contract.v1":
+    failed.append("wrong-version")
+if payload.get("status") != "passed":
+    failed.append("status-not-passed")
+if payload.get("releaseVersion") != "v1.3.0":
+    failed.append("wrong-release-version")
+if payload.get("allowedAuthoritySurface") != "Product / Pack / SKU":
+    failed.append("wrong-authority-surface")
+
+required_fields = set(payload.get("requiredFields", []))
+for field in [
+    "skuId",
+    "productId",
+    "requiredInputs",
+    "reportSections",
+    "evidencePolicy",
+    "decisionPolicy",
+    "deliveryPolicy",
+    "pricingRef",
+    "generatorRef",
+    "sourceRefs",
+]:
+    if field not in required_fields:
+        failed.append(f"missing-required-field-{field}")
+
+synthetic = payload.get("syntheticSkuFixture", {})
+for field in [
+    "skuId",
+    "productId",
+    "pricingRef",
+    "generatorRef",
+]:
+    if not synthetic.get(field):
+        failed.append(f"synthetic-sku-missing-{field}")
+for field in [
+    "requiredInputs",
+    "reportSections",
+    "evidencePolicy",
+    "decisionPolicy",
+    "deliveryPolicy",
+    "sourceRefs",
+]:
+    if not synthetic.get(field):
+        failed.append(f"synthetic-sku-missing-{field}")
+
+resolution = payload.get("syntheticSkuResolution", {})
+if resolution.get("status") != "ready":
+    failed.append("synthetic-sku-resolution-not-ready")
+if resolution.get("canMaterializeProductInstance") is not True:
+    failed.append("synthetic-sku-cannot-materialize-product-instance")
+if resolution.get("fallsBackToGenericHardcodedContent") is not False:
+    failed.append("synthetic-sku-fallback-not-rejected")
+
+fixtures = {fixture.get("fixtureId"): fixture for fixture in payload.get("negativeFixtures", [])}
+for fixture_id in [
+    "missing-sku-definition",
+    "core-runtime-domain-term-as-authority",
+    "synthetic-sku-sidecar-promoted-as-live-product",
+]:
+    fixture = fixtures.get(fixture_id)
+    if not fixture:
+        failed.append(f"missing-negative-fixture-{fixture_id}")
+        continue
+    if fixture.get("status") != "failed-as-expected":
+        failed.append(f"{fixture_id}-unexpected-status")
+    if not fixture.get("failureReason"):
+        failed.append(f"{fixture_id}-missing-failure-reason")
+    if fixture.get("resolution", {}).get("fallsBackToGenericHardcodedContent") is not False:
+        failed.append(f"{fixture_id}-fallback-not-rejected")
+
+missing = fixtures.get("missing-sku-definition", {}).get("resolution", {})
+if missing.get("status") != "invalid":
+    failed.append("missing-sku-not-invalid")
+if missing.get("canMaterializeProductInstance") is not False:
+    failed.append("missing-sku-can-materialize")
+if missing.get("unavailableReason") != "missing-sku-definition":
+    failed.append("missing-sku-wrong-reason")
+
+core_text = f"{payload.get('authorityBoundary', '')} {payload.get('coreRuntimePolicy', '')}".lower()
+for term in payload.get("forbiddenCoreTerms", []):
+    if term.lower() in core_text:
+        failed.append(f"core-runtime-authority-contains-{term}")
+
+if failed:
+    raise SystemExit(f"v130 product SKU extension contract failed: {failed}")
+PY
+
+  record_stage "$stage" "passed" "$(basename "$V130_PRODUCT_SKU_EXTENSION_CONTRACT_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -19112,6 +19220,7 @@ PY
   run_v130_commercial_backend_stable_contract_gate
   run_v130_paid_report_flow_state_machine_gate
   run_v130_commercial_authority_boundary_gate
+  run_v130_product_sku_extension_contract_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
