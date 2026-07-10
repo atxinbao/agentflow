@@ -385,6 +385,7 @@ V130_PRODUCT_SKU_EXTENSION_CONTRACT_PATH="$RUNTIME_DIR/v130-product-sku-extensio
 V130_PROVIDER_GENERATOR_ADAPTER_BOUNDARY_PATH="$RUNTIME_DIR/v130-provider-generator-adapter-boundary.json"
 V130_PAYMENT_PROVIDER_ADAPTER_BOUNDARY_PATH="$RUNTIME_DIR/v130-payment-provider-adapter-boundary.json"
 V130_CUSTOMER_DELIVERY_BACKEND_CONTRACT_PATH="$RUNTIME_DIR/v130-customer-delivery-backend-contract.json"
+V130_COMMERCIAL_E2E_GOLDEN_SCENARIO_PATH="$RUNTIME_DIR/v130-commercial-e2e-golden-scenario.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -18907,6 +18908,110 @@ PY
   record_stage "$stage" "passed" "$(basename "$V130_CUSTOMER_DELIVERY_BACKEND_CONTRACT_PATH")"
 }
 
+run_v130_commercial_e2e_golden_scenario_gate() {
+  local stage="release.v130-commercial-e2e-golden-scenario"
+  record_stage "$stage" "started" "$V130_COMMERCIAL_E2E_GOLDEN_SCENARIO_PATH"
+
+  run_workspace_cmd "$stage.generate" "$RUNTIME_DIR/v130-commercial-e2e-golden-scenario.txt" \
+    cargo run -p agentflow-runtime-api --example v130_commercial_e2e_golden_scenario_proofs -- \
+      "$V130_COMMERCIAL_E2E_GOLDEN_SCENARIO_PATH"
+
+  python3 - "$V130_COMMERCIAL_E2E_GOLDEN_SCENARIO_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+failed = []
+
+if payload.get("version") != "agentflow-commercial-e2e-golden-scenario.v1":
+    failed.append("wrong-version")
+if payload.get("status") != "passed":
+    failed.append("status-not-passed")
+if payload.get("releaseVersion") != "v1.3.0":
+    failed.append("wrong-release-version")
+if payload.get("concreteDomainSkuImplemented") is not False:
+    failed.append("concrete-domain-sku-implemented")
+
+expected = [
+    "ProductSkuExtensionDefinition",
+    "PaidReportOrderRecord",
+    "PaidReportEntitlementAuthorization",
+    "PaidReportOrderToRunAdmission",
+    "ProviderGeneratorAdapterReceipt",
+    "PaidReportArtifact",
+    "PaidReportEvidencePack",
+    "PaidReportDecisionRecord",
+    "PaidReportDeliveryPackageProjection",
+    "PaidReportCustomerDeliveryAccessProjection",
+    "PaidReportFeedbackLoopProjection",
+]
+actual = [fact.get("factType") for fact in payload.get("orderedFacts", [])]
+if actual != expected:
+    failed.append("ordered-facts-do-not-match-backend-chain")
+
+for fact in payload.get("orderedFacts", []):
+    fact_id = fact.get("factId") or "unknown"
+    if not fact.get("contractVersion"):
+        failed.append(f"{fact_id}-missing-contract-version")
+    if not fact.get("authorityOwner"):
+        failed.append(f"{fact_id}-missing-authority-owner")
+    if not fact.get("sourceRef"):
+        failed.append(f"{fact_id}-missing-source-ref")
+
+success = payload.get("successPath", {})
+if success.get("status") != "passed":
+    failed.append("success-path-not-passed")
+if success.get("decisionOutcome") != "accepted":
+    failed.append("success-path-not-accepted")
+if success.get("deliveryStatus") != "delivery-ready":
+    failed.append("success-path-not-delivery-ready")
+if success.get("downloadAccessVisible") is not True:
+    failed.append("success-path-download-hidden")
+if success.get("accessHandleGenerated") is not True:
+    failed.append("success-path-missing-access-handle")
+if success.get("mutatesDeliveredArtifact") is not False:
+    failed.append("success-path-mutates-delivered-artifact")
+if len(success.get("factRefs", [])) != len(expected):
+    failed.append("success-path-does-not-reference-all-facts")
+
+repair = payload.get("failureRepairPath", {})
+if repair.get("status") != "failed-as-expected":
+    failed.append("repair-path-unexpected-status")
+if repair.get("decisionOutcome") != "needs-fix":
+    failed.append("repair-path-wrong-decision-outcome")
+if repair.get("deliveryStatus") != "repair-needed":
+    failed.append("repair-path-wrong-delivery-status")
+if repair.get("downloadAccessVisible") is not False:
+    failed.append("repair-path-download-visible")
+if repair.get("accessHandleGenerated") is not False:
+    failed.append("repair-path-access-handle-generated")
+if repair.get("mutatesDeliveredArtifact") is not False:
+    failed.append("repair-path-mutates-delivered-artifact")
+if repair.get("nextAction") != "create-repair-proposal":
+    failed.append("repair-path-wrong-next-action")
+
+artifacts = set(payload.get("certificationArtifactRefs", []))
+for artifact in [
+    "runtime/v130-commercial-backend-stable-contract.json",
+    "runtime/v130-paid-report-flow-state-machine.json",
+    "runtime/v130-commercial-authority-boundary.json",
+    "runtime/v130-product-sku-extension-contract.json",
+    "runtime/v130-provider-generator-adapter-boundary.json",
+    "runtime/v130-payment-provider-adapter-boundary.json",
+    "runtime/v130-customer-delivery-backend-contract.json",
+]:
+    if artifact not in artifacts:
+        failed.append(f"missing-certification-artifact-{artifact}")
+
+if failed:
+    raise SystemExit(f"v130 commercial E2E golden scenario failed: {failed}")
+PY
+
+  record_stage "$stage" "passed" "$(basename "$V130_COMMERCIAL_E2E_GOLDEN_SCENARIO_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -19545,6 +19650,7 @@ PY
   run_v130_provider_generator_adapter_boundary_gate
   run_v130_payment_provider_adapter_boundary_gate
   run_v130_customer_delivery_backend_contract_gate
+  run_v130_commercial_e2e_golden_scenario_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
