@@ -100,6 +100,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [102-product-sku-extension-contract-v1.md](102-product-sku-extension-contract-v1.md) | Product SKU Extension Contract |
 | [103-provider-generator-adapter-boundary-v1.md](103-provider-generator-adapter-boundary-v1.md) | Provider / Generator Adapter Boundary |
 | [104-payment-provider-adapter-boundary-v1.md](104-payment-provider-adapter-boundary-v1.md) | Payment Provider Adapter Boundary |
+| [105-customer-delivery-backend-contract-v1.md](105-customer-delivery-backend-contract-v1.md) | Customer Delivery Backend Contract |
 
 ## Rules
 

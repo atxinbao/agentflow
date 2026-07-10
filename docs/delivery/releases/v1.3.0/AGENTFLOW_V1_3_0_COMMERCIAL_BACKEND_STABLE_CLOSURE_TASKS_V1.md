@@ -16,7 +16,7 @@ This document records the planned public delivery traceability for `v1.3.0`.
 | V130-005 | #997 | Product SKU Extension Contract | done | `runtime/v130-product-sku-extension-contract.json` |
 | V130-006 | #998 | Provider / Generator Adapter Boundary | done | `runtime/v130-provider-generator-adapter-boundary.json` |
 | V130-007 | #999 | Payment Provider Adapter Boundary | done | `runtime/v130-payment-provider-adapter-boundary.json` |
-| V130-008 | #1000 | Customer Delivery Backend Contract | planned | TBD |
+| V130-008 | #1000 | Customer Delivery Backend Contract | done | `runtime/v130-customer-delivery-backend-contract.json` |
 | V130-009 | #1001 | Commercial End-to-End Golden Scenario | planned | TBD |
 | V130-010 | #1002 | v1.3.0 Release Certification | planned | TBD |
 
@@ -172,3 +172,76 @@ Download View
 Synthetic Release Fixture
 Release Sidecar
 ```
+
+## V130-005 Product SKU Extension Contract
+
+`V130-005` freezes the Product / Pack / SKU authority surface for concrete paid
+report variants while keeping Core Runtime generic.
+
+The release-gate proof at `runtime/v130-product-sku-extension-contract.json`
+must prove Product / Pack / SKU definitions own required inputs, report
+sections, evidence policy, decision policy, delivery policy, pricing refs and
+generator refs.
+
+Core Runtime must not contain concrete domain product copy or hardcoded SKU
+authority.
+
+## V130-006 Provider / Generator Adapter Boundary
+
+`V130-006` freezes the adapter boundary between Core Runtime and future
+generation providers.
+
+The release-gate proof at
+`runtime/v130-provider-generator-adapter-boundary.json` must prove Core Runtime
+uses normalized generation receipts, artifact refs and evidence refs while
+provider-specific generation calls remain adapter-side.
+
+## V130-007 Payment Provider Adapter Boundary
+
+`V130-007` freezes the adapter boundary between Core Runtime and future payment
+providers.
+
+The release-gate proof at `runtime/v130-payment-provider-adapter-boundary.json`
+must include `paid`, `failed`, `refunded`, `revoked` and `missing` dry-run
+fixtures. The proof must show that Core never owns checkout implementation or
+refund execution, and that missing provider state cannot fabricate provider
+payment intent, checkout session or entitlement authorization references.
+
+## V130-008 Customer Delivery Backend Contract
+
+`V130-008` freezes the customer delivery backend contract after order,
+entitlement, decision, artifact and payment adapter boundaries are available.
+
+The release-gate proof at
+`runtime/v130-customer-delivery-backend-contract.json` must bind:
+
+```text
+orderId
+entitlementAuthorizationRef
+decisionId
+reportArtifactRef
+accessReceiptRef
+expiryState
+revocationState
+refundState
+repairState
+rerunState
+feedbackState
+sourceRefs
+```
+
+The accepted fixture must expose download access only when the decision is
+accepted and customer access is authorized.
+
+The negative fixtures must cover:
+
+```text
+expired
+revoked
+refunded
+repair-needed
+rerun-needed
+```
+
+Every negative fixture must hide download access, avoid generating an access
+handle, publish a stable `nextAction`, and include failure reasons.

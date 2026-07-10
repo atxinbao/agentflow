@@ -63,6 +63,8 @@ pub const PROVIDER_GENERATOR_ADAPTER_BOUNDARY_VERSION: &str =
     "agentflow-provider-generator-adapter-boundary.v1";
 pub const PAYMENT_PROVIDER_ADAPTER_BOUNDARY_VERSION: &str =
     "agentflow-payment-provider-adapter-boundary.v1";
+pub const CUSTOMER_DELIVERY_BACKEND_CONTRACT_VERSION: &str =
+    "agentflow-customer-delivery-backend-contract.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
@@ -421,6 +423,52 @@ pub struct PaymentProviderAdapterBoundaryContract {
     pub stable_payment_statuses: Vec<String>,
     #[serde(default)]
     pub stable_refund_statuses: Vec<String>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomerDeliveryBackendFixture {
+    pub fixture_id: String,
+    pub status: String,
+    pub order_id: String,
+    pub entitlement_authorization_ref: String,
+    pub decision_id: String,
+    pub report_artifact_ref: String,
+    pub access_receipt_ref: Option<String>,
+    pub expiry_state: String,
+    pub revocation_state: String,
+    pub refund_state: String,
+    pub repair_state: String,
+    pub rerun_state: String,
+    pub feedback_state: String,
+    pub access_status: String,
+    pub next_action: String,
+    pub download_access_visible: bool,
+    pub access_handle_generated: bool,
+    #[serde(default)]
+    pub failure_reasons: Vec<String>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomerDeliveryBackendContract {
+    pub version: String,
+    pub status: String,
+    pub release_version: String,
+    pub authority_boundary: String,
+    pub read_model_name: String,
+    #[serde(default)]
+    pub required_bindings: Vec<String>,
+    #[serde(default)]
+    pub stable_states: Vec<String>,
+    pub accepted_delivery_fixture: CustomerDeliveryBackendFixture,
+    #[serde(default)]
+    pub negative_access_fixtures: Vec<CustomerDeliveryBackendFixture>,
     #[serde(default)]
     pub source_refs: Vec<String>,
     pub checked_at: String,
@@ -1719,6 +1767,188 @@ pub fn payment_provider_adapter_boundary_contract() -> PaymentProviderAdapterBou
             "docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md".to_string(),
         ],
         checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
+pub fn customer_delivery_backend_contract() -> CustomerDeliveryBackendContract {
+    CustomerDeliveryBackendContract {
+        version: CUSTOMER_DELIVERY_BACKEND_CONTRACT_VERSION.to_string(),
+        status: "passed".to_string(),
+        release_version: "v1.3.0".to_string(),
+        authority_boundary: "Customer Delivery Backend reads accepted decision, complete artifact, authorized entitlement and access receipts. It can project download access and nextAction, but it cannot create payment checkout, mutate delivered artifacts, bypass refund / revocation / expiry state or replace decision authority.".to_string(),
+        read_model_name: "customer-delivery-backend-read-model".to_string(),
+        required_bindings: vec![
+            "orderId".to_string(),
+            "entitlementAuthorizationRef".to_string(),
+            "decisionId".to_string(),
+            "reportArtifactRef".to_string(),
+            "accessReceiptRef".to_string(),
+            "expiryState".to_string(),
+            "revocationState".to_string(),
+            "refundState".to_string(),
+            "repairState".to_string(),
+            "rerunState".to_string(),
+            "feedbackState".to_string(),
+            "sourceRefs".to_string(),
+        ],
+        stable_states: vec![
+            "accessible".to_string(),
+            "expired".to_string(),
+            "revoked".to_string(),
+            "refunded".to_string(),
+            "repair-needed".to_string(),
+            "rerun-needed".to_string(),
+            "blocked".to_string(),
+        ],
+        accepted_delivery_fixture: customer_delivery_backend_fixture(
+            "accepted-authorized",
+            "passed",
+            Some("access-receipt-accepted-authorized"),
+            "active",
+            "none",
+            "none",
+            "none",
+            "not-required",
+            "closed",
+            "accessible",
+            "show-download",
+            true,
+            true,
+            &[],
+        ),
+        negative_access_fixtures: vec![
+            customer_delivery_backend_fixture(
+                "expired",
+                "failed-as-expected",
+                Some("access-receipt-expired"),
+                "expired",
+                "none",
+                "none",
+                "none",
+                "not-required",
+                "closed",
+                "expired",
+                "renew-access",
+                false,
+                false,
+                &["access-expired"],
+            ),
+            customer_delivery_backend_fixture(
+                "revoked",
+                "failed-as-expected",
+                Some("access-receipt-revoked"),
+                "active",
+                "revoked",
+                "none",
+                "none",
+                "not-required",
+                "closed",
+                "revoked",
+                "contact-support",
+                false,
+                false,
+                &["access-revoked"],
+            ),
+            customer_delivery_backend_fixture(
+                "refunded",
+                "failed-as-expected",
+                Some("access-receipt-refunded"),
+                "active",
+                "none",
+                "refunded",
+                "none",
+                "not-required",
+                "closed",
+                "refunded",
+                "show-refund-policy",
+                false,
+                false,
+                &["payment-refunded"],
+            ),
+            customer_delivery_backend_fixture(
+                "repair-needed",
+                "failed-as-expected",
+                None,
+                "active",
+                "none",
+                "none",
+                "repair-needed",
+                "not-required",
+                "repair-requested",
+                "repair-needed",
+                "create-repair-proposal",
+                false,
+                false,
+                &["repair-needed"],
+            ),
+            customer_delivery_backend_fixture(
+                "rerun-needed",
+                "failed-as-expected",
+                None,
+                "active",
+                "none",
+                "none",
+                "none",
+                "rerun-needed",
+                "repair-requested",
+                "rerun-needed",
+                "request-new-authorization",
+                false,
+                false,
+                &["rerun-needs-authorization"],
+            ),
+        ],
+        source_refs: vec![
+            "docs/architecture/105-customer-delivery-backend-contract-v1.md".to_string(),
+            "docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md".to_string(),
+        ],
+        checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
+fn customer_delivery_backend_fixture(
+    fixture_id: &str,
+    status: &str,
+    access_receipt_ref: Option<&str>,
+    expiry_state: &str,
+    revocation_state: &str,
+    refund_state: &str,
+    repair_state: &str,
+    rerun_state: &str,
+    feedback_state: &str,
+    access_status: &str,
+    next_action: &str,
+    download_access_visible: bool,
+    access_handle_generated: bool,
+    failure_reasons: &[&str],
+) -> CustomerDeliveryBackendFixture {
+    CustomerDeliveryBackendFixture {
+        fixture_id: fixture_id.to_string(),
+        status: status.to_string(),
+        order_id: format!("order-{fixture_id}"),
+        entitlement_authorization_ref: format!("authorization-{fixture_id}"),
+        decision_id: format!("decision-{fixture_id}"),
+        report_artifact_ref: format!("artifact-{fixture_id}"),
+        access_receipt_ref: access_receipt_ref.map(str::to_string),
+        expiry_state: expiry_state.to_string(),
+        revocation_state: revocation_state.to_string(),
+        refund_state: refund_state.to_string(),
+        repair_state: repair_state.to_string(),
+        rerun_state: rerun_state.to_string(),
+        feedback_state: feedback_state.to_string(),
+        access_status: access_status.to_string(),
+        next_action: next_action.to_string(),
+        download_access_visible,
+        access_handle_generated,
+        failure_reasons: failure_reasons
+            .iter()
+            .map(|reason| reason.to_string())
+            .collect(),
+        source_refs: vec![
+            "docs/architecture/100-paid-report-flow-state-machine-v1.md".to_string(),
+            "docs/architecture/101-commercial-authority-boundary-v1.md".to_string(),
+            "docs/architecture/104-payment-provider-adapter-boundary-v1.md".to_string(),
+        ],
     }
 }
 
@@ -5819,6 +6049,99 @@ mod tests {
         assert!(missing.checkout_session_ref.is_none());
         assert!(missing.entitlement_authorization_ref.is_none());
         assert!(!missing.core_consumes_authorization_result);
+    }
+
+    #[test]
+    fn customer_delivery_backend_contract_blocks_invalid_access_states() {
+        let contract = customer_delivery_backend_contract();
+
+        assert_eq!(contract.version, CUSTOMER_DELIVERY_BACKEND_CONTRACT_VERSION);
+        assert_eq!(contract.status, "passed");
+        assert_eq!(contract.release_version, "v1.3.0");
+
+        let required = contract
+            .required_bindings
+            .iter()
+            .map(String::as_str)
+            .collect::<std::collections::HashSet<_>>();
+        for field in [
+            "orderId",
+            "entitlementAuthorizationRef",
+            "decisionId",
+            "reportArtifactRef",
+            "accessReceiptRef",
+            "expiryState",
+            "revocationState",
+            "refundState",
+            "repairState",
+            "rerunState",
+            "feedbackState",
+            "sourceRefs",
+        ] {
+            assert!(required.contains(field), "missing binding {field}");
+        }
+
+        let states = contract
+            .stable_states
+            .iter()
+            .map(String::as_str)
+            .collect::<std::collections::HashSet<_>>();
+        for state in [
+            "accessible",
+            "expired",
+            "revoked",
+            "refunded",
+            "repair-needed",
+            "rerun-needed",
+            "blocked",
+        ] {
+            assert!(states.contains(state), "missing state {state}");
+        }
+
+        let accepted = &contract.accepted_delivery_fixture;
+        assert_eq!(accepted.fixture_id, "accepted-authorized");
+        assert_eq!(accepted.status, "passed");
+        assert_eq!(accepted.access_status, "accessible");
+        assert_eq!(accepted.next_action, "show-download");
+        assert!(accepted.download_access_visible);
+        assert!(accepted.access_handle_generated);
+        assert!(accepted.access_receipt_ref.is_some());
+        assert!(accepted.failure_reasons.is_empty());
+
+        let fixtures = contract
+            .negative_access_fixtures
+            .iter()
+            .map(|fixture| (fixture.fixture_id.as_str(), fixture))
+            .collect::<std::collections::HashMap<_, _>>();
+        for fixture_id in [
+            "expired",
+            "revoked",
+            "refunded",
+            "repair-needed",
+            "rerun-needed",
+        ] {
+            let fixture = fixtures
+                .get(fixture_id)
+                .unwrap_or_else(|| panic!("missing fixture {fixture_id}"));
+            assert_eq!(fixture.status, "failed-as-expected");
+            assert!(!fixture.download_access_visible);
+            assert!(!fixture.access_handle_generated);
+            assert!(!fixture.next_action.trim().is_empty());
+            assert!(!fixture.failure_reasons.is_empty());
+            assert!(!fixture.source_refs.is_empty());
+        }
+
+        assert_eq!(fixtures["expired"].next_action, "renew-access");
+        assert_eq!(fixtures["revoked"].next_action, "contact-support");
+        assert_eq!(fixtures["refunded"].next_action, "show-refund-policy");
+        assert_eq!(
+            fixtures["repair-needed"].next_action,
+            "create-repair-proposal"
+        );
+        assert_eq!(
+            fixtures["rerun-needed"].next_action,
+            "request-new-authorization"
+        );
     }
 
     fn registry_fixture() -> TempDir {

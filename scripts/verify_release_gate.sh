@@ -384,6 +384,7 @@ V130_COMMERCIAL_AUTHORITY_BOUNDARY_PATH="$RUNTIME_DIR/v130-commercial-authority-
 V130_PRODUCT_SKU_EXTENSION_CONTRACT_PATH="$RUNTIME_DIR/v130-product-sku-extension-contract.json"
 V130_PROVIDER_GENERATOR_ADAPTER_BOUNDARY_PATH="$RUNTIME_DIR/v130-provider-generator-adapter-boundary.json"
 V130_PAYMENT_PROVIDER_ADAPTER_BOUNDARY_PATH="$RUNTIME_DIR/v130-payment-provider-adapter-boundary.json"
+V130_CUSTOMER_DELIVERY_BACKEND_CONTRACT_PATH="$RUNTIME_DIR/v130-customer-delivery-backend-contract.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -18792,6 +18793,120 @@ PY
   record_stage "$stage" "passed" "$(basename "$V130_PAYMENT_PROVIDER_ADAPTER_BOUNDARY_PATH")"
 }
 
+run_v130_customer_delivery_backend_contract_gate() {
+  local stage="release.v130-customer-delivery-backend-contract"
+  record_stage "$stage" "started" "$V130_CUSTOMER_DELIVERY_BACKEND_CONTRACT_PATH"
+
+  run_workspace_cmd "$stage.generate" "$RUNTIME_DIR/v130-customer-delivery-backend-contract.txt" \
+    cargo run -p agentflow-runtime-api --example v130_customer_delivery_backend_contract_proofs -- \
+      "$V130_CUSTOMER_DELIVERY_BACKEND_CONTRACT_PATH"
+
+  python3 - "$V130_CUSTOMER_DELIVERY_BACKEND_CONTRACT_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+failed = []
+
+if payload.get("version") != "agentflow-customer-delivery-backend-contract.v1":
+    failed.append("wrong-version")
+if payload.get("status") != "passed":
+    failed.append("status-not-passed")
+if payload.get("releaseVersion") != "v1.3.0":
+    failed.append("wrong-release-version")
+
+required = set(payload.get("requiredBindings", []))
+for field in [
+    "orderId",
+    "entitlementAuthorizationRef",
+    "decisionId",
+    "reportArtifactRef",
+    "accessReceiptRef",
+    "expiryState",
+    "revocationState",
+    "refundState",
+    "repairState",
+    "rerunState",
+    "feedbackState",
+    "sourceRefs",
+]:
+    if field not in required:
+        failed.append(f"missing-required-binding-{field}")
+
+states = set(payload.get("stableStates", []))
+for state in [
+    "accessible",
+    "expired",
+    "revoked",
+    "refunded",
+    "repair-needed",
+    "rerun-needed",
+    "blocked",
+]:
+    if state not in states:
+        failed.append(f"missing-stable-state-{state}")
+
+accepted = payload.get("acceptedDeliveryFixture", {})
+if accepted.get("status") != "passed":
+    failed.append("accepted-fixture-not-passed")
+if accepted.get("accessStatus") != "accessible":
+    failed.append("accepted-fixture-not-accessible")
+if accepted.get("nextAction") != "show-download":
+    failed.append("accepted-fixture-wrong-next-action")
+if accepted.get("downloadAccessVisible") is not True:
+    failed.append("accepted-fixture-download-hidden")
+if accepted.get("accessHandleGenerated") is not True:
+    failed.append("accepted-fixture-missing-access-handle")
+if not accepted.get("accessReceiptRef"):
+    failed.append("accepted-fixture-missing-access-receipt")
+if accepted.get("failureReasons"):
+    failed.append("accepted-fixture-has-failure-reasons")
+
+fixtures = {fixture.get("fixtureId"): fixture for fixture in payload.get("negativeAccessFixtures", [])}
+for fixture_id in [
+    "expired",
+    "revoked",
+    "refunded",
+    "repair-needed",
+    "rerun-needed",
+]:
+    fixture = fixtures.get(fixture_id)
+    if not fixture:
+        failed.append(f"missing-negative-fixture-{fixture_id}")
+        continue
+    if fixture.get("status") != "failed-as-expected":
+        failed.append(f"{fixture_id}-unexpected-status")
+    if fixture.get("downloadAccessVisible") is not False:
+        failed.append(f"{fixture_id}-download-access-visible")
+    if fixture.get("accessHandleGenerated") is not False:
+        failed.append(f"{fixture_id}-access-handle-generated")
+    if not fixture.get("nextAction"):
+        failed.append(f"{fixture_id}-missing-next-action")
+    if not fixture.get("failureReasons"):
+        failed.append(f"{fixture_id}-missing-failure-reasons")
+    if not fixture.get("sourceRefs"):
+        failed.append(f"{fixture_id}-missing-source-refs")
+
+for fixture_id, expected_next_action in [
+    ("expired", "renew-access"),
+    ("revoked", "contact-support"),
+    ("refunded", "show-refund-policy"),
+    ("repair-needed", "create-repair-proposal"),
+    ("rerun-needed", "request-new-authorization"),
+]:
+    fixture = fixtures.get(fixture_id, {})
+    if fixture.get("nextAction") != expected_next_action:
+        failed.append(f"{fixture_id}-wrong-next-action")
+
+if failed:
+    raise SystemExit(f"v130 customer delivery backend contract failed: {failed}")
+PY
+
+  record_stage "$stage" "passed" "$(basename "$V130_CUSTOMER_DELIVERY_BACKEND_CONTRACT_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -19429,6 +19544,7 @@ PY
   run_v130_product_sku_extension_contract_gate
   run_v130_provider_generator_adapter_boundary_gate
   run_v130_payment_provider_adapter_boundary_gate
+  run_v130_customer_delivery_backend_contract_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
