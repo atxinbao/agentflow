@@ -59,6 +59,8 @@ pub const COMMERCIAL_AUTHORITY_BOUNDARY_VERSION: &str =
     "agentflow-commercial-authority-boundary.v1";
 pub const PRODUCT_SKU_EXTENSION_CONTRACT_VERSION: &str =
     "agentflow-product-sku-extension-contract.v1";
+pub const PROVIDER_GENERATOR_ADAPTER_BOUNDARY_VERSION: &str =
+    "agentflow-provider-generator-adapter-boundary.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
@@ -292,6 +294,90 @@ pub struct ProductSkuExtensionContract {
     pub negative_fixtures: Vec<ProductSkuExtensionNegativeFixture>,
     #[serde(default)]
     pub forbidden_core_terms: Vec<String>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderGeneratorAdapterRequest {
+    pub version: String,
+    pub status: String,
+    pub request_id: String,
+    pub product_instance_id: String,
+    pub sku_id: String,
+    pub input_snapshot_ref: String,
+    pub sku_definition_ref: String,
+    pub generation_request_ref: String,
+    pub generator_ref: String,
+    pub provider_ref: String,
+    #[serde(default)]
+    pub report_sections: Vec<String>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderGeneratorAdapterReceipt {
+    pub version: String,
+    pub status: String,
+    pub receipt_id: String,
+    pub request_id: String,
+    pub adapter_id: String,
+    pub output_artifact_ref: Option<String>,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    #[serde(default)]
+    pub failure_reasons: Vec<String>,
+    pub remediation_route: String,
+    pub provider_specific_call_is_core_authority: bool,
+    pub delivery_blocked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderGeneratorAdapterArtifact {
+    pub version: String,
+    pub status: String,
+    pub artifact_id: String,
+    pub artifact_kind: String,
+    pub content_ref: String,
+    #[serde(default)]
+    pub section_refs: Vec<String>,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    pub produced_by_adapter: bool,
+    pub writes_core_authority: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderGeneratorAdapterFixture {
+    pub fixture_id: String,
+    pub status: String,
+    pub request: ProviderGeneratorAdapterRequest,
+    pub receipt: ProviderGeneratorAdapterReceipt,
+    pub artifact: Option<ProviderGeneratorAdapterArtifact>,
+    pub expected_delivery_state: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderGeneratorAdapterBoundaryContract {
+    pub version: String,
+    pub status: String,
+    pub release_version: String,
+    pub authority_boundary: String,
+    pub adapter_boundary: String,
+    #[serde(default)]
+    pub required_objects: Vec<String>,
+    pub dry_run_positive_fixture: ProviderGeneratorAdapterFixture,
+    #[serde(default)]
+    pub negative_fixtures: Vec<ProviderGeneratorAdapterFixture>,
+    #[serde(default)]
+    pub stable_failure_reasons: Vec<String>,
     #[serde(default)]
     pub source_refs: Vec<String>,
     pub checked_at: String,
@@ -1352,6 +1438,157 @@ pub fn evaluate_product_sku_extension(
     }
 }
 
+pub fn provider_generator_adapter_boundary_contract() -> ProviderGeneratorAdapterBoundaryContract {
+    let positive_request = provider_generator_adapter_request(
+        "dry-run-generator-request",
+        "synthetic-paid-report-standard",
+        true,
+        true,
+    );
+    let positive_receipt = provider_generator_adapter_receipt(
+        "dry-run-generation-receipt",
+        &positive_request.request_id,
+        "succeeded",
+        Some("agentflow/tasks/synthetic-paid-report-standard/artifacts/report-artifact.json"),
+        vec![
+            "agentflow/tasks/synthetic-paid-report-standard/evidence/generator-run-receipt.json",
+            "agentflow/tasks/synthetic-paid-report-standard/evidence/output-artifact-hash.json",
+        ],
+        Vec::new(),
+        "none",
+        false,
+        false,
+    );
+    let positive_artifact = ProviderGeneratorAdapterArtifact {
+        version: PAID_REPORT_ARTIFACT_VERSION.to_string(),
+        status: "artifact-ready".to_string(),
+        artifact_id: "dry-run-report-artifact".to_string(),
+        artifact_kind: "paid-report".to_string(),
+        content_ref: "agentflow/tasks/synthetic-paid-report-standard/artifacts/report.md"
+            .to_string(),
+        section_refs: vec![
+            "summary".to_string(),
+            "analysis".to_string(),
+            "evidence-index".to_string(),
+            "delivery-notes".to_string(),
+        ],
+        evidence_refs: positive_receipt.evidence_refs.clone(),
+        produced_by_adapter: true,
+        writes_core_authority: false,
+    };
+
+    ProviderGeneratorAdapterBoundaryContract {
+        version: PROVIDER_GENERATOR_ADAPTER_BOUNDARY_VERSION.to_string(),
+        status: "passed".to_string(),
+        release_version: "v1.3.0".to_string(),
+        authority_boundary: "Core Runtime owns the generic adapter request, receipt, artifact, evidence reference, decision and delivery authority. Provider-specific model calls, prompts, credentials and concrete generator implementation stay behind the adapter boundary and never become Core authority.".to_string(),
+        adapter_boundary: "Provider / Generator Adapter may transform an input snapshot plus SKU definition into an output artifact and generation receipt. It cannot write delivery-ready authority, accepted decision authority, payment authority or Core Runtime product semantics.".to_string(),
+        required_objects: vec![
+            "inputSnapshot".to_string(),
+            "skuDefinition".to_string(),
+            "generationRequest".to_string(),
+            "generationReceipt".to_string(),
+            "outputArtifact".to_string(),
+            "evidenceRefs".to_string(),
+            "failureReasons".to_string(),
+        ],
+        dry_run_positive_fixture: ProviderGeneratorAdapterFixture {
+            fixture_id: "dry-run-provider-generator-positive".to_string(),
+            status: "passed".to_string(),
+            request: positive_request,
+            receipt: positive_receipt,
+            artifact: Some(positive_artifact),
+            expected_delivery_state: "evidence-required-before-delivery".to_string(),
+        },
+        negative_fixtures: vec![
+            ProviderGeneratorAdapterFixture {
+                fixture_id: "missing-input-snapshot".to_string(),
+                status: "failed-as-expected".to_string(),
+                request: provider_generator_adapter_request(
+                    "missing-input-snapshot-request",
+                    "synthetic-paid-report-standard",
+                    false,
+                    true,
+                ),
+                receipt: provider_generator_adapter_receipt(
+                    "missing-input-snapshot-receipt",
+                    "missing-input-snapshot-request",
+                    "blocked",
+                    None,
+                    Vec::new(),
+                    vec!["missing-input-snapshot".to_string()],
+                    "collect-input-snapshot",
+                    false,
+                    true,
+                ),
+                artifact: None,
+                expected_delivery_state: "blocked".to_string(),
+            },
+            ProviderGeneratorAdapterFixture {
+                fixture_id: "provider-call-promoted-to-core-authority".to_string(),
+                status: "failed-as-expected".to_string(),
+                request: provider_generator_adapter_request(
+                    "provider-authority-request",
+                    "synthetic-paid-report-standard",
+                    true,
+                    true,
+                ),
+                receipt: provider_generator_adapter_receipt(
+                    "provider-authority-receipt",
+                    "provider-authority-request",
+                    "blocked",
+                    None,
+                    Vec::new(),
+                    vec!["provider-call-cannot-write-core-authority".to_string()],
+                    "move-provider-call-behind-adapter",
+                    true,
+                    true,
+                ),
+                artifact: None,
+                expected_delivery_state: "blocked".to_string(),
+            },
+            ProviderGeneratorAdapterFixture {
+                fixture_id: "failed-generation-keeps-delivery-blocked".to_string(),
+                status: "failed-as-expected".to_string(),
+                request: provider_generator_adapter_request(
+                    "failed-generation-request",
+                    "synthetic-paid-report-standard",
+                    true,
+                    true,
+                ),
+                receipt: provider_generator_adapter_receipt(
+                    "failed-generation-receipt",
+                    "failed-generation-request",
+                    "failed",
+                    None,
+                    vec![
+                        "agentflow/tasks/synthetic-paid-report-standard/evidence/generator-error.json",
+                    ],
+                    vec!["generation-failed".to_string()],
+                    "retry-generation-or-change-provider",
+                    false,
+                    true,
+                ),
+                artifact: None,
+                expected_delivery_state: "blocked".to_string(),
+            },
+        ],
+        stable_failure_reasons: vec![
+            "missing-input-snapshot".to_string(),
+            "missing-sku-definition".to_string(),
+            "generation-failed".to_string(),
+            "output-artifact-missing".to_string(),
+            "provider-call-cannot-write-core-authority".to_string(),
+            "evidence-refs-missing".to_string(),
+        ],
+        source_refs: vec![
+            "docs/architecture/103-provider-generator-adapter-boundary-v1.md".to_string(),
+            "docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md".to_string(),
+        ],
+        checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
 fn paid_report_flow_states() -> Vec<String> {
     [
         "draft-order",
@@ -1530,6 +1767,71 @@ fn product_sku_negative_fixture(
         attempted_operation: attempted_operation.to_string(),
         resolution: evaluate_product_sku_extension(attempted_definition.as_ref()),
         failure_reason: failure_reason.to_string(),
+    }
+}
+
+fn provider_generator_adapter_request(
+    request_id: &str,
+    sku_id: &str,
+    include_input_snapshot: bool,
+    include_sku_definition: bool,
+) -> ProviderGeneratorAdapterRequest {
+    ProviderGeneratorAdapterRequest {
+        version: "agentflow-provider-generator-adapter-request.v1".to_string(),
+        status: "ready".to_string(),
+        request_id: request_id.to_string(),
+        product_instance_id: format!("product-instance-{sku_id}"),
+        sku_id: sku_id.to_string(),
+        input_snapshot_ref: if include_input_snapshot {
+            format!("agentflow/tasks/{sku_id}/input/input-snapshot.json")
+        } else {
+            String::new()
+        },
+        sku_definition_ref: if include_sku_definition {
+            format!("products/commercial-runtime/skus/{sku_id}/sku.json")
+        } else {
+            String::new()
+        },
+        generation_request_ref: format!("agentflow/tasks/{sku_id}/generation/request.json"),
+        generator_ref: format!("products/commercial-runtime/skus/{sku_id}/generator.json"),
+        provider_ref: "providers/dry-run-generator.json".to_string(),
+        report_sections: vec![
+            "summary".to_string(),
+            "analysis".to_string(),
+            "evidence-index".to_string(),
+            "delivery-notes".to_string(),
+        ],
+        source_refs: vec![
+            "docs/architecture/103-provider-generator-adapter-boundary-v1.md".to_string(),
+            format!("products/commercial-runtime/skus/{sku_id}/sku.json"),
+        ],
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn provider_generator_adapter_receipt(
+    receipt_id: &str,
+    request_id: &str,
+    status: &str,
+    output_artifact_ref: Option<&str>,
+    evidence_refs: Vec<&str>,
+    failure_reasons: Vec<String>,
+    remediation_route: &str,
+    provider_specific_call_is_core_authority: bool,
+    delivery_blocked: bool,
+) -> ProviderGeneratorAdapterReceipt {
+    ProviderGeneratorAdapterReceipt {
+        version: "agentflow-provider-generator-adapter-receipt.v1".to_string(),
+        status: status.to_string(),
+        receipt_id: receipt_id.to_string(),
+        request_id: request_id.to_string(),
+        adapter_id: "dry-run-provider-generator-adapter".to_string(),
+        output_artifact_ref: output_artifact_ref.map(str::to_string),
+        evidence_refs: evidence_refs.into_iter().map(str::to_string).collect(),
+        failure_reasons,
+        remediation_route: remediation_route.to_string(),
+        provider_specific_call_is_core_authority,
+        delivery_blocked,
     }
 }
 
@@ -5205,6 +5507,81 @@ mod tests {
                 "core runtime authority text contains forbidden term {term}"
             );
         }
+    }
+
+    #[test]
+    fn provider_generator_adapter_boundary_blocks_provider_authority_leaks() {
+        let contract = provider_generator_adapter_boundary_contract();
+
+        assert_eq!(
+            contract.version,
+            PROVIDER_GENERATOR_ADAPTER_BOUNDARY_VERSION
+        );
+        assert_eq!(contract.status, "passed");
+        assert_eq!(contract.release_version, "v1.3.0");
+
+        for object in [
+            "inputSnapshot",
+            "skuDefinition",
+            "generationRequest",
+            "generationReceipt",
+            "outputArtifact",
+            "evidenceRefs",
+            "failureReasons",
+        ] {
+            assert!(
+                contract.required_objects.iter().any(|item| item == object),
+                "missing required adapter object {object}"
+            );
+        }
+
+        let positive = &contract.dry_run_positive_fixture;
+        assert_eq!(positive.status, "passed");
+        assert!(!positive.request.input_snapshot_ref.trim().is_empty());
+        assert!(!positive.request.sku_definition_ref.trim().is_empty());
+        assert!(!positive.request.generator_ref.trim().is_empty());
+        assert!(!positive.request.provider_ref.trim().is_empty());
+        assert_eq!(positive.receipt.status, "succeeded");
+        assert!(positive.receipt.output_artifact_ref.is_some());
+        assert!(!positive.receipt.evidence_refs.is_empty());
+        assert!(!positive.receipt.provider_specific_call_is_core_authority);
+        assert!(!positive.receipt.delivery_blocked);
+        let artifact = positive.artifact.as_ref().expect("positive artifact");
+        assert!(artifact.produced_by_adapter);
+        assert!(!artifact.writes_core_authority);
+
+        for fixture_id in [
+            "missing-input-snapshot",
+            "provider-call-promoted-to-core-authority",
+            "failed-generation-keeps-delivery-blocked",
+        ] {
+            let fixture = contract
+                .negative_fixtures
+                .iter()
+                .find(|fixture| fixture.fixture_id == fixture_id)
+                .unwrap_or_else(|| panic!("missing fixture {fixture_id}"));
+            assert_eq!(fixture.status, "failed-as-expected");
+            assert!(fixture.receipt.delivery_blocked);
+            assert!(!fixture.receipt.failure_reasons.is_empty());
+            assert_eq!(fixture.expected_delivery_state, "blocked");
+            assert!(fixture.artifact.is_none());
+        }
+
+        let leaked_provider = contract
+            .negative_fixtures
+            .iter()
+            .find(|fixture| fixture.fixture_id == "provider-call-promoted-to-core-authority")
+            .expect("provider leak fixture");
+        assert!(
+            leaked_provider
+                .receipt
+                .provider_specific_call_is_core_authority
+        );
+        assert!(leaked_provider
+            .receipt
+            .failure_reasons
+            .iter()
+            .any(|reason| reason == "provider-call-cannot-write-core-authority"));
     }
 
     fn registry_fixture() -> TempDir {

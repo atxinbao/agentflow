@@ -50,6 +50,9 @@ Commercial Backend Stable Closure:
 - added the v1.3.0 Product SKU extension contract, defining how Product / Pack
   / SKU files bind concrete paid-report SKU fields while missing SKU definitions
   stay invalid and never fall back to generic hardcoded report content;
+- added the v1.3.0 Provider / Generator adapter boundary, freezing dry-run
+  generation request / receipt / artifact / evidence refs and negative fixtures
+  without calling a real provider;
 - required explicit migration or version bump policy for backward-incompatible
   commercial backend contract changes after v1.3.0.
 

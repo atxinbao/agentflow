@@ -98,6 +98,7 @@ Pack 位置和用户项目暴露边界以 [builtin-pack-registry.md](builtin-pac
 | [100-paid-report-flow-state-machine-v1.md](100-paid-report-flow-state-machine-v1.md) | Paid Report Flow State Machine |
 | [101-commercial-authority-boundary-v1.md](101-commercial-authority-boundary-v1.md) | Commercial Authority Boundary |
 | [102-product-sku-extension-contract-v1.md](102-product-sku-extension-contract-v1.md) | Product SKU Extension Contract |
+| [103-provider-generator-adapter-boundary-v1.md](103-provider-generator-adapter-boundary-v1.md) | Provider / Generator Adapter Boundary |
 
 ## Rules
 

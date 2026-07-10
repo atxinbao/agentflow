@@ -14,7 +14,7 @@ This document records the planned public delivery traceability for `v1.3.0`.
 | V130-003 | #995 | Paid Report Flow State Machine | done | `runtime/v130-paid-report-flow-state-machine.json` |
 | V130-004 | #996 | Commercial Authority Boundary Freeze | done | `runtime/v130-commercial-authority-boundary.json` |
 | V130-005 | #997 | Product SKU Extension Contract | done | `runtime/v130-product-sku-extension-contract.json` |
-| V130-006 | #998 | Provider / Generator Adapter Boundary | planned | TBD |
+| V130-006 | #998 | Provider / Generator Adapter Boundary | done | `runtime/v130-provider-generator-adapter-boundary.json` |
 | V130-007 | #999 | Payment Provider Adapter Boundary | planned | TBD |
 | V130-008 | #1000 | Customer Delivery Backend Contract | planned | TBD |
 | V130-009 | #1001 | Commercial End-to-End Golden Scenario | planned | TBD |
