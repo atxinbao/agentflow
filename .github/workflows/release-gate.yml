@@ -203,20 +203,42 @@ jobs:
           done
 
           primary_proof_list="${RUNNER_TEMP:-/tmp}/release-gate-primary-proofs.txt"
-          python3 - "$certification_dir" "$primary_proof_list" <<'PY'
+          python3 - "$artifact_dir" "$certification_dir" "$primary_proof_list" <<'PY'
+          import json
           import pathlib
+          import shutil
           import sys
 
-          certification_dir = pathlib.Path(sys.argv[1])
-          output_path = pathlib.Path(sys.argv[2])
-          runtime_dir = certification_dir / "runtime"
+          artifact_dir = pathlib.Path(sys.argv[1])
+          certification_dir = pathlib.Path(sys.argv[2])
+          output_path = pathlib.Path(sys.argv[3])
+          source_root = pathlib.Path.cwd()
+          certification_path = certification_dir / "certification.json"
           paths = []
-          if runtime_dir.is_dir():
-              paths = sorted(
-                  path.relative_to(certification_dir).as_posix()
-                  for path in runtime_dir.iterdir()
-                  if path.is_file()
-              )
+          if certification_path.is_file():
+              payload = json.loads(certification_path.read_text(encoding="utf-8"))
+              paths = [path for path in payload.get("primaryProofs", []) if isinstance(path, str) and path]
+          if not paths:
+              runtime_dir = certification_dir / "runtime"
+              if runtime_dir.is_dir():
+                  paths = sorted(
+                      path.relative_to(certification_dir).as_posix()
+                      for path in runtime_dir.iterdir()
+                      if path.is_file()
+                  )
+
+          for relative in paths:
+              artifact_path = artifact_dir / relative
+              quick_path = certification_dir / relative
+              source_path = source_root / relative
+
+              if not artifact_path.is_file() and source_path.is_file():
+                  artifact_path.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(source_path, artifact_path)
+              if not quick_path.is_file() and artifact_path.is_file():
+                  quick_path.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(artifact_path, quick_path)
+
           output_path.write_text("\n".join(paths) + ("\n" if paths else ""), encoding="utf-8")
           PY
 
