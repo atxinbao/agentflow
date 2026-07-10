@@ -63,6 +63,9 @@ Commercial Backend Stable Closure:
   Order, Entitlement, Admission, Generation Adapter, Artifact, Evidence,
   Decision, Delivery, Access and Feedback into one generic machine-readable
   proof;
+- added the v1.3.0 release certification artifact, binding all V130 primary
+  proofs, release metadata, commercial backend stable status and explicit
+  non-goal boundary flags;
 - required explicit migration or version bump policy for backward-incompatible
   commercial backend contract changes after v1.3.0.
 

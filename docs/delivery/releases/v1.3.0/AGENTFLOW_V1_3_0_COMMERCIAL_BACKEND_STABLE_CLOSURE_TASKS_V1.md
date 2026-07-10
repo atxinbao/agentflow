@@ -18,7 +18,7 @@ This document records the planned public delivery traceability for `v1.3.0`.
 | V130-007 | #999 | Payment Provider Adapter Boundary | done | `runtime/v130-payment-provider-adapter-boundary.json` |
 | V130-008 | #1000 | Customer Delivery Backend Contract | done | `runtime/v130-customer-delivery-backend-contract.json` |
 | V130-009 | #1001 | Commercial End-to-End Golden Scenario | done | `runtime/v130-commercial-e2e-golden-scenario.json` |
-| V130-010 | #1002 | v1.3.0 Release Certification | planned | TBD |
+| V130-010 | #1002 | v1.3.0 Release Certification | done | `runtime/v130-release-certification.json` |
 
 ## Dependency Order
 
@@ -277,3 +277,21 @@ mutated in place.
 
 The scenario remains generic and must not implement a concrete report domain
 SKU.
+
+## V130-010 v1.3.0 Release Certification
+
+`V130-010` certifies `v1.3.0` as the Commercial Backend Stable Closure release.
+
+The release-gate proof at `runtime/v130-release-certification.json` must include:
+
+- `releaseVersion = v1.3.0`;
+- `releaseTag = v1.3.0`;
+- source commit and workflow run id;
+- artifact names;
+- primary proof index for `V130-001` through `V130-009`;
+- `commercialBackendStable = true`;
+- boundary flags proving `publicCommercialLaunch`, `concretePaidReportSku`,
+  `paymentProviderCheckout` and `realProviderGeneration` remain `false`.
+
+The GitHub milestone can close only after all V130 issues are complete and the
+release gate passes with this certification artifact included.
