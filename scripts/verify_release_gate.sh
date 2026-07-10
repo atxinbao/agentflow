@@ -382,6 +382,7 @@ V130_COMMERCIAL_BACKEND_STABLE_CONTRACT_PATH="$RUNTIME_DIR/v130-commercial-backe
 V130_PAID_REPORT_FLOW_STATE_MACHINE_PATH="$RUNTIME_DIR/v130-paid-report-flow-state-machine.json"
 V130_COMMERCIAL_AUTHORITY_BOUNDARY_PATH="$RUNTIME_DIR/v130-commercial-authority-boundary.json"
 V130_PRODUCT_SKU_EXTENSION_CONTRACT_PATH="$RUNTIME_DIR/v130-product-sku-extension-contract.json"
+V130_PROVIDER_GENERATOR_ADAPTER_BOUNDARY_PATH="$RUNTIME_DIR/v130-provider-generator-adapter-boundary.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -18586,6 +18587,109 @@ PY
   record_stage "$stage" "passed" "$(basename "$V130_PRODUCT_SKU_EXTENSION_CONTRACT_PATH")"
 }
 
+run_v130_provider_generator_adapter_boundary_gate() {
+  local stage="release.v130-provider-generator-adapter-boundary"
+  record_stage "$stage" "started" "$V130_PROVIDER_GENERATOR_ADAPTER_BOUNDARY_PATH"
+
+  run_workspace_cmd "$stage.generate" "$RUNTIME_DIR/v130-provider-generator-adapter-boundary.txt" \
+    cargo run -p agentflow-runtime-api --example v130_provider_generator_adapter_boundary_proofs -- \
+      "$V130_PROVIDER_GENERATOR_ADAPTER_BOUNDARY_PATH"
+
+  python3 - "$V130_PROVIDER_GENERATOR_ADAPTER_BOUNDARY_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+failed = []
+
+if payload.get("version") != "agentflow-provider-generator-adapter-boundary.v1":
+    failed.append("wrong-version")
+if payload.get("status") != "passed":
+    failed.append("status-not-passed")
+if payload.get("releaseVersion") != "v1.3.0":
+    failed.append("wrong-release-version")
+
+required = set(payload.get("requiredObjects", []))
+for item in [
+    "inputSnapshot",
+    "skuDefinition",
+    "generationRequest",
+    "generationReceipt",
+    "outputArtifact",
+    "evidenceRefs",
+    "failureReasons",
+]:
+    if item not in required:
+        failed.append(f"missing-required-object-{item}")
+
+positive = payload.get("dryRunPositiveFixture", {})
+request = positive.get("request", {})
+receipt = positive.get("receipt", {})
+artifact = positive.get("artifact")
+if positive.get("status") != "passed":
+    failed.append("positive-fixture-not-passed")
+for field in [
+    "inputSnapshotRef",
+    "skuDefinitionRef",
+    "generationRequestRef",
+    "generatorRef",
+    "providerRef",
+]:
+    if not request.get(field):
+        failed.append(f"positive-missing-{field}")
+if receipt.get("status") != "succeeded":
+    failed.append("positive-receipt-not-succeeded")
+if not receipt.get("outputArtifactRef"):
+    failed.append("positive-missing-output-artifact-ref")
+if not receipt.get("evidenceRefs"):
+    failed.append("positive-missing-evidence-refs")
+if receipt.get("providerSpecificCallIsCoreAuthority") is not False:
+    failed.append("positive-provider-call-promoted-to-core-authority")
+if receipt.get("deliveryBlocked") is not False:
+    failed.append("positive-delivery-blocked")
+if not artifact:
+    failed.append("positive-missing-artifact")
+else:
+    if artifact.get("producedByAdapter") is not True:
+        failed.append("positive-artifact-not-produced-by-adapter")
+    if artifact.get("writesCoreAuthority") is not False:
+        failed.append("positive-artifact-writes-core-authority")
+
+fixtures = {fixture.get("fixtureId"): fixture for fixture in payload.get("negativeFixtures", [])}
+for fixture_id in [
+    "missing-input-snapshot",
+    "provider-call-promoted-to-core-authority",
+    "failed-generation-keeps-delivery-blocked",
+]:
+    fixture = fixtures.get(fixture_id)
+    if not fixture:
+        failed.append(f"missing-negative-fixture-{fixture_id}")
+        continue
+    negative_receipt = fixture.get("receipt", {})
+    if fixture.get("status") != "failed-as-expected":
+        failed.append(f"{fixture_id}-unexpected-status")
+    if negative_receipt.get("deliveryBlocked") is not True:
+        failed.append(f"{fixture_id}-delivery-not-blocked")
+    if not negative_receipt.get("failureReasons"):
+        failed.append(f"{fixture_id}-missing-failure-reasons")
+    if fixture.get("expectedDeliveryState") != "blocked":
+        failed.append(f"{fixture_id}-wrong-expected-delivery-state")
+    if fixture.get("artifact") is not None:
+        failed.append(f"{fixture_id}-unexpected-artifact")
+
+provider_leak = fixtures.get("provider-call-promoted-to-core-authority", {})
+if provider_leak.get("receipt", {}).get("providerSpecificCallIsCoreAuthority") is not True:
+    failed.append("provider-leak-fixture-does-not-mark-core-authority-attempt")
+
+if failed:
+    raise SystemExit(f"v130 provider/generator adapter boundary failed: {failed}")
+PY
+
+  record_stage "$stage" "passed" "$(basename "$V130_PROVIDER_GENERATOR_ADAPTER_BOUNDARY_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -19221,6 +19325,7 @@ PY
   run_v130_paid_report_flow_state_machine_gate
   run_v130_commercial_authority_boundary_gate
   run_v130_product_sku_extension_contract_gate
+  run_v130_provider_generator_adapter_boundary_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }
