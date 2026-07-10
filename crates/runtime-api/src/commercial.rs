@@ -57,6 +57,8 @@ pub const PAID_REPORT_FLOW_STATE_MACHINE_VERSION: &str =
     "agentflow-paid-report-flow-state-machine.v1";
 pub const COMMERCIAL_AUTHORITY_BOUNDARY_VERSION: &str =
     "agentflow-commercial-authority-boundary.v1";
+pub const PRODUCT_SKU_EXTENSION_CONTRACT_VERSION: &str =
+    "agentflow-product-sku-extension-contract.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
@@ -225,6 +227,73 @@ pub struct CommercialAuthorityBoundary {
     #[serde(default)]
     pub negative_fixtures: Vec<CommercialAuthorityNegativeFixture>,
     pub synthetic_release_sidecar_policy: String,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductSkuExtensionDefinition {
+    pub sku_id: String,
+    pub product_id: String,
+    #[serde(default)]
+    pub required_inputs: Vec<String>,
+    #[serde(default)]
+    pub report_sections: Vec<String>,
+    #[serde(default)]
+    pub evidence_policy: Vec<String>,
+    #[serde(default)]
+    pub decision_policy: Vec<String>,
+    #[serde(default)]
+    pub delivery_policy: Vec<String>,
+    pub pricing_ref: String,
+    pub generator_ref: String,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductSkuExtensionResolution {
+    pub status: String,
+    pub sku_id: Option<String>,
+    pub product_id: Option<String>,
+    pub can_materialize_product_instance: bool,
+    pub falls_back_to_generic_hardcoded_content: bool,
+    pub unavailable_reason: String,
+    #[serde(default)]
+    pub missing_fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductSkuExtensionNegativeFixture {
+    pub fixture_id: String,
+    pub status: String,
+    pub attempted_surface: String,
+    pub attempted_operation: String,
+    pub resolution: ProductSkuExtensionResolution,
+    pub failure_reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductSkuExtensionContract {
+    pub version: String,
+    pub status: String,
+    pub release_version: String,
+    pub authority_boundary: String,
+    pub allowed_authority_surface: String,
+    pub core_runtime_policy: String,
+    #[serde(default)]
+    pub required_fields: Vec<String>,
+    pub synthetic_sku_fixture: ProductSkuExtensionDefinition,
+    pub synthetic_sku_resolution: ProductSkuExtensionResolution,
+    #[serde(default)]
+    pub negative_fixtures: Vec<ProductSkuExtensionNegativeFixture>,
+    #[serde(default)]
+    pub forbidden_core_terms: Vec<String>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
     pub checked_at: String,
 }
 
@@ -1105,6 +1174,184 @@ pub fn commercial_authority_boundary() -> CommercialAuthorityBoundary {
     }
 }
 
+pub fn product_sku_extension_contract() -> ProductSkuExtensionContract {
+    let synthetic_sku = ProductSkuExtensionDefinition {
+        sku_id: "synthetic-paid-report-standard".to_string(),
+        product_id: "generic-paid-report".to_string(),
+        required_inputs: vec![
+            "orderIntentId".to_string(),
+            "customerRequestRef".to_string(),
+            "reportSubjectRef".to_string(),
+        ],
+        report_sections: vec![
+            "summary".to_string(),
+            "analysis".to_string(),
+            "evidence-index".to_string(),
+            "delivery-notes".to_string(),
+        ],
+        evidence_policy: vec![
+            "generator-run-receipt".to_string(),
+            "input-snapshot-hash".to_string(),
+            "section-output-hash".to_string(),
+        ],
+        decision_policy: vec![
+            "accepted-report-artifact-required".to_string(),
+            "delivery-ready-requires-evidence-complete".to_string(),
+        ],
+        delivery_policy: vec![
+            "customer-download-view-readonly".to_string(),
+            "delivery-package-projection-readonly".to_string(),
+        ],
+        pricing_ref: "products/commercial-runtime/skus/synthetic-paid-report-standard/pricing.json"
+            .to_string(),
+        generator_ref:
+            "products/commercial-runtime/skus/synthetic-paid-report-standard/generator.json"
+                .to_string(),
+        source_refs: vec![
+            "products/commercial-runtime/skus/synthetic-paid-report-standard/sku.json".to_string(),
+            "docs/architecture/102-product-sku-extension-contract-v1.md".to_string(),
+        ],
+    };
+    let synthetic_resolution = evaluate_product_sku_extension(Some(&synthetic_sku));
+
+    ProductSkuExtensionContract {
+        version: PRODUCT_SKU_EXTENSION_CONTRACT_VERSION.to_string(),
+        status: "passed".to_string(),
+        release_version: "v1.3.0".to_string(),
+        authority_boundary: "Product / Pack / SKU files may define concrete paid-report SKU inputs, report sections, pricing references, generator references, and delivery policy. Core Runtime can validate and bind those fields, but must not own concrete industry domain semantics or fallback to generic hardcoded report content.".to_string(),
+        allowed_authority_surface: "Product / Pack / SKU".to_string(),
+        core_runtime_policy: "Core Runtime stores generic Paid Report contracts and validation rules only; SKU authority is external product authority and missing SKU definitions produce invalid/deferred state before runtime.".to_string(),
+        required_fields: product_sku_required_fields(),
+        synthetic_sku_fixture: synthetic_sku,
+        synthetic_sku_resolution: synthetic_resolution,
+        negative_fixtures: vec![
+            product_sku_negative_fixture(
+                "missing-sku-definition",
+                "Product SKU Resolver",
+                "materialize product instance without sku.json",
+                None,
+                "missing SKU definitions must return invalid/deferred state and must not fall back to generic hardcoded content",
+            ),
+            product_sku_negative_fixture(
+                "core-runtime-domain-term-as-authority",
+                "Core Runtime",
+                "write concrete industry SKU semantics",
+                Some(ProductSkuExtensionDefinition {
+                    sku_id: "domain-report-standard".to_string(),
+                    product_id: "generic-paid-report".to_string(),
+                    required_inputs: vec!["domainInputRef".to_string()],
+                    report_sections: vec!["domain-analysis".to_string()],
+                    evidence_policy: vec!["generator-run-receipt".to_string()],
+                    decision_policy: vec!["accepted-report-artifact-required".to_string()],
+                    delivery_policy: vec!["customer-download-view-readonly".to_string()],
+                    pricing_ref: "core/runtime/domain-report/pricing.json".to_string(),
+                    generator_ref: "core/runtime/domain-report/generator.json".to_string(),
+                    source_refs: vec!["core/runtime/domain-report/sku.json".to_string()],
+                }),
+                "concrete domain terms are only allowed in Product / Pack / SKU files and cannot be promoted into Core Runtime authority",
+            ),
+            product_sku_negative_fixture(
+                "synthetic-sku-sidecar-promoted-as-live-product",
+                "Synthetic Release Fixture",
+                "promote synthetic SKU fixture as live product SKU authority",
+                Some(ProductSkuExtensionDefinition {
+                    sku_id: "synthetic-paid-report-standard".to_string(),
+                    product_id: "generic-paid-report".to_string(),
+                    required_inputs: vec!["orderIntentId".to_string()],
+                    report_sections: vec!["summary".to_string()],
+                    evidence_policy: vec!["generator-run-receipt".to_string()],
+                    decision_policy: vec!["accepted-report-artifact-required".to_string()],
+                    delivery_policy: vec!["customer-download-view-readonly".to_string()],
+                    pricing_ref:
+                        "products/_fixtures/synthetic-paid-report-standard/pricing.json"
+                            .to_string(),
+                    generator_ref:
+                        "products/_fixtures/synthetic-paid-report-standard/generator.json"
+                            .to_string(),
+                    source_refs: vec![
+                        "products/_fixtures/synthetic-paid-report-standard/sku.json"
+                            .to_string(),
+                    ],
+                }),
+                "synthetic SKU fixtures prove schema behavior only and cannot become live SKU authority",
+            ),
+        ],
+        forbidden_core_terms: vec![
+            "concrete-domain-term-a".to_string(),
+            "concrete-domain-term-b".to_string(),
+            "concrete-domain-term-c".to_string(),
+        ],
+        source_refs: vec![
+            "docs/architecture/102-product-sku-extension-contract-v1.md".to_string(),
+            "docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md".to_string(),
+        ],
+        checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
+pub fn evaluate_product_sku_extension(
+    definition: Option<&ProductSkuExtensionDefinition>,
+) -> ProductSkuExtensionResolution {
+    let Some(definition) = definition else {
+        return ProductSkuExtensionResolution {
+            status: "invalid".to_string(),
+            sku_id: None,
+            product_id: None,
+            can_materialize_product_instance: false,
+            falls_back_to_generic_hardcoded_content: false,
+            unavailable_reason: "missing-sku-definition".to_string(),
+            missing_fields: product_sku_required_fields(),
+        };
+    };
+
+    let mut missing_fields = Vec::new();
+    if definition.sku_id.trim().is_empty() {
+        missing_fields.push("skuId".to_string());
+    }
+    if definition.product_id.trim().is_empty() {
+        missing_fields.push("productId".to_string());
+    }
+    if definition.required_inputs.is_empty() {
+        missing_fields.push("requiredInputs".to_string());
+    }
+    if definition.report_sections.is_empty() {
+        missing_fields.push("reportSections".to_string());
+    }
+    if definition.evidence_policy.is_empty() {
+        missing_fields.push("evidencePolicy".to_string());
+    }
+    if definition.decision_policy.is_empty() {
+        missing_fields.push("decisionPolicy".to_string());
+    }
+    if definition.delivery_policy.is_empty() {
+        missing_fields.push("deliveryPolicy".to_string());
+    }
+    if definition.pricing_ref.trim().is_empty() {
+        missing_fields.push("pricingRef".to_string());
+    }
+    if definition.generator_ref.trim().is_empty() {
+        missing_fields.push("generatorRef".to_string());
+    }
+    if definition.source_refs.is_empty() {
+        missing_fields.push("sourceRefs".to_string());
+    }
+
+    let valid = missing_fields.is_empty();
+    ProductSkuExtensionResolution {
+        status: if valid { "ready" } else { "invalid" }.to_string(),
+        sku_id: Some(definition.sku_id.clone()),
+        product_id: Some(definition.product_id.clone()),
+        can_materialize_product_instance: valid,
+        falls_back_to_generic_hardcoded_content: false,
+        unavailable_reason: if valid {
+            "none".to_string()
+        } else {
+            "missing-sku-required-fields".to_string()
+        },
+        missing_fields,
+    }
+}
+
 fn paid_report_flow_states() -> Vec<String> {
     [
         "draft-order",
@@ -1247,6 +1494,41 @@ fn authority_negative_fixture(
         attempted_target: attempted_target.to_string(),
         attempted_authority_kind: attempted_authority_kind.to_string(),
         can_write_authority: false,
+        failure_reason: failure_reason.to_string(),
+    }
+}
+
+fn product_sku_required_fields() -> Vec<String> {
+    [
+        "skuId",
+        "productId",
+        "requiredInputs",
+        "reportSections",
+        "evidencePolicy",
+        "decisionPolicy",
+        "deliveryPolicy",
+        "pricingRef",
+        "generatorRef",
+        "sourceRefs",
+    ]
+    .iter()
+    .map(|field| field.to_string())
+    .collect()
+}
+
+fn product_sku_negative_fixture(
+    fixture_id: &str,
+    attempted_surface: &str,
+    attempted_operation: &str,
+    attempted_definition: Option<ProductSkuExtensionDefinition>,
+    failure_reason: &str,
+) -> ProductSkuExtensionNegativeFixture {
+    ProductSkuExtensionNegativeFixture {
+        fixture_id: fixture_id.to_string(),
+        status: "failed-as-expected".to_string(),
+        attempted_surface: attempted_surface.to_string(),
+        attempted_operation: attempted_operation.to_string(),
+        resolution: evaluate_product_sku_extension(attempted_definition.as_ref()),
         failure_reason: failure_reason.to_string(),
     }
 }
@@ -4834,6 +5116,94 @@ mod tests {
             assert_eq!(fixture.status, "failed-as-expected");
             assert!(!fixture.can_write_authority);
             assert!(!fixture.failure_reason.trim().is_empty());
+        }
+    }
+
+    #[test]
+    fn product_sku_extension_contract_separates_sku_authority_from_core_runtime() {
+        let contract = product_sku_extension_contract();
+
+        assert_eq!(contract.version, PRODUCT_SKU_EXTENSION_CONTRACT_VERSION);
+        assert_eq!(contract.status, "passed");
+        assert_eq!(contract.release_version, "v1.3.0");
+        assert_eq!(contract.allowed_authority_surface, "Product / Pack / SKU");
+
+        let required = contract
+            .required_fields
+            .iter()
+            .map(String::as_str)
+            .collect::<std::collections::HashSet<_>>();
+        for field in [
+            "skuId",
+            "productId",
+            "requiredInputs",
+            "reportSections",
+            "evidencePolicy",
+            "decisionPolicy",
+            "deliveryPolicy",
+            "pricingRef",
+            "generatorRef",
+            "sourceRefs",
+        ] {
+            assert!(required.contains(field), "missing field {field}");
+        }
+
+        assert_eq!(contract.synthetic_sku_resolution.status, "ready");
+        assert!(
+            contract
+                .synthetic_sku_resolution
+                .can_materialize_product_instance
+        );
+        assert!(
+            !contract
+                .synthetic_sku_resolution
+                .falls_back_to_generic_hardcoded_content
+        );
+        assert!(!contract.synthetic_sku_fixture.required_inputs.is_empty());
+        assert!(!contract.synthetic_sku_fixture.report_sections.is_empty());
+        assert!(!contract.synthetic_sku_fixture.evidence_policy.is_empty());
+        assert!(!contract.synthetic_sku_fixture.decision_policy.is_empty());
+        assert!(!contract.synthetic_sku_fixture.delivery_policy.is_empty());
+        assert!(!contract.synthetic_sku_fixture.pricing_ref.trim().is_empty());
+        assert!(!contract
+            .synthetic_sku_fixture
+            .generator_ref
+            .trim()
+            .is_empty());
+        assert!(!contract.synthetic_sku_fixture.source_refs.is_empty());
+
+        let missing = evaluate_product_sku_extension(None);
+        assert_eq!(missing.status, "invalid");
+        assert_eq!(missing.unavailable_reason, "missing-sku-definition");
+        assert!(!missing.can_materialize_product_instance);
+        assert!(!missing.falls_back_to_generic_hardcoded_content);
+        assert!(missing.missing_fields.iter().any(|field| field == "skuId"));
+
+        for fixture_id in [
+            "missing-sku-definition",
+            "core-runtime-domain-term-as-authority",
+            "synthetic-sku-sidecar-promoted-as-live-product",
+        ] {
+            let fixture = contract
+                .negative_fixtures
+                .iter()
+                .find(|fixture| fixture.fixture_id == fixture_id)
+                .unwrap_or_else(|| panic!("missing fixture {fixture_id}"));
+            assert_eq!(fixture.status, "failed-as-expected");
+            assert!(!fixture.failure_reason.trim().is_empty());
+            assert!(!fixture.resolution.falls_back_to_generic_hardcoded_content);
+        }
+
+        let core_text = format!(
+            "{} {}",
+            contract.authority_boundary, contract.core_runtime_policy
+        )
+        .to_lowercase();
+        for term in &contract.forbidden_core_terms {
+            assert!(
+                !core_text.contains(term),
+                "core runtime authority text contains forbidden term {term}"
+            );
         }
     }
 

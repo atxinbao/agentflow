@@ -1,6 +1,6 @@
 # Changelog
 
-更新日期：2026-07-09
+更新日期：2026-07-10
 执行者：Codex
 
 ## Current Baseline
@@ -47,6 +47,9 @@ Commercial Backend Stable Closure:
 - added the v1.3.0 commercial authority boundary map, separating writable Order
   / Entitlement / Run / Artifact / Evidence / Decision / Access / Policy facts
   from read-only Projection / Customer View / Download View / sidecar surfaces;
+- added the v1.3.0 Product SKU extension contract, defining how Product / Pack
+  / SKU files bind concrete paid-report SKU fields while missing SKU definitions
+  stay invalid and never fall back to generic hardcoded report content;
 - required explicit migration or version bump policy for backward-incompatible
   commercial backend contract changes after v1.3.0.
 
