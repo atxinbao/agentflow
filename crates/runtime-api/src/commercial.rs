@@ -61,6 +61,8 @@ pub const PRODUCT_SKU_EXTENSION_CONTRACT_VERSION: &str =
     "agentflow-product-sku-extension-contract.v1";
 pub const PROVIDER_GENERATOR_ADAPTER_BOUNDARY_VERSION: &str =
     "agentflow-provider-generator-adapter-boundary.v1";
+pub const PAYMENT_PROVIDER_ADAPTER_BOUNDARY_VERSION: &str =
+    "agentflow-payment-provider-adapter-boundary.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
@@ -378,6 +380,47 @@ pub struct ProviderGeneratorAdapterBoundaryContract {
     pub negative_fixtures: Vec<ProviderGeneratorAdapterFixture>,
     #[serde(default)]
     pub stable_failure_reasons: Vec<String>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentProviderAdapterFixture {
+    pub fixture_id: String,
+    pub status: String,
+    pub provider_payment_intent_ref: Option<String>,
+    pub checkout_session_ref: Option<String>,
+    pub entitlement_authorization_ref: Option<String>,
+    pub payment_status: String,
+    pub refund_status: String,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+    pub core_consumes_authorization_result: bool,
+    pub core_consumes_provider_evidence: bool,
+    pub provider_checkout_implementation_is_core_authority: bool,
+    pub provider_refund_execution_is_core_authority: bool,
+    pub entitlement_effect: String,
+    pub failure_reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentProviderAdapterBoundaryContract {
+    pub version: String,
+    pub status: String,
+    pub release_version: String,
+    pub authority_boundary: String,
+    pub adapter_boundary: String,
+    #[serde(default)]
+    pub required_fields: Vec<String>,
+    #[serde(default)]
+    pub dry_run_fixtures: Vec<PaymentProviderAdapterFixture>,
+    #[serde(default)]
+    pub stable_payment_statuses: Vec<String>,
+    #[serde(default)]
+    pub stable_refund_statuses: Vec<String>,
     #[serde(default)]
     pub source_refs: Vec<String>,
     pub checked_at: String,
@@ -1589,6 +1632,96 @@ pub fn provider_generator_adapter_boundary_contract() -> ProviderGeneratorAdapte
     }
 }
 
+pub fn payment_provider_adapter_boundary_contract() -> PaymentProviderAdapterBoundaryContract {
+    PaymentProviderAdapterBoundaryContract {
+        version: PAYMENT_PROVIDER_ADAPTER_BOUNDARY_VERSION.to_string(),
+        status: "passed".to_string(),
+        release_version: "v1.3.0".to_string(),
+        authority_boundary: "Core Runtime consumes normalized payment authorization results, entitlement effects and evidence references. Provider checkout session creation, charge execution, refund execution, credentials and provider webhooks stay behind the Payment Provider Adapter boundary.".to_string(),
+        adapter_boundary: "Payment Provider Adapter may map provider payment intent, checkout session and refund state into entitlement authorization facts. It cannot execute checkout inside Core Runtime, cannot mutate delivery artifacts and cannot make provider execution the source of Core authority.".to_string(),
+        required_fields: vec![
+            "providerPaymentIntentRef".to_string(),
+            "checkoutSessionRef".to_string(),
+            "entitlementAuthorizationRef".to_string(),
+            "paymentStatus".to_string(),
+            "refundStatus".to_string(),
+            "sourceRefs".to_string(),
+        ],
+        dry_run_fixtures: vec![
+            payment_provider_adapter_fixture(
+                "paid",
+                "passed",
+                true,
+                true,
+                true,
+                "paid",
+                "none",
+                "entitlement-authorized",
+                "",
+            ),
+            payment_provider_adapter_fixture(
+                "failed",
+                "failed-as-expected",
+                true,
+                true,
+                false,
+                "failed",
+                "none",
+                "entitlement-blocked",
+                "payment-failed",
+            ),
+            payment_provider_adapter_fixture(
+                "refunded",
+                "failed-as-expected",
+                true,
+                true,
+                true,
+                "paid",
+                "refunded",
+                "entitlement-refunded",
+                "payment-refunded",
+            ),
+            payment_provider_adapter_fixture(
+                "revoked",
+                "failed-as-expected",
+                true,
+                true,
+                true,
+                "paid",
+                "none",
+                "entitlement-revoked",
+                "entitlement-revoked",
+            ),
+            payment_provider_adapter_fixture(
+                "missing",
+                "failed-as-expected",
+                false,
+                false,
+                false,
+                "missing",
+                "unknown",
+                "entitlement-missing",
+                "payment-provider-state-missing",
+            ),
+        ],
+        stable_payment_statuses: vec![
+            "paid".to_string(),
+            "failed".to_string(),
+            "missing".to_string(),
+        ],
+        stable_refund_statuses: vec![
+            "none".to_string(),
+            "refunded".to_string(),
+            "unknown".to_string(),
+        ],
+        source_refs: vec![
+            "docs/architecture/104-payment-provider-adapter-boundary-v1.md".to_string(),
+            "docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md".to_string(),
+        ],
+        checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
 fn paid_report_flow_states() -> Vec<String> {
     [
         "draft-order",
@@ -1832,6 +1965,43 @@ fn provider_generator_adapter_receipt(
         remediation_route: remediation_route.to_string(),
         provider_specific_call_is_core_authority,
         delivery_blocked,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn payment_provider_adapter_fixture(
+    fixture_id: &str,
+    status: &str,
+    has_provider_payment_intent: bool,
+    has_checkout_session: bool,
+    has_entitlement_authorization: bool,
+    payment_status: &str,
+    refund_status: &str,
+    entitlement_effect: &str,
+    failure_reason: &str,
+) -> PaymentProviderAdapterFixture {
+    PaymentProviderAdapterFixture {
+        fixture_id: fixture_id.to_string(),
+        status: status.to_string(),
+        provider_payment_intent_ref: has_provider_payment_intent
+            .then(|| format!("providers/dry-run-payment/{fixture_id}/payment-intent.json")),
+        checkout_session_ref: has_checkout_session
+            .then(|| format!("providers/dry-run-payment/{fixture_id}/checkout-session.json")),
+        entitlement_authorization_ref: has_entitlement_authorization.then(|| {
+            format!("agentflow/tasks/{fixture_id}/commercial/entitlement-authorization.json")
+        }),
+        payment_status: payment_status.to_string(),
+        refund_status: refund_status.to_string(),
+        source_refs: vec![
+            format!("providers/dry-run-payment/{fixture_id}/source.json"),
+            "docs/architecture/104-payment-provider-adapter-boundary-v1.md".to_string(),
+        ],
+        core_consumes_authorization_result: has_entitlement_authorization,
+        core_consumes_provider_evidence: has_provider_payment_intent || has_checkout_session,
+        provider_checkout_implementation_is_core_authority: false,
+        provider_refund_execution_is_core_authority: false,
+        entitlement_effect: entitlement_effect.to_string(),
+        failure_reason: failure_reason.to_string(),
     }
 }
 
@@ -5582,6 +5752,73 @@ mod tests {
             .failure_reasons
             .iter()
             .any(|reason| reason == "provider-call-cannot-write-core-authority"));
+    }
+
+    #[test]
+    fn payment_provider_adapter_boundary_keeps_checkout_outside_core() {
+        let contract = payment_provider_adapter_boundary_contract();
+
+        assert_eq!(contract.version, PAYMENT_PROVIDER_ADAPTER_BOUNDARY_VERSION);
+        assert_eq!(contract.status, "passed");
+        assert_eq!(contract.release_version, "v1.3.0");
+
+        for field in [
+            "providerPaymentIntentRef",
+            "checkoutSessionRef",
+            "entitlementAuthorizationRef",
+            "paymentStatus",
+            "refundStatus",
+            "sourceRefs",
+        ] {
+            assert!(
+                contract.required_fields.iter().any(|item| item == field),
+                "missing payment adapter field {field}"
+            );
+        }
+
+        let fixtures = contract
+            .dry_run_fixtures
+            .iter()
+            .map(|fixture| (fixture.fixture_id.as_str(), fixture))
+            .collect::<std::collections::HashMap<_, _>>();
+        for fixture_id in ["paid", "failed", "refunded", "revoked", "missing"] {
+            let fixture = fixtures
+                .get(fixture_id)
+                .unwrap_or_else(|| panic!("missing fixture {fixture_id}"));
+            assert!(!fixture.source_refs.is_empty());
+            assert!(!fixture.provider_checkout_implementation_is_core_authority);
+            assert!(!fixture.provider_refund_execution_is_core_authority);
+        }
+
+        let paid = fixtures.get("paid").expect("paid fixture");
+        assert_eq!(paid.status, "passed");
+        assert_eq!(paid.payment_status, "paid");
+        assert_eq!(paid.refund_status, "none");
+        assert_eq!(paid.entitlement_effect, "entitlement-authorized");
+        assert!(paid.provider_payment_intent_ref.is_some());
+        assert!(paid.checkout_session_ref.is_some());
+        assert!(paid.entitlement_authorization_ref.is_some());
+        assert!(paid.core_consumes_authorization_result);
+        assert!(paid.core_consumes_provider_evidence);
+
+        for fixture_id in ["failed", "refunded", "revoked", "missing"] {
+            let fixture = fixtures.get(fixture_id).expect("negative fixture");
+            assert_eq!(fixture.status, "failed-as-expected");
+            assert!(!fixture.failure_reason.trim().is_empty());
+        }
+
+        let refunded = fixtures.get("refunded").expect("refunded fixture");
+        assert_eq!(refunded.refund_status, "refunded");
+        assert_eq!(refunded.entitlement_effect, "entitlement-refunded");
+        assert!(!refunded.provider_refund_execution_is_core_authority);
+
+        let missing = fixtures.get("missing").expect("missing fixture");
+        assert_eq!(missing.payment_status, "missing");
+        assert_eq!(missing.refund_status, "unknown");
+        assert!(missing.provider_payment_intent_ref.is_none());
+        assert!(missing.checkout_session_ref.is_none());
+        assert!(missing.entitlement_authorization_ref.is_none());
+        assert!(!missing.core_consumes_authorization_result);
     }
 
     fn registry_fixture() -> TempDir {

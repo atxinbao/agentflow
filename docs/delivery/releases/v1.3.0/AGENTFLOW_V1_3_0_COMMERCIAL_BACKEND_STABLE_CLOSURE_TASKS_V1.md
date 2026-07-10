@@ -15,7 +15,7 @@ This document records the planned public delivery traceability for `v1.3.0`.
 | V130-004 | #996 | Commercial Authority Boundary Freeze | done | `runtime/v130-commercial-authority-boundary.json` |
 | V130-005 | #997 | Product SKU Extension Contract | done | `runtime/v130-product-sku-extension-contract.json` |
 | V130-006 | #998 | Provider / Generator Adapter Boundary | done | `runtime/v130-provider-generator-adapter-boundary.json` |
-| V130-007 | #999 | Payment Provider Adapter Boundary | planned | TBD |
+| V130-007 | #999 | Payment Provider Adapter Boundary | done | `runtime/v130-payment-provider-adapter-boundary.json` |
 | V130-008 | #1000 | Customer Delivery Backend Contract | planned | TBD |
 | V130-009 | #1001 | Commercial End-to-End Golden Scenario | planned | TBD |
 | V130-010 | #1002 | v1.3.0 Release Certification | planned | TBD |

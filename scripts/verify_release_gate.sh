@@ -383,6 +383,7 @@ V130_PAID_REPORT_FLOW_STATE_MACHINE_PATH="$RUNTIME_DIR/v130-paid-report-flow-sta
 V130_COMMERCIAL_AUTHORITY_BOUNDARY_PATH="$RUNTIME_DIR/v130-commercial-authority-boundary.json"
 V130_PRODUCT_SKU_EXTENSION_CONTRACT_PATH="$RUNTIME_DIR/v130-product-sku-extension-contract.json"
 V130_PROVIDER_GENERATOR_ADAPTER_BOUNDARY_PATH="$RUNTIME_DIR/v130-provider-generator-adapter-boundary.json"
+V130_PAYMENT_PROVIDER_ADAPTER_BOUNDARY_PATH="$RUNTIME_DIR/v130-payment-provider-adapter-boundary.json"
 LIVE_GITHUB_MILESTONE_CLOSEOUT_PATH="$RUNTIME_DIR/live-github-milestone-closeout.json"
 RELEASE_CLOSEOUT_PROOF_NEGATIVE_FIXTURE_PATH="$RUNTIME_DIR/release-closeout-proof-negative-fixture.json"
 CORE_DECISION_MODEL_CONTRACT_PATH="$RUNTIME_DIR/core-decision-model-contract.json"
@@ -18690,6 +18691,107 @@ PY
   record_stage "$stage" "passed" "$(basename "$V130_PROVIDER_GENERATOR_ADAPTER_BOUNDARY_PATH")"
 }
 
+run_v130_payment_provider_adapter_boundary_gate() {
+  local stage="release.v130-payment-provider-adapter-boundary"
+  record_stage "$stage" "started" "$V130_PAYMENT_PROVIDER_ADAPTER_BOUNDARY_PATH"
+
+  run_workspace_cmd "$stage.generate" "$RUNTIME_DIR/v130-payment-provider-adapter-boundary.txt" \
+    cargo run -p agentflow-runtime-api --example v130_payment_provider_adapter_boundary_proofs -- \
+      "$V130_PAYMENT_PROVIDER_ADAPTER_BOUNDARY_PATH"
+
+  python3 - "$V130_PAYMENT_PROVIDER_ADAPTER_BOUNDARY_PATH" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+failed = []
+
+if payload.get("version") != "agentflow-payment-provider-adapter-boundary.v1":
+    failed.append("wrong-version")
+if payload.get("status") != "passed":
+    failed.append("status-not-passed")
+if payload.get("releaseVersion") != "v1.3.0":
+    failed.append("wrong-release-version")
+
+required = set(payload.get("requiredFields", []))
+for field in [
+    "providerPaymentIntentRef",
+    "checkoutSessionRef",
+    "entitlementAuthorizationRef",
+    "paymentStatus",
+    "refundStatus",
+    "sourceRefs",
+]:
+    if field not in required:
+        failed.append(f"missing-required-field-{field}")
+
+fixtures = {fixture.get("fixtureId"): fixture for fixture in payload.get("dryRunFixtures", [])}
+for fixture_id in ["paid", "failed", "refunded", "revoked", "missing"]:
+    fixture = fixtures.get(fixture_id)
+    if not fixture:
+        failed.append(f"missing-fixture-{fixture_id}")
+        continue
+    if not fixture.get("sourceRefs"):
+        failed.append(f"{fixture_id}-missing-source-refs")
+    if fixture.get("providerCheckoutImplementationIsCoreAuthority") is not False:
+        failed.append(f"{fixture_id}-checkout-implementation-is-core-authority")
+    if fixture.get("providerRefundExecutionIsCoreAuthority") is not False:
+        failed.append(f"{fixture_id}-refund-execution-is-core-authority")
+
+paid = fixtures.get("paid", {})
+if paid.get("status") != "passed":
+    failed.append("paid-fixture-not-passed")
+if paid.get("paymentStatus") != "paid":
+    failed.append("paid-fixture-wrong-payment-status")
+if paid.get("refundStatus") != "none":
+    failed.append("paid-fixture-wrong-refund-status")
+for field in [
+    "providerPaymentIntentRef",
+    "checkoutSessionRef",
+    "entitlementAuthorizationRef",
+]:
+    if not paid.get(field):
+        failed.append(f"paid-fixture-missing-{field}")
+if paid.get("coreConsumesAuthorizationResult") is not True:
+    failed.append("paid-fixture-core-does-not-consume-authorization-result")
+if paid.get("coreConsumesProviderEvidence") is not True:
+    failed.append("paid-fixture-core-does-not-consume-provider-evidence")
+
+for fixture_id in ["failed", "refunded", "revoked", "missing"]:
+    fixture = fixtures.get(fixture_id, {})
+    if fixture.get("status") != "failed-as-expected":
+        failed.append(f"{fixture_id}-unexpected-status")
+    if not fixture.get("failureReason"):
+        failed.append(f"{fixture_id}-missing-failure-reason")
+
+refunded = fixtures.get("refunded", {})
+if refunded.get("refundStatus") != "refunded":
+    failed.append("refunded-fixture-wrong-refund-status")
+if refunded.get("entitlementEffect") != "entitlement-refunded":
+    failed.append("refunded-fixture-wrong-entitlement-effect")
+
+missing = fixtures.get("missing", {})
+if missing.get("paymentStatus") != "missing":
+    failed.append("missing-fixture-wrong-payment-status")
+if missing.get("refundStatus") != "unknown":
+    failed.append("missing-fixture-wrong-refund-status")
+for field in [
+    "providerPaymentIntentRef",
+    "checkoutSessionRef",
+    "entitlementAuthorizationRef",
+]:
+    if missing.get(field) is not None:
+        failed.append(f"missing-fixture-unexpected-{field}")
+
+if failed:
+    raise SystemExit(f"v130 payment provider adapter boundary failed: {failed}")
+PY
+
+  record_stage "$stage" "passed" "$(basename "$V130_PAYMENT_PROVIDER_ADAPTER_BOUNDARY_PATH")"
+}
+
 prepare_workspace() {
   record_stage "workspace.prepare" "started" "$WORKSPACE"
   git clone "$ROOT" "$WORKSPACE" >/dev/null
@@ -19326,6 +19428,7 @@ PY
   run_v130_commercial_authority_boundary_gate
   run_v130_product_sku_extension_contract_gate
   run_v130_provider_generator_adapter_boundary_gate
+  run_v130_payment_provider_adapter_boundary_gate
   write_status "passed" "release.publish.refresh" "release gate E2E completed"
   write_gate_reports
 }

@@ -53,6 +53,9 @@ Commercial Backend Stable Closure:
 - added the v1.3.0 Provider / Generator adapter boundary, freezing dry-run
   generation request / receipt / artifact / evidence refs and negative fixtures
   without calling a real provider;
+- added the v1.3.0 Payment Provider adapter boundary, freezing dry-run payment
+  intent / checkout session / entitlement authorization / refund status fixtures
+  without executing real checkout, charge or refund flows;
 - required explicit migration or version bump policy for backward-incompatible
   commercial backend contract changes after v1.3.0.
 
