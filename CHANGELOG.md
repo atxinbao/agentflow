@@ -7,27 +7,26 @@
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.2.9/README.md](docs/delivery/releases/v1.2.9/README.md)
-- [docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md)
+- [docs/delivery/releases/v1.3.0/README.md](docs/delivery/releases/v1.3.0/README.md)
+- [docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md)
 
 上一发布基线：
 
-- [docs/delivery/releases/v1.2.8/README.md](docs/delivery/releases/v1.2.8/README.md)
-- [docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md)
+- [docs/delivery/releases/v1.2.9/README.md](docs/delivery/releases/v1.2.9/README.md)
+- [docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md)
 
 历史发布基线：
 
+- [docs/delivery/releases/v1.2.8/README.md](docs/delivery/releases/v1.2.8/README.md)
+- [docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.8/AGENTFLOW_V1_2_8_PAID_REPORT_RUN_DELIVERY_ARTIFACT_CLOSURE_TASKS_V1.md)
 - [docs/delivery/releases/v1.2.7/README.md](docs/delivery/releases/v1.2.7/README.md)
 - [docs/delivery/releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.7/AGENTFLOW_V1_2_7_PAID_REPORT_RUNTIME_HANDOFF_CLOSURE_TASKS_V1.md)
 - [docs/delivery/releases/v1.2.6/README.md](docs/delivery/releases/v1.2.6/README.md)
 - [docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md](docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md)
 
-下一版计划：
-
-- [docs/delivery/releases/v1.3.0/README.md](docs/delivery/releases/v1.3.0/README.md)
-- [docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md)
-
 ## Unreleased
+
+## v1.3.0 - 2026-07-10
 
 Commercial Backend Stable Closure:
 
@@ -68,6 +67,7 @@ Commercial Backend Stable Closure:
   non-goal boundary flags;
 - required explicit migration or version bump policy for backward-incompatible
   commercial backend contract changes after v1.3.0.
+- advanced workspace and desktop version metadata to `1.3.0`.
 
 ## v1.2.9 - 2026-07-09
 
