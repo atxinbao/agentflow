@@ -84,6 +84,7 @@ or local E2E evidence.
 | v1.3.0 product SKU extension contract | `runtime/v130-product-sku-extension-contract.json` | machine-readable Product / Pack / SKU extension contract with synthetic SKU and missing-SKU negative fixture |
 | v1.3.0 provider / generator adapter boundary | `runtime/v130-provider-generator-adapter-boundary.json` | machine-readable dry-run provider/generator request, receipt, artifact, evidence refs and negative fixtures |
 | v1.3.0 payment provider adapter boundary | `runtime/v130-payment-provider-adapter-boundary.json` | machine-readable dry-run payment provider intent, checkout session, entitlement authorization, refund status and missing-state fixtures |
+| v1.3.0 customer delivery backend contract | `runtime/v130-customer-delivery-backend-contract.json` | machine-readable customer delivery access, expiry, revocation, refund, repair, rerun and feedback fixtures |
 
 ## GitHub Traceability
 

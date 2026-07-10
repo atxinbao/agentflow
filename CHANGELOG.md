@@ -56,6 +56,9 @@ Commercial Backend Stable Closure:
 - added the v1.3.0 Payment Provider adapter boundary, freezing dry-run payment
   intent / checkout session / entitlement authorization / refund status fixtures
   without executing real checkout, charge or refund flows;
+- added the v1.3.0 Customer Delivery Backend contract, freezing customer
+  access, expiry, revocation, refund, repair, rerun and feedback fixtures with
+  stable `nextAction` semantics;
 - required explicit migration or version bump policy for backward-incompatible
   commercial backend contract changes after v1.3.0.
 
