@@ -80,6 +80,7 @@ or local E2E evidence.
 | v1.2.9 certification semantics repair | `runtime/v129-release-certification.json` | final certification now exposes live release authority, tag object kind, tag object id, and peeled commit sha |
 | v1.3.0 commercial backend stable contract | `runtime/v130-commercial-backend-stable-contract.json` | machine-readable Product / Order / Entitlement / Run / Artifact / Evidence / Decision / Delivery / Feedback schema inventory |
 | v1.3.0 paid report flow state machine | `runtime/v130-paid-report-flow-state-machine.json` | machine-readable Paid Report lifecycle states, positive transitions, and invalid transition failure fixtures |
+| v1.3.0 commercial authority boundary | `runtime/v130-commercial-authority-boundary.json` | machine-readable authority writer map and negative fixtures for projection / customer view / download view / sidecar authority writes |
 
 ## GitHub Traceability
 

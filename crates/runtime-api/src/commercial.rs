@@ -55,6 +55,8 @@ pub const COMMERCIAL_BACKEND_STABLE_CONTRACT_VERSION: &str =
     "agentflow-commercial-backend-stable-contract.v1";
 pub const PAID_REPORT_FLOW_STATE_MACHINE_VERSION: &str =
     "agentflow-paid-report-flow-state-machine.v1";
+pub const COMMERCIAL_AUTHORITY_BOUNDARY_VERSION: &str =
+    "agentflow-commercial-authority-boundary.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
@@ -179,6 +181,50 @@ pub struct PaidReportFlowStateMachine {
     pub positive_fixtures: Vec<PaidReportFlowTransitionFixture>,
     #[serde(default)]
     pub negative_fixtures: Vec<PaidReportFlowTransitionFixture>,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialAuthorityRule {
+    pub object_name: String,
+    pub contract_version: String,
+    pub owner_component: String,
+    pub authority_kind: String,
+    pub can_create: bool,
+    pub can_update: bool,
+    pub projection_only: bool,
+    pub writes_authority: bool,
+    #[serde(default)]
+    pub read_only_surfaces: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialAuthorityNegativeFixture {
+    pub fixture_id: String,
+    pub status: String,
+    pub attempted_writer: String,
+    pub attempted_target: String,
+    pub attempted_authority_kind: String,
+    pub can_write_authority: bool,
+    pub failure_reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialAuthorityBoundary {
+    pub version: String,
+    pub status: String,
+    pub release_version: String,
+    pub authority_boundary: String,
+    #[serde(default)]
+    pub authority_map: Vec<CommercialAuthorityRule>,
+    #[serde(default)]
+    pub read_only_surfaces: Vec<String>,
+    #[serde(default)]
+    pub negative_fixtures: Vec<CommercialAuthorityNegativeFixture>,
+    pub synthetic_release_sidecar_policy: String,
     pub checked_at: String,
 }
 
@@ -870,6 +916,195 @@ pub fn paid_report_flow_state_machine() -> PaidReportFlowStateMachine {
     }
 }
 
+pub fn commercial_authority_boundary() -> CommercialAuthorityBoundary {
+    CommercialAuthorityBoundary {
+        version: COMMERCIAL_AUTHORITY_BOUNDARY_VERSION.to_string(),
+        status: "passed".to_string(),
+        release_version: "v1.3.0".to_string(),
+        authority_boundary: "Commercial backend authority can only be written by the component that owns the matching stable object. Projection, Customer View, Download View, synthetic release fixtures, and release sidecars are read-only evidence or views and cannot promote themselves to live authority.".to_string(),
+        authority_map: vec![
+            authority_rule(
+                "PaidReportOrderRecord",
+                PAID_REPORT_ORDER_RECORD_VERSION,
+                "Order Runtime",
+                "order",
+                true,
+                true,
+                false,
+                true,
+                &["Projection", "Customer View", "Download View"],
+            ),
+            authority_rule(
+                "PaidReportEntitlementAuthorization",
+                PAID_REPORT_ENTITLEMENT_AUTHORIZATION_VERSION,
+                "Entitlement Runtime",
+                "entitlement",
+                true,
+                true,
+                false,
+                true,
+                &["Projection", "Customer View", "Download View"],
+            ),
+            authority_rule(
+                "PaidReportOrderToRunAdmission",
+                PAID_REPORT_ORDER_TO_RUN_ADMISSION_VERSION,
+                "Runtime Admission",
+                "run-admission",
+                true,
+                false,
+                false,
+                true,
+                &["Projection", "Customer View", "Download View"],
+            ),
+            authority_rule(
+                "PaidReportRunExecutionReceipt",
+                PAID_REPORT_RUN_EXECUTION_RECEIPT_VERSION,
+                "Execution Runtime",
+                "run",
+                true,
+                true,
+                false,
+                true,
+                &["Projection", "Customer View", "Download View"],
+            ),
+            authority_rule(
+                "PaidReportArtifact",
+                PAID_REPORT_ARTIFACT_VERSION,
+                "Artifact Runtime",
+                "artifact",
+                true,
+                true,
+                false,
+                true,
+                &["Projection", "Customer View", "Download View"],
+            ),
+            authority_rule(
+                "PaidReportEvidencePack",
+                PAID_REPORT_EVIDENCE_PACK_VERSION,
+                "Evidence Runtime",
+                "evidence",
+                true,
+                true,
+                false,
+                true,
+                &["Projection", "Customer View", "Download View"],
+            ),
+            authority_rule(
+                "PaidReportDecisionRecord",
+                PAID_REPORT_DECISION_RECORD_VERSION,
+                "Decision Runtime",
+                "decision",
+                true,
+                true,
+                false,
+                true,
+                &["Projection", "Customer View", "Download View"],
+            ),
+            authority_rule(
+                "PaidReportDeliveryPackageProjection",
+                PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION,
+                "Delivery Projection",
+                "delivery-view",
+                false,
+                false,
+                true,
+                false,
+                &["Projection", "Customer View", "Download View"],
+            ),
+            authority_rule(
+                "PaidReportCustomerDeliveryAccessProjection",
+                PAID_REPORT_CUSTOMER_DELIVERY_ACCESS_VERSION,
+                "Customer View",
+                "customer-access-view",
+                false,
+                false,
+                true,
+                false,
+                &["Projection", "Customer View", "Download View"],
+            ),
+            authority_rule(
+                "PaidReportAccessReceipt",
+                PAID_REPORT_ACCESS_RECEIPT_VERSION,
+                "Access Runtime",
+                "access-receipt",
+                true,
+                true,
+                false,
+                true,
+                &["Projection", "Customer View", "Download View"],
+            ),
+            authority_rule(
+                "PaidReportFeedbackLoopProjection",
+                PAID_REPORT_FEEDBACK_LOOP_PROJECTION_VERSION,
+                "Feedback Projection",
+                "feedback-view",
+                false,
+                false,
+                true,
+                false,
+                &["Projection", "Customer View", "Download View"],
+            ),
+            authority_rule(
+                "PaidReportCommercialPolicyRecord",
+                PAID_REPORT_COMMERCIAL_POLICY_VERSION,
+                "Commercial Policy Runtime",
+                "commercial-policy",
+                true,
+                true,
+                false,
+                true,
+                &["Projection", "Customer View", "Download View"],
+            ),
+        ],
+        read_only_surfaces: vec![
+            "Projection".to_string(),
+            "Customer View".to_string(),
+            "Download View".to_string(),
+            "Synthetic Release Fixture".to_string(),
+            "Release Sidecar".to_string(),
+        ],
+        negative_fixtures: vec![
+            authority_negative_fixture(
+                "projection-writing-authority",
+                "Projection",
+                "PaidReportDecisionRecord",
+                "decision",
+                "projection read models can display accepted decisions but cannot create or update decision authority",
+            ),
+            authority_negative_fixture(
+                "customer-view-writing-authority",
+                "Customer View",
+                "PaidReportCustomerDeliveryAccessProjection",
+                "customer-access-view",
+                "customer-facing views can display access state but cannot write access authority",
+            ),
+            authority_negative_fixture(
+                "download-view-writing-authority",
+                "Download View",
+                "PaidReportAccessReceipt",
+                "access-receipt",
+                "download views can consume access receipts but cannot create or update them",
+            ),
+            authority_negative_fixture(
+                "synthetic-release-sidecar-promoted-as-authority",
+                "Synthetic Release Fixture",
+                "Live Release Authority",
+                "release-provenance",
+                "synthetic project-release-gate-e2e facts are fixtures and cannot satisfy live release authority",
+            ),
+            authority_negative_fixture(
+                "release-sidecar-promoted-as-authority",
+                "Release Sidecar",
+                "Live Release Authority",
+                "release-provenance",
+                "release sidecar evidence can support certification but cannot replace live GitHub release provenance",
+            ),
+        ],
+        synthetic_release_sidecar_policy: "synthetic release fixtures and release sidecars are read-only evidence and cannot replace live GitHub release provenance; live release authority must come from published GitHub release provenance and matching source commit.".to_string(),
+        checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
 fn paid_report_flow_states() -> Vec<String> {
     [
         "draft-order",
@@ -968,6 +1203,51 @@ fn flow_failure(code: &str, message: &str) -> PaidReportFlowFailureReason {
         code: code.to_string(),
         message: message.to_string(),
         prevents_authority_writes: true,
+    }
+}
+
+fn authority_rule(
+    object_name: &str,
+    contract_version: &str,
+    owner_component: &str,
+    authority_kind: &str,
+    can_create: bool,
+    can_update: bool,
+    projection_only: bool,
+    writes_authority: bool,
+    read_only_surfaces: &[&str],
+) -> CommercialAuthorityRule {
+    CommercialAuthorityRule {
+        object_name: object_name.to_string(),
+        contract_version: contract_version.to_string(),
+        owner_component: owner_component.to_string(),
+        authority_kind: authority_kind.to_string(),
+        can_create,
+        can_update,
+        projection_only,
+        writes_authority,
+        read_only_surfaces: read_only_surfaces
+            .iter()
+            .map(|surface| surface.to_string())
+            .collect(),
+    }
+}
+
+fn authority_negative_fixture(
+    fixture_id: &str,
+    attempted_writer: &str,
+    attempted_target: &str,
+    attempted_authority_kind: &str,
+    failure_reason: &str,
+) -> CommercialAuthorityNegativeFixture {
+    CommercialAuthorityNegativeFixture {
+        fixture_id: fixture_id.to_string(),
+        status: "failed-as-expected".to_string(),
+        attempted_writer: attempted_writer.to_string(),
+        attempted_target: attempted_target.to_string(),
+        attempted_authority_kind: attempted_authority_kind.to_string(),
+        can_write_authority: false,
+        failure_reason: failure_reason.to_string(),
     }
 }
 
@@ -4464,6 +4744,96 @@ mod tests {
                 "{} must not write authority",
                 fixture.fixture_id
             );
+        }
+    }
+
+    #[test]
+    fn commercial_authority_boundary_freezes_writers_and_rejects_readonly_surfaces() {
+        let boundary = commercial_authority_boundary();
+
+        assert_eq!(boundary.version, COMMERCIAL_AUTHORITY_BOUNDARY_VERSION);
+        assert_eq!(boundary.status, "passed");
+        assert_eq!(boundary.release_version, "v1.3.0");
+
+        let object_names = boundary
+            .authority_map
+            .iter()
+            .map(|rule| rule.object_name.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        for required in [
+            "PaidReportOrderRecord",
+            "PaidReportEntitlementAuthorization",
+            "PaidReportOrderToRunAdmission",
+            "PaidReportRunExecutionReceipt",
+            "PaidReportArtifact",
+            "PaidReportEvidencePack",
+            "PaidReportDecisionRecord",
+            "PaidReportDeliveryPackageProjection",
+            "PaidReportCustomerDeliveryAccessProjection",
+            "PaidReportAccessReceipt",
+            "PaidReportFeedbackLoopProjection",
+            "PaidReportCommercialPolicyRecord",
+        ] {
+            assert!(object_names.contains(required), "missing rule {required}");
+        }
+
+        for authority_kind in [
+            "order",
+            "entitlement",
+            "run-admission",
+            "run",
+            "artifact",
+            "evidence",
+            "decision",
+            "delivery-view",
+            "customer-access-view",
+            "access-receipt",
+            "feedback-view",
+            "commercial-policy",
+        ] {
+            assert!(
+                boundary
+                    .authority_map
+                    .iter()
+                    .any(|rule| rule.authority_kind == authority_kind),
+                "missing authority kind {authority_kind}"
+            );
+        }
+
+        for rule in &boundary.authority_map {
+            assert!(!rule.contract_version.trim().is_empty());
+            if rule.projection_only {
+                assert!(!rule.can_create);
+                assert!(!rule.can_update);
+                assert!(!rule.writes_authority);
+            }
+        }
+
+        for surface in ["Projection", "Customer View", "Download View"] {
+            assert!(
+                boundary
+                    .read_only_surfaces
+                    .iter()
+                    .any(|entry| entry == surface),
+                "missing read-only surface {surface}"
+            );
+        }
+
+        for fixture_id in [
+            "projection-writing-authority",
+            "customer-view-writing-authority",
+            "download-view-writing-authority",
+            "synthetic-release-sidecar-promoted-as-authority",
+            "release-sidecar-promoted-as-authority",
+        ] {
+            let fixture = boundary
+                .negative_fixtures
+                .iter()
+                .find(|fixture| fixture.fixture_id == fixture_id)
+                .unwrap_or_else(|| panic!("missing fixture {fixture_id}"));
+            assert_eq!(fixture.status, "failed-as-expected");
+            assert!(!fixture.can_write_authority);
+            assert!(!fixture.failure_reason.trim().is_empty());
         }
     }
 
