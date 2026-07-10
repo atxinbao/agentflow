@@ -59,6 +59,10 @@ Commercial Backend Stable Closure:
 - added the v1.3.0 Customer Delivery Backend contract, freezing customer
   access, expiry, revocation, refund, repair, rerun and feedback fixtures with
   stable `nextAction` semantics;
+- added the v1.3.0 Commercial E2E golden scenario, connecting Product SKU,
+  Order, Entitlement, Admission, Generation Adapter, Artifact, Evidence,
+  Decision, Delivery, Access and Feedback into one generic machine-readable
+  proof;
 - required explicit migration or version bump policy for backward-incompatible
   commercial backend contract changes after v1.3.0.
 

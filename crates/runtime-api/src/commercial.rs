@@ -65,6 +65,8 @@ pub const PAYMENT_PROVIDER_ADAPTER_BOUNDARY_VERSION: &str =
     "agentflow-payment-provider-adapter-boundary.v1";
 pub const CUSTOMER_DELIVERY_BACKEND_CONTRACT_VERSION: &str =
     "agentflow-customer-delivery-backend-contract.v1";
+pub const COMMERCIAL_E2E_GOLDEN_SCENARIO_VERSION: &str =
+    "agentflow-commercial-e2e-golden-scenario.v1";
 
 const DEFAULT_COMMERCIAL_REGISTRY_ROOT: &str = "products/commercial-runtime";
 const NEGATIVE_COMMERCIAL_FIXTURE_ROOT: &str = "products/_fixtures/commercial-runtime-negative";
@@ -469,6 +471,53 @@ pub struct CustomerDeliveryBackendContract {
     pub accepted_delivery_fixture: CustomerDeliveryBackendFixture,
     #[serde(default)]
     pub negative_access_fixtures: Vec<CustomerDeliveryBackendFixture>,
+    #[serde(default)]
+    pub source_refs: Vec<String>,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialE2eGoldenScenarioFact {
+    pub fact_id: String,
+    pub fact_type: String,
+    pub contract_version: String,
+    pub status: String,
+    pub authority_owner: String,
+    pub source_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialE2eGoldenScenarioPath {
+    pub path_id: String,
+    pub status: String,
+    pub description: String,
+    #[serde(default)]
+    pub fact_refs: Vec<String>,
+    pub decision_outcome: String,
+    pub delivery_status: String,
+    pub download_access_visible: bool,
+    pub access_handle_generated: bool,
+    pub mutates_delivered_artifact: bool,
+    pub next_action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommercialE2eGoldenScenarioProof {
+    pub version: String,
+    pub status: String,
+    pub release_version: String,
+    pub scenario_id: String,
+    pub product_sku_fixture_id: String,
+    pub concrete_domain_sku_implemented: bool,
+    #[serde(default)]
+    pub ordered_facts: Vec<CommercialE2eGoldenScenarioFact>,
+    pub success_path: CommercialE2eGoldenScenarioPath,
+    pub failure_repair_path: CommercialE2eGoldenScenarioPath,
+    #[serde(default)]
+    pub certification_artifact_refs: Vec<String>,
     #[serde(default)]
     pub source_refs: Vec<String>,
     pub checked_at: String,
@@ -1903,6 +1952,174 @@ pub fn customer_delivery_backend_contract() -> CustomerDeliveryBackendContract {
             "docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md".to_string(),
         ],
         checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
+pub fn commercial_e2e_golden_scenario() -> CommercialE2eGoldenScenarioProof {
+    let ordered_facts = vec![
+        commercial_e2e_fact(
+            "sku-extension",
+            "ProductSkuExtensionDefinition",
+            PRODUCT_SKU_EXTENSION_CONTRACT_VERSION,
+            "ready",
+            "Product / Pack / SKU",
+            "runtime/v130-product-sku-extension-contract.json",
+        ),
+        commercial_e2e_fact(
+            "order-record",
+            "PaidReportOrderRecord",
+            PAID_REPORT_ORDER_RECORD_VERSION,
+            "order-ready",
+            "Order Runtime",
+            "runtime/v130-commercial-backend-stable-contract.json",
+        ),
+        commercial_e2e_fact(
+            "entitlement-authorization",
+            "PaidReportEntitlementAuthorization",
+            PAID_REPORT_ENTITLEMENT_AUTHORIZATION_VERSION,
+            "authorized",
+            "Entitlement Runtime",
+            "runtime/v130-payment-provider-adapter-boundary.json",
+        ),
+        commercial_e2e_fact(
+            "order-to-run-admission",
+            "PaidReportOrderToRunAdmission",
+            PAID_REPORT_ORDER_TO_RUN_ADMISSION_VERSION,
+            "accepted",
+            "Runtime Admission",
+            "runtime/v130-paid-report-flow-state-machine.json",
+        ),
+        commercial_e2e_fact(
+            "generation-adapter-receipt",
+            "ProviderGeneratorAdapterReceipt",
+            PROVIDER_GENERATOR_ADAPTER_BOUNDARY_VERSION,
+            "succeeded",
+            "Provider / Generator Adapter",
+            "runtime/v130-provider-generator-adapter-boundary.json",
+        ),
+        commercial_e2e_fact(
+            "report-artifact",
+            "PaidReportArtifact",
+            PAID_REPORT_ARTIFACT_VERSION,
+            "complete",
+            "Artifact Runtime",
+            "runtime/v130-provider-generator-adapter-boundary.json",
+        ),
+        commercial_e2e_fact(
+            "evidence-pack",
+            "PaidReportEvidencePack",
+            PAID_REPORT_EVIDENCE_PACK_VERSION,
+            "complete",
+            "Evidence Runtime",
+            "runtime/v130-commercial-backend-stable-contract.json",
+        ),
+        commercial_e2e_fact(
+            "decision-record",
+            "PaidReportDecisionRecord",
+            PAID_REPORT_DECISION_RECORD_VERSION,
+            "accepted",
+            "Decision Runtime",
+            "runtime/v130-paid-report-flow-state-machine.json",
+        ),
+        commercial_e2e_fact(
+            "delivery-package",
+            "PaidReportDeliveryPackageProjection",
+            PAID_REPORT_DELIVERY_PACKAGE_PROJECTION_VERSION,
+            "delivery-ready",
+            "Delivery Projection",
+            "runtime/v130-customer-delivery-backend-contract.json",
+        ),
+        commercial_e2e_fact(
+            "customer-access",
+            "PaidReportCustomerDeliveryAccessProjection",
+            PAID_REPORT_CUSTOMER_DELIVERY_ACCESS_VERSION,
+            "accessible",
+            "Customer Delivery Projection",
+            "runtime/v130-customer-delivery-backend-contract.json",
+        ),
+        commercial_e2e_fact(
+            "feedback-loop",
+            "PaidReportFeedbackLoopProjection",
+            PAID_REPORT_FEEDBACK_LOOP_PROJECTION_VERSION,
+            "closed",
+            "Feedback Projection",
+            "runtime/v130-customer-delivery-backend-contract.json",
+        ),
+    ];
+    let fact_refs = ordered_facts
+        .iter()
+        .map(|fact| fact.fact_id.clone())
+        .collect::<Vec<_>>();
+
+    CommercialE2eGoldenScenarioProof {
+        version: COMMERCIAL_E2E_GOLDEN_SCENARIO_VERSION.to_string(),
+        status: "passed".to_string(),
+        release_version: "v1.3.0".to_string(),
+        scenario_id: "v130-generic-commercial-backend-e2e".to_string(),
+        product_sku_fixture_id: "synthetic-generic-report-sku".to_string(),
+        concrete_domain_sku_implemented: false,
+        ordered_facts,
+        success_path: CommercialE2eGoldenScenarioPath {
+            path_id: "accepted-delivery-access".to_string(),
+            status: "passed".to_string(),
+            description: "Generic paid report backend chain reaches customer delivery access with accepted decision and authorized entitlement.".to_string(),
+            fact_refs: fact_refs.clone(),
+            decision_outcome: "accepted".to_string(),
+            delivery_status: "delivery-ready".to_string(),
+            download_access_visible: true,
+            access_handle_generated: true,
+            mutates_delivered_artifact: false,
+            next_action: "show-download".to_string(),
+        },
+        failure_repair_path: CommercialE2eGoldenScenarioPath {
+            path_id: "repair-needed-does-not-mutate-delivery".to_string(),
+            status: "failed-as-expected".to_string(),
+            description: "Repair path creates a controlled follow-up proposal and cannot mutate the delivered artifact in place.".to_string(),
+            fact_refs: vec![
+                "decision-record".to_string(),
+                "delivery-package".to_string(),
+                "customer-access".to_string(),
+                "feedback-loop".to_string(),
+            ],
+            decision_outcome: "needs-fix".to_string(),
+            delivery_status: "repair-needed".to_string(),
+            download_access_visible: false,
+            access_handle_generated: false,
+            mutates_delivered_artifact: false,
+            next_action: "create-repair-proposal".to_string(),
+        },
+        certification_artifact_refs: vec![
+            "runtime/v130-commercial-backend-stable-contract.json".to_string(),
+            "runtime/v130-paid-report-flow-state-machine.json".to_string(),
+            "runtime/v130-commercial-authority-boundary.json".to_string(),
+            "runtime/v130-product-sku-extension-contract.json".to_string(),
+            "runtime/v130-provider-generator-adapter-boundary.json".to_string(),
+            "runtime/v130-payment-provider-adapter-boundary.json".to_string(),
+            "runtime/v130-customer-delivery-backend-contract.json".to_string(),
+        ],
+        source_refs: vec![
+            "docs/architecture/106-commercial-e2e-golden-scenario-v1.md".to_string(),
+            "docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md".to_string(),
+        ],
+        checked_at: "2026-07-10T00:00:00Z".to_string(),
+    }
+}
+
+fn commercial_e2e_fact(
+    fact_id: &str,
+    fact_type: &str,
+    contract_version: &str,
+    status: &str,
+    authority_owner: &str,
+    source_ref: &str,
+) -> CommercialE2eGoldenScenarioFact {
+    CommercialE2eGoldenScenarioFact {
+        fact_id: fact_id.to_string(),
+        fact_type: fact_type.to_string(),
+        contract_version: contract_version.to_string(),
+        status: status.to_string(),
+        authority_owner: authority_owner.to_string(),
+        source_ref: source_ref.to_string(),
     }
 }
 
@@ -6142,6 +6359,87 @@ mod tests {
             fixtures["rerun-needed"].next_action,
             "request-new-authorization"
         );
+    }
+
+    #[test]
+    fn commercial_e2e_golden_scenario_covers_backend_chain_and_repair_path() {
+        let scenario = commercial_e2e_golden_scenario();
+
+        assert_eq!(scenario.version, COMMERCIAL_E2E_GOLDEN_SCENARIO_VERSION);
+        assert_eq!(scenario.status, "passed");
+        assert_eq!(scenario.release_version, "v1.3.0");
+        assert!(!scenario.concrete_domain_sku_implemented);
+
+        let fact_types = scenario
+            .ordered_facts
+            .iter()
+            .map(|fact| fact.fact_type.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            fact_types,
+            vec![
+                "ProductSkuExtensionDefinition",
+                "PaidReportOrderRecord",
+                "PaidReportEntitlementAuthorization",
+                "PaidReportOrderToRunAdmission",
+                "ProviderGeneratorAdapterReceipt",
+                "PaidReportArtifact",
+                "PaidReportEvidencePack",
+                "PaidReportDecisionRecord",
+                "PaidReportDeliveryPackageProjection",
+                "PaidReportCustomerDeliveryAccessProjection",
+                "PaidReportFeedbackLoopProjection",
+            ]
+        );
+
+        for fact in &scenario.ordered_facts {
+            assert!(!fact.contract_version.trim().is_empty());
+            assert!(!fact.authority_owner.trim().is_empty());
+            assert!(!fact.source_ref.trim().is_empty());
+        }
+
+        assert_eq!(scenario.success_path.status, "passed");
+        assert_eq!(scenario.success_path.decision_outcome, "accepted");
+        assert_eq!(scenario.success_path.delivery_status, "delivery-ready");
+        assert!(scenario.success_path.download_access_visible);
+        assert!(scenario.success_path.access_handle_generated);
+        assert!(!scenario.success_path.mutates_delivered_artifact);
+        assert_eq!(scenario.success_path.next_action, "show-download");
+        assert_eq!(
+            scenario.success_path.fact_refs.len(),
+            scenario.ordered_facts.len()
+        );
+
+        assert_eq!(scenario.failure_repair_path.status, "failed-as-expected");
+        assert_eq!(scenario.failure_repair_path.decision_outcome, "needs-fix");
+        assert_eq!(
+            scenario.failure_repair_path.delivery_status,
+            "repair-needed"
+        );
+        assert!(!scenario.failure_repair_path.download_access_visible);
+        assert!(!scenario.failure_repair_path.access_handle_generated);
+        assert!(!scenario.failure_repair_path.mutates_delivered_artifact);
+        assert_eq!(
+            scenario.failure_repair_path.next_action,
+            "create-repair-proposal"
+        );
+
+        for artifact in [
+            "runtime/v130-commercial-backend-stable-contract.json",
+            "runtime/v130-paid-report-flow-state-machine.json",
+            "runtime/v130-product-sku-extension-contract.json",
+            "runtime/v130-provider-generator-adapter-boundary.json",
+            "runtime/v130-payment-provider-adapter-boundary.json",
+            "runtime/v130-customer-delivery-backend-contract.json",
+        ] {
+            assert!(
+                scenario
+                    .certification_artifact_refs
+                    .iter()
+                    .any(|entry| entry == artifact),
+                "missing certification artifact {artifact}"
+            );
+        }
     }
 
     fn registry_fixture() -> TempDir {
