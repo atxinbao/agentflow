@@ -1,0 +1,37 @@
+{
+  "version": "agentflow-commercial-sku-source.v1",
+  "source": "products/commercial-runtime/skus/first-paid-report-reference/sku.json",
+  "productId": "paid-report",
+  "skuId": "first-paid-report-reference",
+  "skuName": "First Paid Report Reference",
+  "skuState": "dry-run-reference",
+  "route": "paid-report.reference.dry-run",
+  "dryRunOnly": true,
+  "publicLaunch": false,
+  "realProviderGeneration": false,
+  "productionPaymentCheckout": false,
+  "domainObjectRefs": [
+    "products/commercial-runtime/products.json#paid-report",
+    "products/commercial-runtime/skus/first-paid-report-reference/input-schema.json",
+    "products/commercial-runtime/skus/first-paid-report-reference/output-schema.json"
+  ],
+  "skillRefs": [
+    "commercial-report-intake",
+    "commercial-report-dry-run-generation",
+    "commercial-report-delivery-preview"
+  ],
+  "connectorRefs": [
+    "dry-run-generator",
+    "dry-run-payment"
+  ],
+  "outputContractRefs": [
+    "products/commercial-runtime/skus/first-paid-report-reference/output-schema.json",
+    "products/commercial-runtime/skus/first-paid-report-reference/report-template.json",
+    "products/commercial-runtime/skus/first-paid-report-reference/preview-projection.json"
+  ],
+  "runtimeContractRefs": [
+    "products/commercial-runtime/skus/first-paid-report-reference/golden-scenario.json",
+    "products/commercial-runtime/skus/first-paid-report-reference/generator.json",
+    "products/commercial-runtime/skus/first-paid-report-reference/negative-fixtures.json"
+  ]
+}

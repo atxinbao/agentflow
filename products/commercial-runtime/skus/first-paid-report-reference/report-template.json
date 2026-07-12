@@ -1,0 +1,40 @@
+{
+  "version": "agentflow-commercial-report-template.v1",
+  "source": "products/commercial-runtime/skus/first-paid-report-reference/report-template.json",
+  "productId": "paid-report",
+  "skuId": "first-paid-report-reference",
+  "templateState": "dry-run-template",
+  "sections": [
+    {
+      "sectionId": "summary",
+      "title": "Summary",
+      "required": true,
+      "customerPreview": true
+    },
+    {
+      "sectionId": "findings",
+      "title": "Findings",
+      "required": true,
+      "customerPreview": true
+    },
+    {
+      "sectionId": "evidence",
+      "title": "Evidence",
+      "required": true,
+      "customerPreview": false
+    },
+    {
+      "sectionId": "nextActions",
+      "title": "Next Actions",
+      "required": true,
+      "customerPreview": true
+    }
+  ],
+  "outputSchemaRef": "products/commercial-runtime/skus/first-paid-report-reference/output-schema.json",
+  "deliveryArtifactRefs": [
+    "report.json",
+    "report.md",
+    "preview.json",
+    "evidence-manifest.json"
+  ]
+}

@@ -1,6 +1,6 @@
 # Project Roadmap
 
-更新日期：2026-07-11
+更新日期：2026-07-12
 执行者：Codex
 
 ## Purpose
@@ -156,18 +156,26 @@ v1.2.3 / v1.2.4 = 可公开发布产品
 v1.2.5 / v1.2.6 / v1.2.7 / v1.2.8 = Commercial Runtime 公开发布后的项目级交接收口
 ```
 
-商业后端基线继续分三步收口：
+商业后端基线继续分四步收口：
 
 ```text
 v1.2.9 = Paid Report Commercial Order and Access Closure
 v1.3.0 = Commercial Backend Stable Closure
 v1.3.1 = First Paid Report SKU Readiness / Commercial Certification Hardening
+v1.3.2 = First Paid Report SKU Reference Dry-run
 ```
 
 `v1.3.1` 只定义 First Paid Report SKU Readiness 和证明链修复，不发布具体
 SKU，不接入真实 provider generation，不接入 production payment checkout，不做
 public commercial launch，不做 cloud multi-tenant launch，也不实现 full customer
 account system。
+
+`v1.3.2` 把第一条 Paid Report SKU 从 readiness contract 推进到
+Product / Pack 源里的 reference dry-run。它定义 SKU 源、输入 schema、输出
+schema、dry-run generator receipt、order-to-delivery golden path、customer
+preview projection 和 negative fixtures。它仍不接入真实 provider generation，
+不接入 production payment checkout，不做 public commercial launch，不做 cloud
+multi-tenant launch，也不实现 full customer account system。
 
 | Version | Goal | Primary loop / kernel |
 | --- | --- | --- |
@@ -201,6 +209,7 @@ account system。
 | `v1.2.9` | Paid Report Commercial Order and Access Closure | Paid Report order / entitlement / access |
 | `v1.3.0` | Commercial Backend Stable Closure | Commercial Backend / Paid Report Flow |
 | `v1.3.1` | Commercial Certification and First Paid Report SKU Readiness Hardening | Release certification / SKU readiness |
+| `v1.3.2` | First Paid Report SKU Reference Dry-run | Product SKU source / dry-run delivery preview |
 
 ## Version Intent
 

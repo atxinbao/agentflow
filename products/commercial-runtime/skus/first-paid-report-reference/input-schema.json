@@ -1,0 +1,63 @@
+{
+  "version": "agentflow-commercial-sku-input-schema.v1",
+  "source": "products/commercial-runtime/skus/first-paid-report-reference/input-schema.json",
+  "productId": "paid-report",
+  "skuId": "first-paid-report-reference",
+  "requiredInputs": [
+    {
+      "field": "orderIntentId",
+      "type": "string",
+      "validation": "non-empty"
+    },
+    {
+      "field": "reportInputRef",
+      "type": "string",
+      "validation": "non-empty"
+    },
+    {
+      "field": "customerPreviewRef",
+      "type": "string",
+      "validation": "non-empty"
+    }
+  ],
+  "optionalInputs": [
+    {
+      "field": "requestedLocale",
+      "type": "string",
+      "validation": "supported-locale"
+    },
+    {
+      "field": "deliveryPreference",
+      "type": "string",
+      "validation": "preview-only"
+    }
+  ],
+  "rejectionReasons": [
+    "missing-order-intent",
+    "missing-report-input-ref",
+    "missing-customer-preview-ref",
+    "unsupported-locale",
+    "delivery-preference-not-preview-only"
+  ],
+  "positiveFixture": {
+    "fixtureId": "valid-first-paid-report-reference-input",
+    "expectedDecision": "accepted-for-dry-run"
+  },
+  "negativeFixtures": [
+    {
+      "fixtureId": "missing-order-intent",
+      "expectedDecision": "rejected",
+      "reason": "missing-order-intent"
+    },
+    {
+      "fixtureId": "missing-report-input-ref",
+      "expectedDecision": "rejected",
+      "reason": "missing-report-input-ref"
+    },
+    {
+      "fixtureId": "missing-customer-preview-ref",
+      "expectedDecision": "rejected",
+      "reason": "missing-customer-preview-ref"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Docs Index
 
-更新日期：2026-07-11
+更新日期：2026-07-12
 执行者：Codex
 
 ## Current Standard
@@ -35,21 +35,22 @@ docs/
 7. [architecture/086-industry-product-source-boundary-v1.md](architecture/086-industry-product-source-boundary-v1.md)
 8. [architecture/041-v100-stable-contract-baseline-v1.md](architecture/041-v100-stable-contract-baseline-v1.md)
 9. [architecture/053-core-4d-spec-intake-kernel-v1.md](architecture/053-core-4d-spec-intake-kernel-v1.md)
-10. [delivery/releases/v1.3.1/README.md](delivery/releases/v1.3.1/README.md)
-11. [delivery/releases/v1.3.0/README.md](delivery/releases/v1.3.0/README.md)
-12. [delivery/releases/v1.2.9/README.md](delivery/releases/v1.2.9/README.md)
-13. [delivery/releases/v1.2.8/README.md](delivery/releases/v1.2.8/README.md)
-14. [delivery/releases/v1.2.7/README.md](delivery/releases/v1.2.7/README.md)
-15. [delivery/releases/v1.2.6/README.md](delivery/releases/v1.2.6/README.md)
-16. [delivery/releases/v1.2.5/README.md](delivery/releases/v1.2.5/README.md)
-17. [delivery/releases/v1.2.4/README.md](delivery/releases/v1.2.4/README.md)
-18. [delivery/releases/v1.2.3/README.md](delivery/releases/v1.2.3/README.md)
-19. [delivery/releases/v1.2.2/README.md](delivery/releases/v1.2.2/README.md)
-20. [delivery/releases/v1.2.1/README.md](delivery/releases/v1.2.1/README.md)
-21. [delivery/releases/v1.2.0/README.md](delivery/releases/v1.2.0/README.md)
-22. [requirements/README.md](requirements/README.md)
-23. [requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md](requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md)
-24. [../CHANGELOG.md](../CHANGELOG.md)
+10. [delivery/releases/v1.3.2/README.md](delivery/releases/v1.3.2/README.md)
+11. [delivery/releases/v1.3.1/README.md](delivery/releases/v1.3.1/README.md)
+12. [delivery/releases/v1.3.0/README.md](delivery/releases/v1.3.0/README.md)
+13. [delivery/releases/v1.2.9/README.md](delivery/releases/v1.2.9/README.md)
+14. [delivery/releases/v1.2.8/README.md](delivery/releases/v1.2.8/README.md)
+15. [delivery/releases/v1.2.7/README.md](delivery/releases/v1.2.7/README.md)
+16. [delivery/releases/v1.2.6/README.md](delivery/releases/v1.2.6/README.md)
+17. [delivery/releases/v1.2.5/README.md](delivery/releases/v1.2.5/README.md)
+18. [delivery/releases/v1.2.4/README.md](delivery/releases/v1.2.4/README.md)
+19. [delivery/releases/v1.2.3/README.md](delivery/releases/v1.2.3/README.md)
+20. [delivery/releases/v1.2.2/README.md](delivery/releases/v1.2.2/README.md)
+21. [delivery/releases/v1.2.1/README.md](delivery/releases/v1.2.1/README.md)
+22. [delivery/releases/v1.2.0/README.md](delivery/releases/v1.2.0/README.md)
+23. [requirements/README.md](requirements/README.md)
+24. [requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md](requirements/v0.18.0-core-4d-spec-intake/spec-bundle.md)
+25. [../CHANGELOG.md](../CHANGELOG.md)
 
 ## Rules
 

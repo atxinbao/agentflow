@@ -1,0 +1,45 @@
+{
+  "version": "agentflow-commercial-sku-golden-scenario.v1",
+  "source": "products/commercial-runtime/skus/first-paid-report-reference/golden-scenario.json",
+  "productId": "paid-report",
+  "skuId": "first-paid-report-reference",
+  "scenarioId": "first-paid-report-reference-dry-run-golden-path",
+  "dryRunOnly": true,
+  "stages": [
+    "order-intake",
+    "sku-validation",
+    "run-admission",
+    "dry-run-generation",
+    "evidence-capture",
+    "decision",
+    "delivery-readiness"
+  ],
+  "expectedArtifacts": [
+    "adapter-receipt",
+    "evidence-manifest",
+    "preview-projection",
+    "delivery-readiness-decision"
+  ],
+  "successPath": {
+    "inputDecision": "accepted-for-dry-run",
+    "adapterReceipt": "accepted-for-preview",
+    "deliveryReadiness": "ready"
+  },
+  "failurePaths": [
+    {
+      "fixtureId": "invalid-input",
+      "deliveryReady": false,
+      "reason": "input-validation-failed"
+    },
+    {
+      "fixtureId": "invalid-output",
+      "deliveryReady": false,
+      "reason": "output-schema-invalid"
+    },
+    {
+      "fixtureId": "missing-adapter-receipt",
+      "deliveryReady": false,
+      "reason": "missing-adapter-receipt"
+    }
+  ]
+}

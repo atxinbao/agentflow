@@ -23,6 +23,9 @@
         "report-delivery-decision",
         "human-acceptance-or-repair-route"
       ],
+      "skuRefs": [
+        "products/commercial-runtime/skus/first-paid-report-reference/sku.json"
+      ],
       "sourceRef": "products/commercial-runtime/products.json#paid-report"
     },
     {

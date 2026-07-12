@@ -1,0 +1,54 @@
+{
+  "version": "agentflow-commercial-sku-output-schema.v1",
+  "source": "products/commercial-runtime/skus/first-paid-report-reference/output-schema.json",
+  "productId": "paid-report",
+  "skuId": "first-paid-report-reference",
+  "requiredReportFields": [
+    "reportId",
+    "skuId",
+    "orderIntentId",
+    "generatedAt",
+    "sections",
+    "evidenceRefs",
+    "deliveryPreview"
+  ],
+  "sections": [
+    {
+      "sectionId": "summary",
+      "required": true
+    },
+    {
+      "sectionId": "findings",
+      "required": true
+    },
+    {
+      "sectionId": "evidence",
+      "required": true
+    },
+    {
+      "sectionId": "nextActions",
+      "required": true
+    }
+  ],
+  "customerPreviewFields": [
+    "reportId",
+    "skuName",
+    "readiness",
+    "previewSummary",
+    "sectionCount",
+    "deliveryReadiness",
+    "decisionReasons"
+  ],
+  "deliveryArtifactRefs": [
+    "report.json",
+    "report.md",
+    "preview.json",
+    "evidence-manifest.json"
+  ],
+  "rejectionReasons": [
+    "missing-required-report-field",
+    "missing-required-section",
+    "missing-evidence-ref",
+    "missing-delivery-preview"
+  ]
+}
