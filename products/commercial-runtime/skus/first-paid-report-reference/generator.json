@@ -1,0 +1,46 @@
+{
+  "version": "agentflow-commercial-sku-generator.v1",
+  "source": "products/commercial-runtime/skus/first-paid-report-reference/generator.json",
+  "productId": "paid-report",
+  "skuId": "first-paid-report-reference",
+  "adapterId": "dry-run-generator",
+  "adapterMode": "dry-run",
+  "realProviderCall": false,
+  "billingAttempted": false,
+  "receiptContract": {
+    "requiredFields": [
+      "adapterId",
+      "skuId",
+      "inputHash",
+      "outputSchemaVersion",
+      "generatedArtifactRefs",
+      "decisionHints"
+    ],
+    "generatedArtifactRefs": [
+      "report.json",
+      "report.md",
+      "preview.json",
+      "evidence-manifest.json"
+    ],
+    "decisionHints": [
+      "accepted-for-preview",
+      "needs-input-repair",
+      "output-schema-invalid"
+    ]
+  },
+  "exampleReceipt": {
+    "adapterId": "dry-run-generator",
+    "skuId": "first-paid-report-reference",
+    "inputHash": "sha256:dry-run-input-fixture",
+    "outputSchemaVersion": "agentflow-commercial-sku-output-schema.v1",
+    "generatedArtifactRefs": [
+      "report.json",
+      "report.md",
+      "preview.json",
+      "evidence-manifest.json"
+    ],
+    "decisionHints": [
+      "accepted-for-preview"
+    ]
+  }
+}

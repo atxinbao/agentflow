@@ -1,6 +1,6 @@
 # AGENTS.md - AgentFlow Source Agent Entry
 
-日期：2026-07-11
+日期：2026-07-12
 执行者：Codex
 
 ## Purpose
@@ -21,23 +21,24 @@ It points agents to tracked documentation. It is not a local runtime fact file.
 9. Current module boundaries: `docs/architecture/current-module-boundaries.md`
 10. Current stable contract baseline: `docs/architecture/041-v100-stable-contract-baseline-v1.md`
 11. Release certification boundary: `docs/architecture/050-v100-release-certification-v1.md`
-12. Current release baseline: `docs/delivery/releases/v1.3.1/README.md`
-13. Previous release baseline: `docs/delivery/releases/v1.3.0/README.md`
-14. Previous release baseline: `docs/delivery/releases/v1.2.9/README.md`
-15. Previous release baseline: `docs/delivery/releases/v1.2.8/README.md`
-16. Previous release baseline: `docs/delivery/releases/v1.2.7/README.md`
-17. Previous release baseline: `docs/delivery/releases/v1.2.6/README.md`
-18. Previous release baseline: `docs/delivery/releases/v1.2.5/README.md`
-19. Previous release baseline: `docs/delivery/releases/v1.2.4/README.md`
-20. Previous release baseline: `docs/delivery/releases/v1.2.3/README.md`
-21. Previous release baseline: `docs/delivery/releases/v1.2.2/README.md`
-22. Previous release baseline: `docs/delivery/releases/v1.2.1/README.md`
-23. Recent release trace: `docs/delivery/releases/v1.2.0/README.md`
-24. Recent release trace: `docs/delivery/releases/v1.1.9/README.md`
-25. Recent release trace: `docs/delivery/releases/v1.1.8/README.md`
-26. Historical release trace: `docs/delivery/releases/v1.1.3/README.md`
-27. Historical release trace: `docs/delivery/releases/v1.1.2/README.md`
-28. Historical archive: `docs/project/history/2026-06-current-baseline-history/README.md`
+12. Current release baseline: `docs/delivery/releases/v1.3.2/README.md`
+13. Previous release baseline: `docs/delivery/releases/v1.3.1/README.md`
+14. Previous release baseline: `docs/delivery/releases/v1.3.0/README.md`
+15. Previous release baseline: `docs/delivery/releases/v1.2.9/README.md`
+16. Previous release baseline: `docs/delivery/releases/v1.2.8/README.md`
+17. Previous release baseline: `docs/delivery/releases/v1.2.7/README.md`
+18. Previous release baseline: `docs/delivery/releases/v1.2.6/README.md`
+19. Previous release baseline: `docs/delivery/releases/v1.2.5/README.md`
+20. Previous release baseline: `docs/delivery/releases/v1.2.4/README.md`
+21. Previous release baseline: `docs/delivery/releases/v1.2.3/README.md`
+22. Previous release baseline: `docs/delivery/releases/v1.2.2/README.md`
+23. Previous release baseline: `docs/delivery/releases/v1.2.1/README.md`
+24. Recent release trace: `docs/delivery/releases/v1.2.0/README.md`
+25. Recent release trace: `docs/delivery/releases/v1.1.9/README.md`
+26. Recent release trace: `docs/delivery/releases/v1.1.8/README.md`
+27. Historical release trace: `docs/delivery/releases/v1.1.3/README.md`
+28. Historical release trace: `docs/delivery/releases/v1.1.2/README.md`
+29. Historical archive: `docs/project/history/2026-06-current-baseline-history/README.md`
 
 ## Authority Boundary
 

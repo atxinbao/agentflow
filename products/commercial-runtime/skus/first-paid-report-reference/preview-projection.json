@@ -1,0 +1,37 @@
+{
+  "version": "agentflow-commercial-sku-preview-projection.v1",
+  "source": "products/commercial-runtime/skus/first-paid-report-reference/preview-projection.json",
+  "productId": "paid-report",
+  "skuId": "first-paid-report-reference",
+  "customerSafe": true,
+  "hiddenFields": [
+    "providerInternalState",
+    "runtimeInternalState",
+    "billingInternalState",
+    "agentInternalTrace"
+  ],
+  "visibleFields": [
+    "skuName",
+    "status",
+    "previewSummary",
+    "reportSections",
+    "deliveryReadiness",
+    "decisionReasons"
+  ],
+  "states": [
+    {
+      "state": "ready-for-preview",
+      "deliveryReady": true
+    },
+    {
+      "state": "deferred",
+      "deliveryReady": false,
+      "reason": "awaiting-accepted-decision"
+    },
+    {
+      "state": "invalid",
+      "deliveryReady": false,
+      "reason": "invalid-input-or-output"
+    }
+  ]
+}

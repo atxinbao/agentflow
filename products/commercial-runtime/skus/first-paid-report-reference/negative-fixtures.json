@@ -1,0 +1,38 @@
+{
+  "version": "agentflow-commercial-sku-negative-fixtures.v1",
+  "source": "products/commercial-runtime/skus/first-paid-report-reference/negative-fixtures.json",
+  "productId": "paid-report",
+  "skuId": "first-paid-report-reference",
+  "fixtures": [
+    {
+      "fixtureId": "invalid-sku-source",
+      "expectedDecision": "rejected",
+      "reason": "sku-source-outside-product-pack"
+    },
+    {
+      "fixtureId": "invalid-input",
+      "expectedDecision": "rejected",
+      "reason": "input-validation-failed"
+    },
+    {
+      "fixtureId": "invalid-output",
+      "expectedDecision": "rejected",
+      "reason": "output-schema-invalid"
+    },
+    {
+      "fixtureId": "missing-adapter-receipt",
+      "expectedDecision": "deferred",
+      "reason": "missing-adapter-receipt"
+    },
+    {
+      "fixtureId": "delivery-without-accepted-decision",
+      "expectedDecision": "rejected",
+      "reason": "accepted-decision-required"
+    },
+    {
+      "fixtureId": "core-pollution",
+      "expectedDecision": "rejected",
+      "reason": "sku-specific-content-in-core"
+    }
+  ]
+}

@@ -1,21 +1,24 @@
 # Changelog
 
-更新日期：2026-07-11
+更新日期：2026-07-12
 执行者：Codex
 
 ## Current Baseline
 
 当前发布基线：
 
-- [docs/delivery/releases/v1.3.1/README.md](docs/delivery/releases/v1.3.1/README.md)
-- [docs/delivery/releases/v1.3.1/AGENTFLOW_V1_3_1_COMMERCIAL_CERTIFICATION_FIRST_SKU_READINESS_HARDENING_TASKS_V1.md](docs/delivery/releases/v1.3.1/AGENTFLOW_V1_3_1_COMMERCIAL_CERTIFICATION_FIRST_SKU_READINESS_HARDENING_TASKS_V1.md)
+- [docs/delivery/releases/v1.3.2/README.md](docs/delivery/releases/v1.3.2/README.md)
+- [docs/delivery/releases/v1.3.2/AGENTFLOW_V1_3_2_FIRST_PAID_REPORT_SKU_REFERENCE_DRY_RUN_TASKS_V1.md](docs/delivery/releases/v1.3.2/AGENTFLOW_V1_3_2_FIRST_PAID_REPORT_SKU_REFERENCE_DRY_RUN_TASKS_V1.md)
 
 上一发布基线：
 
-- [docs/delivery/releases/v1.3.0/README.md](docs/delivery/releases/v1.3.0/README.md)
-- [docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md)
+- [docs/delivery/releases/v1.3.1/README.md](docs/delivery/releases/v1.3.1/README.md)
+- [docs/delivery/releases/v1.3.1/AGENTFLOW_V1_3_1_COMMERCIAL_CERTIFICATION_FIRST_SKU_READINESS_HARDENING_TASKS_V1.md](docs/delivery/releases/v1.3.1/AGENTFLOW_V1_3_1_COMMERCIAL_CERTIFICATION_FIRST_SKU_READINESS_HARDENING_TASKS_V1.md)
 
 历史发布基线：
+
+- [docs/delivery/releases/v1.3.0/README.md](docs/delivery/releases/v1.3.0/README.md)
+- [docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.3.0/AGENTFLOW_V1_3_0_COMMERCIAL_BACKEND_STABLE_CLOSURE_TASKS_V1.md)
 
 - [docs/delivery/releases/v1.2.9/README.md](docs/delivery/releases/v1.2.9/README.md)
 - [docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md](docs/delivery/releases/v1.2.9/AGENTFLOW_V1_2_9_PAID_REPORT_COMMERCIAL_ORDER_ACCESS_CLOSURE_TASKS_V1.md)
@@ -28,6 +31,29 @@
 - [docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md](docs/delivery/releases/v1.2.6/AGENTFLOW_V1_2_6_PROJECT_SCOPED_COMMERCIAL_PRODUCT_INSTANCE_TASKS_V1.md)
 
 ## Unreleased
+
+## v1.3.2 - 2026-07-12
+
+First Paid Report SKU Reference Dry-run:
+
+- closed GitHub issues `#1023` through `#1032` with a dedicated V132 release
+  certification chain;
+- added the first paid-report SKU reference source under
+  `products/commercial-runtime/skus/first-paid-report-reference/**`;
+- defined SKU input schema, required / optional fields, rejection reasons and
+  positive / negative input fixtures;
+- defined report output schema, report template, customer preview fields and
+  delivery artifact refs before generator behavior;
+- added a dry-run generator adapter receipt contract without real provider or
+  billing calls;
+- added order-to-delivery dry-run golden path coverage from order intake to
+  delivery readiness;
+- added customer-safe delivery preview projection and explicit non-ready states;
+- added negative fixtures for invalid source, invalid input, invalid output,
+  missing adapter receipt, delivery without accepted decision and Core pollution;
+- aligned docs and roadmap so `v1.3.2` is certified as a dry-run reference, not
+  a public commercial launch;
+- advanced workspace and desktop version metadata to `1.3.2`.
 
 ## v1.3.1 - 2026-07-11
 
